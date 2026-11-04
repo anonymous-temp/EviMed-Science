@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { geoAbilitiesOf } from '@evimed/domain';
+import { geoAbilitiesOf, runRoleOf } from '@evimed/domain';
 import { geoPlanDigest } from './geoPlanContext.mjs';
 import { canonicalJson } from './geoStore.mjs';
 import { HttpError } from './security.mjs';
@@ -309,8 +309,110 @@ export class GeoNativeAuthority {
     return { ...identity, principal };
   }
 
+  /** List only proven project associations, never the owner's unrelated ledger. */
+  async listConversations(user, geoId, options = {}) {
+    let timer;
+    try {
+      return await Promise.race([
+        this.#listConversations(user, geoId, options),
+        new Promise((_, reject) => { timer = setTimeout(() => reject(new HttpError(503, 'geo_conversation_list_timeout', 'The conversation list took too long.')), 15000); }),
+      ]);
+    } finally { clearTimeout(timer); }
+  }
+
+  async #listConversations(user, geoId, { cursor = null, limit = 30 } = {}) {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100 || (cursor != null && (typeof cursor !== 'string' || cursor.length > 1024))) throw new HttpError(400, "geo_payload_invalid", "Invalid page request.");
+    const identity = await this.identity(user, geoId, { ability: 'read' });
+    return this.withRunSnapshot(identity, async snapshot => {
+      const runs = await this.runsInSnapshot(identity, snapshot);
+      const candidates = new Map(), bySession = new Map(), backgroundSessions = new Set(runs.filter(run => runRoleOf(run) != null).map(run => run.sessionId));
+      for (const run of runs) {
+        if (runRoleOf(run) != null || !sessionIdValid(run.sessionId)) continue;
+        const previous = candidates.get(run.sessionId);
+        if (!previous || String(run.createdAt ?? run.startedAt ?? '') > String(previous.createdAt ?? previous.startedAt ?? '')) candidates.set(run.sessionId, run);
+      }
+      for (const [sessionId, run] of candidates) {
+        try { await this.proveSession(identity, sessionId, snapshot); }
+        catch (error) { if (absent(error)) continue; throw error; }
+        bySession.set(sessionId, run);
+      }
+      // Include explicitly created sessions even before their first message.
+      let documentCursor = null;
+      for (let page = 0; page < 100; page += 1) {
+        const found = await this.documents.list(identity.geo.userId, 'geo-plan-context', { projectId: identity.geo.projectId, limit: 100, cursor: documentCursor,
+          filter: { recordType: 'geo-native-session' } });
+        for (const row of found.items) {
+          const sessionId = row.payload.sessionId;
+          if (!['explicit', 'primary'].includes(row.payload.association) || !sessionIdValid(sessionId) || (backgroundSessions.has(sessionId) && !bySession.has(sessionId))) continue;
+          await this.proveSession(identity, sessionId, snapshot);
+          if (!bySession.has(sessionId)) bySession.set(sessionId, { sessionId, createdAt: row.createdAt, title: '新对话' });
+        }
+        documentCursor = found.nextCursor; if (!documentCursor) break;
+        if (page === 99) throw missing();
+      }
+      const fresh = await this.identity(user, geoId, { ability: 'read' });
+      if (canonicalJson(fresh.principal) !== canonicalJson(identity.principal)) throw changed();
+      const rows = [...bySession.values()].map(run => ({ sessionId: run.sessionId, title: run.title || run.question || '对话', createdAt: run.createdAt ?? run.startedAt ?? null }));
+      rows.sort((a, b) => { const left = String(a.createdAt ?? ''), right = String(b.createdAt ?? ''); return left === right ? (a.sessionId < b.sessionId ? -1 : a.sessionId > b.sessionId ? 1 : 0) : left > right ? -1 : 1; });
+      let start = 0;
+      if (cursor) {
+        let decoded;
+        try { decoded = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')); } catch { throw missing(); }
+        if (!Array.isArray(decoded) || decoded.length !== 3 || decoded[0] !== hash(this.base(identity)) || typeof decoded[1] !== 'string' || !sessionIdValid(decoded[2])) throw missing();
+        start = rows.findIndex(row => String(row.createdAt ?? '') < decoded[1] || (String(row.createdAt ?? '') === decoded[1] && row.sessionId > decoded[2]));
+        if (start < 0) start = rows.length;
+      }
+      const items = rows.slice(start, start + limit), last = items.at(-1);
+      const nextCursor = start + limit < rows.length && last ? Buffer.from(JSON.stringify([hash(this.base(identity)), String(last.createdAt ?? ''), last.sessionId])).toString('base64url') : null;
+      return { items, nextCursor };
+    });
+  }
+
+  /** Reserve before contacting the kernel. An uncertain result is never retried as another creation. */
+  async createExplicit(user, geoId, identity, requestId) {
+    if (typeof requestId !== 'string' || !/^[A-Za-z0-9_-]{16,128}$/.test(requestId)) throw missing();
+    const key = `gnr_${hash([this.base(identity), String(user.id), requestId])}`;
+    return this.#once(key, async () => {
+      const reserved = await this.store.transaction(client => this.store.database.withTransactionClient(client, async () => {
+        await client.query(PRIMARY_LOCK, [geoId]);
+        const fresh = await this.identity(user, geoId, { client });
+        if (canonicalJson(fresh.principal) !== canonicalJson(identity.principal)) throw changed();
+        const saved = await this.documents.get(fresh.geo.userId, 'geo-plan-context', key);
+        if (saved) {
+          if (saved.projectId !== fresh.geo.projectId || canonicalJson(saved.payload.base) !== canonicalJson(this.base(fresh))
+            || saved.payload.recordType !== 'geo-native-create-request') throw missing();
+          return { saved, fresh };
+        }
+        await this.documents.put(fresh.geo.userId, 'geo-plan-context', key,
+          { recordType: 'geo-native-create-request', base: this.base(fresh), state: 'pending' },
+          { expectedRevision: 0, projectId: fresh.geo.projectId, transactionClient: client });
+        return { saved: null, fresh };
+      }));
+      if (reserved.saved) {
+        if (reserved.saved.payload.state === 'complete') return this.proveSession(reserved.fresh, reserved.saved.payload.sessionId);
+        throw new HttpError(409, 'geo_creation_pending', 'The conversation creation outcome is not yet known.');
+      }
+      const sessionId = (await this.createSession(reserved.fresh.project)).id;
+      if (!sessionIdValid(sessionId)) throw missing();
+      return this.store.transaction(client => this.store.database.withTransactionClient(client, async () => {
+        await client.query(PRIMARY_LOCK, [geoId]);
+        const fresh = await this.identity(user, geoId, { client });
+        if (canonicalJson(fresh.principal) !== canonicalJson(reserved.fresh.principal)) throw changed();
+        const receipt = await this.documents.get(fresh.geo.userId, 'geo-plan-context', key);
+        if (!receipt || receipt.payload.state !== 'pending') throw changed();
+        await this.documents.put(fresh.geo.userId, 'geo-plan-context', this.sessionKey(fresh, sessionId),
+          { recordType: 'geo-native-session', base: this.base(fresh), sessionId, association: 'explicit' },
+          { expectedRevision: 0, projectId: fresh.geo.projectId, transactionClient: client });
+        await this.documents.put(fresh.geo.userId, 'geo-plan-context', key,
+          { ...receipt.payload, state: 'complete', sessionId },
+          { expectedRevision: receipt.revision, projectId: fresh.geo.projectId, transactionClient: client });
+        return sessionId;
+      }));
+    });
+  }
+
   async descriptor(user, geoId, target) {
-    if (!target || Object.keys(target).some(key => !['kind', 'referenceId', 'sessionId'].includes(key))) throw missing();
+    if (!target || Object.keys(target).some(key => !['kind', 'referenceId', 'sessionId', 'requestId'].includes(key))) throw missing();
     const identity = await this.identity(user, geoId);
     let sessionId, ensured = false;
     if (target.kind === 'primary' && Object.keys(target).length === 1) {
@@ -319,7 +421,8 @@ export class GeoNativeAuthority {
         if (await this.#present(identity.project, sessionId)) ensured = true;
         else sessionId = await this.#replacePrimary(user, geoId, identity, sessionId);
       }
-    } else if (target.kind === 'session' && Object.keys(target).length === 2) sessionId = await this.proveSession(identity, target.sessionId);
+    } else if (target.kind === 'new' && Object.keys(target).length === 2) sessionId = await this.createExplicit(user, geoId, identity, target.requestId);
+    else if (target.kind === 'session' && Object.keys(target).length === 2) sessionId = await this.proveSession(identity, target.sessionId);
     else if (target.kind === 'context' && Object.keys(target).length === 2 && /^gpc_[a-f0-9]{64}$/.test(target.referenceId ?? '')) {
       const context = await this.documents.get(identity.geo.userId, 'geo-plan-context', target.referenceId);
       if (context?.projectId !== identity.geo.projectId || context.payload.geoId !== geoId || context.payload.state !== 'bound') throw missing();

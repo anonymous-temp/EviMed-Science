@@ -53,22 +53,33 @@ Projects 官方指南给出了项目集合、项目主页、右侧 Instructions/
 
 ## 4. 新导航：八步退出常驻导航
 
-进入 GEO 后使用一套模块导航，借鉴 Profound 的功能分区方式。不要在现有全平台大侧栏旁再加第二条完整大侧栏。实施时复用平台侧栏的宽度与组件，在 GEO 路由中显示模块导航，并提供持续可见的返回平台/模块切换入口；其它模块的导航与保存宽度不被改写。
+The owner's November 4 navigation review supersedes the original module-only sidebar. The existing global destinations retain their order and remain reachable inside every GEO project. Only the active GEO project's work destinations expand beneath the GEO entry. There is one sidebar, with independently scrollable function and conversation areas; the account footer remains outside both. Selection may scroll into view but does not reorder the function directory.
 
+The page header contains the only selector of the entire GEO project. Switching projects retains a compatible destination but clears the former project's session, objects, saved selection, query and pending navigation intent. Reselecting the same project preserves its scope. The header states the destination; it does not repeat the project name as another large heading.
+
+The conversation area offers current-project and all-recent scopes. A history filter changes only that list; it never changes the page's project or creates a session. Resource pages show unified history, not a separate knowledge-base or memory conversation namespace. One real session is one entry, programme and verification runs remain execution records, and a cross-project history entry opens its proved project and module. A shared GEO conversation uses delegated module authority rather than the viewer's personal project header. Explicit project conversation creation uses a retained request identity and never replaces the primary conversation. Global New Conversation keeps its ordinary assistant scope. Project names are not repeated as inert strips above history, nor automatically suffixed with GEO.
+
+```text
+EviMed Science / New Conversation
+Global function directory (fixed order)
+  GEO
+    Project work
+    AI performance
+    Content and publication
+    Product and evidence
+Conversation history [This project / All recent]
+Account / Inbox / Settings
+
+Main header: GEO / [Current project selector]
+Page title: Current destination
 ```
-EviMed Science / 返回平台
-循证 GEO
-[当前项目选择器]
 
-项目工作
-AI 表现
-内容与发布
-产品与资料
+All-projects access remains in the project selector. Native drafts and resident frames keep their original project/session identity while other pages are browsed; they are never transferred by a history filter.
 
-项目设置
-```
+Implementation boundaries: `GET /api/geo/projects/:id/conversation/list?limit&cursor` checks current read authority and returns associated session summaries only; it does not start a runtime. Existing `conversation/open` accepts an explicit `{kind:"new",requestId}` under run+edit authority, reserves the request before kernel creation and rechecks the full authority before returning the descriptor. It never changes the primary pointer. An uncertain kernel outcome remains pending rather than being automatically resent; repeated requests can recover a retained successful result, while a genuinely unknown outcome may require operator reconciliation.
 
-“全部项目”从项目选择器进入，保留搜索和新建，不再让它占据日常工作的一整列。
+History aggregates use bounded request concurrency and expose partial reads and continuation. Pagination does not freeze live activity, and each GEO page currently reads the existing canonical ledger once; a 15-second response timeout does not cancel an already running read. These performance and recovery boundaries are not claims of a new indexed conversation service. Owner-only ordinary history in a GEO control project remains distinct from the associated sessions a shared member may read. The native conversation pane and its draft ownership remain the existing platform implementation.
+
 
 AI 表现内使用 Profound AEI 的页签结构，经业务适配成为：
 

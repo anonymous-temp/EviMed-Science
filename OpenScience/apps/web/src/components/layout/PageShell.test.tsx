@@ -251,3 +251,12 @@ it("preserves child drafts, DOM identity and scroll position while the dock togg
     expect(scroll.scrollTop).toBe(120);
   }
 });
+
+it("keeps a module's single project context in measured sticky chrome", () => {
+  const { container } = render(<PageShell title="AI 表现" contextBar={<button>选择整个项目</button>}><p>结果</p></PageShell>);
+  const band = container.querySelector('[data-page-chrome]');
+  expect(band).toHaveClass('sticky', 'top-0');
+  expect(band).toContainElement(screen.getByRole('button', { name: '选择整个项目' }));
+  expect(band).not.toContainElement(screen.getByRole('heading', { name: 'AI 表现' }));
+  expect(container.querySelectorAll('[data-page-context]')).toHaveLength(1);
+});

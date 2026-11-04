@@ -3,7 +3,6 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Sidebar } from "./Sidebar";
-import { GEO_SUMMARIES } from "@/components/geo/__fixtures__/geoProjects";
 
 const mocks = vi.hoisted(() => ({
   finishedToasts: vi.fn(),
@@ -55,10 +54,10 @@ vi.mock("@/lib/store", () => ({
 // have their own tests (ProjectBrowser.test.tsx); here the section is a slot.
 // The module the tab's project belongs to is the list's answer (`onCurrentModule`): here a test says it with `projectModule.current`.
 const projectModule = vi.hoisted(() => ({ current: null as "geo" | "vcr" | null }));
-vi.mock("@/components/sidebar/ProjectBrowser", async () => {
+vi.mock("@/components/sidebar/SidebarConversations", async () => {
   const { useEffect } = await import("react");
   return {
-    ProjectBrowser: ({ geo, vcr, onCurrentModule }: { geo?: boolean; vcr?: boolean; onCurrentModule?: (module: "geo" | "vcr" | null) => void }) => {
+    SidebarConversations: ({ geo, vcr, onCurrentModule }: { geo?: boolean; vcr?: boolean; onCurrentModule?: (module: "geo" | "vcr" | null) => void }) => {
       useEffect(() => { onCurrentModule?.(projectModule.current); }, [onCurrentModule]);
       return <section aria-label="项目" data-testid="project-browser" data-geo={String(Boolean(geo))} data-vcr={String(Boolean(vcr))} />;
     },
@@ -327,8 +326,9 @@ describe("Sidebar navigation", () => {
     expect(within(nav).getByRole("link", { name: "项目工作" })).toHaveAttribute("href", "/app/geo/geo_1");
     expect(within(nav).getByRole("link", { name: "内容与发布" })).toHaveAttribute("href", "/app/geo/geo_1/actions");
     expect(within(nav).getByRole("link", { name: "产品与资料" })).toHaveAttribute("href", "/app/geo/geo_1/evidence");
-    expect(within(nav).getByRole("link", { name: "返回平台" })).toHaveAttribute("href", "/app/home");
-    expect(screen.queryByRole("link", { name: "新对话" })).not.toBeInTheDocument();
+    expect(within(nav).queryByRole("link", { name: "返回平台" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "新对话" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "循证 GEO" })).toHaveAttribute("aria-current", "page");
   });
 
   it("keeps the current project's scope and session in work-area links", async () => {
@@ -340,21 +340,6 @@ describe("Sidebar navigation", () => {
     expect(target.pathname).toBe("/app/geo/geo_1/visibility");
     expect(target.searchParams.get("engines")).toBe("kimi");
     expect(target.searchParams.get("session")).toBe("ses_1");
-  });
-
-  it("does not discard scope when reselecting the same project, but clears it when switching projects", async () => {
-    mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default", name: "我的研究" }, projects: [], features: { geo: true } });
-    mocks.listGeoProjects.mockResolvedValue(GEO_SUMMARIES);
-    renderSidebar("/app/geo/geo_masi/accuracy?engines=kimi&session=ses_1");
-    const selector = await screen.findByRole("button", { name: "选择项目：玛仕度肽注射液" });
-    await userEvent.click(selector);
-    await userEvent.click(screen.getByRole("menuitemradio", { name: "玛仕度肽注射液" }));
-    expect(screen.getByTestId("location")).toHaveTextContent("/app/geo/geo_masi/accuracy");
-    expect(screen.getByTestId("query")).toHaveTextContent("engines=kimi&session=ses_1");
-    await userEvent.click(selector);
-    await userEvent.click(screen.getByRole("menuitemradio", { name: "米曲菌胰酶片" }));
-    expect(screen.getByTestId("location")).toHaveTextContent("/app/geo/geo_mitiao");
-    expect(screen.getByTestId("query")).toBeEmptyDOMElement();
   });
 
   // One board offered and the other not: the one that is there keeps its place

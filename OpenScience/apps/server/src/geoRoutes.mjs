@@ -189,6 +189,7 @@ function money(value, field, zero = false) {
  *     readArticleVersion?: (user: any, geoId: string, articleId: string, versionId: string, digest: string) => Promise<any>,
  *     stageArticleRevision?: (user: any, geoId: string, articleId: string, input: any) => Promise<any>,
  *     conversationRead?: (user: any, geoId: string, sessionId: string, action: string, body?: any) => Promise<any>,
+ *     listConversations?: (user: any, geoId: string, options: { cursor: string | null, limit: number }) => Promise<any>,
  *     stopProgrammeRun?: (ownerId: string, projectId: string, runId: string) => Promise<{ root: string }>,
  *     programmeRuns?: (ownerId: string, projectId: string) => Promise<Array<{ sessionId: string, runId: string, reason: string | null, status: string,
  *       startedAt: string | null }>> } | null,
@@ -324,6 +325,10 @@ export function createGeoRoutes(dependencies) {
       }
     }
     const id = parts[1];
+    if (parts.length === 4 && parts[2] === "conversation" && parts[3] === "list" && method === "GET") {
+      if (!dependencies.projects?.listConversations) throw UNAVAILABLE();
+      return reply(await dependencies.projects.listConversations(user, id, { cursor: url.searchParams.get("cursor"), limit: Number(url.searchParams.get("limit") ?? 30) }));
+    }
     if (parts.length === 4 && parts[2] === "conversation" && parts[3] === "open" && method === "POST") {
       const body = await bodyOf(req, maxJsonBytes, ["target"]);
       if (!dependencies.projects?.openConversation) throw UNAVAILABLE();

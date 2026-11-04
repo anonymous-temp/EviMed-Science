@@ -3027,6 +3027,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         if (!run || run.status !== "running") return { root: "not-running" };
         return { root: (await stopRunForUser(project, run)).root };
       },
+      listConversations: async (user, geoId, options) => geoNativeAuthority.listConversations(user, geoId, options),
       openConversation: async (user, geoId, target) => geoNativeAuthority.descriptor(user, geoId, target),
       readPublicationVersion: async (user, geoId, kind, recordId, versionId, digest, revision) => {
         if (!geoNativeAuthority || !geoArticleResults) throw new HttpError(404, "geo_not_enabled", "The GEO article is unavailable.");

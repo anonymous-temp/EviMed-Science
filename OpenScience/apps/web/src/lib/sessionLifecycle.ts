@@ -37,7 +37,7 @@ function invalidate() {
     const storage = window.sessionStorage;
     for (let i = storage.length - 1; i >= 0; i--) {
       const key = storage.key(i);
-      if (key?.startsWith("evimed.research-db.")) storage.removeItem(key);
+      if (key?.startsWith("evimed.research-db.") || key?.startsWith("geo-create-request:")) storage.removeItem(key);
     }
   } catch { /* Session storage may be unavailable. */ }
   listeners.forEach(listener => listener());

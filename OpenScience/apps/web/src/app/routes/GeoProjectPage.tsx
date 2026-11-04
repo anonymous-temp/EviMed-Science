@@ -25,6 +25,7 @@ import { geoResultDrawerProps } from "@/components/geo/spine/drawerParams";
 import { GEO_ANALYSIS_OPTIONS, geoAnalysisChangeReplaces, geoAnalysisDescriptor, geoAnalysisDescriptorForView, geoAnalysisOptionsForTab, geoAnalysisSearch, geoAnalysisTabForView, geoReturnFromFrozenAnalysis } from "@/components/geo/geoAnalysisMode";
 import { GeoConversationPane } from "@/components/geo/GeoConversationPane";
 import { GeoWorkDetails } from "@/components/geo/GeoWorkDetails";
+import { GeoProjectPicker } from "@/components/geo/GeoProjectPicker";
 import { geoChatPath, geoConversationPane, geoPanePath } from "@/lib/geoLocation";
 import { sessionGeneration, subscribeSessionBoundary } from "@/lib/sessionLifecycle";
 import { useProjectStore } from "@/lib/projects";
@@ -587,6 +588,8 @@ function GeoBand({
   const workHome = projectWork && !workTasks;
   const presentedTab = analysis ? geoAnalysisTabForView(analysis.viewId) : tab;
   const area = snapshotId ? "analytics" : geoWorkArea(presentedTab, analysis ? null : params.get("view"));
+  const pageTitle = snapshotId ? "原始回答" : workHome ? "项目工作" : workTasks ? "任务与成果"
+    : area === "analytics" ? "AI 表现" : area === "content" ? "内容与发布" : area === "context" ? "产品与资料" : "实施方案";
   const [workAttempt, setWorkAttempt] = useState(0);
   const [workError, setWorkError] = useState(false);
   const retryArrival = useRef<string | null>(null);
@@ -779,15 +782,13 @@ function GeoBand({
 
   return (
     <PageShell<string>
-      title={project.name}
-      // The way back is on every tab, so the band stands at the same place on each (the walk's module-chrome): 项目总览 from a step's
-      // tab and the conversation, the project list from the overview. A block link — an inline one is a kind of control of its own.
-      back={snapshotId ? answerBackLink : tab !== "overview" || onChat
-        ? <Link className="inline-block text-ui text-accent" to={destination("overview")} state={sanitizeRuntimeUiHistoryState(location.state)}>项目总览</Link>
-        : <Link className="inline-block text-ui text-accent" to="/app/geo">循证 GEO</Link>}
+      title={pageTitle}
+      // The project scope is selected once for every result and conversation. An exact answer retains its contextual return link.
+      back={snapshotId ? answerBackLink : !workHome && !workTasks ? <Link className="rounded text-ui text-link hover:underline" to={destination("overview")} state={sanitizeRuntimeUiHistoryState(location.state)}>项目工作</Link> : undefined}
+      contextBar={<GeoProjectPicker project={project} destination={snapshotId ? "questions" : area === "context" ? "evidence" : presentedTab} />}
       {...(strip ? { activity: { quiet: true, label: strip.label, startedAt: strip.startedAt, waiting: strip.waiting, queued: strip.queued, to: destination(GEO_STEP_HOME[strip.step].tab, GEO_STEP_HOME[strip.step].view, strip.step, GEO_STEP_HOME[strip.step].section), ...(can("run") && strip.runId ? { onCancel: stopStep, cancelLabel: "停止这一项", cancelling: busy === "stop" } : {}) } } : {})}
       tabs={tabs}
-      documentTitle={GEO_MONITORING_TABS.includes(tab) ? `${project.name} · ${GEO_MONITORING_TITLE}` : undefined}
+      documentTitle={GEO_MONITORING_TABS.includes(tab) ? `${project.name} · ${GEO_MONITORING_TITLE}` : project.name}
       width="wide"
       meta={paused ? <Tag>{workStateLabel("paused")}</Tag> : started ? <Tag title={week ? "按项目开始日期计算。" : now ?? undefined}>{week ? `项目第 ${week} 周` : coverageText(project.coverageDays, project.startedAt ?? project.createdAt ?? null)}</Tag> : undefined}
       actionPlan={{

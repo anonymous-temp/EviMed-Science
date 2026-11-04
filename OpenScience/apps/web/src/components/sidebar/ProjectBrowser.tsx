@@ -24,7 +24,7 @@ import { IconButton } from "@/components/ui/IconButton";
 import { Button } from "@/components/ui/Button";
 import { navItemClasses } from "@/components/ui/NavItem";
 import { isRunning, useProjectRuns, type ProjectRuns } from "@/components/sidebar/useProjectRuns";
-import { geoProjectAssociation, geoProjectLabel, useGeoProjectIds } from "@/components/geo/useGeoProjectIds";
+import { geoProjectAssociation, geoProjectLabel, useGeoProjectClassification } from "@/components/geo/useGeoProjectIds";
 import { useVcrProjects } from "@/components/vcr/useVcrProjectIds";
 import { isTruncated, Tooltip } from "@/components/ui/Tooltip";
 
@@ -130,7 +130,9 @@ type Destination = () => { to: string; state?: { runtimeUiIntent: RuntimeUiInten
  * Conversations are read per project and only once a group is open
  * (`useProjectRuns`); which groups are open survives a reload.
  */
-export function ProjectBrowser({ geo = false, vcr = false, onCurrentModule }: {
+export function ProjectBrowser({ geo = false, vcr = false, excludeGeo = false, studyScope = null, onCurrentModule }: {
+  excludeGeo?: boolean;
+  studyScope?: string | null;
   /** Whether GEO projects receive their module identity and native workflow destination. */
   geo?: boolean;
   /** Whether studies receive their module identity and native workflow destination. */
@@ -144,7 +146,7 @@ export function ProjectBrowser({ geo = false, vcr = false, onCurrentModule }: {
 } = {}) {
   const { projects, currentId, switching, loading, error, load, select, create, rename } = useProjectStore();
   const projectsKey = projects.map((project) => `${project.id}\u0000${project.name}`).join("\u0001");
-  const geoProjectIds = useGeoProjectIds(geo, projectsKey);
+  const { ids: geoProjectIds, ready: geoClassificationReady, error: geoClassificationError, retry: retryGeoClassification } = useGeoProjectClassification(geo, projectsKey);
   // A draft study (「新建研究」 before the first thing is said in it) is not one of the account's projects yet: it is left out of the list
   // — unless it is the project the reader is in, which is the one thing they are looking at.
   const { studies: vcrProjectIds, drafts: vcrDraftIds, studyOf, calculations } = useVcrProjects(vcr, projectsKey, currentId);
@@ -171,6 +173,7 @@ export function ProjectBrowser({ geo = false, vcr = false, onCurrentModule }: {
   const [createError, setCreateError] = useState<string | null>(null);
   const [failures, setFailures] = useState<Record<string, string>>({});
   const [announcement, setAnnouncement] = useState("");
+  const [savedProjectNotice, setSavedProjectNotice] = useState("");
   const [refocus, setRefocus] = useState<{ projectId: string; key: string } | null>(null);
 
   useEffect(() => {
@@ -185,13 +188,13 @@ export function ProjectBrowser({ geo = false, vcr = false, onCurrentModule }: {
   );
   const known = useMemo(() => (projects.length > 0 ? new Set(projects.map((project) => project.id)) : null), [projects]);
   // Module projects share the ordinary project level; only untouched study drafts remain hidden.
-  const shown = useMemo(() => listed.filter((project) => !vcrDraftIds.has(project.id) || project.id === currentId), [listed, vcrDraftIds, currentId]);
+  const shown = useMemo(() => listed.filter((project) => (!studyScope || studyOf.get(project.id) === studyScope) && (!excludeGeo || !geoProjectIds.has(project.id)) && (!vcrDraftIds.has(project.id) || project.id === currentId || Boolean(studyScope))), [listed, vcrDraftIds, currentId, excludeGeo, geoProjectIds, studyScope, studyOf]);
   const isExpanded = useCallback((projectId: string) => expanded[projectId] ?? projectId === currentId, [expanded, currentId]);
   // The current project is always read, open or not, as the one list before
   // this was: a task started in it must light its header even when folded.
   const wanted = useMemo(
-    () => [currentId, ...(known ? listed.filter((project) => isExpanded(project.id)).map((project) => project.id) : [])],
-    [known, listed, isExpanded, currentId],
+    () => [currentId, ...(known ? listed.filter((project) => isExpanded(project.id) || (studyScope && studyOf.get(project.id) === studyScope)).map((project) => project.id) : [])],
+    [known, listed, isExpanded, currentId, studyScope, studyOf],
   );
   const { byProject, read } = useProjectRuns(wanted, known);
 
@@ -302,11 +305,11 @@ export function ProjectBrowser({ geo = false, vcr = false, onCurrentModule }: {
   };
 
   const startTask = (projectId: string) => {
+    if (!geoClassificationReady || geoProjectIds.has(projectId)) return;
     setExpanded((map) => ({ ...map, [projectId]: true }));
     go(projectId, () => {
       const intent = newRuntimeUiIntent();
-      const geoId = geoProjectAssociation(projectId)?.id;
-      return { to: geoId ? geoChatPath(geoId, intent.sessionId) : "/app/chat", state: { runtimeUiIntent: prepareRuntimeUiIntent(intent) } };
+      return { to: "/app/chat", state: { runtimeUiIntent: prepareRuntimeUiIntent(intent) } };
     });
   };
 
@@ -371,9 +374,9 @@ export function ProjectBrowser({ geo = false, vcr = false, onCurrentModule }: {
     setCreateBusy(false);
     setCreating(false);
     setDraftName("");
-    // A new project is for a task, so it opens on one — as adding a
-    // workspace does in the kernel's list.
-    startTask(project.id);
+    // A new project changes the classification input. Wait for the new list before admitting any session creation.
+    if (geo) setSavedProjectNotice(`项目“${project.name}”已保存。项目归属确认后，可在项目旁新建对话；如确认失败，请重试。`);
+    else startTask(project.id);
   };
 
   const needle = query.trim().toLowerCase();
@@ -444,13 +447,15 @@ export function ProjectBrowser({ geo = false, vcr = false, onCurrentModule }: {
       <ProjectGroup
         key={project.id}
         project={project}
+        compact={Boolean(studyScope)}
+        canCreate={geoClassificationReady}
         label={labelOf(labels, project)}
         geo={geoProjectIds.has(project.id)}
         geoId={geoProjectIds.has(project.id) ? geoProjectAssociation(project.id)?.id ?? null : null}
         vcr={vcrProjectIds.has(project.id) || vcrDraftIds.has(project.id)}
         current={isCurrent}
         standIn={projects.length === 0}
-        expanded={isExpanded(project.id)}
+        expanded={Boolean(studyScope) || isExpanded(project.id)}
         showAll={showAll.has(project.id)}
         runs={entry}
         switching={switching === project.id}
@@ -476,10 +481,11 @@ export function ProjectBrowser({ geo = false, vcr = false, onCurrentModule }: {
   return (
     <section
       ref={rootRef}
-      aria-labelledby={headingId}
+      aria-labelledby={studyScope ? undefined : headingId}
+      aria-label={studyScope ? "研究对话" : undefined}
       className="mt-4 flex min-h-0 flex-1 flex-col"
     >
-      <div className="flex h-control shrink-0 items-center gap-0.5 px-3">
+      {!studyScope && <div className="flex h-control shrink-0 items-center gap-0.5 px-3">
         {/* The heading stays in the tree while the search box has the row:
           * it is the section's name either way. */}
         <h2
@@ -532,7 +538,7 @@ export function ProjectBrowser({ geo = false, vcr = false, onCurrentModule }: {
             />
           </>
         )}
-      </div>
+      </div>}
 
       {creating && !searchOpen && (
         <form
@@ -562,6 +568,8 @@ export function ProjectBrowser({ geo = false, vcr = false, onCurrentModule }: {
       )}
 
       <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-2">
+        {geoClassificationError && <div role="alert" className="px-2 py-1 text-caption text-error">项目归属暂时无法确认，项目级新建对话暂不可用。 <button type="button" className="text-link hover:underline" onClick={retryGeoClassification}>重试确认</button></div>}
+        {savedProjectNotice && <p role="status" className="px-2 py-1 text-caption text-text-3">{savedProjectNotice}</p>}
         {error && (
           <div role="alert" className="flex items-center gap-2 px-2 py-1 text-caption text-error">
             <span className="min-w-0 flex-1">{error}</span>
@@ -639,6 +647,8 @@ export function ProjectBrowser({ geo = false, vcr = false, onCurrentModule }: {
  */
 function ProjectGroup({
   project,
+  compact,
+  canCreate,
   label,
   geo,
   geoId,
@@ -666,6 +676,8 @@ function ProjectGroup({
   onWarm,
 }: {
   project: WebProject;
+  compact: boolean;
+  canCreate: boolean;
   /** What the project is called on screen: its name, told apart from a namesake by its start day. */
   label: string;
   /** A GEO project: the radar instead of the folder. */
@@ -763,7 +775,7 @@ function ProjectGroup({
       onPointerEnter={current ? undefined : onWarm}
       onFocus={current ? undefined : onWarm}
     >
-      {renaming ? (
+      {!compact && (renaming ? (
         <form
           className="flex h-control items-center gap-1 pl-1"
           onSubmit={(event) => { event.preventDefault(); void submitRename(); }}
@@ -821,7 +833,7 @@ function ProjectGroup({
             {/* A plus, as the kernel's list has it: the pen-in-a-square of
               * 「新对话」 sat beside the rename pencil as its near twin. The
               * row's two actions are a list row's icon buttons (28). */}
-            <IconButton icon={Plus} size="sm" label={`在“${label}”新建对话`} title="在此项目新建对话" onClick={onNewTask} />
+            {!geo && canCreate && <IconButton icon={Plus} size="sm" label={`在“${label}”新建对话`} title="在此项目新建对话" onClick={onNewTask} />}
             {!standIn && (
               <IconButton
                 icon={Pencil}
@@ -833,9 +845,10 @@ function ProjectGroup({
             )}
           </span>
         </div>
-      )}
+      ))}
       {renameError && <p role="alert" className="px-2 py-1 text-caption text-error">{renameError}</p>}
       {failure && <p role="alert" className="py-1 pl-7 pr-2 text-caption text-error">{failure}</p>}
+      {expanded && geo && geoId && <Link to={`/app/geo/${encodeURIComponent(geoId)}`} className="ml-8 rounded text-ui text-link hover:underline">打开 GEO 项目</Link>}
       {expanded && calculationId && <Link to={vcrCalculationPath(calculationId)} className="ml-8 rounded text-ui text-link hover:underline">打开计算空间</Link>}
       {expanded && (
         <ul id={listId} aria-label={`“${label}”的对话`} className="mt-0.5 flex flex-col">

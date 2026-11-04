@@ -3,14 +3,8 @@ import { prepareRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router";
-import { expect, it, vi } from "vitest";
-import { GEO_SUMMARIES } from "./__fixtures__/geoProjects";
+import { expect, it } from "vitest";
 import { geoWorkspaceId, GeoWorkspaceNav } from "./GeoWorkspaceNav";
-
-vi.mock("@/lib/geoClient", async (original) => ({
-  ...await original<typeof import("@/lib/geoClient")>(),
-  listGeoProjects: async () => GEO_SUMMARIES,
-}));
 
 const state = {
   runtimeUiIntent: prepareRuntimeUiIntent({
@@ -50,19 +44,8 @@ it("carries the pending intent to this project's result and settings links, with
   expect(JSON.parse(screen.getByLabelText("Workspace state").textContent ?? "{}")).toEqual(state);
 });
 
-it("does not put the previous project's draft or state in another project", async () => {
+it("keeps project selection and platform navigation outside the workspace links", () => {
   renderWorkspace();
-  const user = userEvent.setup();
-  await user.click(await screen.findByRole("button", { name: /选择项目：玛仕度肽注射液/ }));
-  await user.click(screen.getByRole("menuitemradio", { name: /米曲菌胰酶片/ }));
-  expect(screen.getByLabelText("Workspace location")).toHaveTextContent("/app/geo/geo_mitiao");
-  expect(screen.getByLabelText("Workspace location")).not.toHaveTextContent("session=");
-  expect(screen.getByLabelText("Workspace state")).toHaveTextContent("null");
-});
-
-it("does not carry project state when returning to the platform", async () => {
-  renderWorkspace();
-  await userEvent.click(screen.getByRole("link", { name: "返回平台" }));
-  expect(screen.getByLabelText("Workspace location")).toHaveTextContent("/app/home");
-  expect(screen.getByLabelText("Workspace state")).toHaveTextContent("null");
+  expect(screen.queryByRole("button", { name: /选择项目/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole("link", { name: "返回平台" })).not.toBeInTheDocument();
 });

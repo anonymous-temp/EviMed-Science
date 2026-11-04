@@ -219,3 +219,77 @@ test('the owner\'s read registers a kept conversation only while the running ker
   const [opened, read] = await Promise.all([opening, reading]);
   assert.equal(opened.sessionId, 'server-created-session'); assert.equal(read, opened.sessionId);
 });
+
+test('explicit conversations are idempotent, scoped, paginated and respect membership', options, async t => {
+  const f = await setup(t);
+  await f.authority.registerPrimary(f.geo, 'shared-root');
+  const target = { kind: 'new', requestId: 'request_1234567890' };
+  const [first, second] = await Promise.all([f.authority.descriptor(f.users.editor, f.geo.id, target), f.authority.descriptor(f.users.editor, f.geo.id, target)]);
+  assert.equal(first.sessionId, second.sessionId);
+  assert.equal(f.calls.filter(([kind]) => kind === 'create').length, 1);
+  assert.equal(await f.authority.primary(await f.authority.identity(f.users.owner, f.geo.id)), 'shared-root');
+  await assert.rejects(f.authority.descriptor(f.users.viewer, f.geo.id, { kind: 'new', requestId: 'viewer_request_1234' }), error => [403, 404].includes(error.status));
+  f.runs.push({ sessionId: 'shared-root', title: 'Human', createdAt: '2026-01-02T00:00:00Z' },
+    { sessionId: 'shared-root', title: 'Again', createdAt: '2026-01-03T00:00:00Z' },
+    { sessionId: 'ordinary-secret', title: 'Private', createdAt: '2026-01-04T00:00:00Z' },
+    { sessionId: 'programme', effectiveRouteReason: 'geo:evidence', createdAt: '2026-01-05T00:00:00Z' });
+  const page = await f.authority.listConversations(f.users.viewer, f.geo.id, { limit: 1 });
+  assert.equal(page.items.length, 1); assert.ok(page.nextCursor);
+  const next = await f.authority.listConversations(f.users.viewer, f.geo.id, { limit: 1, cursor: page.nextCursor });
+  assert.notEqual(page.items[0].sessionId, next.items[0].sessionId);
+  assert.deepEqual(new Set([...page.items, ...next.items].map(item => item.sessionId)), new Set(['shared-root', first.sessionId]));
+  await f.store.removeMember({ geoId: f.geo.id, userId: f.users.editor.id, role: 'editor' });
+  await assert.rejects(f.authority.listConversations(f.users.editor, f.geo.id), error => [403, 404].includes(error.status));
+});
+
+test('unknown creation outcome is not repeated by another authority instance', options, async t => {
+  const f = await setup(t); let creates = 0;
+  f.authority.createSession = async () => { creates++; throw new Error('kernel response lost'); };
+  const target = { kind: 'new', requestId: 'uncertain_request_123' };
+  await assert.rejects(f.authority.descriptor(f.users.editor, f.geo.id, target), /kernel response lost/);
+  const other = new GeoNativeAuthority({ store: f.store, accounts: f.accounts, service: f.service, documents: f.documents, results: f.authority.results, createSession: f.authority.createSession, ensureSession: f.authority.ensureSession, runs: f.authority.runs });
+  await assert.rejects(other.descriptor(f.users.editor, f.geo.id, target), error => error.code === 'geo_creation_pending');
+  assert.equal(creates, 1);
+});
+
+test('list reads a practical ledger snapshot once and excludes unrelated sessions', options, async t => {
+  const f = await setup(t); await f.authority.registerPrimary(f.geo, 'shared-root');
+  f.runs.push(...Array.from({ length: 250 }, (_, i) => ({ sessionId: i % 2 ? 'shared-root' : `unrelated-${i}`, startedAt: `2026-01-01T00:00:${String(i % 60).padStart(2, '0')}Z` })));
+  let reads = 0; f.authority.runs = async () => { reads++; return f.runs; };
+  const start = performance.now();
+  const result = await f.authority.listConversations(f.users.editor, f.geo.id);
+  assert.equal(reads, 1); assert.deepEqual(result.items.map(item => item.sessionId), ['shared-root']);
+  t.diagnostic(`250 ledger runs, ${Math.round(performance.now() - start)} ms; storage and environment dependent`);
+});
+
+
+test('a registered primary without any runs remains visible', options, async t => {
+  const f = await setup(t); await f.authority.registerPrimary(f.geo, 'empty-primary');
+  const listed = await f.authority.listConversations(f.users.viewer, f.geo.id);
+  assert.deepEqual(listed.items.map(item => item.sessionId), ['empty-primary']);
+});
+
+
+test('revoked and re-added editor cannot settle an earlier creation', options, async t => {
+  const f = await setup(t); let proceed; let entered;
+  const ready = new Promise(resolve => { entered = resolve; });
+  const gate = new Promise(resolve => { proceed = resolve; });
+  f.authority.createSession = async () => { entered(); await gate; return { id: 'late-session' }; };
+  const pending = f.authority.descriptor(f.users.editor, f.geo.id, { kind: 'new', requestId: 'revoke_request_12345' });
+  await ready;
+  await f.store.removeMember({ geoId: f.geo.id, userId: f.users.editor.id, role: 'editor' });
+  await f.store.addMember({ geoId: f.geo.id, userId: f.users.editor.id, role: 'editor', invitedBy: f.users.owner.id });
+  proceed(); await assert.rejects(pending, error => error.status === 403);
+  await assert.rejects(f.authority.descriptor(f.users.editor, f.geo.id, { kind: 'session', sessionId: 'late-session' }), error => error.status === 404);
+});
+
+test('a list started before revoke and re-add cannot return under a new membership', options, async t => {
+  const f = await setup(t); await f.authority.registerPrimary(f.geo, 'shared-root');
+  let entered, proceed; const ready = new Promise(resolve => { entered = resolve; }); const gate = new Promise(resolve => { proceed = resolve; });
+  f.authority.runs = async () => { entered(); await gate; return []; };
+  const pending = f.authority.listConversations(f.users.editor, f.geo.id);
+  await ready;
+  await f.store.removeMember({ geoId: f.geo.id, userId: f.users.editor.id, role: 'editor' });
+  await f.store.addMember({ geoId: f.geo.id, userId: f.users.editor.id, role: 'editor', invitedBy: f.users.owner.id });
+  proceed(); await assert.rejects(pending, error => error.status === 403);
+});

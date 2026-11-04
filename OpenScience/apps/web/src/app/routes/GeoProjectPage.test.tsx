@@ -265,7 +265,7 @@ describe("a GEO project's page", () => {
 
   it("keeps project status and reporting without a persistent eight-step rail", async () => {
     renderProject();
-    expect(await screen.findByRole("heading", { level: 1, name: "玛仕度肽注射液" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "当前项目：玛仕度肽注射液，切换项目" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "生成周报" })).toHaveAttribute("data-action-kind", "start");
     expect(document.querySelectorAll("[data-step-rail]")).toHaveLength(0);
     expect(screen.queryByRole("button", { name: /^查看：/ })).not.toBeInTheDocument();
@@ -307,10 +307,10 @@ describe("a GEO project's page", () => {
     "keeps the workbench of %s when a query update removes the anchor", async (address, step) => {
       renderProject(`/app/geo/geo_masi/${address}`);
       // The project's own heading: the loading page has an h1 too, and the rail comes only with the project.
-      await screen.findByRole("heading", { level: 1, name: "玛仕度肽注射液" });
-      expect(screen.getByRole("heading", { level: 1, name: "玛仕度肽注射液" })).toBeVisible();
+      await screen.findByRole("button", { name: "当前项目：玛仕度肽注射液，切换项目" });
+      expect(screen.getByRole("button", { name: "当前项目：玛仕度肽注射液，切换项目" })).toBeVisible();
       await userEvent.click(screen.getByRole("button", { name: "修改平台筛选" }));
-      expect(screen.getByRole("heading", { level: 1, name: "玛仕度肽注射液" })).toBeVisible();
+      expect(screen.getByRole("button", { name: "当前项目：玛仕度肽注射液，切换项目" })).toBeVisible();
       expect(new URL(screen.getByTestId("landed").textContent ?? "", "https://example.test").searchParams.get("step")).toBe(step);
     },
   );
@@ -363,7 +363,7 @@ describe("a GEO project's page", () => {
       await act(async () => { await vi.advanceTimersByTimeAsync(10_001); });
       expect(client.getGeoProject).toHaveBeenCalledTimes(2);
       await act(async () => { finish({ ...GEO_PROJECT, name: "更新后的项目" }); await vi.advanceTimersByTimeAsync(1); });
-      expect(screen.getByRole("heading", { level: 1, name: "更新后的项目" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "当前项目：更新后的项目，切换项目" })).toBeInTheDocument();
       expect(client.getGeoProject).toHaveBeenCalledTimes(3);
     } finally { visible.mockRestore(); vi.useRealTimers(); }
   });
@@ -574,7 +574,7 @@ describe("a GEO project's page", () => {
 
   it("keeps a conversation deep link inside the project shell and native pane", async () => {
     renderProject("/app/geo/geo_masi/chat/ses_geo_masi?step=evidence");
-    expect(await screen.findByRole("heading", { name: "玛仕度肽注射液", level: 1 })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "当前项目：玛仕度肽注射液，切换项目" })).toBeInTheDocument();
     expect(screen.getByLabelText("项目对话")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^查看：/ })).not.toBeInTheDocument();
     expect(screen.getByTestId("landed")).toHaveTextContent("step=evidence");
@@ -597,7 +597,7 @@ describe("a GEO project's page", () => {
 
   it("opens analytics from project work without a global rail or bottom composer", async () => {
     renderProject();
-    await screen.findByRole("heading", { level: 1, name: "玛仕度肽注射液" });
+    await screen.findByRole("button", { name: "当前项目：玛仕度肽注射液，切换项目" });
     expect(document.querySelector("[data-step-rail]")).toBeNull();
     expect(document.querySelector("[data-conversation-bar]")).toBeNull();
     await chooseResult("可见度");
@@ -874,7 +874,7 @@ describe("a GEO project's page", () => {
     await userEvent.type(field, "玛仕度肽（2026 方案）");
     await userEvent.click(within(dialog).getByRole("button", { name: "保存" }));
     await waitFor(() => expect(client.patchGeoProject).toHaveBeenCalledWith("geo_masi", { name: "玛仕度肽（2026 方案）" }));
-    expect(await screen.findByRole("heading", { level: 1, name: "玛仕度肽（2026 方案）" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "当前项目：玛仕度肽（2026 方案），切换项目" })).toBeInTheDocument();
     expect(client.getGeoProject).toHaveBeenCalled();
     expect(screen.queryByRole("dialog", { name: "重命名" })).not.toBeInTheDocument();
   });
@@ -899,7 +899,7 @@ describe("a GEO project's page", () => {
     client.getGeoDiagnosis.mockResolvedValue({ round: null, rounds: [], byEngine: [], byPool: [], failureModes: {}, errors: [], noise: null, more: [] });
     client.getGeoMonitoring.mockResolvedValue({ series: [], arms: { pilot: [], control: [], netEffect: {} }, byEngine: [], cited: [], newErrors: [], next: null });
     renderProject();
-    await screen.findByRole("heading", { level: 1, name: "新循证 GEO 项目" });
+    await screen.findByRole("button", { name: "当前项目：新循证 GEO 项目，切换项目" });
     expect(document.querySelector("[data-step-rail]")).toBeNull();
     expect(document.querySelector("[data-conversation-bar]")).toBeNull();
     await userEvent.click(screen.getByText("任务进度"));
@@ -931,12 +931,12 @@ describe("a GEO project's page", () => {
     expect(await screen.findByTestId("visibility-tab")).toHaveTextContent("geo_masi:玛仕度肽注射液");
 
     await userEvent.click(screen.getByRole("button", { name: "另一个项目" }));
-    expect(screen.queryByRole("heading", { level: 1, name: "玛仕度肽注射液" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "当前项目：玛仕度肽注射液，切换项目" })).not.toBeInTheDocument();
     expect(screen.queryByTestId("visibility-tab")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "更多操作" })).not.toBeInTheDocument();
 
     answer({ ...GEO_PROJECT, id: "geo_other", projectId: "p-other", name: "另一个产品" });
-    expect(await screen.findByRole("heading", { level: 1, name: "另一个产品" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "当前项目：另一个产品，切换项目" })).toBeInTheDocument();
     expect(screen.getByTestId("visibility-tab")).toHaveTextContent("geo_other:另一个产品");
   });
 
@@ -960,7 +960,7 @@ describe("a GEO project that is not being measured", () => {
   it("says 已暂停 in the header with 继续 beside it when its owner paused it, and promises no next round", async () => {
     client.getGeoProject.mockResolvedValue({ ...GEO_PROJECT, status: "paused" });
     renderProject();
-    await screen.findByRole("heading", { level: 1, name: "玛仕度肽注射液" });
+    await screen.findByRole("button", { name: "当前项目：玛仕度肽注射液，切换项目" });
     expect(within(document.querySelector("[data-page-header]") as HTMLElement).getByText("已暂停")).toBeInTheDocument();
     await waitFor(() => expect(client.getGeoMonitoring).toHaveBeenCalled());
     expect(band()).not.toHaveTextContent(/下次复测|待复测/);
@@ -1354,7 +1354,7 @@ function projectWith(steps: Record<string, object>, extra: Record<string, unknow
 }
 const header = () => document.querySelector("[data-page-header]") as HTMLElement;
 /** The project's own header, not the loading page's, which stands in the same place until the project is read. */
-const projectHeader = async () => { await screen.findByRole("heading", { level: 1, name: "玛仕度肽注射液" }); return within(header()); };
+const projectHeader = async () => { await screen.findByRole("button", { name: "当前项目：玛仕度肽注射液，切换项目" }); return within(header()); };
 
 describe("the header's one primary is the next step", () => {
   it("leaves the header empty while what is missing is listed on the overview: its way on is a draft that fills the composer, with the pencil", async () => {
@@ -1415,7 +1415,7 @@ describe("the header's one primary is the next step", () => {
   it("is nothing but 继续 for a paused project, beside the tag that says it is paused, and generation stays out of the header", async () => {
     client.getGeoProject.mockResolvedValue({ ...GEO_PROJECT, status: "paused" });
     renderProject();
-    await screen.findByRole("heading", { level: 1, name: "玛仕度肽注射液" });
+    await screen.findByRole("button", { name: "当前项目：玛仕度肽注射液，切换项目" });
     expect(within(header()).getByRole("button", { name: "继续" })).toHaveAttribute("data-action-kind", "set");
     expect(screen.queryByRole("button", { name: "生成周报" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "设投放预算" })).not.toBeInTheDocument();
@@ -1433,7 +1433,7 @@ describe("conversation entry", () => {
   it("offers one conversation entry on each result and no bottom composer", async () => {
     for (const path of ["/accuracy", "/actions?step=content", "/plan?step=sources", "/evidence"]) {
       const view = renderProject(`/app/geo/geo_masi${path}`);
-      await screen.findByRole("heading", { level: 1, name: "玛仕度肽注射液" });
+      await screen.findByRole("button", { name: "当前项目：玛仕度肽注射液，切换项目" });
       expect(screen.getByRole("button", { name: "询问 AI" })).toBeVisible();
       expect(document.querySelector("[data-conversation-bar]")).toBeNull();
       view.unmount();
@@ -1504,7 +1504,7 @@ describe("what the work waits for from its person, over every view", () => {
     renderProject("/app/geo/geo_masi/sources");
     await screen.findByTestId("sources-tab");
     expect(document.querySelector("[data-work-needs]")).toBeNull();
-    await userEvent.click(screen.getByRole("link", { name: "项目总览" }));
+    await userEvent.click(screen.getByRole("link", { name: "项目工作" }));
     expect(await screen.findByText(/设置投放预算/)).toBeVisible();
   });
 
@@ -1629,7 +1629,8 @@ describe("V2 conversation continuity", () => {
       realOpen.on = true;
       client.nativeOpen.mockResolvedValue({ projectId: "p-masi", sessionId: "ses_geo_masi", scope: { kind: "geo", geoProjectId: "geo_masi", sessionId: "ses_geo_masi" } });
       renderProject("/app/geo/geo_masi/visibility");
-      const heading = await screen.findByRole("heading", { level: 1, name: "玛仕度肽注射液" });
+      await screen.findByRole("button", { name: "当前项目：玛仕度肽注射液，切换项目" });
+      const heading = screen.getByRole("heading", { level: 1 });
       expect(heading.closest(".max-w-wide")).not.toBeNull();
       await userEvent.click(await screen.findByRole("button", { name: "visibility 调整视图" }));
       await userEvent.click(screen.getByRole("button", { name: "询问 AI" }));
