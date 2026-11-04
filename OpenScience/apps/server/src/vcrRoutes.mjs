@@ -1334,8 +1334,8 @@ export function createVcrRoutes(dependencies) {
       const subjectKey = body.subjectKey;
       const { study } = await authorize(id, "run");
       await requireAbility(study, "read_patient_level");
-      const roster = service.packages?.matchStore?.candidateSubjects ? await service.packages.matchStore.candidateSubjects({ studyId: study.id }) : [];
-      if (!roster.includes(subjectKey)) throw new HttpError(404, "vcr_subject_not_found", "所选受试者不在本研究已登记的名单中。");
+      // Whoever the study holds: a document, a table row or a judgment says so, and someone only in a table is on no registered list.
+      if (!(await service.packages?.subjectKnown?.(study, subjectKey))) throw new HttpError(404, "vcr_subject_not_found", "所选受试者不在本研究已登记的名单中。");
       const judge = service.packages?.matchJudge ?? /** @type {any} */ (dependencies).matchJudge ?? null;
       const reads = service.packages?.matchJudgments ?? null;
       if (!judge?.rejudge || !reads?.staleTargets) throw UNAVAILABLE();

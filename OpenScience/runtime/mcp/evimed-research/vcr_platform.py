@@ -737,11 +737,13 @@ def read(arguments: dict) -> dict:
             next_actions.append("To preserve an authenticated human case, call vcr_write what=patient_context with data={messageSeq}.")
         if data.get("nextBeforeSeq") is not None:
             next_actions.append("To see earlier human messages, repeat patient_context with filter.beforeSeq set to data.nextBeforeSeq.")
-    if what == "matching" and (arguments.get("filter") or {}).get("kind") not in ("contract", "terminology"):
+    if what == "matching" and (arguments.get("filter") or {}).get("kind") not in ("contract", "terminology", "table_meaning"):
         next_actions.append("Read matching filter.kind=contract for exact protocol/fact write envelopes; vcr_read what=patient_context lists original uploads and authenticated human cases.")
         if data.get("subjectKey"):
-            if data.get("assessment") is None:
-                next_actions.append("No computed assessment is saved yet. Start vcr_simulate action=start kind=match_criteria, then read matching with this subjectKey when it completes. Do not invent judgments.")
+            if data.get("ranking"):
+                pass
+            elif data.get("assessment") is None:
+                next_actions.append("Nothing is saved for this person yet. To judge them from their record start vcr_simulate action=start kind=match_judge; to screen a table on its columns by rules, kind=match_criteria. Read matching with this subjectKey when it completes. Do not invent judgments.")
             else:
                 next_actions.append("The saved assessment contains criterion judgments and approved evidence. To read one criterion narrowly use filter.subjectKey plus filter.id=criterionId; missing evidence remains unknown.")
                 next_actions.append("Deliver from this read-back: copy summary, each judgment's state and applicable and the evidence quotes as saved; if your own reasoning differs, say so beside the saved verdict, do not replace it.")

@@ -37,7 +37,7 @@ import { resolveVcrReplyStudy } from './vcrReplyContext.mjs';
  * @module vcrService
  */
 
-import { VCR_PRIVATE_MATCHING_PROVENANCE_KEYS, statedRequirement } from './vcrMatching.mjs';
+import { VCR_MATCHING_EVALUATOR_VERSION, VCR_PRIVATE_MATCHING_PROVENANCE_KEYS, statedRequirement } from './vcrMatching.mjs';
 import { passageTerms } from './vcrPassages.mjs';
 import { presentLongitudinalRead } from './vcrLongitudinalPresentation.mjs';
 import { loadMethodValidation, validatedMethods } from './vcrMethodValidation.mjs';
@@ -1272,7 +1272,7 @@ export class VcrService {
     const criteria = protocol ? await matchStore.listCriteria({ studyId: study.id, protocolVersionId: protocol.id }).catch(() => []) : [];
     const latest = `SELECT DISTINCT ON (subject_key) * FROM ${VCR_SCHEMA}.matching_assessments
       WHERE study_id = $1 AND ($2::text IS NULL OR protocol_version_id=$2) ORDER BY subject_key, as_of DESC, created_at DESC`;
-    const [tallyRows, subjectRows, gapRows, reviewRows] = await Promise.all([
+    const [tallyRows, subjectRows, gapRows] = await Promise.all([
       // A subject whose consent was withdrawn is listed with their evaluation, as withdrawn, and is not counted among the candidates.
       matchStore.rows(`SELECT summary, count(*)::int AS total FROM (${latest}) l
         WHERE NOT EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.subject_withdrawals w WHERE w.study_id = $1 AND w.subject_key = l.subject_key) GROUP BY summary`, matchingArgs).catch(() => []),
@@ -1282,12 +1282,6 @@ export class VcrService {
         WHEN 'pending' THEN 2 ELSE 3 END, subject_key LIMIT 200`, matchingArgs).catch(() => []),
       matchStore.rows(`SELECT j.criterion_id, count(*)::int AS unknown FROM ${VCR_SCHEMA}.criterion_judgments j
         WHERE j.assessment_id IN (SELECT id FROM (${latest}) l) AND j.applicable AND j.state = 'unknown' GROUP BY 1`, matchingArgs).catch(() => []),
-      // Excluded on a model's word alone: they wait in 「待复核排除」, so the
-      // false-exclusion rate has a denominator (plan §7.1).
-      matchStore.rows(`SELECT l.subject_key FROM (${latest}) l WHERE l.summary = 'ineligible'
-        AND EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.criterion_judgments j WHERE j.assessment_id = l.id AND j.applicable AND j.state = 'not_satisfied')
-        AND NOT EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.criterion_judgments j WHERE j.assessment_id = l.id AND j.applicable
-          AND j.state = 'not_satisfied' AND j.decided_by <> 'model') ORDER BY l.subject_key LIMIT 200`, matchingArgs).catch(() => []),
     ]);
     // A person asked for by name who the cap left out is still read: the page opens whoever it is told to, not the first 200.
     if (query.candidate && !subjectRows.some((row) => String(row.subject_key) === query.candidate)) {
@@ -1300,6 +1294,8 @@ export class VcrService {
       id: String(row.id), subjectKey: String(row.subject_key), summary: String(row.summary), counts: row.counts ?? {},
       priority: row.priority ?? null, direction: String(row.direction ?? "trial_to_patient"), asOf: row.as_of, reviewedBy: row.reviewed_by ?? null,
       basis: marks.get(String(row.id))?.cause === "withdrawn" ? "withdrawn" : marks.has(String(row.id)) ? "updated" : null,
+      // Made by an earlier set of rules: it stands, and says so. (vcr-eligibility-2 read a filled 0 as affirmed.)
+      evaluatorOlder: object(row.provenance).matchingEvaluatorVersion !== VCR_MATCHING_EVALUATOR_VERSION,
     }));
     const wanted = subjects.map((subject) => subject.id);
     const openRows = wanted.length
@@ -1339,6 +1335,8 @@ export class VcrService {
     const clinicalTimeline = timeline.map(fact => ({ ...fact, superseded: longitudinal.superseded.includes(fact.id),
       conflicts: longitudinal.conflicts.find(entry => entry.factId === fact.id)?.withFacts ?? [], ...(factMarks.has(fact.id) ? { basis: "updated" } : {}) }));
     const candidateCoverage = protocol && matchStore.latestMatchingProgress ? await matchStore.latestMatchingProgress(study.id,protocol.id) : null;
+    // Whether the people here have records to read: what 开始评估 starts. No document at all is a table study, which is screened by its rules. A read that fails is no such statement.
+    const records = await this.packages.documents?.roster?.(study).catch(() => null) ?? null;
     // The documents the page cites, by the names the data tab lists them under: a citation carries an id, a reader needs a name.
     const cited = [...list(selected?.judgments).flatMap((/** @type {any} */ judgment) => [...list(judgment.evidence), ...list(judgment.applicabilityEvidence)].map((/** @type {any} */ item) => item?.locator?.documentId)),
       ...clinicalTimeline.map(fact => fact.source?.documentId)].filter(Boolean);
@@ -1349,13 +1347,13 @@ export class VcrService {
       ? await this.#patientTrials(study, candidateRoster, query, viewer) : null;
     return {
       ...(candidateCoverage ? {candidateCoverage} : {}),
+      ...(records ? { hasRecords: records.length > 0 } : {}),
       documentNames,
       ...(patientTrials ? { patientTrials } : {}),
       protocols, candidateRoster, comparisons, timeline: clinicalTimeline,
       protocol, criteria, subjects, selected, openByAssessment,
       tallies: Object.fromEntries(tallyRows.map((row) => [String(row.summary), Number(row.total)])),
       gapsByCriterion: new Map(gapRows.map((row) => [String(row.criterion_id), { unknown: Number(row.unknown) }])),
-      pendingReview: reviewRows.map((row) => String(row.subject_key)),
       forecastResult: null,
       snapshotAt: null,
     };

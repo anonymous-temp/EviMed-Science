@@ -77,7 +77,7 @@ import { VcrErasureStore } from "./vcrErasureStore.mjs";
 import { createVcrEngineClient } from "./vcrEngineClient.mjs";
 import { createVcrEngineProbe } from "./vcrEngineProbe.mjs";
 import { matchingVariablesOf, subjectTableFacts } from "./vcrMatchingTable.mjs";
-import { ensureTableMeaning } from "./vcrTableMeaning.mjs";
+import { ensureTableMeaning, readTableMeaning, tableMeaningDatasetId } from "./vcrTableMeaning.mjs";
 import { createVcrTrialCorpus } from "./vcrTrialCorpus.mjs";
 import { createVcrEvidencePipeline } from "./vcrEvidence.mjs";
 import { createVcrCorrectionCases } from "./vcrCorrectionCases.mjs";
@@ -631,6 +631,16 @@ export function vcrSubjectTableSeam({ dataPlane, semantics = null, config = {}, 
       return { ...table, meaning: found.meaning, meaningDigest: found.digest,
         meaningStatus: { status: found.status, ...(found.code ? { code: found.code } : {}), ...(found.message ? { message: found.message } : {}) } };
     },
+    /** What the table's codes were read to mean, and how to correct one: a correction outranks the model's reading, and screening reads it next time. @param {any} study */
+    async meaningRead(study) {
+      const table = dataPlane ? await dataPlane.subjectTableForMatching({ studyId: study.id, principal: study.userId, purpose: VCR_JOB_PURPOSE }).catch(() => null) : null;
+      if (!table?.available || !table.snapshotId) return { available: false, note: "这个研究没有受试者表。" };
+      const datasetId = tableMeaningDatasetId(String(table.snapshotId));
+      const record = await semantics?.()?.get(String(study.userId), String(study.projectId), datasetId).catch(() => null);
+      const meaning = readTableMeaning(record?.asset);
+      return { available: true, datasetId, columns: list(table.columns).filter((column) => column?.name && column.name !== "USUBJID").map((column) => ({ name: String(column.name), ...(meaning.columns[column.name] ?? {}) })),
+        correct: { tool: "dataset_semantics", action: "write", datasetId, note: "A code read wrongly, or a column with no map: write the variable's valueMap as the researcher states it, basis statement." } };
+    },
     /** @param {any} study */
     async identity(study) {
       if (!dataPlane) return null;
@@ -746,6 +756,8 @@ export function vcrMatchingSeam({ matchStore, store, documents = null, subjectTa
      * @param {any} study @param {Record<string, any>} filter
      */
     async runtimeRead(study, filter) {
+      // What a study's table means, under its own name: the dataset's id, each column's concept and codes, and how to correct one.
+      if(filter.kind==='table_meaning') return subjectTable?.meaningRead ? subjectTable.meaningRead(study) : {available:false,note:'这个研究没有受试者表。'};
       if(filter.kind==='contract') return {
         factContract:clinicalEnabled(study) ? CLINICAL_FACT_CONTRACT : null,
         // The rule holds for every fact, whether or not the clinical metadata is on for this study.
@@ -759,6 +771,7 @@ export function vcrMatchingSeam({ matchStore, store, documents = null, subjectTa
         factWrite:{tool:'vcr_write',what:'fact',items:[{subjectKey:'returned subjectKey',documentId:'returned documentId',variable:'age',value:45,unit:'year',surface:'45 years',quote:'Exact preserved original quote'}]},
         evaluate:{tool:'vcr_simulate',action:'start',kind:'match_criteria'},
         terminologyRead:{what:'matching',filter:{kind:'terminology'}},
+        tableMeaningRead:{what:'matching',filter:{kind:'table_meaning'}},
       };
       if (filter.snapshotId) {
         const snapshot = await matchStore.matchingSnapshot(study.id, String(filter.snapshotId));
@@ -1326,7 +1339,7 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
       people: (ids) => store.personNames(ids) } });
   // The matching page's reader of the saved judgments, and the start of the judging job from the page.
   const matchResults = new VcrMatchResults({ database: productDatabase, judgments: matchJudgments, documents, matchStore, minCell: matchBatchMinCell(config) });
-  service.attach({ corrections, knowledge, engineProbe, erasure, matchJudgments: matchJudgmentReads, matchJudge, matchResults });
+  service.attach({ corrections, knowledge, engineProbe, erasure, matchJudgments: matchJudgmentReads, matchJudge, matchResults, subjectKnown });
   // The study's project carries the study's name: the first definition names a draft, and the sidebar lists projects. A project the
   // researcher renamed since is left alone, like GEO's — the old name is the study's own, or one nobody gave.
   if (projectStore?.renameProject) {

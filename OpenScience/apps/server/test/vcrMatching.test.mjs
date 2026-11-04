@@ -18,7 +18,7 @@ import {
   criterionConfusion, criterionFunnel, criterionLanguageKeys, decidedShare, dueRechecks, eligibilityCounts, errorLayer, evaluateCriterion,
   evaluateRequirement, evidenceGaps, factsVisibleAt, frozenAsOf, interRaterAgreement, kleeneAnd, kleeneNot, kleeneOr,
   labelClinicalPriority, matchingAssessmentDocument, matchingEvaluationReport, matchingReportDiff, patientMatchingMetrics,
-  pendingReviewExclusions, requiresLanguageJudgment, runMatchingEvaluation,
+  requiresLanguageJudgment, runMatchingEvaluation,
   storedExclusion, summarizeEligibility, verifyFactEvidence, settleFactEvidence, windowStart, withinWindow, VCR_FACT_VOID_REASONS,
 } from "../src/vcrMatching.mjs";
 import { clinicalFactView, validateCapabilityManifest, vcrMatchingFindings } from "@evimed/domain";
@@ -246,7 +246,6 @@ test("language answers for applicability and the requirement are separately anch
   assert.equal(positive.summary, "ineligible");
   assert.equal(positive.judgments[0].applicabilityEvidence[0].quote, "Subtype is active.");
   assert.equal(positive.judgments[0].evidence[0].quote, "Infection is present.");
-  assert.deepEqual(pendingReviewExclusions([positive]), [positive]);
   const negative = evaluate({ ...modelJudgments, premise: { ...modelJudgments.premise, state: NOT_SATISFIED } });
   assert.equal(negative.counts.notApplicable, 1);
   assert.equal(evaluate({ ...modelJudgments, premise: answer("Unsupported") }).summary, "insufficient_evidence");
@@ -651,20 +650,6 @@ test("AC-14 a full assessment keeps the gaps, the void facts and the blocking ex
   assert.deepEqual(findings.issues, [], "every decided judgment carries a quote and a locator");
   assert.equal(findings.metrics.vcrJudgments, 3);
   assert.equal(findings.metrics.vcrJudgmentsUnanchored, 0);
-});
-
-test("subjects ruled out on a model's word alone go to the review queue, not out of the list", () => {
-  const modelOnly = {
-    subjectKey: "S7", summary: "ineligible",
-    judgments: [{ criterionId: "crt-consent", applicable: true, state: NOT_SATISFIED, decidedBy: "model" }],
-  };
-  const codeDecided = {
-    subjectKey: "S2", summary: "ineligible",
-    judgments: [{ criterionId: "crt-mi", applicable: true, state: NOT_SATISFIED, decidedBy: "code" }],
-  };
-  const eligible = { subjectKey: "S1", summary: "eligible", judgments: [] };
-  const queue = pendingReviewExclusions([modelOnly, codeDecided, eligible]);
-  assert.deepEqual(queue.map((item) => item.subjectKey), ["S7"]);
 });
 
 test("the criterion funnel says which single line is costing the trial its patients", () => {

@@ -1603,7 +1603,7 @@ export function presentMatchingTab(bundle, query = {}) {
       summary: `${Number(counts.satisfied ?? 0)} 条满足 · ${Number(counts.unknown ?? 0)} 条未知 · ${Number(counts.pending_recheck ?? 0)} 条待复评${notSatisfied > 0 ? ` · ${notSatisfied} 条不满足` : ""}`,
       eligibility: row.summary,
       // What the evaluation rested on has changed since, or was withdrawn: said as a state beside the person (依据已更新 / 已撤回).
-      ...(row.basis ? { basis: row.basis } : {}),
+      ...(row.basis ? { basis: row.basis } : {}), ...(row.evaluatorOlder === true ? { olderRules: true } : {}),
       open: judged.filter((/** @type {any} */ open) => open.state !== "not_satisfied").map((/** @type {any} */ open) => ({
         code: criterionCode(open.criterionId), state: open.state,
         note: open.recheckAt ? `${zhDate(open.recheckAt, now)} 复评` : null,
@@ -1654,9 +1654,13 @@ export function presentMatchingTab(bundle, query = {}) {
     })).filter((gap) => gap.count > 0);
   const eligible = count("eligible");
   const insufficient = (count("insufficient_evidence") ?? 0) + (count("pending") ?? 0);
+  /** Who the one 重新开始评估 is for: a basis that has changed, or rules that have. @param {any} row */
+  const evaluatedAgain = (row) => row.basis === "updated" || row.evaluatorOlder === true;
   return {
     view,
     available: true,
+    // What 开始评估 starts: a study of tables with no record to read is screened by its rules, one with records is judged by the model.
+    evaluateBy: match.hasRecords === false ? "rules" : "model",
     protocols: list(match.protocols), protocolVersionId: match.protocol?.id ?? null,
     candidateRoster: list(match.candidateRoster),
     ...(match.candidateCoverage ? {candidateCoverage: match.candidateCoverage} : {}),
@@ -1682,8 +1686,8 @@ export function presentMatchingTab(bundle, query = {}) {
     funnel,
     candidates,
     // The people whose evaluation rested on a basis that has since changed, for the one action the page offers: evaluate them again.
-    ...(subjects.some((row) => row.basis === "updated")
-      ? { basisUpdated: { count: subjects.filter((row) => row.basis === "updated").length, subjects: subjects.filter((row) => row.basis === "updated").slice(0, 50).map((row) => String(row.subjectKey)) } } : {}),
+    ...(subjects.some(evaluatedAgain)
+      ? { basisUpdated: { count: subjects.filter(evaluatedAgain).length, subjects: subjects.filter(evaluatedAgain).slice(0, 50).map((row) => String(row.subjectKey)) } } : {}),
     selected,
     gaps,
     protocol: protocol ? { version: protocol.version, title: text(protocol.title) } : null,

@@ -88,7 +88,7 @@ test("the model is shown names, types, units and the codes of a vocabulary colum
   assert.doesNotMatch(prompt, /Table\/1/, "not even the snapshot's name");
 });
 
-test("a column with more codes than a vocabulary may have, or too few people, is offered with no codes and gets no map", async () => {
+test("a column with more codes than a vocabulary may have is offered with no codes and gets no map; a small table's codes are offered", async () => {
   const wide = table();
   wide.rows = Array.from({ length: 60 }, (_, index) => [`P${index}`, String(20 + index), String(index % 40), "Positive", "120"]);
   const plan = planTableMeaning({ table: wide, variables: ["diabetes"], meaning: { columns: {}, asked: [] }, floor: 10 });
@@ -97,7 +97,15 @@ test("a column with more codes than a vocabulary may have, or too few people, is
   assert.equal(brief("DIABETES")?.distinct, `more than ${DATA_DRIFT_BOUNDS.vocabularyMax}`);
   const small = table();
   small.rows = small.rows.slice(0, 5);
-  assert.equal(planTableMeaning({ table: small, variables: ["diabetes"], meaning: { columns: {}, asked: [] }, floor: 10 })?.briefs.find((item) => item.name === "DIABETES")?.values, undefined, "under the small-cell floor");
+  // A small table's codes are read too: 0 and 1 mean what they mean however few people there are, and without them every presence criterion stays open for good.
+  const codes = planTableMeaning({ table: small, variables: ["diabetes"], meaning: { columns: {}, asked: [] }, floor: 10 })?.briefs.find((item) => item.name === "DIABETES");
+  assert.deepEqual(codes?.values, ["0", "1"], "under the small-cell floor");
+  const two = table();
+  two.rows = two.rows.slice(0, 2);
+  assert.ok(planTableMeaning({ table: two, variables: ["diabetes"], meaning: { columns: {}, asked: [] }, floor: 10 })?.briefs.find((item) => item.name === "DIABETES")?.values?.length, "two people, two codes");
+  const manyLevels = table();
+  manyLevels.rows = Array.from({ length: 8 }, (_, index) => [`P${index}`, String(20 + index), `level-${index}`, "Positive", "120"]);
+  assert.equal(planTableMeaning({ table: manyLevels, variables: ["diabetes"], meaning: { columns: {}, asked: [] }, floor: 10 })?.briefs.find((item) => item.name === "DIABETES")?.values, undefined, "one value a person is no list of codes, in a small table as in a large one");
   // an answer that lists codes for such a column is not kept
   const accepted = acceptTableMeaning({ columns: [{ name: "DIABETES", measurement: false, values: { 1: "present" } }] }, /** @type {any} */ (plan));
   assert.deepEqual(accepted.get("DIABETES"), { valueMap: { values: {}, measurement: false } });

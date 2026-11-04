@@ -264,6 +264,9 @@ function clausesNoteOf(pair) {
   return null;
 }
 
+/** What a page and a file say when a scope is larger than one read holds. @param {number} most */
+const CUT_NOTE_ZH = (most) => `这里的对数超过一次能读的上限，只算到前 ${Number(most).toLocaleString("en-US")} 对左右；分批选人可以看全。`;
+
 /** What the page says of a person's trials whose registry record has changed since they were judged. */
 const REGISTRY_STALE_LABEL_ZH = "登记记录已更新，可重新判定";
 /** What the page says of a judgment whose record was a document the person's chart has since changed, withdrawn or re-permitted. */
@@ -294,11 +297,12 @@ const NOT_WITHDRAWN = `NOT EXISTS (SELECT 1 FROM ${S}.subject_withdrawals w WHER
  */
 export class VcrMatchResults extends VcrStoreBase {
   /**
-   * @param {{ database: any, judgments: any, documents?: any, matchStore?: any, minCell?: number, statementTimeoutMs?: number }} deps
+   * @param {{ database: any, judgments: any, documents?: any, matchStore?: any, minCell?: number, statementTimeoutMs?: number, mostPairs?: number }} deps
    * `judgments` is the judgment store (whole rows by id), `documents` the seam that re-reads a sentence and judges a read under the viewer's grant.
    */
-  constructor({ database, judgments, documents = null, matchStore = null, minCell = VCR_MIN_CELL_SIZE, statementTimeoutMs = READ_TIMEOUT_MS }) {
+  constructor({ database, judgments, documents = null, matchStore = null, minCell = VCR_MIN_CELL_SIZE, statementTimeoutMs = READ_TIMEOUT_MS, mostPairs = MOST_PAIRS }) {
     super({ database, statementTimeoutMs });
+    this.mostPairs = mostPairs;
     this.judgments = judgments;
     this.documents = documents;
     this.matchStore = matchStore;
@@ -329,7 +333,7 @@ export class VcrMatchResults extends VcrStoreBase {
         FROM ${S}.match_judgments j
         WHERE j.study_id = $1 AND ($2::text IS NULL OR j.subject_key = $2) AND ($3::text IS NULL OR j.target_kind = $3) AND ($4::text IS NULL OR j.target_id = $4) AND ${NOT_WITHDRAWN}
         ORDER BY j.subject_key, j.target_kind, j.target_id, j.mode, (j.status = 'done') DESC, j.updated_at DESC, j.id
-        LIMIT ${MOST_PAIRS * 2})
+        LIMIT ${Math.floor(this.mostPairs) * 2})
       SELECT ${COLUMNS}, k.answered, k.support, k.against, k.not_applicable, k.silent, k.nei, k.silent_against, k.against_reason, k.support_reason, k.open_reason, u.unanswered
       FROM newest nw JOIN ${S}.match_judgments j ON j.id = nw.id ${COUNTS}`, [studyId, subjectKey, targetKind, targetId]);
   }
@@ -354,6 +358,8 @@ export class VcrMatchResults extends VcrStoreBase {
    */
   async #pairs(studyId, scope) {
     const rows = await this.#newest(studyId, scope);
+    // A scope past what one read holds is read as far as that, and says so: a list or a file that ended silently would read as all of it.
+    const cut = rows.length >= Math.floor(this.mostPairs) * 2;
     /** @type {Map<string, { fit: any, criteria: any }>} */
     const grouped = new Map();
     for (const row of rows) {
@@ -394,7 +400,7 @@ export class VcrMatchResults extends VcrStoreBase {
     // Whoever reads a person reads the same short name: unique within the study's roster, and never the key itself.
     const labels = await this.#labels(studyId, [...done, ...failed].map((entry) => entry.subjectKey));
     for (const entry of [...done, ...failed]) entry.label = labels.get(entry.subjectKey) ?? vcrSubjectLabel(entry.subjectKey);
-    return { done, failed };
+    return { done, failed, cut };
   }
 
   /** What a pair is called in a list, a file and a sentence. @param {any} pair */
@@ -513,7 +519,7 @@ export class VcrMatchResults extends VcrStoreBase {
     // The trials whose verdict rests on a registry record that has changed since: the page offers to judge those again, and says so in words.
     const stale = ranked.filter((pair) => pair.basisChanged?.kind === REGISTRY_RECORD_BASIS).map((pair) => String(pair.targetId));
     return {
-      direction: "patient_to_trial", subjectKey, label: pairs.done[0]?.label ?? pairs.failed[0]?.label ?? vcrSubjectLabel(subjectKey),
+      direction: "patient_to_trial", subjectKey, label: pairs.done[0]?.label ?? pairs.failed[0]?.label ?? vcrSubjectLabel(subjectKey), ...(pairs.cut ? { cutNote: CUT_NOTE_ZH(this.mostPairs) } : {}),
       ...(stale.length ? { stale: { label: REGISTRY_STALE_LABEL_ZH, count: stale.length, registryIds: stale.slice(0, 50) } } : {}),
       held: pairs.done.length > 0 || pairs.failed.length > 0 || progress.total > 0, progress,
       trials, failed: this.#failureSummary(failures), selected: chosen ? await this.#open(study, chosen, viewer) : null,
@@ -552,7 +558,7 @@ export class VcrMatchResults extends VcrStoreBase {
     const funnel = await this.#funnel(study.id, protocolVersionId);
     const failedSummary = this.#failureSummary(failures);
     return {
-      direction: "trial_to_patient", protocolVersionId, held: pairs.done.length > 0 || pairs.failed.length > 0 || progress.total > 0,
+      direction: "trial_to_patient", protocolVersionId, ...(pairs.cut ? { cutNote: CUT_NOTE_ZH(this.mostPairs) } : {}), held: pairs.done.length > 0 || pairs.failed.length > 0 || progress.total > 0,
       progress: exact ? progress : { ...progress, total: hideAlone(progress.total, this.minCell), finished: hideAlone(progress.finished, this.minCell), failed: hideAlone(progress.failed, this.minCell), waiting: hideAlone(progress.waiting, this.minCell),
         clauses: { wanted: hideAlone(progress.clauses.wanted, this.minCell), done: hideAlone(progress.clauses.done, this.minCell), left: hideAlone(progress.clauses.left, this.minCell) } }, tallies: shownTallies,
       people: page.map((pair) => this.#listed(pair)), total: exact ? inList.length : hideAlone(inList.length, this.minCell), offset: start, limit: size, more: inList.length > start + size,
@@ -703,7 +709,9 @@ export class VcrMatchResults extends VcrStoreBase {
           }
         }
       }
-      if (format === "json") await sink.write("]}");
+      // A file past what one read holds ends by saying so.
+      if (pairs.cut && format === "csv") await sink.write(csvLine([CUT_NOTE_ZH(this.mostPairs)]));
+      if (format === "json") await sink.write(`]${pairs.cut ? `,"cutNote":${JSON.stringify(CUT_NOTE_ZH(this.mostPairs))}` : ""}}`);
     };
     return { filename, contentType: format === "csv" ? "text/csv; charset=utf-8" : "application/json; charset=utf-8", rows: ordered.length, run };
   }

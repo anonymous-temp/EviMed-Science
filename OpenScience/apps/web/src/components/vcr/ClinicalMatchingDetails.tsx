@@ -10,8 +10,8 @@ import { Note } from '@/components/ui/Note';
 import { Tag } from '@/components/ui/Tag';
 import { money } from './tabs/JudgedProgress';
 import type { ToolbarFilter } from '@/components/ui/Toolbar';
-import { resolveVcrQuote, startVcrJudge, type VcrClinicalTimelineEntry, type VcrCriterionJudgement, type VcrCriterionState, type VcrJudgeStart, type VcrMatchingTab, type VcrProtocolChoice } from '@/lib/vcrClient';
-import { webErrorMessage } from '@/lib/apiClient';
+import { enqueueVcrMatching, resolveVcrQuote, startVcrJudge, type VcrClinicalTimelineEntry, type VcrCriterionJudgement, type VcrCriterionState, type VcrJudgeStart, type VcrMatchingTab, type VcrProtocolChoice } from '@/lib/vcrClient';
+import { WebApiError, webErrorMessage } from '@/lib/apiClient';
 import { cn } from '@/lib/cn';
 import { formatDay } from '@/lib/format';
 import { ShowMore, useShowMore } from '@/components/ui/ShowMore';
@@ -44,10 +44,19 @@ export function useMatchingEvaluation(studyId: string, onQueued: () => void) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [failed, setFailed] = useState(false);
-  const evaluate = async (selection: { protocolVersionIds: string[]; subjectKeys?: string[]; direction: string }) => {
+  const evaluate = async (selection: { protocolVersionIds: string[]; subjectKeys?: string[]; direction: string; byRules?: boolean }) => {
     if (busy) return;
     setBusy(true); setMessage(''); setFailed(false);
     try {
+      // People with no record to read are screened on their table's columns by the rules: that is a job of its own, with no model reading a note.
+      if (selection.byRules) {
+        const answer = await enqueueVcrMatching(studyId, { protocolVersionIds: selection.protocolVersionIds, direction: selection.direction, ...(selection.subjectKeys?.length ? { subjectKeys: selection.subjectKeys } : {}) });
+        const none = answer.jobs.length === 0;
+        setFailed(none);
+        setMessage(none ? `没有开始评估。${answer.unavailable.map((entry) => webErrorMessage(new WebApiError('', { status: 409, code: entry.code }), { fallback: '这个方案暂时不能评估。' })).join('')}` : `已开始 ${answer.jobs.length} 项按规则筛选。`);
+        if (!none) onQueued();
+        return;
+      }
       // A job for each protocol version, in the order chosen: they queue behind one another, and a refusal of one is that one's.
       const started: VcrJudgeStart[] = [];
       const refused: string[] = [];
@@ -269,7 +278,7 @@ export interface MatchingControls {
  *  - A study with patients and no protocol version still offers the patient to start from in the direction that starts from one;
  *    the protocol's controls have nothing to work on there.
  */
-export function useMatchingControls({ studyId, data, direction, protocolId, subjectKey, settling = false, canRun, judged = false, onProtocol, onCandidate, onReload }: {
+export function useMatchingControls({ studyId, data, direction, protocolId, subjectKey, settling = false, canRun, judged = false, onRules = false, onProtocol, onCandidate, onReload }: {
   studyId: string;
   /** The page being read; null before the first one has arrived (the hook is called either way, and draws nothing). */
   data: VcrMatchingTab | null;
@@ -287,6 +296,8 @@ export function useMatchingControls({ studyId, data, direction, protocolId, subj
   canRun: boolean;
   /** The page draws what the model judged: the earlier path's coverage and 依据已更新 notes are about assessments it does not show, and are left out. */
   judged?: boolean;
+  /** The reader is looking at the rule assessments. */
+  onRules?: boolean;
   onProtocol: (id: string) => void; onCandidate: (id: string) => void; onReload: () => void;
 }): MatchingControls | null {
   const [panel, setPanel] = useState<string[]>([]);
@@ -328,12 +339,14 @@ export function useMatchingControls({ studyId, data, direction, protocolId, subj
     });
   }
 
+  // Going on from what is on screen: the rule assessments are re-run by the rules, whatever else the study holds.
+  const byRules = data.evaluateBy === 'rules' || onRules === true;
   const actions: VcrToolbarAction[] = [];
   // Starting the judging of the protocol in view, for everyone registered or for the patient chosen.
   if (canRun && protocols.length > 0 && roster.length > 0 && !needsPatient) {
     actions.push({
       key: 'evaluate', label: '开始评估', kind: 'start', loading: evaluation.busy || settling,
-      onSelect: () => { if (!evaluation.busy && !settling) void evaluation.evaluate({ protocolVersionIds: [viewing], direction: way, ...scope }); },
+      onSelect: () => { if (!evaluation.busy && !settling) void evaluation.evaluate({ protocolVersionIds: [viewing], direction: way, byRules, ...scope }); },
     });
   }
 
@@ -345,7 +358,7 @@ export function useMatchingControls({ studyId, data, direction, protocolId, subj
       )}
       {!judged && data.basisUpdated && canRun && (
         <Note action={<Button variant="secondary" size="sm" actionKind="start" loading={evaluation.busy} disabled={evaluation.busy || settling}
-          onClick={() => void evaluation.evaluate({ protocolVersionIds: [viewing], direction: way, subjectKeys: data.basisUpdated?.subjects })}>重新开始评估</Button>}
+          onClick={() => void evaluation.evaluate({ protocolVersionIds: [viewing], direction: way, byRules, subjectKeys: data.basisUpdated?.subjects })}>重新开始评估</Button>}
         >{`${data.basisUpdated.count} 人的评估依据已更新`}</Note>
       )}
       {!judged && data.basisUpdated && !canRun && <Note result={[{ n: data.basisUpdated.count }, ' 人的评估依据已更新']} />}
@@ -359,7 +372,7 @@ export function useMatchingControls({ studyId, data, direction, protocolId, subj
         <ProtocolChecklist protocols={protocols} chosen={panel} onChange={setPanel} />
         <div className="flex flex-wrap items-start gap-2">
           {canRun && <Button actionKind="start" loading={evaluation.busy} disabled={evaluation.busy || settling || !panel.length || needsPatient}
-            onClick={() => void evaluation.evaluate({ protocolVersionIds: panel, direction: way, ...scope })}>开始评估所选方案</Button>}
+            onClick={() => void evaluation.evaluate({ protocolVersionIds: panel, direction: way, byRules, ...scope })}>开始评估所选方案</Button>}
         </div>
         {(data.comparisons ?? []).length > 0 && (
           <List label="各方案的评估情况" divided className="md:col-span-2">

@@ -66,3 +66,15 @@ test("a person asked for by name is on the page even when fifty others rank befo
   assert.ok(asked.candidates.some((row) => row.id === "Z-LAST"));
   assert.equal(asked.selected.candidate.id, "Z-LAST");
 });
+
+test("a study with no records screens by its rules, and an assessment by an earlier set of rules says so and is offered again", () => {
+  const rows = [{ ...subject("P-1", "eligible", { satisfied: 2 }), evaluatorOlder: true }, subject("P-2", "eligible", { satisfied: 2 })];
+  const noRecords = presentMatchingTab(bundle(rows, { hasRecords: false }));
+  assert.equal(noRecords.evaluateBy, "rules");
+  assert.equal(presentMatchingTab(bundle(rows, { hasRecords: true })).evaluateBy, "model");
+  assert.equal(presentMatchingTab(bundle(rows)).evaluateBy, "model", "a read that could not say goes to the path that reads what there is");
+  const page = presentMatchingTab(bundle(rows));
+  assert.equal(page.candidates[0].olderRules, true);
+  assert.equal(page.candidates[1].olderRules, undefined);
+  assert.deepEqual(page.basisUpdated, { count: 1, subjects: ["P-1"] }, "the one action that evaluates them again");
+});

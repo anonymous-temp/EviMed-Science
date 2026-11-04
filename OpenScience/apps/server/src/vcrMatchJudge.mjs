@@ -1371,7 +1371,8 @@ export function createMatchJudgmentReads({ judgments, documents, subjectTable = 
 
   /** @param {any} study @param {{ subjectKey?: string | null, targetKind?: string | null, targetId?: string | null, limit: number, offset: number, order: 'target' | 'subject' }} input */
   const read = async (study, { subjectKey = null, targetKind = null, targetId = null, limit, offset, order }) => {
-    const { pairs, failed } = pairsOf(await judgments.list({ studyId: study.id, subjectKey, targetKind, targetId }));
+    const held = await judgments.list({ studyId: study.id, subjectKey, targetKind, targetId });
+    const { pairs, failed } = pairsOf(held);
     const direction = order === 'target' ? 'patient_to_trial' : 'trial_to_patient';
     // How far it is: what the jobs of this scope asked for, and what the newest of them is doing. A read in the middle of a job is not the end of it.
     const jobs = judgments.jobsOf ? await judgments.jobsOf({ studyId: study.id, direction, subjectKey, protocolVersionId: targetId }) : [];
@@ -1392,7 +1393,7 @@ export function createMatchJudgmentReads({ judgments, documents, subjectTable = 
       ? ranked.filter((pair) => isRegistryMark(pair.fitRow?.basisChanged) || isRegistryMark(pair.criteriaRow?.basisChanged)).map((pair) => String(pair.targetId)).slice(0, VCR_MATCH_JUDGE_LIMITS.trials) : [];
     const clausesFailed = pairs.filter((pair) => pair.clauseFailure && !pair.criteriaRow).map((pair) => ({ subjectKey: pair.subjectKey, targetId: pair.targetId, code: pair.clauseFailure, reason: vcrMatchFailureReason(pair.clauseFailure), at: pair.at ?? null }));
     return { ranking: await Promise.all(presented.map(({ row, record }) => projected(study, row, record))), note: SAVED_WORDS_NOTE, finished: ranked.length, failedPairs: failed.length, ...(failed.length ? { failed: failed.slice(0, 50) } : {}), more: ranked.length > offset + limit,
-      total: progress.total, state: progress.state, left: progress.left.length, clauses: progress.clauses, ...(clausesFailed.length ? { clausesFailed: clausesFailed.slice(0, 50) } : {}),
+      total: progress.total, state: progress.state, left: progress.left.length, clauses: progress.clauses, ...(held.length >= 20_000 ? { cut: true } : {}), ...(clausesFailed.length ? { clausesFailed: clausesFailed.slice(0, 50) } : {}),
       ...(progress.latest ? { job: { id: String(progress.latest.id), state: String(progress.latest.state) } } : {}),
       ...(stale.length ? { rejudge: { reason: REGISTRY_RECORD_BASIS, label: '登记记录已更新，可重新判定', subjectKey, registryIds: stale } } : {}) };
   };

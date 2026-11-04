@@ -7,8 +7,8 @@ import { VcrToolbarActions } from './VcrToolbarActions';
 import { CloudDocuments, reviewedSpans } from './data/CloudDocuments';
 import type { VcrIntakeSource, VcrMatchingTab } from '@/lib/vcrClient';
 import { WebApiError } from '@/lib/apiClient';
-const api = vi.hoisted(() => ({ judge:vi.fn(),quote:vi.fn(),permission:vi.fn(),document:vi.fn(),projection:vi.fn(),retire:vi.fn() }));
-vi.mock('@/lib/vcrClient',()=>({startVcrJudge:api.judge,resolveVcrQuote:api.quote,setVcrCloudPermission:api.permission,getVcrProtectedDocument:api.document,createVcrProjection:api.projection,retireVcrProjection:api.retire}));
+const api = vi.hoisted(() => ({ judge:vi.fn(),enqueue:vi.fn(),quote:vi.fn(),permission:vi.fn(),document:vi.fn(),projection:vi.fn(),retire:vi.fn() }));
+vi.mock('@/lib/vcrClient',()=>({startVcrJudge:api.judge,enqueueVcrMatching:api.enqueue,resolveVcrQuote:api.quote,setVcrCloudPermission:api.permission,getVcrProtectedDocument:api.document,createVcrProjection:api.projection,retireVcrProjection:api.retire}));
 beforeEach(()=>vi.clearAllMocks());
 
 /**
@@ -104,6 +104,20 @@ describe('evaluating from the controls',()=>{
     // The judging job of the protocol in view is what starts, and the job's own ceiling is said with it.
     await waitFor(()=>expect(api.judge).toHaveBeenCalledWith('s1',{direction:'trial_to_patient',protocolVersionId:'p2'}));
     expect(await screen.findByRole('status')).toHaveTextContent('已开始 1 项评估，共 6 对，预计最多 1.50 灵豆；随时可以停止，判完的会保留。');
+  });
+  it('a study with no records screens by its rules: 开始评估 starts the rule evaluation, and says how many started',async()=>{
+    api.enqueue.mockResolvedValue({jobs:[{jobId:'job',state:'queued'}],unavailable:[]});
+    controls(page({evaluateBy:'rules'}));
+    fireEvent.click(screen.getByRole('button',{name:'开始评估'}));
+    await waitFor(()=>expect(api.enqueue).toHaveBeenCalledWith('s1',{protocolVersionIds:['p2'],direction:'trial_to_patient'}));
+    expect(api.judge).not.toHaveBeenCalled();
+    expect(await screen.findByRole('status')).toHaveTextContent('已开始 1 项按规则筛选');
+  });
+  it('a rule evaluation nothing could start says why, as a problem',async()=>{
+    api.enqueue.mockResolvedValue({jobs:[],unavailable:[{code:'vcr_matching_no_subjects'}]});
+    controls(page({evaluateBy:'rules'}));
+    fireEvent.click(screen.getByRole('button',{name:'开始评估'}));
+    expect(await screen.findByRole('alert')).toHaveTextContent('没有开始评估');
   });
   it('says nothing was submitted, and why, when no job was queued — as a problem, not as a success with a zero in it',async()=>{
     api.judge.mockRejectedValue(new WebApiError('x',{status:409,code:'vcr_match_judge_nothing_to_read'}));

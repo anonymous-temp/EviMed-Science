@@ -17,8 +17,8 @@
  *   nothing new, find everything recorded and cost nothing.
  * - **The model sees codes, never a person.** The prompt holds column names, declared types and units, and for a column of at most
  *   `vocabularyMax` distinct short values the distinct values themselves -- never a row, never a value beside a key. A column with more
- *   distinct values gets no map and can only be called a measurement; a column of fewer than the small-cell floor of filled cells, or
- *   whose values are nearly one per person, lists no values at all. The values are patient data, so they leave under the same rule every
+ *   distinct values gets no map and can only be called a measurement; a column whose values are nearly one per person lists no values at all, and under the small-cell floor of filled
+ *   cells only a column of a few codes lists them. The values are patient data, so they leave under the same rule every
  *   other patient text does: the source's cloud permission or the deployment's agreements (`authorizeCloud`, the plane's judged answer).
  *   A refusal is a result that says so.
  * - **Code applies what the model said, exactly.** An answer is held to what was offered: a code the column does not contain, a state
@@ -49,6 +49,8 @@ const SUBJECT_COLUMN = 'USUBJID';
 export const TABLE_MEANING_MAX_COLUMNS = 120;
 /** A code longer than this is text, not a code (the domain's code length). */
 const CODE_CHARS = 40;
+/** What a table too small to show levels being shared may offer as codes in one column. */
+const SMALL_TABLE_CODES = 4;
 /** Bumped when the instructions change enough that a recorded meaning should be asked for again (a new dataset id follows the version). */
 export const TABLE_MEANING_PROMPT_VERSION = 'table-meaning-1';
 
@@ -118,8 +120,10 @@ function briefOf(table, column, floor) {
     filled += 1;
     if (seen.size <= DATA_DRIFT_BOUNDS.vocabularyMax) seen.add(cell);
   }
-  // A vocabulary is levels that people share: a column whose values are nearly one per person is a measurement, not a code list.
-  const vocabulary = column.type !== 'date' && filled >= floor && seen.size > 0 && seen.size <= DATA_DRIFT_BOUNDS.vocabularyMax && seen.size * 2 <= filled
+  // A vocabulary is levels that people share: a column whose values are nearly one per person is a measurement, not a code list. A small table cannot show that sharing, and 0 and 1 mean what they mean
+  // however few people there are: without its codes every presence criterion of the table would stay open for good. So a table under the floor offers a column of a few codes.
+  const shared = filled >= floor ? seen.size * 2 <= filled : seen.size <= SMALL_TABLE_CODES && (seen.size * 2 <= filled || filled <= SMALL_TABLE_CODES);
+  const vocabulary = column.type !== 'date' && seen.size > 0 && seen.size <= DATA_DRIFT_BOUNDS.vocabularyMax && shared
     && [...seen].every((value) => [...value].length <= CODE_CHARS);
   return {
     name: column.name, type: column.type ?? 'unknown', ...(column.unit ? { unit: String(column.unit) } : {}), filled,

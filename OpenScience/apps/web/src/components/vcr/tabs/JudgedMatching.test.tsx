@@ -328,6 +328,19 @@ describe("给试验找患者 — a protocol's people", () => {
   }
   const person = (key: string) => document.querySelector(`[data-vcr-person='${key}']`) as HTMLElement;
 
+  it("a judged person does not hide the rule assessments: both stand, one chip away, and a table study opens on its rules", async () => {
+    const assessed = { candidates: [{ id: "P-0001", summary: "2 条满足", eligibility: "eligible", open: [] }], funnel: [{ key: "candidates", label: "候选", count: 1, note: null, tone: "neutral" }], evaluateBy: "model" };
+    const withRules = (extra: Record<string, unknown>) => (body: any) => ({ ...fixture("ev201/matching.json"), ...assessed, ...extra, ...(body ? {} : {}) });
+    await protocolPage({ [`GET ${MATCHING}`]: withRules({}) });
+    const chip = await screen.findByRole("button", { name: "规则筛选" });
+    expect(document.querySelector("[data-vcr-person]")).not.toBeNull();
+    await userEvent.click(chip);
+    await waitFor(() => expect(document.querySelector("[data-vcr-person]")).toBeNull());
+    expect(await screen.findByText("P-0001")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "模型判定" }));
+    await waitFor(() => expect(document.querySelector("[data-vcr-person]")).not.toBeNull());
+  });
+
   it("draws a count too small to show this reader as a dash, never as a zero, and makes no total of what is hidden", async () => {
     await protocolPage({ [JUDGED]: judged((page) => {
       page.tallies = { eligible: null, possible: null, insufficient: null, ineligible: null };

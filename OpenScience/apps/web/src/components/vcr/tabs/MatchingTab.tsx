@@ -81,6 +81,8 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
   // 给患者找试验: the trial of the patient's list the reader opened. It is the patient's, so it goes with them.
   const [trial, setTrial] = useState<string | null>(null);
   const [protocolVersionId, setProtocolVersionId] = useState<string | null>(null);
+  // Which of the two sets of results the reader chose, where both exist; null until they choose.
+  const [source, setSource] = useState<"judged" | "rules" | null>(null);
   // 给试验找患者: the verdict the table is narrowed to, the page of it, and the person opened.
   const [verdict, setVerdict] = useState<VcrVerdict | null>(null);
   const [offset, setOffset] = useState(0);
@@ -128,7 +130,8 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
   const opened = useRef(false);
   const opensOn = state.kind === "ready" ? state.data.opensOnPatient : undefined;
   useEffect(() => {
-    if (opened.current || !opensOn) return;
+    // A link that named a patient, or a choice already made, is not overruled by the roster's first.
+    if (opened.current || !opensOn || touched.current) return;
     opened.current = true;
     setDirection("patient_to_trial");
     setCandidate(opensOn);
@@ -154,7 +157,11 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
 
   // The judged page, once it is read, when it is about what the reader chose and something was judged, failed or asked for. Anything else is the earlier path's page.
   const judged = judgedLoad.state.kind === "ready" ? judgedLoad.state.data : null;
-  const judgedHere = judged && judged.held && judged.direction === direction ? judged : null;
+  const judgedAnswered = judged && judged.held && judged.direction === direction ? judged : null;
+  // The rule assessments stand beside what the model judged, one chip away: judging one person does not hide what the rules said of everyone. A study with no record to read opens on them.
+  const hasRuleRows = state.kind === "ready" && state.data.available !== false && (state.data.candidates?.length ?? 0) > 0;
+  const onRules = hasRuleRows && (source === "rules" || (source === null && state.kind === "ready" && state.data.available !== false && state.data.evaluateBy === "rules"));
+  const judgedHere = onRules ? null : judgedAnswered;
   // The job writes pairs while the page is open: the note's n of m follows it.
   const judging = judgedHere?.progress.state === "running" || judgedHere?.progress.state === "waiting_budget";
   const reloadJudged = judgedLoad.reload;
@@ -178,6 +185,7 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
     settling: state.kind !== "ready",
     canRun,
     judged: judgedHere !== null,
+    onRules,
     onProtocol: (id) => { touched.current = true; setProtocolVersionId(id); setVerdict(null); setOffset(0); setPerson(null); },
     onCandidate: pick,
     onReload: reloadAll,
@@ -189,6 +197,8 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
       ? [{ kind: "chips" as const, label: "匹配方向", neutral: "trial_to_patient", value: direction, onChange: (next: string) => switchDirection(next as Direction), options: DIRECTIONS }]
       : []),
     ...(controls?.filters ?? []),
+    ...(hasRuleRows && judgedAnswered ? [{ kind: "chips" as const, label: "结果来自", neutral: "judged", value: onRules ? "rules" : "judged",
+      onChange: (next: string) => setSource(next as "judged" | "rules"), options: [{ value: "judged", label: "模型判定" }, { value: "rules", label: "规则筛选" }] }] : []),
     // The protocol's people, narrowed to one verdict: the band carries the filter, the table the page.
     ...(judgedHere?.direction === "trial_to_patient" ? [{
       kind: "chips" as const, label: "结论", neutral: "all", value: verdict ?? "all",
@@ -237,6 +247,7 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
     return (
       <div className="flex flex-col gap-6">
         {aside}
+        {judgedHere.cutNote && <p data-vcr-judged-cut="" className="text-caption text-warn-strong">{judgedHere.cutNote}</p>}
         <PatientTrials studyId={studyId} study={study} judged={judgedHere} picked={trial} onPick={pickTrial} onChanged={judgedLoad.reload} />
         {timelineOwner(data) === owner && (
           <ClinicalTimeline studyId={studyId} data={data} subject={owner} mayReadOriginal={study.abilities.includes("read_patient_level")} />
@@ -249,6 +260,7 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
     return (
       <div className="flex flex-col gap-6">
         {aside}
+        {judgedHere.cutNote && <p data-vcr-judged-cut="" className="text-caption text-warn-strong">{judgedHere.cutNote}</p>}
         <MatchingPeople
           studyId={studyId}
           study={study}
@@ -479,6 +491,7 @@ function MatchingView({ studyId, data, abilities, picked, onPick, onDone }: {
                 <span className="min-w-0 flex-1 text-ui text-text-2">{selected.candidate.summary}</span>
                 {selected.candidate.basis === "withdrawn" && <Tag>已撤回</Tag>}
                 {selected.candidate.basis === "updated" && <Tag>依据已更新</Tag>}
+                {selected.candidate.olderRules && <Tag>旧版规则算的</Tag>}
               </div>
             )}
           >
@@ -566,6 +579,7 @@ function CandidateRow({ candidate, current, onPick }: { candidate: VcrCandidate;
           {candidate.eligibility === "ineligible" && <Tag>不符合</Tag>}
           {candidate.basis === "withdrawn" && <Tag>已撤回</Tag>}
           {candidate.basis === "updated" && <Tag>依据已更新</Tag>}
+          {candidate.olderRules && <Tag>旧版规则算的</Tag>}
         </>
       )}
       meta={(

@@ -1091,6 +1091,14 @@ class VcrJobWaitTests(_GatewayCase):
             self.assertIn("end the turn", advice)
             self.assertIn("vcr_read (what: results)", advice)
 
+    def test_a_read_of_a_person_says_how_to_go_on_from_what_is_there(self):
+        _Gateway.answers["read"] = [(200, {"data": {"what": "matching", "subjectKey": "P-1", "assessment": None}})]
+        nothing = vcr_platform.read({"what": "matching", "filter": {"subjectKey": "P-1"}})
+        self.assertIn("match_judge", " ".join(nothing["next_actions"]))
+        _Gateway.answers["read"] = [(200, {"data": {"what": "matching", "subjectKey": "P-1", "assessment": None, "ranking": [{"verdictLabel": "符合"}]}})]
+        judged = vcr_platform.read({"what": "matching", "filter": {"subjectKey": "P-1"}})
+        self.assertNotIn("Nothing is saved", " ".join(judged["next_actions"]))
+
     def test_a_judging_job_is_read_back_from_its_verdicts_and_a_stopped_one_says_so(self):
         self.wait_for("0")
         _Gateway.answers["simulate"] = [(200, {"data": {"action": "status", "jobId": "job_1", "kind": "match_judge", "state": "running", "progress": {"done": 1, "total": 4}}})]

@@ -249,3 +249,33 @@ test("the list of a person's trials reads the same verdict from a score and its 
   assert.equal(row.verdict, "ineligible");
   assert.equal(f.judgments.rows.size, 0);
 });
+
+test("a scope past what one read holds says so on the page and at the end of a file, and a person with no score owed reads whole", async () => {
+  const { VcrMatchResults } = await import("../src/vcrMatchResults.mjs");
+  const fitRow = (target) => ({ id: `f${target}`, subject_key: "P-1", target_kind: "candidate_trial", target_id: target, mode: "fit", status: "done", fit: 70, confidence: 0.8, producer: "job", updated_at: new Date(), document_hash: "d", target_hash: "t", target: { registryId: target, id: target, kind: "candidate_trial", title: target }, missing_reasons: 0, ineligible_reasons: 0 });
+  class Reader extends VcrMatchResults {
+    constructor(rows, jobs, mostPairs) { super({ database: {}, judgments: { byIds: async () => [], jobsOf: async () => jobs }, mostPairs }); this.held = rows; }
+    async rows(sql) { return /subject_withdrawals WHERE study_id/u.test(sql) && /SELECT subject_key/u.test(sql) ? [] : /SELECT DISTINCT j\.subject_key/u.test(sql) ? [] : this.held; }
+    async one() { return { cost: 0.5 }; }
+  }
+  const job = (state, topK = 2) => ({ id: "j", state, created_at: new Date(), scenario: { direction: "patient_to_trial", subjects: ["P-1"], trials: ["NCT1", "NCT2", "NCT3"].map((registryId) => ({ registryId })), fit: true, topK, thinking: "off", thinkingCriteria: "high", estimate: { cost: 1 } } });
+  const three = ["NCT1", "NCT2", "NCT3"].map(fitRow);
+  const cut = await new Reader(three, [job("succeeded", 0)], 1).forPatient({ id: "s" }, "P-1");
+  assert.match(cut.cutNote, /上限/u);
+  const whole = await new Reader(three, [job("succeeded", 0)], 20_000).forPatient({ id: "s" }, "P-1");
+  assert.equal(whole.cutNote, undefined);
+  assert.equal(whole.progress.state, "done");
+  // A job cancelled after stage one: stopped, and what a continuation would start is the clause work owed.
+  const cancelled = new Reader(three, [job("canceled")], 20_000);
+  const page = await cancelled.forPatient({ id: "s" }, "P-1");
+  assert.equal(page.progress.state, "stopped");
+  assert.deepEqual(page.progress.clauses, { wanted: 2, done: 0, left: 2 });
+  assert.equal((await cancelled.resumeSelection({ id: "s" }, { direction: "patient_to_trial", subjectKey: "P-1" })).ids.length, 2);
+  // Every clause call failed: the same, and the page's list of what failed says which stage.
+  const failedClause = (target) => ({ id: `c${target}`, subject_key: "P-1", target_kind: "candidate_trial", target_id: target, mode: "criteria", status: "failed", error_code: "vcr_match_judge_cut_off", updated_at: new Date(), target: { registryId: target, id: target } });
+  const lost = await new Reader([...three, failedClause("NCT1"), failedClause("NCT2")], [job("succeeded")], 20_000).forPatient({ id: "s" }, "P-1");
+  assert.equal(lost.progress.state, "stopped");
+  assert.equal(lost.failed.count, 2);
+  assert.match(lost.failed.listed[0].reason, /^逐条判定没有完成/u);
+  assert.match(lost.trials.find((row) => row.id === "NCT1").clausesNote, /^逐条判定没有完成/u);
+});

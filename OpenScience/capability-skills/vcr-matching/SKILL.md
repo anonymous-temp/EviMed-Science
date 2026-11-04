@@ -36,4 +36,4 @@ Read it back: what `candidate_trials` with `filter.subjectKey`, or what `matchin
 
 ## Structured cohort tables
 
-A table with typed columns keeps its own rule evaluation: `mcp__evimed__vcr_read` what `contracts` gives the criteria grammar, what `matching` with `filter.kind` `contract` the fact contract, and `mcp__evimed__vcr_simulate` kind `match_criteria` runs the evaluator, where an unknown stays unknown. Use it for screening on columns and exact arithmetic, not for reading notes.
+A table with typed columns keeps its own rule evaluation: `mcp__evimed__vcr_read` what `contracts` gives the criteria grammar, what `matching` with `filter.kind` `contract` the fact contract, and `mcp__evimed__vcr_simulate` kind `match_criteria` runs the evaluator, where an unknown stays unknown. Use it for screening on columns and exact arithmetic, not for reading notes. What the table's codes were read to mean is what `matching` with `filter.kind` `table_meaning`; a correction goes to `mcp__evimed__dataset_semantics` on the `datasetId` it names and stands over the model's reading.

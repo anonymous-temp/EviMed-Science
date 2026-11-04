@@ -1421,22 +1421,6 @@ export function matchingAssessmentDocument(assessment) {
 }
 
 /**
- * Subjects ruled out on a model's word alone.
- *
- * They go to 「待复核排除」 rather than out of the list, so the false-exclusion
- * rate has a denominator. A subject excluded by arithmetic on a structured
- * value is not here: that one a reader can check for themselves.
- * @param {readonly ReturnType<typeof assessSubject>[]} assessments
- */
-export function pendingReviewExclusions(assessments) {
-  return (assessments ?? []).filter((assessment) => {
-    if (assessment?.summary !== "ineligible") return false;
-    const deciding = (assessment.judgments ?? []).filter((judgment) => judgment.applicable && judgment.state === NOT_SATISFIED);
-    return deciding.length > 0 && deciding.every((judgment) => judgment.decidedBy === "model");
-  });
-}
-
-/**
  * The criterion funnel both directions share: how many subjects each criterion
  * rules out, leaves unknown or defers. Running a draft protocol's criteria over
  * a historical candidate pool is the feasibility answer partners actually buy —

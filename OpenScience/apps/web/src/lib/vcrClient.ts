@@ -1239,6 +1239,8 @@ export interface VcrCandidate {
   failed?: Array<{ code: string; state: VcrCriterionState }>;
   /** What the evaluation rested on has since been withdrawn (the person's consent, or a record), or changed. */
   basis?: "withdrawn" | "updated";
+  /** Assessed by an earlier set of rules; the one action evaluates them again. */
+  olderRules?: boolean;
 }
 
 /** A sentence a verdict rests on, where it is (the document by the name the data tab lists it under, or a cell of the data table) and the date of what it records. */
@@ -1343,6 +1345,8 @@ export interface VcrMatchingTab {
   protocols?: VcrProtocolChoice[];
   protocolVersionId?: string | null;
   candidateRoster?: string[];
+  /** What 开始评估 starts: a study with no record to read is screened by its rules. */
+  evaluateBy?: 'rules' | 'model';
   /** The people whose evaluation rested on a basis that has since changed: the evaluation that already exists is offered for them. */
   basisUpdated?: { count: number; subjects: string[] };
   candidateCoverage?: { inputSnapshotId: string; requested: number; evaluated: number; pending: number; unavailable: number };
@@ -2567,6 +2571,8 @@ export interface VcrJudgedPatient {
   /** Whether anything was judged, failed or asked for: false is the page saying nothing has been judged for this scope. */
   held: boolean;
   progress: VcrJudgedProgress;
+  /** The scope is larger than one read holds: said, because a list that ended silently would read as all of it. */
+  cutNote?: string;
   trials: VcrJudgedPair[];
   failed: VcrJudgedFailures;
   selected: VcrJudgedOpen | null;
@@ -2580,6 +2586,7 @@ export interface VcrJudgedProtocol {
   protocolVersionId: string;
   held: boolean;
   progress: VcrJudgedProgress;
+  cutNote?: string;
   tallies: Record<VcrVerdict, number | null>;
   people: VcrJudgedPair[];
   total: number | null;
