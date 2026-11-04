@@ -477,7 +477,7 @@ const candidateItem = { registry: "clinicaltrials.gov", registryId: "NCT05000001
 function searching(summaryCloudAllowed) {
   const asked = [], summaries = [];
   const registry = {
-    search: async (query) => { asked.push(JSON.stringify(query)); return { status: "ok", items: [candidateItem], total: 1, retrievedAt: new Date().toISOString() }; },
+    search: async (query) => { asked.push(JSON.stringify(query)); return { status: "ok", items: [candidateItem, { ...candidateItem, registryId: "NCT05000002", url: "https://clinicaltrials.gov/study/NCT05000002" }], total: 2, retrievedAt: new Date().toISOString() }; },
     searchCtis: async (query) => { asked.push(JSON.stringify(query)); return { status: "ok", items: [], total: 0 }; },
     searchChictr: async (query) => { asked.push(JSON.stringify(query)); return { status: "ok", items: [], total: 0 }; },
   };
@@ -503,7 +503,7 @@ test("S7: a summary goes to the reranker only where the person's records may go 
   assert.equal(shut.summaries.length, 0, "after a revocation it does not");
   assert.equal(second.rerank.applied, false);
   assert.deepEqual(second.rerank.reasons, ["vcr_cloud_processing_not_authorized"]);
-  assert.equal(second.candidates.length, 1, "the list is still the list");
+  assert.equal(second.candidates.length, 2, "the list is still the list");
 });
 
 // ---------------------------------------------------------------------------- S5
