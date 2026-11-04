@@ -1,0 +1,32 @@
+{
+  "status": "warning",
+  "summary": "Nothing is under sources yet.",
+  "data": {
+    "op": "overview",
+    "root": "sources",
+    "documents": [],
+    "total": 0,
+    "offset": 0,
+    "truncated": false,
+    "note": "No document has been pushed here yet. Use kb_search, or read the knowledge-base files in the workspace.",
+    "provenance": {
+      "tool": "kb_browse",
+      "arguments": {
+        "op": "overview",
+        "root": "sources"
+      },
+      "scope": {
+        "tenantId": "ck-probe-14d43468",
+        "userId": "ck-probe-14d43468",
+        "projectId": "audit-tool-probe",
+        "workspaceDir": "/workspace/.audit-repo-20261104T131143Z/OpenScience/evals/capability-audit/tool-probe-workspace"
+      }
+    }
+  },
+  "warnings": [
+    "No document has been pushed here yet. Use kb_search, or read the knowledge-base files in the workspace."
+  ],
+  "next_actions": [
+    "Use kb_search, or read the knowledge-base files in the workspace."
+  ]
+}

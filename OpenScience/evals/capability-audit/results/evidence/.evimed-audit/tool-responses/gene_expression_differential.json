@@ -11,27 +11,27 @@
     "files": {
       "results": {
         "path": "deliverables/release-audit-gene-expression/gene-expression-results.json",
-        "sha256": "03497d6b88c67d4dd79a34a2552548f484174a0ce7148adcd5a0eda20948d137",
-        "bytes": 8675
+        "sha256": "601e16b6355d1bd8c6cf2d4d30f4671a8b0037f4306f54c16558e8017b31bfb5",
+        "bytes": 8181
       },
       "table": {
         "path": "deliverables/release-audit-gene-expression/gene-expression-de-table.tsv",
-        "sha256": "653e4f6449222a7ae1b2c12a42d0ccf9075af022f9e33a97bdc83543cbde53c8",
-        "bytes": 3063260
+        "sha256": "601b19a668fbe4ee5cedb35f37ac846c54c66b151143d38a71ac56a966e46c70",
+        "bytes": 2454798
       },
       "topTable": {
         "path": "deliverables/release-audit-gene-expression/gene-expression-top-table.md",
-        "sha256": "d73ad792d337482efaef8b8a0762b3e35d2afc6aa509f10d7e69f9f5eded6c05",
-        "bytes": 581
+        "sha256": "d8478a441c732c8b5230661efbebc25485c690d7a668be36a8f7b5a20d556bce",
+        "bytes": 614
       },
       "analysedMatrix": {
         "path": "deliverables/release-audit-gene-expression/gene-expression-analysed-matrix.tsv.gz",
-        "sha256": "6af52898d470ed515e54e76a760d25c6c609f9b1c97997c103022daeb0c7884a",
-        "bytes": 577967
+        "sha256": "4b039a1c614385b309a472e7d3eaec45b4c503a5dbcaa71d6cb3dab95718ae21",
+        "bytes": 509869
       },
       "request": {
         "path": "deliverables/release-audit-gene-expression/gene-expression-request.json",
-        "sha256": "2073f3b55d4165b8583799b2c581e1653869ecaa201b60021cb381227970ea2a",
+        "sha256": "f92272f02c11f350c7cee9ead4a1987af7b5f76d335af345922a03cff041f9d9",
         "bytes": 678
       },
       "code": {
@@ -41,8 +41,8 @@
       },
       "receipt": {
         "path": "deliverables/release-audit-gene-expression/gene-expression-receipt.json",
-        "sha256": "05ee725bf322816c6b3b93204fe922cb4f761603ce72e99a2882c99e373578d6",
-        "bytes": 2190
+        "sha256": "4b7914eaba022183a4ba8b7a4ebf3faeb31cfe570ef0c31c64fad652dec08526",
+        "bytes": 2186
       }
     },
     "method": {
@@ -105,10 +105,10 @@
       },
       "probesDroppedTotal": 0,
       "missingValueCells": 0,
-      "multiGeneProbes": 521,
+      "multiGeneProbes": 0,
       "multiGeneHandling": "A probe annotated with several genes stays one row, listed with all its symbols and flagged; it is not copied to each gene, and nothing is collapsed to a gene level, so a gene with several probes has several rows.",
-      "unannotatedProbes": 531,
-      "genesWithSeveralProbes": 2568,
+      "unannotatedProbes": 12488,
+      "genesWithSeveralProbes": 0,
       "probesSignificantAtFdr05": 29,
       "probesSignificantAtFdr01": 0,
       "probesPBelow05": 1287,
@@ -130,41 +130,31 @@
       {
         "rank": 1,
         "probe": "101451_at",
-        "geneSymbols": [
-          "Peg3"
-        ],
+        "geneSymbols": [],
         "multiGene": false
       },
       {
         "rank": 2,
         "probe": "98525_f_at",
-        "geneSymbols": [
-          "Erdr1"
-        ],
+        "geneSymbols": [],
         "multiGene": false
       },
       {
         "rank": 3,
         "probe": "102670_at",
-        "geneSymbols": [
-          "Vps54"
-        ],
+        "geneSymbols": [],
         "multiGene": false
       },
       {
         "rank": 4,
         "probe": "160520_at",
-        "geneSymbols": [
-          "Yap1"
-        ],
+        "geneSymbols": [],
         "multiGene": false
       },
       {
         "rank": 5,
         "probe": "102332_at",
-        "geneSymbols": [
-          "Ulk1"
-        ],
+        "geneSymbols": [],
         "multiGene": false
       }
     ],

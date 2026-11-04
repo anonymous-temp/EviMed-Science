@@ -11,47 +11,62 @@
       "limit": 3
     },
     "searchMode": "list",
-    "asOf": "2026-10-12T07:15Z",
+    "asOf": "2026-11-04T13:12Z",
     "count": 3,
     "more": true,
     "items": [
       {
-        "title": "心脏如何长成？《Nature》揭示唐氏综合征易患先心病的机理",
-        "source": "生物谷 Bioon",
-        "sourceType": "媒体",
-        "publishedAt": "2026-10-12",
-        "collectedAt": "2026-10-12T07:11Z",
-        "url": "https://news.bioon.com/article/d9d895484828.html",
+        "title": "血浆IFNL3鉴别胃癌与健康人，AUC达0.901",
+        "originalTitle": "Plasma IFNL3 for Gastric Cancer Detection and Monitoring in East Asians: A Multiphase Study.",
+        "summary": "一项多阶段研究纳入395名参与者，血浆IFNL3区分胃癌与健康供者的AUC为0.901（95% CI 0.866-0.935），高于AFP、CEA和CA19-9。IFNL3水平随临床分期升高，并在癌组织中mRNA表达更高；作者指出其诊断价值仍需更大规模、按分期校正的研究验证。",
+        "reason": "胃癌早筛缺少可靠血液标志物，这个AUC信号值得研究者关注，但样本量和分期校正的局限决定它还不能替代现有检测。",
+        "source": "Cancer medicine",
+        "sourceType": "期刊",
+        "evidenceType": "队列与病例对照",
+        "publishedAt": "2026-11-04",
+        "collectedAt": "2026-11-04T13:00Z",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/42978105/",
+        "doi": "10.1002/cam4.72381",
+        "pmid": "42978105",
         "flags": [
           "涉华"
         ],
         "selected": false
       },
       {
-        "title": "Managing high blood pressure could prevent >500K CVD deaths annually in 20 countries",
-        "source": "美国心脏协会",
-        "sourceType": "循证机构与学会",
-        "publishedAt": "2026-10-11T14:15Z",
-        "collectedAt": "2026-10-12T07:11Z",
-        "url": "https://newsroom.heart.org/news/managing-high-blood-pressure-could-prevent-500k-cvd-deaths-annually-in-20-countries",
+        "title": "中国生物制药与勃林格殷格翰达成授权合作，潜在总额最高70亿美元",
+        "originalTitle": "中国生物制药牵手BI达成70亿美元出海大单，6个肿瘤项目覆盖ADC/TCE，年内BD总额破百亿美元",
+        "summary": "中国生物制药将6个肿瘤领域临床前项目授权给勃林格殷格翰，涉及ADC和TCE方向，潜在交易总额最高70亿美元，含3.58亿美元首付款及近期付款。6个项目中有5个来自2025年收购的礼新医药；加上年内另外两笔对外授权，公司2026年对外授权潜在总额约104.3亿美元。",
+        "source": "摩熵医药",
+        "sourceType": "媒体",
+        "evidenceType": "企业新闻稿",
+        "publishedAt": "2026-11-04",
+        "collectedAt": "2026-11-04T12:53Z",
+        "url": "https://www.pharnexcloud.com/zixun/sx_388380",
+        "flags": [
+          "涉华"
+        ],
         "selected": false
       },
       {
-        "title": "Cell子刊：兰州大学王东升等发现阻断HJV结合减肉毒中毒，或优化肉毒治疗安全窗",
-        "source": "生物谷 Bioon",
+        "title": "晋城市推进医防协同融合，传染病诊断到报告平均用时缩短33%",
+        "originalTitle": "[地方风采] 晋城市强化多维协同 探索推进医防协同融合新模式",
+        "summary": "晋城市以“全市一张网、一县一特色”推进医防协同融合，向1293家医疗机构派驻370名专（兼）职监督员。试点以来，传染病从诊断到报告平均用时缩短33%，处置及时率、规范处置率均达100%。",
+        "source": "医师报",
         "sourceType": "媒体",
-        "publishedAt": "2026-10-12",
-        "collectedAt": "2026-10-12T07:11Z",
-        "url": "https://news.bioon.com/article/c70a95484644.html",
+        "evidenceType": "其他",
+        "publishedAt": "2026-11-04",
+        "collectedAt": "2026-11-04T12:46Z",
+        "url": "https://www.mdweekly.com.cn/index/article/detail?id=66806",
         "flags": [
+          "日期为推断",
           "涉华"
         ],
         "selected": false
       }
     ],
-    "cards": [],
-    "cardCount": 0,
-    "cardsMore": false,
+    "topics": [],
+    "topicCount": 0,
     "provenance": {
       "tool": "frontier_search",
       "arguments": {
@@ -59,10 +74,10 @@
         "limit": 3
       },
       "scope": {
-        "tenantId": "tool-probe-1cb73eaa",
-        "userId": "tool-probe-1cb73eaa",
-        "projectId": "tool-probe",
-        "workspaceDir": "/workspace/.audit-repo-20261012T071445Z/OpenScience/evals/capability-audit/tool-probe-workspace"
+        "tenantId": "ck-probe-14d43468",
+        "userId": "ck-probe-14d43468",
+        "projectId": "audit-tool-probe",
+        "workspaceDir": "/workspace/.audit-repo-20261104T131143Z/OpenScience/evals/capability-audit/tool-probe-workspace"
       }
     }
   },

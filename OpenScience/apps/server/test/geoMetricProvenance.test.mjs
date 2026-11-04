@@ -74,3 +74,37 @@ test("inline owned-source rates include their registered source portfolio in the
   assert.equal(typeof before,"string"); assert.equal(typeof after,"string");
   assert.equal(geoCoverageDifference(before,after).comparable,false);
 });
+
+test("coverage retains stable per-engine heterogeneous sampling surfaces", async () => {
+  const { geoSelectionCoverage } = await import("../src/geoReadScope.mjs");
+  const f = fixture();
+  const rows = f.rows.flatMap(row => [
+    { ...structuredClone(row), surface: { mode: "web", deep: false, newChat: true, city: "Beijing", measurementContract: { samplingMode: "recurring", repeats: 1, sourceBasis: "answers", metricIds: ["M-01"] } } },
+    { ...structuredClone(row), snapshotId: `${row.snapshotId}-kimi`, engine: "kimi", surface: { mode: "web", deep: true, newChat: false, city: "Shanghai", measurementContract: { samplingMode: "recurring", repeats: 1, sourceBasis: "answers", metricIds: ["M-01"] } } },
+  ]);
+  const options = { ...f.options, engines: ["deepseek", "kimi"] };
+  const metric = input => { const computed = computeRoundCells(input, options); const cell = computed.cells.find(item => item.scope === "project" && item.metricId === "M-01"); return geoMetricInputCoverage({ computed, metricOptions: options }, cell, 1); };
+  const original = metric(rows), selected = geoSelectionCoverage(rows, 1);
+  assert.equal(typeof original, "string"); assert.equal(typeof selected, "string");
+  const later = rows.map(row => ({ ...structuredClone(row), roundId: "round-b", snapshotId: `later-${row.snapshotId}` }));
+  assert.equal(metric(later), original); assert.equal(geoSelectionCoverage(later, 1), selected);
+  const variants = [
+    row => { row.surface.deep = !row.surface.deep; }, row => { row.surface.newChat = !row.surface.newChat; },
+    row => { row.surface.city = "Elsewhere"; }, row => { row.repeatIndex = 1; },
+    row => { row.surface.measurementContract.repeats = 2; }, row => { row.surface.measurementContract.metricIds = ["M-03"]; },
+    row => { row.surface.measurementContract.samplingMode = "one_shot"; }, row => { row.surface.measurementContract.sourceBasis = "changed"; },
+  ];
+  for (const mutate of variants) {
+    const changed = structuredClone(later); mutate(changed[0]);
+    assert.notEqual(metric(changed), original); assert.notEqual(geoSelectionCoverage(changed, 1), selected);
+  }
+  const metadata = structuredClone(later);
+  for (const row of metadata) Object.assign(row.surface, { transport: "other", responseDigest: "arbitrary" });
+  assert.equal(metric(metadata), original); assert.equal(geoSelectionCoverage(metadata, 1), selected);
+  assert.equal(metric([...metadata].reverse()), original, "row ordering is not a sampling change");
+  const unknown = structuredClone(later); delete unknown[0].repeatIndex;
+  assert.equal(metric(unknown), null); assert.equal(geoSelectionCoverage(unknown, 1), null);
+  const conflict = structuredClone(later); const duplicate = structuredClone(conflict[0]);
+  duplicate.snapshotId = "conflicting-duplicate"; duplicate.surface.deep = !duplicate.surface.deep; conflict.push(duplicate);
+  assert.equal(geoSelectionCoverage(conflict, 1), null, "a contradictory duplicate cannot assert a unique sampling configuration");
+});

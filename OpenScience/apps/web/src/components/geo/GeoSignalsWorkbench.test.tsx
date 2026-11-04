@@ -232,3 +232,33 @@ it.each([false,true])('keeps a zero-current-stage preview compact when other ste
  else expect(await screen.findByText('当前条件下没有记录。')).toBeVisible();
  expect(screen.getByRole('combobox',{name:'处理状态'})).toBeVisible();
 });
+
+
+it.each(['sampling_surface_unverified', 'judge_version_unrecorded'])('keeps historical readings without rendering a null delta or a verified threshold: %s', async comparability => {
+  api.detail.mockResolvedValue(signal({ kind: 'group_changed', basis: {
+    comparability, group: { id:'g', label:'Historical group', pool:'P2', questionVersion:3 },
+    policy: { threshold:5, noiseMeasured:false },
+    cells: [{ key:'metric', metricId:'M-01', delta:null, reason:comparability,
+      before:{value:20,numerator:44,denominator:220}, after:{value:40,numerator:88,denominator:220} }],
+    sides:{before:{selectionRef:'gsel_before',count:220},after:{selectionRef:'gsel_after',count:220}},
+  } }));
+  draw();
+  expect(await screen.findByText('品牌提及率：20% → 40%')).toBeVisible();
+  expect(screen.getByText(/前次 44 \/ 220；本次 88 \/ 220；差异不可比/)).toBeVisible();
+  expect(screen.queryByText(/null 个百分点/)).toBeNull();
+  expect(screen.queryByText(/观测差异绝对值大于/)).toBeNull();
+  expect(screen.getByRole('link',{name:'查看 AI 表现'})).toHaveAttribute('href',expect.stringContaining('/app/geo/geo/visibility'));
+  expect(screen.getByRole('link',{name:'查看前轮观测样本'})).toBeVisible();
+  expect(screen.getByRole('button',{name:'让 AI 分析'})).toBeVisible();
+  expect(screen.getByText(comparability === 'sampling_surface_unverified' ? '历史观测缺少可核对的采样口径，保留两期读数。' : '历史观测的比较依据不完整，保留两期读数。')).toBeVisible();
+});
+
+
+it('does not replace a missing historical sample scope with the current project analysis', async () => {
+  api.detail.mockResolvedValue(signal({kind:'group_changed',basis:{comparability:'sampling_surface_unverified',
+    cells:[{key:'metric',metricId:'M-01',delta:null,before:{value:20,numerator:44,denominator:220},after:{value:40,numerator:88,denominator:220}}]}}));
+  draw();
+  expect(await screen.findByText('品牌提及率：20% → 40%')).toBeVisible();
+  expect(screen.queryByRole('link',{name:/查看[前后]轮观测样本/})).toBeNull();
+  expect(screen.getByRole('link',{name:'查看 AI 表现'})).toBeVisible();
+});

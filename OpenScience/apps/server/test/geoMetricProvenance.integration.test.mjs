@@ -56,3 +56,35 @@ test("real calculated trends share frozen coverage across project, list, engine 
   const changed = (await service.projectView(user,geoId)).overview.metrics.find(metric => metric.key === "gvi").trend;
   assert.equal(changed[1].coverage,null,"a persisted value that no longer matches its generation is not comparable");
 });
+
+test("real mixed-engine trends preserve a stable per-observation sampling basis", { skip: !url }, async () => {
+  const userId = "mixed-provenance-owner", geoId = "mixed-provenance-geo";
+  await seedGeoProject(database, { id: geoId, userId, projectId: "mixed-provenance-project", engines: ["deepseek", "kimi"],
+    groups: [{ id: "mixed-provenance-group", pool: "P2" }],
+    questions: Array.from({ length: 35 }, (_, index) => ({ id: `mixed-provenance-q-${index}`, groupId: "mixed-provenance-group", text: `Question ${index}` })) });
+  for (const [index, day] of ["2026-11-01", "2026-11-02"].entries()) {
+    const round = `mixed-provenance-round-${index}`;
+    await database.query(`INSERT INTO evimed_geo.rounds(id,user_id,geo_project_id,kind,set_version,engines,status,planned,done,sample_date,started_at,finished_at,surface)
+      VALUES ($1,$2,$3,$4,1,ARRAY['deepseek','kimi'],'done',70,70,$5::text::date,$5::text::timestamptz,$5::text::timestamptz,'{"mode":"web"}')`, [round,userId,geoId,index ? "weekly" : "baseline",day]);
+    await database.query(`INSERT INTO evimed_geo.snapshots(id,user_id,geo_project_id,round_id,question_id,engine,asked_at,status,answer_text,surface)
+      SELECT $1||q.id||e.engine,$2,$3,$1,q.id,e.engine,$4,'valid','Synthetic answer',
+        jsonb_build_object('mode','web','deep',e.engine='kimi','newChat',true,'city','Beijing')
+      FROM evimed_geo.questions q CROSS JOIN (VALUES ('deepseek'),('kimi')) e(engine) WHERE q.geo_project_id=$3`, [round,userId,geoId,day]);
+    await database.query(`INSERT INTO evimed_geo.facts(snapshot_id,user_id,geo_project_id,judged_at,parser_version,judge_extract,checks,brands,failure_mode,mentions_ours)
+      SELECT s.id,$2,$3,$4,'test-parser','{"rubricVersion":"test-rubric"}','{"judgementCoverage":{"status":"complete"}}','[]','omitted',false
+      FROM evimed_geo.snapshots s WHERE s.round_id=$1`, [round,userId,geoId,day]);
+    await measureRound({ store: measure, now: () => new Date(`${day}T12:00:00Z`) },round);
+  }
+  const service = new GeoService({ store, config: { geoEnabled:true, geoAudience:"all", geoTimeZone:"Asia/Shanghai" } });
+  const trend = async () => (await service.projectView({id:userId},geoId)).overview.metrics.find(metric => metric.key === "gvi").trend;
+  let points = await trend(); assert.equal(points.length, 2);
+  assert.equal(typeof points[0].coverage, "string"); assert.equal(geoCoverageDifference(points[0].coverage, points[1].coverage).comparable, true);
+  assert.equal(points[0].coverage.split("|").length, 4);
+  await database.query(`UPDATE evimed_geo.snapshots SET surface=surface || '{"transport":"other","responseDigest":"fixture"}'::jsonb WHERE round_id='mixed-provenance-round-1' AND engine='kimi'`);
+  await measureRound({ store: measure, now: () => new Date('2026-11-02T13:00:00Z') },'mixed-provenance-round-1');
+  points = await trend(); assert.equal(geoCoverageDifference(points[0].coverage, points[1].coverage).comparable, true);
+  await database.query(`UPDATE evimed_geo.snapshots SET surface=jsonb_set(surface,'{deep}','false'::jsonb) WHERE round_id='mixed-provenance-round-1' AND engine='kimi'`);
+  await measureRound({ store: measure, now: () => new Date('2026-11-02T14:00:00Z') },'mixed-provenance-round-1');
+  points = await trend(); assert.equal(typeof points[1].coverage, "string");
+  assert.equal(geoCoverageDifference(points[0].coverage, points[1].coverage).comparable, false);
+});

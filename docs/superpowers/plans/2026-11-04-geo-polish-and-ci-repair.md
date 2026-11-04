@@ -11,6 +11,10 @@
 - Historical unproven metrics retain their observed values but no comparison key. The project-list API keeps numeric trend values and adds aligned coverage; its preview draws independent points when comparison is not established.
 - Multiple-domain strategy inputs are rejected instead of silently accepting their first host. Confirmation fixtures use explicit scope authorization and a subsequent preserved observation. Signal-progress fixtures record their actual test rubric and bound a failed synchronization barrier.
 
+A follow-up sampling-interface audit found and repaired both false comparisons and conservative false unknowns. Two-period ranks, rival trends and group-change signals use exact per-side observations with matching mode, thinking, new-chat and city settings; unmatched groups retain their own readings and member provenance. Aggregate coverage records stable per-question/engine/repeat interface and contract combinations, including explicit mixed interfaces. Transport metadata does not change compatibility, and old mode-only saved subsets remain readable. The final local full GEO PostgreSQL rerun passed 1,114 cases with two opt-in browser cases skipped; the affected frontend copy/analysis rerun passed 77 cases. The earlier opt-in real-HTTP browser checks remain separate evidence.
+
+Historical group-signal display now also requires the current sampling proof. Old rubric-only events keep their original identity, replay receipt, readings and explicit analysis entry, but no verified delta or repeated notification. The frontend accepts null changes without printing null percentages, avoids threshold claims for unverified history and does not turn a missing historical sample scope into the current project scope. The affected frontend and copy checks passed 103 cases; the historical signal PostgreSQL suites passed 49 cases.
+
 ## Verification
 
 - Full isolated PostgreSQL GEO integration run: 1,107 passed, zero failures, two opt-in browser cases skipped. Both opt-in cases then passed separately in Chrome against the actual HTTP API: confirmation of a changed question contract and a frozen competitor cohort with historical naming and return filters.
@@ -18,6 +22,8 @@
 - Frontend/server type checks and lint, production web build and source credential audit passed locally. Independent UI and backend review approved after the identified deletion, scope and resource defects were repaired.
 - Chrome fixture walkthrough covers 1440, 1024 and 390px navigation, project switching, empty/measured comparison, metric selection, Escape focus return and sticky context. It uses the actual frontend with synthetic API data, not real consumer-model sampling or DSH acceptance.
 - The current main was merged into the candidate branch with both progress histories retained; a 283-case merged boundary run, type checks and lint passed. A full frontend run exposed four copy/tooltip/old-navigation failures; these were repaired and the 95-case affected rerun passed. Remote CI, main integration, production runtime, private-skill acceptance and deployment are separate receipts. No deployment is authorized or performed in this iteration.
+
+Latest local candidate: full frontend 563 files / 7,174 passed, GEO non-integration units 644 passed with one optional PostgreSQL case skipped, merged stop/history PostgreSQL 63 passed, production frontend build and source credential audit passed. The latest main stop fix and its audit history are retained. Remote workflow completion and main adoption remain independent gates.
 
 ## Remaining boundary
 

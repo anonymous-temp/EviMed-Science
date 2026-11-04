@@ -25,6 +25,7 @@ import { metricName } from './tabs/geoTabText';
 
 const kinds: Record<GeoSignal['kind'], string> = { error_observed: '医学说法待核查', source_changed: '资料变化', citation_observed: '新增引用页面', group_changed: '问题群变化', order_anomaly: '投放异常' };
 const outcomes: Record<string, string> = { open: '问题仍待处理', acting: '已开展处理', awaiting_remeasure: '等待后续观察', closed: '后续观察支持已消失', withdrawn: '原判断已撤回', unreviewed: '受影响版本仍需核查', partial: '部分版本仍待处理', handled: '本次版本均有核查结果', observed: '已观察到', unknown: '当前业务结果未确认', cancelled: '订单已取消', refunded: '订单已退款', published: '已发布', verified: '已核对发布', settled: '已结算', problem: '订单需要处理', rejected: '订单被拒绝', lost: '订单未能追回' };
+const groupDeltaText = (delta: number | null) => typeof delta === 'number' && Number.isFinite(delta) ? `差异 ${delta > 0 ? '+' : ''}${delta} 个百分点` : '差异不可比';
 const reviewWords = { unhandled: '尚未核查', no_change_needed: '核查认为无需修改', update_proposed: '已提出修改，更新未确认', updated: '已关联更新版本', uncertain: '仍待核实' };
 const time = (value: string | null) => value ? new Date(value).toLocaleString('zh-CN', { hour12: false, timeZone: 'Asia/Shanghai' }) : '时间未记录';
 const stateWord = (row: GeoSignal) => `${GEO_SIGNAL_STATE_LABELS_ZH[row.state]}${row.state === 'ignored' && row.executionState === 'processing' ? ' · AI 仍在处理' : ''}`;
@@ -162,7 +163,7 @@ function SignalDetail({ geoId, project, signalId, onBack }: { geoId: string; pro
   const groupAnalysisHref = (side: 'before' | 'after') => {
     const url = new URL(cleanSignal(destination(geoId, { tab: 'visibility', section: 'trend' })), 'https://evimed.invalid');
     const session = url.searchParams.get('session');
-    url.search = new URLSearchParams({ selectionRef: signal.basis.sides?.[side].selectionRef ?? '' }).toString();
+    url.search = new URLSearchParams({ selectionRef: signal.basis.sides?.[side]?.selectionRef ?? '' }).toString();
     if (session) url.searchParams.set('session', session);
     return `${url.pathname}${url.search}${url.hash}`;
   };
@@ -211,15 +212,15 @@ function SignalDetail({ geoId, project, signalId, onBack }: { geoId: string; pro
       {signal.kind === 'group_changed' && <>
         <p className="text-ui text-text-2">{[signal.basis.group?.label ?? '问题群', signal.basis.group?.pool ? poolName(signal.basis.group.pool) : null, signal.basis.group?.questionVersion ? `问句版本 ${signal.basis.group.questionVersion}` : null].filter(Boolean).join(' · ')}</p>
         <p className="text-caption text-text-3">前次完成：{time(signal.basis.previous?.completedAt ?? null)} · 本次完成：{time(signal.basis.current?.completedAt ?? null)}</p>
-        <p className="text-caption text-text-3">参与比较的平台：{signal.basis.methods?.before.engines.map(engineName).join("、")||"未记录"}</p>
+        <p className="text-caption text-text-3">{signal.basis.comparability ? "观测平台" : "参与比较的平台"}：{signal.basis.methods?.before?.engines?.map(engineName).join("、")||"未记录"}</p>
         <List label="前后观测指标" divided>{signal.basis.cells?.map(cell => <ListRow key={cell.key}
           title={`${metricName(cell.metricId) ?? '指标'}：${cell.before.value}% → ${cell.after.value}%`}
-          meta={`前次 ${cell.before.numerator ?? '未知'} / ${cell.before.denominator ?? '未知'}；本次 ${cell.after.numerator ?? '未知'} / ${cell.after.denominator ?? '未知'}；差异 ${cell.delta > 0 ? '+' : ''}${cell.delta} 个百分点`} />)}</List>
-        <Note result={['观测差异绝对值大于 ', { n: signal.basis.policy?.threshold ?? '未知' }, ' 个百分点；噪声未实测，不能据此判断由内容调整造成。分析任务完成仅表示任务已完成。']} />
+          meta={`前次 ${cell.before.numerator ?? '未知'} / ${cell.before.denominator ?? '未知'}；本次 ${cell.after.numerator ?? '未知'} / ${cell.after.denominator ?? '未知'}；${groupDeltaText(cell.delta)}`} />)}</List>
+        {signal.basis.comparability || signal.basis.cells?.some(cell => typeof cell.delta !== 'number' || !Number.isFinite(cell.delta)) ? <Note action={<Link className="text-link hover:underline" to={cleanSignal(destination(geoId, { tab: 'visibility' }))}>查看 AI 表现</Link>}>{signal.basis.comparability === 'sampling_surface_unverified' ? '历史观测缺少可核对的采样口径，保留两期读数。' : '历史观测的比较依据不完整，保留两期读数。'}</Note> : <Note result={['观测差异绝对值大于 ', { n: signal.basis.policy?.threshold ?? '未知' }, ' 个百分点；噪声未实测，不能据此判断由内容调整造成。分析任务完成仅表示任务已完成。']} />}
         {(['before', 'after'] as const).map(side => <div key={side} className="flex flex-col gap-2">
-          <p className="text-ui text-text-2">{side === 'before' ? '前次' : '本次'}样本：{signal.basis.sides?.[side].count ?? '未知'} 条</p>
+          <p className="text-ui text-text-2">{side === 'before' ? '前次' : '本次'}样本：{signal.basis.sides?.[side]?.count ?? '未知'} 条</p>
           <GeoGroupMembers key={`${signalId}:${side}:${signal.basisDigest}`} geoId={geoId} signalId={signalId} side={side} basisDigest={signal.basisDigest}/>
-          <Link className="text-ui text-link hover:underline" to={groupAnalysisHref(side)}>查看{side === 'before' ? '前轮' : '后轮'}共同样本</Link>
+          {signal.basis.sides?.[side]?.selectionRef && <Link className="text-ui text-link hover:underline" to={groupAnalysisHref(side)}>查看{side === 'before' ? '前轮' : '后轮'}{signal.basis.comparability ? '观测' : '共同'}样本</Link>}
         </div>)}
       </>}
       {signal.kind === 'source_changed' && <>

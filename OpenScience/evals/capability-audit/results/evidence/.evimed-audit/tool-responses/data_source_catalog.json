@@ -1,6 +1,6 @@
 {
   "status": "success",
-  "summary": "Matched 63 audited data sources.",
+  "summary": "Matched 64 audited data sources.",
   "data": {
     "items": [
       {
@@ -1544,23 +1544,50 @@
         },
         "catalogStatus": "active_tool",
         "connectionState": "connected_public"
+      },
+      {
+        "id": "prospero",
+        "index": 124,
+        "name": "PROSPERO",
+        "domain": "系统评价注册",
+        "priority": "P0/P1 EviMed",
+        "status": "connected_public",
+        "accessClass": "public_api",
+        "connector": "prospero",
+        "skill": null,
+        "credential": "无需 key",
+        "license": "使用条款",
+        "officialUrl": "https://www.crd.york.ac.uk/PROSPERO/",
+        "blocker": "",
+        "validation": {
+          "contractTests": "pass",
+          "liveProbe": "pass",
+          "verifiedAt": "2026-11-02",
+          "productionRoute": "server_allowlisted_gateway",
+          "queryMode": "free_text",
+          "deploymentRequirement": "Production uses the authenticated EviMed server gateway with an official-host allowlist; the DSH agent runtime itself keeps arbitrary network egress disabled unless an internal runtime network is explicitly configured."
+        },
+        "catalogStatus": "active_tool",
+        "connectionState": "connected_public"
       }
     ],
-    "matched": 63,
-    "catalogTotal": 123,
+    "matched": 64,
+    "catalogTotal": 124,
     "integrationSummary": {
-      "reviewedTotal": 123,
-      "connectedPublic": 63,
+      "reviewedTotal": 124,
+      "connectedPublic": 64,
       "skillGuidanceOnly": 13,
-      "notConnected": 47,
+      "viaEvimedIndex": 8,
+      "notConnected": 39,
       "connectionStateCounts": {
         "adapter_credentials_required": 2,
         "blocked_approval": 4,
-        "blocked_license": 18,
-        "blocked_no_api": 11,
-        "connected_public": 63,
+        "blocked_license": 12,
+        "blocked_no_api": 10,
+        "connected_public": 64,
+        "connected_via_evimed_index": 8,
         "ready_credentials": 9,
-        "ready_private_adapter": 3,
+        "ready_private_adapter": 2,
         "skill_guidance": 13
       },
       "productionConnectorRoute": "controlled_connector_routes",
@@ -1578,10 +1605,10 @@
         "limit": 123
       },
       "scope": {
-        "tenantId": "tool-probe-1cb73eaa",
-        "userId": "tool-probe-1cb73eaa",
-        "projectId": "tool-probe",
-        "workspaceDir": "/workspace/.audit-repo-20261012T071445Z/OpenScience/evals/capability-audit/tool-probe-workspace"
+        "tenantId": "ck-probe-14d43468",
+        "userId": "ck-probe-14d43468",
+        "projectId": "audit-tool-probe",
+        "workspaceDir": "/workspace/.audit-repo-20261104T131143Z/OpenScience/evals/capability-audit/tool-probe-workspace"
       }
     }
   }

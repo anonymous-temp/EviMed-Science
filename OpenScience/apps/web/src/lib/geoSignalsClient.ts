@@ -40,7 +40,8 @@ export interface GeoSignalDetail extends GeoSignal {
     evidenceAvailability?: string; url?: string; orderId?: string; articleId?: string | null; articleResultVersionId?: string | null;
     group?: { id: string; label: string | null; pool: string; questionVersion: number };
     previous?: { id: string; completedAt: string | null }; current?: { id: string; completedAt: string | null };
-    cells?: Array<{ key: string; metricId: string; delta: number; before: { value: number; numerator: number | null; denominator: number | null }; after: { value: number; numerator: number | null; denominator: number | null } }>;
+    comparability?: string;
+    cells?: Array<{ key: string; metricId: string; delta: number | null; reason?: string; before: { value: number; numerator: number | null; denominator: number | null }; after: { value: number; numerator: number | null; denominator: number | null } }>;
     methods?:{before:{engines:string[]};after:{engines:string[]}};
     policy?: { threshold: number; noiseMeasured: boolean };
     sides?: Record<'before' | 'after', { selectionRef: string; count: number }>;

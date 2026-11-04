@@ -51,6 +51,10 @@ test('actual same-day adjacent producer freezes both complete cohorts through re
  const events=(await documents.list(user.id,'geo-signal',{projectId:project.projectId,limit:100,filter:{recordType:'geo-signal',kind:'group_changed'}})).items;
  assert.equal(events.length,2);assert.deepEqual(events.map(r=>[r.payload.basis.previous.id,r.payload.basis.current.id]).sort(),[['a','b'],['b','c']]);
  const event=events.find(r=>r.payload.basis.current.id==='b');
+ assert.equal(event.payload.basis.judgeComparability,'recorded-rubric-v1');
+ assert.equal(event.payload.basis.samplingComparability,'recorded-surface-v1');
+ const detailBefore = await signals.detail(user,project.id,event.id);
+ assert.equal(detailBefore.title,event.payload.title); assert.ok(detailBefore.basis.cells.some(cell=>Number.isFinite(cell.delta)));
  assert.equal(event.payload.basis.policy.noiseMeasured,false);assert.ok(event.payload.basis.sides.before.targetPages.pages.length>1);
  for(const side of ['before','after']){
   const all=[];let offset=0,page;
@@ -234,4 +238,22 @@ test('historic missing judge version does not produce a group change', options, 
  await measureRound({store:measure},'legacy');
  await new GeoGroupChanges({store,signals}).project(project);
  assert.equal((await documents.list(user.id,'geo-signal',{projectId:project.projectId,filter:{recordType:'geo-signal',kind:'group_changed'}})).items.length,0);
+});
+
+test('group change selects exact surface-matched members and rejects a changed interface', options, async t => {
+ const {store,project,round}=await fixture(t);
+ await round('surface-a','00',false); await round('surface-b','01',true);
+ const base={mode:'web',deep:false,newChat:true,city:'Beijing'};
+ await store.query("UPDATE evimed_geo.snapshots SET surface=$1::jsonb WHERE round_id IN ('surface-a','surface-b')",[JSON.stringify(base)]);
+ const read=()=>readGeoRoundComparison(store,project,{previousRoundId:'surface-a',currentRoundId:'surface-b'});
+ let pair=await read(); assert.equal(pair.commonKeys.length,220);
+ assert.equal(pair.previous.rows.length,220); assert.equal(pair.current.rows.length,220);
+ assert.equal(groupChangeEvents(pair).events.length,1,'stable non-default surface still yields the measured change');
+ for(const [field,value] of [['deep',true],['newChat',false],['city','Shanghai']]) {
+  await store.query("UPDATE evimed_geo.snapshots SET surface=$1::jsonb WHERE round_id='surface-b'",[JSON.stringify({...base,[field]:value})]);
+  pair=await read(); assert.equal(pair.commonKeys.length,0,field); assert.equal(pair.previous.rows.length,0,field); assert.equal(pair.current.rows.length,0,field);
+  assert.equal(groupChangeEvents(pair).events.length,0,field);
+ }
+ await store.query("UPDATE evimed_geo.snapshots SET surface=$1::jsonb WHERE round_id='surface-b'",[JSON.stringify({...base,transport:'other',responseDigest:'unrelated'})]);
+ pair=await read(); assert.equal(pair.commonKeys.length,220);assert.equal(groupChangeEvents(pair).events.length,1,'transport metadata is not a sampling difference');
 });

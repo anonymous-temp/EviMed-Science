@@ -69,5 +69,10 @@ test('legacy group signals preserve observations but remove unsupported changes'
  assert.equal(shown.cells[0].delta,null);
  assert.equal(shown.cells[0].before.value,10);
  assert.equal(row.payload.basis.cells[0].delta,20);
- assert.equal(geoLegacyGroupSignal({payload:{kind:'group_changed',basis:{judgeComparability:'recorded-rubric-v1'}}}),false);
+ const rubricOnly={payload:{kind:'group_changed',basis:{judgeComparability:'recorded-rubric-v1',cells:[{delta:20,before:{value:10},after:{value:30}}]}}};
+ assert.equal(geoLegacyGroupSignal(rubricOnly),true);
+ assert.equal(geoSignalDisplayBasis(rubricOnly).comparability,'sampling_surface_unverified');
+ assert.deepEqual([geoSignalDisplayBasis(rubricOnly).cells[0].delta,geoSignalDisplayBasis(rubricOnly).cells[0].before.value],[null,10]);
+ assert.equal(geoLegacyGroupSignal({payload:{kind:'group_changed',basis:{judgeComparability:'recorded-rubric-v1',samplingComparability:'unknown'}}}),true);
+ assert.equal(geoLegacyGroupSignal({payload:{kind:'group_changed',basis:{judgeComparability:'recorded-rubric-v1',samplingComparability:'recorded-surface-v1'}}}),false);
 });

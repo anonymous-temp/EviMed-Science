@@ -14,7 +14,8 @@ import { GeoFinanceVisual } from "./GeoFinanceVisual";
 const reasonWords: Readonly<Record<string, string>> = {
   judge_version_unknown_or_mixed: "判定版本未记录或不一致，保留读数，不参与排序。",
   judge_version_changed: "判定版本已变，保留读数，不参与排序。",
-  noise_basis_unrecorded:"历史波动范围缺少完整计算依据，不能比较。",judge_version_unrecorded: "历史计算未记录判定版本，不能比较。",
+  noise_basis_unrecorded:"波动范围的依据不完整或采样口径不一致，不能比较。",sampling_surface_unverified:"历史观测缺少可核对的采样口径",judge_version_unrecorded: "历史计算未记录判定版本，不能比较。",
+  no_common_cohort: "没有口径一致的共同采样，请调整对照范围。",
   measurement_method_changed: "测量方法已变化，保留两期读数且不参与排序。",
   measurement_contract_changed: "测量约定已变化，不参与排序。",
   metric_members_changed: "合资格成员发生变化，不参与排序。",

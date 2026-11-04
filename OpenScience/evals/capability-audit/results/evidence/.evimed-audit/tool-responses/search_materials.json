@@ -8,8 +8,8 @@
       }
     ],
     "meta": {
-      "api_version": "0.87.3.dev20+g908cf9b24",
-      "time_stamp": "2026-10-12T07:16:02.662102+00:00",
+      "api_version": "0.88.1",
+      "time_stamp": "2026-11-04T13:12:51.376726+00:00",
       "total_doc": 26,
       "facet": null,
       "max_limit": 1000,
@@ -24,10 +24,10 @@
         "limit": 1
       },
       "scope": {
-        "tenantId": "tool-probe-1cb73eaa",
-        "userId": "tool-probe-1cb73eaa",
-        "projectId": "tool-probe",
-        "workspaceDir": "/workspace/.audit-repo-20261012T071445Z/OpenScience/evals/capability-audit/tool-probe-workspace"
+        "tenantId": "ck-probe-14d43468",
+        "userId": "ck-probe-14d43468",
+        "projectId": "audit-tool-probe",
+        "workspaceDir": "/workspace/.audit-repo-20261104T131143Z/OpenScience/evals/capability-audit/tool-probe-workspace"
       }
     }
   },
@@ -36,7 +36,7 @@
       "id": "materials-project",
       "source": "materials-project",
       "url": "https://api.materialsproject.org/materials/summary/?_limit=1&formula=Fe2O3",
-      "retrievedAt": "2026-10-12T07:16:02.850461Z",
+      "retrievedAt": "2026-11-04T13:12:51.551103Z",
       "sourceType": "other"
     }
   ]

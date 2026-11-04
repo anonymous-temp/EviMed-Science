@@ -6,7 +6,7 @@ const poolName = code => code ? GEO_POOL_LABELS_ZH[code] ?? code : code;
 /** @param {string | null | undefined} code */
 const engineName = code => code ? GEO_ENGINE_LABELS_ZH[code] ?? code : code;
 import { computeGeoSelection } from './geoReadScope.mjs';
-import { geoComparisonMembers } from './geoComparison.mjs';
+import { geoComparisonMembers, geoComparisonSurfaceKey } from './geoComparison.mjs';
 import { brandRegistry, registryKey, foldText } from './geoParse.mjs';
 import { HttpError } from './security.mjs';
 const hash = value => createHash('sha256').update(documentExportDigest(value)).digest('hex');
@@ -185,11 +185,12 @@ export function buildGeoComparisonAnalysis(selected, view, context = {}) {
     for (const entry of candidates) {
         if (entry.scope !== view.dimension || view.metricId && entry.metricId !== view.metricId || entry.variant || entry.rival || entry.arm)
             continue;
-        const dims = { scope: entry.scope, engine: entry.engine, groupId: entry.groupId, pool: entry.pool, groupName: (context.groups ?? []).find(group=>group.id===entry.groupId)?.name??null, comparisonMode: comparison?.mode ?? null, currentSelection: comparison?.currentSelection?.reference ?? selected.selection.reference, previousSelection: comparison?.previousSelection?.reference ?? null };
+        const entryCohorts = entry.cohorts ?? cohorts;
+        const dims = { scope: entry.scope, engine: entry.engine, groupId: entry.groupId, pool: entry.pool, groupName: (context.groups ?? []).find(group=>group.id===entry.groupId)?.name??null, comparisonMode: comparison?.mode ?? null, currentSelection: entryCohorts?.current?.selection.reference ?? comparison?.currentSelection?.reference ?? selected.selection.reference, previousSelection: entryCohorts?.previous?.selection.reference ?? comparison?.previousSelection?.reference ?? null };
         const row = { key: hash([entry.metricId, dims]), label: [GEO_METRIC_LABELS_ZH[entry.metricId], engineName(entry.engine), dims.groupName, poolName(entry.pool)].filter(Boolean).join(' · '), metricId: entry.metricId, dimensions: dims, values: {}, links: [] };
         const members = {};
         for (const period of ['previous', 'current']) {
-            const metric = entry[period], source = cohorts?.[period] ?? (period === 'current' ? selected : null);
+            const metric = entry[period], source = entryCohorts?.[period] ?? (period === 'current' ? selected : null);
             const selectedMembers = source ? geoComparisonMembers(source, metric) : { rows: [], unit: 'answers' };
             memberItems.set(`${row.key}:${period}`, selectedMembers.rows.map(item => memberItem(item, selectedMembers.unit)));
             members[period] = selectedMembers.rows.length;
@@ -350,7 +351,13 @@ export function buildGeoRivalAnalysis(selected, view, context = {}) {
         const paired = !row.dimensions.own && row.dimensions.entityKind === 'brand';
         const relevant = selected.rows.filter(item => item.pool === row.dimensions.pool && item.surface?.mode !== 'inclusion' && (item.status === 'valid' || item.status === 'refusal'));
         const versions = new Set(relevant.filter(item => item.status === 'valid' || item.facts).map(item => item.facts?.judgedAt && item.facts?.checks?.judgementCoverage?.status === 'complete' && item.facts?.judgeExtract?.rubricVersion || null));
-        const comparable = relevant.length > 0 && versions.size <= 1 && !versions.has(null);
+        const surfacesByEngine = new Map();
+        for (const item of relevant) {
+            const surfaces = surfacesByEngine.get(item.engine) ?? new Set();
+            surfaces.add(geoComparisonSurfaceKey(item.surface)); surfacesByEngine.set(item.engine, surfaces);
+        }
+        const comparable = relevant.length > 0 && versions.size <= 1 && !versions.has(null)
+            && [...surfacesByEngine.values()].every(surfaces => surfaces.size === 1);
         if (!comparable && matching.length > 1) unknownRivalTrend = true;
         for (const point of matching) point.dimensions.trendComparable = comparable;
         return (paired ? ['pairedOwn', 'current'] : ['current']).map(columnKey => ({

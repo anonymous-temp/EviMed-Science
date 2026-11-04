@@ -1,8 +1,16 @@
 import { createHash } from "node:crypto";
 
 /** Shared observational comparison basis; the presenter never subtracts incompatible readings. */
-import { computeGvi, geoMetricMembers, geoCellRows, geoCoverageKey, GEO_MEASUREMENT_METHOD_VERSION, documentExportDigest } from '@evimed/domain';
-export const geoComparisonKey = row => JSON.stringify([row.questionId, row.engine, row.surface?.mode ?? null]);
+import { computeGvi, geoMetricMembers, geoCellRows, geoCoverageKey, geoSurfaceKey, GEO_MEASUREMENT_METHOD_VERSION, documentExportDigest } from '@evimed/domain';
+/** Proof that group observations were paired by the full effective sampling interface. */
+export const GEO_SAMPLING_COMPARABILITY = 'recorded-surface-v1';
+
+/** The measurement agreement is compared separately; transport metadata is not a sampling interface. */
+export const geoComparisonSurfaceKey = surface => {
+    const { mode, deep, newChat, city } = surface ?? {};
+    return geoSurfaceKey({ mode, deep, newChat, city });
+};
+export const geoComparisonKey = row => JSON.stringify([row.questionId, row.engine, geoComparisonSurfaceKey(row.surface)]);
 export const geoComparableAnswer = row => Boolean(row.questionId) && (row.status === 'refusal' || row.status === 'valid' && Boolean(row.facts));
 export const geoComparisonCellKey = cell => documentExportDigest([cell.scope, cell.metricId, cell.pool, cell.engine, cell.groupId, cell.arm, cell.variant, cell.rival]);
 export function geoComparisonMembers(selected, metric) {
@@ -75,6 +83,32 @@ export function compareGeoMetricCohorts(left, right, { mode, commonCount }) {
 }
 
 
+/**
+ * Coverage of the actual question/engine/repeat interfaces. A mixed configuration
+ * is explicit and contains only a digest, never a fabricated representative surface.
+ * Conflicting configurations for the same observation remain unknown.
+ */
+export function geoSamplingCoverage(rows, setVersion) {
+    if (!Array.isArray(rows) || !rows.length) return null;
+    const configurations = new Map(), surfaces = new Set();
+    for (const row of rows) {
+        if (!row.questionId || !row.engine || !Number.isSafeInteger(row.repeatIndex) || row.repeatIndex < 0) return null;
+        const surface = geoSurfaceKey(row.surface);
+        const contract = row.surface?.measurementContract;
+        const config = documentExportDigest([surface, contract ? { samplingMode: contract.samplingMode, repeats: contract.repeats,
+            sourceBasis: contract.sourceBasis, metricIds: contract.metricIds } : null]);
+        const key = documentExportDigest([row.questionId, row.groupId ?? null, row.pool ?? null, row.engine, row.repeatIndex]);
+        if (configurations.has(key) && configurations.get(key) !== config) return null;
+        configurations.set(key, config); surfaces.add(surface);
+    }
+    const base = geoCoverageKey({ setVersion, pools: [...new Set(rows.map(row => row.pool).filter(Boolean))],
+        engines: [...new Set(rows.map(row => row.engine))], surface: surfaces.size === 1 ? rows[0].surface : { mode: 'mixed' },
+        methodVersion: GEO_MEASUREMENT_METHOD_VERSION });
+    if (!base) return null;
+    const mapping = [...configurations.entries()].sort(([left], [right]) => left.localeCompare(right));
+    return `${base};sampling=${createHash('sha256').update(documentExportDigest(mapping)).digest('hex')}`;
+}
+
 /** A metric-local compatibility key from the exact inputs being computed, never the round's current facts. */
 export function geoMetricInputCoverage(selected, cell, setVersion) {
     if (!cell || cell.status !== 'ok') return null;
@@ -86,10 +120,7 @@ export function geoMetricInputCoverage(selected, cell, setVersion) {
     const parsed = scope.filter(row => row.surface?.mode !== 'inclusion' && row.status === 'valid');
     const parsers = [...new Set(parsed.map(row => row.facts?.parserVersion || null))];
     if (rubric.applies && (parsers.includes(null) || parsers.length > 1)) return null;
-    const surfaces = [...new Set(scope.map(row => JSON.stringify(row.surface ?? null)))];
-    if (surfaces.length !== 1) return null;
-    const base = geoCoverageKey({ setVersion, pools: [...new Set(scope.map(row => row.pool).filter(Boolean))],
-        engines: [...new Set(scope.map(row => row.engine))], surface: JSON.parse(surfaces[0]), methodVersion: GEO_MEASUREMENT_METHOD_VERSION });
+    const base = geoSamplingCoverage(scope, setVersion);
     if (!base) return null;
     const cohort = [...new Set(scope.map(row => documentExportDigest([geoComparisonKey(row), row.pool, row.groupId, row.repeatIndex ?? 0])))].sort();
     const hash = value => createHash('sha256').update(documentExportDigest(value)).digest('hex');

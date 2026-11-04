@@ -29,8 +29,8 @@
     },
     "registryDataVersion": {
       "apiVersion": "2.0.5",
-      "dataTimestamp": "2026-10-09T09:00:05",
-      "recordLoadedOn": "2026-10-09"
+      "dataTimestamp": "2026-11-04T10:00:04",
+      "recordLoadedOn": "2026-11-04"
     },
     "endpoints": {
       "registered": 7,
@@ -114,10 +114,10 @@
         "compareTo": "none"
       },
       "scope": {
-        "tenantId": "tool-probe-1cb73eaa",
-        "userId": "tool-probe-1cb73eaa",
-        "projectId": "tool-probe",
-        "workspaceDir": "/workspace/.audit-repo-20261012T071445Z/OpenScience/evals/capability-audit/tool-probe-workspace"
+        "tenantId": "ck-probe-14d43468",
+        "userId": "ck-probe-14d43468",
+        "projectId": "audit-tool-probe",
+        "workspaceDir": "/workspace/.audit-repo-20261104T131143Z/OpenScience/evals/capability-audit/tool-probe-workspace"
       }
     }
   },
@@ -127,7 +127,7 @@
       "title": "Study to Assess the Effect of AZD9291 on the Blood Levels of Simvastatin in Patients With EGFRm+ NSCLC",
       "url": "https://clinicaltrials.gov/study/NCT02197234",
       "source": "clinicaltrials.gov",
-      "retrievedAt": "2026-10-12T07:16:16.639242Z",
+      "retrievedAt": "2026-11-04T13:13:09.575266Z",
       "evidenceAccess": "registry_record",
       "artifactPath": ".evimed-sources/clinicaltrials/NCT02197234/d4046c7dd6fa0723b2ab0032beccb0263b151912fc0ca1f8971cc34d06e64139/record.md",
       "sourceType": "trial-registration"

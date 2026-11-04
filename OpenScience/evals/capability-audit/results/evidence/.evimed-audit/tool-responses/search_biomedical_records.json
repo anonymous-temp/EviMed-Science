@@ -7,12 +7,12 @@
       "version": "0.3"
     },
     "esearchresult": {
-      "count": "16755",
+      "count": "16809",
       "retmax": "2",
       "retstart": "0",
       "idlist": [
-        "42859665",
-        "42857939"
+        "42978426",
+        "42977977"
       ],
       "translationset": [
         {
@@ -34,10 +34,10 @@
         "limit": 2
       },
       "scope": {
-        "tenantId": "tool-probe-1cb73eaa",
-        "userId": "tool-probe-1cb73eaa",
-        "projectId": "tool-probe",
-        "workspaceDir": "/workspace/.audit-repo-20261012T071445Z/OpenScience/evals/capability-audit/tool-probe-workspace"
+        "tenantId": "ck-probe-14d43468",
+        "userId": "ck-probe-14d43468",
+        "projectId": "audit-tool-probe",
+        "workspaceDir": "/workspace/.audit-repo-20261104T131143Z/OpenScience/evals/capability-audit/tool-probe-workspace"
       }
     }
   },
@@ -46,7 +46,7 @@
       "id": "biomcp",
       "source": "biomcp",
       "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&retmax=2&term=metformin+type+2+diabetes&tool=evimed_research",
-      "retrievedAt": "2026-10-12T07:15:59.517676Z",
+      "retrievedAt": "2026-11-04T13:12:48.792770Z",
       "sourceType": "other"
     }
   ]

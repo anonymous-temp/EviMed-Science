@@ -5,6 +5,7 @@ import { HttpError } from './security.mjs';
 import { packGeoSignalTargets, readGeoSignalTargets, packGeoGroupChange, readGeoGroupChangeMembers } from './geoSignalTargets.mjs';
 import { summarizeGeoSourceReviews } from './geoSourceReviews.mjs';
 import { migrateProductStore } from './productPersistence.mjs';
+import { GEO_SAMPLING_COMPARABILITY } from './geoComparison.mjs';
 
 const digest = value => createHash('sha256').update(canonicalJson(value)).digest('hex');
 const fail = (code, message, status = 409) => new HttpError(status, code, message);
@@ -33,9 +34,14 @@ export function geoSignalErrorOutcome(error, basis) {
  * Associations and reversible dispositions over existing event and run owners. No model, payment or new job engine.
  * Producers supply the immutable event basis; public routes accept only selection and disposition.
  */
-// Old group signals predate rubric compatibility; retain them as history, never as a verified change.
-export const geoLegacyGroupSignal = row => row.payload.kind === 'group_changed' && row.payload.basis?.judgeComparability !== 'recorded-rubric-v1';
-export const geoSignalDisplayBasis = row => geoLegacyGroupSignal(row) ? { ...row.payload.basis, cells: (row.payload.basis?.cells ?? []).map(cell => ({ ...cell, delta: null, reason: 'judge_version_unrecorded' })), comparability: 'judge_version_unrecorded' } : row.payload.basis;
+// Historical observations remain readable, but rubric-only signals did not prove the sampling interface.
+export const geoLegacyGroupSignal = row => row.payload.kind === 'group_changed' && (row.payload.basis?.judgeComparability !== 'recorded-rubric-v1'
+  || row.payload.basis?.samplingComparability !== GEO_SAMPLING_COMPARABILITY);
+export const geoSignalDisplayBasis = row => {
+  if (!geoLegacyGroupSignal(row)) return row.payload.basis;
+  const reason = row.payload.basis?.judgeComparability !== 'recorded-rubric-v1' ? 'judge_version_unrecorded' : 'sampling_surface_unverified';
+  return { ...row.payload.basis, cells: (row.payload.basis?.cells ?? []).map(cell => ({ ...cell, delta: null, reason })), comparability: reason };
+};
 export class GeoSignals {
   constructor({ documents, store, service, runs, resultForRun, sourceReviewForRun = null, notify = null, now = () => new Date() }) {
     this.documents = documents; this.store = store; this.service = service; this.runs = runs;

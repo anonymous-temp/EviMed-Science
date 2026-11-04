@@ -186,3 +186,23 @@ test('legacy group signal remains reviewable, never renotified or upgraded by re
   assert.match(staged.draft,/口径未知/);
   assert.equal((await documents.get(user.id,'geo-signal',first.id)).payload.basis.cells[0].delta,20);
 });
+
+test('rubric-only group signal stays historical and replay cannot upgrade or notify it', options, async t => {
+  const { makeProject, signals, user, documents } = await fixture(t);
+  const project = await makeProject('legacy-surface-group');
+  let notifications = 0; signals.notify = async () => { notifications++; };
+  const event = { kind: 'group_changed', objectKey: 'g', eventVersion: 'rubric-only', title: '观测变化', observedAt: '2026-10-01T00:00:00Z',
+    basis: { judgeComparability: 'recorded-rubric-v1', cells: [{ key: 'metric', metricId: 'M-01', delta: 20, before: { value: 10 }, after: { value: 30 } }], sides: { before: { targets: [] }, after: { targets: [] } } } };
+  const first = await signals.record(project, event);
+  const replay = await signals.record(project, { ...event, basis: { ...event.basis, samplingComparability: 'recorded-surface-v1' } });
+  assert.equal(replay.id, first.id); assert.equal(replay.revision, first.revision);
+  assert.equal(replay.payload.basis.samplingComparability, undefined);
+  await signals.deliver(project, replay); assert.equal(notifications, 0);
+  const detail = await signals.detail(user, project.id, first.id);
+  assert.equal(detail.title, '历史观测待核实');
+  assert.equal(detail.basis.comparability, 'sampling_surface_unverified');
+  assert.deepEqual([detail.basis.cells[0].delta, detail.basis.cells[0].before.value, detail.basis.cells[0].after.value], [null, 10, 30]);
+  const staged = await signals.stageInput(project, { signalId: first.id, expectedSignalRevision: first.revision, intent: 'analyse' });
+  assert.equal(staged.basis.event.cells[0].delta, null); assert.match(staged.draft, /口径未知/);
+  assert.equal((await documents.get(user.id, 'geo-signal', first.id)).payload.basis.cells[0].delta, 20);
+});

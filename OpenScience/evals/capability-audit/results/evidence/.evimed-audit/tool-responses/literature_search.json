@@ -1,6 +1,5 @@
 {
-  "status": "warning",
-  "summary": "Retrieved 2 traceable PubMed records of 2619 matching.",
+  "summary": "Retrieved 2 traceable PubMed records of 2626 matching.",
   "data": {
     "items": [
       {
@@ -36,25 +35,38 @@
         "sourceType": "rct"
       },
       {
-        "id": "PMID:27341534",
-        "pmid": "27341534",
-        "title": "Aspirin and cardiovascular primary prevention in non-endstage chronic kidney disease: A meta-analysis.",
-        "journal": "Atherosclerosis",
-        "publicationDate": "2016 Aug",
+        "id": "PMID:40902613",
+        "pmid": "40902613",
+        "title": "Clopidogrel versus aspirin for secondary prevention of coronary artery disease: a systematic review and individual patient data meta-analysis.",
+        "journal": "Lancet (London, England)",
+        "publicationDate": "2025 Sep 13",
         "authors": [
-          "Major RW",
-          "Oozeerally I",
-          "Dawson S",
-          "Riddleston H",
-          "Gray LJ",
-          "Brunskill NJ"
+          "Valgimigli M",
+          "Choi KH",
+          "Giacoppo D",
+          "Gragnano F",
+          "Kimura T",
+          "Watanabe H",
+          "Kim HS",
+          "Kang J",
+          "Park KW",
+          "Pettersen AÅ",
+          "Woodward M",
+          "Bhatt DL",
+          "Calabrò P",
+          "Angiolillo DJ",
+          "Mehran R",
+          "Song YB",
+          "Hahn JY"
         ],
-        "doi": "10.1016/j.atherosclerosis.2016.06.013",
-        "url": "https://pubmed.ncbi.nlm.nih.gov/27341534/",
+        "doi": "10.1016/S0140-6736(25)01562-4",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/40902613/",
         "publicationTypes": [
           "Journal Article",
+          "Systematic Review",
           "Meta-Analysis",
-          "Systematic Review"
+          "Comparative Study",
+          "Research Support, N.I.H., Extramural"
         ],
         "hasAbstract": true,
         "sourceType": "meta-analysis"
@@ -63,16 +75,16 @@
     "outcome": {
       "state": "more_available",
       "returned": 2,
-      "total": 2619,
-      "remaining": 2617,
+      "total": 2626,
+      "remaining": 2624,
       "next": {
         "arguments": {
           "offset": 2
         },
-        "how": "2 of 2619 matching records returned; call again with offset=2 for the next 2. PubMed's relevance order is not stable between pages, so a record can appear on two of them: drop repeats by PMID (evidence_deduplicate)."
+        "how": "2 of 2626 matching records returned; call again with offset=2 for the next 2. PubMed's relevance order is not stable between pages, so a record can appear on two of them: drop repeats by PMID (evidence_deduplicate)."
       }
     },
-    "total": 2619,
+    "total": 2626,
     "provenance": {
       "tool": "literature_search",
       "arguments": {
@@ -84,10 +96,10 @@
         ]
       },
       "scope": {
-        "tenantId": "tool-probe-1cb73eaa",
-        "userId": "tool-probe-1cb73eaa",
-        "projectId": "tool-probe",
-        "workspaceDir": "/workspace/.audit-repo-20261012T071445Z/OpenScience/evals/capability-audit/tool-probe-workspace"
+        "tenantId": "ck-probe-14d43468",
+        "userId": "ck-probe-14d43468",
+        "projectId": "audit-tool-probe",
+        "workspaceDir": "/workspace/.audit-repo-20261104T131143Z/OpenScience/evals/capability-audit/tool-probe-workspace"
       }
     }
   },
@@ -95,24 +107,23 @@
     {
       "id": "PMID:30158069",
       "source": "pubmed",
-      "retrievedAt": "2026-10-12T07:16:11.490279Z",
+      "retrievedAt": "2026-11-04T13:13:02.985078Z",
       "url": "https://pubmed.ncbi.nlm.nih.gov/30158069/",
       "title": "Use of aspirin to reduce risk of initial vascular events in patients at moderate risk of cardiovascular disease (ARRIVE): a randomised, double-blind, placebo-controlled trial.",
       "sourceType": "rct"
     },
     {
-      "id": "PMID:27341534",
+      "id": "PMID:40902613",
       "source": "pubmed",
-      "retrievedAt": "2026-10-12T07:16:11.490309Z",
-      "url": "https://pubmed.ncbi.nlm.nih.gov/27341534/",
-      "title": "Aspirin and cardiovascular primary prevention in non-endstage chronic kidney disease: A meta-analysis.",
+      "retrievedAt": "2026-11-04T13:13:02.985115Z",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/40902613/",
+      "title": "Clopidogrel versus aspirin for secondary prevention of coronary artery disease: a systematic review and individual patient data meta-analysis.",
       "sourceType": "meta-analysis"
     }
   ],
-  "warnings": [
-    "Public literature results contain bibliographic metadata only; titles do not establish study design, evidence level, outcomes, effect estimates, or causality."
-  ],
+  "status": "success",
   "next_actions": [
+    "Public literature results contain bibliographic metadata only; titles do not establish study design, evidence level, outcomes, effect estimates, or causality.",
     "Retrieve and review the abstract or full text before classifying study design or summarizing findings: literature_search with pmids=[...] returns and preserves the abstracts of the PubMed records you keep."
   ]
 }
