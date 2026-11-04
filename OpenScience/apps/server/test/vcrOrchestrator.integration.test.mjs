@@ -1837,6 +1837,46 @@ test("above T0 the matching step is sent a run once the criteria exist, and a ru
   assert.ok(asked.runId, "the answer names the run it started");
 });
 
+test("above T0 a judging job holds the matching step, and what it saved finishes it, with no run sent meanwhile", options, async () => {
+  const module = compose();
+  const study = await makeStudy("matchjudge", { dataTier: "T1" });
+  const matching = async () => (await store.studyById(study.id)).steps.matching.status;
+  const protocol = await vcrRuntimeWrite({ store, service: module.service, orchestrator: module.orchestrator, study, what: "protocol", items: null,
+    data: { title: "EV-201 v1.0", criteria: [{ kind: "inclusion", criterionType: "diagnosis", requirement: { op: "present", variable: "nsclc" }, sourceText: "经组织学确诊的非小细胞肺癌" }] } });
+  assert.deepEqual(protocol.issues, []);
+  await store.setStep(study.id, "matching", { requested: true });
+  const version = (await store.one("SELECT id FROM evimed_vcr.protocol_versions WHERE study_id = $1 ORDER BY version DESC LIMIT 1", [study.id])).id;
+
+  // A person (or the conversation) starts the job while no run is out for the step.
+  const job = { id: `job_${randomUUID()}` };
+  await store.query("INSERT INTO evimed_vcr.jobs (id, study_id, user_id, kind, method, state) VALUES ($1, $2, $3, 'match_judge', 'matching.judge', 'running')", [job.id, study.id, study.userId]);
+  await module.orchestrator.advance(study.id);
+  assert.equal(await matching(), "running", "a job of the step's own under way reads running");
+  const sent = module.dispatched.filter((/** @type {any} */ input) => input.capabilityId === "vcr-matching").length;
+  assert.equal(sent, 0, "and the matching run is not sent on top of it");
+
+  // It ends having judged someone against the protocol as it stands: the step is done, with no rule assessment anywhere.
+  await store.query("UPDATE evimed_vcr.jobs SET state = 'succeeded', finished_at = now() WHERE id = $1", [job.id]);
+  const judgment = (/** @type {string} */ targetKind, /** @type {string} */ targetId, /** @type {string} */ status) => store.query(`INSERT INTO evimed_vcr.match_judgments
+    (id, study_id, user_id, subject_key, target_kind, target_id, mode, prompt_version, producer, status) VALUES ($1, $2, $3, $1, $4, $5, 'fit', 'fit-1', 'job', $6)`,
+  [`jud_${randomUUID()}`, study.id, study.userId, targetKind, targetId, status]);
+  await judgment("protocol_version", "protocol-of-an-earlier-version", "done");
+  await judgment("protocol_version", version, "failed");
+  await module.orchestrator.advance(study.id);
+  assert.notEqual(await matching(), "done", "a failure, or the answer to an earlier version of the protocol, finishes nothing");
+  await judgment("protocol_version", version, "done");
+  await module.orchestrator.advance(study.id);
+  assert.equal(await matching(), "done");
+
+  // The other direction, in a study with no protocol: a patient's trials judged is the step's work too.
+  const other = await makeStudy("matchjudgetrial", { dataTier: "T1" });
+  await store.setStep(other.id, "matching", { requested: true });
+  await store.query(`INSERT INTO evimed_vcr.match_judgments (id, study_id, user_id, subject_key, target_kind, target_id, mode, prompt_version, producer, status)
+    VALUES ($1, $2, $3, 'sub_1', 'candidate_trial', 'ClinicalTrials.gov:NCT00000001', 'fit', 'fit-1', 'job', 'done')`, [`jud_${randomUUID()}`, other.id, other.userId]);
+  await module.orchestrator.advance(other.id);
+  assert.equal((await store.studyById(other.id)).steps.matching.status, "done");
+});
+
 test("R3 a person's cancel holds the programme: the run's end is not followed by the next step, and asking for a step takes it and what it needs out of the hold", options, async () => {
   const module = compose();
   const study = await makeStudy("hold");
