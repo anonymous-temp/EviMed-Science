@@ -2768,6 +2768,8 @@ export {
   mergeCriteriaAnswers,
 } from './src/vcrTrialJudgment.mjs'
 
+export { VCR_DEFINITION_PROMPT_VERSION, VCR_DEFINITION_SOURCES, definitionLines, definitionMessages, parseDefinitionsAnswer } from './src/vcrClauseDefinitions.mjs'
+
 export { VCR_LONGITUDINAL_SCHEMA, VCR_LONGITUDINAL_ERROR_CODES, VCR_LONGITUDINAL_SCHEMAS, VCR_LONGITUDINAL_METHODS, VCR_LONGITUDINAL_JOBS, VCR_PREDICTION_TYPES,
   VCR_FORECAST_UNCERTAINTY, VCR_LONGITUDINAL_LIMITS, longitudinalNumber, longitudinalInstant, longitudinalMean,
   longitudinalVariance, longitudinalQuantile, eventsFromMappedTable, replayClinicalEvents, longitudinalReadiness,

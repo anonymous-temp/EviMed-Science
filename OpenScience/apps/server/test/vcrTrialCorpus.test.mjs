@@ -7,6 +7,7 @@ import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import { deflateSync } from "node:zlib";
 
+import { VcrCandidateRerank } from "../src/vcrCandidateRerank.mjs";
 import { createVcrEvidencePipeline } from "../src/vcrEvidence.mjs";
 import { VcrService } from "../src/vcrService.mjs";
 import { createVcrTrialCorpus } from "../src/vcrTrialCorpus.mjs";
@@ -64,7 +65,9 @@ test("frozen product evidence reads 500 deterministically ranked unique IDs in t
   assert.equal(first.retrieval.totalMatched, 600);
   assert.equal(first.retrieval.truncated, true);
   assert.equal(first.retrieval.retrievedIds.length, 500);
-  assert.equal(first.candidates[0].registryId, trialId(101));
+  // TrialGPT's fusion weighs the run's first phrase most: the trial at the head of "diabetes" leads, and the one both phrases find is still kept.
+  assert.equal(first.candidates[0].registryId, trialId(1));
+  assert.ok(first.retrieval.retrievedIds.includes(trialId(101)));
   const ids = [];
   let page = first;
   for (let n = 0; n < 10; n += 1) {
@@ -179,4 +182,50 @@ test("frozen worker enforces its deadline and closes with all pending callers se
   await corpus.close();
   await pending;
   await assert.rejects(corpus.record(trialId(3)), { code: "trial_collection_worker_closed" });
+});
+
+test("a frozen collection takes the same reranker and receipt as the live registries: the whole list is read, reordered against the summary, kept, and paged by searchId (G11)", async (t) => {
+  const { manifest, manifestPath } = await fixture(t);
+  const trialCorpus = createVcrTrialCorpus(manifestPath);
+  t.after(() => trialCorpus.close());
+  /** @type {any[]} */
+  const bodies = [];
+  const fetchImpl = async (_url, init) => {
+    const body = JSON.parse(init.body);
+    bodies.push(body);
+    // The biomarker trial (the 101st) reads best against the summary; the rest by their position from the end.
+    return new Response(JSON.stringify({ results: body.documents.map((document, index) => ({ index, relevance_score: document.includes("Biomarker") ? 0.99 : 0.5 / (1 + index) })) }), { status: 200 });
+  };
+  const reranker = new VcrCandidateRerank({ apiKey: "k", model: "qwen3-rerank", apiBase: "https://dashscope.example.org/compatible-api/v1/reranks", batchSize: 100 }, { fetchImpl, report: () => {} });
+  const held = new Map();
+  const searches = {
+    async save(study, entry) { const id = `cns_${held.size + 1}`; held.set(id, { id, studyId: study.id, createdAt: "2026-11-04T08:00:00.000Z", ...entry }); return id; },
+    async get(study, id) { const row = held.get(id); return row?.studyId === study.id ? row : null; },
+  };
+  const pipeline = createVcrEvidencePipeline({ store: {}, trialCorpus, reranker, searches });
+  const study = { id: "std_1", userId: "u" };
+  const filter = { collection: manifest.id, condition: "diabetes", terms: ["biomarker"], limit: 120, summary: "type 2 diabetes with a biomarker of interest" };
+  const answer = await pipeline.candidatesFor(study, filter, 20);
+  assert.equal(answer.available, true);
+
+  assert.equal(answer.candidates.length, 50, "a frozen list shows its page of fifty");
+  assert.equal(answer.candidates[0].registryId, trialId(101), "the trial that reads best against the summary leads");
+  assert.deepEqual([answer.rerank.state, answer.rerank.applied, answer.rerank.batches], ["ranked", true, 2]);
+  assert.match(bodies[0].documents[0], /^title: Diabetes /);
+  assert.match(bodies[0].documents[0], /eligibility: Inclusion Criteria: Age 18 years or older\./, "the head of the eligibility text came from the collection's record");
+  assert.ok(bodies[0].documents.every((document) => !/qrels|REFERENCE LABEL|private@example\.test/.test(document)));
+  assert.equal(answer.candidates[0].collection, manifest.id);
+  assert.deepEqual([answer.retrieved, answer.more, answer.nextOffset, answer.nextCursor], [120, true, 50, null]);
+  assert.ok(answer.searchId);
+  assert.deepEqual(held.get(answer.searchId).collection, { ...answer.collection });
+  const second = await pipeline.candidatesFor(study, { searchId: answer.searchId, offset: 50, limit: 50 }, 50);
+  assert.deepEqual([second.candidates.length, second.candidates[0].rank, second.collection.revision], [50, 51, trialCorpus.revision]);
+  // Without a reranker, or a summary, or with a cursor, the collection answers as it always did.
+  const plain = await createVcrEvidencePipeline({ store: {}, trialCorpus }).candidatesFor(study, { ...filter, summary: undefined }, 20);
+  assert.equal(plain.searchId, undefined);
+  assert.notEqual(plain.candidates[0].registryId, trialId(101));
+  assert.ok(plain.nextCursor);
+  // The summary is not a term of the search: the same terms with and without it are one cached list, so a cursor from one is valid for the other.
+  const paged = await pipeline.candidatesFor(study, { ...filter, summary: undefined, cursor: plain.nextCursor }, 20);
+  assert.equal(paged.candidates[0].rank, 51);
 });

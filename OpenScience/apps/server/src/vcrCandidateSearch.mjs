@@ -15,8 +15,13 @@
  * - **A registry that failed is named with its reason, and the others' results stand.** The answer says, per registry, what was asked, what
  *   failed and what came back, and says plainly what is not covered at all (CDE and ICTRP are not wired — owner ruling 2026-09-29).
  *   「没查」 and 「查到零条」 are different findings.
- * - **The order is not a ranking.** The registries' own relevance orders are interleaved so no one registry fills the list; nothing here
- *   says one trial suits the patient better than another. 「符合」 is not a recommendation, and a list is not a verdict either.
+ * - **The order is a retrieval order, not a verdict.** Each registry's answers to the run's phrases are fused (TrialGPT's reciprocal-rank
+ *   fusion: a trial the earlier phrases find high comes first) and the registries' lists are interleaved so no one registry fills the list;
+ *   when the run gave a summary of the patient, a reranker puts the list in the order of how well each trial reads against that summary
+ *   (`vcrCandidateRerank.mjs`). Neither says a trial suits the patient or that the patient fits it. 「符合」 is not a recommendation, and a
+ *   list is not a verdict either.
+ * - **Depth is bounded by the clock, not by a count of phrases.** A search asks each registry for every phrase, a page at a time, in the
+ *   run's order of priority, within the deployment's deadline (`vcrCandidateRetrieve.mjs`); a phrase the deadline did not reach is said so.
  * - **The status, age and sex readings are closed tables over structured registry fields** (`registryStatusOpen`, `ageBands`, `sexOf`),
  *   not readings of prose; a word these tables do not know is unknown, never closed or excluded.
  * - **A retrieval hint is never a verdict.** Nothing in this file decides eligibility, and a trial this list left out is left out for a
@@ -44,10 +49,21 @@ export const CANDIDATES_NOT_COVERED = Object.freeze([
   Object.freeze({ id: "ictrp", name: "WHO 国际临床试验注册平台（ICTRP）", reason: "该库的使用条款不允许商业使用，没有接入" }),
 ]);
 
-/** The most phrases besides the condition one list is searched with: each is a request to each registry. */
-export const CANDIDATE_TERMS_MAX = 3;
-export const FROZEN_CANDIDATE_TERMS_MAX = 32;
-export const FROZEN_CANDIDATE_LIMIT = 500;
+/**
+ * The most phrases besides the condition one list is searched with: each is a request, a page at a time, to each registry. The run writes
+ * them as TrialGPT's keyword step does — the patient's problems summarised, then up to 32 conditions ranked by priority.
+ */
+export const CANDIDATE_TERMS_MAX = 32;
+export const FROZEN_CANDIDATE_TERMS_MAX = CANDIDATE_TERMS_MAX;
+/** The most candidates one search keeps for one patient, and the most a frozen collection's list holds. */
+export const CANDIDATE_RETRIEVE_MAX = 500;
+export const FROZEN_CANDIDATE_LIMIT = CANDIDATE_RETRIEVE_MAX;
+/** The most characters of the patient summary a reranker reads (the run writes it; it is not the note). */
+export const CANDIDATE_SUMMARY_MAX = 2_000;
+/** The constant of the reciprocal-rank fusion TrialGPT recommends (its README: 20). */
+export const CANDIDATE_FUSION_K = 20;
+/** The rows of one answer a frozen collection or a stored list returns at a time. */
+export const CANDIDATE_PAGE_SIZE = 50;
 
 /** ClinicalTrials.gov's statuses of a trial that is open or about to be, and CTIS's public status codes for the same (`CTIS_PUBLIC_STATUS`). */
 const CTGOV_OPEN_STATUSES = Object.freeze(["RECRUITING", "NOT_YET_RECRUITING", "ENROLLING_BY_INVITATION"]);
@@ -63,12 +79,16 @@ const idKey = (value) => text(value).replace(/\s+/g, "").toUpperCase();
 const fold = (value) => text(value).normalize("NFKC").replace(/\s+/g, " ").toLowerCase();
 
 /**
+ * @typedef {{ condition: string, terms: string[], summary: string | null, age: number | null, sex: "male" | "female" | null,
+ *   region: string | null, scope: "open" | "any", limit: number }} CandidateRequest
+ */
+
+/**
  * The request as the platform runs it: validated and bounded here as well as at the gateway, because the service is also reached by code.
  * `condition` is required; `terms` are other ways to ask for the same trials (a synonym, the Chinese name, a biomarker) and each is a
  * search of its own, not a narrowing of the condition.
  * @param {Record<string, any>} filter @param {{ limitMax?: number, frozen?: boolean }} [options]
- * @returns {{ ok: true, request: { condition: string, terms: string[], age: number | null, sex: "male" | "female" | null, region: string | null,
- *   scope: "open" | "any", limit: number } } | { ok: false, message: string }}
+ * @returns {{ ok: true, request: CandidateRequest } | { ok: false, message: string }}
  */
 export function candidateRequest(filter, { limitMax = 20, frozen = false } = {}) {
   const condition = text(filter?.condition).replace(/\s+/g, " ");
@@ -81,8 +101,13 @@ export function candidateRequest(filter, { limitMax = 20, frozen = false } = {})
     if ([...term].length > 200) return { ok: false, message: "filter.terms 里每个检索词最长 200 个字。" };
     if (fold(term) !== fold(condition) && !terms.some((held) => fold(held) === fold(term))) terms.push(term);
   }
-  const termsMax = frozen ? FROZEN_CANDIDATE_TERMS_MAX : CANDIDATE_TERMS_MAX;
-  if (terms.length > termsMax) return { ok: false, message: `filter.terms 最多 ${termsMax} 个：每个都会问遍每个登记库，挑最有区分度的。` };
+  if (terms.length > CANDIDATE_TERMS_MAX) return { ok: false, message: `filter.terms 最多 ${CANDIDATE_TERMS_MAX} 个：按重要性排在前面，靠后的在时间用完时可能没查到。` };
+  let summary = null;
+  if (filter?.summary !== undefined && filter?.summary !== null) {
+    if (typeof filter.summary !== "string") return { ok: false, message: `filter.summary 是你写的患者问题摘要（不是病历原文，不含姓名和证件号），最多 ${CANDIDATE_SUMMARY_MAX} 个字。` };
+    summary = text(filter.summary).replace(/\s+/g, " ") || null;
+    if (summary && [...summary].length > CANDIDATE_SUMMARY_MAX) return { ok: false, message: `filter.summary 最多 ${CANDIDATE_SUMMARY_MAX} 个字：写患者的主要问题、分期和用过的治疗，不要贴病历。` };
+  }
   let age = null;
   if (filter?.age !== undefined && filter?.age !== null) {
     age = Number(filter.age);
@@ -105,7 +130,50 @@ export function candidateRequest(filter, { limitMax = 20, frozen = false } = {})
   }
   if (frozen) limitMax = FROZEN_CANDIDATE_LIMIT;
   const limit = Math.max(1, Math.min(limitMax, Number.isSafeInteger(filter?.limit) ? filter.limit : limitMax));
-  return { ok: true, request: { condition, terms, age, sex: /** @type {any} */ (sex), region, scope: /** @type {any} */ (scope), limit } };
+  return { ok: true, request: { condition, terms, summary, age, sex: /** @type {any} */ (sex), region, scope: /** @type {any} */ (scope), limit } };
+}
+
+/**
+ * A page of a search already made (`filter.searchId`, with `offset` and `limit`): the stored list read again, no registry asked.
+ * @param {Record<string, any>} filter @param {{ limitMax?: number }} [options]
+ * @returns {{ ok: true, page: { searchId: string, offset: number, limit: number } } | { ok: false, message: string }}
+ */
+export function candidatePageRequest(filter, { limitMax = 20 } = {}) {
+  const searchId = text(filter?.searchId);
+  if (!/^[A-Za-z0-9_.:@-]{1,160}$/.test(searchId)) return { ok: false, message: "filter.searchId 是上一次检索返回的 searchId。" };
+  const offset = filter?.offset === undefined || filter?.offset === null ? 0 : filter.offset;
+  if (!Number.isSafeInteger(offset) || offset < 0 || offset > CANDIDATE_RETRIEVE_MAX) return { ok: false, message: `filter.offset 是 0 到 ${CANDIDATE_RETRIEVE_MAX} 的整数。` };
+  const limit = Math.max(1, Math.min(limitMax, Number.isSafeInteger(filter?.limit) ? filter.limit : limitMax));
+  return { ok: true, page: { searchId, offset, limit } };
+}
+
+/**
+ * TrialGPT's weight of a hit: the trial at rank `rank` (from 0) of the list the phrase at `queryIndex` (from 0) found. A hit on an earlier phrase
+ * counts for more, and a trial several phrases find rises above one that a single phrase put first.
+ * @param {number} rank @param {number} queryIndex
+ */
+export const fusionScore = (rank, queryIndex) => (1 / (rank + CANDIDATE_FUSION_K)) * (1 / (queryIndex + 1));
+
+/**
+ * Fuse the lists one registry gave to the run's phrases, in the run's order of priority, into one list. Within the list of a phrase the order is
+ * the registry's own; a trial in several lists counts in each. Equal scores keep the order in which the trials were first met.
+ * @template {{ registryId: string }} T
+ * @param {T[][]} lists
+ * @returns {T[]}
+ */
+export function fuseRanked(lists) {
+  /** @type {Map<string, { candidate: T, score: number, first: number }>} */
+  const held = new Map();
+  lists.forEach((items, queryIndex) => {
+    items.forEach((candidate, rank) => {
+      const key = idKey(candidate.registryId);
+      if (!key) return;
+      const entry = held.get(key) ?? { candidate, score: 0, first: held.size };
+      entry.score += fusionScore(rank, queryIndex);
+      held.set(key, entry);
+    });
+  });
+  return [...held.values()].sort((a, b) => b.score - a.score || a.first - b.first).map((entry) => entry.candidate);
 }
 
 // ---------------------------------------------------------------------------
@@ -202,6 +270,8 @@ function candidateOf(item) {
     phase: item.phase ?? "", conditions: shortList(item.conditions, 4), interventions: shortList(item.interventions, 4), url: text(item.url),
     sexStated: item.sexStated ?? null, ageStated: item.ageStated ?? null, ageBands: item.ageBands ?? null, countries: item.countries ?? null,
     eligibilityText: item.eligibilityText === "in_record" ? "in_record" : "not_in_listing",
+    // The head of the eligibility text, kept only to be read by the reranker (never presented): a list item is not the record.
+    eligibilityHead: text(item.eligibilityHead).slice(0, 1_500),
     ids: shortList(item.ids, 12), alsoRegisteredAs: /** @type {Array<{ registry: string, registryId: string }>} */ ([]),
   };
 }
@@ -331,9 +401,9 @@ export function interleave(candidates, limit) {
 
 /**
  * What a registry's searches came to: every query asked of it with what came back, and the state — `searched` (all answered),
- * `partial` (some failed, the rest's results stand), `failed` (none answered) or `not_configured` (this deployment, or this researcher, has
- * no way to ask it).
- * @param {Array<{ query: string, status: string, reason?: string | null, total?: number | null, found: number }>} answers
+ * `partial` (some failed or were not reached, the rest's results stand), `failed` (none answered) or `not_configured` (this deployment, or this
+ * researcher, has no way to ask it). `pages` is how many pages of the query were read; a query the deadline did not reach is `not_reached`.
+ * @param {Array<{ query: string, status: string, reason?: string | null, total?: number | null, found: number, pages?: number }>} answers
  */
 export function registryOutcome(answers) {
   const ok = answers.filter((answer) => answer.status === "ok");
@@ -342,21 +412,22 @@ export function registryOutcome(answers) {
     : failed.every((answer) => answer.reason === "registry_not_configured") ? "not_configured" : "failed";
   return {
     state,
-    searched: ok.map((answer) => ({ query: answer.query, found: answer.found, total: answer.total ?? null })),
+    searched: ok.map((answer) => ({ query: answer.query, found: answer.found, total: answer.total ?? null, pages: answer.pages ?? 1 })),
     failed: failed.map((answer) => ({ query: answer.query, reason: answer.reason ?? "registry_unavailable" })),
   };
 }
 
 /**
  * The sentence the run says in its reply about what was searched: copied, not retyped — which registries answered, which failed and why,
- * what is not covered, and the day.
+ * what is not covered, whether the list was reordered against the patient summary, and the day.
  * @param {Array<{ registry: string, name: string, state: string, failed: Array<{ reason: string }> }>} registries @param {string} asOf
+ * @param {{ state?: string } | null} [rerank]
  */
-export function coverageSentence(registries, asOf) {
+export function coverageSentence(registries, asOf, rerank = null) {
   const day = asOf.slice(0, 10);
   const answered = registries.filter((entry) => entry.state === "searched" || entry.state === "partial");
   const parts = [];
-  parts.push(answered.length ? `已查（${day}）：${answered.map((entry) => `${entry.name}${entry.state === "partial" ? "（部分检索词失败）" : ""}`).join("、")}` : `${day} 没有一个登记库查通`);
+  parts.push(answered.length ? `已查（${day}）：${answered.map((entry) => `${entry.name}${entry.state === "partial" ? "（部分检索词失败或没来得及查）" : ""}`).join("、")}` : `${day} 没有一个登记库查通`);
   for (const entry of registries.filter((item) => item.state === "failed" || item.state === "not_configured")) {
     const reason = entry.state === "not_configured" ? "本部署或本账户没有接入" : [...new Set(entry.failed.map((failure) => failure.reason))].join("、");
     parts.push(`${entry.name}没查到：${reason}`);
@@ -364,13 +435,16 @@ export function coverageSentence(registries, asOf) {
   parts.push(`没有覆盖：${CANDIDATES_NOT_COVERED.map((entry) => entry.name).join("、")}`);
   const chictr = registries.find((entry) => entry.registry === "chictr" && (entry.state === "searched" || entry.state === "partial"));
   if (chictr) parts.push("ChiCTR 经证据接口只有清单，没有入排条件原文");
+  if (rerank?.state === "ranked") parts.push("已按与患者摘要的相关程度重排");
+  else if (rerank?.state === "partial") parts.push("按与患者摘要的相关程度重排了其中一部分，其余保持检索顺序");
+  else if (rerank?.state === "failed") parts.push("重排没有成功，保持检索顺序");
   return `${parts.join("；")}。`;
 }
 
 /**
  * A candidate as the run reads it: the registry's words and the reader's, what the record states of who it takes and where it runs, what
  * could not be held to the filters, and the other registrations of the same trial. No score and no verdict.
- * @param {ReturnType<typeof filterCandidates>["kept"][number]} candidate
+ * @param {ReturnType<typeof filterCandidates>["kept"][number] & { rank?: number, relevance?: number }} candidate
  */
 export function presentCandidate(candidate) {
   return {
@@ -381,6 +455,10 @@ export function presentCandidate(candidate) {
     sex: candidate.sexStated, age: candidate.ageStated, countries: candidate.countries ? candidate.countries.slice(0, 8) : null,
     url: candidate.url, eligibilityText: candidate.eligibilityText, unknown: candidate.unknown,
     ...(candidate.alsoRegisteredAs.length ? { alsoRegisteredAs: candidate.alsoRegisteredAs } : {}),
+    // Where the trial stands in the list the search kept, and — only when a reranker read it — how closely it reads against the summary (0–1).
+    // Neither is a verdict about the patient.
+    ...(Number.isInteger(candidate.rank) ? { rank: candidate.rank } : {}),
+    ...(typeof candidate.relevance === "number" ? { relevance: candidate.relevance } : {}),
   };
 }
 

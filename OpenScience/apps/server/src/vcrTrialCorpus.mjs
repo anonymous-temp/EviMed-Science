@@ -15,7 +15,7 @@ import { Worker, isMainThread, parentPort, workerData } from "node:worker_thread
 import { inflateSync } from "node:zlib";
 
 import { CTGOV_STUDY_URL, ctgovPrecedent } from "./trialRegistryClient.mjs";
-import { ctgovCandidate, filterCandidates, presentCandidate, FROZEN_CANDIDATE_LIMIT } from "./vcrCandidateSearch.mjs";
+import { ctgovCandidate, filterCandidates, fusionScore, presentCandidate, FROZEN_CANDIDATE_LIMIT } from "./vcrCandidateSearch.mjs";
 
 const ID = /^[A-Za-z0-9_.:@-]{1,160}$/;
 const SHA = /^[a-f0-9]{64}$/;
@@ -113,71 +113,98 @@ async function openIndex(manifest) {
     const byId = db.prepare("SELECT nct_id, xml_sha256, payload_sha256, payload FROM documents WHERE nct_id = ?");
     const cache = new Map();
 
+    /**
+     * The list of one request: every phrase searched, the hits fused by TrialGPT's weights (`fusionScore`: an earlier phrase counts for more),
+     * the filters applied, the first `request.limit` kept. Computed once per request and kept for the paging that follows.
+     * @param {import("./vcrCandidateSearch.mjs").CandidateRequest} request
+     */
+    const compute = (request) => {
+      if (fileStamp(path) !== stamp) throw failure("trial_collection_index_changed");
+      // The summary the list may be reordered against is not a term of the search.
+      const { summary: _summary, ...searched } = request;
+      const key = digest(JSON.stringify([source, searched]));
+      let result = cache.get(key);
+      if (!result) {
+        const queries = [...new Map([request.condition, ...request.terms].map((query) => {
+          const words = tokens(query);
+          return [match(words), words];
+        })).entries()].filter(([query]) => query);
+        const all = match([...new Set(queries.flatMap(([, words]) => words))]);
+        const totalMatched = all ? Number(count.get(all)?.count) : 0;
+        /** @type {Map<string, { id: number, nct: string, score: number }>} */
+        const scores = new Map();
+        for (const [queryIndex, [query]] of queries.entries()) {
+          for (const [rank, row] of ranking.all(query, FROZEN_CANDIDATE_LIMIT).entries()) {
+            const nct = String(row.nct_id);
+            const hit = scores.get(nct) ?? { id: Number(row.id), nct, score: 0 };
+            hit.score += fusionScore(rank, queryIndex);
+            scores.set(nct, hit);
+          }
+        }
+        const ordered = [...scores.values()].sort((a, b) => b.score - a.score || a.nct.localeCompare(b.nct));
+        const leftOut = { status: 0, age: 0, sex: 0, region: 0 };
+        const candidates = [];
+        /** @type {Record<string, string>} the head of each kept trial's eligibility text, for a reranker; never presented */
+        const cards = {};
+        let eligible = 0;
+        for (const { id } of ordered) {
+          const row = byRow.get(id);
+          const fields = publicFields(decode(row));
+          const { kept, dropped } = filterCandidates([ctgovCandidate(fields)], request);
+          for (const field of /** @type {(keyof typeof leftOut)[]} */ (Object.keys(leftOut))) leftOut[field] += dropped[field];
+          if (kept.length) {
+            eligible += 1;
+            if (candidates.length < request.limit) {
+              candidates.push({
+                ...presentCandidate(kept[0]), eligibilityText: fields.eligibility ? "in_record" : "not_in_listing",
+                collection: source.id, collectionRevision: source.revision, rank: candidates.length + 1,
+              });
+              cards[fields.registryId] = fields.eligibility.replace(/\s+/g, " ").slice(0, 1_500);
+            }
+          }
+        }
+        result = { candidates, cards, totalMatched, fusionPool: ordered.length, eligible, leftOut };
+        if (cache.size >= 8) cache.delete(cache.keys().next().value);
+        cache.set(key, result);
+      }
+      return { key, result };
+    };
+
+    /** What every answer about a list says of the collection and of the retrieval behind it. */
+    const describe = (/** @type {any} */ result, /** @type {any} */ request) => ({
+      available: true, status: "ok", collection: source, asOf: source.snapshotDate,
+      coverage: `ClinicalTrials.gov frozen collection ${source.id} (${source.snapshotDate}); recruitment status is historical.`,
+      order: "BM25 with reciprocal-rank fusion across queries (TrialGPT's weights: earlier queries count for more). Retrieval rank does not judge eligibility.",
+      found: result.eligible, leftOut: result.leftOut,
+      retrieval: {
+        method: "fts5-bm25-rrf", totalMatched: result.totalMatched, fusionPool: result.fusionPool, eligibleInFusionPool: result.eligible,
+        limit: request.limit, truncated: result.totalMatched > result.fusionPool || result.eligible > request.limit,
+        retrievedIds: result.candidates.map((/** @type {any} */ candidate) => candidate.registryId),
+      },
+    });
+
     return {
-      /** @param {ReturnType<typeof import("./vcrCandidateSearch.mjs").candidateRequest> extends infer R ? Extract<R, {ok:true}>["request"] : never} request @param {string | null} cursor */
+      /** @param {import("./vcrCandidateSearch.mjs").CandidateRequest} request @param {string | null} cursor */
       search(request, cursor) {
-        if (fileStamp(path) !== stamp) throw failure("trial_collection_index_changed");
-        const key = digest(JSON.stringify([source, request]));
+        const { key, result } = compute(request);
         let offset = 0;
         if (cursor) {
           const parsed = /^([a-f0-9]{64})-([1-9][0-9]{0,2})$/.exec(cursor);
           offset = Number(parsed?.[2]);
           if (parsed?.[1] !== key || offset % PAGE_SIZE !== 0 || offset >= request.limit) throw failure("trial_collection_cursor_invalid");
         }
-        let result = cache.get(key);
-        if (!result) {
-          const queries = [...new Map([request.condition, ...request.terms].map((query) => {
-            const words = tokens(query);
-            return [match(words), words];
-          })).entries()].filter(([query]) => query);
-          const all = match([...new Set(queries.flatMap(([, words]) => words))]);
-          const totalMatched = all ? Number(count.get(all)?.count) : 0;
-          /** @type {Map<string, { id: number, nct: string, score: number }>} */
-          const scores = new Map();
-          for (const [query] of queries) {
-            for (const [rank, row] of ranking.all(query, FROZEN_CANDIDATE_LIMIT).entries()) {
-              const nct = String(row.nct_id);
-              const hit = scores.get(nct) ?? { id: Number(row.id), nct, score: 0 };
-              hit.score += 1 / (60 + rank + 1);
-              scores.set(nct, hit);
-            }
-          }
-          const ordered = [...scores.values()].sort((a, b) => b.score - a.score || a.nct.localeCompare(b.nct));
-          const leftOut = { status: 0, age: 0, sex: 0, region: 0 };
-          const candidates = [];
-          let eligible = 0;
-          for (const { id } of ordered) {
-            const row = byRow.get(id);
-            const fields = publicFields(decode(row));
-            const { kept, dropped } = filterCandidates([ctgovCandidate(fields)], request);
-            for (const field of /** @type {(keyof typeof leftOut)[]} */ (Object.keys(leftOut))) leftOut[field] += dropped[field];
-            if (kept.length) {
-              eligible += 1;
-              if (candidates.length < request.limit) candidates.push({
-                ...presentCandidate(kept[0]), eligibilityText: fields.eligibility ? "in_record" : "not_in_listing",
-                collection: source.id, collectionRevision: source.revision, rank: candidates.length + 1,
-              });
-            }
-          }
-          result = { candidates, totalMatched, fusionPool: ordered.length, eligible, leftOut };
-          if (cache.size >= 8) cache.delete(cache.keys().next().value);
-          cache.set(key, result);
-        }
         if (offset && offset >= result.candidates.length) throw failure("trial_collection_cursor_invalid");
         const candidates = result.candidates.slice(offset, offset + PAGE_SIZE);
         const more = offset + candidates.length < result.candidates.length;
-        return {
-          available: true, status: "ok", collection: source, asOf: source.snapshotDate,
-          coverage: `ClinicalTrials.gov frozen collection ${source.id} (${source.snapshotDate}); recruitment status is historical.`,
-          order: "BM25 with reciprocal rank fusion across queries. Retrieval rank does not judge eligibility.",
-          found: result.eligible, leftOut: result.leftOut, more, nextCursor: more ? `${key}-${offset + candidates.length}` : null,
-          retrieval: {
-            method: "fts5-bm25-rrf", totalMatched: result.totalMatched, fusionPool: result.fusionPool, eligibleInFusionPool: result.eligible,
-            limit: request.limit, truncated: result.totalMatched > result.fusionPool || result.eligible > request.limit,
-            retrievedIds: result.candidates.map((/** @type {any} */ candidate) => candidate.registryId),
-          },
-          candidates,
-        };
+        return { ...describe(result, request), more, nextCursor: more ? `${key}-${offset + candidates.length}` : null, candidates };
+      },
+      /**
+       * The whole list of a request and the head of each trial's eligibility text, for a caller that reorders it (the reranker) and keeps it.
+       * @param {import("./vcrCandidateSearch.mjs").CandidateRequest} request
+       */
+      collect(request) {
+        const { result } = compute(request);
+        return { ...describe(result, request), more: false, nextCursor: null, candidates: result.candidates, cards: result.cards };
       },
       /** @param {string} registryId */
       record(registryId) {
@@ -230,7 +257,7 @@ export function createVcrTrialCorpus(path, { timeoutMs = 20_000 } = {}) {
   let closed = false;
   let seq = 0;
   let activeId = 0;
-  /** @type {Map<number, { id: number, action: "search" | "record", args: unknown[], settle: (code: string | null, value?: unknown) => void }>} */
+  /** @type {Map<number, { id: number, action: "search" | "record" | "collect", args: unknown[], settle: (code: string | null, value?: unknown) => void }>} */
   const pending = new Map();
 
   /** @param {string} code */
@@ -270,7 +297,7 @@ export function createVcrTrialCorpus(path, { timeoutMs = 20_000 } = {}) {
     }
   }
 
-  /** @param {"search" | "record"} action @param {unknown[]} args @param {AbortSignal} [signal] */
+  /** @param {"search" | "record" | "collect"} action @param {unknown[]} args @param {AbortSignal} [signal] */
   async function call(action, args, signal) {
     if (closed) throw failure("trial_collection_worker_closed");
     if (signal?.aborted) throw failure("trial_collection_read_aborted");
@@ -300,6 +327,8 @@ export function createVcrTrialCorpus(path, { timeoutMs = 20_000 } = {}) {
     revision: manifest.revision,
     /** @param {any} request @param {string | null} cursor @param {AbortSignal} [signal] */
     search: (request, cursor, signal) => call("search", [request, cursor], signal),
+    /** The whole list of a request with the head of each trial's eligibility text: what a reranker reads. @param {any} request @param {AbortSignal} [signal] */
+    collect: (request, signal) => call("collect", [request], signal),
     /** @param {string} registryId @param {AbortSignal} [signal] */
     record: (registryId, signal) => call("record", [registryId], signal),
     async close() {
@@ -318,7 +347,7 @@ if (!isMainThread && workerData?.vcrTrialCorpus && parentPort) {
     try {
       const ready = await index;
       if (!("value" in ready)) return void channel.postMessage({ id, code: ready.code });
-      const result = action === "search" ? ready.value.search(args[0], args[1]) : ready.value.record(args[0]);
+      const result = action === "search" ? ready.value.search(args[0], args[1]) : action === "collect" ? ready.value.collect(args[0]) : ready.value.record(args[0]);
       channel.postMessage({ id, result });
     } catch (error) {
       const code = /** @type {any} */ (error)?.code;

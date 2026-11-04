@@ -146,6 +146,8 @@ WRITE_MAX_ITEMS = 200
 # The one operation whose answer waits on a container: the gateway's budget is the
 # deployment's own intake timeout plus a margin, and this ceiling sits above it.
 DIGITIZE_TIMEOUT_SECONDS = 100
+# A candidates search reads up to its deadline (30 s by default) and then reorders what it found; the ceiling sits above the two.
+CANDIDATES_TIMEOUT_SECONDS = 75
 DIGITIZE_FIELDS = ("imageArtifactId", "imageSha256", "calibration", "plotArea", "arms", "reportedLogHazardRatio")
 MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 # Reads, writes and job submissions answer within ten seconds server-side; the
@@ -220,8 +222,13 @@ def _detailed_tool_definitions():
                 "per-clause labels with their evidence; matching with filter.protocolVersionId gives the same for a protocol's people, and its numbered clauses). "
                 "what: subject_document with filter.subjectKey and filter.kind sentences reads a patient's record as numbered sentences, with the documentHash a trial_judgment write names; "
                 "trial_registry_record gives numbered clauses. what: candidates searches the three registries for "
-                "trials that might take one patient (filter.condition, terms, age, sex, region, status) and says which were searched, "
-                "which failed and what is not covered."
+                "trials that might take one patient: write filter.condition and up to 32 filter.terms ranked by priority (the patient's problems in "
+                "order of importance, English and Chinese both when the note is Chinese; earlier phrases weigh more and a phrase the deadline "
+                "does not reach is reported), a filter.summary of the patient's problems, stage and treatments so far (your own words, no name "
+                "or ID number, never the note) to put the list in the order of how it reads against the patient, and age, sex, region, status. "
+                "Each registry is paged and merged; the answer says which registries were searched, which failed or were not reached, and what is not covered, "
+                "returns the first rows and a searchId. Read the rest with filter.searchId and filter.offset, or judge the best N with "
+                "vcr_simulate kind match_judge selection {subjectKey, searchId, candidateLimit}."
             ),
             "inputSchema": {
                 "type": "object",
@@ -250,6 +257,8 @@ def _detailed_tool_definitions():
                             # what: candidates -- the registry search a run writes and what it knows of the patient.
                             "condition": {"type": "string", "minLength": 1, "maxLength": 200},
                             "terms": {"type": "array", "items": {"type": "string", "minLength": 1, "maxLength": 200}, "maxItems": 32},
+                            "summary": {"type": "string", "minLength": 1, "maxLength": 2000},
+                            "searchId": ID,
                             "age": {"type": "number", "minimum": 0, "maximum": 130},
                             "sex": {"type": "string", "enum": ["male", "female"]},
                             "region": {"type": "string", "minLength": 1, "maxLength": 80},
@@ -327,7 +336,8 @@ def _detailed_tool_definitions():
                 "job of its own: selection takes protocolVersionId, subjectKeys, asOf and prefilter, and no scenario. The answer "
                 "states what will be read and its cost before the work begins; a canceled or repeated start does not read a record twice. "
                 "match_judge has the model judge patients against trials, pair by pair, in a job of its own: selection takes subjectKey and registryIds "
-                "(one patient, a list of trials, with collection and collectionRevision for a frozen set), or protocolVersionId and subjectKeys (one protocol, a roster); "
+                "(one patient, a list of trials, with collection and collectionRevision for a frozen set) or a searchId from candidates "
+                "(the platform takes the trials from that saved list, best first; candidateLimit keeps the first N of either), or protocolVersionId and subjectKeys (one protocol, a roster); "
                 "fit, topK and thinking are optional. No scenario. Read the saved ranking back with vcr_read candidate_trials or matching. "
             ),
             "inputSchema": {
@@ -352,6 +362,8 @@ def _detailed_tool_definitions():
                         "snapshotId": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
                         "subjectKey": ID,
                         "registryIds": {"type": "array", "minItems": 1, "maxItems": 500, "items": ID},
+                        "searchId": ID,
+                        "candidateLimit": {"type": "integer", "minimum": 1, "maximum": 500},
                         "registry": {"type": "string", "enum": ["clinicaltrials.gov", "chictr", "ctis"]},
                         "collection": ID,
                         "collectionRevision": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
@@ -706,7 +718,8 @@ def read(arguments: dict) -> dict:
     if isinstance(arguments.get("filter"), dict) and arguments["filter"]:
         payload["filter"] = arguments["filter"]
     try:
-        data = _post("read", payload)
+        # A search for a patient's trials pages many registries and then reorders the list: it has its own deadline server-side.
+        data = _post("read", payload, timeout=CANDIDATES_TIMEOUT_SECONDS if what == "candidates" else TIMEOUT_SECONDS)
     except VcrPlatformError as error:
         if error.code in _absent_codes():
             return _module_absent(error, what, "read")
@@ -744,16 +757,30 @@ def read(arguments: dict) -> dict:
                             "criterion stays unknown -- do not write it negated, and do not take silence in a hint for silence in the record.")
     if what == "subject_document" and isinstance(data.get("long"), dict):
         next_actions.append("This record is long: ask for the part a criterion bears on by repeating the read with filter.id (a criterion id) or filter.query (a few words) instead of reading every window.")
+    rerank = data.get("rerank") if isinstance(data.get("rerank"), dict) else {}
     if what == "candidates" and data.get("collection") and data.get("available") is not False:
-        next_actions.append("Judge them with vcr_simulate kind match_judge, selection {subjectKey, registryIds, collection, collectionRevision}; carry the same collection and collectionRevision into trial_registry_record. "
-                            "Use the collection's snapshot date for registry fields, and keep retrieval rank separate from eligibility.")
+        if data.get("searchId"):
+            next_actions.append("Judge the best of them with vcr_simulate kind match_judge, selection {subjectKey, searchId, candidateLimit}: the platform takes the trials, with their collection and revision, "
+                                "from this saved list in the order shown. Carry the collection and collectionRevision of a row into trial_registry_record. Read more rows with filter.searchId and filter.offset.")
+        else:
+            next_actions.append("Judge them with vcr_simulate kind match_judge, selection {subjectKey, registryIds, collection, collectionRevision}; carry the same collection and collectionRevision into trial_registry_record. ")
+        next_actions.append("Use the collection's snapshot date for registry fields, and keep retrieval rank separate from eligibility.")
     elif what == "candidates" and data.get("available") is not False:
-        next_actions.append("Say in the reply what data.coverage says: the registries searched and the day (asOf), any that failed and why, and that CDE and ICTRP are not covered. "
-                            "These are listings found by the search you wrote, merged and de-duplicated; their order is not a ranking and none is a judgement about the patient.")
+        next_actions.append("Say in the reply what data.coverage says: the registries searched and the day (asOf), any that failed or were not reached and why, and that CDE and ICTRP are not covered. "
+                            "These are listings found by the search you wrote, merged and de-duplicated; their order is not a ranking of who fits (data.order says how they are ordered) and none is a judgement about the patient.")
         next_actions.append("A field listed in a candidate's unknown is one the registry did not state, so the candidate was kept, not cleared: ChiCTR gives no sex, age or "
                             "country and no eligibility text. leftOut counts what a record's own stated status, age, sex or country ruled out.")
-        next_actions.append("To judge the patient against these candidates, start vcr_simulate kind match_judge with selection {subjectKey, registryIds}. A handful may be judged here: "
-                            "read the numbered clauses with trial_registry_record and the numbered sentences with subject_document, then save with vcr_write what trial_judgment.")
+        retrieval = data.get("retrieval") if isinstance(data.get("retrieval"), dict) else {}
+        if retrieval.get("reachedAllPhrases") is False:
+            next_actions.append("The search deadline passed before every phrase was asked: registries[].failed lists the phrases with reason search_deadline. Search again with the unreached phrases first, or fewer phrases.")
+        if rerank.get("state") == "skipped" and rerank.get("summaryGiven") is False:
+            next_actions.append("The list is in retrieval order. Add filter.summary (your summary of the patient's problems, stage and treatments, no name or ID number) to have it ordered by how each trial reads against the patient.")
+        if data.get("searchId"):
+            next_actions.append("To judge the best of these, start vcr_simulate kind match_judge with selection {subjectKey, searchId, candidateLimit} (the platform takes the trials from this saved list, best first). "
+                                "A handful may be judged here: read the numbered clauses with trial_registry_record and the numbered sentences with subject_document, then save with vcr_write what trial_judgment.")
+        else:
+            next_actions.append("To judge the patient against these candidates, start vcr_simulate kind match_judge with selection {subjectKey, registryIds}. A handful may be judged here: "
+                                "read the numbered clauses with trial_registry_record and the numbered sentences with subject_document, then save with vcr_write what trial_judgment.")
     if what == 'report_model':
         next_actions.append('For longitudinal report numbers, append the exact field inside a record summary to its numberPath, without another .summary segment. For example: longitudinal.byId.<id>.groups[0].requested. Use vcr_read longitudinal filter.id for one full record when this report model is large; only fields actually returned are bindable.')
     if what == 'longitudinal':
@@ -764,6 +791,8 @@ def read(arguments: dict) -> dict:
         warnings.append("More items exist than this answer holds.")
         if what == "candidates" and data.get("nextCursor"):
             next_actions.append("Repeat the same candidates filters with filter.cursor set to data.nextCursor.")
+        elif what == "candidates" and data.get("searchId") and data.get("nextOffset") is not None:
+            next_actions.append("Read the next rows of this search with filter.searchId=%s and filter.offset=%s; no registry is asked again." % (data["searchId"], data["nextOffset"]))
         else:
             next_actions.append("Follow data.nextRead exactly, carrying its filter.cursor; do not use offset for intake." if what == "data_intake" else "Call again with filter.offset to read the next page, or narrow the filter.")
     if what == 'data_intake' and data.get('sourceRead'):

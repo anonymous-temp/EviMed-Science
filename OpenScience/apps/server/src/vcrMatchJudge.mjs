@@ -32,7 +32,7 @@
 
 import { createHash } from 'node:crypto';
 import {
-  VCR_ENGINE_PROTOCOL_VERSION, VCR_JUDGMENT_PROMPT_VERSIONS, VCR_MATCH_BATCH_DEFAULT_MODEL, VCR_MATCH_BATCH_METHODS, VCR_MATCH_JUDGE_LIMITS, VCR_TRIAL_VERDICT_LABELS_ZH,
+  VCR_DEFINITION_PROMPT_VERSION, VCR_ENGINE_PROTOCOL_VERSION, VCR_JUDGMENT_PROMPT_VERSIONS, VCR_MATCH_BATCH_DEFAULT_MODEL, VCR_MATCH_BATCH_METHODS, VCR_MATCH_JUDGE_LIMITS, VCR_TRIAL_VERDICT_LABELS_ZH,
   canonicalScenarioJson, criteriaMessages, criterionDisplay, fitMessages, isPeak, mergeCriteriaAnswers, mergeFitAnswers, parseCriteriaAnswer, parseFitAnswer, priceUsage, rankJudgments,
   segmentCriteria, segmentSentences, splitNoteParts, trialVerdict, vcrResultOutputPayload,
 } from '@evimed/domain';
@@ -103,13 +103,16 @@ const registryOfId = (registryId) => (/^ChiCTR/iu.test(registryId) ? 'chictr' : 
  * The selection of a judging job. Nothing else is accepted: the pairs' text, the settings of the model and the estimate are the platform's.
  *
  * - patient to trial: `subjectKey` and `registryIds`, with `registry` when the ids' shape does not say and `collection` + `collectionRevision` for a frozen collection;
+ *   or `subjectKey` and `searchId` (a search made with `vcr_read candidates`: the gateway takes its trials from the saved list, in the order the search kept them).
+ *   `candidateLimit` keeps the first N of either list, so a patient with 500 candidates can be judged on the best 100;
  * - trial to patient: `protocolVersionId` (the latest when absent) and `subjectKeys` (the study's roster when absent);
- * - `fit` (stage one, default true), `topK` (stage two: 0 none, `all` every pair, a number per person; the deployment's when absent), `thinking` (`high` or `off`).
+ * - `fit` (stage one, default true), `topK` (stage two: 0 none, `all` every pair, a number per person; the deployment's when absent), `thinking` (`high` or `off`),
+ *   `definitions` (default off: each trial's clauses get a definition card, written once, that the clause-level calls read as background).
  *
  * @param {unknown} raw @returns {Record<string, any>}
  */
 export function judgeSelection(raw = {}) {
-  const fields = ['direction', 'subjectKey', 'registryIds', 'registry', 'collection', 'collectionRevision', 'protocolVersionId', 'subjectKeys', 'fit', 'topK', 'thinking'];
+  const fields = ['direction', 'subjectKey', 'registryIds', 'searchId', 'candidateLimit', 'definitions', 'registry', 'collection', 'collectionRevision', 'protocolVersionId', 'subjectKeys', 'fit', 'topK', 'thinking'];
   const row = object(raw);
   const bad = (/** @type {string} */ message) => new HttpError(400, 'vcr_matching_selection_invalid', message);
   const unknown = Object.keys(row).find((key) => !fields.includes(key));
@@ -118,11 +121,15 @@ export function judgeSelection(raw = {}) {
   if (!['patient_to_trial', 'trial_to_patient'].includes(direction)) throw bad('direction 是 patient_to_trial 或 trial_to_patient。');
   if (direction === 'patient_to_trial') {
     if (typeof row.subjectKey !== 'string' || !ID.test(row.subjectKey)) throw bad('给一位患者判定试验，要写 subjectKey。');
-    if (!Array.isArray(row.registryIds) || !row.registryIds.length || row.registryIds.length > VCR_MATCH_JUDGE_LIMITS.trials
-      || row.registryIds.some((/** @type {unknown} */ id) => typeof id !== 'string' || !REGISTRY_ID.test(id))) throw bad(`registryIds 是 1 到 ${VCR_MATCH_JUDGE_LIMITS.trials} 个登记号。`);
+    if (row.searchId != null) {
+      if (row.registryIds != null) throw bad('registryIds 和 searchId 二选一：searchId 取上一次检索保存的试验。');
+      if (typeof row.searchId !== 'string' || !ID.test(row.searchId)) throw bad('searchId 是 candidates 返回的检索编号。');
+    } else if (!Array.isArray(row.registryIds) || !row.registryIds.length || row.registryIds.length > VCR_MATCH_JUDGE_LIMITS.trials
+      || row.registryIds.some((/** @type {unknown} */ id) => typeof id !== 'string' || !REGISTRY_ID.test(id))) throw bad(`registryIds 是 1 到 ${VCR_MATCH_JUDGE_LIMITS.trials} 个登记号，或写 searchId。`);
+    if (row.candidateLimit != null && !(Number.isInteger(row.candidateLimit) && row.candidateLimit >= 1 && row.candidateLimit <= VCR_MATCH_JUDGE_LIMITS.trials)) throw bad(`candidateLimit 是 1 到 ${VCR_MATCH_JUDGE_LIMITS.trials} 的整数。`);
     if (row.protocolVersionId != null || row.subjectKeys != null) throw bad('一位患者对一组试验：protocolVersionId 和 subjectKeys 属于另一个方向。');
   } else {
-    if (row.subjectKey != null || row.registryIds != null) throw bad('一份方案对一批患者：subjectKey 和 registryIds 属于另一个方向。');
+    if (row.subjectKey != null || row.registryIds != null || row.searchId != null || row.candidateLimit != null) throw bad('一份方案对一批患者：subjectKey、registryIds、searchId 和 candidateLimit 属于另一个方向。');
     if (row.protocolVersionId != null && (typeof row.protocolVersionId !== 'string' || !ID.test(row.protocolVersionId))) throw bad('protocolVersionId 是本研究的方案版本。');
     if (row.subjectKeys != null && (!Array.isArray(row.subjectKeys) || !row.subjectKeys.length || row.subjectKeys.length > VCR_MATCH_JUDGE_LIMITS.subjects
       || row.subjectKeys.some((/** @type {unknown} */ key) => typeof key !== 'string' || !ID.test(key)))) throw bad(`subjectKeys 是 1 到 ${VCR_MATCH_JUDGE_LIMITS.subjects} 个受试者假名。`);
@@ -135,7 +142,11 @@ export function judgeSelection(raw = {}) {
   if (row.topK != null && row.topK !== 'all' && !(Number.isInteger(row.topK) && row.topK >= 0 && row.topK <= VCR_MATCH_JUDGE_LIMITS.trials)) throw bad(`topK 是 0 到 ${VCR_MATCH_JUDGE_LIMITS.trials} 的整数，或 all。`);
   if (row.fit === false && row.topK === 0) throw bad('fit 为 false 时只有逐条判定一步，topK 不能为 0。');
   if (row.thinking != null && !['high', 'off'].includes(row.thinking)) throw bad('thinking 是 high 或 off。');
-  return { ...row, direction, ...(row.registryIds ? { registryIds: [...new Set(/** @type {string[]} */ (row.registryIds))] } : {}), ...(row.subjectKeys ? { subjectKeys: [...new Set(/** @type {string[]} */ (row.subjectKeys))] } : {}) };
+  if (row.definitions != null && typeof row.definitions !== 'boolean') throw bad('definitions 是 true 或 false。');
+  // A list of ids is cut to its first `candidateLimit` here; a saved search's list is cut by the gateway that reads it, which consumes both fields.
+  const registryIds = row.registryIds ? [...new Set(/** @type {string[]} */ (row.registryIds))].slice(0, row.candidateLimit ?? undefined) : null;
+  const { candidateLimit: _limit, ...kept } = row;
+  return { ...(row.searchId == null ? kept : row), direction, ...(registryIds ? { registryIds } : {}), ...(row.subjectKeys ? { subjectKeys: [...new Set(/** @type {string[]} */ (row.subjectKeys))] } : {}) };
 }
 
 // ---------------------------------------------------------------------------
@@ -391,15 +402,15 @@ async function judgeFit({ judge, study, jobId, note, target, thinking, cap }) {
 }
 
 /**
- * One pair's per-clause judgment, a call per part of the record.
- * @param {{ judge: any, study: any, jobId: string, note: any, target: any, thinking: string, cap: number }} input
+ * One pair's per-clause judgment, a call per part of the record. `definitions` are the trial's definition cards, read as background when there are any.
+ * @param {{ judge: any, study: any, jobId: string, note: any, target: any, thinking: string, cap: number, definitions?: any[] }} input
  */
-async function judgeCriteria({ judge, study, jobId, note, target, thinking, cap }) {
+async function judgeCriteria({ judge, study, jobId, note, target, thinking, cap, definitions = [] }) {
   const parts = splitNoteParts(note.records, cap);
   const answers = [];
   /** @type {any[]} */ const calls = [];
   for (const part of parts) {
-    const messages = criteriaMessages({ title: target.title, summary: target.summary, criteria: target.clauses, sentences: part.sentences, conditions: target.conditions, interventions: target.interventions });
+    const messages = criteriaMessages({ title: target.title, summary: target.summary, criteria: target.clauses, sentences: part.sentences, conditions: target.conditions, interventions: target.interventions, definitions });
     answers.push(await askOnceMore({ judge, ask: { study, jobId, messages, thinking }, calls,
       read: (/** @type {string} */ content) => parseCriteriaAnswer(content, { criteria: target.clauses, sentences: part.sentences }),
       usable: (parsed) => parsed.rows.length > 0 }));
@@ -503,6 +514,7 @@ export async function planMatchJudge({ study, selection: raw = {}, matchStore, d
   const cap = VCR_MATCH_JUDGE_LIMITS.noteChars;
   let inputTokens = 0, outputTokens = 0, calls = 0;
   const perPerson = criteriaPairs(1, targets, topK);
+  const definitions = selection.definitions === true;
   for (const key of readable) {
     const chars = charsOf.get(key) ?? 2_000;
     const parts = Math.max(1, Math.ceil(chars / cap));
@@ -511,10 +523,14 @@ export async function planMatchJudge({ study, selection: raw = {}, matchStore, d
     inputTokens += pairs * (chars + parts * (VCR_MATCH_JUDGE_LIMITS.trialChars + VCR_MATCH_JUDGE_LIMITS.overheadTokens));
     outputTokens += parts * pairs * outputPerCall;
   }
+  // A definition card is one call a trial, whoever is judged against it.
+  if (definitions) { calls += targets; inputTokens += targets * (VCR_MATCH_JUDGE_LIMITS.trialChars + VCR_MATCH_JUDGE_LIMITS.overheadTokens); outputTokens += targets * 1_500; }
   const priced = priceUsage({ resourceType: 'model', model, cacheHit: 0, cacheMiss: inputTokens, output: outputTokens, peak });
   const pairs = people.length * targets;
   const estimate = { basis: 'estimate', model, thinking, pairs, calls, inputTokens, outputTokens, outputTokensPerCall: outputPerCall, cost: priced.priced ? priced.cost : null, currency: priced.currency || 'CNY' };
-  const scenario = { direction, subjects: people, ...target, fit, topK, thinking, model, promptVersions: { ...VCR_JUDGMENT_PROMPT_VERSIONS }, estimate };
+  // A judgment that read definition cards is another judgment: the prompt version says so, and the ledger finds only rows made the same way.
+  const promptVersions = { ...VCR_JUDGMENT_PROMPT_VERSIONS, ...(definitions ? { criteria: `${VCR_JUDGMENT_PROMPT_VERSIONS.criteria}+${VCR_DEFINITION_PROMPT_VERSION}` } : {}) };
+  const scenario = { direction, subjects: people, ...target, fit, topK, thinking, model, ...(definitions ? { definitions: true } : {}), promptVersions, estimate };
   return { ok: true, scenario: { ...scenario, chain: judgeChain(scenario) }, statement: judgeStatement({ pairs, fit, topK, estimate, withdrawn: leftOut, noRecord: people.length - readable.length }), withdrawn: leftOut, noRecord: people.length - readable.length };
 }
 
@@ -551,6 +567,7 @@ function judgeStatement({ pairs, fit, topK, estimate, withdrawn, noRecord }) {
  * that failed for a reason that passes is tried once more at the end of its stage.
  *
  * @param {{ store: any, matchStore: any, judgments: any, documents: any, subjectTable?: any, targets: ReturnType<typeof judgmentTargets>, judge: ReturnType<typeof createPairJudge>,
+ *   clauseDefinitions?: { forTarget: (input: { study: any, jobId: string, target: any, targetKind: string }) => Promise<{ definitions: any[], calls: any[], failed?: string }> } | null,
  *   config?: Record<string, any>, report?: (code: string) => void, counters?: ReturnType<typeof createMatchJudgeCounters>, now?: () => Date }} deps
  */
 export function createMatchJudgeExecutor({ store, matchStore, judgments, documents, subjectTable = null, targets, judge, clauseDefinitions = null, config = {}, report = () => {}, counters = createMatchJudgeCounters(), now = () => new Date() }) {
@@ -728,13 +745,17 @@ export function createMatchJudgeExecutor({ store, matchStore, judgments, documen
           saved = await judgments.save({ ...base, targetHash: target.hash, documentHash: note.hash, status: 'done', fit: parsed.fit, confidence: parsed.confidence, verdict: verdict.verdict,
             answer: { ...answer, reasons: parsed.reasons, issues: parsed.issues, parts }, usage: { ...usage, settings }, documentIds: note.documentIds });
         } else {
-          const { parsed, calls, parts } = await judgeCriteria(context);
+          // The trial's definition cards, when the job was asked for them: one call a trial, whichever pair gets there first, and a failure is a pair read without them.
+          const cards = scenario.definitions === true && clauseDefinitions ? await clauseDefinitions.forTarget({ study, jobId, target, targetKind }) : null;
+          if (cards?.calls?.length) account(cards.calls);
+          const { parsed, calls, parts } = await judgeCriteria({ ...context, definitions: cards?.definitions ?? [] });
           const usage = account(calls);
           // The trial-level row of these same words, whichever batch wrote it.
           const scored = fitSeen.get(pairKey) ?? done.get(judgmentKey({ ...base, mode: 'fit', promptVersion: String(promptVersions.fit), targetHash: target.hash, documentHash: note.hash }));
           const verdict = trialVerdict({ fit: scored?.fit ?? null, criteria: parsed.rows, missing: parsed.missing });
           saved = await judgments.save({ ...base, targetHash: target.hash, documentHash: note.hash, status: 'done', fit: scored?.fit ?? null, confidence: scored?.confidence ?? null, verdict: verdict.verdict,
-            answer: { ...answer, rows: parsed.rows, missing: parsed.missing, droppedSentenceIds: parsed.droppedSentenceIds, issues: parsed.issues, parts }, usage: { ...usage, settings }, documentIds: note.documentIds });
+            answer: { ...answer, rows: parsed.rows, missing: parsed.missing, droppedSentenceIds: parsed.droppedSentenceIds, issues: parsed.issues, parts,
+              ...(cards ? { definitions: { version: VCR_DEFINITION_PROMPT_VERSION, used: cards.definitions.length, ...(cards.failed ? { failed: cards.failed } : {}) } } : {}) }, usage: { ...usage, settings }, documentIds: note.documentIds });
         }
         consecutiveUpstream = 0;
         judgedThisBatch += 1;

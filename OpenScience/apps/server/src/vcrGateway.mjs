@@ -120,11 +120,13 @@ const REGISTRY_MARGIN_MS = 3_000;
 const REGISTRY_DEADLINE_MS = 20_000;
 const readFilterFields = Object.freeze(["id", "parentId", "kind", "limit", "offset", "registryId", "registry", "snapshotId", "sourceId", "subjectKey", "documentId", "protocolVersionId", "beforeSeq", "query", "cursor", "collection", "collectionRevision",
   // `what: candidates` (M1): the search a run writes and what it knows of the patient. Their shape is `candidateRequest`'s, in `vcrCandidateSearch.mjs`.
-  "condition", "terms", "age", "sex", "region", "status",
+  "condition", "terms", "age", "sex", "region", "status", "summary",
+  // `what: candidates`, a page of a search already made: its `searchId` and, with `offset` and `limit`, where to read from.
+  "searchId",
   // `what: patient_context`: the next page of the project's knowledge-base documents, beside the page of attachments.
   "knowledgeCursor"]);
 /** The filter keys only `what: candidates` takes. */
-const CANDIDATE_FILTER_FIELDS = Object.freeze(["condition", "terms", "age", "sex", "region", "status"]);
+const CANDIDATE_FILTER_FIELDS = Object.freeze(["condition", "terms", "age", "sex", "region", "status", "summary"]);
 const WRITE_MAX_ITEMS = 200;
 
 /**
@@ -183,6 +185,21 @@ function fieldFindings(found) {
 
 /** @param {number} status @param {string} code @param {string} message */
 const gatewayError = (status, code, message) => new VcrGatewayError(status, code, message);
+
+/**
+ * A judging selection that names a saved search takes its trials from that search's list, in the order the search kept them (reranked when the
+ * run gave a summary), the first `candidateLimit` of them; a frozen collection's search carries its collection and revision with it.
+ * @param {any} vcr @param {any} study @param {any} selection
+ */
+async function resolveSearchSelection(vcr, study, selection) {
+  if (!selection || selection.searchId == null) return selection;
+  const taken = await vcr.candidateSearches?.resolveSelection?.(study, selection.searchId, selection.candidateLimit ?? null).catch(() => null);
+  if (!taken?.registryIds.length) {
+    throw gatewayError(400, "vcr_matching_selection_invalid", "searchId 对不上本研究里保存的一次检索（编号不对，或已被较新的检索取代）。请重新检索。");
+  }
+  const { searchId: _searchId, candidateLimit: _candidateLimit, ...rest } = selection;
+  return { ...rest, registryIds: taken.registryIds, ...(taken.collection ? { collection: taken.collection, collectionRevision: taken.collectionRevision } : {}) };
+}
 
 /** @param {any} res @param {number} status @param {unknown} payload */
 function sendJson(res, status, payload) {
@@ -269,7 +286,8 @@ function readRequest(body) {
     if (body.what !== 'patient_context' || typeof raw.knowledgeCursor !== 'string' || !/^[A-Za-z0-9_-]{1,2048}$/.test(raw.knowledgeCursor)) throw gatewayError(400, 'vcr_read_filter_invalid', 'knowledgeCursor is the exact continuation returned by the preceding page.');
     filter.knowledgeCursor = raw.knowledgeCursor;
   }
-  for (const key of ["id", "parentId", "kind", "registryId", "registry", "snapshotId", "sourceId", "subjectKey", "documentId", "protocolVersionId"]) {
+  if (raw.searchId != null && body.what !== "candidates") throw gatewayError(400, "vcr_read_filter_invalid", "filter.searchId belongs to what: candidates.");
+  for (const key of ["id", "parentId", "kind", "registryId", "registry", "snapshotId", "sourceId", "subjectKey", "documentId", "protocolVersionId", "searchId"]) {
     if (raw[key] == null) continue;
     if (!ID.test(String(raw[key]))) throw gatewayError(400, "vcr_read_filter_invalid", `filter.${key} is not an id.`);
     filter[key] = String(raw[key]);
@@ -2674,6 +2692,8 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
   /** @type {Map<string, { until: number, count: number }>} */
   const windows = new Map();
   const registryDeadline = Number(config?.vcrRegistryTimeoutMs) > 0 ? Number(config.vcrRegistryTimeoutMs) : REGISTRY_DEADLINE_MS;
+  const searchDeadline = Number(config?.vcrCandidateRetrieveDeadlineMs) > 0 ? Number(config.vcrCandidateRetrieveDeadlineMs) : 30_000;
+  const rerankBudget = Number(config?.vcrMatchRerankBudgetMs) > 0 ? Number(config.vcrMatchRerankBudgetMs) : 15_000;
   return async function vcrGatewayHandler(/** @type {any} */ req, /** @type {any} */ res, /** @type {any} */ onFailure) {
     try {
       const pathname = new URL(req.url ?? "/", "http://localhost").pathname;
@@ -2777,7 +2797,9 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
         const request = readRequest(body);
         // A registry read waits on a registry: its budget is its client's deadline
         // and a margin, so the gateway never gives up before the client does.
-        if (request.what === "trial_registry_record" || request.what === "candidates") budget = Math.max(budgetMs, registryDeadline + REGISTRY_MARGIN_MS);
+        if (request.what === "trial_registry_record") budget = Math.max(budgetMs, registryDeadline + REGISTRY_MARGIN_MS);
+        // A search for a patient's trials reads many pages within its own deadline and then reorders what it found: the gateway waits for both.
+        if (request.what === "candidates") budget = Math.max(budgetMs, registryDeadline + REGISTRY_MARGIN_MS, searchDeadline + rerankBudget + REGISTRY_MARGIN_MS);
         work = async () => ({ what: request.what, ...(request.what === 'data_intake'
           ? await vcr.dataIntake?.read(study, request.filter, origin) ?? { available: false, code: 'vcr_gateway_unavailable' }
           : request.what==='patient_context'
@@ -3027,7 +3049,9 @@ async function startJob(vcr, study, request, { ownerView = false } = {}) {
     }
     if (request.selection == null) throw gatewayError(400, "vcr_simulate_payload_invalid", "判定要写 selection：一位患者加 registryIds，或一份方案（protocolVersionId，可加 subjectKeys）。");
     if (typeof vcr.service.forModel !== "function") throw gatewayError(503, "vcr_gateway_unavailable", "这份读取结果无法确认不含小样本格子，已整体拒绝。");
-    return vcr.service.forModel(await vcr.matchJudge.start(study, request.selection), { projection: "match_judge_start", ownerView });
+    // A selection that names a search (`searchId`, with `candidateLimit`) takes its trials from that search's receipt, in the order the search kept them.
+    const selection = await resolveSearchSelection(vcr, study, request.selection);
+    return vcr.service.forModel(await vcr.matchJudge.start(study, selection), { projection: "match_judge_start", ownerView });
   }
   if (request.kind === "pool_evidence") {
     if (!vcr.evidence?.poolParameter) throw gatewayError(503, "vcr_gateway_unavailable", "证据参数化未接入本部署：这一步暂不可用。");

@@ -661,6 +661,43 @@ class VcrReadWriteTests(_GatewayCase):
         self.assertEqual(off["status"], "warning")
         self.assertFalse(any("CDE and ICTRP" in action for action in off["next_actions"]))
 
+    def test_a_search_with_a_summary_is_reordered_kept_and_read_again_by_its_search_id(self):
+        # G11: up to 32 phrases and a summary go to the platform as the run wrote them; the answer's receipt (searchId) is how the rest of the list is read
+        # and how the best N are judged, and the next actions say so, in the words of the state the answer is in.
+        phrases = ["phrase %d" % at for at in range(32)]
+        filter_ = {"condition": "lung cancer", "terms": phrases, "summary": "stage IV lung adenocarcinoma, EGFR positive", "age": 58}
+        ranked = {"what": "candidates", "available": True, "status": "ok", "asOf": "2026-11-04T08:00:00.000Z", "searchId": "cns_1", "coverage": "已查（2026-11-04）：ClinicalTrials.gov",
+                  "retrieved": 120, "returned": 20, "offset": 0, "more": True, "nextOffset": 20, "rerank": {"state": "ranked", "applied": True, "summaryGiven": True},
+                  "retrieval": {"phrases": 33, "reachedAllPhrases": True}, "candidates": [{"registry": "clinicaltrials.gov", "registryId": "NCT00000001", "rank": 1, "relevance": 0.91}]}
+        _Gateway.answers["read"] = (200, {"data": ranked})
+        found = self.server.call_tool("vcr_read", {"what": "candidates", "filter": filter_})
+        self.assertEqual(_Gateway.seen[-1]["body"], {"what": "candidates", "filter": filter_}, "the platform gets what the run wrote, phrases and summary")
+        said = " ".join(found["next_actions"])
+        self.assertIn("filter.searchId=cns_1 and filter.offset=20", said)
+        self.assertIn("selection {subjectKey, searchId, candidateLimit}", said)
+        self.assertNotIn("Add filter.summary", said, "a list that was reordered is not told to add the summary")
+        self.assertNotIn("search deadline", said)
+        # A list not reordered because no summary was given is told how to get one; a deadline that passed is told how to go on.
+        ranked.update({"rerank": {"state": "skipped", "applied": False, "summaryGiven": False}, "retrieval": {"phrases": 33, "reachedAllPhrases": False}})
+        _Gateway.answers["read"] = (200, {"data": ranked})
+        plain = " ".join(self.server.call_tool("vcr_read", {"what": "candidates", "filter": {"condition": "lung cancer"}})["next_actions"])
+        self.assertIn("Add filter.summary", plain)
+        self.assertIn("search_deadline", plain)
+        self.assertIn("not a ranking of who fits", plain)
+        # The page read of a saved search is the same read with its id; and a frozen collection's list is judged through the same id.
+        _Gateway.answers["read"] = (200, {"data": {**ranked, "collection": {"id": "snapshot-1"}, "rerank": {"state": "ranked", "applied": True}, "more": False}})
+        frozen = " ".join(self.server.call_tool("vcr_read", {"what": "candidates", "filter": {"searchId": "cns_1", "offset": 20}})["next_actions"])
+        self.assertEqual(_Gateway.seen[-1]["body"], {"what": "candidates", "filter": {"searchId": "cns_1", "offset": 20}})
+        self.assertIn("searchId, candidateLimit", frozen)
+        self.assertIn("collection and collectionRevision", frozen)
+        # The detailed definition (the one a specialist run reads) names the new keys and the judging selection's.
+        detailed = {tool["name"]: tool for tool in vcr_platform._detailed_tool_definitions()}  # noqa: SLF001
+        filter_keys = detailed["vcr_read"]["inputSchema"]["properties"]["filter"]["properties"]
+        self.assertEqual((filter_keys["summary"]["maxLength"], filter_keys["terms"]["maxItems"], "searchId" in filter_keys), (2000, 32, True))
+        selection_keys = detailed["vcr_simulate"]["inputSchema"]["properties"]["selection"]["properties"]
+        self.assertTrue({"searchId", "candidateLimit"} <= set(selection_keys))
+        self.assertEqual(vcr_platform.CANDIDATES_TIMEOUT_SECONDS > vcr_platform.TIMEOUT_SECONDS, True, "a search that pages many registries is given the time its server-side deadline needs")
+
     def test_the_trials_found_for_a_patient_are_a_write_and_a_read_of_their_own(self):
         # 「给患者找试验」: a run writes the registry trial and its structured criteria, and reads them back.
         self.assertIn("candidate_trial", vcr_platform.WRITE_WHATS)

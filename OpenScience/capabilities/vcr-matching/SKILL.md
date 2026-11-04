@@ -13,13 +13,13 @@ Read [../vcr-protocol/references/operating-contract.md](../vcr-protocol/referenc
 
 ## Get the person and the trials
 
-For one case, `mcp__evimed__vcr_read` what `patient_context` lists the person's messages and attachments, and `mcp__evimed__vcr_write` what `patient_context` saves the original, with `{messageSeq}`, `{sourceId, generation, sha256}` or `{sourceId}`. Use the `subjectKey` it returns and never retype the record. For a batch of files use `data_intake`. Then `mcp__evimed__vcr_read` what `candidates` searches the registries with the conditions, age, sex and region you read in the record; it says which registries answered. A registry that failed is reported and the rest goes on. For a protocol, the study's criteria are the eligibility text.
+For one case, `mcp__evimed__vcr_read` what `patient_context` lists the person's messages and attachments, and `mcp__evimed__vcr_write` what `patient_context` saves the original, with `{messageSeq}`, `{sourceId, generation, sha256}` or `{sourceId}`. Use the `subjectKey` it returns and never retype the record. For a batch of files use `data_intake`. Then `mcp__evimed__vcr_read` what `candidates` searches the registries: `condition` and up to 32 `terms` ranked by importance (the person's problems, in English and Chinese both when the record is Chinese), a `summary` of their problems, stage and treatments so far in your own words (no name or ID number), and the age, sex and region you read in the record. The list comes back in the order it reads against the summary, with a `searchId`, and says which registries answered, failed or were not reached. A registry that failed is reported and the rest goes on. For a protocol, the study's criteria are the eligibility text.
 
 ## Judge
 
 More than a handful of pairs goes to the job: `mcp__evimed__vcr_simulate` action `start`, kind `match_judge`, with `selection`:
 
-- one person: `{ "subjectKey": "…", "registryIds": ["NCT…"] }`, plus `collection` and `collectionRevision` from `candidates` when the search named a frozen set;
+- one person: `{ "subjectKey": "…", "registryIds": ["NCT…"] }`, plus `collection` and `collectionRevision` from `candidates` when the search named a frozen set; or `{ "subjectKey": "…", "searchId": "…", "candidateLimit": 100 }` for the best 100 of a search, which the platform takes from the saved list;
 - one protocol: `{ "protocolVersionId": "…", "subjectKeys": ["…"] }`, or neither for the latest version and the whole roster.
 
 It judges every pair as a whole, then each person's best-ranked pairs clause by clause (`topK`; 0 none, `all` every pair). The answer says what it may cost and it has already started. Do other work meanwhile; its finish comes back to this conversation, and starting the same selection again judges only what is not done.

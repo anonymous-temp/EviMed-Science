@@ -209,12 +209,62 @@ test("the registry search keys belong to what: candidates, are checked in words,
   assert.match(stray.json().error, /candidates/);
   // And the request's own findings answer in words, before the service is reached.
   const before = calls.length;
-  for (const bad of [{ condition: "x", age: 400 }, { condition: "x", sex: "unknown" }, { condition: "x", terms: ["a", "b", "c", "d"] }, { age: 50 }, { condition: "x", status: "closed" }]) {
+  for (const bad of [{ condition: "x", age: 400 }, { condition: "x", sex: "unknown" }, { condition: "x", terms: Array.from({ length: 33 }, (_, at) => `phrase ${at}`) }, { condition: "x", summary: "s".repeat(2001) }, { age: 50 }, { condition: "x", status: "closed" }]) {
     const res = await ask({ what: "candidates", filter: bad });
     assert.deepEqual([res.status, res.json().code], [400, "vcr_read_filter_invalid"], JSON.stringify(bad));
     assert.match(res.json().error, /filter\./);
   }
   assert.equal(calls.length, before, "nothing was read for a request that was refused");
+});
+
+test("a search for a patient's trials takes 32 phrases and a summary, and its saved list is read again by searchId and offset; the id belongs to candidates only (G11)", async () => {
+  const { calls, handler } = fixture();
+  const ask = async (body) => { const res = response(); await handler(request("/internal/vcr/v1/read", body), res); return res; };
+  const filter = { condition: "lung cancer", terms: Array.from({ length: 32 }, (_, at) => `phrase ${at}`), summary: "stage IV lung adenocarcinoma, EGFR positive", age: 58, limit: 20 };
+  assert.equal((await ask({ what: "candidates", filter })).status, 200);
+  assert.deepEqual(calls.at(-1), ["read", "candidates", filter]);
+  const page = { searchId: "cns_0123456789abcdef012345", offset: 20, limit: 20 };
+  assert.equal((await ask({ what: "candidates", filter: page })).status, 200);
+  assert.deepEqual(calls.at(-1), ["read", "candidates", page]);
+  for (const bad of [{ what: "criteria", filter: { searchId: "cns_1" } }, { what: "candidates", filter: { searchId: "has space" } }, { what: "study", filter: { summary: "x" } }]) {
+    const res = await ask(bad);
+    assert.deepEqual([res.status, res.json().code], [400, "vcr_read_filter_invalid"], JSON.stringify(bad));
+  }
+});
+
+test("a judging selection can name a saved search: the platform takes the trials from it in its order, cut to candidateLimit, and a search that is not this study's is a named refusal (G11)", async () => {
+  /** @type {any[]} */
+  const started = [];
+  const matchJudge = { async start(/** @type {any} */ _study, /** @type {any} */ selection) {
+    started.push(selection);
+    return { action: "start", kind: "match_judge", state: "queued", jobId: "job_7", statement: "这一批判定 2 对", estimate: { basis: "estimate", pairs: 2, calls: 3, cost: 0.1 }, direction: selection.direction };
+  } };
+  const asked = [];
+  const candidateSearches = { async resolveSelection(/** @type {any} */ _study, /** @type {string} */ id, /** @type {number | null} */ limit) {
+    asked.push([id, limit]);
+    if (id === "cns_other") return null;
+    return id === "cns_frozen" ? { registryIds: ["NCT00000001"], collection: "snapshot-1", collectionRevision: "a".repeat(64), available: 1 }
+      : { registryIds: ["NCT00000003", "ChiCTR2400000001"].slice(0, limit ?? 2), collection: null, collectionRevision: null, available: 2 };
+  } };
+  const { handler } = fixture({ matchJudge, candidateSearches });
+  const start = async (/** @type {Record<string, any>} */ selection) => { const res = response(); await handler(request("/internal/vcr/v1/simulate", { action: "start", kind: "match_judge", selection }), res); return res; };
+  const best = await start({ subjectKey: "P-1", searchId: "cns_1", candidateLimit: 1, topK: 3 });
+  assert.equal(best.status, 200, best.body);
+  assert.deepEqual(started.at(-1), { direction: "patient_to_trial", subjectKey: "P-1", topK: 3, registryIds: ["NCT00000003"] }, "the search and the limit are consumed; the job sees ids");
+  assert.deepEqual(asked.at(-1), ["cns_1", 1]);
+  await start({ subjectKey: "P-1", searchId: "cns_frozen" });
+  assert.deepEqual(started.at(-1), { direction: "patient_to_trial", subjectKey: "P-1", registryIds: ["NCT00000001"], collection: "snapshot-1", collectionRevision: "a".repeat(64) });
+  const before = started.length;
+  const foreign = await start({ subjectKey: "P-1", searchId: "cns_other" });
+  assert.deepEqual([foreign.status, foreign.json().code], [400, "vcr_matching_selection_invalid"]);
+  for (const bad of [{ subjectKey: "P-1", searchId: "cns_1", registryIds: ["NCT00000001"] }, { subjectKey: "P-1", registryIds: ["NCT00000001"], candidateLimit: 0 }, { protocolVersionId: "pv_1", searchId: "cns_1" }]) {
+    assert.equal((await start(bad)).status, 400, JSON.stringify(bad));
+  }
+  assert.equal(started.length, before, "nothing refused reached the job");
+  // A list of ids is cut by the limit before the job sees it.
+  await start({ subjectKey: "P-1", registryIds: ["NCT00000001", "NCT00000002", "NCT00000003"], candidateLimit: 2 });
+  assert.deepEqual(started.at(-1).registryIds, ["NCT00000001", "NCT00000002"]);
+  assert.equal("candidateLimit" in started.at(-1), false);
 });
 
 test("frozen candidate pagination and exact reads carry the collection through the gateway", async () => {

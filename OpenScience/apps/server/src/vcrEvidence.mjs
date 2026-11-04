@@ -101,9 +101,13 @@ import { quoteIsPresent } from "@evimed/domain/clinical-evidence";
 
 import { REGISTRY_NOT_FOUND, REGISTRY_UNAVAILABLE, REGISTRY_UNAVAILABLE_PARAMETERS, confidenceLevelOf } from "./trialRegistryClient.mjs";
 import {
-  CANDIDATES_NOT_COVERED, CANDIDATE_REGISTRIES, CTGOV_OPEN_STATUSES, CTIS_OPEN_STATUSES, candidateQueries, candidateRequest, chictrCandidate,
-  coverageSentence, ctgovCandidate, ctisCandidate, filterCandidates, interleave, mergeCandidates, presentCandidate, registryOutcome,
+  CANDIDATES_NOT_COVERED, CANDIDATE_PAGE_SIZE, CANDIDATE_REGISTRIES, CANDIDATE_RETRIEVE_MAX, CTGOV_OPEN_STATUSES, CTIS_OPEN_STATUSES, candidatePageRequest,
+  candidateQueries, candidateRequest, chictrCandidate, coverageSentence, ctgovCandidate, ctisCandidate, filterCandidates, fuseRanked, interleave,
+  mergeCandidates, presentCandidate, registryOutcome,
 } from "./vcrCandidateSearch.mjs";
+import { rerankCandidates } from "./vcrCandidateRerank.mjs";
+import { retrieveCandidates } from "./vcrCandidateRetrieve.mjs";
+import { summaryStamp } from "./vcrCandidateSearchStore.mjs";
 import { EVIDENCE_ARM_ROLES } from "./vcrEvidenceStore.mjs";
 import { candidateTrialFromRecord } from "./vcrPatientTrials.mjs";
 import { verifyLiteratureBaseline } from "./vcrEvidenceSources.mjs";
@@ -1202,9 +1206,12 @@ export function poolTargetOf(raw) {
  * client and the job queue (which belongs to another package and may not exist
  * yet — its absence is answered, not assumed).
  *
- * @param {{ store: any, registry?: any, trialCorpus?: ReturnType<typeof import("./vcrTrialCorpus.mjs").createVcrTrialCorpus>, jobs?: any, now?: () => Date, logger?: any }} options
+ * @param {{ store: any, registry?: any, trialCorpus?: ReturnType<typeof import("./vcrTrialCorpus.mjs").createVcrTrialCorpus>, jobs?: any, now?: () => Date, logger?: any,
+ *   reranker?: import("./vcrCandidateRerank.mjs").VcrCandidateRerank | null, searches?: import("./vcrCandidateSearchStore.mjs").VcrCandidateSearchStore | null,
+ *   retrieval?: { retrieveMax?: number, deadlineMs?: number, concurrency?: number } }} options `reranker` reorders a candidate list against the run's
+ *   summary of the patient; `searches` keeps the receipt of a search; `retrieval` bounds how deep and how long a search reads the registries.
  */
-export function createVcrEvidencePipeline({ store, registry = null, trialCorpus = null, jobs = null, now = () => new Date(), logger = null } = { store: null }) {
+export function createVcrEvidencePipeline({ store, registry = null, trialCorpus = null, jobs = null, now = () => new Date(), logger = null, reranker = null, searches = null, retrieval = {} } = { store: null }) {
   if (!store) throw new TypeError("The evidence pipeline needs its store.");
   /** @type {{resolve:Function}|null} */
   let literatureSources = null;
@@ -1285,6 +1292,99 @@ export function createVcrEvidencePipeline({ store, registry = null, trialCorpus 
     if (fetched.status === "ok" && registryName === "chictr" && !built) return { failure: { status: REGISTRY_NOT_FOUND, reason: REGISTRY_NOT_FOUND } };
     if (fetched.status !== "ok" || !built?.precedent) return { failure: fetched };
     return { built };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Candidate searches: reordering against the run's summary, keeping the receipt, reading a page of it back
+  // ---------------------------------------------------------------------------
+
+  /** The rows of a stored or fresh list from `offset`, and where the next page begins. @param {any[]} rows @param {number} offset @param {number} limit */
+  const pageOf = (rows, offset, limit) => {
+    const page = rows.slice(offset, offset + limit);
+    const next = offset + page.length;
+    return { retrieved: rows.length, returned: page.length, offset, more: next < rows.length, ...(next < rows.length ? { nextOffset: next } : {}), candidates: page };
+  };
+
+  /** What the answer says of the list's order. @param {{ applied?: boolean } | null | undefined} rerank */
+  const orderSentence = (rerank) => (rerank?.applied
+    ? "按与你写的患者摘要的相关程度排序（重排序），不是适合程度的判断；重排之前是各登记库按检索词优先级融合、再轮流排列的检索顺序。"
+    : "各登记库按检索词优先级融合后轮流排列的检索顺序，不是适合程度的排序。");
+
+  /** What a rerank did, as the receipt and the answer keep it. @param {Awaited<ReturnType<typeof rerankCandidates>>} outcome @param {boolean} summaryGiven */
+  const rerankRecord = (outcome, summaryGiven) => ({
+    state: summaryGiven || outcome.state === "unconfigured" ? outcome.state : "skipped", applied: outcome.applied, model: outcome.model,
+    batches: outcome.batches, failedBatches: outcome.failedBatches, reasons: outcome.reasons, summaryGiven,
+  });
+
+  /**
+   * Put a list in the order of how it reads against the run's summary. Always returns the whole list: with no summary, no reranker or a
+   * failure it is the order it came in, and the record says which.
+   * @param {{ summary: string | null, list: any[], signal?: AbortSignal }} input
+   */
+  async function rankForSummary({ summary, list, signal }) {
+    const outcome = await rerankCandidates({ summary: summary ?? "", candidates: list }, { reranker, signal });
+    const rows = outcome.order.map((index, at) => ({
+      ...list[index], rank: at + 1,
+      ...(outcome.applied && typeof outcome.scores[index] === "number" ? { relevance: Math.round(/** @type {number} */ (outcome.scores[index]) * 1000) / 1000 } : {}),
+    }));
+    return { rows, record: rerankRecord(outcome, Boolean(summary)) };
+  }
+
+  /**
+   * Keep the receipt of a search with the conversation's study. A search with no study, or one that could not be written, has no `searchId`
+   * and is otherwise the same; nothing waits on it.
+   * @param {{ study: { id?: string | null, userId?: string } | null, subjectKey: string | null, request: Record<string, any>, registries: any[], rerank: Record<string, any> | null,
+   *   collection?: Record<string, any> | null, found: number, items: any[] }} entry
+   */
+  async function keepSearch({ study, ...entry }) {
+    if (!searches || !study?.id) return null;
+    try {
+      return await searches.save(/** @type {any} */ (study), entry);
+    } catch (error) {
+      note("vcr.evidence.candidate_search_unsaved", { code: String(/** @type {any} */ (error)?.code ?? "save_failed") });
+      return null;
+    }
+  }
+
+  /** A page of a search already made, from its receipt. @param {{ study: any, filter: Record<string, any>, limitMax: number }} input */
+  async function readSearchPage({ study, filter, limitMax }) {
+    const asked = candidatePageRequest(filter, { limitMax });
+    if (asked.ok === false) return { available: false, code: "vcr_read_filter_invalid", message: asked.message };
+    const receipt = searches && study?.id ? await searches.get(study, asked.page.searchId).catch(() => null) : null;
+    if (!receipt) return { available: false, code: "vcr_read_filter_invalid", message: "没有这次检索的记录（编号不对、不属于本研究，或已被较新的检索取代）。请重新检索。" };
+    const asOf = receipt.createdAt ?? now().toISOString();
+    return {
+      available: true, status: "ok", asOf, searchId: receipt.id, request: receipt.request, registries: receipt.registries, rerank: receipt.rerank,
+      ...(receipt.collection ? { collection: receipt.collection } : {}),
+      notCovered: CANDIDATES_NOT_COVERED.map((entry) => ({ registry: entry.id, name: entry.name, reason: entry.reason })),
+      coverage: receipt.registries.length ? coverageSentence(receipt.registries, asOf, receipt.rerank) : "冻结登记库的检索，不是实时登记库。",
+      found: receipt.found, ...pageOf(receipt.items, asked.page.offset, asked.page.limit), order: orderSentence(receipt.rerank),
+    };
+  }
+
+  /**
+   * A frozen collection's list, read whole, reordered against the summary and kept as a receipt: the first page is returned and the rest is
+   * read with `searchId` and `offset`. The same fusion, reranker and receipt as the live registries; only the source differs.
+   * @param {{ study: any, request: import("./vcrCandidateSearch.mjs").CandidateRequest, signal?: AbortSignal, subjectKey: string | null }} input
+   */
+  async function frozenReranked({ study, request, signal, subjectKey }) {
+    const collected = await trialCorpus.collect(request, signal);
+    const rows = collected.candidates;
+    const outcome = await rerankCandidates({ summary: request.summary ?? "", candidates: rows.map((/** @type {any} */ row) => ({
+      registryId: row.registryId, title: row.title, conditions: row.conditions, interventions: row.interventions, phase: row.phase,
+      sexStated: row.sex, ageStated: row.age, eligibilityHead: collected.cards?.[row.registryId] ?? "" })) }, { reranker, signal });
+    const ordered = outcome.order.map((index, at) => ({
+      ...rows[index], rank: at + 1,
+      ...(outcome.applied && typeof outcome.scores[index] === "number" ? { relevance: Math.round(/** @type {number} */ (outcome.scores[index]) * 1000) / 1000 } : {}),
+    }));
+    const record = rerankRecord(outcome, true);
+    const { candidates: _all, cards: _cards, ...base } = collected;
+    const collection = { ...collected.collection, revision: trialCorpus.revision };
+    const requestRecord = { condition: request.condition, terms: request.terms, age: request.age, sex: request.sex, region: request.region, status: request.scope,
+      summary: summaryStamp(request.summary ?? "") };
+    const searchId = await keepSearch({ study, subjectKey, request: requestRecord, registries: [], rerank: record, collection, found: collected.found, items: ordered });
+    return { ...base, ...(searchId ? { searchId } : {}), rerank: record, ...pageOf(ordered, 0, CANDIDATE_PAGE_SIZE), nextCursor: null,
+      order: record.applied ? orderSentence(record) : base.order };
   }
 
   const pipeline = {
@@ -1386,14 +1486,17 @@ export function createVcrEvidencePipeline({ store, registry = null, trialCorpus 
     },
 
     /**
-     * `vcr_read what: "candidates"` (M1): the registry trials that might take one patient. The run writes the search — a condition and a
-     * few phrases, English and Chinese — and says what it knows of the patient (age, sex, country); this asks the three registries together,
-     * merges and de-duplicates what they answer, leaves out what a record's own stated fields rule out, cuts the list, and says per
-     * registry what was asked, what failed and what is not covered at all. A registry that failed costs its own results and no one else's.
-     * Nothing here judges the patient against a trial (`vcrCandidateSearch.mjs`).
-     * @param {{ userId?: string, filter?: Record<string, any>, limitMax?: number, signal?: AbortSignal }} input
+     * `vcr_read what: "candidates"` (M1): the registry trials that might take one patient. The run writes the search — a condition and up
+     * to 32 phrases ranked by priority, English and Chinese — a summary of the patient's problems, and what it knows of the patient (age,
+     * sex, country); this asks the three registries together, a page at a time and within a deadline, fuses and de-duplicates what they
+     * answer, leaves out what a record's own stated fields rule out, puts the list in the order of how it reads against the summary when a
+     * reranker is configured, keeps the whole list as a receipt (`searchId`) and returns its first rows, and says per registry what was
+     * asked, what failed or was not reached, and what is not covered at all. A registry that failed costs its own results and no one
+     * else's. Nothing here judges the patient against a trial (`vcrCandidateSearch.mjs`).
+     * @param {{ userId?: string, filter?: Record<string, any>, limitMax?: number, signal?: AbortSignal, study?: { id?: string | null, userId?: string } | null }} input
      */
-    async patientCandidates({ userId = "", filter = {}, limitMax = 20, signal }) {
+    async patientCandidates({ userId = "", filter = {}, limitMax = 20, signal, study = null }) {
+      if (filter.searchId != null) return readSearchPage({ study, filter, limitMax });
       const frozen = filter.collection != null;
       const asked = candidateRequest(filter, { limitMax, frozen });
       const asOf = now().toISOString();
@@ -1404,6 +1507,10 @@ export function createVcrEvidencePipeline({ store, registry = null, trialCorpus 
           return { available: false, code: REGISTRY_UNAVAILABLE, reason: "trial_collection_unavailable", message: "指定的冻结登记库未接入。" };
         }
         try {
+          // A list to be reordered is read whole (up to the request's limit) and kept as a receipt; a plain list is paged by the collection's cursor.
+          if (request.summary && !filter.cursor && reranker?.configured && typeof trialCorpus.collect === "function") {
+            return await frozenReranked({ study, request, signal, subjectKey: filter.subjectKey ?? null });
+          }
           return await trialCorpus.search(request, filter.cursor ?? null, signal);
         } catch (error) {
           const reason = String(/** @type {any} */ (error)?.code ?? "trial_collection_read_failed");
@@ -1415,64 +1522,71 @@ export function createVcrEvidencePipeline({ store, registry = null, trialCorpus 
       }
       if (!registry) return { available: false, code: "registry_unavailable", message: "试验登记检索未接入：这一步暂不可用，其余步骤照常。" };
       const queries = candidateQueries(request);
-      // The registries' own filters narrow what they send where a status is always stated (ClinicalTrials.gov, CTIS); everything else is held
-      // to the filters here, from the fields the record states. More than the list's size is asked for because some of it is left out.
-      const per = Math.min(request.region ? 30 : 50, Math.max(10, request.limit * 2));
       const open = request.scope === "open";
+      // The head of each trial's eligibility text is asked for only when the list is going to be read by a reranker.
+      const withText = Boolean(request.summary) && Boolean(reranker?.configured);
       /** @param {() => Promise<any>} ask */
       const settle = async (ask) => { try { return await ask(); } catch (error) { return { status: REGISTRY_UNAVAILABLE, reason: String(/** @type {any} */ (error)?.code ?? "request_failed"), items: [] }; } };
       const ask = {
-        "clinicaltrials.gov": (/** @type {{ kind: string, text: string }} */ query) => settle(() => registry.search({
-          ...(query.kind === "condition" ? { condition: query.text } : { term: query.text }), status: open ? [...CTGOV_OPEN_STATUSES] : [], limit: per,
-          forPatient: true, withLocations: Boolean(request.region) })),
-        ctis: (/** @type {{ kind: string, text: string }} */ query) => settle(async () => (typeof registry.searchCtis === "function"
-          ? registry.searchCtis({ ...(query.kind === "condition" ? { condition: query.text } : { term: query.text }), statuses: open ? [...CTIS_OPEN_STATUSES] : [], limit: per })
+        "clinicaltrials.gov": (/** @type {{ kind: string, text: string }} */ query, /** @type {{ pageToken: string | null, limit: number }} */ page) => settle(() => registry.search({
+          ...(query.kind === "condition" ? { condition: query.text } : { term: query.text }), status: open ? [...CTGOV_OPEN_STATUSES] : [], limit: page.limit,
+          ...(page.pageToken ? { pageToken: page.pageToken } : {}), forPatient: true, withLocations: Boolean(request.region), withEligibility: withText })),
+        ctis: (/** @type {{ kind: string, text: string }} */ query, /** @type {{ pageToken: string | null, limit: number }} */ page) => settle(async () => (typeof registry.searchCtis === "function"
+          ? registry.searchCtis({ ...(query.kind === "condition" ? { condition: query.text } : { term: query.text }), statuses: open ? [...CTIS_OPEN_STATUSES] : [], limit: page.limit,
+            ...(page.pageToken ? { pageToken: page.pageToken } : {}) })
           : { status: REGISTRY_UNAVAILABLE, reason: "registry_not_configured", items: [] })),
-        chictr: (/** @type {{ kind: string, text: string }} */ query) => settle(() => registry.searchChictr({ query: query.text, limit: per, userId })),
+        // The evidence API has no second page: one request per phrase, as many as it will give.
+        chictr: (/** @type {{ kind: string, text: string }} */ query, /** @type {{ pageToken: string | null, limit: number }} */ page) => settle(() => registry.searchChictr({ query: query.text, limit: page.limit, userId })),
       };
       const shape = { "clinicaltrials.gov": ctgovCandidate, ctis: ctisCandidate, chictr: chictrCandidate };
-      // Every (registry, phrase) is asked at once: one that does not answer waits out its own deadline and holds nobody else.
-      const answers = await Promise.all(CANDIDATE_REGISTRIES.map(async (entry) => Promise.all(queries.map(async (query) => ({
-        query: query.text, answer: await ask[/** @type {keyof typeof ask} */ (entry.id)](query) })))));
+      const retrieveMax = Math.max(20, Math.min(CANDIDATE_RETRIEVE_MAX, Number(retrieval.retrieveMax) || CANDIDATE_RETRIEVE_MAX));
+      const deadlineMs = Math.max(250, Number(retrieval.deadlineMs) || 30_000);
+      const read = await retrieveCandidates({
+        queries, asks: ask, registries: CANDIDATE_REGISTRIES.map((entry) => entry.id), retrieveMax, signal,
+        pageSizes: { "clinicaltrials.gov": request.region ? 50 : 100, ctis: 100, chictr: 100 }, deadlineAt: Date.now() + deadlineMs, concurrency: Number(retrieval.concurrency) || 3,
+      });
       /** @type {ReturnType<typeof ctgovCandidate>[]} */
       const found = [];
       let retrievedAt = null;
-      const registries = CANDIDATE_REGISTRIES.map((entry, at) => {
-        const rows = answers[at];
-        /** @type {ReturnType<typeof ctgovCandidate>[]} */
-        const own = [];
-        for (const { answer } of rows) {
-          if (answer.status === "ok" && answer.retrievedAt && (!retrievedAt || answer.retrievedAt > retrievedAt)) retrievedAt = answer.retrievedAt;
-          for (const item of answer.status === "ok" ? answer.items ?? [] : []) own.push(/** @type {any} */ (shape)[entry.id](item));
-        }
+      const registries = CANDIDATE_REGISTRIES.map((entry) => {
+        const rows = read.results[entry.id];
+        for (const row of rows) if (row.status === "ok" && row.retrievedAt && (!retrievedAt || row.retrievedAt > retrievedAt)) retrievedAt = row.retrievedAt;
+        // The run's phrases in the run's order: the trials a registry gave for each, fused by TrialGPT's weights into the registry's one list.
+        const own = fuseRanked(rows.map((row) => (row.status === "ok" ? row.items.map((item) => /** @type {any} */ (shape)[entry.id](item)) : [])));
         found.push(...own);
-        const outcome = registryOutcome(rows.map(({ query, answer }) => ({
-          query, status: String(answer.status), reason: answer.status === "ok" ? null : String(answer.reason ?? answer.status),
-          total: answer.total ?? null, found: answer.status === "ok" ? (answer.items ?? []).length : 0 })));
-        return { registry: entry.id, name: entry.name, ...outcome,
+        const outcome = registryOutcome(rows.map((row) => ({
+          query: row.query, status: row.status, reason: row.status === "ok" ? null : String(row.reason ?? row.status),
+          total: row.total, found: row.items.length, pages: row.pages, ...(row.truncated ? { truncated: row.truncated } : {}) })));
+        return { registry: entry.id, name: entry.name, ...outcome, retrieved: own.length,
           ...(entry.id === "chictr" ? { limits: "只有清单：没有入排条件原文，也没有年龄、性别、中心；写入候选试验时条件按未知算（缺登记原文）。" } : {}) };
       });
       const merged = mergeCandidates(found);
       const { kept, dropped } = filterCandidates(merged, request);
-      const { list, more } = interleave(kept, request.limit);
-      note("vcr.evidence.candidates_for_patient", { userId, found: found.length, merged: merged.length, kept: kept.length, returned: list.length });
+      const { list, more: truncated } = interleave(kept, retrieveMax);
+      const ranked = await rankForSummary({ summary: request.summary, list, signal });
       const reachable = registries.some((entry) => entry.state === "searched" || entry.state === "partial");
+      const requestRecord = { condition: request.condition, terms: request.terms, age: request.age, sex: request.sex, region: request.region, status: request.scope,
+        ...(request.summary ? { summary: summaryStamp(request.summary) } : {}) };
+      const searchId = await keepSearch({ study, subjectKey: filter.subjectKey ?? null, request: requestRecord, registries, rerank: ranked.record, found: merged.length, items: ranked.rows.map(presentCandidate) });
+      note("vcr.evidence.candidates_for_patient", { userId, found: found.length, merged: merged.length, kept: kept.length, retrieved: ranked.rows.length, requests: read.requests, rerank: ranked.record.state });
       return {
         available: true,
         status: reachable ? "ok" : REGISTRY_UNAVAILABLE,
         asOf,
         registryReadAt: retrievedAt,
-        request: { condition: request.condition, terms: request.terms, age: request.age, sex: request.sex, region: request.region, status: request.scope },
+        ...(searchId ? { searchId } : {}),
+        request: requestRecord,
         registries,
         notCovered: CANDIDATES_NOT_COVERED.map((entry) => ({ registry: entry.id, name: entry.name, reason: entry.reason })),
         // What the run says in its reply about where it looked, as the platform words it.
-        coverage: coverageSentence(registries, asOf),
+        coverage: coverageSentence(registries, asOf, ranked.record),
+        retrieval: { phrases: queries.length, depthPerPhrase: read.depth, requests: read.requests, reachedAllPhrases: read.reachedAll, truncated },
+        rerank: ranked.record,
         found: merged.length,
         // Left out for what the record itself states, by the first filter that did; the unstated ones stayed in, marked `unknown`.
         leftOut: dropped,
-        more,
-        order: "按各登记库自己的相关性顺序轮流排列，不是适合程度的排序。",
-        candidates: list.map(presentCandidate),
+        ...pageOf(ranked.rows.map(presentCandidate), 0, request.limit),
+        order: orderSentence(ranked.record),
       };
     },
 
@@ -2009,7 +2123,7 @@ export function createVcrEvidencePipeline({ store, registry = null, trialCorpus 
 
     /** @param {any} study @param {Record<string, any>} [filter] @param {number} [limitMax] @param {AbortSignal} [signal] */
     async candidatesFor(study, filter = {}, limitMax = 20, signal) {
-      return pipeline.patientCandidates({ userId: String(study?.userId ?? ""), filter, limitMax, signal });
+      return pipeline.patientCandidates({ userId: String(study?.userId ?? ""), filter, limitMax, signal, study });
     },
 
     /** @param {any} study @param {Record<string, any>} [filter] @param {AbortSignal} [signal] */

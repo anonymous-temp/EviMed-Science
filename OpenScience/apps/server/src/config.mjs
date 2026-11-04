@@ -1150,6 +1150,23 @@ function vcrSettings(overrides) {
     // structure, so the list is cut to what a reader can go through; the registries are asked for twice as many because some are left out by
     // what their records state. Unset = 20.
     vcrCandidateSearchMax: integer("vcrCandidateSearchMax", "OPEN_SCIENCE_VCR_CANDIDATE_SEARCH_MAX", 20, 5, 50),
+    // How deep and how long one search for a patient's trials reads (vcrCandidateRetrieve, G11): the most trials a search keeps for one patient (the list a
+    // judging job takes its trials from; the answer shows `vcrCandidateSearchMax` of them at a time), the deadline for the registries' part of the search (a phrase
+    // not started by then is said to be not reached), how many phrases of one registry are asked at once, and the least gap between two requests to one public
+    // registry (their interfaces limit a caller's rate; 0 = unpaced). Counters: `open_science_vcr_candidate_search_total`.
+    vcrCandidateRetrieveMax: integer("vcrCandidateRetrieveMax", "OPEN_SCIENCE_VCR_CANDIDATE_RETRIEVE_MAX", 500, 20, 500),
+    vcrCandidateRetrieveDeadlineMs: integer("vcrCandidateRetrieveDeadlineMs", "OPEN_SCIENCE_VCR_CANDIDATE_RETRIEVE_DEADLINE_MS", 30_000, 2_000, 120_000),
+    vcrCandidateRetrieveConcurrency: integer("vcrCandidateRetrieveConcurrency", "OPEN_SCIENCE_VCR_CANDIDATE_RETRIEVE_CONCURRENCY", 3, 1, 8),
+    vcrRegistryPaceMs: integer("vcrRegistryPaceMs", "OPEN_SCIENCE_VCR_REGISTRY_PACE_MS", 250, 0, 5_000),
+    // The reranker of a candidate list (vcrCandidateRerank, G11): DashScope's `qwen3-rerank` reads the run's summary of the patient against each trial's title, conditions,
+    // interventions and the head of its eligibility text and puts the list in that order; it falls open to the registries' order. On by default where a DashScope key exists
+    // (unset follows the key; `=false` turns it off). One request's limit, all requests' limit, and the documents of a batch (the model takes 500 in one request; a
+    // smaller batch keeps one call's tokens and time small). Counters: `open_science_vcr_candidate_rerank_total`.
+    vcrMatchRerankEnabled: process.env.OPEN_SCIENCE_VCR_MATCH_RERANK_ENABLED == null || process.env.OPEN_SCIENCE_VCR_MATCH_RERANK_ENABLED === ""
+      ? (overrides.vcrMatchRerankEnabled ?? null) : (overrides.vcrMatchRerankEnabled ?? boolEnv("OPEN_SCIENCE_VCR_MATCH_RERANK_ENABLED", true)),
+    vcrMatchRerankTimeoutMs: integer("vcrMatchRerankTimeoutMs", "OPEN_SCIENCE_VCR_MATCH_RERANK_TIMEOUT_MS", 8_000, 1_000, 60_000),
+    vcrMatchRerankBudgetMs: integer("vcrMatchRerankBudgetMs", "OPEN_SCIENCE_VCR_MATCH_RERANK_BUDGET_MS", 15_000, 2_000, 120_000),
+    vcrMatchRerankBatchSize: integer("vcrMatchRerankBatchSize", "OPEN_SCIENCE_VCR_MATCH_RERANK_BATCH_SIZE", 50, 2, 100),
     // A patient's record longer than this many characters is read through the passages that bear on a criterion (vcrPassages, M4) rather
     // than window after window: past about two windows (20,000 characters each) a chart is more than a run reads in order, and the part of it
     // a criterion asks about is a small part. Unset = 40,000. A shorter record is read as it always was.

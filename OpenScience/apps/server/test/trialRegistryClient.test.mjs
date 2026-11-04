@@ -11,7 +11,7 @@ import { VCR_ENROLLMENT_KINDS } from "@evimed/domain";
 
 import { FLAURA } from "./vcrEvidenceFixtures.mjs";
 import {
-  CTGOV_LOCATION_FIELDS, CTGOV_PATIENT_FIELDS, CTGOV_SEARCH_FIELDS, REGISTRY_NOT_FOUND, REGISTRY_UNAVAILABLE, REGISTRY_UNAVAILABLE_PARAMETERS,
+  CTGOV_ELIGIBILITY_FIELDS, CTGOV_LOCATION_FIELDS, CTGOV_PATIENT_FIELDS, CTGOV_SEARCH_FIELDS, REGISTRY_NOT_FOUND, REGISTRY_UNAVAILABLE, REGISTRY_UNAVAILABLE_PARAMETERS,
   armRoleOf, chictrPrecedent, confidenceLevelOf, confidenceLevelOfDispersion, createChictrAdapter, createTrialRegistryClient, ctgovPrecedent,
   monthsBetween, reducedRegistryRecord, registryRecordHash, renderRegistryRecordText,
 } from "../src/trialRegistryClient.mjs";
@@ -391,6 +391,53 @@ test("a list for one patient asks for who each trial takes and, when a country i
   assert.deepEqual([forPatient.items[1].sex, forPatient.items[1].minimumAge, forPatient.items[1].secondaryIds, forPatient.items[1].countries], [null, null, [], null]);
   const noSites = await client.search({ condition: "lung cancer", forPatient: true });
   assert.equal(Object.hasOwn(noSites.items[0], "countries"), false, "sites are asked for only when a country is");
+});
+
+test("a list that will be reranked asks for the head of each trial's eligibility text, bounded, and no other list does (G11)", async () => {
+  const long = `Inclusion Criteria:\n${"stage IV disease; ".repeat(300)}`;
+  const { fetchImpl, seen } = upstream(() => ({ body: { totalCount: 1, studies: [
+    { protocolSection: { identificationModule: { nctId: "NCT07400009", briefTitle: "A" }, statusModule: { overallStatus: "RECRUITING" }, eligibilityModule: { eligibilityCriteria: long } } },
+  ] } }));
+  const client = createTrialRegistryClient({ fetchImpl, sleep: noSleep });
+  const plain = await client.search({ condition: "lung cancer", forPatient: true });
+  assert.equal(new URL(seen[0]).searchParams.get("fields").includes("eligibilityCriteria"), false);
+  assert.equal(Object.hasOwn(plain.items[0], "eligibilityHead"), false);
+  const withText = await client.search({ condition: "lung cancer", forPatient: true, withEligibility: true });
+  assert.deepEqual(new URL(seen[1]).searchParams.get("fields").split("|").slice(-1), [...CTGOV_ELIGIBILITY_FIELDS]);
+  assert.equal(withText.items[0].eligibilityHead.length, 1500, "a card's worth, not the criteria");
+  assert.ok(withText.items[0].eligibilityHead.startsWith("Inclusion Criteria: stage IV disease;"), "whitespace folded");
+});
+
+test("a paced registry is asked one request every pace, whatever is waiting; a request whose deadline would pass in the queue is answered timeout, and the queue is bounded (G11)", async () => {
+  const starts = [];
+  const body = { totalCount: 0, studies: [] };
+  const fetchImpl = async () => { starts.push(Date.now()); return new Response(JSON.stringify(body), { status: 200 }); };
+  const client = createTrialRegistryClient({ fetchImpl, paceMs: 40, maxAttempts: 1, timeoutMs: 5_000 });
+  const began = Date.now();
+  const answers = await Promise.all(Array.from({ length: 6 }, (_, at) => client.search({ condition: `c${at}` })));
+  assert.ok(answers.every((answer) => answer.status === "ok"));
+  assert.deepEqual(starts.slice(1).map((at, index) => at - starts[index] >= 35), [true, true, true, true, true]);
+  assert.ok(Date.now() - began >= 5 * 35);
+  assert.equal(client.status().counters.paced >= 5, true);
+  // The two registries and the record reads each keep their own lane: a CTIS search is not made to wait behind CT.gov's queue.
+  const lanes = [];
+  const two = createTrialRegistryClient({ fetchImpl: async (url) => { lanes.push([String(url).includes("ctis") ? "ctis" : "ctgov", Date.now()]); return new Response(JSON.stringify(String(url).includes("ctis")
+    ? { data: [], pagination: { totalRecords: 0, nextPage: false } } : body), { status: 200 }); }, ctisBaseUrl: "https://ctis.example.org/api", paceMs: 200, maxAttempts: 1 });
+  await Promise.all([two.search({ condition: "a" }), two.searchCtis({ condition: "a" })]);
+  assert.ok(Math.abs(lanes[0][1] - lanes[1][1]) < 100, "separate lanes, same instant");
+  // A queue deeper than its deadline allows answers timeout for the tail instead of making it wait.
+  const slow = createTrialRegistryClient({ fetchImpl, paceMs: 300, maxAttempts: 1, timeoutMs: 700 });
+  const tail = await Promise.all(Array.from({ length: 5 }, (_, at) => slow.search({ condition: `t${at}` })));
+  assert.deepEqual(tail.map((answer) => answer.status === "ok" ? "ok" : answer.reason), ["ok", "ok", "timeout", "timeout", "timeout"], "the third would wait 600 ms for its turn and has 700 ms in all, less the quarter second it needs to be answered");
+  // And a bounded queue sheds, named.
+  const shallow = createTrialRegistryClient({ fetchImpl, paceMs: 200, maxAttempts: 1, maxQueued: 2, timeoutMs: 5_000 });
+  const shed = await Promise.all(Array.from({ length: 4 }, (_, at) => shallow.search({ condition: `s${at}` })));
+  assert.deepEqual(shed.map((answer) => answer.status === "ok" ? "ok" : answer.reason), ["ok", "ok", "registry_busy", "registry_busy"]);
+  assert.equal(shallow.status().counters.shed, 2);
+  // An unpaced client (the default) queues nothing.
+  const free = createTrialRegistryClient({ fetchImpl, maxAttempts: 1 });
+  await Promise.all(Array.from({ length: 3 }, () => free.search({ condition: "x" })));
+  assert.equal(free.status().counters.paced, 0);
 });
 
 test("offline is a named answer, not an empty library", async () => {

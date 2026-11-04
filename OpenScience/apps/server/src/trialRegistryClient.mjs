@@ -127,7 +127,7 @@ const REGISTRY_ID = /^[A-Za-z][A-Za-z0-9-]{2,63}$/;
 
 /** Public coverage never copies an arbitrary transport error or adapter payload. */
 const COVERAGE_REASONS = new Set([
-  "timeout", "request_failed", "response_too_large", "registry_answer_unreadable",
+  "timeout", "request_failed", "registry_busy", "response_too_large", "registry_answer_unreadable",
   "registry_record_unreadable", "registry_not_found", "evimed_trials_unavailable",
   "ENOTFOUND", "EAI_AGAIN", "ECONNREFUSED", "ECONNRESET", "ETIMEDOUT",
 ]);
@@ -1345,6 +1345,13 @@ export const CTGOV_PATIENT_FIELDS = Object.freeze([
   "protocolSection.eligibilityModule.maximumAge",
   "protocolSection.identificationModule.secondaryIdInfos",
 ]);
+/**
+ * The eligibility text of a record, asked for only when the list is about to be reranked (`search({ withEligibility })`): the head of
+ * it is what the reranker reads beside the title and the conditions. A page that carries it is several times the size of one that does not.
+ */
+export const CTGOV_ELIGIBILITY_FIELDS = Object.freeze(["protocolSection.eligibilityModule.eligibilityCriteria"]);
+/** How much of a record's eligibility text a list item keeps: a reranker's card, never the criteria themselves. */
+export const LIST_ELIGIBILITY_HEAD_CHARS = 1_500;
 /** The sites of a record, for the countries a trial runs in. */
 export const CTGOV_LOCATION_FIELDS = Object.freeze(["protocolSection.contactsLocationsModule.locations"]);
 
@@ -1352,7 +1359,9 @@ export const CTGOV_LOCATION_FIELDS = Object.freeze(["protocolSection.contactsLoc
  * @param {{ baseUrl?: string, timeoutMs?: number, maxAttempts?: number, fetchImpl?: typeof fetch,
  *   now?: () => Date, sleep?: (ms: number) => Promise<unknown>,
  *   chictrAdapter?: ((request: { query: string, limit: number, userId?: string }) => Promise<any>) | null,
- *   ctisBaseUrl?: string }} [options]
+ *   ctisBaseUrl?: string, paceMs?: number, maxQueued?: number }} [options] `paceMs` is the least gap between two request starts to one registry (0 =
+ *   unpaced): a candidate search asks one registry dozens of times, and the registries' public interfaces limit a caller's rate. The requests wait in
+ *   a queue of at most `maxQueued` per registry, each for no longer than its own deadline.
  */
 export function createTrialRegistryClient({
   baseUrl = CTGOV_BASE_URL,
@@ -1363,11 +1372,40 @@ export function createTrialRegistryClient({
   now = () => new Date(),
   sleep = (/** @type {number} */ ms) => new Promise((resolve) => { setTimeout(resolve, ms).unref?.(); }),
   chictrAdapter = null,
+  paceMs = 0,
+  maxQueued = 400,
 } = {}) {
   const origin = text(baseUrl).replace(/\/+$/, "");
   const attempts = Math.max(1, Math.min(6, Math.floor(maxAttempts)));
-  const counters = { searches: 0, records: 0, requests: 0, retried: 0, unavailable: 0, notFound: 0 };
+  const counters = { searches: 0, records: 0, requests: 0, retried: 0, unavailable: 0, notFound: 0, paced: 0, shed: 0 };
   let lastError = /** @type {string | null} */ (null);
+  const gap = Math.max(0, Math.min(5_000, Math.floor(Number(paceMs)) || 0));
+  /** @type {Map<string, { tail: Promise<unknown>, lastStart: number, queued: number }>} */
+  const lanes = new Map();
+  /**
+   * Wait for this registry's next turn. Starts are spaced `paceMs` apart whatever is in flight, the queue is bounded, and a request whose
+   * deadline would pass before its turn comes is answered `timeout` at once instead of waiting for it. A registry with no pace is not queued.
+   * @param {string} lane @param {number} deadline epoch ms @returns {Promise<"timeout" | "registry_busy" | null>}
+   */
+  async function turn(lane, deadline) {
+    if (!gap) return null;
+    const state = lanes.get(lane) ?? { tail: Promise.resolve(), lastStart: 0, queued: 0 };
+    lanes.set(lane, state);
+    if (state.queued >= maxQueued) { counters.shed += 1; return /** @type {"registry_busy"} */ ("registry_busy"); }
+    state.queued += 1;
+    const mine = state.tail.then(async () => {
+      const wait = state.lastStart + gap - Date.now();
+      if (wait > 0) {
+        if (deadline - Date.now() < wait + 250) return /** @type {"timeout"} */ ("timeout");
+        counters.paced += 1;
+        await sleep(wait);
+      }
+      state.lastStart = Date.now();
+      return /** @type {null} */ (null);
+    });
+    state.tail = mine.catch(() => null);
+    try { return await mine; } finally { state.queued -= 1; }
+  }
   const configured = Boolean(origin) && typeof fetchImpl === "function";
   const ctisOrigin = text(ctisBaseUrl).replace(/\/+$/, "");
   const ctisConfigured = Boolean(ctisOrigin) && typeof fetchImpl === "function";
@@ -1402,10 +1440,12 @@ export function createTrialRegistryClient({
    * `init` carries a POST's method, body and content type (CTIS's search): the
    * same deadline, retries and bound apply, and a search is safe to repeat.
    * @param {string} url @param {number} deadline epoch ms
-   * @param {{ method?: string, body?: string }} [init]
+   * @param {{ method?: string, body?: string, lane?: string }} [init] `lane` names the registry whose pace the request keeps
    */
   async function getJson(url, deadline, init = {}) {
     for (let attempt = 0; attempt < attempts; attempt += 1) {
+      const waited = await turn(init.lane ?? "", deadline);
+      if (waited) { lastError = waited; return { ok: false, reason: waited }; }
       const remaining = deadline - Date.now();
       if (remaining < 250) {
         lastError = "timeout";
@@ -1501,10 +1541,10 @@ export function createTrialRegistryClient({
      * gets is the same bytes it always was. A field the record does not state is absent on the item (`null`), never a guess.
      * @param {{ condition?: string, intervention?: string, term?: string, phases?: string[],
      *   status?: string[], studyType?: string, hasResults?: boolean | null, limit?: number,
-     *   pageToken?: string | null, forPatient?: boolean, withLocations?: boolean }} request
+     *   pageToken?: string | null, forPatient?: boolean, withLocations?: boolean, withEligibility?: boolean }} request
      */
     async search({ condition = "", intervention = "", term = "", phases = [], status = [], studyType = "",
-      hasResults = null, limit = 20, pageToken = null, forPatient = false, withLocations = false } = {}) {
+      hasResults = null, limit = 20, pageToken = null, forPatient = false, withLocations = false, withEligibility = false } = {}) {
       if (!origin || typeof fetchImpl !== "function") return unavailable("registry_not_configured");
       counters.searches += 1;
       const parameters = new URLSearchParams();
@@ -1519,10 +1559,11 @@ export function createTrialRegistryClient({
       parameters.set("pageSize", String(Math.max(1, Math.min(100, Math.floor(limit)))));
       parameters.set("countTotal", "true");
       parameters.set("format", "json");
-      parameters.set("fields", [...CTGOV_SEARCH_FIELDS, ...(forPatient ? CTGOV_PATIENT_FIELDS : []), ...(withLocations ? CTGOV_LOCATION_FIELDS : [])].join("|"));
+      parameters.set("fields", [...CTGOV_SEARCH_FIELDS, ...(forPatient ? CTGOV_PATIENT_FIELDS : []), ...(withLocations ? CTGOV_LOCATION_FIELDS : []),
+        ...(withEligibility ? CTGOV_ELIGIBILITY_FIELDS : [])].join("|"));
       if (text(pageToken)) parameters.set("pageToken", text(pageToken));
 
-      const answer = await getJson(`${origin}/studies?${parameters.toString()}`, Date.now() + timeoutMs);
+      const answer = await getJson(`${origin}/studies?${parameters.toString()}`, Date.now() + timeoutMs, { lane: "clinicaltrials.gov" });
       if (!answer.ok) return unavailable(answer.reason, "clinicaltrials.gov");
       const studies = Array.isArray(answer.body?.studies) ? answer.body.studies
         : answer.body?.studies === undefined && answer.body?.totalCount === 0 ? [] : null;
@@ -1556,6 +1597,7 @@ export function createTrialRegistryClient({
               .map((/** @type {any} */ item) => text(item?.name)).filter(Boolean),
             hasResults: Boolean(study?.hasResults),
             url: registryId ? `${CTGOV_STUDY_URL}${encodeURIComponent(registryId)}` : "",
+            ...(withEligibility ? { eligibilityHead: text(protocol.eligibilityModule?.eligibilityCriteria).replace(/\s+/g, " ").slice(0, LIST_ELIGIBILITY_HEAD_CHARS) } : {}),
             ...(forPatient ? {
               sex: text(protocol.eligibilityModule?.sex) || null,
               minimumAge: text(protocol.eligibilityModule?.minimumAge) || null,
@@ -1583,7 +1625,7 @@ export function createTrialRegistryClient({
       if (!REGISTRY_ID.test(id)) return unavailable("registry_id_invalid");
       if (!origin || typeof fetchImpl !== "function") return unavailable("registry_not_configured");
       counters.records += 1;
-      const answer = await getJson(`${origin}/studies/${encodeURIComponent(id)}?format=json`, Date.now() + timeoutMs);
+      const answer = await getJson(`${origin}/studies/${encodeURIComponent(id)}?format=json`, Date.now() + timeoutMs, { lane: "clinicaltrials.gov" });
       if (!answer.ok) {
         if (answer.reason === REGISTRY_NOT_FOUND) {
           observed("clinicaltrials.gov", "available");
@@ -1630,7 +1672,7 @@ export function createTrialRegistryClient({
         sort: { property: "decisionDate", direction: "DESC" },
         searchCriteria: criteria,
       });
-      const answer = await getJson(`${ctisOrigin}/search`, Date.now() + timeoutMs, { method: "POST", body });
+      const answer = await getJson(`${ctisOrigin}/search`, Date.now() + timeoutMs, { method: "POST", body, lane: "ctis" });
       // A 404 on the search endpoint is the endpoint gone, not a trial that is not there.
       if (!answer.ok) return unavailable(answer.reason === REGISTRY_NOT_FOUND ? "http_404" : answer.reason, "ctis");
       const data = answer.body;
@@ -1661,7 +1703,7 @@ export function createTrialRegistryClient({
       if (!CTIS_NUMBER.test(id)) return unavailable("registry_id_invalid");
       if (!ctisConfigured) return unavailable("registry_not_configured");
       counters.records += 1;
-      const answer = await getJson(`${ctisOrigin}/retrieve/${encodeURIComponent(id)}`, Date.now() + timeoutMs);
+      const answer = await getJson(`${ctisOrigin}/retrieve/${encodeURIComponent(id)}`, Date.now() + timeoutMs, { lane: "ctis" });
       if (!answer.ok) {
         if (answer.reason === REGISTRY_NOT_FOUND) {
           observed("ctis", "available");
@@ -1697,6 +1739,8 @@ export function createTrialRegistryClient({
     async searchChictr({ query, limit = 20, userId = "" } = { query: "" }) {
       if (typeof chictrAdapter !== "function") return unavailable("registry_not_configured");
       counters.searches += 1;
+      const waited = await turn("chictr", Date.now() + timeoutMs);
+      if (waited) return unavailable(waited, "chictr");
       try {
         const answer = await chictrAdapter({ query: text(query), limit: Math.max(1, Math.min(100, Math.floor(limit))), userId: text(userId) });
         const items = Array.isArray(answer?.items) ? answer.items : Array.isArray(answer) ? answer : null;

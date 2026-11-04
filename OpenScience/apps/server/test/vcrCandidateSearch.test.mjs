@@ -27,14 +27,17 @@ const ctis = (number, extra = {}) => ctisListItem({ ctNumber: number, ctTitle: `
 /** A ChiCTR listing: the evidence API's list item, through the client's own builder. */
 const chictr = (number, extra = {}) => chictrPrecedent({ registrationNo: number, title: `中国 ${number}`, status: "招募中", phase: "III期临床试验", conditions: ["肺癌"], interventions: ["药物C"], url: `https://www.chictr.org.cn/showproj.html?proj=${number}`, ...extra }, { retrievedAt: AT });
 
-test("a request is the condition, up to three other phrases and what is known of the patient; anything else is refused in words", () => {
-  const good = candidateRequest({ condition: " non-small cell   lung cancer ", terms: ["NSCLC EGFR", "非小细胞肺癌", "non-small cell lung cancer"], age: 63, sex: "Female", region: "China", status: "any", limit: 5 });
+test("a request is the condition, up to 32 other phrases, a summary and what is known of the patient; anything else is refused in words", () => {
+  const good = candidateRequest({ condition: " non-small cell   lung cancer ", terms: ["NSCLC EGFR", "非小细胞肺癌", "non-small cell lung cancer"], summary: "  63-year-old woman,  stage IV NSCLC  ", age: 63, sex: "Female", region: "China", status: "any", limit: 5 });
   assert.equal(good.ok, true);
-  assert.deepEqual(good.request, { condition: "non-small cell lung cancer", terms: ["NSCLC EGFR", "非小细胞肺癌"], age: 63, sex: "female", region: "China", scope: "any", limit: 5 },
+  assert.deepEqual(good.request, { condition: "non-small cell lung cancer", terms: ["NSCLC EGFR", "非小细胞肺癌"], summary: "63-year-old woman, stage IV NSCLC", age: 63, sex: "female", region: "China", scope: "any", limit: 5 },
     "the condition said again as a phrase is not a second search");
-  assert.deepEqual(candidateRequest({ condition: "x" }).request, { condition: "x", terms: [], age: null, sex: null, region: null, scope: "open", limit: 20 });
+  assert.deepEqual(candidateRequest({ condition: "x" }).request, { condition: "x", terms: [], summary: null, age: null, sex: null, region: null, scope: "open", limit: 20 });
+  assert.equal(candidateRequest({ condition: "x", terms: Array.from({ length: 32 }, (_, at) => `phrase ${at}`) }).ok, true, "32 phrases are the cap");
+  assert.match(candidateRequest({ condition: "x", terms: Array.from({ length: 33 }, (_, at) => `phrase ${at}`) }).message, /最多 32 个/);
+  assert.equal(candidateRequest({ condition: "x", summary: "   " }).request.summary, null, "an empty summary is none");
   assert.equal(candidateRequest({ condition: "x", limit: 99 }, { limitMax: 12 }).request.limit, 12, "the list's size is the deployment's");
-  for (const bad of [{}, { condition: "" }, { condition: "x", terms: "y" }, { condition: "x", terms: ["a", "b", "c", "d"] }, { condition: "x", age: -1 }, { condition: "x", age: "old" },
+  for (const bad of [{}, { condition: "" }, { condition: "x", terms: "y" }, { condition: "x", summary: 5 }, { condition: "x", summary: "s".repeat(2001) }, { condition: "x", age: -1 }, { condition: "x", age: "old" },
     { condition: "x", sex: "other" }, { condition: "x", region: "" }, { condition: "x", status: "closed" }, { condition: "x".repeat(201) }]) {
     const answer = candidateRequest(bad);
     assert.equal(answer.ok, false, JSON.stringify(bad).slice(0, 60));
@@ -119,7 +122,10 @@ test("the list is cut to its size taking the registries in turn, and says when t
 test("a registry's searches come to a state: searched, partial, failed, or not configured; and the coverage is a sentence the run can copy", () => {
   assert.equal(registryOutcome([{ query: "a", status: "ok", found: 3, total: 9 }]).state, "searched");
   const partial = registryOutcome([{ query: "a", status: "ok", found: 3, total: 9 }, { query: "b", status: REGISTRY_UNAVAILABLE, reason: "timeout", found: 0 }]);
-  assert.deepEqual([partial.state, partial.searched, partial.failed], ["partial", [{ query: "a", found: 3, total: 9 }], [{ query: "b", reason: "timeout" }]]);
+  assert.deepEqual([partial.state, partial.searched, partial.failed], ["partial", [{ query: "a", found: 3, total: 9, pages: 1 }], [{ query: "b", reason: "timeout" }]]);
+  assert.equal(registryOutcome([{ query: "a", status: "ok", found: 150, total: 900, pages: 2 }]).searched[0].pages, 2);
+  const unreached = registryOutcome([{ query: "a", status: "ok", found: 3, total: 9 }, { query: "b", status: "not_reached", reason: "search_deadline", found: 0 }]);
+  assert.deepEqual([unreached.state, unreached.failed], ["partial", [{ query: "b", reason: "search_deadline" }]], "a phrase the deadline did not reach is said so");
   assert.equal(registryOutcome([{ query: "a", status: REGISTRY_UNAVAILABLE, reason: "timeout", found: 0 }]).state, "failed");
   assert.equal(registryOutcome([{ query: "a", status: REGISTRY_UNAVAILABLE, reason: "registry_not_configured", found: 0 }]).state, "not_configured");
   const sentence = coverageSentence([
@@ -232,7 +238,7 @@ test("when no registry answers the answer says so and lists nothing; a deploymen
   assert.deepEqual([refused.available, refused.code], [false, "vcr_read_filter_invalid"]);
 });
 
-test("the list is capped and says there is more; the registry is asked for twice that, and a status of any is not sent as a filter (M1)", async () => {
+test("the list is capped and says there is more; the registry is asked for a full page, and a status of any is not sent as a filter (M1)", async () => {
   const many = (prefix, n) => Array.from({ length: n }, (_, at) => ctgov(`NCT${prefix}${String(at).padStart(4, "0")}`));
   const registry = registryDouble({ ctgov: () => ({ status: "ok", total: 40, retrievedAt: AT, items: many("0731", 12) }),
     ctis: () => ({ status: "ok", total: 0, retrievedAt: AT, items: [] }), chictr: () => ({ status: "ok", total: 0, retrievedAt: AT, items: [] }) });
@@ -240,7 +246,7 @@ test("the list is capped and says there is more; the registry is asked for twice
   assert.equal(answer.candidates.length, 5);
   assert.equal(answer.more, true);
   assert.equal(answer.found, 12);
-  assert.equal(registry.asked.ctgov[0].limit, 10, "twice the list's size, never less than ten");
+  assert.equal(registry.asked.ctgov[0].limit, 100, "a page is the registry's full page: the search keeps up to 500 for the patient and shows the list's size at a time");
   assert.deepEqual(registry.asked.ctgov[0].status, []);
   assert.equal(registry.asked.ctgov[0].withLocations, false, "no country named, no sites asked for");
 });
