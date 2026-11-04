@@ -204,7 +204,12 @@ export function presentDoseResponse(result, value) {
         ? `剂量和效应不是一条直线（非线性检验 P = ${plain(Number(nl.p))}）：看下面的曲线，不要只看每单位的斜率。`
         : `没有发现偏离直线的证据（非线性检验 P = ${plain(Number(nl.p))}），但研究少时这个检验把握不大。`;
   }
-  const firstSentence = first === null
+  const firstKind = String(dr.firstDoseKind ?? "");
+  // a line leaves 1 at every dose when its slope is significant, and so does a curve whose slope at the reference is: then the first dose above the
+  // reference is only the first step of the grid, and the page says there is no starting dose to name (review stats2 finding 6)
+  const firstSentence = firstKind === "at_once"
+    ? `参照剂量以上的每个剂量，${ratioWord}的区间都不包含 1：刚越过 ${plain(reference)}${unit ? ` ${unit}` : ""}，曲线就已经离开 1，所以数据指不出一个“起效的剂量”。要问多大剂量才有意义，就看下面曲线上想要的${ratioWord}落在哪个剂量。`
+    : first === null
     ? `在数据覆盖的剂量范围内，相对于 ${plain(reference)}${unit ? ` ${unit}` : ""}，${ratioWord}的区间没有离开 1。`
     : `从大约 ${plain(first)}${unit ? ` ${unit}` : ""} 起，相对于 ${plain(reference)}${unit ? ` ${unit}` : ""}，${ratioWord}的区间不再包含 1；这是对拟合曲线逐点的读法，不是数据确定下来的起效剂量。`;
   const heterogeneity = object(dr.heterogeneity);
@@ -214,8 +219,11 @@ export function presentDoseResponse(result, value) {
     { key: "model", label: "剂量和效应的关系", value: spline ? `限制性立方样条，节点在剂量 ${list(model.knots).map((knot) => plain(Number(knot))).join("、")}` : "一条直线（对数比值随剂量线性变化）", source: "given", decisive: true },
     { key: "reference", label: "比较的参照剂量", value: `${plain(reference)}${unit ? ` ${unit}` : ""}`, source: list(dr.assumed).some((entry) => object(entry).key === "referenceDose") ? "default" : "given", decisive: true },
     { key: "covariance", label: "同一研究里各水平的相关性",
-      value: String(given.covariance) === "indep" ? "按相互独立处理（有的水平没写病例数或人数）：区间比用上病例数时更窄" : "用各水平的病例数和人数还原（Greenland–Longnecker 的方法）",
-      source: list(dr.assumed).some((entry) => object(entry).key === "covariance" && object(entry).value === "indep") ? "default" : "given", decisive: String(given.covariance) === "indep" },
+      value: String(given.covariance) === "indep" ? "按相互独立处理（有的水平没写病例数或人数）：区间比用上病例数时更窄"
+        : String(given.covariance) === "mixed" ? `用各水平的病例数和人数还原（Greenland–Longnecker 的方法）；研究 ${list(given.independentStudies).map(String).join("、")} 没写全病例数或人数，它的各水平按相互独立处理，合并后的区间比全都用上病例数时更窄`
+        : "用各水平的病例数和人数还原（Greenland–Longnecker 的方法）",
+      source: list(dr.assumed).some((entry) => object(entry).key === "covariance" && ["indep", "mixed"].includes(String(object(entry).value))) ? "default" : "given",
+      decisive: ["indep", "mixed"].includes(String(given.covariance)) },
     { key: "stage", label: "合并方式", value: `${STAGE_WORDS[String(given.stage)] ?? ""}；${FIT_WORDS[String(given.method)] ?? ""}`, source: "default", decisive: false },
   ];
   if (excluded.length) {

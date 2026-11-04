@@ -100,11 +100,14 @@ vcr_case("N76d", c("AC-08", "AC-25"), function() {
   rt <- vcr_test_run(.n76_job(list(studies = tworef, model = list(kind = "linear")), "n76d5"))
   rr <- vcr_test_run(vcr_test_job("evidence.dose_response", list(studies = st, model = list(kind = "linear")), NULL, job_id = "job_n76d3", cores = 2L))
   has <- function(r, code) code %in% vcr_test_issue_codes(r)
-  cov_note <- any(vapply(rn$diagnostics$doseResponse$assumed, function(a) identical(a$key, "covariance") && identical(a$value, "indep"), logical(1)))
+  # one study without counts is independent and the others keep the Greenland-Longnecker covariance, said in a note that names the study (review stats2 finding 3;
+  # N76f holds the pooled numbers): this expectation used to be 'indep' for every study, which is what the item changes
+  cov_note <- any(vapply(rn$diagnostics$doseResponse$assumed, function(a) identical(a$key, "covariance") && identical(a$value, "mixed") && grepl(nocount[[1]]$studyId, a$basis, fixed = TRUE), logical(1))) &&
+    identical(rn$diagnostics$doseResponse$given$covariance, "mixed")
   b1 <- one$diagnostics$doseResponse$coefficients[[1]]$estimate; b2 <- two$diagnostics$doseResponse$coefficients[[1]]$estimate
   list(pass = identical(rs$status, "succeeded") && length(ex) == 1L && identical(ex[[1]]$studyId, "tiny") && identical(nothing$status, "failed") && has(nothing, "scenario_value_invalid") &&
         identical(one$status, "succeeded") && abs(b1 - b2) < 5e-6 && cov_note && has(rt, "scenario_value_invalid") && identical(two$manifest$outputHash, rr$manifest$outputHash),
-       detail = sprintf("spline with a two-level study: left out and named (%s, %d levels, needs %d); a model no study can carry: refused (%s); one-stage slope %.6f vs two-stage %.6f; a level without counts: covariance independent and said (%s); two reference rows: refused (%s); same hash on 1 and 2 cores: %s",
+       detail = sprintf("spline with a two-level study: left out and named (%s, %d levels, needs %d); a model no study can carry: refused (%s); one-stage slope %.6f vs two-stage %.6f; a level without counts: that study alone is independent, the others keep their counts, and it is said (%s); two reference rows: refused (%s); same hash on 1 and 2 cores: %s",
                         ex[[1]]$studyId, as.integer(ex[[1]]$levels), as.integer(ex[[1]]$needed), has(nothing, "scenario_value_invalid"), b1, b2, cov_note, has(rt, "scenario_value_invalid"), identical(two$manifest$outputHash, rr$manifest$outputHash)))
 })
 
@@ -129,4 +132,66 @@ vcr_case("N76e", c("AC-08", "AC-30"), function() {
   ok <- identical(broken$status, "failed") && identical(a$code, "dose_response_method_unavailable") && identical(a$field, "engine") && !grepl("too few", a$detail) &&
     identical(singular$status, "failed") && identical(b$field, "scenario") && grepl("too few", b$detail)
   list(pass = ok, detail = sprintf("a package that cannot load: %s at %s (%s); a fit that fails on the studies: %s at %s (%s)", a$code, a$field, a$detail, b$code, b$field, b$detail))
+})
+
+#' Harrell's restricted cubic spline (the dose and k - 2 terms) written again from the formula, for the cases that must not use the engine's own.
+.n76_rcs <- function(x, t) {
+  k <- length(t); pos <- function(u) pmax(u, 0)^3
+  do.call(cbind, c(list(x), lapply(seq_len(k - 2L), function(j) (pos(x - t[j]) - pos(x - t[k - 1L]) * (t[k] - t[j]) / (t[k] - t[k - 1L]) + pos(x - t[k]) * (t[k - 1L] - t[j]) / (t[k] - t[k - 1L])) / (t[k] - t[1L])^2)))
+}
+
+vcr_case("N76f", c("AC-08", "AC-30"), function() {
+  # Review stats2 findings 3, 20, 21 and 6.
+  # (3) One study without counts took the Greenland-Longnecker covariance away from all six (pooled slope -.008194 against the right -.004865). The right
+  #     answer is written outside the engine: each study fitted by the package on its own (Greenland-Longnecker for five, independent for the one) and the
+  #     slopes pooled by REML in metafor, a different package and a different route to the pool.
+  # (21) A study with no counts on the REFERENCE row, or with zero cases on a level, was refused as 'the levels may be too few'; it runs as independent.
+  # (20) A study left out of a spline must not place a knot: the knots are the type-7 percentiles of the doses of the studies that stay, and the fit equals
+  #      the fit without that study.
+  # (6) 'The first dose at which the interval leaves 1' was the first grid point whenever the slope was significant. Now: the dose is named when the
+  #     interval starts including 1 and leaves it later (alcohol_crc, spline: between 24 and 36, and the first dose above the reference on the engine's
+  #     grid where the interval leaves 1 by a closed-form pointwise interval written here), and not named, with the reason, when it has left at once.
+  if (!requireNamespace("dosresmeta", quietly = TRUE) || !requireNamespace("metafor", quietly = TRUE)) return(list(pass = FALSE, detail = "error: dosresmeta or metafor is not installed (the run must not skip silently)"))
+  cvd <- get(utils::data("alcohol_cvd", package = "dosresmeta", envir = environment())[1], envir = environment()); cvd$peryears <- cvd$n
+  st <- .n76_studies(cvd)
+  first <- st; for (j in seq_along(first[[1]]$rows)) { first[[1]]$rows[[j]]$cases <- NULL; first[[1]]$rows[[j]]$n <- NULL }
+  r3 <- vcr_test_run(.n76_job(list(studies = first, model = list(kind = "linear")), "n76f1"))
+  fits <- lapply(split(cvd, cvd$id), function(x) {
+    f <- suppressWarnings(dosresmeta::dosresmeta(logrr ~ dose, id = id, type = type, se = se, cases = cases, n = n, data = x, covariance = if (x$id[1] == cvd$id[1]) "indep" else "gl", method = "fixed"))
+    c(as.numeric(stats::coef(f)), as.numeric(stats::vcov(f)))
+  })
+  m <- metafor::rma(vapply(fits, `[`, numeric(1), 1L), vapply(fits, `[`, numeric(1), 2L), method = "REML")
+  cf <- r3$diagnostics$doseResponse$coefficients[[1]]
+  all6 <- vcr_test_run(.n76_job(list(studies = st, model = list(kind = "linear")), "n76f0"))$diagnostics$doseResponse$coefficients[[1]]$estimate
+  mixed <- identical(r3$diagnostics$doseResponse$given$covariance, "mixed") && identical(unlist(r3$diagnostics$doseResponse$given$independentStudies), "1") &&
+    abs(cf$estimate - stats::coef(m)[[1]]) < 2e-5 && abs(cf$se - m$se) < 2e-4 && abs(cf$estimate - all6) > 3e-4
+  # (21)
+  one <- st[1]; no_ref <- one; no_ref[[1]]$rows[[1]]$cases <- NULL
+  zero <- one; zero[[1]]$rows[[2]]$cases <- 0
+  indep <- vcr_test_run(.n76_job(list(studies = one, model = list(kind = "linear"), covariance = "indep"), "n76f2"))
+  run21 <- lapply(list(no_ref, zero), function(s) vcr_test_run(.n76_job(list(studies = s, model = list(kind = "linear")), "n76f3")))
+  ok21 <- all(vapply(run21, function(x) identical(x$status, "succeeded") && identical(x$diagnostics$doseResponse$given$covariance, "indep") &&
+                       abs(x$diagnostics$doseResponse$coefficients[[1]]$estimate - indep$diagnostics$doseResponse$coefficients[[1]]$estimate) < 1e-12, logical(1)))
+  # (20)
+  crc <- get(utils::data("alcohol_crc", package = "dosresmeta", envir = environment())[1], envir = environment())
+  tiny <- list(studyId = "tiny", type = "ir", rows = list(list(dose = 0, effect = 0, cases = 10, n = 1000), list(dose = 500, effect = 0.2, se = 0.3, cases = 14, n = 900)))
+  sc20 <- list(model = list(kind = "spline", knotPercentiles = list(0.1, 0.5, 0.9)), referenceDose = 0)
+  with_tiny <- vcr_test_run(.n76_job(c(list(studies = c(.n76_studies(crc), list(tiny))), sc20), "n76f4"))
+  without <- vcr_test_run(.n76_job(c(list(studies = .n76_studies(crc)), sc20), "n76f5"))
+  kn <- as.numeric(unlist(with_tiny$diagnostics$doseResponse$given$model$knots))
+  ok20 <- identical(with_tiny$status, "succeeded") && max(abs(kn - as.numeric(stats::quantile(crc$dose, c(0.1, 0.5, 0.9), type = 7)))) < 1e-9 &&
+    max(abs(vapply(with_tiny$diagnostics$doseResponse$coefficients, function(x) x$estimate, numeric(1)) - vapply(without$diagnostics$doseResponse$coefficients, function(x) x$estimate, numeric(1)))) < 1e-12
+  # (6)
+  coffee <- get(utils::data("coffee_mort", package = "dosresmeta", envir = environment())[1], envir = environment()); coffee$peryears <- coffee$n; coffee$se[coffee$se == 0] <- NA
+  lin <- vcr_test_run(.n76_job(list(studies = .n76_studies(coffee), model = list(kind = "linear")), "n76f6"))$diagnostics$doseResponse
+  sp <- vcr_test_run(.n76_job(list(studies = .n76_studies(crc), model = list(kind = "spline", knotPercentiles = list(0.05, 0.35, 0.65, 0.95)), referenceDose = 0), "n76f7"))$diagnostics$doseResponse
+  b <- vapply(sp$coefficients, function(x) x$estimate, numeric(1)); V <- as.matrix(sp$covarianceOfCoefficients); knots <- as.numeric(unlist(sp$given$model$knots))
+  grid <- seq(0, max(crc$dose), length.out = 200L)[-1L]; X <- .n76_rcs(grid, knots) - matrix(.n76_rcs(0, knots), length(grid), length(b), byrow = TRUE)
+  est <- as.vector(X %*% b); se <- sqrt(rowSums((X %*% V) * X)); out <- which(est - stats::qnorm(0.975) * se > 0 | est + stats::qnorm(0.975) * se < 0)
+  ok6 <- identical(lin$firstDoseKind, "at_once") && !is.finite(as.numeric(lin$firstDoseAwayFromReference %||% NA_real_)) && identical(sp$firstDoseKind, "threshold") &&
+    abs(sp$firstDoseAwayFromReference - grid[min(out)]) < 1e-9 && sp$firstDoseAwayFromReference > 24 && sp$firstDoseAwayFromReference < 36 && min(out) > 1L
+  list(pass = mixed && ok21 && ok20 && ok6,
+       detail = sprintf("alcohol_cvd with the first study's counts removed: pooled slope %.6f (se %.6f) against the package-by-study fits pooled by metafor %.6f (%.6f) and %.6f with all six on their counts; a study with no counts on its reference row or zero cases on a level runs as independent (the slope of the independent fit, %.6f); a two-level study at dose 500 sets no knot (%s); first dose: coffee_mort linear, significant slope, none named (at once: %s); alcohol_crc spline: %.2f, the closed-form pointwise search gives %.2f [checks: mixed %s, independent %s, knots %s, first dose %s]",
+                        cf$estimate, cf$se, stats::coef(m)[[1]], m$se, all6, indep$diagnostics$doseResponse$coefficients[[1]]$estimate, paste(round(kn, 3), collapse = ", "), identical(lin$firstDoseKind, "at_once"),
+                        sp$firstDoseAwayFromReference, grid[min(out)], mixed, ok21, ok20, ok6))
 })

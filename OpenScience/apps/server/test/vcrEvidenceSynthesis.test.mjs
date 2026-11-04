@@ -93,11 +93,16 @@ test("a dose-response card says what a step of dose does, where the curve first 
   assert.equal(lin.modelKind, "linear");
   assert.ok(lin.predictions.length >= 2 && lin.predictions.every((row) => row.value.interval));
   assert.ok(lin.curve.length >= 20 && lin.curve.every((point) => point.lower <= point.ratio && point.ratio <= point.upper));
-  assert.match(lin.firstDose.sentence, /逐点|没有离开 1/);
+  // a line's significant slope leaves 1 at every dose above the reference: no starting dose is named, and the page says why (review stats2 finding 6)
+  assert.equal(linear.diagnostics.doseResponse.firstDoseKind, "at_once");
+  assert.equal(lin.firstDose.dose, null);
+  assert.match(lin.firstDose.sentence, /参照剂量以上的每个剂量.*区间都不包含 1.*指不出一个“起效的剂量”/);
   assert.equal(lin.tests.nonlinearity, null);
   const spline = fixture("dose-spline");
   const spl = presentDoseResponse(spline, value(spline, "dose_response_meta"));
   assert.equal(spl.modelKind, "spline");
+  assert.equal(spline.diagnostics.doseResponse.firstDoseKind, "threshold");
+  assert.match(spl.firstDose.sentence, /从大约 30\.1 g\/day 起.*逐点的读法/);
   assert.match(spl.headline, /非线性检验 P = 0\.0/);
   assert.deepEqual(spl.predictions.map((row) => row.dose), [0, 12, 24, 36, 48, 60]);
   assert.equal(spl.predictions[0].isReference, true);
@@ -187,4 +192,15 @@ test("a pooling with a heterogeneity prior reads like any pooling: a credible in
   assert.match(tauPriorWords({ kind: "bartos_2023", setting: { effectScale: "log_hazard_ratio" } }), /Bartoš 等，2023/);
   assert.match(tauPriorWords({ kind: "turner_2015_generic" }), /总体情况/);
   assert.equal(measureLabel("network_effect"), "两种治疗的比较");
+});
+
+test("a dose-response card whose studies mix counts and no counts says which study is read as independent", () => {
+  const linear = fixture("dose-linear");
+  const mixed = { ...linear, diagnostics: { ...linear.diagnostics, doseResponse: { ...linear.diagnostics.doseResponse,
+    given: { ...linear.diagnostics.doseResponse.given, covariance: "mixed", independentStudies: ["Bianchi"] },
+    assumed: [...linear.diagnostics.doseResponse.assumed, { key: "covariance", value: "mixed", basis: "a level of Bianchi states no usable counts" }] } } };
+  const card = presentDoseResponse(mixed, value(mixed, "dose_response_meta"));
+  const row = card.premises.find((entry) => entry.key === "covariance");
+  assert.match(row.value, /Greenland–Longnecker.*研究 Bianchi 没写全病例数或人数.*按相互独立处理.*更窄/);
+  assert.equal(row.decisive, true);
 });

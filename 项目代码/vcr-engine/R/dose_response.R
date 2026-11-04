@@ -24,10 +24,17 @@
 #   spline and the model is refused by name, with the linear model as the way on.
 # - **A study that cannot carry the model is left out, and the result says which.** The two-stage method fits each study's coefficients by
 #   itself, so a study needs at least as many non-reference rows as the model has coefficients; the one-stage method does not. The excluded
-#   studies and why are in the result, the pooled numbers are those of the rest, and when none is left the job is refused.
+#   studies and why are in the result, the pooled numbers are those of the rest, and when none is left the job is refused. The knots of a
+#   spline come from the studies that stay: a study that is left out does not place one.
+# - **The covariance of the contrasts is rebuilt study by study.** A study whose every row, the reference row included, states its cases and
+#   people (and whose reconstruction is finite) has the Greenland-Longnecker covariance; any other study has independent contrasts, named in the
+#   result, and the pool is one REML pool of both kinds (dosresmeta's `covariance = "user"`). One study without counts used to take the
+#   reconstruction away from all of them, and a missing count on the reference row was refused as "too few levels".
 # - **The predictions are the model's, read against a stated reference dose** (default: the smallest dose in the data, 0 for most exposures),
 #   with the interval from the pooled coefficients' covariance. The "first dose at which the interval leaves 1" is read off a fine grid of
-#   those same predictions and is a pointwise statement, not a threshold the data establish.
+#   those same predictions and is a pointwise statement, not a threshold the data establish. On a line the log ratio is b d with a standard error
+#   |d| se(b), so a significant slope leaves 1 at every dose above the reference (and so does a spline whose slope at the reference is significant):
+#   then the first dose is the first step of the grid, a property of the grid, and no dose is named (`firstDoseKind` is `at_once`).
 # - **A tests of non-linearity is a Wald test on the spline terms** of the pooled coefficients (the package's `waldtest` computes the
 #   same quadratic form); the overall test is the same on all coefficients. Both are chi-squared on the pooled covariance.
 # - **The package's own text never reaches the person.** An error inside dosresmeta or mixmeta becomes `dose_response_not_computable` (a package that cannot be loaded is `dose_response_method_unavailable`: the engine's, not the studies'); its
@@ -119,22 +126,18 @@ vcr_job_dose_response <- function(job, output_dir = NULL, ...) {
   fit_method <- as.character(sc$method %||% "reml")
   if (is.null(sc$method)) note("method", "reml", "restricted maximum likelihood for the between-study variance")
 
-  # the knots, from the pooled exposure distribution
-  knots <- NULL
-  if (identical(kind, "spline")) {
-    if (!is.null(model$knots)) {
-      knots <- sort(vcr_num(model$knots))
-    } else {
-      pct <- if (is.null(model$knotPercentiles)) { note("model.knotPercentiles", list(0.1, 0.5, 0.9), "Orsini et al. (2012): three knots at the 10th, 50th and 90th percentiles of the pooled exposure distribution"); c(0.1, 0.5, 0.9) } else vcr_num(model$knotPercentiles)
-      knots <- as.numeric(stats::quantile(df$dose, pct, type = 7, names = FALSE))
-    }
-    if (length(knots) < 3L || length(knots) > 5L || anyDuplicated(round(knots, 12))) {
-      vcr_abort("scenario_value_invalid", "scenario.model", "A spline needs three to five different knots; with fewer distinct doses than that, use the linear model.")
-    }
+  # the number of knots fixes the number of terms, which fixes which studies the two-stage model can carry; the knots then come from the
+  # exposure distribution of the studies that stay (a study left out must not place a knot)
+  spline <- identical(kind, "spline")
+  pct <- NULL
+  if (spline && is.null(model$knots)) {
+    pct <- if (is.null(model$knotPercentiles)) { note("model.knotPercentiles", list(0.1, 0.5, 0.9), "Orsini et al. (2012): three knots at the 10th, 50th and 90th percentiles of the pooled exposure distribution"); c(0.1, 0.5, 0.9) } else vcr_num(model$knotPercentiles)
   }
-  terms <- if (is.null(knots)) "dose" else c("dose", paste0("spline", seq_len(length(knots) - 2L)))
-  p <- length(terms)
-  basis_fn <- if (is.null(knots)) function(x) matrix(x, ncol = 1L) else function(x) vcr_rcs_basis(x, knots)
+  n_knots <- if (!spline) 0L else if (!is.null(model$knots)) length(model$knots) else length(pct)
+  if (spline && (n_knots < 3L || n_knots > 5L)) {
+    vcr_abort("scenario_value_invalid", "scenario.model", "A spline needs three to five different knots; with fewer distinct doses than that, use the linear model.")
+  }
+  p <- if (spline) n_knots - 1L else 1L
 
   # a study the model cannot carry (two-stage fits each study by itself)
   excluded <- list()
@@ -147,17 +150,47 @@ vcr_job_dose_response <- function(job, output_dir = NULL, ...) {
     }
   }
   if (!nrow(df)) vcr_abort("scenario_value_invalid", "scenario.studies", "No study has enough levels for the model: use the linear model, or the one-stage method.")
+
+  knots <- NULL
+  if (spline) {
+    knots <- if (!is.null(model$knots)) sort(vcr_num(model$knots)) else as.numeric(stats::quantile(df$dose, pct, type = 7, names = FALSE))
+    if (length(knots) < 3L || length(knots) > 5L || anyDuplicated(round(knots, 12))) {
+      vcr_abort("scenario_value_invalid", "scenario.model", "A spline needs three to five different knots; with fewer distinct doses than that, use the linear model.")
+    }
+  }
+  terms <- if (is.null(knots)) "dose" else c("dose", paste0("spline", seq_len(length(knots) - 2L)))
+  basis_fn <- if (is.null(knots)) function(x) matrix(x, ncol = 1L) else function(x) vcr_rcs_basis(x, knots)
   k <- length(unique(df$id))
   if (k == 1L && identical(stage, "two") && !identical(fit_method, "fixed")) { fit_method <- "fixed"; note("method", "fixed", "a single study has no between-study variance to estimate") }
 
-  # which covariance can be built
-  nr <- df[!is.na(df$se), , drop = FALSE]
-  has_counts <- !anyNA(nr$cases) && !anyNA(nr$n) && all(nr$cases >= 0) && all(nr$n > 0)
-  covariance <- as.character(sc$covariance %||% "gl")
-  if (is.null(sc$covariance)) note("covariance", "gl", "Greenland & Longnecker's reconstruction of the covariance of the contrasts of one study from its counts")
-  if (!identical(covariance, "indep") && !has_counts) {
-    covariance <- "indep"
-    note("covariance", "indep", "a level states no counts, so the contrasts of one study are treated as independent: their standard errors are then read as they are printed, and the pooled interval is not the one the counts would give")
+  # Which covariance each study can have. The counts rebuild the covariance of a study's contrasts only if every row of THAT study states them (the
+  # reference row too: the method reads its cases and people) and the reconstruction comes out finite; a study that cannot is read with independent
+  # contrasts and the others keep theirs. One study without counts used to take the reconstruction away from all of them.
+  asked <- as.character(sc$covariance %||% "gl")
+  Slist <- NULL; independent <- character(0)
+  if (!identical(asked, "indep")) {
+    Slist <- lapply(split(seq_len(nrow(df)), factor(df$id, levels = unique(df$id))), function(ix) {
+      d <- df[ix, , drop = FALSE]
+      usable <- !anyNA(d$cases) && !anyNA(d$n) && all(d$cases >= 0) && all(d$n > 0)
+      S <- if (usable) tryCatch(suppressWarnings(dosresmeta::covar.logrr(cases = d$cases, n = d$n, y = d$logrr, v = ifelse(is.na(d$se), 0, d$se^2), type = d$type[1L],
+                                                                           covariance = if (identical(asked, "h")) "hamling" else "gl")), error = function(e) NULL) else NULL
+      if (is.null(S) || any(!is.finite(S))) NULL else S
+    })
+    independent <- names(Slist)[vapply(Slist, is.null, logical(1))]
+  } else independent <- unique(df$id)
+  if (is.null(sc$covariance) && !length(independent)) note("covariance", "gl", "Greenland & Longnecker's reconstruction of the covariance of the contrasts of one study from its counts")
+  covariance <- if (!length(independent)) asked else if (length(independent) == length(unique(df$id))) "indep" else "user"
+  if (length(independent) && !identical(asked, "indep")) {
+    note("covariance", if (identical(covariance, "indep")) "indep" else "mixed",
+         paste0("a level of ", paste(independent, collapse = ", "), " states no usable counts (cases and people on every level, the reference included), so the contrasts of ",
+                if (length(independent) == 1L) "that study are" else "those studies are", " treated as independent: their standard errors are then read as they are printed, and the pooled interval is narrower than the counts would give"))
+  }
+  if (identical(covariance, "user")) {
+    Slist <- lapply(split(seq_len(nrow(df)), factor(df$id, levels = unique(df$id))), function(ix) {
+      d <- df[ix, , drop = FALSE]; S <- Slist[[as.character(d$id[1L])]]
+      if (is.null(S)) diag(d$se[!is.na(d$se)]^2, nrow = sum(!is.na(d$se))) else S
+    })
+    names(Slist) <- NULL
   }
 
   spl <- basis_fn(df$dose)
@@ -167,7 +200,7 @@ vcr_job_dose_response <- function(job, output_dir = NULL, ...) {
   fml <- stats::as.formula(paste("logrr ~", paste(terms, collapse = " + ")))
   fit_error <- NULL
   fit <- tryCatch(suppressWarnings(suppressMessages(
-    dosresmeta::dosresmeta(formula = fml, id = id, type = type, se = se, cases = cases, n = n, data = d2,
+    dosresmeta::dosresmeta(formula = fml, id = id, type = type, se = se, cases = cases, n = n, data = d2, Slist = Slist,
                            covariance = covariance, method = fit_method, proc = if (identical(stage, "one")) "1stage" else "2stage"))),
     error = function(e) { fit_error <<- e; NULL })
   # A package (or one it needs) that cannot be loaded is the engine's, and the studies are not the reason: saying "too few levels" for it
@@ -203,9 +236,14 @@ vcr_job_dose_response <- function(job, output_dir = NULL, ...) {
   pred <- .vcr_dr_predict(basis_fn, beta, V, at, xref, z)
   fine <- seq(dmin, dmax, length.out = VCR_DR_GRID)
   fp <- .vcr_dr_predict(basis_fn, beta, V, fine, xref, z)
+  # The first dose ABOVE the reference at which the pointwise interval leaves 1. A line has a log ratio b d with a standard error |d| se(b), so a
+  # significant slope leaves 1 at every dose, and a spline whose slope at the reference is significant does the same: then the answer is the first grid
+  # point past the reference, a property of the grid and not of the data, and it is not reported as a dose ("at once").
   away <- which(fp$lower > 0 | fp$upper < 0)
-  away <- away[fine[away] != xref]
-  first_sig <- if (length(away)) fine[min(away)] else NA_real_
+  away <- away[fine[away] > xref]
+  above <- which(fine > xref)
+  first_kind <- if (!length(away)) "none" else if (min(away) == min(above)) "at_once" else "threshold"
+  first_sig <- if (identical(first_kind, "threshold")) fine[min(away)] else NA_real_
 
   step <- vcr_scalar(sc$perDose, 1)
   if (is.null(knots) && is.null(sc$perDose)) note("perDose", 1, "one unit of dose")
@@ -225,13 +263,14 @@ vcr_job_dose_response <- function(job, output_dir = NULL, ...) {
        diagnostics = list(doseResponse = list(
          given = list(label = sc$label, doseUnit = sc$doseUnit, ratioKind = sc$ratioKind, studies = length(unique(df$id)), levels = nrow(df),
                       model = list(kind = kind, knots = knots, knotPercentiles = if (!is.null(knots) && !is.null(model$knotPercentiles)) vcr_num(model$knotPercentiles) else NULL),
-                      stage = stage, method = fit_method, covariance = covariance, level = level, referenceDose = xref, doseRange = c(dmin, dmax),
+                      stage = stage, method = fit_method, covariance = if (identical(covariance, "user")) "mixed" else covariance, independentStudies = if (length(independent) && !identical(covariance, "indep")) as.list(independent) else NULL, level = level, referenceDose = xref, doseRange = c(dmin, dmax),
                       perDose = if (is.null(knots)) step else NULL),
          coefficients = coef_rows, covarianceOfCoefficients = unname(V), terms = terms,
          heterogeneity = list(tau = as.list(stats::setNames(tau, terms)), Q = q_val, df = q_df, p = q_p, i2 = i2),
          tests = list(overall = overall, nonlinearity = nonlin),
          predictions = lapply(seq_len(nrow(pred)), function(i) list(dose = pred$dose[i], logRatio = pred$logRatio[i], ratio = exp(pred$logRatio[i]), lower = exp(pred$lower[i]), upper = exp(pred$upper[i]))),
          curve = lapply(unique(round(seq(1, length(fine), length.out = 41L))), function(i) list(dose = fine[i], ratio = exp(fp$logRatio[i]), lower = exp(fp$lower[i]), upper = exp(fp$upper[i]))),
-         firstDoseAwayFromReference = first_sig, firstDoseBasis = "pointwise: the first dose on a grid of 200 at which the interval of the ratio no longer contains 1; not a threshold the data establish",
+         firstDoseAwayFromReference = first_sig, firstDoseKind = first_kind,
+         firstDoseBasis = "pointwise: the first dose above the reference, on a grid of 200, at which the interval of the ratio no longer contains 1; not a threshold the data establish. When the interval has left 1 at the first grid point (a significant slope at the reference) no dose is named: 'at_once'",
          excluded = excluded, assumed = assumed)))
 }
