@@ -2,7 +2,7 @@
  * The model's instructions for one patient: the matching skill's own rules, quoted from the shipping file when the run starts,
  * and the thirteen criteria in the guide's words.
  *
- * Nothing the skill says about reading a note is paraphrased here. Three stretches of `capabilities/vcr-matching/SKILL.md` are
+ * Nothing the skill says about reading a note is paraphrased here. Three stretches of the skill (`skill-before-2026-11-04.txt`) are
  * cut out of the file by their opening and closing words and placed in the prompt unchanged:
  *
  * - the paragraphs that keep "does it apply / is the fact recorded / does it satisfy" apart and say what a fact may claim;
@@ -24,7 +24,9 @@ import path from 'node:path';
 import { LANGUAGE_CRITERIA, VARIABLES, variablesOf, languageKeysOf } from './criteria.mjs';
 import { sha256 } from './data.mjs';
 
-export const SKILL_PATH = path.resolve(import.meta.dirname, '../../../capabilities/vcr-matching/SKILL.md');
+// The shipping skill stopped teaching fact writing on 2026-11-04, when free text moved to the model's own judgment. This harness measures the fact path, which stays
+// until the arms have been compared, so it quotes that skill as it last shipped: the file beside it, byte for byte.
+export const SKILL_PATH = path.resolve(import.meta.dirname, 'skill-before-2026-11-04.txt');
 
 /** Each stretch: where it opens (included) and where the next thing begins (excluded). */
 const STRETCHES = Object.freeze([

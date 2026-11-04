@@ -69,7 +69,7 @@ export const SETTINGS = Object.freeze({ model: MODEL, temperature: 0, thinking: 
 const PREDICT_FILES = Object.freeze([
   'evals/vcr-matching/n2c2/criteria.mjs', 'evals/vcr-matching/n2c2/data.mjs', 'evals/vcr-matching/n2c2/prompt.mjs',
   'evals/vcr-matching/n2c2/deepseek.mjs', 'evals/vcr-matching/n2c2/assess.mjs', 'evals/vcr-matching/n2c2/run_n2c2.mjs',
-  'capabilities/vcr-matching/SKILL.md', 'apps/server/src/vcrMatching.mjs', 'apps/server/src/vcrClinicalDateEvidence.mjs',
+  'evals/vcr-matching/n2c2/skill-before-2026-11-04.txt', 'apps/server/src/vcrMatching.mjs', 'apps/server/src/vcrClinicalDateEvidence.mjs',
   'packages/domain/src/vcrMatchBatch.mjs', 'packages/domain/src/metering.mjs', 'packages/domain/src/clinicalUnits.mjs', 'packages/domain/src/clinical-units.json',
   'packages/domain/src/clinicalFact.mjs',
 ]);
