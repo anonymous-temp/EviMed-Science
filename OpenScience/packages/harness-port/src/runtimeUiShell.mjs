@@ -68,7 +68,7 @@ export const inject = ['slots'];
  * the owner of `_sidebarCol`, `_centerCol`, `_rightbarCol`, `_overlayLayer` and `_handle`, is byte-identical), and
  * `data-composer-stat`, `data-composer-dock`, `data-conversation-scroll` and `data-turn-tail` are in the new bundles.
  */
-export const GEOMETRY_KERNEL_PIN = '0.2.1-rc.5';
+export const GEOMETRY_KERNEL_PIN = '0.2.2-rc.1';
 
 /* >>> generated brand identity — run `pnpm tokens:css` <<< */
 /** @returns {{ path: string, light: string, dark: string }} */

@@ -1111,7 +1111,7 @@ const settingsRead = (rpcId = "r1") => ({ type: "client-request", rpcId, method:
 test("the chat's presentation reaches the page through the one settings read, and the rest of the kernel's document does not", { timeout: 5000 }, async (t) => {
   // A hosted conversation drew the web client's default work details (`detailed`: every step flat while the turn runs)
   // because the page's only settings read was denied with the namespace (2026-10-28). The kernel's answer is the recorded
-  // one (packages/contracts/dsh/fixtures, a live 0.2.1-rc.5 with the profile's `ui-chat` values in its patch): 21 views,
+  // one (packages/contracts/dsh/fixtures, a live 0.2.2-rc.1 with the profile's `ui-chat` values in its patch): 21 views,
   // among them the model provider, the web tools' endpoints, the sandbox and the permission table.
   const recorded = await readFile(new URL("../../../packages/contracts/dsh/fixtures/settings-describe.json", import.meta.url), "utf8");
   const views = JSON.parse(recorded).result.value.namespaces;

@@ -58,7 +58,7 @@
  */
 
 /** The kernel client version these contracts were read from. */
-export const RUNTIME_UI_KERNEL_PIN = '0.2.1-rc.5';
+export const RUNTIME_UI_KERNEL_PIN = '0.2.2-rc.1';
 
 /** Public keyed body/title cell registered by the pinned sidebar-browser client. */
 export const RUNTIME_UI_NATIVE_BROWSER_KEY = '@deepseek-ai/dsh-client-ui-sidebar-browser';

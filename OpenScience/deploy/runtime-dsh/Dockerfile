@@ -76,10 +76,10 @@ RUN bash /usr/local/lib/evimed/install-runtime.sh renderer
 # `if [ -n "$NODE_SHA256" ]`, so an arm64 image fetched Node over the network
 # and untarred it into /usr/local unverified -- and did so silently, because a
 # skipped check and a passed one look identical in a build log.
-ARG NODE_VERSION=22.22.3
+ARG NODE_VERSION=24.22.2
 ARG NODE_DIST_BASE=https://nodejs.org/dist
-ARG NODE_SHA256_AMD64=2e5d13569282d016861fae7c8f935e741693c269101a5bebcf761a5376d1f99f
-ARG NODE_SHA256_ARM64=1c4a9933a5e45bc88f54f70b5f91232c127ec49f1a5989d23fb85824c7adf9b7
+ARG NODE_SHA256_AMD64=48cc0e21e048790e54c0cf5749c2725005313d652651c40b7a21feb9697aaf75
+ARG NODE_SHA256_ARM64=eb187837a2230d4047161ac0be008584e16b46f726e9c9490ee35dc6b17d9ba8
 ARG UV_VERSION=0.11.26
 ARG UV_SHA256_AMD64=6426a73c3837e6e2483ee344cbc00f36394d179afcba6183cb77437e67db4af0
 ARG UV_SHA256_ARM64=befa1a59c91e96eb601b0fd9a97c03dd666f17baba644b2b4db9c59a767e387e
@@ -131,8 +131,8 @@ RUN bash /usr/local/lib/evimed/install-runtime.sh analysis
 # the whole-tree version assertion below verifies the resulting kernel closure
 # rather than trusting the date.
 ARG NPM_REGISTRY=https://registry.npmjs.org
-ARG DSH_VERSION=0.2.1-rc.5
-ARG DSH_CORDIS_VERSION=4.0.5
+ARG DSH_VERSION=0.2.2-rc.1
+ARG DSH_CORDIS_VERSION=4.1.0
 ARG DSH_PUBLISHED_BEFORE=2026-10-29T14:24:35.397Z
 COPY --from=install-phases /phases/kernel.sh /usr/local/lib/evimed/install-runtime.sh
 RUN bash /usr/local/lib/evimed/install-runtime.sh kernel

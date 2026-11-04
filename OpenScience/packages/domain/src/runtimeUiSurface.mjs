@@ -119,8 +119,6 @@ export const RUNTIME_UI_DENIED_NAMESPACES = Object.freeze([
   //               switching bundles in a running kernel, and probing registries
   // - `account`   signing the kernel into a DeepSeek account (an OAuth flow
   //               and a stored provider credential); runtimes hold none
-  // - `schedule`  cron-like prompts the control plane does not know about,
-  //               the `goals` reason again
   // - `speech`    experimental voice input that ships audio to a recognizer
   // - `permissionPresets` the permission table behind the access-mode chip,
   //               which the hosted page does not show
@@ -132,7 +130,6 @@ export const RUNTIME_UI_DENIED_NAMESPACES = Object.freeze([
   "pluginManager",
   "pluginRegistryProbe",
   "account",
-  "schedule",
   "speech",
   "permissionPresets",
   // Arrived in 0.2.0, classified the day the pin moved rather than found open later
@@ -171,7 +168,53 @@ export const RUNTIME_UI_DENIED_NAMESPACES = Object.freeze([
   // decide what to draw. It narrows; refusing it would only leave the page guessing.
   "pluginMarket",
   "cotTranslation",
+  // Arrived in 0.2.2, classified the day the pin moved. None of their rows is in this composition, so nothing answers today:
+  //
+  // - `forgePanel`       Git worktrees and pull requests on a forge, with a token of its own
+  // - `liveshareShares`  publishing a session through a relay to people outside the deployment
+  // - `pluginRecommendations`  an index of plugins to install, which a hosted runtime never does
+  // - `actionCards`      cards that act for the person, from a plugin this composition does not mount
+  //
+  // `schedule` left this list the same day: the kernel's automation tasks are the product's scheduled tasks now, and what
+  // a browser could do with them beyond its own project is held by `runtimeUiScheduleRefusal` below.
+  "forgePanel",
+  "liveshareShares",
+  "pluginRecommendations",
+  "actionCards",
 ]);
+
+/** The two calls that can name where a task's conversations open. */
+const SCHEDULE_TARGET_METHODS = new Set(["schedule/create", "schedule/edit"]);
+
+/**
+ * A scheduled task from the browser opens its conversations in this project and this composition, or not at all.
+ *
+ * Hidden knowledge: `schedule/create` and `schedule/edit` take `target.create.cwd` and `target.create.agentPreset` as given,
+ * with nothing confining them, and the session they make runs there at the first delivery: the same hole as the
+ * `working_directory` tool the composition leaves out, reached a day later. The model's tools cannot name either value (they
+ * capture the calling session's), so this is the browser's half. Omitting both is always fine: the Host's defaults are the
+ * project's workspace and the composition.
+ *
+ * @param {string | null | undefined} method
+ * @param {unknown} payload the native RPC's payload on either transport (`{ args: { request } }`)
+ * @param {string} workspaceRoot
+ * @param {string} presetId the only agent preset a hosted session runs
+ * @returns {string | null} why it is refused, or null
+ */
+export function runtimeUiScheduleRefusal(method, payload, workspaceRoot, presetId) {
+  if (!method || !SCHEDULE_TARGET_METHODS.has(String(method))) return null;
+  const request = /** @type {any} */ (payload)?.args?.request;
+  if (!request || typeof request !== "object" || Array.isArray(request)) return "a scheduled-task call must carry its request";
+  const target = method === "schedule/create" ? request.target : request.patch?.target;
+  if (target === undefined) return null;
+  if (!target || typeof target !== "object" || Array.isArray(target)) return "a task's destination must be an object";
+  const create = target.create;
+  if (create === undefined) return null;
+  if (!create || typeof create !== "object" || Array.isArray(create)) return "a task's new-conversation settings must be an object";
+  if (create.cwd !== undefined && !isRuntimeUiWorkspacePath(create.cwd, workspaceRoot)) return "a task's conversations open in this project's workspace";
+  if (create.agentPreset !== undefined && create.agentPreset !== presetId) return "a task's conversations run this deployment's composition";
+  return null;
+}
 
 /**
  * The file-reading methods whose `path` the kernel resolves against the

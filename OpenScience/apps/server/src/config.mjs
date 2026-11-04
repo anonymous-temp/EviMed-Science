@@ -2375,7 +2375,7 @@ export function loadConfig(overrides = {}) {
       process.env.OPEN_SCIENCE_DSH_VERSION ??
       release.manifest?.runtime?.dshVersion ??
       depsVersions.dsh?.version ??
-      "0.2.1-rc.5",
+      "0.2.2-rc.1",
     socketBundleVersion:
       overrides.socketBundleVersion ??
       process.env.OPEN_SCIENCE_SOCKET_BUNDLE_VERSION ??
@@ -2471,6 +2471,9 @@ export function loadConfig(overrides = {}) {
     // A session that has taken a timed answer holds a message kind 0.1.7-rc.2 cannot read, so going back below the
     // 0.2.0-rc.2 pin after this has been on loses those sessions (docs/WEB_DEPLOYMENT.md).
     runtimeAskUserMode: parseAskUserMode(overrides.runtimeAskUserMode ?? process.env.OPEN_SCIENCE_RUNTIME_ASK_USER_MODE),
+    // The floor between two fresh conversations of one scheduled task (the kernel's `newSessionIntervalSeconds`, 60 to 604,800).
+    // A `new` task has no concurrency cap of its own and each delivery is a whole conversation the person pays for.
+    scheduleNewSessionIntervalSeconds: integer("scheduleNewSessionIntervalSeconds", "OPEN_SCIENCE_SCHEDULE_NEW_SESSION_INTERVAL_SECONDS", 900, 60, 604_800),
     // The socket plugins a runtime runs without (preset row ids, comma
     // separated). Empty — every plugin on — is the product; naming one is how
     // a plugin is measured against the kernel's own composition (principle 11).

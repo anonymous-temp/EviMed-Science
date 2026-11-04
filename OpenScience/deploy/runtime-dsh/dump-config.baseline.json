@@ -210,9 +210,12 @@
 # == @deepseek-ai/dsh-base
 - id: fs-observation-policy
   name: '@deepseek-ai/dsh-fs-observation-policy'
+  disabled: true
 # == @deepseek-ai/dsh-base, patched by @deepseek-ai/dsh-web-app
 - id: tool-fs
   name: '@deepseek-ai/dsh-tool-fs'
+  config:
+    applyPatch: false
   disabled: true
 - id: tool-fs-search
   name: '@deepseek-ai/dsh-tool-fs-search'
@@ -328,9 +331,6 @@
 - id: tool-subagent-control
   name: '@deepseek-ai/dsh-tool-subagent-control'
   disabled: true
-- id: tool-subagent-list-agents
-  name: '@deepseek-ai/dsh-tool-subagent-control/list-agents'
-  disabled: true
 - id: tool-subagent
   name: '@deepseek-ai/dsh-tool-subagent'
   config:
@@ -425,11 +425,15 @@
 - id: mcp-resources
   name: '@deepseek-ai/dsh-mcp-resources'
   disabled: true
-# == @deepseek-ai/dsh-base, patched by @deepseek-ai/dsh-web-app
+# == @deepseek-ai/dsh-base
 - id: tools
   name: '@deepseek-ai/dsh-tools'
-  config:
-    mode: !!js process.env.DSH_TOOLS_MODE
+- id: tool-executor-native
+  name: '@deepseek-ai/dsh-tool-executor-native'
+- id: tool-executor-ptc
+  name: '@deepseek-ai/dsh-tool-executor-ptc'
+  disabled: true
+# == @deepseek-ai/dsh-base, patched by @deepseek-ai/dsh-web-app
 - id: system-prompt
   name: '@deepseek-ai/dsh-system-prompt'
   config:
@@ -485,6 +489,12 @@
     iconTimeoutMs: 10000
     launchWatchMs: 1000
   disabled: true
+# == @deepseek-ai/dsh-web-app
+- id: ui-file-actions
+  name: '@deepseek-ai/dsh-client-ui-file-actions'
+- id: ui-context-menu
+  name: '@deepseek-ai/dsh-client-ui-context-menu'
+# == @deepseek-ai/dsh-web-app, patched by @evimed/dsh-socket
 - id: ui-open-in-app
   name: '@deepseek-ai/dsh-client-ui-open-in-app'
   disabled: true
@@ -517,7 +527,8 @@
 # == @deepseek-ai/dsh-web-app, patched by @evimed/dsh-socket
 - id: schedule
   name: '@deepseek-ai/dsh-schedule'
-  disabled: true
+  config:
+    newSessionIntervalSeconds: !!js Number(process.env.EVIMED_SCHEDULE_NEW_SESSION_INTERVAL_SECONDS || 900)
 - id: ui-settings-account
   name: '@deepseek-ai/dsh-client-ui-settings-account'
   disabled: true
@@ -628,16 +639,22 @@
   name: '@deepseek-ai/dsh-client-ui-conversation'
 - id: ui-approval
   name: '@deepseek-ai/dsh-client-ui-approval'
+- id: message-quotes
+  name: '@deepseek-ai/dsh-message-quotes'
 - id: ui-chat
   name: '@deepseek-ai/dsh-client-ui-chat'
 - id: ui-brand-official
   name: '@deepseek-ai/dsh-client-ui-brand-official'
 - id: ui-attachment
   name: '@deepseek-ai/dsh-client-ui-attachment'
+- id: ui-file-drag
+  name: '@deepseek-ai/dsh-client-ui-file-drag'
 - id: ui-tool
   name: '@deepseek-ai/dsh-client-ui-tool'
 - id: ui-cordis
   name: '@deepseek-ai/dsh-client-ui-cordis'
+- id: deliverable-file-references
+  name: '@deepseek-ai/dsh-deliverable-file-references'
 - id: ui-deliverables
   name: '@deepseek-ai/dsh-client-ui-deliverables'
 - id: workspace-changes
@@ -668,8 +685,6 @@
   name: '@deepseek-ai/dsh-client-ui-message-feedback'
 - id: ui-model-selection
   name: '@deepseek-ai/dsh-client-ui-model-selection'
-- id: ui-deepseek-model-label-1017
-  name: '@deepseek-ai/dsh-client-ui-deepseek-model-label-1017'
 - id: ui-permission
   name: '@deepseek-ai/dsh-client-ui-permission-presets'
 - id: ui-agent-preset
@@ -723,6 +738,8 @@
         disabled: !!js process.platform !== 'win32'
       - id: tool-fs
         name: '@deepseek-ai/dsh-tool-fs'
+        config:
+          applyPatch: false
       - id: tool-fs-search
         name: '@deepseek-ai/dsh-tool-fs-search'
         config:
@@ -825,14 +842,13 @@
         config:
           - id: tool-subagent-control
             name: '@deepseek-ai/dsh-tool-subagent-control'
-          - id: tool-subagent-list-agents
-            name: '@deepseek-ai/dsh-tool-subagent-control/list-agents'
           - id: tool-subagent
             name: '@deepseek-ai/dsh-tool-subagent'
             config:
               provider: spawn
               toolName: subagent
-              modelSelectionSettings: true
+              modelSelection: true
+              modelDiscovery: true
           - id: tool-subagent-fork
             name: '@deepseek-ai/dsh-tool-subagent'
             config:
@@ -859,7 +875,7 @@
         name: '@deepseek-ai/dsh-tool-present'
       - id: tool-plugin-manager
         name: '@deepseek-ai/dsh-plugin-manager/tools'
-        disabled: true
+        disabled: !!js '!ctx.get(''profileContext'')'
       - id: tool-plugin-market
         name: '@deepseek-ai/dsh-plugin-market/tools'
         disabled: true
@@ -888,6 +904,8 @@
         disabled: !!js process.platform !== 'win32'
       - id: tool-fs
         name: '@deepseek-ai/dsh-tool-fs'
+        config:
+          applyPatch: false
       - id: tool-fs-search
         name: '@deepseek-ai/dsh-tool-fs-search'
         config:
@@ -990,14 +1008,13 @@
         config:
           - id: tool-subagent-control
             name: '@deepseek-ai/dsh-tool-subagent-control'
-          - id: tool-subagent-list-agents
-            name: '@deepseek-ai/dsh-tool-subagent-control/list-agents'
           - id: tool-subagent
             name: '@deepseek-ai/dsh-tool-subagent'
             config:
               provider: spawn
               toolName: subagent
-              modelSelectionSettings: true
+              modelSelection: true
+              modelDiscovery: true
           - id: tool-subagent-fork
             name: '@deepseek-ai/dsh-tool-subagent'
             config:
@@ -1022,10 +1039,8 @@
         config:
           fetch: true
           searchTimeoutMs: 60000
-      - id: tool-presentation
-        name: '@deepseek-ai/dsh-agent-tool-presentation'
-        config:
-          mode: ptc
+      - id: tool-executor-ptc
+        name: '@deepseek-ai/dsh-tool-executor-ptc'
       - id: present
         name: '@deepseek-ai/dsh-tool-present'
       - id: tool-plugin-manager
@@ -1157,6 +1172,8 @@
         disabled: !!js process.platform !== 'win32'
       - id: tool-fs
         name: '@deepseek-ai/dsh-tool-fs'
+        config:
+          applyPatch: false
       - id: tool-fs-search
         name: '@deepseek-ai/dsh-tool-fs-search'
         config:
@@ -1255,14 +1272,13 @@
         config:
           - id: tool-subagent-control
             name: '@deepseek-ai/dsh-tool-subagent-control'
-          - id: tool-subagent-list-agents
-            name: '@deepseek-ai/dsh-tool-subagent-control/list-agents'
           - id: tool-subagent
             name: '@deepseek-ai/dsh-tool-subagent'
             config:
               provider: spawn
               toolName: subagent
-              modelSelectionSettings: true
+              modelSelection: true
+              modelDiscovery: true
           - id: tool-subagent-fork
             name: '@deepseek-ai/dsh-tool-subagent'
             config:
@@ -1480,6 +1496,8 @@
           allowParallelInProgress: true
       - id: present
         name: '@deepseek-ai/dsh-tool-present'
+      - id: tool-schedule
+        name: '@deepseek-ai/dsh-tool-schedule'
       - id: tool-subagent
         name: '@deepseek-ai/dsh-tool-subagent'
         config:

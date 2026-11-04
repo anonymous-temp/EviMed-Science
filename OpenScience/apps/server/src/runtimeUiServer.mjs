@@ -1,12 +1,13 @@
 import {withSessionPromptAdmission} from './runtimePromptAdmission.mjs';
 import { handleManagedBrowserRequest } from './managedBrowserRoutes.mjs';
+import { EVIMED_PRESET } from "./dshProfilePatch.mjs";
 import { MODEL_REASONING_EFFORTS } from "./modelReasoningPolicy.mjs";
 /** The native browser application on an isolated origin, with immutable per-frame project bindings. */
 import { createServer } from "node:http";
 import path from "node:path";
 import { SEAMS } from "@evimed/harness-port";
 
-import { CAPABILITY_DISPLAY, capabilityBrief, capabilityListed, errorCodeMessage, isDeniedRuntimeUiHostRoute, isDeniedRuntimeUiMethod, isRuntimeUiSettingsRead, RUNTIME_UI_ANSWERED_HOST_ROUTES, RUNTIME_UI_ANSWERED_METHODS, RUNTIME_UI_SETTINGS_READ, RUNTIME_UI_WORKSPACE_PATH_METHODS, runtimeUiMethodFromPath, runtimeUiSettingsAnswer, runtimeUiWorkspacePathRefusal } from "@evimed/domain";
+import { CAPABILITY_DISPLAY, capabilityBrief, capabilityListed, errorCodeMessage, isDeniedRuntimeUiHostRoute, isDeniedRuntimeUiMethod, isRuntimeUiSettingsRead, RUNTIME_UI_ANSWERED_HOST_ROUTES, RUNTIME_UI_ANSWERED_METHODS, RUNTIME_UI_SETTINGS_READ, RUNTIME_UI_WORKSPACE_PATH_METHODS, runtimeUiMethodFromPath, runtimeUiScheduleRefusal, runtimeUiSettingsAnswer, runtimeUiWorkspacePathRefusal } from "@evimed/domain";
 import { assertSpendWithinLimits } from "./usageMetering.mjs";
 
 import { assertNoSymlinkPath, HttpError, mimeFor, openScopedFileNoFollow, readBody, readStableFileHandle } from "./security.mjs";
@@ -85,7 +86,8 @@ async function authorizeMethod(config, project, method, boundWorkspace = false, 
  * @param {string | null} method @param {unknown} payload @param {string} workspaceRoot @param {any} project
  */
 async function assertWorkspacePath(method, payload, workspaceRoot, project) {
-  const refusal = runtimeUiWorkspacePathRefusal(method, payload, workspaceRoot);
+  const refusal = runtimeUiWorkspacePathRefusal(method, payload, workspaceRoot)
+    ?? runtimeUiScheduleRefusal(method, payload, workspaceRoot, EVIMED_PRESET);
   if (refusal) throw new HttpError(403, "runtime_ui_method_denied", `${method} refused: ${refusal}.`);
   if (!WORKSPACE_PATH_METHODS.has(method)) return;
   const args = /** @type {any} */ (payload).args;
@@ -829,7 +831,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, onGoalBar
       req.__openScienceProxyBody = raw;
       try { workspaceBody = JSON.parse(raw.toString("utf8")); } catch { /* Remains a denied workspace mutation. */ }
     }
-    if (method && WORKSPACE_PATH_METHODS.has(method) && req.method === "POST") {
+    if (method && (WORKSPACE_PATH_METHODS.has(method) || method === "schedule/create" || method === "schedule/edit") && req.method === "POST") {
       // The path is in the body, so the body is read here and handed on with
       // the request, as the prompt's is. A call this cannot parse carries no
       // path this can check, and is refused rather than forwarded.

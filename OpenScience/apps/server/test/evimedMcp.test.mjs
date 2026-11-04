@@ -82,7 +82,7 @@ function dshConfig(overrides = {}) {
     evimedWorkloadSigningSecret: signingSecret,
     evimedWorkloadTokenTtlSeconds: 300,
     socketBundleVersion: "0.1.0",
-    dshVersion: "0.2.1-rc.5",
+    dshVersion: "0.2.2-rc.1",
     runtimeSandboxEnforcement: "full",
     evimedAdapterUrls: {},
     ...overrides,

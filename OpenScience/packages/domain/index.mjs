@@ -788,6 +788,7 @@ export {
   RUNTIME_UI_WORKSPACE_PATH_METHODS,
   isRuntimeUiWorkspacePath,
   runtimeUiWorkspacePathRefusal,
+  runtimeUiScheduleRefusal,
 } from './src/runtimeUiSurface.mjs'
 
 // Types are re-exported separately because they are not runtime bindings: a

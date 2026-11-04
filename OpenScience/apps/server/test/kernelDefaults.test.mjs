@@ -96,7 +96,7 @@ test("every setting the runtime depends on still holds in the composition the im
   // and the 1017 model label), two out (skill-badge, tool-ralph).
   // 209 on 2026-10-31 (merge of the Gitee main e9c9f96f6): `evimed-search-topics`, the row of the independent search-topics host bundle
   // (disabled unless EVIMED_SEARCH_TOPICS_ENABLED), written by hand into the baseline with BASELINE_PROVENANCE.sha256 moved in the same edit.
-  // 210 on 2026-11-01 (0.2.1-rc.5): `entry-customization`, the More menus the kernel's web app adds (hidden by the hosted profile).
+  // 210 on 2026-11-01 (0.2.2-rc.1): `entry-customization`, the More menus the kernel's web app adds (hidden by the hosted profile).
   assert.equal(report.counts.baselineRows, 210, "the recorded composition includes the native client, citation bundle, plugin probe, community clients, engine context, scoped skill catalogue, LoopX and the OpenViking memory plugin with its bridge");
   assert.equal(parseCordisDocument(await readFile(source("baseline"), "utf8")).rows.filter((row) => ["dsh-annotation", "ui-mermaid"].includes(row.id)).length, 2);
   const baseline = parseCordisDocument(await readFile(source("baseline"), "utf8"));

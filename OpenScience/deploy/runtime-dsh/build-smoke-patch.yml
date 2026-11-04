@@ -129,7 +129,7 @@
 - id: evimed-seam-probe
   config:
     requiredEnforcement: 'partial'
-    dshVersion: '0.2.1-rc.5'
+    dshVersion: '0.2.2-rc.1'
 
 
 # Inside a container whose only writable place is the workspace nothing
