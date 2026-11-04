@@ -105,7 +105,7 @@ export const HOSTED_PERMISSION_PRESET_DESCRIPTION = "只能读写本项目的工
  * @property {{ deliveryAttemptLimit: number, maxChildrenTotal?: number, maxConcurrentChildren?: number, maxParallelChildren?: number, maxSteps: number, maxTokens: number, evidenceStaleMinutes: number, screeningBatchSize?: number }} limits
  *   `maxParallelChildren` is the retired single limit, read only as the
  *   fallback for the two that replaced it.
- * @property {{ hosted: boolean, askUser: boolean, askUserMode?: 'attended'|'timed', review: boolean, capsule: boolean, operator?: boolean, requiredEnforcement: 'full'|'partial' }} flags
+ * @property {{ hosted: boolean, askUser: boolean, askUserMode?: 'attended'|'timed', scheduleNewSessionIntervalSeconds?: number, review: boolean, capsule: boolean, operator?: boolean, requiredEnforcement: 'full'|'partial' }} flags
  * @property {readonly string[]} [disabledClientBundles] ids of `COMMUNITY_CLIENT_BUNDLE_ROWS`
  *   the deployment switched off; each becomes a `disabled: true` row
  */
