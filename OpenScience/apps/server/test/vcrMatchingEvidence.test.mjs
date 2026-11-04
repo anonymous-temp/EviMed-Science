@@ -5,32 +5,70 @@ import { vcrDocumentsSeam } from "../src/vcrComposition.mjs";
 import { createPatientTrials } from "../src/vcrPatientTrials.mjs";
 import { VcrService } from "../src/vcrService.mjs";
 import { createVcrGatewayHandler } from "../src/vcrGateway.mjs";
+import { VCR_MATCHING_EVALUATOR_VERSION } from "../src/vcrMatching.mjs";
 
 const STUDY = { id: "s1", userId: "u1", cloudContext: { sessionId: "native1", runId: "r1" } };
 const QUOTE = "ECOG 1";
 const EVIDENCE = [{ quote: QUOTE, locator: { documentId: "d1", start: 0, end: QUOTE.length } }];
-function fixture() {
+function fixture(judgment = {}) {
   const trial = { id: "t1", registry: "chictr", registryId: "ChiCTR1", title: "Synthetic trial", status: "Recruiting", retrievedAt: "2026-10-25T00:00:00Z", eligibilityText: "ECOG <= 1" };
-  const full = { id: "a1", summary: "eligible", counts: { satisfied: 1, unknown: 0, total: 1 }, asOf: "2026-10-25T00:00:00Z", evidenceGaps: [],
-    judgments: [{ criterionId: "c1", state: "satisfied", applicable: true, decidedBy: "code", evidence: EVIDENCE }] };
-  let withdrawn = false, authorized = true;
+  const full = { id: "a1", candidateTrialId: trial.id, summary: "eligible", counts: { satisfied: 1, unknown: 0, total: 1 },
+    asOf: "2026-10-25T00:00:00Z", evidenceGaps: [],
+    ...(judgment.applicabilityState ? { provenance: { matchingEvaluatorVersion: VCR_MATCHING_EVALUATOR_VERSION } } : {}),
+    judgments: [{ criterionId: "c1", state: "satisfied", applicable: true, decidedBy: "code", evidence: EVIDENCE, ...judgment }] };
+  let withdrawn = false, authorized = true, premiseAuthorized = true;
   const reads = [];
-  const documents = vcrDocumentsSeam({ dataPlane: { async projectionText(input) { reads.push(input); return authorized ? { id: "d1", subjectKey: "P1", text: QUOTE } : null; } } });
-  const candidates = { async getCandidateTrial() { return trial; }, async listCriteria() { return []; }, async latestAssessments() { return new Map([[trial.id, full]]); }, async getAssessment() { return full; } };
+  const documents = vcrDocumentsSeam({ dataPlane: { async projectionText(input) {
+    reads.push(input);
+    if (!authorized || (input.documentId === "d2" && !premiseAuthorized)) return null;
+    return { id: input.documentId, subjectKey: "P1", text: QUOTE };
+  } } });
+  const candidates = { async rankingSnapshot() { return {
+    trials: [trial], assessments: [full], judgments: full.judgments,
+    criteria: [{ id: "c1", candidateTrialId: trial.id, kind: "inclusion", sourceText: "ECOG <= 1" }],
+  }; } };
   const patientTrials = createPatientTrials({ candidateStore: candidates, matchStore: { async withdrawnSubjects() { return new Set(withdrawn ? ["P1"] : []); } }, documents });
-  return { patientTrials, reads, setWithdrawn: value => { withdrawn = value; }, setAuthorized: value => { authorized = value; } };
+  return { patientTrials, reads, setWithdrawn: value => { withdrawn = value; }, setAuthorized: value => { authorized = value; },
+    revokePremise: () => { premiseAuthorized = false; } };
 }
 test("patient-to-trial runtime detail revalidates criterion quotations and preserves individual criteria counts", async () => {
   const f = fixture();
   const result = await f.patientTrials.runtimeRead(STUDY, { id: "t1", subjectKey: "P1" });
   assert.deepEqual(result.assessment.judgments[0].evidence, EVIDENCE);
-  assert.deepEqual(result.assessment.criteriaCounts, { satisfied: 1, unknown: 0 });
+  assert.equal(result.assessment.judgments[0].applicabilityState, undefined, "legacy judgments do not gain inferred applicability");
+  assert.deepEqual(result.assessment.criteriaCounts, { satisfied: 1, not_satisfied: 0, unknown: 0, pending_recheck: 0, notApplicable: 0 });
   const shown = new VcrService({ store: {}, config: {} }).forModel(result);
   assert.equal(shown.assessment.criteriaCounts.satisfied, 1);
   f.setAuthorized(false);
   const denied = await f.patientTrials.runtimeRead(STUDY, { id: "t1", subjectKey: "P1" });
   assert.deepEqual(denied.assessment.judgments[0].evidence, []);
   assert.equal(denied.assessment.evidenceCoverage.withheld, 1);
+});
+test("current runtime details keep both judgment axes and recheck premise evidence under the current permission", async () => {
+  const applicabilityEvidence = [{ ...EVIDENCE[0], locator: { ...EVIDENCE[0].locator, documentId: "d2" } }];
+  const applicabilityMissing = [{ variable: "subgroup", reason: "not_recorded" }];
+  const f = fixture({ state: "unknown", requirementState: "not_satisfied", applicabilityState: "unknown",
+    applicabilityEvidence, applicabilityMissing, missing: applicabilityMissing });
+  const read = () => f.patientTrials.runtimeRead(STUDY, { id: "t1", subjectKey: "P1" });
+  const result = await read();
+  const judgment = result.assessment.judgments[0];
+  assert.equal(result.assessment.matchingEvaluatorVersion, VCR_MATCHING_EVALUATOR_VERSION);
+  assert.equal(judgment.state, "unknown");
+  assert.equal(judgment.requirementState, "not_satisfied");
+  assert.equal(judgment.applicabilityState, "unknown");
+  assert.equal(judgment.applicabilityMissing[0].variable, "subgroup");
+  assert.deepEqual(judgment.applicabilityEvidence, applicabilityEvidence);
+  assert.deepEqual(judgment.evidence, EVIDENCE);
+  f.revokePremise();
+  const denied = await read();
+  assert.deepEqual(denied.assessment.judgments[0].applicabilityEvidence, []);
+  assert.deepEqual(denied.assessment.judgments[0].evidence, EVIDENCE);
+  assert.deepEqual(denied.assessment.evidenceCoverage, { supplied: 2, shared: 1, withheld: 1 });
+  f.setAuthorized(false);
+  const revoked = await read();
+  assert.deepEqual(revoked.assessment.judgments[0].evidence, []);
+  assert.deepEqual(revoked.assessment.judgments[0].applicabilityEvidence, []);
+  assert.deepEqual(revoked.assessment.evidenceCoverage, { supplied: 2, shared: 0, withheld: 2 });
 });
 test("a withdrawn patient has no runtime candidate assessment, evidence or work requests", async () => {
   const f = fixture(); f.setWithdrawn(true);

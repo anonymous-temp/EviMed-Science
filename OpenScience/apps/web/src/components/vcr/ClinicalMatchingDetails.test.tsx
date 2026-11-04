@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ClinicalTimeline, useMatchingControls } from './ClinicalMatchingDetails';
+import { ClinicalTimeline, CriterionTable, useMatchingControls } from './ClinicalMatchingDetails';
 import { Toolbar } from '@/components/ui/Toolbar';
 import { VcrToolbarActions } from './VcrToolbarActions';
 import { CloudDocuments, reviewedSpans } from './data/CloudDocuments';
@@ -30,6 +30,40 @@ const choose = async (chip: string | RegExp, item: string | RegExp) => {
   await userEvent.click(screen.getByRole('button', { name: chip }));
   await userEvent.click(await screen.findByRole('menuitemradio', { name: item }));
 };
+
+it('shows all distinct citations for a criterion, including a later deciding branch', () => {
+  const evidenceItems = ['记录一', '记录二', '记录三', '决定结论的记录'].map(quote => ({ quote, source: '病历原文' }));
+  render(<CriterionTable label="条件判断" rows={[{
+    code: 'I1', kind: 'inclusion', text: '存在一个风险因素', state: 'satisfied',
+    evidence: evidenceItems[0], evidenceItems,
+  }]} />);
+  for (const item of evidenceItems) expect(screen.getByText(`“${item.quote}”`)).toBeVisible();
+});
+
+it('distinguishes an unknown applicability premise from its requirement and shows both evidence axes', () => {
+  const premise = { quote: '肾病状态待查', source: '病历一' };
+  const requirement = { quote: '未接受过该治疗', source: '病历二' };
+  render(<CriterionTable label="条件判断" rows={[{
+    code: 'I1', kind: 'inclusion', text: '仅肾病患者需要既往治疗', state: 'unknown',
+    applicabilityState: 'unknown', applicabilityReason: '未记录', applicabilityEvidenceItems: [premise],
+    evidence: requirement, evidenceItems: [requirement],
+  }]} />);
+  expect(screen.getByText('适用范围待核实')).toBeVisible();
+  expect(screen.getByText('适用范围依据')).toBeVisible();
+  expect(screen.getByText('条件依据')).toBeVisible();
+  expect(screen.getByText('“肾病状态待查”')).toBeVisible();
+  expect(screen.getByText('“未接受过该治疗”')).toBeVisible();
+  expect(screen.getByText('适用范围：未记录')).toBeVisible();
+});
+
+it('shows a pending applicability recheck even when the requirement has no other gap', () => {
+  render(<CriterionTable label="条件判断" rows={[{
+    code: 'I1', kind: 'inclusion', text: '条件文本', state: 'unknown',
+    applicabilityState: 'pending_recheck', applicabilityRequestNote: '11月15日 起可复评',
+  }]} />);
+  expect(screen.getByText('适用范围待复评')).toBeVisible();
+  expect(screen.getByText('适用范围：11月15日 起可复评')).toBeVisible();
+});
 
 
 describe('evaluating from the controls',()=>{

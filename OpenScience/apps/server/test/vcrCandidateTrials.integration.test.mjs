@@ -8,6 +8,8 @@ import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { VCR_TABLES } from "../src/vcrPersistence.mjs";
 import { VcrCandidateTrialStore } from "../src/vcrCandidateTrialStore.mjs";
 import { VcrMatchStore } from "../src/vcrMatchStore.mjs";
+import { assessSubject, VCR_MATCHING_EVALUATOR_VERSION } from "../src/vcrMatching.mjs";
+import { languageCriterionHash } from "../src/vcrMatchingSnapshot.mjs";
 import { VcrStoreBase, deleteVcrStudyRows, vcrId } from "../src/vcrStoreBase.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
 
@@ -69,6 +71,119 @@ test("the migration creates the candidate-trial tables and every one is a declar
   }
   const column = await q("SELECT 1 FROM information_schema.columns WHERE table_schema = 'evimed_vcr' AND table_name = 'language_judgments' AND column_name = 'candidate_trial_id'");
   assert.equal(column.length, 1, "an answer to a language criterion can be bound to a candidate trial");
+});
+
+test("both matching stores round-trip applicability language answers and independently evaluated states", options, async () => {
+  const studyId = await seedStudy();
+  const criterion = { ...AGE, applicability: { op: "language", key: "subgroup", text: "Does this screening apply to the patient's subgroup?" } };
+  const protocol = await matching.saveProtocolVersion({ studyId, userId: USER, criteria: [criterion] });
+  const registry = await trials.saveCandidateTrial({ studyId, userId: USER, trial: trial("NCT05000099"), criteria: [criterion], max: 10 });
+  const candidateTrialId = registry.trial.id;
+  const subjectKey = "P-applicability";
+  const asOf = "2026-10-11T00:00:00.000Z";
+  const quote = "This screening applies to the subgroup.";
+  const documents = { record: { text: quote } };
+  const evidence = [{ documentId: "record", quote, start: 0, end: quote.length, visibleAt: "2026-10-10T00:00:00.000Z" }];
+  const input = { studyId, userId: USER, subjectKey, criterionKey: "subgroup", state: "satisfied", evidence };
+  const protocolAnswer = await matching.saveLanguageJudgment({ ...input, protocolVersionId: protocol.id });
+  const candidateAnswer = await trials.saveLanguageJudgment({ ...input, candidateTrialId });
+  const protocolAnswers = (await matching.latestLanguageJudgments({ studyId, protocolVersionId: protocol.id, visibleBy: asOf })).get(subjectKey);
+  const candidateAnswers = await trials.latestLanguageJudgments({ studyId, candidateTrialId, subjectKey, visibleBy: asOf });
+  assert.equal(protocolAnswers.subgroup.id, protocolAnswer.id);
+  assert.equal(candidateAnswers.subgroup.id, candidateAnswer.id);
+  assert.deepEqual((await trials.languageAnswersForTrials(studyId, subjectKey, [candidateTrialId], new Map([[candidateTrialId, registry.criteria]]))).get(candidateTrialId), new Set(["subgroup"]));
+
+  const facts = [{ id: "age", variable: "age", value: 17, unit: "year", extractedBy: "structured" }];
+  const protocolAssessment = assessSubject({ studyId, protocolVersionId: protocol.id, subjectKey, asOf, criteria: protocol.criteria,
+    facts, documents, modelJudgments: protocolAnswers, provenance: { inputSnapshotId: "current-protocol" } });
+  const candidateAssessment = assessSubject({ studyId, subjectKey, asOf, criteria: registry.criteria, facts,
+    documents, modelJudgments: candidateAnswers, provenance: { inputSnapshotId: "current-candidate" } });
+  const savedProtocol = await matching.saveAssessment({ userId: USER, assessment: protocolAssessment });
+  const savedCandidate = await trials.saveAssessment({ userId: USER, assessment: { ...candidateAssessment, candidateTrialId },
+    expectedRecordHash: registry.trial.recordHash, expectedCriteriaHash: registry.trial.criteriaHash });
+  for (const saved of [await matching.getAssessment(savedProtocol.id, studyId), await trials.getAssessment(savedCandidate.id, studyId)]) {
+    assert.equal(saved.summary, "ineligible");
+    assert.equal(saved.provenance.matchingEvaluatorVersion, VCR_MATCHING_EVALUATOR_VERSION);
+    assert.equal(saved.judgments[0].requirementState, "not_satisfied");
+    assert.equal(saved.judgments[0].applicabilityState, "satisfied");
+    assert.equal(saved.judgments[0].applicabilityEvidence[0].quote, quote);
+    assert.equal(saved.judgments[0].evidence[0].variable, "age");
+  }
+  await q("UPDATE evimed_vcr.language_judgments SET withdrawn = '{}'::jsonb WHERE id = $1", [candidateAnswer.id]);
+  assert.deepEqual(await trials.latestLanguageJudgments({ studyId, candidateTrialId, subjectKey, visibleBy: asOf }), {});
+  assert.deepEqual((await trials.languageAnswersForTrials(studyId, subjectKey, [candidateTrialId], new Map([[candidateTrialId, registry.criteria]]))).get(candidateTrialId), new Set());
+});
+
+test("both stores refuse to reuse a persisted answer across conflicting criteria", options, async () => {
+  const studyId = await seedStudy();
+  const criterionKey = "shared";
+  const requirements = [
+    { ...AGE, requirement: { op: "language", key: criterionKey, text: "Prior transplant?" } },
+    { ...BRAIN, applicability: { op: "language", key: criterionKey, text: "Has HIV?" } },
+  ];
+  const protocol = await matching.saveProtocolVersion({ studyId, userId: USER, criteria: requirements });
+  const registry = await trials.saveCandidateTrial({ studyId, userId: USER, trial: trial("NCT05000098"), criteria: requirements, max: 10 });
+  const candidateTrialId = registry.trial.id;
+  const subjectKey = "P-legacy-collision";
+  const input = { studyId, userId: USER, subjectKey, criterionKey, state: "satisfied", evidence: [] };
+  for (const [protocolId, trialId, criteria] of [[protocol.id, null, protocol.criteria], [null, candidateTrialId, registry.criteria]]) {
+    await q(`INSERT INTO evimed_vcr.language_judgments (id,study_id,user_id,subject_key,criterion_key,state,protocol_version_id,candidate_trial_id,criterion_hash)
+      VALUES ($1,$2,$3,$4,$5,'satisfied',$6,$7,$8)`,
+    [vcrId("judgment"), studyId, USER, subjectKey, criterionKey, protocolId, trialId, languageCriterionHash(/** @type {any[]} */ (criteria), criterionKey)]);
+  }
+  await assert.rejects(matching.saveLanguageJudgment({ ...input, protocolVersionId: protocol.id }), { code: "vcr_criterion_malformed" });
+  await assert.rejects(trials.saveLanguageJudgment({ ...input, candidateTrialId }), { code: "vcr_criterion_malformed" });
+  assert.equal((await matching.latestLanguageJudgments({ studyId, protocolVersionId: protocol.id })).get(subjectKey), undefined);
+  assert.deepEqual(await trials.latestLanguageJudgments({ studyId, candidateTrialId, subjectKey }), {});
+  assert.deepEqual((await trials.languageAnswersForTrials(studyId, subjectKey, [candidateTrialId], new Map([[candidateTrialId, registry.criteria]]))).get(candidateTrialId), new Set());
+});
+
+test("an observed candidate language answer is fenced by record and criterion revision", options, async () => {
+  const studyId = await seedStudy();
+  const criterionKey = "answer";
+  const candidate = await trials.saveCandidateTrial({ studyId, userId: USER, trial: trial("NCT05000097"), criteria: [
+    { ...AGE, requirement: { op: "language", key: criterionKey, text: "Is the age requirement documented?" } },
+  ], max: 10 });
+  const candidateTrialId = candidate.trial.id;
+  const expectedCriterionHash = languageCriterionHash(candidate.criteria, criterionKey);
+  const expectedRecordHash = candidate.trial.recordHash;
+  const input = { studyId, userId: USER, candidateTrialId, subjectKey: "P-observed", criterionKey, state: "unknown", evidence: [] };
+  await assert.rejects(trials.saveLanguageJudgment({ ...input, expectedCriterionHash }), { code: "vcr_write_refused" });
+  await assert.rejects(trials.saveLanguageJudgment({ ...input, expectedRecordHash, expectedCriterionHash: "a".repeat(64) }), { code: "vcr_write_refused" });
+  const stored = await trials.saveLanguageJudgment({ ...input, expectedRecordHash, expectedCriterionHash });
+  const nextHash = "c".repeat(64);
+  let stale;
+  await database.transaction(async client => {
+    await client.query("SELECT id FROM evimed_vcr.candidate_trials WHERE id=$1 FOR UPDATE", [candidateTrialId]);
+    stale = assert.rejects(trials.saveLanguageJudgment({ ...input, expectedRecordHash, expectedCriterionHash }), { code: "vcr_write_refused" });
+    await client.query("UPDATE evimed_vcr.candidate_trials SET record_hash=$2 WHERE id=$1", [candidateTrialId, nextHash]);
+  });
+  await stale;
+  assert.deepEqual((await q("SELECT id FROM evimed_vcr.language_judgments WHERE candidate_trial_id=$1", [candidateTrialId])).map(row => row.id), [stored.id]);
+  assert.ok((await trials.saveLanguageJudgment({ ...input, expectedRecordHash: nextHash, expectedCriterionHash })).id);
+});
+
+test("persisted scheduler honors each axis date while respecting inapplicability", options, async () => {
+  const studyId = await seedStudy();
+  const requirement = { op: "elapsed_since", variable: "treatment", days: 28 };
+  const protocol = await matching.saveProtocolVersion({ studyId, userId: USER, criteria: [
+    { ...AGE, requirement, applicability: { op: "present", variable: "subgroup" } },
+    { ...AGE, requirement, applicability: { ...requirement, days: 14 } },
+  ] });
+  const [unknownPremise, pendingPremise] = protocol.criteria;
+  const facts = [{ id: "treatment", variable: "treatment", occurredAt: "2026-09-20", extractedBy: "structured" }];
+  const asOf = "2026-09-28T00:00:00Z";
+  const save = (subjectKey, criteria, inputs = facts) => matching.saveAssessment({ userId: USER,
+    assessment: assessSubject({ studyId, protocolVersionId: protocol.id, subjectKey, asOf, criteria, facts: inputs }) });
+  await save("P-requirement-date", [unknownPremise]);
+  await save("P-premise-date", [pendingPremise]);
+  await save("P-inapplicable", [unknownPremise], [...facts, { id: "negative", variable: "subgroup", polarity: "negated", extractedBy: "structured" }]);
+  assert.deepEqual(await matching.dueRecheckSubjects({ studyId, now: new Date("2026-10-03") }), []);
+  const first = await matching.dueRecheckSubjects({ studyId, now: new Date("2026-10-04") });
+  assert.deepEqual(first.map(row => [row.subjectKey, new Date(row.due).toISOString()]), [["P-premise-date", "2026-10-04T00:00:00.000Z"]]);
+  const both = await matching.dueRecheckSubjects({ studyId, now: new Date("2026-10-18") });
+  assert.deepEqual(both.map(row => [row.subjectKey, new Date(row.due).toISOString()]),
+    [["P-premise-date", "2026-10-04T00:00:00.000Z"], ["P-requirement-date", "2026-10-18T00:00:00.000Z"]]);
 });
 
 test("a trial is saved with its criteria in order, original wording kept, and is no version of the study's protocol", options, async () => {

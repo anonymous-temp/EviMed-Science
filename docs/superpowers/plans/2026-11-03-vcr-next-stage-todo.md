@@ -22,6 +22,16 @@ The first topic of each TREC year failed before a source-verified retrieval rece
 
 References are the [baseline report](2026-11-03-evimed-trialgpt-platform-baseline-results.md) and [frozen comparison protocol](2026-11-03-evimed-trialgpt-platform-comparison.md). The following numerical targets are proposed engineering acceptance targets, not measured outcomes or a promised performance gain.
 
+## Implementation checkpoint — 2026-11-04
+
+The current worktree integrates `origin/main` through merge `b5740f2ff`. Frozen control revision `b5740f2ff` completed the preselected six-patient panel in isolated real DSH. The six cases contain 107 annotations; 94 aligned, with 39 label agreements and 73 historical TrialGPT agreements on the same aligned rows. This is a development control, not a 53-patient or clinical performance estimate. The historical control did not capture per-call reasoning settings.
+
+The 1,015-row engineering audit and blinded clinical review packets are recorded in [the follow-up audit](2026-11-04-vcr-baseline-audit.md). Clinical adjudication is still pending. Version-bound candidate writes, whole-clause size, ambiguous language-key guards, conservative numeric fidelity advisories, applicability/time evaluation and evidence presentation are implemented and under verification. The new candidate-trial parse cache is additive; old binaries retain their original table and primary key.
+
+The model gateway can record redacted provider status and optional per-call metadata, distinguish semantic deltas from heartbeats, and drain receipt producers before test shutdown. It has no new default semantic timeout. The evaluation driver stops its campaign on three attributable same-run upstream refusals within 60 seconds, retains partial results and performs a post-drain receipt audit. Task completion is improved for explicitly selected missing/empty trials, but a durable inventory of every requested pair is not yet implemented.
+
+The background language job is not enabled. Safe implementation still requires a common authorization fence at body handoff and at atomic result commit, with a leased job identity, source and judgment revision checks, all input-document dependencies, erasure/revocation handling and concurrency tests. Existing fact-extraction caching is not a sufficient authority for those writes. Full candidate/protocol background automation, paired E1, TREC and n2c2 remain open.
+
 ## Execution order
 
 1. Run Tasks 1 and 2 together. Error adjudication can proceed while request stability is repaired.

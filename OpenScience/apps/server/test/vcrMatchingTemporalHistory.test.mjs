@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { assessSubject, evaluateRequirement, patientMatchingMetrics, NOT_SATISFIED, SATISFIED, UNKNOWN } from '../src/vcrMatching.mjs';
+import { assessSubject, evaluateRequirement, frozenAsOf, patientMatchingMetrics, storedExclusion, windowStart, VCR_MATCHING_EVALUATOR_VERSION, NOT_SATISFIED, SATISFIED, UNKNOWN } from '../src/vcrMatching.mjs';
 
 const asOf = '2026-11-01T00:00:00.000Z';
 const window = { months: 6 };
@@ -84,6 +84,73 @@ test('source-bound MI denials preserve the difference between old, partial and f
     const assessment = assessSubject({ asOf, criteria, facts: [fact], documents: { record: { text: quote } } });
     assert.deepEqual(assessment.voidedFacts, [], 'all examples have valid source quotations and printed dates');
     assert.equal(assessment.summary, expected, quote);
+  }
+});
+
+test('calendar windows clamp missing UTC dates and keep both endpoints inclusive', () => {
+  const asIso = (duration, anchor) => new Date(windowStart(duration, Date.parse(anchor))).toISOString();
+  assert.equal(asIso({ months: 1 }, '2026-03-31T09:15:00.123Z'), '2026-02-28T09:15:00.123Z');
+  assert.equal(asIso({ months: 1 }, '2024-03-31T09:15:00.123Z'), '2024-02-29T09:15:00.123Z');
+  assert.equal(asIso({ months: 1 }, '2026-01-31'), '2025-12-31T00:00:00.000Z');
+  assert.equal(asIso({ months: 6 }, '2026-08-31'), '2026-02-28T00:00:00.000Z');
+  assert.equal(asIso({ years: 1 }, '2024-02-29'), '2023-02-28T00:00:00.000Z');
+
+  const anchorDate = '2024-03-31T09:15:00.123Z';
+  const criterion = { id: 'recent', kind: 'exclusion', requirement: storedExclusion({ op: 'present', variable: 'event_history', window: { months: 1, anchorDate } }) };
+  const assess = (date) => assessSubject({ subjectKey: 'P', asOf, criteria: [criterion], facts: [event('event', date)] });
+  for (const date of ['2024-02-29T09:15:00.123Z', '2024-02-29T09:15:00.124Z', anchorDate]) {
+    assert.equal(assess(date).summary, 'ineligible', date);
+  }
+  for (const date of ['2024-02-29T09:15:00.122Z', '2024-03-31T09:15:00.124Z', null]) {
+    assert.equal(assess(date).summary, 'insufficient_evidence', date ?? 'undated');
+  }
+  assert.equal(assess(anchorDate).provenance.matchingEvaluatorVersion, VCR_MATCHING_EVALUATOR_VERSION);
+});
+
+test('clamped calendar windows require a source-derived denial covering both boundaries', () => {
+  const anchorDate = '2024-03-31';
+  const selectedWindow = { months: 1, anchorDate };
+  const clinical = { schema: 1, assertion: 'negated', experiencer: 'patient' };
+  const denial = (start, end) => event('denial', end, { polarity: 'negated', clinical: { ...clinical, occurredInterval: { start, end } } });
+  assert.equal(judge('absent', [denial('2024-02-29', anchorDate)], selectedWindow).state, SATISFIED);
+  assert.equal(judge('absent', [denial('2024-03-01', anchorDate)], selectedWindow).state, UNKNOWN);
+  assert.equal(judge('absent', [denial('2024-02-29', '2024-03-30')], selectedWindow).state, UNKNOWN);
+});
+
+test('an impossible source anchor does not roll into another calendar date', () => {
+  const anchorDate = '2026-02-29';
+  assert.throws(() => frozenAsOf(anchorDate), { code: 'vcr_asof_invalid' });
+  assert.equal(frozenAsOf('2024-02-29T09:15'), '2024-02-29T09:15:00.000Z');
+  const invalid = judge('present', [event('recent', '2026-02-25')], { months: 1, anchorDate });
+  assert.equal(invalid.state, UNKNOWN);
+  assert.equal(invalid.missing[0].reason, 'criterion_malformed');
+});
+
+test('source-bound washout requires dated lifetime denial or a denial covering the whole interval', () => {
+  const asOf = '2026-11-04';
+  const criteria = [{ id: 'washout', kind: 'inclusion', requirement: { op: 'elapsed_since', variable: 'prednisone', days: 14 } }];
+  const examine = (text, occurredAt, clinical, factSchema = 2) => assessSubject({
+    subjectKey: 'P', asOf, criteria, documents: { doc: { text } },
+    facts: [{ id: 'denial', variable: 'prednisone', extractedBy: 'model', polarity: 'negated', surface: 'prednisone',
+      occurredAt, clinical, provenance: { factSchema }, source: { documentId: 'doc', start: 0, end: text.length, quote: text } }],
+  });
+  const denial = { schema: 1, assertion: 'negated', experiencer: 'patient' };
+  const lifetime = { ...denial, medication: { state: 'unknown', absenceScope: 'never' } };
+  const interval = { ...denial, occurredInterval: { start: '2026-10-21', end: asOf } };
+  for (const [text, date, clinical, schema, expected] of [
+    ['2026-11-04: not taking prednisone today.', asOf, null, 2, 'insufficient_evidence'],
+    ['2026-11-04: not taking prednisone today.', asOf, null, 1, 'insufficient_evidence'],
+    ['Never received prednisone.', null, null, 1, 'eligible'],
+    ['Never received prednisone.', null, lifetime, 2, 'insufficient_evidence'],
+    ['2026-11-04: never received prednisone.', asOf, lifetime, 2, 'eligible'],
+    ['2026-11-03: never received prednisone.', '2026-11-03', lifetime, 2, 'insufficient_evidence'],
+    ['No prednisone from 2026-10-21 through 2026-11-04.', asOf, interval, 2, 'eligible'],
+    ['No prednisone from 2026-10-22 through 2026-11-04.', asOf,
+      { ...interval, occurredInterval: { ...interval.occurredInterval, start: '2026-10-22' } }, 2, 'insufficient_evidence'],
+  ]) {
+    const result = examine(text, date, clinical, schema);
+    assert.deepEqual(result.voidedFacts, []);
+    assert.equal(result.summary, expected, text);
   }
 });
 

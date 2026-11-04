@@ -62,6 +62,7 @@ import { extractSelection } from "./vcrMatchBatch.mjs";
 import { locateSourceText, OTHER_TRIAL_MIN_SOURCE_CHARS, sourceTextLength } from "./vcrPatientTrials.mjs";
 import { factsOnSameWords, surfaceBasis } from "./vcrFactBasis.mjs";
 import { dataIntakeShapeValid } from "./vcrDataIntake.mjs";
+import { criterionFidelityWarnings } from "./vcrCriterionFidelity.mjs";
 import { VCR_CONVERSATION_STUDY_NAME, clinicalFactIssues, clinicalFactPolarity, clinicalNumericValue } from "@evimed/domain";
 import { createHash } from "node:crypto";
 import { VCR_LONGITUDINAL_JOBS, VCR_LONGITUDINAL_ERROR_CODES } from '@evimed/domain';
@@ -83,7 +84,7 @@ import { vcrResultEntry, withJobEntry, withWriteEntry } from "./vcrResultEntry.m
 import { renderVcrNumbers } from "./vcrRender.mjs";
 import { checkRegulatoryContact, resolveVisitsRef, visitKey } from "./vcrScheduleView.mjs";
 import { EVIDENCE_ARM_ROLES } from "./vcrEvidenceStore.mjs";
-import { VCR_MATCHING_VOCABULARY_VERSION, settleFactEvidence, storedExclusion } from "./vcrMatching.mjs";
+import { VCR_MATCHING_VOCABULARY_VERSION, ambiguousCriterionLanguageKeys, settleFactEvidence, storedExclusion } from "./vcrMatching.mjs";
 import { DATE_QUOTE_MAX } from "./vcrClinicalDateEvidence.mjs";
 import { candidateRequest, FROZEN_CANDIDATE_LIMIT } from "./vcrCandidateSearch.mjs";
 import { VCR_RECONSTRUCTION_REFERENCE, vcrReconstructionReferenceFor, vcrResultKindFor } from "./vcrJobs.mjs";
@@ -578,8 +579,8 @@ class Item {
     return true;
   }
 
-  /** @param {string} field @param {{ max?: number, required?: boolean }} [options] @returns {string | undefined} */
-  str(field, { max = 200, required = false } = {}) {
+  /** @param {string} field @param {{ max?: number, required?: boolean, preserve?: boolean }} [options] @returns {string | undefined} */
+  str(field, { max = 200, required = false, preserve = false } = {}) {
     const value = this.row[field];
     if (value == null || value === "") {
       if (required) this.bad(field, `${field} 必填。`);
@@ -589,7 +590,7 @@ class Item {
       this.bad(field, `${field} 是不超过 ${max} 个字符的文字。`);
       return undefined;
     }
-    return value.trim();
+    return preserve ? value : value.trim();
   }
 
   /**
@@ -779,10 +780,19 @@ async function checkedCriteria(deps, rows, issues, what) {
       versionRow = { ...versionRow, ...rest };
     }
     for (const [at, candidate] of candidates.entries()) {
-      const criterion = checkedCriterion(deps, candidate, index, candidates === rows ? "" : `criteria[${at}].`, issues);
+      const nested = what === "protocol" || Array.isArray(row.criteria);
+      const criterion = checkedCriterion(deps, candidate, index, nested ? `criteria[${at}].` : "", issues);
       if (criterion) criteria.push(criterion);
-      if (criterion) warnNegatedExclusion(criterion, candidates === rows ? `[${index}].requirement` : `criteria[${at}].requirement`, warnings);
+      if (criterion) {
+        const prefix = nested ? `${rows.length > 1 ? `[${index}].` : ""}criteria[${at}].` : `[${index}].`;
+        warnNegatedExclusion(criterion, `${prefix}requirement`, warnings);
+        for (const warning of criterionFidelityWarnings(criterion)) warnings.push({ ...warning, field: `${prefix}${warning.field}` });
+      }
     }
+  }
+  if (ambiguousCriterionLanguageKeys(criteria).size) {
+    issues.push(issue(null, "criteria", "vcr_criterion_malformed", "不同语言问题不能共用同一个 key；请为不同问题分别指定 key，再提交完整条件集。"));
+    criteria.length = 0;
   }
   return { criteria, versionRow, warnings };
 }
@@ -800,11 +810,11 @@ function checkedCriterion(deps, candidate, index, where, issues) {
   if (!item.only(CRITERION_FIELDS)) return null;
   const kind = item.choice("kind", ["inclusion", "exclusion"], { required: true });
   const criterionType = item.choice("criterionType", VCR_CRITERION_TYPES, { fallback: "other", words: vcrWordList("criterion", "criterionType") });
-  const sourceText = item.str("sourceText", { max: 4000 }) ?? "";
+  const sourceText = item.str("sourceText", { max: 4000, preserve: true }) ?? "";
   const sourceLocator = item.obj("sourceLocator", { bytes: 4096 }) ?? {};
   const evidenceNeeded = item.arr("evidenceNeeded", { max: 30 }) ?? [];
   const requirement = item.obj("requirement", { required: true, bytes: 32 * 1024 });
-  const applicability = item.obj("applicability", { bytes: 8 * 1024 });
+  const applicability = item.obj("applicability", { bytes: 32 * 1024 });
   /** @type {Array<[string, Record<string, any> | undefined]>} */
   const nodes = [["requirement", requirement], ["applicability", applicability]];
   for (const [field, node] of nodes) {
@@ -815,6 +825,23 @@ function checkedCriterion(deps, candidate, index, where, issues) {
         `${own(field)} 不符合入排条件的规定结构：${problems.slice(0, 3).map((problem) => `${problem.field || field}（${problem.detail}）`).join("；")}。`));
       item.ok = false;
     }
+  }
+  if (item.ok) {
+    const seen = new Map();
+    const visit = (node, axis) => {
+      if (!node || typeof node !== "object") return;
+      if (node.op === "language") {
+        const key = node.key ?? ""; // An absent key resolves to the criterion id on both axes.
+        const previous = seen.get(key);
+        if (previous && (previous.axis !== axis || previous.text !== node.text)) {
+          issues.push(issue(index, own(axis), "vcr_criterion_malformed", "语言条件的 key 必须唯一标识同一轴上的同一原文；适用性和要求使用不同 key。"));
+          item.ok = false;
+        } else seen.set(key, { axis, text: node.text });
+      }
+      for (const child of Array.isArray(node.operands) ? node.operands : node.operand ? [node.operand] : []) visit(child, axis);
+    };
+    visit(requirement, "requirement");
+    visit(applicability, "applicability");
   }
   if (!item.ok) return null;
   return {
@@ -1243,6 +1270,7 @@ const WRITERS = {
         }
       }
     }
+    if (checked && ambiguousCriterionLanguageKeys(checked).size) item.bad("criteria", "不同语言问题不能共用同一个 key；请为不同问题分别指定 key，再提交完整条件集。", "vcr_criterion_malformed");
     if (!item.ok) return null;
     if (!evidence?.candidateRecord || !patientTrials?.writeTrial) return void item.bad("registryId", "给患者找试验在本部署尚未接入。", "vcr_write_refused");
     const newHere = checked === null && typeof patientTrials.holds === "function" && !(await patientTrials.holds(study, { registry, registryId }));
@@ -1266,6 +1294,7 @@ const WRITERS = {
       // The grammar is read again: a vocabulary that has moved since the parse was kept makes it a parse to ask for anew, not a trial lost.
       for (const raw of earlier ?? []) { const criterion = checkedCriterion(deps, raw, item.index, "", scratch); if (criterion) again.push(criterion); else break; }
       if (!earlier?.length || scratch.length || again.length !== earlier.length) return void needCriteria();
+      if (ambiguousCriterionLanguageKeys(again).size) return void needCriteria();
       checked = again;
       reused = true;
     }
@@ -1306,6 +1335,7 @@ const WRITERS = {
     const criteria = checked ? kept.map((at) => {
       const criterion = checked[at];
       warnNegatedExclusion(criterion, `criteria[${at}].requirement`, warnings);
+      for (const warning of criterionFidelityWarnings(criterion)) warnings.push({ ...warning, field: `criteria[${at}].${warning.field}` });
       const found = where[at];
       if (found) located += 1;
       else if (trial.eligibilityText) {
@@ -2047,6 +2077,16 @@ const WRITERS = {
     const protocolVersionId = item.token("protocolVersionId", ID, "本研究方案版本的 id");
     // The answer is about one trial's criterion: the study's own protocol version, or a candidate trial found for a patient.
     const candidateTrialId = item.token("candidateTrialId", ID, "候选试验的 id（vcr_read what:candidate_trials 给出）");
+    const hasRecordHash = Object.hasOwn(item.row, "expectedRecordHash");
+    const hasCriterionHash = Object.hasOwn(item.row, "expectedCriterionHash");
+    const fenced = hasRecordHash && hasCriterionHash;
+    const expectedRecordHash = item.row.expectedRecordHash;
+    const expectedCriterionHash = item.row.expectedCriterionHash;
+    if (hasRecordHash !== hasCriterionHash || (fenced && (!candidateTrialId
+      || !(expectedRecordHash === null || typeof expectedRecordHash === "string" && COLLECTION_REVISION.test(expectedRecordHash))
+      || typeof expectedCriterionHash !== "string" || !COLLECTION_REVISION.test(expectedCriterionHash)))) {
+      item.bad("expectedCriterionHash", "候选试验的两个版本哈希需同时提供：从候选试验读取的 expectedRecordHash（可以为 null）和 expectedCriterionHash。", "vcr_criterion_malformed");
+    }
     if (protocolVersionId && candidateTrialId) item.bad("candidateTrialId", "protocolVersionId 和 candidateTrialId 二选一：答案属于本研究的方案，或属于一个候选试验。");
     const criterionKey = item.token("criterionKey", TOKEN, "入排条件里 language 节点的 key（没写 key 时用条件的 id）", { required: true });
     const state = item.choice("state", ["satisfied", "not_satisfied", "unknown"], { required: true });
@@ -2085,10 +2125,11 @@ const WRITERS = {
     }
     const provenance = caller?.provenance ?? { schema: 1, status: "unknown", runId: caller?.runtimeRunId ?? null };
     if (candidateTrialId) {
-      const saved = await patientTrials.saveLanguageJudgment(study, { subjectKey, candidateTrialId, criterionKey, state, evidence: anchored, provenance });
+      const saved = await patientTrials.saveLanguageJudgment(study, { subjectKey, candidateTrialId, criterionKey, state, evidence: anchored, provenance,
+        ...(fenced ? { expectedRecordHash, expectedCriterionHash } : {}) });
       // The verdict about this patient and this trial rests on the answer just written: it is judged again once the batch is in.
       (extra.reevaluate ??= new Set()).add(`${subjectKey}\u0000${candidateTrialId}`);
-      extra.results.push({ index: item.index, id: saved.id });
+      extra.results.push({ index: item.index, id: saved.id, versionBinding: fenced ? "checked" : "unfenced" });
       return saved.id;
     }
     const saved = await matchStore.saveLanguageJudgment({ studyId: study.id, userId: study.userId, subjectKey, criterionKey, protocolVersionId, state, evidence: anchored, provenance });

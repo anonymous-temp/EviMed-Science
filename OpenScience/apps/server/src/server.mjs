@@ -5830,6 +5830,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     runPurpose,
     runScope: autopilotRunScope,
     serviceCaller: openVikingModelCaller,
+    onModelCall: typeof overrides.modelGatewayOnCall === 'function' ? overrides.modelGatewayOnCall : null,
   });
   // A specialist engine's spend, reported by its adapter when a job ends (X1
   // purpose `engine`): the runtime calls engines directly, so this is the one
@@ -7100,6 +7101,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         requestId,
         truncated: failure?.truncated === true,
         upstream: failure?.upstream ?? null,
+        modelUpstream: pathname.startsWith('/internal/model/') ? safeModelUpstreamFailure(failure) : null,
+        modelActivity: pathname.startsWith('/internal/model/') ? safeModelActivity(failure) : null,
       });
     };
     const gateway = pathname.startsWith(`${EVOLUTION_GATEWAY_PATH}/`)
@@ -9514,6 +9517,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   return {
     config,
     store,
+    drainModelCalls: modelGatewayHandler.drainModelCalls,
     runtimeManager,
     memorySettings,
     memoryIndexProvider,
@@ -9667,7 +9671,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       await startRecurringWork();
       return address;
     },
-    async close() {
+    async close({ modelCallDrainTimeoutMs = 0 } = {}) {
       // First, so a job the shutdown ends is handed back as a restart and not
       // counted against its three attempts.
       learningWorker?.interrupt();
@@ -9753,8 +9757,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       await new Promise((resolve, reject) => {
         server.close((err) => (err ? reject(err) : resolve()));
       });
+      // Explicit benchmark shutdown: after admission closes, keep the ledger
+      // alive until in-flight model callbacks and accounting have finished.
+      // Ordinary production shutdown retains its existing behavior.
+      const modelCallDrain = modelCallDrainTimeoutMs > 0
+        ? await modelGatewayHandler.drainModelCalls({ timeoutMs: modelCallDrainTimeoutMs }).catch(() => ({ drained: false, pending: null })) : null;
       await flushLedgerWrites();
       await store.close();
+      return { modelCallDrain };
     },
   };
 
@@ -10339,9 +10349,30 @@ function safeLogId(value) {
   return typeof value === "string" && /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/.test(value) ? value : null;
 }
 
-async function appendErrorRecord(config, req, pathname, { status, code, requestId = null, truncated = false, upstream = null, cause = null }) {
+export function safeModelUpstreamFailure(failure) {
+  const status = failure?.upstreamStatus;
+  if (!Number.isInteger(status) || status < 400 || status > 599) return null;
+  const id = failure?.providerRequestId;
+  return { status, ...(typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id) ? { requestId: id } : {}) };
+}
+
+export function safeModelActivity(failure) {
+  const projectId = safeLogId(failure?.verifiedProjectId);
+  const run = failure?.verifiedRunId;
+  const runId = typeof run === 'string' && /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(run) ? run : null;
+  const value = failure?.progress;
+  const valid = value && ['heartbeats', 'text', 'reasoning', 'tools'].every(key => Number.isSafeInteger(value[key]) && value[key] >= 0)
+    && ['firstMs', 'lastMs'].every(key => value[key] === null || Number.isSafeInteger(value[key]) && value[key] >= 0)
+    && ((value.firstMs === null && value.lastMs === null) || (Number.isSafeInteger(value.firstMs) && Number.isSafeInteger(value.lastMs) && value.firstMs <= value.lastMs))
+    && (value.finishReason === null || ['stop', 'length', 'tool_calls', 'content_filter', 'insufficient_system_resource', 'end_turn', 'max_tokens', 'tool_use', 'stop_sequence'].includes(value.finishReason));
+  if (!projectId && !runId && !valid) return null;
+  return { ...(projectId ? { projectId } : {}), ...(runId ? { runId } : {}), ...(valid ? { progress: Object.fromEntries(['heartbeats', 'text', 'reasoning', 'tools', 'firstMs', 'lastMs', 'finishReason'].map(key => [key, value[key]])) } : {}) };
+}
+
+async function appendErrorRecord(config, req, pathname, { status, code, requestId = null, truncated = false, upstream = null, modelUpstream = null, modelActivity = null, cause = null }) {
   const projectHeader = req.headers["x-open-science-project"];
-  const projectId = safeLogId(Array.isArray(projectHeader) ? projectHeader[0] : projectHeader);
+  const projectId = pathname.startsWith('/internal/model/') ? modelActivity?.projectId ?? null
+    : safeLogId(Array.isArray(projectHeader) ? projectHeader[0] : projectHeader);
   const record = {
     createdAt: new Date().toISOString(),
     requestId,
@@ -10359,6 +10390,8 @@ async function appendErrorRecord(config, req, pathname, { status, code, requestI
     ...(upstream && typeof upstream.host === "string" && /^[a-z0-9.-]{1,253}$/i.test(upstream.host)
       && Number.isSafeInteger(upstream.status)
       ? { upstream: { host: upstream.host.toLowerCase(), status: upstream.status } } : {}),
+    ...(modelUpstream ? { modelUpstream } : {}),
+    ...(modelActivity ? { modelActivity } : {}),
     // What an unclassified failure was underneath (`errorCause`): only a code, never a message.
     ...(cause ? { cause } : {}),
   };

@@ -501,3 +501,30 @@ test("a protocol write keeps a negated exclusion and names it beside the version
   const warned = answer.results.flatMap((row) => row.warnings ?? []).filter((found) => found.code === "exclusion_written_negated");
   assert.deepEqual(warned.map((found) => found.field), ["criteria[1].requirement"]);
 });
+
+test("an explicit numeric threshold lost in a presence-only rule is named without refusing the criterion", async () => {
+  const risk = { kind: "inclusion", criterionType: "other", sourceText: "Obesity (BMI >25)",
+    requirement: { op: "present", variable: "obesity" } };
+  const seam = seams();
+  const candidate = await write(seam, [{ registryId: "NCT05000001", criteria: [risk] }]);
+  assert.equal(candidate.ok, true);
+  assert.equal(seam.written[0].criteria[0].sourceText, risk.sourceText);
+  assert.deepEqual(candidate.results[0].warnings.filter(warning => warning.code === "numeric_threshold_requires_review").map(warning => warning.field), ["criteria[0].sourceText"]);
+
+  const saved = [];
+  const store = { async latestProtocolVersion() { return null; }, async saveProtocolVersion(input) { saved.push(input); return { id: "prt_1", version: 1 }; } };
+  const protocol = await vcrRuntimeWrite({ store, service: {}, orchestrator: null, study, what: "criteria", items: [{ title: "v1", criteria: [risk] }], data: null });
+  assert.equal(protocol.ok, true);
+  assert.equal(saved[0].criteria[0].sourceText, risk.sourceText);
+  assert.deepEqual(protocol.results.flatMap(row => row.warnings ?? []).filter(warning => warning.code === "numeric_threshold_requires_review").map(warning => warning.field), ["criteria[0].sourceText"]);
+});
+
+test("threshold warnings identify the original row across flat and grouped criteria writes", async () => {
+  const first = { kind: "inclusion", criterionType: "other", sourceText: "BMI >25", requirement: { op: "present", variable: "obesity" } };
+  const second = { kind: "inclusion", criterionType: "other", sourceText: "LVEF <40", requirement: { op: "present", variable: "heart_failure" } };
+  const store = { async latestProtocolVersion() { return null; }, async saveProtocolVersion() { return { id: "prt_1", version: 1 }; } };
+  const call = items => vcrRuntimeWrite({ store, service: {}, orchestrator: null, study, what: "criteria", items, data: null });
+  const warnings = answer => answer.results.flatMap(row => row.warnings ?? []).filter(warning => warning.code === "numeric_threshold_requires_review").map(warning => warning.field);
+  assert.deepEqual(warnings(await call([first, second])), ["[0].sourceText", "[1].sourceText"]);
+  assert.deepEqual(warnings(await call([{ criteria: [first] }, { criteria: [second] }])), ["[0].criteria[0].sourceText", "[1].criteria[0].sourceText"]);
+});

@@ -225,6 +225,8 @@ export const VCR_WRITE_FIELDS = Object.freeze({
     "criterionKey",
     "protocolVersionId",
     "candidateTrialId",
+    "expectedRecordHash",
+    "expectedCriterionHash",
     "state",
     "evidence"
   ],
@@ -303,7 +305,7 @@ export const VCR_WRITE_EXAMPLES = Object.freeze({
   plan: Object.freeze({ analysis: { primary: '单侧 α 0.025 的 log-rank 检验' }, sensitivity: { cases: ['HR 0.80', '年脱落率 10%'] }, sealedFields: [] }),
   candidate_trial: Object.freeze({
     registry: 'clinicaltrials.gov', registryId: 'NCT06927986',
-    criteria: [{ kind: 'inclusion', criterionType: 'biomarker', sourceText: 'Presence of at least one EGFR-sensitive mutation', requirement: { op: 'present', variable: 'egfr_exon19_deletion' } }],
+    criteria: [{ kind: 'inclusion', criterionType: 'biomarker', sourceText: 'Presence of at least one EGFR-sensitive mutation', requirement: { op: 'language', key: 'egfr_sensitive_mutation', text: 'Presence of at least one EGFR-sensitive mutation' } }],
   }),
 });
 
@@ -332,6 +334,8 @@ export function vcrWriteContracts(kind = null) {
     population: { ...contracts.population, kind: VCR_POPULATION_KINDS, real: 'snapshotId from freeze and definition rules, or fromProtocol=true with snapshotId' },
     protocol: { fields: ['title', 'sourceRef', 'usdm', 'criteria'], criteria: 'Read matching filter.kind=contract for exact criterion/applicability structure' },
     criteria: { fields: ['kind', 'criterionType', 'requirement', 'applicability', 'sourceText', 'sourceLocator', 'evidenceNeeded'], words: wordsOf('criterion'), requirement: VCR_REQUIREMENT_CONTRACT, applicability: 'Same grammar as requirement; do not infer eligibility when applicability is unknown', sourceLocator: 'optional object; never a string or invented quotation' },
+    language_judgment: { ...contracts.language_judgment,
+      candidateVersion: 'For candidateTrialId pass both expectedRecordHash (string or null) and expectedCriterionHash from the matching request. The write rejects a changed source or criterion. Both absent is a legacy unfenced write.' },
     // The closed words of each field with what each means, and one copyable example. A spelling that has exactly one meaning here is read
     // as that word and the answer says so; any other word is refused with this list.
     evidence_item: { ...contracts.evidence_item, words: wordsOf('evidence_item'), example: VCR_WRITE_EXAMPLES.evidence_item,

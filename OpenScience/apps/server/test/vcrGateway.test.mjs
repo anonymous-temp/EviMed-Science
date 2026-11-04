@@ -1463,6 +1463,84 @@ function nativeProbe() {
   return { scopes, call };
 }
 
+test("whole language clauses survive the gateway and ambiguous language keys are refused", async () => {
+  const made = fixture();
+  const saved = [];
+  made.vcr.store.saveProtocolVersion = async (input) => { saved.push(input.criteria[0]); return { id: "prt_1", version: 1, criteria: input.criteria }; };
+  const write = async (criterion) => {
+    const res = response();
+    await made.handler(request("/internal/vcr/v1/write", { what: "protocol", data: { title: "t", criteria: [criterion] } }), res);
+    return res.json().data;
+  };
+  for (const text of ["a".repeat(500), "a".repeat(4000), "🧬".repeat(4000)]) {
+    const sourceText = text;
+    const result = await write({ kind: "inclusion", sourceText, requirement: { op: "language", text } });
+    assert.equal(result.ok, true);
+    assert.equal(saved.at(-1).sourceText, sourceText);
+    assert.equal(saved.at(-1).requirement.text, text);
+  }
+  const tooLong = "🧬".repeat(4001);
+  assert.equal((await write({ kind: "inclusion", sourceText: tooLong, requirement: { op: "language", text: tooLong } })).ok, false);
+  const clause = ` ${"🧬".repeat(3998)} `;
+  assert.equal((await write({ kind: "inclusion", sourceText: clause, requirement: { op: "present", variable: "diagnosis" },
+    applicability: { op: "language", key: "applies", text: clause } })).ok, true);
+  assert.equal(saved.at(-1).sourceText, clause);
+  assert.equal(saved.at(-1).applicability.text, clause);
+  for (const [requirement, applicability] of [
+    [{ op: "language", key: "same", text: "one" }, { op: "language", key: "same", text: "one" }],
+    [{ op: "all", operands: [{ op: "language", key: "same", text: "one" }, { op: "language", key: "same", text: "two" }] }, undefined],
+    [{ op: "language", text: "one" }, { op: "language", text: "two" }],
+  ]) {
+    assert.equal((await write({ kind: "inclusion", sourceText: "one", requirement, applicability })).ok, false);
+  }
+  assert.equal(saved.length, 4);
+});
+
+test("protocol and candidate writes reject cross-criterion key collisions as a whole set", async () => {
+  const writes = [];
+  const made = fixture({
+    evidence: { candidateRecord: async () => ({ status: "ok", trial: { registryId: "NCT00000001", eligibilityText: "First condition. Second condition.", recordHash: "hash" } }) },
+    patientTrials: { writeTrial: async (_study, input) => { writes.push(input); return { trial: { id: "trial_1" }, criteria: input.criteria, evaluation: {} }; } },
+  });
+  const criterion = (text) => ({ kind: "inclusion", sourceText: text, requirement: { op: "language", key: "shared", text } });
+  const call = async (body) => { const res = response(); await made.handler(request("/internal/vcr/v1/write", body), res); return res.json().data; };
+  const conflicting = [criterion("First condition."), criterion("Second condition.")];
+  for (const body of [
+    { what: "protocol", data: { title: "t", criteria: conflicting } },
+    { what: "criteria", items: conflicting },
+    { what: "candidate_trial", items: [{ registryId: "NCT00000001", criteria: conflicting }] },
+  ]) {
+    const result = await call(body);
+    assert.equal(result.ok, false);
+    assert.equal(result.ids.length, 0);
+    assert.ok(result.issues.some(issue => issue.code === "vcr_criterion_malformed"));
+  }
+  assert.equal(writes.length, 0);
+  const same = [criterion("First condition."), criterion("First condition.")];
+  assert.equal((await call({ what: "protocol", data: { title: "t", criteria: same } })).ok, true);
+  assert.equal((await call({ what: "candidate_trial", items: [{ registryId: "NCT00000001", criteria: same }] })).ok, true);
+  assert.equal(writes.length, 1);
+});
+
+test("candidate language judgment forwards both observed hashes or reports an unfenced legacy write", async () => {
+  const saved = [];
+  const made = fixture({ matchStore: { holdsSubject: async () => true },
+    patientTrials: { languageKeys: async () => ["consent"], saveLanguageJudgment: async (_study, input) => { saved.push(input); return { id: "j1" }; } } });
+  const call = async (extra) => { const res = response(); await made.handler(request("/internal/vcr/v1/write", { what: "language_judgment", items: [{ subjectKey: "P-1", candidateTrialId: "trial_1", criterionKey: "consent", state: "unknown", ...extra }] }), res); return res.json().data; };
+  const hash = "a".repeat(64);
+  const bound = await call({ expectedRecordHash: null, expectedCriterionHash: hash });
+  assert.equal(bound.ok, true, JSON.stringify(bound));
+  assert.equal(bound.results[0].versionBinding, "checked");
+  assert.equal(saved[0].expectedRecordHash, null);
+  assert.equal(saved[0].expectedCriterionHash, hash);
+  assert.equal((await call({})).results[0].versionBinding, "unfenced");
+  assert.equal(Object.hasOwn(saved[1], "expectedRecordHash"), false);
+  for (const extra of [{ expectedCriterionHash: hash }, { expectedRecordHash: null }, { expectedRecordHash: "bad", expectedCriterionHash: hash }]) {
+    assert.equal((await call(extra)).ok, false);
+  }
+  assert.equal(saved.length, 2);
+});
+
 test("a write that will be refused on its shape alone opens no scope; one that can be written still does", async () => {
   const probe = nativeProbe();
   const criterion = { kind: "inclusion", criterionType: "demographic", sourceText: "Age >= 18", requirement: { op: "compare", variable: "age", comparator: "gte", value: 18, unit: "year" } };

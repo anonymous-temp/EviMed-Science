@@ -112,6 +112,8 @@ try {
     ['packages/socket/plugins/run-policy.mjs', liveSocket+'plugins/run-policy.mjs'],
     ['capability-skills/vcr-matching/SKILL.md', liveSocket+'capability-skills/vcr-matching/SKILL.md'],
     ['packages/domain/src/toolNames.mjs', liveSocket+'node_modules/@evimed/domain/src/toolNames.mjs'],
+    ['packages/domain/src/vcrRules.mjs', liveSocket+'node_modules/@evimed/domain/src/vcrRules.mjs'],
+    ['deploy/runtime-dsh/capabilities/vcr-matching.json', '/opt/evimed/capabilities/vcr-matching.json'],
   ];
   const runtimeModuleHashes = {};
   for (const [source, live] of liveSources) {

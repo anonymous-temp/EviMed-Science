@@ -91,11 +91,13 @@ export function CriterionState({ row, caveats = [] }: { row: VcrCriterionJudgeme
       {row.overridden && <span data-vcr-overridden=""><Tag>人工改判</Tag></span>}
     </span>
   );
-  if (caveats.length === 0) return mark;
+  if (caveats.length === 0 && row.applicabilityState !== 'unknown' && row.applicabilityState !== 'pending_recheck') return mark;
   return (
     <span className="flex flex-col items-start gap-1">
       {mark}
       <span data-vcr-caveats="" className="flex flex-wrap gap-1">
+        {row.applicabilityState === 'unknown' && <Tag tone="warn">适用范围待核实</Tag>}
+        {row.applicabilityState === 'pending_recheck' && <Tag tone="warn">适用范围待复评</Tag>}
         {caveats.map((caveat) => <Tag key={caveat.key} tone={caveat.needsChecking ? 'warn' : 'neutral'}>{caveat.label}</Tag>)}
       </span>
     </span>
@@ -121,15 +123,23 @@ export function CriterionTable({ label, rows, facts, extraColumns = [] }: {
     {
       key: 'evidence',
       header: '患者证据',
-      isEmpty: (row) => !row.evidence,
-      // Up to three citations, the first still `evidence`: each with its quote, the document it is in and the date of what it records.
-      cell: (row) => row.evidence ? (
+      isEmpty: (row) => !row.evidence && !row.applicabilityEvidenceItems?.length,
+      // Every distinct citation is accessible. The first remains `evidence` for older responses.
+      cell: (row) => row.evidence || row.applicabilityEvidenceItems?.length ? (
         <span className="flex flex-col gap-1.5">
-          {(row.evidenceItems?.length ? row.evidenceItems : [row.evidence]).map((item, index) => (
-            <span key={`${item.quote}-${index}`} className="block">
-              <span className="block text-text">{`“${item.quote}”`}</span>
-              <span className="block text-caption text-text-3">{[item.source, item.at, item.dateNote].filter(Boolean).join(' · ')}</span>
-              {item.note && <span className="block text-caption text-text-3">{item.note}</span>}
+          {[
+            { name: '适用范围依据', items: row.applicabilityEvidenceItems ?? [] },
+            { name: '条件依据', items: row.evidenceItems?.length ? row.evidenceItems : row.evidence ? [row.evidence] : [] },
+          ].filter(group => group.items.length > 0).map(group => (
+            <span key={group.name} className="flex flex-col gap-1.5">
+              {row.applicabilityState != null && <span className="text-caption text-text-3">{group.name}</span>}
+              {group.items.map((item, index) => (
+                <span key={`${item.quote}-${index}`} className="block">
+                  <span className="block text-text">{`“${item.quote}”`}</span>
+                  <span className="block text-caption text-text-3">{[item.source, item.at, item.dateNote].filter(Boolean).join(' · ')}</span>
+                  {item.note && <span className="block text-caption text-text-3">{item.note}</span>}
+                </span>
+              ))}
             </span>
           ))}
         </span>
@@ -138,11 +148,13 @@ export function CriterionTable({ label, rows, facts, extraColumns = [] }: {
     {
       key: 'request',
       header: '补证建议',
-      isEmpty: (row) => !row.request && !row.reason,
-      cell: (row) => row.request || row.reason ? (
+      isEmpty: (row) => !row.request && !row.reason && !row.applicabilityReason && !row.applicabilityRequestNote,
+      cell: (row) => row.request || row.reason || row.applicabilityReason || row.applicabilityRequestNote ? (
         <span className="block">
           {row.request && <span className="block text-text">{row.request}</span>}
           {row.reason && <span className={row.request ? 'block text-caption text-text-3' : 'block text-text'}>{row.reason}</span>}
+          {row.applicabilityReason && row.applicabilityReason !== row.reason && <span className="block text-caption text-text-3">{`适用范围：${row.applicabilityReason}`}</span>}
+          {row.applicabilityRequestNote && <span className="block text-caption text-text-3">{`适用范围：${row.applicabilityRequestNote}`}</span>}
           {row.requestNote && <span className="block text-caption text-text-3">{row.requestNote}</span>}
         </span>
       ) : <span className="text-text-3">—</span>,

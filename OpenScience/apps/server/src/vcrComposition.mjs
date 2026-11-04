@@ -104,12 +104,12 @@ import { createVcrImporter } from "./vcrImport.mjs";
 import { parseProbabilityByMonth, readAccrualForecast } from "./vcrAccrual.mjs";
 import { matchingCandidates } from "./vcrMatchingCandidates.mjs";
 import {
-  VCR_MATCHING_VOCABULARY_VERSION, matchingInputDigest, assessSubject, eligibilityCounts, frozenAsOf, languageKeysOf, requiresLanguageJudgment,
+  VCR_MATCHING_VOCABULARY_VERSION, VCR_MATCHING_EVALUATOR_VERSION, matchingInputDigest, assessSubject, eligibilityCounts, frozenAsOf, criterionLanguageKeys, requiresLanguageJudgment,
 } from "./vcrMatching.mjs";
 import { VCR_JOB_PURPOSE } from "./vcrJobs.mjs";
 import { createFactExtractor, createMatchBatch, createMatchBatchCounters, createMatchExtractExecutor } from "./vcrMatchBatch.mjs";
 import { vcrRuntimeWrite } from "./vcrGateway.mjs";
-import { MATCHING_SNAPSHOT_PREFIX, freezeMatchingInputs, hydrateMatchingInputs, matchingSelection, verifyMatchingSnapshot } from "./vcrMatchingSnapshot.mjs";
+import { MATCHING_SNAPSHOT_PREFIX, freezeMatchingInputs, hydrateMatchingInputs, languageCriteriaByKey, matchingSelection, verifyMatchingSnapshot } from "./vcrMatchingSnapshot.mjs";
 
 /**
  * The data-plane seam the service reads through: the page's tab, the one-line
@@ -277,6 +277,7 @@ export function vcrMatchingExecutor({ matchStore, store, documents = null, subje
     const snapshotId = list(job.inputs).map(input => String(input.id ?? '')).find(id => id.startsWith(MATCHING_SNAPSHOT_PREFIX))?.slice(MATCHING_SNAPSHOT_PREFIX.length);
     if (!snapshotId) throw new HttpError(409, 'vcr_matching_snapshot_missing', 'This older job has no frozen matching inputs. Queue a new evaluation.');
     const snapshot = verifyMatchingSnapshot(await matchStore.matchingSnapshot(studyId, snapshotId), studyId, snapshotId);
+    if (snapshot.matchingEvaluatorVersion !== VCR_MATCHING_EVALUATOR_VERSION) throw new HttpError(409, 'vcr_matching_evaluator_changed', 'The matching evaluator changed. Queue a new evaluation.');
     if (snapshot.protocolVersionId !== protocolVersionId || snapshot.asOf !== asOf) throw new HttpError(409, 'vcr_matching_input_changed', 'The job and its frozen inputs disagree.');
     const frozenIds = list(object(job?.scenario).criteria).map((criterion) => String(object(criterion).id ?? ''));
     const criteria = snapshot.criteria;
@@ -625,7 +626,7 @@ export function vcrMatchingSeam({ matchStore, store, documents = null, subjectTa
   /** @param {any} study */
   const languageKeys = async (study, /** @type {string|null} */ protocolVersionId = null) => {
     const criteria = await matchStore.listCriteria({ studyId: study.id, protocolVersionId }).catch(() => []);
-    return [...new Set(criteria.flatMap((criterion) => languageKeysOf(criterion.requirement, criterion.id)))];
+    return [...languageCriteriaByKey(criteria).keys()];
   };
 
   const seam = {
@@ -717,6 +718,7 @@ export function vcrMatchingSeam({ matchStore, store, documents = null, subjectTa
         return {protocol:null,criteria:[],subjects:[],contractRead:{what:'matching',filter:{kind:'contract'}},note:'No criteria are saved. Read the contract, then structure only the supplied protocol with vcr_write; a separate study-definition workflow is not required.'};
       }
       const criteria = await matchStore.listCriteria({ studyId: study.id, protocolVersionId: protocol.id });
+      const validLanguageKeys = languageCriteriaByKey(criteria);
       const subjectKey = filter?.subjectKey ? String(filter.subjectKey) : null;
       const withdrawn = await matchStore.withdrawnSubjects?.(study.id) ?? new Set();
       const view = {
@@ -725,8 +727,8 @@ export function vcrMatchingSeam({ matchStore, store, documents = null, subjectTa
         criteria: criteria.map((criterion) => ({
           id: criterion.id, ordinal: criterion.ordinal, kind: criterion.kind, criterionType: criterion.criterionType,
           sourceText: criterion.sourceText, requirement: criterion.requirement, applicability: criterion.applicability,
-          decidedBy: requiresLanguageJudgment(criterion.requirement) ? "model" : "code",
-          languageKeys: languageKeysOf(criterion.requirement, criterion.id),
+          decidedBy: requiresLanguageJudgment(criterion.requirement) || requiresLanguageJudgment(criterion.applicability) ? "model" : "code",
+          languageKeys: criterionLanguageKeys(criterion).filter(key => validLanguageKeys.has(key)),
         })),
       };
       if(filter.kind==='terminology') return {protocol,terminology:clinicalEnabled(study) ? await clinicalContext(study,criteria).catch(()=>null) : null};
@@ -797,7 +799,8 @@ export function vcrMatchingSeam({ matchStore, store, documents = null, subjectTa
     async matchScenario(study, selection = {}) {
       selection = matchingSelection(selection);
       if (selection.snapshotId) {
-        const previous = await matchStore.matchingSnapshot(study.id, selection.snapshotId);
+        const previous = verifyMatchingSnapshot(await matchStore.matchingSnapshot(study.id, selection.snapshotId), study.id, selection.snapshotId);
+        if (previous?.matchingEvaluatorVersion !== VCR_MATCHING_EVALUATOR_VERSION) throw new HttpError(409, 'vcr_matching_evaluator_changed', 'The matching evaluator changed. Queue a new evaluation.');
         const offset = selection.offset ?? previous.offset;
         if (offset < 0 || offset >= previous.subjects.length) throw new HttpError(400, 'vcr_matching_selection_invalid', 'Offset is outside the frozen candidate roster.');
         const payload = { ...previous, offset };

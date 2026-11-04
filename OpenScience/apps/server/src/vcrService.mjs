@@ -1321,8 +1321,12 @@ export class VcrService {
       || Number(a.counts?.unknown ?? 0) - Number(b.counts?.unknown ?? 0) || a.subjectKey.localeCompare(b.subjectKey));
     const focus = listed.find((subject) => subject.subjectKey === query.candidate) ?? listed[0] ?? null;
     const selected = focus ? await matchStore.getAssessment(focus.id).catch(() => null) : null;
-    if (selected) selected.judgments = await Promise.all(list(selected.judgments).map(async judgment => ({ ...judgment,
-      evidence: await this.packages.documents?.viewEvidence?.(study, list(judgment.evidence), focus.subjectKey, viewer) ?? [] })));
+    if (selected) selected.judgments = await Promise.all(list(selected.judgments).map(async judgment => {
+      // Both axes contain patient quotations and must pass the same viewer grant.
+      const evidence = await this.packages.documents?.viewEvidence?.(study, list(judgment.evidence), focus.subjectKey, viewer) ?? [];
+      const applicabilityEvidence = await this.packages.documents?.viewEvidence?.(study, list(judgment.applicabilityEvidence), focus.subjectKey, viewer) ?? [];
+      return { ...judgment, evidence, applicabilityEvidence };
+    }));
     const candidateRoster = typeof matchStore.candidateSubjects === 'function' ? await matchStore.candidateSubjects({ studyId: study.id }) : [];
     const focusKey = query.candidate ?? focus?.subjectKey;
     const comparisons = focusKey ? await Promise.all(protocols.map(async entry => ({ protocol: entry,
@@ -1336,7 +1340,7 @@ export class VcrService {
       conflicts: longitudinal.conflicts.find(entry => entry.factId === fact.id)?.withFacts ?? [], ...(factMarks.has(fact.id) ? { basis: "updated" } : {}) }));
     const candidateCoverage = protocol && matchStore.latestMatchingProgress ? await matchStore.latestMatchingProgress(study.id,protocol.id) : null;
     // The documents the page cites, by the names the data tab lists them under: a citation carries an id, a reader needs a name.
-    const cited = [...list(selected?.judgments).flatMap((/** @type {any} */ judgment) => list(judgment.evidence).map((/** @type {any} */ item) => item?.locator?.documentId)),
+    const cited = [...list(selected?.judgments).flatMap((/** @type {any} */ judgment) => [...list(judgment.evidence), ...list(judgment.applicabilityEvidence)].map((/** @type {any} */ item) => item?.locator?.documentId)),
       ...clinicalTimeline.map(fact => fact.source?.documentId)].filter(Boolean);
     const documentNames = cited.length && typeof matchStore.documentNames === 'function' ? await matchStore.documentNames(study.id, cited).catch(() => new Map()) : new Map();
     // 「给患者找试验」: the patient the page asks for, and the trials that have judged them (the candidates a run found, and the study's own

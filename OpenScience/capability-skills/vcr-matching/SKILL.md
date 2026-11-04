@@ -11,6 +11,22 @@ Support both directions: identify trials for one person, or assess an authorized
 patient collection against a protocol. Work in Chinese unless requested otherwise.
 Matching ends with criterion evidence, unknowns, exclusions and recheck needs.
 
+When the request supplies trial identifiers, assess each exact identifier against
+the named collection and revision; do not substitute search results or omit a
+missing record. Inventory every requested patient–trial pair and every source
+eligibility clause. Save each assessment or explicitly report its pending,
+failed or unavailable disposition; retain completed work when another pair
+fails. Read the saved results back before reporting completion.
+
+Preserve each complete source clause, including its alternatives, qualifiers,
+negation and applicability. A language requirement accepts up to 4,000 Unicode
+characters; do not truncate an oversized clause to fit: report it as unprocessed.
+Use distinct language keys for applicability and requirement, and never reuse
+one key for different language questions. A verbatim quotation establishes its
+source, not the correctness of an interpretation. Explain a supported clinical
+inference with its source inputs and rationale as an inference; do not create an
+unstated measurement, event, negative finding or date as a patient fact.
+
 ## Shared operating contract
 
 Read [../vcr-protocol/references/operating-contract.md](../vcr-protocol/references/operating-contract.md) before this workflow; reuse it when already loaded in this conversation. It defines task scope, data requirements, evidence and continuation boundaries.
@@ -190,6 +206,7 @@ Report inter-rater agreement and disagreements as properties of that reference s
 
 - 补了这位患者的新事实，或要让另一位受试者也对照已有的试验：同一个 `registryId` 再写一次，只写 `subjectKeys`，不带 `criteria`。条件要改就把整套 `criteria` 重写，平台会把受影响的判定重做。
 - 语言条件的回答用第三节的 `language_judgment`，写 `candidateTrialId`（读回的试验 id）代替 `protocolVersionId`；还欠哪些，读 `{ "what": "candidate_trials", "filter": { "subjectKey": "P-001" } }` 的 `requests[]`。
+- 对候选试验的语言回答，随该请求一起传回读取时的 `expectedRecordHash`（可为 null）和 `expectedCriterionHash`，两项同时提供；如果条件或登记记录已变，重新读取后再判断。旧调用不传哈希仍可保存，但属于未做版本绑定的判断，不应称为已核对版本。
 - 同一次读取的 `ranking` 就是平台排好的顺序：全部满足的在前，其余没被排除的按已判比例，被排除的在后，同样的再看登记状态（那是读记录那天的状态，`statusAsOf`，不是某个中心现在有名额）；本研究自己的方案也在里面。顺序不是你的判断，不改它，也不写「匹配度」。
 - 交付 `matching-assessment.md`：每个试验一段——登记号、名称、状态、为什么可能合适、还缺哪些证据和怎么补，满足和不满足各引患者原句与试验原句；`matching.json` 写 `subjectKey`、`direction: "patient_to_trial"` 和 `trials[]`（抄自 `ranking`）。登记状态不等于某个中心现在有名额；联系患者、转诊、入组都不归你。
 

@@ -239,6 +239,52 @@ function gatewayError(status, code, message) {
   return new GatewayError(status, code, message);
 }
 
+// Only accept opaque, UUID-shaped identifiers from an untrusted upstream.
+// Arbitrary header text could contain patient information or credentials.
+function safeProviderRequestId(value) {
+  return typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value) ? value : null;
+}
+
+// SSE payloads are examined transiently and never retained in telemetry. An
+// oversized frame is ignored until its delimiter, keeping memory bounded.
+export function createModelProgress() {
+  const decoder = new TextDecoder();
+  let buffer = '', dropping = false, heartbeats = 0, text = 0, reasoning = 0, tools = 0, firstMs = null, lastMs = null, finishReason = null;
+  const started = Date.now();
+  const observeFrame = (frame) => {
+    if (frame.split(/\r?\n/).some(line => line.startsWith(':'))) heartbeats++;
+    const data = frame.split(/\r?\n/).filter(line => line.startsWith('data:')).map(line => line.slice(5).trimStart()).join('\n');
+    if (!data || data === '[DONE]') return;
+    let event; try { event = JSON.parse(data); } catch { return; }
+    for (const choice of Array.isArray(event?.choices) ? event.choices : []) {
+      if (['stop', 'length', 'tool_calls', 'content_filter', 'insufficient_system_resource'].includes(choice?.finish_reason)) finishReason = choice.finish_reason;
+    }
+    if (event?.type === 'message_delta' && ['end_turn', 'max_tokens', 'tool_use', 'stop_sequence'].includes(event?.delta?.stop_reason)) finishReason = event.delta.stop_reason;
+    const deltas = Array.isArray(event?.choices) ? event.choices.map(choice => choice?.delta) : [event?.delta];
+    let semantic = false;
+    for (const delta of deltas) {
+      if (!delta || typeof delta !== 'object') continue;
+      if (typeof delta.content === 'string' && delta.content.length || typeof delta.text === 'string' && delta.text.length) { text++; semantic = true; }
+      if (typeof delta.reasoning_content === 'string' && delta.reasoning_content.length || typeof delta.thinking === 'string' && delta.thinking.length) { reasoning++; semantic = true; }
+      if (Array.isArray(delta.tool_calls) && delta.tool_calls.length || ['input_json_delta', 'tool_use'].includes(delta.type)) { tools++; semantic = true; }
+    }
+    if (semantic) { const at = Date.now() - started; firstMs ??= at; lastMs = at; }
+  };
+  return {
+    observe(chunk) {
+      buffer += decoder.decode(chunk, { stream: true });
+      let end;
+      while ((end = buffer.search(/\r?\n\r?\n/)) >= 0) {
+        const delimiter = buffer.slice(end).match(/^\r?\n\r?\n/)[0];
+        if (!dropping) observeFrame(buffer.slice(0, end));
+        buffer = buffer.slice(end + delimiter.length); dropping = false;
+      }
+      if (buffer.length > 65536) { buffer = buffer.slice(-3); dropping = true; }
+    },
+    snapshot: () => ({ heartbeats, text, reasoning, tools, firstMs, lastMs, finishReason }),
+  };
+}
+
 /**
  * The sentence for the one refusal the gateway answers that it did not raise:
  * the usage ledger's 402. Answered with the generic sentence below, a call its
@@ -272,7 +318,9 @@ function sendError(res, error, onFailure) {
   // left is a destroyed socket, and that is the one failure a caller cannot
   // tell from success.
   if (typeof onFailure === "function") {
-    onFailure({ code, status, truncated: res.headersSent && !res.writableEnded });
+    onFailure({ code, status, truncated: res.headersSent && !res.writableEnded,
+      ...(Number.isInteger(error?.upstreamStatus) ? { upstreamStatus: error.upstreamStatus } : {}),
+      ...(error?.providerRequestId ? { providerRequestId: error.providerRequestId } : {}) });
   }
   if (res.headersSent || res.destroyed) {
     if (!res.destroyed) res.destroy();
@@ -934,7 +982,7 @@ export async function pipeModelGatewayBody(body, res, signal, maxBytes, onChunk 
 
 /**
  * @param {Record<string, any>} config @param {any} runtimeManager
- * @param {{ fetchImpl?: typeof fetch, usageLedger?: any, assertModelAccess?: ((caller:any,body:any)=>Promise<void>)|null,
+ * @param {{ fetchImpl?: typeof fetch, usageLedger?: any, onModelCall?: ((receipt:any)=>unknown)|null, assertModelAccess?: ((caller:any,body:any)=>Promise<void>)|null,
  *           attributeRun?: (caller: { userId: string, projectId: string, sessionId?: string | null }) => Promise<string | null>,
  *           runPurpose?: (request: { userId: string, projectId: string, runId: string | null }) => Promise<string>,
  *           runScope?: (request: { userId: string, projectId: string, runId: string }) => Promise<{ usageRunId: string, runLimit: number } | null>,
@@ -962,10 +1010,11 @@ export async function pipeModelGatewayBody(body, res, signal, maxBytes, onChunk 
  */
 export function createModelGatewayHandler(config, runtimeManager, {
   fetchImpl = fetch, usageLedger = null, attributeRun = null, runPurpose = null, runScope = null, assertModelAccess = null,
-  serviceCaller = null,
+  serviceCaller = null, onModelCall = null,
 } = {}) {
   const prefixes = new PromptPrefixMemo();
-  return async function modelGatewayHandler(req, res, onFailure) {
+  const producers = new Set();
+  const modelGatewayHandler = async function modelGatewayHandler(req, res, onFailure) {
     const requestPath = new URL(req.url ?? "/", "http://localhost").pathname;
     if (requestPath === filesGatewayPrefix || requestPath.startsWith(`${filesGatewayPrefix}/`)) {
       // Before authentication, and without reading the body: nothing on this
@@ -982,6 +1031,13 @@ export function createModelGatewayHandler(config, runtimeManager, {
       sendError(res, gatewayError(404, "not_found", "Not found."), onFailure);
       return;
     }
+    let releaseProducer = () => {};
+    if (typeof onModelCall === 'function') {
+      let finish;
+      const producer = new Promise(resolve => { finish = resolve; });
+      producers.add(producer);
+      releaseProducer = () => { producers.delete(producer); finish(); };
+    }
     const abortController = new AbortController();
     let reservation = null;
     let reservationUserId = null;
@@ -997,6 +1053,13 @@ export function createModelGatewayHandler(config, runtimeManager, {
     let usageTail = null;
     let deliveredBytes = 0;
     let modelName = null;
+    let callSettings = null, callOutcome = 'failed', callErrorCode = null;
+    const callId = randomUUID();
+    let jsonReceiptBytes = 0, jsonReceiptOverflow = false;
+    const jsonReceiptChunks = [];
+    let verifiedProjectId = null;
+    let verifiedRunId = null;
+    const progress = createModelProgress();
     const requestStartedAt = new Date();
     /** What an uncertain call is bounded at (`uncertainCallCost`): an error
      *  answered before any output produced none; a stream shows its events as
@@ -1062,6 +1125,8 @@ export function createModelGatewayHandler(config, runtimeManager, {
           caller = engineCaller(token, route, config);
         }
       }
+      verifiedProjectId = typeof caller.projectId === 'string' && /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(caller.projectId) ? caller.projectId : null;
+      verifiedRunId = typeof caller.runId === 'string' && /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(caller.runId) ? caller.runId : null;
       const body = await readJsonBody(req, caller.service ? caller.maxBodyBytes : Math.max(1024, Number(config.modelGatewayMaxBodyBytes) || 1024 * 1024));
       const requestConfig = caller.engine
         ? { ...config, modelGatewayTrustedEffort: caller.reasoningEffort ?? config.deepseekReasoningEffort ?? "high" }
@@ -1069,6 +1134,16 @@ export function createModelGatewayHandler(config, runtimeManager, {
         : caller.service && body?.thinking === undefined && body?.reasoning_effort === undefined ? { ...config, modelGatewayTrustedEffort: "off" }
           : config;
       let normalized = route.normalize(body, requestConfig);
+      callSettings = {
+        requestedModel: supportedDeepSeekModels.has(body?.model) ? body.model : null,
+        forwardedModel: supportedDeepSeekModels.has(normalized.model) ? normalized.model : null,
+        thinking: ['enabled', 'disabled'].includes(normalized.thinking?.type) ? normalized.thinking.type : null,
+        reasoningEffort: normalized.thinking?.type === 'disabled' ? 'off'
+          : ['low', 'high', 'max'].includes(normalized.reasoning_effort ?? normalized.output_config?.effort)
+            ? normalized.reasoning_effort ?? normalized.output_config.effort : null,
+        outputLimit: normalized.max_completion_tokens ?? normalized.max_tokens ?? null,
+        stream: normalized.stream === true,
+      };
       const scoped = caller.engine || caller.service ? { request: normalized, scope: null } : consumeBudgetScope(normalized, caller, config);
       normalized = scoped.request;
       // The cloud-processing check is about a study's records in a researcher's session; the service caller has neither.
@@ -1085,6 +1160,10 @@ export function createModelGatewayHandler(config, runtimeManager, {
         const estimate = estimateModelReservation(normalized, config, requestStartedAt, { cachedTokens: prefixes.cached(prefixes.key(token, normalized)) });
         caller = { ...caller, ...(await serviceCaller.admit(caller, estimate.cost)), runId: null };
       }
+      const attributed = caller.runId == null && attributeRun && !caller.engine && !caller.service
+        ? await attributeRun({ userId: caller.userId, projectId: caller.projectId, sessionId: kernelSessionId(req) }).catch(() => null)
+        : null;
+      if (typeof attributed === 'string' && /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(attributed)) verifiedRunId = attributed;
       if (usageLedger) {
         const prefixKey = prefixes.key(token, normalized);
         const estimate = estimateModelReservation(normalized, config, requestStartedAt, { cachedTokens: prefixes.cached(prefixKey) });
@@ -1111,9 +1190,6 @@ export function createModelGatewayHandler(config, runtimeManager, {
         // An engine job's run was decided when the job was admitted and rides
         // in its credential; asking again now could name a run that started
         // after the job did.
-        const attributed = caller.runId == null && attributeRun && !caller.engine && !caller.service
-          ? await attributeRun({ userId: caller.userId, projectId: caller.projectId, sessionId: kernelSessionId(req) }).catch(() => null)
-          : null;
         let runId = caller.runId ?? attributed ?? null;
         let runLimit = caller.runId != null ? Number(caller.runLimit) || 0 : (attributed ? Number(config.userRunSpendLimit) || 0 : 0);
         // An execution the control plane started in the researcher's own runtime: booked under its own id, held to its own
@@ -1186,16 +1262,17 @@ export function createModelGatewayHandler(config, runtimeManager, {
       if (!upstream.ok) {
         providerDisposition = "rejected";
         upstreamStatus = upstream.status;
+        providerRequestId = safeProviderRequestId(upstream.headers.get("x-request-id"));
         recordProviderRefusal("deepseek", upstream.status);
         await upstream.body?.cancel().catch(() => {});
-        throw gatewayError(
+        throw Object.assign(gatewayError(
           mappedUpstreamStatus(upstream.status),
           upstream.status === 429 ? "model_gateway_rate_limited"
             : upstream.status === 402 ? "model_gateway_payment_required" : "model_gateway_upstream_error",
           upstream.status === 429 ? "The model provider rate limit was reached."
             : upstream.status === 402 ? "The model provider refused the call: its balance is exhausted."
               : "The model provider rejected the request.",
-        );
+        ), { upstreamStatus, providerRequestId });
       }
       providerDisposition = "accepted";
       const contentType = String(upstream.headers.get("content-type") ?? "").toLowerCase();
@@ -1225,9 +1302,16 @@ export function createModelGatewayHandler(config, runtimeManager, {
         armIdleDeadline();
         deliveredBytes += chunk.byteLength;
         tail.observe(chunk);
+        if (streamRequested) progress.observe(chunk);
+        else if (typeof onModelCall === 'function' && !jsonReceiptOverflow) {
+          jsonReceiptBytes += chunk.byteLength;
+          if (jsonReceiptBytes > 65536) { jsonReceiptOverflow = true; jsonReceiptChunks.length = 0; }
+          else jsonReceiptChunks.push(Buffer.from(chunk));
+        }
       }, normalized.stream ? () => tail.finished() : null);
-      providerRequestId = tail.providerRequestId();
+      providerRequestId = tail.providerRequestId() ?? providerRequestId;
       const exactUsage = tail.usage();
+      callOutcome = streamRequested && !tail.finished() ? 'incomplete' : 'completed';
       // After the body, never before: a call that failed halfway is not a call
       // to bill, and awaiting a ledger write before the last byte would put
       // the accounting in the answer's way.
@@ -1245,6 +1329,10 @@ export function createModelGatewayHandler(config, runtimeManager, {
           model: normalized.model, usage: exactUsage, at: requestStartedAt });
       }
     } catch (error) {
+      callOutcome = 'failed';
+      const reportFailure = failure => { callErrorCode = typeof failure.code === 'string' && /^model_gateway_[a-z_]+$/.test(failure.code) ? failure.code : null; onFailure?.({ ...failure,
+        ...(verifiedProjectId ? { verifiedProjectId } : {}), ...(verifiedRunId ? { verifiedRunId } : {}),
+        ...(streamRequested ? { progress: progress.snapshot() } : {}) }); };
       // The provider's own count is the last thing it sends. Once it has
       // arrived the call is known exactly, whoever hung up after it: booking it
       // `uncertain` at its reserved cost would bill an estimate for a call
@@ -1279,18 +1367,18 @@ export function createModelGatewayHandler(config, runtimeManager, {
       if (res.headersSent && !res.writableEnded) {
         const seconds = ((Date.now() - requestStartedAt.getTime()) / 1000).toFixed(1);
         process.stderr.write(
-          `model gateway stream truncated after ${res.getHeader?.("content-type") ?? "stream"}: ${abortReason?.name ?? (error instanceof Error ? error.message : String(error))}`
+          `model gateway stream truncated: ${abortReason?.name === "TimeoutError" ? "timeout" : clientDisconnected ? "client disconnected" : "upstream interrupted"}`
           + ` (${deliveredBytes} bytes in ${seconds}s, usage ${seenUsage ? "received" : "not received"}, [DONE] ${usageTail?.finished() ? "received" : "not received"})\n`,
         );
       }
       if (abortReason?.name === "TimeoutError") {
-        sendError(res, gatewayError(504, "model_gateway_timeout", "The model gateway request timed out."), onFailure);
+        sendError(res, gatewayError(504, "model_gateway_timeout", "The model gateway request timed out."), reportFailure);
       } else if (clientDisconnected) {
         // Before or after the 200: the caller hung up, the provider did not
         // fail. Reported as unavailable, a runtime that dropped its own stream
         // (a session ended by a refused sibling request, a stopped container)
         // read on the error ledger as a provider outage (2026-09-27).
-        sendError(res, gatewayError(499, "model_gateway_client_closed", "The model gateway client disconnected."), onFailure);
+        sendError(res, gatewayError(499, "model_gateway_client_closed", "The model gateway client disconnected."), reportFailure);
       } else if (res.headersSent && !res.writableEnded && !(error instanceof GatewayError)) {
         // The provider's stream broke off after its 200 had been forwarded —
         // a reset or a read that failed mid-answer. It fell to sendError's
@@ -1299,9 +1387,9 @@ export function createModelGatewayHandler(config, runtimeManager, {
         // the error ledger from 2026-09-04 to 09-27 was this, truncated, never
         // a configuration fault. The call itself is closed as `uncertain`
         // above, which is right: the provider may have billed it.
-        sendError(res, gatewayError(502, "model_gateway_upstream_interrupted", "The model provider's stream broke off mid-answer."), onFailure);
+        sendError(res, gatewayError(502, "model_gateway_upstream_interrupted", "The model provider's stream broke off mid-answer."), reportFailure);
       } else {
-        sendError(res, error, onFailure);
+        sendError(res, error, reportFailure);
       }
       if (!abortController.signal.aborted) {
         abortController.abort(error instanceof Error ? error : new Error("Model gateway failed."));
@@ -1310,8 +1398,42 @@ export function createModelGatewayHandler(config, runtimeManager, {
       if (timeout) clearTimeout(timeout);
       req.off("aborted", onAborted);
       res.off("close", onResponseClose);
+      if (providerDisposition !== 'not-dispatched' && callSettings && typeof onModelCall === 'function') {
+        const observed = usageTail?.observedModel() ?? null;
+        let jsonFinishReason = null;
+        if (!streamRequested && !jsonReceiptOverflow && jsonReceiptChunks.length) {
+          try {
+            const parsed = JSON.parse(Buffer.concat(jsonReceiptChunks).toString('utf8'));
+            const reason = parsed?.choices?.[0]?.finish_reason ?? parsed?.stop_reason;
+            if (['stop', 'length', 'tool_calls', 'content_filter', 'insufficient_system_resource', 'end_turn', 'max_tokens', 'tool_use', 'stop_sequence'].includes(reason)) jsonFinishReason = reason;
+          } catch { /* an incomplete JSON answer has no known finish reason */ }
+        }
+        const receipt = { callId, projectId: verifiedProjectId, runId: verifiedRunId, ...callSettings,
+          startedAt: requestStartedAt.toISOString(), finishedAt: new Date().toISOString(),
+          upstreamStatus: upstreamStatus >= 400 && upstreamStatus <= 599 ? upstreamStatus : null,
+          servedModel: supportedDeepSeekModels.has(observed) ? observed : null,
+          finishReason: streamRequested ? progress.snapshot().finishReason : jsonFinishReason,
+          dispatch: providerDisposition === 'dispatched' ? 'attempted' : providerDisposition,
+          outcome: callOutcome, errorCode: callErrorCode };
+        try { Promise.resolve(onModelCall(receipt)).catch(() => {}); } catch { /* telemetry cannot change the call */ }
+      }
+      releaseProducer();
     }
   };
+  /** Wait for callbacks to be invoked after admission is closed by the caller.
+   * Does not cancel calls, and does not wait for asynchronous callback writes. */
+  modelGatewayHandler.drainModelCalls = async ({ timeoutMs = 30000 } = {}) => {
+    const deadline = Date.now() + Math.max(1, Math.min(300000, Number(timeoutMs) || 30000));
+    while (producers.size) {
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) return { drained: false, pending: producers.size };
+      let timer;
+      await Promise.race([Promise.all([...producers]), new Promise(resolve => { timer = setTimeout(resolve, remaining); })]);
+      clearTimeout(timer);
+    }
+    return { drained: true, pending: 0 };
+  };
+  return modelGatewayHandler;
 }
 
 // Match the review client's never-sent boundary: ambiguous resets or deadlines

@@ -916,11 +916,33 @@ test("a criterion's evidence shows every citation the verdict rests on, each wit
   assert.equal(judged([{ ...later, dateBound: "no_later_than" }], names).evidence.dateNote, null, "a bound with no header basis is not a header date");
   // No name resolved (a document the viewer cannot name, or an evidence kind with none): the older label, and nothing invented.
   assert.equal(judged([later]).evidence.source, "病历原文");
-  // Only what is quoted is shown, and no more than three citations.
+  // Only what is quoted is shown. Duplicates must not hide a later deciding branch.
   assert.equal(judged([{ ...later, quote: "" }, earlier], names).evidenceItems.length, 1);
-  assert.equal(judged([later, earlier, later, earlier], names).evidenceItems.length, 3);
+  assert.equal(judged([later, earlier, later, earlier], names).evidenceItems.length, 2);
+  const third = citation("2026-04-01 诊断高血压", "sfl_third", "2026-04-01T00:00:00.000Z");
+  const deciding = citation("2026-09-01 诊断肥胖", "sfl_deciding", "2026-09-01T00:00:00.000Z");
+  assert.deepEqual(judged([later, earlier, third, deciding], names).evidenceItems.map((item) => item.quote),
+    [later.quote, earlier.quote, third.quote, deciding.quote], "every unique citation stays accessible");
+  assert.deepEqual(judged([later, later, later, deciding], names).evidenceItems.map((item) => item.quote),
+    [later.quote, deciding.quote], "repeated evidence does not hide the deciding citation");
+  const sameWordsOtherDocument = citation(later.quote, "sfl_other", later.occurredAt);
+  assert.equal(judged([later, sameWordsOtherDocument], names).evidenceItems.length, 2,
+    "identical words in different documents retain both provenance locations");
   assert.equal(judged([], names).evidence, null);
   assert.deepEqual(judged([], names).evidenceItems, []);
+  const premise = citation("未记录肾病", "sfl_premise", null);
+  const unresolvedPremise = presentMatchingTab({ ...base, match: { ...base.match,
+    selected: { ...base.match.selected, judgments: [{ criterionId: "crit_1", state: "unknown", applicable: true,
+      applicabilityState: "unknown", applicabilityEvidence: [premise], applicabilityMissing: [{ reason: "not_recorded" }], evidence: [later] }] } } }).selected.criteria[0];
+  assert.equal(unresolvedPremise.applicabilityState, "unknown");
+  assert.equal(unresolvedPremise.applicabilityReason, "未记录");
+  assert.equal(unresolvedPremise.applicabilityEvidenceItems[0].quote, premise.quote);
+  assert.equal(unresolvedPremise.evidenceItems[0].quote, later.quote);
+  const pendingPremise = presentMatchingTab({ ...base, match: { ...base.match,
+    selected: { ...base.match.selected, judgments: [{ criterionId: "crit_1", state: "unknown", applicable: true,
+      applicabilityState: "pending_recheck", applicabilityRecheckAt: "2026-11-15T00:00:00.000Z", evidence: [] }] } } }).selected.criteria[0];
+  assert.match(pendingPremise.applicabilityRequestNote, /11.*15.*起可复评/);
+  assert.equal(Object.hasOwn(judged([later], names), "applicabilityState"), false, "historical rows do not gain an invented axis");
   // Neither the run that wrote the facts nor the model behind them is on the page.
   assert.equal(/run|model|requestHash|provenance/i.test(JSON.stringify(row)), false);
 });

@@ -38,7 +38,8 @@ import {
 } from '@evimed/domain';
 import { HttpError } from './security.mjs';
 import { callModelForControlPlane } from './modelGateway.mjs';
-import { assessSubject, frozenAsOf, languageKeysOf } from './vcrMatching.mjs';
+import { assessSubject, frozenAsOf, ambiguousCriterionLanguageKeys } from './vcrMatching.mjs';
+import { languageCriteriaByKey } from './vcrMatchingSnapshot.mjs';
 import { matchingVariablesOf, subjectTableFacts } from './vcrMatchingTable.mjs';
 import { locatePassages, passageTerms } from './vcrPassages.mjs';
 
@@ -264,7 +265,7 @@ export function createFactExtractor({ config, usageLedger = null, callModel = ca
  *
  * @param {{ study: any, selection?: unknown, matchStore: any, documents: any, subjectTable?: any, config: Record<string, any>, now?: () => Date }} deps
  * @returns {Promise<{ ok: false, message: string } | { ok: true, protocolVersionId: string, asOf: string, variables: string[], plan: ReturnType<typeof planMatchExtraction>,
- *   statement: string, prefilter: boolean, model: string, pendingLanguageKeys: string[], questionsDigest: string }>}
+ *   statement: string, prefilter: boolean, model: string, pendingLanguageKeys: string[], ambiguousLanguageKeys: string[], questionsDigest: string }>}
  */
 export async function planBatch({ study, selection: raw = {}, matchStore, documents, subjectTable = null, config, now = () => new Date() }) {
   const selection = extractSelection(raw);
@@ -274,10 +275,10 @@ export async function planBatch({ study, selection: raw = {}, matchStore, docume
   if (!documents?.roster) return { ok: false, message: '病历文档未接入本部署：这一步暂不可用，其余步骤照常。' };
   const asOf = selection.asOf ? frozenAsOf(selection.asOf) : now().toISOString();
   const wanted = matchingVariablesOf(criteria);
-  const pendingLanguageKeys = [...new Set(criteria.flatMap(criterion => [
-    ...languageKeysOf(criterion.requirement, criterion.id), ...languageKeysOf(criterion.applicability, criterion.id),
-  ]))];
-  const languageNote = pendingLanguageKeys.length ? '这次批量读取只提取事实，不回答语言条件；读回患者评估，对仍缺失的条件在会话中根据患者全部相关病历逐条回答。' : '';
+  const pendingLanguageKeys = [...languageCriteriaByKey(criteria).keys()];
+  const ambiguousLanguageKeys = [...ambiguousCriterionLanguageKeys(criteria)];
+  const languageNote = (pendingLanguageKeys.length ? '这次批量读取只提取事实，不回答语言条件；读回患者评估，对仍缺失的条件在会话中根据患者全部相关病历逐条回答。' : '')
+    + (ambiguousLanguageKeys.length ? '部分语言条件的 key 有冲突，需先修正完整条件集，冲突项保持未知。' : '');
 
   // The table, when the study has one: the columns answer their variables, and the people they decide against are not read.
   /** @type {any} */
@@ -291,8 +292,8 @@ export async function planBatch({ study, selection: raw = {}, matchStore, docume
   const questionsDigest = matchExtractDigest(variables, criteria, String(latest.id));
   if (!variables.length) {
     const plan = planMatchExtraction({ roster: [], limit: 1, answeredByTable });
-    return { ok: true, protocolVersionId: String(latest.id), asOf, variables, plan, pendingLanguageKeys, questionsDigest,
-      statement: pendingLanguageKeys.length ? languageNote : `${matchBatchStatement(plan, { minCell: matchBatchMinCell(config) })}（没有需要从病历提取的变量。）`,
+    return { ok: true, protocolVersionId: String(latest.id), asOf, variables, plan, pendingLanguageKeys, ambiguousLanguageKeys, questionsDigest,
+      statement: languageNote || `${matchBatchStatement(plan, { minCell: matchBatchMinCell(config) })}（没有需要从病历提取的变量。）`,
       prefilter: selection.prefilter !== false, model: String(config.deepseekModel || VCR_MATCH_BATCH_DEFAULT_MODEL) };
   }
 
@@ -322,7 +323,7 @@ export async function planBatch({ study, selection: raw = {}, matchStore, docume
     done, limit: Number(config.vcrMatchBatchMaxSubjects) || VCR_MATCH_BATCH_LIMITS.subjects, prefilter: selection.prefilter !== false, model, answeredByTable,
     reading: matchExtractBudget(criteria, variables),
   });
-  return { ok: true, protocolVersionId: String(latest.id), asOf, variables, plan, pendingLanguageKeys, questionsDigest,
+  return { ok: true, protocolVersionId: String(latest.id), asOf, variables, plan, pendingLanguageKeys, ambiguousLanguageKeys, questionsDigest,
     statement: matchBatchStatement(plan, { minCell: matchBatchMinCell(config) }) + languageNote, prefilter: selection.prefilter !== false, model };
 }
 
@@ -562,8 +563,9 @@ export function createMatchBatch({ jobs, matchStore, documents, subjectTable = n
         ...(built.plan.bounded ? { bounded: built.plan.bounded } : {}),
         protocolVersionId: built.protocolVersionId,
         pendingLanguageKeys: built.pendingLanguageKeys,
+        ambiguousLanguageKeys: built.ambiguousLanguageKeys,
       };
-      if (!built.plan.toRead.length) return { action: 'start', kind: 'match_extract', state: built.pendingLanguageKeys.length ? 'language_pending' : 'nothing_to_read', jobId: null, ...summary };
+      if (!built.plan.toRead.length) return { action: 'start', kind: 'match_extract', state: built.pendingLanguageKeys.length || built.ambiguousLanguageKeys.length ? 'language_pending' : 'nothing_to_read', jobId: null, ...summary };
       const scenario = extractScenario(built);
       // The same reading asked for again while it is out is that reading; one that has ended is a new attempt (a record that failed is read
       // again), so the key carries how many readings of this one there have been.

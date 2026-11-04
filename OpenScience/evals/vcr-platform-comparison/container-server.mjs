@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
+import path from 'node:path';
 import { createWebApiApp } from '../../apps/server/src/server.mjs';
 import { installBudgetGuard } from './budget-guard.mjs';
 import { closedCorpusFetch, installClosedCorpusFence, runtimeSocketFence } from './container-boundary.mjs';
@@ -11,10 +12,18 @@ const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 const collectionBytes = await fs.readFile(configFile);
 let vcrFetchAllowed = 0;
 let vcrFetchBlocked = 0;
+let receiptWrites = Promise.resolve();
+let receiptFailure = false;
+const recordModelCall = receipt => {
+  receiptWrites = receiptWrites.then(() => fs.appendFile('/audit/model-calls.jsonl', JSON.stringify(receipt)+'\n', { mode: 0o600 }))
+    .catch(() => { receiptFailure = true; });
+  return receiptWrites;
+};
 if (sha256(collectionBytes) !== launch.collectionManifestSha256) throw new Error('Collection bytes differ');
 const password = (await fs.readFile('/audit/secrets/postgres', 'utf8')).trim();
 const app = createWebApiApp({
   authMode: 'local', devAuth: false, selfRegistrationEnabled: true, localAutoConfig: false,
+  modelGatewayOnCall: recordModelCall,
   sessionCookieName: 'os_vcr_container_benchmark',
   host: '0.0.0.0', port: 8787, publicUrl: launch.origin,
   dataDir: '/data', stateStore: 'postgres',
@@ -73,6 +82,10 @@ for (const module of [
   'apps/server/src/server.mjs', 'apps/server/src/vcrService.mjs', 'apps/server/src/vcrPatientTrials.mjs',
   'apps/server/src/vcrTrialCorpus.mjs', 'apps/server/src/vcrCandidateTrialStore.mjs',
   'apps/server/src/vcrGateway.mjs', 'apps/server/src/vcrRoutes.mjs', 'apps/server/src/config.mjs',
+  'apps/server/src/vcrCriterionFidelity.mjs', 'apps/server/src/vcrMatchBatch.mjs',
+  'apps/server/src/vcrMatchStore.mjs', 'apps/server/src/vcrMatching.mjs', 'apps/server/src/vcrMatchingEvidence.mjs',
+  'apps/server/src/vcrMatchingSnapshot.mjs', 'apps/server/src/vcrPersistence.mjs', 'apps/server/src/vcrViewsTabs.mjs',
+  'apps/server/src/vcrWriteContracts.mjs', 'apps/server/src/modelGateway.mjs', 'apps/server/src/usageLedger.mjs',
   'evals/vcr-platform-comparison/container-server.mjs', 'evals/vcr-platform-comparison/container-launch.mjs',
   'evals/vcr-platform-comparison/container-probe.mjs', 'evals/vcr-platform-comparison/container-boundary.mjs',
   'evals/vcr-platform-comparison/container-resources.mjs',
@@ -109,6 +122,7 @@ try {
     corpusProbe: { collection, revision: frozen.collection.revision, liveAvailable: live.available,
       blockedRegistryFetches: vcrFetchBlocked, allowedFetches: vcrFetchAllowed }, collectionManifestHostPath: launch.collectionManifestHostPath,
     collectionManifestSha256: launch.collectionManifestSha256, collectionDatabaseSha256: launch.collectionDatabaseSha256,
+    modelCallsHostPath: path.join(path.dirname(launch.collectionManifestHostPath), 'model-calls.jsonl'),
     budget: { file: launch.budgetHostPath, totalLimit: budget.totalLimit, accountLimit: budget.accountLimit,
       allModelPurposes: true, basis: 'Reference-price estimated reservations with settlement and conservative uncertain retention' },
   };
@@ -119,6 +133,22 @@ try {
 }
 for (const signal of ['SIGINT', 'SIGTERM']) {
   process.once(signal, async () => {
-    try { await app.close(); } finally { await budget?.close(); }
+    try {
+      const result = await app.close({ modelCallDrainTimeoutMs: 30_000 });
+      if (!result.modelCallDrain.drained) {
+        process.stderr.write(`Benchmark model-call receipts incomplete: ${result.modelCallDrain.pending ?? 'unknown'} calls remain.\n`);
+        process.exitCode = 1;
+      }
+    } finally {
+      try {
+        await budget?.close();
+      } finally {
+        await receiptWrites;
+        if (receiptFailure) {
+          process.stderr.write('Benchmark model-call receipt write failed.\n');
+          process.exitCode = 1;
+        }
+      }
+    }
   });
 }

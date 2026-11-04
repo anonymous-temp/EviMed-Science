@@ -3,6 +3,7 @@
  * No conditions, facts or answers are seeded. All inference enters automated dispatch.
  */
 import fs from 'node:fs/promises';
+import { constants as fsConstants } from 'node:fs';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
@@ -18,10 +19,63 @@ const git = (...args) => execFileSync('git', args, {cwd:ROOT,encoding:'utf8'}).t
 const sleep = ms => new Promise(resolve => setTimeout(resolve,ms));
 const safe = value => {if (!/^[A-Za-z0-9_-]{1,128}$/.test(value)) throw new Error('Unsafe case identity');return value;};
 const rows = value => Array.isArray(value) ? value : value?.runs ?? value?.items ?? [];
+
+// Fixed before a campaign: only distinct, explicitly rejected upstream calls
+// attributed to this exact project and run can trip the breaker.
+export function upstreamFailureWindow(receipts, {projectId,runId,startedAt,now=Date.now()}={}) {
+  const start=Date.parse(startedAt);if(!projectId||!runId||!Number.isFinite(start))return null;
+  const seen=new Set();const matches=[];
+  for(const row of receipts){
+    const time=Date.parse(row?.finishedAt);
+    if(row?.projectId!==projectId||row?.runId!==runId||row?.dispatch!=='rejected'||row?.outcome!=='failed'
+      ||!Number.isFinite(time)||time<start||time>now
+      ||typeof row.callId!=='string'||!/^[0-9a-f-]{36}$/i.test(row.callId)||seen.has(row.callId))continue;
+    const status=row.upstreamStatus;
+    if(!((row.errorCode==='model_gateway_upstream_error'&&Number.isInteger(status)&&status>=500&&status<=599)
+      ||(row.errorCode==='model_gateway_rate_limited'&&status===429)
+      ||(row.errorCode==='model_gateway_payment_required'&&status===402)))continue;
+    seen.add(row.callId);matches.push({callId:row.callId,finishedAt:row.finishedAt,status});
+  }
+  matches.sort((a,b)=>Date.parse(a.finishedAt)-Date.parse(b.finishedAt));
+  for(let i=2;i<matches.length;i++)if(Date.parse(matches[i].finishedAt)-Date.parse(matches[i-2].finishedAt)<=60000)
+    return {code:'repeated_upstream_refusal',windowMs:60000,threshold:3,events:matches.slice(i-2,i+1)};
+  return null;
+}
+
+export function ownedUpstreamFailure(receipts, scopes, now=Date.now()) {
+  for(const scope of scopes) {
+    const found=upstreamFailureWindow(receipts,{...scope,now});
+    if(found)return {...found,originCaseId:scope.caseId,projectId:scope.projectId,runId:scope.runId};
+  }
+  return null;
+}
+
+export async function readModelCallReceipts(file) {
+  if(!file)return [];
+  let handle;
+  try {
+    handle=await fs.open(file,fsConstants.O_RDONLY|fsConstants.O_NOFOLLOW);
+    const stat=await handle.stat();if(!stat.isFile()||stat.size>16*1024*1024)throw new Error('Model receipt file unavailable or exceeds the reading bound');
+    const text=await handle.readFile('utf8');const lines=text.split('\n');lines.pop();
+    return lines.flatMap(line=>{try {const row=JSON.parse(line);return row&&typeof row==='object'?[row]:[];}catch{return [];}});
+  } catch(error) {if(error?.code==='ENOENT')return [];throw error;} finally {await handle?.close();}
+}
 async function save(file,value) {
   await fs.mkdir(path.dirname(file),{recursive:true,mode:0o700});
   const temporary=file+'.'+randomUUID()+'.tmp';
   await fs.writeFile(temporary,JSON.stringify(value,null,2)+'\n',{mode:0o600});await fs.rename(temporary,file);
+}
+
+// Call only after the control plane has drained its receipt producers. This
+// appends an audit finding to the summary without changing any case outcome.
+export async function reconcileCampaignReceipts(out) {
+  const frozen=JSON.parse(await fs.readFile(path.join(out,'FROZEN.json'),'utf8'));
+  const summary=JSON.parse(await fs.readFile(path.join(out,'summary.json'),'utf8'));
+  if(typeof frozen.modelCallsHostPath!=='string'||!path.isAbsolute(frozen.modelCallsHostPath))throw new Error('Frozen receipt path missing');
+  const finding=ownedUpstreamFailure(await readModelCallReceipts(frozen.modelCallsHostPath),summary.cases);
+  summary.postShutdownReceiptCheck={checkedAt:new Date().toISOString(),circuitBreaker:finding};
+  await save(path.join(out,'summary.json'),summary);
+  return summary.postShutdownReceiptCheck;
 }
 
 async function downloadArtifact({base,account,projectId,relative,folder,signal,instance}){
@@ -71,6 +125,7 @@ export async function verifyContainerStartup(startup, startupPath) {
   const state = path.resolve(path.dirname(startupPath), '..');
   const hostManifest = path.join(state, 'audit', 'collection.json');
   if (startup.collectionManifestHostPath !== hostManifest) throw new Error('Container collection host mapping differs');
+  if (startup.modelCallsHostPath !== path.join(state, 'audit', 'model-calls.jsonl')) throw new Error('Model receipt host mapping differs');
   const probe = JSON.parse(await fs.readFile(path.join(state, 'probe.json')));
   if (probe.instance !== startup.instance || probe.sourceSha !== startup.sourceSha || probe.image !== startup.image
       || probe.network !== config.runtimeInternalNetworkName || probe.kernelVersion !== startup.kernelVersion
@@ -126,7 +181,7 @@ export async function verifyCampaign({base,manifestPath,startupPath,expectedSha}
     startupSha256:hash(await fs.readFile(startupPath)),createdAt:new Date().toISOString()}};
 }
 
-export async function runCase({base,example,manifest,out,timeoutMs=900000,instance=null,signal=null}) {
+export async function runCase({base,example,manifest,out,timeoutMs=900000,instance=null,signal=null,receiptPath=null,priorScopes=[]}) {
   const folder=path.join(out,safe(example.id));await fs.mkdir(folder,{recursive:true,mode:0o700});
   const record={caseId:example.id,task:manifest.task??'matching',startedAt:new Date().toISOString(),status:'starting',requests:[]};
   let account,projectId,sessionId,studyId,projectCreated=false,interrupted=false,captureDeadline=null;
@@ -199,6 +254,10 @@ export async function runCase({base,example,manifest,out,timeoutMs=900000,instan
     record.runId=run.id;record.status='running';await save(path.join(folder,'case.json'),record);
     let settled=false;
     while(Date.now()<deadline&&!interrupted) {
+      let trip;
+      try {trip=ownedUpstreamFailure(await readModelCallReceipts(receiptPath),[...priorScopes,{caseId:example.id,projectId,runId:run.id,startedAt:record.startedAt}]);}
+      catch {record.receiptReadFailure=true;record.status='receipt_unavailable';break;}
+      if(trip){record.circuitBreaker=trip;record.status='upstream_stopped';break;}
       const runs=rows(await api('GET','/api/agent-runs'));record.runs=runs;
       if(runs.some(r=>r.automated!==true))throw new Error('An unmarked run entered the campaign');
       await discoverStudy();
@@ -210,7 +269,7 @@ export async function runCase({base,example,manifest,out,timeoutMs=900000,instan
       await sleep(3000);
     }
     record.status=settled?(['completed','succeeded','done'].includes(record.rootOutcome)?'settled':'run_failed')
-      :interrupted?'interrupted':record.status==='awaiting_budget'?'awaiting_budget':'timed_out';
+      :interrupted?'interrupted':['awaiting_budget','upstream_stopped','receipt_unavailable'].includes(record.status)?record.status:'timed_out';
     if(!settled)await quiesce();
     captureDeadline=Date.now()+30000;
     const capturing=!settled||interrupted?{cleanup:true,capture:true}:{};
@@ -259,6 +318,14 @@ export async function runCase({base,example,manifest,out,timeoutMs=900000,instan
         }
       }
       await stop().catch(error=>{record.stopError=error.message;});
+      // A receipt may be queued just after the last polling read. Recheck once
+      // after quiescing while the account and its attribution are still known.
+      if(record.runId&&!record.circuitBreaker&&!record.receiptReadFailure){
+        try {
+          const trip=ownedUpstreamFailure(await readModelCallReceipts(receiptPath),[...priorScopes,{caseId:example.id,projectId,runId:record.runId,startedAt:record.startedAt}]);
+          if(trip)record.circuitBreaker=trip;
+        } catch {record.receiptReadFailure=true;record.status='receipt_unavailable';}
+      }
       record.usage=await api('GET','/api/account/usage',undefined,{cleanup:true}).catch(()=>null);
       record.cleanup=record.stopError&&record.dispatchAttempted?{deleted:false,reason:record.stopError}:await account.close();
       if(!record.cleanup.deleted)record.status='cleanup_failed';
@@ -286,7 +353,10 @@ export async function main() {
   if(!selected.length||(ids&&selected.length!==ids.size))throw new Error('Unknown case selection');
   await fs.mkdir(out,{recursive:false,mode:0o700});
   const summary={...checked.freeze,task:checked.manifest.task??'matching',budgetCny:budget,perAccountCeilingCny:ceiling,
-    planned:selected.map(c=>c.id),cases:[],spentBoundCny:0,status:'running'};
+    planned:selected.map(c=>c.id),cases:[],spentBoundCny:0,status:'running',
+    modelCallsHostPath:checked.startup.modelCallsHostPath,
+    circuitBreakerPolicy:{threshold:3,windowMs:60000,scope:'same authenticated project and run',
+      statuses:['upstream_5xx','rate_limit_429','payment_402']}};
   if(summary.task==='matching'){
     if(!values.reference||!values.gold)throw new Error('Bind reference and target hashes before inference');
     summary.referenceSha256=hash(await fs.readFile(values.reference));summary.goldSha256=hash(await fs.readFile(values.gold));
@@ -301,18 +371,26 @@ export async function main() {
   try{
   for(const example of selected) {
     if(campaignAbort.signal.aborted){summary.status='interrupted';break;}
+    let priorTrip;
+    try {priorTrip=ownedUpstreamFailure(await readModelCallReceipts(checked.startup.modelCallsHostPath),summary.cases);}
+    catch {summary.status='stopped_receipt_unavailable';break;}
+    if(priorTrip){summary.circuitBreaker=priorTrip;summary.status='stopped_upstream';break;}
     if(summary.spentBoundCny+ceiling>budget){summary.status='budget_exhausted';break;}
     if(git('rev-parse','HEAD')!==values.sha||git('status','--porcelain'))throw new Error('Source changed during campaign');
     // Reserve the account's enforced maximum before a model request can be made.
     summary.spentBoundCny+=ceiling;summary.activeCase=example.id;await save(path.join(out,'summary.json'),summary);
-    const result=await runCase({base,example,manifest:checked.manifest,out,timeoutMs:Number(values.timeout??900000),instance:checked.startup.instance,signal:campaignAbort.signal});
+    const result=await runCase({base,example,manifest:checked.manifest,out,timeoutMs:Number(values.timeout??900000),instance:checked.startup.instance,signal:campaignAbort.signal,
+      receiptPath:checked.startup.modelCallsHostPath,priorScopes:summary.cases});
     const bound=usageBound(result.usage,ceiling);
     summary.spentBoundCny+=bound-ceiling;summary.activeCase=null;
-    summary.cases.push({id:example.id,status:result.status,runId:result.runId,studyId:result.studyId,usage:result.usage,cleanup:result.cleanup});
+    summary.cases.push({id:example.id,caseId:example.id,projectId:result.projectId,startedAt:result.startedAt,status:result.status,runId:result.runId,studyId:result.studyId,usage:result.usage,cleanup:result.cleanup});
     await save(path.join(out,'summary.json'),summary);
     console.log(JSON.stringify({case:example.id,status:result.status,completed:summary.cases.length,total:selected.length,costBoundCny:summary.spentBoundCny}));
     if(result.status==='interrupted'){summary.status='interrupted';break;}
+    if(result.circuitBreaker)summary.circuitBreaker=result.circuitBreaker;
     if(result.accountId&&result.cleanup?.deleted!==true){summary.status='stopped';break;}
+    if(result.circuitBreaker){summary.status='stopped_upstream';break;}
+    if(result.receiptReadFailure){summary.status='stopped_receipt_unavailable';break;}
   }
   }finally{for(const event of ['SIGINT','SIGTERM','SIGHUP'])process.off(event,interrupt);}
   if(summary.status==='running')summary.status=summary.cases.every(row=>row.status==='settled')?'finished':'completed_with_findings';

@@ -1273,8 +1273,13 @@ export interface VcrCriterionJudgement {
    * (`documentId`, `start`, `end` — the same span a fact of the clinical timeline cites) or a cell of the data table (`snapshotId`, `field`).
    */
   evidence?: VcrCriterionCitation | null;
-  /** Every citation the verdict rests on (at most three), the first of them being `evidence`: an unknown that waits on a prescription also shows the administration it was set against. */
+  /** Distinct citations the verdict rests on, with the first also exposed as `evidence` for older consumers. */
   evidenceItems?: VcrCriterionCitation[];
+  /** The applicability axis is absent on historical assessments. */
+  applicabilityState?: VcrCriterionState | null;
+  applicabilityEvidenceItems?: VcrCriterionCitation[];
+  applicabilityReason?: string | null;
+  applicabilityRequestNote?: string | null;
   /** What to ask for: 「申请近 4 周头颅 MRI」. */
   request?: string | null;
   /** Why it is not decided, in the assessment's words (「缺登记原文」); null for a decided criterion. */

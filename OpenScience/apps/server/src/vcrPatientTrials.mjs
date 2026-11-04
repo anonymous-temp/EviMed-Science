@@ -32,9 +32,10 @@ import { candidateCriteriaHash } from "./vcrCandidateTrialStore.mjs";
 import { HttpError } from "./security.mjs";
 import { CTGOV_STUDY_URL, CTIS_STUDY_URL } from "./trialRegistryClient.mjs";
 import { VCR_MATCHING_GAP_REASON_LABELS_ZH } from "@evimed/domain";
-import { VCR_MATCHING_VOCABULARY_VERSION, assessSubject, eligibilityCounts, summarizeEligibility, decidedShare, frozenAsOf, languageKeysOf, matchingInputDigest, statedRequirement } from "./vcrMatching.mjs";
+import { VCR_MATCHING_EVALUATOR_VERSION, VCR_MATCHING_VOCABULARY_VERSION, assessSubject, criterionLanguageKeys, eligibilityCounts, summarizeEligibility, decidedShare, frozenAsOf, matchingInputDigest, statedRequirement } from "./vcrMatching.mjs";
 import { matchingVariablesOf, subjectTableFacts } from "./vcrMatchingTable.mjs";
 import { matchingAssessmentEvidence } from "./vcrMatchingEvidence.mjs";
+import { languageCriteriaByKey, languageCriterionHash } from "./vcrMatchingSnapshot.mjs";
 
 /**
  * Sites kept on a candidate trial. A registry record can list hundreds; a patient's reader needs where
@@ -362,6 +363,7 @@ const protocolTitle = (protocol) => text(protocol.title) || `方案版本 ${prot
  */
 function trialForRun(trial, criteria, { withCriteria = false } = {}) {
   const located = criteria.filter(criterion => locateSourceText(criterion.sourceText, trial.eligibilityText)).length;
+  const validLanguageKeys = languageCriteriaByKey(criteria);
   return {
     id: trial.id, registry: trial.registry, registryId: trial.registryId, title: trial.title, phase: trial.phase, status: trial.status,
     conditions: trial.conditions, locations: { total: trial.locations?.total ?? null, countries: trial.locations?.countries ?? [] },
@@ -376,7 +378,11 @@ function trialForRun(trial, criteria, { withCriteria = false } = {}) {
         // An exclusion reads back as written: the condition that excludes (`statedRequirement`).
         sourceText: criterion.sourceText, requirement: statedRequirement(criterion), applicability: criterion.applicability,
         sourceLocator: criterion.sourceLocator, sourceVerified: Boolean(locateSourceText(criterion.sourceText, trial.eligibilityText)),
-        languageKeys: languageKeysOf(criterion.requirement, criterion.id),
+        languageKeys: criterionLanguageKeys(criterion).filter(key => validLanguageKeys.has(key)),
+        languageBindings: criterionLanguageKeys(criterion).filter(key => validLanguageKeys.has(key)).map(key => ({
+          criterionKey: key, expectedRecordHash: trial.recordHash ?? null,
+          expectedCriterionHash: languageCriterionHash(validLanguageKeys.get(key) ?? [], key),
+        })),
       }))
       : criteria.length,
   };
@@ -474,9 +480,19 @@ export function createPatientTrials({ candidateStore, matchStore = null, documen
       /** @type {Array<{ code: string }>} */
       const notes = [];
       const subjects = [...new Set(subjectKeys.map(String))];
-      const held = (await candidateStore.listCandidateTrials({ studyId: study.id, limit: 1000 })).filter((trial) => !trialIds || trialIds.includes(trial.id));
+      const requested = trialIds ? [...new Set(trialIds.map(String))] : null;
+      const held = (await candidateStore.listCandidateTrials({ studyId: study.id, limit: 1000 })).filter((trial) => !requested || requested.includes(trial.id));
       const criteriaOf = await candidateStore.criteriaOfTrials(study.id, held.map((trial) => trial.id));
-      // A trial with no criteria has nothing to judge a patient against.
+      const heldIds = new Set(held.map(trial => trial.id));
+      for (const subjectKey of subjects) {
+        for (const trialId of requested ?? []) if (!heldIds.has(trialId)) {
+          unavailable.push({ trialId, subjectKey, code: "vcr_candidate_trial_not_found" });
+        }
+        for (const trial of held) if (!(criteriaOf.get(trial.id) ?? []).length) {
+          unavailable.push({ trialId: trial.id, registryId: trial.registryId, subjectKey, code: "vcr_criteria_missing" });
+        }
+      }
+      // A trial with no criteria has nothing to judge, but is named above.
       const trials = held.filter((trial) => (criteriaOf.get(trial.id) ?? []).length > 0);
       if (!subjects.length || !trials.length) return { evaluated, unavailable, notes };
       const at = frozenAsOf(asOf ?? now().toISOString());
@@ -529,7 +545,8 @@ export function createPatientTrials({ candidateStore, matchStore = null, documen
               ...Object.values(language).flatMap((entry) => list(entry?.evidence).map((item) => String(item?.documentId ?? ""))),
             ].filter(Boolean));
             const inputSnapshotId = matchingInputDigest({
-              kind: "candidate_trial", candidateTrialId: trial.id, criteriaHash: trial.criteriaHash, recordHash: trial.recordHash, subjectKey,
+              kind: "candidate_trial", matchingEvaluatorVersion: VCR_MATCHING_EVALUATOR_VERSION,
+              candidateTrialId: trial.id, criteriaHash: trial.criteriaHash, recordHash: trial.recordHash, subjectKey,
               facts: facts.map((fact) => [fact.id, matchingInputDigest(fact)]).sort(), languages: Object.values(language).map((entry) => entry.id).sort(),
             });
             const assessment = assessSubject({
@@ -632,7 +649,7 @@ export function createPatientTrials({ candidateStore, matchStore = null, documen
       const trial = await candidateStore.getCandidateTrial({ studyId: study.id, id: candidateTrialId });
       if (!trial) return [];
       const criteria = await candidateStore.listCriteria(trial.id);
-      return [...new Set(criteria.flatMap((criterion) => languageKeysOf(criterion.requirement, criterion.id)))];
+      return [...languageCriteriaByKey(criteria).keys()];
     },
 
     /**
@@ -760,10 +777,11 @@ export function createPatientTrials({ candidateStore, matchStore = null, documen
           const assessment = effectiveAssessment(snapshot.assessments.find(a => a.candidateTrialId === trial.id) ?? null, snapshot.criteria.filter(c => c.candidateTrialId === trial.id), snapshot.judgments);
           return { trials: [trialForRun(trial, snapshot.criteria, { withCriteria: true })], more: false, subjectKey, assessment: await matchingAssessmentEvidence({ documents, study, assessment, subjectKey }) };
         }
-        const trial = await candidateStore.getCandidateTrial({ studyId: study.id, id: filter.id ? String(filter.id) : null, registry: filter.registry ? String(filter.registry) : null, registryId: filter.registryId ? String(filter.registryId) : null });
+        const snapshot = await candidateStore.rankingSnapshot(study.id, "", { id: filter.id ? String(filter.id) : undefined,
+          registry: filter.registry ? String(filter.registry) : undefined, registryId: filter.registryId ? String(filter.registryId) : undefined });
+        const trial = snapshot.trials[0];
         if (!trial) return { trials: [], more: false };
-        const criteria = await candidateStore.listCriteria(trial.id);
-        return { trials: [trialForRun(trial, criteria, { withCriteria: true })], more: false };
+        return { trials: [trialForRun(trial, snapshot.criteria, { withCriteria: true })], more: false };
       }
       if (subjectKey) {
         const ranking = await self.ranked(study, { subjectKey });
@@ -781,12 +799,17 @@ export function createPatientTrials({ candidateStore, matchStore = null, documen
         const criteriaOf = new Map(candidateIds.map(id => [id, current.criteria.filter(c => c.candidateTrialId === id)]));
         const answeredByTrial = await candidateStore.languageAnswersForTrials(study.id, subjectKey, candidateIds, criteriaOf);
         const protocolCriteria = matchStore ? await matchStore.criteriaOfProtocols(study.id, page.filter(entry => entry.kind === "protocol").map(entry => entry.id)) : [];
-        /** @type {Array<{ trialId: string, criterionKey: string, criterionId: string }>} */
+        /** @type {Array<{ trialId: string, criterionKey: string, criterionId: string, expectedRecordHash?: string|null, expectedCriterionHash?: string }>} */
         const requests = [];
         for (const row of page.filter(entry => entry.kind === "registry")) {
           const answered = answeredByTrial.get(row.id) ?? new Set();
-          for (const criterion of criteriaOf.get(row.id) ?? []) for (const key of languageKeysOf(criterion.requirement, criterion.id)) {
-            if (!answered.has(key)) requests.push({ trialId: row.id, criterionKey: key, criterionId: criterion.id });
+          const criteria = criteriaOf.get(row.id) ?? [];
+          const validLanguageKeys = languageCriteriaByKey(criteria);
+          const trial = current.trials?.find(entry => entry.id === row.id);
+          for (const criterion of criteria) for (const key of criterionLanguageKeys(criterion).filter(languageKey => validLanguageKeys.has(languageKey))) {
+            if (!answered.has(key)) requests.push({ trialId: row.id, criterionKey: key, criterionId: criterion.id,
+              ...(trial ? { expectedRecordHash: trial.recordHash ?? null,
+                expectedCriterionHash: languageCriterionHash(validLanguageKeys.get(key) ?? [], key) } : {}) });
           }
         }
         return {

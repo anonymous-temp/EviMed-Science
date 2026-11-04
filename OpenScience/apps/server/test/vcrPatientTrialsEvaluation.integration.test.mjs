@@ -93,6 +93,24 @@ test("a changed source snapshot cannot inherit an old parse or assessment", opti
   assert.equal(await candidates.getAssessment(oldAssessment, study.id), null);
 });
 
+test("candidate detail exposes a coherent language binding that rejects a later source revision", options, async () => {
+  const study = await seedStudy();
+  await seedPatient(study);
+  const patientTrials = seam();
+  const trial = trialOf("NCT06000989");
+  const written = await patientTrials.writeTrial(study, { trial, criteria: [CONSENT], subjectKeys: ["P-1"] });
+  const read = await patientTrials.runtimeRead(study, { id: written.trial.id });
+  const binding = read.trials[0].criteria[0].languageBindings[0];
+  assert.equal(binding.criterionKey, "consent");
+  assert.equal(binding.expectedRecordHash, trial.recordHash);
+  assert.match(binding.expectedCriterionHash, /^[a-f0-9]{64}$/);
+  const input = { subjectKey: "P-1", candidateTrialId: written.trial.id, criterionKey: "consent", state: "unknown", evidence: [], ...binding };
+  await patientTrials.saveLanguageJudgment(study, input);
+  await candidates.saveCandidateTrial({ studyId: study.id, userId: USER,
+    trial: { ...trial, recordHash: "e".repeat(64) }, criteria: [CONSENT], max: 20 });
+  await assert.rejects(patientTrials.saveLanguageJudgment(study, input), { code: "vcr_write_refused" });
+});
+
 test("absent registry eligibility and invented criteria remain unknown despite compatible patient facts", options, async () => {
   const study = await seedStudy(); await seedPatient(study);
   const trials = seam();

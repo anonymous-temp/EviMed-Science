@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
-import { VcrCandidateTrialStore } from "../src/vcrCandidateTrialStore.mjs";
+import { VcrCandidateTrialStore, VCR_CRITERIA_COMPILER_POLICY } from "../src/vcrCandidateTrialStore.mjs";
 import { vcrRuntimeWrite } from "../src/vcrGateway.mjs";
 import { VcrMatchStore } from "../src/vcrMatchStore.mjs";
 import { createPatientTrials } from "../src/vcrPatientTrials.mjs";
@@ -58,6 +58,34 @@ const AGE = { kind: "inclusion", criterionType: "demographic", sourceText: "Age 
 const NSCLC = { kind: "inclusion", criterionType: "diagnosis", sourceText: "Histologically confirmed NSCLC", requirement: { op: "present", variable: "nsclc" } };
 const BRAIN = { kind: "exclusion", criterionType: "comorbidity", sourceText: "Active brain metastases", requirement: { op: "present", variable: "active_brain_metastasis" } };
 
+test("legacy and current cache writers coexist without sharing compiler results", options, async () => {
+  const registry = "clinicaltrials.gov";
+  const registryId = "NCT07000999";
+  const userId = "u_parsed_legacy_policy";
+  const writeLegacy = (hash, criterion) => q(`INSERT INTO evimed_vcr.parsed_trial_criteria (user_id,registry,registry_id,record_hash,criteria)
+    VALUES ($1,$2,$3,$4,$5::jsonb) ON CONFLICT (user_id,registry,registry_id) DO UPDATE SET
+      record_hash=EXCLUDED.record_hash, criteria=EXCLUDED.criteria`, [userId, registry, registryId, hash, JSON.stringify([criterion])]);
+  await writeLegacy(HASH_1, AGE);
+  const key = { userId, registry, registryId, recordHash: HASH_1 };
+  assert.equal(await candidates.parsedCriteriaFor(key), null);
+  assert.deepEqual(await candidates.parsedCriteriaHeld({ userId, trials: [{ registry, registryId }] }), new Set());
+  await candidates.saveParsedCriteria({ ...key, criteria: [NSCLC] });
+  assert.equal((await candidates.parsedCriteriaFor(key)).criteria[0].sourceText, NSCLC.sourceText);
+  assert.equal(await candidates.parsedCriteriaFor({ ...key, userId: "other" }), null);
+  assert.equal(await candidates.parsedCriteriaFor({ ...key, recordHash: HASH_2 }), null);
+  await writeLegacy(HASH_2, AGE);
+  const [legacy] = await q("SELECT record_hash, criteria FROM evimed_vcr.parsed_trial_criteria WHERE user_id=$1", [userId]);
+  assert.equal(legacy.record_hash, HASH_2);
+  assert.equal(legacy.criteria[0].sourceText, AGE.sourceText);
+  const [current] = await q("SELECT compiler_policy, criteria FROM evimed_vcr.parsed_trial_criteria_versions WHERE user_id=$1", [userId]);
+  assert.equal(current.compiler_policy, VCR_CRITERIA_COMPILER_POLICY);
+  assert.equal(current.criteria[0].sourceText, NSCLC.sourceText);
+  assert.equal((await candidates.parsedCriteriaFor(key)).criteria[0].sourceText, NSCLC.sourceText);
+  await database.transaction(client => deleteVcrUserRows(client, userId));
+  assert.equal(await candidates.parsedCriteriaFor(key), null);
+  assert.deepEqual(await q("SELECT record_hash FROM evimed_vcr.parsed_trial_criteria WHERE user_id=$1", [userId]), []);
+});
+
 /** A write the way the run makes it, over the real stores; the registry is a double whose record hash and wording the test sets. */
 function writer(study, state) {
   const patientTrials = createPatientTrials({ candidateStore: candidates, matchStore: matching, config: { vcrCandidateTrialsMax: 20 }, now: () => new Date("2026-11-01T08:00:00Z") });
@@ -82,7 +110,7 @@ test("a second study of the same account reads the parse of the same record inst
   const written = await firstWriter.write([{ registryId: "NCT07000001", criteria: [AGE, NSCLC, BRAIN] }]);
   assert.deepEqual(written.issues, []);
   assert.equal(written.results[0].reused, undefined, "the first study parsed it");
-  const [kept] = await q("SELECT record_hash, criteria FROM evimed_vcr.parsed_trial_criteria WHERE user_id = $1", [user]);
+  const [kept] = await q("SELECT record_hash, criteria FROM evimed_vcr.parsed_trial_criteria_versions WHERE user_id = $1", [user]);
   assert.equal(kept.record_hash, HASH_1);
   assert.deepEqual(kept.criteria.map((criterion) => criterion.sourceText), [AGE.sourceText, NSCLC.sourceText, BRAIN.sourceText]);
   assert.deepEqual(kept.criteria[2].requirement, BRAIN.requirement, "kept as the run wrote it (an exclusion is stored negated and negated once by the write)");
@@ -120,7 +148,7 @@ test("a record whose hash changed is parsed again: the old parse is not read, an
   assert.match(changed.issues[0].message, /解析/);
 
   await writer(second, state).write([{ registryId: "NCT07000002", criteria: [AGE, NSCLC] }]);
-  assert.deepEqual((await q("SELECT record_hash, jsonb_array_length(criteria) AS n FROM evimed_vcr.parsed_trial_criteria WHERE user_id = $1", [user])).map((row) => [row.record_hash, row.n]),
+  assert.deepEqual((await q("SELECT record_hash, jsonb_array_length(criteria) AS n FROM evimed_vcr.parsed_trial_criteria_versions WHERE user_id = $1", [user])).map((row) => [row.record_hash, row.n]),
     [[HASH_2, 2]], "one row per trial: the newer record's parse");
   const reused = await writer(third, state).write([{ registryId: "NCT07000002" }]);
   assert.equal(reused.results[0].criteria, 2);
@@ -145,7 +173,7 @@ test("another account never reads an account's parse", options, async () => {
   assert.equal(await candidates.getCandidateTrial({ studyId: other.id, registryId: "NCT07000003" }), null, "and nothing was written for it");
   // The same registry id of the other account is a row of its own.
   await writer(other, state).write([{ registryId: "NCT07000003", criteria: [NSCLC] }]);
-  assert.equal((await q("SELECT count(*)::int AS n FROM evimed_vcr.parsed_trial_criteria WHERE registry_id = 'NCT07000003'"))[0].n, 2);
+  assert.equal((await q("SELECT count(*)::int AS n FROM evimed_vcr.parsed_trial_criteria_versions WHERE registry_id = 'NCT07000003'"))[0].n, 2);
   const mine = await candidates.parsedCriteriaFor({ userId: "u_parsed_owner", registry: "clinicaltrials.gov", registryId: "NCT07000003", recordHash: HASH_1 });
   assert.equal(mine.criteria.length, 2, "and the owner's is untouched");
 });
@@ -162,7 +190,7 @@ test("a parse that cannot be kept costs the next study a parse and this one noth
   assert.deepEqual(reports, ["XX000"]);
 
   await writer(study, { hash: HASH_1 }).write([{ registryId: "NCT07000005", criteria: [AGE] }]);
-  assert.equal((await q("SELECT count(*)::int AS n FROM evimed_vcr.parsed_trial_criteria WHERE user_id = $1", [user]))[0].n, 1);
+  assert.equal((await q("SELECT count(*)::int AS n FROM evimed_vcr.parsed_trial_criteria_versions WHERE user_id = $1", [user]))[0].n, 1);
   await database.transaction((client) => deleteVcrUserRows(client, user));
-  assert.equal((await q("SELECT count(*)::int AS n FROM evimed_vcr.parsed_trial_criteria WHERE user_id = $1", [user]))[0].n, 0);
+  assert.equal((await q("SELECT count(*)::int AS n FROM evimed_vcr.parsed_trial_criteria_versions WHERE user_id = $1", [user]))[0].n, 0);
 });

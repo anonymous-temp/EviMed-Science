@@ -7,7 +7,37 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { promptFor, runCase, usageBound } from './run.mjs';
+import { promptFor, readModelCallReceipts, reconcileCampaignReceipts, runCase, upstreamFailureWindow, usageBound } from './run.mjs';
+
+test('upstream breaker only counts distinct explicit same-run provider refusals in the window', async()=>{
+  const now=Date.now(), startedAt=new Date(now-120000).toISOString();
+  const row=(i,extra={})=>({callId:`00000000-0000-0000-0000-${String(i).padStart(12,'0')}`,projectId:'p',runId:'r',finishedAt:new Date(now-1000*i).toISOString(),dispatch:'rejected',outcome:'failed',errorCode:'model_gateway_upstream_error',upstreamStatus:503,...extra});
+  const check=rows=>upstreamFailureWindow(rows,{projectId:'p',runId:'r',startedAt,now});
+  assert.equal(check([row(1),row(2)]),null);
+  assert.equal(check([row(1),row(1),row(2)]),null);
+  for(const extra of [{projectId:'other'},{runId:'other'},{upstreamStatus:400},{dispatch:'accepted'},{errorCode:'model_gateway_timeout'},{finishedAt:new Date(now-63000).toISOString()}]) assert.equal(check([row(1),row(2),row(3,extra)]),null);
+  assert.equal(check([row(1),row(2),row(3)]).events.length,3);
+  assert.equal(check([row(1,{errorCode:'model_gateway_rate_limited',upstreamStatus:429})]),null);
+  const dir=await fs.mkdtemp(path.join(os.tmpdir(),'vcr-receipt-'));
+  try {const file=path.join(dir,'calls');await fs.writeFile(file,JSON.stringify(row(1))+'\n'+JSON.stringify(row(2))+'\n'+JSON.stringify(row(3)).slice(0,25));
+    assert.equal((await readModelCallReceipts(file)).length,2);assert.equal(check(await readModelCallReceipts(file)),null);
+  } finally {await fs.rm(dir,{recursive:true,force:true});}
+});
+
+test('post-shutdown reconciliation retains late evidence without rewriting case outcomes',async()=>{
+  const dir=await fs.mkdtemp(path.join(os.tmpdir(),'vcr-reconcile-'));
+  try {
+    const receiptPath=path.join(dir,'calls.jsonl'),startedAt=new Date(Date.now()-3000).toISOString();
+    await fs.writeFile(path.join(dir,'FROZEN.json'),JSON.stringify({modelCallsHostPath:receiptPath}));
+    const cases=[{id:'p1',caseId:'p1',projectId:'p',runId:'r',startedAt,status:'settled'}];
+    await fs.writeFile(path.join(dir,'summary.json'),JSON.stringify({status:'finished',cases}));
+    const lines=Array.from({length:3},(_,i)=>JSON.stringify({callId:`00000000-0000-0000-0000-${String(i).padStart(12,'0')}`,projectId:'p',runId:'r',finishedAt:new Date().toISOString(),dispatch:'rejected',outcome:'failed',errorCode:'model_gateway_upstream_error',upstreamStatus:503}));
+    await fs.writeFile(receiptPath,lines.join('\n')+'\n');
+    const result=await reconcileCampaignReceipts(dir);assert.equal(result.circuitBreaker.originCaseId,'p1');
+    const after=JSON.parse(await fs.readFile(path.join(dir,'summary.json'),'utf8'));
+    assert.equal(after.status,'finished');assert.deepEqual(after.cases,cases);
+  } finally {await fs.rm(dir,{recursive:true,force:true});}
+});
 
 test('unknown usage retains the full reservation and known overage is never hidden',()=>{
   assert.equal(usageBound(null,5),5);
@@ -45,9 +75,12 @@ test('server rejects remote and query-overridden database URLs before importing 
   }
 });
 
-for(const failure of [false,true,'project','poll'])test(`real account helper deletes after ${failure==='project'?'project failure':failure==='poll'?'poll failure':failure?'dispatch failure':'completion'}`,async()=>{
+for(const failure of [false,true,'project','poll','breaker','late_breaker'])test(`real account helper deletes after ${failure==='project'?'project failure':failure==='poll'?'poll failure':failure==='breaker'||failure==='late_breaker'?'upstream breaker':failure?'dispatch failure':'completion'}`,async()=>{
   const tmp=await fs.mkdtemp(path.join(os.tmpdir(),'vcr-driver-'));
-  let registered=0,deleted=0,stopped=0,dispatched=false,project=null,polls=0;
+  let registered=0,deleted=0,stopped=0,dispatched=false,project=null,polls=0,canceled=false;
+  const receiptPath=path.join(tmp,'model-calls.jsonl');
+  const lateRow=i=>JSON.stringify({callId:`00000000-0000-0000-0000-${String(i).padStart(12,'0')}`,projectId:'prior-project',runId:'prior-run',finishedAt:new Date().toISOString(),dispatch:'rejected',outcome:'failed',errorCode:'model_gateway_upstream_error',upstreamStatus:503});
+  if(failure==='late_breaker')await fs.writeFile(receiptPath,lateRow(0)+'\n'+lateRow(1)+'\n');
   const server=createServer(async(req,res)=>{
     let text='';for await(const chunk of req)text+=chunk;
     const body=text?JSON.parse(text):{};let data={},status=200;
@@ -60,7 +93,10 @@ for(const failure of [false,true,'project','poll'])test(`real account helper del
       assert.equal(body.automated,true);assert.equal(req.headers['x-evimed-automated'],'1');
       assert.ok(req.headers['x-open-science-project']);assert.equal(body.line,'answer');
       dispatched=true;data={id:'fixture-run'};status=failure===true?500:202;
-    }else if(route==='/api/agent-runs'){polls++;data=[{id:'fixture-run',automated:true,status:'completed'}];if(failure==='poll'&&polls===1)status=500;}
+      if(failure==='breaker')await fs.writeFile(receiptPath,Array.from({length:3},(_,i)=>JSON.stringify({callId:`00000000-0000-0000-0000-${String(i).padStart(12,'0')}`,projectId:project,runId:'fixture-run',finishedAt:new Date().toISOString(),dispatch:'rejected',outcome:'failed',errorCode:'model_gateway_upstream_error',upstreamStatus:503})).join('\n')+'\n');
+      if(failure==='late_breaker')await fs.appendFile(receiptPath,lateRow(2)+'\n');
+    }else if(route==='/api/agent-runs'){polls++;data=[{id:'fixture-run',automated:true,status:['breaker','late_breaker'].includes(failure)&&!canceled?'running':'completed'}];if(failure==='poll'&&polls===1)status=500;}
+    else if(route==='/api/agent-runs/fixture-run/cancel'){canceled=true;}
     else if(route==='/api/vcr/studies')data={conversationStudies:dispatched?[{id:'study',projectId:project,originatingSessionId:'fixture-session',tabs:['matching']}]:[]};
     else if(route==='/api/vcr/studies/study/jobs')data={jobs:[]};
     else if(route.startsWith('/api/vcr/studies/study/matching')){
@@ -77,9 +113,12 @@ for(const failure of [false,true,'project','poll'])test(`real account helper del
   try{
     const file=path.join(tmp,'patient.txt');await fs.writeFile(file,'A public synthetic patient.');
     const example={id:'p1',files:[{name:'patient.txt',path:file,sha256:createHash('sha256').update(await fs.readFile(file)).digest('hex')}]};
-    const record=await runCase({base:`http://127.0.0.1:${server.address().port}`,example,manifest:{collection:'sigir',task:'matching'},out:tmp});
+    const record=await runCase({base:`http://127.0.0.1:${server.address().port}`,example,manifest:{collection:'sigir',task:'matching'},out:tmp,receiptPath,
+      priorScopes:failure==='late_breaker'?[{caseId:'prior',projectId:'prior-project',runId:'prior-run',startedAt:new Date(Date.now()-60000).toISOString()}]:[]});
     assert.equal(registered,1);assert.equal(deleted,1);assert.ok(failure==='project'||stopped>=1);assert.equal(dispatched,failure!=='project');
-    assert.equal(record.cleanup.deleted,true);assert.equal(record.status,failure?'failed':'settled');
+    assert.equal(record.cleanup.deleted,true);assert.equal(record.status,['breaker','late_breaker'].includes(failure)?'upstream_stopped':failure?'failed':'settled');
+    if(['breaker','late_breaker'].includes(failure)){assert.equal(canceled,true);assert.equal(record.circuitBreaker.events.length,3);assert.ok(record.transcript);}
+    if(failure==='late_breaker')assert.equal(record.circuitBreaker.originCaseId,'prior');
     if(!failure){assert.equal(record.studyId,'study');assert.equal(record.matching.patientTrials.subject,'patient_1');assert.equal(record.trialDetails.length,1);}
     if(failure==='poll')assert.ok(Object.hasOwn(record,'transcript'),'failed poll still preserves partial evidence before shutdown');
     assert.doesNotMatch(await fs.readFile(path.join(tmp,'p1/case.json'),'utf8'),/fixture-csrf|fixture=1/);

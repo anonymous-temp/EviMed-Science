@@ -88,6 +88,9 @@ export const PENDING_RECHECK = "pending_recheck";
 /** Every state this module may produce, in the order a funnel shows them. */
 export const VCR_MATCHING_STATES = Object.freeze([SATISFIED, NOT_SATISFIED, UNKNOWN, PENDING_RECHECK]);
 
+/** Unversioned saved assessments predate the applicability gate and UTC calendar clamping. */
+export const VCR_MATCHING_EVALUATOR_VERSION = "vcr-eligibility-2";
+
 /**
  * Why a model-extracted fact was thrown away. A void fact never becomes a
  * `not_satisfied`: it becomes an `unknown` with the reason attached, because a
@@ -184,16 +187,27 @@ export function instant(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+/** Protocol clocks accept an ISO calendar date or instant. A zone-free time is interpreted in UTC. @param {unknown} value */
+function protocolInstant(value) {
+  if (typeof value !== "string") return null;
+  const shape = /^(\d{4}-\d{2}-\d{2})(T(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d{1,3})?)?)?(Z|[+-]\d{2}:\d{2})?$/.exec(value);
+  if (!shape || (!shape[2] && shape[3])) return null;
+  const midnight = instant(`${shape[1]}T00:00:00Z`);
+  if (midnight === null || new Date(midnight).toISOString().slice(0, 10) !== shape[1]) return null;
+  return shape[2] ? instant(`${shape[1]}${shape[2]}${shape[3] ?? "Z"}`) : midnight;
+}
+
 const DAY_MS = 86_400_000;
 
 /** @param {number} from @param {number} to */
 export function daysBetween(from, to) { return (to - from) / DAY_MS; }
 
 /**
- * The start of a look-back window. Calendar months, not 30-day blocks: 「近 6
- * 个月」 on 2026-09-28 begins on 2026-03-28, and an event on 2026-02-28 is
- * outside it. Thirty-day arithmetic would have moved that boundary by nine
- * days and flipped C2-19's third case.
+ * Look-back convention in vcr-eligibility-2: subtract calendar months (a year
+ * is twelve months) in UTC, keeping the day and time when possible. If the
+ * day is absent in the target month, use its last day. For example, one
+ * month before March 31 starts February 28 (February 29 in a leap year).
+ * The lower boundary and the anchor both count. A day is exactly 24 hours.
  * @param {{ days?: number, months?: number, years?: number }} window @param {number} anchor
  * @returns {number|null}
  */
@@ -201,14 +215,12 @@ export function windowStart(window, anchor) {
   if (!window || typeof window !== "object") return null;
   if (window.days == null && window.months == null && window.years == null) return null;
   const at = new Date(anchor);
-  const years = Number(window.years);
-  if (Number.isFinite(years)) at.setUTCFullYear(at.getUTCFullYear() - years);
-  // Calendar months overflow the way JavaScript's do: 8-31 minus one month is
-  // 3 March, not 31 February. Protocols write 「近 6 个月」 and mean the same
-  // day six months back, which this gives; the month-end case is off by up to
-  // three days and is called out in the criterion's own note when it matters.
-  const months = Number(window.months);
-  if (Number.isFinite(months)) at.setUTCMonth(at.getUTCMonth() - months);
+  const months = (window.years ?? 0) * 12 + (window.months ?? 0);
+  if (months) {
+    const day = at.getUTCDate();
+    at.setUTCMonth(at.getUTCMonth() - months + 1, 0);
+    at.setUTCDate(Math.min(day, at.getUTCDate()));
+  }
   const days = Number(window.days);
   return at.getTime() - (Number.isFinite(days) ? days : 0) * DAY_MS;
 }
@@ -236,14 +248,15 @@ function dateFromHeaderIsAfter(fact, at) {
  */
 export function withinWindow(fact, window, anchor) {
   if (!window) return true;
-  const start = windowStart(window, Number.isFinite(instant(window.anchorDate)) ? instant(window.anchorDate) : anchor);
+  const end = window.anchorDate == null ? anchor : protocolInstant(window.anchorDate);
+  if (end === null) return null;
+  const start = windowStart(window, end);
   if (start === null) return true;
   const at = instant(fact?.occurredAt);
   if (at === null) return null;
   // A date that is only an upper bound (a past event dated by the record it was read in) puts the event outside the window when the bound
   // is before the window starts, and says nothing otherwise: the event may be anywhere before the bound.
   if (isBoundedDate(fact)) return at < start ? false : null;
-  const end = Number.isFinite(instant(window.anchorDate)) ? instant(window.anchorDate) : anchor;
   return at >= start && at <= end;
 }
 
@@ -600,6 +613,9 @@ export function evaluateRequirement(node, context) {
 
 /** @param {any} node @param {any} context @returns {RequirementVerdict} */
 function evaluateNode(node, context) {
+  if (node.window?.anchorDate != null && protocolInstant(node.window.anchorDate) === null) {
+    return unknownBecause(String(node.variable ?? ""), "criterion_malformed");
+  }
   switch (node.op) {
     case "all": case "any": {
       const parts = (Array.isArray(node.operands) ? node.operands : []).map((child) => evaluateNode(child, context));
@@ -663,10 +679,13 @@ function evaluatePresence(node, context) {
     // a lookback window. The recorded interval must cover it; the existing
     // medication contract can also explicitly assert lifetime absence.
     if (!node.window) return true;
-    if (fact.clinical?.medication?.absenceScope === 'never') return true;
+    const anchor = protocolInstant(node.window.anchorDate) ?? context.asOf;
+    if (fact.clinical?.medication?.absenceScope === 'never') {
+      const statedAt = isBoundedDate(fact) ? null : instant(fact.occurredAt);
+      return statedAt !== null && statedAt >= anchor && statedAt <= context.asOf;
+    }
     if (fact.clinical?.medication && fact.clinical.medication.absenceScope !== 'interval') return false;
     const interval = fact.clinical?.occurredInterval;
-    const anchor = instant(node.window.anchorDate) ?? context.asOf;
     const start = windowStart(node.window, anchor);
     return interval
       && start !== null && instant(interval.start) !== null && instant(interval.end) !== null
@@ -892,7 +911,8 @@ function evaluateElapsed(node, context) {
   // does the event, and the bound stands for its date; when the bound is still inside the washout the event may be anywhere before it, and the
   // fact is undated, as any fact that cannot be placed is.
   const placed = (/** @type {any} */ fact) => (isBoundedDate(fact) && !(instant(fact.occurredAt) !== null && clear(/** @type {number} */ (instant(fact.occurredAt)))) ? { ...fact, occurredAt: null } : fact);
-  const held = factsFor(context, variable).filter(fact => !fact.clinical?.copiedFrom).map(placed);
+  const observed = factsFor(context, variable).filter(fact => !fact.clinical?.copiedFrom);
+  const held = observed.map(placed);
   const isExposure = (/** @type {any} */ fact) => !fact.clinical?.medication
     || fact.clinical.assertion === 'negated' || ['administered', 'stopped'].includes(fact.clinical.medication.state);
   const everything = held.filter(isExposure);
@@ -906,12 +926,14 @@ function evaluateElapsed(node, context) {
   const stillOpen = (unresolved, against) => unknownBecause(variable, "unresolved_exposure", [...unresolved.slice(0, 1), ...against].map(citation));
   // What happened after the assessment date is not yet a fact of it.
   const dated = affirmed.filter((fact) => instant(fact?.occurredAt) !== null && /** @type {number} */ (instant(fact.occurredAt)) <= context.asOf);
-  const denied = everything.filter((fact) => {
+  const denied = observed.filter(isExposure).filter((fact) => {
     if (fact?.polarity !== 'negated') return false;
-    if (!fact.clinical) return true; // Legacy assertions retain their declared interpretation.
-    if (fact.clinical.medication?.absenceScope === 'never') return true;
-    const interval = fact.clinical.occurredInterval;
-    return fact.clinical.medication?.absenceScope === 'interval' && interval
+    const statedAt = instant(fact.occurredAt);
+    const absenceScope = fact.clinical?.medication?.absenceScope;
+    if (fact.provenance?.factSchema === 1 && statedAt === null && (!fact.clinical || absenceScope === 'never')) return true;
+    if (absenceScope === 'never') return !isBoundedDate(fact) && statedAt === context.asOf;
+    const interval = fact.clinical?.occurredInterval;
+    return (!fact.clinical?.medication || absenceScope === 'interval') && interval
       && instant(interval.start) != null && instant(interval.end) != null
       && instant(interval.start) <= context.asOf - Number(node.days ?? 0) * DAY_MS && instant(interval.end) >= context.asOf;
   });
@@ -951,6 +973,7 @@ function evaluateElapsed(node, context) {
  */
 function evaluateLanguage(node, context) {
   const key = String(node.key ?? context.criterionId ?? "");
+  if (context.allowedLanguageKeys && !context.allowedLanguageKeys.includes(key)) return unknownBecause(key, "criterion_malformed");
   const judgment = (context.modelJudgments ?? {})[key];
   if (!judgment || ![SATISFIED, NOT_SATISFIED, UNKNOWN].includes(String(judgment.state))) return unknownBecause(key, "not_recorded");
   if (judgment.state === UNKNOWN) return unknownBecause(key, "not_recorded");
@@ -1003,6 +1026,44 @@ export function languageKeysOf(node, fallback = "") {
   return children.flatMap((child) => languageKeysOf(child, fallback));
 }
 
+/** Model keys bound to one axis. Reusing a key across both axes cannot distinguish the two questions. @param {any} criterion */
+export function criterionLanguageKeys(criterion) {
+  const id = String(criterion?.id ?? "");
+  const applicability = new Set(languageKeysOf(criterion?.applicability, id));
+  const requirement = new Set(languageKeysOf(criterion?.requirement, id));
+  return [...applicability, ...requirement].filter(key => !applicability.has(key) || !requirement.has(key));
+}
+
+/** Reject an answer key when the criterion set would use it for different questions. @param {readonly any[]} criteria */
+export function ambiguousCriterionLanguageKeys(criteria) {
+  /** @type {Map<string, { index: number, text: string|null }>} */
+  const bindings = new Map();
+  /** @type {Set<string>} */
+  const ambiguous = new Set();
+  /** @param {any} node @param {string} fallback @param {number} index */
+  const visit = (node, fallback, index) => {
+    if (!node || typeof node !== "object") return;
+    if (node.op === "language") {
+      const key = String(node.key ?? fallback);
+      if (!key) return;
+      const text = typeof node.text === "string" && node.text.trim() ? node.text.trim() : null;
+      const prior = bindings.get(key);
+      if (prior && (prior.text !== text || (text === null && prior.index !== index))) ambiguous.add(key);
+      if (!prior) bindings.set(key, { index, text });
+    }
+    if (Array.isArray(node.operands)) node.operands.forEach(child => visit(child, fallback, index));
+    if (node.operand) visit(node.operand, fallback, index);
+  };
+  for (const [index, criterion] of criteria.entries()) {
+    const fallback = String(criterion?.id ?? "");
+    const premiseKeys = new Set(languageKeysOf(criterion?.applicability, fallback));
+    for (const key of languageKeysOf(criterion?.requirement, fallback)) if (premiseKeys.has(key)) ambiguous.add(key);
+    visit(criterion?.applicability, fallback, index);
+    visit(criterion?.requirement, fallback, index);
+  }
+  return ambiguous;
+}
+
 /** Does this requirement tree need the model to answer any part of it? */
 export function requiresLanguageJudgment(node) {
   if (!node || typeof node !== "object") return false;
@@ -1020,9 +1081,14 @@ export function requiresLanguageJudgment(node) {
  * @property {string} criterionId
  * @property {string} kind `inclusion` or `exclusion`
  * @property {string} criterionType
- * @property {string} state
- * @property {boolean} applicable
- * @property {string} applicabilityState the three-valued answer behind the boolean
+ * @property {string} state the result used for eligibility, conditional on applicability
+ * @property {string} requirementState the result of the requirement evaluated on its own
+ * @property {boolean} applicable false only when the premise is proven false
+ * @property {string} applicabilityState the independently evaluated premise
+ * @property {any[]} applicabilityEvidence
+ * @property {{ variable: string, reason: string }[]} applicabilityMissing
+ * @property {string|null} applicabilityRecheckAt
+ * @property {{ variable: string, reason: string }[]} requirementMissing
  * @property {string} decidedBy `code` or `model`
  * @property {any[]} evidence
  * @property {string|null} recheckAt
@@ -1032,12 +1098,10 @@ export function requiresLanguageJudgment(node) {
 /**
  * Judge one criterion.
  *
- * Applicability is evaluated first and kept as its own field. A criterion that
- * does not apply is still evaluated and still recorded — the state it would
- * have had is useful when someone later argues about whether it applied — but
- * the eligibility summary skips it. What it is never allowed to become is an
- * `unknown`, because `unknown` means "go find a document" and nobody should be
- * sent to look for a pregnancy test on a man.
+ * A false premise keeps the criterion out of the summary. If the requirement
+ * is satisfied, it holds whenever the premise applies. For any other result
+ * an unresolved premise leaves the criterion unknown. Both axes remain
+ * available for review.
  *
  * One criterion that cannot be evaluated never stops the others: an error inside
  * it is that criterion's `unknown` (`evaluation_error`) and the subject's other
@@ -1048,35 +1112,35 @@ export function requiresLanguageJudgment(node) {
  * @returns {CriterionJudgment}
  */
 export function evaluateCriterion(criterion, context) {
-  const local = { ...context, criterionId: String(criterion?.id ?? "") };
+  const ambiguous = context.ambiguousLanguageKeys ?? ambiguousCriterionLanguageKeys([criterion]);
+  const local = { ...context, criterionId: String(criterion?.id ?? ""),
+    allowedLanguageKeys: criterionLanguageKeys(criterion).filter(key => !ambiguous.has(key)) };
   const criterionType = VCR_CRITERION_TYPES.includes(criterion?.criterionType) ? criterion.criterionType : "other";
-  try {
-    const applicability = criterion?.applicability
-      ? evaluateRequirement(criterion.applicability, local)
-      : verdict(SATISFIED);
-    const result = evaluateRequirement(criterion?.requirement, local);
-    return {
-      criterionId: String(criterion?.id ?? ""),
-      kind: criterion?.kind === "exclusion" ? "exclusion" : "inclusion",
-      criterionType,
-      state: VCR_CRITERION_STATES.includes(result.state) ? result.state : UNKNOWN,
-      applicable: applicability.state !== NOT_SATISFIED,
-      applicabilityState: applicability.state,
-      decidedBy: requiresLanguageJudgment(criterion?.requirement) ? "model" : "code",
-      evidence: result.evidence,
-      recheckAt: result.recheckAt,
-      // A malformed applicability is a gap on this criterion too: it applies
-      // (it is not known not to), and the protocol step owes a fix.
-      missing: applicability.state === UNKNOWN && applicability.missing.some((item) => item.reason === "criterion_malformed")
-        ? [...result.missing, ...applicability.missing] : result.missing,
-    };
-  } catch {
-    return {
-      criterionId: String(criterion?.id ?? ""), kind: criterion?.kind === "exclusion" ? "exclusion" : "inclusion", criterionType,
-      state: UNKNOWN, applicable: true, applicabilityState: UNKNOWN, decidedBy: "code", evidence: [], recheckAt: null,
-      missing: [{ variable: "", reason: "evaluation_error" }],
-    };
-  }
+  const evaluate = (/** @type {any} */ node) => {
+    try { return evaluateRequirement(node, local); }
+    catch { return unknownBecause("", "evaluation_error"); }
+  };
+  const applicability = criterion?.applicability == null ? verdict(SATISFIED) : evaluate(criterion.applicability);
+  const requirement = evaluate(criterion?.requirement);
+  const applicabilityUnresolved = applicability.state === UNKNOWN || applicability.state === PENDING_RECHECK;
+  const requirementState = VCR_CRITERION_STATES.includes(requirement.state) ? requirement.state : UNKNOWN;
+  return {
+    criterionId: String(criterion?.id ?? ""),
+    kind: criterion?.kind === "exclusion" ? "exclusion" : "inclusion",
+    criterionType,
+    state: applicabilityUnresolved && requirementState !== SATISFIED ? UNKNOWN : requirementState,
+    applicable: applicability.state !== NOT_SATISFIED,
+    requirementState,
+    applicabilityState: applicability.state,
+    applicabilityEvidence: applicability.evidence,
+    applicabilityMissing: applicability.missing,
+    applicabilityRecheckAt: applicability.recheckAt,
+    requirementMissing: requirement.missing,
+    decidedBy: requiresLanguageJudgment(criterion?.applicability) || requiresLanguageJudgment(criterion?.requirement) ? "model" : "code",
+    evidence: requirement.evidence,
+    recheckAt: requirement.recheckAt,
+    missing: [...applicability.missing, ...requirement.missing],
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -1160,7 +1224,7 @@ export function evidenceGaps(judgments) {
       const reason = GAP_REASONS.includes(item?.reason) ? item.reason : "not_recorded";
       const key = `${item?.variable ?? ""}\u0000${reason}`;
       const entry = gaps.get(key) ?? { variable: String(item?.variable ?? ""), reason, criterionIds: [] };
-      entry.criterionIds.push(judgment.criterionId);
+      if (!entry.criterionIds.includes(judgment.criterionId)) entry.criterionIds.push(judgment.criterionId);
       gaps.set(key, entry);
     }
   }
@@ -1170,9 +1234,14 @@ export function evidenceGaps(judgments) {
 /** Deferrals that have come due and must be re-evaluated (plan §7.1 point 4). */
 export function dueRechecks(judgments, now) {
   const at = instant(now) ?? Date.now();
-  return (judgments ?? [])
-    .filter((judgment) => judgment?.state === PENDING_RECHECK && instant(judgment.recheckAt) !== null && instant(judgment.recheckAt) <= at)
-    .map((judgment) => ({ criterionId: judgment.criterionId, recheckAt: judgment.recheckAt }));
+  return (judgments ?? []).flatMap(judgment => {
+    if (!judgment || judgment.applicable === false) return [];
+    const recheckAt = earliest([
+      (judgment.requirementState ?? judgment.state) === PENDING_RECHECK ? judgment.recheckAt : null,
+      judgment.applicabilityState === PENDING_RECHECK ? judgment.applicabilityRecheckAt : null,
+    ]);
+    return recheckAt !== null && /** @type {number} */ (instant(recheckAt)) <= at ? [{ criterionId: judgment.criterionId, recheckAt }] : [];
+  });
 }
 
 /**
@@ -1209,8 +1278,8 @@ export function labelClinicalPriority(priority) {
  * @returns {string}
  */
 export function frozenAsOf(value) {
-  const at = typeof value === "string" && /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})?)?$/.test(value) ? Date.parse(value) : Number.NaN;
-  if (!Number.isFinite(at)) {
+  const at = protocolInstant(value);
+  if (at === null) {
     throw Object.assign(new TypeError("asOf is an ISO date or instant, for example 2026-09-28 or 2026-09-28T08:00:00Z."), { code: "vcr_asof_invalid" });
   }
   return new Date(at).toISOString();
@@ -1256,6 +1325,7 @@ export function assessSubject(input) {
   const context = {
     facts: longitudinal.facts, asOf, documents: input.documents,
     modelJudgments: input.modelJudgments ?? {},
+    ambiguousLanguageKeys: ambiguousCriterionLanguageKeys(input.criteria ?? []),
     unitConverter: input.unitConverter,
     vocabularyVersion: input.provenance?.vocabularyVersion ?? VCR_MATCHING_VOCABULARY_VERSION,
   };
@@ -1271,7 +1341,8 @@ export function assessSubject(input) {
     // superseded rather than overwritten, and `matchingReportDiff` needs the
     // three to say what changed between two measurements.
     clinicalHistory: { superseded: longitudinal.superseded, conflicts: longitudinal.conflicts },
-    provenance: { ...(input.provenance ?? {}), vocabularyVersion: input.provenance?.vocabularyVersion ?? VCR_MATCHING_VOCABULARY_VERSION,
+    provenance: { ...(input.provenance ?? {}), matchingEvaluatorVersion: VCR_MATCHING_EVALUATOR_VERSION,
+      vocabularyVersion: input.provenance?.vocabularyVersion ?? VCR_MATCHING_VOCABULARY_VERSION,
       inputFactIds: (input.facts ?? []).map(fact => fact.id).filter(Boolean),
       inputLanguageIds: Object.values(input.modelJudgments ?? {}).map(judgment => judgment.id).filter(Boolean),
       inputFactHashes: Object.fromEntries((input.facts ?? []).filter(fact => fact.id).map(fact => [fact.id, matchingInputDigest(fact)])),
@@ -1317,6 +1388,12 @@ export function matchingAssessmentDocument(assessment) {
       criterionType: judgment.criterionType,
       state: judgment.state,
       applicable: judgment.applicable,
+      requirementState: judgment.requirementState,
+      applicabilityState: judgment.applicabilityState,
+      applicabilityEvidence: (judgment.applicabilityEvidence ?? []).map((item) => ({ quote: item.quote, locator: item.locator })),
+      applicabilityMissing: judgment.applicabilityMissing,
+      applicabilityRecheckAt: judgment.applicabilityRecheckAt,
+      requirementMissing: judgment.requirementMissing,
       decidedBy: judgment.decidedBy,
       recheckAt: judgment.recheckAt,
       evidence: judgment.evidence.map((item) => ({ quote: item.quote, locator: item.locator })),
@@ -1440,7 +1517,13 @@ export function applicabilityConfusion(pairs) {
   for (const pair of pairs ?? []) {
     const goldApplicable = Boolean(pair?.goldApplicable);
     const predictedApplicable = Boolean(pair?.predictedApplicable);
+    const applicabilityUnknown = [UNKNOWN, PENDING_RECHECK].includes(pair?.predictedApplicabilityState);
     cells.counted += 1;
+    if (applicabilityUnknown) {
+      if (goldApplicable) cells.other += 1;
+      else cells.notApplicableReadAsUnknown += 1;
+      continue;
+    }
     if (goldApplicable === predictedApplicable) {
       if (goldApplicable) cells.agreedApplicable += 1; else cells.agreedNotApplicable += 1;
       continue;
@@ -1619,6 +1702,7 @@ export function runMatchingEvaluation(dataset) {
       });
       applicabilityPairs.push({
         goldApplicable: gold.applicable !== false, predictedApplicable: judgment.applicable,
+        predictedApplicabilityState: judgment.applicabilityState,
         gold: gold.state, predicted: judgment.state,
       });
       if (gold.raterA) raterA.push(String(gold.raterA));
@@ -1626,11 +1710,14 @@ export function runMatchingEvaluation(dataset) {
     }
     subjectPairs.push({ subjectKey: item.subjectKey, gold: item.goldSummary, predicted: assessment.summary });
   }
-  return matchingEvaluationReport({
-    label: String(dataset?.label ?? ""),
-    synthetic: dataset?.synthetic !== false,
-    criterionPairs, subjectPairs, applicabilityPairs, raterA, raterB,
-  });
+  return {
+    ...matchingEvaluationReport({
+      label: String(dataset?.label ?? ""),
+      synthetic: dataset?.synthetic !== false,
+      criterionPairs, subjectPairs, applicabilityPairs, raterA, raterB,
+    }),
+    matchingEvaluatorVersion: VCR_MATCHING_EVALUATOR_VERSION,
+  };
 }
 
 /**

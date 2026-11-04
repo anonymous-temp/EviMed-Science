@@ -1,4 +1,4 @@
-import { vcrPredictionLimit, VCR_EFFECT_DISCOUNT_LABEL_ZH } from "@evimed/domain";
+import { vcrPredictionLimit, VCR_EFFECT_DISCOUNT_LABEL_ZH, VCR_MATCHING_GAP_REASON_LABELS_ZH } from "@evimed/domain";
 import { vcrPopulationGenerationInput } from "./vcrSubjects.mjs";
 import { presentVcrReview } from "./vcrViewsKit.mjs";
 /**
@@ -1422,7 +1422,6 @@ function forecastView(forecast, now) {
 
 const SUMMARY_ORDER = Object.freeze(["eligible", "insufficient_evidence", "pending", "ineligible"]);
 /** The most citations a criterion row shows under its verdict. */
-const EVIDENCE_SHOWN = 3;
 
 /**
  * The words under a citation for what it did not print: a unit read by the domain's table (`unitBasis`), a date taken from another
@@ -1457,7 +1456,7 @@ function judgementView(criterion, code, judgment, now, documentNames = new Map()
   // Every citation the verdict rests on, not only the first: an `unknown` that waits on a prescription also shows the administration it
   // was set against. Each says what it quotes, where (the document by the name the data tab lists it under, never a person's), and
   // when what it records happened.
-  const cited = list(judgment?.evidence).map(object).filter((item) => text(item.quote)).slice(0, EVIDENCE_SHOWN).map((evidence) => ({
+  const citationsOf = (/** @type {unknown} */ items) => list(items).map(object).filter((item) => text(item.quote)).map((evidence) => ({
     quote: String(evidence.quote), locator: evidence.locator ?? null,
     source: evidence.quoteKind === "snapshot_cell" ? `数据快照字段「${object(evidence.locator).field ?? evidence.variable}」`
       : evidence.quoteKind === "verbatim" ? (documentNames.get(String(object(evidence.locator).documentId)) ?? "病历原文") : (vcrLocatorText(evidence.locator) ?? text(evidence.source)),
@@ -1467,6 +1466,15 @@ function judgementView(criterion, code, judgment, now, documentNames = new Map()
     // What the quotation does not itself say, said beside it: a unit the domain's table supplied, a date taken from another line.
     note: evidenceNote(evidence),
   }));
+  // A Boolean rule can reuse the same source in several branches. Deduplicate
+  // only identical displayed citations, including their source location, so
+  // repeated counterevidence cannot displace the deciding quotation.
+  const distinct = (/** @type {ReturnType<typeof citationsOf>} */ citations) => [...new Map(citations.map((citation) => [JSON.stringify(citation), citation])).values()];
+  const cited = distinct(citationsOf(judgment?.evidence));
+  const applicabilityEvidence = distinct(citationsOf(judgment?.applicabilityEvidence));
+  const applicabilityMissing = object(list(judgment?.applicabilityMissing)[0]);
+  const applicabilityReason = text(applicabilityMissing.label)
+    ?? /** @type {Record<string, string>} */ (VCR_MATCHING_GAP_REASON_LABELS_ZH)[String(applicabilityMissing.reason ?? "")] ?? null;
   const state = judgment?.overrideState ?? judgment?.state ?? "unknown";
   const needed = list(criterion.evidenceNeeded).map((item) => (typeof item === "string" ? item : text(object(item).description) ?? text(object(item).text) ?? text(object(item).variable))).filter(Boolean);
   return {
@@ -1479,6 +1487,13 @@ function judgementView(criterion, code, judgment, now, documentNames = new Map()
     applicable: judgment ? judgment.applicable !== false : true,
     evidence: cited[0] ?? null,
     evidenceItems: cited,
+    ...(judgment?.applicabilityState == null ? {} : {
+      applicabilityState: judgment.applicabilityState,
+      applicabilityEvidenceItems: applicabilityEvidence,
+      applicabilityReason,
+      applicabilityRequestNote: judgment.applicabilityState === "pending_recheck" && judgment.applicabilityRecheckAt
+        ? `${zhDate(judgment.applicabilityRecheckAt, now)} 起可复评` : null,
+    }),
     request: state === "unknown" || state === "pending_recheck" ? (needed[0] ?? null) : null,
     // Why it is not decided, in the assessment's own words (缺登记原文, 单位对不上, …): the first reason the criterion's gaps give.
     reason: state === "unknown" || state === "pending_recheck" ? (text(object(list(judgment?.missing)[0]).label) ?? null) : null,

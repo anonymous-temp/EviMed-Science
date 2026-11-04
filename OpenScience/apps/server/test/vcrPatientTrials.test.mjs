@@ -258,7 +258,8 @@ test("persisted criterion scores order equal eligibility tiers without changing 
 test("patient runtime ranking pages retain global rank and language requests on later pages", async () => {
   const rows = Array.from({ length: 51 }, (_, i) => ({ id: `t${i}`, kind: "registry", rank: i + 1, registryId: `NCT${i}`, summary: "insufficient_evidence", counts: { unknown: 1 }, evidenceGaps: [] }));
   const { matchingInputDigest } = await import("../src/vcrMatching.mjs");
-  const criteria = rows.map(row => ({ candidateTrialId: row.id, id: `c${row.id}`, ordinal: 1, kind: "inclusion", sourceText: "consent", requirement: { op: "language", key: `key-${row.id}` } }));
+  const criteria = rows.map(row => ({ candidateTrialId: row.id, id: `c${row.id}`, ordinal: 1, kind: "inclusion", sourceText: "consent", requirement: { op: "language", key: `key-${row.id}` },
+    ...(row.id === "t50" ? { applicability: { op: "language", key: "applicable-t50", text: "Does this condition apply?" } } : {}) }));
   for (const row of rows) row.snapshotHash = matchingInputDigest({ criteria: criteria.filter(c => c.candidateTrialId === row.id), judgments: [] });
   const store = {
     async rankingSnapshot() { return { assessments: rows.map(row => ({ candidateTrialId: row.id, id: row.assessmentId })), criteria, judgments: [] }; },
@@ -271,5 +272,61 @@ test("patient runtime ranking pages retain global rank and language requests on 
   const last = await service.runtimeRead({ id: "study" }, { subjectKey: "P", offset: 50 });
   assert.equal(first.ranking.length, 50); assert.equal(first.more, true); assert.equal(first.total, 51);
   assert.equal(last.ranking[0].rank, 51); assert.equal(last.more, false);
-  assert.equal(last.requests[0].trialId, "t50");
+  assert.deepEqual(last.requests.map(request => [request.trialId, request.criterionKey]).sort(), [["t50", "applicable-t50"], ["t50", "key-t50"]]);
+});
+
+test("legacy candidate criteria with a conflicting key are not offered as answerable requests", async () => {
+  const criteria = [
+    { id: "c1", candidateTrialId: "trial", kind: "inclusion", requirement: { op: "language", key: "shared", text: "Can consent" } },
+    { id: "c2", candidateTrialId: "trial", kind: "inclusion", requirement: { op: "present", variable: "age" },
+      applicability: { op: "language", key: "shared", text: "Has renal disease" } },
+  ];
+  const { matchingInputDigest } = await import("../src/vcrMatching.mjs");
+  const row = { id: "trial", kind: "registry", rank: 1, registryId: "NCT00000001", summary: "insufficient_evidence",
+    counts: { unknown: 2 }, evidenceGaps: [], snapshotHash: matchingInputDigest({ criteria, judgments: [] }) };
+  const store = {
+    async getCandidateTrial() { return row; },
+    async listCriteria() { return criteria; },
+    async rankingSnapshot() { return { assessments: [{ candidateTrialId: row.id, id: row.assessmentId }], criteria, judgments: [] }; },
+    async languageAnswersForTrials() { return new Map([[row.id, new Set()]]); },
+  };
+  const service = createPatientTrials({ candidateStore: store });
+  service.ranked = async () => [row];
+  service.unjudged = async () => [];
+  assert.deepEqual(await service.languageKeys({ id: "study" }, row.id), []);
+  assert.deepEqual((await service.runtimeRead({ id: "study" }, { subjectKey: "P" })).requests, []);
+});
+
+test("candidate language bindings come from one coherent record and criterion snapshot", async () => {
+  const criteria = [{ id: "c1", candidateTrialId: "trial", ordinal: 1, kind: "inclusion", sourceText: "Consent",
+    requirement: { op: "language", key: "consent", text: "Consent" } }];
+  const trial = { id: "trial", registry: "clinicaltrials.gov", registryId: "NCT00000001", recordHash: null, eligibilityText: "Consent" };
+  const store = { async rankingSnapshot(studyId, subjectKey, filter) {
+    assert.equal(studyId, "study");
+    assert.equal(subjectKey, "");
+    assert.equal(filter.id, "trial");
+    return { trials: [trial], criteria, assessments: [], judgments: [] };
+  } };
+  const service = createPatientTrials({ candidateStore: store });
+  const result = await service.runtimeRead({ id: "study" }, { id: "trial" });
+  const binding = result.trials[0].criteria[0].languageBindings[0];
+  const { languageCriterionHash } = await import("../src/vcrMatchingSnapshot.mjs");
+  assert.deepEqual(binding, { criterionKey: "consent", expectedRecordHash: null,
+    expectedCriterionHash: languageCriterionHash(criteria, "consent") });
+});
+
+test("requested missing trials and trials without criteria are unavailable for each selected patient", async () => {
+  const store = {
+    async listCandidateTrials() { return [{ id: "empty", registryId: "NCT00000001" }]; },
+    async criteriaOfTrials() { return new Map([["empty", []]]); },
+  };
+  const service = createPatientTrials({ candidateStore: store });
+  const result = await service.evaluate({ id: "study" }, { subjectKeys: ["P1", "P2", "P1"], trialIds: ["missing", "empty", "missing"] });
+  assert.deepEqual(result.evaluated, []);
+  assert.deepEqual(result.unavailable, [
+    { trialId: "missing", subjectKey: "P1", code: "vcr_candidate_trial_not_found" },
+    { trialId: "empty", registryId: "NCT00000001", subjectKey: "P1", code: "vcr_criteria_missing" },
+    { trialId: "missing", subjectKey: "P2", code: "vcr_candidate_trial_not_found" },
+    { trialId: "empty", registryId: "NCT00000001", subjectKey: "P2", code: "vcr_criteria_missing" },
+  ]);
 });

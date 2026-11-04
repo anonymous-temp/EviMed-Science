@@ -14,6 +14,7 @@ import YAML from "yaml";
 import { validateEngineResult, validateEngineJob, FACT_EVIDENCE_RULE } from "@evimed/domain";
 
 import { freezeMatchingInputs, MATCHING_SNAPSHOT_PREFIX } from "../src/vcrMatchingSnapshot.mjs";
+import { matchingInputDigest } from "../src/vcrMatching.mjs";
 import { loadConfig } from "../src/config.mjs";
 import { VcrService, vcrReadiness } from "../src/vcrService.mjs";
 import { removeVcrArtifacts } from "../src/vcrStoreBase.mjs";
@@ -212,6 +213,29 @@ async function snapshotInputs(matchStore, criteria = CRITERIA) {
   await matchStore.saveMatchingSnapshot(snapshot);
   return [...matchingInputs(), { kind: "evidence", id: `${MATCHING_SNAPSHOT_PREFIX}${snapshot.id}` }];
 }
+
+test("matching discovers language in both axes and fences old evaluator snapshots", async () => {
+  const criteria = [{ id: "c1", kind: "inclusion", requirement: { op: "language", key: "requirement", text: "Requirement" },
+    applicability: { op: "language", key: "applicability", text: "Scope" } }];
+  const matchStore = matchStoreDouble({ async listCriteria() { return criteria; } });
+  const seam = vcrMatchingSeam({ matchStore, store: storeDouble, documents: cloudDocuments });
+  assert.deepEqual((await seam.languageKeys({ id: "std_1" })).sort(), ["applicability", "requirement"]);
+  const view = await seam.runtimeRead({ id: "std_1" }, { subjectKey: "P-001" });
+  assert.deepEqual(view.requests.map(row => row.criterionKey).sort(), ["applicability", "requirement"]);
+  const conflicting = [...criteria, { id: "c2", kind: "inclusion", requirement: { op: "language", key: "requirement", text: "Different" } }];
+  const legacy = vcrMatchingSeam({ matchStore: matchStoreDouble({ async listCriteria() { return conflicting; } }), store: storeDouble, documents: cloudDocuments });
+  assert.deepEqual(await legacy.languageKeys({ id: "std_1" }), ["applicability"]);
+  assert.deepEqual((await legacy.runtimeRead({ id: "std_1" }, { subjectKey: "P-001" })).requests.map(row => row.criterionKey), ["applicability"]);
+  const old = freezeMatchingInputs({ studyId: "std_1", protocolVersionId: "prt_1", asOf: AS_OF,
+    criteria, facts: [], languages: new Map(), subjects: ["P-001"] });
+  old.payload.matchingEvaluatorVersion = "old";
+  old.id = matchingInputDigest(old.payload);
+  await matchStore.saveMatchingSnapshot(old);
+  await assert.rejects(seam.matchScenario({ id: "std_1" }, { snapshotId: old.id }), error => error.code === "vcr_matching_evaluator_changed");
+  const execute = vcrMatchingExecutor({ matchStore, store: { async studyById() { return { id: "std_1" }; } } });
+  await assert.rejects(execute({ job: { studyId: "std_1", inputs: [...matchingInputs(), { kind: "evidence", id: `${MATCHING_SNAPSHOT_PREFIX}${old.id}` }] }, onProgress: async () => {} }),
+    error => error.code === "vcr_matching_evaluator_changed");
+});
 
 test("AC-14 CS-31 the local executor loads what it evaluates by study, decides in code and answers a valid engine result", async () => {
   const facts = new Map([["P-001", [{ id: "f1", subjectKey: "P-001", variable: "age", value: 62, unit: "year", polarity: "affirmed", occurredAt: null,

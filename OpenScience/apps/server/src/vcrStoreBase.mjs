@@ -300,6 +300,7 @@ export async function deleteVcrUserRows(client, userId) {
   // The account's pointers and its record of re-checks: rows of the account alone, with no study to cascade from.
   await client.query(`DELETE FROM ${VCR_SCHEMA}.precedent_candidates WHERE user_id = $1`, [userId]);
   await client.query(`DELETE FROM ${VCR_SCHEMA}.parsed_trial_criteria WHERE user_id = $1`, [userId]);
+  await client.query(`DELETE FROM ${VCR_SCHEMA}.parsed_trial_criteria_versions WHERE user_id = $1`, [userId]);
   await client.query(`DELETE FROM ${VCR_SCHEMA}.pack_promotions WHERE user_id = $1`, [userId]);
   // A platform pack the account was the author of is not the account's to take away — studies of others may have pinned it — but the
   // attribution goes with the account: the version is retired for new studies and carries no name.

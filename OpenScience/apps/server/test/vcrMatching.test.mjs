@@ -14,12 +14,12 @@ import YAML from "yaml";
 
 import {
   SATISFIED, NOT_SATISFIED, UNKNOWN, PENDING_RECHECK, VCR_MATCHING_STATES,
-  admissibleFacts, applicabilityConfusion, assessSubject, blockingExclusionUnknowns,
-  criterionConfusion, criterionFunnel, dueRechecks, eligibilityCounts, errorLayer, evaluateCriterion,
+  admissibleFacts, ambiguousCriterionLanguageKeys, applicabilityConfusion, assessSubject, blockingExclusionUnknowns,
+  criterionConfusion, criterionFunnel, criterionLanguageKeys, decidedShare, dueRechecks, eligibilityCounts, errorLayer, evaluateCriterion,
   evaluateRequirement, evidenceGaps, factsVisibleAt, frozenAsOf, interRaterAgreement, kleeneAnd, kleeneNot, kleeneOr,
   labelClinicalPriority, matchingAssessmentDocument, matchingEvaluationReport, matchingReportDiff, patientMatchingMetrics,
   pendingReviewExclusions, requiresLanguageJudgment, runMatchingEvaluation,
-  summarizeEligibility, verifyFactEvidence, settleFactEvidence, windowStart, withinWindow, VCR_FACT_VOID_REASONS,
+  storedExclusion, summarizeEligibility, verifyFactEvidence, settleFactEvidence, windowStart, withinWindow, VCR_FACT_VOID_REASONS,
 } from "../src/vcrMatching.mjs";
 import { clinicalFactView, validateCapabilityManifest, vcrMatchingFindings } from "@evimed/domain";
 
@@ -156,8 +156,10 @@ test('current non-administration is not a lifetime denial of earlier exposure', 
   const context={schema:1,assertion:'negated',experiencer:'patient',temporality:'current',medication:{state:'planned',absenceScope:'current'}};
   const current={id:'no-current-dose',variable:'docetaxel',polarity:'negated',clinical:context};
   assert.equal(evaluateCriterion(criterion,{facts:[current],asOf:Date.parse(AS_OF)}).state,UNKNOWN);
-  const never={...current,clinical:{...context,temporality:'historical',medication:{state:'unknown',absenceScope:'never'}}};
+  const never={...current,provenance:{factSchema:1},clinical:{...context,temporality:'historical',medication:{state:'unknown',absenceScope:'never'}}};
   assert.equal(evaluateCriterion(criterion,{facts:[never],asOf:Date.parse(AS_OF)}).state,SATISFIED);
+  assert.equal(evaluateCriterion(criterion,{facts:[{...never,occurredAt:'2026-09-27'}],asOf:Date.parse(AS_OF)}).state,UNKNOWN);
+  assert.equal(evaluateCriterion(criterion,{facts:[{...never,occurredAt:AS_OF}],asOf:Date.parse(AS_OF)}).state,SATISFIED);
 });
 
 test("AC-14 not-applicable is a field beside the state, not a fifth state and not an unknown", () => {
@@ -177,6 +179,123 @@ test("AC-14 not-applicable is a field beside the state, not a fifth state and no
   ]), "eligible");
   // Nor does it raise an evidence gap: nobody should be sent to look for it.
   assert.deepEqual(evidenceGaps([judged]), []);
+});
+
+test("a failed conditional exclusion stays unknown until its applicability is established", () => {
+  const criterion = {
+    id: "conditional", kind: "exclusion",
+    applicability: { op: "compare", variable: "subtype", comparator: "in", value: ["active"] },
+    requirement: storedExclusion({ op: "present", variable: "recent_infection" }),
+  };
+  const unconditional = { ...criterion, id: "unconditional", applicability: null };
+  const subtype = { id: "subtype", variable: "subtype", value: "active", extractedBy: "structured" };
+  const infection = { id: "infection", variable: "recent_infection", polarity: "affirmed", extractedBy: "structured" };
+  const evaluate = (facts, criteria = [criterion]) => assessSubject({ subjectKey: "P", asOf: AS_OF, criteria, facts });
+  const unresolved = evaluate([infection]);
+  const judgment = unresolved.judgments[0];
+  assert.equal(judgment.state, UNKNOWN);
+  assert.equal(judgment.applicabilityState, UNKNOWN);
+  assert.equal(judgment.requirementState, NOT_SATISFIED);
+  assert.equal(judgment.applicable, true);
+  assert.equal(judgment.evidence[0].factId, "infection");
+  assert.deepEqual(judgment.applicabilityMissing, [{ variable: "subtype", reason: "not_measured" }]);
+  assert.deepEqual(unresolved.evidenceGaps, [{ variable: "subtype", reason: "not_measured", criterionIds: ["conditional"] }]);
+  assert.equal(unresolved.summary, "insufficient_evidence");
+  assert.deepEqual(decidedShare(unresolved.counts), { decided: 0, applicable: 1, percent: 0 });
+  assert.deepEqual(unresolved.blockingExclusionUnknowns, ["conditional"]);
+  assert.equal(criterionFunnel([unresolved])[0].not_satisfied, 0);
+  const exported = matchingAssessmentDocument(unresolved).judgments[0];
+  assert.equal(exported.requirementState, NOT_SATISFIED);
+  assert.deepEqual(exported.applicabilityMissing, judgment.applicabilityMissing);
+
+  const applicable = evaluate([infection, subtype]);
+  assert.equal(applicable.summary, "ineligible");
+  assert.equal(applicable.judgments[0].applicabilityEvidence[0].factId, "subtype");
+  const inapplicable = evaluate([infection, { ...subtype, value: "resolved" }]);
+  assert.equal(inapplicable.counts.notApplicable, 1);
+  assert.equal(inapplicable.judgments[0].requirementState, NOT_SATISFIED);
+  assert.equal(evaluate([infection], [criterion, unconditional]).summary, "ineligible", "another definite failure still decides");
+
+  const clear = evaluate([{ ...infection, polarity: "negated" }]);
+  assert.equal(clear.summary, "eligible", "the requirement holds whenever the premise applies");
+  assert.equal(clear.judgments[0].requirementState, SATISFIED);
+  assert.equal(clear.judgments[0].applicabilityState, UNKNOWN);
+  assert.deepEqual(clear.evidenceGaps, unresolved.evidenceGaps);
+  const deferred = evaluate([infection, { id: "treatment", variable: "treatment", occurredAt: "2026-09-20", extractedBy: "structured" }],
+    [{ ...criterion, applicability: { op: "elapsed_since", variable: "treatment", days: 28 } }]);
+  assert.equal(deferred.summary, "insufficient_evidence");
+  assert.equal(deferred.judgments[0].applicabilityState, PENDING_RECHECK);
+  assert.equal(deferred.judgments[0].applicabilityRecheckAt, "2026-10-18T00:00:00.000Z");
+});
+
+test("language answers for applicability and the requirement are separately anchored and cannot share a key", () => {
+  const criterion = {
+    id: "conditional", kind: "exclusion",
+    applicability: { op: "language", key: "premise", text: "Does the subtype require screening?" },
+    requirement: storedExclusion({ op: "language", key: "condition", text: "Is an infection present?" }),
+  };
+  const text = "Subtype is active. Infection is present.";
+  const source = chart(text);
+  const answer = quote => ({ state: SATISFIED, evidence: [{ documentId: "doc-1", quote, start: text.indexOf(quote), end: text.indexOf(quote) + quote.length }] });
+  const modelJudgments = { premise: answer("Subtype is active."), condition: answer("Infection is present.") };
+  const evaluate = (answers, selected = criterion) => assessSubject({
+    subjectKey: "P", asOf: AS_OF, criteria: [selected], facts: [], documents: source.documents, modelJudgments: answers,
+  });
+  assert.deepEqual(criterionLanguageKeys(criterion), ["premise", "condition"]);
+  const positive = evaluate(modelJudgments);
+  assert.equal(positive.summary, "ineligible");
+  assert.equal(positive.judgments[0].applicabilityEvidence[0].quote, "Subtype is active.");
+  assert.equal(positive.judgments[0].evidence[0].quote, "Infection is present.");
+  assert.deepEqual(pendingReviewExclusions([positive]), [positive]);
+  const negative = evaluate({ ...modelJudgments, premise: { ...modelJudgments.premise, state: NOT_SATISFIED } });
+  assert.equal(negative.counts.notApplicable, 1);
+  assert.equal(evaluate({ ...modelJudgments, premise: answer("Unsupported") }).summary, "insufficient_evidence");
+  const ambiguous = { ...criterion, applicability: { ...criterion.applicability, key: "condition" } };
+  assert.deepEqual(criterionLanguageKeys(ambiguous), []);
+  const legacy = evaluate(modelJudgments, ambiguous);
+  assert.equal(legacy.summary, "insufficient_evidence");
+  assert.equal(legacy.judgments[0].applicabilityState, UNKNOWN);
+  assert.equal(legacy.judgments[0].requirementState, UNKNOWN);
+  assert.equal(legacy.judgments[0].applicabilityMissing[0].reason, "criterion_malformed");
+});
+
+test("a shared legacy answer cannot establish a different criterion's applicability", () => {
+  const key = "shared";
+  const question = { op: "language", key, text: "Has the patient had a transplant?" };
+  const first = { id: "a", kind: "inclusion", requirement: question };
+  const second = { id: "b", kind: "inclusion", requirement: { op: "absent", variable: "infection" },
+    applicability: { op: "language", key, text: "Does the patient have HIV?" } };
+  const text = "Kidney transplant performed.";
+  const modelJudgments = { [key]: { state: SATISFIED, evidence: [{ documentId: "doc", quote: text, start: 0, end: text.length }] } };
+  const facts = [{ id: "infection", variable: "infection", polarity: "affirmed", extractedBy: "structured" }];
+  const evaluate = criteria => assessSubject({ subjectKey: "P", asOf: AS_OF, criteria, facts, documents: { doc: { text } }, modelJudgments });
+  assert.deepEqual([...ambiguousCriterionLanguageKeys([first, second])], [key]);
+  const legacy = evaluate([first, second]);
+  assert.equal(legacy.summary, "insufficient_evidence");
+  assert.equal(legacy.judgments[0].requirementState, UNKNOWN);
+  assert.equal(legacy.judgments[1].applicabilityState, UNKNOWN);
+  assert.equal(legacy.judgments[1].requirementState, NOT_SATISFIED);
+  assert.deepEqual(legacy.judgments[1].applicabilityEvidence, []);
+
+  const sameQuestion = { ...second, applicability: question };
+  assert.deepEqual([...ambiguousCriterionLanguageKeys([first, sameQuestion])], []);
+  assert.equal(evaluate([first, sameQuestion]).summary, "ineligible");
+  assert.deepEqual([...ambiguousCriterionLanguageKeys([first, { ...second, applicability: { op: "language", key } }])], [key]);
+});
+
+test("rechecks keep both axis dates when the displayed eligibility is unknown or satisfied", () => {
+  const asOf = "2026-09-28T00:00:00.000Z";
+  const fact = { id: "treatment", variable: "treatment", occurredAt: "2026-09-20", extractedBy: "structured" };
+  const base = { id: "conditional", kind: "inclusion", requirement: { op: "elapsed_since", variable: "treatment", days: 28 } };
+  const unknownPremise = { ...base, applicability: { op: "present", variable: "qualifying_diagnosis" } };
+  const pendingPremise = { ...base, applicability: { ...base.requirement, days: 14 } };
+  const evaluate = criterion => assessSubject({ subjectKey: "P", asOf, criteria: [criterion], facts: [fact] }).judgments;
+  assert.deepEqual(dueRechecks(evaluate(unknownPremise), "2026-10-18"), [{ criterionId: "conditional", recheckAt: "2026-10-18T00:00:00.000Z" }]);
+  assert.deepEqual(dueRechecks(evaluate(pendingPremise), "2026-10-04"), [{ criterionId: "conditional", recheckAt: "2026-10-04T00:00:00.000Z" }]);
+  assert.deepEqual(dueRechecks(evaluate(pendingPremise), "2026-10-03"), []);
+  const pendingSatisfied = evaluate({ ...pendingPremise, requirement: { op: "present", variable: "treatment" } });
+  assert.equal(pendingSatisfied[0].state, SATISFIED);
+  assert.equal(dueRechecks(pendingSatisfied, "2026-10-04").length, 1);
 });
 
 // --------------------------------------------------------------- C2-17
@@ -594,12 +713,15 @@ test("AC-36 「不适用」 confused with 「未知」 has a cell of its own", (
     { goldApplicable: false, predictedApplicable: false, gold: UNKNOWN, predicted: UNKNOWN },
     { goldApplicable: false, predictedApplicable: true, gold: UNKNOWN, predicted: UNKNOWN },
     { goldApplicable: true, predictedApplicable: false, gold: UNKNOWN, predicted: SATISFIED },
+    { goldApplicable: false, predictedApplicable: true, predictedApplicabilityState: UNKNOWN, gold: UNKNOWN, predicted: SATISFIED },
+    { goldApplicable: true, predictedApplicable: true, predictedApplicabilityState: UNKNOWN, gold: SATISFIED, predicted: SATISFIED },
   ]);
-  assert.equal(cells.notApplicableReadAsUnknown, 1);
+  assert.equal(cells.notApplicableReadAsUnknown, 2);
   assert.equal(cells.unknownReadAsNotApplicable, 1);
   assert.equal(cells.agreedApplicable, 1);
   assert.equal(cells.agreedNotApplicable, 1);
-  assert.equal(cells.counted, 4);
+  assert.equal(cells.other, 1);
+  assert.equal(cells.counted, 6);
 });
 
 test("AC-36 subject-level metrics report recall, false exclusion, PPV and the number needed to screen together", () => {
@@ -703,7 +825,7 @@ test("C2-20 the evaluation runs the production evaluator, so a fixture case is r
 
 test("C2-16 a recorded denial of ever having had the drug satisfies a washout; silence does not", () => {
   const source = chart("否认多西他赛用药史。");
-  const denied = source.fact("否认多西他赛用药史", { variable: "docetaxel", polarity: "negated" });
+  const denied = source.fact("否认多西他赛用药史", { variable: "docetaxel", polarity: "negated", provenance: { factSchema: 1 } });
   const criterion = {
     id: "crt-washout", kind: "exclusion", criterionType: "prior_treatment",
     requirement: { op: "elapsed_since", variable: "docetaxel", days: 28 },
@@ -1004,7 +1126,10 @@ test('a current medication denial does not establish absence throughout a lookba
   const fact={id:'denial',variable:'docetaxel',polarity:'negated',clinical};
   const evaluate=clinical=>evaluateCriterion(criterion,{facts:[{...fact,clinical}],asOf}).state;
   assert.equal(evaluate(clinical),UNKNOWN);
-  assert.equal(evaluate({...clinical,medication:{state:'unknown',absenceScope:'never'}}),SATISFIED);
+  const never = {...clinical,medication:{state:'unknown',absenceScope:'never'}};
+  assert.equal(evaluate(never),UNKNOWN);
+  assert.equal(evaluateCriterion(criterion,{facts:[{...fact,clinical:never,occurredAt:'2026-10-09'}],asOf}).state,SATISFIED);
+  assert.equal(evaluateCriterion(criterion,{facts:[{...fact,clinical:never,occurredAt:'2026-10-08'}],asOf}).state,UNKNOWN);
   const scoped={...clinical,medication:{state:'unknown',absenceScope:'interval'},occurredInterval:{start:'2026-09-09',end:'2026-10-09'}};
   assert.equal(evaluate(scoped),SATISFIED);
   assert.equal(evaluate({...scoped,occurredInterval:{start:'2026-09-10',end:'2026-10-09'}}),UNKNOWN);

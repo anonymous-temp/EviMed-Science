@@ -20,8 +20,8 @@
 import { createHash, randomUUID } from "node:crypto";
 
 import { correctionHash, correctionPartition } from "./vcrCorrectionCases.mjs";
-import { publicMatchingProvenance, languageKeysOf, matchingInputDigest } from "./vcrMatching.mjs";
-import { languageCriterionHash, languageInput, verifyMatchingSnapshot } from "./vcrMatchingSnapshot.mjs";
+import { publicMatchingProvenance, matchingInputDigest } from "./vcrMatching.mjs";
+import { languageCriteriaByKey, languageCriterionHash, languageInput, readCriterionEvaluation, storedCriterionEvaluation, verifyMatchingSnapshot } from "./vcrMatchingSnapshot.mjs";
 import { VCR_CRITERION_STATES, clinicalFactIssues, clinicalFactPolarity, matchBatchUnitKey } from "@evimed/domain";
 
 import { HttpError } from "./security.mjs";
@@ -103,7 +103,7 @@ const judgmentOf = (row) => (row ? {
   state: row.state,
   applicable: row.applicable,
   decidedBy: row.decided_by,
-  evidence: row.evidence ?? [],
+  ...readCriterionEvaluation(row),
   recheckAt: row.recheck_at ?? null,
   overriddenBy: row.overridden_by ?? null,
   overrideState: row.override_state ?? null,
@@ -315,16 +315,17 @@ export class VcrMatchStore extends VcrStoreBase {
         `DELETE FROM ${VCR_SCHEMA}.criterion_judgments WHERE assessment_id = $1 AND NOT (criterion_id = ANY($2::text[]))`,
         [row.id, kept]);
       for (const judgment of assessment.judgments ?? []) {
+        const { evidence, evaluation } = storedCriterionEvaluation(judgment);
         await client.query(
           `INSERT INTO ${VCR_SCHEMA}.criterion_judgments
-             (id, assessment_id, criterion_id, user_id, state, applicable, decided_by, evidence, recheck_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9)
+             (id, assessment_id, criterion_id, user_id, state, applicable, decided_by, evidence, recheck_at, evaluation)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10::jsonb)
            ON CONFLICT (assessment_id, criterion_id) DO UPDATE SET
              state = EXCLUDED.state, applicable = EXCLUDED.applicable, decided_by = EXCLUDED.decided_by,
-             evidence = EXCLUDED.evidence, recheck_at = EXCLUDED.recheck_at`,
+             evidence = EXCLUDED.evidence, recheck_at = EXCLUDED.recheck_at, evaluation = EXCLUDED.evaluation`,
           [vcrId("judgment"), row.id, judgment.criterionId, userId, judgment.state,
             judgment.applicable !== false, judgment.decidedBy ?? "code",
-            JSON.stringify(judgment.evidence ?? []), judgment.recheckAt ?? null],
+            evidence, judgment.recheckAt ?? null, evaluation],
         );
       }
       await this.audit({
@@ -623,11 +624,15 @@ export class VcrMatchStore extends VcrStoreBase {
    */
   async dueRecheckSubjects({ studyId = null, now = new Date(), limit = 200 } = {}) {
     const rows = await this.rows(
-      `SELECT DISTINCT a.study_id, a.subject_key, min(j.recheck_at) AS due
+      `SELECT a.study_id, a.subject_key, min(recheck.due_at) AS due
          FROM ${VCR_SCHEMA}.criterion_judgments j
          JOIN ${VCR_SCHEMA}.matching_assessments a ON a.id = j.assessment_id
          JOIN ${VCR_SCHEMA}.studies s ON s.id = a.study_id AND s.deleted_at IS NULL AND s.status = 'active'
-        WHERE j.state = 'pending_recheck' AND j.recheck_at IS NOT NULL AND j.recheck_at <= $2
+         CROSS JOIN LATERAL (SELECT LEAST(
+           CASE WHEN COALESCE(j.evaluation->>'requirementState', j.state) = 'pending_recheck' THEN j.recheck_at END,
+           CASE WHEN j.evaluation->>'applicabilityState' = 'pending_recheck' THEN (j.evaluation->>'applicabilityRecheckAt')::timestamptz END
+         ) AS due_at) recheck
+        WHERE j.applicable AND recheck.due_at <= $2
           AND ($1::text IS NULL OR a.study_id = $1)
           AND a.id = (SELECT id FROM ${VCR_SCHEMA}.matching_assessments l WHERE l.study_id = a.study_id AND l.subject_key = a.subject_key
                        ORDER BY l.as_of DESC, l.created_at DESC LIMIT 1)
@@ -879,9 +884,10 @@ export class VcrMatchStore extends VcrStoreBase {
         AND ($2::text IS NULL OR id=$2) ORDER BY version DESC LIMIT 1`, [studyId, protocolVersionId])).rows[0];
       if (!protocol) throw new HttpError(409, 'vcr_protocol_version_not_found', 'The protocol version is unavailable.');
       const criteria = (await client.query(`SELECT * FROM ${VCR_SCHEMA}.criteria WHERE study_id=$1 AND protocol_version_id=$2 ORDER BY ordinal`,
-        [studyId, protocol.id])).rows.map(criterionOf).filter((/** @type {any} */ criterion) => languageKeysOf(criterion.requirement, criterion.id).includes(criterionKey));
-      if (!criteria.length) throw new HttpError(409, 'vcr_criterion_malformed', 'This language key does not belong to the protocol version.');
-      const criterionHash = languageCriterionHash(criteria, criterionKey);
+        [studyId, protocol.id])).rows.map(criterionOf);
+      const bound = languageCriteriaByKey(criteria).get(criterionKey);
+      if (!bound) throw new HttpError(409, 'vcr_criterion_malformed', 'This language key is absent or ambiguous in the protocol version.');
+      const criterionHash = languageCriterionHash(bound, criterionKey);
       const visibleAt = (evidence ?? []).map((/** @type {any} */ item) => Date.parse(item?.visibleAt ?? "")).filter(Number.isFinite);
       const result = await client.query(
         `INSERT INTO ${VCR_SCHEMA}.language_judgments (id, study_id, user_id, subject_key, criterion_key, state, evidence, visible_at, protocol_version_id, criterion_hash, provenance)
@@ -904,7 +910,7 @@ export class VcrMatchStore extends VcrStoreBase {
   async latestLanguageJudgments({ studyId, visibleBy = null, protocolVersionId = null }) {
     const version = protocolVersionId ?? (await this.latestProtocol(studyId))?.id;
     if (!version) return new Map();
-    const criteria = await this.listCriteria({ studyId, protocolVersionId: version });
+    const criteria = languageCriteriaByKey(await this.listCriteria({ studyId, protocolVersionId: version }));
     const rows = await this.rows(
       `SELECT DISTINCT ON (subject_key, criterion_key) *
          FROM ${VCR_SCHEMA}.language_judgments
@@ -914,8 +920,8 @@ export class VcrMatchStore extends VcrStoreBase {
     /** @type {Map<string, Record<string, any>>} */
     const bySubject = new Map();
     for (const row of rows) {
-      const bound = criteria.filter(criterion => languageKeysOf(criterion.requirement, criterion.id).includes(row.criterion_key));
-      if (!bound.length || row.criterion_hash !== languageCriterionHash(bound, row.criterion_key)) continue;
+      const bound = criteria.get(row.criterion_key);
+      if (!bound || row.criterion_hash !== languageCriterionHash(bound, row.criterion_key)) continue;
       const entry = bySubject.get(String(row.subject_key)) ?? {};
       entry[String(row.criterion_key)] = languageInput({ id: row.id, state: row.state, evidence: row.evidence,
         protocolVersionId: row.protocol_version_id, criterionHash: row.criterion_hash, provenance: row.provenance });
