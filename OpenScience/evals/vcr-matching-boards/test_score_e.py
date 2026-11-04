@@ -61,6 +61,14 @@ class HandWorked(unittest.TestCase):
         self.assertIsNone(nothing["recall100"])
         self.assertIsNone(nothing["graded100"])
 
+    def test_a_list_with_unjudged_ids_is_also_read_without_them(self):
+        unjudged = "NCT99999999"
+        got = score_e.metrics([unjudged, A, B], QRELS)
+        without = score_e.metrics([A, B], QRELS)
+        self.assertLess(got["ndcg10"], without["ndcg10"])
+        self.assertAlmostEqual(got["ndcg10Judged"], without["ndcg10"])
+        self.assertAlmostEqual(got["p10Judged"], without["p10"])
+
     def test_a_repeated_id_is_refused(self):
         with self.assertRaises(ValueError):
             score_e.metrics([A, A], QRELS)

@@ -13,6 +13,7 @@ in test_score_e.py):
   P@10      the share of the first ten that are eligible (grade 2): trec_eval `P.10` with `-l 2`, the TREC Clinical Trials convention.
   J@10      the share of the first ten that the qrels judged at all (any grade, 0 included). A list shorter than ten counts its missing places as
             unjudged, as P@10 counts them as not eligible.
+  nDCG@10 judged, P@10 judged   the same two over the list with unjudged ids dropped first (a condensed list). Beside the official figures, not instead of them.
   Recall@k  eligible: eligible ids in the first k over all eligible ids of the topic; graded: summed grades in the first k over the summed grades
             of the whole qrels. A topic with nothing eligible (nothing graded) has no recall and is left out of that mean, never counted as 0.
             The ceiling columns are what a perfect list of k ids reaches (a 2023 topic has several hundred eligible trials, so recall@100 cannot pass
@@ -93,6 +94,11 @@ def metrics(order, qrels):
         "j10": sum(ident in qrels for ident in top) / 10,
         "listed": len(order),
     }
+    # The same list with the trials nobody judged dropped first (a condensed list): a run made after the track was pooled finds trials no assessor saw, and they count as
+    # not relevant above. Reported beside the official figure, never instead of it; the track's own runs helped build the pool, so this is the fairer read of a late run, not a win over them.
+    judged = [qrels[ident] for ident in order if ident in qrels]
+    out["ndcg10Judged"] = dcg(judged) / ideal if ideal else None
+    out["p10Judged"] = sum(grade == 2 for grade in judged[:10]) / 10
     ranked = sorted(qrels.values(), reverse=True)
     for k in KS:
         cut = order[:k]
@@ -235,7 +241,7 @@ def score_end2end(args):
             usage = record.get("usage") or {}
             row["costCny"] = usage.get("costCny")
             rows.append(row)
-    keys = ["ndcg10", "p10", "j10"] + (["retrievalOrderNdcg10", "retrievalOrderP10"] if retrieved else [])
+    keys = ["ndcg10", "p10", "j10", "ndcg10Judged", "p10Judged"] + (["retrievalOrderNdcg10", "retrievalOrderP10"] if retrieved else [])
     report = {"scope": "end to end: the judge's order over the candidates it was handed, against the full official qrels; unjudged trials have zero gain",
               "summary": summarise(rows, keys, args.resamples, args.seed), "rows": rows,
               "complete": {str(year): sum(row["allJudged"] for row in rows if row["year"] == year) for year in years}}
