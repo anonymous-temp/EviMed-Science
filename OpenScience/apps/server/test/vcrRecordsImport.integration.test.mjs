@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { execFileSync } from "node:child_process";
 import { after, before, test } from "node:test";
 import { zipSync, strToU8 } from "fflate";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
@@ -21,6 +22,7 @@ let isolated, database, directory, documents, vcr, intake, receipts, project, pa
 /** @type {any} */ let proposal;
 let modelCalls = 0;
 let sequence = 0;
+const pythonCanOpenpyxl = () => { try { execFileSync("python3", ["-c", "import openpyxl"], { stdio: "ignore" }); return true; } catch { return false; } };
 const origin = { userId: "owner", projectId: "project", rootSessionId: "root", runId: "run", callId: "call" };
 
 before(async () => {
@@ -135,6 +137,16 @@ test("a table of 300 rows goes in through the job in batches: the model names th
   const second = await resultOf(again.jobId);
   assert.deepEqual([second.diagnostics.stored, second.diagnostics.repeated], [0, 303]);
   assert.equal((await vcr.dataStore.listSourceFilesForStudy(study.id)).filter((file) => file.role === "document").length, files.length);
+});
+
+test("a workbook of notes reads like a table", { ...options, skip: options.skip || (!pythonCanOpenpyxl() && "openpyxl is needed") }, async () => {
+  const study = await newStudy();
+  const file = path.join(directory, "notes.xlsx");
+  execFileSync("python3", ["-c", "import openpyxl,sys;w=openpyxl.Workbook();s=w.active;s.append(['ID','NOTE']);s.append(['X1','记录一']);s.append(['X2','记录二']);w.save(sys.argv[1])", file]);
+  const handle = await receipts.record(project, { name: "notes.xlsx", bytes: await fs.readFile(file), sessionId: "root" });
+  const started = await intake(study, { action: "import_documents", ...handle, subjectColumn: "ID", textColumn: "NOTE" }, origin);
+  await drain();
+  assert.deepEqual([(await resultOf(started.jobId)).diagnostics.stored, (await peopleOf(study)).size], [2, 2]);
 });
 
 test("two people with the same words in one source each keep a document", options, async () => {

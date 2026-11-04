@@ -1115,6 +1115,7 @@ export function createVcrEngineJobRemover({ config, fetchImpl, engine = null }) 
  *   usageLedger?: any,
  *   dataSemantics?: (() => any) | null,
  *   webReader?: { read: (url: string, options?: any) => Promise<{ text: string }> } | null,
+ *   documentParser?: { configured: boolean, parseBytes: Function } | null,
  * }} input `dataSemantics`: the dataset-semantics service, as a function (it is built after this module); where it is off, the codes of a table stay unread.
  */
 export function composeVcr({ config, productDatabase, projectStore = null, audit = async () => {}, fetchImpl, report = () => {}, connectorCredentials = null, intakeController = null, entityVocabulary = null, sourceChanges = null, officialZoneForKeys = null, predictionRegistry = null, usageLedger = null, dataSemantics = null, documentParser = null, webReader = null }) {

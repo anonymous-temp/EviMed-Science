@@ -373,6 +373,14 @@ test('batch matching imports original subject narratives from owned CSV as a job
   await intake(study, { action: 'import_documents', ...several, subjectColumn: 'case_id', textColumn: 'narrative' }, origin);
   await drain();
   assert.equal((await keys()).length, 4);
+  // Through the gateway, as a conversation does it: the job's id comes back, and what it could not read is a read away.
+  const viaGateway = await call('write', { what: 'data_intake', data: { action: 'import_documents', ...several, subjectColumn: 'case_id', textColumn: 'narrative' } });
+  assert.equal(viaGateway.status, 200, JSON.stringify(viaGateway.json));
+  assert.match(viaGateway.json.data.jobId, /./);
+  await drain();
+  const report = await call('read', { what: 'data_intake', filter: { id: viaGateway.json.data.jobId } });
+  assert.equal(report.status, 200);
+  assert.deepEqual(report.json.data.importReport.rows, []);
   const documents_ = await vcr.documents.roster(study);
   await assert.rejects(vcr.documents.runtimeRead({ ...study, cloudContext: { runId: 'automated-run', sessionId: 'root' } }, { subjectKey: documents_[0].subjectKey, documentId: documents_[0].id }),
     { code: 'vcr_cloud_processing_not_authorized' }, 'preservation is not a cloud grant');

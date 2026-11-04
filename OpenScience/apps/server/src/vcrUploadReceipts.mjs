@@ -11,7 +11,8 @@ const patientTextFormats = new Set(['txt', 'md']);
 /** A record as PDF, Word or a picture of a page: read at intake, by the plane's converter or the in-house parser (`vcrRecordExtract.mjs`). */
 const patientBinaryFormats = new Set(['pdf', 'docx', 'png', 'jpg', 'jpeg', 'bmp', 'tif', 'tiff', 'webp']);
 const patientFormats = new Set([...patientTextFormats, ...patientBinaryFormats]);
-const archiveFormats = new Set(['zip']);
+/** What is imported whole: a zip of notes, and a hospital's export (`import_standard`: FHIR as NDJSON, ADaM as SAS transport; a Bundle arrives as `json`, which is a table's receipt). */
+const archiveFormats = new Set(['zip', 'ndjson', 'xpt']);
 /** A table of notes is a table with a note in every row, far past what a table of values weighs; the job streams it, so only the plain table import keeps its own ceiling. */
 const noteTableFormats = new Set(['csv', 'tsv', 'xlsx']);
 const extension = name => path.posix.extname(name).slice(1).toLowerCase();

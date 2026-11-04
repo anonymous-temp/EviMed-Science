@@ -40,8 +40,10 @@ test('tables, patient records and archives are kept as originals; what no intake
     assert.match((await kept.record(project, { name, bytes: Buffer.from(`bytes of ${name}`), sessionId: 's1' }))?.sourceId ?? '', /^upl_/, name);
     assert.equal(puts.at(-1).payload.intake, 'patient_context', name);
   }
-  await kept.record(project, { name: 'notes.zip', bytes: Buffer.from('PK'), sessionId: 's1' });
-  assert.equal(puts.at(-1).payload.intake, 'notes_archive');
+  for (const name of ['notes.zip', 'adsl.xpt', 'export.ndjson']) {
+    await kept.record(project, { name, bytes: Buffer.from(`PK ${name}`), sessionId: 's1' });
+    assert.equal(puts.at(-1).payload.intake, 'notes_archive', name);
+  }
   assert.equal(await kept.get('u1', puts.at(-1).id), null, 'a patient original is never a table for the plain import');
 });
 

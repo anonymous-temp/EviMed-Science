@@ -970,7 +970,7 @@ export function judgmentChanges(rows) {
 
 /**
  * What the platform does when a judging job is asked for: plan it, say it, queue it. Nothing waits on an answer.
- * @param {{ jobs: any, matchStore: any, documents: any, subjectTable?: any, config: Record<string, any>, counters?: ReturnType<typeof createMatchJudgeCounters> }} deps
+ * @param {{ jobs: any, matchStore: any, documents: any, subjectTable?: any, judgments?: any, config: Record<string, any>, counters?: ReturnType<typeof createMatchJudgeCounters> }} deps
  */
 export function createMatchJudge({ jobs, matchStore, documents, subjectTable = null, judgments = null, config, counters = createMatchJudgeCounters() }) {
   return {

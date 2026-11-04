@@ -1933,6 +1933,7 @@ export class VcrDataPlane {
    *   access?: VcrAccess | null, seal?: { recordOutcomeAccess?: (input: any) => Promise<unknown> } | null,
    *   extractor?: { available: boolean, counters?: Record<string, number>, describe?: () => any, extract: (input: { root: string, studyId: string, path: string, format: string, signal?: AbortSignal }) => Promise<{ text: string, extraction: Record<string, any> }> } | null,
    *   importer?: { available: boolean, counters?: Record<string, number>, describe?: () => any, run: (input: any, consume: (done: any) => Promise<any>) => Promise<any> } | null,
+   *   scanReader?: { available: boolean, read: (input: { path: string, ext: string, signal?: AbortSignal }) => Promise<{ text: string, extraction: Record<string, any> }> } | null,
    *   erasure?: import("./vcrErasureStore.mjs").VcrErasureStore | null,
    *   now?: () => Date }} options
    *   `access` judges every operation (one is made from the store when none is
@@ -2127,7 +2128,7 @@ export class VcrDataPlane {
    * upload (`uploadAuditDetail`), since it may not say the file's name.
    *
    * @param {{ actor: string, studyId: string, sourceId: string, name: string, role?: string,
-   *   stream: AsyncIterable<Buffer | Uint8Array>, declaredLength?: number | null, subject?: string | null,
+   *   stream: AsyncIterable<Buffer | Uint8Array>, declaredLength?: number | null, subject?: string | null, subjectKey?: string | null,
    *   visibleAt?: string | null, sheet?: string | null, importedFrom?: Record<string, any> | null }} entry
    */
   async storeUpload(entry) {
@@ -2936,9 +2937,10 @@ export class VcrDataPlane {
    *
    * @param {{ studyId: string, snapshotId: string, principal: string, purpose?: string | null, fields?: string[] | null,
    *   kind?: string | null, jobKind?: string | null, method?: string | null, endpointType?: string | null,
-   *   parameterCode?: string | null, include?: ("subject" | "longitudinal" | "events" | "files")[] | null }} input
+   *   parameterCode?: string | null, include?: ("subject" | "longitudinal" | "events" | "files")[] | null,
+   *   columnLabels?: boolean, timeColumns?: boolean }} input `columnLabels` asks what each view column was called; `timeColumns` keeps the columns the field map says are times, for the matching reader
    * @returns {Promise<{ snapshotId: string,
-   *   inputs: { kind: string, id: string, shape?: string, location: string, hash: string, valueSource: string, columnSources?: Record<string, string> }[],
+   *   inputs: { kind: string, id: string, shape?: string, location: string, hash: string, valueSource: string, columnSources?: Record<string, string>, columnLabels?: Record<string, string> }[],
    *   withheld: { id: string, kind: string, shape?: string, reason: string, fields: string[] }[],
    *   outcomeFieldsRead: string[], grantId: string | null }>}
    */
