@@ -34,6 +34,12 @@
 #   (a covariate the treatment moves is read wrongly: the premises say so). The grace period is the periods 0..g: the last chance to start is the
 #   start of period g, and a person who has not started by then has left the second arm before period g's event (the event of a period is the event
 #   under that period's treatment), so the arm is "start at the natural time if that is within the window, else at g".
+# - **The horizon must lie inside the follow-up of each arm and of each estimand.** An intention-to-treat risk is read where some trial of each arm was
+#   followed to the horizon, a per-protocol one where some trial of each arm was on protocol to it; an estimand the follow-up cannot carry is left out and
+#   named (`droppedEstimands`, limited) while the other is kept, and when it is the only one asked the job is not estimable by name.
+# - **An arm with no event has no risk the data can measure.** A model fitted to it returns a number set by its penalty, and every resample of it gives
+#   the same zero, so no interval of its risk, of the difference or of the ratio is drawn from the resamples; the exact upper limit of 0 events among n
+#   people is stated instead (`armsWithoutEvents`) and the result is limited.
 # - **Every number is the engine's, and the naive estimate is only a diagnostic.** The result carries, beside the estimate, the naive comparison that
 #   classifies people by whether they ever started (the immortal-time estimate) so a reader sees how much time was waited for; it is a check, never
 #   an estimate. Checks of the input (eligibility already treated, immortal waiting time, records cut short) are diagnostics, never gates.
