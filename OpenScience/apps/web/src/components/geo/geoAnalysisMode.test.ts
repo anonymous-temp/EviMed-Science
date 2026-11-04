@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { GeoAnalysisDescriptor, GeoAnalysisId } from '@/lib/geoAnalysisClient';
 import { normalizeGeoAnalysisView } from '../../../../server/src/geoAnalysisRegistry.mjs';
-import { GEO_ANALYSIS_GROUPS, GEO_ANALYSIS_OPTIONS, GEO_ANALYSIS_VIEW_FIELDS, geoAnalysisChangeReplaces, geoAnalysisDescriptor, geoAnalysisDescriptorForView, geoAnalysisOptionsForTab, geoAnalysisSearch, geoAnalysisTabForView } from './geoAnalysisMode';
+import { geoSearchWithScope } from '@/lib/geoReadScope';
+import { GEO_ANALYSIS_GROUPS, GEO_ANALYSIS_OPTIONS, GEO_ANALYSIS_VIEW_FIELDS, geoAnalysisChangeReplaces, geoAnalysisDescriptor, geoAnalysisDescriptorForView, geoAnalysisOptionsForTab, geoAnalysisSearch, geoAnalysisTabForView, geoFrozenAnalysisSearch } from './geoAnalysisMode';
 
 describe('GEO main area analysis address', () => {
   it('names all 27 views separately from the business view', () => {
@@ -17,6 +18,21 @@ describe('GEO main area analysis address', () => {
     for (const [key, value] of new URLSearchParams(original)) expect(returned.get(key)).toBe(value);
     expect(returned.has('analysis')).toBe(false);
   });
+});
+
+it('returns from a frozen analysis to the original filters unless the person explicitly changed them', () => {
+  const original = '?from=2026-10-01&to=2026-10-31&engine=deepseek&pool=P2&cluster=g1&clientTags=a&clientTags=b&session=s1';
+  const opened = geoFrozenAnalysisSearch(original, { viewId: 'V08', metricId: 'M-16', dimension: 'project' }, 'gsel_exact');
+  expect(new URLSearchParams(opened).get('selectionRef')).toBe('gsel_exact');
+  const returned = new URLSearchParams(geoAnalysisSearch(opened, null));
+  for (const key of new Set(new URLSearchParams(original).keys())) expect(returned.getAll(key)).toEqual(new URLSearchParams(original).getAll(key));
+  expect(returned.has('selectionRef')).toBe(false);
+  const changed = geoSearchWithScope(opened, { from: '2026-11-01', engines: ['kimi'] });
+  const changedReturn = new URLSearchParams(geoAnalysisSearch(changed, null));
+  expect(changedReturn.get('from')).toBe('2026-11-01');
+  expect(changedReturn.getAll('engines')).toEqual(['kimi']);
+  expect(changedReturn.has('engine')).toBe(false);
+  expect(changedReturn.has('selectionRef')).toBe(false);
 });
 
 describe('GEO analysis destinations', () => {

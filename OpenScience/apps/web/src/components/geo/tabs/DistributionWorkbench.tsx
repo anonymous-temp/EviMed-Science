@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { useLocation, useSearchParams } from 'react-router';
+import { Link, useLocation, useSearchParams } from 'react-router';
+import { useGeoDestinationPath } from '../useGeoPath';
 import { cancelGeoOrder, type GeoProject } from '@/lib/geoClient';
 import { getGeoExecutionOrders, getGeoOrderDetail, getGeoProjectLedger, getGeoOwnedPublications, getGeoOwnedPublication, confirmGeoOwnedPublication, type GeoExecutionOrder } from '@/lib/geoDistributionClient';
 import { webErrorMessage } from '@/lib/apiClient';
@@ -92,7 +93,7 @@ function OrderPage({ geoId, onOpen }: { geoId: string; onOpen(id: string): void 
     {state.data.items.length === 0 ? <EmptyState title="还没有投放订单" reason="自主发布的页面见“自主发布”。" /> : <DataTable label="投放订单" rows={rows} rowKey={row => row.id} onRowOpen={row => onOpen(row.id)} state={rows.length ? 'content' : 'empty'} emptyText="本页没有匹配的订单，请调整搜索。" columns={[
       { key: 'article', header: '稿件', rowHeader: true, cell: row => <Button variant="text" size="sm" onClick={() => onOpen(row.id)}>{row.articleTitle || '未关联稿件'}</Button> },
       { key: 'media', header: '渠道', cell: row => row.media || row.domain || '未记录' },
-      { key: 'state', header: '状态', cell: row => orderStateWord(row.state) },
+      { key: 'state', header: '状态', cell: row => row.sourceProofProblem ? `${orderStateWord(row.state)} · 来源证明待处理` : orderStateWord(row.state) },
       { key: 'version', header: '发布版本', cell: row => row.articleResultVersionId ? `${geoVersionLabel(row.articleResultVersionId, state.data.items.map(item => item.articleResultVersionId))} · ${versionWord(row.versionState)}` : '未记录' },
       { key: 'date', header: '发布时间', cell: row => when(row.publishedAt) },
       { key: 'price', header: '费用', align: 'right', cell: row => yuan(row.priceCny) },
@@ -120,6 +121,7 @@ function LedgerPage({ geoId, onOpen }: { geoId: string; onOpen(id: string): void
   </div>;
 }
 function OrderDetail({ geoId, project, orderId, onClose }: { geoId: string; project: GeoProject; orderId: string; onClose(): void }) {
+  const destination = useGeoDestinationPath();
   const frame = useGeoFrame();
   const pager = usePages();
   const { state, reload } = useSharedGeoLoad(`distribution-order:${geoId}:${orderId}:${pager.cursor ?? ''}`, () => getGeoOrderDetail(geoId, orderId, { cursor: pager.cursor, limit: 30 }));
@@ -138,6 +140,7 @@ function OrderDetail({ geoId, project, orderId, onClose }: { geoId: string; proj
   const order = state.kind === 'ready' ? state.data.order : null;
   const href = safeWebHref(order?.publishedUrl);
   const canManage = !project.access || project.access.abilities.includes('manage_money');
+  const canEdit = !project.access || project.access.abilities.includes('edit');
   // The button that opens the version the page was published from: beside the sentence that says there is a newer one, else in the row of actions.
   const versionButton = order && order.articleResultVersionId && order.articleDigest ? <Button variant="text" size="sm" onClick={() => void openVersion(order)}>查看当时稿件</Button> : null;
   const newerVersion = order?.versionState === 'update_needed' && versionButton !== null;
@@ -148,6 +151,7 @@ function OrderDetail({ geoId, project, orderId, onClose }: { geoId: string; proj
       {state.refreshError && <Note tone="warn" action={<Button size="sm" onClick={reload}>重试</Button>}>{state.refreshError}</Note>}
       <p className="text-ui">{orderStateWord(order.state)} · {order.media || order.domain || '媒体未记录'} · {yuan(order.priceCny)}{order.versionState === 'unknown' ? ' · 稿件版本未记录' : ''}</p>
       <p className="text-caption text-text-3">{`实际发布时间：${when(order.publishedAt)}`}</p>
+      {order.sourceProofProblem && <Note tone="warn" action={<Link to={destination(geoId, { tab: 'actions' })}>查看行动</Link>}>{order.sourceProofProblem === 'mismatch' ? '来源证明与登记域名不一致，计划暂未投放。请联系管理员同步媒体目录后再核验。' : canEdit ? '来源证明缺失，计划暂未投放。如有关联行动，可在行动中重新核验信源；如无核验入口或仍未恢复，请联系管理员同步媒体目录。' : '来源证明缺失，计划暂未投放。请联系有编辑权限的成员核验信源，或联系管理员同步媒体目录。'}</Note>}
       {newerVersion && <Note action={versionButton}>当前稿件已有新版本，线上页面仍关联当时发布的版本。</Note>}
       <div className="flex flex-wrap gap-2">
         {href && <a href={href} target="_blank" rel="noreferrer" className="text-link hover:underline">打开线上页面</a>}

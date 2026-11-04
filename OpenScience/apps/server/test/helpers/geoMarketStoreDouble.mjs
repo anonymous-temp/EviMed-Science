@@ -3,6 +3,7 @@
 // accepts what the database refuses hides the failure until production (a
 // limit-blind double once hid a 400 on every 主动科研 load). The scenarios in
 // geoMarketScenarios.mjs run against this double and against PostgreSQL alike.
+import { dnsKey } from '../../src/geoDomains.mjs';
 import {
   ARTICLE_STATUSES,
   EPSILON_CNY,
@@ -163,6 +164,45 @@ export class GeoMarketStoreDouble {
       .map(clone);
   }
 
+  async listDueDomainChecks({ maxPriceCny, checkedBefore, attemptedBefore, limit }) {
+    return [...this.media.values()].filter(row => row.available && !row.blacklisted && row.priceCny != null && row.priceCny <= maxPriceCny
+      && row.domain && row.caseLink && !row.flags?.medicalRefused && (row.domainVerified == null || !row.flags?.domainCheckedAt
+        || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(row.flags.domainCheckedAt) || row.flags.domainCheckedAt < checkedBefore)
+      && (row.flags?.manualDomainCheckAt ?? '') < attemptedBefore)
+      .sort((a,b)=>String(a.flags?.manualDomainCheckAt ?? '').localeCompare(String(b.flags?.manualDomainCheckAt ?? ''))
+        || Number(Boolean(b.flags?.medicalCategory))-Number(Boolean(a.flags?.medicalCategory))
+        || String(a.mediaType).localeCompare(String(b.mediaType)) || String(a.resourceId).localeCompare(String(b.resourceId))).slice(0,limit).map(clone);
+  }
+
+  async claimDomainRecheck(media, token, at, before) {
+    const row = this.media.get(`${media.mediaType}:${media.resourceId}`);
+    if (!row || row.domain !== media.domain || row.caseLink !== media.caseLink || (row.flags?.manualDomainCheckAt ?? '') >= before) return false;
+    row.flags = { ...row.flags, manualDomainCheckToken: token, manualDomainCheckAt: at };
+    return true;
+  }
+
+  async finishDomainRecheck(media, token, verdict) {
+    const row = this.media.get(`${media.mediaType}:${media.resourceId}`);
+    if (!row || row.domain !== media.domain || row.caseLink !== media.caseLink || row.flags?.manualDomainCheckToken !== token) return false;
+    row.domainVerified = verdict.domainVerified;
+    row.flags = { ...row.flags, ...verdict.flags };
+    return true;
+  }
+
+  async listPreferredMedia({names,maxPriceCny,includeUnavailable=false,includeUnverifiedHost=false}) {
+    const normalize=value=>String(value ?? '').trim().toLowerCase().replace(/^www\./,'');
+    const wanted=new Set(names.map(normalize).filter(Boolean));
+    if(wanted.size>GEO_MARKET_DECISION_ORDERS_MAX)throw new HttpError(422,'geo_spine_incomplete','The preferred media input exceeds its complete-read limit.');
+    const max=assertAmount(maxPriceCny);
+    const rows=[...this.media.values()].filter(row=>(includeUnavailable || row.available && !row.blacklisted && row.priceCny!=null && row.priceCny<=max)
+      && (wanted.has(normalize(row.domain)) || row.domainVerified===true && row.flags?.domainCheck==='ok'
+        && normalize(row.flags?.host)===normalize(row.flags?.domainFinalHost)
+        && (normalize(row.flags?.host)===normalize(row.domain) || normalize(row.flags?.host).endsWith(`.${normalize(row.domain)}`))
+        && wanted.has(normalize(row.flags?.host)) || includeUnverifiedHost && wanted.has(normalize(row.flags?.host))));
+    if(rows.length>GEO_MARKET_DECISION_ORDERS_MAX)throw new HttpError(422,'geo_spine_incomplete','The preferred media input exceeds its complete-read limit.');
+    return rows.sort((a,b)=>String(a.mediaType).localeCompare(String(b.mediaType)) || String(a.resourceId).localeCompare(String(b.resourceId))).map(clone);
+  }
+
   /** @param {{ mediaType: string, resourceId: string, domainVerified?: boolean | null, flags?: Record<string, any>, blacklisted?: boolean, blacklistReason?: string | null }} update */
   async updateMediaFlags({ mediaType, resourceId, domainVerified, flags = {}, blacklisted, blacklistReason }) {
     assertOneOf(mediaType, MEDIA_TYPES, "media type");
@@ -301,7 +341,7 @@ export class GeoMarketStoreDouble {
   async getSources(geoProjectId, domains) {
     const unique = new Set(domains.map(String));
     if (unique.size > GEO_MARKET_STORE_LIMITS.mediaKeysMax) throw storeError("Too many domains in one lookup.");
-    return this.sources.filter((source) => source.geoProjectId === geoProjectId && unique.has(source.domain)).map(clone);
+    return this.sources.filter((source) => source.geoProjectId === geoProjectId && unique.has(dnsKey(source.domain))).map(clone);
   }
 
   /** @param {string} geoProjectId */

@@ -680,6 +680,8 @@ CREATE INDEX IF NOT EXISTS geo_schedule_marks_open_idx ON evimed_geo.schedule_ma
 -- (entityVocabulary.mjs). NULL means not tagged yet — the vocabulary could not
 -- tag when the product was written — and a pass over those rows tags them.
 ALTER TABLE evimed_geo.projects ADD COLUMN IF NOT EXISTS entity_keys text[];
+ALTER TABLE evimed_geo.projects ADD COLUMN IF NOT EXISTS confirmation_generation bigint NOT NULL DEFAULT 0;
+ALTER TABLE evimed_geo.projects ADD COLUMN IF NOT EXISTS confirmation_authorization jsonb;
 
 -- When the market last took its turn with a project (\`tickOrders\`): the projects are served in turn, the one served longest ago
 -- first, so a tick that stops at its send cap leaves the others at the front of the next one. NULL is not served yet. Not

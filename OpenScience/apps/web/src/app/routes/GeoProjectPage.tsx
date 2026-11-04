@@ -22,7 +22,7 @@ import {
 } from "@/lib/geoClient";
 import { GeoAnalysisWorkbench } from "@/components/geo/GeoAnalysisWorkbench";
 import { geoResultDrawerProps } from "@/components/geo/spine/drawerParams";
-import { GEO_ANALYSIS_OPTIONS, geoAnalysisChangeReplaces, geoAnalysisDescriptor, geoAnalysisDescriptorForView, geoAnalysisOptionsForTab, geoAnalysisSearch, geoAnalysisTabForView } from "@/components/geo/geoAnalysisMode";
+import { GEO_ANALYSIS_OPTIONS, geoAnalysisChangeReplaces, geoAnalysisDescriptor, geoAnalysisDescriptorForView, geoAnalysisOptionsForTab, geoAnalysisSearch, geoAnalysisTabForView, geoReturnFromFrozenAnalysis } from "@/components/geo/geoAnalysisMode";
 import { GeoConversationPane } from "@/components/geo/GeoConversationPane";
 import { GeoWorkDetails } from "@/components/geo/GeoWorkDetails";
 import { geoChatPath, geoConversationPane, geoPanePath } from "@/lib/geoLocation";
@@ -107,7 +107,7 @@ type Loaded =
   | { kind: "loading" }
   | { kind: "off" }
   | { kind: "missing" }
-  | { kind: "error"; message: string }
+  | { kind: "error"; message: string; stale?: boolean }
   | { kind: "ready"; project: GeoProject; scopeKey: string; refreshError?: string; refreshStale?: boolean; scopeError?: string };
 
 /**
@@ -247,7 +247,7 @@ function GeoProjectView({ geoId }: { geoId: string }) {
           const stale = error instanceof WebApiError && error.status === 409;
           setLoaded(current => current.kind === "ready" && !denied
             ? current.scopeKey === scopeKey ? { ...current, refreshError: message, refreshStale: stale } : { ...current, scopeError: message }
-            : { kind: "error", message });
+            : { kind: "error", message, stale });
         }
       },
     ).finally(() => {
@@ -324,10 +324,12 @@ function GeoProjectView({ geoId }: { geoId: string }) {
     );
   }
   if (loaded.kind !== "ready" || !api) {
+    const originalFilters = loaded.kind === "error" && loaded.stale ? geoReturnFromFrozenAnalysis(location.search) : null;
     return (
       <PageShell title="循证 GEO" width="wide">
         {loaded.kind === "error" ? <>
           <LoadError message={loaded.message} onRetry={reload} />
+          {originalFilters !== null && <Button variant="text" onClick={() => navigate({ pathname: location.pathname, search: originalFilters, hash: location.hash }, { replace: true, state: sanitizeRuntimeUiHistoryState(location.state) })}>返回原筛选</Button>}
           {scopeKey && <Button variant="text" onClick={() => navigate({ pathname: location.pathname, search: geoSearchWithScope(location.search, {}), hash: location.hash }, { replace: true, state: sanitizeRuntimeUiHistoryState(location.state) })}>清除分析范围</Button>}
         </> : <GeoProjectSkeleton />}
       </PageShell>
@@ -371,6 +373,7 @@ function GeoBand({
   const { snapshotId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
+  const originalFilters = geoReturnFromFrozenAnalysis(location.search);
   const openConversation = useOpenGeoConversation();
   const workspaceWidth = useRef<HTMLDivElement>(null);
   const viewportSplit = useWorkspaceSplit();
@@ -684,7 +687,12 @@ function GeoBand({
     contextAction: !coverChat && !analysis && continues ? { id: "continue-step", label: continues.label, onSelect: continues.onClick } : undefined,
   };
 
-  const diagnosisUnmeasured = selectedStep === "diagnosis" && !coverChat && (project.steps.diagnosis?.status ?? "none") === "none" && canConverse;
+  const selected = project.selection;
+  const recordedMetric = project.overview.metrics.some(metric => typeof metric.cell?.value === "number");
+  const diagnosisUnmeasured = selectedStep === "diagnosis" && !coverChat && !api.scopePending && !analysis
+    && (project.steps.diagnosis?.status ?? "none") === "none" && canConverse && !geoReadScopeQuery(api.scope)
+    && project.hasMeasurementHistory === false && selected?.counts?.planned === 0 && selected.counts.snapshots === 0
+    && Array.isArray(selected.roundIds) && selected.roundIds.length === 0 && !recordedMetric;
   const results = workTasks ? (
     <ProgrammeRunsDrawer inline projectId={project.projectId} load={() => getGeoProgrammeRuns(geoId)} loadMore={cursor => getGeoProgrammeRuns(geoId, cursor)} readRecord={project.signalsSupported ? readRunRecord : undefined} version={runsVersion} onClose={() => undefined} />
   ) : snapshotId ? (
@@ -696,7 +704,9 @@ function GeoBand({
       {/* The work's one 「现在」, before anything else the project has to show. */}
       {tab === "overview" && !analysis && <GeoJourneySummary project={project} compact={started} />}
       {!analysis && project.signalsSupported && params.has("signal") && <GeoSignalsWorkbench geoId={geoId} project={project} step={api.step} compact />}
-      {api.scopePending && (api.scopeError ? <LoadError message={api.scopeError} onRetry={reload} /> : <TabSkeleton />)}
+      {api.scopePending && (api.scopeError ? <><LoadError message={api.scopeError} onRetry={reload} />
+        {originalFilters !== null && <Button variant="text" onClick={() => navigate({ pathname: location.pathname, search: originalFilters, hash: location.hash }, { replace: true, state: sanitizeRuntimeUiHistoryState(location.state) })}>返回原筛选</Button>}
+      </> : <TabSkeleton />)}
       <div hidden={api.scopePending || !analysis && project.signalsSupported && params.has("signal")}><PendingFeedbackBoundary mode={api.scopePending || !analysis && project.signalsSupported && params.has("signal") ? "inactive" : "active"}>
         <section aria-label="当前结果分析" className="flex flex-col gap-5">
           {(tab !== "visibility" || analysis) && analysisSelector}

@@ -12,6 +12,7 @@ import { GEO_OFF_SENTENCE } from "@/components/geo/GeoStates";
 import { useGeoAnswerBack } from "@/components/geo/geoFrame";
 import { GEO_STEP_HOME, GEO_TABS, geoDestinationPath } from "@/components/geo/geoTabs";
 import { geoPathWithContext } from "@/components/geo/useGeoPath";
+import { geoFrozenAnalysisSearch } from "@/components/geo/geoAnalysisMode";
 import type { GeoStepKey } from "@/lib/geoClient";
 import { CONVERSATION_SETTLED_EVENT } from "@/lib/runtimeUiBridge";
 import { useProjectStore } from "@/lib/projects";
@@ -1044,6 +1045,67 @@ describe("the project's conversation for a role that may not converse", () => {
 });
 
 describe("a saved selection whose data changed", () => {
+  it("offers the original default view when the saved frozen link expires", async () => {
+    const frozen = geoFrozenAnalysisSearch("", { viewId: "V08", metricId: "M-16", dimension: "project" }, "gsel_expired");
+    client.getGeoProject.mockImplementation(async (_geoId, scope) => {
+      if (scope?.selectionRef) throw new WebApiError("The saved selection changed after measurement.", { status: 409, code: "geo_read_filter_invalid" });
+      return GEO_PROJECT;
+    });
+    renderProject(`/app/geo/geo_masi/visibility?${frozen}`);
+    await userEvent.click(await screen.findByRole("button", { name: "返回原筛选" }));
+    await waitFor(() => expect(screen.getByTestId("visibility-tab")).toBeVisible());
+    expect(new URL(screen.getByTestId("landed").textContent ?? "", "https://example.test").search).toBe("");
+  });
+
+  it("offers the default view when an already open project reaches an expired frozen link", async () => {
+    const frozen = geoFrozenAnalysisSearch("", { viewId: "V08", metricId: "M-16", dimension: "project" }, "gsel_expired");
+    client.getGeoProject.mockImplementation(async (_geoId, scope) => {
+      if (scope?.selectionRef) throw new WebApiError("The saved selection changed after measurement.", { status: 409, code: "geo_read_filter_invalid" });
+      return GEO_PROJECT;
+    });
+    renderProject("/app/geo/geo_masi/visibility");
+    await screen.findByTestId("visibility-tab");
+    (window as unknown as { __geoTestDestination: string }).__geoTestDestination = `/app/geo/geo_masi/visibility?${frozen}`;
+    await userEvent.click(screen.getByRole("button", { name: "模拟侧栏导航" }));
+    await userEvent.click(await screen.findByRole("button", { name: "返回原筛选" }));
+    await waitFor(() => expect(screen.getByTestId("visibility-tab")).toBeVisible());
+    expect(new URL(screen.getByTestId("landed").textContent ?? "", "https://example.test").search).toBe("");
+  });
+
+  it("returns from a cold expired frozen analysis to the exact original filters", async () => {
+    const original = "?from=2026-10-01&to=2026-10-14&engine=deepseek&pool=P2&cluster=g1&session=s1";
+    const frozen = geoFrozenAnalysisSearch(original, { viewId: "V08", metricId: "M-16", dimension: "project" }, "gsel_expired");
+    client.getGeoProject.mockImplementation(async (_geoId, scope) => {
+      if (scope?.selectionRef) throw new WebApiError("The saved selection changed after measurement.", { status: 409, code: "geo_read_filter_invalid" });
+      return GEO_PROJECT;
+    });
+    renderProject(`/app/geo/geo_masi/visibility?${frozen}`);
+    await userEvent.click(await screen.findByRole("button", { name: "返回原筛选" }));
+    await waitFor(() => expect(screen.getByTestId("visibility-tab")).toBeInTheDocument());
+    const url = new URL(screen.getByTestId("landed").textContent ?? "", "https://example.test");
+    for (const [key, value] of new URLSearchParams(original)) expect(url.searchParams.getAll(key)).toContain(value);
+    expect(url.searchParams.has("selectionRef")).toBe(false);
+    expect(url.searchParams.has("analysis")).toBe(false);
+  });
+
+  it("offers the same return when an expired frozen analysis is opened from an already loaded project", async () => {
+    const original = "?from=2026-10-01&to=2026-10-14&engine=deepseek&pool=P2&cluster=g1&session=s1";
+    const frozen = geoFrozenAnalysisSearch(original, { viewId: "V08", metricId: "M-16", dimension: "project" }, "gsel_expired");
+    client.getGeoProject.mockImplementation(async (_geoId, scope) => {
+      if (scope?.selectionRef) throw new WebApiError("The saved selection changed after measurement.", { status: 409, code: "geo_read_filter_invalid" });
+      return GEO_PROJECT;
+    });
+    renderProject(`/app/geo/geo_masi/visibility${original}`);
+    await screen.findByTestId("visibility-tab");
+    (window as unknown as { __geoTestDestination: string }).__geoTestDestination = `/app/geo/geo_masi/visibility?${frozen}`;
+    await userEvent.click(screen.getByRole("button", { name: "模拟侧栏导航" }));
+    await userEvent.click(await screen.findByRole("button", { name: "返回原筛选" }));
+    await waitFor(() => expect(screen.getByTestId("visibility-tab")).toBeVisible());
+    const url = new URL(screen.getByTestId("landed").textContent ?? "", "https://example.test");
+    for (const [key, value] of new URLSearchParams(original)) expect(url.searchParams.getAll(key)).toContain(value);
+    expect(url.searchParams.has("selectionRef")).toBe(false);
+  });
+
   it("offers to read the latest data in the same range, instead of a 重试更新 that sends the stale reference again", async () => {
     const range = { from: "2026-10-01", to: "2026-10-14" };
     client.getGeoProject.mockResolvedValueOnce({ ...GEO_PROJECT, scope: { ...range, selectionRef: "gsel_old" } })
@@ -1058,6 +1120,40 @@ describe("a saved selection whose data changed", () => {
     await waitFor(() => expect(screen.getByTestId("landed")).not.toHaveTextContent("selectionRef"));
     expect(screen.getByTestId("landed")).toHaveTextContent("from=2026-10-01");
     await waitFor(() => expect(screen.queryByText(/所选范围里的数据已经更新/)).not.toBeInTheDocument());
+  });
+});
+
+describe("first diagnosis guidance", () => {
+  const unstarted = { ...GEO_PROJECT, hasMeasurementHistory: false, steps: { ...GEO_PROJECT.steps, diagnosis: { status: "none" as const } },
+    overview: { ...GEO_PROJECT.overview, metrics: GEO_PROJECT.overview.metrics.map(metric => ({ ...metric, cell: { ...metric.cell, value: null, status: "absent" as const } })) } };
+  it("offers a first diagnosis only when the unfiltered selection proves no prior round or attempts", async () => {
+    client.getGeoProject.mockResolvedValue({ ...unstarted, selection: { roundIds: [], counts: { planned: 0, snapshots: 0 } } });
+    renderProject("/app/geo/geo_masi/visibility");
+    expect(await screen.findByText(/还没有测量结果/)).toBeVisible();
+    expect(screen.getByRole("link", { name: "去开始诊断" })).toBeVisible();
+  });
+  it.each([
+    { roundIds: ["old"], counts: { planned: 41, snapshots: 41 } },
+    { roundIds: ["failed"], counts: { planned: 3, snapshots: 0 } },
+    { counts: { planned: 0, snapshots: 0 } },
+    undefined,
+  ])("does not claim a first diagnosis when existing activity or selection coverage is unknown", async (selection) => {
+    client.getGeoProject.mockResolvedValue({ ...unstarted, selection });
+    renderProject("/app/geo/geo_masi/visibility");
+    await screen.findByTestId("visibility-tab");
+    expect(screen.queryByText(/还没有测量结果/)).not.toBeInTheDocument();
+  });
+  it("does not call an empty filtered scope the first project diagnosis", async () => {
+    client.getGeoProject.mockResolvedValue({ ...unstarted, selection: { roundIds: [], counts: { planned: 0, snapshots: 0 } } });
+    renderProject("/app/geo/geo_masi/visibility?from=2026-10-01&to=2026-10-02");
+    await screen.findByTestId("visibility-tab");
+    expect(screen.queryByText(/还没有测量结果/)).not.toBeInTheDocument();
+  });
+  it.each([true, undefined, null])("does not infer no history from an empty selection when project history is present or unknown", async (hasMeasurementHistory) => {
+    client.getGeoProject.mockResolvedValue({ ...unstarted, hasMeasurementHistory, selection: { roundIds: [], counts: { planned: 0, snapshots: 0 } } });
+    renderProject("/app/geo/geo_masi/visibility");
+    await screen.findByTestId("visibility-tab");
+    expect(screen.queryByText(/还没有测量结果/)).not.toBeInTheDocument();
   });
 });
 

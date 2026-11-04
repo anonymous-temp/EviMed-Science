@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { GEO_PLACEMENT_LABELS } from "@evimed/domain";
 import { GEO_ORDER_ARTICLE_LIVE_STATES, migrateGeo } from "./geoPersistence.mjs";
 import { HttpError } from "./security.mjs";
+import { dnsKey } from "./geoDomains.mjs";
 
 export { GEO_ORDER_ARTICLE_LIVE_STATES };
 
@@ -520,10 +521,15 @@ export class GeoMarketStore {
         icp_owner text, fields jsonb, price_cny numeric, publish_rate numeric, publish_seconds int, remarks text, case_link text,
         flags jsonb, available boolean, blacklisted boolean, blacklist_reason text, price_history jsonb, synced_at timestamptz)
       ON CONFLICT (media_type, resource_id) DO UPDATE SET
-        name = EXCLUDED.name, domain = EXCLUDED.domain, domain_verified = EXCLUDED.domain_verified, icp_owner = EXCLUDED.icp_owner,
+        name = EXCLUDED.name, domain = EXCLUDED.domain,
+        domain_verified = CASE WHEN evimed_geo.media.domain IS DISTINCT FROM EXCLUDED.domain OR evimed_geo.media.case_link IS DISTINCT FROM EXCLUDED.case_link
+          THEN NULL ELSE evimed_geo.media.domain_verified END, icp_owner = EXCLUDED.icp_owner,
         fields = EXCLUDED.fields, price_cny = EXCLUDED.price_cny, publish_rate = EXCLUDED.publish_rate,
         publish_seconds = EXCLUDED.publish_seconds, remarks = EXCLUDED.remarks, case_link = EXCLUDED.case_link,
-        flags = coalesce(evimed_geo.media.flags, '{}'::jsonb) || coalesce(EXCLUDED.flags, '{}'::jsonb),
+        flags = (CASE WHEN evimed_geo.media.domain IS DISTINCT FROM EXCLUDED.domain OR evimed_geo.media.case_link IS DISTINCT FROM EXCLUDED.case_link
+          THEN coalesce(evimed_geo.media.flags, '{}'::jsonb) - ARRAY['domainCheckedAt','domainCheck','domainFinalHost','domainCheckError','manualDomainCheckToken','manualDomainCheckAt']
+          ELSE coalesce(evimed_geo.media.flags, '{}'::jsonb) END) ||
+          (coalesce(EXCLUDED.flags, '{}'::jsonb) - ARRAY['domainCheckedAt','domainCheck','domainFinalHost','domainCheckError','manualDomainCheckToken','manualDomainCheckAt']),
         available = EXCLUDED.available, blacklisted = EXCLUDED.blacklisted, blacklist_reason = EXCLUDED.blacklist_reason,
         price_history = EXCLUDED.price_history, synced_at = EXCLUDED.synced_at`, [JSON.stringify(payload)]);
     return rows.length;
@@ -544,6 +550,76 @@ export class GeoMarketStore {
       WHERE available AND NOT coalesce(blacklisted, false) AND price_cny IS NOT NULL AND price_cny <= $1
       ORDER BY media_type, resource_id LIMIT $2`, [assertAmount(maxPriceCny), limit]);
     return result.rows.map(mapMedia);
+  }
+
+  /** Select oldest eligible attempts across the catalogue; no first-page starvation. */
+  async listDueDomainChecks({ maxPriceCny, checkedBefore, attemptedBefore, limit }) {
+    assertLimit(limit, GEO_MARKET_STORE_LIMITS.candidatesMax);
+    const result = await this.#query(`SELECT * FROM evimed_geo.media WHERE available AND NOT coalesce(blacklisted,false)
+      AND price_cny IS NOT NULL AND price_cny <= $1 AND domain IS NOT NULL AND case_link IS NOT NULL
+      AND coalesce(flags->>'medicalRefused','false') <> 'true'
+      AND (domain_verified IS NULL OR coalesce(flags->>'domainCheckedAt','') = ''
+        OR flags->>'domainCheckedAt' !~ '^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$'
+        OR flags->>'domainCheckedAt' < $2)
+      AND coalesce(flags->>'manualDomainCheckAt','') < $3
+      ORDER BY coalesce(flags->>'manualDomainCheckAt',''),
+        CASE WHEN flags->>'medicalCategory'='true' THEN 0 ELSE 1 END,media_type,resource_id LIMIT $4`,
+    [assertAmount(maxPriceCny), assertAt(checkedBefore), assertAt(attemptedBefore), limit]);
+    return result.rows.map(mapMedia);
+  }
+
+  /** Complete bounded lookup of named media outside the ranking window. */
+  async listPreferredMedia({ names, maxPriceCny, includeUnavailable = false, includeUnverifiedHost = false }) {
+    const wanted=[...new Set(names.map(dnsKey))].filter(Boolean);
+    if(!wanted.length)return [];
+    if(wanted.length>GEO_MARKET_DECISION_ORDERS_MAX)throw new HttpError(422,'geo_spine_incomplete','The preferred media input exceeds its complete-read limit. Contact an administrator before retrying.');
+    let result;
+    try {
+      result=await this.#transaction(async client=>{
+        await client.query("SET LOCAL statement_timeout = '5s'");
+        return client.query(`SELECT * FROM evimed_geo.media WHERE ($2::boolean OR (available AND NOT coalesce(blacklisted,false)
+          AND price_cny IS NOT NULL AND price_cny <= $1)) ORDER BY media_type,resource_id LIMIT $3`,
+        [assertAmount(maxPriceCny), includeUnavailable, GEO_MARKET_DECISION_ORDERS_MAX+1]);
+      });
+    } catch(error) {
+      if(error?.code==='57014') {
+        const failure=/statement timeout/i.test(String(error.message ?? ''))
+          ? new HttpError(422,'geo_spine_incomplete','The preferred media read timed out. Contact an administrator before retrying.')
+          : new HttpError(503,'geo_source_preview_interrupted','The source preview read was interrupted. Please retry.');
+        failure.cause=error;
+        throw failure;
+      }
+      const failure = new HttpError(503, 'geo_source_preview_interrupted', 'The source preview read was interrupted. Please retry.');
+      failure.cause = error;
+      throw failure;
+    }
+    if(result.rows.length>GEO_MARKET_DECISION_ORDERS_MAX)throw new HttpError(422,'geo_spine_incomplete','The preferred media input exceeds its complete-read limit. Contact an administrator before retrying.');
+    const selected = new Set(wanted);
+    return result.rows.map(mapMedia).filter(media => {
+      if (selected.has(dnsKey(media.domain))) return true;
+      const host = dnsKey(media.flags?.host);
+      const checked = dnsKey(media.flags?.domainFinalHost);
+      return selected.has(host) && (includeUnverifiedHost || media.domainVerified === true
+        && media.flags?.domainCheck === 'ok' && host === checked);
+    });
+  }
+
+  /** Claim one exact catalogue record across workers; a crash leaves a short cooldown. */
+  async claimDomainRecheck(media, token, at, before) {
+    const result = await this.#query(`UPDATE evimed_geo.media SET
+      flags = coalesce(flags, '{}'::jsonb) || jsonb_build_object('manualDomainCheckToken', $5::text, 'manualDomainCheckAt', $6::text)
+      WHERE media_type=$1 AND resource_id=$2 AND domain=$3 AND case_link=$4
+        AND coalesce(flags->>'manualDomainCheckAt', '') < $7
+      RETURNING resource_id`, [media.mediaType, media.resourceId, media.domain, media.caseLink, token, at, before]);
+    return (result.rowCount ?? 0) === 1;
+  }
+
+  async finishDomainRecheck(media, token, verdict) {
+    const result = await this.#query(`UPDATE evimed_geo.media SET domain_verified=$6,
+      flags = coalesce(flags, '{}'::jsonb) || $7::jsonb
+      WHERE media_type=$1 AND resource_id=$2 AND domain=$3 AND case_link=$4 AND flags->>'manualDomainCheckToken'=$5`,
+    [media.mediaType, media.resourceId, media.domain, media.caseLink, token, verdict.domainVerified, JSON.stringify(verdict.flags)]);
+    return (result.rowCount ?? 0) === 1;
   }
 
   /**
@@ -743,12 +819,14 @@ export class GeoMarketStore {
 
   /** @param {string} geoProjectId @param {string[]} domains */
   async getSources(geoProjectId, domains) {
-    const unique = [...new Set(domains.map(String))];
+    const unique = [...new Set(domains.map(dnsKey))];
     if (unique.length > GEO_MARKET_STORE_LIMITS.mediaKeysMax) throw storeError("Too many domains in one lookup.");
     if (!unique.length) return [];
-    const result = await this.#query(`SELECT * FROM evimed_geo.sources WHERE geo_project_id = $1 AND domain = ANY($2::text[])`,
-      [String(geoProjectId), unique]);
-    return result.rows.map(mapSource);
+    // Normalize historical Unicode and ASCII keys with the exact same IDNA/PSL rules as the caller.
+    const result = await this.#query(`SELECT * FROM evimed_geo.sources WHERE geo_project_id = $1 LIMIT 10001`, [String(geoProjectId)]);
+    if (result.rows.length > 10000) throw new HttpError(422, 'geo_spine_incomplete', 'Source records exceed the complete-read limit.');
+    const wanted = new Set(unique);
+    return result.rows.map(mapSource).filter(source => wanted.has(dnsKey(source.domain)));
   }
 
   /**

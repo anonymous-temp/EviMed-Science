@@ -288,6 +288,20 @@ test("a person's choices are found under the key a group had before its set was 
   assert.equal(action.status, "proposed", "a swap is not a skip");
 });
 
+test('action-scoped source previews do not leak to another action in the same group',()=>{
+  const first='fill_gap:g-p2:dropped_condition',second='fill_gap:g-p2:missing_evidence';
+  const result=byKey(deriveGeoActions({...base(),strategy:{...base().strategy,gaps:[...gaps,
+    {gapId:'GAP-extra',groupId:'g-p2',class:'missing_evidence',handoff:'content'}]},
+    choices:[{key:first,sourceDomain:'host.example.org'},{key:second,sourceDomain:'other.example.org'}],
+    candidates:{'g-p2':[{domain:'host.example.org',canonicalDomain:'example.org',available:true,actionKey:first},
+      {domain:'other.example.org',available:true,actionKey:second},{domain:'shared.example.org',available:true}]}}));
+  assert.equal(result[first].sources[0].domain,'host.example.org');assert.equal(result[first].sources[0].canonicalDomain,'example.org');
+  assert.equal(geoLeanAction(result[first]).sources[0].canonicalDomain,'example.org');
+  assert.equal(result[first].sources.some((/** @type {any} */ source)=>source.domain==='other.example.org'),false);
+  assert.equal(result[second].sources[0].domain,'other.example.org');
+  assert.equal(result[second].sources.some((/** @type {any} */ source)=>source.domain==='host.example.org'),false);
+});
+
 test("a group short of its target with no gap is an action of its own; one at target with live articles is kept", () => {
   const readings = [
     { groupId: "g-p1", metricId: "M-01", roundId: "r2", date: "2026-10-05", kind: "weekly", k: 2, n: 12, value: 16.67, status: "insufficient" },
@@ -670,4 +684,13 @@ test("a page of lean rows keeps to its budget, always holds a row, and a cut is 
   assert.equal(Object.hasOwn(all, "nextOffset") || Object.hasOwn(all, "omitted"), false);
   assert.deepEqual(geoLeanActionsPage([], {}), { rows: [], total: 0, more: false });
   assert.equal(geoLeanActionsPage(many, { offset: 99 }).more, false, "past the end is the end");
+});
+
+test('choice effects preserve the www label belonging to the public suffix registrable domain', () => {
+  for (const input of ['www.com.cn','www.www.com.cn','WWW.WWW.WWW.com.cn.']) {
+    const result=geoChoiceEffects([{key:'fill_gap:g:missing_evidence',status:'proposed',articleIds:['a'],choice:{sourceDomain:input}}]);
+    assert.deepEqual(result.preferredByArticle.get('a'),['www.com.cn']);
+  }
+  const result=geoChoiceEffects([{key:'fill_gap:g:missing_evidence',status:'proposed',articleIds:['a'],choice:{sourceDomain:'www.食狮.公司.cn'}}]);
+  assert.deepEqual(result.preferredByArticle.get('a'),['xn--85x722f.xn--55qx5d.cn']);
 });

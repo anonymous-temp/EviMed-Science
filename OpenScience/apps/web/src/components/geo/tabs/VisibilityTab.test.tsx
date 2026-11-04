@@ -18,6 +18,11 @@ const client = vi.hoisted(() => ({
   getGeoQuestions: vi.fn(),
   runGeoStep: vi.fn(),
 }));
+const rivalAnalysis = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/geoAnalysisClient", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/geoAnalysisClient")>()),
+  getGeoAnalysis: rivalAnalysis,
+}));
 vi.mock("@/lib/geoClient", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/geoClient")>()),
   ...client,
@@ -70,6 +75,9 @@ beforeEach(() => {
   client.getGeoQuestions.mockResolvedValue({ sets: [], groups: clustersFilled.groups, version: 1 });
   client.getGeoCluster.mockImplementation(async (_geoId: string, id: string) => clusterViewFixture(id));
   client.runGeoStep.mockResolvedValue({ sessionId: "ses_geo_1" });
+  rivalAnalysis.mockReset().mockResolvedValue({ selection: { reference: "gsel_1" }, digest: "digest-1", rows: [{ key: "rival-p2", label: "竞品", dimensions: { entityName: "竞品", entityLabel: "竞品", entityKind: "brand", own: false, period: "selected", pool: "P2" },
+    values: { current: { value: 40, state: "known", metric: { denominator: 50 }, members: { exact: true, selectionRef: "gsel_1", expectedDigest: "digest-1", rowKey: "rival-p2", columnKey: "current", unit: "answers", total: 50 } },
+      pairedOwn: { value: 20, state: "known", metric: { denominator: 50 }, members: { exact: true, selectionRef: "gsel_1", expectedDigest: "digest-1", rowKey: "rival-p2", columnKey: "pairedOwn", unit: "answers", total: 50 } }, unknown: { value: 0 } } }], page: { nextOffset: null } });
 });
 
 const groupRow = (id: string) => document.querySelector(`[data-cluster-row='${id}']`) as HTMLElement | null;
@@ -274,20 +282,19 @@ it("keeps monitoring settings reachable while data is loading and shows the true
   expect(screen.queryByRole("button", { name: "停止自动监测" })).toBeNull();
 });
 
-it("shows the ranking only for the matching metric and expands other trends", async () => {
+it("places an exact-cohort competitor comparison beside the default trend and retains the trend comparison control", async () => {
   renderTab();
   const choice = await screen.findByRole("combobox", { name: "分析指标" });
   const area = document.querySelector("[data-geo-trend-ranking]")!;
-  expect(screen.queryByRole("table", { name: "同类药提及率" })).not.toBeInTheDocument();
-  expect(area).not.toHaveClass("lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]");
-  await userEvent.selectOptions(choice, "mention");
-  const ranking = await screen.findByRole("table", { name: "同类药提及率" });
   expect(area).toHaveClass("grid", "lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]");
-  expect(area).toContainElement(ranking);
+  expect(area).toContainElement(await screen.findByRole("region", { name: "本品与竞品提及率" }));
+  expect(await screen.findByText("本品 20% · 竞品 40%")).toBeVisible();
+  await userEvent.selectOptions(choice, "mention");
+  expect(area).toContainElement(screen.getByRole("region", { name: "本品与竞品提及率" }));
   expect(area.querySelector("[data-chart='trend']")).not.toBeNull();
   expect(screen.getByTestId("search")).toHaveTextContent("trendMetric=mention");
   await userEvent.selectOptions(screen.getByRole("combobox", { name: "比较" }), "none");
-  expect(screen.queryByRole("table", { name: "同类药提及率" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("region", { name: "本品与竞品提及率" })).not.toBeInTheDocument();
   expect(screen.getByTestId("search")).toHaveTextContent("compareBy=none");
 });
 
@@ -331,8 +338,8 @@ it("preserves measured metrics, comparison, denominator and insufficient sample 
   const gvi = await screen.findByRole("group", { name: "综合可见度指数" });
   await waitFor(() => expect(gvi).toHaveTextContent("38"));
   expect(gvi).toHaveTextContent("目标 55");
-  expect(gvi).toHaveTextContent("提及率第 2 / 2");
-  expect(gvi).toHaveTextContent("司美格鲁肽 提及率 48%");
+  expect(gvi).not.toHaveTextContent("提及率第");
+  expect(gvi).not.toHaveTextContent("司美格鲁肽 提及率 48%");
   const mention = screen.getByRole("group", { name: "品类问题可见率" });
   expect(mention).toHaveTextContent("18");
   expect(mention).toHaveTextContent("目标 35%");

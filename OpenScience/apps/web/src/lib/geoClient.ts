@@ -209,6 +209,8 @@ export interface GeoOverview {
 export interface GeoProject extends GeoScopedView {
   /** Actual accepted work, independent of whether future monitoring is enabled. */
   activeMeasurement?: GeoActiveMeasurement | null;
+  /** Project-wide, including failed or skipped rounds; absent when an older server cannot say. */
+  hasMeasurementHistory?: boolean;
   id: string;
   projectId: string;
   name: string;
@@ -369,6 +371,7 @@ export interface GeoErrorRow {
   severity: GeoSeverity;
   errorType: GeoErrorType;
   stability: "stable" | "sporadic" | "unconfirmed" | null;
+  confirmationReason?: string | null;
   citedSource: GeoCitedSource | null;
   action: GeoErrorAction | null;
   status: GeoErrorStatus;
@@ -847,6 +850,8 @@ export interface GeoClustersView extends GeoScopedView {
 export interface GeoActionSource {
   url?: string | null;
   domain: string | null;
+  /** Registrable outlet domain when `domain` is the selected verified host. */
+  canonicalDomain?: string | null;
   channel: string | null;
   name: string | null;
   kind: string | null;
@@ -1449,6 +1454,10 @@ export function chooseGeoActionSource(geoId: string, key: string, domain: string
   return productRequest<GeoActionChoiceResult>(`${project(geoId)}/actions/${id(key)}/source`, "POST", { domain });
 }
 
+export function verifyGeoActionSource(geoId: string, key: string) {
+  return productRequest<{ checked: number; verified: number; coolingDown: number; remaining: number; alreadyVerified: number }>(`${project(geoId)}/actions/${id(key)}/verify-source`, "POST", {});
+}
+
 /**
  * 「我已发布，贴链接」: the person published a page of the brand's own and pastes its address. The server registers it exactly as the run's
  * `geo_write owned_links` does — the post-publication re-tests (weeks 1, 2, 4, 8, 12 on the group's questions) and the citation match read
@@ -1544,6 +1553,14 @@ export interface GeoStartAnswer {
 export function setGeoMonitoringAutomation(geoId: string, enabled: boolean) {
   return productRequest<{enabled:boolean}>(`${project(geoId)}/monitoring/automation`, "POST", {enabled});
 }
+
+export interface GeoConfirmationPreview {
+  token: string; questionVersion: number | null; questionIds: string[]; engines: string[];
+  repeats: number; maxRounds: number; maxJobAttempts: number; cost: null; allowed: boolean; authorized: boolean;
+}
+export const previewGeoConfirmation = (geoId: string) => productRequest<GeoConfirmationPreview>(`${project(geoId)}/monitoring/confirmation-authorization`);
+export const authorizeGeoConfirmation = (geoId: string, token: string) => productRequest<GeoConfirmationPreview>(`${project(geoId)}/monitoring/confirmation-authorization`, "POST", { token });
+export const revokeGeoConfirmation = (geoId: string) => productRequest<{ authorized: false }>(`${project(geoId)}/monitoring/confirmation-authorization`, "DELETE");
 
 /** “让 AI 做”: starts one step now. The person stays where they are. */
 /** Stops one run of the programme's; what it had done stays. */

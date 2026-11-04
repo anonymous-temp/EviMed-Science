@@ -1,4 +1,5 @@
 import { geoAccountGeneration } from "./geoService.mjs";
+import { authorizeGeoConfirmation, previewGeoConfirmationAuthorization, revokeGeoConfirmation } from "./geoConfirmationAuthorization.mjs";
 import { GEO_SOURCE_PAGE_FIELDS, geoReadPage, normalizeGeoMember, geoScopeFromQuery } from "./geoReadScope.mjs";
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
@@ -645,6 +646,13 @@ export function createGeoRoutes(dependencies) {
       await audit("geo.action.source", "completed", { userId: user.id, code: id, detail: result.sourceDomain ? "swapped" : "recommended" });
       return reply(result);
     }
+    if (parts.length === 5 && method === "POST" && tab === "actions" && parts[4] === "verify-source") {
+      const controller = new AbortController();
+      const closed = () => { if (!res.writableEnded) controller.abort(); };
+      res.once("close", closed);
+      try { return reply(await service.verifyActionSource(user, id, parts[3], controller.signal)); }
+      finally { res.off("close", closed); }
+    }
     // The address of a page the brand published itself, pasted by a person: the registration the run makes with `geo_write owned_links`,
     // so the post-publication re-tests and the citation match pick it up with nothing more asked of anyone.
     if (parts.length === 3 && method === "POST" && tab === "owned-links") {
@@ -751,6 +759,20 @@ export function createGeoRoutes(dependencies) {
       if (!hooks.market?.cancelOrder) throw UNAVAILABLE();
       const result = await hooks.market.cancelOrder(asOwner(user, project), project, order.id);
       await audit("geo.order.cancel", "completed", { userId: user.id, code: order.id, detail: id });
+      return reply(result);
+    }
+    if (parts.length === 4 && tab === "monitoring" && parts[3] === "confirmation-authorization" && ["GET", "POST", "DELETE"].includes(method)) {
+      const project = await service.requireProject(user, id, "run");
+      if (method === "GET") return reply(await previewGeoConfirmationAuthorization(service.store, project.userId, id, user.id));
+      if (method === "DELETE") {
+        const result = await revokeGeoConfirmation(service.store, project.userId, id, user.id);
+        await audit("geo.confirmation.authorization", "completed", { userId: user.id, code: id, detail: "revoked" });
+        return reply(result);
+      }
+      const body = await bodyOf(req, maxJsonBytes, ["token"]);
+      if (typeof body.token !== "string" || !/^[a-f0-9]{64}$/.test(body.token)) throw new HttpError(400, "geo_payload_invalid", "A preview token is required.");
+      const result = await authorizeGeoConfirmation(service.store, project.userId, id, user.id, body.token);
+      await audit("geo.confirmation.authorization", "completed", { userId: user.id, code: id, detail: "confirmed" });
       return reply(result);
     }
     if (parts.length === 4 && method === "POST" && tab === "monitoring" && parts[3] === "automation") {

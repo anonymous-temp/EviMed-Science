@@ -19,6 +19,7 @@ import { TrendChart } from "@/components/charts/TrendChart";
 import { OWN_COLOR, TARGET_COLOR } from "@/components/charts/trendModel";
 import { GeoSparkline } from "../GeoSparkline";
 import { GeoComparison } from "../GeoComparison";
+import { GeoPairedRivals } from "../GeoPairedRivals";
 import { useGeoFrame, useGeoToolbar } from "../geoFrame";
 import { nextMeasurement } from "../geoBand";
 import { readFailure, useGeoDiagnosis, useGeoMonitoring, useGeoStrategy, type ReadFailure } from "../geoProjectData";
@@ -166,7 +167,7 @@ export function VisibilityTab({ geoId, project, analysisSelector }: { geoId: str
   // Competitor measurements are on mention rate only. Do not imply a ranking belongs to another metric.
   const compareRivals = metric === "mention" && compareBy !== "none";
   const canCompareRivals = metric === "mention" && (ranking.length > 1 || Boolean(watch?.rivals?.length));
-  const showRanking = compareRivals && (ranking.length > 0 || diagnosis.state.kind === "loading" || diagnosisFailed !== null);
+  const showComparison = metric !== "mention" || compareRivals;
 
   return (
     <div data-geo-tab="visibility" className="flex flex-col gap-6">
@@ -179,7 +180,7 @@ export function VisibilityTab({ geoId, project, analysisSelector }: { geoId: str
           <option value="rivals">同类药</option><option value="none">不比较</option>
         </Select></div>}
       </div>}
-      <div data-geo-trend-ranking="" className={showRanking ? "grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]" : "grid grid-cols-1 gap-6"}>
+      <div data-geo-trend-ranking="" className={showComparison ? "grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]" : "grid grid-cols-1 gap-6"}>
       <MetricTrend
         project={project}
         watch={watch}
@@ -191,13 +192,12 @@ export function VisibilityTab({ geoId, project, analysisSelector }: { geoId: str
         loading={monitoring.state.kind === "loading"}
         error={monitoringFailed}
       />
-      {showRanking && <Ranking ranking={ranking} loading={diagnosis.state.kind === "loading"} error={diagnosisFailed} />}
+      {showComparison && <GeoPairedRivals geoId={geoId} />}
       </div>
       <GeoOverviewMetrics geoId={geoId} project={project} diagnosis={diagnosis} strategy={strategy} compact />
       {strategy.state.kind === "error" && <TabError message={`目标信息没有读到：${strategy.state.message}`} onRetry={strategy.reload} />}
       {strategy.state.kind === "ready" && strategy.state.refreshError && <TabError message={`目标信息更新失败，仍显示上次结果：${strategy.state.refreshError}`} onRetry={strategy.reload} />}
       <GeoComparison geoId={geoId} view={project} />
-      {diagnosisFailed && metric !== "mention" && <TabError message={`同类药的提及率没有读到：${diagnosisFailed.message}`} onRetry={diagnosisFailed.retry} />}
       <PoolRivalTrends project={project} rivals={watch?.rivals} />
       <EngineHeatCard project={project} diagnosis={diag} loading={diagnosis.state.kind === "loading"} metric={metric} engine={engine} error={diagnosisFailed} />
       {isEngineBarMetric(metric)
@@ -435,9 +435,8 @@ function ByPool({ geoId, diagnosis, loading, pool, error }: { geoId: string; dia
 /* --------------------------------------------------------------- ranking */
 
 /**
- * The same-class ranking: our mention rate against each rival's, and over which questions each was read. 总览 draws this card too —
- * `compact`, in the third of a row it has, the scope under the name instead of a column of its own — so the two pages cannot
- * disagree about who is ahead or on what.
+ * Legacy summary readings do not retain a paired cohort. They remain readable with their source scope but are not ranked.
+ * The current visibility page uses the cohort-paired V08 analysis instead.
  */
 export function Ranking({ ranking, loading, compact = false, error = null }: {
   ranking: ReturnType<typeof rivalRanking>;
@@ -451,23 +450,20 @@ export function Ranking({ ranking, loading, compact = false, error = null }: {
   }
   // Nobody measured a rival: no empty card to say so.
   if (ranking.length === 0 && !loading) return null;
-  const top = ranking.reduce((max, row) => Math.max(max, row.value ?? 0), 0);
-  const ours = ranking.find((row) => row.ours) ?? null;
-  const place = ours ? ranking.indexOf(ours) + 1 : 0;
-  // Every rate over the same questions: the range is said once, not per row.
+  const displayed = [...ranking].sort((a, b) => Number(b.ours) - Number(a.ours) || a.name.localeCompare(b.name, "zh-CN"));
   const scope = ranking.length > 0 && ranking.every((row) => row.scope === ranking[0].scope) ? ranking[0].scope : null;
   return (
     <ChartCard
-      title={ours && place > 0 ? `提及率在 ${ranking.length} 个同类药里排第 ${place}` : "同类药提及率"}
+      title="已记录的同类药提及率"
       state={loading ? "loading" : ranking.length === 0 ? "empty" : "content"}
       emptyText="这一轮还没有测到同类药的提及率。"
-      footnote={scope ? `都按${scope}计算` : undefined}
+      footnote={`${scope ? `记录范围：${scope}。` : ""}历史读数的可比范围尚未核实，不作排名。`}
       height={180}
     >
       <DataTable
         label="同类药提及率"
         minWidth={compact ? "min-w-0" : undefined}
-        rows={ranking}
+        rows={displayed}
         rowKey={(row) => row.key}
         highlight={(row) => row.ours}
         rowAttrs={(row) => ({ "data-rank-row": row.key })}
@@ -485,7 +481,6 @@ export function Ranking({ ranking, loading, compact = false, error = null }: {
             ),
           },
           { key: "scope", header: "读数范围", cell: (row) => <span className="text-text-3">{row.scope}</span>, isEmpty: () => compact || scope !== null },
-          { key: "bar", header: "", width: compact ? "w-24" : "w-40", cell: (row) => <InlineBar value={row.value} max={top} tone={row.ours ? "own" : "rival"} label={`${row.name} 提及率`} /> },
           { key: "value", header: "提及率", align: "right", width: compact ? "w-16" : "w-20", cell: (row) => (row.value === null ? geoCellWord(null) : `${Math.round(row.value)}%`) },
         ]}
       />

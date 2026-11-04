@@ -994,7 +994,9 @@ describe("可见度 when one of its reads failed", () => {
     renderTab(<VisibilityTab {...props()} />);
     expect(await screen.findByText(/^各引擎的读数没有读到：/)).toBeInTheDocument();
     expect(screen.getByText(/^按问句池的提及率没有读到：/)).toBeInTheDocument();
-    expect(screen.getByText(/^同类药的提及率没有读到：/)).toBeInTheDocument();
+    // The paired competitor card has its own scoped analysis read and does
+    // not infer that read's outcome from the separate diagnosis request.
+    expect(screen.getByRole("region", { name: "本品与竞品提及率" })).toBeInTheDocument();
     expect(screen.queryByText("还没有按问句池测过提及率。")).not.toBeInTheDocument();
     expect(document.querySelector("[data-heat-row]")).toBeNull();
   });

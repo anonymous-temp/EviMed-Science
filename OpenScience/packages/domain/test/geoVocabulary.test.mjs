@@ -144,6 +144,7 @@ test("the tool codes are classified for a run, the route codes are registered, a
   for (const code of [...recoverable, ...terminal]) assert.ok(toolFamily.test(code), `${code} falls outside the tool family`);
   assert.ok(GEO_ROUTE_ERROR_CODES.length >= 20);
   assert.match(knownErrorCodeMessage('geo_spine_incomplete') ?? '', /完整读取上限.*联系管理员/);
+  assert.match(knownErrorCodeMessage('geo_source_preview_interrupted') ?? '', /信源读取被中断.*重试/);
   // What the gateway folds into `geo_write_payload_invalid` only a page hears by name.
   for (const code of ["geo_question_import_invalid", "geo_diagnosis_invalid", "geo_contract_missing", "geo_recovery_invalid", "geo_round_empty",
     "geo_round_question_invalid", "geo_round_engine_invalid", "geo_round_too_large", "geo_round_not_found"]) assert.ok(GEO_ROUTE_ERROR_CODES.includes(code), code);

@@ -10,7 +10,7 @@ import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { GeoService, compactAction } from "../src/geoService.mjs";
 import { GEO_ACTIONS_READ_CHARS, geoLeanAction } from "@evimed/domain";
 import { GeoMarketStore } from "../src/geoMarketStore.mjs";
-import { previewOutlets } from "../src/geoMarket.mjs";
+import { previewOutlets, recheckSelectedDomain } from "../src/geoMarket.mjs";
 import { GEO_SPINE_INPUT_MAX, GeoStore } from "../src/geoStore.mjs";
 import { createGeoRoutes } from "../src/geoRoutes.mjs";
 import { geoRuntimeWrite } from "../src/geoWrites.mjs";
@@ -569,8 +569,9 @@ test("what a person's choices do to the platform's choosers is the page's own ve
 
 test("with a market the sources carry its word on them: price, whether it would place there, and why not — and looking orders nothing", options, async () => {
   const market = new GeoMarketStore(database);
-  await q(`UPDATE evimed_geo.media SET domain_verified = true, flags = '{}'::jsonb WHERE resource_id = 'res1'`);
+  await q(`UPDATE evimed_geo.media SET domain_verified = true,case_link='https://dayi.org.cn/case', flags = '{\"domainCheck\":\"ok\",\"domainFinalHost\":\"dayi.org.cn\",\"domainCheckedAt\":\"2026-10-14T00:00:00.000Z\"}'::jsonb WHERE resource_id = 'res1'`);
   await q(`INSERT INTO evimed_geo.media (resource_id, media_type, name, domain, price_cny, available, domain_verified) VALUES ('res2', 'website', '科普中国', 'kepuchina.cn', 90, true, true)`);
+  await q(`UPDATE evimed_geo.media SET case_link='https://kepuchina.cn/case', flags='{\"domainCheck\":\"ok\",\"domainFinalHost\":\"kepuchina.cn\",\"domainCheckedAt\":\"2026-10-14T00:00:00.000Z\"}'::jsonb WHERE resource_id='res2'`);
   const before = (await q(`SELECT count(*)::int AS n FROM evimed_geo.orders WHERE geo_project_id = $1`, [geo.geoId])).rows[0].n;
   service.spine.placementPreview = (input) => previewOutlets({ store: market, market: { configured: true }, now: () => NOW, config: {} }, input);
   const configuredBefore = service.spine.marketConfigured;
@@ -715,6 +716,58 @@ test("each spine input fails explicitly above its complete-read bound", options,
   });
 });
 
+test('preferred-media overflow propagates through the real actions API',options,async()=>{
+  const key=`fill_gap:${id('g2')}:benefit_only`,previous=service.spine.placementPreview,market=new GeoMarketStore(database);
+  await q(`INSERT INTO evimed_geo.media(resource_id,media_type,domain,domain_verified,available,price_cny)
+    SELECT $1 || n,'website','overflow-preview.example.org',true,true,100 FROM generate_series(1,10001) n`,[id('preview-overflow-')]);
+  await store.setActionChoice({geoId:geo.geoId,ownerId:ALICE,key,decidedBy:ALICE,sourceDomain:'overflow-preview.example.org'});
+  service.spine.placementPreview=input=>previewOutlets({store:market,market:{configured:true},now:()=>NOW},input);
+  try {
+    const result=await call('GET',`/api/geo/projects/${geo.geoId}/actions`);
+    assert.equal(result.status,422);assert.equal(result.payload.code,'geo_spine_incomplete');assert.equal(result.payload.data,undefined);
+    const sourcePath=`/api/geo/projects/${geo.geoId}/actions/${encodeURIComponent(key)}/source`;
+    assert.equal((await call('POST',sourcePath,{user:MALLORY,body:{domain:null}})).status,404);
+    assert.equal((await call('POST',`/api/geo/projects/${geo.geoId}/actions/${encodeURIComponent(`fill_gap:${id('g2')}:unknown`)}/source`,{body:{domain:null}})).status,404);
+    const cleared=await call('POST',sourcePath,{body:{domain:null}});assert.equal(cleared.status,200);assert.equal(cleared.payload.data.cleared,true);
+    const restored=await call('GET',`/api/geo/projects/${geo.geoId}/actions`);assert.equal(restored.status,200);
+  } finally {
+    service.spine.placementPreview=previous;
+    await store.setActionChoice({geoId:geo.geoId,ownerId:ALICE,key,decidedBy:ALICE,sourceDomain:null});
+    await q("DELETE FROM evimed_geo.media WHERE resource_id LIKE $1",[`${id('preview-overflow-')}%`]);
+  }
+});
+
+test('a cancelled real preferred-media query propagates a neutral retryable API error',options,async()=>{
+  const previous=service.spine.placementPreview,key=`fill_gap:${id('g2')}:benefit_only`,market=new GeoMarketStore(database);
+  const old=(await store.actionChoices(geo.geoId)).find(choice=>choice.key===key);
+  await store.setActionChoice({geoId:geo.geoId,ownerId:ALICE,key,decidedBy:ALICE,skipped:false,sourceDomain:'cancel-preview.example.org'});
+  const deps={store:market,market:{configured:true},now:()=>NOW};
+  service.spine.placementPreview=async input=>{
+    await previewOutlets(deps,{...input,choices:[],actions:[]}); // Warm only the bounded base catalogue before taking the lock.
+    return database.withClient(async locker=>{
+      await locker.query('BEGIN');await locker.query('LOCK TABLE evimed_geo.media IN ACCESS EXCLUSIVE MODE');
+      try {
+        const pending=previewOutlets(deps,input).then(value=>({value}),error=>({error}));
+        let pid=null;
+        for(let attempt=0;attempt<100;attempt++){
+          const result=await q("SELECT pid FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND query LIKE '%SELECT * FROM evimed_geo.media WHERE%' LIMIT 1");
+          if(result.rows.length){pid=result.rows[0].pid;break;}await new Promise(resolve=>setTimeout(resolve,10));
+        }
+        assert.ok(pid);await q('SELECT pg_cancel_backend($1)',[pid]);
+        const result=await pending;if(result.error)throw result.error;return result.value;
+      } finally {await locker.query('ROLLBACK');}
+    });
+  };
+  try {
+    const result=await call('GET',`/api/geo/projects/${geo.geoId}/actions`);
+    assert.equal(result.status,503);assert.equal(result.payload.code,'geo_source_preview_interrupted');
+    assert.equal(result.payload.data,undefined);assert.equal(JSON.stringify(result.payload).includes('canceling statement'),false);
+  } finally {
+    service.spine.placementPreview=previous;
+    await store.setActionChoice({geoId:geo.geoId,ownerId:ALICE,key,decidedBy:ALICE,skipped:old?.skipped ?? false,sourceDomain:old?.sourceDomain ?? null});
+  }
+});
+
 test("citation reads batch hosts, preserve matches and reject unbounded inputs", options, async t => {
   const project=await store.createProject({userId:ALICE,projectId:id('citation-scale'),engines:['deepseek'],coverageDays:90});
   const prefix=id('citation-scale-'), article=`${prefix}article`;
@@ -756,4 +809,100 @@ test("the complete-read API distinguishes PostgreSQL timeout from user cancellat
     const cancelled=await call('GET',`/api/geo/projects/${project.id}/actions`);
     assert.equal(cancelled.status,500);assert.equal(cancelled.payload.code,'internal_error');
   } finally {store.statementTimeoutMs=timeout;store.spineArticles=previous;}
+});
+
+test('source verification checks permission, live action and current selection again', options, async () => {
+  const key=`fill_gap:${id('g2')}:benefit_only`;
+  const path=`/api/geo/projects/${geo.geoId}/actions/${encodeURIComponent(key)}/verify-source`;
+  const previous=service.recheckActionSource;
+  let count=0;
+  await store.setActionChoice({geoId:geo.geoId,ownerId:ALICE,key,decidedBy:ALICE,skipped:false,sourceDomain:'example.org'});
+  service.recheckActionSource=async domain=>{assert.equal(domain,'example.org');count+=1;return {checked:1,verified:1,coolingDown:0,remaining:0,alreadyVerified:0};};
+  try {
+    assert.equal((await call('POST',path,{user:MALLORY,body:{}})).status,404);
+    assert.equal((await call('POST',`/api/geo/projects/${geo.geoId}/actions/${encodeURIComponent(`fill_gap:${id('g2')}:unknown`)}/verify-source`,{body:{}})).status,404);
+    assert.equal(count,0);
+    assert.equal((await call('POST',path,{body:{}})).status,200);
+    await q("UPDATE evimed_geo.projects SET status='paused' WHERE id=$1",[geo.geoId]);
+    assert.equal((await call('POST',path,{body:{}})).status,409);
+    await q("UPDATE evimed_geo.projects SET status='active' WHERE id=$1",[geo.geoId]);
+    service.recheckActionSource=async ()=>{
+      await store.setActionChoice({geoId:geo.geoId,ownerId:ALICE,key,decidedBy:ALICE,sourceDomain:'other.org'});
+      return {checked:1,verified:1,coolingDown:0,remaining:0,alreadyVerified:0};
+    };
+    assert.equal((await call('POST',path,{body:{}})).status,409);
+    await store.setActionChoice({geoId:geo.geoId,ownerId:ALICE,key,decidedBy:ALICE,skipped:true});
+    assert.equal((await call('POST',path,{body:{}})).status,409);
+  } finally {
+    service.recheckActionSource=previous;
+    await store.setActionChoice({geoId:geo.geoId,ownerId:ALICE,key,decidedBy:ALICE,skipped:false,sourceDomain:null});
+  }
+});
+
+test('source verification aborts on real HTTP disconnect', options, async () => {
+  const key=`fill_gap:${id('g2')}:benefit_only`, previous=service.recheckActionSource;
+  await store.setActionChoice({geoId:geo.geoId,ownerId:ALICE,key,decidedBy:ALICE,skipped:false,sourceDomain:'example.org'});
+  let entered, observed;const started=new Promise(resolve=>{entered=resolve;});const stopped=new Promise(resolve=>{observed=resolve;});
+  service.recheckActionSource=async (_domain,_before,signal)=>{
+    entered();await new Promise(resolve=>signal.addEventListener('abort',resolve,{once:true}));observed();
+    return {checked:0,verified:0,coolingDown:0,remaining:0,alreadyVerified:0};
+  };
+  const controller=new AbortController();
+  try {
+    const pending=fetch(`${base}/api/geo/projects/${geo.geoId}/actions/${encodeURIComponent(key)}/verify-source`,{method:'POST',headers:{'x-test-user':ALICE},signal:controller.signal}).catch(()=>null);
+    await started;controller.abort();await pending;await stopped;
+  } finally {
+    service.recheckActionSource=previous;
+    await store.setActionChoice({geoId:geo.geoId,ownerId:ALICE,key,decidedBy:ALICE,skipped:false,sourceDomain:null});
+  }
+});
+
+
+test('verification database failures are sanitized over HTTP', options, async () => {
+  const key=`fill_gap:${id('g2')}:benefit_only`,previous=service.recheckActionSource;
+  await store.setActionChoice({geoId:geo.geoId,ownerId:ALICE,key,decidedBy:ALICE,skipped:false,sourceDomain:'example.org'});
+  const media={mediaType:'website',resourceId:'safe',domain:'example.org',caseLink:'https://example.org/case',domainVerified:false,flags:{}};
+  const marketStore={listPreferredMedia:async()=>[media],claimDomainRecheck:async()=>true,finishDomainRecheck:async()=>true};
+  const deps={store:marketStore,market:{configured:true},webReader:{read:async()=>({receipt:{finalUrl:media.caseLink},text:''})}};
+  service.recheckActionSource=(domain,before,signal)=>recheckSelectedDomain(deps,domain,before,signal);
+  const path=`/api/geo/projects/${geo.geoId}/actions/${encodeURIComponent(key)}/verify-source`;
+  try {
+    for (const field of ['claimDomainRecheck','finishDomainRecheck']) {
+      const original=marketStore[field];marketStore[field]=async()=>{throw new Error('SECRET_DATABASE_DETAIL');};
+      const result=await call('POST',path,{body:{}});
+      assert.equal(result.status,503);assert.equal(result.payload.code,'geo_source_preview_interrupted');
+      assert.doesNotMatch(JSON.stringify(result.payload),/SECRET_DATABASE_DETAIL/);
+      marketStore[field]=original;
+    }
+    const brokenStore=new GeoMarketStore({query:async()=>({rows:[]}),transaction:async()=>{throw new Error('SECRET_DATABASE_DETAIL');}});
+    brokenStore.ready=async()=>{};
+    service.recheckActionSource=(domain,before,signal)=>recheckSelectedDomain({...deps,store:brokenStore},domain,before,signal);
+    const result=await call('POST',path,{body:{}});
+    assert.equal(result.status,503);assert.equal(result.payload.code,'geo_source_preview_interrupted');
+    assert.doesNotMatch(JSON.stringify(result.payload),/SECRET_DATABASE_DETAIL/);
+    const originalLoad=service.spine.load;
+    service.spine.load=async()=>{throw new Error('SECRET_DATABASE_DETAIL');};
+    try {
+      const failed=await call('POST',path,{body:{}});
+      assert.equal(failed.status,503);assert.equal(failed.payload.code,'geo_source_preview_interrupted');
+      assert.doesNotMatch(JSON.stringify(failed.payload),/SECRET_DATABASE_DETAIL/);
+    } finally {service.spine.load=originalLoad;}
+  } finally {
+    service.recheckActionSource=previous;
+    await store.setActionChoice({geoId:geo.geoId,ownerId:ALICE,key,decidedBy:ALICE,skipped:false,sourceDomain:null});
+  }
+});
+
+test('clusters show unmeasured groups before the first round over HTTP', options, async () => {
+  const project=await store.createProject({userId:ALICE,projectId:id('no-round'),engines:['deepseek'],coverageDays:90});
+  await q(`INSERT INTO evimed_geo.question_sets (geo_project_id,version,user_id,measured_count) VALUES ($1,1,$2,1)`,[project.id,ALICE]);
+  await q(`INSERT INTO evimed_geo.question_groups (id,user_id,geo_project_id,set_version,pool,name,is_control) VALUES ($1,$2,$3,1,'P2','Unmeasured',false)`,[id('no-round-group'),ALICE,project.id]);
+  await q(`INSERT INTO evimed_geo.questions (id,user_id,geo_project_id,group_id,set_version,text,kind,pool,is_measured)
+    VALUES ($1,$2,$3,$4,1,'Question','real','P2',true)`,[id('no-round-question'),ALICE,project.id,id('no-round-group')]);
+  const response=await call('GET',`/api/geo/projects/${project.id}/clusters`);
+  assert.equal(response.status,200);
+  const group=response.payload.data.groups.find(item=>item.id===id('no-round-group'));
+  assert.ok(group);assert.equal(group.mention.n,null);assert.equal(group.mention.k,null);
+  const measured=await call('GET',`/api/geo/projects/${geo.geoId}/clusters`);
+  assert.equal(measured.status,200);assert.ok(measured.payload.data.groups.some(item=>item.mention.n>0));
 });

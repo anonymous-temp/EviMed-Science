@@ -1,4 +1,5 @@
 import type { GeoAnalysisDescriptor, GeoAnalysisId } from "@/lib/geoAnalysisClient";
+import { geoSearchWithScope } from "@/lib/geoReadScope";
 import type { GeoTabKey } from "./geoTabs";
 
 /** Component contract: GEO analysis mode; URL owns identity, scope and return context. */
@@ -134,6 +135,29 @@ export function geoAnalysisDescriptor(search: string): GeoAnalysisDescriptor | n
 }
 /** The return snapshot covers only colliding descriptor keys; business view/scope/session stay native URL fields. */
 const RETURN_PARAM = 'analysisReturn';
+const SCOPE_RETURN_PARAM = 'analysisScopeReturn';
+const SCOPE_KEYS = ['round', 'from', 'to', 'compareFrom', 'compareTo', 'comparisonMode', 'timeZone', 'questionVersion', 'selectionRef',
+  'engines', 'groupIds', 'pools', 'clientTags', 'engine', 'cluster', 'pool'] as const;
+
+/** Open an exact frozen observation while retaining the original business filters for the return. */
+export function geoFrozenAnalysisSearch(search: string, descriptor: GeoAnalysisDescriptor, reference: string): string {
+  const original = new URLSearchParams(search);
+  const entries = [...original.entries()].filter(([key]) => (SCOPE_KEYS as readonly string[]).includes(key));
+  const opened = geoAnalysisSearch(search, descriptor);
+  const params = new URLSearchParams(geoSearchWithScope(opened, { selectionRef: reference }));
+  params.set(SCOPE_RETURN_PARAM, JSON.stringify({ reference, entries }));
+  return params.toString();
+}
+
+/** A stale frozen link can return only when its saved business scope is recoverable. */
+export function geoReturnFromFrozenAnalysis(search: string): string | null {
+  const current = new URLSearchParams(search);
+  const reference = current.get('selectionRef');
+  if (!reference || !current.has(SCOPE_RETURN_PARAM) || !GEO_ANALYSIS_OPTIONS.some(item => item.value === current.get('analysis'))) return null;
+  const returned = geoAnalysisSearch(search, null);
+  return new URLSearchParams(returned).get('selectionRef') === reference ? null : returned;
+}
+
 export function geoAnalysisSearch(search: string, descriptor: GeoAnalysisDescriptor | null): string {
   const params = new URLSearchParams(search);
   const wasAnalysis = GEO_ANALYSIS_OPTIONS.some(item => item.value === params.get('analysis'));
@@ -160,6 +184,23 @@ export function geoAnalysisSearch(search: string, descriptor: GeoAnalysisDescrip
         if (Array.isArray(values) && values.every(value => typeof value === 'string')) for (const value of values) params.append(key, value);
       }
     } catch { /* A malformed optional return snapshot cannot change the current business scope. */ }
+    // Restore only if the person is still on the exact frozen scope. An explicit
+    // scope change in analysis takes precedence over the originating filters.
+    const heldScope = params.get(SCOPE_RETURN_PARAM);
+    if (heldScope) try {
+      const saved: unknown = JSON.parse(heldScope);
+      if (saved && typeof saved === 'object') {
+        const { reference, entries } = saved as { reference?: unknown; entries?: unknown };
+        const onlyReference = SCOPE_KEYS.filter(key => params.has(key)).every(key => key === 'selectionRef');
+        if (typeof reference === 'string' && params.get('selectionRef') === reference && onlyReference && Array.isArray(entries)
+          && entries.every(entry => Array.isArray(entry) && entry.length === 2 && typeof entry[0] === 'string'
+            && (SCOPE_KEYS as readonly string[]).includes(entry[0]) && typeof entry[1] === 'string')) {
+          for (const key of SCOPE_KEYS) params.delete(key);
+          for (const [key, value] of entries as string[][]) params.append(key, value);
+        }
+      }
+    } catch { /* A malformed return scope leaves the current scope untouched. */ }
+    params.delete(SCOPE_RETURN_PARAM);
     // A direct analysis link has no originating snapshot, and its descriptor fields are the analysis's, not the business view's: they are
     // not left behind in the address, where the next view opened from it would inherit them.
     params.delete(RETURN_PARAM);

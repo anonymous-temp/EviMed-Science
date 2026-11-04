@@ -43,6 +43,7 @@ import { GEO_METRICS, geoConstant, isOurCitation, geoClaimApplicability, geoClai
 import { compactText } from "./geoParse.mjs";
 import { enqueueRound, measurableEngines } from "./geoProbeQueue.mjs";
 import { HttpError, randomId } from "./security.mjs";
+import { GEO_CONFIRM_TRIES } from "./geoConfirmationPolicy.mjs";
 
 export const GEO_ERROR_STATUSES = Object.freeze(["open", "acting", "awaiting_remeasure", "closed"]);
 export const GEO_ERROR_ACTIONS = Object.freeze(["own_edit", "correction_letter", "encyclopedia_fix", "report_and_cover", "no_contact", "continuous_supply"]);
@@ -286,26 +287,34 @@ async function notifyError(deps, error, context, occurrence = "first") {
  * for the same question and engine is shared.
  * @param {Parameters<typeof enqueueRound>[0]} deps
  * @param {ReturnType<typeof import("./geoMeasureStore.mjs").errorRow>} error
- * @param {{ roundId?: string | null, kind?: string | null, ref?: any } | null} [origin]  the round the error was seen in
+ * @param {{ roundId?: string | null, kind?: string | null, ref?: any, planned?: number | null } | null} [origin]  the round the error was seen in
  * @returns {Promise<Record<string, unknown> | null>} the `confirm` value, or null when no round could be queued
  */
-async function confirmationFor(deps, error, origin = null) {
+async function confirmationFor(deps, error, origin = null, observationId = error.confirm?.observationId ?? error.firstSnapshotId) {
   const repeats = Number(catalogue("EC_CONFIRM_REPEATS", 10));
-  if (!error.questionId) return { status: "unavailable", stability: "unconfirmed", asked: 0, reason: "no_question" };
-  if (!measurableEngines(deps).includes(error.engine)) return { status: "unavailable", stability: "unconfirmed", asked: 0, reason: "engine_unavailable" };
+  const eventId = error.confirm?.eventId ?? error.confirm?.observationId ?? observationId;
+  const receipt = (/** @type {Record<string, any>} */ fields) => ({ ...fields, observationId, eventId, tries: Number(error.confirm?.tries ?? 1) });
+  const unavailable = (/** @type {string} */ reason) => receipt({ status: "unavailable", stability: "unconfirmed", asked: 0, reason,
+    failedAt: (deps.now ?? (() => new Date()))().toISOString() });
+  if (!error.questionId) return unavailable("no_question");
+  if (!measurableEngines(deps).includes(error.engine)) return unavailable("engine_unavailable");
   if (origin?.kind === "confirm" && origin.ref?.questionId === error.questionId && origin.ref?.engine === error.engine && origin.roundId) {
-    return { status: "pending", roundId: origin.roundId, asked: repeats, valid: null, seen: null, stability: "unconfirmed" };
+    if (!(await deps.store.canJoinConfirmation(error, origin.roundId, observationId))) return unavailable("geo_confirmation_scope_changed");
+    return receipt({ status: "pending", roundId: origin.roundId, asked: origin.planned ?? null, valid: null, seen: null, stability: "unconfirmed" });
   }
   const open = await deps.store.openRoundWithRef(error.geoProjectId, "confirm", { questionId: error.questionId, engine: error.engine });
-  if (open) return { status: "pending", roundId: open, asked: repeats, valid: null, seen: null, stability: "unconfirmed" };
+  if (open) {
+    if (!(await deps.store.canJoinConfirmation(error, open, observationId))) return unavailable("geo_confirmation_scope_changed");
+    return receipt({ status: "pending", roundId: open, asked: (await deps.store.round(open))?.planned ?? null, valid: null, seen: null, stability: "unconfirmed" });
+  }
   try {
     const round = await enqueueRound(deps, {
       geoProjectId: error.geoProjectId, kind: "confirm", questionIds: [error.questionId], engines: [error.engine], repeat: repeats,
-      ref: { errorId: error.id, questionId: error.questionId, engine: error.engine, reason: "confirm" },
+      ref: { errorId: error.id, observationId, eventId, questionId: error.questionId, engine: error.engine, reason: "confirm" },
     });
-    return { status: "pending", roundId: round.roundId, asked: round.planned, valid: null, seen: null, stability: "unconfirmed" };
+    return receipt({ status: "pending", roundId: round.roundId, asked: round.planned, valid: null, seen: null, stability: "unconfirmed" });
   } catch (cause) {
-    if (cause instanceof HttpError) return { status: "unavailable", stability: "unconfirmed", asked: 0, reason: cause.code };
+    if (cause instanceof HttpError) return unavailable(cause.code);
     return null;
   }
 }
@@ -346,6 +355,15 @@ export async function recordErrorsFromFacts(deps, { snapshot, statements, contex
         if (await notifyError(deps, error, { projectId: context.project.projectId, brandName: context.project.product?.brandName ?? null,
           claimStatement: claim?.statement ?? null, questionText: question?.text ?? null }, `seen:${snapshot.id}`)) out.notified += 1;
       }
+      if (!error.confirm || (error.confirm.status === "unavailable" && ["geo_confirmation_authorization_required", "geo_monitoring_authorization_required", "geo_confirmation_scope_changed"].includes(String(error.confirm.reason))
+        && snapshot.askedAt && error.confirm.observationId && snapshot.id !== error.confirm.observationId
+        && (!error.confirm.failedAt || Date.parse(snapshot.askedAt) > Date.parse(String(error.confirm.failedAt))))) {
+        const confirm = await confirmationFor(deps, error, null, snapshot.id);
+        if (confirm) {
+          if (error.confirm) await deps.store.recordConfirmationReconsideration(error.id, error.confirm, confirm);
+          else await deps.store.updateError(error.id, { confirm });
+        }
+      }
       continue;
     }
     out.created += 1;
@@ -354,7 +372,7 @@ export async function recordErrorsFromFacts(deps, { snapshot, statements, contex
       if (await notifyError(deps, error, { projectId: context.project.projectId, brandName: context.project.product?.brandName ?? null,
         claimStatement: claim?.statement ?? null, questionText: question?.text ?? null })) out.notified += 1;
     }
-    const confirm = await confirmationFor(deps, error, round ? { roundId: round.id, kind: round.kind, ref: round.ref } : null);
+    const confirm = await confirmationFor(deps, error, round ? { roundId: round.id, kind: round.kind, ref: round.ref, planned: round.planned } : null);
     if (confirm) await deps.store.updateError(error.id, { confirm });
   }
   await deps.store.errorsRecorded(snapshot.id, statements);
@@ -382,7 +400,7 @@ export async function noteErrorAction(deps, { geoProjectId, errorId, materials =
 }
 
 /** How many confirmation rounds one error is given, the first included: a skipped one is asked again, never without bound. */
-export const GEO_CONFIRM_TRIES = 3;
+export { GEO_CONFIRM_TRIES };
 
 /**
  * Whether an engine is back after `since`: this deployment can ask it, the
@@ -482,6 +500,13 @@ export async function tickErrors(deps) {
       .filter((answer) => answer.questionId === error.questionId && answer.engine === error.engine);
     // Wait until every answer the round got has been read.
     if (answers.some((answer) => (answer.status === "valid" || answer.status === "refusal") && !answer.parsed)) continue;
+    const uncertain = (await store.query(`SELECT 1 FROM evimed_geo.probe_jobs WHERE round_id=$1 AND question_id=$2 AND engine=$3
+      AND error_code='delivery_unknown_no_automatic_retry' LIMIT 1`, [roundId, error.questionId, error.engine])).rows.length > 0;
+    if (uncertain) {
+      await store.updateError(error.id, { confirm: { ...error.confirm, status: "unavailable", stability: "unconfirmed", reason: "delivery_unknown_no_automatic_retry" } });
+      counts.confirmsRead += 1;
+      continue;
+    }
     const valid = answers.filter((answer) => (answer.status === "valid" && answer.judged) || answer.status === "refusal");
     // A round that got no answer from the engine — never asked it (paused,
     // or no channel), or asked and heard nothing back (the probe host down,

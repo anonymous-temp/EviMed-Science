@@ -20,6 +20,7 @@ import {
   scheduledAfterObservations,
   safetyReading,
   severeOpenErrors,
+  standing,
   shownDelta,
   statedValue,
   trendConclusion,
@@ -303,7 +304,8 @@ describe("the ranking", () => {
     // Over the same questions, so one range for every row.
     expect(new Set(rows.map((row) => row.scope)).size).toBe(1);
     const lead = overviewTiles(project(), { ...diagnosisFilled, more })[0];
-    expect([lead.rank, lead.rival]).toEqual(["提及率第 2 / 3", "诺和盈 提及率 31%"]);
+    // Historical summary cells do not carry the paired cohort required for a ranking.
+    expect([lead.rank, lead.rival]).toEqual([null, null]);
   });
 
   it("puts us in it once, marked, beside the rivals actually measured", () => {
@@ -313,6 +315,8 @@ describe("the ranking", () => {
       ["信尔美", 21, true],
     ]);
     expect(rows.filter((row) => row.ours)).toHaveLength(1);
+    expect(standing(project(), diagnosisFilled).rank).toBeNull();
+    expect(headlineSentence(project(), diagnosisFilled)).not.toContain("排第");
   });
 });
 

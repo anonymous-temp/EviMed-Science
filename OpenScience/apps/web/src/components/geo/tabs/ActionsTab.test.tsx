@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { GeoArticle, GeoProject } from "@/lib/geoClient";
+import { WebApiError } from "@/lib/apiClient";
 import { diagnosisFilled, diagnosisWith, distributionFilled, geoProject, monitoringFilled } from "../__fixtures__/geoTabs";
 import {
   ACTION_BRAND,
@@ -28,6 +29,7 @@ const client = vi.hoisted(() => ({
   getGeoCluster: vi.fn(),
   skipGeoAction: vi.fn(),
   chooseGeoActionSource: vi.fn(),
+  verifyGeoActionSource: vi.fn(),
   createGeoOwnedLink: vi.fn(),
   getGeoArticles: vi.fn(),
   getGeoArticle: vi.fn(),
@@ -422,6 +424,17 @@ describe("行动: the action's drawer", () => {
     expect(screen.getByTestId("search")).toHaveTextContent("");
   });
 
+  it("rechecks an unavailable selected source from its action", async () => {
+    client.getGeoActions.mockResolvedValue({ ...actionsFilled, actions: actionsFilled.actions.map((action) => action.key === ACTION_SAFETY.key
+      ? { ...action, sources: action.sources.map((source) => source.chosen === "swapped"
+        ? { ...source, available: false, unavailableBecause: ["domain_check_stale"] } : source) } : action) });
+    client.verifyGeoActionSource.mockResolvedValue({ checked: 1, verified: 1, coolingDown: 0, remaining: 0, alreadyVerified: 0 });
+    renderTab(geoProject(), `/app/geo/geo_1/actions?action=${encodeURIComponent(ACTION_SAFETY.key)}`);
+    const drawer = await screen.findByRole("dialog", { name: "补上缺口 · 只讲获益不讲安全" });
+    await userEvent.click(within(drawer).getByRole("button", { name: "重新核验信源" }));
+    await waitFor(() => expect(client.verifyGeoActionSource).toHaveBeenCalledWith("geo_1", ACTION_SAFETY.key));
+  });
+
   it("swaps a source from its row in the drawer, and goes back to the recommendation", async () => {
     renderTab(geoProject(), `/app/geo/geo_1/actions?action=${encodeURIComponent(ACTION_SAFETY.key)}`);
     const drawer = await screen.findByRole("dialog", { name: "补上缺口 · 只讲获益不讲安全" });
@@ -619,6 +632,35 @@ describe("行动: states", () => {
     renderTab();
     await userEvent.click(await screen.findByRole("button", { name: /重试/ }));
     expect(await findRow(ACTION_BRAND.key)).toBeInTheDocument();
+  });
+
+  it('explains incomplete source previews and retries instead of showing an empty action list',async()=>{
+    client.getGeoActions.mockRejectedValueOnce(new WebApiError('incomplete',{status:422,code:'geo_spine_incomplete'})).mockResolvedValue(actionsFilled);
+    renderTab();
+    expect(await screen.findByText(/项目关联记录超过当前完整读取上限/)).toBeInTheDocument();
+    expect(screen.getByText(/请联系管理员处理后再试/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button',{name:/重试/}));
+    expect(await findRow(ACTION_BRAND.key)).toBeInTheDocument();
+  });
+
+  it('explains an interrupted source preview and lets the user retry',async()=>{
+    client.getGeoActions.mockRejectedValueOnce(new WebApiError('interrupted',{status:503,code:'geo_source_preview_interrupted'})).mockResolvedValue(actionsFilled);
+    renderTab();
+    expect(await screen.findByText(/信源读取被中断，请重试/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button',{name:/重试/}));
+    expect(await findRow(ACTION_BRAND.key)).toBeInTheDocument();
+  });
+
+  it('shows a selected host’s canonical domain and a stale-check recovery instruction',async()=>{
+    const source={...ACTION_BRAND.sources[0],domain:'sub.example.org',canonicalDomain:'example.org',available:false,
+      unavailableBecause:['domain_check_stale'],route:'market' as const,chosen:'swapped' as const};
+    client.getGeoActions.mockResolvedValue({...actionsFilled,actions:actionsFilled.actions.map(action=>
+      action.key===ACTION_BRAND.key ? {...action,sources:[source]} : action)});
+    renderTab(geoProject(),`/app/geo/geo_1/actions?action=${encodeURIComponent(ACTION_BRAND.key)}`);
+    const drawer=await screen.findByRole('dialog');
+    expect(await within(drawer).findByText('归属域名 example.org')).toBeInTheDocument();
+    expect(within(drawer).getByText(/域名核验已过期，请重新核验或更换信源/)).toBeInTheDocument();
+    expect(within(drawer).getByText(/现在投不了/)).toBeInTheDocument();
   });
 
   it("does not draw an action's article button for a viewer, and offers nothing to change", async () => {

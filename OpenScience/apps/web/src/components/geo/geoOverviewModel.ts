@@ -290,22 +290,13 @@ export function severeOpenErrors(diagnosis: GeoDiagnosis | null): number {
 }
 
 /**
- * Our place in the same-class ranking, and the rival ahead of the field: the
- * two things that answer “61 算好还是不好” beside the index (fusion plan
- * §4.8). The ranking is by mention rate — the one reading every rival has —
- * and says so.
+ * The legacy overview cells do not carry each competitor's eligible cohort.
+ * They cannot establish a place or a leading rival, even when the displayed
+ * pool names agree. The V08 analysis reads a paired cohort for each rival.
  */
 export function standing(project: GeoProject, diagnosis: GeoDiagnosis | null): { rank: string | null; rival: string | null; place: number | null; count: number } {
   const ranking = rivalRanking(project, diagnosis);
-  const ours = ranking.find((row) => row.ours && row.value !== null) ?? null;
-  const place = ours ? ranking.indexOf(ours) + 1 : null;
-  const leader = ranking.find((row) => !row.ours && row.value !== null) ?? null;
-  return {
-    rank: place === null ? null : `提及率第 ${place} / ${ranking.length}`,
-    rival: leader ? `${leader.name} 提及率 ${formatGeoValue(leader.value ?? 0, "percent")}` : null,
-    place,
-    count: ranking.length,
-  };
+  return { rank: null, rival: null, place: null, count: ranking.length };
 }
 
 export function overviewTiles(project: GeoProject, diagnosis: GeoDiagnosis | null, strategy?: GeoStrategyView | null): OverviewTile[] {

@@ -659,6 +659,13 @@ export class GeoStore {
     return new Map(rows.map((row) => [String(row.geo_project_id), { id: String(row.id), kind: String(row.kind), status: String(row.status) }]));
   }
 
+  /** A project-wide existence check also sees failed and skipped rounds excluded from an observation selection.
+   * @param {string} geoId @param {string} userId */
+  async hasMeasurementHistory(geoId, userId) {
+    const result = await this.query(`SELECT EXISTS(SELECT 1 FROM evimed_geo.rounds WHERE geo_project_id=$1 AND user_id=$2) AS present`, [geoId, userId]);
+    return result.rows[0]?.present === true;
+  }
+
   // --- members -------------------------------------------------------------------
 
   /** Every member row of a project, oldest first. @param {string} geoId */
@@ -745,6 +752,16 @@ export class GeoStore {
     if (patch.competitors !== undefined) put("competitors", JSON.stringify(patch.competitors), "::jsonb");
     if (patch.budget !== undefined) put("budget", patch.budget == null ? null : JSON.stringify(patch.budget), "::jsonb");
     if (patch.producer !== undefined) put("producer", patch.producer == null ? null : JSON.stringify(patch.producer), "::jsonb");
+    // A return to an earlier scope is a new scope, not a revival of old consent.
+    const scopeChanges = [];
+    if (patch.engines !== undefined) { values.push([...patch.engines]); scopeChanges.push(`engines IS DISTINCT FROM $${values.length}::text[]`); }
+    if (patch.coverageDays !== undefined) { values.push(patch.coverageDays); scopeChanges.push(`coverage_days IS DISTINCT FROM $${values.length}`); }
+    if (patch.status !== undefined) { values.push(patch.status); scopeChanges.push(`status IS DISTINCT FROM $${values.length}`); }
+    if (scopeChanges.length) {
+      const changed = scopeChanges.join(" OR ");
+      sets.push(`confirmation_generation = confirmation_generation + CASE WHEN ${changed} THEN 1 ELSE 0 END`);
+      sets.push(`confirmation_authorization = CASE WHEN ${changed} THEN NULL ELSE confirmation_authorization END`);
+    }
     if (!sets.length) return this.getProject(userId, id);
     const result = await this.query(`UPDATE evimed_geo.projects SET ${sets.join(", ")}, updated_at = now()
       WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL RETURNING ${PROJECT_COLUMNS}`, values);
@@ -761,8 +778,10 @@ export class GeoStore {
     const patch = { ...fields, ...(fields.requested === true ? { requestOrigin: fields.requestOrigin ?? "platform", requestedAt: at } : {}), updatedAt: at };
     const result = await this.query(`UPDATE evimed_geo.projects
       SET steps = jsonb_set(coalesce(steps, '{}'::jsonb), ARRAY[$2::text], coalesce(steps -> $2::text, '{}'::jsonb) || $3::jsonb),
+          confirmation_generation = confirmation_generation + CASE WHEN $4::boolean THEN 1 ELSE 0 END,
+          confirmation_authorization = CASE WHEN $4::boolean THEN NULL ELSE confirmation_authorization END,
           updated_at = now()
-      WHERE id = $1 AND deleted_at IS NULL RETURNING ${PROJECT_COLUMNS}`, [id, step, JSON.stringify(patch)]);
+      WHERE id = $1 AND deleted_at IS NULL RETURNING ${PROJECT_COLUMNS}`, [id, step, JSON.stringify(patch), step === "monitoring" && fields.automation !== undefined]);
     return result.rows[0] ? geoProjectFromRow(result.rows[0]) : null;
   }
 
@@ -985,6 +1004,7 @@ export class GeoStore {
       throw new HttpError(409, "geo_contract_missing", "Revise this imported question set with rows and its measurement agreement; a legacy write cannot discard the current agreement.");
     }
     const version = Number(latest?.version ?? 0) + 1;
+    await client.query(`UPDATE evimed_geo.projects SET confirmation_generation=confirmation_generation+1, confirmation_authorization=NULL, updated_at=now() WHERE id=$1`, [geoId]);
     await client.query(`INSERT INTO evimed_geo.question_sets (geo_project_id, version, user_id, locked_at, measured_count, note, run_id, contract, request_key, request_digest)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10)`, [geoId, version, userId, lockedAt, measuredCount, note, runId, contract ? JSON.stringify(contract) : null, requestKey, digest]);
     const groupRows = [];
@@ -1033,10 +1053,16 @@ export class GeoStore {
 
   /** Lock a set version for measurement. @param {string} geoId @param {number} version @param {number} measuredCount */
   async lockQuestionSet(geoId, version, measuredCount) {
-    const result = await this.query(`UPDATE evimed_geo.question_sets SET locked_at = coalesce(locked_at, now()), measured_count = $3
+    return this.transaction(async (client) => {
+      await client.query(`SELECT pg_advisory_xact_lock(hashtext('evimed-geo-set:' || $1))`, [geoId]);
+      await client.query(`SELECT id FROM evimed_geo.projects WHERE id=$1 FOR UPDATE`, [geoId]);
+      await client.query(`UPDATE evimed_geo.projects SET confirmation_generation=confirmation_generation+1, confirmation_authorization=NULL, updated_at=now()
+        WHERE id=$1 AND EXISTS (SELECT 1 FROM evimed_geo.question_sets WHERE geo_project_id=$1 AND version=$2 AND locked_at IS NULL)`, [geoId, version]);
+      const result = await client.query(`UPDATE evimed_geo.question_sets SET locked_at = coalesce(locked_at, now()), measured_count = $3
       WHERE geo_project_id = $1 AND version = $2 RETURNING version, locked_at, measured_count`, [geoId, version, measuredCount]);
-    const row = result.rows[0];
-    return row ? { version: Number(row.version), lockedAt: iso(row.locked_at), measuredCount: Number(row.measured_count) } : null;
+      const row = result.rows[0];
+      return row ? { version: Number(row.version), lockedAt: iso(row.locked_at), measuredCount: Number(row.measured_count) } : null;
+    });
   }
 
   /**

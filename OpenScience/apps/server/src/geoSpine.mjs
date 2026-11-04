@@ -87,7 +87,7 @@ export class GeoSpine {
   /**
    * @param {{ store: import("./geoStore.mjs").GeoStore, now?: () => Date, marketConfigured?: () => boolean,
    *   placementPreview?: ((input: { project: any, groups: any[], candidates: Map<string, Array<Record<string, any>>>, choices: any[],
-   *     articles: any[] }) => Promise<Map<string, Array<Record<string, any>>>>) | null }} options
+   *     articles: any[], actions: any[] }) => Promise<Map<string, Array<Record<string, any>>>>) | null }} options
    *   `placementPreview` is the market's read-only ranking of the outlets an article of the group could go to (`geoMarket.mjs`
    *   `previewOutlets`): the same function the market places by, and nothing is ordered by asking.
    */
@@ -320,9 +320,11 @@ export class GeoSpine {
     }
     if (this.placementPreview) {
       try {
-        const ranked = await this.placementPreview({ project: spine.project, groups: spine.groups, candidates: out, choices: spine.choices, articles: spine.articles });
+        const actions=(await this.actions(spine,{candidates:new Map()})).actions;
+        const ranked = await this.placementPreview({ project: spine.project, groups: spine.groups, candidates: out, choices: spine.choices, articles: spine.articles, actions });
         for (const [groupId, list] of ranked) out.set(groupId, list);
-      } catch {
+      } catch (error) {
+        if (error?.code === 'geo_spine_incomplete' || error?.code === 'geo_source_preview_interrupted' || error?.code === '57014') throw error;
         // The preview decorates: a market that cannot be read leaves the sources as they are, never the page.
       }
     }

@@ -62,6 +62,7 @@ import { nextWeeklySlot, programSteps, wantedSteps } from "./geoOrchestrator.mjs
 import { GEO_PROBE_ENGINES } from "./geoProbeQueue.mjs";
 import { GEO_PROBE_TASK_OUTCOMES } from "./geoProbeGateway.mjs";
 import { HttpError } from "./security.mjs";
+import { dnsKey } from "./geoDomains.mjs";
 import { GEO_ORDER_ARTICLE_LIVE_STATES, ORDER_SELECT, mapOrder, orderCancellable, projectMoney } from "./geoMarketStore.mjs";
 import { mediaMarketConfigured } from "./mediaMarketClient.mjs";
 import { GEO_VALUE_OBSERVATIONS_SHOWN } from "./geoValueStore.mjs";
@@ -252,6 +253,7 @@ function errorView(row) {
     severity: text(row.severity),
     errorType: text(row.error_type),
     stability: row.confirm && typeof row.confirm === "object" ? text(row.confirm.stability) : null,
+    confirmationReason: row.confirm && typeof row.confirm === "object" ? text(row.confirm.reason) : null,
     citedSource: row.cited_source && typeof row.cited_source === "object" ? row.cited_source : null,
     action: text(row.action),
     status: String(row.status),
@@ -379,7 +381,7 @@ export function compactAction(action) {
     gapId: action.need.gapId, gapClass: action.need.gapClass, errorIds: action.need.errorIds, judgment: action.need.judgment ? clip(action.need.judgment, 300) : null,
     expectedPoints: action.need.expectedPoints.slice(0, 5).map((/** @type {any} */ point) => ({ statement: clip(point.statement, 160), claimIds: point.claimIds })),
     what: action.what, engines: action.engines,
-    sources: action.sources.map((/** @type {any} */ source) => ({ domain: source.domain, channel: source.channel, route: source.route, chosen: source.chosen,
+    sources: action.sources.map((/** @type {any} */ source) => ({ domain: source.domain, ...(source.canonicalDomain ? {canonicalDomain:source.canonicalDomain} : {}), channel: source.channel, route: source.route, chosen: source.chosen,
       available: source.available, price: source.price, why: source.why ? clip(source.why, 160) : null })),
     expected: { metricId: action.expected.primaryMetricId, promise: action.expected.promise, from: action.expected.from, baseline: action.expected.baseline,
       target: action.expected.target, reached: action.expected.reached, horizonWeeks: action.expected.horizonWeeks, tier: action.expected.tier,
@@ -437,6 +439,8 @@ export class GeoService {
      * composition gives it the market's read-only ranking (`spine.placementPreview`) when there is a market.
      */
     this.spine = new GeoSpine({ store, now: () => this.now(), marketConfigured: () => geoMarketConfigured(config) });
+    /** @type {null | ((domain: string, beforeRead: () => Promise<void>, signal?: AbortSignal) => Promise<{checked: number, verified: number, coolingDown: number, remaining: number, alreadyVerified: number}>)} */
+    this.recheckActionSource = null;
     /**
      * The probe's in-process state (the breaker, the host pause), set by the composition beside the measurement; what the
      * monitoring view says of a paused measurement (`geoMeasurementPause`). Null: nothing is known to be paused.
@@ -788,7 +792,7 @@ export class GeoService {
   /** @param {any} project */
   async #projectViewBase(project) {
     const metricIds = GEO_OVERVIEW_METRICS.map((entry) => entry.metricId);
-    const [latest, series, targets, week, names, started, cardsBlockedBy, needsYou, summaries, activeMeasurements] = await Promise.all([
+    const [latest, series, targets, week, names, started, cardsBlockedBy, needsYou, summaries, activeMeasurements, hasMeasurementHistory] = await Promise.all([
       this.#latestProjectMetrics([project.id], metricIds),
       this.#series([project.id], metricIds, "project", "", { coverage: true }),
       this.store.latestTargets(project.id),
@@ -799,6 +803,7 @@ export class GeoService {
       this.#needsYou(project),
       this.spine.stepSummaries(project.id).catch(() => ({})),
       this.store.activeMeasurements([project.id]),
+      this.store.hasMeasurementHistory(project.id, project.userId),
     ]);
     // One short count per programme step, for the rail: what the step produced (「86 条结论」「25 个群」).
     const steps = Object.fromEntries(Object.entries(project.steps ?? {}).map(([step, state]) => [step,
@@ -817,6 +822,7 @@ export class GeoService {
     return {
       ...project,
       activeMeasurement: activeMeasurements.get(project.id) ?? null,
+      hasMeasurementHistory,
       name: geoProjectName(project, names.get(project.projectId)),
       startedAt: started.get(project.id) ?? project.createdAt,
       availableEngines: geoAvailableEngines(this.config),
@@ -1016,7 +1022,7 @@ export class GeoService {
         const questions = selected.questions.filter((question) => question.group_id === group.id);
         const members = answers.filter((answer) => questions.some((question) => question.id === answer.questionId));
         const legacy = context.legacyReadings.filter((entry) => entry.groupId === group.id && entry.metricId === "M-01" && entry.kind !== "post_publication").at(-1);
-        const historicalMention = !filtered && !selected.rows.some((row) => row.facts) && legacy?.roundId === roundView?.id
+        const historicalMention = legacy && roundView && !filtered && !selected.rows.some((row) => row.facts) && legacy.roundId === roundView.id
           ? { ...geoGroupReading({ k: legacy.k, n: legacy.n }), roundId: legacy.roundId, date: legacy.date, coverage: legacy.coverage } : null;
         const mention = historicalMention ?? cell("M-01", { scope: "group", pool: group.pool, groupId: group.id });
         return { ...old, errors: context.errorSummary.byGroup[group.id] ?? { total: 0, open: 0, severe: 0 }, id: group.id, name: group.name, pool: group.pool, journeyStage: group.journey_stage, audience: group.audience,
@@ -2380,16 +2386,45 @@ export class GeoService {
     if (!parseGeoActionKey(key) && !/^client:[0-9a-f]{8}$/.test(key)) throw failure(404, "geo_action_not_found", "Action not found.");
     let sourceDomain = change.sourceDomain;
     if (typeof sourceDomain === "string") {
-      sourceDomain = sourceDomain.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "").replace(/^www\./, "");
+      sourceDomain = dnsKey(sourceDomain.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, ""));
       if (!/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,62}$/.test(sourceDomain)) {
         throw failure(400, "geo_action_choice_invalid", "A source is named by its website's domain.");
       }
     }
-    const { spine, derived } = await this.#spineOf(project);
+    const spine = await this.spine.load(project, { answers: false });
+    const derived = await this.spine.actions(spine, { candidates: new Map() });
     if (!this.spine.knowsKey(spine, derived, key)) throw failure(404, "geo_action_not_found", "Action not found.");
     const stored = await this.store.setActionChoice({ geoId: project.id, ownerId: project.userId, key, decidedBy: String(user.id),
       ...(change.skipped === undefined ? {} : { skipped: change.skipped }), ...(sourceDomain === undefined ? {} : { sourceDomain }) });
     return { key, skipped: stored?.skipped ?? false, sourceDomain: stored?.sourceDomain ?? null, updatedAt: stored?.updatedAt ?? null, cleared: stored === null };
+  }
+
+  /** Recheck only the current, existing action's explicitly selected source. */
+  async verifyActionSource(user, id, key, signal = undefined) {
+    const selected = async () => {
+      try {
+      const project = await this.requireProject(user, id, "edit");
+      if (project.status !== "active") throw failure(409, "geo_action_choice_invalid", "The project is not active.");
+      const spine = await this.spine.load(project, { answers: false });
+      const derived = await this.spine.actions(spine, { candidates: new Map() });
+      if (!this.spine.knowsKey(spine, derived, key)) throw failure(404, "geo_action_not_found", "Action not found.");
+      const choice = spine.choices.find((entry) => entry.key === key);
+      if (!choice || choice.skipped || !choice.sourceDomain) throw failure(409, "geo_action_choice_invalid", "No source is selected.");
+      return choice.sourceDomain;
+      } catch (cause) {
+        if (cause instanceof HttpError) throw cause;
+        const error = failure(503, "geo_source_preview_interrupted", "Source verification was interrupted.");
+        error.cause = cause;
+        throw error;
+      }
+    };
+    const domain = await selected();
+    if (!this.recheckActionSource) throw failure(503, "geo_source_preview_interrupted", "Source verification is unavailable.");
+    const result = await this.recheckActionSource(domain, async () => {
+      if (signal?.aborted || await selected() !== domain) throw failure(409, "geo_action_choice_invalid", "The selected source changed.");
+    }, signal);
+    if (await selected() !== domain) throw failure(409, "geo_action_choice_invalid", "The selected source changed.");
+    return result;
   }
 
   /**

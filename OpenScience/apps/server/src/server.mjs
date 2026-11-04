@@ -462,7 +462,7 @@ import { tickErrors as tickGeoErrors } from "./geoErrors.mjs";
 import { GeoMarketStore } from "./geoMarketStore.mjs";
 import { GeoMarketOperations } from "./geoMarketOperations.mjs";
 import { cancelOrder as cancelGeoOrder, clearStop as clearGeoMarketStop, confirmTopup as confirmGeoTopup, markOrderLost as markGeoOrderLost,
-  marketStatus as geoMarketStatus, noteCitation as noteGeoCitation, previewOutlets as previewGeoOutlets, resolveUnknownOrder as resolveGeoUnknownOrder,
+  marketStatus as geoMarketStatus, noteCitation as noteGeoCitation, previewOutlets as previewGeoOutlets, recheckSelectedDomain, resolveUnknownOrder as resolveGeoUnknownOrder,
   setBudget as setGeoBudget,
   tickCatalogue as tickGeoCatalogue, tickOrders as tickGeoOrders, tickPoll as tickGeoPoll, tickReconcile as tickGeoReconcile,
   tickTopups as tickGeoTopups, tickVerify as tickGeoVerify } from "./geoMarket.mjs";
@@ -6134,6 +6134,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     geoParts.service.probeState = () => measureDeps.state;
     // The market's read-only ranking beside an action: the function the market places by, over the same rows (nothing is ordered by asking).
     geoParts.service.spine.placementPreview = (/** @type {any} */ input) => previewGeoOutlets(marketDeps, input);
+    geoParts.service.recheckActionSource = (domain, beforeRead, signal) => recheckSelectedDomain(marketDeps, domain, beforeRead, signal);
     // The platform's own medication-question bank (flywheel F22): composed only with its lever on, beside the module. It is the module's
     // own daily loop (below) and the topic selector's observed errors; with the lever off there is nothing of it.
     if (config.geoQuestionBankEnabled) {

@@ -3,12 +3,13 @@ import { geoReadTransactionActive, withGeoReadTransaction } from './geoReadScope
 import { projectMoney, mapOrder, orderCancellable, ORDER_SELECT, ORDER_STATES } from './geoMarketStore.mjs';
 import { geoMarketReadPageOptions, geoMarketReadPage, geoMarketReadTimestamp } from './geoMarketOperations.mjs';
 import { geoLedgerBalances } from './geoDistributionMoney.mjs';
+import { geoMediaProofProblem } from './geoDomains.mjs';
 
 const invalid = () => new HttpError(400, 'geo_payload_invalid', 'Invalid project distribution page.');
 const iso = value => value == null ? null : new Date(value).toISOString();
 const ledgerRow = row => ({ id: String(row.id), orderId: row.order_id ?? null, kind: String(row.kind), amountCny: Number(row.amount_cny), createdAt: iso(row.created_at) });
 const orderQuery = `SELECT o.*,a.title AS article_title,a.layer AS article_layer,a.current_result_version_id,a.content_sha256 AS current_digest,
-  m.name AS media_name,m.domain AS media_domain FROM (${ORDER_SELECT} WHERE o.geo_project_id=$1 AND o.user_id=(SELECT user_id FROM evimed_geo.projects WHERE id=$1)) o
+  m.name AS media_name,m.domain AS media_domain,m.case_link AS media_case_link,m.flags AS media_flags,m.domain_verified AS media_domain_verified FROM (${ORDER_SELECT} WHERE o.geo_project_id=$1 AND o.user_id=(SELECT user_id FROM evimed_geo.projects WHERE id=$1)) o
   LEFT JOIN evimed_geo.articles a ON a.id=o.article_id AND a.geo_project_id=o.geo_project_id AND a.user_id=o.user_id
   LEFT JOIN evimed_geo.media m ON m.media_type=o.media_type AND m.resource_id=o.resource_id`;
 const phases = new Set(['send_started', 'late_send_result', 'price_changed', 'url_changed', 'refund_seen', 'refund_escalated', 'auto_cancel', 'check', 'cited']);
@@ -19,6 +20,7 @@ const orderView = row => {
   const comparable = Boolean(order.articleResultVersionId && order.articleDigest && row.current_result_version_id && row.current_digest);
   return { id: order.id, articleId: order.articleId, articleTitle: row.article_title ?? null, media: row.media_name ?? null, domain: row.media_domain ?? null,
     layer: row.article_layer ?? null, state: order.state, priceCny: order.settledCny ?? order.priceCny ?? order.reserveCny,
+    sourceProofProblem: order.state === 'planned' ? geoMediaProofProblem({domain:row.media_domain,caseLink:row.media_case_link,flags:row.media_flags,domainVerified:row.media_domain_verified}) : null,
     articleResultVersionId: order.articleResultVersionId, articleDigest: order.articleDigest, currentResultVersionId: row.current_result_version_id ?? null,
     versionState: !comparable ? 'unknown' : order.articleResultVersionId === row.current_result_version_id && order.articleDigest === row.current_digest ? 'current' : 'update_needed',
     publishedUrl: order.publishedUrl, checks: order.checks, cancellable: orderCancellable(order), createdAt: order.createdAt, updatedAt: order.updatedAt,

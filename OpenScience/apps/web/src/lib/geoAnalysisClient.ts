@@ -126,6 +126,8 @@ export interface GeoAnalysisRow {
     pool?: string | null;
     entityKind?: "brand" | "generic";
     entityName?: string;
+    /** Current and recorded historical names, when they differ. */
+    entityLabel?: string;
     entityKey?: string | null;
     own?: boolean;
     unit?: string;

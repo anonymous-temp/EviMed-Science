@@ -7,6 +7,7 @@ export interface GeoExecutionOrder {
   layer: GeoArticleLayer | null; state: GeoOrderState; priceCny: number | null; publishedUrl: string | null;
   articleResultVersionId: string | null; articleDigest: string | null; currentResultVersionId: string | null;
   versionState: 'current' | 'update_needed' | 'unknown'; checks: GeoOrderCheck[]; cancellable: boolean;
+  sourceProofProblem?: 'missing' | 'mismatch' | null;
   createdAt: string | null; updatedAt: string | null; sentAt: string | null; submittedAt: string | null;
   acceptedAt: string | null; publishedAt: string | null; stateAt: string | null; refundSeenAt: string | null;
 }

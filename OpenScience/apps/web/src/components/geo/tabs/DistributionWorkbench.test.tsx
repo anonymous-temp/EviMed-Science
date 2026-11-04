@@ -245,3 +245,13 @@ it('removes an already displayed publication text on account switch', async () =
   fireEvent(window,new Event(WEB_SESSION_STARTED_EVENT));
   expect(screen.queryByText('Visible before switch')).not.toBeInTheDocument();
 });
+
+it('shows why a planned order is waiting and how to recover it', async () => {
+  const planned=order({state:'planned',sourceProofProblem:'missing'});
+  api.getGeoExecutionOrders.mockResolvedValue({items:[planned],nextCursor:null,total:1});
+  api.getGeoOrderDetail.mockResolvedValue(details(planned));
+  mount();
+  expect(await screen.findByText(/来源证明待处理/)).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button',{name:/Frozen article/}));
+  expect(await screen.findByText(/来源证明缺失，计划暂未投放/)).toHaveTextContent('重新核验信源');
+});
