@@ -1031,6 +1031,11 @@ class VcrJobWaitTests(_GatewayCase):
             self.assertIn("notice", advice)
             self.assertIn("end the turn", advice)
             self.assertIn("vcr_read (what: results)", advice)
+            # Live 2026-11-04: told to answer with what it had, the model worked the sample size out itself and gave its own number
+            # beside the engine's. A job that finishes before the reply is written is read once more, not computed twice.
+            self.assertIn("give no number of your own", advice)
+            self.assertIn("look once more with status just before you answer", advice)
+            self.assertNotIn("action status", advice)
 
     def test_a_job_that_finishes_during_the_wait_comes_back_finished_from_one_start(self):
         self.wait_for("20")

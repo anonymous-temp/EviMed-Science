@@ -1457,6 +1457,9 @@ def _job_answer(data: dict, action: str) -> dict:
                 "Do not wait for it in this turn -- no status loop, no sleep or wait command. Tell the researcher what is "
                 "computing, where the result will appear and how far it got, answer with what you already have, and end the turn "
                 "(or go on with work that does not need this result).",
+                "Do not work out the same quantity yourself meanwhile and give no number of your own for it: the number the researcher "
+                "is given is the engine's. A small job is usually finished by the time you have written your reply, so look once more "
+                "with status just before you answer and use the result if it is there; one more look is not a loop.",
                 "In a later turn, when asked, read the result with vcr_read (what: results).",
             ],
         }
