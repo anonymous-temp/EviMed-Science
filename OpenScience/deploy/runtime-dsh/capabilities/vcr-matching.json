@@ -1,6 +1,6 @@
 {
   "id": "vcr-matching",
-  "version": "1.8.2",
+  "version": "1.8.3",
   "title": "Virtual Clinical Research — Patient Matching",
   "description": "Judge eligibility in either direction from original case records and the trial's own eligibility text: a whole-pair judgment for every pair, clause by clause for the best-ranked, with sentence evidence and a visible label for what the record does not say. No recruitment operations.",
   "whenToUse": "Virtual Clinical Research (虚拟临床研究): Use for a requested eligibility assessment deliverable, protocol-to-patient matching or patient-to-trial matching. A single case can start from the original human message or attachment in global conversation. No study form, full protocol or PICO is required for patient-to-trial search.",

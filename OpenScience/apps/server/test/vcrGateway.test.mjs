@@ -1572,6 +1572,64 @@ function nativeProbe() {
   return { scopes, call };
 }
 
+test("a protocol needs only its words: clause text is enough, a pasted text is numbered by code, and the grammar stays for table screening", async () => {
+  const made = fixture();
+  /** @type {any[]} */
+  const saved = [];
+  made.vcr.store.saveProtocolVersion = async (input) => { saved.push(input); return { id: "prt_1", version: saved.length, criteria: input.criteria }; };
+  const write = async (/** @type {Record<string, any>} */ data) => {
+    const res = response();
+    await made.handler(request("/internal/vcr/v1/write", { what: "protocol", data }), res);
+    return res.json().data;
+  };
+  // Clause text alone: the text is what is asked of the model, in the grammar's own shape for a question only language can answer.
+  const clauses = await write({ title: "t", criteria: [{ kind: "inclusion", sourceText: "Age >= 18 years" }, { kind: "exclusion", sourceText: "Pregnancy" }] });
+  assert.equal(clauses.ok, true, JSON.stringify(clauses.issues));
+  assert.deepEqual(saved.at(-1).criteria.map((/** @type {any} */ row) => [row.kind, row.sourceText, row.requirement.op]), [["inclusion", "Age >= 18 years", "language"], ["exclusion", "Pregnancy", "not"]]);
+  assert.equal(saved.at(-1).criteria[0].requirement.text, "Age >= 18 years");
+  assert.deepEqual(saved.at(-1).criteria[1].requirement.operand, { op: "language", text: "Pregnancy" }, "an exclusion's text is written as stated and stored as its negation, like any other");
+  // A pasted protocol: the segmenter's clauses, on their own sides, words whole, each knowing where it stood.
+  const text = "Inclusion Criteria:\n1. ECOG 0, 1, or 2.\n2. Adenocarcinoma, or\n3. Squamous cell carcinoma\nExclusion Criteria:\n- Pregnancy";
+  const pasted = await write({ title: "EV-201", protocolText: text });
+  assert.equal(pasted.ok, true, JSON.stringify(pasted.issues));
+  const rows = saved.at(-1).criteria;
+  assert.deepEqual(rows.map((/** @type {any} */ row) => [row.kind, row.sourceText]), [["inclusion", "ECOG 0, 1, or 2."], ["inclusion", "Adenocarcinoma, or 3. Squamous cell carcinoma"], ["exclusion", "Pregnancy"]]);
+  assert.equal(text.slice(rows[0].sourceLocator.start, rows[0].sourceLocator.end), "ECOG 0, 1, or 2.");
+  assert.equal(saved.at(-1).title, "EV-201");
+  assert.equal(saved.at(-1).protocolText, undefined);
+  assert.deepEqual(pasted.results?.find((/** @type {any} */ row) => row.clauses)?.clauses, { inclusion: 2, exclusion: 1, noSection: 0 });
+  // A line that names no section is a requirement as written, and the answer says so for the run to look again.
+  const none = await write({ protocolText: "Adults with asthma\n\nNo prior biologics" });
+  assert.deepEqual(saved.at(-1).criteria.map((/** @type {any} */ row) => row.kind), ["inclusion", "inclusion"]);
+  const said = none.results?.find((/** @type {any} */ row) => row.clauses);
+  assert.deepEqual(said.clauses, { inclusion: 2, exclusion: 0, noSection: 2 });
+  assert.match(said.note, /没有写明/);
+  // A clause longer than a language node holds keeps all its words in the source text.
+  const long = "x".repeat(6000);
+  const longWrite = await write({ criteria: [{ kind: "inclusion", sourceText: long }] });
+  assert.equal(longWrite.ok, true, JSON.stringify(longWrite.issues));
+  assert.equal(saved.at(-1).criteria[0].sourceText, long);
+  assert.equal(saved.at(-1).criteria[0].requirement.text.length, 4000);
+  // What cannot be read is named and nothing is written: no words, both forms at once, a text with no clause in it.
+  const before = saved.length;
+  for (const [data, field] of [
+    [{ criteria: [{ kind: "inclusion", requirement: { op: "present", variable: "nsclc" } }] }, "criteria[0].sourceText"],
+    [{ criteria: [{ kind: "inclusion", sourceText: "   " }] }, "criteria[0].sourceText"],
+    [{ protocolText: "x", criteria: [{ kind: "inclusion", sourceText: "y" }] }, "protocolText"],
+    [{ protocolText: "Inclusion Criteria:\n\nExclusion Criteria:" }, "protocolText"],
+    [{ protocolText: 5 }, "protocolText"],
+  ]) {
+    const refused = await write(/** @type {any} */ (data));
+    assert.equal(refused.ok, false, JSON.stringify(data));
+    assert.equal(refused.issues[0].field, field, JSON.stringify(data));
+  }
+  assert.equal(saved.length, before);
+  // The grammar is kept where a table is screened, with the words beside it.
+  const typed = await write({ criteria: [{ kind: "inclusion", sourceText: "Age >= 18", requirement: { op: "compare", variable: "age", comparator: "gte", value: 18, unit: "year" } }] });
+  assert.equal(typed.ok, true);
+  assert.equal(saved.at(-1).criteria[0].requirement.op, "compare");
+});
+
 test("whole language clauses survive the gateway and ambiguous language keys are refused", async () => {
   const made = fixture();
   const saved = [];

@@ -24,6 +24,8 @@ import { VcrStore, vcrObjectNode } from "../src/vcrStore.mjs";
 import { vcrComputedOutputHash } from "../src/vcrEngineClient.mjs";
 import { VcrJobs, vcrScenarioHash } from "../src/vcrJobs.mjs";
 import { VcrOrchestrator } from "../src/vcrOrchestrator.mjs";
+import { judgmentTargets } from "../src/vcrMatchJudge.mjs";
+import { requiresLanguageJudgment } from "../src/vcrMatching.mjs";
 import { VcrService, seedVcrCatalogue } from "../src/vcrService.mjs";
 import { createVcrNotifier } from "../src/vcrNotify.mjs";
 import { createVcrSeal } from "../src/vcrSeal.mjs";
@@ -1875,6 +1877,25 @@ test("above T0 a judging job holds the matching step, and what it saved finishes
     VALUES ($1, $2, $3, 'sub_1', 'candidate_trial', 'ClinicalTrials.gov:NCT00000001', 'fit', 'fit-1', 'job', 'done')`, [`jud_${randomUUID()}`, other.id, other.userId]);
   await module.orchestrator.advance(other.id);
   assert.equal((await store.studyById(other.id)).steps.matching.status, "done");
+});
+
+test("a protocol pasted as text is saved through the tool path and reads back as the clauses a job judges", options, async () => {
+  const module = compose();
+  const study = await makeStudy("protocoltext", { dataTier: "T1" });
+  const text = "Inclusion and Exclusion Criteria:\n\nInclusion Criteria:\n1. ECOG 0, 1, or 2.\n2. Adenocarcinoma, or\n3. Squamous cell carcinoma\n\nExclusion Criteria:\n* Pregnancy";
+  const written = await vcrRuntimeWrite({ store, service: module.service, orchestrator: module.orchestrator, study, what: "protocol", items: null, data: { title: "EV-201", protocolText: text } });
+  assert.deepEqual(written.issues, []);
+  const version = await store.one("SELECT id, title FROM evimed_vcr.protocol_versions WHERE study_id = $1", [study.id]);
+  assert.equal(version.title, "EV-201");
+  const rows = await store.rows("SELECT kind, source_text, requirement, ordinal FROM evimed_vcr.criteria WHERE protocol_version_id = $1 ORDER BY ordinal", [version.id]);
+  assert.deepEqual(rows.map((row) => row.requirement.op), ["language", "language", "not"]);
+  const targets = judgmentTargets({ matchStore: {
+    listCriteria: async () => rows.map((row) => ({ id: String(row.ordinal), ordinal: row.ordinal, kind: row.kind, sourceText: row.source_text, requirement: row.requirement })),
+    protocols: async () => [version] } });
+  const target = await targets.protocol({ study: { id: study.id }, protocolVersionId: version.id });
+  assert.deepEqual(target.clauses.map((/** @type {any} */ clause) => [clause.number, clause.kind, clause.text]), [[1, "inclusion", "ECOG 0, 1, or 2."], [2, "inclusion", "Adenocarcinoma, or 3. Squamous cell carcinoma"], [3, "exclusion", "Pregnancy"]]);
+  // A study whose protocol is words reads running while judged, and the rule evaluation is still there for a table.
+  assert.ok(requiresLanguageJudgment(rows[0].requirement));
 });
 
 test("R3 a person's cancel holds the programme: the run's end is not followed by the next step, and asking for a step takes it and what it needs out of the hold", options, async () => {

@@ -753,6 +753,7 @@ export function vcrMatchingSeam({ matchStore, store, documents = null, subjectTa
         writeEnvelope: 'Single: {what,data:<one object>}; batch: {what,items:[<object>]}. Never nest items inside data; never use writes as schema probes.',
         note:'Examples describe syntax only. Use only criteria and facts supported by the supplied protocol and preserved patient material. Do not guess internal message sequence numbers.',
         patientContext:{tool:'vcr_write',what:'patient_context',data:{}},
+        protocolTextWrite:{tool:'vcr_write',what:'protocol',data:{title:'Protocol title',protocolText:'The eligibility section as written; the platform numbers its clauses'},note:'Enough for judging. A criterion always has sourceText; requirement is for screening a table.'},
         protocolWrite:{tool:'vcr_write',what:'protocol',data:{criteria:[{kind:'inclusion',criterionType:'demographic',sourceText:'Exact protocol wording',requirement:{op:'compare',variable:'age',comparator:'between',value:18,highValue:65,unit:'year'}}]}},
         factWrite:{tool:'vcr_write',what:'fact',items:[{subjectKey:'returned subjectKey',documentId:'returned documentId',variable:'age',value:45,unit:'year',surface:'45 years',quote:'Exact preserved original quote'}]},
         evaluate:{tool:'vcr_simulate',action:'start',kind:'match_criteria'},

@@ -277,7 +277,8 @@ def _detailed_tool_definitions():
             "name": "vcr_write",
             "description": (
                 "Write this 虚拟临床研究 study's definitions and designs: the research definition, a protocol version and "
-                "its structured eligibility criteria, assumption cards and their evidence items, precedents, population, "
+                "its eligibility criteria (protocolText, the section as written, which the platform numbers; or criteria of kind and sourceText, "
+                "with a requirement only for screening a table), assumption cards and their evidence items, precedents, population, "
                 "patient-set, comparator and trial designs, a design grid, a decision record, a regulatory contact, the protocol's visit schedule "
                 "(soa, one visit per item), a fitted literature model, "
                 "a model's ICH M15 assessment record, patient facts, longitudinal research history, or the report text. A disease pack: data {use: <catalogue id>} binds one, "

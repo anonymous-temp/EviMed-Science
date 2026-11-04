@@ -73,7 +73,7 @@ import { createHash } from "node:crypto";
 import { VCR_LONGITUDINAL_JOBS, VCR_LONGITUDINAL_ERROR_CODES } from '@evimed/domain';
 
 import {
-  VCR_ASSESSMENT_KEY, VCR_ASSESSMENT_LIMITS, VCR_ASSESSMENT_RATING_FIELDS, VCR_ASSESSMENT_TEXT_FIELDS, VCR_ASSUMPTION_KEY, VCR_CRITERION_TYPES, VCR_DISTRIBUTIONS, VCR_ENDPOINT_TYPES, VCR_ESTIMANDS, VCR_EXPORT_KINDS, VCR_EXPORT_KIND_LABELS_ZH,
+  segmentCriteria, VCR_REQUIREMENT_LIMITS, VCR_ASSESSMENT_KEY, VCR_ASSESSMENT_LIMITS, VCR_ASSESSMENT_RATING_FIELDS, VCR_ASSESSMENT_TEXT_FIELDS, VCR_ASSUMPTION_KEY, VCR_CRITERION_TYPES, VCR_DISTRIBUTIONS, VCR_ENDPOINT_TYPES, VCR_ESTIMANDS, VCR_EXPORT_KINDS, VCR_EXPORT_KIND_LABELS_ZH,
   VCR_INTENDED_USES, VCR_JOB_KINDS, VCR_JOB_METHODS, VCR_MODEL_DOCUMENT_SECTIONS, VCR_MODEL_DOCUMENT_SECTION_LABELS_ZH, VCR_MODEL_RISKS,
   VCR_MODEL_DOCUMENT_KINDS, VCR_POPULATION_KINDS, VCR_RATINGS, VCR_RUN_SCENARIO_FIELDS, VCR_SCENARIO_SCHEMAS,
   VCR_STEPS, VCR_SYNTHETIC_USES, VCR_TRIAL_DESIGNS, canonicalScenarioJson, findExpressionFields, validateRequirement, vcrAssessmentIssues,
@@ -785,6 +785,31 @@ function distributionOf(item, field, value) {
 /** The criterion fields a protocol write takes. */
 const CRITERION_FIELDS = Object.freeze(["kind", "criterionType", "requirement", "applicability", "sourceText", "sourceLocator", "evidenceNeeded"]);
 
+/** How much pasted or uploaded eligibility text one protocol write takes, and how long one clause's words may be: the longest of 52,459 registry trials is under 9,000 characters. */
+const PROTOCOL_TEXT_MAX = 200_000;
+const CLAUSE_TEXT_MAX = 12_000;
+
+/**
+ * The clauses of a protocol's eligibility text, as criteria that carry only their words. Code decides where a clause begins and ends (`segmentCriteria`), and
+ * what a clause means stays language. A clause under no section is kept as a requirement, the way it is written: the words go to the model as they are, and a label
+ * on the other side still reads right (`parseCriteriaAnswer`).
+ * @param {unknown} text @param {number} index @param {any[]} issues
+ * @returns {{ candidates: Array<Record<string, any>>, clauses: { inclusion: number, exclusion: number, noSection: number } } | null}
+ */
+function criteriaOfProtocolText(text, index, issues) {
+  const refuse = (/** @type {string} */ message) => { issues.push(issue(index, "protocolText", "vcr_write_value_invalid", message)); return null; };
+  if (typeof text !== "string") return refuse("protocolText 是方案入排条件的原文。");
+  if (text.length > PROTOCOL_TEXT_MAX) return refuse(`protocolText 不超过 ${PROTOCOL_TEXT_MAX} 个字符；只放入排条件那一部分。`);
+  const clauses = segmentCriteria(text);
+  if (!clauses.length) return refuse("protocolText 里没有读到条件。");
+  return {
+    candidates: clauses.map((clause) => ({ kind: clause.kind === "exclusion" ? "exclusion" : "inclusion", sourceText: `${clause.lead ? `${clause.lead} ` : ""}${clause.text}`.replace(/\s*[\r\n]+\s*/gu, " "),
+      sourceLocator: { start: clause.start, end: clause.end } })),
+    clauses: { inclusion: clauses.filter((clause) => clause.kind === "inclusion").length + clauses.filter((clause) => clause.kind === "unsectioned").length,
+      exclusion: clauses.filter((clause) => clause.kind === "exclusion").length, noSection: clauses.filter((clause) => clause.kind === "unsectioned").length },
+  };
+}
+
 /**
  * The criteria of a protocol or criteria write, checked one by one: the
  * requirement and the applicability each against the domain's grammar, the
@@ -793,7 +818,7 @@ const CRITERION_FIELDS = Object.freeze(["kind", "criterionType", "requirement", 
  * ONE protocol version, never one version per row.
  *
  * @param {WriteDeps} deps @param {any[]} rows @param {any[]} issues @param {string} what
- * @returns {Promise<{ criteria: any[], versionRow: Record<string, any>, warnings: any[] }>}
+ * @returns {Promise<{ criteria: any[], versionRow: Record<string, any>, warnings: any[], clauses: { inclusion: number, exclusion: number, noSection: number } | null }>}
  */
 async function checkedCriteria(deps, rows, issues, what) {
   /** @type {any[]} */
@@ -802,11 +827,20 @@ async function checkedCriteria(deps, rows, issues, what) {
   const warnings = [];
   /** @type {Record<string, any>} */
   let versionRow = {};
+  /** What a pasted text was read into, for the answer. @type {{ inclusion: number, exclusion: number, noSection: number } | null} */
+  let clauses = null;
   for (const [index, raw] of rows.entries()) {
     const row = object(raw);
-    const candidates = what === "criteria" && Array.isArray(row.criteria) ? row.criteria : what === "protocol" ? (Array.isArray(row.criteria) ? row.criteria : []) : [row];
+    let candidates = what === "criteria" && Array.isArray(row.criteria) ? row.criteria : what === "protocol" ? (Array.isArray(row.criteria) ? row.criteria : []) : [row];
+    if (what === "protocol" && row.protocolText !== undefined) {
+      if (Array.isArray(row.criteria)) { issues.push(issue(index, "protocolText", "vcr_write_value_invalid", "protocolText 和 criteria 只写一个。")); continue; }
+      const read = criteriaOfProtocolText(row.protocolText, index, issues);
+      if (!read) continue;
+      candidates = read.candidates;
+      clauses = read.clauses;
+    }
     if (what === "protocol" || Array.isArray(row.criteria)) {
-      const rest = Object.fromEntries(Object.entries(row).filter(([key]) => key !== "criteria"));
+      const rest = Object.fromEntries(Object.entries(row).filter(([key]) => key !== "criteria" && key !== "protocolText"));
       versionRow = { ...versionRow, ...rest };
     }
     for (const [at, candidate] of candidates.entries()) {
@@ -824,7 +858,12 @@ async function checkedCriteria(deps, rows, issues, what) {
     issues.push(issue(null, "criteria", "vcr_criterion_malformed", "不同语言问题不能共用同一个 key；请为不同问题分别指定 key，再提交完整条件集。"));
     criteria.length = 0;
   }
-  return { criteria, versionRow, warnings };
+  return { criteria, versionRow, warnings, clauses };
+}
+
+/** A clause with no structure is a question only language can answer. One longer than a language node holds keeps all its words in `sourceText`, which is what a model judges. @param {string} words */
+function languageOf(words) {
+  return { op: "language", text: [...words.trim()].slice(0, VCR_REQUIREMENT_LIMITS.maxLanguageText).join("") };
 }
 
 /**
@@ -840,10 +879,13 @@ function checkedCriterion(deps, candidate, index, where, issues) {
   if (!item.only(CRITERION_FIELDS)) return null;
   const kind = item.choice("kind", ["inclusion", "exclusion"], { required: true });
   const criterionType = item.choice("criterionType", VCR_CRITERION_TYPES, { fallback: "other", words: vcrWordList("criterion", "criterionType") });
-  const sourceText = item.str("sourceText", { max: 4000, preserve: true }) ?? "";
+  // The words are what a model judges, so a criterion always has them; the grammar is what a table is screened by, so it may be left out.
+  const written = item.str("sourceText", { max: CLAUSE_TEXT_MAX, preserve: true, required: true });
+  if (written !== undefined && !written.trim()) item.bad("sourceText", "sourceText 必填：方案里这一条的原文。");
+  const sourceText = written ?? "";
   const sourceLocator = item.obj("sourceLocator", { bytes: 4096 }) ?? {};
   const evidenceNeeded = item.arr("evidenceNeeded", { max: 30 }) ?? [];
-  const requirement = item.obj("requirement", { required: true, bytes: 32 * 1024 });
+  const requirement = item.obj("requirement", { bytes: 32 * 1024 }) ?? (sourceText.trim() ? languageOf(sourceText) : undefined);
   const applicability = item.obj("applicability", { bytes: 32 * 1024 });
   /** @type {Array<[string, Record<string, any> | undefined]>} */
   const nodes = [["requirement", requirement], ["applicability", applicability]];
@@ -2347,7 +2389,7 @@ export async function vcrRuntimeWrite({ store, service, orchestrator, study, wha
 
   if (what === "protocol" || what === "criteria") {
     try {
-      const { criteria, versionRow, warnings: negated } = await checkedCriteria(deps, rows, issues, what);
+      const { criteria, versionRow, warnings: negated, clauses } = await checkedCriteria(deps, rows, issues, what);
       if (criteria.length) {
         const previous = await store.latestProtocolVersion(study.id);
         // The matching store writes the version with its criteria and their
@@ -2361,6 +2403,7 @@ export async function vcrRuntimeWrite({ store, service, orchestrator, study, wha
         changed.push(`protocol_version:${saved.id}@${saved.version}`);
         ids.push(saved.id);
         if (negated.length) results.push({ protocolVersion: saved.version, warnings: negated });
+        if (clauses) results.push({ protocolVersion: saved.version, clauses, ...(clauses.noSection ? { note: `${clauses.noSection} 条没有写明入选还是排除，按原话作为要求保存。读 matching 看一遍；不对就用 criteria 写明 kind 再存一版。` } : {}) });
         // A version written without the criteria that were refused is a version that
         // asks less than the protocol does: the run is told that the whole set is
         // what a corrected write must carry, not only the refused ones.
