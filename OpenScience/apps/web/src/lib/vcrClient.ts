@@ -3384,6 +3384,8 @@ export interface VcrIntakeSource {
 export interface VcrIntakeTable {
   shape: string;
   label: string;
+    /** What a destination is sent when it is not a record's text, by origin (the reranker of the patient-matching search). */
+    cloudDestinationNotes?: Record<string, string>;
   rows: number | null;
   columns: string[];
   issues: number;
@@ -3509,6 +3511,7 @@ function readIntakeSource(raw: Loose): VcrIntakeSource {
       id: text(grant.id) ?? "", grantee: text(grant.grantee) ?? "", granteeLabel: text(grant.granteeLabel) ?? "", role: text(grant.role),
       fields: strings(grant.fields), fieldMode: grant.fieldMode === "deny" ? "deny" : "allow", window: text(grant.window), purposes: strings(grant.purposes),
       revoked: grant.revoked === true, revokedAt: text(grant.revokedAt), createdAt: text(grant.createdAt),
+      cloudDestinationNotes: Object.fromEntries(Object.entries(obj(upload.cloudDestinationNotes)).flatMap(([origin, note]) => typeof note === "string" && note ? [[origin, note]] : [])),
     })),
   };
 }

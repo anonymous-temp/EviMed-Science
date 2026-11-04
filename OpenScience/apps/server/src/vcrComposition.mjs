@@ -113,7 +113,7 @@ import { VCR_JOB_PURPOSE } from "./vcrJobs.mjs";
 import { createFactExtractor, createMatchBatch, createMatchBatchCounters, createMatchExtractExecutor } from "./vcrMatchBatch.mjs";
 import { createRecordsImport, createRecordsImportExecutor } from "./vcrRecordsImport.mjs";
 import { createLongTableReader } from "./vcrLongTables.mjs";
-import { VcrCandidateRerank } from "./vcrCandidateRerank.mjs";
+import { VcrCandidateRerank, createRerankMeter } from "./vcrCandidateRerank.mjs";
 import { VcrCandidateSearchStore } from "./vcrCandidateSearchStore.mjs";
 import { VcrClauseDefinitionStore, createClauseDefinitionCounters, createClauseDefinitions } from "./vcrClauseDefinitions.mjs";
 import { createMatchJudge, createMatchJudgeCounters, createMatchJudgeExecutor, createMatchJudgmentReads, createPairJudge, judgmentTargets, tableFieldsOf } from "./vcrMatchJudge.mjs";
@@ -1198,12 +1198,16 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   // A list of trials found for a patient is reordered against the run's summary of the patient (DashScope's reranker, the memory reranker's key and model; on where
   // the key exists) and kept as a receipt a judging job reads its trials from.
   const candidateSearches = new VcrCandidateSearchStore({ database: productDatabase });
+  // Its spend is the platform's key's and is booked to the study's owner under purpose `vcr`, at the provider's own token count; where the deployment requires a durable ledger and
+  // has none, the reranker is left off (the registries' order stands) rather than spending where nobody records it.
+  const rerankMeter = createRerankMeter(usageLedger);
+  const rerankAllowed = rerankMeter !== null || config.requireDurableUsageLedger !== true;
   const candidateReranker = new VcrCandidateRerank({
-    apiKey: config.dashscopeApiKey, model: config.memoryRerankModel, apiBase: config.memoryRerankApiBase, enabled: config.vcrMatchRerankEnabled ?? Boolean(config.dashscopeApiKey),
+    apiKey: config.dashscopeApiKey, model: config.memoryRerankModel, apiBase: config.memoryRerankApiBase, enabled: rerankAllowed && (config.vcrMatchRerankEnabled ?? Boolean(config.dashscopeApiKey)),
     timeoutMs: config.vcrMatchRerankTimeoutMs, budgetMs: config.vcrMatchRerankBudgetMs, batchSize: config.vcrMatchRerankBatchSize,
   }, { fetchImpl: call, report });
   const evidence = createVcrEvidencePipeline({
-    store: evidenceStore, registry, jobs, trialCorpus, reranker: candidateReranker, searches: candidateSearches,
+    store: evidenceStore, registry, jobs, trialCorpus, reranker: candidateReranker, searches: candidateSearches, meter: rerankMeter,
     retrieval: { retrieveMax: config.vcrCandidateRetrieveMax, deadlineMs: config.vcrCandidateRetrieveDeadlineMs, concurrency: config.vcrCandidateRetrieveConcurrency },
   });
   jobs.baselineVerifier = input => evidence.verifyBaselineTable(input);
@@ -1555,8 +1559,9 @@ export function vcrMetricFamilies(enabled, snapshot) {
       Object.entries(snapshot.patientTrials).map(([kind, value]) => ({ labels: { kind }, value: Number(value) })));
   }
   if (snapshot.candidateRerank) {
-    add("candidate_rerank_total", "What the reordering of a candidate list against the run's patient summary did since this process started (G11): batches that scored, documents scored, and batches that failed by code (the list then keeps the registries' order).", "counter", [
+    add("candidate_rerank_total", "What the reordering of a candidate list against the run's patient summary did since this process started (G11): batches that scored, documents scored, tokens booked to the usage ledger under purpose vcr, requests that came back with no token count, bookings that failed, and batches that failed by code (the list then keeps the registries' order).", "counter", [
       { labels: { kind: "batches" }, value: snapshot.candidateRerank.succeeded }, { labels: { kind: "documents" }, value: snapshot.candidateRerank.documents },
+      { labels: { kind: "billed_tokens" }, value: snapshot.candidateRerank.billedTokens ?? 0 }, { labels: { kind: "unmetered_requests" }, value: snapshot.candidateRerank.unmetered ?? 0 }, { labels: { kind: "billing_failed" }, value: snapshot.candidateRerank.billingFailed ?? 0 },
       ...Object.entries(snapshot.candidateRerank.failed).map(([code, value]) => ({ labels: { kind: `failed:${code}` }, value: Number(value) }))]);
   }
   if (snapshot.clauseDefinitions) {

@@ -134,3 +134,41 @@ test("with no key, no summary or fewer than two trials it asks nothing and says 
   assert.equal(one.state, "skipped");
   assert.equal(double.calls.length, 0);
 });
+
+test("each request's token count, as the provider gave it, is handed to the caller's bill; a request with no count books nothing, and a bill that fails changes no order", async () => {
+  const booked = [];
+  const counted = (tokens) => async (_url, init) => {
+    const body = JSON.parse(init.body);
+    const documents = body.documents ?? body.input.documents;
+    const results = documents.map((_, index) => ({ index, relevance_score: index / documents.length }));
+    return new Response(JSON.stringify({ results, request_id: `req-${tokens}`, ...(tokens == null ? {} : { usage: { total_tokens: tokens } }) }), { status: 200 });
+  };
+  const rerank = reranker({ batchSize: 2 }, counted(79));
+  const candidates = ["a", "b", "c", "d", "e"].map((id) => trial(id, `title ${id}`));
+  const result = await rerankCandidates({ summary: "lung cancer", candidates }, { reranker: rerank, bill: async (spend) => { booked.push(spend); } });
+  assert.equal(result.state, "ranked");
+  assert.equal(booked.length, 3, "one booking for each of the three requests");
+  assert.deepEqual(booked[0], { tokens: 79, requestId: "req-79", model: "qwen3-rerank" });
+  assert.equal(rerank.counts().billedTokens, 237);
+
+  // No count came back: nothing is written down that was not measured.
+  const silent = reranker({}, counted(null));
+  const unbilled = [];
+  await rerankCandidates({ summary: "lung cancer", candidates }, { reranker: silent, bill: async (spend) => { unbilled.push(spend); } });
+  assert.deepEqual(unbilled, []);
+  assert.equal(silent.counts().unmetered, 1);
+
+  // A ledger that cannot be written leaves the order as it was scored, and the failure is counted.
+  const broken = reranker({}, counted(10));
+  const ordered = await rerankCandidates({ summary: "lung cancer", candidates }, { reranker: broken, bill: async () => { throw new Error("ledger down"); } });
+  assert.equal(ordered.state, "ranked");
+  assert.deepEqual(ordered.ids, ["e", "d", "c", "b", "a"]);
+  assert.equal(broken.counts().billingFailed, 1);
+  assert.equal(broken.counts().billedTokens, 0);
+
+  // A refused request (401) was never counted by the provider: no booking.
+  const refused = reranker({}, async () => new Response("no", { status: 401 }));
+  const none = [];
+  await rerankCandidates({ summary: "lung cancer", candidates }, { reranker: refused, bill: async (spend) => { none.push(spend); } });
+  assert.deepEqual(none, []);
+});

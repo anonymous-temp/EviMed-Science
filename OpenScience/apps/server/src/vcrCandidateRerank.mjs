@@ -18,12 +18,16 @@
  *   batch's worth so that neither the token limit of one request nor its time decides the list. The model counts the query once for
  *   every document (query tokens x documents + the documents' tokens, at most 120,000 a request; one query or document at most 4,000), so a
  *   batch is sized by that sum, counting a character as a token, which is the worst case for Chinese.
- * - **Spend is the key's, small and counted**: the query is billed once per document. `counts()` is what the metrics scrape reads.
+ * - **Spend is the key's, small, counted and booked**: the query is billed once per document. A caller that names a `bill` function is handed the
+ *   provider's own token count of each request, to book to the usage ledger (purpose `vcr`, `vcrComposition.mjs`); a request that came back with no count
+ *   books nothing, because a spend estimated and written down reads in the ledger like a spend measured. `counts()` is what the metrics scrape reads.
  *
  * @module vcrCandidateRerank
  */
 
-import { maskIdentifiers } from "@evimed/domain";
+import { createHash, randomUUID } from "node:crypto";
+
+import { REFERENCE_PRICE_LIST, maskIdentifiers, priceUsage } from "@evimed/domain";
 
 /** DashScope's native rerank path takes a different envelope from the OpenAI-compatible one (the marker `memoryRerank.mjs` also tests for). */
 const NATIVE_PATH_MARKER = "/api/v1/services/rerank";
@@ -122,6 +126,10 @@ export class VcrCandidateRerank {
     this.reported = /** @type {string | null} */ (null);
     this.succeeded = 0;
     this.documents = 0;
+    /** The tokens booked to a ledger, the requests that came back with no count, and the bookings that failed. */
+    this.billedTokens = 0;
+    this.unmetered = 0;
+    this.billingFailed = 0;
     /** @type {Map<string, number>} */
     this.failed = new Map();
   }
@@ -131,9 +139,9 @@ export class VcrCandidateRerank {
     return this.enabled && Boolean(this.apiKey && this.model && this.apiBase && typeof this.fetchImpl === "function");
   }
 
-  /** The counters the metrics scrape reads: batches that scored, documents scored, and failures by code. */
+  /** The counters the metrics scrape reads: batches that scored, documents scored, tokens booked, and failures by code. */
   counts() {
-    return { succeeded: this.succeeded, documents: this.documents, failed: Object.fromEntries([...this.failed].sort(([a], [b]) => a.localeCompare(b))) };
+    return { succeeded: this.succeeded, documents: this.documents, billedTokens: this.billedTokens, unmetered: this.unmetered, billingFailed: this.billingFailed, failed: Object.fromEntries([...this.failed].sort(([a], [b]) => a.localeCompare(b))) };
   }
 
   /** @param {string} code */
@@ -147,10 +155,11 @@ export class VcrCandidateRerank {
    * Score documents against a query. Always resolves: a batch that could not be scored has `null` for each of its documents and its
    * failure code in `reasons`.
    * @param {string} query the patient summary @param {string[]} documents
-   * @param {{ signal?: AbortSignal }} [options]
+   * @param {{ signal?: AbortSignal, bill?: ((spend: { tokens: number, requestId: string | null, model: string }) => Promise<unknown>) | null }} [options]
+   *   `bill` is handed the provider's own token count of each request that has one; its failure is counted and never changes the order.
    * @returns {Promise<{ scores: Array<number | null>, state: "ranked" | "partial" | "failed" | "unconfigured", batches: number, failedBatches: number, reasons: string[], model: string }>}
    */
-  async score(query, documents, { signal } = {}) {
+  async score(query, documents, { signal, bill = null } = {}) {
     const texts = documents.map((document) => text(document).slice(0, this.maxCharsPerDocument));
     /** @type {Array<number | null>} */
     const scores = texts.map(() => null);
@@ -185,6 +194,11 @@ export class VcrCandidateRerank {
         const mine = batches[cursor++];
         if (stopped || budget.signal.aborted) { failedBatches += 1; reasons.add(this.#fail(stopped ?? "vcr_rerank_timeout")); continue; }
         const outcome = await this.#batch(masked, mine.map((index) => texts[index]), budget.signal);
+        if (bill && outcome.sent) {
+          if (outcome.tokens > 0) {
+            try { await bill({ tokens: outcome.tokens, requestId: outcome.requestId, model: this.model }); this.billedTokens += outcome.tokens; } catch { this.billingFailed += 1; }
+          } else this.unmetered += 1;
+        }
         if (outcome.scores) { mine.forEach((index, at) => { scores[index] = /** @type {number[]} */ (outcome.scores)[at]; }); this.succeeded += 1; this.documents += mine.length; }
         else {
           failedBatches += 1;
@@ -223,14 +237,18 @@ export class VcrCandidateRerank {
         signal: controller.signal,
       });
       if (!response.ok) {
-        return { scores: null, code: response.status === 401 || response.status === 403 ? "vcr_rerank_auth_failed" : "vcr_rerank_upstream_error" };
+        return { scores: null, code: response.status === 401 || response.status === 403 ? "vcr_rerank_auth_failed" : "vcr_rerank_upstream_error", sent: false, tokens: 0, requestId: null };
       }
       let parsed;
-      try { parsed = JSON.parse(await response.text()); } catch { return { scores: null, code: "vcr_rerank_response_invalid" }; }
+      try { parsed = JSON.parse(await response.text()); } catch { return { scores: null, code: "vcr_rerank_response_invalid", sent: true, tokens: 0, requestId: null }; }
+      // An answer that came back is a request the provider counted, whatever its scores were worth.
+      const counted = Number(parsed?.usage?.total_tokens);
+      const tokens = Number.isFinite(counted) && counted > 0 ? Math.round(counted) : 0;
+      const requestId = typeof parsed?.request_id === "string" && parsed.request_id ? parsed.request_id.slice(0, 200) : null;
       const scores = scoresOf(parsed, documents.length);
-      return scores ? { scores, code: null } : { scores: null, code: "vcr_rerank_response_invalid" };
+      return scores ? { scores, code: null, sent: true, tokens, requestId } : { scores: null, code: "vcr_rerank_response_invalid", sent: true, tokens, requestId };
     } catch (error) {
-      return { scores: null, code: /** @type {any} */ (error)?.name === "AbortError" ? "vcr_rerank_timeout" : "vcr_rerank_unavailable" };
+      return { scores: null, code: /** @type {any} */ (error)?.name === "AbortError" ? "vcr_rerank_timeout" : "vcr_rerank_unavailable", sent: false, tokens: 0, requestId: null };
     } finally {
       clearTimeout(timer);
       outer.removeEventListener("abort", relay);
@@ -244,11 +262,11 @@ export class VcrCandidateRerank {
  *
  * @param {{ summary: string, candidates: Array<{ registryId: string, title?: string, conditions?: string[], interventions?: string[],
  *   phase?: string, sexStated?: string | null, ageStated?: string | null, eligibilityHead?: string, eligibility?: string }> }} input
- * @param {{ reranker: VcrCandidateRerank | null, signal?: AbortSignal }} deps
+ * @param {{ reranker: VcrCandidateRerank | null, signal?: AbortSignal, bill?: ((spend: { tokens: number, requestId: string | null, model: string }) => Promise<unknown>) | null }} deps
  * @returns {Promise<{ ids: string[], order: number[], scores: Array<number | null>, state: "ranked" | "partial" | "failed" | "unconfigured" | "skipped",
  *   applied: boolean, batches: number, failedBatches: number, reasons: string[], model: string | null }>}
  */
-export async function rerankCandidates({ summary, candidates }, { reranker, signal }) {
+export async function rerankCandidates({ summary, candidates }, { reranker, signal, bill = null }) {
   const identity = candidates.map((_, index) => index);
   const skipped = (/** @type {"unconfigured" | "skipped"} */ state, /** @type {string[]} */ reasons = []) => ({
     ids: candidates.map((candidate) => candidate.registryId), order: identity, scores: candidates.map(() => null), state, applied: false,
@@ -256,12 +274,33 @@ export async function rerankCandidates({ summary, candidates }, { reranker, sign
   });
   if (!reranker?.configured) return skipped("unconfigured", ["vcr_rerank_unconfigured"]);
   if (!text(summary) || candidates.length < 2) return skipped("skipped");
-  const scored = await reranker.score(summary, candidates.map((candidate) => candidateCard(candidate, reranker.maxCharsPerDocument)), { signal });
+  const scored = await reranker.score(summary, candidates.map((candidate) => candidateCard(candidate, reranker.maxCharsPerDocument)), { signal, bill });
   const order = orderByScores(scored.scores);
   const applied = scored.state === "ranked" || scored.state === "partial";
   const chosen = applied ? order : identity;
   return {
     ids: chosen.map((index) => candidates[index].registryId), order: chosen, scores: scored.scores, state: scored.state, applied,
     batches: scored.batches, failedBatches: scored.failedBatches, reasons: scored.reasons, model: scored.model || null,
+  };
+}
+
+/**
+ * The booking of a rerank request's spend: a settled row of the usage ledger for the study's owner, purpose `vcr`, priced at the reference list on the
+ * provider's own token count. The money is already spent when this is called, so nothing is reserved and no cap refuses it (`recordSettled`; `vcr` is an
+ * uncapped purpose); a model with no price row is booked unpriced, with its tokens, rather than at a guess. Null without a ledger.
+ * @param {{ recordSettled: (input: any) => Promise<unknown> } | null} usageLedger
+ * @returns {((study: any, spend: { tokens: number, requestId: string | null, model: string }) => Promise<void>) | null}
+ */
+export function createRerankMeter(usageLedger) {
+  if (!usageLedger) return null;
+  return async (study, spend) => {
+    const priced = priceUsage({ resourceType: "model", model: spend.model, cacheMiss: spend.tokens, output: 0, peak: true });
+    const id = randomUUID();
+    await usageLedger.recordSettled({
+      id, userId: String(study.userId), projectId: String(study.projectId), runId: study.executionOrigin?.runId ?? null, purpose: "vcr", operation: "candidate-rerank",
+      model: spend.model, priceVersion: REFERENCE_PRICE_LIST.version, currency: REFERENCE_PRICE_LIST.currency,
+      requestFingerprint: createHash("sha256").update(`${id}:${spend.model}:${spend.tokens}`).digest("hex"),
+      usage: { cacheHitTokens: 0, cacheMissTokens: spend.tokens, completionTokens: 0 }, actualCost: priced.cost, priced: priced.priced, providerRequestId: spend.requestId,
+    });
   };
 }

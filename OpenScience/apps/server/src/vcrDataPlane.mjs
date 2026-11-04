@@ -116,7 +116,7 @@ import {
 } from "@evimed/domain";
 
 import { HttpError, openScopedFileNoFollow, readStableFileHandle } from "./security.mjs";
-import { DEPLOYMENT_PERMISSION_HASH, buildCloudProjection, cloudAuthorization, cloudPermission, cloudState, deploymentCloudPermission, originalProjectionSpan, projectionHash, vcrCloudDestinations } from "./vcrCloudProjection.mjs";
+import { DEPLOYMENT_PERMISSION_HASH, buildCloudProjection, cloudAuthorization, cloudPermission, cloudState, deploymentCloudPermission, originalProjectionSpan, projectionHash, vcrCloudDestinations, vcrCloudDestinationNotes } from "./vcrCloudProjection.mjs";
 import { VcrAccess } from "./vcrAccess.mjs";
 import { documentReading } from "./vcrDocumentWindow.mjs";
 import { VCR_IMPORT_FORMATS, VCR_INTAKE_SCRATCH, VCR_TABLE_LIMITS, isVcrIntakeScratchLocation } from "./vcrIntakeLayout.mjs";
@@ -3902,7 +3902,7 @@ export class VcrDataPlane {
           readable, cloudPermission: source.cloudPermission ?? null, cloud: cloudState(source.cloudPermission, vcrCloudDestinations(this.config), this.now().toISOString(), deploymentCloudPermission(this.config)),
           allowedUses: source.allowedUses, visibleWindow: source.visibleWindow, retention: source.retention,
           valueSource: source.valueSource, status: source.status, createdAt: source.createdAt,
-          upload: { formats: Object.keys(VCR_UPLOAD_FORMATS.data), maxBytes: this.maxBytes, documents: this.documentUpload(), cloudDestinations: vcrCloudDestinations(this.config), imports: this.importUpload() },
+          upload: { formats: Object.keys(VCR_UPLOAD_FORMATS.data), maxBytes: this.maxBytes, documents: this.documentUpload(), cloudDestinations: vcrCloudDestinations(this.config), cloudDestinationNotes: vcrCloudDestinationNotes(this.config), imports: this.importUpload() },
           // A source the viewer holds no grant on is a name and a state: its files' names, its map and who may read it are not theirs to see.
           files: readable ? own.map(filed) : [],
           fieldMap: {

@@ -1208,10 +1208,11 @@ export function poolTargetOf(raw) {
  *
  * @param {{ store: any, registry?: any, trialCorpus?: ReturnType<typeof import("./vcrTrialCorpus.mjs").createVcrTrialCorpus>, jobs?: any, now?: () => Date, logger?: any,
  *   reranker?: import("./vcrCandidateRerank.mjs").VcrCandidateRerank | null, searches?: import("./vcrCandidateSearchStore.mjs").VcrCandidateSearchStore | null,
- *   retrieval?: { retrieveMax?: number, deadlineMs?: number, concurrency?: number } }} options `reranker` reorders a candidate list against the run's
+ *   retrieval?: { retrieveMax?: number, deadlineMs?: number, concurrency?: number },
+ *   meter?: ((study: any, spend: { tokens: number, requestId: string | null, model: string }) => Promise<unknown>) | null }} options `meter` books the reranker's token count to the study's owner; `reranker` reorders a candidate list against the run's
  *   summary of the patient; `searches` keeps the receipt of a search; `retrieval` bounds how deep and how long a search reads the registries.
  */
-export function createVcrEvidencePipeline({ store, registry = null, trialCorpus = null, jobs = null, now = () => new Date(), logger = null, reranker = null, searches = null, retrieval = {} } = { store: null }) {
+export function createVcrEvidencePipeline({ store, registry = null, trialCorpus = null, jobs = null, now = () => new Date(), logger = null, reranker = null, searches = null, retrieval = {}, meter = null } = { store: null }) {
   if (!store) throw new TypeError("The evidence pipeline needs its store.");
   /** @type {{resolve:Function}|null} */
   let literatureSources = null;
@@ -1310,6 +1311,9 @@ export function createVcrEvidencePipeline({ store, registry = null, trialCorpus 
     ? "按与你写的患者摘要的相关程度排序（重排序），不是适合程度的判断；重排之前是各登记库按检索词优先级融合、再轮流排列的检索顺序。"
     : "各登记库按检索词优先级融合后轮流排列的检索顺序，不是适合程度的排序。");
 
+  /** The booking of a rerank request's spend for the owner of the study the search belongs to; none without a study (an evaluation harness) or a meter. @param {any} study */
+  const billFor = (study) => (meter && study?.id && study.userId && study.projectId ? (/** @type {{ tokens: number, requestId: string | null, model: string }} */ spend) => meter(study, spend) : null);
+
   /** What a rerank did, as the receipt and the answer keep it. @param {Awaited<ReturnType<typeof rerankCandidates>>} outcome @param {boolean} summaryGiven */
   const rerankRecord = (outcome, summaryGiven) => ({
     state: summaryGiven || outcome.state === "unconfigured" ? outcome.state : "skipped", applied: outcome.applied, model: outcome.model,
@@ -1319,10 +1323,10 @@ export function createVcrEvidencePipeline({ store, registry = null, trialCorpus 
   /**
    * Put a list in the order of how it reads against the run's summary. Always returns the whole list: with no summary, no reranker or a
    * failure it is the order it came in, and the record says which.
-   * @param {{ summary: string | null, list: any[], signal?: AbortSignal }} input
+   * @param {{ summary: string | null, list: any[], signal?: AbortSignal, study?: any }} input
    */
-  async function rankForSummary({ summary, list, signal }) {
-    const outcome = await rerankCandidates({ summary: summary ?? "", candidates: list }, { reranker, signal });
+  async function rankForSummary({ summary, list, signal, study = null }) {
+    const outcome = await rerankCandidates({ summary: summary ?? "", candidates: list }, { reranker, signal, bill: billFor(study) });
     const rows = outcome.order.map((index, at) => ({
       ...list[index], rank: at + 1,
       ...(outcome.applied && typeof outcome.scores[index] === "number" ? { relevance: Math.round(/** @type {number} */ (outcome.scores[index]) * 1000) / 1000 } : {}),
@@ -1372,7 +1376,7 @@ export function createVcrEvidencePipeline({ store, registry = null, trialCorpus 
     const rows = collected.candidates;
     const outcome = await rerankCandidates({ summary: request.summary ?? "", candidates: rows.map((/** @type {any} */ row) => ({
       registryId: row.registryId, title: row.title, conditions: row.conditions, interventions: row.interventions, phase: row.phase,
-      sexStated: row.sex, ageStated: row.age, eligibilityHead: collected.cards?.[row.registryId] ?? "" })) }, { reranker, signal });
+      sexStated: row.sex, ageStated: row.age, eligibilityHead: collected.cards?.[row.registryId] ?? "" })) }, { reranker, signal, bill: billFor(study) });
     const ordered = outcome.order.map((index, at) => ({
       ...rows[index], rank: at + 1,
       ...(outcome.applied && typeof outcome.scores[index] === "number" ? { relevance: Math.round(/** @type {number} */ (outcome.scores[index]) * 1000) / 1000 } : {}),
@@ -1563,7 +1567,7 @@ export function createVcrEvidencePipeline({ store, registry = null, trialCorpus 
       const merged = mergeCandidates(found);
       const { kept, dropped } = filterCandidates(merged, request);
       const { list, more: truncated } = interleave(kept, retrieveMax);
-      const ranked = await rankForSummary({ summary: request.summary, list, signal });
+      const ranked = await rankForSummary({ summary: request.summary, list, signal, study });
       const reachable = registries.some((entry) => entry.state === "searched" || entry.state === "partial");
       const requestRecord = { condition: request.condition, terms: request.terms, age: request.age, sex: request.sex, region: request.region, status: request.scope,
         ...(request.summary ? { summary: summaryStamp(request.summary) } : {}) };

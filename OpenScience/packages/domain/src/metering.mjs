@@ -290,7 +290,7 @@ const referencePrices20260928 = deepFreeze({
  * the same price and through the same method, so its row does not move.
  * @type {PriceList}
  */
-export const REFERENCE_PRICE_LIST = deepFreeze({
+const referencePrices20261017 = deepFreeze({
   ...referencePrices20260928,
   version: 'evimed-reference-2026-10-17',
   effectiveFrom: '2026-10-17T00:00:00.000Z',
@@ -298,6 +298,24 @@ export const REFERENCE_PRICE_LIST = deepFreeze({
   toolRequest: {
     'deepseek-search': { perThousand: 5 },
     'deepseek-fetch': { perThousand: 5 },
+  },
+})
+
+/**
+ * The 2026-10-17 rates plus DashScope's text reranker, which the patient-matching search asks to put the trials a registry found in the
+ * order of how they read against one patient (\`vcrCandidateRerank.mjs\`, booked under purpose \`vcr\`). qwen3-rerank, Beijing: text input
+ * ¥0.5 per million tokens, nothing for output, no night rate and no cache tier (https://help.aliyun.com/zh/model-studio/qwen3-rerank,
+ * read 2026-11-04); the provider's own \`usage.total_tokens\` of a request is the count. Another rerank model is unpriced until it has a row.
+ * @type {PriceList}
+ */
+export const REFERENCE_PRICE_LIST = deepFreeze({
+  ...referencePrices20261017,
+  version: 'evimed-reference-2026-11-04',
+  effectiveFrom: '2026-11-04T00:00:00.000Z',
+  modelSource: `${referencePrices20261017.modelSource} · https://help.aliyun.com/zh/model-studio/qwen3-rerank`,
+  model: {
+    ...referencePrices20261017.model,
+    'qwen3-rerank': { cacheHit: 0.5, cacheMiss: 0.5, output: 0, offPeak: false },
   },
 })
 
@@ -330,7 +348,8 @@ const priceLists = deepFreeze({
   'evimed-reference-2026-09-23': referencePrices20260923,
   'evimed-reference-2026-09-24': referencePrices20260924,
   'evimed-reference-2026-09-28': referencePrices20260928,
-  'evimed-reference-2026-10-17': REFERENCE_PRICE_LIST,
+  'evimed-reference-2026-10-17': referencePrices20261017,
+  'evimed-reference-2026-11-04': REFERENCE_PRICE_LIST,
 })
 
 /**

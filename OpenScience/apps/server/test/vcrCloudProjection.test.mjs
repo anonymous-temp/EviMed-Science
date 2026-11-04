@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildCloudProjection, cloudAuthorization, cloudPermission, cloudState, deploymentCloudPermission, originalProjectionSpan, requireCloudPermission, vcrCloudDestinations } from '../src/vcrCloudProjection.mjs';
+import { buildCloudProjection, cloudAuthorization, cloudPermission, cloudState, deploymentCloudPermission, originalProjectionSpan, vcrCloudDestinationNotes, requireCloudPermission, vcrCloudDestinations } from '../src/vcrCloudProjection.mjs';
 
 const at = '2026-10-09T00:00:00.000Z';
 const origin = 'https://api.example.org';
@@ -94,4 +94,21 @@ test('an accepted suggestion is replaced as the kind it was suggested as; a date
   const restored = originalProjectionSpan(projection, text, { start: 0, end: projection.text.length, quote: projection.text });
   assert.equal(restored.quote, text);
   assert.throws(() => buildCloudProjection({ text, key: Buffer.alloc(32), attestation: 'x', spans: [{ ...at('2026-10-01'), kind: 'timestamp' }] }), { code: 'vcr_projection_span_invalid' });
+});
+
+test('DashScope is a destination where the candidate reranker is on, and the page says what it is sent', () => {
+  const base = { deepseekBaseUrl: 'https://api.example.com', memoryRerankApiBase: 'https://dashscope.example.org/compatible-api/v1/reranks', dashscopeApiKey: 'k' };
+  assert.deepEqual(vcrCloudDestinations(base), ['https://api.example.com', 'https://dashscope.example.org']);
+  assert.match(vcrCloudDestinationNotes(base)['https://dashscope.example.org'], /摘要.*遮盖.*试验文本.*不含病历原文/);
+  // Off, or with no key, nothing goes there and nothing is said.
+  for (const off of [{ vcrMatchRerankEnabled: false }, { dashscopeApiKey: '' }, { memoryRerankApiBase: '' }]) {
+    assert.deepEqual(vcrCloudDestinations({ ...base, ...off }), ['https://api.example.com'], JSON.stringify(off));
+    assert.deepEqual(vcrCloudDestinationNotes({ ...base, ...off }), {}, JSON.stringify(off));
+  }
+  // A permission recorded for the model providers alone does not cover a destination it never named; the deployment's agreements follow the list.
+  const at = '2026-11-04T00:00:00.000Z';
+  const named = { schema: 1, status: 'approved', purpose: 'vcr', dataClass: 'clinical', destinations: ['https://api.example.com'], retention: 'none', training: 'disabled', humanReview: 'disabled', expiresAt: null };
+  assert.equal(cloudState(named, vcrCloudDestinations(base), at).state, 'closed');
+  assert.equal(cloudState(named, vcrCloudDestinations({ ...base, vcrMatchRerankEnabled: false }), at).state, 'allowed');
+  assert.equal(cloudState(null, vcrCloudDestinations({ ...base, vcrProviderAgreements: true }), at, deploymentCloudPermission({ ...base, vcrProviderAgreements: true })).state, 'allowed');
 });
