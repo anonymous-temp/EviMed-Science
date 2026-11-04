@@ -806,7 +806,12 @@ export function createPatientTrials({ candidateStore, matchStore = null, documen
           const criteria = criteriaOf.get(row.id) ?? [];
           const validLanguageKeys = languageCriteriaByKey(criteria);
           const trial = current.trials?.find(entry => entry.id === row.id);
-          for (const criterion of criteria) for (const key of criterionLanguageKeys(criterion).filter(languageKey => validLanguageKeys.has(languageKey))) {
+          // The current assessment has already decided these criteria do not
+          // apply. Do not ask the run to answer their language predicates;
+          // unrelated or older assessments must not suppress a request.
+          const inapplicable = new Set(current.judgments.filter(judgment => row.assessmentId && judgment.assessmentId === row.assessmentId
+            && judgment.applicable === false).map(judgment => judgment.criterionId));
+          for (const criterion of criteria.filter(item => !inapplicable.has(item.id))) for (const key of criterionLanguageKeys(criterion).filter(languageKey => validLanguageKeys.has(languageKey))) {
             if (!answered.has(key)) requests.push({ trialId: row.id, criterionKey: key, criterionId: criterion.id,
               ...(trial ? { expectedRecordHash: trial.recordHash ?? null,
                 expectedCriterionHash: languageCriterionHash(validLanguageKeys.get(key) ?? [], key) } : {}) });

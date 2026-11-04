@@ -275,6 +275,49 @@ test("patient runtime ranking pages retain global rank and language requests on 
   assert.deepEqual(last.requests.map(request => [request.trialId, request.criterionKey]).sort(), [["t50", "applicable-t50"], ["t50", "key-t50"]]);
 });
 
+test("runtime requests omit criteria proven inapplicable only in the selected assessment", async () => {
+  const { matchingInputDigest } = await import("../src/vcrMatching.mjs");
+  const criteria = [
+    { id: "not-applicable", candidateTrialId: "trial", kind: "inclusion",
+      applicability: { op: "language", key: "premise-no", text: "For women" },
+      requirement: { op: "language", key: "requirement-no", text: "Pregnancy test" } },
+    { id: "unresolved", candidateTrialId: "trial", kind: "inclusion",
+      applicability: { op: "language", key: "premise-unknown", text: "For adults" },
+      requirement: { op: "language", key: "requirement-unknown", text: "Consent" } },
+    { id: "stale", candidateTrialId: "trial", kind: "inclusion",
+      requirement: { op: "language", key: "old-assessment-only", text: "A different condition" } },
+    { id: "shared-no", candidateTrialId: "trial", kind: "inclusion",
+      requirement: { op: "language", key: "shared", text: "Same language question" } },
+    { id: "shared-yes", candidateTrialId: "trial", kind: "inclusion",
+      requirement: { op: "language", key: "shared", text: "Same language question" } },
+  ];
+  const judgments = [
+    { assessmentId: "current", criterionId: "not-applicable", state: "unknown", applicable: false },
+    { assessmentId: "current", criterionId: "unresolved", state: "unknown", applicable: true },
+    { assessmentId: "old", criterionId: "stale", state: "unknown", applicable: false },
+    { assessmentId: "current", criterionId: "shared-no", state: "unknown", applicable: false },
+    { assessmentId: "current", criterionId: "shared-yes", state: "unknown", applicable: true },
+  ];
+  const current = judgments.filter(j => j.assessmentId === "current");
+  const row = { id: "trial", assessmentId: "current", kind: "registry", rank: 1,
+    registryId: "NCT00000001", summary: "insufficient_evidence", counts: { unknown: 2 }, evidenceGaps: [],
+    snapshotHash: matchingInputDigest({ criteria, judgments: current.map(j => [j.criterionId, j.state, j.applicable]).sort() }) };
+  const store = {
+    async rankingSnapshot() { return { trials: [], assessments: [{ candidateTrialId: "trial", id: "current" }], criteria, judgments }; },
+    async languageAnswersForTrials() { return new Map([["trial", new Set()]]); },
+  };
+  const service = createPatientTrials({ candidateStore: store });
+  service.ranked = async () => [row];
+  service.unjudged = async () => [];
+  const result = await service.runtimeRead({ id: "study" }, { subjectKey: "patient" });
+  assert.deepEqual(result.requests.map(request => request.criterionKey).sort(),
+    ["old-assessment-only", "premise-unknown", "requirement-unknown", "shared"]);
+  assert.equal(result.requests.find(request => request.criterionKey === "shared").criterionId, "shared-yes");
+  // A changed judgment after ranking cannot suppress requests through a stale read.
+  judgments[1].applicable = false;
+  await assert.rejects(service.runtimeRead({ id: "study" }, { subjectKey: "patient" }), error => error.code === "vcr_read_changed");
+});
+
 test("legacy candidate criteria with a conflicting key are not offered as answerable requests", async () => {
   const criteria = [
     { id: "c1", candidateTrialId: "trial", kind: "inclusion", requirement: { op: "language", key: "shared", text: "Can consent" } },

@@ -56,6 +56,13 @@ ordering can help or hurt on particular examples; it does not establish a safe
 replacement or justify tuning to these three labels. The product evaluated up
 to 20 candidates from a 500-ID retrieval receipt, not all 500.
 
+For 2023 topic 1, the two trials moved to the top each had two saved conditions,
+one satisfied and one unknown. Their full frozen source records each contain
+two substantive inclusion items and an exclusion section of `None`; their low
+condition counts are not evidence that the parser missed their main clauses.
+Of the selected 20 trials, 13 were unjudged in qrels. The metric loss is real
+under the specified convention, but is not by itself a clinical-error finding.
+
 ## Observed issues and remaining gates
 
 - On 2022 topic 1, 162 conditions were saved, while the final narrative said
@@ -63,7 +70,10 @@ to 20 candidates from a 500-ID retrieval receipt, not all 500.
   need an exact read-back for counts.
 - The same case's final view still listed four language requests corresponding
   to criteria already marked not applicable. Those should not be counted as
-  four applicable missed decisions, but the stale requests are confusing.
+  four applicable missed decisions. A subsequent code repair suppresses these
+  requests only when the current saved assessment proves inapplicability; it
+  retains requests for unresolved applicability and other assessments. This
+  repair has unit and snapshot-race tests but has not been rerun on this case.
 - Two long candidate-tool responses were spilled and recovered from files by
   the agent. The 500-ID receipt remained parseable and the scoring used the
   saved view, but very large tool responses create avoidable orchestration work.
