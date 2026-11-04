@@ -116,3 +116,18 @@ vcr_case("N74d", c("AC-08", "AC-30"), function() {
        detail = sprintf("k = 2: no frequentist prediction interval (%s), Bayesian prediction interval %.4f to %.4f outside the credible interval %.4f to %.4f; no prior = unchanged to the bit (%s); frequentist kept (%s); grid 2001 vs 8001 nodes differ by %.1e; same hash on 1 and 2 cores (%s); a 1.0.0 label with a prior is refused (%s)",
                         !has_fr_pi, pi$low, pi$high, ci$low, ci$high, same_without, keeps, conv, same_bytes, "method_version_mismatch" %in% codes))
 })
+
+vcr_case("N74e", c("AC-08", "AC-30"), function() {
+  # I-squared compares Q with its degrees of freedom; one study has none. Q is 0 up to rounding there (1e-31 for an estimate of -0.4 and a standard error of
+  # 0.2, exactly 0 for -0.37), and the ratio read 100% for the first and 0% for the second. It is not reported for one study, with or without a prior for tau,
+  # and it is reported (and is the usual Higgins-Thompson value) for three.
+  one <- function(y, prior = NULL, id) vcr_test_run(vcr_test_job("evidence.pool", c(list(studies = .n74_studies(y, 0.2), method = "random_effects_reml", scale = "identity"), if (!is.null(prior)) list(tauPrior = prior)), NULL, job_id = id))
+  has <- function(r) any(vapply(r$measures, function(m) identical(m$name, "i_squared"), logical(1)))
+  a <- one(-0.4, id = "job_n74e1"); b <- one(-0.37, id = "job_n74e2"); c1 <- one(-0.4, list(kind = "half_normal", scale = 0.2), "job_n74e3")
+  three <- vcr_test_run(vcr_test_job("evidence.pool", list(studies = .n74_studies(c(-0.5, -0.1, -0.3), c(0.1, 0.1, 0.1)), method = "random_effects_reml", scale = "identity"), NULL, job_id = "job_n74e4"))
+  q <- (c(-0.5, -0.1, -0.3) - mean(c(-0.5, -0.1, -0.3)))^2 / 0.01; Q <- sum(q); want <- max(0, (Q - 2) / Q)
+  ok <- c(one_study = identical(a$status, "succeeded") && !has(a) && !has(b) && !has(c1), valid = length(vcr_validate_result(a)) == 0L && length(vcr_validate_result(c1)) == 0L,
+          k = vcr_measure_value(a, "k") == 1, three = has(three) && abs(vcr_measure_value(three, "i_squared") - want) < 1e-9)
+  list(pass = all(ok), detail = sprintf("one study (estimate -0.4 and -0.37, standard error 0.2; and with a half-normal prior on tau): no I-squared is reported (it read 1.0 and 0); three studies: %.4f = (Q - df) / Q = %.4f%s",
+                                        vcr_measure_value(three, "i_squared"), want, if (all(ok)) "" else paste0("; FAILED: ", paste(names(ok)[!ok], collapse = ","))))
+})

@@ -1101,8 +1101,7 @@ vcr_job_pool_evidence <- function(job, output_dir = NULL, ...) {
       "prediction_interval", pool$estimate, unit = scale, source = "aggregate",
       interval = vcr_interval("prediction", pool$predictionInterval[1], pool$predictionInterval[2], pool$level))))
   }
-  measures <- c(measures, list(
-    vcr_measure("i_squared", pool$i2, source = "aggregate"),
+  measures <- c(measures, if (is.finite(pool$i2)) list(vcr_measure("i_squared", pool$i2, source = "aggregate")), list(
     vcr_measure("tau_squared", pool$tau2, unit = scale, source = "aggregate"),
     vcr_measure("tau", pool$tau, unit = scale, source = "aggregate"),
     vcr_measure("k", pool$k, source = "aggregate")))
@@ -1133,10 +1132,11 @@ vcr_job_pool_evidence <- function(job, output_dir = NULL, ...) {
   measures <- list(
     vcr_measure("pooled_estimate", b$estimate, unit = scale, source = "aggregate", interval = vcr_interval("credible", b$interval[1], b$interval[2], level)),
     vcr_measure("prediction_interval", b$estimate, unit = scale, source = "aggregate", interval = vcr_interval("prediction", b$predictionInterval[1], b$predictionInterval[2], level)),
-    vcr_measure("i_squared", pool$i2, source = "aggregate"),
+    if (is.finite(pool$i2)) vcr_measure("i_squared", pool$i2, source = "aggregate"),
     vcr_measure("tau_squared", b$tau2, unit = scale, source = "aggregate", interval = vcr_interval("credible", b$tau2Interval[1], b$tau2Interval[2], level)),
     vcr_measure("tau", b$tau, unit = scale, source = "aggregate", interval = vcr_interval("credible", b$tauInterval[1], b$tauInterval[2], level)),
     vcr_measure("k", pool$k, source = "aggregate"))
+  measures <- Filter(Negate(is.null), measures)
   fr_pi <- is.finite(pool$predictionInterval[1]) && is.finite(pool$predictionInterval[2])
   list(status = "succeeded", measures = measures,
        counts = vcr_counts(realPatients = NULL, generatedRecords = 0),

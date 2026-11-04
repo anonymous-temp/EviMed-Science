@@ -31,6 +31,14 @@
 # - **Zero cells are corrected per study and the study is listed.** A binary study with an arm that has no event, or only events, gets 0.5 added to the
 #   events and to the non-events of every arm of that study (the same increment `netmeta::pairwise` adds to a study with a zero cell), and the study
 #   is named in the result's assumptions. A different correction is a different estimate; the person can change it (`continuityCorrection`).
+#   **A study in which NO arm has an event (or every arm has only events) compares nothing and is left out, as `netmeta::pairwise` leaves it out**
+#   (it is named in the assumptions, and `k` counts the studies that stayed). The first version corrected it and kept it: a log odds ratio of
+#   -0.608 against netmeta's -0.620 on the same four studies, one of them with no event in either arm. (A multi-arm study with SOME arms at zero is
+#   kept and corrected: netmeta refuses it and advises the same.)
+# - **A multi-arm study stated as contrasts must agree with itself.** The effects against the first treatment are read from the comparisons that involve it,
+#   and the other comparisons only give the variances, so a study that states C-B = +5 beside B-A = -0.3 and C-A = -0.5 would run with no complaint.
+#   Each stated comparison is held to the difference of the other two to within what rounding explains (0.02, or a quarter of its standard error), and a
+#   study that disagrees is refused by its path, never repaired.
 # - **A network that is not connected is refused by name, with its parts.** Treatments in separate components cannot be compared; the result lists
 #   the components so the person sees what is missing.
 # - **Nothing here is simulated.** Every number is closed form or a matrix solve, so there is no Monte-Carlo error and a rerun is identical.
@@ -68,7 +76,7 @@ VCR_NET_RATIO_MEASURES <- c("odds_ratio", "risk_ratio", "log_ratio")
 vcr_net_parse <- function(sc) {
   measure <- as.character(sc$measure)
   incr <- vcr_scalar(sc$continuityCorrection, 0.5)
-  out <- list(); corrected <- character(0)
+  out <- list(); corrected <- character(0); excluded <- character(0)
   seen <- character(0)
   for (i in seq_along(sc$studies)) {
     st <- sc$studies[[i]]
@@ -83,6 +91,8 @@ vcr_net_parse <- function(sc) {
       if (measure %in% c("odds_ratio", "risk_ratio")) {
         e <- vapply(arms, function(a) vcr_scalar(a$events, NA_real_), numeric(1)); n <- vapply(arms, function(a) vcr_scalar(a$n, NA_real_), numeric(1))
         if (anyNA(e) || anyNA(n) || any(e > n)) vcr_abort("scenario_value_invalid", paste0(here, ".arms"), "A binary arm states its events and its size, and events do not exceed the size.")
+        # no arm has an event (or every arm has only events): nothing to compare, left out as netmeta::pairwise leaves it out
+        if (all(e == 0) || all(e == n)) { excluded <- c(excluded, id); next }
         if (any(e == 0 | e == n)) { corrected <- c(corrected, id); e <- e + incr; n <- n + 2 * incr }
         if (identical(measure, "odds_ratio")) { theta <- log(e / (n - e)); v <- 1 / e + 1 / (n - e) } else { theta <- log(e / n); v <- 1 / e - 1 / n }
       } else if (identical(measure, "mean_difference")) {
@@ -111,10 +121,19 @@ vcr_net_parse <- function(sc) {
         r <- which((tr == t & co == trts[1L]) | (tr == trts[1L] & co == t))
         eff_vs_first[t] <- if (tr[r] == t) eff[r] else -eff[r]
       }
+      # the stated comparisons must be those the effects against the first treatment imply (a study with two arms has nothing to disagree with)
+      if (a > 2L) for (r in seq_along(cs)) {
+        implied <- eff_vs_first[[tr[r]]] - eff_vs_first[[co[r]]]
+        if (abs(eff[r] - implied) > max(0.02, 0.25 * se[r])) {
+          vcr_abort("scenario_value_invalid", paste0(here, ".contrasts"), sprintf(
+            "The comparisons of this study do not agree with each other: %s against %s is stated as %s, and the study's other comparisons make it %s. Check the effects (a study's comparisons come from the same arms, so any one is the difference of two others up to rounding).",
+            tr[r], co[r], format(signif(eff[r], 4)), format(signif(implied, 4))))
+        }
+      }
       out[[length(out) + 1L]] <- .vcr_net_study(id, trts, as.numeric(eff_vs_first), va)
     }
   }
-  list(studies = out, corrected = corrected)
+  list(studies = out, corrected = corrected, excluded = excluded)
 }
 
 #' Connected components of the treatment graph.
@@ -215,6 +234,7 @@ vcr_job_network_meta <- function(job, output_dir = NULL, ...) {
     reference <- treatments[order(-count, seq_along(treatments))][1L]
     note("reference", reference, "the treatment in the most studies (ties by name); the league table and the P-scores do not depend on it")
   } else if (!(reference %in% treatments)) vcr_abort("scenario_value_invalid", "scenario.reference", "The reference is one of the treatments of the studies.")
+  if (length(parsed$excluded)) note("excludedStudies", paste(parsed$excluded, collapse = ", "), "left out because no arm of the study has an event (or every arm has only events), so it compares nothing; netmeta::pairwise leaves such a study out too")
   if (length(parsed$corrected)) note("continuityCorrection", vcr_scalar(sc$continuityCorrection, 0.5), paste0("added to the events and non-events of every arm of the studies with a zero cell: ", paste(parsed$corrected, collapse = ", ")))
 
   fe <- .vcr_net_fit(studies, treatments, reference, 0, need_trace = TRUE)

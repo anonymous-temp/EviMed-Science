@@ -122,3 +122,36 @@ vcr_case("N75d", c("AC-08", "AC-25"), function() {
        detail = sprintf("two separate networks: %s (%s); three-arm study with two pairs: %s; standard errors that cannot belong to one set of arms: %s; binary arm without events: %s; unknown reference: %s; a zero-cell study runs, corrected and named: %s",
                         has(apart, "network_not_connected"), parts, has(incomplete, "scenario_value_invalid"), has(impossible, "scenario_value_invalid"), has(nocounts, "scenario_value_invalid"), has(badref, "scenario_value_invalid"), ok_assumed))
 })
+
+vcr_case("N75e", c("AC-08", "AC-30"), function() {
+  # Two things the data sets of N75b do not have. (1) A study in which no arm has an event compares nothing: netmeta::pairwise leaves it out ("Comparison
+  # not considered", k = 4 of 5), and the first version corrected it with 0.5 and kept it (a log odds ratio of -0.608 against netmeta's -0.620 on the
+  # same studies). The estimates, standard errors, Q, tau-squared and P-scores now equal netmeta's on the studies that stayed, and the left-out study is named.
+  # (2) A study stated as contrasts is held to itself: B-A -0.3 and C-A -0.5 make C-B +0.2, and a stated +5 (read only for its variance) ran with a
+  # heterogeneity p of 0.86; now it is refused by its path, while a rounding of 0.01 is not.
+  if (!requireNamespace("netmeta", quietly = TRUE)) return(list(pass = FALSE, detail = "error: the cross-check package netmeta is not installed (the run must not skip silently)"))
+  suppressMessages(library(netmeta))
+  d <- data.frame(id = paste0("s", 1:6), t1 = c("A", "A", "B", "A", "A", "B"), t2 = c("B", "B", "C", "C", "B", "C"), e1 = c(3, 0, 5, 6, 4, 7), n1 = c(50, 40, 60, 45, 55, 70),
+                  e2 = c(8, 0, 9, 12, 10, 14), n2 = c(50, 40, 60, 45, 55, 70))
+  pw <- suppressWarnings(pairwise(list(t1, t2), event = list(e1, e2), n = list(n1, n2), data = d, sm = "OR", studlab = id))
+  net <- suppressWarnings(netmeta(pw, reference.group = "A", common = TRUE, random = TRUE))
+  studies <- lapply(seq_len(nrow(d)), function(i) list(studyId = d$id[i], arms = list(list(treatment = d$t1[i], events = d$e1[i], n = d$n1[i]), list(treatment = d$t2[i], events = d$e2[i], n = d$n2[i]))))
+  r <- vcr_test_run(.n75_job(list(measure = "odds_ratio", direction = "lower_better", studies = studies, reference = "A"), "n75e1"))
+  if (!identical(r$status, "succeeded")) return(list(pass = FALSE, detail = paste("the job did not succeed:", paste(vcr_test_issue_codes(r), collapse = ", "))))
+  dn <- r$diagnostics$network
+  cmp <- .n75_compare(dn, net, rownames(net$TE.random), "good")
+  left_out <- unlist(lapply(dn$assumed, function(a) if (identical(a$key, "excludedStudies")) a$value))
+  k_engine <- vcr_measure_value(r, "k")
+  # (2) three-arm studies stated as contrasts
+  tri <- function(ba, ca, cb, id) vcr_test_run(.n75_job(list(measure = "log_ratio", direction = "lower_better", studies = list(
+    list(studyId = "t", contrasts = list(list(treatment = "B", comparator = "A", effect = ba, se = 0.1), list(treatment = "C", comparator = "A", effect = ca, se = 0.1), list(treatment = "C", comparator = "B", effect = cb, se = 0.1))),
+    list(studyId = "u", contrasts = list(list(treatment = "C", comparator = "B", effect = -0.2, se = 0.1))), list(studyId = "v", contrasts = list(list(treatment = "B", comparator = "A", effect = -0.3, se = 0.1)))), reference = "A"), id))
+  wrong <- tri(-0.3, -0.5, 5, "n75e2"); off <- tri(-0.3, -0.5, -0.1, "n75e3"); rounded <- tri(-0.3, -0.5, -0.19, "n75e4"); exact <- tri(-0.3, -0.5, -0.2, "n75e5")
+  field <- function(res) { i <- res$diagnostics$issues; if (length(i)) i[[1]]$field else NA_character_ }
+  ok <- c(estimates = cmp$worst < 1e-8, k = k_engine == net$k && k_engine == 5, named = identical(left_out, "s2"),
+          wrong = identical(wrong$status, "failed") && identical(field(wrong), "scenario.studies[0].contrasts") && "scenario_value_invalid" %in% vcr_test_issue_codes(wrong),
+          off = identical(off$status, "failed"), rounded = identical(rounded$status, "succeeded"), exact = identical(exact$status, "succeeded"))
+  list(pass = all(ok), detail = sprintf("five studies of which one has no event in either arm: against netmeta the largest differences are effects %.1e, standard errors %.1e, tau2/Q/df %.1e, P-scores %.1e; k %d (netmeta %d); left out and named: %s; a three-arm study stating C-B = +5 beside B-A = -0.3 and C-A = -0.5 is refused at %s (C-B = -0.1 too; -0.19 and -0.2 are not)%s",
+                                        cmp$estimate, cmp$se, max(cmp$heterogeneity), max(cmp$pscores), as.integer(k_engine), as.integer(net$k), paste(left_out, collapse = ","), field(wrong),
+                                        if (all(ok)) "" else paste0("; FAILED: ", paste(names(ok)[!ok], collapse = ","))))
+})
