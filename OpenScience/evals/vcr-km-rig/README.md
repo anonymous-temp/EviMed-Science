@@ -166,7 +166,7 @@
 ## 怎么跑
 
 ```bash
-source /home/coder/evimed-wt/vcrfix-handoff/alg/env.sh   # R 与引擎的路径（VCR_R_LIBS、VCR_ENGINE_ROOT）
+export VCR_R_LIBS=<R library> VCR_ENGINE_ROOT=<engine directory>   # R 与引擎的路径
 python3 rig.py --work /tmp/vcr-km-rig --out results.json  # 2 核约 6 分钟（这次 362 秒）；中断后同一命令接着跑
 python3 tables.py results.json                            # 打印本文的表
 ```
