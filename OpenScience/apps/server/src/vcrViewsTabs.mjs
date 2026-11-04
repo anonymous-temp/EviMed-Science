@@ -1446,6 +1446,9 @@ function dateNote(basis, bound) {
   return bound === "no_later_than" ? "日期取自病历抬头，事件发生不晚于这一天" : "日期取自病历抬头";
 }
 
+/** A gap's reason in words: the label it carries (the candidate-trial path writes one), else the registry of reasons' (a protocol's assessment keeps the code alone). @param {Record<string, any>} gap */
+const gapReason = (gap) => text(gap.label) ?? /** @type {Record<string, string>} */ (VCR_MATCHING_GAP_REASON_LABELS_ZH)[String(gap.reason ?? "")] ?? null;
+
 /**
  * The criterion the way a coordinator reads it: the protocol's own words, the
  * patient's own sentence, and what to ask for.
@@ -1495,7 +1498,7 @@ function judgementView(criterion, code, judgment, now, documentNames = new Map()
     }),
     request: state === "unknown" || state === "pending_recheck" ? (needed[0] ?? null) : null,
     // Why it is not decided, in the assessment's own words (缺登记原文, 单位对不上, …): the first reason the criterion's gaps give.
-    reason: state === "unknown" || state === "pending_recheck" ? (text(object(list(judgment?.missing)[0]).label) ?? null) : null,
+    reason: state === "unknown" || state === "pending_recheck" ? gapReason(object(list(judgment?.missing)[0])) : null,
     requestNote: state === "pending_recheck" && judgment?.recheckAt ? `${zhDate(judgment.recheckAt, now)} 起可复评` : null,
     decidedBy: judgment?.decidedBy ?? null,
     overridden: Boolean(judgment?.overrideState),

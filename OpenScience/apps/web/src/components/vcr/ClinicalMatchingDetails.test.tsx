@@ -40,6 +40,30 @@ it('shows all distinct citations for a criterion, including a later deciding bra
   for (const item of evidenceItems) expect(screen.getByText(`“${item.quote}”`)).toBeVisible();
 });
 
+it('on a phone the rules are cards, not a table that scrolls sideways: each keeps its code, state and the columns that have something to say', () => {
+  const original = window.matchMedia;
+  window.matchMedia = ((query: string) => ({ matches: query === '(max-width: 639px)', media: query, addEventListener: () => {}, removeEventListener: () => {}, addListener: () => {}, removeListener: () => {}, onchange: null, dispatchEvent: () => false })) as typeof window.matchMedia;
+  try {
+    render(<CriterionTable label="条件判断" rows={[
+      { code: 'I1', kind: 'inclusion', text: '年龄 ≥ 18 岁', state: 'satisfied', evidence: { quote: '患者 62 岁', source: '病历原文' } },
+      { code: 'E1', kind: 'exclusion', text: '活动性脑转移', state: 'unknown', request: '申请头颅 MRI', reason: '未记录' },
+    ]} />);
+    expect(screen.queryByRole('table')).toBeNull();
+    const cards = screen.getByRole('list', { name: '条件判断' });
+    expect(cards.querySelectorAll('li')).toHaveLength(2);
+    const first = cards.querySelector("[data-vcr-criterion='I1']") as HTMLElement;
+    expect(first).toHaveAttribute('data-vcr-criterion-state', 'satisfied');
+    expect(first).toHaveTextContent('规则 I1');
+    expect(first).toHaveTextContent('年龄 ≥ 18 岁');
+    expect(first).toHaveTextContent('“患者 62 岁”');
+    expect(first).not.toHaveTextContent('补证建议');
+    const second = cards.querySelector("[data-vcr-criterion='E1']") as HTMLElement;
+    expect(second).toHaveTextContent('申请头颅 MRI');
+    expect(second).toHaveTextContent('未记录');
+    expect(second).not.toHaveTextContent('患者证据');
+  } finally { window.matchMedia = original; }
+});
+
 it('distinguishes an unknown applicability premise from its requirement and shows both evidence axes', () => {
   const premise = { quote: '肾病状态待查', source: '病历一' };
   const requirement = { quote: '未接受过该治疗', source: '病历二' };

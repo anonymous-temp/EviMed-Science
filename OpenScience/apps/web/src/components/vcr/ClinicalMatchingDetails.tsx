@@ -1,4 +1,6 @@
 import { useState, type ReactNode } from 'react';
+import { vcrSubjectLabels } from '@evimed/domain';
+import { useNarrow } from '@/lib/useMediaQuery';
 import { CircleCheck, CircleHelp, CircleMinus, CircleX, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { DataTable, type DataColumn } from '@/components/ui/DataTable';
@@ -125,6 +127,7 @@ export function CriterionTable({ label, rows, facts, extraColumns = [] }: {
   facts?: readonly VcrClinicalTimelineEntry[];
   extraColumns?: ReadonlyArray<DataColumn<VcrCriterionJudgement>>;
 }) {
+  const narrow = useNarrow();
   const columns: Array<DataColumn<VcrCriterionJudgement>> = [
     { key: 'code', header: '编号', rowHeader: true, width: 'w-16', cell: (row) => <span className="tabular-nums text-text-3">{row.code}</span> },
     { key: 'text', header: '方案原文', cell: (row) => <span className="text-text">{row.text}</span> },
@@ -170,6 +173,28 @@ export function CriterionTable({ label, rows, facts, extraColumns = [] }: {
     },
     ...extraColumns,
   ];
+  // On a phone the table does not scroll sideways: each rule is a card of its own, the rule's words first and each column under its name.
+  if (narrow) {
+    return (
+      <ul aria-label={label} data-vcr-criterion-cards="" className="flex flex-col gap-2">
+        {rows.map((row) => (
+          <li
+            key={row.code}
+            data-vcr-criterion={row.code}
+            data-vcr-criterion-state={row.applicable === false ? 'not_applicable' : row.state}
+            className="flex flex-col gap-2 rounded-card border border-border bg-surface px-3 py-2.5 text-ui"
+          >
+            {columns.filter((column) => !column.isEmpty?.(row)).map((column) => (
+              <div key={column.key} className="flex min-w-0 flex-col gap-0.5 break-words">
+                <span className="text-caption text-text-3">{column.key === 'code' ? `规则 ${row.code}` : column.header}</span>
+                {column.key === 'code' ? null : column.cell(row)}
+              </div>
+            ))}
+          </li>
+        ))}
+      </ul>
+    );
+  }
   return (
     <DataTable
       label={label}
@@ -286,12 +311,14 @@ export function useMatchingControls({ studyId, data, direction, protocolId, subj
       onChange: next => { if (next) onProtocol(next); },
     });
   }
+  // The patients are read by their short names (`vcrSubjectLabels`); the key stays the value of the choice.
+  const shortNames = vcrSubjectLabels(roster);
   // A protocol's people the model judged are a paged table of their own, and a person is opened from it: a menu of thousands is not a way to choose one.
   if (!(judged && way === 'trial_to_patient')) {
     const offered = roster.length > MOST_PATIENTS ? [...roster.slice(0, MOST_PATIENTS), ...(subject && !roster.slice(0, MOST_PATIENTS).includes(subject) ? [subject] : [])] : roster;
     filters.push({
       kind: 'select', label: '患者', allLabel: way === 'patient_to_trial' ? '请选择患者' : '全部已登记患者',
-      options: offered.map(key => ({ value: key, label: key })), value: subject || null,
+      options: offered.map(key => ({ value: key, label: shortNames.get(key) ?? key })), value: subject || null,
       onChange: next => {
         const chosen = next ?? '';
         setSubject(chosen);

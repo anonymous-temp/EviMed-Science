@@ -112,6 +112,10 @@ test("the link to the comparison tab names the saved comparison the answer is ab
   assert.deepEqual(entry, { studyId: "std_conv", tab: "comparator", label: "在“对照”页查看", object: "cmp_3a", url: "https://evimed.example/app/virtual-research/std_conv/comparator?object=cmp_3a" });
   assert.deepEqual(vcrResultEntry({ studyId: "std_conv", tab: "comparator", publicUrl: "" , object: "cmp_3a" }), { studyId: "std_conv", tab: "comparator", label: "在“对照”页查看", object: "cmp_3a" });
   assert.equal(vcrResultEntry({ studyId: "std_conv", tab: "trial", publicUrl: PUBLIC, object: "scn_1" }).url, "https://evimed.example/app/virtual-research/std_conv/trial");
+  // The matching tab reads one too, a patient's key, and a write about a patient links to that patient's trials.
+  assert.equal(vcrResultEntry({ studyId: "std_conv", tab: "matching", publicUrl: PUBLIC, object: "Pee008d6ee9ef7847" }).url, "https://evimed.example/app/virtual-research/std_conv/matching?object=Pee008d6ee9ef7847");
+  assert.equal(vcrResultEntry({ studyId: "std_conv", tab: "matching", publicUrl: PUBLIC, object: "../x" }).url, "https://evimed.example/app/virtual-research/std_conv/matching");
+  assert.equal(withWriteEntry("patient_context", { ok: true, ids: ["x"], issues: [], subjectKey: "Pee008d6ee9ef7847" }, { study: conversation, publicUrl: PUBLIC }).resultEntry.object, "Pee008d6ee9ef7847");
   for (const object of ["", "../x", "a/b", "x".repeat(161), null, 5]) assert.equal(vcrResultEntry({ studyId: "std_conv", tab: "comparator", publicUrl: PUBLIC, object }).url, "https://evimed.example/app/virtual-research/std_conv/comparator", String(object));
   // a start's answer names the comparison it filed the job under; a status answer is given the job's own record of it
   const started = { jobId: "job_1", state: "queued", subject: { kind: "comparator", id: "cmp_3a", version: 1 } };
