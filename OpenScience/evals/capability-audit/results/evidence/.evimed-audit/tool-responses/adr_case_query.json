@@ -59,10 +59,10 @@
         "limit": 2
       },
       "scope": {
-        "tenantId": "tool-probe-1cb73eaa",
-        "userId": "tool-probe-1cb73eaa",
-        "projectId": "tool-probe",
-        "workspaceDir": "/workspace/.audit-repo-20261012T071445Z/OpenScience/evals/capability-audit/tool-probe-workspace"
+        "tenantId": "ck-probe-14d43468",
+        "userId": "ck-probe-14d43468",
+        "projectId": "audit-tool-probe",
+        "workspaceDir": "/workspace/.audit-repo-20261104T131143Z/OpenScience/evals/capability-audit/tool-probe-workspace"
       }
     }
   },
@@ -70,7 +70,7 @@
     {
       "id": "FAERS:10004085",
       "source": "openfda-faers",
-      "retrievedAt": "2026-10-12T07:17:02.225801Z",
+      "retrievedAt": "2026-11-04T13:17:12.875080Z",
       "url": "https://api.fda.gov/drug/event.json?search=safetyreportid:10004085",
       "title": "FAERS safety report 10004085",
       "sourceType": "regulatory"
@@ -78,7 +78,7 @@
     {
       "id": "FAERS:10006272",
       "source": "openfda-faers",
-      "retrievedAt": "2026-10-12T07:17:02.225829Z",
+      "retrievedAt": "2026-11-04T13:17:12.875116Z",
       "url": "https://api.fda.gov/drug/event.json?search=safetyreportid:10006272",
       "title": "FAERS safety report 10006272",
       "sourceType": "regulatory"
