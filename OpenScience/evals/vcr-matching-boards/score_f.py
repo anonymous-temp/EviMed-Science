@@ -280,8 +280,8 @@ def main_f(args):
     digest = hashlib.sha256(scorer.read_bytes()).hexdigest()
     if digest != SCORER_SHA256:
         raise SelfCheckError("The official track1_eval.py differs from the reviewed bytes")
-    if args.split not in SPLITS:
-        raise SelfCheckError(f"Board F is scored on {', '.join(SPLITS)}; the test split is scored once, by the owner.")
+    if args.split not in SPLITS and not (args.split == "test" and args.unseal):
+        raise SelfCheckError(f"Board F is scored on {', '.join(SPLITS)}; the test split is scored once, with --unseal, after the prompts are frozen.")
     labels = read_jsonl(Path(args.labels) / "F-n2c2" / "labels.jsonl")
     records = {}
     for record in read_jsonl(args.judgments):
@@ -290,7 +290,7 @@ def main_f(args):
     work = Path(args.work) / "board-f" / args.split
     result = {"score": score(records, labels, args.split, scorer, wrapper, args.python, work, args.resamples), "completion": completion(records, labels, args.split)}
     manifest = read_json(Path(args.n2c2_boards) / "F-n2c2" / "manifest.json")
-    result["provenance"] = {"casesSha256": manifest["casesSha256"], "devDigest": manifest["devDigest"], "heldoutDigest": manifest["heldoutDigest"], "scorerSha256": digest, "testSealed": True}
+    result["provenance"] = {"casesSha256": manifest["casesSha256"], "devDigest": manifest["devDigest"], "heldoutDigest": manifest["heldoutDigest"], "scorerSha256": digest, "testSealed": args.split != "test"}
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     (out / "board-f.json").write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -304,7 +304,8 @@ def cli(argv):
     parser.add_argument("--n2c2-boards", type=Path, required=True, help="board F's prepared directory (prepare_f.mjs)")
     parser.add_argument("--labels", type=Path, required=True, help="board F's labels directory")
     parser.add_argument("--n2c2-root", type=Path, required=True, help="the unpacked n2c2 files (work/eval/track1_eval.py)")
-    parser.add_argument("--split", required=True, choices=SPLITS)
+    parser.add_argument("--split", required=True, choices=(*SPLITS, "test"))
+    parser.add_argument("--unseal", action="store_true", help="read the official test split: run once, after the prompts are frozen")
     parser.add_argument("--judgments", type=Path, required=True)
     parser.add_argument("--work", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
