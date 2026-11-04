@@ -39,6 +39,16 @@ test("a scenario's numbers are laid against the person's messages: a number is t
   assert.deepEqual(vcrNumericLeaves({ a: [1, { b: 2 }], c: "x", d: Number.NaN }), [{ path: "a[0]", value: 1 }, { path: "a[1].b", value: 2 }]);
 });
 
+test("a percentage and a name made of numbers are not a bare number: 'at most 45 patients' is not the 45% of a toxicity, a cohort of 3 is not the 3 of '3+3' (live check 2026-11-04)", () => {
+  const message = ["五个剂量，毒性大概 5%、10%、20%、30%、45%，目标 25%，3+3 和 BOIN 哪个更容易选对？"];
+  const scenario = { design: { kind: "boin", cohortSize: 3, maxPatients: 45, startDose: 1, targetToxicity: 0.25 }, truth: { toxicity: [0.05, 0.1, 0.2, 0.3, 0.45] } };
+  assert.deepEqual(vcrPersonStated(scenario, message).paths, ["design.targetToxicity", "truth.toxicity[0]", "truth.toxicity[1]", "truth.toxicity[2]", "truth.toxicity[3]", "truth.toxicity[4]"],
+    "the curve and the target are what the person said; the cohort and the cap are the model's");
+  assert.deepEqual(vcrPersonStated({ design: { allocation: 2, followup: 24 } }, ["随机比例 2:1，随访 24 个月"]).paths, ["design.followup"], "2:1 is a ratio, 24 a number");
+  assert.deepEqual(vcrPersonStated({ design: { nTreat: 300 } }, ["每组 300 人"]).paths, ["design.nTreat"], "a plain number beside none of them");
+  assert.deepEqual(vcrPersonStated({ truth: { rate: 0.4 } }, ["有效率 40 %，对照 20%"]).paths, ["truth.rate"], "a percentage is the fraction; a space before the sign is allowed");
+});
+
 test("no message, no strong word: a conversation that could not be read records that, and every stated number reads 假设", () => {
   const scenario = { design: { followup: 24 } };
   for (const messages of [null, undefined, [], ["", "  "]]) assert.deepEqual(vcrPersonStated(scenario, messages), { schema: 1, readable: false, paths: [] });

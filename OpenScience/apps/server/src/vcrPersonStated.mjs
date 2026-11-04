@@ -59,10 +59,13 @@ export function vcrPersonStated(scenario, messages) {
   const texts = Array.isArray(messages) ? messages.filter((entry) => typeof entry === "string" && entry.trim()) : [];
   if (!texts.length) return { schema: VCR_PERSON_STATED_SCHEMA, readable: false, paths: [] };
   const text = texts.join("\n");
+  // The plain numbers: a percentage (30% is the 0.3 of a rate, not a 30), a ratio or a name made of numbers (3+3, 1:1, 2/3) are not a bare number
+  // somebody said (live check 2026-11-04: 'at most 30 patients' matched the 30% of a toxicity and a cohort of 3 the 3 of '3+3').
+  const plain = text.replace(/\d+(?:\.\d+)?\s*(?:%|％|个百分点)/gu, " ").replace(/\d+(?:\.\d+)?(?:\s*[+:/：／＋]\s*\d+(?:\.\d+)?)+/gu, " ");
   const paths = vcrNumericLeaves(scenario)
     .filter(({ value }) => value !== 0 && value !== 1)
     // a fraction is also the percentage the person wrote (0.05 for 「5%」, 「百分之五」 is not read); a bare 5 is not a 0.05
-    .filter(({ value }) => numberIsInQuote(text, value) || (value > 0 && value < 1 && percentIsInText(text, value)))
+    .filter(({ value }) => numberIsInQuote(plain, value) || (value > 0 && value < 1 && percentIsInText(text, value)))
     .map(({ path }) => path);
   return { schema: VCR_PERSON_STATED_SCHEMA, readable: true, paths: [...new Set(paths)].slice(0, MAX_PATHS) };
 }
