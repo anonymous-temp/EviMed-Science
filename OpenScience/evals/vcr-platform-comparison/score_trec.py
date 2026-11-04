@@ -63,6 +63,27 @@ def metrics(order,qrels,retrieved):
             'retrieved':None if retrieved is None else len(retrieved),'ranked':len(order)}
 
 
+def fixed_candidate_comparison(order,rank_issues,retrieved,qrels):
+    """Compare orders only when both use the same verified candidate set.
+
+    This is a retrieval-order control for the product's actual saved order, not
+    a relevance reranker or a substitute for an end-to-end result. Scores use
+    the same full-topic ideal denominator as the main TREC metric.
+    """
+    if not qrels:return {'status':'unjudged_topic'}
+    if not order:return {'status':'empty_ranking'}
+    if rank_issues or any(not isinstance(ident,str) for ident in order) or len(set(order))!=len(order):
+        return {'status':'unverified_ranking'}
+    if retrieved is None:return {'status':'retrieval_unavailable'}
+    positions={ident:index for index,ident in enumerate(retrieved)}
+    if any(ident not in positions for ident in order):return {'status':'candidate_outside_retrieval'}
+    retrieval_order=sorted(order,key=positions.__getitem__)
+    keys=('ndcg10','precision10_eligible')
+    saved=metrics(order,qrels,None);control=metrics(retrieval_order,qrels,None)
+    return {'status':'available','selectedCount':len(order),'retrievalOrder':retrieval_order,
+            'saved':{key:saved[key] for key in keys},'retrieval':{key:control[key] for key in keys}}
+
+
 def score(campaign,qrels_file,collection_file,out):
     frozen=json.loads((campaign/'FROZEN.json').read_text());raw=qrels_file.read_bytes();collection_bytes=collection_file.read_bytes()
     if hashlib.sha256(raw).hexdigest()!=frozen.get('goldSha256')or hashlib.sha256(collection_bytes).hexdigest()!=frozen.get('collectionManifestSha256'):
@@ -96,14 +117,16 @@ def score(campaign,qrels_file,collection_file,out):
         truth=qrels.get(matched[2]);measures=metrics(order,truth,retrieved)if truth else None
         results.append({'case':case,'year':int(matched[1]),'topic':matched[2],'judged':bool(truth),'execution':record.get('status','missing_artifact'),
                         'metrics':measures,'rankedIds':order,'rankingIssues':rank_issues,'retrievalObserved':receipt is not None,
-                        'retrievalObservedDepth':len(receipt['ids'])if receipt else None,'retrievalComplete500':retrieved is not None})
+                        'retrievalObservedDepth':len(receipt['ids'])if receipt else None,'retrievalComplete500':retrieved is not None,
+                        'fixedCandidateComparison':fixed_candidate_comparison(order,rank_issues,retrieved,truth)})
     keys=('ndcg10','precision10_eligible','recall500_eligible','recall500_graded')
     summary={}
     for key in keys:
         values=[row['metrics'][key]for row in results if row['metrics']and row['metrics'][key]is not None]
         summary[key]={'mean':sum(values)/len(values)if values else None,'denominator':len(values)}
     result={'scope':'full frozen TREC corpus; linear-gain nDCG; unjudged trials have zero gain, not clinical ineligibility',
-            'sourceSha':frozen['sourceSha'],'topics':len(results),'summary':summary,'rows':results,
+            'sourceSha':frozen['sourceSha'],'scorerSha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+            'topics':len(results),'summary':summary,'rows':results,
             'retrievalSelection':'last successful deepest source-verified candidate-search receipt, no gold selection'}
     with out.open('x')as handle:json.dump(result,handle,indent=2)
     return summary
