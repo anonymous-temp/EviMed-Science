@@ -96,9 +96,19 @@ vcr_bias_shifted_null <- function(inp, biases) {
 }
 
 #' The prevalence, among the people who carry more of a binary confounder, that makes its bias factor `target` (a ratio of at least 1),
-#' given the association `gamma` (above 1) and the prevalence `r` among the people who carry less; NA when no prevalence in [0, 1] does.
+#' given the association `gamma` and the prevalence `r` among the people who carry less; NA when no prevalence in [0, 1] does.
+#'
+#' Hidden knowledge: the outcome's risk factor of an arm is f(p) = 1 + (gamma - 1) p. A confounder that RAISES the outcome (gamma above 1) must
+#' be carried by the arm whose outcome looks better to be exaggerated by it, so f(carrier) / f(other) = target. One that LOWERS it (gamma below
+#' 1) makes its carrier look better, so f(carrier) / f(other) = 1 / target: the arms trade places but the equation is NOT the same one with
+#' the association turned over (the first version solved the gamma = 1 / gamma problem, which is a different confounder: a protective
+#' association of 0.5 with no confounder among the controls tips an estimate of 0.7 at a treated prevalence of 0.6, not 0.4286, 2026-11-04).
+#' A gamma of 1 carries no bias at all: NA.
 .vcr_bias_tip_carrier <- function(target, gamma, r) {
-  carrier <- (target * (gamma * r + 1 - r) - 1) / (gamma - 1)
+  if (!is.finite(gamma) || abs(gamma - 1) < 1e-12) return(NA_real_)
+  f_other <- 1 + (gamma - 1) * r
+  want <- if (gamma > 1) target * f_other else f_other / target
+  carrier <- (want - 1) / (gamma - 1)
   if (is.finite(carrier) && carrier >= r && carrier <= 1) carrier else NA_real_
 }
 
@@ -113,7 +123,7 @@ vcr_bias_shifted_null <- function(inp, biases) {
   carrier <- if ((inp$sigma > 0) == raises) "treated" else "control"
   strength <- if (inp$ratio) (if (gamma < 1) 1 / gamma else gamma) else abs(gamma)
   if (inp$ratio) {
-    c1 <- .vcr_bias_tip_carrier(exp(magnitude), strength, reference)
+    c1 <- .vcr_bias_tip_carrier(exp(magnitude), gamma, reference)
     list(carrier = carrier, carrierPrevalence = c1, prevalenceDifference = if (is.na(c1)) NA_real_ else c1 - reference, feasible = !is.na(c1),
          standardizedDifference = magnitude / log(strength))
   } else {

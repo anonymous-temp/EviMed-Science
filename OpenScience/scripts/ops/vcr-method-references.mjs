@@ -235,6 +235,7 @@ export const NUMERIC_REFERENCES = {
   N72c: { methods: ['comparator.bias_analysis'], anchors: ['abs(row1$carrierPrevalence / 0.05 - 9) < 1e-4'] },
   N72d: { methods: ['comparator.bias_analysis'], anchors: ['cdf_comb <- function(x) stats::integrate(', 'abs(m$value - want_med) < 3 * m$mcse'] },
   N72e: { methods: ['comparator.bias_analysis'], anchors: ['bf <- (g * p1 + 1 - p1) / (g * p0 + 1 - p0)', 'abs(pa$systematic$median - 1) < 1e-12'] },
+  N72g: { methods: ['comparator.bias_analysis'], anchors: ['tipr::tip_with_binary(b, unexposed_confounder_prev = base, confounder_outcome_effect = g, verbose = FALSE)$exposed_confounder_prev', 'worst_back <- max(worst_back, abs(back(row$estimate, k$g, k$base) - k$est))'] },
   N73a: { methods: ['comparator.stc'], anchors: ['fit <- stats::glm(y ~ x1 + x2 + arm + arm:x1, data = d, family = stats::binomial())', 'abs(v(r, "marginal_contrast_ipd") - hand) < 1e-9'] },
   N73b: { methods: ['comparator.stc'], anchors: ['tr <- .n73_truth(TRUE)', 'ok <- abs(bias[["g"]]) < 3.5 * mcse[["g"]] && abs(bias[["cv"]]) > 8 * mcse[["cv"]] && abs(bias[["cv"]]) > 0.04'] },
   N73c: { methods: ['comparator.stc'], anchors: ['maic <- vcr_test_run(vcr_test_job("comparator.maic"', 'abs(e_s$value - e_m$value) < sqrt(se_s^2 + se_m^2)'] },

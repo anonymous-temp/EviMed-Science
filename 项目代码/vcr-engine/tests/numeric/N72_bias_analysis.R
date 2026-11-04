@@ -193,3 +193,40 @@ vcr_case("N72f", c("AC-07", "AC-30"), function() {
   ok <- all(vapply(codes, function(r) identical(r$status, "failed") && length(r$measures) == 0L, logical(1))) && !identical(none$status, "succeeded")
   list(pass = ok, detail = paste(c(paste(names(got), got, sep = " -> "), paste0("no interval or error -> ", none$status, ":", paste(vcr_test_issue_codes(none), collapse = ","))), collapse = "; "))
 })
+
+vcr_case("N72g", c("AC-08", "AC-30"), function() {
+  # A confounder that LOWERS the outcome (an association below 1), against tipr on the ratio scale. N72b held tipr only at associations above
+  # 1, and the code answered a protective association of 0.5 with the answer for an association of 2: the same equation seen from the other
+  # arm is not the same equation (a protective association of 0.5, no confounder among the controls, tips an estimate of 0.7 at a treated
+  # prevalence of 0.6, not 0.4286). Each row is also substituted back into the bias factor, which is what the closed form has to return.
+  suppressMessages(library(tipr))
+  run <- function(est, lo, hi, g, base, id) {
+    r <- vcr_test_run(.n72_job(list(scale = "hazard_ratio", estimate = est, lower = lo, upper = hi, confounderTipping = list(associations = list(g), baselinePrevalence = base)), id))
+    r$diagnostics$biasAnalysis$confounderTipping$rows[[1]]
+  }
+  tip_bin <- function(b, g, base, protective_estimate) {
+    if (protective_estimate) tipr::tip_with_binary(b, unexposed_confounder_prev = base, confounder_outcome_effect = g, verbose = FALSE)$exposed_confounder_prev
+    else tipr::tip_with_binary(b, exposed_confounder_prev = base, confounder_outcome_effect = g, verbose = FALSE)$unexposed_confounder_prev
+  }
+  # the bias factor an arm pair gives: the treated arm's risk factor over the control's
+  back <- function(row_part, g, base) {
+    f <- function(x) 1 + (g - 1) * x
+    if (identical(row_part$carrier, "treated")) f(row_part$carrierPrevalence) / f(base) else f(base) / f(row_part$carrierPrevalence)
+  }
+  cfg <- list(list(est = 0.7, lo = 0.55, hi = 0.89, g = 0.5, base = 0), list(est = 0.7, lo = 0.55, hi = 0.89, g = 0.5, base = 0.2), list(est = 1.4, lo = 1.1, hi = 1.8, g = 0.5, base = 0.2),
+              list(est = 1.4, lo = 1.1, hi = 1.8, g = 0.25, base = 0.1), list(est = 0.65, lo = 0.5, hi = 0.85, g = 0.4, base = 0.05))
+  worst_tipr <- 0; worst_back <- 0; text <- character()
+  z <- stats::qnorm(0.975)
+  for (i in seq_along(cfg)) {
+    k <- cfg[[i]]
+    row <- run(k$est, k$lo, k$hi, k$g, k$base, paste0("n72g_", i))
+    ref <- tip_bin(k$est, k$g, k$base, k$est < 1)
+    # and at the interval's nearer limit, the number the page also shows
+    se <- (log(k$hi) - log(k$lo)) / (2 * z); lim <- if (k$est < 1) exp(log(k$est) + z * se) else exp(log(k$est) - z * se)
+    ref_lim <- tip_bin(lim, k$g, k$base, k$est < 1)
+    worst_tipr <- max(worst_tipr, abs(row$estimate$carrierPrevalence - ref), if (is.finite(ref_lim)) abs(row$limit$carrierPrevalence - ref_lim) else 0)
+    worst_back <- max(worst_back, abs(back(row$estimate, k$g, k$base) - k$est))
+    text <- c(text, sprintf("HR %.2f, gamma %.2f, baseline %.2f: %s prevalence %.4f (tipr %.4f; the bias factor it gives %.4f)", k$est, k$g, k$base, row$estimate$carrier, row$estimate$carrierPrevalence, ref, back(row$estimate, k$g, k$base)))
+  }
+  list(pass = worst_tipr < 1e-9 && worst_back < 1e-9, detail = sprintf("%s; largest difference from tipr %.1e, from the substituted bias factor %.1e", paste(text, collapse = "; "), worst_tipr, worst_back))
+})
