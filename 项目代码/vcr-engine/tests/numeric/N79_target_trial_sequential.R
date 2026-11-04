@@ -120,7 +120,8 @@ vcr_case("N79c", c("AC-07", "AC-30"), function() {
   # interaction, no trial-period term) run too.
   long <- .n79_switching(60L, 8L, seed = 20261110L)
   sc <- list(covariates = list("x", "z"), strategy = list(kind = "sequential", estimand = "both"), horizon = 6L)
-  mk <- function(sc_, limit = 600) { j <- vcr_test_job("comparator.target_trial", sc_, list(vcr_test_input(long, "snp_n79c:longitudinal", "long")), seed = 5L, job_id = "job_n79c"); j$cpuSecondsLimit <- limit; j }
+  # one core: a batch finishes on every core before the budget is read, so on four cores the first read already holds 200 resamples and the case read another branch (CI, 2026-11-04).
+  mk <- function(sc_, limit = 600) { j <- vcr_test_job("comparator.target_trial", sc_, list(vcr_test_input(long, "snp_n79c:longitudinal", "long")), seed = 5L, job_id = "job_n79c"); j$cpuSecondsLimit <- limit; j$cores <- 1L; j }
   full <- vcr_test_run(mk(sc))
   part <- vcr_test_run(mk(sc, max(0.5, 0.45 * full$manifest$cpuSeconds / 0.9)))
   stopped_ok <- identical(part$status, "succeeded") && identical(part$conclusion, "limited") && "bootstrap_stopped_early" %in% vcr_chr(part$diagnostics$limitedBy) &&
