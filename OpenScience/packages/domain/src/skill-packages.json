@@ -1112,17 +1112,17 @@
       "id": "capability/vcr-analysis",
       "name": "vcr-analysis",
       "origin": "capability",
-      "version": "1.16.0",
+      "version": "1.17.0",
       "source": {"kind":"release"},
-      "digest": "sha256:915a6b2c229426dab7a9ef1966f502945a6af0a99398aa4791e72bf37ece8501",
+      "digest": "sha256:62ed65897f09bc675a6e6d57cf73f14eb382c17c6dff543ad644830157c53c27",
       "digestAlgorithm": "release-directory-v1",
       "references": [
-        {"path":"capability.yaml","sha256":"a6b1e7cb14ec0be507d0a3c0d1b440592d333241f82a4be3ef1000f49120a417"},
+        {"path":"capability.yaml","sha256":"951d2cf69c0f8315230943e0571317602069a015b87a27e52950c797598782fc"},
         {"path":"references/comparators.md","sha256":"40d0310bea6b36128345e24031e847c360688e3b6e258c3f74bc3b68e225e24b"},
         {"path":"references/delivery.md","sha256":"14bf6198c8ba48f89c93787ac473178b175403ffab9f33542df74724bbf525fe"},
         {"path":"references/longitudinal.md","sha256":"241d2acf2d570afca6d25dc7b66d3f07c555afb8663e4acf4a00d095e0821695"},
-        {"path":"references/models.md","sha256":"00d2a6da12fe9bcbaf4bd648ce5a679db9f1e51869bc959623568eaf13c9cb02"},
-        {"path":"references/populations-and-patients.md","sha256":"413cb05a31c6fe8d34177237a19fb9a2d18395559be866b45227fc84cddbef56"},
+        {"path":"references/models.md","sha256":"bd05ca4cf9ccc3069203ed47ac145c661f174d2c252908d74cb5dbc08bc3643e"},
+        {"path":"references/populations-and-patients.md","sha256":"2874926dd240be156529d989622c64980a8212879aa20af79f86fda53292d149"},
         {"path":"references/trial-design.md","sha256":"a93848d70c4807825e64d6e70775c3215d6b34d9d95f185eca5120701b88d2e7"}
       ],
       "dependencies": [

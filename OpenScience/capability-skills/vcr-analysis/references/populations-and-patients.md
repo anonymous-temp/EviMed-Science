@@ -143,3 +143,18 @@ exploratory assumption or provide the supported computation evidence.
 ```
 
 An assessment's `issues` describe missing information; the record is retained and can be completed in a new version. Event-history models use the cloud forecast or external-file path described below. Do not send them through the statistical patient-set generator or substitute a different model when an API is unavailable.
+
+## 合成数据能不能拿来做推断，以及哪些人最容易被认出来
+
+用户问“这份合成数据跑我的 HR，假阳性率多少”或“哪些人最容易被认出来”，用 `synthesize_population`（或对已有合成表用 `population_quality`）的这几项，不要自己估：
+
+- **声明分析**（`analyses`）：除了 `mean`、`glm`，还有 `cox`（`time`、`status`（1 是事件）、`predictors`、`target`，报对数风险比）、`logrank`（`time`、`status`、`group`，报第二组对第一组的 Peto 对数风险比和 log-rank 的 p 值）、`rmst`（再加 `tau`，报限制性平均生存时间之差）。每个分析在真实表和每一份合成表上都跑，各份按 Raab、Nowok、Dibben 的规则合并（方差里加上生成模型本身的抽样误差）；一份当真实数据直接分析会低估方差。`population_quality` 读一张带 `copy` 列的表时，就把它当作它的各份。
+- **假阳性率**（`inference.nullCalibration`：`analysis` 写某个声明分析的名字，它要有 `target` 或 `group`，`replicates` 默认 100）：把真实表的臂标签打乱（这时没有真实效应），用同一个生成器再合成，跑这个分析，数它的区间排除“无效应”的次数。三个数一起报：直接在打乱后的真实表上（应该在 5% 附近）、把合成表的第 1 份当真实数据（常常明显高于 5%）、各份合并后（应该回到 5% 附近）；每个都是模拟得到的，带蒙特卡洛误差，不要只报其中一个。`population_quality` 只对 `generator.family` 是 `synthpop_cart` 的表能重做；别的工具生成的表，结果会说“重做不了”，照实告诉用户。
+- **逐条隐私**（`privacy`，要有留出集）：真实记录里“被认出来的风险”高于界限（`membershipRiskBound`，默认 0.75）的占比，旁边是没进过数据的留出记录里同样高风险的占比（碰巧会有的水平，两个要放在一起看）；最危险的那一类人是什么样（每类至少 10 人才显示，更少的不显示，永远不显示某个人的记录）；属性推断（`secrets` 不写就取前几列分类变量）比从没进过数据的人多猜对的部分。平均数会盖住少数被复制的记录：成员推断 AUC 看上去正常，不等于没有人被认出来。结果不说“匿名”或“安全”，只说测到了什么。
+
+## 疾病进展的人群曲线（`generate_progression`）
+
+用户问“这个入组规模下，对照组 18 个月进展多少，治疗把进展减慢 25% 功效多少”，且手里有已发表的进展模型参数时用。它是**人群层面**的：画的是一组人的平均病程和人与人之间的散布，不是对某个人的预测（在这类曲线出自的那个已发表模型里，只用基线预测个人的变化，R² 只有 0.16），结果页会先这样说，你转述时也先这样说。
+- 模型族从线性、指数、逻辑斯蒂（S 形）、Emax 里选一个，和论文用的一致；每个数字写成 `{ value, basis, citation }`，`basis` 是 `literature`（写出处）、`assumed`（用户的假设）或 `data`（用户自己的数据估的）。**没有出处的数字不要填，也不要替用户编**；问他参数来自哪篇，问不到就明说这是假设。不要自己带一个病种进来，平台里没有任何内置参数。
+- 治疗是“把病程的时钟拨慢”：`treatment.slowing` 是减慢的比例。分析是基线到某次随访的变化（`change`），或每个人的进展斜率（`slope`）；功效是模拟得到的，带蒙特卡洛误差，旁边有同一个检验的公式解，应当一致。`slowing` 为 0 时同一个数就是 I 类错误。
+- 第一次随访必须是时间 0。
