@@ -169,7 +169,7 @@ export class GeoSpine {
     const readings = readingRows.map((row) => ({
       groupId: String(currentOf.get(String(row.group_id)) ?? row.group_id), metricId: String(row.metric_id), roundId: String(row.round_id), date: text(row.day),
       kind: String(row.kind), k: num(row.numerator), n: num(row.denominator), value: num(row.value), status: String(row.status),
-      coverage: coverageKeyOf(coverages.get(String(row.round_id)), { methodVersion: text(row.method_version) }),
+      coverage: ["M-01", "M-01S", "M-02", "M-03", "M-04", "M-04C", "M-05", "M-06", "M-07", "M-11", "M-12", "M-13", "M-14", "M-15", "M-16", "M-17", "M-18", "M-19"].includes(String(row.metric_id)) ? null : coverageKeyOf(coverages.get(String(row.round_id)), { methodVersion: text(row.method_version) }),
     }));
 
     const poolReadings = (await this.#query(`SELECT DISTINCT ON (m.pool, m.metric_id) m.pool, m.metric_id, m.value, m.status, m.numerator, m.denominator, m.round_id
@@ -187,9 +187,10 @@ export class GeoSpine {
       ORDER BY m.scope, coalesce(m.pool, ''), m.variant, m.computed_at DESC`, [geoId])).rows;
     for (const row of netRows) {
       const key = row.scope === "project" ? `all|${row.variant}` : `${row.pool}|${row.variant}`;
-      const ok = row.status === "ok";
+      const unknownJudge = row.status === "ok" && ["M-01", "M-02", "M-03", "M-06", "M-15", "M-19"].includes(String(row.variant));
+      const ok = row.status === "ok" && !unknownJudge;
       arms[key] = { netEffect: ok ? num(row.value) : null, verdict: ok ? text(row.reason) : null, noiseBand: num(row.noise_band), comparable: ok,
-        reason: ok ? null : text(row.reason), roundId: text(row.round_id) };
+        reason: unknownJudge ? "judge_version_unrecorded" : ok ? null : text(row.reason), roundId: text(row.round_id) };
     }
 
     const errorRows = (await this.#query(`SELECT e.id, e.fingerprint, e.engine, e.question_id, e.first_snapshot_id, e.last_snapshot_id, e.statement, e.error_type,

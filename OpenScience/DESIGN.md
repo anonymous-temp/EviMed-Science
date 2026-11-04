@@ -1136,6 +1136,8 @@ GEO result pages show the resolved time, comparison, platform and question-group
 
 GEO errors with no recorded severity say “严重程度未知” in the claim list and detail. A mixed group retains the unknown label on its ungraded engine row; it does not inherit the group's recorded severity.
 
+A source's history compares citation counts using sampling coverage, but describes wrong-answer counts as recorded observations and does not calculate their change without the rounds' judgment-policy basis.
+
 ## Implementation proof
 
 The November 2 paper-and-ink application keeps v3.3/DS23 as its baseline. Brand intensity follows the touchpoint within the existing one-brand-moment budget; work controls and reading stay quiet. It preserves the 24px title, 280px sidebar, star-led memory overview and native-input-led home. Static navigation groups and existing-token surface hierarchy are introduced. The monitoring-page follow-up makes the GEO result composition own sibling spacing, separates metric navigation from folded data filters, gives findings a continuous reading surface and keeps automation scope/stop consequences visible while disclosing accepted settings. Quiet activity/needs presentations retain the existing slots and actions; default presentations elsewhere are preserved. A PageShell with a dock reserves a separate bottom row; its scroll reference and sticky-band measurements belong to the content viewport above that row, so the conversation input never obscures result targets. The implementation and the four real-native checks are recorded in `../docs/superpowers/plans/2026-11-02-paper-ink-visual-adoption.md`; the canonical page inventory remains `scripts/ops/page-templates.json`.

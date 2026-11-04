@@ -537,7 +537,7 @@ export class GeoService {
       points.push({
         date: rowDay(row, this.timeZone), value: num(row.value), n: num(row.denominator), k: num(row.numerator),
         // An engine's own series is of that engine alone: its rate does not move with which others answered.
-        ...(coverages ? { coverage: coverageKeyOf(coverages.get(String(row.round_id ?? "")), {
+        ...(coverages ? { coverage: ["M-01", "M-01S", "M-02", "M-03", "M-04", "M-04C", "M-05", "M-06", "M-07", "M-11", "M-12", "M-13", "M-14", "M-15", "M-16", "M-17", "M-18", "M-19"].includes(String(row.metric_id)) ? null : coverageKeyOf(coverages.get(String(row.round_id ?? "")), {
           engine: extra === "engine" ? text(row.engine) : null, methodVersion: text(row.method_version),
         }) } : {}),
       });
@@ -593,9 +593,8 @@ export class GeoService {
     const projects = await this.store.listProjectsFor(String(user.id));
     const ids = projects.map((project) => project.id);
     const headline = [GEO_VIEW_METRIC_IDS.gvi, GEO_VIEW_METRIC_IDS.mentionHeadline];
-    const [latest, series, names, alerts, targets, started, activeMeasurements] = await Promise.all([
+    const [latest, names, alerts, targets, started, activeMeasurements] = await Promise.all([
       this.#latestProjectMetrics(ids, headline),
-      this.#series(ids, [GEO_VIEW_METRIC_IDS.gvi]),
       this.#controlProjectNames(projects.map((project) => ({ userId: project.userId, projectId: project.projectId }))),
       this.#alerts(ids),
       Promise.all(projects.map((project) => this.store.latestTargets(project.id))),
@@ -606,7 +605,7 @@ export class GeoService {
     return {
       projects: projects.map((project, index) => {
         const metrics = latest.get(project.id) ?? new Map();
-        const trend = (series.get(project.id)?.get(GEO_VIEW_METRIC_IDS.gvi) ?? []).map((point) => point.value).filter((value) => value != null);
+        const trend = []; // Historical GVI rows do not record their judgment rubric.
         const alert = alerts.get(project.id) ?? { wrongOurs: 0, severe: 0, safety: 0, severity: null };
         return {
           id: project.id,
@@ -1049,7 +1048,7 @@ export class GeoService {
         const point = result.cells.find((candidate) => candidate.metricId === metricId && candidate.scope === (engine ? "engine" : "project") && candidate.engine === engine && candidate.variant === variant && !candidate.rival);
         return { date, roundId: roundIds.length === 1 ? roundIds[0] : null, roundIds, value: point?.value ?? null, n: point?.denominator ?? null, k: point?.numerator ?? null,
           members: point?.members ?? null, snapshotIds: point?.snapshotIds ?? [],
-          methodVersion: GEO_MEASUREMENT_METHOD_VERSION, coverage: geoSelectionCoverage(/** @type {any[]} */ (engine ? result.balance.deduped : result.balance.rows), version, engine) };
+          methodVersion: GEO_MEASUREMENT_METHOD_VERSION, coverage: ["M-01", "M-01S", "M-02", "M-03", "M-04", "M-04C", "M-05", "M-06", "M-07", "M-11", "M-12", "M-13", "M-14", "M-15", "M-16", "M-17", "M-18", "M-19"].includes(metricId) ? null : geoSelectionCoverage(/** @type {any[]} */ (engine ? result.balance.deduped : result.balance.rows), version, engine) };
       });
       if (kind === "project") view.overview.metrics = view.overview.metrics.map((/** @type {any} */ entry) => ({ ...entry,
         trend: history(GEO_OVERVIEW_METRICS.find((definition) => definition.key === entry.key)?.metricId ?? "") }));
@@ -2166,7 +2165,7 @@ export class GeoService {
         control: points("control"),
         // The band the net effect was judged against is its own row's, with whether it was measured or the default; a row written
         // before the band was kept shows mention's measured band, as it did, and says nothing about it.
-        netEffect: { ...geoCellFromRow(netRow),
+        netEffect: { ...geoCellFromRow(netRow), ...(netRow?.status === "ok" ? { value: null, numerator: null, denominator: null, status: "not_measurable", reason: "judge_version_unrecorded" } : {}),
           noiseBand: netRow?.noise_band != null ? num(netRow.noise_band) : noise.rows[0] ? num(noise.rows[0].value) : null,
           noiseMeasured: netRow?.noise_band != null ? netRow.noise_measured === true : null },
       },

@@ -1,3 +1,4 @@
+import { geoSignalDisplayBasis } from './geoSignals.mjs';
 /** Preserved business occurrences and current handling context have separate identities and clocks. */
 import {createHash} from 'node:crypto';
 import {geoMetricMembers,GEO_METRIC_LABELS_ZH,GEO_METRIC_UNITS} from '@evimed/domain';
@@ -260,7 +261,7 @@ export async function readGeoHistoryContext(store,project,selected,view,{service
   if(row.payload.kind==='group_changed'&&!groupCohortMatches(selected,{kind:row.payload.kind,cohorts})){excludedGroupEvents++;continue;}
   const targets=row.payload.kind==='source_changed'?await readGeoSignalTargets(documents,project,row):null;
   if(targets){preservedMembers+=targets.length;if(preservedMembers>max)throw new HttpError(422,'geo_read_filter_invalid','Selected historical targets exceed 20,000 members.');}
-  signals.push({...projected,basis:row.payload.basis,basisDigest:row.payload.basisDigest,eventVersion:row.payload.eventVersion,...(targets?{targets}:{}),...(Object.keys(cohorts).length?{cohorts}:{})});
+  signals.push({...projected,basis:geoSignalDisplayBasis(row),basisDigest:row.payload.basisDigest,eventVersion:row.payload.eventVersion,...(targets?{targets}:{}),...(Object.keys(cohorts).length?{cohorts}:{})});
  }
  if(view.viewId==='V15')return {errors,signals,executionAvailable,excludedGroupEvents};
  const publication=await readGeoPublicationContext(store,project);

@@ -565,7 +565,8 @@ describe("信源", () => {
     expect(heads[2]).toHaveTextContent("测量范围有变化，不与前一轮比较");
     expect(section.querySelector("[data-geo-history-break]")).toHaveTextContent("竖线两侧的轮次测量范围不同，不互相比较。");
     // The latest round against the one before it — the same coverage — is compared, by the one reading.
-    expect(section.querySelector("[data-geo-history-note]")).toHaveTextContent("较上一轮（9月21日）：被引用多 3 个，讲错的回答少 4 个");
+    expect(section.querySelector("[data-geo-history-note]")).toHaveTextContent("较上一轮（9月21日）：被引用多 3 个。本视图未提供各轮的判定口径，讲错回答不比较变化。");
+    expect(within(table).getByText("已记录讲错的回答")).toBeVisible();
   });
 
   it("states that the latest round is not compared when the engine set changed in it, and never writes a change across it", async () => {
@@ -1038,6 +1039,19 @@ describe("可见度", () => {
     expect(risk).toHaveTextContent("越低越好");
   });
 
+  it("keeps pool rival observations but does not connect readings with unknown judge versions", async () => {
+    client.getGeoMonitoring.mockResolvedValue({ ...monitoringFilled, rivals: [{ name: "竞品甲", entityKey: "rival", pool: "P2", label: "竞品甲 · P2",
+      points: [{ date: "2026-09-22", value: 10, n: 40, coverage: null }, { date: "2026-10-13", value: 20, n: 40, coverage: null }],
+      ownPoints: [{ date: "2026-09-22", value: 30, n: 40, coverage: null }, { date: "2026-10-13", value: 40, n: 40, coverage: null }] }] });
+    client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled);
+    renderTab(<VisibilityTab {...props()} />);
+    expect(await screen.findByText("判定版本或测量范围未知或不一致，各期读数不连线比较。")).toBeInTheDocument();
+    const table = screen.getByRole("table", { name: /竞品甲.*同口径读数/ });
+    expect(within(table).getByText("10%")).toBeInTheDocument();
+    expect(within(table).getByText("20%")).toBeInTheDocument();
+    expect(screen.getByLabelText(/竞品甲.*同口径趋势/).closest('figure')).toHaveAttribute('data-chart-connected','false');
+  });
+
   it("draws the rivals as grey lines on the mention trend, which is over their questions too (G15)", async () => {
     client.getGeoMonitoring.mockResolvedValue({
       ...monitoringFilled,
@@ -1286,4 +1300,36 @@ describe("a role that may not open the conversation", () => {
     await within(dialog).findByRole("region", { name: "讲错的回答" });
     expect(within(dialog).queryByRole("button", { name: "让 AI 处理这个信源" })).not.toBeInTheDocument();
   });
+});
+
+describe('判定口径未知的趋势', () => {
+  it.each([['总览', OverviewTab], ['可见度', VisibilityTab]])('%s 保留各期读数但不连线', async (_name, Tab) => {
+    client.getGeoMonitoring.mockResolvedValue({ ...monitoringFilled, series: [{ key: 'gvi', points: [
+      { date: '2026-09-22', value: 10, n: 40, coverage: null }, { date: '2026-10-13', value: 20, n: 40, coverage: null },
+    ] }] });
+    client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled);
+    renderTab(<Tab {...props()} />);
+    expect(await screen.findByText('判定版本或测量范围未知或不一致，各期读数不连线比较。')).toBeInTheDocument();
+    expect(screen.getByRole('img',{name:/趋势/}).closest('figure')).toHaveAttribute('data-chart-connected','false');
+    await userEvent.click(screen.getByText('查看各期读数'));
+    const history = screen.getByRole('list', { name: /历史读数/ });
+    expect(within(history).getByText(/2026-09-22：10/)).toBeInTheDocument();
+    expect(within(history).getByText(/2026-10-13：20/)).toBeInTheDocument();
+  });
+});
+
+it('keeps distinct same-day readings in the collapsed history without duplicate keys', async () => {
+  client.getGeoMonitoring.mockResolvedValue({ ...monitoringFilled, series: [{ key: 'gvi', points: [
+    { date: '2026-10-13', value: 10, n: 40, coverage: null }, { date: '2026-10-13', value: 20, n: 40, coverage: null },
+  ] }] });
+  client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled);
+  renderTab(<OverviewTab {...props()} />);
+  await screen.findByText('判定版本或测量范围未知或不一致，各期读数不连线比较。');
+  const details = screen.getByText('查看各期读数').closest('details');
+  expect(details).not.toHaveAttribute('open');
+  await userEvent.click(screen.getByText('查看各期读数'));
+  const history = screen.getByRole('list',{name:/历史读数/});
+  expect(within(history).getAllByRole('listitem')).toHaveLength(2);
+  expect(within(history).getByText(/2026-10-13：10/)).toBeInTheDocument();
+  expect(within(history).getByText(/2026-10-13：20/)).toBeInTheDocument();
 });

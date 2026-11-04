@@ -371,6 +371,12 @@ export async function netEffectRows(store, { project, round, controlGroups, engi
         rows.push({ ...where, value: null, numerator: null, denominator: null, status: "not_measurable", reason: "engine_version_unknown" });
         continue;
       }
+      // Stored arm cells do not carry the rubric used at calculation time. Rejudging
+      // facts later makes the current facts an unreliable provenance for those cells.
+      if (effect.status === "computed" && ["M-01", "M-02", "M-03", "M-06", "M-15", "M-19"].includes(metricId)) {
+        rows.push({ ...where, value: null, numerator: null, denominator: null, status: "not_measurable", reason: "judge_version_unrecorded" });
+        continue;
+      }
       // The verdict is only as good as the band it was judged against: the row keeps that band and whether it was measured
       // (a noise round exists for M-01, M-03 and M-10) or the default, and the page says which.
       const why = (/** @type {string} */ reason) => (effect.missing ?? []).some((entry) => entry.reason === reason);

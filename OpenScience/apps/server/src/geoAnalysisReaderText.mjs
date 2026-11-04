@@ -36,7 +36,7 @@ const REASONS = { answer_applicability_is_separate: "适用性另行判断", ans
   scheduled_context_not_observed: "计划内容未观察到", scheduled_observation_missing: "计划的观察缺失", unextracted_statement_count_unknown: "未抽取的陈述数未知",
   verification_basis_incomplete: "核实依据不完整", verification_basis_unavailable: "核实依据暂不可读", insufficient_sample: "样本不足",
   one_shot_descriptive: "一次性测量，不给置信区间", mixed_contract_descriptive: "测量约定不同，不给置信区间", metric_unavailable: "指标暂不可用",
-  group_metric_unavailable: "问题群指标暂不可用", measurement_method_changed: "测量方法已变", measurement_contract_changed: "测量约定已变",
+  judge_version_unknown_or_mixed: "判定版本未记录或不一致，不能比较", judge_version_changed: "判定版本已变，不能比较", judge_version_unrecorded: "历史计算未记录判定版本，不能比较", group_metric_unavailable: "问题群指标暂不可用", measurement_method_changed: "测量方法已变", measurement_contract_changed: "测量约定已变",
   no_common_cohort: "没有共同样本", separate_cohorts: "两段样本不同", previous_metric_absent: "对照区间没有这项指标", comparison_basis_changed: "比较依据已变",
   metric_members_changed: "指标成员已变", not_applicable: "不适用", no_selected_readings: "所选范围没有读数", source_update_needed: "来源有更新，需要复核",
   claim_expired: "结论已过有效期", claim_inactive: "结论已停用", card_withdrawn: "证据卡已撤回" };

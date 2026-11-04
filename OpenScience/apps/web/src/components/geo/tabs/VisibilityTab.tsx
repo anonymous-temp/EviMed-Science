@@ -1,4 +1,4 @@
-import { geoAutomationEnabled } from "@evimed/domain";
+import { geoAutomationEnabled, geoCoverageDifference } from "@evimed/domain";
 import { useLocation } from "react-router";
 import { useEffect, useMemo, useRef, type ReactNode } from "react";
 import {
@@ -241,6 +241,7 @@ function MetricTrend({
   error: ReadFailure | null;
 }) {
   const points = line?.points ?? [];
+  const comparablePoints = points.every((point,index) => index === 0 || statedValue(point) === null || statedValue(points[index-1]) === null || geoCoverageDifference(points[index-1].coverage,point.coverage).comparable);
   const unit: GeoUnit = metricUnit(line?.key);
   const name = metricName(line?.key) ?? GEO_METRIC_NAMES.gvi;
   const target = project.overview.metrics.find((metric) => metric.key === line?.key || GEO_METRIC_NAMES[metric.key] === name)?.target ?? null;
@@ -281,7 +282,8 @@ function MetricTrend({
         footnote={denominator}
         height={260}
       >
-        <TrendChart input={input} format={format} label={`${name}趋势`} height={260} integer bounds={[0, 100]} />
+        <TrendChart input={input} format={format} label={`${name}趋势`} height={260} integer bounds={[0, 100]} connectLines={comparablePoints} />
+        {!comparablePoints && <div><p>判定版本或测量范围未知或不一致，各期读数不连线比较。</p><details><summary>查看各期读数</summary><ol aria-label={`${name}历史读数`}>{points.map((point,index) => <li key={`${point.date}-${index}`}>{point.date}：{statedValue(point) === null ? "未知" : format(statedValue(point) as number)}</li>)}</ol></details></div>}
       </ChartCard>
     </div>
   );
@@ -536,9 +538,11 @@ function rivalTitle(rival: NonNullable<GeoMonitoring["rivals"]>[number]): string
 function PoolRivalTrends({project,rivals}:{project:GeoProject;rivals:GeoMonitoring["rivals"]}) {
  return <>{(rivals??[]).filter(rival=>rival.pool&&rival.ownPoints).map(rival=>{
   const points=rival.points,own=rival.ownPoints??[],labels=points.map(point=>monthDay(point.date)??point.date),known=points.some(point=>point.value!==null)||own.some(point=>point.value!==null);
+  const comparable = [points,own].every(series => series.every((point,index) => index === 0 || point.value == null || series[index-1].value == null || geoCoverageDifference(series[index-1].coverage,point.coverage).comparable));
   return <ChartCard key={`${rival.entityKey}-${rival.pool}`} title={rivalTitle(rival)} state={known?"content":"empty"} emptyText="这个问句池尚无足够的可测回答；历史缺席保留未知。">
-   <TrendChart label={`${rivalTitle(rival)} 同口径趋势`} input={{labels,own:{name:project.product?.brandName??project.name,values:points.map(point=>own.find(item=>item.date===point.date)?.value??null)},rivals:[{name:rival.name,values:points.map(point=>point.value)}]}}/>
-   <DataTable label={`${rivalTitle(rival)} 同口径读数`} rows={points} rowKey={point=>point.date} columns={[
+   <TrendChart label={`${rivalTitle(rival)} 同口径趋势`} connectLines={comparable} input={{labels,own:{name:project.product?.brandName??project.name,values:points.map(point=>own.find(item=>item.date===point.date)?.value??null)},rivals:[{name:rival.name,values:points.map(point=>point.value)}]}}/>
+   {!comparable && <p className="text-ui text-text-2">判定版本或测量范围未知或不一致，各期读数不连线比较。</p>}
+   <DataTable label={`${rivalTitle(rival)} 同口径读数`} rows={points.map((point,index)=>({...point, rowId:`${point.date}-${index}`}))} rowKey={point=>point.rowId} columns={[
     {key:"date",header:"实测日期",rowHeader:true,cell:point=>point.date},
     {key:"own",header:"本品提及率",cell:point=>{const ownPoint=own.find(item=>item.date===point.date);return ownPoint?.value==null?"未知或样本不足":`${ownPoint.value}%`; }},
     {key:"rival",header:"竞品提及率",cell:point=>point.value==null?"未知或样本不足":`${point.value}%`},

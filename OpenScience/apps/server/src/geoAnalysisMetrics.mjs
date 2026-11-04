@@ -343,10 +343,16 @@ export function buildGeoRivalAnalysis(selected, view, context = {}) {
         ];
         return [cellOf(row, 'current', row.dimensions.own, row.dimensions.entityLabel)];
     });
+    let unknownRivalTrend = false;
     const series = selectedRows.flatMap(row => {
         if (row.dimensions.own && row.dimensions.entityKind === 'brand' && hasBrandRival) return [];
         const matching = points.filter(point => point.dimensions.entityKey === row.dimensions.entityKey && point.dimensions.pool === row.dimensions.pool);
         const paired = !row.dimensions.own && row.dimensions.entityKind === 'brand';
+        const relevant = selected.rows.filter(item => item.pool === row.dimensions.pool && item.surface?.mode !== 'inclusion' && (item.status === 'valid' || item.status === 'refusal'));
+        const versions = new Set(relevant.filter(item => item.status === 'valid' || item.facts).map(item => item.facts?.judgedAt && item.facts?.checks?.judgementCoverage?.status === 'complete' && item.facts?.judgeExtract?.rubricVersion || null));
+        const comparable = relevant.length > 0 && versions.size <= 1 && !versions.has(null);
+        if (!comparable && matching.length > 1) unknownRivalTrend = true;
+        for (const point of matching) point.dimensions.trendComparable = comparable;
         return (paired ? ['pairedOwn', 'current'] : ['current']).map(columnKey => ({
             key: hash([row.dimensions.entityKey, row.dimensions.pool, columnKey]),
             label: `${columnKey === 'pairedOwn' ? `${ownName}（同一合资格回答）` : row.dimensions.entityLabel} · ${poolName(row.dimensions.pool)}`,
@@ -354,17 +360,17 @@ export function buildGeoRivalAnalysis(selected, view, context = {}) {
             comparisonKey: paired ? comparisonKey(row) : null,
             comparisonLabel: paired ? `${row.dimensions.entityLabel} · ${row.dimensions.pool}` : null,
             unit: row.values[columnKey].unit,
-            values: matching.map(point => point.values[columnKey].state === 'known' ? point.values[columnKey].value : null),
+            values: matching.map(point => comparable && point.values[columnKey].state === 'known' ? point.values[columnKey].value : null),
         }));
     });
-    return { definition: { metricId: view.metricId, unit: 'percent', methodVersion: selected.selection.methodVersion, dataType: 'registered_competitor_metrics', countingRule: view.metricId === 'M-17' ? '所选回答与已登记品牌集合的相对提及声量份额；仅用于明确选择该指标并记录实体集合的测量，不代表市场份额。' : '各问句池分别计算已登记竞品的阳性提及回答 / 合资格回答，本品使用相同合资格回答；通用名独立观测，不汇总为整体竞品指标。', denominatorRule: '按原有领域指标的去重、平衡、适用性和样本要求计算。未保存登记依据的历史缺席保持未知；每个池、日期和实际轮次独立计算。' }, contextualBasis: [{ kind: 'registered_entities', id: 'project', version: null, digest: hash({ product, competitors, rounds: selected.rounds.map(round => [round.id, round.ref?.evaluationBasis, round.surface?.measurementContract]) }), temporalBasis: 'recorded_when_available_current_context_otherwise' }], columns: [{ key: 'current', label: view.metricId === 'M-17' ? '相对提及份额 / 通用名观测（回答）' : '提及率 / 通用名观测', type: 'number' }, { key: 'pairedOwn', label: '同一合资格回答中的本品', type: 'number' }, { key: 'mentioned', label: '阳性提及回答', type: 'number' }, { key: 'eligible', label: '登记依据完整的回答', type: 'number' }, { key: 'unknown', label: '历史依据未知的回答', type: 'number' }], rows, chart: { kind: 'rivals', labels, series, cells: chartCells }, memberItems, dependencies: [selected.rows, selected.metricOptions, selected.rounds], availability: { status: rows.length ? 'ready' : 'empty', reasons: rows.some(row => row.values.unknown.value > 0) ? ['rival_history_unknown'] : [], remedy: null } };
+    return { definition: { metricId: view.metricId, unit: 'percent', methodVersion: selected.selection.methodVersion, dataType: 'registered_competitor_metrics', countingRule: view.metricId === 'M-17' ? '所选回答与已登记品牌集合的相对提及声量份额；仅用于明确选择该指标并记录实体集合的测量，不代表市场份额。' : '各问句池分别计算已登记竞品的阳性提及回答 / 合资格回答，本品使用相同合资格回答；通用名独立观测，不汇总为整体竞品指标。', denominatorRule: '按原有领域指标的去重、平衡、适用性和样本要求计算。未保存登记依据的历史缺席保持未知；每个池、日期和实际轮次独立计算。' }, contextualBasis: [{ kind: 'registered_entities', id: 'project', version: null, digest: hash({ product, competitors, rounds: selected.rounds.map(round => [round.id, round.ref?.evaluationBasis, round.surface?.measurementContract]) }), temporalBasis: 'recorded_when_available_current_context_otherwise' }], columns: [{ key: 'current', label: view.metricId === 'M-17' ? '相对提及份额 / 通用名观测（回答）' : '提及率 / 通用名观测', type: 'number' }, { key: 'pairedOwn', label: '同一合资格回答中的本品', type: 'number' }, { key: 'mentioned', label: '阳性提及回答', type: 'number' }, { key: 'eligible', label: '登记依据完整的回答', type: 'number' }, { key: 'unknown', label: '历史依据未知的回答', type: 'number' }], rows, chart: { kind: 'rivals', labels, series, cells: chartCells }, memberItems, dependencies: [selected.rows, selected.metricOptions, selected.rounds], availability: { status: rows.length ? 'ready' : 'empty', reasons: [...(rows.some(row => row.values.unknown.value > 0) ? ['rival_history_unknown'] : []), ...(unknownRivalTrend ? ['judge_version_unknown_or_mixed'] : [])], remedy: null } };
 }
 /** Compatibility projection has no arithmetic: each own point is the rival's exact eligible-cohort domain reading. */
 export function geoRivalMonitoringRows(analysis) {
     const keys = [...new Set(analysis.rows.filter(row => !row.dimensions.own && row.dimensions.entityKind === 'brand').map(row => documentExportDigest([row.dimensions.entityKey, row.dimensions.pool])))];
     return keys.map(key => {
         const rows = analysis.rows.filter(row => documentExportDigest([row.dimensions.entityKey, row.dimensions.pool]) === key && row.dimensions.period === 'day'), summary = analysis.rows.find(row => documentExportDigest([row.dimensions.entityKey, row.dimensions.pool]) === key);
-        const point = (row, column) => { const value = row.values[column]; return { date: row.dimensions.date, value: value.state === 'known' ? value.value : null, n: value.metric?.denominator ?? null, k: value.metric?.numerator ?? null, coverage: documentExportDigest([row.dimensions.pool, row.dimensions.registryBasis]), status: value.state, analysisMembers: value.members ?? null }; };
+        const point = (row, column) => { const value = row.values[column]; return { date: row.dimensions.date, value: value.state === 'known' ? value.value : null, n: value.metric?.denominator ?? null, k: value.metric?.numerator ?? null, coverage: row.dimensions.trendComparable === false ? null : documentExportDigest([row.dimensions.pool, row.dimensions.registryBasis]), status: value.state, analysisMembers: value.members ?? null }; };
         return { name: summary.dimensions.entityName, label: `${summary.dimensions.entityLabel??summary.dimensions.entityName} · ${poolName(summary.dimensions.pool)}`, entityKey: summary.dimensions.entityKey, pool: summary.dimensions.pool, points: rows.map(row => point(row, 'current')), ownPoints: rows.map(row => point(row, 'pairedOwn')), unknownTimeCount: analysis.selection.timeCoverage?.unknownTime ?? 0 };
     });
 }

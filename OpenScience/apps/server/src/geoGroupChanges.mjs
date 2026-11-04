@@ -160,7 +160,7 @@ export function groupChangeEvents({previous,current,commonKeys,excluded = null})
     }
     const descriptor=selected=>({id:selected.rounds[0].id,completedAt:selected.rounds[0].completed_at??(selected.rounds[0].finished_at==null?null:new Date(selected.rounds[0].finished_at).toISOString()),questionVersion:version});
     const label=current.questions.find(q=>q.group_id===group.groupId)?.group_name??null;
-    const basis={policy:GROUP_CHANGE_POLICY,basisObservation:'at_discovery',roundOrder:'finished_at,id',group:{id:group.groupId,label,pool:group.pool,questionVersion:version},
+    const basis={judgeComparability:'recorded-rubric-v1',policy:GROUP_CHANGE_POLICY,basisObservation:'at_discovery',roundOrder:'finished_at,id',group:{id:group.groupId,label,pool:group.pool,questionVersion:version},
       previous:descriptor(previous),current:descriptor(current),methods:{before:beforeBasis,after:afterBasis},common:{count:commonKeys.length,digest:hash(commonKeys)},excluded,cells,sides};
     const sample=side=>sides[side].targets;
     const eventVersion=hash([GROUP_CHANGE_POLICY.policyVersion,basis.previous.id,basis.current.id,objectKey,basis.methods,sample('before'),sample('after'),cells]);

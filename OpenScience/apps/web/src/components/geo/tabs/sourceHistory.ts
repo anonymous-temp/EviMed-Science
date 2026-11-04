@@ -30,9 +30,9 @@ function countWord(delta: number, flat: boolean): string {
 
 /**
  * A source's counts across the last few rounds (R14 N-11), laid out to be read as a small table of rounds — and compared only
- * where the rounds were measured over the same thing (N-4): a column whose coverage differs from the one before it is marked, and
- * the sentence under the table compares the latest round with the previous one by the same `readingChange` every page uses, or
- * says that it does not. Null where there is no trend to show: fewer than two rounds, or a site no round cited.
+ * where the rounds were measured over the same thing (N-4). Citation counts can be compared using the sampling coverage; the
+ * source-history response has no per-round judgment policy, so the observed wrong counts remain separate readings without a delta.
+ * Null where there is no trend to show: fewer than two rounds, or a site no round cited.
  */
 export function sourceHistoryModel(history: ReadonlyArray<GeoSourceHistoryPoint> | null | undefined): SourceHistoryModel | null {
   const rounds = (Array.isArray(history) ? history : []).filter((point) => point && point.roundId);
@@ -44,14 +44,11 @@ export function sourceHistoryModel(history: ReadonlyArray<GeoSourceHistoryPoint>
     wrongOurs: point.wrongOurs,
     breakBefore: index > 0 && !geoCoverageDifference(rounds[index - 1].coverage, point.coverage).comparable,
   }));
-  const series = (pick: (point: GeoSourceHistoryPoint) => number) => rounds.map((point) => ({ date: point.sampleDate ?? undefined, value: pick(point), coverage: point.coverage }));
-  const cited = readingChange(series((point) => point.cited));
-  const wrong = readingChange(series((point) => point.wrongOurs));
-  const notice = coverageNotice(cited) ?? coverageNotice(wrong);
+  const cited = readingChange(rounds.map((point) => ({ date: point.sampleDate ?? undefined, value: point.cited, coverage: point.coverage })));
+  const notice = coverageNotice(cited);
   const previous = monthDay(cited.from);
-  const sentence = notice
-    ?? (cited.delta !== null && wrong.delta !== null
-      ? `较上一轮${previous ? `（${previous}）` : ""}：被引用${countWord(cited.delta, cited.flat)}，讲错的回答${countWord(wrong.delta, wrong.flat)}`
-      : null);
+  const citationChange = notice ?? (cited.delta !== null
+    ? `较上一轮${previous ? `（${previous}）` : ""}：被引用${countWord(cited.delta, cited.flat)}` : null);
+  const sentence = [citationChange, "本视图未提供各轮的判定口径，讲错回答不比较变化"].filter(Boolean).join("。") + "。";
   return { columns, broken: columns.some((column) => column.breakBefore), sentence };
 }

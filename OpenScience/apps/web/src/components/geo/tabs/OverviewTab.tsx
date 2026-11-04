@@ -1,3 +1,4 @@
+import { geoCoverageDifference } from '@evimed/domain';
 import { Note } from "@/components/ui/Note";
 import { useGeoFrame } from "../geoFrame";
 import { GeoAnalysisEntry } from "../GeoAnalysisEntry";
@@ -140,6 +141,7 @@ function TrendCard({
     ?? null;
   const points = Array.isArray(series?.points) ? series.points : [];
   const dates = points.map((point) => point.date);
+  const comparablePoints = points.every((point,index) => index === 0 || statedValue(point) === null || statedValue(points[index-1]) === null || geoCoverageDifference(points[index-1].coverage,point.coverage).comparable);
   const metric = project.overview.metrics.find((item) => item.key === "gvi") ?? null;
   const next = nextMeasurement(project, watch);
   const input = useMemo(() => ({
@@ -170,7 +172,8 @@ function TrendCard({
       height={240}
       className={className}
     >
-      <TrendChart input={input} label={`${GEO_METRIC_NAMES.gvi}趋势`} integer bounds={[0, 100]} />
+      <TrendChart input={input} label={`${GEO_METRIC_NAMES.gvi}趋势`} integer bounds={[0, 100]} connectLines={comparablePoints} />
+      {!comparablePoints && <div><p>判定版本或测量范围未知或不一致，各期读数不连线比较。</p><details><summary>查看各期读数</summary><ol aria-label={`${GEO_METRIC_NAMES.gvi}历史读数`}>{points.map((point,index) => <li key={`${point.date}-${index}`}>{point.date}：{statedValue(point) === null ? "未知" : formatGeoValue(statedValue(point) as number, "index")}</li>)}</ol></details></div>}
     </ChartCard>
   );
 }

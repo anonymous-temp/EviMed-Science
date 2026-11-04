@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { groupChangeEvents, GROUP_CHANGE_POLICY } from '../src/geoGroupChanges.mjs';
 import { GEO_MEASUREMENT_METHOD_VERSION } from '@evimed/domain';
-const row = (snapshotId, n) => ({snapshotId,questionId:`q${n}`,groupId:'g',pool:'P2',engine:'deepseek',repeatIndex:0,surface:{mode:'web'},status:'valid',facts:{mentionsOurs:true}});
+const row = (snapshotId, n) => ({snapshotId,questionId:`q${n}`,groupId:'g',pool:'P2',engine:'deepseek',repeatIndex:0,surface:{mode:'web'},status:'valid',facts:{mentionsOurs:true,judgedAt:'2026-10-01',checks:{judgementCoverage:{status:'complete'}},judgeExtract:{rubricVersion:'v1'}}});
 function selection(id, value) {
  const rows=Array.from({length:20},(_,n)=>row(`${id}-${n}`,n));
  const cell={metricId:'M-01',scope:'group',groupId:'g',pool:'P2',engine:null,arm:null,variant:null,rival:null,status:'ok',value,numerator:value/5,denominator:20,unit:'percent'};
@@ -51,4 +51,23 @@ test('a valid measurement agreement is enforced for metrics, actual engines and 
   selected.selection.comparability.samplingContracts[0].repeats=2;selected.rows.push(...selected.rows.map(row=>({...row,snapshotId:row.snapshotId+'-repeat',repeatIndex:1})));
  }
  assert.equal(groupChangeEvents(complete).events.length,1);
+});
+
+test('group changes do not report different or unknown judge versions',()=>{
+ const previous=selection('a',20),current=selection('b',40);
+ const pair={previous,current,commonKeys:previous.rows.map(r=>JSON.stringify([r.questionId,r.engine,'web']))};
+ current.rows[0].facts.judgeExtract.rubricVersion='v2';
+ assert.equal(groupChangeEvents(pair).events.length,0);
+ current.rows[0].facts.judgeExtract.rubricVersion=null;
+ assert.equal(groupChangeEvents(pair).events.length,0);
+});
+test('legacy group signals preserve observations but remove unsupported changes', async () => {
+ const {geoLegacyGroupSignal,geoSignalDisplayBasis} = await import('../src/geoSignals.mjs');
+ const row={payload:{kind:'group_changed',basis:{cells:[{metricId:'M-01',delta:20,before:{value:10},after:{value:30}}]}}};
+ assert.equal(geoLegacyGroupSignal(row),true);
+ const shown=geoSignalDisplayBasis(row);
+ assert.equal(shown.cells[0].delta,null);
+ assert.equal(shown.cells[0].before.value,10);
+ assert.equal(row.payload.basis.cells[0].delta,20);
+ assert.equal(geoLegacyGroupSignal({payload:{kind:'group_changed',basis:{judgeComparability:'recorded-rubric-v1'}}}),false);
 });

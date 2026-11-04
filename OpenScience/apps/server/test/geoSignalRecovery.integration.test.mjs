@@ -163,3 +163,26 @@ test('legacy and signal producers share the first text-change notice, preserve r
   assert.equal((await database.query('SELECT count(*)::integer AS n FROM evimed_inbox.notifications')).rows[0].n, 8);
   assert.equal(sent.length, 8);
 });
+
+test('legacy group signal remains reviewable, never renotified or upgraded by replay', options, async t => {
+  const { makeProject, signals, user, documents } = await fixture(t);
+  const project = await makeProject('legacy-group');
+  let notifications = 0; signals.notify = async () => { notifications++; };
+  const event = { kind:'group_changed', objectKey:'g', eventVersion:'old', title:'观测变化', observedAt:'2026-10-01T00:00:00Z',
+    basis:{ cells:[{key:'metric',metricId:'M-01',delta:20,before:{value:10},after:{value:30}}], sides:{before:{targets:[]},after:{targets:[]}} } };
+  const first = await signals.record(project,event);
+  const replay = await signals.record(project,{...event,basis:{...event.basis,judgeComparability:'recorded-rubric-v1'}});
+  assert.equal(replay.id,first.id);
+  assert.equal(replay.payload.basis.judgeComparability,undefined);
+  await signals.deliver(project,replay);
+  assert.equal(notifications,0);
+  const list = await signals.list(user,project.id);
+  assert.equal(list.items[0].title,'历史观测待核实');
+  const detail = await signals.detail(user,project.id,first.id);
+  assert.equal(detail.basis.cells[0].delta,null);
+  assert.equal(detail.basis.cells[0].before.value,10);
+  const staged = await signals.stageInput(project,{signalId:first.id,expectedSignalRevision:first.revision,intent:'analyse'});
+  assert.equal(staged.basis.event.cells[0].delta,null);
+  assert.match(staged.draft,/口径未知/);
+  assert.equal((await documents.get(user.id,'geo-signal',first.id)).payload.basis.cells[0].delta,20);
+});

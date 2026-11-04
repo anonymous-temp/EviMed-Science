@@ -1,5 +1,5 @@
 /** Shared observational comparison basis; the presenter never subtracts incompatible readings. */
-import { computeGvi, geoMetricMembers, documentExportDigest } from '@evimed/domain';
+import { computeGvi, geoMetricMembers, geoCellRows, documentExportDigest } from '@evimed/domain';
 export const geoComparisonKey = row => JSON.stringify([row.questionId, row.engine, row.surface?.mode ?? null]);
 export const geoComparableAnswer = row => Boolean(row.questionId) && (row.status === 'refusal' || row.status === 'valid' && Boolean(row.facts));
 export const geoComparisonCellKey = cell => documentExportDigest([cell.scope, cell.metricId, cell.pool, cell.engine, cell.groupId, cell.arm, cell.variant, cell.rival]);
@@ -25,6 +25,33 @@ function compositeBasis(selected, metric) {
             })) };
     });
 }
+// Medical judgments are comparable only when every contributing judgment has one recorded rubric.
+const medicalMetrics = new Set(['M-01', 'M-01S', 'M-02', 'M-03', 'M-04', 'M-04C', 'M-05', 'M-06', 'M-07', 'M-11', 'M-12', 'M-13', 'M-14', 'M-15', 'M-16', 'M-17', 'M-18']);
+function rubricVersions(selected, cell) {
+    let metrics = medicalMetrics.has(cell.metricId) ? [cell] : [];
+    if (cell.metricId === 'M-19') {
+        const basis = compositeBasis(selected, cell) ?? [];
+        metrics = basis.flatMap(({ pool, dimensions }) => dimensions.flatMap(({ ingredients }) => ingredients
+            .filter(({ metricId }) => medicalMetrics.has(metricId))
+            .map(({ metricId }) => selected.computed.cells.find(candidate => candidate.metricId === metricId && candidate.pool === pool && candidate.scope === (cell.arm ? 'arm' : 'pool') && candidate.arm === cell.arm && !candidate.engine && !candidate.variant && !candidate.rival)).filter(Boolean)));
+    }
+    // A verdict can change eligibility itself; inspect all valid answers in the cell, not just its current denominator.
+    const rows = metrics.flatMap(metric => {
+        const input = metric.scope === 'engine' || metric.scope === 'pool_engine' ? selected.computed.balance.deduped : selected.computed.balance.rows;
+        return geoCellRows(input, metric, selected.metricOptions);
+    });
+    const eligible = /** @type {any[]} */ (rows).filter(row => row.status === 'valid' || row.status === 'refusal');
+    const judged = eligible.filter(row => row.surface?.mode !== 'inclusion' && (row.status === 'valid' || row.facts));
+    const versions = [...new Set(judged.map(row => row.facts?.judgedAt && row.facts?.checks?.judgementCoverage?.status === 'complete' && typeof row.facts?.judgeExtract?.rubricVersion === 'string' && row.facts.judgeExtract.rubricVersion.trim() || null))];
+    if (!eligible.length) versions.push(null);
+    return { applies: metrics.length > 0, versions };
+}
+function rubricMismatch(left, right, cell, old) {
+    const a = rubricVersions(left, cell), b = rubricVersions(right, old);
+    if (!a.applies && !b.applies) return null;
+    if (a.versions.length > 1 || b.versions.length > 1 || a.versions.includes(null) || b.versions.includes(null)) return 'judge_version_unknown_or_mixed';
+    return !a.versions.length || !b.versions.length || a.versions[0] === b.versions[0] ? null : 'judge_version_changed';
+}
 const contractKeys = selected => [...new Set((selected.selection.comparability?.samplingContracts ?? [null]).map(contract => documentExportDigest(contract ? { samplingMode: contract.samplingMode, repeats: contract.repeats, sourceBasis: contract.sourceBasis, metricIds: contract.metricIds } : null)))].sort();
 export function geoComparisonContractsMatch(left, right) {
     return contractKeys(left).length === 1 && documentExportDigest(contractKeys(left)) === documentExportDigest(contractKeys(right));
@@ -37,7 +64,7 @@ export function compareGeoMetricCohorts(left, right, { mode, commonCount }) {
     const contractMatches = geoComparisonContractsMatch(left, right);
     return left.computed.cells.map(cell => {
         const old = before.get(geoComparisonCellKey(cell));
-        const reason = mode !== 'common' ? 'separate_cohorts' : !commonCount ? 'no_common_cohort' : !methodMatches ? 'measurement_method_changed' : !contractMatches ? 'measurement_contract_changed' : !old ? 'previous_metric_absent' : documentExportDigest(compositeBasis(left, cell)) !== documentExportDigest(compositeBasis(right, old)) ? 'comparison_basis_changed' : documentExportDigest(memberKeys(left, cell)) !== documentExportDigest(memberKeys(right, old)) ? 'metric_members_changed' : null;
+        const reason = mode !== 'common' ? 'separate_cohorts' : !commonCount ? 'no_common_cohort' : !methodMatches ? 'measurement_method_changed' : !contractMatches ? 'measurement_contract_changed' : !old ? 'previous_metric_absent' : documentExportDigest(compositeBasis(left, cell)) !== documentExportDigest(compositeBasis(right, old)) ? 'comparison_basis_changed' : documentExportDigest(memberKeys(left, cell)) !== documentExportDigest(memberKeys(right, old)) ? 'metric_members_changed' : rubricMismatch(left, right, cell, old);
         const comparable = reason === null;
         const measurable = comparable && cell.status === 'ok' && old?.status === 'ok' && cell.value != null && old.value != null;
         return { metricId: cell.metricId, scope: cell.scope, pool: cell.pool, engine: cell.engine, groupId: cell.groupId, arm: cell.arm, variant: cell.variant, rival: cell.rival, current: cell, previous: old ?? null, comparable, reason,

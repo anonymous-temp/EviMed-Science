@@ -103,7 +103,7 @@ function registeredRivalView(refusals = false): GeoAnalysisView {
   const rows = ['old', 'now'].flatMap(round => Array.from({ length: 50 }, (_, index) => ({
     snapshotId: `${round}-${index}`, questionId: `q${index}`, engine: 'deepseek', roundId: round, roundKind: 'baseline', repeatIndex: 0,
     status: 'valid', pool: 'P2', groupId: 'g', askedAt: round === 'old' ? '2026-10-01T00:00:00Z' : '2026-10-02T00:00:00Z', surface: { mode: 'web' },
-    facts: { registryKey: registryKey(brandRegistry(product, round === 'old' ? [] : competitors), owned), brands: [{ name: 'Ours', ours: true, count: round === 'old' || index < 10 ? 1 : 0 }, ...(round === 'now' ? [{ name: 'Rival', competitor: true, count: index < 20 ? 1 : 0 }] : [])], checks: { judgementCoverage: { status: 'complete' } } },
+    facts: { judgedAt: '2026-10-01', judgeExtract: { rubricVersion: 'v1' }, registryKey: registryKey(brandRegistry(product, round === 'old' ? [] : competitors), owned), brands: [{ name: 'Ours', ours: true, count: round === 'old' || index < 10 ? 1 : 0 }, ...(round === 'now' ? [{ name: 'Rival', competitor: true, count: index < 20 ? 1 : 0 }] : [])], checks: { judgementCoverage: { status: 'complete' } } },
   })));
   if (refusals) {
     rows.splice(0, 50);

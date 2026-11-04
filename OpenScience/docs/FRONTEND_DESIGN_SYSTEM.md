@@ -222,6 +222,8 @@ Owner **B**. DS23 governs how the module's work is presented. The maintained pro
 
 An error without a recorded severity is labelled as unknown in its list and detail, never as a low severity or as proof of no risk. When grouped engines include both known and unknown severities, the individual ungraded row remains distinguishable from the group's known severity.
 
+In source history, citation counts may be compared when their sampling coverage permits it. Recorded wrong-answer counts remain individual observations until the source-history response can establish the judgment policy for each round; the citation coverage alone does not authorize a wrong-answer change.
+
 ## DS16 VCR product-policy boundary
 
 Owner **B**. DS23 governs how the module's work is presented; the reset's six result destinations take the place of a step rail. The [October 25 AI-native reset](../../docs/superpowers/specs/2026-10-25-vcr-ai-native-product-reset.md) owns task scope, retained scientific objects, recruitment removals and conversation-first entry. Its dated UI handoff preserves the original v3 requirements. Apply shared numeric, provenance, keyboard and result-version rules here. AT08/15/25 and the reset's scientific journeys must pass; a design-document revision does not implement the reset.
