@@ -1341,6 +1341,57 @@ test("a workspace-file read is held to the workspace on both transports, and the
   assert.equal(f.received.filter((frame) => frame.type === "open").length, inside.length);
 });
 
+test("a scheduled task from the page is forwarded, and one that would open its conversations outside this project is refused, on both transports", { timeout: 5000 }, async (t) => {
+  // The kernel's automation tasks are the product's scheduled tasks (2026-11-04), so `schedule/*` reaches the runtime. `target.create`
+  // names where a task's conversations open; the proxy holds it to this workspace and this composition (`runtimeUiScheduleRefusal`).
+  const f = await fixture(t);
+  const c = f.connect({ Origin: SHELL_ORIGIN });
+  assert.equal(await c.opened, 101);
+  const arrived = [];
+  f.manager.proxy = async (req, res) => { arrived.push([new URL(req.url, "http://ui.local").pathname, req.__openScienceProxyBody?.toString("utf8") ?? null]); res.writeHead(200); res.end("{}"); };
+  const root = f.manager.runtimeWorkspaceRoot(await f.store.requireProject(f.user, "default"));
+  const call = (endpoint, args) => fetch(`${f.base}/api/${endpoint}`, {
+    method: "POST", headers: { Cookie: f.cookie, Origin: UI_ORIGIN, "Content-Type": "application/json" },
+    body: JSON.stringify({ type: "client-request", rpcId: "r1", method: endpoint, payload: { args } }),
+  });
+  const task = (target) => ({ request: { title: "t", prompt: "p", timing: { kind: "rrule", rrule: "FREQ=DAILY" }, ...(target ? { target } : {}) } });
+  const inside = [
+    ["schedule/list", { request: { limit: 500 } }],
+    ["schedule/create", task()],
+    ["schedule/create", task({ kind: "new", create: {} })],
+    ["schedule/create", task({ kind: "new_once", create: { cwd: root, agentPreset: "evimed-universal" } })],
+    ["schedule/create", task({ kind: "new", create: { cwd: "analysis" } })],
+    ["schedule/edit", { request: { id: "sch_1", action: "update", patch: { active: false } } }],
+    ["schedule/edit", { request: { id: "sch_1", action: "delete" } }],
+  ];
+  for (const [index, [endpoint, args]] of inside.entries()) {
+    assert.equal((await call(endpoint, args)).status, 200, `${endpoint} ${JSON.stringify(args)} is forwarded`);
+    c.send(open(`in${index}`, endpoint, args));
+    assert.deepEqual((await c.next()).value, { reached: endpoint });
+  }
+  assert.equal(arrived.length, inside.length);
+  assert.ok(arrived.filter(([pathname]) => /schedule\/(create|edit)$/.test(pathname)).every(([, body]) => body && body.includes("request")), "the body read for the check is the body forwarded");
+  const outside = [
+    ["schedule/create", task({ kind: "new", create: { cwd: "/etc" } })],
+    ["schedule/create", task({ kind: "new", create: { cwd: `${root}/../other` } })],
+    ["schedule/create", task({ kind: "new_once", create: { agentPreset: "default" } })],
+    ["schedule/create", task({ kind: "new", create: { cwd: root, agentPreset: "other" } })],
+    ["schedule/edit", { request: { id: "sch_1", action: "update", patch: { target: { kind: "new", create: { cwd: "/" } } } } }],
+    ["schedule/edit", { request: { id: "sch_1", action: "update", patch: { target: { kind: "new", create: { agentPreset: "default" } } } } }],
+    ["schedule/create", {}],
+    ["schedule/edit", { request: "not an object" }],
+  ];
+  for (const [index, [endpoint, args]] of outside.entries()) {
+    const response = await call(endpoint, args);
+    assert.equal(response.status, 403, `${endpoint} ${JSON.stringify(args)}`);
+    assert.equal((await response.json()).error?.code, "runtime_ui_method_denied", endpoint);
+    c.send(open(`out${index}`, endpoint, args));
+    assert.equal((await c.next()).error?.code, "runtime_ui_method_denied", endpoint);
+    assert.equal((await c.next()).type, "end");
+  }
+  assert.equal(arrived.length, inside.length, "nothing that names a destination outside the project reached the runtime");
+});
+
 test("a file opened in the kernel's own file panel is noted as opened, on both transports, with a workspace-relative path; a listing, a stat, an embedded asset and a refused path are not", { timeout: 5000 }, async (t) => {
   // The use signal of the learning loop (`LearningEvidence.noteFileUse`): the researcher reading a file a run delivered. An observation, never a check.
   const noted = [];
