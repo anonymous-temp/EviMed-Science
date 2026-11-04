@@ -3,9 +3,17 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createWebApiApp } from '../../apps/server/src/server.mjs';
 import { installBudgetGuard } from './budget-guard.mjs';
+import { authorizationBinding } from './n2c2-preflight.mjs';
 import { closedCorpusFetch, installClosedCorpusFence, runtimeSocketFence } from './container-boundary.mjs';
 
 const launch = JSON.parse(await fs.readFile('/audit/launch.json'));
+const instance = randomUUID();
+let protectedAuthorization=null;
+if(launch.n2c2Authorization){
+  const checked=await authorizationBinding('/audit/n2c2-authorization.json',launch.name,{verifyHostSources:false,controllerFile:true});
+  if(checked.sha256!==launch.n2c2Authorization.bindingSha256)throw new Error('n2c2 launch authorization differs');
+  protectedAuthorization={...launch.n2c2Authorization,instance};
+}
 const configFile = '/audit/collection.json';
 const budgetFile = '/budget/budget.json';
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -49,7 +57,9 @@ const app = createWebApiApp({
   approvalMode: 'never', maxProjectsPerUser: 100,
   userDailySpendLimit: 5, userRunSpendLimit: 4, userWeeklySpendLimit: 5,
   vcrEnabled: true, vcrAudience: 'all', vcrProviderAgreements: true,
-  vcrProviderAgreementReference: 'Public synthetic TrialGPT and TREC evaluation inputs; no clinical enrollment decisions',
+  vcrProviderAgreementReference: protectedAuthorization
+    ? 'User-confirmed n2c2-2018-t1 processing at DeepSeek only; authorization '+protectedAuthorization.bindingSha256+'; experiment '+launch.name+'; instance '+instance
+    : 'Public synthetic TrialGPT and TREC evaluation inputs; no clinical enrollment decisions',
   vcrFetch: closedCorpusFetch((...args) => {
     vcrFetchAllowed += 1;
     return fetch(...args);
@@ -89,10 +99,10 @@ for (const module of [
   'evals/vcr-platform-comparison/container-server.mjs', 'evals/vcr-platform-comparison/container-launch.mjs',
   'evals/vcr-platform-comparison/container-probe.mjs', 'evals/vcr-platform-comparison/container-boundary.mjs',
   'evals/vcr-platform-comparison/container-resources.mjs',
+  'evals/vcr-platform-comparison/container-client.mjs', 'evals/vcr-platform-comparison/n2c2-prepare.py', 'evals/vcr-platform-comparison/n2c2-preflight.mjs', 'evals/vcr-platform-comparison/n2c2-protocol.json',
   'evals/vcr-platform-comparison/container-runtime.Dockerfile', 'evals/vcr-platform-comparison/budget-guard.mjs',
 ]) modules[module] = sha256(await fs.readFile(new URL('../../'+module, import.meta.url)));
 
-const instance = randomUUID();
 let budget;
 const onRuntimeNetwork = runtimeSocketFence(launch.internalSubnet);
 installClosedCorpusFence(app.server, { onRuntimeNetwork, instance });
@@ -118,6 +128,8 @@ try {
     origin: launch.origin, instance, modules, sandboxBackend: 'docker', approvalPolicy: 'never',
     configurationEvidence: 'resolved configuration verified', resolvedConfig,
     image: launch.image, baseImage: launch.baseImage, overlaySha256: launch.overlaySha256, kernelVersion: launch.kernelVersion,
+    ...(protectedAuthorization?{n2c2Authorization:protectedAuthorization}:{}),
+    dockerClient: launch.dockerClient,
     paid: launch.paid, closedCorpus: true, internalSubnet: launch.internalSubnet,
     corpusProbe: { collection, revision: frozen.collection.revision, liveAvailable: live.available,
       blockedRegistryFetches: vcrFetchBlocked, allowedFetches: vcrFetchAllowed }, collectionManifestHostPath: launch.collectionManifestHostPath,

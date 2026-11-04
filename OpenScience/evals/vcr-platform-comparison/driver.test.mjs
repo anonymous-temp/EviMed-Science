@@ -124,3 +124,58 @@ for(const failure of [false,true,'project','poll','breaker','late_breaker'])test
     assert.doesNotMatch(await fs.readFile(path.join(tmp,'p1/case.json'),'utf8'),/fixture-csrf|fixture=1/);
   }finally{await new Promise(resolve=>server.close(resolve));await fs.rm(tmp,{recursive:true,force:true});}
 });
+
+for(const mode of ['complete','missing','failed'])test('protocol matching uses normal isolated conversation and saved assessment ('+mode+')',async()=>{
+  const tmp=await fs.mkdtemp(path.join(os.tmpdir(),'n2c2-driver-synthetic-'));
+  const definition=JSON.parse(await fs.readFile(new URL('./n2c2-protocol.json',import.meta.url),'utf8'));
+  const calls=[],uploads=[];
+  let project=null,dispatched=false,polls=0,deleted=0;
+  const server=createServer(async(req,res)=>{
+    let bodyText='';for await(const part of req)bodyText+=part;
+    const body=bodyText?JSON.parse(bodyText):{};
+    const route=req.url;calls.push({method:req.method,route});
+    let status=200,data={};
+    if(route==='/api/auth/register'){status=201;data={csrfToken:'fixture-only',user:{id:body.username}};res.setHeader('set-cookie','synthetic=1; Path=/');}
+    else if(route==='/api/projects'){project=body.id;data={id:project};}
+    else if(route==='/api/files/upload'){uploads.push(Buffer.from(body.data,'base64').toString());data={source:{id:'uploaded-synthetic'}};}
+    else if(route==='/api/runtime/sessions')data={id:'session-fixture'};
+    else if(route==='/api/agent-runs/dispatch'){
+      assert.equal(body.automated,true);assert.equal(body.line,'answer');assert.match(body.text,/trial_to_patient/);
+      assert.equal(req.headers['x-evimed-automated'],'1');
+      assert.doesNotMatch(body.text,/NCT\d/);dispatched=true;status=202;data={id:'run-fixture'};
+    }else if(route==='/api/agent-runs'){
+      polls++;status=mode==='failed'&&polls===1?500:200;data=[{id:'run-fixture',automated:true,status:'completed'}];
+    }else if(route==='/api/vcr/studies')data={conversationStudies:dispatched?[{id:'study-fixture',projectId:project,originatingSessionId:'session-fixture'}]:[]};
+    else if(route==='/api/vcr/studies/study-fixture/jobs')data={jobs:[]};
+    else if(route.startsWith('/api/vcr/studies/study-fixture/matching')){
+      const query=new URL(route,'http://localhost').searchParams;
+      assert.equal(query.get('direction'),'trial_to_patient');
+      const selected=query.get('candidate');
+      data={direction:'trial_to_patient',candidateRoster:['subject-fixture'],protocolVersionId:'protocol-fixture',
+        selected:selected&&mode!=='missing'?{assessmentId:'assessment-fixture',candidate:{id:'subject-fixture'},
+          criteria:definition.criteria.map((row,i)=>({criterionId:'criterion-'+i,kind:'inclusion',text:row.text,
+            state:i===0?'unknown':'satisfied',applicable:true,decidedBy:i===0?'model':'code'}))}:null};
+    }else if(route==='/api/account/usage')data={currency:'CNY',actualCost:0,reservedCalls:0,uncertainCalls:0};
+    else if(route==='/api/account'&&req.method==='DELETE'){deleted++;assert.ok(body.confirm);assert.ok(body.password);}
+    res.writeHead(status,{'content-type':'application/json'});res.end(JSON.stringify({data}));
+  });
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+  try{
+    const files=[];
+    for(const[name,text]of [['patient.txt','Record date: 2020-01-15\nA fabricated fixture for an offline transport test.'],
+      ['protocol.txt',definition.criteria.map(row=>'['+row.tag+'] '+row.text).join('\n')]]){
+      const file=path.join(tmp,name);await fs.writeFile(file,text);
+      files.push({path:file,name,sha256:createHash('sha256').update(text).digest('hex')});
+    }
+    const record=await runCase({base:'http://127.0.0.1:'+server.address().port,
+      example:{id:'n2c2-test-001',asOf:'2020-01-15',files},
+      manifest:{dataset:'n2c2-2018-t1',task:'protocol_matching'},out:tmp});
+    assert.equal(record.cleanup.deleted,true);assert.equal(deleted,1);assert.equal(uploads.length,2);
+    assert.ok(uploads.every(text=>!/<TAGS|\bmet="/.test(text)));
+    assert.ok(!calls.some(call=>/trial_registry_record|vcr_write/.test(call.route)));
+    assert.equal(record.status,mode==='complete'?'settled':mode==='missing'?'missing_feature_result':'failed');
+    if(mode==='complete'){assert.equal(record.matching.selected.assessmentId,'assessment-fixture');assert.equal(record.matching.selected.criteria.length,13);}
+    if(mode==='failed')assert.ok(record.partialMatching);
+    assert.equal(record.trialDetails?.length??0,0);
+  }finally{await new Promise(resolve=>server.close(resolve));await fs.rm(tmp,{recursive:true,force:true});}
+});

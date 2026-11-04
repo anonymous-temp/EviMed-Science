@@ -7,11 +7,14 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { cleanupResources } from './container-resources.mjs';
+import { readDockerClient } from './container-client.mjs';
+import { authorizationBinding, verifyN2c2Manifest } from './n2c2-preflight.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const { values } = parseArgs({ options: {
   name: { type: 'string' }, state: { type: 'string' }, collection: { type: 'string' },
   'docker-client': { type: 'string' }, 'budget-dir': { type: 'string' }, 'seed-budget': { type: 'string' },
+  'n2c2-authorization': { type: 'string' },
   'deepseek-key-file': { type: 'string' }, paid: { type: 'boolean', default: false },
   port: { type: 'string', default: '58913' }, 'ui-port': { type: 'string', default: '58914' },
   context: { type: 'string', default: 'colima' },
@@ -32,6 +35,13 @@ const budgetDir = absolute('budget-dir');
 const ports = [values.port, values['ui-port']].map(Number);
 if (ports.some(port => !Number.isSafeInteger(port) || port < 1024 || port > 65535) || ports[0] === ports[1]) throw new Error('Invalid local ports');
 if (paid !== Boolean(values['deepseek-key-file'])) throw new Error('Provide the provider key file only in paid mode');
+let n2c2Authorization=null;
+if(values['n2c2-authorization']){
+  const checked=await authorizationBinding(absolute('n2c2-authorization'),name);
+  for(const manifest of checked.binding.manifests)await verifyN2c2Manifest(manifest.manifestPath);
+  n2c2Authorization={bindingSha256:checked.sha256,experimentId:name,dataset:'n2c2-2018-t1',
+    destination:'https://api.deepseek.com'};
+}
 const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
 const docker = (...args) => execFileSync('docker', ['--context', values.context, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'], timeout: 45_000 }).trim();
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -71,11 +81,17 @@ const baseImage = imageInfo(values['base-image']);
 const controlImage = imageInfo(values['control-image']);
 const postgresImage = imageInfo(values['postgres-image']);
 if (new Set([baseImage.Architecture, controlImage.Architecture, postgresImage.Architecture]).size !== 1) throw new Error('Local image architectures differ');
+const client = await readDockerClient(dockerClient, controlImage.Architecture);
 const endpoints = JSON.parse(execFileSync('docker', ['context','inspect',values.context,'--format','{{json .Endpoints}}'], { encoding: 'utf8' }));
 if (!endpoints.docker.Host.startsWith('unix://')) throw new Error('A local Docker context is required');
 await fs.mkdir(state, { mode: 0o700 });
 await fs.mkdir(audit, { mode: 0o700 });
 await fs.mkdir(secrets, { mode: 0o700 });
+if(n2c2Authorization){
+  const bytes=await fs.readFile(absolute('n2c2-authorization'));
+  if(hash(bytes)!==n2c2Authorization.bindingSha256)throw new Error('n2c2 authorization changed during launch');
+  await fs.writeFile(path.join(audit,'n2c2-authorization.json'),bytes,{flag:'wx',mode:0o600});
+}
 await fs.mkdir(build, { mode: 0o700 });
 await fs.mkdir(budgetDir, { recursive: true, mode: 0o700 });
 if ((await fs.readdir(budgetDir)).some(entry => entry !== 'budget.json')
@@ -93,7 +109,7 @@ if (paid) await fs.access(budgetFile);
 for (const key of ['postgres', 'model', 'workload']) {
   await fs.writeFile(path.join(secrets, key), randomBytes(32).toString('hex')+'\n', { mode: 0o600 });
 }
-await fs.copyFile(dockerClient, path.join(audit, 'docker'));
+await fs.writeFile(path.join(audit, 'docker'), client.bytes, {mode:0o700,flag:'wx'});
 await fs.chmod(path.join(audit, 'docker'), 0o700);
 await fs.writeFile(manifestFile, collectionBytes, { mode: 0o600 });
 const selected = [
@@ -163,10 +179,11 @@ try {
   const [internalSubnet, ...extraSubnets] = ipam.map(entry => entry.Subnet);
   if (!internalSubnet || extraSubnets.length) throw new Error('Benchmark expects one isolated IPv4 subnet');
   const launch = {
-    sourceSha, dirty, name, paid, volume, network, internalSubnet, image: image.Id, baseImage: baseImage.Id, kernelVersion, overlaySha256,
+    sourceSha, dirty, name, paid, dockerClient:{format:client.format,architecture:client.architecture,sha256:client.sha256}, volume, network, internalSubnet, image: image.Id, baseImage: baseImage.Id, kernelVersion, overlaySha256,
     origin: 'http://127.0.0.1:'+ports[0], uiOrigin: 'http://127.0.0.1:'+ports[1],
     collectionManifestHostPath: manifestFile, collectionManifestSha256: hash(collectionBytes),
     collectionDatabaseSha256: collection.databaseSha256, budgetHostPath: budgetFile,
+    ...(n2c2Authorization?{n2c2Authorization}:{}),
   };
   await fs.writeFile(path.join(audit, 'launch.json'), JSON.stringify(launch)+'\n', { mode: 0o600 });
   const bind = (source, target, readOnly = true) => ['--mount', `type=bind,src=${source},dst=${target}${readOnly ? ',readonly' : ''}`];

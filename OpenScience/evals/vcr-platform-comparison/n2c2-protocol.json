@@ -1,0 +1,88 @@
+{
+  "schema": 1,
+  "dataset": "n2c2-2018-t1",
+  "source": {
+    "title": "Annotation Guidelines: Clinical Trial Cohort Selection",
+    "version": "3",
+    "author": "Amber Stubbs",
+    "date": "2017-07-17",
+    "guideSha256": "85c02963e76f7e8796187325b477236ab7611e38d0db9b01164d45763b437b9e",
+    "challengeUrl": "https://n2c2.dbmi.hms.harvard.edu/challenge/2018-track-1-clinical-trial-cohort-selection",
+    "publicationUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC6798568/",
+    "archiveSha256": {
+      "raw/train.zip": "5c89a73b38c8155b9d337ed07b7e437f82d0f06a758abfc143dfc37501f4f953",
+      "raw/unannotated_test_data.zip": "eebaa71f32ff628e218cfda787b43e0e4d34352babf4edd6c6a1edf68c90d0e4",
+      "raw/Cohort_selection_AnnGuide_ver3.pdf": "85c02963e76f7e8796187325b477236ab7611e38d0db9b01164d45763b437b9e",
+      "raw/track1_eval_script.zip": "5bb5882f9182b277894223cfe6e22ba9a3951296210c0e1316f929391d92d665",
+      "sealed/n2c2-t1_gold_standard_test_data.zip": "f0cd49d80228f29373f02c673becad3242916fb0bd378c9da705b67d00c47045"
+    }
+  },
+  "chronology": [
+    "Use the most recent original record date as the evaluation date, regardless of its calendar year.",
+    "The annotation guide assumes a patient's status persists between records until a subsequent record indicates a change.",
+    "A historical event must fall within the criterion's required interval, rather than merely being mentioned in a recent record.",
+    "A record header provides document context. Preserve any separate event date, correction, uncertainty, explicit denial, or retrospective statement."
+  ],
+  "criteria": [
+    {
+      "tag": "ABDOMINAL",
+      "text": "History of intra abdominal surgery, small or large intestine resection or small bowel obstruction"
+    },
+    {
+      "tag": "ADVANCED-CAD",
+      "text": "Advanced cardiovascular disease. For the purposes of this annotation, we define \"advanced\" as having two or more of the following: Taking two or more medications to treat CAD; History of myocardial infarction; Currently experiencing angina; Ischemia, past or present"
+    },
+    {
+      "tag": "ALCOHOL-ABUSE",
+      "text": "Current alcohol use over weekly recommended limits"
+    },
+    {
+      "tag": "ASP-FOR-MI",
+      "text": "Use of aspirin to prevent myocardial infarction"
+    },
+    {
+      "tag": "CREATININE",
+      "text": "Serum creatinine > upper limit of normal"
+    },
+    {
+      "tag": "DIETSUPP-2MOS",
+      "text": "Taken a dietary supplement (excluding Vitamin D) in the past 2 months"
+    },
+    {
+      "tag": "DRUG-ABUSE",
+      "text": "Drug abuse, current or past"
+    },
+    {
+      "tag": "ENGLISH",
+      "text": "Patient must speak English"
+    },
+    {
+      "tag": "HBA1C",
+      "text": "Any HbA1c value between 6.5 and 9.5%"
+    },
+    {
+      "tag": "KETO-1YR",
+      "text": "Diagnosis of ketoacidosis in the past year"
+    },
+    {
+      "tag": "MAJOR-DIABETES",
+      "text": "Major diabetes-related complication. For the purposes of this annotation, we define \"major complication\" (as opposed to \"minor complication\") as any of the following that are a result of (or strongly correlated with) uncontrolled diabetes: Amputation; Kidney damage; Skin conditions; Retinopathy; nephropathy; neuropathy"
+    },
+    {
+      "tag": "MAKES-DECISIONS",
+      "text": "Patient must make their own medical decisions"
+    },
+    {
+      "tag": "MI-6MOS",
+      "text": "Myocardial infarction in the past 6 months"
+    }
+  ],
+  "scoringOnly": {
+    "unknownAsNotMetReading": "Binary sensitivity b",
+    "unknownAsMetTagsReadingC": [
+      "ENGLISH",
+      "MAKES-DECISIONS"
+    ],
+    "statement": "These binary sensitivities are applied after prediction freeze. They do not establish why clinical evidence was unknown."
+  }
+}

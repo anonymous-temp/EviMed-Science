@@ -10,6 +10,7 @@ import { execFileSync } from 'node:child_process';
 import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { openThrowawayAccount, fetchTransport } from '../../scripts/ops/throwaway-account.mjs';
+import { n2c2Prompt, verifyN2c2Manifest } from './n2c2-preflight.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const ACTIVE = new Set(['queued','running','planned','dispatching','starting','waiting']);
@@ -93,6 +94,7 @@ async function downloadArtifact({base,account,projectId,relative,folder,signal,i
 
 export function promptFor(manifest,example) {
   const task=manifest.task??'matching';
+  if(task==='protocol_matching')return n2c2Prompt(manifest,example);
   if (!['matching','retrieval'].includes(task)) throw new Error('Unsupported task');
   if (!/^[A-Za-z0-9_.:@-]{1,160}$/.test(manifest.collection)) throw new Error('Invalid collection');
   const purpose=task==='matching'
@@ -160,22 +162,27 @@ export async function verifyCampaign({base,manifestPath,startupPath,expectedSha}
   const bytes=await fs.readFile(manifestPath);const manifest=JSON.parse(bytes);
   if(manifest.version!==1||!Array.isArray(manifest.cases)||!manifest.cases.length)throw new Error('Invalid case manifest');
   if(new Set(manifest.cases.map(row=>row.id)).size!==manifest.cases.length)throw new Error('Duplicate case identities');
+  const protectedInputs=manifest.task==='protocol_matching'?await verifyN2c2Manifest(path.resolve(manifestPath),startup):null;
   const collectionBytes=await fs.readFile(await verifyContainerStartup(startup,startupPath));
   const collection=JSON.parse(collectionBytes);
-  if(hash(collectionBytes)!==startup.collectionManifestSha256||collection.id!==manifest.collection
+  if(hash(collectionBytes)!==startup.collectionManifestSha256||(!protectedInputs&&collection.id!==manifest.collection)
       ||collection.databasePath!=='/collections/index.sqlite'||collection.databaseSha256!==startup.collectionDatabaseSha256
       ||startup.corpusProbe.collection!==collection.id)throw new Error('Frozen collection differs');
   for(const example of manifest.cases) {
     safe(example.id);
     const names=example.files.map(file=>file.name).sort();
-    if(JSON.stringify(names)!==JSON.stringify(manifest.task==='retrieval'?['patient.txt']:['patient.txt','trials.txt']))throw new Error('Exact per-task input files required');
+    if(JSON.stringify(names)!==JSON.stringify(manifest.task==='protocol_matching'?['patient.txt','protocol.txt']:manifest.task==='retrieval'?['patient.txt']:['patient.txt','trials.txt']))throw new Error('Exact per-task input files required');
     for(const file of example.files) {
-      if(!['patient.txt','trials.txt'].includes(file.name)||!path.isAbsolute(file.path)||hash(await fs.readFile(file.path))!==file.sha256)throw new Error('Input whitelist/hash mismatch');
+      if(!['patient.txt','trials.txt','protocol.txt'].includes(file.name)||!path.isAbsolute(file.path)||hash(await fs.readFile(file.path))!==file.sha256)throw new Error('Input whitelist/hash mismatch');
       if(manifest.task==='retrieval'&&file.name!=='patient.txt')throw new Error('Retrieval may not receive annotation candidate IDs');
     }
   }
   return {manifest,startup,freeze:{sourceSha:head,manifestSha256:hash(bytes),
     collectionManifestSha256:hash(collectionBytes),
+    ...(protectedInputs?{dataset:'n2c2-2018-t1',split:manifest.split,priorExposure:true,
+      n2c2AuthorizationSha256:protectedInputs.bindingSha256,provenanceSha256:protectedInputs.provenanceSha256,
+      protocolDefinitionSha256:manifest.protocolDefinitionSha256,sourceArchiveSha256:manifest.sourceArchiveSha256,
+      sealedGoldSha256:manifest.sealedGoldSha256}:{}),
     alignmentPolicySha256:hash(await fs.readFile(new URL('./alignment-policy.json',import.meta.url))),
     alignmentCodeSha256:hash(await fs.readFile(new URL('./alignment.py',import.meta.url))),
     startupSha256:hash(await fs.readFile(startupPath)),createdAt:new Date().toISOString()}};
@@ -183,6 +190,7 @@ export async function verifyCampaign({base,manifestPath,startupPath,expectedSha}
 
 export async function runCase({base,example,manifest,out,timeoutMs=900000,instance=null,signal=null,receiptPath=null,priorScopes=[]}) {
   const folder=path.join(out,safe(example.id));await fs.mkdir(folder,{recursive:true,mode:0o700});
+  const direction=manifest.task==='protocol_matching'?'trial_to_patient':'patient_to_trial';
   const record={caseId:example.id,task:manifest.task??'matching',startedAt:new Date().toISOString(),status:'starting',requests:[]};
   let account,projectId,sessionId,studyId,projectCreated=false,interrupted=false,captureDeadline=null;
   const deadline=Date.now()+timeoutMs,controller=new AbortController();
@@ -275,16 +283,17 @@ export async function runCase({base,example,manifest,out,timeoutMs=900000,instan
     const capturing=!settled||interrupted?{cleanup:true,capture:true}:{};
     record.transcript=await api('GET',`/api/runtime/sessions/${sessionId}/transcript`,undefined,capturing).catch(error=>({error:error.message}));
     if(studyId) {
-      let matching=await api('GET',`/api/vcr/studies/${studyId}/matching?direction=patient_to_trial`,undefined,capturing);
+      let matching=await api('GET',`/api/vcr/studies/${studyId}/matching?direction=${direction}`,undefined,capturing);
       const roster=[...new Set(matching.candidateRoster??[])];
-      const selected=matching.opensOnPatient??(roster.length===1?roster[0]:null);
-      if(selected&&roster.includes(selected))matching=await api('GET',`/api/vcr/studies/${studyId}/matching?direction=patient_to_trial&candidate=${encodeURIComponent(selected)}`,undefined,capturing);
+      const selected=manifest.task==='protocol_matching'?(roster.length===1?roster[0]:null)
+        :matching.opensOnPatient??(roster.length===1?roster[0]:null);
+      if(selected&&roster.includes(selected))matching=await api('GET',`/api/vcr/studies/${studyId}/matching?direction=${direction}&candidate=${encodeURIComponent(selected)}`,undefined,capturing);
       else if(roster.length>1)record.patientScopeIssue='multiple_patients_in_one_case';
       record.matching=matching;
       const patient=matching.patientTrials?.subject;
       record.trialDetails=[];
       if(patient)for(const trial of matching.patientTrials?.trials??[]) {
-        const detail=await api('GET',`/api/vcr/studies/${studyId}/matching?direction=patient_to_trial&candidate=${encodeURIComponent(patient)}&trial=${encodeURIComponent(trial.id)}`,undefined,capturing);
+        const detail=await api('GET',`/api/vcr/studies/${studyId}/matching?direction=${direction}&candidate=${encodeURIComponent(patient)}&trial=${encodeURIComponent(trial.id)}`,undefined,capturing);
         record.trialDetails.push({registryId:trial.registryId,id:trial.id,detail});
       }
     }
@@ -298,7 +307,8 @@ export async function runCase({base,example,manifest,out,timeoutMs=900000,instan
       record.exportedFiles.push(await downloadArtifact({base,account,projectId,relative,folder,instance,
         signal:capturing.cleanup?exportTimer:AbortSignal.any([controller.signal,exportTimer])}));
     }
-    if(record.status==='settled'&&(!studyId||!record.trialDetails?.length))record.status='missing_feature_result';
+    if(record.status==='settled'&&(!studyId||(manifest.task==='protocol_matching'
+      ?!record.matching?.selected?.assessmentId:!record.trialDetails?.length)))record.status='missing_feature_result';
   }catch(error){record.status='failed';record.error={message:error.message,code:error.code??null};
     if(!account&&error.account){record.accountId=error.account;record.cleanup={deleted:false,reason:'registration_outcome_uncertain'};}}
   finally {
@@ -310,7 +320,7 @@ export async function runCase({base,example,manifest,out,timeoutMs=900000,instan
         captureDeadline=Date.now()+15000;
         const capture={cleanup:true,capture:true};
         record.transcript=await api('GET',`/api/runtime/sessions/${sessionId}/transcript`,undefined,capture).catch(error=>({error:error.message}));
-        if(studyId)record.partialMatching=await api('GET',`/api/vcr/studies/${studyId}/matching?direction=patient_to_trial`,undefined,capture).catch(error=>({error:error.message}));
+        if(studyId)record.partialMatching=await api('GET',`/api/vcr/studies/${studyId}/matching?direction=${direction}`,undefined,capture).catch(error=>({error:error.message}));
         record.partialOutputs=await api('GET',`/api/sources/outputs?projectId=${encodeURIComponent(projectId)}`,undefined,capture).catch(error=>({error:error.message}));
         if(Date.now()<captureDeadline){
           record.partialFiles=[await downloadArtifact({base,account,projectId,relative:'matching-assessment.json',folder,instance,
