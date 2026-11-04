@@ -96,7 +96,11 @@ const effectiveModel = (config) => String(config?.deepseekModel || VCR_MATCH_BAT
 /** @param {Record<string, any>} config */
 const effectiveTopK = (config) => (config?.vcrMatchJudgeTopK === 'all' ? 'all' : Number.isInteger(config?.vcrMatchJudgeTopK) ? config.vcrMatchJudgeTopK : 20);
 /** @param {Record<string, any>} config */
-const effectiveOutputTokens = (config) => Math.max(1_000, Math.min(384_000, Number(config?.vcrMatchJudgeOutputTokens ?? 16_000) || 16_000));
+const effectiveOutputTokens = (config) => Math.max(1_000, Math.min(384_000, Number(config?.vcrMatchJudgeOutputTokens ?? 32_000) || 32_000));
+/** With thinking off nothing but the answer counts, and an answer that long has run away. */
+const OUTPUT_WITHOUT_THINKING = 6_000;
+/** @param {number} allowance @param {string} thinking */
+const outputFor = (allowance, thinking) => (thinking === 'off' ? Math.min(allowance, OUTPUT_WITHOUT_THINKING) : allowance);
 
 /** The registry a registration number belongs to, where its shape says. @param {string} registryId */
 const registryOfId = (registryId) => (/^ChiCTR/iu.test(registryId) ? 'chictr' : /^\d{4}-\d{6}-\d{2}(?:-\d{2})?$/u.test(registryId) ? 'ctis' : 'clinicaltrials.gov');
@@ -175,7 +179,7 @@ export function createPairJudge({ config, usageLedger = null, callModel = callMo
       const body = await callModel({ config, usageLedger, fetchImpl }, {
         userId: String(study.userId), projectId: String(study.projectId ?? ''), runId: jobId, purpose: 'vcr', signal: controller.signal,
         body: {
-          model, max_tokens: maxTokens, response_format: { type: 'json_object' }, messages,
+          model, max_tokens: outputFor(maxTokens, thinking), response_format: { type: 'json_object' }, messages,
           ...(thinking === 'off' ? { thinking: { type: 'disabled' }, temperature: 0 } : { thinking: { type: 'enabled' }, reasoning_effort: 'high' }),
         },
       });
@@ -212,6 +216,11 @@ export function createPairJudge({ config, usageLedger = null, callModel = callMo
           const priced = priceUsage({ resourceType: 'model', model, cacheHit: answered.usage.cacheHitTokens, cacheMiss: Math.max(0, answered.usage.inputTokens - answered.usage.cacheHitTokens), output: answered.usage.outputTokens, peak: isPeak(now()) });
           return { ...answered, cost: priced.priced ? priced.cost : null, currency: priced.currency || 'CNY' };
         } catch (error) {
+          const paid = /** @type {any} */ (error)?.usage;
+          if (paid) {
+            const billed = priceUsage({ resourceType: 'model', model, cacheHit: paid.cacheHitTokens, cacheMiss: Math.max(0, paid.inputTokens - paid.cacheHitTokens), output: paid.outputTokens, peak: isPeak(new Date()) });
+            Object.assign(/** @type {any} */ (error), { cost: billed.priced ? billed.cost : null });
+          }
           if (!transientFailure(error) || attempt >= RETRY_BACKOFF_MS.length) throw error;
           counters.callsRetried += 1;
           await sleep(RETRY_BACKOFF_MS[attempt]);
@@ -380,7 +389,14 @@ export function judgmentTargets({ evidence = null, matchStore, pages = null }) {
  */
 async function askOnceMore({ judge, ask, calls, read, usable }) {
   for (let attempt = 0; ; attempt += 1) {
-    const answered = await judge.call(ask).catch((/** @type {any} */ error) => { throw Object.assign(error, { calls }); });
+    /** @type {any} */ let answered;
+    try {
+      answered = await judge.call(ask);
+    } catch (/** @type {any} */ error) {
+      // A cut-off answer has been paid for, and the same pair usually fits when asked again.
+      if (error?.code === 'vcr_match_judge_cut_off' && attempt < 1) { calls.push({ content: '', usage: error.usage, cost: error.cost ?? null, currency: 'CNY' }); continue; }
+      throw Object.assign(error, { calls });
+    }
     calls.push(answered);
     const parsed = read(answered.content);
     if (attempt >= 1 || usable(parsed)) return parsed;
@@ -525,7 +541,7 @@ export async function planMatchJudge({ study, selection: raw = {}, matchStore, d
     const pairs = (fit ? targets : 0) + perPerson;
     calls += parts * pairs;
     inputTokens += pairs * (chars + parts * (VCR_MATCH_JUDGE_LIMITS.trialChars + VCR_MATCH_JUDGE_LIMITS.overheadTokens));
-    outputTokens += parts * pairs * outputPerCall;
+    outputTokens += parts * ((fit ? targets : 0) * outputFor(outputPerCall, thinking) + perPerson * outputFor(outputPerCall, thinkingCriteria));
   }
   // A definition card is one call a trial, whoever is judged against it.
   if (definitions) { calls += targets; inputTokens += targets * (VCR_MATCH_JUDGE_LIMITS.trialChars + VCR_MATCH_JUDGE_LIMITS.overheadTokens); outputTokens += targets * 1_500; }

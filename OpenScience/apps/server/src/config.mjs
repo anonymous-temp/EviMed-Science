@@ -1190,7 +1190,7 @@ function vcrSettings(overrides) {
     // .795; TREC 2022 dev .881, .852) at a third of the price and time; clause by clause thinking helps (746 to 782 of 1,015 on the same prompt).
     vcrMatchJudgeThinking: matchJudgeThinking(overrides.vcrMatchJudgeThinking ?? process.env.OPEN_SCIENCE_VCR_MATCH_JUDGE_THINKING, "off"),
     vcrMatchJudgeCriteriaThinking: matchJudgeThinking(overrides.vcrMatchJudgeCriteriaThinking ?? process.env.OPEN_SCIENCE_VCR_MATCH_JUDGE_CRITERIA_THINKING, "high"),
-    vcrMatchJudgeOutputTokens: integer("vcrMatchJudgeOutputTokens", "OPEN_SCIENCE_VCR_MATCH_JUDGE_OUTPUT_TOKENS", 16_000, 2_000, 64_000),
+    vcrMatchJudgeOutputTokens: integer("vcrMatchJudgeOutputTokens", "OPEN_SCIENCE_VCR_MATCH_JUDGE_OUTPUT_TOKENS", 32_000, 2_000, 64_000),
     vcrMatchJudgeTimeoutMs: integer("vcrMatchJudgeTimeoutMs", "OPEN_SCIENCE_VCR_MATCH_JUDGE_TIMEOUT_MS", 180_000, 10_000, 600_000),
     vcrMatchJudgeMaxUpstreamFailures: integer("vcrMatchJudgeMaxUpstreamFailures", "OPEN_SCIENCE_VCR_MATCH_JUDGE_MAX_UPSTREAM_FAILURES", 20, 1, 1_000),
     // A judging job on the worker's lane hands its turn back after this many pairs or this long (one running slow job per account, so the account's other work runs between its batches), and a

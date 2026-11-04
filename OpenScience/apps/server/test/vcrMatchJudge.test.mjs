@@ -164,7 +164,7 @@ test("patient to trial: every pair is judged at trial level, then the top K by r
   assert.deepEqual(lung.map((row) => [row.mode, row.status, row.producer, row.model, row.thinking]).sort(), [["criteria", "done", "job", "deepseek-flash", "high"], ["fit", "done", "job", "deepseek-flash", "high"]]);
   const scored = lung.find((row) => row.mode === "fit");
   assert.deepEqual([scored.fit, scored.confidence, scored.verdict, scored.answer.reasons.eligible, scored.answer.eligibilitySource], [90, 0.8, "eligible", ["年龄符合"], "registry"]);
-  assert.equal(scored.usage.settings.maxTokens, 16000);
+  assert.equal(scored.usage.settings.maxTokens, 32000);
   const clauses = lung.find((row) => row.mode === "criteria");
   assert.deepEqual(clauses.answer.rows.map((row) => [row.number, row.label, row.basis]), [[1, "included", "stated"], [2, "included", "stated"], [3, "not_excluded", "stated"]]);
   assert.deepEqual(clauses.answer.rows[0].evidence, [{ sentenceId: 0, text: "男性，70 岁。", start: 0, end: 8, documentId: "d1" }], "evidence resolved by code to the record's own words");
@@ -176,7 +176,7 @@ test("the note leads each call, so one patient's trials share a prefix", async (
   await f.run(f.job({ topK: 0 }));
   const users = f.provider.calls.map((call) => call.user);
   assert.ok(users.every((user) => user.startsWith(`Patient note/summary:\n${TEXT.d1}`)));
-  assert.ok(f.provider.calls.every((call) => call.body.response_format.type === "json_object" && call.body.thinking.type === "enabled" && call.body.reasoning_effort === "high" && call.body.max_tokens === 16000));
+  assert.ok(f.provider.calls.every((call) => call.body.response_format.type === "json_object" && call.body.thinking.type === "enabled" && call.body.reasoning_effort === "high" && call.body.max_tokens === 32000));
 });
 
 test("protocol to patients: one protocol's clauses against each person, with its source text as the eligibility text", async () => {
@@ -364,8 +364,8 @@ test("output cut off by the allowance is a failed pair, never an empty answer, a
   assert.deepEqual(result.diagnostics.failures, { vcr_match_judge_cut_off: 1 });
   const row = [...f.judgments.rows.values()].find((entry) => entry.status === "failed");
   assert.deepEqual([row.targetId, row.errorCode, row.fit], ["NCT00000001", "vcr_match_judge_cut_off", undefined]);
-  assert.equal(result.diagnostics.used.outputTokens, 60, "the words it paid for are in the bill");
-  assert.equal(f.provider.calls.length, 3, "no retry: the same call would be cut off again");
+  assert.equal(result.diagnostics.used.outputTokens, 80, "the words it paid for are in the bill, both times");
+  assert.equal(f.provider.calls.length, 4, "a cut-off answer is asked again once, then the pair fails");
 });
 
 test("an answer with no score or no clause is a failed pair; a partial clause answer is saved and names what is missing", async () => {
@@ -475,6 +475,12 @@ test("each stage keeps its own thinking: off for the trial-level call, high clau
   const asked = f.provider.calls.length;
   await f.run(f.job({ topK: "all", thinking: "off", thinkingCriteria: "high" }));
   assert.equal(f.provider.calls.length, asked, "a resume finds both stages in the ledger");
+});
+
+test("with thinking off the allowance is small: an answer that long has run away", async () => {
+  const f = fixture();
+  await f.run(f.job({ topK: 0, thinking: "off" }));
+  assert.ok(f.provider.calls.every((call) => call.body.max_tokens === 6000));
 });
 
 test("thinking off is recorded on the row and is its own judgment", async () => {
