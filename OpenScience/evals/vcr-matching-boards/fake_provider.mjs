@@ -50,9 +50,38 @@ export async function startFakeProvider({ expectThinking = null, expectKey = nul
       requests.push({ path: req.url, model: body.model, thinking, reasoningEffort: body.reasoning_effort ?? null, jsonMode: body.response_format?.type === 'json_object', maxTokens: body.max_tokens ?? null, criteria, userChars: user.length, ...(keepPrompts ? { system, user } : {}) });
       if (expectThinking && thinking !== expectThinking) violations.push(`request ${index}: thinking ${thinking}, wanted ${expectThinking}`);
       if (expectKey && req.headers.authorization !== `Bearer ${expectKey}`) violations.push(`request ${index}: wrong credentials`);
+      if (/\/anthropic\/v1\/messages$/u.test(String(req.url))) {
+        // A conversation's own turns reach the provider on its Anthropic-shaped route: one short text answer, streamed, and no tool call.
+        const event = (/** @type {string} */ name, /** @type {any} */ data) => `event: ${name}\ndata: ${JSON.stringify({ type: name, ...data })}\n\n`;
+        setTimeout(() => {
+          if (body.stream === true) {
+            res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' });
+            res.write(event('message_start', { message: { id: `msg_fake_${index}`, type: 'message', role: 'assistant', model: body.model, content: [], stop_reason: null, stop_sequence: null, usage: { input_tokens: 900, output_tokens: 1 } } }));
+            res.write(event('content_block_start', { index: 0, content_block: { type: 'text', text: '' } }));
+            res.write(event('content_block_delta', { index: 0, delta: { type: 'text_delta', text: '收到。' } }));
+            res.write(event('content_block_stop', { index: 0 }));
+            res.write(event('message_delta', { delta: { stop_reason: 'end_turn', stop_sequence: null }, usage: { output_tokens: 12 } }));
+            res.end(event('message_stop', {}));
+          } else {
+            res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ id: `msg_fake_${index}`, type: 'message', role: 'assistant', model: body.model, content: [{ type: 'text', text: '收到。' }], stop_reason: 'end_turn', usage: { input_tokens: 900, output_tokens: 12 } }));
+          }
+        }, latencyMs);
+        return;
+      }
       if (!/\/chat\/completions$/u.test(String(req.url))) { res.writeHead(404).end('{}'); return; }
       const injected = failWhen ? failWhen(index, body) : null;
       setTimeout(() => {
+        if (!injected && body.stream === true) {
+          // A streamed request (a conversation's own turns): one short assistant message and the usage, as the provider streams them. No tool is ever called.
+          const usage = { prompt_tokens: 900, completion_tokens: 12, prompt_cache_hit_tokens: 0, prompt_cache_miss_tokens: 900, total_tokens: 912 };
+          res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' });
+          const chunk = (/** @type {any} */ delta, /** @type {string | null} */ finish, /** @type {any} */ extra = {}) => `data: ${JSON.stringify({ id: `fake-${index}`, object: 'chat.completion.chunk', created: 0, model: body.model, choices: [{ index: 0, delta, finish_reason: finish }], ...extra })}\n\n`;
+          res.write(chunk({ role: 'assistant', content: '收到。' }, null));
+          res.write(chunk({}, 'stop'));
+          res.write(`data: ${JSON.stringify({ id: `fake-${index}`, object: 'chat.completion.chunk', created: 0, model: body.model, choices: [], usage })}\n\n`);
+          res.end('data: [DONE]\n\n');
+          return;
+        }
         if (injected) { res.writeHead(injected, { 'content-type': 'application/json' }).end(JSON.stringify({ error: { message: 'injected' } })); return; }
         const said = contentWhen ? contentWhen(index, body) : null;
         const content = said != null ? said : criteria

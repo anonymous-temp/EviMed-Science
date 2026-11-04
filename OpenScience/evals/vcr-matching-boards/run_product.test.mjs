@@ -11,7 +11,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { describe, test } from 'node:test';
-import { EXIT, ARMS, acceptReceipt, exportRecord, ownedProcesses, parseOptions, promptFor, runBoardCase, runProduct, settleStep, writeCaseInputs } from './run_product.mjs';
+import { EXIT, ARMS, acceptReceipt, availableMb, exportRecord, ownedProcesses, parseOptions, promptFor, replyAgreement, runBoardCase, runProduct, settleStep, summarizeTranscript, writeCaseInputs } from './run_product.mjs';
 
 const tmp = (/** @type {string} */ label) => fs.mkdtempSync(path.join(os.tmpdir(), `vcr-prod-${label}-`));
 const ROW = { caseId: 'p-1', patientId: 'p-1', collection: 'tg2-sigir', split: 'dev', note: 'A person with asthma.', candidateIds: ['NCT00000001', 'NCT00000002', 'NCT00000003'], candidateCount: 3 };
@@ -51,6 +51,45 @@ describe('options', () => {
     assert.throws(() => parseOptions(base.slice(0, 4), {}), { code: 'option_missing' });
     assert.equal(parseOptions(['--readiness', '--data-dir', '/tmp/d', '--live-root', '/tmp/l', '--os', '/tmp/o', '--key-file', '/tmp/k'], {}).readiness, true, 'readiness needs no boards');
     assert.equal(parseOptions(['--arm', 'job', '--data-dir', '/tmp/d', '--boards', '/tmp/b', '--live-root', '/tmp/l', '--os', '/tmp/o'], { OPEN_SCIENCE_DEEPSEEK_API_KEY_FILE: '/tmp/k' }).keyFile, '/tmp/k');
+  });
+});
+
+describe('what a conversation did, read from its transcript', () => {
+  const tool = (/** @type {string} */ name, /** @type {Record<string, any>} */ extra = {}) => ({ role: 'tool', parts: [{ type: 'tool', tool: name, status: 'done', error: null, ...extra }] });
+  const said = (/** @type {string} */ text) => ({ role: 'assistant', parts: [{ type: 'reasoning', text: 'thinking' }, { type: 'text', text }] });
+  test('tool names come out in order, errors and unfinished calls are counted, and the reply is the last thing the assistant said', () => {
+    const digest = summarizeTranscript({ turns: [{}, {}], messages: [{ role: 'user', parts: [{ type: 'text', text: 'ask' }] }, said('first'), tool('mcp__evimed__vcr_read'), tool('mcp__evimed__vcr_simulate', { error: 'boom' }),
+      tool('mcp__evimed__vcr_read', { status: 'pending' }), said('  second  '), { role: 'assistant', parts: [{ type: 'text', text: '' }] }] });
+    assert.deepEqual(digest.tools, ['mcp__evimed__vcr_read', 'mcp__evimed__vcr_simulate', 'mcp__evimed__vcr_read']);
+    assert.deepEqual([digest.toolErrors, digest.pendingCalls, digest.assistantMessages, digest.turns, digest.reply, digest.replyChars], [1, 1, 3, 2, 'second', 6]);
+    assert.deepEqual(summarizeTranscript(null), { tools: [], toolErrors: 0, pendingCalls: 0, assistantMessages: 0, turns: null, reply: '', replyChars: 0 });
+    assert.deepEqual(summarizeTranscript({ error: 'x' }).tools, []);
+  });
+  test('the verdicts a reply states are compared with the saved rows: agree, disagree, stated none, unreported, and ids nothing saved', () => {
+    const rows = [['NCT00000001', 'eligible'], ['NCT00000002', 'possible'], ['NCT00000003', 'ineligible'], ['NCT00000004', 'insufficient'], ['NCT00000005', 'eligible'], ['NCT00000006', 'eligible']].map(([id, verdict]) => ({ target: { registryId: id }, verdict }));
+    const reply = ['1. NCT00000001 符合', '2. NCT00000002 可能符合，需确认', '3. NCT00000003 不符合', 'NCT00000004: eligible', 'NCT00000006 在名单里', 'NCT00000009 符合'].join('\n');
+    assert.deepEqual(replyAgreement(reply, rows), { saved: 6, reported: 5, agree: 3, disagree: 1, noVerdictStated: 1, unreported: 1, unknownIds: 1, agreeByHeading: 0 });
+    assert.deepEqual(replyAgreement('', rows), { saved: 6, reported: 0, agree: 0, disagree: 0, noVerdictStated: 0, unreported: 6, unknownIds: 0, agreeByHeading: 0 });
+    assert.equal(replyAgreement('NCT00000001 不符合', rows.slice(0, 1)).disagree, 1, '不符合 is not also 符合');
+    assert.equal(replyAgreement('NCT00000001 可能符合', rows.slice(0, 1)).disagree, 1, '可能符合 is not also 符合');
+    // A table row's verdict is its verdict cell; the reasons beside it may use the word of a single clause. With no verdict cell the heading above stands.
+    const table = ['## 第二档：可能符合（2 个）', '| 序 | 试验 | 判定 | 为什么 |', '| 1 | NCT00000002 肺栓塞 | 82 | 疑似 PE 且符合造影条件 |', '', '**第三档：不符合**', '| 2 | NCT00000003 另一项 | 不符合 | 年龄不符合 |', '| 3 | NCT00000001 一项 | **符合** | 唯一条款符合 |'].join('\n');
+    assert.deepEqual(replyAgreement(table, rows.slice(0, 3)), { saved: 3, reported: 3, agree: 3, disagree: 0, noVerdictStated: 0, unreported: 0, unknownIds: 0, agreeByHeading: 1 });
+    assert.deepEqual(replyAgreement(['| 1 | NCT00000003 | 不符合（当前） | 55 |', '| 2 | NCT00000002 | 80 | 可能符合：年龄满足，需确认 |'].join('\n'), rows.slice(1, 3)), { saved: 2, reported: 2, agree: 2, disagree: 0, noVerdictStated: 0, unreported: 0, unknownIds: 0, agreeByHeading: 0 }, 'a verdict cell may carry a bracket or a reason');
+    assert.equal(replyAgreement('结果：符合 1 项、可能符合 20 项。\n| 1 | NCT00000002 | 80 | 理由 |', rows.slice(1, 2)).noVerdictStated, 1, 'a summary line with several verdicts is not a heading');
+  });
+  test('free memory is a number in MB on this machine', () => {
+    assert.ok(Number.isInteger(availableMb()) && /** @type {number} */ (availableMb()) > 0);
+  });
+  test('arms and patients are lists that are checked, and the allowance and caps are options of the run', () => {
+    const base = ['--board', 'sigir', '--data-dir', '/tmp/d', '--boards', '/tmp/b', '--live-root', '/tmp/l', '--os', '/tmp/o', '--key-file', '/tmp/k'];
+    const options = parseOptions([...base, '--arms', 'job,native', '--patients', 'p1,p2', '--allowance-cny', '15', '--run-cap-cny', '1.6', '--min-free-mb', '900'], {});
+    assert.deepEqual([options.arms, options.patients, options.allowanceCny, options.runCapCny, options.minFreeMb], [['job', 'native'], ['p1', 'p2'], 15, 1.6, 900]);
+    assert.deepEqual(parseOptions([...base, '--arm', 'native'], {}).arms, ['native']);
+    assert.throws(() => parseOptions([...base, '--arms', 'job,both'], {}), { code: 'option_invalid' });
+    assert.throws(() => parseOptions([...base, '--arms', 'job,job'], {}), { code: 'option_invalid' });
+    assert.throws(() => parseOptions([...base, '--patients', 'p1,p1'], {}), { code: 'option_invalid' });
+    assert.throws(() => parseOptions([...base, '--patients', '../x'], {}), { code: 'option_invalid' });
   });
 });
 

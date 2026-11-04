@@ -152,6 +152,8 @@ const OPTIONS = {
   'case-timeout-min': { type: 'string', default: '45' }, 'quiet-seconds': { type: 'string', default: '20' }, score: { type: 'string', default: 'auto' },
   tg2: { type: 'string' }, tg1: { type: 'string' }, labels: { type: 'string' }, 'eval-python': { type: 'string' }, out: { type: 'string' }, 'check-minutes': { type: 'string', default: '5' },
   'sha': { type: 'string' }, 'manifest-out': { type: 'string' }, 'startup': { type: 'string' },
+  arms: { type: 'string' }, patients: { type: 'string' }, 'allowance-cny': { type: 'string' }, 'run-cap-cny': { type: 'string', default: '4' }, 'account-cap-cny': { type: 'string', default: '5' },
+  'min-free-mb': { type: 'string', default: '1200' }, 'summary-dir': { type: 'string' },
 };
 
 /** @param {string | undefined} value @param {string} name @param {number} min @param {number} max */
@@ -170,6 +172,10 @@ export function parseOptions(argv, env = process.env) {
   if (BOARDS[board].answer !== 'ranking') throw fail('The product runner takes the ranking boards (sigir, trec2021, trec2022, nih); the criterion board is run by dev_job.', 'option_invalid');
   const arm = String(values.arm ?? 'job');
   if (!ARMS.includes(arm)) throw fail(`--arm is one of ${ARMS.join(', ')}.`, 'option_invalid');
+  const arms = values.arms ? String(values.arms).split(',').map((name) => name.trim()).filter(Boolean) : [arm];
+  if (!arms.length || arms.some((name) => !ARMS.includes(name)) || new Set(arms).size !== arms.length) throw fail(`--arms is a list from ${ARMS.join(', ')}, none twice.`, 'option_invalid');
+  const patients = values.patients ? String(values.patients).split(',').map((name) => name.trim()).filter(Boolean) : null;
+  if (patients && (!patients.length || patients.some((name) => !/^[A-Za-z0-9_-]{1,64}$/u.test(name)) || new Set(patients).size !== patients.length)) throw fail('--patients is a list of patient ids, none twice.', 'option_invalid');
   if (!SPLITS.includes(String(values.split))) throw fail(`--split is one of ${SPLITS.join(', ')}.`, 'option_invalid');
   const dataDir = values['data-dir'] ?? env.VCR_BOARDS_DATA;
   const boards = values.boards ?? env.VCR_BOARDS_INPUTS;
@@ -184,7 +190,7 @@ export function parseOptions(argv, env = process.env) {
   const score = String(values.score);
   if (!['auto', 'yes', 'no'].includes(score)) throw fail('--score is auto, yes or no.', 'option_invalid');
   return {
-    readiness, board, arm, split: String(values.split), diagnostic: Boolean(values.diagnostic), planOnly: Boolean(values['plan-only']),
+    readiness, board, arm, arms, patients, split: String(values.split), diagnostic: Boolean(values.diagnostic), planOnly: Boolean(values['plan-only']),
     limitPatients: values['limit-patients'] == null ? null : whole(values['limit-patients'], '--limit-patients', 1, 100_000),
     dataDir: path.resolve(dataDir), boardsDir: boards ? path.resolve(boards) : null, liveRoot: path.resolve(liveRoot), tree: path.resolve(tree),
     dshBin: values['dsh-bin'] ? path.resolve(values['dsh-bin']) : path.join(path.resolve(liveRoot), 'kernel/node_modules/.bin/dsh'), keyFile: path.resolve(keyFile),
@@ -195,6 +201,8 @@ export function parseOptions(argv, env = process.env) {
     score, tg2: values.tg2 ?? env.VCR_BOARDS_TG2 ?? null, tg1: values.tg1 ?? env.VCR_BOARDS_TG1 ?? null, labels: values.labels ?? env.VCR_BOARDS_LABELS ?? null,
     evalPython: values['eval-python'] ?? env.VCR_BOARDS_PYTHON ?? 'python3', out: values.out ? path.resolve(values.out) : null,
     sha: values.sha ?? null, startup: values.startup ?? null,
+    allowanceCny: values['allowance-cny'] == null ? null : Number(values['allowance-cny']), runCapCny: Number(values['run-cap-cny']), accountCapCny: Number(values['account-cap-cny']),
+    minFreeMb: whole(values['min-free-mb'], '--min-free-mb', 0, 100_000), summaryDir: values['summary-dir'] ? path.resolve(values['summary-dir']) : null,
   };
 }
 
@@ -242,7 +250,7 @@ export async function startServer(o, { manifest = '', dataDir, databaseUrl, log 
     PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '', LANG: 'C.UTF-8', TZ: 'UTC', TMPDIR: process.env.TMPDIR ?? '/tmp',
     OS: o.tree, TREE_DIR: o.liveRoot, LIVE_DIR: o.liveRoot, LIVE_DATA: liveData, LIVE_PORT: String(port), LIVE_DATABASE_URL: databaseUrl, DSH_BIN: o.dshBin,
     EVAL_DEEPSEEK_KEY_FILE: o.keyFile, VCR_BENCHMARK_BUDGET_FILE: path.join(dataDir, 'budget.json'), VCR_BENCHMARK_BUDGET_CNY: String(o.budgetCny),
-    VCR_STARTUP_RECEIPT: receiptFile, PRODUCT_MODEL_BASE_URL: o.baseUrl, PRODUCT_JUDGE_CONCURRENCY: String(o.concurrency), ...(manifest ? { VCR_COLLECTION_MANIFEST: manifest } : {}),
+    VCR_STARTUP_RECEIPT: receiptFile, PRODUCT_MODEL_BASE_URL: o.baseUrl, PRODUCT_JUDGE_CONCURRENCY: String(o.concurrency), PRODUCT_RUN_CAP_CNY: String(o.runCapCny ?? 4), PRODUCT_ACCOUNT_CAP_CNY: String(o.accountCapCny ?? 5), ...(manifest ? { VCR_COLLECTION_MANIFEST: manifest } : {}),
   };
   const logFile = path.join(dataDir, 'server.log');
   const out = fs.openSync(logFile, 'a', 0o600);
@@ -395,6 +403,11 @@ export async function runBoardCase({ base, instance = null, row, files, arm, out
     // The saved judgments, read back from the platform before the account (and its usage rows) is deleted.
     record.transcript = await api('GET', `/api/runtime/sessions/${sessionId}/transcript`, undefined, { cleanup: !settled || interrupted }).catch((error) => ({ error: error.message }));
     record.saved = await read({ userId: account.id, projectId });
+    // What the conversation did, by name, and what it said last; the whole transcript goes to a file of its own, not into the record.
+    record.digest = summarizeTranscript(record.transcript);
+    record.agreement = replyAgreement(record.digest.reply, record.saved?.ranking ?? []);
+    fs.writeFileSync(path.join(folder, 'transcript.json'), JSON.stringify(record.transcript), { mode: 0o600 });
+    record.transcript = { messages: record.transcript?.messages?.length ?? 0, ...(record.transcript?.error ? { error: record.transcript.error } : {}) };
     record.outputs = await api('GET', `/api/sources/outputs?projectId=${encodeURIComponent(projectId)}`, undefined, { cleanup: !settled || interrupted }).catch(() => null);
     if (record.status === 'settled' && !record.saved.ranking.length && !record.saved.failed.length) record.status = 'missing_feature_result';
   } catch (error) {
@@ -410,6 +423,7 @@ export async function runBoardCase({ base, instance = null, row, files, arm, out
       if (!record.cleanup.deleted) record.status = 'cleanup_failed';
     }
     record.finishedAt = new Date(now()).toISOString();
+    record.wallMinutes = Number(((Date.parse(record.finishedAt) - Date.parse(record.startedAt)) / 60_000).toFixed(2));
     // The conversation and the saved rows stay in the case folder; the account and its data do not.
     fs.writeFileSync(path.join(folder, 'case.json'), `${JSON.stringify(record, null, 2)}\n`, { mode: 0o600 });
     signal?.removeEventListener('abort', onAbort);
@@ -426,6 +440,116 @@ export function exportRecord(row, record) {
   const saved = record.saved ?? { ranking: [], failed: [], usage: null };
   const base = rankingRecord({ case: row, ranking: saved.ranking ?? [], failed: saved.failed ?? [], usage: saved.usage ?? null });
   return { ...base, ...(base.status === 'none' ? { why: record.status } : {}), caseStatus: record.status, arm: record.arm };
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// What a conversation did, read from its transcript
+// ---------------------------------------------------------------------------------------------------------------------
+
+/**
+ * The names of the tools a conversation called, in order, and the last thing the assistant said. Names and text only; no argument and no result.
+ * @param {any} transcript
+ */
+export function summarizeTranscript(transcript) {
+  const messages = Array.isArray(transcript?.messages) ? transcript.messages : [];
+  /** @type {string[]} */ const tools = [];
+  let toolErrors = 0, pending = 0, assistantMessages = 0, reply = '';
+  for (const message of messages) {
+    if (message?.role === 'tool') {
+      for (const part of message.parts ?? []) {
+        if (part?.type !== 'tool') continue;
+        tools.push(String(part.tool));
+        if (part.error) toolErrors += 1;
+        if (part.status === 'pending') pending += 1;
+      }
+    } else if (message?.role === 'assistant') {
+      assistantMessages += 1;
+      const text = (message.parts ?? []).filter((part) => part?.type === 'text').map((part) => String(part.text ?? '')).join('').trim();
+      if (text) reply = text;
+    }
+  }
+  return { tools, toolErrors, pendingCalls: pending, assistantMessages, turns: Array.isArray(transcript?.turns) ? transcript.turns.length : null, reply, replyChars: [...reply].length };
+}
+
+const VERDICT_WORDS = Object.freeze({ eligible: '符合', possible: '可能符合', insufficient: '证据不足', ineligible: '不符合' });
+
+/** Which of the four verdicts a line states. @param {string} line @returns {Set<string>} */
+function verdictsInLine(line) {
+  const found = new Set();
+  let text = String(line);
+  // The longer phrases first, each removed once read, so that "不符合" and "可能符合" are not also "符合".
+  const take = (/** @type {RegExp} */ pattern, /** @type {string} */ verdict) => { if (pattern.test(text)) { found.add(verdict); text = text.replace(new RegExp(pattern.source, `${pattern.flags}g`), ' '); } };
+  take(/不符合|不符|不适合|不合格|\bineligible\b/iu, 'ineligible');
+  take(/可能符合|可能适合|possibly eligible|\bpossible\b/iu, 'possible');
+  take(/证据不足|信息不足|\binsufficient\b/iu, 'insufficient');
+  if (/符合|\beligible\b/iu.test(text)) found.add('eligible');
+  return found;
+}
+
+const VERDICT_CELLS = Object.freeze({ 符合: 'eligible', 可能符合: 'possible', 证据不足: 'insufficient', 不符合: 'ineligible', 记载不足: 'insufficient' });
+
+/**
+ * What a line of the reply says of the trial it names: in a table row, the cell that is a verdict word (the other cells are reasons, and a reason
+ * may say 符合 of one clause); in prose, the verdict words of the line; and when the line says none, the verdict of the heading above it (「第一档：符合」).
+ * @param {string} line @param {string | null} heading @returns {{ stated: Set<string>, from: 'cell' | 'line' | 'heading' | 'none' }}
+ */
+function statedBy(line, heading) {
+  if (line.includes('|')) {
+    // A verdict cell begins with the verdict word, alone or followed by a bracket, a colon or a reason: 「不符合（当前）」, 「可能符合：年龄满足」.
+    const cells = line.split('|').map((cell) => cell.replace(/[*\s]/gu, '').replace(/^(?:当前|目前)/u, ''));
+    const verdicts = cells.map((cell) => /^(可能符合|不符合|证据不足|记载不足|符合)(?:$|[（(：:，,。；;])/u.exec(cell)?.[1] ?? null)
+      .map((word) => (word ? VERDICT_CELLS[/** @type {keyof typeof VERDICT_CELLS} */ (word)] : null)).filter(Boolean);
+    if (verdicts.length) return { stated: new Set(/** @type {string[]} */ (verdicts)), from: 'cell' };
+    return heading ? { stated: new Set([heading]), from: 'heading' } : { stated: new Set(), from: 'none' };
+  }
+  const found = verdictsInLine(line);
+  if (found.size) return { stated: found, from: 'line' };
+  return heading ? { stated: new Set([heading]), from: 'heading' } : { stated: new Set(), from: 'none' };
+}
+
+/**
+ * Do the verdicts the reply states match the rows that were saved? A trial counts as reported when its registry id is in the reply; it agrees when
+ * the verdict its line states (or, failing that, its heading) is the saved one. Trials the reply does not mention are not wrong, only unreported;
+ * an id the reply names that nothing saved is counted as unknown. A heading is a line with no registry id that states one verdict.
+ * @param {string} reply @param {ReadonlyArray<{ target?: any, verdict?: string }>} ranking
+ */
+export function replyAgreement(reply, ranking) {
+  const saved = new Map(ranking.map((item) => [String(item.target?.registryId ?? item.target?.id ?? '').toUpperCase(), String(item.verdict ?? '')]));
+  /** @type {Map<string, { stated: Set<string>, from: string }[]>} */
+  const stated = new Map();
+  let heading = /** @type {string | null} */ (null);
+  const mentioned = new Set();
+  for (const line of String(reply).split('\n')) {
+    const ids = [...new Set(line.toUpperCase().match(/NCT\d{8}/gu) ?? [])];
+    if (!ids.length) {
+      const found = verdictsInLine(line.replace(/\d+\s*(?:项|个|对)/gu, ' '));
+      if (found.size === 1 && !line.includes('|')) heading = [...found][0];
+      continue;
+    }
+    for (const id of ids) {
+      mentioned.add(id);
+      if (!saved.has(id)) continue;
+      stated.set(id, [...(stated.get(id) ?? []), statedBy(line, heading)]);
+    }
+  }
+  let agree = 0, disagree = 0, noVerdictStated = 0, byHeading = 0;
+  for (const [id, verdict] of saved) {
+    const lines = stated.get(id);
+    if (!lines) continue;
+    const explicit = lines.filter((entry) => entry.stated.size);
+    if (!explicit.length) { noVerdictStated += 1; continue; }
+    if (explicit.some((entry) => entry.stated.has(verdict))) { agree += 1; if (explicit.every((entry) => entry.from === 'heading')) byHeading += 1; } else disagree += 1;
+  }
+  const reported = stated.size;
+  return { saved: saved.size, reported, agree, disagree, noVerdictStated, unreported: saved.size - reported, unknownIds: [...mentioned].filter((id) => !saved.has(id)).length, agreeByHeading: byHeading };
+}
+
+/** MemAvailable in MB, or null where /proc is not there. */
+export function availableMb() {
+  try {
+    const match = /^MemAvailable:\s+(\d+) kB/mu.exec(fs.readFileSync('/proc/meminfo', 'utf8'));
+    return match ? Math.round(Number(match[1]) / 1024) : null;
+  } catch { return null; }
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -479,11 +603,14 @@ export async function createSavedReader({ databaseUrl, tree }) {
 
 /** The account's model usage, from the ledger, while the account still exists. @param {any} database @param {string} userId */
 async function usageOf(database, userId) {
-  const result = await database.query(`SELECT COALESCE(sum(CASE WHEN status = 'released' THEN 0 ELSE COALESCE(actual_cost, reserved_cost) END), 0)::float AS cny,
-    COALESCE(sum(COALESCE(cache_hit_tokens, 0) + COALESCE(cache_miss_tokens, 0)), 0)::float AS input, COALESCE(sum(COALESCE(output_tokens, 0)), 0)::float AS output, count(*)::int AS calls
-    FROM evimed_usage.model_requests WHERE user_id = $1`, [userId]).catch(() => null);
-  const row = result?.rows?.[0];
-  return row ? { inputTokens: Number(row.input), outputTokens: Number(row.output), costCny: Number(row.cny), calls: Number(row.calls) } : null;
+  const result = await database.query(`SELECT COALESCE(purpose, '(none)') AS purpose, COALESCE(sum(CASE WHEN status = 'released' THEN 0 ELSE COALESCE(actual_cost, reserved_cost) END), 0)::float AS cny,
+    COALESCE(sum(COALESCE(cache_hit_tokens, 0) + COALESCE(cache_miss_tokens, 0)), 0)::float AS input, COALESCE(sum(COALESCE(output_tokens, 0)), 0)::float AS output, count(*)::int AS calls,
+    count(*) FILTER (WHERE status IN ('reserved', 'uncertain'))::int AS unsettled
+    FROM evimed_usage.model_requests WHERE user_id = $1 GROUP BY 1`, [userId]).catch(() => null);
+  if (!result) return null;
+  const sum = (/** @type {string} */ key) => result.rows.reduce((total, row) => total + Number(row[key]), 0);
+  return { inputTokens: sum('input'), outputTokens: sum('output'), costCny: sum('cny'), calls: sum('calls'), unsettled: sum('unsettled'),
+    byPurpose: Object.fromEntries(result.rows.map((row) => [row.purpose, { calls: Number(row.calls), costCny: Number(Number(row.cny).toFixed(4)), inputTokens: Number(row.input), outputTokens: Number(row.output) }])) };
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -499,19 +626,27 @@ async function usageOf(database, userId) {
 export async function runProduct(o, deps = {}) {
   const log = deps.log ?? ((/** @type {string} */ line) => process.stdout.write(`${line}\n`));
   const now = deps.now ?? (() => new Date());
-  const root = o.out ?? path.join(o.dataDir, 'product', o.readiness ? 'readiness' : `${o.arm}-${o.board}`);
+  const root = o.out ?? path.join(o.dataDir, 'product', o.readiness ? 'readiness' : `${(o.arms ?? [o.arm]).join('+')}-${o.board}`);
   fs.mkdirSync(root, { recursive: true, mode: 0o700 });
   const dbUrl = scratchUrl({ serverUrl: o.dbUrl, name: o.dbName });
-  const cases = o.readiness ? [] : loadCases(o.boardsDir, o.board, { split: o.split, limit: o.limitPatients });
+  let cases = o.readiness ? [] : loadCases(o.boardsDir, o.board, { split: o.split, limit: o.patients ? null : o.limitPatients });
+  if (o.patients && !o.readiness) {
+    // The patients named, in the order named: a check on five chosen patients is five, not whichever the board lists first.
+    const byId = new Map(cases.map((row) => [row.patientId, row]));
+    const missing = o.patients.filter((id) => !byId.has(id));
+    if (missing.length) throw fail(`These patients are not in the ${o.board} ${o.split} split: ${missing.join(', ')}.`, 'no_cases');
+    cases = o.patients.map((id) => /** @type {Record<string, any>} */ (byId.get(id)));
+  }
   if (!o.readiness && !cases.length) throw fail('No cases for this board and split.', 'no_cases');
+  const arms = o.arms ?? [o.arm];
   const manifestFile = !o.readiness && o.boardsDir ? path.join(o.boardsDir, 'collections', String(cases[0].collection), 'collection.json') : '';
   const inputs = o.readiness ? null : writeCaseInputs({ cases, dir: path.join(root, 'inputs') });
   const spend = createSpendLedger(path.join(o.dataDir, 'spend-ledger.jsonl'));
   const realProvider = new URL(o.baseUrl).origin === REAL_PROVIDER;
   const balance = deps.balance !== undefined ? deps.balance : (realProvider ? createBalanceChecker({ python: o.evalPython, script: path.join(HERE, 'budget.py'), keyFile: o.keyFile, floor: o.floorCny }) : null);
   const recordedBefore = spend.recorded();
-  const estimate = o.readiness ? 0 : o.caseCny * cases.length;
-  const header = o.readiness ? 'readiness (nothing is dispatched)' : `board=${o.board} arm=${o.arm} split=${o.split} cases=${cases.length} (about CNY ${estimate.toFixed(2)} at ${o.caseCny} a case; recorded so far CNY ${recordedBefore.toFixed(2)} of cap ${o.capCny})`;
+  const estimate = o.readiness ? 0 : (o.allowanceCny ?? o.caseCny * cases.length * arms.length);
+  const header = o.readiness ? 'readiness (nothing is dispatched)' : `board=${o.board} arms=${arms.join(',')} split=${o.split} cases=${cases.length} x ${arms.length} (about CNY ${estimate.toFixed(2)} at ${o.caseCny} a case; recorded so far CNY ${recordedBefore.toFixed(2)} of cap ${o.capCny})`;
   log(`[run_product] ${header}${o.diagnostic ? ' | diagnostic (host-kernel stack)' : ''}`);
   if (o.planOnly) return { exitCode: EXIT.finished, summary: { planOnly: true, cases: cases.length, estimateCny: estimate }, outDir: root };
   if (!o.readiness) {
@@ -546,37 +681,62 @@ export async function runProduct(o, deps = {}) {
     if (o.readiness) summary.readinessResult = { ...await readiness({ base: server.base, instance: server.instance, liveData: server.liveData, log }), standInRequests: stand?.requests.length ?? 0, paidRequests: 0 };
     else {
       reader = await createSavedReader({ databaseUrl: dbUrl, tree: o.tree });
-      const arm = /** @type {keyof typeof ARM_SENTENCE} */ (o.arm);
-      /** @type {Array<Record<string, any>>} */ const exported = [];
+      /** @type {Record<string, Array<Record<string, any>>>} */ const exported = Object.fromEntries(arms.map((name) => [name, []]));
       let spentThisRun = 0;
       let lastCheck = Date.now();
       let unreadable = 0;
-      for (const [index, row] of cases.entries()) {
+      const plan = cases.flatMap((row, index) => arms.map((name) => ({ row, index, arm: /** @type {keyof typeof ARM_SENTENCE} */ (name) })));
+      for (const [step, { row, index, arm }] of plan.entries()) {
         if (abort.signal.aborted) { stopReason = new GuardStop('signal', 'Interrupted: the account of the case in hand is deleted and the run stops.'); break; }
         const guard = await watch({ spentThisRunCny: spentThisRun, recordedBeforeCny: recordedBefore, capCny: o.capCny, floor: o.floorCny, allowPeak: o.allowPeak, now: now(), balance: Date.now() - lastCheck >= o.checkMs ? balance : null });
         if (Date.now() - lastCheck >= o.checkMs) { lastCheck = Date.now(); unreadable = guard.unreadable ? unreadable + 1 : 0; }
         if (guard.stop || unreadable >= 3) { stopReason = guard.stop ?? new GuardStop('balance_unreadable', 'The balance could not be read three times in a row.'); break; }
+        // The allowance of this check: a case is started only if what is left would pay for the worst it is held to.
+        if (o.allowanceCny != null) {
+          const reserve = arm === 'native' ? o.runCapCny + 0.3 : 1.5;
+          if (spentThisRun + reserve > o.allowanceCny) { stopReason = new GuardStop('allowance', `CNY ${spentThisRun.toFixed(2)} spent of ${o.allowanceCny}; the next case (${arm}) could cost up to ${reserve.toFixed(2)}.`); break; }
+        }
+        // One kernel at a time, and not on a machine that is short of memory.
+        for (let waited = 0; o.minFreeMb > 0 && (availableMb() ?? Infinity) < o.minFreeMb && waited < 30; waited += 1) { if (waited === 0) log(`[run_product] free memory ${availableMb()} MB, under ${o.minFreeMb}: waiting`); await new Promise((resolve) => { setTimeout(resolve, 20_000); }); }
+        if (o.minFreeMb > 0 && (availableMb() ?? Infinity) < o.minFreeMb) { stopReason = new GuardStop('memory', `Free memory stayed under ${o.minFreeMb} MB for ten minutes.`); break; }
         const input = /** @type {NonNullable<typeof inputs>} */ (inputs).cases[index];
-        const record = await runBoardCase({ base: server.base, instance: server.instance, row, files: input.files, arm, outDir: path.join(root, 'cases'), timeoutMs: o.caseTimeoutMs, quietMs: o.quietMs,
+        const record = await runBoardCase({ base: server.base, instance: server.instance, row, files: input.files, arm, outDir: path.join(root, 'cases', arm), timeoutMs: o.caseTimeoutMs, quietMs: o.quietMs,
           signal: abort.signal, read: (query) => reader.read(query) });
         const cost = Number(record.saved?.usage?.costCny ?? usageBound(record.usage, o.caseCny));
         spentThisRun += cost;
-        spend.append({ kind: 'job', arm: `product-${o.arm}`, board: o.board, jobId: `product:${o.arm}:${row.patientId}:${record.runId ?? 'norun'}`, costCny: cost, calls: Number(record.saved?.usage?.calls ?? 0) });
-        exported.push(exportRecord(row, record));
-        summary.cases.push({ caseId: row.patientId, status: record.status, cleanup: record.cleanup, costCny: Number(cost.toFixed(4)), readFrom: record.saved?.readFrom ?? null, judged: record.saved?.ranking?.length ?? 0 });
-        log(`[run_product] ${index + 1}/${cases.length} ${row.patientId}: ${record.status} | judged ${record.saved?.ranking?.length ?? 0}/${row.candidateIds.length} | cost CNY ${cost.toFixed(2)} | account ${record.cleanup?.deleted ? 'deleted' : 'NOT DELETED'}`);
+        spend.append({ kind: 'job', arm: `product-${arm}`, board: o.board, jobId: `product:${arm}:${row.patientId}:${record.runId ?? 'norun'}`, costCny: cost, calls: Number(record.saved?.usage?.calls ?? 0) });
+        exported[arm].push(exportRecord(row, record));
+        const asked = row.candidateIds.length, saved = record.saved?.ranking?.length ?? 0;
+        const line = { caseId: row.patientId, arm, status: record.status, cleanup: record.cleanup, pairsAsked: asked, pairsSaved: saved, pairsFailed: record.saved?.failed?.length ?? 0, wallMinutes: record.wallMinutes ?? null,
+          modelCalls: record.saved?.usage?.calls ?? null, costCny: Number(cost.toFixed(4)), byPurpose: record.saved?.usage?.byPurpose ?? null, unsettledCalls: record.saved?.usage?.unsettled ?? null,
+          tools: record.digest?.tools ?? [], toolErrors: record.digest?.toolErrors ?? null, replyChars: record.digest?.replyChars ?? null, agreement: record.agreement ?? null, readFrom: record.saved?.readFrom ?? null,
+          jobs: (record.jobs ?? []).map((job) => ({ state: job.state ?? job.status, error: job.error?.code ?? null })), error: record.error ?? null };
+        summary.cases.push(line);
+        if (o.summaryDir) {
+          fs.mkdirSync(o.summaryDir, { recursive: true, mode: 0o700 });
+          fs.writeFileSync(path.join(o.summaryDir, `${arm}-${row.patientId}.json`), `${JSON.stringify({ ...line, reply: record.digest?.reply ?? '', startedAt: record.startedAt, finishedAt: record.finishedAt, prompt: record.prompt }, null, 2)}\n`, { mode: 0o600 });
+        }
+        log(`[run_product] ${step + 1}/${plan.length} ${arm} ${row.patientId}: ${record.status} | saved ${saved}/${asked} | ${record.wallMinutes} min | ${line.modelCalls} calls | CNY ${cost.toFixed(2)} (total ${spentThisRun.toFixed(2)}) | tools ${line.tools.length} | account ${record.cleanup?.deleted ? 'deleted' : 'NOT DELETED'}`);
         if (record.status === 'cleanup_failed') { stopReason = new GuardStop('cleanup_failed', 'An account could not be deleted: stopping so nobody adds to the leftovers.'); break; }
       }
-      const file = path.join(root, 'judgments.jsonl');
-      fs.writeFileSync(file, exported.map((entry) => JSON.stringify(entry)).join('\n') + (exported.length ? '\n' : ''));
-      Object.assign(summary, { spentCny: Number(spentThisRun.toFixed(4)), campaignCnyAfter: Number(spend.recorded().toFixed(4)), judgments: file });
+      /** @type {Record<string, string>} */ const files = {};
+      for (const name of arms) {
+        const dir = arms.length > 1 ? path.join(root, name) : root;
+        fs.mkdirSync(dir, { recursive: true });
+        files[name] = path.join(dir, 'judgments.jsonl');
+        fs.writeFileSync(files[name], exported[name].map((entry) => JSON.stringify(entry)).join('\n') + (exported[name].length ? '\n' : ''));
+      }
+      Object.assign(summary, { arms, spentCny: Number(spentThisRun.toFixed(4)), campaignCnyAfter: Number(spend.recorded().toFixed(4)), judgments: files });
       if (stopReason) summary.stopped = { code: stopReason.code, message: stopReason.message };
       const holdsTest = cases.some((row) => row.split === 'test');
-      if ((o.score === 'yes' || (o.score === 'auto' && !holdsTest)) && exported.length) summary.score = await scoreRun(o, BOARDS[o.board], root, file, log);
+      if (o.score === 'yes' || (o.score === 'auto' && !holdsTest)) {
+        summary.score = {};
+        for (const name of arms) if (exported[name].length) summary.score[name] = await scoreRun(o, BOARDS[o.board], path.dirname(files[name]), files[name], log);
+      }
     }
     summary.finishedAt = now().toISOString();
     fs.writeFileSync(path.join(root, 'summary.json'), `${JSON.stringify(summary, null, 2)}\n`, { mode: 0o600 });
-    const unsettled = summary.cases.filter((entry) => entry.status !== 'settled').length;
+    const unsettled = summary.cases.filter((/** @type {any} */ entry) => entry.status !== 'settled').length;
     return { exitCode: stopReason ? EXIT.stopped : unsettled ? EXIT.unsettled : EXIT.finished, summary, outDir: root };
   } finally {
     if (deps.signals !== false) for (const name of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.off(name, onSignal);
