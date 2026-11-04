@@ -24,7 +24,7 @@
 
 import { finishPremises } from "./vcrPremises.mjs";
 import { vcrScenarioKey } from "./vcrScenarioKey.mjs";
-import { list, markFor, measureValue, numeric, object } from "./vcrViewsKit.mjs";
+import { TIME_UNIT_WORDS, list, markFor, measureValue, numeric, object } from "./vcrViewsKit.mjs";
 
 /**
  * The key a confirmatory result is filed under (the result's `subject_id`): the design, the endpoint and the scenario it was asked on. The
@@ -67,7 +67,8 @@ const plain = (value, digits = 3) => String(Number(value.toPrecision(digits)));
 export function cellLabel(name) {
   const fixed = /** @type {Record<string, string>} */ ({
     power: "功效（拒绝零假设的概率）", type_one_error: "I 类错误（无效应时仍拒绝的概率）", expected_sample_size: "期望样本量", expected_events: "期望事件数",
-    expected_patients: "期望入组人数", expected_sample_size_h0: "无效应时的期望样本量", expected_events_h0: "无效应时的期望事件数",
+    expected_patients: "期望入组人数", expected_patients_h0: "无效应时的期望入组人数", expected_patients_from_events: "事件数折成的期望人数", max_patients_from_events: "最多事件数折成的人数",
+    expected_sample_size_h0: "无效应时的期望样本量", expected_events_h0: "无效应时的期望事件数",
     futility_stop_probability: "中途因无效停止的概率", futility_stop_probability_h0: "无效应时中途停止的概率", early_stop_probability: "中期就达标而停止的概率",
     increase_probability: "中期加样的概率", correct_selection_probability: "选中真正最好的臂的概率", selected_subset: "保留标志物阳性亚组的概率",
     selected_full: "保留全人群的概率", reject_subset: "亚组结论成立的概率", reject_full: "全人群结论成立的概率",
@@ -105,6 +106,17 @@ function effectText(row, endpoint) {
   if (effect && typeof effect === "object") return `亚组 ${plain(Number(effect.subset))}，其余 ${plain(Number(effect.rest))}（${word}）`;
   return numeric(effect) === null ? "—" : `${word} ${plain(Number(effect))}`;
 }
+
+/**
+ * How the people of an event-time design were counted, in the words of the page (the engine's `people.basis`, design.confirmatory 1.2.0). A design
+ * that could not count them says why and which keys would let it: that is the answer to "how many people", never a number worked out from the events.
+ */
+const PEOPLE_WORDS = Object.freeze(/** @type {Record<string, string>} */ ({
+  enrolment_at_looks: "均匀入组；每次中期分析时已经入组的人，按停在各次的概率加权，停止之后不再入组",
+  planned_enrolment: "计划入组的人数；中期就停的，只算当时已入组的人；继续并加样的，把增加的事件数按计划效应下每人发生事件的概率折成人数",
+  events_over_event_probability: "事件数 ÷ 每人在所述入组和随访内发生事件的概率（对照和试验组各占一半）；只是换算，没有模拟入组，中期停掉的臂已入组的人没有算",
+}));
+const PEOPLE_MISSING = "没有算：没有说明入组和随访。给出入组时长、随访时长（有人脱落时再给每年脱落率）和对照组中位时间，就能把事件数折成人数";
 
 /** @param {string} key @param {unknown} raw */
 function assumptionRow(key, raw) {
@@ -156,12 +168,22 @@ function premisesOf(confirmatory) {
   if (subsets) rows.push({ key: "effect", label: "设想的效应情形", value: `${subsets} 种，给出亚组和其余人群的${EFFECT_WORDS[endpoint] ?? "效应"}`, source: "assumed", decisive: true });
   if (numeric(given.rateRatio) !== null) rows.push({ key: "effect", label: "率比", value: plain(Number(given.rateRatio)), source: "assumed", decisive: true });
   if (numeric(given.controlRate) !== null) rows.push({ key: "control", label: "对照组事件率", value: `${plain(Number(given.controlRate) * 100)}%`, source: "assumed", decisive: true });
-  if (numeric(given.controlMedian) !== null) rows.push({ key: "control", label: "对照组中位时间", value: plain(Number(given.controlMedian)), source: "assumed", decisive: true });
+  const unit = TIME_UNIT_WORDS[String(given.timeUnit)]?.after ?? null;
+  if (numeric(given.controlMedian) !== null) rows.push({ key: "control", label: "对照组中位时间", value: `${plain(Number(given.controlMedian))}${unit ? ` ${unit}` : ""}`, source: "assumed", decisive: true });
   if (numeric(given.controlEventRate) !== null) rows.push({ key: "control", label: "对照组事件率（每患者每单位时间）", value: plain(Number(given.controlEventRate)), source: "assumed", decisive: true });
   if (numeric(given.overdispersion) !== null) rows.push({ key: "overdispersion", label: "过度离散", value: `${plain(Number(given.overdispersion))}（0 表示泊松）`, source: "assumed", decisive: true });
   if (numeric(given.subsetPrevalence) !== null) rows.push({ key: "prevalence", label: "标志物阳性所占比例", value: `${plain(Number(given.subsetPrevalence) * 100)}%`, source: "assumed", decisive: true });
   const dropout = numeric(given.dropoutAnnual);
   if (dropout !== null) rows.push({ key: "dropout", label: "每年脱落率", value: `${plain(dropout * 100)}%`, source: "assumed", decisive: false });
+  // the accrual and what the people rest on (only a result that stated them has them: an older result reads as it read)
+  const people = object(confirmatory.people);
+  const duration = numeric(given.accrualDuration);
+  const followup = numeric(given.followup);
+  if (duration !== null && followup !== null) {
+    rows.push({ key: "accrual", label: "入组与随访", value: `入组 ${plain(duration)} ${unit ?? "个月"}，随访 ${plain(followup)} ${unit ?? "个月"}`, source: "assumed", decisive: people.computed === true });
+  }
+  if (people.computed === true && PEOPLE_WORDS[String(people.basis)]) rows.push({ key: "people", label: "人数怎么算", value: PEOPLE_WORDS[String(people.basis)], source: "default", decisive: true });
+  else if (people.computed === false) rows.push({ key: "people", label: "人数", value: PEOPLE_MISSING, source: "default", decisive: false });
   const zone = object(given.promisingZone);
   if (numeric(zone.lower) !== null && numeric(zone.upper) !== null) {
     rows.push({ key: "zone", label: "只在中期条件功效落在这个区间时加样", value: `${plain(Number(zone.lower) * 100)}% 到 ${plain(Number(zone.upper) * 100)}%（区间之外按原计划样本量继续）`, source: "assumed", decisive: true });
@@ -185,23 +207,30 @@ function premisesOf(confirmatory) {
 function columnsFor(kind, confirmatory) {
   const events = confirmatory.unit === "events";
   const size = events ? "expected_events" : "expected_sample_size";
+  // the people beside the events, when the design counted them (design.confirmatory 1.2.0): one column, worded by what it counts
+  const counted = object(confirmatory.people).computed === true;
+  const people = (/** @type {string} */ cell, /** @type {string} */ label, /** @type {string | undefined} */ group) => (counted ? [{ key: cell, cell, label, ...(group ? { group } : {}) }] : []);
   switch (kind) {
     case "futility_group_sequential":
       return [{ key: "power", cell: "power", label: "功效 / I 类错误" }, { key: size, cell: size, label: events ? "期望事件数" : "期望样本量" },
+        ...people("expected_patients", "期望入组人数", undefined),
         { key: "futility_stop_probability", cell: "futility_stop_probability", label: "中途因无效停止的概率" }];
     case "sample_size_reestimation":
       return [{ key: "power", cell: "power", label: "功效 / I 类错误", group: "本设计" }, { key: size, cell: size, label: events ? "期望事件数" : "期望样本量", group: "本设计" },
+        ...people("expected_patients", "期望入组人数", "本设计"),
         { key: "increase_probability", cell: "increase_probability", label: "中期加样的概率", group: "本设计" },
         { key: "fixed_power", cell: null, label: "功效 / I 类错误", group: "固定设计", baseline: "fixed.power" },
         { key: "gs_power", cell: null, label: "功效 / I 类错误", group: "成组序贯", baseline: "groupSequential.power" },
         { key: "gs_size", cell: null, label: events ? "期望事件数" : "期望样本量", group: "成组序贯", baseline: "groupSequential.expectedSize", name: size }];
     case "multi_arm_selection":
       return [{ key: "power", cell: "power", label: "功效 / I 类错误", group: "本设计" }, { key: size, cell: size, label: events ? "期望事件数" : "期望样本量", group: "本设计" },
+        ...people("expected_patients_from_events", "事件数折成的人数", "本设计"),
         { key: "correct_selection_probability", cell: "correct_selection_probability", label: "选中最好臂的概率", group: "本设计" },
         ...Array.from({ length: Number(object(confirmatory.plan).arms ?? 0) }, (_, index) => ({ key: `selected_arm_${index + 1}`, cell: `selected_arm_${index + 1}`, label: `第 ${index + 1} 臂被保留`, group: "本设计" })),
         { key: "fixed_power", cell: null, label: "功效 / I 类错误", group: "最好的臂单独做试验", baseline: "fixed.power" }];
     case "enrichment":
       return [{ key: "power", cell: "power", label: "功效 / I 类错误", group: "本设计" }, { key: size, cell: size, label: events ? "期望事件数" : "期望样本量", group: "本设计" },
+        ...people("expected_patients_from_events", "事件数折成的人数", "本设计"),
         { key: "selected_subset", cell: "selected_subset", label: "保留亚组的概率", group: "本设计" },
         { key: "fixed_power", cell: null, label: "功效 / I 类错误", group: "不做中期、全人群固定设计", baseline: "fixed.power" }];
     default: return [];
@@ -210,6 +239,24 @@ function columnsFor(kind, confirmatory) {
 
 /** @param {Record<string, any>} path @param {string} dotted */
 const pick = (path, dotted) => dotted.split(".").reduce((node, key) => (node && typeof node === "object" ? node[key] : undefined), /** @type {any} */ (path));
+
+/**
+ * What a card is called: the design kind and the one setting that tells two cards of it apart on a page (the cap of a re-estimation, the
+ * number of looks, the arms, the share of the biomarker subset). A card named only by its kind was 「样本量再估计」 twice.
+ * @param {string} design @param {string} title @param {Record<string, any>} confirmatory
+ */
+function titleOf(design, title, confirmatory) {
+  const plan = object(confirmatory.plan);
+  const prevalence = numeric(plan.prevalence);
+  const factor = numeric(plan.cap) !== null && numeric(plan.total) ? Number(plan.cap) / Number(plan.total) : null;
+  switch (design) {
+    case "futility_group_sequential": return list(confirmatory.looks).length ? `${title}，${list(confirmatory.looks).length} 次分析` : title;
+    case "sample_size_reestimation": return factor === null ? title : `${title}，上限 ${plain(factor, 3)} 倍`;
+    case "multi_arm_selection": return numeric(plan.arms) !== null ? `${title}，${plan.arms} 个剂量` : title;
+    case "enrichment": return prevalence === null ? title : `${title}，阳性占 ${plain(prevalence * 100)}%`;
+    default: return title;
+  }
+}
 
 /**
  * The cards of the trial tab for the confirmatory results the study holds now, newest first.
@@ -224,6 +271,7 @@ export function presentConfirmatoryDesigns(bundle, { nodeOf }) {
     const design = String(confirmatory.kind ?? "");
     const words = KIND_WORDS[design];
     if (!words) return null;
+    const title = titleOf(design, words.title, confirmatory);
     const staleMark = markFor(bundle.stale ?? [], nodeOf(result));
     const context = { result, staleMark };
     const events = confirmatory.unit === "events";
@@ -260,15 +308,18 @@ export function presentConfirmatoryDesigns(bundle, { nodeOf }) {
     const baselines = [];
     const base = object(confirmatory.baselines);
     const unit = events ? "个事件" : "例";
-    if (numeric(object(base.fixed).size) !== null) baselines.push({ key: "fixed", label: events ? "固定设计所需事件数" : "固定设计所需样本量", text: `${plain(Number(object(base.fixed).size))} ${unit}` });
-    if (numeric(object(base.groupSequential).maxSize) !== null) baselines.push({ key: "groupSequential", label: "同样分析次数的成组序贯设计最多", text: `${plain(Number(object(base.groupSequential).maxSize))} ${unit}` });
+    // (design.confirmatory 1.2.0) the people those events are, at the planned effect and the stated accrual
+    const counted = object(confirmatory.people);
+    const asPeople = (/** @type {unknown} */ number) => (counted.computed === true && numeric(number) !== null ? `，折成 ${plain(Number(number))} 人` : "");
+    if (numeric(object(base.fixed).size) !== null) baselines.push({ key: "fixed", label: events ? "固定设计所需事件数" : "固定设计所需样本量", text: `${plain(Number(object(base.fixed).size))} ${unit}${asPeople(counted.fixedPatients)}` });
+    if (numeric(object(base.groupSequential).maxSize) !== null) baselines.push({ key: "groupSequential", label: "同样分析次数的成组序贯设计最多", text: `${plain(Number(object(base.groupSequential).maxSize))} ${unit}${asPeople(counted.groupSequentialPatients)}` });
     if (numeric(object(base.fixedMultiArm).size) !== null) baselines.push({ key: "fixedMultiArm", label: "所有臂都做到最后", text: `${plain(Number(object(base.fixedMultiArm).size))} 例` });
     if (numeric(object(base.separateTrials).size) !== null) baselines.push({ key: "separateTrials", label: "每个剂量各做一个双臂试验", text: `${plain(Number(object(base.separateTrials).size))} 例` });
     if (numeric(object(base.fixedFullPopulation).size) !== null) baselines.push({ key: "fixedFullPopulation", label: "不做中期、全人群固定设计", text: `${plain(Number(object(base.fixedFullPopulation).size))} 例` });
     const limited = result.conclusion === "limited" || object(result.diagnostics).canceled === true || list(object(result.diagnostics).issues).some((issue) => object(issue).code === "cpu_budget_exhausted")
       ? `只算完了一部分模拟（${list(confirmatory.iterations).map(Number).filter(Number.isFinite).join(" / ")} 次，每行各自的次数见表），数字按已算完的给出。` : null;
     return {
-      id: String(result.id), version: Number(result.version), design, title: words.title, question: words.question, endpoint: ENDPOINT_WORDS[String(confirmatory.endpoint)] ?? "",
+      id: String(result.id), version: Number(result.version), design, title, question: words.question, endpoint: ENDPOINT_WORDS[String(confirmatory.endpoint)] ?? "",
       unit: events ? "events" : "patients", headline, premises: premisesOf(confirmatory), looks, baselines, limited,
       table: rows.length ? { columns: columns.map(({ key, label, group }) => ({ key, label, group: group ?? null })), rows } : null,
     };

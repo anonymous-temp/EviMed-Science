@@ -34,6 +34,16 @@
 #   the control, there is no accrual and no control median, and the result lists "simulated on the log-rank statistics, proportional
 #   hazards" among its assumptions. Its baseline is in the same unit: the best arm in a two-arm trial of its own with the events its own
 #   comparison has in the design.
+# - **The people of an event-time design (1.2.0) are the people enrolled when the trial ends, never the events over a chance of an event.** A
+#   person asks "how many people on average", and the events saved by stopping early are mostly follow-up saved, not people: the interim
+#   of a 18-month accrual falls at month 17, when 95% have already entered. Group sequential: the expected number enrolled at each look
+#   (even enrolment, the look is the day the expected events reach its share, nobody enters after a stop) weighted by the probability of
+#   stopping there. Re-estimation: the plan's people (its events over the chance of an event at the planned effect), the people enrolled at the
+#   interim for a trial that stops there, the final events over that chance for one that goes on. The simulation's own `numberOfSubjects` is not
+#   used: it enrols the cap's people on the cap's schedule in every trial (1,466 on average beside a plan of 830). Selection and enrichment are
+#   sized in events and simulated on the log-rank statistics, so for them the people are only the events over the chance of an event of a
+#   control and a treated person (`*_patients_from_events`: the final comparison, the arms dropped at the interim not counted), and only when the
+#   scenario states the accrual and the control median; otherwise `people` says they are not computed and which keys give them.
 # - **A run that is stopped keeps what it has.** The batches that finished are merged, every scenario reports the iterations it ran, and
 #   the result is `limited` with the named reason (a spent CPU budget or a cancel), never a whole-looking answer from part of the work.
 # ---------------------------------------------------------------------------
@@ -110,6 +120,54 @@ VCR_CONFIRMATORY_NULL_RATE_RATIO <- 1
   list(patients = ceiling(events / p_ev), eventProbability = p_ev)
 }
 
+#' Is the job labelled with `from` or a later release? (A job with no label, a handler called directly, replays the oldest release: only a
+#' labelled job is counted as having a later one.) design.confirmatory 1.2.0 added the people of an event-time design.
+.vcr_conf_labelled_at_least <- function(job, from) {
+  mv <- job[["methodVersion"]]
+  is.character(mv) && length(mv) == 1L && nzchar(mv) && utils::compareVersion(mv, from) >= 0L
+}
+
+#' What turns the events of an event-time design into people: the accrual, the follow-up, the dropout and the control median the scenario
+#' stated. `NULL` when it did not (a selection or an enrichment design states none of them unless asked about people).
+.vcr_conf_people_context <- function(sc, p) {
+  if (is.null(sc$accrual) || is.null(p$control_median)) return(NULL)
+  .vcr_conf_tte_context(sc, p)
+}
+
+#' The answer of a design that cannot say how many people: the reason and the keys that would give it, in the words the model reads.
+.vcr_conf_people_missing <- function() list(computed = FALSE, reason = "accrual_not_stated",
+  needs = list("accrual.duration", "accrual.followup", "truth.controlMedian"),
+  note = paste("People are not computed: the scenario states no accrual, so the events cannot be turned into patients.",
+               "Give accrual.duration, accrual.followup (and accrual.dropoutAnnual if some are lost) and truth.controlMedian, and the result reports expected and maximum patients as well."))
+
+#' The people of a design that is sized in events and simulated on the log-rank statistics: its maximum events over the chance of an event of one
+#' person (`per_head`), or the reason there is no answer.
+.vcr_conf_people_block <- function(ctx, per_head, max_events, basis) {
+  if (is.null(ctx) || is.null(per_head)) return(.vcr_conf_people_missing())
+  list(computed = TRUE, basis = basis, maxPatients = ceiling(max_events / per_head - 1e-9), accrualDuration = ctx$duration, followup = ctx$followup)
+}
+
+#' The probability that a person of a group with `hr` (against the control) has an event under the stated accrual, follow-up and dropout.
+.vcr_conf_event_prob <- function(hr, ctx) vcr_event_probability(ctx$dist$rate * hr, ctx$duration, ctx$followup, ctx$eta)
+
+#' The expected events at calendar time `t` of `n` people who enter evenly over the accrual: the people enrolled by `t`, each with the
+#' probability of an event by `t` (the Lachin-Foulkes probability for an accrual that has run `t` and no follow-up yet, or the whole accrual and
+#' `t - accrual` of follow-up), averaged over the groups (`shares`, with the hazard ratios `hrs` against the control).
+.vcr_conf_events_by_time <- function(t, n, shares, hrs, ctx) {
+  during <- min(t, ctx$duration)
+  enrolled <- if (ctx$duration > 0) n * min(1, t / ctx$duration) else n
+  enrolled * sum(shares * vapply(hrs, function(h) vcr_event_probability(ctx$dist$rate * h, during, max(0, t - ctx$duration), ctx$eta), numeric(1)))
+}
+
+#' When `events` are expected to have happened among `n` people, and how many of them were enrolled by then (the analysis of a look
+#' happens that day; enrolment stops with a trial that stops).
+.vcr_conf_enrolled_at <- function(events, n, shares, hrs, ctx) {
+  horizon <- ctx$duration + ctx$followup
+  at <- function(t) .vcr_conf_events_by_time(t, n, shares, hrs, ctx)
+  t <- if (!(events > 0)) 0 else if (at(horizon) <= events) horizon else stats::uniroot(function(u) at(u) - events, c(0, horizon), tol = 1e-10)$root
+  list(time = t, enrolled = if (ctx$duration > 0) n * min(1, t / ctx$duration) else n)
+}
+
 #' The analytic power of the one-sided log-rank test at `events` events and a hazard ratio, 1:1, signed (a hazard ratio above 1 has a power
 #' below alpha): Schoenfeld's formula, the engine's own, solved for power.
 .vcr_conf_events_power <- function(events, hazard_ratio, alpha) stats::pnorm(sqrt(events / 4) * (-log(hazard_ratio)) - stats::qnorm(1 - alpha))
@@ -133,6 +191,8 @@ VCR_CONFIRMATORY_NULL_RATE_RATIO <- 1
   keep <- list(direction = if (is.character(hy)) hy, plannedEffect = vcr_scalar(tr$plannedEffect, NULL), controlRate = vcr_scalar(tr[["controlRate"]], NULL), controlMedian = vcr_scalar(tr$controlMedian, NULL),
                controlEventRate = vcr_scalar(tr$controlEventRate, NULL), rateRatio = vcr_scalar(tr$rateRatio, NULL), overdispersion = vcr_scalar(tr$overdispersion, NULL),
                subsetPrevalence = vcr_scalar(d$subsetPrevalence, NULL), dropoutAnnual = vcr_scalar(sc$accrual$dropoutAnnual, NULL),
+               accrualDuration = vcr_scalar(sc$accrual$duration, NULL), followup = vcr_scalar(sc$accrual$followup, NULL),
+               timeUnit = if (!is.null(sc$accrual)) vcr_time_unit(sc)$unit,
                effectScenarios = if (!is.null(tr$effectScenarios)) length(tr$effectScenarios), subsetScenarios = if (!is.null(tr$subsetEffects)) length(tr$subsetEffects),
                promisingZone = if (!is.null(zone)) list(lower = vcr_scalar(zone$lower), upper = vcr_scalar(zone$upper)))
   Filter(Negate(is.null), keep)
@@ -186,23 +246,40 @@ VCR_CONFIRMATORY_NULL_RATE_RATIO <- 1
   max_size <- size$max
   at_look <- max_size * p$rates
   patients <- NULL
+  people <- v12 <- NULL
   if (events) {
     ctx <- .vcr_conf_tte_context(sc, p)
     patients <- .vcr_conf_patients_for_events(max_size, effect, ctx, p$allocation)$patients
+    v12 <- .vcr_conf_labelled_at_least(job, "1.2.0")
   }
   efficacy <- gs$efficacyBounds; futility_bounds <- gs$futilityBounds %||% rep(NA_real_, k)
   looks <- lapply(seq_len(k), function(i) list(look = i, informationRate = p$rates[i], size = at_look[i], efficacyBound = efficacy[i],
     futilityBound = if (is.finite(futility_bounds[i])) futility_bounds[i] else NULL, alphaSpent = gs$alphaSpent[i], betaSpent = if (is.null(gs$betaSpent)) NULL else gs$betaSpent[i]))
-  row <- function(role, probs, expected, effect_value) list(role = role, effect = effect_value, cells = c(
+  # The people of an event-time design (1.2.0): the number enrolled when the trial stops. Enrolment is even over the accrual, a look is the day
+  # the expected events reach its share of the planned events, and a trial that stops enrols no one after it, so a look after the accrual has
+  # ended stops nothing in people (the events saved are the follow-up saved). The events per head are the stated accrual's (Lachin-Foulkes).
+  at_looks <- function(hr, probs) {
+    shares <- c(1 - p$allocation, p$allocation); hrs <- c(1, hr)
+    where <- lapply(seq_len(k), function(i) .vcr_conf_enrolled_at(p$rates[i] * max_size, patients, shares, hrs, ctx))
+    stopped <- probs$reject + probs$futility
+    weight <- c(stopped[-k], 1 - sum(stopped[-k]))
+    list(expected = sum(weight * vapply(where, function(w) w$enrolled, numeric(1))), looks = where)
+  }
+  row <- function(role, probs, expected, effect_value, enrolled = NULL) list(role = role, effect = effect_value, cells = c(
     .vcr_conf_cells(.vcr_conf_calc(if (identical(role, "null")) "type_one_error" else "power", sum(probs$reject)),
                     .vcr_conf_calc("futility_stop_probability", sum(probs$futility)),
-                    .vcr_conf_calc(if (events) "expected_events" else "expected_sample_size", expected)),
+                    .vcr_conf_calc(if (events) "expected_events" else "expected_sample_size", expected),
+                    if (!is.null(enrolled)) .vcr_conf_calc("expected_patients", enrolled$expected)),
     .vcr_conf_indexed(k, function(i) .vcr_conf_calc(sprintf("stop_efficacy_%d", i), probs$reject[i])),
     .vcr_conf_indexed(k, function(i) .vcr_conf_calc(sprintf("stop_futility_%d", i), probs$futility[i]))))
   # (the expected sizes are rpact's own absolute ones from the sample-size call; the characteristics' average sample number is relative to
   # the fixed design, not to the maximum, and is not used here)
-  effects <- list(row("null", op$h0, size$expected_h0, .vcr_conf_null_value(p$endpoint)),
-                  row("planned", op$h1, size$expected_h1, effect))
+  enrolled <- if (isTRUE(v12)) list(h0 = at_looks(1, op$h0), h1 = at_looks(effect, op$h1))
+  effects <- list(row("null", op$h0, size$expected_h0, .vcr_conf_null_value(p$endpoint), enrolled[["h0"]]),
+                  row("planned", op$h1, size$expected_h1, effect, enrolled[["h1"]]))
+  if (!is.null(enrolled)) people <- list(computed = TRUE, basis = "enrolment_at_looks", maxPatients = patients, accrualDuration = ctx$duration, followup = ctx$followup,
+    atLooks = lapply(seq_len(k), function(i) list(look = i, timePlanned = enrolled[["h1"]]$looks[[i]]$time, enrolledPlanned = enrolled[["h1"]]$looks[[i]]$enrolled,
+                                                  timeNull = enrolled[["h0"]]$looks[[i]]$time, enrolledNull = enrolled[["h0"]]$looks[[i]]$enrolled)))
   size_name <- if (events) "expected_events" else "expected_sample_size"
   renamed <- function(m, name) { m$name <- name; m }
   measures <- Filter(Negate(is.null), list(
@@ -211,11 +288,12 @@ VCR_CONFIRMATORY_NULL_RATE_RATIO <- 1
     if (!is.null(patients)) .vcr_conf_calc("max_patients", patients),
     effects[[2]]$cells$power, effects[[1]]$cells$type_one_error,
     effects[[2]]$cells[[size_name]], renamed(effects[[1]]$cells[[size_name]], paste0(size_name, "_h0")),
+    if (!is.null(enrolled)) effects[[2]]$cells$expected_patients, if (!is.null(enrolled)) renamed(effects[[1]]$cells$expected_patients, "expected_patients_h0"),
     effects[[2]]$cells$futility_stop_probability, renamed(effects[[1]]$cells$futility_stop_probability, "futility_stop_probability_h0")))
   list(status = "succeeded", measures = measures, counts = vcr_counts(), conclusion = "estimable",
-       diagnostics = list(confirmatory = list(kind = p$kind, endpoint = p$endpoint, unit = unit, looks = looks, effects = effects,
+       diagnostics = list(confirmatory = c(list(kind = p$kind, endpoint = p$endpoint, unit = unit, looks = looks, effects = effects,
          baselines = list(fixed = list(size = .vcr_conf_ceiling(fixed), unit = unit)), inflation = op$inflation,
-         binding = futility$binding, assumed = p$assumed, given = .vcr_conf_given(sc))))
+         binding = futility$binding, assumed = p$assumed, given = .vcr_conf_given(sc)), if (!is.null(people)) list(people = people))))
 }
 
 # --- the simulated designs: shared reductions ---------------------------------------------------------------
@@ -251,6 +329,16 @@ VCR_CONFIRMATORY_NULL_RATE_RATIO <- 1
 
 # --- sample size re-estimation (T3) -----------------------------------------------------------------------
 
+#' The people a re-estimation trial has enrolled when it ends (design.confirmatory 1.2.0), one number per simulated trial. The plan enrols
+#' `plan_people$patients` to reach its planned events; a trial that stops at the interim has enrolled those who entered by the day the
+#' expected interim events were reached at the true effect (even enrolment, none after the stop), and one that goes on has enrolled the people its
+#' final events need at the planned event rate per head, never fewer than the plan. (The simulation's own `numberOfSubjects` is not this: it
+#' enrols the people of the cap on the cap's schedule in every trial, 1,466 on average beside a plan of 830.)
+.vcr_conf_reestimation_people <- function(it, events, effect, plan, plan_people, ctx, allocation) {
+  at_interim <- .vcr_conf_enrolled_at(plan[1L], plan_people$patients, c(1 - allocation, allocation), c(1, effect), ctx)$enrolled
+  ifelse(it$stage == 1L, at_interim, pmax(plan_people$patients, events / plan_people$eventProbability))
+}
+
 .vcr_conf_reestimation <- function(job, progress = NULL) {
   sc <- job$scenario; p <- .vcr_conf_note_defaults(.vcr_conf_common(sc), sc)
   d <- sc$design; tr <- sc$truth
@@ -276,10 +364,13 @@ VCR_CONFIRMATORY_NULL_RATE_RATIO <- 1
   cap <- ceiling(factor * plan_total)
   if (cap <= plan_total) cap <- plan_total + 1
   ctx <- if (events) .vcr_conf_tte_context(sc, p) else NULL
+  v12 <- events && .vcr_conf_labelled_at_least(job, "1.2.0")
   max_subjects <- if (events) {
     worst <- max(vapply(effects, function(e) .vcr_conf_patients_for_events(cap, e, ctx, p$allocation)$patients, numeric(1)))
     as.integer(worst)
   }
+  # (1.2.0) the people the plan enrols, and the chance of an event per person that turns every other number of events into people
+  plan_people <- if (v12) .vcr_conf_patients_for_events(plan_total, planned_effect, ctx, p$allocation)
   accrual <- if (events) list(duration = ctx$duration, dropoutAnnual = vcr_scalar(sc$accrual$dropoutAnnual, 0), perYear = ctx$perYear, maxSubjects = max_subjects)
   inv <- vcr_rpact_inverse_normal(p$rates, p$alpha, p[["spending"]], p$gamma)
   is_null <- abs(effects - null_value) < 1e-12
@@ -306,7 +397,7 @@ VCR_CONFIRMATORY_NULL_RATE_RATIO <- 1
       .vcr_conf_mean(if (events) "expected_events" else "expected_sample_size", total),
       .vcr_conf_prob("early_stop_probability", sum(it$stopped_stage1), it$n),
       .vcr_conf_prob("increase_probability", increased, it$n),
-      if (events) .vcr_conf_mean("expected_patients", it$size))
+      if (events) .vcr_conf_mean("expected_patients", if (v12) .vcr_conf_reestimation_people(it, ev, effects[s], plan, plan_people, ctx, p$allocation) else it$size))
     rows_out[[length(rows_out) + 1L]] <- list(role = if (is_null[s]) "null" else if (abs(effects[s] - planned_effect) < 1e-12) "planned" else "assumed", effect = effects[s],
       iterations = it$n, cells = cells,
       fixed = list(power = fixed_pw[[s]]$power, size = .vcr_conf_ceiling(fx_size$max)),
@@ -315,18 +406,26 @@ VCR_CONFIRMATORY_NULL_RATE_RATIO <- 1
   stop_state <- .vcr_conf_stop(batches)
   head_row <- Filter(function(r) identical(r$role, "planned"), rows_out)
   null_row <- Filter(function(r) identical(r$role, "null"), rows_out)
+  # (1.2.0) the people beside the events: the trial is simulated patient by patient, so the expected number is the simulation's own and the most
+  # a trial can enrol is the people that the capped number of events needs in the worst of the effects
   measures <- c(list(.vcr_conf_calc(if (events) "required_events" else "required_total", .vcr_conf_ceiling(fx_size$max)),
                      .vcr_conf_calc(if (events) "planned_events" else "planned_total", plan_total),
                      .vcr_conf_calc(if (events) "max_events" else "max_patients", cap)),
-                if (length(head_row)) unname(head_row[[1]]$cells[c("power", if (events) "expected_events" else "expected_sample_size", "increase_probability")]),
+                if (v12) list(.vcr_conf_calc("max_patients", .vcr_conf_ceiling(cap / plan_people$eventProbability))),
+                if (length(head_row)) unname(head_row[[1]]$cells[c("power", if (events) "expected_events" else "expected_sample_size", if (v12) "expected_patients", "increase_probability")]),
                 if (length(null_row)) list(null_row[[1]]$cells$type_one_error))
+  people <- if (v12) {
+    list(computed = TRUE, basis = "planned_enrolment", maxPatients = .vcr_conf_ceiling(cap / plan_people$eventProbability), plannedPatients = plan_people$patients, accrualDuration = ctx$duration, followup = ctx$followup,
+         fixedPatients = .vcr_conf_patients_for_events(fx_size$max, planned_effect, ctx, p$allocation)$patients,
+         groupSequentialPatients = .vcr_conf_patients_for_events(gs_size$max, planned_effect, ctx, p$allocation)$patients)
+  }
   list(status = stop_state$status %||% "succeeded", measures = measures, issues = stop_state$issues %||% list(), counts = vcr_counts(generatedRecords = sum(batches$done)),
        conclusion = if (is.null(stop_state)) "estimable" else "limited",
-       diagnostics = list(replicatesCompleted = min(batches$done), confirmatory = list(kind = p$kind, endpoint = p$endpoint, unit = unit, effects = rows_out,
+       diagnostics = list(replicatesCompleted = min(batches$done), confirmatory = c(list(kind = p$kind, endpoint = p$endpoint, unit = unit, effects = rows_out,
          plan = list(first = plan[1L], total = plan[2L], cap = cap, conditionalPower = cp, promisingZone = zone), iterations = as.list(batches$done),
          baselines = list(fixed = list(size = .vcr_conf_ceiling(fx_size$max), unit = unit),
                           groupSequential = list(maxSize = .vcr_conf_ceiling(gs_size$max), unit = unit, looks = length(p$rates))),
-         assumed = p$assumed, given = .vcr_conf_given(sc))))
+         assumed = p$assumed, given = .vcr_conf_given(sc)), if (!is.null(people)) list(people = people))))
 }
 
 # --- multi-arm selection (T4) -------------------------------------------------------------------------------
@@ -348,6 +447,9 @@ VCR_CONFIRMATORY_NULL_RATE_RATIO <- 1
   intersection <- as.character(d$intersectionTest %||% "simes")
   if (is.null(d$intersectionTest)) p <- .vcr_conf_assume(p, "design.intersectionTest", intersection)
   if (events) p <- .vcr_conf_event_driven(p)
+  # (1.2.0) an event-time design says how many people its events are when the scenario states the accrual and the control median
+  v12 <- events && .vcr_conf_labelled_at_least(job, "1.2.0")
+  ctx <- if (v12) .vcr_conf_people_context(sc, p)
   per_arm <- vcr_scalar(d$plannedSize, NULL)
   if (is.null(per_arm)) vcr_abort("scenario_field_missing", "scenario.design.plannedSize",
     if (events) "A multi-arm event-time design states the planned number of events at the final analysis (the arms still in the trial and the control)."
@@ -374,6 +476,9 @@ VCR_CONFIRMATORY_NULL_RATE_RATIO <- 1
     best <- which(benefit(scenarios[[s]]) == max(benefit(scenarios[[s]])))
     # an event-time trial costs the events planned for the stage it stopped at
     if (events) it$size <- ifelse(it$stage == 2L, planned[2L], planned[1L])
+    # the people those events are: the events over the chance of an event of a person of the control and of the arm that is best in this scenario
+    # (1:1; the people of the arms dropped at the interim are not counted, nor is the enrolment simulated)
+    per_head <- if (!is.null(ctx)) 0.5 * .vcr_conf_event_prob(1, ctx) + 0.5 * .vcr_conf_event_prob(min(scenarios[[s]]), ctx)
     # an arm is selected when it has a row at the second stage; one that stopped at the first stage for success has none
     stage2 <- r[r$stageNumber == 2L, , drop = FALSE]
     n_it <- it$n
@@ -382,6 +487,7 @@ VCR_CONFIRMATORY_NULL_RATE_RATIO <- 1
     best_selected <- length(unique(stage2$iterationNumber[stage2$armNumber %in% best]))
     cells <- c(.vcr_conf_cells(.vcr_conf_prob(if (is_null[s]) "type_one_error" else "power", sum(it$reject), n_it),
                                .vcr_conf_mean(size_name, it$size),
+                               if (!is.null(ctx)) .vcr_conf_mean("expected_patients_from_events", it$size / per_head),
                                .vcr_conf_prob("early_stop_probability", sum(it$stopped_stage1), n_it),
                                # with equal effects there is no best arm to select, and the cell is left out
                                if (!is_null[s] && length(best) == 1L) .vcr_conf_prob("correct_selection_probability", best_selected, n_it)),
@@ -396,22 +502,25 @@ VCR_CONFIRMATORY_NULL_RATE_RATIO <- 1
                      own_events <- planned[1L] * (1 + best_hr) / (1 + sum(scenarios[[s]])) + (planned[2L] - planned[1L])
                      .vcr_conf_events_power(own_events, best_hr, p$alpha / arms)
                    } else .vcr_conf_fixed_power(p, scenarios[[s]][best[1L]], per_arm, per_arm, p$alpha / arms)
-    rows_out[[length(rows_out) + 1L]] <- list(role = if (is_null[s]) "null" else "assumed", effect = scenarios[[s]], iterations = n_it, cells = cells,
-      fixed = list(power = split_power, alpha = p$alpha / arms))
+    rows_out[[length(rows_out) + 1L]] <- c(list(role = if (is_null[s]) "null" else "assumed", effect = scenarios[[s]], iterations = n_it, cells = cells,
+      fixed = list(power = split_power, alpha = p$alpha / arms)), if (!is.null(per_head)) list(perHead = per_head))
   }
   fixed_all <- (arms + 1L) * per_arm; separate <- 2L * arms * per_arm
   stop_state <- .vcr_conf_stop(batches)
   first_alt <- Filter(function(r) identical(r$role, "assumed"), rows_out)
   null_row <- Filter(function(r) identical(r$role, "null"), rows_out)
+  people <- if (v12) .vcr_conf_people_block(ctx, if (length(first_alt)) first_alt[[1]]$perHead, per_arm, "events_over_event_probability")
   measures <- c(if (events) list(.vcr_conf_calc("max_events", per_arm))
                 else list(.vcr_conf_calc("max_patients", fixed_all), .vcr_conf_calc("separate_trials_size", separate)),
-                if (length(first_alt)) unname(first_alt[[1]]$cells[c("power", size_name, "correct_selection_probability")]),
+                if (isTRUE(people$computed)) list(.vcr_conf_calc("max_patients_from_events", people$maxPatients)),
+                if (length(first_alt)) unname(first_alt[[1]]$cells[c("power", size_name, if (isTRUE(people$computed)) "expected_patients_from_events", "correct_selection_probability")]),
                 if (length(null_row)) list(null_row[[1]]$cells$type_one_error))
   list(status = stop_state$status %||% "succeeded", measures = Filter(Negate(is.null), measures), issues = stop_state$issues %||% list(),
        counts = vcr_counts(generatedRecords = sum(batches$done)), conclusion = if (is.null(stop_state)) "estimable" else "limited",
-       diagnostics = list(replicatesCompleted = min(batches$done), confirmatory = list(kind = p$kind, endpoint = p$endpoint, unit = unit, effects = rows_out,
+       diagnostics = list(replicatesCompleted = min(batches$done), confirmatory = c(list(kind = p$kind, endpoint = p$endpoint, unit = unit, effects = rows_out,
          plan = list(first = planned[1L], total = per_arm, arms = arms, perArm = !events), iterations = as.list(batches$done),
-         baselines = if (events) list() else list(fixedMultiArm = list(size = fixed_all), separateTrials = list(size = separate)), assumed = p$assumed, given = .vcr_conf_given(sc))))
+         baselines = if (events) list() else list(fixedMultiArm = list(size = fixed_all), separateTrials = list(size = separate)), assumed = p$assumed, given = .vcr_conf_given(sc)),
+         if (!is.null(people)) list(people = people))))
 }
 
 # --- enrichment (T5) --------------------------------------------------------------------------------------------
@@ -426,6 +535,8 @@ VCR_CONFIRMATORY_NULL_RATE_RATIO <- 1
   intersection <- as.character(d$intersectionTest %||% "simes")
   if (is.null(d$intersectionTest)) p <- .vcr_conf_assume(p, "design.intersectionTest", intersection)
   if (events) p <- .vcr_conf_event_driven(p)
+  v12 <- events && .vcr_conf_labelled_at_least(job, "1.2.0")
+  ctx <- if (v12) .vcr_conf_people_context(sc, p)
   total <- vcr_scalar(d$plannedSize, NULL)
   if (is.null(total)) vcr_abort("scenario_field_missing", "scenario.design.plannedSize",
     if (events) "An event-time enrichment design states the planned number of events at the final analysis (the full population, both arms)."
@@ -449,6 +560,9 @@ VCR_CONFIRMATORY_NULL_RATE_RATIO <- 1
     # the full population is enrolled for the first stage; the second stage is enrolled from the population that was kept, in the planned number
     it$size <- ifelse(it$stage == 2L, planned[2L], planned[1L])
     n_it <- it$n
+    # the people those events are: the events over the chance of an event of a person of the control and of one given the treatment, who is in the
+    # biomarker-positive subset with the stated prevalence (1:1; the enrolment is not simulated)
+    per_head <- if (!is.null(ctx)) 0.5 * .vcr_conf_event_prob(1, ctx) + 0.5 * (prevalence * .vcr_conf_event_prob(scenarios[[s]][["subset"]], ctx) + (1 - prevalence) * .vcr_conf_event_prob(scenarios[[s]][["rest"]], ctx))
     pop <- r$populationNumber
     # population 1 is the biomarker-positive subset, the last the full population
     stage2 <- r[r$stageNumber == 2L, , drop = FALSE]
@@ -456,6 +570,7 @@ VCR_CONFIRMATORY_NULL_RATE_RATIO <- 1
     rej <- function(k) length(unique(r$iterationNumber[pop == k & r$rejectPerStage %in% c(TRUE, 1)]))
     cells <- .vcr_conf_cells(.vcr_conf_prob(if (is_null[s]) "type_one_error" else "power", sum(it$reject), n_it),
                              .vcr_conf_mean(size_name, it$size),
+                             if (!is.null(ctx)) .vcr_conf_mean("expected_patients_from_events", it$size / per_head),
                              .vcr_conf_prob("early_stop_probability", sum(it$stopped_stage1), n_it),
                              .vcr_conf_prob("selected_subset", cont(1L), n_it), .vcr_conf_prob("selected_full", cont(2L), n_it),
                              .vcr_conf_prob("reject_subset", rej(1L), n_it), .vcr_conf_prob("reject_full", rej(2L), n_it))
@@ -466,21 +581,24 @@ VCR_CONFIRMATORY_NULL_RATE_RATIO <- 1
       exp(sum(share * log(scenarios[[s]])) / sum(share))
     } else prevalence * scenarios[[s]][["subset"]] + (1 - prevalence) * scenarios[[s]][["rest"]]
     fixed_power <- if (is_null[s]) p$alpha else if (events) .vcr_conf_events_power(total, pooled, p$alpha) else .vcr_conf_fixed_power(p, pooled, total / 2, total / 2, p$alpha)
-    rows_out[[length(rows_out) + 1L]] <- list(role = if (is_null[s]) "null" else "assumed", effect = list(subset = scenarios[[s]][["subset"]], rest = scenarios[[s]][["rest"]]),
+    rows_out[[length(rows_out) + 1L]] <- c(list(role = if (is_null[s]) "null" else "assumed", effect = list(subset = scenarios[[s]][["subset"]], rest = scenarios[[s]][["rest"]]),
       iterations = n_it, cells = cells,
-      fixed = list(power = fixed_power, pooledEffect = pooled))
+      fixed = list(power = fixed_power, pooledEffect = pooled)), if (!is.null(per_head)) list(perHead = per_head))
   }
   stop_state <- .vcr_conf_stop(batches)
   first_alt <- Filter(function(r) identical(r$role, "assumed"), rows_out)
   null_row <- Filter(function(r) identical(r$role, "null"), rows_out)
+  people <- if (v12) .vcr_conf_people_block(ctx, if (length(first_alt)) first_alt[[1]]$perHead, total, "events_over_event_probability")
   measures <- c(list(.vcr_conf_calc(if (events) "max_events" else "max_patients", total)),
-                if (length(first_alt)) unname(first_alt[[1]]$cells[c("power", size_name, "selected_subset")]),
+                if (isTRUE(people$computed)) list(.vcr_conf_calc("max_patients_from_events", people$maxPatients)),
+                if (length(first_alt)) unname(first_alt[[1]]$cells[c("power", size_name, if (isTRUE(people$computed)) "expected_patients_from_events", "selected_subset")]),
                 if (length(null_row)) list(null_row[[1]]$cells$type_one_error))
   list(status = stop_state$status %||% "succeeded", measures = measures, issues = stop_state$issues %||% list(),
        counts = vcr_counts(generatedRecords = sum(batches$done)), conclusion = if (is.null(stop_state)) "estimable" else "limited",
-       diagnostics = list(replicatesCompleted = min(batches$done), confirmatory = list(kind = p$kind, endpoint = p$endpoint, unit = unit, effects = rows_out,
+       diagnostics = list(replicatesCompleted = min(batches$done), confirmatory = c(list(kind = p$kind, endpoint = p$endpoint, unit = unit, effects = rows_out,
          plan = list(first = planned[1L], total = total, prevalence = prevalence), iterations = as.list(batches$done),
-         baselines = list(fixedFullPopulation = list(size = total)), assumed = p$assumed, given = .vcr_conf_given(sc))))
+         baselines = list(fixedFullPopulation = list(size = total)), assumed = p$assumed, given = .vcr_conf_given(sc)),
+         if (!is.null(people)) list(people = people))))
 }
 
 # --- count endpoint (T6) ---------------------------------------------------------------------------------------------

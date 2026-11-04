@@ -884,6 +884,12 @@ vcr_pattern_match <- function(pattern, x) {
   }
   truth <- .vcrp_get(sc, "truth"); if (!.vcrp_named(truth)) truth <- list()
   type <- if (.vcrp_chr(type)) type else ""
+  # an event-time selection or enrichment turns its events into people from the accrual and the control median together (1.2.0)
+  if (kind %in% c("multi_arm_selection", "enrichment") && identical(type, "time_to_event")) {
+    has_accrual <- !is.null(.vcrp_get(sc, "accrual")); has_median <- !is.null(truth[["controlMedian"]])
+    if (has_accrual && !has_median) bad("truth.controlMedian", "The accrual turns events into people through the control median: state the control median too, or leave the accrual out.", "scenario_field_missing")
+    if (has_median && !has_accrual) bad("accrual.duration", "The control median turns events into people through the accrual: state the accrual (its duration and follow-up) too, or leave the control median out.", "scenario_field_missing")
+  }
   on_scale <- function(field, value) {
     if (!.vcrp_num(value)) return(invisible(NULL))
     if (type == "time_to_event" && !(value > 0)) bad(field, "A hazard ratio is positive.")
@@ -1261,6 +1267,15 @@ vcr_job_at_least <- function(job, from) {
     (isTRUE(.vcrp_get(design, "kind") %in% c("multi_arm_selection", "enrichment")) && identical(.vcrp_get(.vcrp_get(sc, "endpoint"), "type"), "time_to_event"))
 }
 
+# Does a confirmatory scenario ask for what design.confirmatory 1.2.0 added (the accrual, time unit and control median of an event-time multi-arm
+# selection or enrichment)? Mirrors usesConfirmatoryBeyond1_1_0 in the domain.
+.vcrp_uses_confirmatory_beyond_1_1_0 <- function(sc) {
+  design <- .vcrp_get(sc, "design")
+  if (!.vcrp_named(design)) return(FALSE)
+  isTRUE(.vcrp_get(design, "kind") %in% c("multi_arm_selection", "enrichment")) && identical(.vcrp_get(.vcrp_get(sc, "endpoint"), "type"), "time_to_event") &&
+    (!is.null(.vcrp_get(sc, "accrual")) || !is.null(.vcrp_get(sc, "timeUnit")) || !is.null(.vcrp_get(.vcrp_get(sc, "truth"), "controlMedian")))
+}
+
 # Does a synthesis or quality scenario ask for what population.synthpop / population.quality 1.1.0 added? Mirrors usesQualityBeyond1_0_0 in the domain.
 .vcrp_uses_quality_beyond_1_0_0 <- function(sc) {
   if (!.vcrp_named(sc)) return(FALSE)
@@ -1296,8 +1311,9 @@ vcr_job_at_least <- function(job, from) {
     if (identical(job[["method"]], "model.survival_fit") && (identical(.vcrp_get(job$scenario, "distribution"), "spline") || !is.null(.vcrp_get(job$scenario, "knots")))) return(FALSE)
     # and model.prognostic_apply 1.1.0 added the local calibration against the outcome the table holds
     if (identical(job[["method"]],"model.prognostic_apply") && !is.null(.vcrp_get(job$scenario,"calibration"))) return(FALSE)
-    # and design.confirmatory 1.1.0 the promising zone and the event-time selection and enrichment designs
-    if (identical(job[["method"]],"design.confirmatory") && .vcrp_uses_confirmatory_beyond_1_0_0(job$scenario)) return(FALSE)
+    # and design.confirmatory 1.1.0 the promising zone and the event-time selection and enrichment designs, and 1.2.0 the accrual of those two
+    if (identical(job[["method"]],"design.confirmatory") && .vcrp_uses_confirmatory_beyond_1_0_0(job$scenario) && utils::compareVersion(job$methodVersion,"1.1.0")<0) return(FALSE)
+    if (identical(job[["method"]],"design.confirmatory") && .vcrp_uses_confirmatory_beyond_1_1_0(job$scenario) && utils::compareVersion(job$methodVersion,"1.2.0")<0) return(FALSE)
     # and population.synthpop / population.quality 1.1.0 the survival analyses, the permuted-arm calibration and the privacy measures
     if (job[["method"]] %in% c("population.synthpop","population.quality") && .vcrp_uses_quality_beyond_1_0_0(job$scenario) && utils::compareVersion(job$methodVersion,"1.1.0")<0) return(FALSE)
     # and evidence.pool 1.1.0 the informative prior for the heterogeneity

@@ -382,7 +382,7 @@
       ]
     },
     "design.confirmatory": {
-      "version": "1.1.0",
+      "version": "1.2.0",
       "endpoints": [
         "continuous",
         "binary",
@@ -398,7 +398,8 @@
       ],
       "modelTier": "scenario",
       "compatibleVersions": [
-        "1.0.0"
+        "1.0.0",
+        "1.1.0"
       ]
     },
     "design.dose": {
@@ -10103,11 +10104,27 @@
                   "path": "design.kind",
                   "in": [
                     "futility_group_sequential",
-                    "sample_size_reestimation"
+                    "sample_size_reestimation",
+                    "multi_arm_selection",
+                    "enrichment"
                   ]
                 }
               ],
-              "req": true
+              "reqWhen": [
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "time_to_event"
+                  ]
+                },
+                {
+                  "path": "design.kind",
+                  "notIn": [
+                    "multi_arm_selection",
+                    "enrichment"
+                  ]
+                }
+              ]
             },
             "controlEventRate": {
               "t": "number",
@@ -10211,7 +10228,9 @@
               "path": "design.kind",
               "in": [
                 "futility_group_sequential",
-                "sample_size_reestimation"
+                "sample_size_reestimation",
+                "multi_arm_selection",
+                "enrichment"
               ]
             }
           ]
@@ -10236,7 +10255,9 @@
               "path": "design.kind",
               "in": [
                 "futility_group_sequential",
-                "sample_size_reestimation"
+                "sample_size_reestimation",
+                "multi_arm_selection",
+                "enrichment"
               ]
             }
           ]

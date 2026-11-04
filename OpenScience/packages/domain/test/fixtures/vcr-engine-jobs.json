@@ -7226,6 +7226,147 @@
           }
         ]
       }
+    },
+    {
+      "name": "confirmatory: an event-time selection that states the accrual and the control median also gives people (1.2.0)",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "design_confirmatory",
+        "method": "design.confirmatory",
+        "methodVersion": "1.2.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "multi_arm_selection",
+            "informationRates": [
+              0.5,
+              1
+            ],
+            "activeArms": 3,
+            "plannedSize": 240
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "truth": {
+            "effectScenarios": [
+              [
+                0.9,
+                0.75,
+                0.6
+              ]
+            ],
+            "controlMedian": 12
+          },
+          "accrual": {
+            "duration": 18,
+            "followup": 12,
+            "dropoutAnnual": 0.05
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "confirmatory: an event-time enrichment that states the accrual and the control median also gives people (1.2.0)",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "design_confirmatory",
+        "method": "design.confirmatory",
+        "methodVersion": "1.2.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "enrichment",
+            "informationRates": [
+              0.5,
+              1
+            ],
+            "subsetPrevalence": 0.4,
+            "plannedSize": 240
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "truth": {
+            "subsetEffects": [
+              {
+                "subset": 0.6,
+                "rest": 0.9
+              }
+            ],
+            "controlMedian": 12
+          },
+          "accrual": {
+            "duration": 18,
+            "followup": 12,
+            "dropoutAnnual": 0.05
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "confirmatory: the promising zone is 1.1.0's and stays valid under that label",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "design_confirmatory",
+        "method": "design.confirmatory",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "sample_size_reestimation",
+            "informationRates": [
+              0.5,
+              1
+            ],
+            "promisingZone": {
+              "lower": 0.36,
+              "upper": 0.8
+            }
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "truth": {
+            "plannedEffect": 0.7,
+            "effects": [
+              0.8
+            ],
+            "controlMedian": 12
+          },
+          "accrual": {
+            "duration": 12,
+            "followup": 12
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      }
     }
   ],
   "invalid": [
@@ -22123,7 +22264,7 @@
       ]
     },
     {
-      "name": "confirmatory: an event-time multi-arm design has no control median (it is simulated on the statistics)",
+      "name": "confirmatory: a control median alone on an event-time multi-arm design is 1.2.0's key (the 1.1.0 label cannot carry it) and needs the accrual beside it",
       "job": {
         "jobId": "job_1",
         "studyId": "std_1",
@@ -22165,7 +22306,8 @@
         ]
       },
       "expected": [
-        "scenario_field_unknown@scenario.truth.controlMedian"
+        "method_version_mismatch@methodVersion",
+        "scenario_field_missing@scenario.accrual.duration"
       ]
     },
     {
@@ -30166,6 +30308,151 @@
           "truth": {
             "plannedEffect": 0.1,
             "controlRate": 0.3
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "method_version_mismatch@methodVersion"
+      ]
+    },
+    {
+      "name": "an event-time selection states an accrual and no control median: events cannot be turned into people",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "design_confirmatory",
+        "method": "design.confirmatory",
+        "methodVersion": "1.2.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "multi_arm_selection",
+            "informationRates": [
+              0.5,
+              1
+            ],
+            "activeArms": 3,
+            "plannedSize": 240
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "truth": {
+            "effectScenarios": [
+              [
+                0.9,
+                0.75,
+                0.6
+              ]
+            ]
+          },
+          "accrual": {
+            "duration": 18,
+            "followup": 12
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_missing@scenario.truth.controlMedian"
+      ]
+    },
+    {
+      "name": "an event-time enrichment states a control median and no accrual",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "design_confirmatory",
+        "method": "design.confirmatory",
+        "methodVersion": "1.2.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "enrichment",
+            "informationRates": [
+              0.5,
+              1
+            ],
+            "subsetPrevalence": 0.4,
+            "plannedSize": 240
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "truth": {
+            "subsetEffects": [
+              {
+                "subset": 0.6,
+                "rest": 0.9
+              }
+            ],
+            "controlMedian": 12
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_missing@scenario.accrual.duration"
+      ]
+    },
+    {
+      "name": "the accrual of an event-time selection is 1.2.0's: a 1.1.0 job that states it is refused",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "design_confirmatory",
+        "method": "design.confirmatory",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "multi_arm_selection",
+            "informationRates": [
+              0.5,
+              1
+            ],
+            "activeArms": 3,
+            "plannedSize": 240
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "truth": {
+            "effectScenarios": [
+              [
+                0.9,
+                0.75,
+                0.6
+              ]
+            ],
+            "controlMedian": 12
+          },
+          "accrual": {
+            "duration": 18,
+            "followup": 12,
+            "dropoutAnnual": 0.05
           }
         },
         "inputs": [

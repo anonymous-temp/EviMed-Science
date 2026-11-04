@@ -358,6 +358,10 @@ export const MEASURE_META = Object.freeze({
   expected_sample_size_h0: { label: "无效应时的期望样本量", unit: "例" },
   expected_events_h0: { label: "无效应时的期望事件数", unit: "个" },
   expected_patients: { label: "期望入组人数", unit: "例" },
+  expected_patients_h0: { label: "无效应时的期望入组人数", unit: "例" },
+  // an event-time selection or enrichment is sized in events: its people are the events over the chance of an event of one person
+  expected_patients_from_events: { label: "事件数折成的期望人数", unit: "例" },
+  max_patients_from_events: { label: "最多事件数折成的人数", unit: "例" },
   power_logrank: { label: "同一批模拟里 log-rank 检验的功效", unit: "%", percent: true },
   type_one_error_logrank: { label: "同一批模拟里 log-rank 检验的 I 类错误", unit: "%", percent: true },
   type_one_error_strong_null: { label: "强零假设下 MaxCombo 判为更优的概率", unit: "%", percent: true },

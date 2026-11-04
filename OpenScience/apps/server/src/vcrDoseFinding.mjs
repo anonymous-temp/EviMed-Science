@@ -149,6 +149,11 @@ function premisesOfFinding(dose, kinds) {
   return finishPremises(rows);
 }
 
+/** The most people the designs of a dose-finding result ran with: stated, else the default the engine took (both are in the result). @param {Record<string, any>} dose */
+function maxPatientsOf(dose) {
+  return numeric(object(dose.given).maxPatients) ?? numeric(list(dose.assumed).map(object).find((entry) => entry.key === "design.maxPatients")?.value);
+}
+
 /**
  * @param {Record<string, any>} result @param {any} staleMark
  */
@@ -195,7 +200,8 @@ function dosePayload(result, staleMark) {
     ? `只模拟完了一部分试验（${trialsDone ?? "?"} 次，原定 ${trialsAsked ?? "?"} 次），数字按已完成的给出。` : null;
   return {
     id: String(result.id), version: Number(result.version), form: "dose_finding", design: String(asked.kind),
-    title: compared ? `${labelOf(kinds[0])} 与 ${kinds.slice(1).map(labelOf).join("、")} 的对比` : `${labelOf(String(asked.kind))} 的运行特征`,
+    // (the people it ran with are part of what it is: the same designs at 30 and at 18 people are two cards)
+    title: `${compared ? `${labelOf(kinds[0])} 与 ${kinds.slice(1).map(labelOf).join("、")} 的对比` : `${labelOf(String(asked.kind))} 的运行特征`}${numeric(maxPatientsOf(dose)) === null ? "" : `，最多 ${plain(Number(maxPatientsOf(dose)))} 人`}`,
     question: compared ? "在这条毒性曲线下，几种设计选对最大耐受剂量的概率、超量给药的人数差多少" : "在这条毒性曲线下，这种设计选对最大耐受剂量的概率、超量给药的人数是多少",
     trials: trialsDone, askedLabel: labelOf(String(asked.kind)), target: numeric(curve.target) === null ? null : Number(curve.target) * 100, doses, headline,
     table: { columns, rows }, differences: differences.length ? { columns: differenceColumns, rows: differences, note: "各设计用同一批患者的耐受性模拟，差值的误差按逐次试验的差值计算。" } : null,

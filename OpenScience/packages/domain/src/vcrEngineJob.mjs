@@ -139,7 +139,7 @@ export const VCR_ENGINE_METHODS = Object.freeze({
   // The confirmatory designs (algorithm round T2-T6, 2026-11-03): rpact does the arithmetic (R/rpact_adapter.R is the one file that calls it), so
   // the checks are the packages and closed forms that are not rpact: gsDesign, mvtnorm, a negative-binomial sample size and a simulation in plain R.
   // 1.1.0 (T3-T5 completed): the promising zone of the re-estimation, and the event-time selection and enrichment designs.
-  'design.confirmatory': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['gsDesign::gsDesign (test.type 3 and 4): efficacy and futility boundaries and the inflation over the fixed design', 'known-truth simulation of the group-sequential statistic, of the conditional-power rule and of the promising-zone rule in plain R', 'mvtnorm: the probability that an arm is selected at the interim (continuous, and event time with the correlation of log-rank statistics that share a control)', 'patient-level survival simulation in plain R: the probability that an arm, or the biomarker subset, is kept at the event-time interim', 'closed-form negative-binomial sample size (Zhu & Lakkis 2014)', 'the engine\'s own group-sequential recursion (the efficacy boundaries and the non-adaptive limit)']), modelTier: 'scenario' },
+  'design.confirmatory': { version: '1.2.0', compatibleVersions: frozen(['1.0.0', '1.1.0']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['gsDesign::gsDesign (test.type 3 and 4): efficacy and futility boundaries and the inflation over the fixed design', 'known-truth simulation of the group-sequential statistic, of the conditional-power rule and of the promising-zone rule in plain R', 'mvtnorm: the probability that an arm is selected at the interim (continuous, and event time with the correlation of log-rank statistics that share a control)', 'patient-level survival simulation in plain R: the probability that an arm, or the biomarker subset, is kept at the event-time interim', 'closed-form negative-binomial sample size (Zhu & Lakkis 2014)', 'the engine\'s own group-sequential recursion (the efficacy boundaries and the non-adaptive limit)']), modelTier: 'scenario' },
   // Dose-finding designs (algorithm round T7, T15, 2026-11-03): the 3+3 rule, BOIN (local boundaries and a non-informative prior only), the keyboard
   // design and the continual reassessment method, simulated on one toxicity curve with the same random numbers, and the exact probability of choosing
   // the right dose among two or three randomised ones. Written in R (the packages are 80 to 100 times slower per trial); the packages are the checks.
@@ -847,6 +847,19 @@ function usesConfirmatoryBeyond1_0_0(scenario) {
 }
 
 /**
+ * Does a confirmatory scenario ask for what design.confirmatory 1.2.0 added: the accrual, the time unit and the control median of an event-time
+ * multi-arm selection or enrichment, which turn its events into people (the people of the other event-time kinds are an output, not a key)?
+ * Mirrored by `.vcrp_uses_confirmatory_beyond_1_1_0` in protocol.R.
+ * @param {any} scenario
+ */
+function usesConfirmatoryBeyond1_1_0(scenario) {
+  const design = scenario?.design
+  if (design === null || typeof design !== 'object') return false
+  return (design.kind === 'multi_arm_selection' || design.kind === 'enrichment') && scenario?.endpoint?.type === 'time_to_event'
+    && (scenario?.accrual !== undefined || scenario?.timeUnit !== undefined || scenario?.truth?.controlMedian !== undefined)
+}
+
+/**
  * Does a synthesis or a quality scenario ask for what population.synthpop and population.quality 1.1.0 added: a Cox, log-rank or restricted-mean analysis,
  * the permuted-arm calibration or the privacy measures (algorithm round P1, P2)? Mirrored by `.vcrp_uses_quality_beyond_1_0_0` in protocol.R.
  * @param {any} scenario
@@ -902,8 +915,9 @@ function legacyDesignVersionMatches(job) {
     if (job.method === 'model.survival_fit' && (job.scenario?.distribution === 'spline' || job.scenario?.knots !== undefined)) return false
     // and model.prognostic_apply 1.1.0 added the local calibration against the outcome the table holds
     if (job.method === 'model.prognostic_apply' && job.scenario?.calibration !== undefined) return false
-    // and design.confirmatory 1.1.0 the promising zone and the event-time selection and enrichment designs
-    if (job.method === 'design.confirmatory' && usesConfirmatoryBeyond1_0_0(job.scenario)) return false
+    // and design.confirmatory 1.1.0 the promising zone and the event-time selection and enrichment designs, and 1.2.0 the accrual of those two
+    if (job.method === 'design.confirmatory' && usesConfirmatoryBeyond1_0_0(job.scenario) && !versionAtLeast(job.methodVersion, '1.1.0')) return false
+    if (job.method === 'design.confirmatory' && usesConfirmatoryBeyond1_1_0(job.scenario) && !versionAtLeast(job.methodVersion, '1.2.0')) return false
     // and population.synthpop / population.quality 1.1.0 the survival analyses, the permuted-arm calibration and the privacy measures
     if ((job.method === 'population.synthpop' || job.method === 'population.quality') && usesQualityBeyond1_0_0(job.scenario) && !versionAtLeast(job.methodVersion, '1.1.0')) return false
     // and evidence.pool 1.1.0 the informative prior for the heterogeneity

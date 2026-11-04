@@ -330,6 +330,11 @@ export const NUMERIC_REFERENCES = {
   N99c: { methods: ['patients.progression'], anchors: ['ctl_at <- function(t) 3 + 5 * t / (12 + t)', 'sd18 <- sqrt(1.2^2 + 1.2^2 * u18^2 + 2 * 0.3 * 1.2 * 1.2 * u18 + 0.7^2)'] },
   N99d: { methods: ['patients.progression'], anchors: ['identical(vcr_output_hash(r1), vcr_output_hash(r2)) && identical(vcr_output_hash(r1), vcr_output_hash(r3))'] },
   N99e: { methods: ['patients.progression'], anchors: ['identical(code(unsourced), "scenario_field_missing")'] },
+  // the people of an adaptive design whose answer is in events (live check 2026-11-04, design.confirmatory 1.2.0): patient-level simulations and the Lachin-Foulkes chance of an event written out
+  N100a: { methods: ['design.confirmatory'], anchors: ['sim <- lapply(c(0.5, 1), function(rate) .n100_enrolled(n, 0.5, hr, rate * max_events))', 'expected <- ended[1] * got[1] + (1 - ended[1]) * got[2]'] },
+  N100b: { methods: ['design.confirmatory'], anchors: ['closed <- p1$value * at_interim[["mean"]] + (1 - p1$value) * n0', 'n0 <- ceiling(plan / per_head); cap <- ceiling(1.0001 * plan)'] },
+  N100c: { methods: ['design.confirmatory'], anchors: ['head_multi <- .n100_per_head(0.6)', 'ev <- t_event < t_drop & entry + t_event <= 30'] },
+  N100d: { methods: ['design.confirmatory'], anchors: ['recorded <- c(futility_tte = "f079dc9b9383b2335d62025a8b8b8b0b19fb7cb4a75f722c5f458a786f60c749"', 'identical(unname(got), unname(recorded))'] },
 
   // --- the comparator-effect stream's cases (listed so that merging it needs no edit here; inert until the cases exist) ---
   N33a: { methods: ['comparator.weighted_cox'], anchors: ['Cross-software: the weights are WeightIt', 'rel(m(j_ebal, "hazard_ratio"), r_ebal$hr) < 1e-6'] },

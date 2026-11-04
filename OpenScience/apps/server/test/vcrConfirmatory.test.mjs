@@ -136,6 +136,53 @@ test("an event-time selection and an event-time enrichment are sized in events, 
   assert.ok(row.cells.fixed_power.value > 0 && row.cells.fixed_power.mcse === null, "the baseline is the best arm in a two-arm trial of its own, closed form");
 });
 
+test("an event-time design that counted its people says so in the headline, the table, the premises and the baselines (live check 2026-11-04: the conversation turned events into people itself)", () => {
+  // the group-sequential design: the people enrolled when it stops, with the accrual that decides them
+  const futility = card("futility-people");
+  assert.ok(futility.headline.some((entry) => entry.key === "expected_patients" && entry.label === "期望入组人数" && entry.value.value > 700), "the expected people are a headline number");
+  assert.ok(futility.headline.some((entry) => entry.key === "expected_patients_h0" && entry.label === "无效应时的期望入组人数"));
+  assert.ok(futility.table.columns.some((column) => column.key === "expected_patients" && column.label === "期望入组人数"));
+  assert.ok(futility.table.rows.every((row) => row.cells.expected_patients?.value > 0), "every row has its people");
+  const accrual = futility.premises.find((row) => row.key === "accrual");
+  assert.equal(accrual.value, "入组 18 个月，随访 12 个月");
+  assert.ok(accrual.decisive && futility.premises.find((row) => row.key === "people").value.includes("停止之后不再入组"));
+  assert.ok(futility.premises.filter((row) => row.decisive).length <= 5);
+  // the re-estimation: the people beside the events, and the baselines in people too
+  const ssr = card("ssr-people");
+  assert.ok(ssr.headline.some((entry) => entry.key === "max_patients" && entry.label === "最多患者数") && ssr.headline.some((entry) => entry.key === "expected_patients"));
+  assert.deepEqual(ssr.baselines.map((row) => row.text), ["508 个事件，折成 827 人", "510 个事件，折成 829 人"]);
+  assert.ok(ssr.table.columns.some((column) => column.key === "expected_patients" && column.group === "本设计"));
+  assert.equal(ssr.title, "样本量再估计，上限 2 倍", "two re-estimations with another cap are two cards, called by it");
+  // a selection and an enrichment: the events as people, named for what they are
+  for (const name of ["multi-people", "enrichment-people"]) {
+    const each = card(name);
+    assert.ok(each.headline.some((entry) => entry.key === "max_patients_from_events" && entry.label === "最多事件数折成的人数"), name);
+    assert.ok(each.headline.some((entry) => entry.key === "expected_patients_from_events" && entry.label === "事件数折成的期望人数"), name);
+    assert.ok(each.table.columns.some((column) => column.key === "expected_patients_from_events" && column.label === "事件数折成的人数"), name);
+    assert.match(each.premises.find((row) => row.key === "people").value, /只是换算，没有模拟入组/, name);
+    assert.ok(!each.headline.some((entry) => entry.key === "max_patients" || entry.key === "expected_patients"), `${name}: no people the design did not count`);
+  }
+  assert.equal(card("multi-people").title, "多臂中期选择，3 个剂量");
+  assert.equal(card("enrichment-people").title, "人群富集，阳性占 40%");
+  assert.equal(card("futility-people").title, "中期无效性停止，2 次分析");
+});
+
+test("a selection that states no accrual says people are not computed and what would give them, and an older result reads as it read", () => {
+  const none = card("multi-events-no-accrual");
+  const row = none.premises.find((entry) => entry.key === "people");
+  assert.match(row.value, /^没有算：没有说明入组和随访/);
+  assert.match(row.value, /入组时长、随访时长/);
+  assert.match(row.value, /对照组中位时间/);
+  assert.ok(!none.headline.some((entry) => /patients/.test(entry.key)) && !none.table.columns.some((column) => /patients/.test(column.key)));
+  // a result written before 1.2.0 has no people block and no accrual in what it was given: no row of either
+  for (const name of ["multi-events", "enrichment-events", "ssr", "ssr-zone", "futility"]) {
+    const old = card(name);
+    assert.equal(old.premises.find((entry) => entry.key === "people"), undefined, name);
+    assert.equal(old.premises.find((entry) => entry.key === "accrual"), undefined, name);
+    assert.ok(!old.table.columns.some((column) => /patients/.test(column.key)), name);
+  }
+});
+
 test("a stopped run says so and keeps its numbers", () => {
   const stopped = fixture("ssr");
   stopped.conclusion = "limited";

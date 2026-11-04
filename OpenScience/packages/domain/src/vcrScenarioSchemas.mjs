@@ -438,8 +438,9 @@ const CONFIRMATORY_SCHEMA = object({
     subsetEffects: req(gated(array(object({ subset: req(number()), rest: req(number()) }), { min: 1, max: 8 }), CONF_KIND('enrichment'))),
     sd: gated(number({ gt: 0, default: 1, unit: 'outcome units' }), [CONTINUOUS, isNot('design.kind', 'count_endpoint')]),
     controlRate: req(gated(number({ ...PROBABILITY }), [BINARY, isNot('design.kind', 'count_endpoint')])),
-    // the selection and the enrichment designs are simulated on the log-rank statistics from the planned events: no control median, no accrual
-    controlMedian: req(gated(number({ gt: 0, unit: 'time units' }), [TIME_TO_EVENT, CONF_KIND('futility_group_sequential', 'sample_size_reestimation')])),
+    // the selection and the enrichment designs are simulated on the log-rank statistics from the planned events: no control median and no accrual
+    // are needed; when both are stated (design.confirmatory 1.2.0) the events are turned into people (checkConfirmatorySemantics: one without the other is refused)
+    controlMedian: { ...gated(number({ gt: 0, unit: 'time units' }), [TIME_TO_EVENT, CONF_KIND('futility_group_sequential', 'sample_size_reestimation', 'multi_arm_selection', 'enrichment')]), reqWhen: [TIME_TO_EVENT, isNot('design.kind', 'multi_arm_selection', 'enrichment')] },
     controlEventRate: req(gated(number({ gt: 0, unit: 'events per patient per unit of exposure time' }), CONF_KIND('count_endpoint'))),
     rateRatio: req(gated(number({ gt: 0 }), CONF_KIND('count_endpoint'))),
     overdispersion: req(gated(number({ min: 0, max: 20 }), CONF_KIND('count_endpoint'))),
@@ -453,8 +454,8 @@ const CONFIRMATORY_SCHEMA = object({
     duration: req(number({ min: 0, unit: 'time units' })),
     followup: req(number({ min: 0, unit: 'time units' })),
     dropoutAnnual: number({ min: 0, lt: 1, default: 0, unit: 'proportion per year' }),
-  }), [TIME_TO_EVENT, CONF_KIND('futility_group_sequential', 'sample_size_reestimation')]),
-  timeUnit: gated(string({ values: [...VCR_TIME_UNITS], default: VCR_DEFAULT_TIME_UNIT }), [TIME_TO_EVENT, CONF_KIND('futility_group_sequential', 'sample_size_reestimation')]),
+  }), [TIME_TO_EVENT, CONF_KIND('futility_group_sequential', 'sample_size_reestimation', 'multi_arm_selection', 'enrichment')]),
+  timeUnit: gated(string({ values: [...VCR_TIME_UNITS], default: VCR_DEFAULT_TIME_UNIT }), [TIME_TO_EVENT, CONF_KIND('futility_group_sequential', 'sample_size_reestimation', 'multi_arm_selection', 'enrichment')]),
 })
 
 /**
@@ -2149,6 +2150,14 @@ function checkConfirmatorySemantics(scenario, path, ctx) {
     bad('design.intersectionTest', 'An enrichment design tests its subsets with Simes or Bonferroni; Dunnett\'s test is for several arms against one control.', 'design_not_supported')
   }
   const truth = isObject(scenario?.truth) ? scenario.truth : {}
+  // an event-time selection or enrichment turns its events into people from the accrual and the control median together: one of them alone is
+  // not silently ignored (design.confirmatory 1.2.0)
+  if ((kind === 'multi_arm_selection' || kind === 'enrichment') && type === 'time_to_event') {
+    const accrual = scenario?.accrual !== undefined
+    const median = truth.controlMedian !== undefined
+    if (accrual && !median) bad('truth.controlMedian', 'The accrual turns events into people through the control median: state the control median too, or leave the accrual out.', 'scenario_field_missing')
+    if (median && !accrual) bad('accrual.duration', 'The control median turns events into people through the accrual: state the accrual (its duration and follow-up) too, or leave the control median out.', 'scenario_field_missing')
+  }
   /** @param {string} field @param {unknown} value */
   const onScale = (field, value) => {
     if (typeof value !== 'number' || !Number.isFinite(value)) return
