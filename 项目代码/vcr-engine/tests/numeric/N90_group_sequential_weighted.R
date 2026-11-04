@@ -8,6 +8,9 @@
 #      sampling error of a quantile, the realized spend equals the planned spend look by look, and a look whose planned spend is below one trial cannot stop
 #   b  the type I error of MaxCombo at three looks, run apart from the boundary run with another seed, is the level within the combined error; one and
 #      two cores give the same bits; a spent budget leaves fewer null trials and says limited; no budget for 2,000 null trials is a named refusal
+#   e  what a stopped trial reports: the estimate, its error and its interval are the log-rank estimate on the data of the STOPPING look (as the
+#      log-rank group-sequential design beside it reports them), so bias, coverage and mse of a weighted design are comparable with the log-rank's
+#      (they were read on all the data: bias -0.004 against -0.036 at a hazard ratio of 0.6)
 #   c  gsDesign2::gs_power_combo: the cumulative probability of having stopped at each look of a delayed-effect design (its calendar looks put on the
 #      engine's event fractions), against the simulation with boundaries found under the null
 #
@@ -109,4 +112,35 @@ vcr_case("N90c", c("AC-29"), function() {
   list(pass = all(gap < 3 * se + 0.03),
        detail = sprintf("MaxCombo (the four Fleming-Harrington weights) at 3 looks on a delayed effect (HR 1 for 4 months, then 0.6; 150 + 150 people; looks at the event fractions %s that gsDesign2 gives its calendar looks 18, 30 and 42 months), the null spend of each look as gsDesign2 has it (%s): the probability of having stopped by each look is %s in the simulation (boundaries from 8,000 null trials, 4,000 trials) against %s from gsDesign2::gs_power_combo (largest gap %.3f, allowed 3 errors + 0.03 for its asymptotic information)",
                         paste(sprintf("%.3f", frac), collapse = "/"), paste(sprintf("%.2g", spend), collapse = "/"), paste(sprintf("%.4f", mine), collapse = "/"), paste(sprintf("%.4f", ups$probability), collapse = "/"), max(gap)))
+})
+
+
+vcr_case("N90e", c("AC-28", "AC-29"), function() {
+  # (1) the estimate is the stopping look's, exactly: one trial analysed with a boundary that stops it at look 1 (-Inf), with none that can (Inf), and with the
+  # log-rank estimate computed on the look's own data
+  set.seed(9051L, kind = VCR_RNG_KIND)
+  d <- vcr_sim_tte(150L, 150L, vcr_dist_exponential_from_median(12), 0.6, list(kind = "uniform", duration = 12), 24, 0.05, dropout_period = 12, max_followup = Inf)
+  gs <- vcr_group_sequential(c(0.5, 1), 0.025, "obrien_fleming")
+  cal <- d$entry + d$time; ev_cal <- sort(cal[d$status == 1L]); total <- length(ev_cal); targets <- ceiling(gs$informationRates * total)
+  look1 <- .vcr_gs_look_data(d, gs, 1L, cal, ev_cal, total, targets)$data
+  early <- .vcr_run_gs_weighted(d, gs, 0.025, 1, "maxcombo", 0.5, bounds = c(-Inf, Inf))
+  never <- .vcr_run_gs_weighted(d, gs, 0.025, 1, "maxcombo", 0.5, bounds = c(Inf, Inf))
+  ref1 <- vcr_analyse_logrank(look1, 0.025, 1, 1); refK <- vcr_analyse_logrank(d, 0.025, 1, 1)
+  exact <- c(early = early[["look"]] == 1 && abs(early[["estimate"]] - ref1[["estimate"]]) < 1e-14 && abs(early[["se"]] - ref1[["se"]]) < 1e-14 && abs(early[["ci_low"]] - ref1[["ci_low"]]) < 1e-14,
+             never = never[["look"]] == 2 && abs(never[["estimate"]] - refK[["estimate"]]) < 1e-14 && abs(never[["ci_high"]] - refK[["ci_high"]]) < 1e-14,
+             differs = abs(ref1[["estimate"]] - refK[["estimate"]]) > 1e-3)
+  # (2) bias and coverage of the weighted design against the log-rank design on the same hazard ratio
+  mk <- function(method) list(design = list(kind = "group_sequential", nTreat = 150, nControl = 150, informationRates = list(0.5, 1), spending = "obrien_fleming"), endpoint = list(type = "time_to_event"),
+    truth = list(hazardRatio = 0.6, controlMedian = 12), accrual = list(kind = "uniform", duration = 12, followup = 24, dropoutAnnual = 0.05), analysis = list(method = method, alpha = 0.025, sided = 1))
+  null <- mk("maxcombo"); null$truth <- list(hazardRatio = 1, controlMedian = 12)
+  b <- vcr_gs_simulated_bounds(.n90_trials(null, 9052L, 3000L)[, c("stat1", "stat2")], gs$alphaSpent)
+  w <- .n90_trials(mk("maxcombo"), 9053L, 2500L, list(bounds = b$bounds))
+  l <- .n90_trials(mk("logrank"), 9054L, 2500L)
+  bias <- function(x) c(mean(x[, "estimate"]) - log(0.6), stats::sd(x[, "estimate"]) / sqrt(nrow(x)))
+  cover <- function(x) { p <- mean(x[, "ci_low"] <= log(0.6) & x[, "ci_high"] >= log(0.6)); c(p, sqrt(p * (1 - p) / nrow(x))) }
+  bw <- bias(w); bl <- bias(l); cw <- cover(w); cl <- cover(l)
+  z_bias <- abs(bw[1] - bl[1]) / sqrt(bw[2]^2 + bl[2]^2); z_cover <- abs(cw[1] - cl[1]) / sqrt(cw[2]^2 + cl[2]^2)
+  ok <- c(exact, comparable = z_bias < 3.5 && z_cover < 3.5, truncated = bl[1] < -0.02 && bw[1] < -0.02)
+  list(pass = all(ok), detail = sprintf("the estimate of a trial stopped at look 1 is the log-rank estimate on that look's data (%s) and a trial that never stops reports the final one (%s); hazard ratio 0.6, 150 + 150, looks at 50%% and 100%%, 2,500 trials each: bias of the MaxCombo design %.4f (error %.4f) beside the log-rank design's %.4f (%.4f), %.2f errors apart (it was -0.004 against -0.036 when read on all the data); coverage %.3f / %.3f%s",
+                                        exact[["early"]], exact[["never"]], bw[1], bw[2], bl[1], bl[2], z_bias, cw[1], cl[1], if (all(ok)) "" else paste0("; FAILED: ", paste(names(ok)[!ok], collapse = ","))))
 })

@@ -472,16 +472,22 @@ vcr_dist_normalize <- function(d) {
   targets <- ceiling(gs$informationRates * total_events)
   stat <- rep(NA_real_, K); events_k <- rep(NA_real_, K); n_k <- rep(NA_real_, K); dur_k <- rep(NA_real_, K)
   rejected <- 0; look <- K
+  seen <- NULL      # the data of the last look that was analysed: the stopping look, or the final one
   for (k in seq_len(K)) {
     ld <- .vcr_gs_look_data(d, gs, k, cal, ev_cal, total_events, targets)
     if (is.null(ld)) next
+    seen <- ld$data
     stat[k] <- .vcr_gs_weighted_stat(ld$data, method, s_star, sided)
     events_k[k] <- sum(ld$data$status); n_k[k] <- nrow(ld$data); dur_k[k] <- ld$cutoff
     if (!is.null(bounds) && is.finite(stat[k]) && stat[k] > bounds[k]) { rejected <- 1; look <- k; break }
   }
   if (is.null(bounds)) return(stats::setNames(c(stat[1L], 0, stat), c("estimate", "reject", paste0("stat", seq_len(K)))))
   lr <- if (logrank) .vcr_run_group_sequential(d, gs, alpha, sided, 1) else NULL
-  base <- vcr_analyse_logrank(d, alpha, sided, 1)
+  # The estimate, its error and its interval are what the stopped trial would report: the log-rank estimate on the data of the stopping look,
+  # as the log-rank design beside it reports (`.vcr_run_group_sequential`). Read on all the data of a trial that stopped at look 1 they
+  # described data the trial never saw, and bias, coverage and mse were not comparable with the log-rank's (bias -0.004 against -0.036 for the
+  # same hazard ratio of 0.6, 150 per arm, looks at 50% and 100%, 2026-11-04).
+  base <- vcr_analyse_logrank(seen %||% d, alpha, sided, 1)
   out <- c(estimate = unname(base["estimate"]), se = unname(base["se"]), statistic = NA_real_, p = NA_real_, reject = rejected,
            ci_low = unname(base["ci_low"]), ci_high = unname(base["ci_high"]),
            events = if (rejected == 1) events_k[look] else total_events, look = look,
