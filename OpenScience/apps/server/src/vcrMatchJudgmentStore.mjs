@@ -20,6 +20,7 @@
  * @module vcrMatchJudgmentStore
  */
 
+import { rankJudgments } from "@evimed/domain";
 import { VCR_SCHEMA } from "./vcrPersistence.mjs";
 import { VcrStoreBase, lockSubject, vcrId } from "./vcrStoreBase.mjs";
 
@@ -43,6 +44,87 @@ export function basisChangedOf(value) {
   const text = String(value);
   if (!text.startsWith("{")) return text;
   try { return JSON.parse(text); } catch { return text; }
+}
+
+/**
+ * Which rows of a pair a verdict rests on. Two rows stand together only when they read the same words (the person's record and the trial's, by hash). When they did not, the newer reading stands
+ * alone and the other is history: a score of a later note beside clauses of an earlier one would call someone 符合 on what the note has since overtaken.
+ * @template T @param {T & { documentHash?: string, targetHash?: string, updatedAt?: string | null } | null} fit @param {T & { documentHash?: string, targetHash?: string, updatedAt?: string | null } | null} criteria
+ * @returns {{ fit: T | null, criteria: T | null, older: 'fit' | 'criteria' | null }}
+ */
+export function standingRows(fit, criteria) {
+  if (!fit || !criteria || (fit.documentHash === criteria.documentHash && fit.targetHash === criteria.targetHash)) return { fit, criteria, older: null };
+  return String(fit.updatedAt ?? '') >= String(criteria.updatedAt ?? '') ? { fit, criteria: null, older: 'criteria' } : { fit: null, criteria, older: 'fit' };
+}
+
+/** What a row says of what its verdict did not read, in words a person reads; null when it read it all. @param {Record<string, any> | null | undefined} answer */
+export function recordGapOf(answer) {
+  const gaps = [];
+  const count = (/** @type {unknown} */ value) => (Number.isFinite(Number(value)) ? Number(value) : 0);
+  if (count(answer?.unreadableDocuments)) gaps.push(`${count(answer?.unreadableDocuments)} 份病历没能读取`);
+  if (count(answer?.documentsLeftOut)) gaps.push(`${count(answer?.documentsLeftOut)} 份较早的病历因为太多没有读`);
+  if (answer?.tableUnread) gaps.push('表格里的数据这次没读到');
+  if (answer?.longUnread) gaps.push('结构化记录这次没读到');
+  if (count(answer?.leftOut?.rows)) gaps.push(`结构化数据里 ${count(answer?.leftOut?.rows)} 行较早或关系较小的记录没有列出`);
+  if (count(answer?.clausesWithoutWords)) gaps.push(`方案里有 ${count(answer?.clausesWithoutWords)} 条条件没有原文，没有判这几条`);
+  return gaps.length ? `这条结论没有读全：${gaps.join('，')}。` : null;
+}
+
+const OPEN_STATES = Object.freeze(['queued', 'running', 'awaiting_budget']);
+
+/**
+ * Which of a job's pairs its second stage is for and has not done: per person the best K by rank among the pairs the job asked about, where a trial with no eligibility text has nothing to ask.
+ * The same choice the job makes, so that what a reader calls left is what a continuation does.
+ * @param {ReadonlyArray<Record<string, any>>} done pairs with a verdict: `subjectKey`, `targetId`, `fit`, `confidence`, `eligibilitySource`, `judgedByClauses`
+ * @param {Record<string, any>} scenario the job's @param {(pair: any) => boolean} inJob
+ */
+export function clauseStageOf(done, scenario, inJob) {
+  const topK = scenario?.topK ?? 0;
+  /** @type {Map<string, any[]>} */
+  const bySubject = new Map();
+  for (const pair of done) {
+    if (!inJob(pair) || pair.eligibilitySource === 'none') continue;
+    bySubject.set(String(pair.subjectKey), [...(bySubject.get(String(pair.subjectKey)) ?? []), pair]);
+  }
+  const wanted = topK === 0 ? [] : [...bySubject.values()].flatMap((own) => {
+    const ranked = rankJudgments(own.map((pair) => ({ ...pair, id: String(pair.targetId) })));
+    return topK === 'all' ? ranked : ranked.slice(0, Number(topK));
+  });
+  return { wanted: wanted.length, done: wanted.filter((pair) => pair.judgedByClauses).length, left: wanted.filter((pair) => !pair.judgedByClauses) };
+}
+
+/**
+ * How the judging of a scope stands, from its jobs (newest first) and the pairs it has: what was asked, what is done, what failed, what never ran and which clause work is owed. The page's and the
+ * conversation's reads say the same thing because they read it from here.
+ * @param {{ direction: 'patient_to_trial' | 'trial_to_patient', jobs: ReadonlyArray<any>, done: ReadonlyArray<any>, failed: ReadonlyArray<any>, withdrawn?: ReadonlySet<string>, only?: string | null }} input
+ */
+export function judgingProgress({ direction, jobs, done, failed, withdrawn = new Set(), only = null }) {
+  const objectOf = (/** @type {unknown} */ value) => (value && typeof value === 'object' && !Array.isArray(value) ? /** @type {Record<string, any>} */ (value) : {});
+  const askedBy = (/** @type {any} */ job) => {
+    const scenario = objectOf(job?.scenario);
+    if (direction === 'patient_to_trial') return (Array.isArray(scenario.trials) ? scenario.trials : []).flatMap((trial) => (trial?.registryId ? [String(trial.registryId)] : []));
+    return (Array.isArray(scenario.subjects) ? scenario.subjects : []).map(String).filter((key) => !withdrawn.has(key) && key !== WITHDRAWN_SUBJECT_MARK && (!only || key === only));
+  };
+  const idOf = (/** @type {any} */ pair) => String(direction === 'patient_to_trial' ? pair.targetId : pair.subjectKey);
+  const asked = new Set(jobs.flatMap(askedBy));
+  const finished = new Set(done.map(idOf));
+  const lost = new Set(failed.map(idOf));
+  for (const id of [...finished, ...lost]) asked.add(id);
+  const failedOnly = [...lost].filter((id) => !finished.has(id));
+  const waiting = [...asked].filter((id) => !finished.has(id) && !lost.has(id));
+  const latest = jobs[0] ?? null;
+  const running = latest ? OPEN_STATES.includes(String(latest.state)) : false;
+  const inLatest = new Set(askedBy(latest));
+  const clauses = latest ? clauseStageOf(done, objectOf(latest.scenario), (pair) => inLatest.has(idOf(pair))) : { wanted: 0, done: 0, left: [] };
+  const clauseLeft = [...new Set(clauses.left.map(idOf))];
+  const total = asked.size;
+  return {
+    total, finished: finished.size, failed: failedOnly.length, waiting: waiting.length, latest, running,
+    state: running ? (String(latest.state) === 'awaiting_budget' ? 'waiting_budget' : 'running') : total === 0 ? 'idle' : waiting.length || failedOnly.length || clauseLeft.length ? 'stopped' : 'done',
+    clauses: { wanted: clauses.wanted, done: clauses.done, left: clauses.left.length },
+    // What is still to do: the pairs that never ran, the ones that failed, and the ones whose clauses are owed. A continuation starts exactly these, and the ledger has the rest.
+    left: [...new Set([...waiting, ...failedOnly, ...clauseLeft])],
+  };
 }
 
 /** The columns of a row without its answer and usage, which are what is large. */
@@ -121,12 +203,25 @@ export class VcrMatchJudgmentStore extends VcrStoreBase {
     const rows = await this.rows(`SELECT ${LIGHT},
         EXISTS (SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(j.answer->'rows')='array' THEN j.answer->'rows' ELSE '[]'::jsonb END) c
           WHERE c->>'basis'='stated' AND c->>'label' IN ('excluded','not_included')) AS disqualified,
-        j.answer->'target' AS target
+        j.answer->'target' AS target, j.answer->>'eligibilitySource' AS eligibility_source
       FROM ${VCR_SCHEMA}.match_judgments j WHERE j.study_id=$1 AND ($2::text IS NULL OR j.subject_key=$2) AND ($3::text IS NULL OR j.target_kind=$3)
       AND ($4::text IS NULL OR j.target_id=$4)
       AND NOT EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.subject_withdrawals w WHERE w.study_id=j.study_id AND w.subject_key=j.subject_key)
       ORDER BY j.updated_at DESC, j.id LIMIT $5`, [studyId, subjectKey, targetKind, targetId, limit]);
-    return rows.map((row) => ({ ...judgmentOf(row), disqualified: row.disqualified === true, target: row.target ?? null }));
+    return rows.map((row) => ({ ...judgmentOf(row), disqualified: row.disqualified === true, target: row.target ?? null, eligibilitySource: row.eligibility_source ?? null }));
+  }
+
+  /**
+   * The judging jobs of a scope, newest first, and only what a reader of their progress needs of them.
+   * @param {{ studyId: string, direction: 'patient_to_trial' | 'trial_to_patient', subjectKey?: string | null, protocolVersionId?: string | null, limit?: number }} input
+   */
+  async jobsOf({ studyId, direction, subjectKey = null, protocolVersionId = null, limit = 30 }) {
+    const columns = `id, state, scenario, checkpoint #>> '{judge,used,cost}' AS carried_cost, created_at, updated_at, finished_at`;
+    return direction === 'patient_to_trial'
+      ? this.rows(`SELECT ${columns} FROM ${VCR_SCHEMA}.jobs WHERE study_id = $1 AND kind = 'match_judge' AND scenario ->> 'direction' = 'patient_to_trial'
+          AND scenario -> 'subjects' @> to_jsonb($2::text) ORDER BY created_at DESC LIMIT ${Math.max(1, Math.floor(limit))}`, [studyId, subjectKey])
+      : this.rows(`SELECT ${columns} FROM ${VCR_SCHEMA}.jobs WHERE study_id = $1 AND kind = 'match_judge' AND scenario ->> 'direction' = 'trial_to_patient'
+          AND scenario ->> 'protocolVersionId' = $2 ORDER BY created_at DESC LIMIT ${Math.max(1, Math.floor(limit))}`, [studyId, protocolVersionId]);
   }
 
   /** Whole rows, for the page a reader shows. @param {string} studyId @param {readonly string[]} ids */

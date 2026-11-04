@@ -27,7 +27,7 @@
 import { definitionLines } from './vcrClauseDefinitions.mjs'
 
 /** Bumped when a prompt changes enough that a pair judged under the old one should be judged again. */
-export const VCR_JUDGMENT_PROMPT_VERSIONS = Object.freeze({ fit: 'fit-2', criteria: 'criteria-4' })
+export const VCR_JUDGMENT_PROMPT_VERSIONS = Object.freeze({ fit: 'fit-3', criteria: 'criteria-5' })
 
 /** The labels of a clause, as stored. */
 export const VCR_CRITERION_LABELS = Object.freeze(['included', 'not_included', 'excluded', 'not_excluded', 'not_applicable', 'not_enough_information'])
@@ -477,10 +477,10 @@ const FIT_SYSTEM = [
 /**
  * The trial-level call of one patient and one trial (TrialGPT 2.0). A trial whose record carries no eligibility text is judged on what it
  * does carry, and the prompt says so.
- * @param {{ title?: string, summary?: string, eligibility?: string, note: string, conditions?: readonly string[], interventions?: readonly string[] }} input
+ * @param {{ title?: string, summary?: string, eligibility?: string, takes?: string, note: string, conditions?: readonly string[], interventions?: readonly string[] }} input
  * @returns {Array<{ role: 'system' | 'user', content: string }>}
  */
-export function fitMessages({ title = '', summary = '', eligibility = '', note, conditions = [], interventions = [] }) {
+export function fitMessages({ title = '', summary = '', eligibility = '', takes = '', note, conditions = [], interventions = [] }) {
   const raw = String(eligibility ?? '').trim()
   const user = [
     `Patient note/summary:\n${String(note ?? '').trim()}`,
@@ -489,6 +489,7 @@ export function fitMessages({ title = '', summary = '', eligibility = '', note, 
     ...(conditions.length ? [`Target conditions: ${conditions.join(', ')}`] : []),
     ...(interventions.length ? [`Interventions: ${interventions.join(', ')}`] : []),
     `Brief summary: ${String(summary ?? '').trim()}`,
+    ...(takes ? [`The registry says the trial takes: ${takes}`] : []),
     '',
     raw ? `Eligibility Criteria (raw):\n${raw}` : 'Eligibility Criteria (raw): the registry record carries none. Judge from the title, target conditions and summary, and say in missing_information that the eligibility text was not available.',
     '',
@@ -549,10 +550,10 @@ function criteriaSystem(kind) {
  * `kind` the call carries that side only, as the original does; without it, one call carries both.
  * `definitions` (optional, default none) are the trial's definition cards (`vcrClauseDefinitions.mjs`): background on what a term usually means,
  * added after the criteria for the clauses of this call. With none the messages are exactly what they are without the field.
- * @param {{ title?: string, summary?: string, kind?: 'inclusion' | 'exclusion', criteria: ReadonlyArray<{ number: number, kind: string, text: string, lead?: string }>, sentences: ReadonlyArray<{ id: number, text: string }>, conditions?: readonly string[], interventions?: readonly string[], definitions?: ReadonlyArray<{ number: number, counts: string, doesNotCount: string }> }} input
+  * @param {{ title?: string, summary?: string, takes?: string, kind?: 'inclusion' | 'exclusion', criteria: ReadonlyArray<{ number: number, kind: string, text: string, lead?: string }>, sentences: ReadonlyArray<{ id: number, text: string }>, conditions?: readonly string[], interventions?: readonly string[], definitions?: ReadonlyArray<{ number: number, counts: string, doesNotCount: string }> }} input
  * @returns {Array<{ role: 'system' | 'user', content: string }>}
  */
-export function criteriaMessages({ title = '', summary = '', kind, criteria, sentences, conditions = [], interventions = [], definitions = [] }) {
+export function criteriaMessages({ title = '', summary = '', takes = '', kind, criteria, sentences, conditions = [], interventions = [], definitions = [] }) {
   const listed = kind ? criteria.filter((clause) => clause.kind === kind || clause.kind === 'unsectioned') : criteria
   /** @param {string} name @param {string} heading */
   const section = (name, heading) => {
@@ -568,6 +569,7 @@ export function criteriaMessages({ title = '', summary = '', kind, criteria, sen
     ...(conditions.length ? [`Target diseases: ${conditions.join(', ')}`] : []),
     ...(interventions.length ? [`Interventions: ${interventions.join(', ')}`] : []),
     `Summary: ${String(summary ?? '').trim()}`,
+    ...(takes ? [`The registry says the trial takes: ${takes}`] : []),
     ...section('inclusion', 'Inclusion criteria'),
     ...section('exclusion', 'Exclusion criteria'),
     ...section('unsectioned', kind ? `${kind === 'inclusion' ? 'Inclusion' : 'Exclusion'} criteria` : 'Other criteria'),

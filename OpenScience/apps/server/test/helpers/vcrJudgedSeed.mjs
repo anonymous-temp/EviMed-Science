@@ -47,7 +47,7 @@ export async function seedJudged({ app, call, owner }, name = "患者匹配结�
   const patient = String(uploaded.file.detail.subjectKey);
   const document = String(uploaded.file.id);
   const db = app.vcr.store.database;
-  const save = (entry) => app.vcr.matchJudgments.save({ studyId: study.id, userId: owner, targetHash: "t", documentHash: "d", promptVersion: entry.mode === "fit" ? "fit-2" : "criteria-4", model: "deepseek-flash", thinking: "high", producer: "job", status: "done",
+  const save = (entry) => app.vcr.matchJudgments.save({ studyId: study.id, userId: owner, targetHash: "t", documentHash: "d", promptVersion: entry.mode === "fit" ? "fit-3" : "criteria-5", model: "deepseek-flash", thinking: "high", producer: "job", status: "done",
     documentIds: [document], ...entry, answer: JSON.parse(JSON.stringify(entry.answer ?? {}).replaceAll("DOCUMENT", document)) });
   const job = async (scenario, state) => {
     const id = `job_${Math.random().toString(36).slice(2, 12)}`;

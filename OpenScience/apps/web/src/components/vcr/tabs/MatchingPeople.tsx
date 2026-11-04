@@ -64,7 +64,7 @@ function FunnelRow({ row, people }: { row: VcrJudgedFunnelRow; people: number | 
     <li data-vcr-funnel-clause={row.number} className={cn("flex flex-col gap-1 border-b border-border py-2.5", FUNNEL_COLUMNS)}>
       <div className="flex items-baseline gap-2 text-caption text-text-3 md:flex-col md:gap-0">
         <span className="tabular-nums">{row.number}</span>
-        <span>{row.kind === "exclusion" ? "排除" : "入选"}</span>
+        <span>{row.kind === "exclusion" ? "排除" : row.kind === "unsectioned" ? "未分节" : "入选"}</span>
       </div>
       <div className="min-w-0">
         <p className="text-ui text-text">{row.clause}</p>

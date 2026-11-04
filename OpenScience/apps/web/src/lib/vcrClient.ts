@@ -2468,7 +2468,7 @@ export interface VcrJudgedEvidence { sentenceId: number; text: string; documentI
 /** One clause of a trial's eligibility text, judged for one patient. */
 export interface VcrJudgedClause {
   number: number;
-  kind: "inclusion" | "exclusion";
+  kind: "inclusion" | "exclusion" | "unsectioned";
   clause: string;
   lead?: string;
   label: string;
@@ -2518,6 +2518,10 @@ export interface VcrJudgedPair {
   basisChanged?: { kind: "record" | "registry_record"; label: string };
   /** 「未取到入排原文，依据标题和疾病判断」 where the trial's record held no eligibility text. */
   eligibilityNote?: string;
+  /** What this verdict did not read, in words: a document, a table, older rows, a criterion with no text. */
+  recordGap?: string;
+  /** A second stage that failed, or one that read earlier words and so is not behind this verdict. */
+  clausesNote?: string;
   rank?: number;
 }
 
@@ -2540,6 +2544,8 @@ export interface VcrJudgedProgress {
   failed: number | null;
   waiting: number | null;
   state: "idle" | "running" | "waiting_budget" | "stopped" | "done";
+  /** The latest job's second stage: pairs it is for, done, and still owed; null is a count of people too small to show this reader. */
+  clauses?: { wanted: number | null; done: number | null; left: number | null };
   jobId: string | null;
   startedAt: string | null;
   /** The stated ceiling of the latest job and what its pairs have cost so far; either may be unknown. */
@@ -2567,7 +2573,7 @@ export interface VcrJudgedPatient {
 }
 
 /** Counts of people: null is one too small to show this reader (exact small counts are the owner's). */
-export interface VcrJudgedFunnelRow { number: number; kind: "inclusion" | "exclusion"; clause: string; support: number | null; against: number | null; silent: number | null; open: number | null; notApplicable: number | null }
+export interface VcrJudgedFunnelRow { number: number; kind: "inclusion" | "exclusion" | "unsectioned"; clause: string; support: number | null; against: number | null; silent: number | null; open: number | null; notApplicable: number | null }
 
 export interface VcrJudgedProtocol {
   direction: "trial_to_patient";

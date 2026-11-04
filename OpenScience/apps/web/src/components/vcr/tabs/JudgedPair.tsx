@@ -91,9 +91,9 @@ export function ClauseList({ label, clauses, mayRead, onOpen, compact = false }:
           <li key={clause.number} data-vcr-clause={clause.number} data-vcr-clause-stance={clause.stance} className={cn("flex flex-col gap-2 border-b border-border py-3 last:border-b-0", columns)}>
             <div className={cn("flex items-baseline gap-2 text-caption text-text-3", !compact && "md:flex-col md:gap-0")}>
               <span className="tabular-nums">{clause.number}</span>
-              <span>{clause.kind === "exclusion" ? "排除" : "入选"}</span>
+              <span>{clause.kind === "exclusion" ? "排除" : clause.kind === "unsectioned" ? "未分节" : "入选"}</span>
             </div>
-            <p className="min-w-0 text-ui text-text">{clause.clause}</p>
+            <p className="min-w-0 text-ui text-text">{clause.lead && <span className="text-text-3">{clause.lead} </span>}{clause.clause}</p>
             <div className="min-w-0 text-ui">
               <ClauseState clause={clause} />
               {clause.reason && <p className="mt-1 text-caption text-text-2">{clause.reason}</p>}
@@ -148,6 +148,8 @@ export function JudgedPairDetail({ studyId, pair, mayReadRecord, subject, showTi
           <p className="text-caption text-text-3">{stances.map(([stance, n]) => `${VCR_MATCH_STANCE_LABELS_ZH[stance]} ${n}`).join(" · ")}</p>
         )}
         {pair.eligibilityNote && <p data-vcr-eligibility-note="" className="text-caption text-warn-strong">{pair.eligibilityNote}</p>}
+        {pair.clausesNote && <p data-vcr-clauses-note="" className="text-caption text-warn-strong">{pair.clausesNote}</p>}
+        {pair.recordGap && <p data-vcr-record-gap="" className="text-caption text-warn-strong">{pair.recordGap}</p>}
       </header>
       {pair.reasonsWithheld && <p data-vcr-reasons-withheld="" className="text-caption text-text-2">{pair.reasonsWithheld}</p>}
       <ReasonGroups groups={pair.groups} />

@@ -142,7 +142,8 @@ export function vcrJobNoticeText({ resultKind, stage = null, label = null, state
     const clauseTotal = measure("criteria_pairs_total");
     // A comparison over part of the pairs is not what a stopped job has to say first.
     const changed = !stopped && typeof result?.diagnostics?.changes?.sentence === "string" ? result.diagnostics.changes.sentence.replace(/。$/u, "") : "";
-    const unread = stopped && clauseTotal && clauseTotal.value > (clauses?.value ?? 0) ? `，逐条判了 ${count(clauses?.value ?? 0)}/${count(clauseTotal.value)} 对` : "";
+    const unread = !stopped ? "" : result?.diagnostics?.clausesNotReached ? "，逐条判定没有开始"
+      : clauseTotal && clauseTotal.value > (clauses?.value ?? 0) ? `，逐条判了 ${count(clauses?.value ?? 0)}/${count(clauseTotal.value)} 对` : "";
     headline = changed ? changed : finished && total ? `判定了 ${count(finished.value)}/${count(total.value)} 对${failed && failed.value > 0 ? `，${count(failed.value)} 对没判成` : ""}${unread}` : null;
   } else if (resultKind === "records_import") {
     headline = typeof result?.diagnostics?.statement === "string" ? result.diagnostics.statement.replace(/。$/u, "") : null;

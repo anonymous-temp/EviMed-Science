@@ -41,7 +41,9 @@ export function JudgedProgressNote({ progress, noun, mayRun, busy, onResume, onS
 }) {
   const cost = costClause(progress);
   const failed = progress.failed !== null && progress.failed > 0 ? `，其中 ${progress.failed} ${noun.slice(0, 1)}没判成` : "";
-  const tail = `${noun}${failed}${cost ? `；${cost}` : ""}。`;
+  const owed = progress.clauses?.left ?? 0;
+  const clausesWord = owed > 0 && progress.clauses?.wanted ? `，逐条判了 ${progress.clauses.done ?? 0} / ${progress.clauses.wanted}` : "";
+  const tail = `${noun}${failed}${clausesWord}${cost ? `；${cost}` : ""}。`;
   // A count of people too small to show this reader is not a zero: the sentence goes without it.
   const howFar = (lead: string): NoteResult => (progress.finished !== null && progress.total !== null
     ? [`${lead}已完成 `, { n: progress.finished }, " / ", { n: progress.total }, ` ${tail}`]
@@ -58,8 +60,9 @@ export function JudgedProgressNote({ progress, noun, mayRun, busy, onResume, onS
       </div>
     );
   }
-  const left = (progress.waiting ?? 0) + (progress.failed ?? 0);
-  const leftHidden = progress.waiting === null || progress.failed === null;
+  // What a continuation starts: what never ran, what failed, and the pairs whose clauses are owed.
+  const left = (progress.waiting ?? 0) + (progress.failed ?? 0) + owed;
+  const leftHidden = progress.waiting === null || progress.failed === null || progress.clauses?.left === null;
   if (progress.state === "stopped" && (left > 0 || leftHidden)) {
     return (
       <div data-vcr-judged-progress="stopped">

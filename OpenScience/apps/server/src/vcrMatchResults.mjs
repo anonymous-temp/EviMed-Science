@@ -40,7 +40,7 @@ import {
 
 import { presentJudgment } from "./vcrMatchJudge.mjs";
 import { phaseLabel, registryStatusLabel } from "./vcrPatientTrials.mjs";
-import { REGISTRY_RECORD_BASIS, WITHDRAWN_SUBJECT_MARK, basisChangedOf } from "./vcrMatchJudgmentStore.mjs";
+import { REGISTRY_RECORD_BASIS, WITHDRAWN_SUBJECT_MARK, basisChangedOf, judgingProgress, recordGapOf, standingRows } from "./vcrMatchJudgmentStore.mjs";
 import { VCR_SCHEMA } from "./vcrPersistence.mjs";
 import { VcrStoreBase } from "./vcrStoreBase.mjs";
 
@@ -55,7 +55,6 @@ export const MATCH_PAGE = Object.freeze({ default: 25, most: 100 });
 /** Pairs whose whole answers an export holds at a time. */
 const EXPORT_CHUNK = 100;
 const VERDICTS = Object.freeze(["eligible", "possible", "insufficient", "ineligible"]);
-const OPEN_JOB_STATES = Object.freeze(["queued", "running", "awaiting_budget"]);
 /** Jobs whose plans make up "how many were asked". */
 const JOBS_READ = 30;
 /** Failed pairs a page lists by name; the rest are counted. */
@@ -119,6 +118,9 @@ export function csvCell(value) {
 /** @param {readonly unknown[]} cells */
 export const csvLine = (cells) => `${cells.map(csvCell).join(",")}\r\n`;
 
+/** The section a clause stands in; one under no section says so, and is no inclusion. @param {unknown} kind */
+const kindOf = (kind) => (kind === "exclusion" || kind === "unsectioned" ? kind : "inclusion");
+
 /** The clause rows of a pair in the shape the page and the files read. @param {any} presented a `presentJudgment` answer */
 function clauseRows(presented) {
   const answered = list(presented.criteria).map((/** @type {any} */ row) => {
@@ -128,13 +130,13 @@ function clauseRows(presented) {
       ...(item.source?.field ? { field: String(item.source.field) } : {}),
     }));
     return {
-      number: Number(row.number), kind: row.kind === "exclusion" ? "exclusion" : "inclusion", clause: String(row.clause ?? ""), ...(row.lead ? { lead: String(row.lead) } : {}),
+      number: Number(row.number), kind: kindOf(row.kind), clause: String(row.clause ?? ""), ...(row.lead ? { lead: String(row.lead) } : {}),
       label: String(row.label), basis: row.basis === "stated" ? "stated" : "silent", display: row.display ?? criterionDisplay(row), stance: stanceOf(row),
       reason: clip(text(row.reason)) ?? "", evidence, ...(row.evidenceWithheld ? { evidenceHidden: Number(row.evidenceWithheld) } : {}),
     };
   });
   const unanswered = list(presented.missingClauses).map((/** @type {any} */ clause) => ({
-    number: Number(clause.number), kind: clause.kind === "exclusion" ? "exclusion" : "inclusion", clause: String(clause.text ?? ""),
+    number: Number(clause.number), kind: kindOf(clause.kind), clause: String(clause.text ?? ""),
     label: "not_enough_information", basis: "silent", display: "模型没有判断这一条", stance: /** @type {const} */ ("open"), reason: "", evidence: [], unanswered: true,
   }));
   return [...answered, ...unanswered].sort((a, b) => a.number - b.number);
@@ -194,7 +196,8 @@ function whyOf(verdict, row, counts) {
 }
 
 /** The columns of a newest-rows query that the page needs, named once. */
-const COLUMNS = `j.document_ids, j.answer -> 'readFrom' AS read_from, j.id, j.subject_key, j.target_kind, j.target_id, j.mode, j.status, j.error_code, j.fit, j.confidence, j.producer, j.model, j.thinking, j.basis_changed, j.job_id,
+const COLUMNS = `j.document_hash, j.target_hash, j.answer -> 'unreadableDocuments' AS unreadable_documents, j.answer -> 'documentsLeftOut' AS documents_left_out, j.answer -> 'leftOut' AS left_out, j.answer -> 'tableUnread' AS table_unread,
+  j.answer -> 'longUnread' AS long_unread, j.answer -> 'clausesWithoutWords' AS clauses_without_words, j.document_ids, j.answer -> 'readFrom' AS read_from, j.id, j.subject_key, j.target_kind, j.target_id, j.mode, j.status, j.error_code, j.fit, j.confidence, j.producer, j.model, j.thinking, j.basis_changed, j.job_id,
   j.created_at, j.updated_at, j.answer -> 'target' AS target, j.answer ->> 'eligibilitySource' AS eligibility_source,
   j.answer #>> '{reasons,eligible,0}' AS first_eligible, j.answer #>> '{reasons,ineligible,0}' AS first_ineligible, j.answer #>> '{reasons,missing,0}' AS first_missing, j.answer #>> '{reasons,rationale}' AS rationale,
   CASE WHEN jsonb_typeof(j.answer #> '{reasons,missing}') = 'array' THEN jsonb_array_length(j.answer #> '{reasons,missing}') ELSE 0 END AS missing_reasons`;
@@ -248,6 +251,17 @@ function hideSmall(cells, keys, minCell) {
 }
 /** A count of people on its own: small is null. @param {number} count @param {number} minCell */
 const hideAlone = (count, minCell) => (count >= 1 && count < minCell ? null : count);
+
+/** What a row says of what its verdict did not read, from the columns of the newest query. @param {any} row */
+const gapOfRow = (row) => recordGapOf({ unreadableDocuments: row?.unreadable_documents, documentsLeftOut: row?.documents_left_out, leftOut: row?.left_out, tableUnread: row?.table_unread, longUnread: row?.long_unread, clausesWithoutWords: row?.clauses_without_words });
+
+/** What a pair's list row says of its second stage when it is not behind the verdict. @param {any} pair */
+function clausesNoteOf(pair) {
+  if (pair.clauseFailure && !pair.judgedByClauses) return `逐条判定没有完成：${vcrMatchFailureReason(pair.clauseFailure)}`;
+  if (pair.older === "criteria") return "逐条判定读的是更早的内容，没有算进这个结论。";
+  if (pair.older === "fit") return "匹配度读的是更早的内容，没有算进这个结论。";
+  return null;
+}
 
 /** What the page says of a person's trials whose registry record has changed since they were judged. */
 const REGISTRY_STALE_LABEL_ZH = "登记记录已更新，可重新判定";
@@ -350,7 +364,10 @@ export class VcrMatchResults extends VcrStoreBase {
     /** @type {any[]} */ const done = [];
     /** @type {any[]} */ const failed = [];
     for (const { fit, criteria } of grouped.values()) {
-      const scored = fit?.status === "done" ? fit : null, clauses = criteria?.status === "done" ? criteria : null;
+      // The rows of a pair stand together only when they read the same words; otherwise the newer reading stands alone.
+      const readingOf = (/** @type {any} */ row) => (row?.status === "done" ? { row, documentHash: row.document_hash, targetHash: row.target_hash, updatedAt: iso(row.updated_at) } : null);
+      const standing = standingRows(readingOf(fit), readingOf(criteria));
+      const scored = standing.fit?.row ?? null, clauses = standing.criteria?.row ?? null;
       if (!scored && !clauses) {
         const row = fit ?? criteria;
         failed.push({ subjectKey: String(row.subject_key), targetKind: String(row.target_kind), targetId: String(row.target_id), target: object(row.target), code: row.error_code ?? null, at: iso(row.updated_at) });
@@ -367,7 +384,8 @@ export class VcrMatchResults extends VcrStoreBase {
         fitRowId: scored?.id ?? null, criteriaRowId: clauses?.id ?? null, fit: score === null ? null : Number(score),
         confidence: (scored?.confidence ?? clauses?.confidence) === null || (scored?.confidence ?? clauses?.confidence) === undefined ? null : Number(scored?.confidence ?? clauses?.confidence),
         verdict: verdict.verdict, counts, producer: String(anchor.producer), judgedAt: iso(anchor.updated_at), basisChanged: basisMarkOf(scored?.basis_changed ?? clauses?.basis_changed ?? null),
-        eligibilitySource: anchor.eligibility_source ?? scored?.eligibility_source ?? null, judgedByClauses: Boolean(clauses),
+        eligibilitySource: anchor.eligibility_source ?? scored?.eligibility_source ?? null, judgedByClauses: Boolean(clauses), older: standing.older, recordGap: gapOfRow(anchor),
+        ...(criteria?.status === "failed" ? { clauseFailure: criteria.error_code ?? "vcr_match_judge_failed", clauseFailedAt: iso(criteria.updated_at) } : {}),
         why: whyOf(verdict.verdict, { first_eligible: scored?.first_eligible, first_ineligible: scored?.first_ineligible, first_missing: scored?.first_missing, rationale: scored?.rationale,
           against_reason: clauses?.against_reason, support_reason: clauses?.support_reason, open_reason: clauses?.open_reason }, counts),
       });
@@ -400,7 +418,7 @@ export class VcrMatchResults extends VcrStoreBase {
       why: pair.readable === false ? (pair.counts ? `满足 ${pair.counts.support} 条，待查 ${pair.counts.open} 条` : "") : pair.why, ...(pair.readable === false ? { reasonsWithheld: pair.withheldNote } : {}),
       counts: pair.counts ? { support: pair.counts.support, against: pair.counts.against, silent: pair.counts.silent, open: pair.counts.open, notApplicable: pair.counts.notApplicable } : null,
       judgedAt: pair.judgedAt, producer: pair.producer === "conversation" ? "conversation" : "job", ...(pair.basisChanged ? { basisChanged: pair.basisChanged } : {}),
-      ...(pair.eligibilitySource === "none" ? { eligibilityNote: VCR_MATCH_NO_ELIGIBILITY_ZH } : {}),
+      ...(pair.eligibilitySource === "none" ? { eligibilityNote: VCR_MATCH_NO_ELIGIBILITY_ZH } : {}), ...(pair.recordGap ? { recordGap: pair.recordGap } : {}), ...(clausesNoteOf(pair) ? { clausesNote: clausesNoteOf(pair) } : {}),
     };
   }
 
@@ -412,34 +430,23 @@ export class VcrMatchResults extends VcrStoreBase {
   }
 
   /**
+   * Everything that failed in a scope: the pairs with nothing, then the pairs with a score whose clauses failed, which have a verdict and are still owed something.
+   * @param {{ done: any[], failed: any[] }} pairs
+   */
+  #failures({ done, failed }) {
+    const owed = done.filter((pair) => pair.clauseFailure && !pair.judgedByClauses).map((pair) => ({ ...this.#failure({ ...pair, code: pair.clauseFailure, at: pair.clauseFailedAt }), reason: `逐条判定没有完成：${vcrMatchFailureReason(pair.clauseFailure)}`, clausesOnly: true }));
+    return [...failed.map((entry) => this.#failure(entry)), ...owed];
+  }
+
+  /**
    * What was asked, what is done and what it cost, from the study's judging jobs and the rows they left.
    * @param {string} studyId @param {{ direction: 'patient_to_trial' | 'trial_to_patient', subjectKey?: string | null, protocolVersionId?: string | null }} scope
    * @param {{ done: any[], failed: any[] }} pairs
    */
   async #progress(studyId, { direction, subjectKey = null, protocolVersionId = null }, { done, failed }) {
-    const jobs = direction === "patient_to_trial"
-      ? await this.rows(`SELECT id, state, scenario, checkpoint #>> '{judge,used,cost}' AS carried_cost, created_at, updated_at, finished_at FROM ${S}.jobs WHERE study_id = $1 AND kind = 'match_judge' AND scenario ->> 'direction' = 'patient_to_trial'
-          AND scenario -> 'subjects' @> to_jsonb($2::text) ORDER BY created_at DESC LIMIT ${JOBS_READ}`, [studyId, subjectKey])
-      : await this.rows(`SELECT id, state, scenario, checkpoint #>> '{judge,used,cost}' AS carried_cost, created_at, updated_at, finished_at FROM ${S}.jobs WHERE study_id = $1 AND kind = 'match_judge' AND scenario ->> 'direction' = 'trial_to_patient'
-          AND scenario ->> 'protocolVersionId' = $2 ORDER BY created_at DESC LIMIT ${JOBS_READ}`, [studyId, protocolVersionId]);
+    const jobs = await this.judgments.jobsOf({ studyId, direction, subjectKey, protocolVersionId, limit: JOBS_READ });
     const withdrawn = direction === "trial_to_patient" ? new Set((await this.rows(`SELECT subject_key FROM ${S}.subject_withdrawals WHERE study_id = $1`, [studyId])).map((row) => String(row.subject_key))) : new Set();
-    /** What every job of this scope asked for, by the id of the thing judged (a registry number, a person). @type {Set<string>} */
-    const asked = new Set();
-    for (const job of jobs) {
-      const scenario = object(job.scenario);
-      if (direction === "patient_to_trial") for (const trial of list(scenario.trials)) { if (trial?.registryId) asked.add(String(trial.registryId)); }
-      else for (const key of list(scenario.subjects)) { if (!withdrawn.has(String(key)) && String(key) !== WITHDRAWN_SUBJECT_MARK) asked.add(String(key)); }
-    }
-    const idOf = (/** @type {any} */ pair) => (direction === "patient_to_trial" ? pair.targetId : pair.subjectKey);
-    const finished = new Set(done.map(idOf));
-    const lost = new Set(failed.map(idOf));
-    for (const id of finished) asked.add(id);
-    for (const id of lost) asked.add(id);
-    const failedOnly = [...lost].filter((id) => !finished.has(id));
-    const total = asked.size;
-    const waiting = [...asked].filter((id) => !finished.has(id) && !lost.has(id));
-    const latest = jobs[0] ?? null;
-    const running = latest ? OPEN_JOB_STATES.includes(String(latest.state)) : false;
+    const { latest, running: _running, ...standing } = judgingProgress({ direction, jobs, done, failed, withdrawn });
     // What the job says it spent: every call, the ones whose row a later try replaced and the ones that wrote no row. The rows say it while a batch is out, and when the job kept no account.
     const spent = latest ? await this.one(`SELECT sum(NULLIF(usage ->> 'cost', '')::numeric)::float AS cost,
         (SELECT (r.diagnostics #>> '{used,cost}')::float FROM ${S}.results r JOIN ${S}.executions e ON e.id = r.execution_id WHERE e.job_id = $2 ORDER BY r.created_at DESC LIMIT 1) AS accounted
@@ -447,12 +454,10 @@ export class VcrMatchResults extends VcrStoreBase {
     const spentAmounts = [spent?.accounted, latest?.carried_cost, spent?.cost].filter((value) => value != null && Number.isFinite(Number(value))).map(Number);
     const estimate = object(object(latest?.scenario).estimate);
     return {
-      total, finished: finished.size, failed: failedOnly.length, waiting: waiting.length,
-      state: running ? (String(latest.state) === "awaiting_budget" ? "waiting_budget" : "running") : total === 0 ? "idle" : waiting.length || failedOnly.length ? "stopped" : "done",
+      ...standing,
       jobId: latest ? String(latest.id) : null, startedAt: latest ? iso(latest.created_at) : null,
       cost: latest ? { ceiling: estimate.cost == null || !Number.isFinite(Number(estimate.cost)) ? null : Number(estimate.cost), spent: spentAmounts.length ? Math.max(...spentAmounts) : null, currency: String(estimate.currency ?? "CNY") } : null,
-      // What is still to do — the ones that never ran and the ones that failed — and how the latest job was set; the continue action starts exactly these.
-      left: [...waiting, ...failedOnly],
+      // How the latest job was set; the continue action starts what `left` names under these.
       settings: latest ? pick(object(latest.scenario), ["fit", "topK", "thinking", "thinkingCriteria", "collection", "collectionRevision"]) : {},
     };
   }
@@ -502,7 +507,7 @@ export class VcrMatchResults extends VcrStoreBase {
     const ranked = rankJudgments(pairs.done.map((pair) => ({ ...pair, id: pair.targetId, criteria: pair.counts && pair.counts.against > 0 ? [{ label: "excluded", basis: "stated" }] : [] })));
     await this.#judgeReaders(study, viewer, ranked);
     const trials = ranked.map((pair, index) => ({ rank: index + 1, ...this.#listed(pair) }));
-    const failures = pairs.failed.map((entry) => this.#failure(entry));
+    const failures = this.#failures(pairs);
     const chosen = ranked.find((pair) => pair.targetId === target) ?? ranked[0] ?? null;
     // The trials whose verdict rests on a registry record that has changed since: the page offers to judge those again, and says so in words.
     const stale = ranked.filter((pair) => pair.basisChanged?.kind === REGISTRY_RECORD_BASIS).map((pair) => String(pair.targetId));
@@ -532,7 +537,7 @@ export class VcrMatchResults extends VcrStoreBase {
     const start = Math.max(0, Math.floor(offset));
     const size = Math.max(1, Math.min(MATCH_PAGE.most, Math.floor(limit)));
     const chosen = subjectKey ? pairs.done.find((pair) => pair.subjectKey === subjectKey) ?? null : null;
-    const failures = pairs.failed.map((entry) => this.#failure(entry));
+    const failures = this.#failures(pairs);
     const exact = String(study.userId) === String(viewer?.id ?? "");
     const shownTallies = exact ? tallies : hideSmall(tallies, VERDICTS, this.minCell);
     // Someone with no patient-level access sees the verdicts of groups large enough to show.
@@ -547,7 +552,8 @@ export class VcrMatchResults extends VcrStoreBase {
     const failedSummary = this.#failureSummary(failures);
     return {
       direction: "trial_to_patient", protocolVersionId, held: pairs.done.length > 0 || pairs.failed.length > 0 || progress.total > 0,
-      progress: exact ? progress : { ...progress, total: hideAlone(progress.total, this.minCell), finished: hideAlone(progress.finished, this.minCell), failed: hideAlone(progress.failed, this.minCell), waiting: hideAlone(progress.waiting, this.minCell) }, tallies: shownTallies,
+      progress: exact ? progress : { ...progress, total: hideAlone(progress.total, this.minCell), finished: hideAlone(progress.finished, this.minCell), failed: hideAlone(progress.failed, this.minCell), waiting: hideAlone(progress.waiting, this.minCell),
+        clauses: { wanted: hideAlone(progress.clauses.wanted, this.minCell), done: hideAlone(progress.clauses.done, this.minCell), left: hideAlone(progress.clauses.left, this.minCell) } }, tallies: shownTallies,
       people: page.map((pair) => this.#listed(pair)), total: exact ? inList.length : hideAlone(inList.length, this.minCell), offset: start, limit: size, more: inList.length > start + size,
       clauses: exact ? funnel : { judgedPeople: hideAlone(funnel.judgedPeople, this.minCell), rows: funnel.rows.map((row) => hideSmall(row, ["support", "against", "silent", "open", "notApplicable"], this.minCell)) },
       failed: exact ? failedSummary : { ...failedSummary, count: hideAlone(failedSummary.count, this.minCell), reasons: failedSummary.reasons.map((entry) => ({ ...entry, count: hideAlone(entry.count, this.minCell) })), listed: [] },
@@ -585,11 +591,11 @@ export class VcrMatchResults extends VcrStoreBase {
     ]);
     /** @type {Map<number, any>} */
     const byNumber = new Map(answered.map((row) => [Number(row.number), {
-      number: Number(row.number), kind: row.kind === "exclusion" ? "exclusion" : "inclusion", clause: String(row.clause ?? ""),
+      number: Number(row.number), kind: kindOf(row.kind), clause: String(row.clause ?? ""),
       support: Number(row.support), against: Number(row.against), silent: Number(row.silent), open: Number(row.open), notApplicable: Number(row.not_applicable),
     }]));
     for (const row of unanswered) {
-      const entry = byNumber.get(Number(row.number)) ?? { number: Number(row.number), kind: row.kind === "exclusion" ? "exclusion" : "inclusion", clause: String(row.clause ?? ""), support: 0, against: 0, silent: 0, open: 0, notApplicable: 0 };
+      const entry = byNumber.get(Number(row.number)) ?? { number: Number(row.number), kind: kindOf(row.kind), clause: String(row.clause ?? ""), support: 0, against: 0, silent: 0, open: 0, notApplicable: 0 };
       entry.open += Number(row.open);
       byNumber.set(entry.number, entry);
     }
@@ -657,7 +663,7 @@ export class VcrMatchResults extends VcrStoreBase {
     const chunks = (/** @type {any[]} */ items) => { const out = []; for (let at = 0; at < items.length; at += EXPORT_CHUNK) out.push(items.slice(at, at + EXPORT_CHUNK)); return out; };
     const pairLine = (/** @type {any} */ pair) => {
       const listed = this.#listed(pair);
-      return { listed, cells: [listed.subjectKey, listed.kind === "protocol" ? "本研究方案" : "登记试验", listed.registryId, listed.title, listed.verdictLabel, listed.fit, listed.fitLabel, listed.confidenceLabel,
+      return { listed, cells: [listed.label, listed.kind === "protocol" ? "本研究方案" : "登记试验", listed.registryId, listed.title, listed.verdictLabel, listed.fit, listed.fitLabel, listed.confidenceLabel,
         listed.counts?.support ?? null, listed.counts?.against ?? null, listed.counts?.silent ?? null, listed.counts?.open ?? null, listed.counts?.notApplicable ?? null, listed.why,
         listed.producer === "conversation" ? "对话" : "判定作业", listed.judgedAt, listed.basisChanged ? "是" : "否"] };
     };
@@ -686,7 +692,7 @@ export class VcrMatchResults extends VcrStoreBase {
             const hidden = Number(/** @type {any} */ (clause).evidenceHidden ?? 0);
             const note = pair.readable === false ? listed.reasonsWithheld : hidden ? evidenceNoteZh(hidden) : null;
             if (format === "csv") {
-              await sink.write(csvLine([cells[0], cells[1], cells[2], cells[3], cells[4], clause.number, clause.kind === "exclusion" ? "排除" : "入选", clause.clause, clause.display, sentences.length ? "有" : "无", pair.readable === false ? note : clause.reason,
+              await sink.write(csvLine([cells[0], cells[1], cells[2], cells[3], cells[4], clause.number, clause.kind === "exclusion" ? "排除" : clause.kind === "unsectioned" ? "未分节" : "入选", clause.clause, clause.display, sentences.length ? "有" : "无", pair.readable === false ? note : clause.reason,
                 sentences.map((item) => item.sentenceId).join("、"), sentences.length ? sentences.map((item) => item.text).join(" | ") : note ?? ""]));
             } else {
               await sink.write(`${first ? "" : ","}${JSON.stringify({ subjectKey: listed.subjectKey, target: { kind: listed.kind, id: listed.id, registryId: listed.registryId, title: listed.title }, verdict: listed.verdict,

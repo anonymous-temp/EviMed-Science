@@ -1721,7 +1721,7 @@ export function createVcrEvidencePipeline({ store, registry = null, trialCorpus 
       const description = built.description ?? built.record?.reduced?.protocolSection?.descriptionModule ?? {};
       return { status: "ok", trial: {
         registry: precedent.registry ?? registryName, registryId: precedent.registryId ?? registryId, title: precedent.title ?? "", summary: description.briefSummary ?? "",
-        eligibility: precedent.eligibilityText ?? "", conditions: precedent.pico?.conditions ?? [], interventions: (precedent.pico?.interventions ?? []).map((/** @type {any} */ item) => item?.name ?? item),
+        eligibility: precedent.eligibilityText ?? "", minimumAge: precedent.pico?.minimumAge ?? "", maximumAge: precedent.pico?.maximumAge ?? "", sex: precedent.pico?.sex ?? "", conditions: precedent.pico?.conditions ?? [], interventions: (precedent.pico?.interventions ?? []).map((/** @type {any} */ item) => item?.name ?? item),
         url: built.record?.url ?? precedent.sources?.[0]?.url ?? null, status: precedent.design?.overallStatus ?? null, phase: (precedent.design?.phases ?? []).join("/") || null,
         recordHash: built.record?.hash ?? precedent.sources?.[0]?.recordHash ?? null, ...(collection ? { collection: precedent.sources?.[0]?.collection ?? null } : {}),
       } };

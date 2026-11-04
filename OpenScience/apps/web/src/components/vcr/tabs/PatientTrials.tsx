@@ -39,6 +39,8 @@ function TrialRow({ trial, current, onPick }: { trial: VcrJudgedPair; current: b
         {trial.why && <span className="block truncate text-ui text-text-2">{trial.why}</span>}
         {meta && <span className="block text-caption text-text-3">{meta}</span>}
         {trial.eligibilityNote && <span className="block text-caption text-text-3">{trial.eligibilityNote}</span>}
+        {trial.clausesNote && <span className="block text-caption text-text-3">{trial.clausesNote}</span>}
+        {trial.recordGap && <span className="block text-caption text-text-3">{trial.recordGap}</span>}
         {trial.basisChanged && <span data-vcr-basis-changed={trial.basisChanged.kind} className="block text-caption text-warn-strong">{trial.basisChanged.label}</span>}
       </button>
     </li>

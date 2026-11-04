@@ -223,7 +223,7 @@ test("B2: a save between a withdrawal's delete and its commit does not survive i
   const source = await vcr.dataPlane.registerSource({ userId: "owner", studyId: study.id, name: "n" });
   const up = await vcr.dataPlane.storeUpload({ actor: "owner", studyId: study.id, sourceId: source.id, name: "n.txt", role: "document", subject: "RACE", stream: Readable.from([Buffer.from(SECRET)]) });
   const key = String(up.file.detail.subjectKey);
-  const row = (extra = {}) => ({ studyId: study.id, userId: "owner", subjectKey: key, targetKind: "candidate_trial", targetId: "NCT09999999", targetHash: "t", documentHash: "d", mode: "criteria", promptVersion: "criteria-4", model: "m", thinking: "off", producer: "job", status: "done", verdict: "possible", answer: { rows: [{ number: 1, kind: "inclusion", clause: "c", label: "included", basis: "stated", reason: ID_NUMBER }] }, ...extra });
+  const row = (extra = {}) => ({ studyId: study.id, userId: "owner", subjectKey: key, targetKind: "candidate_trial", targetId: "NCT09999999", targetHash: "t", documentHash: "d", mode: "criteria", promptVersion: "criteria-5", model: "m", thinking: "off", producer: "job", status: "done", verdict: "possible", answer: { rows: [{ number: 1, kind: "inclusion", clause: "c", label: "included", basis: "stated", reason: ID_NUMBER }] }, ...extra });
   await vcr.matchJudgments.save(row({ targetId: "NCT08888888" }));
   // A table lock that lets reads through and holds the withdrawal's own insert, which comes after its delete of the rows.
   const gate = new pg.Client({ connectionString: isolated.url });
@@ -253,7 +253,7 @@ test("B2: a save naming a document that has gone writes nothing", options, async
   const up = await vcr.dataPlane.storeUpload({ actor: "owner", studyId: study.id, sourceId: source.id, name: "n.txt", role: "document", subject: "GONE", stream: Readable.from([Buffer.from(SECRET)]) });
   const key = String(up.file.detail.subjectKey);
   await vcr.dataPlane.removeUpload({ actor: "owner", studyId: study.id, fileId: up.file.id });
-  const late = await vcr.matchJudgments.save({ studyId: study.id, userId: "owner", subjectKey: key, targetKind: "candidate_trial", targetId: "NCT08888888", targetHash: "t", documentHash: "d", mode: "criteria", promptVersion: "criteria-4", model: "m", thinking: "off", producer: "job", status: "done", verdict: "possible", documentIds: [up.file.id], liveDocuments: true, answer: { rows: [] } });
+  const late = await vcr.matchJudgments.save({ studyId: study.id, userId: "owner", subjectKey: key, targetKind: "candidate_trial", targetId: "NCT08888888", targetHash: "t", documentHash: "d", mode: "criteria", promptVersion: "criteria-5", model: "m", thinking: "off", producer: "job", status: "done", verdict: "possible", documentIds: [up.file.id], liveDocuments: true, answer: { rows: [] } });
   assert.equal(late, null);
 });
 
@@ -514,8 +514,8 @@ test("S5: after a revocation a conversation's read keeps the verdict and loses t
   const up = await vcr.dataPlane.storeUpload({ actor: "owner", studyId: study.id, sourceId: source.id, name: "n.txt", role: "document", subject: "REAL-2", stream: Readable.from([Buffer.from(SECRET)]) });
   const key = String(up.file.detail.subjectKey);
   const base = { studyId: study.id, userId: "owner", subjectKey: key, targetKind: "candidate_trial", targetId: "NCT1", targetHash: "t", documentHash: "d", model: "m", thinking: "off", producer: "job", status: "done", documentIds: [up.file.id] };
-  await vcr.matchJudgments.save({ ...base, mode: "fit", promptVersion: "fit-2", fit: 80, confidence: 0.5, verdict: "possible", answer: { target: { kind: "candidate_trial", id: "NCT1" }, reasons: { eligible: ["患者李四的肌酐 3.1"], ineligible: [], missing: ["李四的 ECOG"], rationale: "李四合适" } } });
-  await vcr.matchJudgments.save({ ...base, mode: "criteria", promptVersion: "criteria-4", verdict: "possible", answer: { target: { kind: "candidate_trial", id: "NCT1" }, rows: [{ number: 1, kind: "inclusion", clause: "c", label: "included", basis: "stated", reason: "患者李四的肌酐 3.1", sentenceIds: [0], evidence: [{ sentenceId: 0, text: SECRET, start: 0, end: SECRET.length, documentId: up.file.id }] }], missing: [] } });
+  await vcr.matchJudgments.save({ ...base, mode: "fit", promptVersion: "fit-3", fit: 80, confidence: 0.5, verdict: "possible", answer: { target: { kind: "candidate_trial", id: "NCT1" }, reasons: { eligible: ["患者李四的肌酐 3.1"], ineligible: [], missing: ["李四的 ECOG"], rationale: "李四合适" } } });
+  await vcr.matchJudgments.save({ ...base, mode: "criteria", promptVersion: "criteria-5", verdict: "possible", answer: { target: { kind: "candidate_trial", id: "NCT1" }, rows: [{ number: 1, kind: "inclusion", clause: "c", label: "included", basis: "stated", reason: "患者李四的肌酐 3.1", sentenceIds: [0], evidence: [{ sentenceId: 0, text: SECRET, start: 0, end: SECRET.length, documentId: up.file.id }] }], missing: [] } });
   const context = { ...study, cloudContext: { runId: "r", sessionId: "s" } };
   const before = await vcr.matchJudgmentReads.forSubject(context, key, { limit: 5 });
   assert.match(JSON.stringify(before.ranking[0]), /肌酐 3\.1/u, "while the source may go to the cloud the reasons do");

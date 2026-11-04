@@ -36,7 +36,7 @@
 
 import { createHash } from 'node:crypto';
 import {
-  VCR_DEFINITION_PROMPT_VERSION, VCR_ENGINE_PROTOCOL_VERSION, VCR_JUDGMENT_PROMPT_VERSIONS, VCR_MATCH_BATCH_DEFAULT_MODEL, VCR_MATCH_BATCH_METHODS, VCR_MATCH_JUDGE_LIMITS, VCR_MIN_CELL_SIZE, VCR_TRIAL_VERDICT_LABELS_ZH,
+  vcrMatchFailureReason, VCR_DEFINITION_PROMPT_VERSION, VCR_ENGINE_PROTOCOL_VERSION, VCR_JUDGMENT_PROMPT_VERSIONS, VCR_MATCH_BATCH_DEFAULT_MODEL, VCR_MATCH_BATCH_METHODS, VCR_MATCH_JUDGE_LIMITS, VCR_MIN_CELL_SIZE, VCR_TRIAL_VERDICT_LABELS_ZH,
   canonicalScenarioJson, criteriaMessages, criterionDisplay, fitMessages, isPeak, mergeCriteriaAnswers, mergeFitAnswers, parseCriteriaAnswer, parseFitAnswer, priceUsage, rankJudgments,
   segmentCriteria, segmentSentences, splitNoteParts, trialVerdict, vcrResultOutputPayload, vcrSubjectLabel,
 } from '@evimed/domain';
@@ -44,7 +44,7 @@ import { HttpError } from './security.mjs';
 import { callModelForControlPlane } from './modelGateway.mjs';
 import { matchBatchMinCell, resultOutcome } from './vcrMatchBatch.mjs';
 import { LONG_LIMITS, acceptLongShapes, acceptRelevance, longRelevanceMessages, longShapeMessages } from './vcrLongTables.mjs';
-import { REGISTRY_RECORD_BASIS, WITHDRAWN_SUBJECT_MARK, judgmentKey } from './vcrMatchJudgmentStore.mjs';
+import { REGISTRY_RECORD_BASIS, WITHDRAWN_SUBJECT_MARK, judgingProgress, judgmentKey, recordGapOf, standingRows } from './vcrMatchJudgmentStore.mjs';
 
 const LOCK_HASH = createHash('sha256').update(`evimed-control-plane:matching.judge:${VCR_MATCH_BATCH_METHODS['matching.judge'].version}`).digest('hex');
 
@@ -74,7 +74,8 @@ const transientFailure = (error) => {
  * at the end of its stage like one the provider failed, and is not counted as the provider being down. A run of thousands meets one sooner or later.
  */
 const DATABASE_TRANSIENT = Object.freeze(['57014', '40001', '40P01', '55P03', '57P01', '08000', '08003', '08006', 'ECONNRESET', 'ETIMEDOUT', 'EPIPE']);
-const passes = (/** @type {any} */ error) => transientFailure(error) || DATABASE_TRANSIENT.includes(String(error?.code ?? ''));
+const isStall = (/** @type {any} */ error) => DATABASE_TRANSIENT.includes(String(error?.code ?? ''));
+const passes = (/** @type {any} */ error) => transientFailure(error) || isStall(error);
 /** How many registry reads run at once: a frozen collection's worker queues eight, and a live registry is shared. */
 const REGISTRY_READS = 4;
 /** How long progress may go unsaid, so a slow provider does not read as a dead worker. */
@@ -258,7 +259,8 @@ export function createPairJudge({ config, usageLedger = null, callModel = callMo
 export async function tableFieldsOf(subjectTable, study) {
   if (!subjectTable?.read) return null;
   let table;
-  try { table = await subjectTable.read(study); } catch { return null; }
+  // A stall is not a study with no table: the words read would quietly be fewer, under another hash.
+  try { table = await subjectTable.read(study); } catch (error) { if (isStall(error)) throw error; return null; }
   if (!table?.available || !table.snapshotId) return null;
   // A table of keys alone still says who the people are, when their record is in long tables.
   const fields = list(table.columns).map((column) => String(column.name)).filter((name) => name && name !== 'USUBJID');
@@ -271,7 +273,7 @@ export async function tableFieldsOf(subjectTable, study) {
  * them. The hash names what was read, so a changed document is a new judgment and an unchanged one is not.
  *
  * @param {{ study: any, subjectKey: string, documents: any, roster: ReadonlyArray<{ id: string, visibleAt?: string | null }>, table?: { snapshotId: string, fields: string[] } | null, long?: any, ahead?: readonly string[] }} input
- * @returns {Promise<{ hash: string, documentIds: string[], records: any[], sentences: any[], unreadable: number, chars: number, snapshots: Array<{ id: string, fields?: string[] }>, documentsLeftOut?: number, leftOut?: { rows: number, earliest: string | null } }>}
+ * @returns {Promise<{ hash: string, documentIds: string[], records: any[], sentences: any[], unreadable: number, chars: number, snapshots: Array<{ id: string, fields?: string[] }>, documentsLeftOut?: number, leftOut?: { rows: number, earliest: string | null }, tableUnread?: boolean, longUnread?: boolean }>}
  */
 export async function readSubjectNote({ study, subjectKey, documents, roster, table = null, long = null, ahead = [] }) {
   const chronological = [...roster].sort((a, b) => String(a.visibleAt ?? '').localeCompare(String(b.visibleAt ?? '')) || String(a.id).localeCompare(String(b.id)));
@@ -296,7 +298,11 @@ export async function readSubjectNote({ study, subjectKey, documents, roster, ta
     /** @type {any} */
     let record = null;
     try { record = await documents.runtimeRead(study, { subjectKey, documentId: String(entry.id) }); }
-    catch (error) { firstFailure = firstFailure ?? String(/** @type {any} */ (error)?.code ?? 'vcr_projection_unavailable'); }
+    catch (error) {
+      // What the cloud may not read is part of what this verdict rests on, and is said on its row. A stall is neither: this pair is tried again rather than judged on what is left.
+      if (isStall(error)) throw error;
+      firstFailure = firstFailure ?? String(/** @type {any} */ (error)?.code ?? 'vcr_projection_unavailable');
+    }
     if (!record?.text) { unreadable += 1; continue; }
     const text = String(record.text);
     const id = String(record.id ?? entry.id);
@@ -307,8 +313,9 @@ export async function readSubjectNote({ study, subjectKey, documents, roster, ta
     records.push({ documentId: id, text, sentences: numbered });
     identity.push([id, String(record.projectionHash ?? record.sourceHash ?? sha256(text))]);
   }
+  let tableUnread = false, longUnread = false;
   if (table?.fields?.length && documents.runtimeEvidence) {
-    const cells = await documents.runtimeEvidence(study, table.fields.map((field) => ({ source: { snapshotId: table.snapshotId, field } })), subjectKey).catch(() => []);
+    const cells = await documents.runtimeEvidence(study, table.fields.map((field) => ({ source: { snapshotId: table.snapshotId, field } })), subjectKey).catch((error) => { if (isStall(error)) throw error; tableUnread = true; return []; });
     const lines = list(cells).filter((cell) => typeof cell?.quote === 'string' && cell.quote);
     if (lines.length) {
       let at = 0;
@@ -326,7 +333,7 @@ export async function readSubjectNote({ study, subjectKey, documents, roster, ta
   // The long tables: conditions, labs and medications as dated lines, within a bounded size, and what was left out said in the record itself.
   /** @type {{ rows: number, earliest: string | null } | null} */
   let leftOut = null;
-  const held = long ? await long.linesFor(subjectKey, ahead).catch(() => null) : null;
+  const held = long ? await long.linesFor(subjectKey, ahead).catch((/** @type {unknown} */ error) => { if (isStall(error)) throw error; longUnread = true; return null; }) : null;
   if (held?.lines?.length) {
     leftOut = held.leftOut ?? null;
     const lines = [...held.lines, ...(leftOut ? [{ text: `（结构化数据中另有 ${leftOut.rows} 行较早或与条件关系较小的记录没有列出${leftOut.earliest ? `，最早 ${leftOut.earliest}` : ''}。）`, snapshotId: held.lines[0].snapshotId }] : [])];
@@ -350,7 +357,22 @@ export async function readSubjectNote({ study, subjectKey, documents, roster, ta
     if (sentence.source.field) fields.add(String(sentence.source.field));
     read.set(sentence.source.snapshotId, fields);
   }
-  return { hash: sha256(canonicalScenarioJson(identity)), documentIds, records, sentences, unreadable, chars: records.reduce((sum, record) => sum + record.text.length, 0), snapshots: [...read].map(([id, fields]) => ({ id, ...(fields.size ? { fields: [...fields] } : {}) })), ...(keptFrom ? { documentsLeftOut: keptFrom } : {}), ...(leftOut ? { leftOut } : {}) };
+  return { hash: sha256(canonicalScenarioJson(identity)), documentIds, records, sentences, unreadable, chars: records.reduce((sum, record) => sum + record.text.length, 0), snapshots: [...read].map(([id, fields]) => ({ id, ...(fields.size ? { fields: [...fields] } : {}) })), ...(keptFrom ? { documentsLeftOut: keptFrom } : {}), ...(leftOut ? { leftOut } : {}), ...(tableUnread ? { tableUnread } : {}), ...(longUnread ? { longUnread } : {}) };
+}
+
+/** What a row keeps of what its verdict did not read, for whoever reads the row (`recordGapOf`). @param {any} note @param {any} target */
+const gapsOf = (note, target) => ({ ...(note.unreadable ? { unreadableDocuments: note.unreadable } : {}), ...(note.leftOut ? { leftOut: note.leftOut } : {}), ...(note.documentsLeftOut ? { documentsLeftOut: note.documentsLeftOut } : {}),
+  ...(note.tableUnread ? { tableUnread: true } : {}), ...(note.longUnread ? { longUnread: true } : {}), ...(target?.clausesWithoutWords ? { clausesWithoutWords: target.clausesWithoutWords } : {}) });
+
+/**
+ * Who the registry's own fields say a trial takes, which a record's free text often leaves out: without it the first real runs scored an adults-only trial
+ * 82 for an eight-year-old. Words for the model to read; nothing here decides.
+ * @param {{ minimumAge?: string, maximumAge?: string, sex?: string }} trial
+ */
+function whoTheTrialTakes({ minimumAge = '', maximumAge = '', sex = '' }) {
+  const low = String(minimumAge ?? '').trim(), high = String(maximumAge ?? '').trim(), who = String(sex ?? '').trim();
+  const ages = low && high ? `${low} to ${high}` : low ? `${low} and older` : high ? `up to ${high}` : '';
+  return [ages && `ages ${ages}`, who && `sex ${who}`].filter(Boolean).join('; ');
 }
 
 /**
@@ -380,7 +402,7 @@ export function judgmentTargets({ evidence = null, matchStore, pages = null }) {
         if (page?.eligibility.trim()) eligibility = page.eligibility;
         else page = null;
       }
-      const words = { title: String(trial.title ?? ''), summary: String(trial.summary ?? ''), eligibility, conditions: list(trial.conditions).map(String), interventions: list(trial.interventions).map(String) };
+      const words = { title: String(trial.title ?? ''), summary: String(trial.summary ?? ''), eligibility, takes: whoTheTrialTakes(trial), conditions: list(trial.conditions).map(String), interventions: list(trial.interventions).map(String) };
       return { kind: 'candidate_trial', id: String(trial.registryId), ...words, clauses: segmentCriteria(eligibility), hash: sha256(canonicalScenarioJson(words)),
         eligibilitySource: page ? 'web_read' : eligibility.trim() ? 'registry' : 'none',
         summaryOfTarget: { kind: 'candidate_trial', id: String(trial.registryId), registry: String(trial.registry ?? input.registry), registryId: String(trial.registryId), title: words.title,
@@ -397,20 +419,22 @@ export function judgmentTargets({ evidence = null, matchStore, pages = null }) {
       /** @type {Array<{ number: number, kind: string, text: string, start: number, end: number, criterionId?: string }>} */
       const clauses = [];
       let eligibility = '';
+      // A rule saved with no words has nothing for a model to read. It stays out of what is asked, and every row made from this version says how many there were (`recordGapOf`).
+      const worded = (/** @type {any} */ row) => Boolean(String(row.sourceText ?? '').trim());
+      const clausesWithoutWords = criteria.filter((/** @type {any} */ row) => !worded(row)).length;
       for (const [kind, heading] of [['inclusion', 'Inclusion Criteria:'], ['exclusion', 'Exclusion Criteria:']]) {
-        const rows = criteria.filter((/** @type {any} */ row) => (row.kind ?? 'inclusion') === kind);
+        const rows = criteria.filter((/** @type {any} */ row) => (row.kind ?? 'inclusion') === kind && worded(row));
         if (!rows.length) continue;
         eligibility += `${eligibility ? '\n\n' : ''}${heading}`;
         for (const row of rows) {
-          const text = String(row.sourceText ?? '').trim();
-          if (!text) continue;
+          const text = String(row.sourceText).trim();
           eligibility += '\n* ';
           clauses.push({ number: clauses.length + 1, kind, text, start: eligibility.length, end: eligibility.length + text.length, ...(row.id ? { criterionId: String(row.id) } : {}) });
           eligibility += text;
         }
       }
       const title = String(version?.title ?? '');
-      return { kind: 'protocol_version', id: protocolVersionId, title, summary: '', eligibility, conditions: [], interventions: [], clauses, hash: sha256(canonicalScenarioJson({ title, eligibility })),
+      return { kind: 'protocol_version', id: protocolVersionId, title, summary: '', eligibility, conditions: [], interventions: [], clauses, hash: sha256(canonicalScenarioJson({ title, eligibility })), ...(clausesWithoutWords ? { clausesWithoutWords } : {}),
         eligibilitySource: 'protocol', summaryOfTarget: { kind: 'protocol_version', id: protocolVersionId, title, ...(version?.version ? { version: version.version } : {}) } };
     },
   };
@@ -446,7 +470,7 @@ async function judgeFit({ judge, study, jobId, note, target, thinking, cap }) {
   const answers = [];
   /** @type {any[]} */ const calls = [];
   for (const part of parts) {
-    const messages = fitMessages({ title: target.title, summary: target.summary, eligibility: target.eligibility, note: part.text, conditions: target.conditions, interventions: target.interventions });
+    const messages = fitMessages({ title: target.title, summary: target.summary, eligibility: target.eligibility, takes: target.takes, note: part.text, conditions: target.conditions, interventions: target.interventions });
     answers.push(await askOnceMore({ judge, ask: { study, jobId, messages, thinking }, calls, read: parseFitAnswer, usable: (parsed) => parsed.fit !== null }));
   }
   const merged = mergeFitAnswers(answers);
@@ -463,7 +487,7 @@ async function judgeCriteria({ judge, study, jobId, note, target, thinking, cap,
   const answers = [];
   /** @type {any[]} */ const calls = [];
   for (const part of parts) {
-    const messages = criteriaMessages({ title: target.title, summary: target.summary, criteria: target.clauses, sentences: part.sentences, conditions: target.conditions, interventions: target.interventions, definitions });
+    const messages = criteriaMessages({ title: target.title, summary: target.summary, takes: target.takes, criteria: target.clauses, sentences: part.sentences, conditions: target.conditions, interventions: target.interventions, definitions });
     answers.push(await askOnceMore({ judge, ask: { study, jobId, messages, thinking }, calls,
       read: (/** @type {string} */ content) => parseCriteriaAnswer(content, { criteria: target.clauses, sentences: part.sentences }),
       usable: (parsed) => parsed.rows.length > 0 }));
@@ -645,7 +669,7 @@ export function createMatchJudgeExecutor({ store, matchStore, judgments, documen
   const ceiling = effectiveJobCeiling(config);
   const cap = VCR_MATCH_JUDGE_LIMITS.noteChars;
   /** @param {{ job: Record<string, any>, onProgress: (progress: { done: number, total: number, note?: string }) => Promise<unknown>, isCanceled?: () => Promise<boolean>, yieldable?: boolean, saveCheckpoint?: ((patch: Record<string, any>) => Promise<unknown>) | null }} input */
-  return async ({ job, onProgress, isCanceled = async () => false, yieldable = false, saveCheckpoint = null }) => {
+  const runBatch = async ({ job, onProgress, isCanceled = async () => false, yieldable = false, saveCheckpoint = null }) => {
     const studyId = String(job?.studyId ?? '');
     const jobId = String(job?.jobId ?? job?.id);
     const found = await store.studyById(studyId);
@@ -861,8 +885,8 @@ export function createMatchJudgeExecutor({ store, matchStore, judgments, documen
         const context = { judge: fenced, study, jobId, note, target, thinking: thinkingOf(mode), cap };
         const live = { liveDocuments: Boolean(documents.recordStands) };
         const readFrom = list(note.snapshots).length ? { readFrom: { snapshots: note.snapshots } } : {};
-        const settings = { maxTokens: judge.maxTokens, timeoutMs: judge.timeoutMs, ...(note.unreadable ? { unreadableDocuments: note.unreadable } : {}), ...(note.leftOut ? { leftOut: note.leftOut } : {}), ...(note.documentsLeftOut ? { documentsLeftOut: note.documentsLeftOut } : {}) };
-        const answer = { target: target.summaryOfTarget, eligibilitySource: target.eligibilitySource, ...(note.unreadable ? { unreadableDocuments: note.unreadable } : {}), ...(note.leftOut ? { leftOut: note.leftOut } : {}), ...(note.documentsLeftOut ? { documentsLeftOut: note.documentsLeftOut } : {}), ...readFrom };
+        const settings = { maxTokens: judge.maxTokens, timeoutMs: judge.timeoutMs };
+        const answer = { target: target.summaryOfTarget, eligibilitySource: target.eligibilitySource, ...gapsOf(note, target), ...readFrom };
         /** @type {any} */
         let saved;
         if (mode === 'fit') {
@@ -878,7 +902,7 @@ export function createMatchJudgeExecutor({ store, matchStore, judgments, documen
           const { parsed, calls, parts } = await judgeCriteria({ ...context, definitions: cards?.definitions ?? [] });
           const usage = account(calls);
           // The trial-level row of these same words, whichever batch wrote it.
-          const scored = fitSeen.get(pairKey) ?? done.get(judgmentKey({ ...base, mode: 'fit', promptVersion: String(promptVersions.fit), targetHash: target.hash, documentHash: note.hash }));
+          const scored = fitSeen.get(pairKey) ?? done.get(judgmentKey({ ...base, mode: 'fit', promptVersion: String(promptVersions.fit), thinking: thinkingOf('fit'), targetHash: target.hash, documentHash: note.hash }));
           const verdict = trialVerdict({ fit: scored?.fit ?? null, criteria: parsed.rows, missing: parsed.missing });
           saved = await judgments.save({ ...base, ...live, targetHash: target.hash, documentHash: note.hash, status: 'done', fit: scored?.fit ?? null, confidence: scored?.confidence ?? null, verdict: verdict.verdict,
             answer: { ...answer, rows: parsed.rows, missing: parsed.missing, droppedSentenceIds: parsed.droppedSentenceIds, issues: parsed.issues, parts,
@@ -1058,8 +1082,18 @@ export function createMatchJudgeExecutor({ store, matchStore, judgments, documen
 
     const scenarioHash = /^[a-f0-9]{64}$/.test(String(job.scenarioHash ?? '')) ? String(job.scenarioHash) : createHash('sha256').update(canonicalScenarioJson(scenario)).digest('hex');
     // Everyone on the frozen roster having withdrawn since is a job that judged nobody, not a clean one.
-    const outcome = total ? resultOutcome({ finished: finishedPairs, total, failed: failedPairs + stages.criteria.failed, stopped: Boolean(stopped) || canceled, failures, noun: '对', verb: '判定' })
+    // Every pair may have a score and its clauses still be owed: the second stage failed, or never began. That is a job stopped short, said in its own words.
+    const clausesAsked = topK !== 0 && scenario.fit !== false;
+    const clausesNotReached = clausesAsked && !second && finishedPairs > 0;
+    const clausesDone = stages.criteria.done + stages.criteria.already;
+    const clausesShort = clausesNotReached || (clausesAsked && clausesDone < stages.criteria.total);
+    const outcome = total ? resultOutcome({ finished: finishedPairs, total, failed: failedPairs, stopped: Boolean(stopped) || canceled || clausesShort, failures, noun: '对', verb: '判定' })
       : { status: 'failed', conclusion: 'not_estimable', issues: [{ code: 'vcr_match_nothing_finished', message: '这一批的受试者都已撤回同意，没有可判定的。' }] };
+    if (clausesShort && outcome.status !== 'failed') {
+      const said = clausesNotReached ? '逐条判定没有开始' : `逐条判了 ${clausesDone}/${stages.criteria.total} 对`;
+      const stoppedWords = stopped || canceled ? '，中途停下' : '';
+      outcome.issues = [{ code: outcome.issues[0].code, message: `${total} 对里判定完 ${finishedPairs} 对${failedPairs > 0 ? `，${failedPairs} 对没判定成` : ''}，${said}${stoppedWords}；判定完的保留。` }];
+    }
     const changes = scenario.followUp && judgments.list ? judgmentChanges(await judgments.list({ studyId, subjectKey: frozenSubjects.length === 1 ? frozenSubjects[0] : null }).catch(() => [])) : null;
     /** @type {Record<string, any>} */
     const result = {
@@ -1073,7 +1107,7 @@ export function createMatchJudgeExecutor({ store, matchStore, judgments, documen
       diagnostics: {
         ...(outcome.issues.length ? { issues: outcome.issues } : {}),
         direction, ...(scenario.protocolVersionId ? { protocolVersionId: String(scenario.protocolVersionId) } : {}), chain: scenario.chain ?? null,
-        finished: finishedPairs, total, failed: failedPairs, remaining, canceled, stages,
+        finished: finishedPairs, total, failed: failedPairs, remaining, canceled, stages, ...(clausesNotReached ? { clausesNotReached: true } : {}),
         ...(Object.keys(failures).length ? { failures } : {}), ...(stopped ? { stopped } : {}), ...(skippedWithdrawn ? { skippedWithdrawn } : {}),
         ...(changes ? { changes: { ...changes, followUp: scenario.followUp } } : {}),
         // What was stated before the work and what it came to.
@@ -1085,6 +1119,12 @@ export function createMatchJudgeExecutor({ store, matchStore, judgments, documen
     };
     result.manifest.outputHash = createHash('sha256').update(vcrResultOutputPayload(result)).digest('hex');
     return result;
+  };
+  // What a batch reads before its first pair (the roster, the ledger, the marks) has no pair to fail on. A stall there is the queue's to try again, with the checkpoint as it stands: a multi-hour job is
+  // not over because a statement timed out behind a checkpoint.
+  return async (input) => {
+    try { return await runBatch(input); }
+    catch (error) { throw isStall(error) ? Object.assign(/** @type {object} */ (error), { retryable: true }) : error; }
   };
 }
 
@@ -1169,10 +1209,10 @@ export function createMatchJudge({ jobs, matchStore, documents, subjectTable = n
       if (!judgments?.list) return null;
       const rows = (await judgments.list({ studyId: study.id, subjectKey })).filter((/** @type {any} */ row) => row.status === 'done' && (!targetIds || targetIds.includes(row.targetId)));
       if (!rows.length) return null;
-      /** @type {Map<string, { kind: string, targetId: string, target: any, modes: Set<string>, thinking: string }>} */
+      /** @type {Map<string, { kind: string, targetId: string, target: any, modes: Set<string> }>} */
       const byTarget = new Map();
       for (const row of rows) {
-        const entry = byTarget.get(row.targetId) ?? { kind: row.targetKind, targetId: row.targetId, target: row.target ?? {}, modes: new Set(), thinking: row.thinking };
+        const entry = byTarget.get(row.targetId) ?? { kind: row.targetKind, targetId: row.targetId, target: row.target ?? {}, modes: new Set() };
         entry.modes.add(row.mode);
         byTarget.set(row.targetId, entry);
       }
@@ -1218,7 +1258,8 @@ function newest(rows) {
  */
 export function presentJudgment(fit, criteria) {
   const usable = (/** @type {any} */ row) => (row?.status === 'done' ? row : null);
-  const scored = usable(fit), clauses = usable(criteria);
+  const standing = standingRows(usable(fit), usable(criteria));
+  const scored = standing.fit, clauses = standing.criteria;
   const rows = list(clauses?.answer?.rows);
   const missing = list(clauses?.answer?.missing);
   const reasons = object(scored?.answer?.reasons);
@@ -1226,6 +1267,7 @@ export function presentJudgment(fit, criteria) {
   const newestOf = clauses && scored ? ((clauses.updatedAt ?? '') > (scored.updatedAt ?? '') ? clauses : scored) : clauses ?? scored;
   const anchor = newestOf ?? fit ?? criteria;
   const basisChanged = scored?.basisChanged ?? clauses?.basisChanged ?? null;
+  const gap = recordGapOf(anchor?.answer);
   return {
     id: anchor.id, subjectKey: anchor.subjectKey, subjectLabel: vcrSubjectLabel(anchor.subjectKey), target: object(anchor.answer?.target).id ? anchor.answer.target : { kind: anchor.targetKind, id: anchor.targetId },
     verdict: judged.verdict, verdictLabel: VCR_TRIAL_VERDICT_LABELS_ZH[judged.verdict], fit: scored?.fit ?? clauses?.fit ?? null, confidence: scored?.confidence ?? clauses?.confidence ?? null,
@@ -1234,7 +1276,7 @@ export function presentJudgment(fit, criteria) {
     missingClauses: missing,
     eligibilitySource: anchor.answer?.eligibilitySource ?? null,
     producer: anchor.producer, model: anchor.model, thinking: anchor.thinking, judgedAt: anchor.updatedAt,
-    ...(basisChanged ? { basisChanged } : {}),
+    ...(basisChanged ? { basisChanged } : {}), ...(gap ? { recordGap: gap } : {}), ...(standing.older === 'criteria' ? { clausesOutdated: true } : {}), ...(standing.older === 'fit' ? { scoreOutdated: true } : {}),
     ...(isRegistryMark(basisChanged) && anchor.targetKind === 'candidate_trial' ? { rejudge: { reason: REGISTRY_RECORD_BASIS, label: '重新判定', subjectKey: anchor.subjectKey, registryIds: [anchor.targetId] } } : {}),
   };
 }
@@ -1298,14 +1340,17 @@ export function createMatchJudgmentReads({ judgments, documents, subjectTable = 
     for (const { fit, criteria } of grouped.values()) {
       const scored = newest(fit), clauses = newest(criteria);
       if (scored?.status === 'done' || clauses?.status === 'done') {
-        const usableFit = scored?.status === 'done' ? scored : null, usableCriteria = clauses?.status === 'done' ? clauses : null;
+        const standing = standingRows(scored?.status === 'done' ? scored : null, clauses?.status === 'done' ? clauses : null);
+        const usableFit = standing.fit, usableCriteria = standing.criteria;
+        // A pair with a score whose clauses failed has a verdict from its score, and the clauses are still owed.
+        const clauseFailure = clauses?.status === 'failed' ? clauses.errorCode ?? 'vcr_match_judge_failed' : null;
         pairs.push({ fitRow: usableFit, criteriaRow: usableCriteria, subjectKey: (usableFit ?? usableCriteria).subjectKey, targetId: (usableFit ?? usableCriteria).targetId,
-          fit: usableFit?.fit ?? usableCriteria?.fit ?? null, confidence: usableFit?.confidence ?? usableCriteria?.confidence ?? null,
+          fit: usableFit?.fit ?? usableCriteria?.fit ?? null, confidence: usableFit?.confidence ?? usableCriteria?.confidence ?? null, eligibilitySource: (usableFit ?? usableCriteria).eligibilitySource ?? null, judgedByClauses: Boolean(usableCriteria), ...(clauseFailure ? { clauseFailure, at: clauses.updatedAt } : {}),
           // What an order needs of a clause row is whether it states a disqualifier, and the store says so without reading the answer out.
           criteria: usableCriteria?.disqualified ? [{ label: 'excluded', basis: 'stated' }] : [] });
       } else {
         const row = scored ?? clauses;
-        failed.push({ subjectKey: row.subjectKey, target: object(row.target).id ? row.target : { kind: row.targetKind, id: row.targetId }, code: row.errorCode, at: row.updatedAt });
+        failed.push({ subjectKey: row.subjectKey, targetId: row.targetId, target: object(row.target).id ? row.target : { kind: row.targetKind, id: row.targetId }, code: row.errorCode, at: row.updatedAt });
       }
     }
     return { pairs, failed };
@@ -1314,6 +1359,11 @@ export function createMatchJudgmentReads({ judgments, documents, subjectTable = 
   /** @param {any} study @param {{ subjectKey?: string | null, targetKind?: string | null, targetId?: string | null, limit: number, offset: number, order: 'target' | 'subject' }} input */
   const read = async (study, { subjectKey = null, targetKind = null, targetId = null, limit, offset, order }) => {
     const { pairs, failed } = pairsOf(await judgments.list({ studyId: study.id, subjectKey, targetKind, targetId }));
+    const direction = order === 'target' ? 'patient_to_trial' : 'trial_to_patient';
+    // How far it is: what the jobs of this scope asked for, and what the newest of them is doing. A read in the middle of a job is not the end of it.
+    const jobs = judgments.jobsOf ? await judgments.jobsOf({ studyId: study.id, direction, subjectKey, protocolVersionId: targetId }) : [];
+    const withdrawn = direction === 'trial_to_patient' ? new Set([...(await matchStore.withdrawnSubjects?.(study.id) ?? [])].map(String)) : new Set();
+    const progress = judgingProgress({ direction, jobs, done: pairs, failed, withdrawn, only: direction === 'trial_to_patient' ? subjectKey : null });
     const ranked = rankJudgments(pairs.map((pair) => ({ ...pair, id: order === 'target' ? pair.targetId : pair.subjectKey })));
     const page = ranked.slice(offset, offset + limit);
     const whole = new Map((await judgments.byIds(study.id, page.flatMap((pair) => [pair.fitRow?.id, pair.criteriaRow?.id].filter(Boolean)))).map((/** @type {any} */ row) => [row.id, row]));
@@ -1321,12 +1371,16 @@ export function createMatchJudgmentReads({ judgments, documents, subjectTable = 
       const fit = pair.fitRow ? whole.get(pair.fitRow.id) ?? null : null, criteria = pair.criteriaRow ? whole.get(pair.criteriaRow.id) ?? null : null;
       if (!fit && !criteria) return [];
       const rows = [fit, criteria].filter(Boolean);
-      return [{ row: presentJudgment(fit, criteria), record: { subjectKey: String(rows[0].subjectKey), documentIds: [...new Set(rows.flatMap((row) => list(row.documentIds).map(String)))], snapshotIds: [...new Set(rows.flatMap((row) => list(object(row.answer?.readFrom).snapshots).map((snapshot) => String(object(snapshot).id))))] } }];
+      const owed = pair.clauseFailure && !pair.criteriaRow ? { clausesFailed: { code: pair.clauseFailure, reason: vcrMatchFailureReason(pair.clauseFailure) } } : {};
+      return [{ row: { ...presentJudgment(fit, criteria), ...owed }, record: { subjectKey: String(rows[0].subjectKey), documentIds: [...new Set(rows.flatMap((row) => list(row.documentIds).map(String)))], snapshotIds: [...new Set(rows.flatMap((row) => list(object(row.answer?.readFrom).snapshots).map((snapshot) => String(object(snapshot).id))))] } }];
     });
     // The trials of this person whose verdict rests on a record that has since changed, whatever page they are on: one action judges them again.
     const stale = order === 'target' && subjectKey
       ? ranked.filter((pair) => isRegistryMark(pair.fitRow?.basisChanged) || isRegistryMark(pair.criteriaRow?.basisChanged)).map((pair) => String(pair.targetId)).slice(0, VCR_MATCH_JUDGE_LIMITS.trials) : [];
+    const clausesFailed = pairs.filter((pair) => pair.clauseFailure && !pair.criteriaRow).map((pair) => ({ subjectKey: pair.subjectKey, targetId: pair.targetId, code: pair.clauseFailure, reason: vcrMatchFailureReason(pair.clauseFailure), at: pair.at ?? null }));
     return { ranking: await Promise.all(presented.map(({ row, record }) => projected(study, row, record))), note: SAVED_WORDS_NOTE, finished: ranked.length, failedPairs: failed.length, ...(failed.length ? { failed: failed.slice(0, 50) } : {}), more: ranked.length > offset + limit,
+      total: progress.total, state: progress.state, left: progress.left.length, clauses: progress.clauses, ...(clausesFailed.length ? { clausesFailed: clausesFailed.slice(0, 50) } : {}),
+      ...(progress.latest ? { job: { id: String(progress.latest.id), state: String(progress.latest.state) } } : {}),
       ...(stale.length ? { rejudge: { reason: REGISTRY_RECORD_BASIS, label: '登记记录已更新，可重新判定', subjectKey, registryIds: stale } } : {}) };
   };
 

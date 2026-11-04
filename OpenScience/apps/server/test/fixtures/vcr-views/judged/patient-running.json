@@ -10,6 +10,11 @@
     "failed": 2,
     "waiting": 1,
     "state": "running",
+    "clauses": {
+      "wanted": 3,
+      "done": 3,
+      "left": 0
+    },
     "jobId": "job_fixed",
     "startedAt": "2026-11-04T08:00:00.000Z",
     "cost": {

@@ -1860,7 +1860,7 @@ test("above T0 a judging job holds the matching step, and what it saved finishes
   // It ends having judged someone against the protocol as it stands: the step is done, with no rule assessment anywhere.
   await store.query("UPDATE evimed_vcr.jobs SET state = 'succeeded', finished_at = now() WHERE id = $1", [job.id]);
   const judgment = (/** @type {string} */ targetKind, /** @type {string} */ targetId, /** @type {string} */ status) => store.query(`INSERT INTO evimed_vcr.match_judgments
-    (id, study_id, user_id, subject_key, target_kind, target_id, mode, prompt_version, producer, status) VALUES ($1, $2, $3, $1, $4, $5, 'fit', 'fit-2', 'job', $6)`,
+    (id, study_id, user_id, subject_key, target_kind, target_id, mode, prompt_version, producer, status) VALUES ($1, $2, $3, $1, $4, $5, 'fit', 'fit-3', 'job', $6)`,
   [`jud_${randomUUID()}`, study.id, study.userId, targetKind, targetId, status]);
   await judgment("protocol_version", "protocol-of-an-earlier-version", "done");
   await judgment("protocol_version", version, "failed");
@@ -1874,7 +1874,7 @@ test("above T0 a judging job holds the matching step, and what it saved finishes
   const other = await makeStudy("matchjudgetrial", { dataTier: "T1" });
   await store.setStep(other.id, "matching", { requested: true });
   await store.query(`INSERT INTO evimed_vcr.match_judgments (id, study_id, user_id, subject_key, target_kind, target_id, mode, prompt_version, producer, status)
-    VALUES ($1, $2, $3, 'sub_1', 'candidate_trial', 'ClinicalTrials.gov:NCT00000001', 'fit', 'fit-2', 'job', 'done')`, [`jud_${randomUUID()}`, other.id, other.userId]);
+    VALUES ($1, $2, $3, 'sub_1', 'candidate_trial', 'ClinicalTrials.gov:NCT00000001', 'fit', 'fit-3', 'job', 'done')`, [`jud_${randomUUID()}`, other.id, other.userId]);
   await module.orchestrator.advance(other.id);
   assert.equal((await store.studyById(other.id)).steps.matching.status, "done");
 });
