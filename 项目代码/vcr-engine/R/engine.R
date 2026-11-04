@@ -65,6 +65,8 @@ vcr_engine_load <- function(root = NULL) {
 vcr_engine_handlers <- function() list(
   "model.survival_fit" = vcr_job_fit_survival_model,
   "model.prognostic_apply" = vcr_job_apply_prognostic_model,
+  "model.prognostic_train" = vcr_job_train_prognostic_model,
+  "patients.progression" = vcr_job_patients_progression,
   "profile.snapshot" = vcr_job_profile_snapshot,
   "cohort.build" = vcr_job_build_cohort,
   "population.scenario" = vcr_job_generate_population,
@@ -164,6 +166,14 @@ VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "borrowing")
 # --- inference validity and per-record privacy of a synthetic population (algorithm round P1, P2, 2026-11-03) ---
 VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "quality_inference")
 # --- end quality inference ---
+
+# --- a prognostic model trained on the user's own table, cross-fitted (algorithm round P3, 2026-11-03) ---
+VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "model_prognostic_train")
+# --- end prognostic training ---
+
+# --- a population-level disease-progression simulator from a published model family (algorithm round P4, 2026-11-03) ---
+VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "patients_progression")
+# --- end progression ---
 
 #' Startup self-check: the local registry and the domain must agree, exactly.
 vcr_engine_self_check <- function() {

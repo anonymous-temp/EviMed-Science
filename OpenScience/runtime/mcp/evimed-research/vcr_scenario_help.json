@@ -48,6 +48,8 @@
     "design_bayesian": {"method":"design.bayesian"},
     "design_win_ratio": {"method":"design.win_ratio"},
     "borrowing_prior": {"method":"comparator.borrowing"},
+    "train_prognostic_model": {"method":"model.prognostic_train"},
+    "generate_progression": {"method":"patients.progression"},
     "match_extract": {"method":"matching.extract","platformBuilt":[]},
     "forecast_trajectories": {"method":"forecast.trajectories"},
     "evaluate_forecast": {"method":"forecast.evaluate"},
@@ -110,6 +112,246 @@
             "distribution": "weibull",
             "timeUnit": "months",
             "horizons": [6,12,24]
+          }
+        }
+      ]
+    },
+    "model.prognostic_train": {
+      "endpoints": ["continuous","binary","time_to_event"],
+      "notes": [
+        "Trains on the person's own historical table: Cox for a time-to-event outcome, logistic for a 0/1 outcome, linear for a continuous one, cross-fitted in `folds` folds (events dealt round the folds), so every figure is out of fold. A forest (ranger) is fitted on the same folds as a comparison only and is never saved. Each predictor states its unit (a text column is \"category\"); a text column becomes one indicator per level held by at least the small-cell size of people, the commonest level is the reference, and a person with a rarer level gets no prediction from the saved equation.",
+        "The result holds the equation in the shape model.prognostic_apply takes, labelled as trained on the person's own data and not externally validated; out-of-fold discrimination (C index, AUC or R squared), calibration slope and intercept, the correlation rho between score and outcome with its interval (for a time-to-event outcome the correlation with an event by the horizon among people whose status there is known, an approximation), and a table of PROCOVA sample-size savings under discounts lambda on the correlation and gamma on the control SD, from design.procova's own formula, at the estimated rho and at the lower end of its interval. A model that cannot be estimated (fewer than 10 events or non-events, or fewer than 5 per fitted parameter) is not_estimable, never invented."
+      ],
+      "rows": [
+        {"path":"inputId","type":"string","maxLength":141,"role":"input id","required":true,"fieldRole":"research_fact"},
+        {"path":"idColumn","type":"string","maxLength":64,"role":"column","required":true,"fieldRole":"research_fact"},
+        {"path":"sourceCondition","type":"string","values":["control","natural_history","standard_care"],"required":true,"fieldRole":"defaultable"},
+        {"path":"armColumn","type":"string","maxLength":64,"role":"column","fieldRole":"research_fact"},
+        {"path":"armValue","type":"string","maxLength":80,"fieldRole":"research_fact"},
+        {"path":"endpoint","type":"object","required":true},
+        {"path":"endpoint.type","type":"string","values":["continuous","binary","time_to_event"],"required":true,"fieldRole":"defaultable"},
+        {
+          "path": "endpoint.outcomeColumn",
+          "type": "string",
+          "maxLength": 64,
+          "role": "column",
+          "required": true,
+          "when": [{"path":"endpoint.type","in":["continuous","binary"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "endpoint.timeColumn",
+          "type": "string",
+          "maxLength": 64,
+          "role": "column",
+          "required": true,
+          "when": [{"path":"endpoint.type","in":["time_to_event"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "endpoint.statusColumn",
+          "type": "string",
+          "maxLength": 64,
+          "role": "column",
+          "required": true,
+          "when": [{"path":"endpoint.type","in":["time_to_event"]}],
+          "fieldRole": "research_fact"
+        },
+        {"path":"endpoint.parameterCode","type":"string","maxLength":64,"when":[{"path":"endpoint.type","in":["time_to_event"]}],"fieldRole":"defaultable"},
+        {"path":"endpoint.horizon","type":"number","gt":0,"required":true,"fieldRole":"research_fact"},
+        {"path":"endpoint.timeUnit","type":"string","values":["days","weeks","months","years"],"required":true,"fieldRole":"defaultable"},
+        {"path":"predictors","type":"list","count":{"min":1,"max":50},"items":{"type":"object"},"required":true,"fieldRole":"research_fact"},
+        {"path":"predictors[].column","type":"string","maxLength":64,"role":"column","required":true,"fieldRole":"research_fact"},
+        {"path":"predictors[].unit","type":"string","maxLength":80,"required":true,"fieldRole":"research_fact"},
+        {"path":"predictors[].transform","type":"string","values":["identity","log","log1p","square"],"default":"identity","fieldRole":"defaultable"},
+        {"path":"folds","type":"integer","min":3,"max":10,"default":5,"fieldRole":"defaultable"},
+        {"path":"comparison","type":"object"},
+        {"path":"comparison.ranger","type":"boolean","default":true,"within":"comparison","fieldRole":"defaultable"},
+        {"path":"procova","type":"object"},
+        {"path":"procova.lambdas","type":"list","count":{"min":1,"max":8},"items":{"type":"number","min":0,"max":1},"within":"procova","fieldRole":"defaultable"},
+        {"path":"procova.gammas","type":"list","count":{"min":1,"max":8},"items":{"type":"number","min":1},"within":"procova","fieldRole":"defaultable"},
+        {"path":"procova.allocation","type":"number","gt":0,"lt":1,"default":0.5,"within":"procova","fieldRole":"defaultable"}
+      ],
+      "rules": [{"kind":"requires","key":"armColumn","needs":["armValue"]},{"kind":"requires","key":"armValue","needs":["armColumn"]}],
+      "examples": [
+        {
+          "label": "a survival prognostic model trained on the historical control arm of a table, five folds",
+          "scenario": {
+            "inputId": "snp_1:subject",
+            "idColumn": "USUBJID",
+            "sourceCondition": "control",
+            "armColumn": "arm",
+            "armValue": "control",
+            "endpoint": {"type":"time_to_event","timeColumn":"os_months","statusColumn":"death","horizon":24,"timeUnit":"months"},
+            "predictors": [{"column":"age","unit":"years"},{"column":"ecog","unit":"category"},{"column":"ldh","unit":"U/L","transform":"log"}],
+            "folds": 5
+          }
+        },
+        {
+          "label": "a continuous change score, with the discounts the savings table is computed under",
+          "scenario": {
+            "inputId": "snp_1:subject",
+            "idColumn": "USUBJID",
+            "sourceCondition": "natural_history",
+            "endpoint": {"type":"continuous","outcomeColumn":"change_score","horizon":18,"timeUnit":"months"},
+            "predictors": [{"column":"baseline_score","unit":"points"},{"column":"age","unit":"years"}],
+            "folds": 5,
+            "procova": {"lambdas":[1,0.9,0.5],"gammas":[1,1.1],"allocation":0.5}
+          }
+        }
+      ]
+    },
+    "patients.progression": {
+      "endpoints": ["continuous"],
+      "notes": [
+        "A population-level simulator of the average course of a continuous score and how widely people scatter around it, from a model family the run takes from a publication: linear (slope), exponential (slope and acceleration), logistic (amplitude, midpoint, steepness) or emax (amplitude, halfTime). Every number is { value, basis: literature | assumed | data, citation? }: the source of a value is a premise the page shows, and nothing is built in: no disease, no parameter. The first visit is time zero, the baseline. The between-person spread (betweenPersonSd) is on the progression amplitude, correlated with the baseline by `correlation` (default 0).",
+        "The treatment slows the clock: a treated person follows the same curve with time scaled by 1 - slowing. The result is the exact mean curve and spread by arm at every visit, and the power of the analysis (a Welch t-test of the change from baseline to `visit`, or of each person's least-squares slope over all the visits) by simulation with its Monte Carlo error, with the closed-form power of the same test beside it. With no slowing the same number is the type I error. It is not a prediction for a person: in the one published model this kind of curve comes from, baseline predicted an individual's change with R squared 0.16."
+      ],
+      "rows": [
+        {"path":"endpoint","type":"object","required":true},
+        {"path":"endpoint.type","type":"string","values":["continuous"],"required":true,"fieldRole":"defaultable"},
+        {"path":"endpoint.unit","type":"string","maxLength":40,"fieldRole":"defaultable"},
+        {"path":"design","type":"object","required":true},
+        {"path":"design.nTreat","type":"integer","min":2,"max":100000,"required":true,"fieldRole":"research_fact"},
+        {"path":"design.nControl","type":"integer","min":2,"max":100000,"required":true,"fieldRole":"research_fact"},
+        {"path":"timeUnit","type":"string","values":["days","weeks","months","years"],"required":true,"fieldRole":"defaultable"},
+        {"path":"visits","type":"list","count":{"min":3,"max":40},"items":{"type":"number","min":0},"increasing":true,"required":true,"fieldRole":"research_fact"},
+        {"path":"model","type":"object","required":true},
+        {"path":"model.family","type":"string","values":["linear","exponential","logistic","emax"],"required":true,"fieldRole":"defaultable"},
+        {"path":"model.slope","type":"object","required":true,"when":[{"path":"model.family","in":["linear","exponential"]}]},
+        {"path":"model.slope.value","type":"number","required":true,"when":[{"path":"model.family","in":["linear","exponential"]}],"fieldRole":"research_fact"},
+        {
+          "path": "model.slope.basis",
+          "type": "string",
+          "values": ["literature","assumed","data"],
+          "required": true,
+          "when": [{"path":"model.family","in":["linear","exponential"]}],
+          "fieldRole": "defaultable"
+        },
+        {"path":"model.slope.citation","type":"string","maxLength":300,"when":[{"path":"model.family","in":["linear","exponential"]}],"fieldRole":"defaultable"},
+        {"path":"model.betweenPersonSd","type":"object","required":true},
+        {"path":"model.betweenPersonSd.value","type":"number","min":0,"required":true,"fieldRole":"research_fact"},
+        {"path":"model.betweenPersonSd.basis","type":"string","values":["literature","assumed","data"],"required":true,"fieldRole":"defaultable"},
+        {"path":"model.betweenPersonSd.citation","type":"string","maxLength":300,"fieldRole":"defaultable"},
+        {"path":"model.acceleration","type":"object","required":true,"when":[{"path":"model.family","in":["exponential"]}]},
+        {"path":"model.acceleration.value","type":"number","required":true,"when":[{"path":"model.family","in":["exponential"]}],"fieldRole":"research_fact"},
+        {
+          "path": "model.acceleration.basis",
+          "type": "string",
+          "values": ["literature","assumed","data"],
+          "required": true,
+          "when": [{"path":"model.family","in":["exponential"]}],
+          "fieldRole": "defaultable"
+        },
+        {"path":"model.acceleration.citation","type":"string","maxLength":300,"when":[{"path":"model.family","in":["exponential"]}],"fieldRole":"defaultable"},
+        {"path":"model.amplitude","type":"object","required":true,"when":[{"path":"model.family","in":["logistic","emax"]}]},
+        {"path":"model.amplitude.value","type":"number","required":true,"when":[{"path":"model.family","in":["logistic","emax"]}],"fieldRole":"research_fact"},
+        {
+          "path": "model.amplitude.basis",
+          "type": "string",
+          "values": ["literature","assumed","data"],
+          "required": true,
+          "when": [{"path":"model.family","in":["logistic","emax"]}],
+          "fieldRole": "defaultable"
+        },
+        {"path":"model.amplitude.citation","type":"string","maxLength":300,"when":[{"path":"model.family","in":["logistic","emax"]}],"fieldRole":"defaultable"},
+        {"path":"model.midpoint","type":"object","required":true,"when":[{"path":"model.family","in":["logistic"]}]},
+        {"path":"model.midpoint.value","type":"number","required":true,"when":[{"path":"model.family","in":["logistic"]}],"fieldRole":"research_fact"},
+        {
+          "path": "model.midpoint.basis",
+          "type": "string",
+          "values": ["literature","assumed","data"],
+          "required": true,
+          "when": [{"path":"model.family","in":["logistic"]}],
+          "fieldRole": "defaultable"
+        },
+        {"path":"model.midpoint.citation","type":"string","maxLength":300,"when":[{"path":"model.family","in":["logistic"]}],"fieldRole":"defaultable"},
+        {"path":"model.steepness","type":"object","required":true,"when":[{"path":"model.family","in":["logistic"]}]},
+        {"path":"model.steepness.value","type":"number","gt":0,"required":true,"when":[{"path":"model.family","in":["logistic"]}],"fieldRole":"research_fact"},
+        {
+          "path": "model.steepness.basis",
+          "type": "string",
+          "values": ["literature","assumed","data"],
+          "required": true,
+          "when": [{"path":"model.family","in":["logistic"]}],
+          "fieldRole": "defaultable"
+        },
+        {"path":"model.steepness.citation","type":"string","maxLength":300,"when":[{"path":"model.family","in":["logistic"]}],"fieldRole":"defaultable"},
+        {"path":"model.halfTime","type":"object","required":true,"when":[{"path":"model.family","in":["emax"]}]},
+        {"path":"model.halfTime.value","type":"number","gt":0,"required":true,"when":[{"path":"model.family","in":["emax"]}],"fieldRole":"research_fact"},
+        {
+          "path": "model.halfTime.basis",
+          "type": "string",
+          "values": ["literature","assumed","data"],
+          "required": true,
+          "when": [{"path":"model.family","in":["emax"]}],
+          "fieldRole": "defaultable"
+        },
+        {"path":"model.halfTime.citation","type":"string","maxLength":300,"when":[{"path":"model.family","in":["emax"]}],"fieldRole":"defaultable"},
+        {"path":"baseline","type":"object","required":true},
+        {"path":"baseline.mean","type":"object","required":true},
+        {"path":"baseline.mean.value","type":"number","required":true,"fieldRole":"research_fact"},
+        {"path":"baseline.mean.basis","type":"string","values":["literature","assumed","data"],"required":true,"fieldRole":"defaultable"},
+        {"path":"baseline.mean.citation","type":"string","maxLength":300,"fieldRole":"defaultable"},
+        {"path":"baseline.sd","type":"object","required":true},
+        {"path":"baseline.sd.value","type":"number","min":0,"required":true,"fieldRole":"research_fact"},
+        {"path":"baseline.sd.basis","type":"string","values":["literature","assumed","data"],"required":true,"fieldRole":"defaultable"},
+        {"path":"baseline.sd.citation","type":"string","maxLength":300,"fieldRole":"defaultable"},
+        {"path":"residualSd","type":"object","required":true},
+        {"path":"residualSd.value","type":"number","min":0,"required":true,"fieldRole":"research_fact"},
+        {"path":"residualSd.basis","type":"string","values":["literature","assumed","data"],"required":true,"fieldRole":"defaultable"},
+        {"path":"residualSd.citation","type":"string","maxLength":300,"fieldRole":"defaultable"},
+        {"path":"correlation","type":"object"},
+        {"path":"correlation.value","type":"number","min":-1,"max":1,"required":true,"within":"correlation","fieldRole":"research_fact"},
+        {"path":"correlation.basis","type":"string","values":["literature","assumed","data"],"required":true,"within":"correlation","fieldRole":"defaultable"},
+        {"path":"correlation.citation","type":"string","maxLength":300,"within":"correlation","fieldRole":"defaultable"},
+        {"path":"treatment","type":"object","required":true},
+        {"path":"treatment.slowing","type":"object","required":true},
+        {"path":"treatment.slowing.value","type":"number","min":0,"lt":1,"required":true,"fieldRole":"research_fact"},
+        {"path":"treatment.slowing.basis","type":"string","values":["literature","assumed","data"],"required":true,"fieldRole":"defaultable"},
+        {"path":"treatment.slowing.citation","type":"string","maxLength":300,"fieldRole":"defaultable"},
+        {"path":"analysis","type":"object"},
+        {"path":"analysis.kind","type":"string","values":["change","slope"],"default":"change","within":"analysis","fieldRole":"defaultable"},
+        {"path":"analysis.visit","type":"number","min":0,"within":"analysis","fieldRole":"defaultable"},
+        {"path":"analysis.alpha","type":"number","gt":0,"lt":1,"default":0.05,"within":"analysis","fieldRole":"defaultable"}
+      ],
+      "examples": [
+        {
+          "label": "linear progression of a score, 25% slower under treatment, power of the change at 18 months (every number says where it came from)",
+          "scenario": {
+            "endpoint": {"type":"continuous","unit":"points"},
+            "design": {"nTreat":150,"nControl":150},
+            "timeUnit": "months",
+            "visits": [0,6,12,18],
+            "model": {
+              "family": "linear",
+              "slope": {"value":0.12,"basis":"literature","citation":"a published progression model, its placebo slope"},
+              "betweenPersonSd": {"value":0.08,"basis":"literature","citation":"the same model, its between-person SD of the slope"}
+            },
+            "baseline": {"mean":{"value":3,"basis":"data"},"sd":{"value":1.2,"basis":"data"}},
+            "residualSd": {"value":0.7,"basis":"literature","citation":"the same model, its residual SD"},
+            "treatment": {"slowing":{"value":0.25,"basis":"assumed"}},
+            "analysis": {"kind":"change","visit":18}
+          }
+        },
+        {
+          "label": "a saturating (Emax) progression, tested by the per-person slope",
+          "scenario": {
+            "endpoint": {"type":"continuous"},
+            "design": {"nTreat":100,"nControl":100},
+            "timeUnit": "months",
+            "visits": [0,3,6,12,18,24],
+            "model": {
+              "family": "emax",
+              "amplitude": {"value":4,"basis":"literature","citation":"a published saturating model"},
+              "betweenPersonSd": {"value":1.5,"basis":"literature"},
+              "halfTime": {"value":12,"basis":"literature"}
+            },
+            "baseline": {"mean":{"value":20,"basis":"data"},"sd":{"value":4,"basis":"data"}},
+            "residualSd": {"value":1,"basis":"literature"},
+            "correlation": {"value":0.2,"basis":"assumed"},
+            "treatment": {"slowing":{"value":0.3,"basis":"assumed"}},
+            "analysis": {"kind":"slope"}
           }
         }
       ]

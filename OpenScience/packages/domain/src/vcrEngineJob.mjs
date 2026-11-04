@@ -102,6 +102,11 @@ export const VCR_ENGINE_METHODS = Object.freeze({
   // 1.1.0 (algorithm round C13): the `spline` family, a Royston-Parmar model of the log cumulative hazard written in R, with the median, the restricted mean and the
   // survival beyond the data, and how far beyond the data each lies. flexsurv is the check in CI and is never called from the engine.
   'model.survival_fit': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen([]), crossChecks: frozen(['independent base-R likelihood optimization', 'flexsurv distribution and delta-method output oracle', 'closed-form censored exponential likelihood', 'flexsurv::flexsurvspline (the spline family: knots, log likelihood, AIC, coefficients, the survival, median and restricted mean beyond the data, and their delta-method errors from the package\'s own covariance)']), modelTier: 'literature' },
+  // A prognostic model trained on the person's own historical table, cross-fitted (algorithm round P3): Cox, logistic or linear, a forest beside it for comparison, out-of-fold discrimination and
+  // calibration, the correlation with the outcome and the PROCOVA savings under the discounts. The equation is the shape model.prognostic_apply takes. `ranger` and `survival` are the runtime; the checks are closed forms and known-truth simulations.
+  'model.prognostic_train': { version: '1.0.0', endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['coxph, glm and lm refits on the held-out folds by hand', 'design.procova for the sample-size ratios', 'a known-truth simulation of the out-of-fold discrimination, calibration and correlation']), modelTier: 'data' },
+  // A population-level disease-progression simulator from a published model family (algorithm round P4): linear, exponential, logistic or Emax progression, treatment as the clock slowed, power by simulation with its error. No disease is built in.
+  'patients.progression': { version: '1.0.0', endpoints: frozen(['continuous']), crossChecks: frozen(['the moments of the outcome at every visit in closed form', 'the closed-form power of the same test (noncentral t with Welch degrees of freedom)']), modelTier: 'scenario' },
   'model.prognostic_apply': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['closed-form published equation evaluation']), modelTier: 'literature' },
   'profile.snapshot': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen([]), crossChecks: frozen(['every printed figure recomputed from its definition (means, spreads, type-7 quantiles, counts)']), modelTier: null },
   'cohort.build': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen([]), crossChecks: frozen([]), modelTier: null },
@@ -252,6 +257,9 @@ export const VCR_JOB_METHODS = Object.freeze({
   design_win_ratio: 'design.win_ratio',
   // dynamic borrowing of an external control arm (2026-11-03)
   borrowing_prior: 'comparator.borrowing',
+  // a prognostic model trained on the person's own table, and a population-level disease-progression simulator (2026-11-03)
+  train_prognostic_model: 'model.prognostic_train',
+  generate_progression: 'patients.progression',
   // The batch reading of patient records (D4): run by the control plane on its slow local lane, never by the R engine.
   ...VCR_MATCH_BATCH_JOBS,
   // The longitudinal forecast kinds, last, in VCR_JOB_KINDS' order (the scenario help lists kinds in this object's order).
@@ -260,7 +268,7 @@ export const VCR_JOB_METHODS = Object.freeze({
 
 /** Job kinds that read patient-level rows, and so need a snapshot grant (plan §8.1). */
 export const VCR_PATIENT_LEVEL_JOB_KINDS = frozen([
-  'fit_survival_model', 'apply_prognostic_model',
+  'fit_survival_model', 'apply_prognostic_model', 'train_prognostic_model',
   'profile_snapshot', 'build_cohort', 'synthesize_population', 'population_quality',
   'weight_comparator', 'propensity_weight_comparator', 'rmst', 'match_criteria', 'weighted_cox_comparator',
   'maic_time_to_event_comparator', 'aipw_comparator', 'covariate_set_comparator', 'stc_comparator', 'target_trial_emulation',
@@ -282,6 +290,7 @@ export const VCR_PATIENT_LEVEL_JOB_KINDS = frozen([
 export const VCR_INDIVIDUAL_INPUT_SOURCES = Object.freeze({
   'model.survival_fit': frozen([...VCR_REAL_PATIENT_SOURCES, 'reconstructed']),
   'model.prognostic_apply': frozen([...VCR_REAL_PATIENT_SOURCES, 'synthetic']),
+  'model.prognostic_train': VCR_REAL_PATIENT_SOURCES,
   'population.synthpop': VCR_REAL_PATIENT_SOURCES,
   'comparator.entropy_balance': VCR_REAL_PATIENT_SOURCES,
   'comparator.propensity_weight': VCR_REAL_PATIENT_SOURCES,

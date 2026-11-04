@@ -287,6 +287,25 @@ export const VCR_SCENARIO_EXAMPLES = Object.freeze({
     { label: 'a synthetic table with a survival analysis combined over its copies, and the per-record privacy', scenario: { trainingInputId: 'snp_1:subject', syntheticInputId: 'pop_synth@1', holdoutInputId: 'snp_1:holdout',
       analyses: [{ name: 'log-rank of the arm', kind: 'logrank', time: 'os_months', status: 'death', group: 'arm' }, { name: 'restricted mean at 24 months', kind: 'rmst', time: 'os_months', status: 'death', group: 'arm', tau: 24 }],
       privacy: { membershipRiskBound: 0.75, secrets: ['sex'] } } }],
+  'model.prognostic_train': [{ label: 'a survival prognostic model trained on the historical control arm of a table, five folds', scenario: {
+    inputId: 'snp_1:subject', idColumn: 'USUBJID', sourceCondition: 'control', armColumn: 'arm', armValue: 'control',
+    endpoint: { type: 'time_to_event', timeColumn: 'os_months', statusColumn: 'death', horizon: 24, timeUnit: 'months' },
+    predictors: [{ column: 'age', unit: 'years' }, { column: 'ecog', unit: 'category' }, { column: 'ldh', unit: 'U/L', transform: 'log' }], folds: 5 } },
+    { label: 'a continuous change score, with the discounts the savings table is computed under', scenario: {
+      inputId: 'snp_1:subject', idColumn: 'USUBJID', sourceCondition: 'natural_history',
+      endpoint: { type: 'continuous', outcomeColumn: 'change_score', horizon: 18, timeUnit: 'months' },
+      predictors: [{ column: 'baseline_score', unit: 'points' }, { column: 'age', unit: 'years' }], folds: 5,
+      procova: { lambdas: [1, 0.9, 0.5], gammas: [1, 1.1], allocation: 0.5 } } }],
+  'patients.progression': [{ label: 'linear progression of a score, 25% slower under treatment, power of the change at 18 months (every number says where it came from)', scenario: {
+    endpoint: { type: 'continuous', unit: 'points' }, design: { nTreat: 150, nControl: 150 }, timeUnit: 'months', visits: [0, 6, 12, 18],
+    model: { family: 'linear', slope: { value: 0.12, basis: 'literature', citation: 'a published progression model, its placebo slope' }, betweenPersonSd: { value: 0.08, basis: 'literature', citation: 'the same model, its between-person SD of the slope' } },
+    baseline: { mean: { value: 3, basis: 'data' }, sd: { value: 1.2, basis: 'data' } }, residualSd: { value: 0.7, basis: 'literature', citation: 'the same model, its residual SD' },
+    treatment: { slowing: { value: 0.25, basis: 'assumed' } }, analysis: { kind: 'change', visit: 18 } } },
+    { label: 'a saturating (Emax) progression, tested by the per-person slope', scenario: {
+      endpoint: { type: 'continuous' }, design: { nTreat: 100, nControl: 100 }, timeUnit: 'months', visits: [0, 3, 6, 12, 18, 24],
+      model: { family: 'emax', amplitude: { value: 4, basis: 'literature', citation: 'a published saturating model' }, betweenPersonSd: { value: 1.5, basis: 'literature' }, halfTime: { value: 12, basis: 'literature' } },
+      baseline: { mean: { value: 20, basis: 'data' }, sd: { value: 4, basis: 'data' } }, residualSd: { value: 1, basis: 'literature' }, correlation: { value: 0.2, basis: 'assumed' },
+      treatment: { slowing: { value: 0.3, basis: 'assumed' } }, analysis: { kind: 'slope' } } }],
   'population.check': [{ label: 'a generated population against a second, independent baseline table (the platform fills `generated` from the population subjectId names)', scenario: {
     baselineTable: [{ variable: 'age', mean: 63, sd: 10 }, { variable: 'male', proportion: 0.58 }], referenceN: 412 } }],
   'patients.continuous': [{ label: 'a continuous endpoint', scenario: {
@@ -713,6 +732,18 @@ const SYNTHETIC_REPORT_NOTES = Object.freeze([
   'privacy needs a holdout: the share of real records whose membership risk (from the distance to the closest synthetic record, against the holdout) is above membershipRiskBound (default 0.75), beside the holdout\'s share, which is what chance alone gives; the kind of person the at-risk group is (a count of 1 to 9 people is never shown, and no row ever is); and attribute inference for the secret columns (default up to five categorical ones): an attacker who knows a person\'s other columns reads the closest synthetic record\'s value, and the success is held against the same attack on holdout people.',
 ])
 
+/** What a prognostic model trained on the person's own table reports and does not (algorithm round P3), for the model that writes the scenario. */
+const PROGNOSTIC_TRAIN_NOTES = Object.freeze([
+  'Trains on the person\'s own historical table: Cox for a time-to-event outcome, logistic for a 0/1 outcome, linear for a continuous one, cross-fitted in `folds` folds (events dealt round the folds), so every figure is out of fold. A forest (ranger) is fitted on the same folds as a comparison only and is never saved. Each predictor states its unit (a text column is "category"); a text column becomes one indicator per level held by at least the small-cell size of people, the commonest level is the reference, and a person with a rarer level gets no prediction from the saved equation.',
+  'The result holds the equation in the shape model.prognostic_apply takes, labelled as trained on the person\'s own data and not externally validated; out-of-fold discrimination (C index, AUC or R squared), calibration slope and intercept, the correlation rho between score and outcome with its interval (for a time-to-event outcome the correlation with an event by the horizon among people whose status there is known, an approximation), and a table of PROCOVA sample-size savings under discounts lambda on the correlation and gamma on the control SD, from design.procova\'s own formula, at the estimated rho and at the lower end of its interval. A model that cannot be estimated (fewer than 10 events or non-events, or fewer than 5 per fitted parameter) is not_estimable, never invented.',
+])
+
+/** What the disease-progression simulator is and is not (algorithm round P4), for the model that writes the scenario. */
+const PROGRESSION_NOTES = Object.freeze([
+  'A population-level simulator of the average course of a continuous score and how widely people scatter around it, from a model family the run takes from a publication: linear (slope), exponential (slope and acceleration), logistic (amplitude, midpoint, steepness) or emax (amplitude, halfTime). Every number is { value, basis: literature | assumed | data, citation? }: the source of a value is a premise the page shows, and nothing is built in: no disease, no parameter. The first visit is time zero, the baseline. The between-person spread (betweenPersonSd) is on the progression amplitude, correlated with the baseline by `correlation` (default 0).',
+  'The treatment slows the clock: a treated person follows the same curve with time scaled by 1 - slowing. The result is the exact mean curve and spread by arm at every visit, and the power of the analysis (a Welch t-test of the change from baseline to `visit`, or of each person\'s least-squares slope over all the visits) by simulation with its Monte Carlo error, with the closed-form power of the same test beside it. With no slowing the same number is the type I error. It is not a prediction for a person: in the one published model this kind of curve comes from, baseline predicted an individual\'s change with R squared 0.16.',
+])
+
 const METHOD_NOTES = Object.freeze({
   'comparator.entropy_balance': Object.freeze([...COMPARATOR_TIME_UNIT_NOTES, IMPUTATION_NOTE]),
   'comparator.propensity_weight': Object.freeze([...COMPARATOR_TIME_UNIT_NOTES, TRIM_NOTE, IMPUTATION_NOTE]),
@@ -733,6 +764,8 @@ const METHOD_NOTES = Object.freeze({
   'comparator.prognostic_adjustment': ROBUSTNESS_TIME_UNIT_NOTES,
   'population.synthpop': Object.freeze([...vcrSynthpopHelpNotes(), ...SYNTHETIC_REPORT_NOTES]),
   'population.quality': SYNTHETIC_REPORT_NOTES,
+  'model.prognostic_train': PROGNOSTIC_TRAIN_NOTES,
+  'patients.progression': PROGRESSION_NOTES,
   'patients.continuous': PATIENT_PAIRING_NOTES,
   'patients.binary': PATIENT_PAIRING_NOTES,
   'patients.time_to_event': PATIENT_PAIRING_NOTES,

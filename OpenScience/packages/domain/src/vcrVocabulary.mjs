@@ -522,6 +522,7 @@ export const VCR_TAB_LABELS_ZH = Object.freeze({
  */
 export const VCR_RESULT_KIND_TABS = Object.freeze({
   population: 'population', patient_set: 'patients', comparator: 'comparator', trial_scenario: 'trial', design_grid: 'trial',
+  prognostic_training: 'comparator', progression_simulation: 'patients',
   accrual_forecast: 'trial', design_confirmatory: 'trial', design_dose: 'trial', design_bayesian: 'trial', design_win_ratio: 'trial', matching: 'matching', match_extract: 'matching', evidence_pool: 'data', snapshot_profile: 'data', population_check: 'population',
   network_meta: 'data', dose_response_meta: 'data', effect_shrinkage: 'data',
 })
@@ -904,6 +905,8 @@ export const VCR_JOB_KINDS = frozen([
   'design_win_ratio',
   // --- appended (2026-11-03): dynamic borrowing of an external control arm: the power, SAM and elastic priors (algorithm round C10, C11, C12) ---
   'borrowing_prior',
+  // --- appended (2026-11-03): a prognostic model trained on the person's own historical table (algorithm round P3) and a population-level disease-progression simulator (P4) ---
+  'train_prognostic_model', 'generate_progression',
   // --- appended (2026-11-01): the batch reading of patient records for the criteria's facts (remediation plan D4) ---
   'match_extract',
   'forecast_trajectories', 'evaluate_forecast', 'compare_forecasts', 'benchmark_trial_effect',
@@ -924,7 +927,7 @@ export const VCR_JOB_KIND_STEPS = Object.freeze({
   weight_comparator: 'comparator', propensity_weight_comparator: 'comparator', maic_comparator: 'comparator', evalue: 'comparator',
   rmst: 'comparator', weighted_cox_comparator: 'comparator', maic_time_to_event_comparator: 'comparator', aipw_comparator: 'comparator',
   covariate_set_comparator: 'comparator', negative_control_comparator: 'comparator', tipping_point: 'comparator',
-  prognostic_adjustment_comparator: 'comparator', bias_analysis: 'comparator', stc_comparator: 'comparator', target_trial_emulation: 'comparator', borrowing_prior: 'comparator',
+  prognostic_adjustment_comparator: 'comparator', bias_analysis: 'comparator', stc_comparator: 'comparator', target_trial_emulation: 'comparator', borrowing_prior: 'comparator', train_prognostic_model: 'comparator', generate_progression: 'patients',
   design_analytic: 'trial', design_simulation: 'trial', design_confirmatory: 'trial', design_dose: 'trial', design_bayesian: 'trial', design_win_ratio: 'trial', design_grid: 'trial', assurance: 'trial', procova: 'trial', accrual_forecast: 'trial',
   match_criteria: 'matching', match_extract: 'matching',
 })

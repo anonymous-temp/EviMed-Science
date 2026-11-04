@@ -311,6 +311,12 @@ vcr_test_handler_jobs <- function() {
   cases <- list(
     list("model.survival_fit", list(inputId = in_event$id, idColumn = "USUBJID", timeColumn = "AVAL", statusColumn = "CNSR", statusEncoding = "censor", distribution = "weibull", timeUnit = "months", horizons = c(3, 9, 18), sourceCondition = "control", armColumn = "PARAMCD", armValue = "OS"), list(in_event)),
     list("model.prognostic_apply", list(inputId = in_subj$id, idColumn = "USUBJID", sourceCondition = "control", endpoint = list(type = "binary", horizon = 12, timeUnit = "months"), inputUnits = list(age = "years"), model = list(family = "logistic", intercept = -1, terms = list(list(column = "age", coefficient = .03, transform = "identity", unit = "years", center = 60, scale = 1)))), list(in_subj)),
+    list("model.prognostic_train", list(inputId = in_subj$id, idColumn = "USUBJID", sourceCondition = "natural_history", endpoint = list(type = "continuous", outcomeColumn = "y", horizon = 12, timeUnit = "months"),
+                                        predictors = list(list(column = "age", unit = "years"), list(column = "male", unit = "category")), folds = 3L, comparison = list(ranger = FALSE)), list(in_subj)),
+    list("patients.progression", list(endpoint = list(type = "continuous"), design = list(nTreat = 20L, nControl = 20L), timeUnit = "months", visits = c(0, 6, 12),
+                                      model = list(family = "linear", slope = list(value = 0.1, basis = "assumed"), betweenPersonSd = list(value = 0.05, basis = "assumed")),
+                                      baseline = list(mean = list(value = 3, basis = "assumed"), sd = list(value = 1, basis = "assumed")), residualSd = list(value = 0.5, basis = "assumed"),
+                                      treatment = list(slowing = list(value = 0.3, basis = "assumed"))), NULL),
     list("profile.snapshot", vcr_empty_object(), list(in_subj)),
     list("cohort.build", list(rules = list(list(name = "adult", rule = list(op = "compare", column = "age", comparator = "gte", value = 40)))), list(in_subj)),
     list("population.scenario", list(n = 200L, population = list(variables = list(list(name = "age", family = "normal", mean = 60, sd = 9)))), NULL),

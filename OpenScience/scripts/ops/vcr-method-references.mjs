@@ -290,6 +290,22 @@ export const NUMERIC_REFERENCES = {
   N97e: { methods: ['population.synthpop', 'population.quality'], anchors: ['identical(rep_copy$bands$inferenceRisk, "red") && identical(rep_fresh$bands$inferenceRisk, "green")'] },
   N97f: { methods: ['population.quality'], anchors: ['identical(vcr_output_hash(r1), vcr_output_hash(r2)) && q$release$copies == 5L'] },
 
+  // model.prognostic_train (P3): coxph and lm on every row, the job's own folds rebuilt by hand, the population C and R squared of a known truth, DeLong against every pair, design.procova's formula and a closed form for the savings, model.prognostic_apply reproducing the saved model
+  N98a: { methods: ['model.prognostic_train'], anchors: ['full <- survival::coxph(survival::Surv(os, death) ~ x1 + x2 + x3 + x4, data = d, ties = "efron")', 'abs(.n98_m(r, "out_of_fold_c_index") - c_hand) < 1e-10'] },
+  N98b: { methods: ['model.prognostic_train'], anchors: ['r2_pop <- sum(b^2) / (sum(b^2) + sigma^2)', 'abs(.n98_m(r, "out_of_fold_r_squared") - r2_hand) < 1e-10'] },
+  N98c: { methods: ['model.prognostic_train'], anchors: ['closed <- function(rho, l, g) (1 - (l * rho)^2) * (1 + g^2) / 2', 'abs(ratio_job - one$sampleSizeRatio$value) < 1e-12'] },
+  N98d: { methods: ['model.prognostic_train'], anchors: ['psi <- outer(pos, neg, function(a, b) (a > b) + 0.5 * (a == b))', 'abs(dl$se - se_pairs) < 1e-12'] },
+  N98e: { methods: ['model.prognostic_train'], anchors: ['identical(r_few$conclusion, "not_estimable") && identical(r_few$notEstimableRule, "too_few_events")', '!grepl("St-Rare-Genotype-X", json3, fixed = TRUE)'] },
+  N98f: { methods: ['model.prognostic_train'], anchors: ['identical(vcr_output_hash(r1), vcr_output_hash(r2)) && identical(rf$model, "random_forest")'] },
+  N98g: { methods: ['model.prognostic_train'], anchors: ['joined <- vcr_test_run(vcr_test_job("model.prognostic_train", sc, list(in_subj, in_ev), seed = 9801L))', 'max(abs(b1 - b2)) < 1e-12'] },
+
+  // patients.progression (P4): the unit shapes against their own rates integrated numerically, the moments of 200,000 simulated people per family against the closed form, the closed-form power of the Welch test (noncentral t) and stats::power.t.test for equal variances, the clock slowed by a stated share
+  N99a: { methods: ['patients.progression'], anchors: ['stats::integrate(rate_of, 0, t, rel.tol = 1e-12)$value', 'mo <- vcr_progression_moments(par, 3, 1.2, 0.7, 0.3, visits, scale)'] },
+  N99b: { methods: ['patients.progression'], anchors: ['pt <- stats::power.t.test(n = 60, delta = delta, sd = sd_change, sig.level = 0.05, type = "two.sample", strict = TRUE)$power', 'want <- r$diagnostics$progression$approximation$power'] },
+  N99c: { methods: ['patients.progression'], anchors: ['ctl_at <- function(t) 3 + 5 * t / (12 + t)', 'sd18 <- sqrt(1.2^2 + 1.2^2 * u18^2 + 2 * 0.3 * 1.2 * 1.2 * u18 + 0.7^2)'] },
+  N99d: { methods: ['patients.progression'], anchors: ['identical(vcr_output_hash(r1), vcr_output_hash(r2)) && identical(vcr_output_hash(r1), vcr_output_hash(r3))'] },
+  N99e: { methods: ['patients.progression'], anchors: ['identical(code(unsourced), "scenario_field_missing")'] },
+
   // --- the comparator-effect stream's cases (listed so that merging it needs no edit here; inert until the cases exist) ---
   N33a: { methods: ['comparator.weighted_cox'], anchors: ['Cross-software: the weights are WeightIt', 'rel(m(j_ebal, "hazard_ratio"), r_ebal$hr) < 1e-6'] },
   N34a: { methods: ['comparator.maic_time_to_event'], anchors: ['The unanchored vignette: 500 patients of arm A matched', 'abs(m("hazard_ratio_robust")$value - 0.2834780) < 1e-6'] },

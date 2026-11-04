@@ -6623,6 +6623,467 @@
           }
         ]
       }
+    },
+    {
+      "name": "train_prognostic_model #1: a Cox model on the control arm",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "train_prognostic_model",
+        "method": "model.prognostic_train",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "inputId": "snp_1:subject",
+          "idColumn": "USUBJID",
+          "sourceCondition": "control",
+          "armColumn": "arm",
+          "armValue": "control",
+          "endpoint": {
+            "type": "time_to_event",
+            "timeColumn": "os_months",
+            "statusColumn": "death",
+            "horizon": 24,
+            "timeUnit": "months"
+          },
+          "predictors": [
+            {
+              "column": "age",
+              "unit": "years"
+            },
+            {
+              "column": "ecog",
+              "unit": "category"
+            },
+            {
+              "column": "ldh",
+              "unit": "U/L",
+              "transform": "log"
+            }
+          ],
+          "folds": 5,
+          "comparison": {
+            "ranger": true
+          },
+          "procova": {
+            "lambdas": [
+              1,
+              0.9,
+              0.5
+            ],
+            "gammas": [
+              1,
+              1.25
+            ],
+            "allocation": 0.5
+          }
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      }
+    },
+    {
+      "name": "train_prognostic_model #2: a linear model of a continuous change score",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "train_prognostic_model",
+        "method": "model.prognostic_train",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "inputId": "snp_1:subject",
+          "idColumn": "USUBJID",
+          "sourceCondition": "natural_history",
+          "endpoint": {
+            "type": "continuous",
+            "outcomeColumn": "change",
+            "horizon": 18,
+            "timeUnit": "months"
+          },
+          "predictors": [
+            {
+              "column": "baseline",
+              "unit": "points"
+            }
+          ],
+          "folds": 3
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      }
+    },
+    {
+      "name": "train_prognostic_model #3: a logistic model",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "train_prognostic_model",
+        "method": "model.prognostic_train",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "inputId": "snp_1:subject",
+          "idColumn": "USUBJID",
+          "sourceCondition": "control",
+          "armColumn": "arm",
+          "armValue": "control",
+          "endpoint": {
+            "type": "binary",
+            "outcomeColumn": "response",
+            "horizon": 12,
+            "timeUnit": "months"
+          },
+          "predictors": [
+            {
+              "column": "age",
+              "unit": "years"
+            },
+            {
+              "column": "ecog",
+              "unit": "category"
+            },
+            {
+              "column": "ldh",
+              "unit": "U/L",
+              "transform": "log"
+            }
+          ],
+          "folds": 5,
+          "comparison": {
+            "ranger": true
+          },
+          "procova": {
+            "lambdas": [
+              1,
+              0.9,
+              0.5
+            ],
+            "gammas": [
+              1,
+              1.25
+            ],
+            "allocation": 0.5
+          }
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      }
+    },
+    {
+      "name": "generate_progression #1: linear, the change at 18 months",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "generate_progression",
+        "method": "patients.progression",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "continuous",
+            "unit": "points"
+          },
+          "design": {
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "timeUnit": "months",
+          "visits": [
+            0,
+            6,
+            12,
+            18
+          ],
+          "model": {
+            "family": "linear",
+            "slope": {
+              "value": 0.12,
+              "basis": "literature",
+              "citation": "a published progression model"
+            },
+            "betweenPersonSd": {
+              "value": 0.08,
+              "basis": "literature"
+            }
+          },
+          "baseline": {
+            "mean": {
+              "value": 3,
+              "basis": "data"
+            },
+            "sd": {
+              "value": 1.2,
+              "basis": "data"
+            }
+          },
+          "residualSd": {
+            "value": 0.7,
+            "basis": "literature"
+          },
+          "treatment": {
+            "slowing": {
+              "value": 0.25,
+              "basis": "assumed"
+            }
+          },
+          "analysis": {
+            "kind": "change",
+            "visit": 18
+          }
+        },
+        "inputs": []
+      }
+    },
+    {
+      "name": "generate_progression #2: an Emax family tested by the slope, with a correlation",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "generate_progression",
+        "method": "patients.progression",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "continuous",
+            "unit": "points"
+          },
+          "design": {
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "timeUnit": "months",
+          "visits": [
+            0,
+            6,
+            12,
+            18
+          ],
+          "model": {
+            "family": "emax",
+            "amplitude": {
+              "value": 4,
+              "basis": "literature"
+            },
+            "betweenPersonSd": {
+              "value": 1.5,
+              "basis": "literature"
+            },
+            "halfTime": {
+              "value": 12,
+              "basis": "literature"
+            }
+          },
+          "baseline": {
+            "mean": {
+              "value": 3,
+              "basis": "data"
+            },
+            "sd": {
+              "value": 1.2,
+              "basis": "data"
+            }
+          },
+          "residualSd": {
+            "value": 0.7,
+            "basis": "literature"
+          },
+          "treatment": {
+            "slowing": {
+              "value": 0.25,
+              "basis": "assumed"
+            }
+          },
+          "analysis": {
+            "kind": "slope",
+            "alpha": 0.05
+          },
+          "correlation": {
+            "value": 0.2,
+            "basis": "assumed"
+          }
+        },
+        "inputs": []
+      }
+    },
+    {
+      "name": "generate_progression #3: logistic with no slowing (the type I error)",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "generate_progression",
+        "method": "patients.progression",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "continuous",
+            "unit": "points"
+          },
+          "design": {
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "timeUnit": "months",
+          "visits": [
+            0,
+            6,
+            12,
+            18
+          ],
+          "model": {
+            "family": "logistic",
+            "amplitude": {
+              "value": 6,
+              "basis": "literature"
+            },
+            "betweenPersonSd": {
+              "value": 1.5,
+              "basis": "literature"
+            },
+            "midpoint": {
+              "value": 14,
+              "basis": "literature"
+            },
+            "steepness": {
+              "value": 0.2,
+              "basis": "literature"
+            }
+          },
+          "baseline": {
+            "mean": {
+              "value": 3,
+              "basis": "data"
+            },
+            "sd": {
+              "value": 1.2,
+              "basis": "data"
+            }
+          },
+          "residualSd": {
+            "value": 0.7,
+            "basis": "literature"
+          },
+          "treatment": {
+            "slowing": {
+              "value": 0,
+              "basis": "assumed"
+            }
+          },
+          "analysis": {
+            "kind": "change",
+            "visit": 18
+          }
+        },
+        "inputs": []
+      }
+    },
+    {
+      "name": "generate_progression #4: exponential",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "generate_progression",
+        "method": "patients.progression",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "continuous",
+            "unit": "points"
+          },
+          "design": {
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "timeUnit": "months",
+          "visits": [
+            0,
+            6,
+            12,
+            18
+          ],
+          "model": {
+            "family": "exponential",
+            "slope": {
+              "value": 0.1,
+              "basis": "literature"
+            },
+            "betweenPersonSd": {
+              "value": 0.05,
+              "basis": "literature"
+            },
+            "acceleration": {
+              "value": 0.04,
+              "basis": "literature"
+            }
+          },
+          "baseline": {
+            "mean": {
+              "value": 3,
+              "basis": "data"
+            },
+            "sd": {
+              "value": 1.2,
+              "basis": "data"
+            }
+          },
+          "residualSd": {
+            "value": 0.7,
+            "basis": "literature"
+          },
+          "treatment": {
+            "slowing": {
+              "value": 0.25,
+              "basis": "assumed"
+            }
+          },
+          "analysis": {
+            "kind": "change",
+            "visit": 18
+          }
+        },
+        "inputs": []
+      }
     }
   ],
   "invalid": [
@@ -27765,6 +28226,1373 @@
       },
       "expected": [
         "method_version_mismatch@methodVersion"
+      ]
+    },
+    {
+      "name": "a prognostic training without predictors",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "train_prognostic_model",
+        "method": "model.prognostic_train",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "inputId": "snp_1:subject",
+          "idColumn": "USUBJID",
+          "sourceCondition": "control",
+          "armColumn": "arm",
+          "armValue": "control",
+          "endpoint": {
+            "type": "time_to_event",
+            "timeColumn": "os_months",
+            "statusColumn": "death",
+            "horizon": 24,
+            "timeUnit": "months"
+          },
+          "predictors": [],
+          "folds": 5,
+          "comparison": {
+            "ranger": true
+          },
+          "procova": {
+            "lambdas": [
+              1,
+              0.9,
+              0.5
+            ],
+            "gammas": [
+              1,
+              1.25
+            ],
+            "allocation": 0.5
+          }
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.predictors"
+      ]
+    },
+    {
+      "name": "a prognostic training with fewer than three folds",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "train_prognostic_model",
+        "method": "model.prognostic_train",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "inputId": "snp_1:subject",
+          "idColumn": "USUBJID",
+          "sourceCondition": "control",
+          "armColumn": "arm",
+          "armValue": "control",
+          "endpoint": {
+            "type": "time_to_event",
+            "timeColumn": "os_months",
+            "statusColumn": "death",
+            "horizon": 24,
+            "timeUnit": "months"
+          },
+          "predictors": [
+            {
+              "column": "age",
+              "unit": "years"
+            },
+            {
+              "column": "ecog",
+              "unit": "category"
+            },
+            {
+              "column": "ldh",
+              "unit": "U/L",
+              "transform": "log"
+            }
+          ],
+          "folds": 2,
+          "comparison": {
+            "ranger": true
+          },
+          "procova": {
+            "lambdas": [
+              1,
+              0.9,
+              0.5
+            ],
+            "gammas": [
+              1,
+              1.25
+            ],
+            "allocation": 0.5
+          }
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.folds"
+      ]
+    },
+    {
+      "name": "a prognostic training of a time-to-event outcome without its status column",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "train_prognostic_model",
+        "method": "model.prognostic_train",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "inputId": "snp_1:subject",
+          "idColumn": "USUBJID",
+          "sourceCondition": "control",
+          "armColumn": "arm",
+          "armValue": "control",
+          "endpoint": {
+            "type": "time_to_event",
+            "timeColumn": "os_months",
+            "horizon": 24,
+            "timeUnit": "months"
+          },
+          "predictors": [
+            {
+              "column": "age",
+              "unit": "years"
+            },
+            {
+              "column": "ecog",
+              "unit": "category"
+            },
+            {
+              "column": "ldh",
+              "unit": "U/L",
+              "transform": "log"
+            }
+          ],
+          "folds": 5,
+          "comparison": {
+            "ranger": true
+          },
+          "procova": {
+            "lambdas": [
+              1,
+              0.9,
+              0.5
+            ],
+            "gammas": [
+              1,
+              1.25
+            ],
+            "allocation": 0.5
+          }
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_missing@scenario.endpoint.statusColumn"
+      ]
+    },
+    {
+      "name": "a prognostic training of a binary outcome that names a time column",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "train_prognostic_model",
+        "method": "model.prognostic_train",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "inputId": "snp_1:subject",
+          "idColumn": "USUBJID",
+          "sourceCondition": "control",
+          "armColumn": "arm",
+          "armValue": "control",
+          "endpoint": {
+            "type": "binary",
+            "outcomeColumn": "y",
+            "timeColumn": "os_months",
+            "horizon": 12,
+            "timeUnit": "months"
+          },
+          "predictors": [
+            {
+              "column": "age",
+              "unit": "years"
+            },
+            {
+              "column": "ecog",
+              "unit": "category"
+            },
+            {
+              "column": "ldh",
+              "unit": "U/L",
+              "transform": "log"
+            }
+          ],
+          "folds": 5,
+          "comparison": {
+            "ranger": true
+          },
+          "procova": {
+            "lambdas": [
+              1,
+              0.9,
+              0.5
+            ],
+            "gammas": [
+              1,
+              1.25
+            ],
+            "allocation": 0.5
+          }
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_unknown@scenario.endpoint.timeColumn"
+      ]
+    },
+    {
+      "name": "a prognostic training that names an arm column without its value",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "train_prognostic_model",
+        "method": "model.prognostic_train",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "inputId": "snp_1:subject",
+          "idColumn": "USUBJID",
+          "sourceCondition": "control",
+          "armColumn": "arm",
+          "endpoint": {
+            "type": "time_to_event",
+            "timeColumn": "os_months",
+            "statusColumn": "death",
+            "horizon": 24,
+            "timeUnit": "months"
+          },
+          "predictors": [
+            {
+              "column": "age",
+              "unit": "years"
+            },
+            {
+              "column": "ecog",
+              "unit": "category"
+            },
+            {
+              "column": "ldh",
+              "unit": "U/L",
+              "transform": "log"
+            }
+          ],
+          "folds": 5,
+          "comparison": {
+            "ranger": true
+          },
+          "procova": {
+            "lambdas": [
+              1,
+              0.9,
+              0.5
+            ],
+            "gammas": [
+              1,
+              1.25
+            ],
+            "allocation": 0.5
+          }
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_missing@scenario.armValue"
+      ]
+    },
+    {
+      "name": "a prognostic training with a predictor that states no unit",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "train_prognostic_model",
+        "method": "model.prognostic_train",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "inputId": "snp_1:subject",
+          "idColumn": "USUBJID",
+          "sourceCondition": "control",
+          "armColumn": "arm",
+          "armValue": "control",
+          "endpoint": {
+            "type": "time_to_event",
+            "timeColumn": "os_months",
+            "statusColumn": "death",
+            "horizon": 24,
+            "timeUnit": "months"
+          },
+          "predictors": [
+            {
+              "column": "age"
+            }
+          ],
+          "folds": 5,
+          "comparison": {
+            "ranger": true
+          },
+          "procova": {
+            "lambdas": [
+              1,
+              0.9,
+              0.5
+            ],
+            "gammas": [
+              1,
+              1.25
+            ],
+            "allocation": 0.5
+          }
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_missing@scenario.predictors[0].unit"
+      ]
+    },
+    {
+      "name": "a prognostic training with a transform that does not exist",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "train_prognostic_model",
+        "method": "model.prognostic_train",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "inputId": "snp_1:subject",
+          "idColumn": "USUBJID",
+          "sourceCondition": "control",
+          "armColumn": "arm",
+          "armValue": "control",
+          "endpoint": {
+            "type": "time_to_event",
+            "timeColumn": "os_months",
+            "statusColumn": "death",
+            "horizon": 24,
+            "timeUnit": "months"
+          },
+          "predictors": [
+            {
+              "column": "age",
+              "unit": "years",
+              "transform": "cube"
+            }
+          ],
+          "folds": 5,
+          "comparison": {
+            "ranger": true
+          },
+          "procova": {
+            "lambdas": [
+              1,
+              0.9,
+              0.5
+            ],
+            "gammas": [
+              1,
+              1.25
+            ],
+            "allocation": 0.5
+          }
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.predictors[0].transform"
+      ]
+    },
+    {
+      "name": "a prognostic training with a discount above one",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "train_prognostic_model",
+        "method": "model.prognostic_train",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "inputId": "snp_1:subject",
+          "idColumn": "USUBJID",
+          "sourceCondition": "control",
+          "armColumn": "arm",
+          "armValue": "control",
+          "endpoint": {
+            "type": "time_to_event",
+            "timeColumn": "os_months",
+            "statusColumn": "death",
+            "horizon": 24,
+            "timeUnit": "months"
+          },
+          "predictors": [
+            {
+              "column": "age",
+              "unit": "years"
+            },
+            {
+              "column": "ecog",
+              "unit": "category"
+            },
+            {
+              "column": "ldh",
+              "unit": "U/L",
+              "transform": "log"
+            }
+          ],
+          "folds": 5,
+          "comparison": {
+            "ranger": true
+          },
+          "procova": {
+            "lambdas": [
+              1.5
+            ]
+          }
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.procova.lambdas[0]"
+      ]
+    },
+    {
+      "name": "a prognostic training under a kind that belongs to another method",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "apply_prognostic_model",
+        "method": "model.prognostic_train",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "inputId": "snp_1:subject",
+          "idColumn": "USUBJID",
+          "sourceCondition": "control",
+          "armColumn": "arm",
+          "armValue": "control",
+          "endpoint": {
+            "type": "time_to_event",
+            "timeColumn": "os_months",
+            "statusColumn": "death",
+            "horizon": 24,
+            "timeUnit": "months"
+          },
+          "predictors": [
+            {
+              "column": "age",
+              "unit": "years"
+            },
+            {
+              "column": "ecog",
+              "unit": "category"
+            },
+            {
+              "column": "ldh",
+              "unit": "U/L",
+              "transform": "log"
+            }
+          ],
+          "folds": 5,
+          "comparison": {
+            "ranger": true
+          },
+          "procova": {
+            "lambdas": [
+              1,
+              0.9,
+              0.5
+            ],
+            "gammas": [
+              1,
+              1.25
+            ],
+            "allocation": 0.5
+          }
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "kind_method_mismatch@method"
+      ]
+    },
+    {
+      "name": "a progression value that states no basis",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "generate_progression",
+        "method": "patients.progression",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "continuous",
+            "unit": "points"
+          },
+          "design": {
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "timeUnit": "months",
+          "visits": [
+            0,
+            6,
+            12,
+            18
+          ],
+          "model": {
+            "family": "linear",
+            "slope": {
+              "value": 0.12,
+              "citation": "a published progression model"
+            },
+            "betweenPersonSd": {
+              "value": 0.08,
+              "basis": "literature"
+            }
+          },
+          "baseline": {
+            "mean": {
+              "value": 3,
+              "basis": "data"
+            },
+            "sd": {
+              "value": 1.2,
+              "basis": "data"
+            }
+          },
+          "residualSd": {
+            "value": 0.7,
+            "basis": "literature"
+          },
+          "treatment": {
+            "slowing": {
+              "value": 0.25,
+              "basis": "assumed"
+            }
+          },
+          "analysis": {
+            "kind": "change",
+            "visit": 18
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_field_missing@scenario.model.slope.basis"
+      ]
+    },
+    {
+      "name": "a progression value whose basis is not one of the three",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "generate_progression",
+        "method": "patients.progression",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "continuous",
+            "unit": "points"
+          },
+          "design": {
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "timeUnit": "months",
+          "visits": [
+            0,
+            6,
+            12,
+            18
+          ],
+          "model": {
+            "family": "linear",
+            "slope": {
+              "value": 0.12,
+              "basis": "literature",
+              "citation": "a published progression model"
+            },
+            "betweenPersonSd": {
+              "value": 0.08,
+              "basis": "literature"
+            }
+          },
+          "baseline": {
+            "mean": {
+              "value": 3,
+              "basis": "data"
+            },
+            "sd": {
+              "value": 1.2,
+              "basis": "data"
+            }
+          },
+          "residualSd": {
+            "value": 0.7,
+            "basis": "guess"
+          },
+          "treatment": {
+            "slowing": {
+              "value": 0.25,
+              "basis": "assumed"
+            }
+          },
+          "analysis": {
+            "kind": "change",
+            "visit": 18
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.residualSd.basis"
+      ]
+    },
+    {
+      "name": "a progression model of a family that does not exist",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "generate_progression",
+        "method": "patients.progression",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "continuous",
+            "unit": "points"
+          },
+          "design": {
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "timeUnit": "months",
+          "visits": [
+            0,
+            6,
+            12,
+            18
+          ],
+          "model": {
+            "family": "gompertz",
+            "slope": {
+              "value": 0.1,
+              "basis": "literature"
+            },
+            "slopeSd": {
+              "value": 0.1,
+              "basis": "literature"
+            }
+          },
+          "baseline": {
+            "mean": {
+              "value": 3,
+              "basis": "data"
+            },
+            "sd": {
+              "value": 1.2,
+              "basis": "data"
+            }
+          },
+          "residualSd": {
+            "value": 0.7,
+            "basis": "literature"
+          },
+          "treatment": {
+            "slowing": {
+              "value": 0.25,
+              "basis": "assumed"
+            }
+          },
+          "analysis": {
+            "kind": "change",
+            "visit": 18
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_field_unknown@scenario.model.slope",
+        "scenario_field_unknown@scenario.model.slopeSd",
+        "scenario_value_invalid@scenario.model.family",
+        "scenario_field_missing@scenario.model.betweenPersonSd"
+      ]
+    },
+    {
+      "name": "an exponential progression without its acceleration",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "generate_progression",
+        "method": "patients.progression",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "continuous",
+            "unit": "points"
+          },
+          "design": {
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "timeUnit": "months",
+          "visits": [
+            0,
+            6,
+            12,
+            18
+          ],
+          "model": {
+            "family": "exponential",
+            "slope": {
+              "value": 0.1,
+              "basis": "literature"
+            },
+            "betweenPersonSd": {
+              "value": 0.05,
+              "basis": "literature"
+            }
+          },
+          "baseline": {
+            "mean": {
+              "value": 3,
+              "basis": "data"
+            },
+            "sd": {
+              "value": 1.2,
+              "basis": "data"
+            }
+          },
+          "residualSd": {
+            "value": 0.7,
+            "basis": "literature"
+          },
+          "treatment": {
+            "slowing": {
+              "value": 0.25,
+              "basis": "assumed"
+            }
+          },
+          "analysis": {
+            "kind": "change",
+            "visit": 18
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_field_missing@scenario.model.acceleration"
+      ]
+    },
+    {
+      "name": "a progression with a slowing of one",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "generate_progression",
+        "method": "patients.progression",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "continuous",
+            "unit": "points"
+          },
+          "design": {
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "timeUnit": "months",
+          "visits": [
+            0,
+            6,
+            12,
+            18
+          ],
+          "model": {
+            "family": "linear",
+            "slope": {
+              "value": 0.12,
+              "basis": "literature",
+              "citation": "a published progression model"
+            },
+            "betweenPersonSd": {
+              "value": 0.08,
+              "basis": "literature"
+            }
+          },
+          "baseline": {
+            "mean": {
+              "value": 3,
+              "basis": "data"
+            },
+            "sd": {
+              "value": 1.2,
+              "basis": "data"
+            }
+          },
+          "residualSd": {
+            "value": 0.7,
+            "basis": "literature"
+          },
+          "treatment": {
+            "slowing": {
+              "value": 1,
+              "basis": "assumed"
+            }
+          },
+          "analysis": {
+            "kind": "change",
+            "visit": 18
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.treatment.slowing.value"
+      ]
+    },
+    {
+      "name": "a progression with fewer than three visits",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "generate_progression",
+        "method": "patients.progression",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "continuous",
+            "unit": "points"
+          },
+          "design": {
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "timeUnit": "months",
+          "visits": [
+            0,
+            12
+          ],
+          "model": {
+            "family": "linear",
+            "slope": {
+              "value": 0.12,
+              "basis": "literature",
+              "citation": "a published progression model"
+            },
+            "betweenPersonSd": {
+              "value": 0.08,
+              "basis": "literature"
+            }
+          },
+          "baseline": {
+            "mean": {
+              "value": 3,
+              "basis": "data"
+            },
+            "sd": {
+              "value": 1.2,
+              "basis": "data"
+            }
+          },
+          "residualSd": {
+            "value": 0.7,
+            "basis": "literature"
+          },
+          "treatment": {
+            "slowing": {
+              "value": 0.25,
+              "basis": "assumed"
+            }
+          },
+          "analysis": {
+            "kind": "change",
+            "visit": 18
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.visits"
+      ]
+    },
+    {
+      "name": "a progression with visits out of order",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "generate_progression",
+        "method": "patients.progression",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "continuous",
+            "unit": "points"
+          },
+          "design": {
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "timeUnit": "months",
+          "visits": [
+            0,
+            12,
+            6
+          ],
+          "model": {
+            "family": "linear",
+            "slope": {
+              "value": 0.12,
+              "basis": "literature",
+              "citation": "a published progression model"
+            },
+            "betweenPersonSd": {
+              "value": 0.08,
+              "basis": "literature"
+            }
+          },
+          "baseline": {
+            "mean": {
+              "value": 3,
+              "basis": "data"
+            },
+            "sd": {
+              "value": 1.2,
+              "basis": "data"
+            }
+          },
+          "residualSd": {
+            "value": 0.7,
+            "basis": "literature"
+          },
+          "treatment": {
+            "slowing": {
+              "value": 0.25,
+              "basis": "assumed"
+            }
+          },
+          "analysis": {
+            "kind": "change",
+            "visit": 18
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.visits"
+      ]
+    },
+    {
+      "name": "a progression with a negative between-person spread",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "generate_progression",
+        "method": "patients.progression",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "continuous",
+            "unit": "points"
+          },
+          "design": {
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "timeUnit": "months",
+          "visits": [
+            0,
+            6,
+            12,
+            18
+          ],
+          "model": {
+            "family": "linear",
+            "slope": {
+              "value": 0.1,
+              "basis": "literature"
+            },
+            "betweenPersonSd": {
+              "value": -0.1,
+              "basis": "literature"
+            }
+          },
+          "baseline": {
+            "mean": {
+              "value": 3,
+              "basis": "data"
+            },
+            "sd": {
+              "value": 1.2,
+              "basis": "data"
+            }
+          },
+          "residualSd": {
+            "value": 0.7,
+            "basis": "literature"
+          },
+          "treatment": {
+            "slowing": {
+              "value": 0.25,
+              "basis": "assumed"
+            }
+          },
+          "analysis": {
+            "kind": "change",
+            "visit": 18
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.model.betweenPersonSd.value"
+      ]
+    },
+    {
+      "name": "a progression with a correlation above one",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "generate_progression",
+        "method": "patients.progression",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "continuous",
+            "unit": "points"
+          },
+          "design": {
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "timeUnit": "months",
+          "visits": [
+            0,
+            6,
+            12,
+            18
+          ],
+          "model": {
+            "family": "linear",
+            "slope": {
+              "value": 0.12,
+              "basis": "literature",
+              "citation": "a published progression model"
+            },
+            "betweenPersonSd": {
+              "value": 0.08,
+              "basis": "literature"
+            }
+          },
+          "baseline": {
+            "mean": {
+              "value": 3,
+              "basis": "data"
+            },
+            "sd": {
+              "value": 1.2,
+              "basis": "data"
+            }
+          },
+          "residualSd": {
+            "value": 0.7,
+            "basis": "literature"
+          },
+          "treatment": {
+            "slowing": {
+              "value": 0.25,
+              "basis": "assumed"
+            }
+          },
+          "analysis": {
+            "kind": "change",
+            "visit": 18
+          },
+          "correlation": {
+            "value": 1.5,
+            "basis": "assumed"
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.correlation.value"
+      ]
+    },
+    {
+      "name": "a progression analysis that does not exist",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "generate_progression",
+        "method": "patients.progression",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "continuous",
+            "unit": "points"
+          },
+          "design": {
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "timeUnit": "months",
+          "visits": [
+            0,
+            6,
+            12,
+            18
+          ],
+          "model": {
+            "family": "linear",
+            "slope": {
+              "value": 0.12,
+              "basis": "literature",
+              "citation": "a published progression model"
+            },
+            "betweenPersonSd": {
+              "value": 0.08,
+              "basis": "literature"
+            }
+          },
+          "baseline": {
+            "mean": {
+              "value": 3,
+              "basis": "data"
+            },
+            "sd": {
+              "value": 1.2,
+              "basis": "data"
+            }
+          },
+          "residualSd": {
+            "value": 0.7,
+            "basis": "literature"
+          },
+          "treatment": {
+            "slowing": {
+              "value": 0.25,
+              "basis": "assumed"
+            }
+          },
+          "analysis": {
+            "kind": "mmrm"
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.analysis.kind"
+      ]
+    },
+    {
+      "name": "a progression of a binary endpoint",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "generate_progression",
+        "method": "patients.progression",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "binary"
+          },
+          "design": {
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "timeUnit": "months",
+          "visits": [
+            0,
+            6,
+            12,
+            18
+          ],
+          "model": {
+            "family": "linear",
+            "slope": {
+              "value": 0.12,
+              "basis": "literature",
+              "citation": "a published progression model"
+            },
+            "betweenPersonSd": {
+              "value": 0.08,
+              "basis": "literature"
+            }
+          },
+          "baseline": {
+            "mean": {
+              "value": 3,
+              "basis": "data"
+            },
+            "sd": {
+              "value": 1.2,
+              "basis": "data"
+            }
+          },
+          "residualSd": {
+            "value": 0.7,
+            "basis": "literature"
+          },
+          "treatment": {
+            "slowing": {
+              "value": 0.25,
+              "basis": "assumed"
+            }
+          },
+          "analysis": {
+            "kind": "change",
+            "visit": 18
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.endpoint.type",
+        "endpoint_not_supported@scenario.endpoint.type"
       ]
     }
   ],

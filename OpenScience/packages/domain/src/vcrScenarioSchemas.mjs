@@ -757,6 +757,10 @@ const PROGNOSTIC_TERM = object({
   center: req(number()), scale: req(number({ gt: 0 })),
   category: string({ maxLength: 100 }), levels: array(string({ maxLength: 100 }), { min: 2, max: 100, unique: true }),
 });
+/** A number of the progression model with where it came from (algorithm round P4): `literature` names the citation, `assumed` is the person's own premise, `data` was estimated from their table. */
+const PROGRESSION_PARAM = (/** @type {Record<string, any>} */ range = {}) => object({
+  value: req(number(range)), basis: req(string({ values: ['literature', 'assumed', 'data'] })), citation: string({ maxLength: 300 }),
+})
 const PROGNOSTIC_TERMS = req(array(PROGNOSTIC_TERM, { min: 1, max: 100 }));
 const PROGNOSTIC_MODEL = { t: 'variant', on: 'family', variants: {
   linear: { intercept: req(number()), residualSd: number({ gt: 0 }), terms: PROGNOSTIC_TERMS },
@@ -791,6 +795,61 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
       timeColumn: req(gated(COLUMN, is('model.family', 'cox'))),
       statusColumn: req(gated(COLUMN, is('model.family', 'cox'))),
     }),
+  }),
+
+  // A prognostic model trained on the person's own historical table and cross-fitted (algorithm round P3): `model` Cox for time to event, logistic for a 0/1 outcome, linear
+  // for a continuous one, with `folds` folds; a forest (`ranger`) is fitted on the same folds as a comparison only. `predictors` states each column's unit, and a text column
+  // becomes one indicator per level held by at least the small-cell size of people. `procova` sets the discounts the table of sample-size savings is computed under.
+  'model.prognostic_train': object({
+    inputId: req(INPUT_REF), idColumn: req(COLUMN),
+    sourceCondition: req(string({ values: ['control', 'natural_history', 'standard_care'] })),
+    // the arm to train on, when the table holds more than one; a table that is already the control cohort names none
+    armColumn: COLUMN, armValue: string({ maxLength: 80 }),
+    endpoint: req(object({
+      type: req(string({ values: ['continuous', 'binary', 'time_to_event'] })),
+      outcomeColumn: req(gated(COLUMN, is('endpoint.type', 'continuous', 'binary'))),
+      timeColumn: req(gated(COLUMN, is('endpoint.type', 'time_to_event'))), statusColumn: req(gated(COLUMN, is('endpoint.type', 'time_to_event'))),
+      // a time that is not a column of the table is read from the snapshot's event table (AVAL, CNSR) for this parameter
+      parameterCode: gated(string({ maxLength: 64 }), is('endpoint.type', 'time_to_event')),
+      horizon: req(number({ gt: 0 })), timeUnit: req(string({ values: [...VCR_TIME_UNITS] })),
+    })),
+    predictors: req(array(object({
+      column: req(COLUMN), unit: req(string({ maxLength: 80 })), transform: string({ values: ['identity', 'log', 'log1p', 'square'], default: 'identity' }),
+    }), { min: 1, max: 50 })),
+    folds: integer({ min: 3, max: 10, default: 5 }),
+    comparison: object({ ranger: boolean({ default: true }) }),
+    procova: object({
+      lambdas: array(number({ min: 0, max: 1 }), { min: 1, max: 8 }), gammas: array(number({ min: 1 }), { min: 1, max: 8 }),
+      allocation: number({ gt: 0, lt: 1, default: 0.5 }),
+    }),
+  }, { requires: { armColumn: ['armValue'], armValue: ['armColumn'] } }),
+
+  // A population-level disease-progression simulator from a published model family (algorithm round P4). Every number is a parameter that says where it came from
+  // (`basis`: the literature with its citation, an assumption, or the person's data); the change of a person at time t is amplitude_i * u(t), u the family's unit shape
+  // (linear t, exponential (exp(k t) - 1) / k, logistic S(k (t - t50)) - S(-k t50), Emax t / (T50 + t)), the amplitude (the slope, or the plateau) varying between people
+  // as N(mean, sd) with correlation `correlation` to the baseline; a treated person follows the same curve with time scaled by 1 - slowing. The first visit is time zero.
+  'patients.progression': object({
+    endpoint: req(object({ type: req(string({ values: ['continuous'] })), unit: string({ maxLength: 40 }) })),
+    design: req(object({ nTreat: req(integer({ min: 2, max: 100_000 })), nControl: req(integer({ min: 2, max: 100_000 })) })),
+    timeUnit: req(string({ values: [...VCR_TIME_UNITS] })),
+    visits: req(array(number({ min: 0 }), { min: 3, max: 40, increasing: true })),
+    model: req(object({
+      family: req(string({ values: ['linear', 'exponential', 'logistic', 'emax'] })),
+      // the amplitude is the slope (linear, exponential: initial slope, with `acceleration` k) or the plateau (logistic: `midpoint` and `steepness`; emax: `halfTime`)
+      slope: req(gated(PROGRESSION_PARAM(), is('model.family', 'linear', 'exponential'))),
+      // the between-person SD of that amplitude, whatever the family
+      betweenPersonSd: req(PROGRESSION_PARAM({ min: 0 })),
+      acceleration: req(gated(PROGRESSION_PARAM(), is('model.family', 'exponential'))),
+      amplitude: req(gated(PROGRESSION_PARAM(), is('model.family', 'logistic', 'emax'))),
+      midpoint: req(gated(PROGRESSION_PARAM(), is('model.family', 'logistic'))),
+      steepness: req(gated(PROGRESSION_PARAM({ gt: 0 }), is('model.family', 'logistic'))),
+      halfTime: req(gated(PROGRESSION_PARAM({ gt: 0 }), is('model.family', 'emax'))),
+    })),
+    baseline: req(object({ mean: req(PROGRESSION_PARAM()), sd: req(PROGRESSION_PARAM({ min: 0 })) })),
+    residualSd: req(PROGRESSION_PARAM({ min: 0 })),
+    correlation: PROGRESSION_PARAM({ min: -1, max: 1 }),
+    treatment: req(object({ slowing: req(PROGRESSION_PARAM({ min: 0, lt: 1 })) })),
+    analysis: object({ kind: string({ values: ['change', 'slope'], default: 'change' }), visit: number({ min: 0 }), alpha: number({ gt: 0, lt: 1, default: 0.05 }) }),
   }),
 
   'profile.snapshot': object({}),

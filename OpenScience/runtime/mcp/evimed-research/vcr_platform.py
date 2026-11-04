@@ -120,6 +120,8 @@ JOB_KINDS = ("fit_survival_model", "apply_prognostic_model",
     "design_dose", "design_bayesian", "design_win_ratio",
     # dynamic borrowing of an external control arm: the power, SAM and elastic priors (2026-11-03)
     "borrowing_prior",
+    # a prognostic model trained on the person's own historical table, cross-fitted, and a population-level disease-progression simulator (2026-11-03)
+    "train_prognostic_model", "generate_progression",
     # the batch reading of patient records for the criteria's facts (2026-11-01)
     "match_extract",
     "forecast_trajectories", "evaluate_forecast", "compare_forecasts", "benchmark_trial_effect",

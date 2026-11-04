@@ -15,6 +15,31 @@
         "1.0.0"
       ]
     },
+    "model.prognostic_train": {
+      "version": "1.0.0",
+      "endpoints": [
+        "continuous",
+        "binary",
+        "time_to_event"
+      ],
+      "crossChecks": [
+        "coxph, glm and lm refits on the held-out folds by hand",
+        "design.procova for the sample-size ratios",
+        "a known-truth simulation of the out-of-fold discrimination, calibration and correlation"
+      ],
+      "modelTier": "data"
+    },
+    "patients.progression": {
+      "version": "1.0.0",
+      "endpoints": [
+        "continuous"
+      ],
+      "crossChecks": [
+        "the moments of the outcome at every visit in closed form",
+        "the closed-form power of the same test (noncentral t with Welch degrees of freedom)"
+      ],
+      "modelTier": "scenario"
+    },
     "model.prognostic_apply": {
       "version": "1.1.0",
       "endpoints": [
@@ -763,11 +788,14 @@
     "design_dose": "design.dose",
     "design_bayesian": "design.bayesian",
     "design_win_ratio": "design.win_ratio",
-    "borrowing_prior": "comparator.borrowing"
+    "borrowing_prior": "comparator.borrowing",
+    "train_prognostic_model": "model.prognostic_train",
+    "generate_progression": "patients.progression"
   },
   "patientLevelJobKinds": [
     "fit_survival_model",
     "apply_prognostic_model",
+    "train_prognostic_model",
     "profile_snapshot",
     "build_cohort",
     "synthesize_population",
@@ -787,6 +815,7 @@
   "observedOnlyMethods": [
     "model.survival_fit",
     "model.prognostic_apply",
+    "model.prognostic_train",
     "population.synthpop",
     "comparator.entropy_balance",
     "comparator.propensity_weight",
@@ -832,6 +861,12 @@
       "calculated",
       "imputed",
       "synthetic"
+    ],
+    "model.prognostic_train": [
+      "observed",
+      "extracted",
+      "calculated",
+      "imputed"
     ],
     "population.synthpop": [
       "observed",
@@ -1479,6 +1514,637 @@
                 ]
               },
               "req": true
+            }
+          }
+        }
+      }
+    },
+    "model.prognostic_train": {
+      "t": "object",
+      "fields": {
+        "inputId": {
+          "t": "string",
+          "ref": "input",
+          "maxLength": 141,
+          "req": true
+        },
+        "idColumn": {
+          "t": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+          "maxLength": 64,
+          "req": true
+        },
+        "sourceCondition": {
+          "t": "string",
+          "values": [
+            "control",
+            "natural_history",
+            "standard_care"
+          ],
+          "req": true
+        },
+        "armColumn": {
+          "t": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+          "maxLength": 64
+        },
+        "armValue": {
+          "t": "string",
+          "maxLength": 80
+        },
+        "endpoint": {
+          "t": "object",
+          "fields": {
+            "type": {
+              "t": "string",
+              "values": [
+                "continuous",
+                "binary",
+                "time_to_event"
+              ],
+              "req": true
+            },
+            "outcomeColumn": {
+              "t": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+              "maxLength": 64,
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "continuous",
+                  "binary"
+                ]
+              },
+              "req": true
+            },
+            "timeColumn": {
+              "t": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+              "maxLength": 64,
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "time_to_event"
+                ]
+              },
+              "req": true
+            },
+            "statusColumn": {
+              "t": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+              "maxLength": 64,
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "time_to_event"
+                ]
+              },
+              "req": true
+            },
+            "parameterCode": {
+              "t": "string",
+              "maxLength": 64,
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "time_to_event"
+                ]
+              }
+            },
+            "horizon": {
+              "t": "number",
+              "gt": 0,
+              "req": true
+            },
+            "timeUnit": {
+              "t": "string",
+              "values": [
+                "days",
+                "weeks",
+                "months",
+                "years"
+              ],
+              "req": true
+            }
+          },
+          "req": true
+        },
+        "predictors": {
+          "t": "array",
+          "items": {
+            "t": "object",
+            "fields": {
+              "column": {
+                "t": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                "maxLength": 64,
+                "req": true
+              },
+              "unit": {
+                "t": "string",
+                "maxLength": 80,
+                "req": true
+              },
+              "transform": {
+                "t": "string",
+                "values": [
+                  "identity",
+                  "log",
+                  "log1p",
+                  "square"
+                ],
+                "default": "identity"
+              }
+            }
+          },
+          "min": 1,
+          "max": 50,
+          "req": true
+        },
+        "folds": {
+          "t": "integer",
+          "min": 3,
+          "max": 10,
+          "default": 5
+        },
+        "comparison": {
+          "t": "object",
+          "fields": {
+            "ranger": {
+              "t": "boolean",
+              "default": true
+            }
+          }
+        },
+        "procova": {
+          "t": "object",
+          "fields": {
+            "lambdas": {
+              "t": "array",
+              "items": {
+                "t": "number",
+                "min": 0,
+                "max": 1
+              },
+              "min": 1,
+              "max": 8
+            },
+            "gammas": {
+              "t": "array",
+              "items": {
+                "t": "number",
+                "min": 1
+              },
+              "min": 1,
+              "max": 8
+            },
+            "allocation": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "default": 0.5
+            }
+          }
+        }
+      },
+      "requires": {
+        "armColumn": [
+          "armValue"
+        ],
+        "armValue": [
+          "armColumn"
+        ]
+      }
+    },
+    "patients.progression": {
+      "t": "object",
+      "fields": {
+        "endpoint": {
+          "t": "object",
+          "fields": {
+            "type": {
+              "t": "string",
+              "values": [
+                "continuous"
+              ],
+              "req": true
+            },
+            "unit": {
+              "t": "string",
+              "maxLength": 40
+            }
+          },
+          "req": true
+        },
+        "design": {
+          "t": "object",
+          "fields": {
+            "nTreat": {
+              "t": "integer",
+              "min": 2,
+              "max": 100000,
+              "req": true
+            },
+            "nControl": {
+              "t": "integer",
+              "min": 2,
+              "max": 100000,
+              "req": true
+            }
+          },
+          "req": true
+        },
+        "timeUnit": {
+          "t": "string",
+          "values": [
+            "days",
+            "weeks",
+            "months",
+            "years"
+          ],
+          "req": true
+        },
+        "visits": {
+          "t": "array",
+          "items": {
+            "t": "number",
+            "min": 0
+          },
+          "min": 3,
+          "max": 40,
+          "increasing": true,
+          "req": true
+        },
+        "model": {
+          "t": "object",
+          "fields": {
+            "family": {
+              "t": "string",
+              "values": [
+                "linear",
+                "exponential",
+                "logistic",
+                "emax"
+              ],
+              "req": true
+            },
+            "slope": {
+              "t": "object",
+              "fields": {
+                "value": {
+                  "t": "number",
+                  "req": true
+                },
+                "basis": {
+                  "t": "string",
+                  "values": [
+                    "literature",
+                    "assumed",
+                    "data"
+                  ],
+                  "req": true
+                },
+                "citation": {
+                  "t": "string",
+                  "maxLength": 300
+                }
+              },
+              "when": {
+                "path": "model.family",
+                "in": [
+                  "linear",
+                  "exponential"
+                ]
+              },
+              "req": true
+            },
+            "betweenPersonSd": {
+              "t": "object",
+              "fields": {
+                "value": {
+                  "t": "number",
+                  "min": 0,
+                  "req": true
+                },
+                "basis": {
+                  "t": "string",
+                  "values": [
+                    "literature",
+                    "assumed",
+                    "data"
+                  ],
+                  "req": true
+                },
+                "citation": {
+                  "t": "string",
+                  "maxLength": 300
+                }
+              },
+              "req": true
+            },
+            "acceleration": {
+              "t": "object",
+              "fields": {
+                "value": {
+                  "t": "number",
+                  "req": true
+                },
+                "basis": {
+                  "t": "string",
+                  "values": [
+                    "literature",
+                    "assumed",
+                    "data"
+                  ],
+                  "req": true
+                },
+                "citation": {
+                  "t": "string",
+                  "maxLength": 300
+                }
+              },
+              "when": {
+                "path": "model.family",
+                "in": [
+                  "exponential"
+                ]
+              },
+              "req": true
+            },
+            "amplitude": {
+              "t": "object",
+              "fields": {
+                "value": {
+                  "t": "number",
+                  "req": true
+                },
+                "basis": {
+                  "t": "string",
+                  "values": [
+                    "literature",
+                    "assumed",
+                    "data"
+                  ],
+                  "req": true
+                },
+                "citation": {
+                  "t": "string",
+                  "maxLength": 300
+                }
+              },
+              "when": {
+                "path": "model.family",
+                "in": [
+                  "logistic",
+                  "emax"
+                ]
+              },
+              "req": true
+            },
+            "midpoint": {
+              "t": "object",
+              "fields": {
+                "value": {
+                  "t": "number",
+                  "req": true
+                },
+                "basis": {
+                  "t": "string",
+                  "values": [
+                    "literature",
+                    "assumed",
+                    "data"
+                  ],
+                  "req": true
+                },
+                "citation": {
+                  "t": "string",
+                  "maxLength": 300
+                }
+              },
+              "when": {
+                "path": "model.family",
+                "in": [
+                  "logistic"
+                ]
+              },
+              "req": true
+            },
+            "steepness": {
+              "t": "object",
+              "fields": {
+                "value": {
+                  "t": "number",
+                  "gt": 0,
+                  "req": true
+                },
+                "basis": {
+                  "t": "string",
+                  "values": [
+                    "literature",
+                    "assumed",
+                    "data"
+                  ],
+                  "req": true
+                },
+                "citation": {
+                  "t": "string",
+                  "maxLength": 300
+                }
+              },
+              "when": {
+                "path": "model.family",
+                "in": [
+                  "logistic"
+                ]
+              },
+              "req": true
+            },
+            "halfTime": {
+              "t": "object",
+              "fields": {
+                "value": {
+                  "t": "number",
+                  "gt": 0,
+                  "req": true
+                },
+                "basis": {
+                  "t": "string",
+                  "values": [
+                    "literature",
+                    "assumed",
+                    "data"
+                  ],
+                  "req": true
+                },
+                "citation": {
+                  "t": "string",
+                  "maxLength": 300
+                }
+              },
+              "when": {
+                "path": "model.family",
+                "in": [
+                  "emax"
+                ]
+              },
+              "req": true
+            }
+          },
+          "req": true
+        },
+        "baseline": {
+          "t": "object",
+          "fields": {
+            "mean": {
+              "t": "object",
+              "fields": {
+                "value": {
+                  "t": "number",
+                  "req": true
+                },
+                "basis": {
+                  "t": "string",
+                  "values": [
+                    "literature",
+                    "assumed",
+                    "data"
+                  ],
+                  "req": true
+                },
+                "citation": {
+                  "t": "string",
+                  "maxLength": 300
+                }
+              },
+              "req": true
+            },
+            "sd": {
+              "t": "object",
+              "fields": {
+                "value": {
+                  "t": "number",
+                  "min": 0,
+                  "req": true
+                },
+                "basis": {
+                  "t": "string",
+                  "values": [
+                    "literature",
+                    "assumed",
+                    "data"
+                  ],
+                  "req": true
+                },
+                "citation": {
+                  "t": "string",
+                  "maxLength": 300
+                }
+              },
+              "req": true
+            }
+          },
+          "req": true
+        },
+        "residualSd": {
+          "t": "object",
+          "fields": {
+            "value": {
+              "t": "number",
+              "min": 0,
+              "req": true
+            },
+            "basis": {
+              "t": "string",
+              "values": [
+                "literature",
+                "assumed",
+                "data"
+              ],
+              "req": true
+            },
+            "citation": {
+              "t": "string",
+              "maxLength": 300
+            }
+          },
+          "req": true
+        },
+        "correlation": {
+          "t": "object",
+          "fields": {
+            "value": {
+              "t": "number",
+              "min": -1,
+              "max": 1,
+              "req": true
+            },
+            "basis": {
+              "t": "string",
+              "values": [
+                "literature",
+                "assumed",
+                "data"
+              ],
+              "req": true
+            },
+            "citation": {
+              "t": "string",
+              "maxLength": 300
+            }
+          }
+        },
+        "treatment": {
+          "t": "object",
+          "fields": {
+            "slowing": {
+              "t": "object",
+              "fields": {
+                "value": {
+                  "t": "number",
+                  "min": 0,
+                  "lt": 1,
+                  "req": true
+                },
+                "basis": {
+                  "t": "string",
+                  "values": [
+                    "literature",
+                    "assumed",
+                    "data"
+                  ],
+                  "req": true
+                },
+                "citation": {
+                  "t": "string",
+                  "maxLength": 300
+                }
+              },
+              "req": true
+            }
+          },
+          "req": true
+        },
+        "analysis": {
+          "t": "object",
+          "fields": {
+            "kind": {
+              "t": "string",
+              "values": [
+                "change",
+                "slope"
+              ],
+              "default": "change"
+            },
+            "visit": {
+              "t": "number",
+              "min": 0
+            },
+            "alpha": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "default": 0.05
             }
           }
         }
@@ -12967,7 +13633,9 @@
     "design_dose",
     "design_bayesian",
     "design_win_ratio",
-    "borrowing_prior"
+    "borrowing_prior",
+    "train_prognostic_model",
+    "generate_progression"
   ],
   "endpointTypes": [
     "continuous",
