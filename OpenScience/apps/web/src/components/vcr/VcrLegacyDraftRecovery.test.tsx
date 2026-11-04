@@ -1,3 +1,4 @@
+import { expectOpaqueRuntimeUiIntent } from "@/test/runtimeUiIntentAssertions";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
@@ -19,7 +20,8 @@ it("restores exact text as a guarded unsent intent while retaining its local cop
   expect(screen.queryByText("Another account")).toBeNull();
   await userEvent.click(screen.getByRole("button", { name: "放进对话输入框" }));
   const state = JSON.parse(screen.getByTestId("intent").textContent!);
-  expect(state.runtimeUiIntent.draft).toBe("  Exact question\n\n\n材料文件：source.csv（上传未完成）");
-  expect(state.runtimeUiIntent.restoreDraft).toBe(true);
+  const intent = expectOpaqueRuntimeUiIntent(state);
+  expect(intent.draft).toBe("  Exact question\n\n\n材料文件：source.csv（上传未完成）");
+  expect(intent.restoreDraft).toBe(true);
   expect(localStorage.getItem(key)).toBe(value);
 });

@@ -1,3 +1,4 @@
+import { expectOpaqueRuntimeUiIntent } from "@/test/runtimeUiIntentAssertions";
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router";
@@ -47,8 +48,7 @@ it.each(EXAMPLES)("opens %s as an unsent native conversation draft without creat
   expect(location.path).toBe("/app/chat");
   expect(location.state.globalAssistant).toBe(true);
   expect(location.state.conversationProjectId).toBe("default");
-  expect(location.state.runtimeUiIntent.projectId).toBe("default");
-  expect(location.state.runtimeUiIntent.draft).toBe(draft);
+  expect(expectOpaqueRuntimeUiIntent(location.state, "default").draft).toBe(draft);
   expect(location.state.capabilityId).toBeUndefined();
   expect(server.calls.filter(call => call.method === "POST")).toEqual([]);
   expect(store.select).toHaveBeenCalledWith("default", expect.any(Function));

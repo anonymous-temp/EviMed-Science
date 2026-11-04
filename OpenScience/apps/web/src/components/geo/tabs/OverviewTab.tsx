@@ -1,3 +1,4 @@
+import { geoCoverageDifference } from '@evimed/domain';
 import { Note } from "@/components/ui/Note";
 import { useGeoFrame } from "../geoFrame";
 import { GeoAnalysisEntry } from "../GeoAnalysisEntry";
@@ -8,34 +9,23 @@ import { useMemo } from "react";
 import { Radar } from "lucide-react";
 import type { GeoMonitoring, GeoProject } from "@/lib/geoClient";
 import { ChartCard } from "@/components/ui/ChartCard";
-import { Delta } from "@/components/ui/Delta";
-import { BulletBar, StatBand, StatTile } from "@/components/ui/StatTile";
 import { Section } from "@/components/ui/Section";
 import { TrendChart } from "@/components/charts/TrendChart";
-import { GeoSparkline } from "../GeoSparkline";
 import { formatGeoValue } from "../GeoCellText";
 import { NeedsYou } from "../NeedsYou";
 import { LoadError } from "@/components/cards/LoadError";
 import { nextMeasurement } from "../geoBand";
 import { readFailure, useGeoDiagnosis, useGeoMonitoring, useGeoStrategy, type GeoLoadResult } from "../geoProjectData";
-import { List, ListRow } from "@/components/ui/ListRow";
-import { Tag } from "@/components/ui/Tag";
 import {
   actionMarkers,
-  dayWord,
-  denominatorLine,
   chartDates,
+  scheduledAfterObservations,
   headlineSentence,
-  overviewCoverageNotice,
-  overviewTiles,
   readingChange,
   rivalRanking,
   statedValue,
   trendConclusion,
-  weekTarget,
   withCoverageMarker,
-  GEO_ALERT_KINDS,
-  type MetricTriple,
 } from "../geoOverviewModel";
 import { GEO_METRIC_NAMES, monthDay } from "../geoText";
 import { geoTabPath } from "../geoTabs";
@@ -43,6 +33,8 @@ import { roundKindWord } from "./geoTabText";
 import { Ranking } from "./VisibilityTab";
 import { GeoComparison } from "../GeoComparison";
 import { useGeoPath } from "../useGeoPath";
+import { GeoOverviewMetrics } from "../GeoOverviewMetrics";
+import { GeoWeekActivity } from "../GeoWeekActivity";
 
 /**
  * 总览 — the first screen, and the only one most readers will look at (fusion plan §4.8, mockup m10; R19 audit C §2.3).
@@ -65,19 +57,13 @@ export function OverviewTab({ geoId, project }: { geoId: string; project: GeoPro
   const strategy = useGeoStrategy(geoId);
   const diag = diagnosis.state.kind === "ready" ? diagnosis.state.data : null;
   const watch = monitoring.state.kind === "ready" ? monitoring.state.data : null;
-  const plan = strategy.state.kind === "ready" ? strategy.state.data : null;
   // The open errors and the rivals are the diagnosis's: when it did not come, the band says so instead of reading as none.
   const diagnosisFailed = readFailure(diagnosis);
 
-  const tiles = useMemo(() => overviewTiles(project, diag, plan), [project, diag, plan]);
-  const denominator = denominatorLine(project, diag);
   const ranking = useMemo(() => rivalRanking(project, diag), [project, diag]);
   const gvi = project.overview.metrics.find((metric) => metric.key === "gvi") ?? null;
   // The index has no measured band of its own: its change is stated as a change.
   const gviChange = readingChange(gvi?.trend);
-  // The index takes two cells (fusion plan §4.8), so the band is one column
-  // wider than it has tiles; past six the widest layout gets a seventh.
-  const cells = tiles.length + 1;
   const ranked = ranking.length > 0;
 
   if (geoOverviewNeedsMeasurement(project, diagnosis.state, monitoring.state)) return <div data-geo-tab="overview" data-geo-first-use="" className="flex flex-col gap-6">
@@ -104,54 +90,7 @@ export function OverviewTab({ geoId, project }: { geoId: string; project: GeoPro
         </p>
       )}
 
-      <StatBand
-        label="本轮指标"
-        // The denominator, and — when the engines, the questions or the surface changed since the last round — the plain statement that
-        // the tiles' changes are not compared (R14 N-4); the same sentence the headline and the chart say.
-        footnote={[denominator, overviewCoverageNotice(project)].filter(Boolean).join(" · ") || null}
-        columns={cells >= 6 ? 6 : cells === 5 ? 5 : 4}
-        className={cells > 6 ? "xl:[&>div]:grid-cols-7" : undefined}
-      >
-        {tiles.map((tile) => (
-          <StatTile
-            key={tile.key}
-            label={tile.label}
-            // A diagnosis that was not read is said once in the tile (the word) and once with its reason and 重试 below the band: a tile that
-            // carried the message and a retry of its own repeated both.
-            reading={tile.key === "safety" && diagnosis.state.kind === "loading" ? { kind: "loading" } : tile.key === "safety" && diagnosis.state.kind === "error" ? { kind: "unmeasured", reason: "读取失败" } : tile.reading}
-            renderMeasured={() => tile.value}
-            hint={tile.hint}
-            lead={tile.lead}
-            rank={tile.rank ?? undefined}
-            tone={tile.tone}
-            to={tile.tab ? path(geoTabPath(geoId, tile.tab)) : undefined}
-            delta={<Delta value={tile.delta} unit={tile.key === "gvi" ? "index" : "point"} polarity={tile.polarity} />}
-            note={tile.triple ? undefined : tile.note}
-            className={tile.lead ? "sm:col-span-2" : undefined}
-            chart={(
-              <>
-                {tile.lead
-                  ? (
-                    <BulletBar
-                      label={tile.label}
-                      value={tile.reading.kind === "measured" ? tile.reading.value : null}
-                      target={tile.target}
-                      targetLabel={tile.target === null ? undefined : `目标 ${formatGeoValue(tile.target, "index")}`}
-                      // The rival's reading is a mention rate, not an index: it is
-                      // named under the bar, never placed on its scale.
-                      rivalLabel={tile.rival ?? undefined}
-                    />
-                  )
-                  // A tile that reads 「样本不足」 draws no line: the words and a falling line would say two things.
-                  : !tile.placeholder && tile.trend.some((value) => value !== null)
-                    ? <GeoSparkline values={tile.trend} target={tile.target} width={140} height={28} className="w-full" />
-                    : null}
-                {tile.triple && !tile.placeholder && <TripleLine triple={tile.triple} unit={tile.key === "gvi" ? "index" : "percent"} />}
-              </>
-            )}
-          />
-        ))}
-      </StatBand>
+      <GeoOverviewMetrics geoId={geoId} project={project} diagnosis={diagnosis} strategy={strategy} />
 
       {diagnosisFailed && <LoadError message={`用药安全和同类药排名没有读到：${diagnosisFailed.message}`} onRetry={diagnosisFailed.retry} />}
 
@@ -172,58 +111,9 @@ export function OverviewTab({ geoId, project }: { geoId: string; project: GeoPro
         <Ranking compact ranking={ranking} loading={diagnosis.state.kind === "loading"} />
       </div>
 
-      <Week geoId={geoId} project={project} />
+      <GeoWeekActivity geoId={geoId} project={project} />
       <GeoAnalysisEntry geoId={geoId} project={project} />
     </div>
-  );
-}
-
-/* ----------------------------------------------------------------- triple */
-
-/**
- * 「基线 31 · 9月29日 → 目标 55 · 12月29日前」: where it began and where it is meant to be, under the figure that says where it is.
- * A target the reading has passed reads 「已达到目标 12」 — a number beside a figure above it was read as the page contradicting
- * itself (R19 audit C class 4.3).
- */
-function TripleLine({ triple, unit }: { triple: MetricTriple; unit: "index" | "percent" }) {
-  const base = triple.baseline ? `基线 ${formatGeoValue(triple.baseline.value, unit)}${triple.baseline.date ? ` · ${monthDay(triple.baseline.date)}` : ""}` : null;
-  const target = triple.target === null ? null
-    : triple.reached ? `已达到目标 ${formatGeoValue(triple.target, unit)}`
-      : `目标 ${formatGeoValue(triple.target, unit)}${triple.dueAt ? ` · ${monthDay(triple.dueAt)}前` : ""}`;
-  if (!base && !target) return null;
-  return (
-    <p data-geo-triple="" className="mt-2 flex flex-wrap items-baseline gap-x-1.5 text-caption tabular-nums text-text-3">
-      {base && <span>{base}</span>}
-      {base && target && <span aria-hidden="true">→</span>}
-      {target && <span className={triple.reached ? "text-accent" : undefined}>{target}</span>}
-    </p>
-  );
-}
-
-/* ------------------------------------------------------------------- week */
-
-/** What changed since the last look, each line landing on the thing it is about. */
-function Week({ geoId, project }: { geoId: string; project: GeoProject }) {
-  const path = useGeoPath();
-  const items = project.overview.week ?? [];
-  if (items.length === 0) return null;
-  return (
-    <Section title="本周">
-      <List divided label="本周">
-        {items.slice(0, 5).map((item, index) => {
-          const to = weekTarget(geoId, item);
-          return (
-            <ListRow
-              key={`${index}:${item.text}`}
-              to={to ? path(to) : undefined}
-              leading={<span className="w-16 text-caption text-text-3">{dayWord(item.at) ?? ""}</span>}
-              title={item.text}
-              trailing={GEO_ALERT_KINDS.has(item.kind) ? <Tag tone="safety">需处理</Tag> : undefined}
-            />
-          );
-        })}
-      </List>
-    </Section>
   );
 }
 
@@ -251,6 +141,7 @@ function TrendCard({
     ?? null;
   const points = Array.isArray(series?.points) ? series.points : [];
   const dates = points.map((point) => point.date);
+  const comparablePoints = points.every((point,index) => index === 0 || statedValue(point) === null || statedValue(points[index-1]) === null || geoCoverageDifference(points[index-1].coverage,point.coverage).comparable);
   const metric = project.overview.metrics.find((item) => item.key === "gvi") ?? null;
   const next = nextMeasurement(project, watch);
   const input = useMemo(() => ({
@@ -260,7 +151,7 @@ function TrendCard({
     targetLabel: metric?.target == null ? null : `目标 ${formatGeoValue(metric.target, "index")}`,
     band: null,
     markers: withCoverageMarker(actionMarkers(dates, watch), points),
-    nextLabel: next ? `${monthDay(next.date)} ${roundKindWord(next.kind) ?? "复测"}` : null,
+    nextLabel: next && scheduledAfterObservations(next.date, dates) ? `${monthDay(next.date)} 计划${roundKindWord(next.kind) ?? "复测"}` : null,
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [watch, next, metric?.target, project.name]);
 
@@ -281,7 +172,8 @@ function TrendCard({
       height={240}
       className={className}
     >
-      <TrendChart input={input} label={`${GEO_METRIC_NAMES.gvi}趋势`} integer bounds={[0, 100]} />
+      <TrendChart input={input} label={`${GEO_METRIC_NAMES.gvi}趋势`} integer bounds={[0, 100]} connectLines={comparablePoints} />
+      {!comparablePoints && <div><p>判定版本或测量范围未知或不一致，各期读数不连线比较。</p><details><summary>查看各期读数</summary><ol aria-label={`${GEO_METRIC_NAMES.gvi}历史读数`}>{points.map((point,index) => <li key={`${point.date}-${index}`}>{point.date}：{statedValue(point) === null ? "未知" : formatGeoValue(statedValue(point) as number, "index")}</li>)}</ol></details></div>}
     </ChartCard>
   );
 }

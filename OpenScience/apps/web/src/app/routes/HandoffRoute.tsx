@@ -1,3 +1,4 @@
+import { sessionOwner } from "@/lib/sessionLifecycle";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 
@@ -7,7 +8,7 @@ import { PageTitle } from "@/components/layout/PageTitle";
 import { Button } from "@/components/ui/Button";
 import { useProjectStore } from "@/lib/projects";
 import { createResearchHandoff, handoffFromFragment, handoffIntent } from "@/lib/researchHandoff";
-import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
+import { prepareRuntimeUiIntent, newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 
 import { FrameSkeleton } from "./RuntimeUiFrame";
 
@@ -37,10 +38,12 @@ export function HandoffRoute() {
   useEffect(() => {
     if (!payload || started.current === attempt) return;
     started.current = attempt;
+    const owner = sessionOwner();
     void createResearchHandoff(payload)
-      .then((created) => useProjectStore.getState().select(created.projectId, () => {
-        navigate("/app/chat", { replace: true, flushSync: true, state: { runtimeUiIntent: handoffIntent(created) } });
-      }))
+      .then((created) => { if (owner !== sessionOwner()) return; return useProjectStore.getState().select(created.projectId, () => {
+        if (owner !== sessionOwner()) return;
+        navigate("/app/chat", { replace: true, flushSync: true, state: { runtimeUiIntent: prepareRuntimeUiIntent(handoffIntent(created)) } });
+      }); })
       .catch(() => setFailed(true));
   }, [payload, attempt, navigate]);
 
@@ -51,7 +54,7 @@ export function HandoffRoute() {
         <PageTitle page="转为深度研究" />
         <EmptyState
           title={damaged ? "这条转入链接已失效" : "没有要转入的问题"}
-          action={<Button onClick={() => navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent() } })}>开始新对话</Button>}
+          action={<Button onClick={() => navigate("/app/chat", { state: { runtimeUiIntent: prepareRuntimeUiIntent(newRuntimeUiIntent()) } })}>开始新对话</Button>}
         />
       </>
     );

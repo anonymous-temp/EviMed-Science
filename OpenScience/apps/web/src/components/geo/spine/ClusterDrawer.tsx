@@ -40,7 +40,7 @@ import {
 } from "./clusterModel";
 import { QuestionRows } from "./QuestionRows";
 import { useGeoCluster, useGeoClusters } from "./spineData";
-import { useOpenArticle } from "./useOpenArticle";
+import { useArticleActions } from "./useArticleActions";
 
 /** Real phrasings listed before 「还有 N 条」. */
 const PHRASINGS_SHOWN = 6;
@@ -296,7 +296,7 @@ function Answering({ geoId, view, engines, focus }: { geoId: string; view: GeoCl
 
 function Doing({ geoId, project, view }: { geoId: string; project: GeoProject; view: GeoClusterView }) {
   const geoDestinationPath = useGeoDestinationPath();
-  const openArticle = useOpenArticle(project);
+  const articleActions = useArticleActions(geoId, project, () => {});
   const { actions, articles, orders, ownedLinks } = view;
   const control = view.group.isControl;
   const hasWork = actions.length + articles.length + orders.length + ownedLinks.length > 0;
@@ -328,20 +328,21 @@ function Doing({ geoId, project, view }: { geoId: string; project: GeoProject; v
           <p className="mb-1 text-caption text-text-3">稿件</p>
           <List label="这一群的稿件" divided>
             {articles.map((article) => {
-              const canOpen = Boolean(article.runId && article.path);
+              const canOpen = Boolean(article.currentResultVersionId && article.contentSha256 && article.versionBasis === "current");
               return (
                 <ListRow
                   key={article.id}
                   title={article.title || "未命名稿件"}
                   titleProps={{ "data-geo-article": article.id }}
-                  onOpen={canOpen ? () => openArticle(article) : undefined}
-                  meta={[layerName(article.layer) === "—" ? null : layerName(article.layer), GEO_ARTICLE_STATUS_WORDS[article.status] ?? null].filter(Boolean).join(" · ")}
+                  onOpen={canOpen ? () => articleActions.open(article) : undefined}
+                  meta={[layerName(article.layer) === "—" ? null : layerName(article.layer), GEO_ARTICLE_STATUS_WORDS[article.status] ?? null, canOpen ? "当前稿件版本" : "版本未记录，无法预览"].filter(Boolean).join(" · ")}
                 />
               );
             })}
           </List>
         </div>
       )}
+      {articleActions.dialogs}
       {orders.length > 0 && (
         <div className="mt-4">
           <p className="mb-1 text-caption text-text-3">投放的订单</p>

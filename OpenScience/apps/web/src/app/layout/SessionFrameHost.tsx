@@ -1,14 +1,14 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { cn } from "@/lib/cn";
 import { fetchWebMe, listWebAgentRuns, warmWebRuntime, webRuntimeProfile } from "@/lib/apiClient";
 import { isConversationRun } from "@/lib/conversations";
 import { conversationTitle } from "@/lib/conversationTitles";
-import { conversationProjectFromLocation } from "@/lib/runtimeUiNavigation";
+import { conversationProjectFromLocation, registerPendingRuntimeUiIntent, runtimeUiIntentFromState, sanitizeRuntimeUiHistoryState } from "@/lib/runtimeUiNavigation";
 import { useProjectStore } from "@/lib/projects";
-import { geoIdFromChatPath } from "@/lib/geoLocation";
+import { geoConversationPane, geoIdFromChatPath, geoSessionIdFromChatPath } from "@/lib/geoLocation";
 import { chatPath, chatSessionId, isChatPath } from "@/lib/runLocation";
-import { isPanePath, useTaskPane } from "@/lib/taskPane";
+import { isPanePath, matchesGeoPane, useTaskPane } from "@/lib/taskPane";
 
 import { Button } from "@/components/ui/Button";
 import { FrameSkeleton, RuntimeUiFrame } from "@/app/routes/RuntimeUiFrame";
@@ -85,15 +85,44 @@ export function SessionFrameHost() {
 
   // A page asking for the frame over its pane — a task's execution, a study's own conversation — in this project.
   const taskPane = useTaskPane();
-  const onPane = isPanePath(location.pathname);
-  const geoPane = onPane && taskPane?.scope ? taskPane : null;
+  const paneAddress = useMemo(() => geoConversationPane(location.pathname, location.search), [location.pathname, location.search]);
+  const legacyGeoId = geoIdFromChatPath(location.pathname);
+  const legacySession = geoSessionIdFromChatPath(location.pathname);
+  const onPane = isPanePath(location.pathname, location.search);
+  const geoMatches = taskPane?.scope && (matchesGeoPane(taskPane, paneAddress)
+    || (legacyGeoId && taskPane.scope.geoProjectId === legacyGeoId && (!legacySession || taskPane.sessionId === legacySession) && taskPane.scope.sessionId === taskPane.sessionId));
+  const geoPane = onPane && geoMatches ? taskPane : null;
   const currentProjectId = geoPane ? `geo:${geoPane.scope!.geoProjectId}:${geoPane.sessionId}` : ownedProjectId;
   const scopedPanes = useRef(new Map<string, typeof geoPane>());
   if (geoPane) scopedPanes.current.set(currentProjectId, geoPane);
   const waitingForProject = addressedProject !== null && currentProjectId !== addressedProject;
   const onChat = isChatPath(location.pathname) && !waitingForProject;
-  const taskSession = onPane && taskPane && (geoPane || taskPane.projectId === currentProjectId) ? taskPane.sessionId : null;
+  const taskSession = onPane && taskPane && (taskPane.scope ? Boolean(geoPane) : !paneAddress && taskPane.projectId === currentProjectId) ? taskPane.sessionId : null;
+  // A pre-migration entry can still be reached with Back. Replace only the current entry and keep its other Router state.
+  useLayoutEffect(() => {
+    const clean = sanitizeRuntimeUiHistoryState(location.state);
+    if (clean !== location.state) {
+      void navigate({ pathname: location.pathname, search: location.search, hash: location.hash }, {
+        replace: true, state: clean, preventScrollReset: true,
+      });
+    }
+  }, [location.pathname, location.search, location.hash, location.state, navigate]);
   // The frame is on screen: as the chat surface, or placed over a task's pane.
+  // The resident host observes committed locations even before a frame or pane exists.
+  useEffect(() => {
+    const candidate = (location.state as { runtimeUiIntent?: { projectId?: unknown } } | null)?.runtimeUiIntent;
+    if (typeof candidate?.projectId !== "string") return;
+    const intent = runtimeUiIntentFromState(location.state, candidate.projectId);
+    if (!intent) return;
+    if (paneAddress) {
+      if (intent.scope?.geoProjectId !== paneAddress.geoId || intent.sessionId !== paneAddress.sessionId) return;
+    } else if (legacyGeoId) {
+      if (intent.scope?.geoProjectId !== legacyGeoId || (legacySession && intent.sessionId !== legacySession)) return;
+    } else {
+      if (!isChatPath(location.pathname) || intent.scope || intent.projectId !== ownedProjectId || (chatSessionId(location.pathname) && chatSessionId(location.pathname) !== intent.sessionId)) return;
+    }
+    registerPendingRuntimeUiIntent(intent);
+  }, [location.pathname, location.search, location.state, ownedProjectId, paneAddress, legacyGeoId, legacySession]);
   const onSurface = onChat || taskSession !== null;
   const sessionId = onChat ? chatSessionId(location.pathname) : taskSession;
   // Whether this arrival is a deliberate new conversation. 「新对话」 — the
@@ -102,7 +131,7 @@ export function SessionFrameHost() {
   // Presence, not validity: `RuntimeUiFrame` validates the intent against the
   // current project. What this decides is only whether the arrival was
   // deliberate, and an intent for another project is still a deliberate one.
-  const wantsNew = Boolean((location.state as { runtimeUiIntent?: unknown } | null)?.runtimeUiIntent);
+  const wantsNew = Boolean(runtimeUiIntentFromState(location.state, currentProjectId));
 
   const [uiOrigin, setUiOrigin] = useState(() => webRuntimeProfile().uiOrigin);
   const [originLoading, setOriginLoading] = useState(() => !webRuntimeProfile().uiOrigin);
@@ -283,7 +312,7 @@ export function SessionFrameHost() {
   const box = placed && placement ? { left: placement.left, top: placement.top, width: placement.width, height: placement.height } : undefined;
   return (
     // Hidden rather than unmounted: see the note above.
-    <div ref={root} className={cn(onChat ? "relative h-full w-full" : placed ? "pointer-events-none absolute inset-0" : "hidden")}
+    <div ref={root} className={cn(onChat ? "relative h-full w-full" : placed ? "pointer-events-none absolute inset-0 overflow-hidden supports-[overflow:clip]:overflow-clip" : "hidden")}
       data-session-surface={onChat ? "visible" : placed ? "task" : "hidden"}>
       {!uiOrigin && onSurface && (onChat || box) && <div data-task-frame={placed ? "" : undefined} className={cn("absolute pointer-events-auto", !placed && "inset-0")} style={box}>
         {originLoading ? <FrameSkeleton title={conversationTitle(sessionId)} /> : <div role="alert" className="flex h-full flex-col items-center justify-center gap-3 text-ui text-error">

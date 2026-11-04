@@ -85,6 +85,7 @@ export function GeoHistoryMember({geoId,item,selectionRef,openPublication}:{geoI
     {item.kind==="sampling_mode_changed"&&item.roundId&&<Link className="text-accent" to={link("questions",{diagnosisRound:item.roundId})}>查看本轮采集设置与记录</Link>}
     {["question_set_created","question_set_locked"].includes(item.kind??"")&&item.questionVersion!=null&&<Link className="text-accent" to={link("questions",{},item.questionVersion)}>查看事件关联的问题集版本</Link>}
     {item.resultVersionId&&item.digest&&openPublication&&<Button size="sm" variant="text" onClick={()=>void openPublication(item.resultVersionId!,item.digest!)}>打开事件关联的内容版本</Button>}
+    {item.resultVersionId&&item.digest&&!openPublication&&<p>版本关联记录未保留，暂时无法打开。</p>}
     {item.signalId&&<Link className="text-accent" to={link("overview",{signal:item.signalId})}>查看线索与处理记录</Link>}
     {item.errorId&&<Link className="text-accent" to={link("accuracy",{error:item.fingerprint?.trim()||item.errorId})}>查看此错误的当前处置</Link>}
     {item.snapshotId&&<Link className="text-accent" to={link("answers/"+encodeURIComponent(item.snapshotId),{})}>查看这次观察的原始回答</Link>}

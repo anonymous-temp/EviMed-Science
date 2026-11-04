@@ -66,3 +66,9 @@ Data
   manifest.json; the abstracts belong to their publishers.
 - 项目代码/knowledge-plugin/tests/fixtures/: captured public web pages and feeds,
   kept only to test parsing; their content belongs to the publishers.
+
+- OpenScience/packages/domain/src/vendor/tldts-6.1.86.mjs is derived from the official
+  tldts 6.1.86 ESM bundle, Copyright (c) 2017 Thomas Parisot, 2018 Rémi
+  Berson, MIT licensed; see its adjacent tldts-LICENSE.txt. It embeds a
+  snapshot derived from the Public Suffix List, available under MPL 2.0;
+  see the adjacent MPL-2.0.txt and README.md for the version-specific source.

@@ -1,20 +1,21 @@
 {
   "status": "success",
-  "summary": "Scheduled “Release audit task” — 10月19日 · 仅一次 00:00（协调世界时）, next run 10月19日 00:00.",
+  "summary": "Scheduled “Release audit task” — 11月11日 · 仅一次 00:00（协调世界时）, next run 11月11日 00:00.",
   "data": {
-    "taskId": "agenda-634b1b72-7604-42fc-a38b-44d78942e3a1",
+    "taskId": "agenda-06a325c1-a169-46e8-935a-f75a23cd694a",
     "title": "Release audit task",
     "schedule": {
       "kind": "once",
       "time": "00:00",
-      "date": "2026-10-19",
+      "date": "2026-11-11",
       "timeZone": "UTC"
     },
-    "scheduleText": "10月19日 · 仅一次 00:00",
+    "scheduleText": "11月11日 · 仅一次 00:00",
     "timeZone": "UTC",
     "timeZoneName": "协调世界时",
-    "nextRunAt": "2026-10-19T00:00:00.000Z",
-    "nextRunText": "10月19日 00:00",
+    "sourceIds": [],
+    "nextRunAt": "2026-11-11T00:00:00.000Z",
+    "nextRunText": "11月11日 00:00",
     "state": "scheduled",
     "created": true
   },

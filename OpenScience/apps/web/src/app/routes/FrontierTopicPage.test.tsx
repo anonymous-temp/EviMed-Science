@@ -1,3 +1,4 @@
+import { optionalOpaqueRuntimeUiIntent } from "@/test/runtimeUiIntentAssertions";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
@@ -45,7 +46,7 @@ function page(overrides: Partial<TopicPageData> = {}): TopicPageData {
 
 function Probe() {
   const location = useLocation();
-  const intent = (location.state as { runtimeUiIntent?: { draft?: string; originReference?: unknown } } | null)?.runtimeUiIntent;
+  const intent = optionalOpaqueRuntimeUiIntent(location.state);
   return <div data-testid="location" data-origin={intent?.originReference ? "yes" : undefined} data-draft={intent?.draft}>{location.pathname}</div>;
 }
 

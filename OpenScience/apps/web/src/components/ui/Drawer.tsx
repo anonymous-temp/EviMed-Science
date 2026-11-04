@@ -1,11 +1,10 @@
-import { isComposingKey } from "@/lib/compositionKeys";
 import { useUnsavedGuard } from "@/lib/useUnsavedGuard";
 import { ConfirmDialog } from "./ConfirmDialog";
-import { useEffect, useId, useRef, type ReactNode } from "react";
+import { useId, useRef, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { focusableIn, trapTab, registerFocusLayer, ownsKeyboard } from "@/lib/focusTrap";
 import { IconButton } from "@/components/ui/IconButton";
+import { ResultModalSurface, useResultModalFocus } from "@/components/workspace/WorkspaceResultActivity";
 
 /**
  * Component: Drawer; owner: H; rules: DS21, DESIGN.md component adoption.
@@ -58,50 +57,22 @@ export function Drawer({
   const titleId = useId();
   const descriptionId = useId();
   const guard = useUnsavedGuard(dirty, onClose, busy);
-  const close = useRef(guard.requestClose);
-  close.current = guard.requestClose;
+  // Announce the heading on entry without opening the close button's tooltip.
+  const modal = useResultModalFocus(panelRef, "drawer", () => panelRef.current, guard.requestClose);
 
-  useEffect(() => {
-    const unregister = registerFocusLayer(panelRef.current);
-    const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    // The panel itself takes focus, announced by its title. Focusing the corner 关闭 here showed that button's tooltip
-    // unasked, and the tooltip — the top layer while it is up — took the reader's first Escape, so every drawer needed
-    // two presses to close (the release-11 walk of the evidence matrix). Tab from the panel reaches 关闭 first.
-    if (panelRef.current) panelRef.current.focus();
-    else focusableIn(panelRef.current)[0]?.focus();
-    const onKey = (event: KeyboardEvent) => {
-      // A dialog opened from inside the drawer (a confirmation, an edit form) is a modal layer of its
-      // own: while it is up Tab and Escape are its, not this panel's, or one Escape would close both.
-      if (!ownsKeyboard(panelRef.current, event)) return;
-      if (event.key === "Escape" && !isComposingKey(event)) {
-        // Handled: another listener on the document (the sidebar's, below `lg`) must not close its own layer with the same press.
-        event.preventDefault();
-        event.stopPropagation();
-        close.current();
-      } else {
-        trapTab(panelRef.current, event);
-      }
-    };
-    document.addEventListener("keydown", onKey);
-    return () => {
-      unregister();
-      document.removeEventListener("keydown", onKey);
-      trigger?.focus();
-    };
-  }, []);
-
-  return (<>
+  return <ResultModalSurface scoped={modal.scoped} suspended={modal.suspended}>
     {/* Escape is the keyboard equivalent of clicking the presentation backdrop. */}
     <div
       role="presentation"
       className={cn("fixed inset-0 z-drawer flex bg-scrim", sheet ? "items-end justify-center" : "justify-end")}
-      onClick={(event) => { if (event.target === event.currentTarget) close.current(); }}
+      onClick={(event) => { if (event.target === event.currentTarget) guard.requestClose(); }}
     >
       <div
         ref={panelRef}
         role="dialog"
         aria-modal="true"
         tabIndex={-1}
+        onFocus={modal.onFocus}
         aria-labelledby={bare ? undefined : titleId}
         aria-label={bare && typeof title === "string" ? title : undefined}
         aria-describedby={description && !bare ? descriptionId : undefined}
@@ -124,7 +95,7 @@ export function Drawer({
               </div>
               {actions}
               {/* The dialog's corner close: a 36 px icon button (spec §17.2). */}
-              <IconButton ref={closeRef} icon={X} label="关闭" disabled={busy} onClick={() => close.current()} />
+              <IconButton ref={closeRef} icon={X} label="关闭" disabled={busy} onClick={() => guard.requestClose()} />
 
             </header>
             <div className={cn("min-h-0 flex-1 overflow-y-auto", sheet ? "px-4 py-4" : "px-6 py-6")}>{children}</div>
@@ -136,5 +107,5 @@ export function Drawer({
       </div>
     </div>
     {guard.confirming && <ConfirmDialog title="放弃未保存的修改？" consequences="未保存的修改将丢失。" recovery="返回编辑可继续保留修改。" confirmLabel="放弃修改" onConfirm={guard.discard} onCancel={guard.keepEditing} />}
-  </>);
+  </ResultModalSurface>;
 }

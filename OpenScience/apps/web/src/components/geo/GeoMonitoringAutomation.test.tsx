@@ -4,10 +4,57 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach,expect,it,vi } from 'vitest';
 import { geoProject } from './__fixtures__/geoTabs';
 import { GeoMonitoringAutomation } from './GeoMonitoringAutomation';
-const api=vi.hoisted(()=>({set:vi.fn()}));
-vi.mock('@/lib/geoClient',async original=>({...await original<typeof import('@/lib/geoClient')>(),setGeoMonitoringAutomation:api.set}));
+const api=vi.hoisted(()=>({set:vi.fn(),preview:vi.fn(),authorize:vi.fn(),revoke:vi.fn()}));
+vi.mock('@/lib/geoClient',async original=>({...await original<typeof import('@/lib/geoClient')>(),setGeoMonitoringAutomation:api.set,previewGeoConfirmation:api.preview,authorizeGeoConfirmation:api.authorize,revokeGeoConfirmation:api.revoke}));
 const render=(node:React.ReactNode)=>rtlRender(node,{wrapper:MemoryRouter});
-beforeEach(()=>{api.set.mockReset().mockResolvedValue({enabled:true});});
+beforeEach(()=>{api.set.mockReset().mockResolvedValue({enabled:true});api.preview.mockReset().mockResolvedValue({token:'preview-token',questionVersion:2,questionIds:['q1'],engines:['deepseek'],repeats:7,maxRounds:3,maxJobAttempts:3,cost:null,allowed:true,authorized:false});api.authorize.mockReset().mockResolvedValue({});api.revoke.mockReset().mockResolvedValue({});});
+it('shows the actual confirmation scope and submits the reviewed preview',async()=>{
+  const p=geoProject({monitoring:'done'});
+  p.steps.monitoring!.automation={state:'confirmed',actorId:'actor',at:'2026-10-31T10:00:00Z',engines:[...p.engines],coverageDays:p.coverageDays};
+  render(<GeoMonitoringAutomation project={p}/>);
+  expect(await screen.findByText(/题集 v2 · 1 个问题/)).toBeVisible();
+  expect(screen.getByText(/每个错误每轮计划 7 次/)).toBeVisible();
+  expect(screen.getByText(/只有本地未发出的容量等待不计入/)).toHaveTextContent('超过平台配置的等待期限仍未取回时停止自动复问并提示人工核查');
+  expect(screen.getByText(/预计费用暂不可核实/)).toBeVisible();
+  await userEvent.click(screen.getByRole('button',{name:'确认开启错误复问'}));
+  await waitFor(()=>expect(api.authorize).toHaveBeenCalledWith('geo_1','preview-token'));
+});
+it('can stop error confirmations alone and retry a failed scope read',async()=>{
+  const p=geoProject({monitoring:'done'});p.steps.monitoring!.automation={state:'confirmed',actorId:'actor',at:'2026-10-31T10:00:00Z',engines:[...p.engines],coverageDays:p.coverageDays};
+  api.preview.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce({token:'t',questionVersion:1,questionIds:['q'],engines:['deepseek'],repeats:2,maxRounds:3,maxJobAttempts:3,cost:null,allowed:true,authorized:true});
+  render(<GeoMonitoringAutomation project={p}/>);
+  await userEvent.click(await screen.findByRole('button',{name:'重新读取确认范围'}));
+  await userEvent.click(await screen.findByRole('button',{name:'停止错误复问'}));
+  await waitFor(()=>expect(api.revoke).toHaveBeenCalledWith('geo_1'));
+  expect(api.set).not.toHaveBeenCalled();
+});
+it('ignores a late preview from a previously selected project',async()=>{
+  let resolveOld!:(value:unknown)=>void;
+  api.preview.mockImplementationOnce(()=>new Promise(resolve=>{resolveOld=resolve;})).mockResolvedValueOnce({token:'new',questionVersion:3,questionIds:['q'],engines:['deepseek'],repeats:4,maxRounds:3,maxJobAttempts:3,cost:null,allowed:true,authorized:false});
+  const p=geoProject({monitoring:'done'});p.steps.monitoring!.automation={state:'confirmed',actorId:'actor',at:'2026-10-31T10:00:00Z',engines:[...p.engines],coverageDays:p.coverageDays};
+  const view=render(<GeoMonitoringAutomation project={p}/>);
+  view.rerender(<GeoMonitoringAutomation project={{...p,id:'geo_2'}}/>);
+  expect(await screen.findByText(/题集 v3/)).toBeVisible();
+  resolveOld({token:'old',questionVersion:1,questionIds:['q'],engines:['deepseek'],repeats:2,maxRounds:3,maxJobAttempts:3,cost:null,allowed:true,authorized:false});
+  await userEvent.click(screen.getByRole('button',{name:'确认开启错误复问'}));
+  await waitFor(()=>expect(api.authorize).toHaveBeenCalledWith('geo_2','new'));
+  expect(screen.queryByText(/题集 v1/)).toBeNull();
+});
+it('does not let a late authorization update the next project',async()=>{
+  let finish!:(value:unknown)=>void;
+  api.authorize.mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
+  api.preview.mockResolvedValueOnce({token:'old',questionVersion:1,questionIds:['q'],engines:['deepseek'],repeats:2,maxRounds:3,maxJobAttempts:3,cost:null,allowed:true,authorized:false})
+    .mockResolvedValueOnce({token:'new',questionVersion:3,questionIds:['q'],engines:['deepseek'],repeats:4,maxRounds:3,maxJobAttempts:3,cost:null,allowed:true,authorized:false})
+    .mockResolvedValue({token:'old',questionVersion:1,questionIds:['q'],engines:['deepseek'],repeats:2,maxRounds:3,maxJobAttempts:3,cost:null,allowed:true,authorized:true});
+  const p=geoProject({monitoring:'done'});p.steps.monitoring!.automation={state:'confirmed',actorId:'actor',at:'2026-10-31T10:00:00Z',engines:[...p.engines],coverageDays:p.coverageDays};
+  const view=render(<GeoMonitoringAutomation project={p}/>);
+  await userEvent.click(await screen.findByRole('button',{name:'确认开启错误复问'}));
+  view.rerender(<GeoMonitoringAutomation project={{...p,id:'geo_2'}}/>);
+  expect(await screen.findByText(/题集 v3/)).toBeVisible();
+  finish({});
+  await waitFor(()=>expect(screen.getByRole('button',{name:'确认开启错误复问'})).toBeEnabled());
+  expect(screen.queryByText('已授权当前范围的自动确认。')).toBeNull();
+});
 it('does not imply past scope authorization; turning it on and declining are explicit choices',async()=>{
   render(<GeoMonitoringAutomation project={geoProject({monitoring:'done'})}/>);
   expect(screen.getByRole('heading',{name:'等你开启自动监测'})).toBeVisible();

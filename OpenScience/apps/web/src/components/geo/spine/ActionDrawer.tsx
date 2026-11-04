@@ -6,6 +6,7 @@ import { pythonRound } from "@evimed/domain";
 import { webErrorMessage } from "@/lib/apiClient";
 import {
   cancelGeoOrder,
+  verifyGeoActionSource,
   type GeoAction,
   type GeoActionSource,
   type GeoArticle,
@@ -428,6 +429,7 @@ function SourceRow({
   onSwap: (domain: string | null) => void;
   onChanged: () => void;
 }) {
+  const [verifying, setVerifying] = useState(false);
   const conditions = conditionsWord(source.conditions);
   const price = priceWord(source);
   const route = routeWord(source.route);
@@ -437,12 +439,27 @@ function SourceRow({
   const channelArticle = own ? articles.find((article) => source.articleIds.includes(article.id)) ?? articles.find((article) => article.channel === source.channel) ?? null : null;
   const placed = source.chosen === "placed";
   const swapped = source.chosen === "swapped";
+  const verify = () => {
+    setVerifying(true);
+    void verifyGeoActionSource(geoId, action.key).then((result) => {
+      if (result.remaining && result.coolingDown) toast.error("部分媒体刚刚已尝试核对，请等待一分钟后重试。");
+      else if (result.remaining) toast.error("还有媒体待核对，请再次点击继续。");
+      else if (result.verified && result.verified === result.checked) toast.success("核对完成，投放条件将重新检查。");
+      else if (result.verified) toast.error("部分媒体核对未通过，请稍后重试或更换信源。");
+      else if (result.checked) toast.error("暂未核对通过，请稍后重试或更换信源。");
+      else if (result.alreadyVerified) toast.success("域名核对仍在有效期内，投放条件将重新检查。");
+      else toast.error("暂未核对通过，请稍后重试或更换信源。");
+      onChanged();
+    }).catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "信源核对未完成，请稍后重试。" })))
+      .finally(() => setVerifying(false));
+  };
   const tag = placed ? "已投放" : swapped ? "你换的" : own ? "自有渠道" : null;
   return (
     <li data-geo-source={source.domain ?? source.channel ?? undefined} data-geo-source-chosen={source.chosen} className="flex flex-col gap-1 py-3">
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
         <span className="min-w-0 text-ui text-text">{sourceName(source)}</span>
         {source.name && source.domain && <span className="text-caption text-text-3">{source.domain}</span>}
+        {source.canonicalDomain && source.canonicalDomain !== source.domain && <span className="text-caption text-text-3">{`归属域名 ${source.canonicalDomain}`}</span>}
         {sourceKinds(source).map((word) => <Tag key={word}>{word}</Tag>)}
         {tag && <Tag tone="accent">{tag}</Tag>}
         {route && source.route !== "market" && source.route !== "own" && <Tag>{route}</Tag>}
@@ -451,6 +468,7 @@ function SourceRow({
           <Button variant="text" size="sm" onClick={() => onSwap(source.domain)}>换到这里</Button>
         )}
         {canEdit && swapped && <Button variant="text" size="sm" onClick={() => onSwap(null)}>恢复推荐</Button>}
+        {canEdit && swapped && source.available === false && <Button variant="text" size="sm" loading={verifying} onClick={verify}>重新核对信源</Button>}
       </div>
       {source.why && <p className="max-w-measure-body text-ui text-text-2">{source.why}</p>}
       <p className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-caption text-text-3">
@@ -460,6 +478,7 @@ function SourceRow({
           <span>{`被引用：${Object.entries(source.citedFor).map(([engine, count]) => `${engineName(engine)} ${count}`).join("、")}`}</span>
         )}
         {source.available === false && why.length > 0 && <span className="text-warn-strong">{`现在投不了：${why.join("、")}`}</span>}
+        {swapped && source.available === true && <span>执行时会再次核对预算和名额</span>}
         {own && route && <span>{route}</span>}
       </p>
       {own && <OwnedLinkForm geoId={geoId} action={action} source={source} articleId={channelArticle?.id ?? null} onRegistered={onChanged} />}

@@ -1,6 +1,6 @@
 {
   "_provenance": {
-    "source": "geo-skills 3.0.1 (owner's proprietary method package, not vendored): shared/rules/metrics.yaml converted to JSON key for key; constants from shared/rules/catalogue.yaml; engines from shared/rules/interfaces.yaml",
+    "source": "geo-skills 3.0.1 (owner's proprietary method package, not vendored): shared/rules/metrics.yaml converted to JSON; constants from shared/rules/catalogue.yaml; engines from shared/rules/interfaces.yaml. Platform interpretation changes are named in the platform provenance below.",
     "version": "3.0.1",
     "sha256": {
       "shared/rules/metrics.yaml": "a4ac003a9b9f4e0d383af15cfe9b301beff6387933a64ac5772b73e2b727579f",
@@ -87,7 +87,9 @@
       "noise_band_sd_multiplier": "EviMed definition: geo-skills leaves the noise threshold to the skill (metrics.json#noise.threshold); net-effect-and-trends.md names 2 x the A/A noise standard deviation",
       "noise_band_metric_ids": "EviMed definition: the answer-denominator rates a noise round can replicate",
       "insufficient_gvi_below_answers": "EviMed: SPEC §0 ruling 8 applied to the index — an index built on fewer answers is shown as 样本不足",
-      "insufficient_ratio_input_statuses": "EviMed: SPEC §0 ruling 8 applied to a derived ratio — a ratio of cells that are 样本不足 is 样本不足 (compute_metrics.py reports it ok; the golden keeps the script's status and the test names the difference)"
+      "insufficient_ratio_input_statuses": "EviMed: SPEC §0 ruling 8 applied to a derived ratio — a ratio of cells that are 样本不足 is 样本不足 (compute_metrics.py reports it ok; the golden keeps the script's status and the test names the difference)",
+      "m13_interpretation": "The historical M-13 formula is retained for compatibility. Its label and direction describe a ratio of two question-pool mention rates, not a user conversion rate or a universally improving target.",
+      "net_effect_interpretation": "A comparable-group difference in changes is a conditional observation, not mandatory contract acceptance or proof of causation. Acceptance follows the agreed scope."
     }
   },
   "version": "3.0.0",
@@ -334,12 +336,13 @@
     },
     {
       "id": "M-13",
-      "name": "通用名到厂牌转化率",
+      "name": "品牌问法与品类问法提及率比值",
       "formula": "P1 池 M-01 / P2 池 M-01",
       "unit": "ratio",
       "channel": "derived",
       "measurable_when": "P2 池 M-01 > 0",
-      "direction": "up",
+      "direction": "neutral",
+      "note": "品牌问法的品牌提及率除以品类问法的品牌提及率；两组问题不同，这个比值不是用户转化率，也没有统一的越高越好方向。",
       "pools": [
         "P1",
         "P2"
@@ -596,7 +599,7 @@
     "formula": "试点组变化 - 对照组变化",
     "control_group_count_min": 3,
     "control_group_count_max": 5,
-    "rule": "对照语义群不投放、只监测，与试点群同池同难度；验收口径与合同一律用净效应，不用单臂 before/after",
+    "rule": "若项目采用对照比较，对照语义群不投放、只监测，与试点群保持可比；净效应是有条件的变化差，不能单独证明因果，验收按双方约定的交付范围进行。",
     "window_weeks": "ROLLING_WINDOW_WEEKS",
     "control_share": [
       "CONTROL_CLUSTER_SHARE_MIN",

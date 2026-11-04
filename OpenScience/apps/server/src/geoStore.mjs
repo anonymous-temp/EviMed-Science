@@ -290,6 +290,13 @@ export function geoOwnedLinkFromRow(row) {
 
 /** The most owned links one project lists (and may hold active). */
 export const GEO_OWNED_LINKS_MAX = 500;
+// Bound each complete spine input to avoid unbounded in-process derivation.
+// The extra row distinguishes a complete input from an overflow.
+export const GEO_SPINE_INPUT_MAX = 10_000;
+export function requireCompleteSpineRows(rows, kind) {
+  if (rows.length > GEO_SPINE_INPUT_MAX) throw new HttpError(422, "geo_spine_incomplete", `The ${kind} input exceeds the supported complete-read limit. Contact an administrator before retrying.`);
+  return rows;
+}
 
 /**
  * Hosts on the owned-link platforms whose page is named by its query string,
@@ -326,7 +333,7 @@ const PROJECT_COLUMNS = `id, user_id, project_id, product, competitors, coverage
   entity_keys, producer, product_zone_id, conversation_session_id, internal, created_at, updated_at, deleted_at`;
 
 /** The tables whose rows go with a project or an account; the money tables are not among them. */
-const OWNED_TABLES = Object.freeze(["read_selections", "facts", "snapshots", "probe_jobs", "rounds", "metrics", "errors", "questions", "question_groups", "schedule_marks",
+const OWNED_TABLES = Object.freeze(["read_selections", "facts", "snapshots", "probe_jobs", "rounds", "metrics", "metric_input_snapshots", "errors", "questions", "question_groups", "schedule_marks",
   "question_sets", "journeys", "claims", "strategy", "targets", "placement_plans", "sources", "article_versions", "articles", "owned_links", "members", "value_profiles",
   "action_choices"]);
 
@@ -399,6 +406,8 @@ export async function deleteGeoProjectRows(client, userId, projectId) {
  */
 export async function deleteGeoUserRows(client, userId) {
   if (!client || !(await geoSchemaExists(client))) return { projects: 0, screenshots: [] };
+  const receiptTable = await client.query("SELECT to_regclass('evimed_geo.project_create_receipts') AS name");
+  if (receiptTable.rows[0]?.name) await client.query("DELETE FROM evimed_geo.project_create_receipts WHERE user_id=$1", [userId]);
   if (await probeRequestsTableExists(client)) await client.query(`DELETE FROM evimed_geo.probe_requests WHERE user_id = $1`, [userId]);
   if (await socialJobsTableExists(client)) await client.query(`DELETE FROM evimed_geo.social_jobs WHERE user_id = $1`, [userId]);
   const candidates = await screenshotsOf(client, "user_id = $1", [userId]);
@@ -521,7 +530,12 @@ export class GeoStore {
 
   /** The entity keys of a product, or null where there is no vocabulary or it cannot tag. @param {Record<string, any>} product */
   async #entityKeys(product) {
-    return (await this.entityVocabulary?.tag({ texts: productTexts(product) })) ?? null;
+    if (!this.entityVocabulary) return null;
+    const tag = () => this.entityVocabulary.tag({ texts: productTexts(product) });
+    if (!this.database.transactionScope?.()) return (await tag()) ?? null;
+    // The glossary absorbs lookup errors, but PostgreSQL still needs to unwind the failed statement.
+    try { return (await this.database.transaction(tag)) ?? null; }
+    catch { return null; }
   }
 
   /**
@@ -645,6 +659,13 @@ export class GeoStore {
     return new Map(rows.map((row) => [String(row.geo_project_id), { id: String(row.id), kind: String(row.kind), status: String(row.status) }]));
   }
 
+  /** A project-wide existence check also sees failed and skipped rounds excluded from an observation selection.
+   * @param {string} geoId @param {string} userId */
+  async hasMeasurementHistory(geoId, userId) {
+    const result = await this.query(`SELECT EXISTS(SELECT 1 FROM evimed_geo.rounds WHERE geo_project_id=$1 AND user_id=$2) AS present`, [geoId, userId]);
+    return result.rows[0]?.present === true;
+  }
+
   // --- members -------------------------------------------------------------------
 
   /** Every member row of a project, oldest first. @param {string} geoId */
@@ -731,6 +752,16 @@ export class GeoStore {
     if (patch.competitors !== undefined) put("competitors", JSON.stringify(patch.competitors), "::jsonb");
     if (patch.budget !== undefined) put("budget", patch.budget == null ? null : JSON.stringify(patch.budget), "::jsonb");
     if (patch.producer !== undefined) put("producer", patch.producer == null ? null : JSON.stringify(patch.producer), "::jsonb");
+    // A return to an earlier scope is a new scope, not a revival of old consent.
+    const scopeChanges = [];
+    if (patch.engines !== undefined) { values.push([...patch.engines]); scopeChanges.push(`engines IS DISTINCT FROM $${values.length}::text[]`); }
+    if (patch.coverageDays !== undefined) { values.push(patch.coverageDays); scopeChanges.push(`coverage_days IS DISTINCT FROM $${values.length}`); }
+    if (patch.status !== undefined) { values.push(patch.status); scopeChanges.push(`status IS DISTINCT FROM $${values.length}`); }
+    if (scopeChanges.length) {
+      const changed = scopeChanges.join(" OR ");
+      sets.push(`confirmation_generation = confirmation_generation + CASE WHEN ${changed} THEN 1 ELSE 0 END`);
+      sets.push(`confirmation_authorization = CASE WHEN ${changed} THEN NULL ELSE confirmation_authorization END`);
+    }
     if (!sets.length) return this.getProject(userId, id);
     const result = await this.query(`UPDATE evimed_geo.projects SET ${sets.join(", ")}, updated_at = now()
       WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL RETURNING ${PROJECT_COLUMNS}`, values);
@@ -747,8 +778,10 @@ export class GeoStore {
     const patch = { ...fields, ...(fields.requested === true ? { requestOrigin: fields.requestOrigin ?? "platform", requestedAt: at } : {}), updatedAt: at };
     const result = await this.query(`UPDATE evimed_geo.projects
       SET steps = jsonb_set(coalesce(steps, '{}'::jsonb), ARRAY[$2::text], coalesce(steps -> $2::text, '{}'::jsonb) || $3::jsonb),
+          confirmation_generation = confirmation_generation + CASE WHEN $4::boolean THEN 1 ELSE 0 END,
+          confirmation_authorization = CASE WHEN $4::boolean THEN NULL ELSE confirmation_authorization END,
           updated_at = now()
-      WHERE id = $1 AND deleted_at IS NULL RETURNING ${PROJECT_COLUMNS}`, [id, step, JSON.stringify(patch)]);
+      WHERE id = $1 AND deleted_at IS NULL RETURNING ${PROJECT_COLUMNS}`, [id, step, JSON.stringify(patch), step === "monitoring" && fields.automation !== undefined]);
     return result.rows[0] ? geoProjectFromRow(result.rows[0]) : null;
   }
 
@@ -971,6 +1004,7 @@ export class GeoStore {
       throw new HttpError(409, "geo_contract_missing", "Revise this imported question set with rows and its measurement agreement; a legacy write cannot discard the current agreement.");
     }
     const version = Number(latest?.version ?? 0) + 1;
+    await client.query(`UPDATE evimed_geo.projects SET confirmation_generation=confirmation_generation+1, confirmation_authorization=NULL, updated_at=now() WHERE id=$1`, [geoId]);
     await client.query(`INSERT INTO evimed_geo.question_sets (geo_project_id, version, user_id, locked_at, measured_count, note, run_id, contract, request_key, request_digest)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10)`, [geoId, version, userId, lockedAt, measuredCount, note, runId, contract ? JSON.stringify(contract) : null, requestKey, digest]);
     const groupRows = [];
@@ -1019,10 +1053,16 @@ export class GeoStore {
 
   /** Lock a set version for measurement. @param {string} geoId @param {number} version @param {number} measuredCount */
   async lockQuestionSet(geoId, version, measuredCount) {
-    const result = await this.query(`UPDATE evimed_geo.question_sets SET locked_at = coalesce(locked_at, now()), measured_count = $3
+    return this.transaction(async (client) => {
+      await client.query(`SELECT pg_advisory_xact_lock(hashtext('evimed-geo-set:' || $1))`, [geoId]);
+      await client.query(`SELECT id FROM evimed_geo.projects WHERE id=$1 FOR UPDATE`, [geoId]);
+      await client.query(`UPDATE evimed_geo.projects SET confirmation_generation=confirmation_generation+1, confirmation_authorization=NULL, updated_at=now()
+        WHERE id=$1 AND EXISTS (SELECT 1 FROM evimed_geo.question_sets WHERE geo_project_id=$1 AND version=$2 AND locked_at IS NULL)`, [geoId, version]);
+      const result = await client.query(`UPDATE evimed_geo.question_sets SET locked_at = coalesce(locked_at, now()), measured_count = $3
       WHERE geo_project_id = $1 AND version = $2 RETURNING version, locked_at, measured_count`, [geoId, version, measuredCount]);
-    const row = result.rows[0];
-    return row ? { version: Number(row.version), lockedAt: iso(row.locked_at), measuredCount: Number(row.measured_count) } : null;
+      const row = result.rows[0];
+      return row ? { version: Number(row.version), lockedAt: iso(row.locked_at), measuredCount: Number(row.measured_count) } : null;
+    });
   }
 
   /**
@@ -1195,6 +1235,12 @@ export class GeoStore {
     return result.rows.map(geoSourceFromRow);
   }
 
+  /** Complete bounded source catalogue for action derivation. */
+  async spineSources(geoId) {
+    const rows = (await this.query(`SELECT * FROM evimed_geo.sources WHERE geo_project_id = $1 ORDER BY domain LIMIT $2`, [geoId, GEO_SPINE_INPUT_MAX + 1])).rows;
+    return requireCompleteSpineRows(rows, "sources").map(geoSourceFromRow);
+  }
+
   /** Resolve every cited domain within an already authorized owner/project pair.
    * This is a bounded selected-key lookup, independent of the catalogue list's display limit.
    * Exact host matching folds only case and leading www, as the source presenter does.
@@ -1253,6 +1299,35 @@ export class GeoStore {
   async listArticles(geoId) {
     const result = await this.query(`SELECT * FROM evimed_geo.articles WHERE geo_project_id = $1 ORDER BY created_at, path, id LIMIT 2000`, [geoId]);
     return result.rows.map(geoArticleFromRow);
+  }
+
+  /** Complete bounded input for action derivation; never return a truncated catalogue. */
+  async spineArticles(geoId) {
+    const rows = (await this.query(`SELECT * FROM evimed_geo.articles WHERE geo_project_id = $1 ORDER BY created_at, path, id LIMIT $2`, [geoId, GEO_SPINE_INPUT_MAX + 1])).rows;
+    return requireCompleteSpineRows(rows, "articles").map(geoArticleFromRow);
+  }
+
+  /** A bounded page over the whole project's article catalogue, not a filter over the legacy first 2,000 rows.
+   * @param {string} geoId @param {{search:string,status:string,sort:'title'|'status'|'updated',limit:number,offset:number,review:boolean,snapshot:string|null}} input */
+  async articleCatalog(geoId, input) {
+    const orders = {
+      title: [`COALESCE(a.title,'') ASC, a.id ASC`, `COALESCE(p.title,'') ASC, p.id ASC`],
+      status: [`a.status ASC, a.id ASC`, `p.status ASC, p.id ASC`],
+      updated: [`a.updated_at DESC NULLS LAST, a.id ASC`, `p.updated_at DESC NULLS LAST, p.id ASC`],
+    };
+    const order = orders[input.sort];
+    if (!order) throw new Error('Invalid article catalogue sort');
+    const result = await this.query(`WITH matching AS MATERIALIZED (
+      SELECT a.*, COALESCE(g.typical_question,'') AS catalog_question FROM evimed_geo.articles a
+      LEFT JOIN evimed_geo.question_groups g ON g.id=a.group_id AND g.geo_project_id=a.geo_project_id
+      WHERE a.geo_project_id=$1 AND ($2='' OR strpos(lower(COALESCE(a.title,'')),lower($2))>0
+        OR strpos(lower(COALESCE(g.typical_question,'')),lower($2))>0)
+        AND ($3='all' OR a.status=$3) AND (NOT $6::boolean OR (a.safety='open' AND a.status<>'withdrawn'))
+    ) SELECT totals.total, totals.snapshot, p.* FROM (SELECT count(*)::integer AS total,
+      md5(COALESCE(string_agg(md5(to_jsonb(m)::text),'' ORDER BY m.id),'')) AS snapshot FROM matching m) totals
+      LEFT JOIN LATERAL (SELECT a.* FROM matching a ORDER BY ${order[0]} LIMIT $4 OFFSET $5) p ON TRUE
+      ORDER BY ${order[1]}`, [geoId, input.search, input.status, input.limit, input.offset, input.review]);
+    return { total: Number(result.rows[0]?.total ?? 0), snapshot: String(result.rows[0]?.snapshot ?? ''), articles: result.rows.filter(row => row.id != null).map(geoArticleFromRow) };
   }
 
   /** @param {string} geoId @param {string} articleId */
@@ -1465,9 +1540,27 @@ export class GeoStore {
    * @param {string} geoId @param {Iterable<string>} hosts
    * @returns {Promise<Array<{ url: string, engine: string | null, askedAt: string | null, questionId: string | null }>>}
    */
-  async #citationsOn(geoId, hosts) {
+  async #citationsOn(geoId, hosts, { complete = false } = {}) {
     const wanted = [...new Set([...hosts].filter(Boolean))];
     if (!wanted.length) return [];
+    if (complete) {
+      if (wanted.length > 2000) throw new HttpError(422, "geo_spine_incomplete", "The citation host input exceeds the supported complete-read limit. Contact an administrator before retrying.");
+      const seen = new Map(), deadline = Date.now() + 5_000;
+      for (let offset = 0; offset < wanted.length; offset += 128) {
+        if (Date.now() >= deadline) throw new HttpError(422, "geo_spine_incomplete", "The complete citation read exceeded its time budget. Contact an administrator before retrying.");
+        const batch = wanted.slice(offset, offset + 128);
+        const rows = (await this.query(`SELECT s.id AS snapshot_id, c.ordinality AS position, s.engine, s.asked_at, s.question_id, c.value ->> 'url' AS url
+          FROM evimed_geo.snapshots s CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(s.citations) = 'array' THEN s.citations ELSE '[]'::jsonb END)
+            WITH ORDINALITY AS c(value, ordinality)
+          WHERE s.geo_project_id = $1 AND lower(c.value ->> 'url') LIKE ANY($2::text[]) LIMIT $3`,
+        [geoId, batch.map(host => `%${host.replace(/[\\%_]/g, character => `\\${character}`)}%`), GEO_SPINE_INPUT_MAX + 1])).rows;
+        requireCompleteSpineRows(rows, "citations");
+        if (Date.now() >= deadline) throw new HttpError(422, "geo_spine_incomplete", "The complete citation read exceeded its time budget. Contact an administrator before retrying.");
+        for (const row of rows) seen.set(`${row.snapshot_id}\u0000${row.position}`, row);
+        if (seen.size > GEO_SPINE_INPUT_MAX) requireCompleteSpineRows([...seen.values()], "citations");
+      }
+      return [...seen.values()].map(row => ({ url: String(row.url ?? ""), engine: text(row.engine), askedAt: iso(row.asked_at), questionId: text(row.question_id) }));
+    }
     const rows = (await this.query(`SELECT s.engine, s.asked_at, s.question_id, c.value ->> 'url' AS url
       FROM evimed_geo.snapshots s
         CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(s.citations) = 'array' THEN s.citations ELSE '[]'::jsonb END) AS c(value)
@@ -1487,15 +1580,16 @@ export class GeoStore {
    * @returns {Promise<Array<{ articleId: string, title: string | null, engine: string | null, firstSeen: string | null, questionId: string | null }>>}
    *   `questionId`: the question whose answer cited it first — direct evidence that reaches the question, not only the group
    */
-  async citedArticles(geoId) {
+  async citedArticles(geoId, { complete = false } = {}) {
     const [published, owned] = await Promise.all([
       this.query(`SELECT DISTINCT o.article_id, o.published_url, a.title FROM evimed_geo.orders o
         LEFT JOIN evimed_geo.articles a ON a.id = o.article_id
-        WHERE o.geo_project_id = $1 AND o.published_url IS NOT NULL AND o.article_id IS NOT NULL`, [geoId]),
+        WHERE o.geo_project_id = $1 AND o.published_url IS NOT NULL AND o.article_id IS NOT NULL${complete ? ` LIMIT ${GEO_SPINE_INPUT_MAX + 1}` : ''}`, [geoId]),
       this.query(`SELECT l.article_id, l.url_key, a.title FROM evimed_geo.owned_links l
           JOIN evimed_geo.articles a ON a.id = l.article_id AND a.geo_project_id = l.geo_project_id
-        WHERE l.geo_project_id = $1`, [geoId]),
+        WHERE l.geo_project_id = $1${complete ? ` LIMIT ${GEO_SPINE_INPUT_MAX + 1}` : ''}`, [geoId]),
     ]);
+    if (complete) { requireCompleteSpineRows(published.rows, "published orders"); requireCompleteSpineRows(owned.rows, "owned links"); }
     /** @param {Map<string, { articleId: string, title: string | null }[]>} map @param {string} key @param {any} row */
     const add = (map, key, row) => {
       if (!key) return;
@@ -1512,7 +1606,7 @@ export class GeoStore {
     const hosts = [...byKey.keys(), ...byOwnedKey.keys()].map((key) => key.split("/")[0]);
     /** @type {Map<string, { articleId: string, title: string | null, engine: string | null, firstSeen: string | null, questionId: string | null }>} */
     const first = new Map();
-    for (const citation of await this.#citationsOn(geoId, hosts)) {
+    for (const citation of await this.#citationsOn(geoId, hosts, { complete })) {
       const articles = [...(byKey.get(canonicalGeoUrl(citation.url)) ?? []), ...(byOwnedKey.get(geoOwnedLinkKey(citation.url).key) ?? [])];
       for (const article of articles) {
         const at = citation.askedAt;
@@ -1530,13 +1624,14 @@ export class GeoStore {
    * @param {string} geoId
    * @returns {Promise<Array<ReturnType<typeof geoOwnedLinkFromRow> & { citedBy: Array<{ engine: string, firstSeen: string | null }> }>>}
    */
-  async ownedLinks(geoId) {
+  async ownedLinks(geoId, { complete = false, includeCitations = true } = {}) {
     const rows = (await this.query(`SELECT * FROM evimed_geo.owned_links WHERE geo_project_id = $1
-      ORDER BY (status = 'retired'), published_at DESC, id LIMIT $2`, [geoId, GEO_OWNED_LINKS_MAX])).rows;
+      ORDER BY (status = 'retired'), published_at DESC, id LIMIT $2`, [geoId, complete ? GEO_SPINE_INPUT_MAX + 1 : GEO_OWNED_LINKS_MAX])).rows;
+    if (complete) requireCompleteSpineRows(rows, "owned links");
     const keys = new Set(rows.map((/** @type {any} */ row) => String(row.url_key)));
     /** @type {Map<string, Map<string, string | null>>} */
     const cited = new Map();
-    for (const citation of await this.#citationsOn(geoId, [...keys].map((key) => key.split("/")[0]))) {
+    for (const citation of includeCitations ? await this.#citationsOn(geoId, [...keys].map((key) => key.split("/")[0]), { complete }) : []) {
       const key = geoOwnedLinkKey(citation.url).key;
       if (!citation.engine || !keys.has(key)) continue;
       const engines = cited.get(key) ?? new Map();
@@ -1635,6 +1730,14 @@ export class GeoStore {
       WHERE geo_project_id = $1 ORDER BY updated_at DESC LIMIT 2000`, [geoId]);
     return result.rows.map((/** @type {any} */ row) => ({ key: String(row.action_key), skipped: row.skipped === true, sourceDomain: text(row.source_domain),
       decidedBy: text(row.decided_by), updatedAt: iso(row.updated_at) }));
+  }
+
+  /** Complete bounded choices for action derivation. */
+  async spineActionChoices(geoId) {
+    const rows = (await this.query(`SELECT action_key, skipped, source_domain, decided_by, updated_at FROM evimed_geo.action_choices
+      WHERE geo_project_id = $1 ORDER BY updated_at DESC, action_key LIMIT $2`, [geoId, GEO_SPINE_INPUT_MAX + 1])).rows;
+    return requireCompleteSpineRows(rows, "action choices").map(row => ({ key: String(row.action_key), skipped: row.skipped === true,
+      sourceDomain: text(row.source_domain), decidedBy: text(row.decided_by), updatedAt: iso(row.updated_at) }));
   }
 
   /**

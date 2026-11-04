@@ -22,11 +22,14 @@
  */
 
 import {
-  GEO_ACTION_READ_METRICS, GEO_ARTICLE_CHANNEL_LABELS_ZH, GEO_ENGINES, GEO_MIN_CELL_SAMPLES, GEO_OWNED_LINK_PLATFORMS, GEO_STEPS, GEO_TIERS, GEO_URGENT_SEVERITIES,
+  GEO_ACTION_SERIES_POINTS, GEO_ACTION_READ_METRICS, GEO_ARTICLE_CHANNEL_LABELS_ZH, GEO_ENGINES, GEO_MIN_CELL_SAMPLES, GEO_OWNED_LINK_PLATFORMS, GEO_STEPS, GEO_TIERS, GEO_URGENT_SEVERITIES,
   GEO_VIEW_METRIC_IDS, deriveGeoActions, geoChoiceEffects, geoGroupReading, geoMetricName, geoMetricUnit, geoNeedsYou, geoStepSummary, geoTextKey, parseGeoActionKey,
 } from "@evimed/domain";
+import { storedMetricCoverage, storedNetProofs } from "./geoMetricProvenance.mjs";
 import { coverageKeyOf, roundCoverages } from "./geoCoverage.mjs";
 import { ORDER_SELECT, mapOrder } from "./geoMarketStore.mjs";
+import { GEO_SPINE_INPUT_MAX, requireCompleteSpineRows } from "./geoStore.mjs";
+import { HttpError } from "./security.mjs";
 import { roundAnswers, tallySources } from "./geoSourceAnswers.mjs";
 
 /** A round (aliased `r`) that heard an answer — a valid or refused one, what every number is made of. */
@@ -85,7 +88,7 @@ export class GeoSpine {
   /**
    * @param {{ store: import("./geoStore.mjs").GeoStore, now?: () => Date, marketConfigured?: () => boolean,
    *   placementPreview?: ((input: { project: any, groups: any[], candidates: Map<string, Array<Record<string, any>>>, choices: any[],
-   *     articles: any[] }) => Promise<Map<string, Array<Record<string, any>>>>) | null }} options
+   *     articles: any[], actions: any[] }) => Promise<Map<string, Array<Record<string, any>>>>) | null }} options
    *   `placementPreview` is the market's read-only ranking of the outlets an article of the group could go to (`geoMarket.mjs`
    *   `previewOutlets`): the same function the market places by, and nothing is ordered by asking.
    */
@@ -106,6 +109,17 @@ export class GeoSpine {
    *   group's views list): what a chooser needs of the actions is everything else.
    */
   async load(project, { answers = true } = {}) {
+    try { return await this.#load(project, { answers }); }
+    catch (error) {
+      if (error?.code === "57014" && /statement timeout/i.test(String(error.message ?? ""))) {
+        throw new HttpError(422, "geo_spine_incomplete", "The complete spine read timed out. Contact an administrator before retrying.");
+      }
+      throw error;
+    }
+  }
+
+  /** @param {any} project @param {{answers: boolean}} options */
+  async #load(project, { answers }) {
     const geoId = project.id;
     const sets = await this.store.questionSets(geoId);
     const version = sets[0]?.version ?? null;
@@ -146,17 +160,22 @@ export class GeoSpine {
     const latestRound = headline.rows[0] ?? null;
     const baselineRound = baseline.rows[0] ?? null;
 
-    const readingRows = (await this.#query(`SELECT DISTINCT ON (m.group_id, m.metric_id, m.round_id) m.group_id, m.metric_id, m.round_id, r.kind, r.sample_date::text AS day,
-        m.numerator, m.denominator, m.value, m.status, m.method_version
+    const readingRows = (await this.#query(`SELECT DISTINCT ON (m.group_id, m.metric_id, m.round_id) m.*, r.kind, r.sample_date::text AS day
       FROM evimed_geo.metrics m JOIN evimed_geo.rounds r ON r.id = m.round_id AND r.kind = ANY($3::text[])
       WHERE m.geo_project_id = $1 AND m.scope = 'group' AND m.group_id IS NOT NULL AND m.metric_id = ANY($2::text[])
         AND m.variant IS NULL AND m.rival IS NULL AND m.arm IS NULL AND m.engine IS NULL
       ORDER BY m.group_id, m.metric_id, m.round_id, m.computed_at DESC`, [geoId, [...GEO_ACTION_READ_METRICS], [...SERIES_KINDS]])).rows;
-    const coverages = await roundCoverages(this.store, [...new Set(readingRows.map((row) => String(row.round_id)))]);
+    // Keep complete historical readings for derivation, but prove only the displayed series window.
+    const counts = new Map();
+    const proofRows = [...readingRows].sort((left, right) => String(right.day).localeCompare(String(left.day)) || String(right.round_id).localeCompare(String(left.round_id)))
+      .filter(row => { const key = `${currentOf.get(String(row.group_id)) ?? row.group_id}|${row.metric_id}`;
+        const count = counts.get(key) ?? 0; counts.set(key, count + 1); return count < GEO_ACTION_SERIES_POINTS; });
+    const coverages = await roundCoverages(this.store, [...new Set(proofRows.map((row) => String(row.round_id)))]);
+    const frozenCoverage = await storedMetricCoverage({ query: this.#query.bind(this) }, proofRows);
     const readings = readingRows.map((row) => ({
       groupId: String(currentOf.get(String(row.group_id)) ?? row.group_id), metricId: String(row.metric_id), roundId: String(row.round_id), date: text(row.day),
       kind: String(row.kind), k: num(row.numerator), n: num(row.denominator), value: num(row.value), status: String(row.status),
-      coverage: coverageKeyOf(coverages.get(String(row.round_id)), { methodVersion: text(row.method_version) }),
+      coverage: row.computation_generation ? frozenCoverage.get(row.id) ?? null : ["M-01", "M-01S", "M-02", "M-03", "M-04", "M-04C", "M-05", "M-06", "M-07", "M-11", "M-12", "M-13", "M-14", "M-15", "M-16", "M-17", "M-18", "M-19"].includes(String(row.metric_id)) ? null : coverageKeyOf(coverages.get(String(row.round_id)), { methodVersion: text(row.method_version) }),
     }));
 
     const poolReadings = (await this.#query(`SELECT DISTINCT ON (m.pool, m.metric_id) m.pool, m.metric_id, m.value, m.status, m.numerator, m.denominator, m.round_id
@@ -169,20 +188,23 @@ export class GeoSpine {
 
     /** @type {Record<string, { netEffect: number | null, verdict: string | null, noiseBand: number | null, comparable: boolean, reason: string | null, roundId: string | null }>} */
     const arms = {};
-    const netRows = (await this.#query(`SELECT DISTINCT ON (m.scope, coalesce(m.pool, ''), m.variant) m.scope, m.pool, m.variant, m.value, m.status, m.reason, m.noise_band, m.round_id
+    const netRows = (await this.#query(`SELECT DISTINCT ON (m.scope, coalesce(m.pool, ''), m.variant) m.*
       FROM evimed_geo.metrics m WHERE m.geo_project_id = $1 AND m.metric_id = 'NET' AND m.scope IN ('project', 'pool') AND m.variant IS NOT NULL
       ORDER BY m.scope, coalesce(m.pool, ''), m.variant, m.computed_at DESC`, [geoId])).rows;
+    const verifiedNet = await storedNetProofs({ query: this.#query.bind(this) }, netRows);
     for (const row of netRows) {
       const key = row.scope === "project" ? `all|${row.variant}` : `${row.pool}|${row.variant}`;
-      const ok = row.status === "ok";
+      const unknownJudge = row.status === "ok" && !verifiedNet.has(row.id);
+      const ok = row.status === "ok" && !unknownJudge;
       arms[key] = { netEffect: ok ? num(row.value) : null, verdict: ok ? text(row.reason) : null, noiseBand: num(row.noise_band), comparable: ok,
-        reason: ok ? null : text(row.reason), roundId: text(row.round_id) };
+        reason: unknownJudge ? "judge_version_unrecorded" : ok ? null : text(row.reason), roundId: text(row.round_id) };
     }
 
     const errorRows = (await this.#query(`SELECT e.id, e.fingerprint, e.engine, e.question_id, e.first_snapshot_id, e.last_snapshot_id, e.statement, e.error_type,
         e.severity, e.claim_id, e.cited_source, e.action, e.status, e.materials, e.created_at, q.group_id
       FROM evimed_geo.errors e LEFT JOIN evimed_geo.questions q ON q.id = e.question_id
-      WHERE e.geo_project_id = $1 AND e.judgment_state='active' ORDER BY e.created_at DESC LIMIT 1000`, [geoId])).rows;
+      WHERE e.geo_project_id = $1 AND e.judgment_state='active' ORDER BY e.created_at DESC, e.id LIMIT $2`, [geoId, GEO_SPINE_INPUT_MAX + 1])).rows;
+    requireCompleteSpineRows(errorRows, "errors");
     const errors = errorRows.map((row) => ({
       id: String(row.id), fingerprint: text(row.fingerprint), engine: String(row.engine), questionId: text(row.question_id),
       groupId: row.group_id ? String(currentOf.get(String(row.group_id)) ?? row.group_id) : null,
@@ -192,16 +214,17 @@ export class GeoSpine {
       firstSnapshotId: text(row.first_snapshot_id), createdAt: iso(row.created_at),
     }));
 
-    const [articles, orderRows, ownedLinks, cited, batchRows, choices] = await Promise.all([
-      this.store.listArticles(geoId),
-      this.#query(`SELECT o.*, m.domain AS media_domain, m.name AS media_name FROM (${ORDER_SELECT} WHERE o.geo_project_id = $1 ORDER BY o.created_at DESC LIMIT 500) o
-        LEFT JOIN evimed_geo.media m ON m.media_type = o.media_type AND m.resource_id = o.resource_id ORDER BY o.created_at DESC`, [geoId]),
-      this.store.ownedLinks(geoId),
-      this.store.citedArticles(geoId),
+    const [articles, orderRows, , batchRows, choices, sources] = await Promise.all([
+      this.store.spineArticles(geoId),
+      this.#query(`SELECT o.*, m.domain AS media_domain, m.name AS media_name FROM (${ORDER_SELECT} WHERE o.geo_project_id = $1 ORDER BY o.created_at DESC, o.id LIMIT $2) o
+        LEFT JOIN evimed_geo.media m ON m.media_type = o.media_type AND m.resource_id = o.resource_id ORDER BY o.created_at DESC, o.id`, [geoId, GEO_SPINE_INPUT_MAX + 1]),
+      this.store.ownedLinks(geoId, { complete: true, includeCitations: false }),
       this.#query(`SELECT key, state, detail FROM evimed_geo.schedule_marks WHERE geo_project_id = $1 AND kind = 'run' AND starts_with(key, 'run:content:')`, [geoId]),
-      this.store.actionChoices(geoId),
+      this.store.spineActionChoices(geoId),
+      this.store.spineSources(geoId),
     ]);
-    const orders = orderRows.rows.map((/** @type {any} */ row) => ({ ...mapOrder(row), domain: text(row.media_domain), mediaName: text(row.media_name) }));
+    const orders = requireCompleteSpineRows(orderRows.rows, "orders").map((/** @type {any} */ row) => ({ ...mapOrder(row), domain: text(row.media_domain), mediaName: text(row.media_name) }));
+    const [ownedLinks, cited] = await Promise.all([this.store.ownedLinks(geoId, { complete: true }), this.store.citedArticles(geoId, { complete: true })]);
     const batches = batchRows.rows.map((/** @type {any} */ row) => {
       const detail = row.detail && typeof row.detail === "object" ? row.detail : {};
       return { key: String(row.key), state: String(row.state),
@@ -225,7 +248,6 @@ export class GeoSpine {
         answersByGroup.set(resolved, list);
       }
     }
-    const sources = await this.store.listSources(geoId);
 
     return {
       project, version, locked: sets[0]?.lockedAt != null, groups, currentOf, groupNames, strategy, targets,
@@ -306,9 +328,11 @@ export class GeoSpine {
     }
     if (this.placementPreview) {
       try {
-        const ranked = await this.placementPreview({ project: spine.project, groups: spine.groups, candidates: out, choices: spine.choices, articles: spine.articles });
+        const actions=(await this.actions(spine,{candidates:new Map()})).actions;
+        const ranked = await this.placementPreview({ project: spine.project, groups: spine.groups, candidates: out, choices: spine.choices, articles: spine.articles, actions });
         for (const [groupId, list] of ranked) out.set(groupId, list);
-      } catch {
+      } catch (error) {
+        if (error?.code === 'geo_spine_incomplete' || error?.code === 'geo_source_preview_interrupted' || error?.code === '57014') throw error;
         // The preview decorates: a market that cannot be read leaves the sources as they are, never the page.
       }
     }
@@ -497,7 +521,8 @@ export class GeoSpine {
       claims: Object.fromEntries(claims.map((claim) => [claim.id, claim])),
       actions: mine,
       articles: articles.map((article) => ({ id: article.id, layer: article.layer, title: article.title, status: article.status, gate: article.gate, safety: article.safety,
-        channel: article.channel, channelNote: article.channelNote, audience: article.audience, audienceNote: article.audienceNote, path: article.path, runId: article.runId })),
+        channel: article.channel, channelNote: article.channelNote, audience: article.audience, audienceNote: article.audienceNote, path: article.path, runId: article.runId,
+        currentResultVersionId: article.currentResultVersionId, contentSha256: article.contentSha256, versionBasis: "current" })),
       orders: spine.orders.filter((order) => orderIds.has(order.id)).map((order) => ({ id: order.id, articleId: order.articleId, state: order.state, domain: order.domain,
         publishedUrl: order.publishedUrl, publishedAt: order.publishedAt, priceCny: order.settledCny ?? order.priceCny ?? order.reserveCny })),
       ownedLinks: spine.ownedLinks.filter((link) => link.groupId && ids.has(link.groupId)).map((link) => ({ id: link.id, articleId: link.articleId, platform: link.platform,

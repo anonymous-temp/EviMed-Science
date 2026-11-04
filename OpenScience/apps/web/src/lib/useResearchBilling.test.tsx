@@ -263,3 +263,21 @@ describe("a simulated wallet", () => {
     expect(allowanceSimulated(null)).toBe(false);
   });
 });
+
+it("clears A balance and link at an external boundary and ignores a late A read", async () => {
+  const late = pending();
+  const a = { ...on, available: 11, commerce: { ...on.commerce, rechargeUrl: "https://a.example/recharge" } };
+  const b = { ...on, available: 22, commerce: { ...on.commerce, rechargeUrl: "https://b.example/recharge" } };
+  mocks.allowance.mockResolvedValueOnce(a).mockReturnValueOnce(late.promise).mockResolvedValueOnce(b);
+  const first = renderHook(() => useResearchBilling()); await settle();
+  expect(first.result.current.allowance?.commerce.rechargeUrl).toBe(a.commerce.rechargeUrl);
+  act(() => first.result.current.reload());
+  await act(async () => { window.dispatchEvent(new StorageEvent("storage", { key: "open-science:web-session-sync", newValue: '{"kind":"started"}' })); });
+  expect(first.result.current.allowance).toBeNull();
+  first.unmount();
+  const second = renderHook(() => useResearchBilling()); await settle();
+  expect(second.result.current.allowance?.available).toBe(22);
+  expect(second.result.current.allowance?.commerce.rechargeUrl).toBe(b.commerce.rechargeUrl);
+  await act(async () => { late.resolve(a); });
+  expect(second.result.current.allowance?.available).toBe(22);
+});

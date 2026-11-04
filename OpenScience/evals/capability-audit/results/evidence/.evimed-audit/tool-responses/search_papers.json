@@ -7,7 +7,7 @@
     "message-version": "1.0.0",
     "message": {
       "facets": {},
-      "total-results": 1293744,
+      "total-results": 1301424,
       "items": [
         {
           "DOI": "10.1002/cca.1972",
@@ -71,10 +71,10 @@
         "limit": 2
       },
       "scope": {
-        "tenantId": "tool-probe-1cb73eaa",
-        "userId": "tool-probe-1cb73eaa",
-        "projectId": "tool-probe",
-        "workspaceDir": "/workspace/.audit-repo-20261012T071445Z/OpenScience/evals/capability-audit/tool-probe-workspace"
+        "tenantId": "ck-probe-14d43468",
+        "userId": "ck-probe-14d43468",
+        "projectId": "audit-tool-probe",
+        "workspaceDir": "/workspace/.audit-repo-20261104T131143Z/OpenScience/evals/capability-audit/tool-probe-workspace"
       }
     }
   },
@@ -83,7 +83,7 @@
       "id": "paper-search",
       "source": "paper-search",
       "url": "https://api.crossref.org/works?query=aspirin+cardiovascular+prevention&rows=2&select=DOI%2Ctitle%2Cauthor%2Cpublished%2CURL%2Ctype",
-      "retrievedAt": "2026-10-12T07:15:58.004988Z",
+      "retrievedAt": "2026-11-04T13:12:47.396758Z",
       "sourceType": "other"
     }
   ]

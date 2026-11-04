@@ -1,3 +1,4 @@
+import { sessionOwner } from "@/lib/sessionLifecycle";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import {
@@ -42,7 +43,7 @@ import {
   type EvidenceCard,
 } from "@/lib/evidenceZoneClient";
 import { evidenceErrorMessage } from "@/lib/evidenceZoneClient";
-import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
+import { prepareRuntimeUiIntent, newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 
 export function EvidenceReadingPage() {
   const { zoneId = "", cardId = "" } = useParams();
@@ -145,13 +146,14 @@ function EvidenceReadingContent({
   const research = async () => {
     if (!zone || !evidence) return;
     const current = capture();
+    const owner = sessionOwner();
     setBusy(true);
     setError(null);
     try {
       const prepared = await prepareEvidenceResearch(zone, evidence);
-      if (!current()) return;
+      if (!current() || owner !== sessionOwner()) return;
       navigate("/app/chat", {
-        state: { runtimeUiIntent: newRuntimeUiIntent(prepared.draft) },
+        state: { runtimeUiIntent: prepareRuntimeUiIntent(newRuntimeUiIntent(prepared.draft)) },
       });
     } catch (reason) {
       if (current()) failed("提问", reason, () => void research());

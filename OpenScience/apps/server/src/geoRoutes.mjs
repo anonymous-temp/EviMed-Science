@@ -1,8 +1,10 @@
+import { geoAccountGeneration } from "./geoService.mjs";
+import { authorizeGeoConfirmation, previewGeoConfirmationAuthorization, revokeGeoConfirmation } from "./geoConfirmationAuthorization.mjs";
 import { GEO_SOURCE_PAGE_FIELDS, geoReadPage, normalizeGeoMember, geoScopeFromQuery } from "./geoReadScope.mjs";
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import {
-  GEO_COVERAGE_DAYS_MAX, GEO_COVERAGE_DAYS_MIN, GEO_ENGINES, GEO_EXPORT_KINDS, GEO_ORDER_CANCELLABLE_STATES, GEO_PROJECT_STATUSES, GEO_STEPS,
+  GEO_ARTICLE_STATUSES, GEO_COVERAGE_DAYS_MAX, GEO_COVERAGE_DAYS_MIN, GEO_ENGINES, GEO_EXPORT_KINDS, GEO_ORDER_CANCELLABLE_STATES, GEO_PROJECT_STATUSES, GEO_STEPS,
   GEO_TIERS, geoProducerSettingsIssues, geoVisibleQuestionOfReason, normalizeGeoProducerSettings,
 } from "@evimed/domain";
 import { GEO_ANALYSIS_FIELDS } from "./geoAnalysis.mjs";
@@ -178,12 +180,16 @@ function money(value, field, zero = false) {
 /**
  * @param {{ store: any, service: any, config: Record<string, any>, maxJsonBytes: number,
  *   audit?: (event: string, status: string, details: Record<string, any>) => Promise<unknown>,
- *   projects?: { create: (user: any, name: string) => Promise<{ id: string, name: string }>,
+ *   projects?: { create: (user: any, name: string, options?: { reservation: "named" | "random" }) => Promise<{ id: string, name: string }>,
  *     rename?: (ownerId: string, projectId: string, name: string) => Promise<unknown>,
  *     bindSession: (user: any, projectId: string, geoProject?: any) => Promise<{ sessionId: string | null, bound: boolean }>,
  *     conversationSessionId?: (user: any, geoId: string) => Promise<string | null>,
  *     openConversation?: (user: any, geoId: string, target: any) => Promise<any>,
+ *     readPublicationVersion?: (user: any, geoId: string, kind: string, recordId: string, versionId: string, digest: string, revision: number | null) => Promise<any>,
+ *     readArticleVersion?: (user: any, geoId: string, articleId: string, versionId: string, digest: string) => Promise<any>,
+ *     stageArticleRevision?: (user: any, geoId: string, articleId: string, input: any) => Promise<any>,
  *     conversationRead?: (user: any, geoId: string, sessionId: string, action: string, body?: any) => Promise<any>,
+ *     listConversations?: (user: any, geoId: string, options: { cursor: string | null, limit: number }) => Promise<any>,
  *     stopProgrammeRun?: (ownerId: string, projectId: string, runId: string) => Promise<{ root: string }>,
  *     programmeRuns?: (ownerId: string, projectId: string) => Promise<Array<{ sessionId: string, runId: string, reason: string | null, status: string,
  *       startedAt: string | null }>> } | null,
@@ -297,22 +303,32 @@ export function createGeoRoutes(dependencies) {
     if (parts.length === 1) {
       if (method === "GET") return reply(await service.listProjects(user));
       if (method === "POST") {
-        const body = await bodyOf(req, maxJsonBytes, ["brandName", "coverageDays", "engines"]);
+        const body = await bodyOf(req, maxJsonBytes, ["brandName", "coverageDays", "engines", "requestKey", "accountGeneration"]);
+        if (body.requestKey != null && (typeof body.requestKey !== "string" || !/^[A-Za-z0-9_-]{16,128}$/.test(body.requestKey))) throw new HttpError(400, "geo_payload_invalid", "Invalid request key.");
+        if (body.accountGeneration !== undefined &&
+          (typeof body.accountGeneration !== "string" || body.accountGeneration !== geoAccountGeneration(user))) {
+          throw new HttpError(409, "geo_account_changed", "This creation request belongs to another account generation.");
+        }
         const input = {
+          requestKey: body.requestKey ?? undefined,
           brandName: brandName(body.brandName) ?? undefined,
           coverageDays: body.coverageDays == null ? undefined : coverageDays(body.coverageDays),
           engines: body.engines == null ? undefined : engines(body.engines),
         };
         if (!dependencies.projects) throw UNAVAILABLE();
-        const created = await service.createProject(user, input, {
+        const { replayed, ...created } = await service.createProject(user, input, {
           createControlProject: dependencies.projects.create,
           bindSession: dependencies.projects.bindSession,
         });
-        await audit("geo.project.create", "completed", { userId: user.id, code: created.id, detail: created.projectId });
+        await audit("geo.project.create", replayed ? "replayed" : "completed", { userId: user.id, code: created.id, detail: created.projectId });
         return reply(created, 201);
       }
     }
     const id = parts[1];
+    if (parts.length === 4 && parts[2] === "conversation" && parts[3] === "list" && method === "GET") {
+      if (!dependencies.projects?.listConversations) throw UNAVAILABLE();
+      return reply(await dependencies.projects.listConversations(user, id, { cursor: url.searchParams.get("cursor"), limit: Number(url.searchParams.get("limit") ?? 30) }));
+    }
     if (parts.length === 4 && parts[2] === "conversation" && parts[3] === "open" && method === "POST") {
       const body = await bodyOf(req, maxJsonBytes, ["target"]);
       if (!dependencies.projects?.openConversation) throw UNAVAILABLE();
@@ -522,7 +538,19 @@ export function createGeoRoutes(dependencies) {
       if (tab === "clusters") return reply(await service.clusters(user, id, geoScopeFromQuery(url.searchParams, [])));
       if (tab === "actions") return reply(await service.actions(user, id));
       if (tab === "strategy") return reply(await service.strategy(user, id, geoScopeFromQuery(url.searchParams, ["strategyVersion", "planContextRef", "sourceId", "url"])));
-      if (tab === "articles") return reply(await service.articles(user, id));
+      if (tab === "articles") {
+        if (!url.searchParams.has("catalog")) return reply(await service.articles(user, id));
+        for (const key of url.searchParams.keys()) if (!["catalog", "search", "status", "sort", "limit", "offset", "review", "snapshot"].includes(key)
+          || url.searchParams.getAll(key).length !== 1) throw new HttpError(400, "geo_payload_invalid", "Invalid article catalogue.");
+        const search = url.searchParams.get("search") ?? "", status = url.searchParams.get("status") ?? "all", sort = url.searchParams.get("sort") ?? "title";
+        const limit = Number(url.searchParams.get("limit") ?? 20), offset = Number(url.searchParams.get("offset") ?? 0);
+        const snapshot = url.searchParams.get("snapshot");
+        if (url.searchParams.get("catalog") !== "1" || url.searchParams.has("review") && url.searchParams.get("review") !== "1" || search.length > 200 || !["all", ...GEO_ARTICLE_STATUSES].includes(status)
+          || !["title", "status", "updated"].includes(sort) || !Number.isSafeInteger(limit) || limit < 1 || limit > 100
+          || !Number.isSafeInteger(offset) || offset < 0 || offset > 1_000_000 || snapshot !== null && !/^[a-f0-9]{32}$/.test(snapshot)
+          || offset > 0 && snapshot === null) throw new HttpError(400, "geo_payload_invalid", "Invalid article catalogue.");
+        return reply(await service.articleCatalog(user, id, { search: search.trim(), status, sort: /** @type {'title'|'status'|'updated'} */ (sort), limit, offset, review: url.searchParams.has("review"), snapshot }));
+      }
       if (tab === "distribution") {
         const configured = typeof hooks.market?.configured === "function" ? Boolean(hooks.market.configured()) : undefined;
         return reply(await service.distribution(user, id, configured === undefined ? {} : { marketConfigured: configured }));
@@ -587,6 +615,12 @@ export function createGeoRoutes(dependencies) {
     if (parts.length === 4 && method === "GET" && tab === "analysis" && parts[3] === "members") {
       return reply(await service.analysisMembers(user, id, geoScopeFromQuery(url.searchParams, GEO_ANALYSIS_FIELDS)));
     }
+    if (parts.length === 5 && method === "GET" && (tab === "orders" || tab === "owned-links") && parts[4] === "version-text") {
+      if (!dependencies.projects?.readPublicationVersion) throw UNAVAILABLE();
+      const revision = url.searchParams.has("revision") ? Number(url.searchParams.get("revision")) : null;
+      if (revision !== null && (!Number.isSafeInteger(revision) || revision < 1)) throw new HttpError(400, "geo_payload_invalid", "Invalid revision.");
+      return reply(await dependencies.projects.readPublicationVersion(user, id, tab, parts[3], url.searchParams.get("versionId") ?? "", url.searchParams.get("digest") ?? "", revision));
+    }
     if (parts.length === 4 && method === "GET" && tab === "orders") return reply(await service.distributionOrder(user, id, parts[3], Object.fromEntries(url.searchParams)));
     if (parts.length === 4 && method === "POST" && tab === "source-ownership" && parts[3] === "read") {
       return reply(await service.sourceOwnershipRead(user, id, await bodyOf(req, maxJsonBytes, ["target", "beforeRevision"])));
@@ -616,6 +650,13 @@ export function createGeoRoutes(dependencies) {
       const result = await service.chooseAction(user, id, parts[3], { sourceDomain: body.domain });
       await audit("geo.action.source", "completed", { userId: user.id, code: id, detail: result.sourceDomain ? "swapped" : "recommended" });
       return reply(result);
+    }
+    if (parts.length === 5 && method === "POST" && tab === "actions" && parts[4] === "verify-source") {
+      const controller = new AbortController();
+      const closed = () => { if (!res.writableEnded) controller.abort(); };
+      res.once("close", closed);
+      try { return reply(await service.verifyActionSource(user, id, parts[3], controller.signal)); }
+      finally { res.off("close", closed); }
     }
     // The address of a page the brand published itself, pasted by a person: the registration the run makes with `geo_write owned_links`,
     // so the post-publication re-tests and the citation match pick it up with nothing more asked of anyone.
@@ -666,6 +707,16 @@ export function createGeoRoutes(dependencies) {
       const body = await bodyOf(req, maxJsonBytes, ["tier"]);
       return reply(await service.setTier(user, id, tier(body.tier)));
     }
+    if (parts.length === 4 && method === "GET" && tab === "articles") return reply(await service.article(user, id, parts[3]));
+    if (parts.length === 5 && method === "GET" && tab === "articles" && parts[4] === "version-text") {
+      if (!dependencies.projects?.readArticleVersion) throw UNAVAILABLE();
+      return reply(await dependencies.projects.readArticleVersion(user, id, parts[3], url.searchParams.get("versionId") ?? "", url.searchParams.get("digest") ?? ""));
+    }
+    if (parts.length === 5 && method === "POST" && tab === "articles" && parts[4] === "revision") {
+      const body = await bodyOf(req, maxJsonBytes, ["versionId", "digest", "requestId"]);
+      if (!dependencies.projects?.stageArticleRevision) throw UNAVAILABLE();
+      return reply(await dependencies.projects.stageArticleRevision(user, id, parts[3], body));
+    }
     if (parts.length === 5 && method === "GET" && tab === "articles" && parts[4] === "versions") {
       return reply(await service.articleVersions(user, id, parts[3]));
     }
@@ -713,6 +764,20 @@ export function createGeoRoutes(dependencies) {
       if (!hooks.market?.cancelOrder) throw UNAVAILABLE();
       const result = await hooks.market.cancelOrder(asOwner(user, project), project, order.id);
       await audit("geo.order.cancel", "completed", { userId: user.id, code: order.id, detail: id });
+      return reply(result);
+    }
+    if (parts.length === 4 && tab === "monitoring" && parts[3] === "confirmation-authorization" && ["GET", "POST", "DELETE"].includes(method)) {
+      const project = await service.requireProject(user, id, "run");
+      if (method === "GET") return reply(await previewGeoConfirmationAuthorization(service.store, project.userId, id, user.id));
+      if (method === "DELETE") {
+        const result = await revokeGeoConfirmation(service.store, project.userId, id, user.id);
+        await audit("geo.confirmation.authorization", "completed", { userId: user.id, code: id, detail: "revoked" });
+        return reply(result);
+      }
+      const body = await bodyOf(req, maxJsonBytes, ["token"]);
+      if (typeof body.token !== "string" || !/^[a-f0-9]{64}$/.test(body.token)) throw new HttpError(400, "geo_payload_invalid", "A preview token is required.");
+      const result = await authorizeGeoConfirmation(service.store, project.userId, id, user.id, body.token);
+      await audit("geo.confirmation.authorization", "completed", { userId: user.id, code: id, detail: "confirmed" });
       return reply(result);
     }
     if (parts.length === 4 && method === "POST" && tab === "monitoring" && parts[3] === "automation") {

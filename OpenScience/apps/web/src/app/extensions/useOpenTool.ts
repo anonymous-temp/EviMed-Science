@@ -1,9 +1,10 @@
+import { sessionOwner } from "@/lib/sessionLifecycle";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { webErrorMessage } from "@/lib/apiClient";
 import { bindConversationCapability } from "@/lib/dispatch";
 import type { CapabilityUi } from "@/lib/researchAgentUi";
-import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
+import { prepareRuntimeUiIntent, newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { toast } from "@/lib/toast";
 
 /**
@@ -24,9 +25,12 @@ export function useOpenTool() {
   const open = useCallback((agent: CapabilityUi) => {
     if (busy.current) return;
     busy.current = true;
+    const owner = sessionOwner();
     setOpening(agent.id);
     void bindConversationCapability(null, { agentId: agent.id, agentVersion: agent.version })
-      .then((bound) => navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent(undefined, bound.sessionId), capabilityId: agent.id } }))
+      .then((bound) => {
+        if (alive.current && owner === sessionOwner()) navigate("/app/chat", { state: { runtimeUiIntent: prepareRuntimeUiIntent(newRuntimeUiIntent(undefined, bound.sessionId)), capabilityId: agent.id } });
+      })
       .catch((error: unknown) => toast.error(`没能选定“${agent.title}”，对话没有打开。${webErrorMessage(error, { fallback: "请稍后重试。" })}`))
       .finally(() => { busy.current = false; if (alive.current) setOpening(null); });
   }, [navigate]);

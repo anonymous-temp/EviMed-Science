@@ -42,6 +42,7 @@ import { Toolbar, type ToolbarProps } from "@/components/ui/Toolbar";
  * back                                    ‹ 前沿动态
  * header   title · meta · scope ········· actions          (scrolls away)
  * ┌ band ────────────────────────────────────────────┐     (sticky, top 0)
+ * │ context  Optional shared project selector          │
  * │ steps    StepRail: 已完成 · 进行中 · 等你 …         │
  * │ activity ActivityStrip: ● 正在生成虚拟患者 · 计算 1,200 / 2,000 [取消] │
  * │ tabs     Tabs                                    │
@@ -56,6 +57,7 @@ import { Toolbar, type ToolbarProps } from "@/components/ui/Toolbar";
  * there are the ones the framework draws.
  *
  *  - `scope` (`ScopeMenuProps`) — whose things the page shows, after the title;
+ *  - `contextBar` — a module's single persistent project scope; part of the measured sticky band;
  *  - `titleVariant="document"` — the serif title of a reader;
  *  - `steps` (`StepRailProps`) — a module's program; present on **every** tab of
  *    the module with reachable destinations;
@@ -186,6 +188,8 @@ export interface PageShellProps<V extends string = string> {
   eyebrow?: ReactNode;
   /** A reading page's line directly under its title (the original-language title), before the band. */
   underTitle?: ReactNode;
+  /** Persistent scope for a module whose conversation and results share one project. */
+  contextBar?: ReactNode;
   /** What stays at the window's bottom under the body, full width: a module's collapsed conversation (`ConversationBar`). */
   dock?: ReactNode;
   /** A reading page's right column, sticky beside the page from `lg`. */
@@ -232,6 +236,7 @@ export function PageShell<V extends string = string>({
   headline,
   eyebrow,
   underTitle,
+  contextBar,
   aside,
   asideLabel,
   dock,
@@ -241,7 +246,7 @@ export function PageShell<V extends string = string>({
   const band = useRef<HTMLDivElement>(null);
   // The band has a hairline under it once the header has scrolled out from over it.
   const [stuck, setStuck] = useState(false);
-  const hasBand = Boolean(steps || activity || tabs || toolbar);
+  const hasBand = Boolean(contextBar || steps || activity || tabs || toolbar);
   const hasDock = dock != null;
   // Re-measure chrome when the dock changes the scroll viewport geometry; its DOM stays stable.
 
@@ -310,6 +315,7 @@ export function PageShell<V extends string = string>({
             !lastRowRuled && "after:pointer-events-none after:absolute after:inset-x-4 after:bottom-0 after:h-px after:bg-border after:opacity-0 after:transition-opacity after:duration-fast data-[stuck]:after:opacity-100 md:after:inset-x-6",
           )}
         >
+          {contextBar && <div data-page-context="" className="py-2">{contextBar}</div>}
           {steps && <StepRail {...steps} />}
           {activity && <div className="pb-2"><ActivityStrip {...activity} /></div>}
           {tabs && <Tabs label={tabs.label} items={tabs.items} value={tabs.value} onChange={tabs.onChange} panelId={tabs.panelId} />}

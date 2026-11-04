@@ -1,7 +1,7 @@
 import {GeoHistoryMember} from "./GeoHistoryMember";
 import { OriginalJudgment, genericMentionsText } from "./GeoJudgmentView";
 import { GeoFinanceMember } from "./GeoFinanceMember";
-import { useOpenPublication } from "./spine/useOpenPublication";
+import { GeoScopedVersionPreview, type GeoVersionTarget } from "./GeoScopedVersionPreview";
 import { useState } from "react";
 import { Link, useLocation } from "react-router";
 import {
@@ -63,7 +63,7 @@ export function GeoAnalysisMembersDrawer({
   members: GeoAnalysisMembers;
   onClose(): void;
 }) {
-  const openPublication = useOpenPublication(project ?? {projectId:""} as GeoProject);
+  const [versionPreview, setVersionPreview] = useState<GeoVersionTarget | null>(null);
   const frame = useGeoFrame(),
     [pagination,setPagination] = useState({key:"",offset:0});
   const originKey=JSON.stringify(members),[related,setRelated]=useState<{originKey:string;members:GeoAnalysisMembers}|null>(null);
@@ -79,7 +79,7 @@ export function GeoAnalysisMembersDrawer({
     frame?.refreshScope?.();
     onClose();
   };
-  return (
+  return (<>
     <Drawer title={`${units[activeMembers.unit] ?? "记录"}明细`} onClose={onClose}>
       {state.kind === "loading" ? (
         <FilesSkeleton />
@@ -114,7 +114,7 @@ export function GeoAnalysisMembersDrawer({
           />
           {state.data.items.length ? (
             state.data.items.map((item) => (
-              <Member key={item.id} publicationContext={["V23","V24"].includes(activeMembers.view.viewId)} onShowVersions={showVersions} openPublication={project?openPublication:undefined} canEdit={!!project&&(!project.access||project.access.abilities.includes("edit"))} geoId={geoId} item={item} selectionRef={["V13","V15","V27","V16","V17","V18","V19","V22","V23","V24","V25","V26"].includes(activeMembers.view.viewId)||item.source||item.citingAnswers?activeMembers.selectionRef:undefined} />
+              <Member key={item.id} publicationContext={["V23","V24"].includes(activeMembers.view.viewId)} onShowVersions={showVersions} openVersion={setVersionPreview} canEdit={!!project&&(!project.access||project.access.abilities.includes("edit"))} geoId={geoId} item={item} selectionRef={["V13","V15","V27","V16","V17","V18","V19","V22","V23","V24","V25","V26"].includes(activeMembers.view.viewId)||item.source||item.citingAnswers?activeMembers.selectionRef:undefined} />
             ))
           ) : (
             <EmptyState title="这个分类没有记录" />
@@ -141,7 +141,20 @@ export function GeoAnalysisMembersDrawer({
         </div>
       )}
     </Drawer>
+    {versionPreview && <GeoScopedVersionPreview key={`${geoId}:${versionPreview.kind}:${versionPreview.recordId}:${versionPreview.versionId}:${versionPreview.digest}:${versionPreview.revision ?? ""}`} geoId={geoId} target={versionPreview} onClose={() => setVersionPreview(null)} />}
+    </>
   );
+}
+export function geoMemberVersionTarget(item: GeoAnalysisMemberItem): GeoVersionTarget | null {
+  if (!item.resultVersionId || !item.digest) return null;
+  const pin = { versionId: item.resultVersionId, digest: item.digest };
+  const orderId = item.orderId ?? (item.unit === "orders" ? item.objectId : null);
+  if (orderId) return { ...pin, kind: "orders", recordId: orderId };
+  const publicationId = item.linkId ?? (item.kind === "publication_update" ? item.publicationId : null) ?? (item.unit === "publications" ? item.objectId : null);
+  const revision = item.kind === "publication_update" ? item.revision : undefined;
+  if (publicationId) return { ...pin, kind: "owned-links", recordId: publicationId, ...(revision != null ? { revision } : {}) };
+  if (item.articleId) return { ...pin, kind: "article", recordId: item.articleId };
+  return null;
 }
 function Member({
   publicationContext=false,
@@ -150,7 +163,7 @@ function Member({
   item,
   selectionRef,
   canEdit,
-  openPublication,
+  openVersion,
 }: {
   geoId: string;
   item: GeoAnalysisMemberItem;
@@ -158,8 +171,12 @@ function Member({
   onShowVersions?(total:number):void;
   selectionRef?: string;
   canEdit: boolean;
-  openPublication?(version:string,digest:string):Promise<void>;
+  openVersion(target:GeoVersionTarget):void;
 }) {
+  const versionTarget = geoMemberVersionTarget(item);
+  const openPublication = versionTarget ? async (version: string, digest: string) => {
+    if (version === versionTarget.versionId && digest === versionTarget.digest) openVersion(versionTarget);
+  } : undefined;
   const contextPath = useGeoPath();
   const location = useLocation(),
     question = item.question ?? item;
@@ -191,6 +208,7 @@ function Member({
       ]}/>
       {item.resultVersionCount!=null&&item.resultVersionCount>0&&item.rowResultVersionCount!=null&&onShowVersions&&<Button size="sm" variant="text" onClick={()=>onShowVersions(item.rowResultVersionCount!)}>查看本行内容版本明细</Button>}
       {item.resultVersionId&&item.digest&&openPublication&&<Button size="sm" variant="text" onClick={()=>void openPublication(item.resultVersionId!,item.digest!)}>打开当时内容版本</Button>}
+      {item.resultVersionId&&item.digest&&!openPublication&&<p>版本关联记录未保留，暂时无法打开。</p>}
       {url&&safeCitationUrl(url)&&<a className="text-accent" href={url} target="_blank" rel="noreferrer">查看发布页面</a>}
       {item.unit==="publications"&&item.objectId&&<Link className="text-accent" to={contextPath(`/app/geo/${encodeURIComponent(geoId)}/actions?${publicationQuery}#geo-distribution`)}>查看发布记录与更新登记</Link>}
       {orderId&&<Link className="text-accent" to={contextPath(`/app/geo/${encodeURIComponent(geoId)}/actions?${orderQuery}#geo-distribution`)}>查看订单与可执行操作</Link>}
@@ -246,6 +264,7 @@ function Member({
     {item.sourcePublicationStatus?.kind && <FactList rows={[{label:"原始来源状态",value:changeWord(item.sourcePublicationStatus.kind)},
       ...(item.sourcePublicationStatus.notices??[]).map(notice=>({label:"来源通知标识",value:notice}))]}/>}
     {item.resultVersionId&&item.digest&&openPublication&&<Button size="sm" variant="text" onClick={()=>void openPublication(item.resultVersionId!,item.digest!)}>打开当时内容版本</Button>}
+    {item.resultVersionId&&item.digest&&!openPublication&&<p>版本关联记录未保留，暂时无法打开。</p>}
     {item.url&&safeCitationUrl(item.url)&&<a className="text-accent" href={item.url} target="_blank" rel="noreferrer">查看发布页面</a>}
     {item.snapshotId && <Link className="text-accent" to={contextPath(`${answerPath(geoId,item.snapshotId)}${selectionRef?`?${geoSearchWithScope(location.search,{selectionRef})}`:location.search}`)}>查看原始回答与依据</Link>}
     <Link className="text-accent" to={contextPath(`/app/geo/${encodeURIComponent(geoId)}/${["claims","findings","statement_assessments","finding_observations"].includes(item.unit)?`evidence${evidenceQuery.size?`?${evidenceQuery}`:""}`:`content${location.search}`}`)}>{["claims","findings","statement_assessments","finding_observations"].includes(item.unit)?"查看证据与关联":"查看内容与版本"}</Link>
@@ -281,7 +300,7 @@ function Member({
       )}
       {item.source && <Disclosure summary="完整来源页面与原始地址"><Note action={null}>错误与品牌提及仅表示共同出现，不能据此推断来源导致错误。部分判定保留原判定状态。</Note>{item.source.pages.map(page=><article key={page.sourceKey}><p className="text-caption text-text-2">{page.sourceKey}</p>{page.originalUrls.map(url=><a key={url} className="block text-accent" href={safeCitationUrl(url)?url:undefined} target="_blank" rel="noreferrer">{url}</a>)}{page.annotations?.length ? <SourceAnnotations geoId={geoId} annotations={page.annotations} canEdit={canEdit}/> : null}{page.preservedCitations?.map((citation,index)=><p key={index} className="text-caption text-text-2">{citation.marker!=null?`引用标记：${String(citation.marker)}`:""}{citation.position!=null?` · 保留位置：${String(citation.position)}`:""}</p>)}</article>)}</Disclosure>}
       {!!item.judgment && <Disclosure summary="原始判定"><OriginalJudgment judgment={item.judgment}/></Disclosure>}
-      {item.citingAnswers?.map(answer=><Member key={answer.id} canEdit={canEdit} geoId={geoId} item={answer} selectionRef={selectionRef}/>)}
+      {item.citingAnswers?.map(answer=><Member key={answer.id} canEdit={canEdit} geoId={geoId} item={answer} selectionRef={selectionRef} openVersion={openVersion}/>)}
       {item.extraction && <Disclosure summary="实体提取依据"><FactList rows={[{label:"提取时间",value:item.extraction.judgedAt ?? "未知"},{label:"通用名提及",value:genericMentionsText(item.extraction.genericMentions)}]} /></Disclosure>}
       {item.expression && <FactList rows={[
         {label:"表达对象",value:item.expression.entity ?? "对象未保留"},

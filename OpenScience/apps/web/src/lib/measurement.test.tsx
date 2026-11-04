@@ -17,7 +17,9 @@ describe("measurement boundaries", () => {
     expect(safetyReading(diagnosis({})).kind).toBe("unmeasured");
     expect(safetyReading(diagnosis({ errorCounts: { severe: 0 } })).kind).toBe("unmeasured");
     expect(safetyReading(diagnosis({ round: { done: 30 }, errors: [] })).kind).toBe("unmeasured");
-    expect(safetyReading(diagnosis({ round: { done: 30 }, errorCounts: { severe: 0 } }))).toMatchObject({ kind: "measured", value: 0, scope: "本轮 30 次有效回答", observedAt: null });
+    expect(safetyReading(diagnosis({ round: { done: 30 }, errorCounts: { severe: 0 } })).kind).toBe("unmeasured");
+    const judgment = { status: "ok", denominator: 30 };
+    expect(safetyReading(diagnosis({ round: { done: 30 }, errorCounts: { severe: 0 }, failureModes: { correct: { ...judgment, numerator: 30 }, wrongOurs: { ...judgment, numerator: 0 } } }))).toMatchObject({ kind: "measured", value: 0, scope: "项目当前待处理记录；最近一轮 30 次有效回答", observedAt: null });
   });
   it("retains useful prior measurement after a refresh failure with local retry", () => {
     const retry = vi.fn();

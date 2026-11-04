@@ -3,6 +3,7 @@
 // accepts what the database refuses hides the failure until production (a
 // limit-blind double once hid a 400 on every 主动科研 load). The scenarios in
 // geoMarketScenarios.mjs run against this double and against PostgreSQL alike.
+import { dnsKey } from '../../src/geoDomains.mjs';
 import {
   ARTICLE_STATUSES,
   EPSILON_CNY,
@@ -12,7 +13,9 @@ import {
   budgetStopped,
   dailyReserved,
   projectMoney,
+  sendInFlight,
   GEO_MARKET_STORE_LIMITS,
+  GEO_MARKET_DECISION_ORDERS_MAX,
 
   MEDIA_TYPES,
   ORDER_STATES,
@@ -161,6 +164,45 @@ export class GeoMarketStoreDouble {
       .map(clone);
   }
 
+  async listDueDomainChecks({ maxPriceCny, checkedBefore, attemptedBefore, limit }) {
+    return [...this.media.values()].filter(row => row.available && !row.blacklisted && row.priceCny != null && row.priceCny <= maxPriceCny
+      && row.domain && row.caseLink && !row.flags?.medicalRefused && (row.domainVerified == null || !row.flags?.domainCheckedAt
+        || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(row.flags.domainCheckedAt) || row.flags.domainCheckedAt < checkedBefore)
+      && (row.flags?.manualDomainCheckAt ?? '') < attemptedBefore)
+      .sort((a,b)=>String(a.flags?.manualDomainCheckAt ?? '').localeCompare(String(b.flags?.manualDomainCheckAt ?? ''))
+        || Number(Boolean(b.flags?.medicalCategory))-Number(Boolean(a.flags?.medicalCategory))
+        || String(a.mediaType).localeCompare(String(b.mediaType)) || String(a.resourceId).localeCompare(String(b.resourceId))).slice(0,limit).map(clone);
+  }
+
+  async claimDomainRecheck(media, token, at, before) {
+    const row = this.media.get(`${media.mediaType}:${media.resourceId}`);
+    if (!row || row.domain !== media.domain || row.caseLink !== media.caseLink || (row.flags?.manualDomainCheckAt ?? '') >= before) return false;
+    row.flags = { ...row.flags, manualDomainCheckToken: token, manualDomainCheckAt: at };
+    return true;
+  }
+
+  async finishDomainRecheck(media, token, verdict) {
+    const row = this.media.get(`${media.mediaType}:${media.resourceId}`);
+    if (!row || row.domain !== media.domain || row.caseLink !== media.caseLink || row.flags?.manualDomainCheckToken !== token) return false;
+    row.domainVerified = verdict.domainVerified;
+    row.flags = { ...row.flags, ...verdict.flags };
+    return true;
+  }
+
+  async listPreferredMedia({names,maxPriceCny,includeUnavailable=false,includeUnverifiedHost=false}) {
+    const normalize=value=>String(value ?? '').trim().toLowerCase().replace(/^www\./,'');
+    const wanted=new Set(names.map(normalize).filter(Boolean));
+    if(wanted.size>GEO_MARKET_DECISION_ORDERS_MAX)throw new HttpError(422,'geo_spine_incomplete','The preferred media input exceeds its complete-read limit.');
+    const max=assertAmount(maxPriceCny);
+    const rows=[...this.media.values()].filter(row=>(includeUnavailable || row.available && !row.blacklisted && row.priceCny!=null && row.priceCny<=max)
+      && (wanted.has(normalize(row.domain)) || row.domainVerified===true && row.flags?.domainCheck==='ok'
+        && normalize(row.flags?.host)===normalize(row.flags?.domainFinalHost)
+        && (normalize(row.flags?.host)===normalize(row.domain) || normalize(row.flags?.host).endsWith(`.${normalize(row.domain)}`))
+        && wanted.has(normalize(row.flags?.host)) || includeUnverifiedHost && wanted.has(normalize(row.flags?.host))));
+    if(rows.length>GEO_MARKET_DECISION_ORDERS_MAX)throw new HttpError(422,'geo_spine_incomplete','The preferred media input exceeds its complete-read limit.');
+    return rows.sort((a,b)=>String(a.mediaType).localeCompare(String(b.mediaType)) || String(a.resourceId).localeCompare(String(b.resourceId))).map(clone);
+  }
+
   /** @param {{ mediaType: string, resourceId: string, domainVerified?: boolean | null, flags?: Record<string, any>, blacklisted?: boolean, blacklistReason?: string | null }} update */
   async updateMediaFlags({ mediaType, resourceId, domainVerified, flags = {}, blacklisted, blacklistReason }) {
     assertOneOf(mediaType, MEDIA_TYPES, "media type");
@@ -299,7 +341,7 @@ export class GeoMarketStoreDouble {
   async getSources(geoProjectId, domains) {
     const unique = new Set(domains.map(String));
     if (unique.size > GEO_MARKET_STORE_LIMITS.mediaKeysMax) throw storeError("Too many domains in one lookup.");
-    return this.sources.filter((source) => source.geoProjectId === geoProjectId && unique.has(source.domain)).map(clone);
+    return this.sources.filter((source) => source.geoProjectId === geoProjectId && unique.has(dnsKey(source.domain))).map(clone);
   }
 
   /** @param {string} geoProjectId */
@@ -490,6 +532,25 @@ export class GeoMarketStoreDouble {
     return rows.slice(offset, offset + limit).map((order) => this.#orderView(order));
   }
 
+  async listDecisionOrders(filter) {
+    const rows=[];
+    for(let offset=0;offset<=GEO_MARKET_DECISION_ORDERS_MAX;offset+=500){
+      const page=await this.listOrders({...filter,limit:Math.min(500,GEO_MARKET_DECISION_ORDERS_MAX+1-offset),offset});
+      rows.push(...page);
+      if(rows.length>GEO_MARKET_DECISION_ORDERS_MAX)throw new HttpError(422,'geo_spine_incomplete','The complete market order input exceeds its limit.');
+      if(page.length<Math.min(500,GEO_MARKET_DECISION_ORDERS_MAX+1-offset))break;
+    }
+    return rows;
+  }
+
+  async listRecoverableReserved({sendingBefore,idleBefore,limit}) {
+    assertLimit(limit,GEO_MARKET_STORE_LIMITS.listMax);
+    const sending=Date.parse(assertAt(sendingBefore)),idle=Date.parse(assertAt(idleBefore));
+    return [...this.orders.values()].filter(order=>order.state==='reserved').map(order=>this.#orderView(order))
+      .filter(order=>sendInFlight(order) ? Date.parse(order.sentAt)<sending : order.stateAt && Date.parse(order.stateAt)<idle)
+      .sort((a,b)=>byTime(a.sentAt ?? a.stateAt,b.sentAt ?? b.stateAt) || String(a.id).localeCompare(String(b.id))).slice(0,limit);
+  }
+
   /** @param {string} orderId @param {number} limit */
   async listOrderEvents(orderId, limit) {
     assertLimit(limit, GEO_MARKET_STORE_LIMITS.listMax);
@@ -527,9 +588,9 @@ export class GeoMarketStoreDouble {
   async platformFlowsSince(since) {
     const cutoff = Date.parse(assertAt(since));
     const after = (/** @type {string} */ at) => Date.parse(at) > cutoff;
-    const max = GEO_MARKET_STORE_LIMITS.flowsMax;
+    const max = GEO_MARKET_STORE_LIMITS.flowsMax + 1;
     const sorted = [...this.events].sort((a, b) => byTime(a.at, b.at));
-    return {
+    const result = {
       charges: sorted.filter((event) => event.toState === "submitted" && event.fromState !== "submitted" && after(event.at))
         .slice(0, max).map((event) => ({ orderId: event.orderId, amountCny: Number(this.orders.get(event.orderId)?.priceCny ?? 0), at: event.at })),
       refunds: sorted.filter((event) => event.toState === "refunded" && event.fromState !== "refunded" && after(event.at))
@@ -539,6 +600,8 @@ export class GeoMarketStoreDouble {
       adjustments: this.ledger.filter((row) => row.kind === "adjustment" && row.geoProjectId == null && row.orderId == null && after(row.createdAt))
         .sort((a, b) => byTime(a.createdAt, b.createdAt)).slice(0, max).map((row) => ({ id: row.id, amountCny: row.amountCny, at: row.createdAt })),
     };
+    if (Object.values(result).some(rows=>rows.length>GEO_MARKET_STORE_LIMITS.flowsMax)) throw new HttpError(422,'geo_spine_incomplete','The complete market balance input exceeds its limit.');
+    return result;
   }
 
   // ------------------------------------------------------------ top-ups
@@ -585,6 +648,13 @@ export class GeoMarketStoreDouble {
     if (status != null) assertOneOf(status, TOPUP_STATUSES, "top-up status");
     return [...this.topups.values()].filter((topup) => status == null || topup.status === status)
       .sort((a, b) => byTime(b.requestedAt, a.requestedAt) || (a.id < b.id ? -1 : 1)).slice(0, limit).map(clone);
+  }
+
+  async listDecisionTopups() {
+    const rows=[...this.topups.values()].filter(topup=>topup.status==='requested')
+      .sort((a,b)=>byTime(b.requestedAt,a.requestedAt) || (a.id < b.id ? -1 : 1));
+    if(rows.length>GEO_MARKET_DECISION_ORDERS_MAX) throw new HttpError(422,'geo_spine_incomplete','The complete top-up input exceeds its limit.');
+    return rows.map(clone);
   }
 
   /** @param {string} id */

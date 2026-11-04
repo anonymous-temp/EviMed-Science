@@ -1,9 +1,10 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes, useLocation } from "react-router";
+import { Link, MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { GeoEngine, GeoProject } from "@/lib/geoClient";
-import { cell, diagnosisFilled, geoProject, monitoringFilled } from "../__fixtures__/geoTabs";
+import { GEO_PROJECT } from "../__fixtures__/geoProjects";
+import { cell, diagnosisFilled, diagnosisWith, geoProject, monitoringFilled, strategyFilled } from "../__fixtures__/geoTabs";
 import { clustersFilled, clusterViewFixture, G_BRAND, G_CONTROL, G_EFFECT, G_SAFETY } from "../__fixtures__/geoSpine";
 import { GeoFrameHarness } from "../__fixtures__/geoFrameHarness";
 import { VisibilityTab } from "./VisibilityTab";
@@ -11,10 +12,16 @@ import { VisibilityTab } from "./VisibilityTab";
 const client = vi.hoisted(() => ({
   getGeoDiagnosis: vi.fn(),
   getGeoMonitoring: vi.fn(),
+  getGeoStrategy: vi.fn(),
   getGeoClusters: vi.fn(),
   getGeoCluster: vi.fn(),
   getGeoQuestions: vi.fn(),
   runGeoStep: vi.fn(),
+}));
+const rivalAnalysis = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/geoAnalysisClient", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/geoAnalysisClient")>()),
+  getGeoAnalysis: rivalAnalysis,
 }));
 vi.mock("@/lib/geoClient", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/geoClient")>()),
@@ -63,16 +70,40 @@ beforeEach(() => {
   for (const fn of Object.values(client)) fn.mockReset();
   client.getGeoDiagnosis.mockResolvedValue(withEngines);
   client.getGeoMonitoring.mockResolvedValue(monitoring);
+  client.getGeoStrategy.mockResolvedValue(strategyFilled);
   client.getGeoClusters.mockResolvedValue(clustersFilled);
   client.getGeoQuestions.mockResolvedValue({ sets: [], groups: clustersFilled.groups, version: 1 });
   client.getGeoCluster.mockImplementation(async (_geoId: string, id: string) => clusterViewFixture(id));
   client.runGeoStep.mockResolvedValue({ sessionId: "ses_geo_1" });
+  rivalAnalysis.mockReset().mockResolvedValue({ selection: { reference: "gsel_1" }, digest: "digest-1", rows: [{ key: "rival-p2", label: "竞品", dimensions: { entityName: "竞品", entityLabel: "竞品", entityKind: "brand", own: false, period: "selected", pool: "P2" },
+    values: { current: { value: 40, state: "known", metric: { denominator: 50 }, members: { exact: true, selectionRef: "gsel_1", expectedDigest: "digest-1", rowKey: "rival-p2", columnKey: "current", unit: "answers", total: 50 } },
+      pairedOwn: { value: 20, state: "known", metric: { denominator: 50 }, members: { exact: true, selectionRef: "gsel_1", expectedDigest: "digest-1", rowKey: "rival-p2", columnKey: "pairedOwn", unit: "answers", total: 50 } }, unknown: { value: 0 } } }], page: { nextOffset: null } });
 });
 
 const groupRow = (id: string) => document.querySelector(`[data-cluster-row='${id}']`) as HTMLElement | null;
+async function chooseMetric(name: string) {
+  await userEvent.click(screen.getByRole("button", { name: /^分析指标：/ }));
+  await userEvent.click(await screen.findByRole("menuitemradio", { name }));
+}
 const toolbar = () => document.querySelector("[data-toolbar]") as HTMLElement;
 
 describe("可见度: the order of what it shows", () => {
+  it("retains the original baseline and target alongside the current reading", async () => {
+    const project = geoProject();
+    renderTab({ ...project, overview: { ...project.overview, metrics: project.overview.metrics.map((metric) => metric.key === "gvi" ? { ...metric, trend: [{ date: "2026-09-25", value: 31 }, { date: "2026-10-12", value: 38 }] } : metric) } });
+    const band = await screen.findByRole("group", { name: "综合可见度指数" });
+    await waitFor(() => expect(band).toHaveTextContent("基线 31"));
+    expect(band).toHaveTextContent("目标 55");
+    expect(band).toHaveTextContent("38");
+  });
+  it("does not present unjudged answers as zero serious errors in the relocated metrics", async () => {
+    const zero = { ...withEngines.failureModes.correct, status: "ok" as const, numerator: 0, denominator: 40, value: 0 };
+    client.getGeoDiagnosis.mockResolvedValue({ ...withEngines, errorCounts: { ...withEngines.errorCounts!, severe: 0 }, failureModes: { ...withEngines.failureModes, correct: zero, wrongOurs: zero, unknown: { ...zero, numerator: 40, value: 100 } } });
+    renderTab();
+    const safety = await screen.findByRole("group", { name: "用药安全" });
+    expect(safety).toHaveTextContent("核查不足");
+    expect(safety).not.toHaveTextContent("0条严重讲错");
+  });
   it("retains platform, pool and group choices after the measured rows have been narrowed", async () => {
     const group = clustersFilled.groups.find(row => row.id === G_EFFECT)!;
     client.getGeoClusters.mockResolvedValue({ ...clustersFilled, engines: ["deepseek"], groups: [group] });
@@ -167,24 +198,23 @@ describe("可见度: the groups against the engines", () => {
 });
 
 describe("可见度: the band's toolbar drives every block", () => {
-  it("holds the metric, the engine, the pool and the group; nothing filters from under a block", async () => {
+  it("places the metric with the trend and keeps scope filters in the toolbar", async () => {
     renderTab();
     await screen.findByRole("heading", { name: /综合可见度指数/ });
     await waitFor(() => expect(document.querySelector("[data-cluster-grid]")).not.toBeNull());
-    expect(within(toolbar()).getByRole("button", { name: /^指标：/ })).toBeVisible();
+    expect(screen.getByRole("button", { name: /^分析指标：/ })).toBeVisible();
     expect(screen.queryByRole("group", { name: "引擎" })).toBeNull();
     await userEvent.click(within(toolbar()).getByRole("button", { name: /^筛选/ }));
     for (const name of ["引擎", "问句池", "问题群"]) expect(screen.getByRole("group", { name })).toBeVisible();
   });
 
-  it("a metric chip moves the trend, rings the grid's column and swaps the engines' card for that rate's bars", async () => {
+  it("a metric choice moves the trend, rings the grid's column and swaps the engines' card for that rate's bars", async () => {
     renderTab();
     await screen.findByRole("heading", { name: /综合可见度指数/ });
     // the index has no column of its own: nothing is ringed, and the engines' card is the mention trend
     expect(document.querySelector("th[data-heat-emphasis]")).toBeNull();
     expect(document.querySelector("[data-geo-engine-trend]")).not.toBeNull();
-    await userEvent.click(within(toolbar()).getByRole("button", { name: /^指标：/ }));
-    await userEvent.click(await screen.findByRole("menuitemradio", { name: "事实准确率" }));
+    await chooseMetric("事实准确率");
     await screen.findByRole("heading", { name: /^事实准确率 94%/ });
     expect(document.querySelector("th[data-heat-emphasis]")).toHaveTextContent("事实准确率");
     expect(document.querySelector("[data-geo-engine-trend]")).toBeNull();
@@ -240,4 +270,137 @@ describe("可见度: what is not measured is said, not drawn", () => {
     await screen.findByRole("heading", { name: /综合可见度指数/ });
     expect(document.querySelector("[data-cluster-grid]")).toBeNull();
   });
+});
+
+
+it("keeps monitoring settings reachable while data is loading and shows the true configured status", async () => {
+  client.getGeoMonitoring.mockReturnValue(new Promise(() => undefined));
+  client.getGeoDiagnosis.mockReturnValue(new Promise(() => undefined));
+  const project = geoProject();
+  project.steps.monitoring = { status: "running", requested: true, automation: { state: "confirmed", actorId: "a", at: "2026-10-01T00:00:00Z", engines: [...project.engines], coverageDays: project.coverageDays } };
+  const openPanel = vi.fn();
+  render(<MemoryRouter initialEntries={["/app/geo/geo_1/visibility"]}><GeoFrameHarness project={project} tab="visibility" openPanel={openPanel}><VisibilityTab geoId="geo_1" project={project} /></GeoFrameHarness></MemoryRouter>);
+  expect(screen.getByText("已开启自动监测")).toBeVisible();
+  await userEvent.click(screen.getByRole("link", { name: "监测设置" }));
+  expect(openPanel).toHaveBeenCalledWith("settings");
+  expect(screen.queryByRole("button", { name: "停止自动监测" })).toBeNull();
+});
+
+it("places an exact-cohort competitor comparison beside the default trend and retains the trend comparison control", async () => {
+  renderTab();
+  await screen.findByRole("button", { name: /^分析指标：/ });
+  const area = document.querySelector("[data-geo-trend-ranking]")!;
+  await waitFor(() => expect(area).toHaveClass("grid", "lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]"));
+  expect(area).toContainElement(await screen.findByRole("region", { name: "本品与竞品提及率" }));
+  expect(await screen.findByText("本品 20% · 竞品 40%")).toBeVisible();
+  await chooseMetric("品类问题可见率");
+  expect(area).toContainElement(screen.getByRole("region", { name: "本品与竞品提及率" }));
+  expect(area.querySelector("[data-chart='trend']")).not.toBeNull();
+  expect(screen.getByTestId("search")).toHaveTextContent("trendMetric=mention");
+  await userEvent.click(screen.getByRole("button", { name: /^比较：/ }));
+  await userEvent.click(await screen.findByRole("menuitemradio", { name: "不比较" }));
+  expect(screen.queryByRole("region", { name: "本品与竞品提及率" })).not.toBeInTheDocument();
+  expect(screen.getByTestId("search")).toHaveTextContent("compareBy=none");
+});
+
+it("opens settings from the automation anchor even when both reads fail", async () => {
+  client.getGeoMonitoring.mockRejectedValue(new Error("unavailable"));
+  client.getGeoDiagnosis.mockRejectedValue(new Error("unavailable"));
+  const project = geoProject();
+  const openPanel = vi.fn();
+  render(<MemoryRouter initialEntries={["/app/geo/geo_1/visibility#geo-automation"]}><GeoFrameHarness project={project} tab="visibility" openPanel={openPanel}><VisibilityTab geoId="geo_1" project={project} /></GeoFrameHarness></MemoryRouter>);
+  await waitFor(() => expect(openPanel).toHaveBeenCalledWith("settings"));
+  await screen.findByRole("button", { name: /重试/ });
+  expect(screen.getByRole("link", { name: "监测设置" })).toBeVisible();
+});
+
+
+it("opens the monitoring deep link once per hash visit and still allows explicit reopening", async () => {
+  const project = geoProject();
+  const openPanel = vi.fn();
+  render(<MemoryRouter initialEntries={["/app/geo/geo_1/visibility#geo-automation"]}>
+    <Link to="?metric=mention#geo-automation">Change metric</Link>
+    <Link to="?metric=mention">Leave automation link</Link>
+    <Link to="?metric=mention#geo-automation">Reenter automation link</Link>
+    <GeoFrameHarness project={project} tab="visibility" openPanel={openPanel}><VisibilityTab geoId="geo_1" project={project} /></GeoFrameHarness>
+  </MemoryRouter>);
+  expect(openPanel).toHaveBeenCalledTimes(1);
+  await userEvent.click(screen.getByRole("link", { name: "Change metric" }));
+  expect(openPanel).toHaveBeenCalledTimes(1);
+  await userEvent.click(screen.getByRole("link", { name: "监测设置" }));
+  expect(openPanel).toHaveBeenCalledTimes(2);
+  await userEvent.click(screen.getByRole("link", { name: "Leave automation link" }));
+  expect(openPanel).toHaveBeenCalledTimes(2);
+  await userEvent.click(screen.getByRole("link", { name: "Reenter automation link" }));
+  expect(openPanel).toHaveBeenCalledTimes(3);
+});
+
+
+it("preserves measured metrics, comparison, denominator and insufficient sample on visibility", async () => {
+  const severe = diagnosisWith([{ ...diagnosisFilled.errors[0], severity: "S3", status: "open" }]);
+  client.getGeoDiagnosis.mockResolvedValue(severe);
+  renderTab(GEO_PROJECT);
+  const gvi = await screen.findByRole("group", { name: "综合可见度指数" });
+  await waitFor(() => expect(gvi).toHaveTextContent("38"));
+  expect(gvi).toHaveTextContent("目标 55");
+  expect(gvi).not.toHaveTextContent("提及率第");
+  expect(gvi).not.toHaveTextContent("司美格鲁肽 提及率 48%");
+  const mention = screen.getByRole("group", { name: "品类问题可见率" });
+  expect(mention).toHaveTextContent("18");
+  expect(mention).toHaveTextContent("目标 35%");
+  const citation = screen.getByRole("group", { name: "引用命中率" });
+  expect(citation).toHaveTextContent("样本不足");
+  expect(citation).not.toHaveTextContent("6%");
+  expect(screen.getByRole("group", { name: "用药安全" })).toHaveTextContent("1");
+  const stats = screen.getByRole("region", { name: "本轮指标" });
+  expect(within(stats).getAllByText(/按 3 个引擎、310 次有效回答计算/)).toHaveLength(1);
+});
+
+it("does not show unmeasured project metrics as measured zero", async () => {
+  const project = geoProject();
+  const metrics = project.overview.metrics.map(metric => ({ ...metric, cell: { ...metric.cell, value: null, numerator: null, denominator: null, status: "not_measurable" as const }, trend: [] }));
+  client.getGeoDiagnosis.mockResolvedValue({ ...diagnosisFilled, round: null, errors: [], errorCounts: undefined, failureModes: {}, byEngine: [], byPool: [], more: [] });
+  client.getGeoMonitoring.mockResolvedValue({ ...monitoringFilled, series: [], byEngine: [], next: null });
+  renderTab({ ...project, overview: { ...project.overview, metrics } });
+  const stats = await screen.findByRole("region", { name: "本轮指标" });
+  await waitFor(() => expect(within(stats).getByRole("group", { name: "综合可见度指数" })).toHaveTextContent(/未测|—/));
+  for (const label of ["综合可见度指数", "品类问题可见率", "引用命中率"]) {
+    const tile = within(stats).getByRole("group", { name: label });
+    expect(tile.querySelector("[data-stat-value]")).not.toHaveTextContent(/^0(?:%|条|$)/);
+  }
+  expect(within(stats).getByRole("group", { name: "用药安全" })).not.toHaveTextContent("0条严重讲错");
+  expect(stats).not.toHaveTextContent(/次有效回答计算/);
+});
+
+
+it("places the overview before the plot and gives an empty comparison no unused column", async () => {
+  rivalAnalysis.mockResolvedValue({ selection: { reference: "gsel_1" }, digest: "digest-1", rows: [], page: { nextOffset: null } });
+  renderTab();
+  await screen.findByText("当前范围暂无可比的竞品读数，可查看完整分析与原因。");
+  const area = document.querySelector<HTMLElement>("[data-geo-trend-ranking]")!;
+  const metrics = screen.getByRole("region", { name: "本轮指标" });
+  expect(metrics.compareDocumentPosition(area) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(area).not.toHaveClass("lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]");
+  expect(within(area).getByRole("button", { name: /^分析指标：/ })).toBeVisible();
+  expect(area.querySelector("[data-geo-rival-empty] [data-chart-empty]")).toBeNull();
+});
+
+
+it("does not read a hidden rival comparison when opened with comparison disabled", async () => {
+  renderTab(geoProject(), "/app/geo/geo_1/visibility?trendMetric=mention&compareBy=none");
+  await screen.findByRole("button", { name: "比较：不比较" });
+  expect(rivalAnalysis).not.toHaveBeenCalled();
+  expect(screen.queryByRole("region", { name: "本品与竞品提及率" })).toBeNull();
+});
+
+it("reserves the measured comparison column while the comparison is being read", async () => {
+  let resolve!: (value: unknown) => void;
+  rivalAnalysis.mockReturnValue(new Promise(done => { resolve = done; }));
+  renderTab();
+  await screen.findByRole("button", { name: /^分析指标：/ });
+  const area = document.querySelector("[data-geo-trend-ranking]")!;
+  expect(area).toHaveClass("lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]");
+  resolve({ selection: { reference: "gsel_1" }, digest: "digest-1", rows: [], page: { nextOffset: null } });
+  await screen.findByText("当前范围暂无可比的竞品读数，可查看完整分析与原因。");
+  expect(area).not.toHaveClass("lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]");
 });

@@ -16,6 +16,13 @@ it('opens the existing exact plan version and labels retained historical members
  expect(screen.getByText(/原有成员可能已无法读取/)).toBeVisible();
 });
 
+it('does not expose the retained ratio or its input rates when its sample is insufficient',()=>{
+ render(<MemoryRouter><GeoFinanceMember geoId="g" item={{id:'thin',unit:'frozen_metric_readings',metricId:'M-13',status:'insufficient',value:1.75,numerator:70,denominator:40,memberCount:12}}/></MemoryRouter>);
+ expect(screen.getAllByText('样本不足')).toHaveLength(2);
+ expect(screen.queryByText(/1\.75|70|40/)).toBeNull();
+ expect(screen.getByText('12')).toBeVisible();
+});
+
 it('keeps historical group identity while labelling unavailable current metadata and unknown business scope',()=>{
  render(<MemoryRouter><GeoFinanceMember geoId="g" item={{id:'historical',unit:'ledger_entries',kind:'settle',amountCny:0.3,association:{groupId:'retired'},groupContext:'historical_association_current_metadata_unavailable',businessScopeState:'unknown'}}/></MemoryRouter>);
  expect(screen.getByText('0.3 元')).toBeVisible();expect(screen.queryByText(/0\.300000000/)).not.toBeInTheDocument();

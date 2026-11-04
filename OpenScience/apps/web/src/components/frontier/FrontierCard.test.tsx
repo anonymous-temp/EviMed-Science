@@ -1,3 +1,4 @@
+import { optionalOpaqueRuntimeUiIntent } from "@/test/runtimeUiIntentAssertions";
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
@@ -20,7 +21,7 @@ beforeEach(() => { zoneCreate.allowed = true; });
 
 function Probe() {
   const location = useLocation();
-  const intent = (location.state as { runtimeUiIntent?: { kind: string; draft?: string; originReference?: { kind: string; id: string } } } | null)?.runtimeUiIntent;
+  const intent = optionalOpaqueRuntimeUiIntent(location.state);
   return <div data-testid="probe">{location.pathname}{location.search}|{intent?.kind}|{intent?.draft}{intent?.originReference ? `|origin:${intent.originReference.kind}:${intent.originReference.id}` : ""}</div>;
 }
 

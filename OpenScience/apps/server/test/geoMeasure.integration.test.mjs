@@ -4,6 +4,8 @@
 // except the probe host, the model and the inclusion vendor.
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
+import { spawn } from "node:child_process";
+import { once } from "node:events";
 import { mkdtemp, readdir, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -11,10 +13,12 @@ import { after, before, test } from "node:test";
 import pg from "pg";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { GeoMeasureStore } from "../src/geoMeasureStore.mjs";
+import { GeoStore } from "../src/geoStore.mjs";
+import { authorizeGeoConfirmation, previewGeoConfirmationAuthorization, revokeGeoConfirmation } from "../src/geoConfirmationAuthorization.mjs";
 import { GEO_PROBE_BREAK_AFTER, enqueueRound, geoMeasureState, tickProbe } from "../src/geoProbeQueue.mjs";
 import { GEO_JUDGE_VERSION, GeoJudge, tickParse } from "../src/geoJudge.mjs";
 import { measureRound, netEffectRows, tickMetrics } from "../src/geoMetricsJob.mjs";
-import { errorFingerprint, noteErrorAction, tickErrors } from "../src/geoErrors.mjs";
+import { errorFingerprint, noteErrorAction, recordErrorsFromFacts, tickErrors } from "../src/geoErrors.mjs";
 import { coverageKeyOf, roundCoverages } from "../src/geoCoverage.mjs";
 import { migrateUsageLedger } from "../src/usagePersistence.mjs";
 import { GEO_TABLES_FOR_TESTS, fakeModel, judgeCallParts, seedGeoProject, startFakeProbe, testClock } from "./helpers/geoMeasureFixtures.mjs";
@@ -70,6 +74,7 @@ after(async () => {
 });
 
 async function reset() {
+  store.sampleClock = null;
   await database.query(`TRUNCATE ${GEO_TABLES_FOR_TESTS.map((table) => `evimed_geo.${table}`).join(", ")} CASCADE`);
   await rm(path.join(dataDir, "geo"), { recursive: true, force: true });
 }
@@ -93,8 +98,8 @@ const LOGIN = "请先登录后继续使用";
 const REFUSAL = "抱歉，我无法提供医疗建议，请咨询专业医生。";
 const OWNED_LABEL = [{ title: "说明书", url: "https://www.mazdutide.example.com/label" }];
 
-/** @param {string} id @param {{ engines?: string[], controls?: number }} [options] */
-async function seed(id, { engines = ["deepseek", "doubao"] } = {}) {
+/** @param {string} id @param {{ engines?: string[], controls?: number, confirmation?: boolean, repeats?: number }} [options] */
+async function seed(id, { engines = ["deepseek", "doubao"], confirmation = false, repeats = 10 } = {}) {
   await seedGeoProject(database, {
     id, userId: `user_${id}`, projectId: `proj_${id}`, engines,
     groups: [
@@ -113,7 +118,338 @@ async function seed(id, { engines = ["deepseek", "doubao"] } = {}) {
   });
   await database.query(`UPDATE evimed_geo.projects SET steps=$2::jsonb WHERE id=$1`, [id, JSON.stringify({ monitoring: { automation: {
     state: "confirmed", actorId: `user_${id}`, at: new Date().toISOString(), engines, coverageDays: 90 } } })]);
+  if (confirmation) {
+    if (repeats !== 10) await database.query(`UPDATE evimed_geo.question_sets SET contract=$2::jsonb WHERE geo_project_id=$1`,
+      [id, JSON.stringify({ samplingMode: "recurring", engines, repeats })]);
+    const content = new GeoStore({ database });
+    const preview = await previewGeoConfirmationAuthorization(content, `user_${id}`, id);
+    await authorizeGeoConfirmation(content, `user_${id}`, id, `user_${id}`, preview.token, () => new Date("2026-01-01T00:00:00Z"));
+  }
 }
+
+test("confirmation admission checks explicit scope and preserves accepted work", options, async () => {
+  await reset();
+  await seed("geo_consent", { engines: ["deepseek"] });
+  const content = new GeoStore({ database });
+  const h = await harness({ clock: new Date(Date.now() + 10_000).toISOString() });
+  try {
+    const args = { geoProjectId: "geo_consent", kind: "confirm", questionIds: ["geo_consent_q1"], engines: ["deepseek"], repeat: 10,
+      ref: { errorId: "ge_consent", questionId: "geo_consent_q1", engine: "deepseek" } };
+    await assert.rejects(enqueueRound(h.deps, args), { code: "geo_confirmation_authorization_required" });
+    const preview = await previewGeoConfirmationAuthorization(content, "user_geo_consent", "geo_consent");
+    const consent = await authorizeGeoConfirmation(content, "user_geo_consent", "geo_consent", "user_geo_consent", preview.token);
+    await assert.rejects(enqueueRound(h.deps, args), { code: "geo_confirmation_scope_changed" }, "an error without a preserved observation cannot authorize a round");
+    await database.query(`INSERT INTO evimed_geo.snapshots (id,user_id,geo_project_id,engine,question_id,asked_at,status)
+      VALUES ('snap_consent','user_geo_consent','geo_consent','deepseek','geo_consent_q1',$1,'valid')`, [h.clock.now().toISOString()]);
+    await database.query(`INSERT INTO evimed_geo.errors (id,user_id,geo_project_id,fingerprint,engine,question_id,first_snapshot_id,status,created_at,updated_at)
+      VALUES ('ge_consent','user_geo_consent','geo_consent','fingerprint','deepseek','geo_consent_q1','snap_consent','open',$1,$1)`, [h.clock.now().toISOString()]);
+    await database.query(`UPDATE evimed_geo.snapshots SET asked_at=$1 WHERE id='snap_consent'`, [consent.authorizedAt]);
+    await assert.rejects(enqueueRound(h.deps, args), { code: "geo_confirmation_scope_changed" }, "equal millisecond does not establish observation order");
+    await database.query(`UPDATE evimed_geo.snapshots SET asked_at=$1 WHERE id='snap_consent'`, [h.clock.now().toISOString()]);
+    const accepted = await enqueueRound(h.deps, args);
+    assert.equal(accepted.planned, 10);
+    h.clock.advance(1000);
+    await database.query(`INSERT INTO evimed_geo.snapshots (id,user_id,geo_project_id,round_id,engine,question_id,asked_at,status,answer_text)
+      VALUES ('snap_self','user_geo_consent','geo_consent',$1,'deepseek','geo_consent_q1',$2,'valid','A distinct incorrect statement')`, [accepted.roundId, h.clock.now().toISOString()]);
+    const context = await store.projectContext("geo_consent");
+    const claim = context.claims.find(row => row.key === "indication");
+    const statement = { text: "A distinct incorrect statement", verdict: "wrong", claimId: claim.id, claimKey: claim.key, severity: "S2", errorType: "number" };
+    await database.query(`INSERT INTO evimed_geo.facts (snapshot_id,user_id,geo_project_id,statements) VALUES ('snap_self','user_geo_consent','geo_consent',$1::jsonb)`, [JSON.stringify([statement])]);
+    await recordErrorsFromFacts(h.deps, { snapshot: await store.snapshot("snap_self"), context,
+      statements: [statement] });
+    const [self] = await rows(`SELECT confirm FROM evimed_geo.errors WHERE first_snapshot_id='snap_self'`);
+    assert.equal(self.confirm.status, "unavailable", "a round cannot confirm an error first observed in its own answer");
+    await revokeGeoConfirmation(content, "user_geo_consent", "geo_consent");
+    await assert.rejects(enqueueRound(h.deps, args), { code: "geo_confirmation_authorization_required" });
+    assert.equal((await rows(`SELECT status FROM evimed_geo.rounds WHERE id=$1`, [accepted.roundId]))[0].status, "queued");
+    await content.updateProject("user_geo_consent", "geo_consent", { engines: ["doubao"] });
+    await content.updateProject("user_geo_consent", "geo_consent", { engines: ["deepseek"] });
+    await assert.rejects(enqueueRound(h.deps, args), { code: "geo_confirmation_authorization_required" });
+    const [preserved] = await rows(`SELECT planned, status FROM evimed_geo.rounds WHERE id=$1`, [accepted.roundId]);
+    assert.equal(preserved.planned, 10);
+    assert.equal(preserved.status, "queued");
+    const next = await previewGeoConfirmationAuthorization(content, "user_geo_consent", "geo_consent");
+    await authorizeGeoConfirmation(content, "user_geo_consent", "geo_consent", "user_geo_consent", next.token);
+    await database.query(`UPDATE evimed_geo.snapshots SET asked_at='2000-01-01' WHERE id='snap_consent'`);
+    await database.query(`UPDATE evimed_geo.rounds SET status='cancelled' WHERE id=$1`, [accepted.roundId]);
+    await assert.rejects(enqueueRound(h.deps, args), { code: "geo_confirmation_scope_changed" });
+    await database.query(`INSERT INTO evimed_geo.snapshots (id,user_id,geo_project_id,engine,question_id,asked_at,status)
+      VALUES ('snap_recurrence','user_geo_consent','geo_consent','deepseek','geo_consent_q1',$1,'valid')`, [h.clock.now().toISOString()]);
+    await database.query(`UPDATE evimed_geo.errors SET last_snapshot_id='snap_recurrence',created_at='2000-01-01' WHERE id='ge_consent'`);
+    const recurrence = await enqueueRound(h.deps, { ...args, ref: { ...args.ref, observationId: "snap_recurrence" } });
+    assert.equal(recurrence.planned, 10, "a newly observed recurrence is not an old backlog replay");
+  } finally { await h.probe.close(); }
+});
+
+test("legacy and exhausted confirmation leases never submit again; accepted references remain pollable", options, async () => {
+  await reset();
+  await seed("geo_fence", { engines: ["deepseek"] });
+  const now = new Date("2026-09-25T15:00:00Z");
+  for (const [roundId, receipt] of [["legacy", {}], ["current", { confirmationAuthorization: { generation: "1" } }]]) {
+    await database.query(`INSERT INTO evimed_geo.rounds (id,user_id,geo_project_id,kind,set_version,engines,planned,status,surface)
+      VALUES ($1,'user_geo_fence','geo_fence','confirm',1,ARRAY['deepseek'],2,'running',$2::jsonb)`, [roundId, JSON.stringify(receipt)]);
+  }
+  for (const [index, [id, roundId, jobStatus, attempts, external]] of [["legacy_q", "legacy", "queued", 0, null], ["legacy_accepted", "legacy", "leased", 1, "accepted-ref"],
+    ["expired_three", "current", "leased", 3, null], ["queued_three", "current", "queued", 3, null]].entries()) {
+    await database.query(`INSERT INTO evimed_geo.probe_jobs (id,user_id,round_id,geo_project_id,question_id,engine,repeat_index,status,attempts,lease_until,external_ref)
+      VALUES ($1,'user_geo_fence',$2,'geo_fence','geo_fence_q1','deepseek',$7,$3,$4,$5,$6)`, [id, roundId, jobStatus, attempts, new Date(now.getTime()-1000), external, index % 2]);
+  }
+  await store.recoverExpiredLeases(now);
+  await store.recoverExpiredLeases(new Date(now.getTime()+1000));
+  const jobs = await rows(`SELECT id,status,error_code,external_ref FROM evimed_geo.probe_jobs ORDER BY id`);
+  assert.deepEqual(jobs.map(row => [row.id,row.status,row.error_code,row.external_ref]), [
+    ["expired_three","failed","delivery_unknown_no_automatic_retry",null], ["legacy_accepted","leased",null,"accepted-ref"],
+    ["legacy_q","failed","geo_confirmation_legacy_unapproved",null], ["queued_three","failed","delivery_unknown_no_automatic_retry",null],
+  ]);
+  assert.equal((await rows(`SELECT failed FROM evimed_geo.rounds WHERE id='current'`))[0].failed, 2);
+  assert.equal((await store.heldJobsToPoll({ now: new Date(now.getTime()+1000), engines: ["deepseek"], limit: 10 })).some(job => job.id === "legacy_accepted"), true);
+});
+
+for (const attempt of [1,2,3]) test(`a different process crashing after dispatch on attempt ${attempt} cannot cause a resubmit`, options, async () => {
+  await reset();
+  await seed("geo_crash", { engines: ["deepseek"] });
+  const now = new Date("2026-09-25T15:00:00Z");
+  await database.query(`CREATE TABLE IF NOT EXISTS evimed_geo.test_confirm_sends (job_id text)`);
+  await database.query(`TRUNCATE evimed_geo.test_confirm_sends`);
+  await database.query(`INSERT INTO evimed_geo.rounds (id,user_id,geo_project_id,kind,set_version,engines,planned,status,surface)
+    VALUES ('gr_crash','user_geo_crash','geo_crash','confirm',1,ARRAY['deepseek'],1,'running','{"confirmationAuthorization":{"generation":"1"}}'::jsonb)`);
+  await database.query(`INSERT INTO evimed_geo.probe_jobs (id,user_id,round_id,geo_project_id,question_id,engine,repeat_index,status,attempts)
+    VALUES ('gj_crash','user_geo_crash','gr_crash','geo_crash','geo_crash_q1','deepseek',0,'queued',$1)`,[attempt-1]);
+  const code = `import {ControlPlaneDatabase} from './apps/server/src/controlPlaneDatabase.mjs'; import {GeoMeasureStore} from './apps/server/src/geoMeasureStore.mjs';
+    const db=new ControlPlaneDatabase({databaseUrl:process.env.TEST_URL,databasePoolMax:1,databaseConnectionTimeoutMs:2000}); const store=new GeoMeasureStore(db); await store.ready();
+    const now=new Date('2026-09-25T15:00:00Z'); const job=await store.leaseNextJob({now,owner:'crashed-worker',leaseUntil:new Date(now.getTime()-1),engines:['deepseek'],paused:[],nightOpen:true,nightMinAsks:100,weekStart:new Date('2026-09-21T00:00:00Z'),weeklyCap:0});
+    if(job?.attempts!==Number(process.env.TEST_ATTEMPT)) process.exit(2); await db.query("UPDATE evimed_geo.probe_jobs SET lease_until=clock_timestamp()+interval '1 minute' WHERE id=$1",[job.id]);
+    if(!await store.markConfirmationDispatch(job)) process.exit(3); await db.query('INSERT INTO evimed_geo.test_confirm_sends(job_id) VALUES ($1)',[job.id]); process.exit(0);`;
+  const child = spawn(process.execPath, ["--input-type=module", "-e", code], { cwd: process.cwd(), env: { ...process.env, TEST_URL: isolatedUrl, TEST_ATTEMPT: String(attempt) }, stdio: "ignore" });
+  const [exit] = await once(child, "exit");
+  assert.equal(exit, 0);
+  await database.query(`UPDATE evimed_geo.probe_jobs SET lease_until=$1 WHERE id='gj_crash'`,[new Date(now.getTime()-1000)]);
+  await store.recoverExpiredLeases(now);
+  await store.recoverExpiredLeases(new Date(now.getTime()+1000));
+  const [job] = await rows(`SELECT status,attempts,error_code FROM evimed_geo.probe_jobs WHERE id='gj_crash'`);
+  assert.deepEqual(job, { status: "failed", attempts: attempt, error_code: "delivery_unknown_no_automatic_retry" });
+  assert.equal((await rows(`SELECT count(*)::int AS n FROM evimed_geo.test_confirm_sends`))[0].n, 1);
+  assert.equal((await rows(`SELECT failed FROM evimed_geo.rounds WHERE id='gr_crash'`))[0].failed, 1);
+  assert.equal(await store.leaseNextJob({ now, owner: "new-worker", leaseUntil: new Date(now.getTime()+1000), engines: ["deepseek"], paused: [], nightOpen: true,
+    nightMinAsks: 100, weekStart: new Date("2026-09-21T00:00:00Z"), weeklyCap: 0 }), null);
+});
+
+for (const attempt of [1,2,3]) test(`confirmation crash after unknown snapshot or dispatch on attempt ${attempt} never resubmits`, options, async () => {
+  await reset(); const id=`geo_crash_window_${attempt}`; await seed(id,{engines:["deepseek"],confirmation:true,repeats:2});
+  const h=await harness();
+  try {
+    const round=await oneConfirmation(h,id);
+    const jobs=await rows(`SELECT id FROM evimed_geo.probe_jobs WHERE round_id=$1 ORDER BY repeat_index`,[round.roundId]);
+    const expired=new Date(h.clock.now().getTime()-1000);
+    await database.query(`UPDATE evimed_geo.probe_jobs SET status='leased',attempts=$2,lease_until=$3,dispatch_started_at=CASE WHEN id=$4 THEN now() ELSE NULL END WHERE round_id=$1`,[round.roundId,attempt,expired,jobs[0].id]);
+    await database.query(`UPDATE evimed_geo.probe_jobs SET external_ref='accepted-retained' WHERE id=$1`,[jobs[1].id]);
+    await database.query(`INSERT INTO evimed_geo.snapshots (id,user_id,geo_project_id,round_id,probe_job_id,engine,question_id,status,warnings)
+      VALUES ($1,$2,$3,$4,$5,'deepseek',$6,'failed','["delivery_unknown_no_automatic_retry"]'::jsonb)`,[`${id}_unknown`,`user_${id}`,id,round.roundId,jobs[1].id,`${id}_q1`]);
+    await store.recoverExpiredLeases(h.clock.now());
+    const states=await rows(`SELECT status,attempts,error_code FROM evimed_geo.probe_jobs WHERE round_id=$1 ORDER BY repeat_index`,[round.roundId]);
+    assert.deepEqual(states.map(row=>[row.status,row.attempts,row.error_code]),Array(2).fill(["failed",attempt,"delivery_unknown_no_automatic_retry"]));
+    assert.equal((await rows(`SELECT external_ref FROM evimed_geo.probe_jobs WHERE id=$1`,[jobs[1].id]))[0].external_ref,"accepted-retained");
+    assert.equal((await rows(`SELECT failed FROM evimed_geo.rounds WHERE id=$1`,[round.roundId]))[0].failed,2);
+    await tickProbe({...h.deps,maxAsks:2}); assert.equal(h.probe.asks.length,0);
+  } finally { await h.probe.close(); }
+});
+
+for (const attempt of [1,2,3]) test(`a concurrent dispatch commit on attempt ${attempt} cannot be erased by lease recovery`, options, async () => {
+  await reset(); const id=`geo_lock_race_${attempt}`; await seed(id,{engines:["deepseek"],confirmation:true,repeats:1});
+  const h=await harness(); const blocker=new pg.Client({connectionString:isolatedUrl}); await blocker.connect();
+  try {
+    const round=await oneConfirmation(h,id); const [job]=await rows(`SELECT id FROM evimed_geo.probe_jobs WHERE round_id=$1`,[round.roundId]);
+    await database.query(`UPDATE evimed_geo.probe_jobs SET status='leased',attempts=$2,lease_until=$3 WHERE id=$1`,[job.id,attempt,new Date(h.clock.now().getTime()-1000)]);
+    await blocker.query("BEGIN"); await blocker.query(`UPDATE evimed_geo.probe_jobs SET dispatch_started_at=now() WHERE id=$1`,[job.id]);
+    const recovery=store.recoverExpiredLeases(h.clock.now());
+    let waiting=false;
+    for(let i=0;i<100 && !waiting;i+=1){ waiting=Boolean((await rows(`SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND query LIKE '%UPDATE evimed_geo.probe_jobs%'`)).length); if(!waiting) await new Promise(resolve=>setTimeout(resolve,10)); }
+    assert.ok(waiting); await blocker.query("COMMIT"); await recovery;
+    const [protectedRow]=await rows(`SELECT status,dispatch_started_at FROM evimed_geo.probe_jobs WHERE id=$1`,[job.id]);
+    assert.notEqual(protectedRow.status,"queued"); assert.ok(protectedRow.dispatch_started_at);
+    await store.recoverExpiredLeases(h.clock.now());
+    assert.equal((await rows(`SELECT status FROM evimed_geo.probe_jobs WHERE id=$1`,[job.id]))[0].status,"failed");
+    await store.holdJob(job.id,"late-accepted",{now:h.clock.now(),leaseUntil:new Date(h.clock.now().getTime()+60_000),runAfter:h.clock.now()});
+    const [late]=await rows(`SELECT status,external_ref FROM evimed_geo.probe_jobs WHERE id=$1`,[job.id]);
+    assert.deepEqual(late,{status:"leased",external_ref:"late-accepted"});
+    assert.equal((await store.heldJobsToPoll({now:h.clock.now(),engines:["deepseek"],limit:10})).some(row=>row.id===job.id),true);
+    const upstream={providers:async()=>({providers:[{provider:"deepseek",state:"ready"}]}),
+      read:async()=>({results:[{status:"ok",answer:A_RIGHT,answerDigest:null,screenshotName:null,latencyMs:1}],raw:[{status:"ok"}],integrity:{transport:"tls",signed:false,responseDigest:"test"}}),
+      submit:async()=>{throw new Error("must not resubmit");}};
+    await tickProbe({...h.deps,upstream:/** @type {any} */ (upstream),maxAsks:1});
+    assert.equal((await rows(`SELECT status FROM evimed_geo.probe_jobs WHERE id=$1`,[job.id]))[0].status,"done");
+    assert.equal((await rows(`SELECT count(*)::int AS n FROM evimed_geo.snapshots WHERE probe_job_id=$1 AND status='valid'`,[job.id]))[0].n,1);
+    assert.equal(h.probe.asks.length,0);
+  } finally { await blocker.query("ROLLBACK").catch(()=>{}); await blocker.end(); await h.probe.close(); }
+});
+
+test("a rolled-back dispatch marker permits only an unsent lease to recover", options, async () => {
+  await reset(); const id="geo_dispatch_rollback"; await seed(id,{engines:["deepseek"],confirmation:true,repeats:1});
+  const h=await harness(); const blocker=new pg.Client({connectionString:isolatedUrl}); await blocker.connect();
+  try {
+    const round=await oneConfirmation(h,id); const [job]=await rows(`SELECT id FROM evimed_geo.probe_jobs WHERE round_id=$1`,[round.roundId]);
+    await database.query(`UPDATE evimed_geo.probe_jobs SET status='leased',attempts=1,lease_until=$2 WHERE id=$1`,[job.id,new Date(h.clock.now().getTime()-1000)]);
+    await blocker.query("BEGIN"); await blocker.query(`UPDATE evimed_geo.probe_jobs SET dispatch_started_at=now() WHERE id=$1`,[job.id]);
+    const recovery=store.recoverExpiredLeases(h.clock.now());
+    let waiting=false; for(let i=0;i<100&&!waiting;i+=1){waiting=Boolean((await rows(`SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND query LIKE '%UPDATE evimed_geo.probe_jobs%'`)).length);if(!waiting)await new Promise(resolve=>setTimeout(resolve,10));}
+    assert.ok(waiting); await blocker.query("ROLLBACK"); await recovery;
+    const [saved]=await rows(`SELECT status,dispatch_started_at FROM evimed_geo.probe_jobs WHERE id=$1`,[job.id]);
+    assert.deepEqual(saved,{status:"queued",dispatch_started_at:null}); assert.equal(h.probe.asks.length,0);
+  } finally { await blocker.query("ROLLBACK").catch(()=>{}); await blocker.end(); await h.probe.close(); }
+});
+
+test("old errors are not backfilled but a new observed recurrence can be confirmed", options, async () => {
+  await reset();
+  await seed("geo_recurrence", { engines: ["deepseek"] });
+  const h = await harness();
+  const content = new GeoStore({ database });
+  try {
+    await enqueueRound(h.deps, { geoProjectId: "geo_recurrence", kind: "baseline", questionIds: ["geo_recurrence_q1"] });
+    await tickProbe({ ...h.deps, maxAsks: 5 });
+    await tickParse({ ...h.deps, maxParse: 5 });
+    const [old] = await rows(`SELECT id,confirm FROM evimed_geo.errors WHERE geo_project_id='geo_recurrence'`);
+    assert.equal(old.confirm.status, "unavailable");
+    await database.query(`UPDATE evimed_geo.errors SET confirm=jsonb_set(confirm - 'failedAt','{reason}',to_jsonb('geo_confirmation_scope_changed'::text)) WHERE id=$1`, [old.id]);
+    h.clock.advance(1000);
+    const preview = await previewGeoConfirmationAuthorization(content, "user_geo_recurrence", "geo_recurrence");
+    await authorizeGeoConfirmation(content, "user_geo_recurrence", "geo_recurrence", "user_geo_recurrence", preview.token, h.clock.now);
+    h.clock.advance(61_000);
+    await tickErrors(h.deps);
+    assert.equal((await rows(`SELECT count(*)::int AS n FROM evimed_geo.rounds WHERE kind='confirm'`))[0].n, 0);
+    await enqueueRound(h.deps, { geoProjectId: "geo_recurrence", kind: "baseline", questionIds: ["geo_recurrence_q1"] });
+    await tickProbe({ ...h.deps, maxAsks: 5 });
+    await tickParse({ ...h.deps, maxParse: 5 });
+    const [recurred] = await rows(`SELECT confirm,first_snapshot_id,last_snapshot_id,judgment_history FROM evimed_geo.errors WHERE id=$1`, [old.id]);
+    assert.equal(recurred.confirm.status, "pending");
+    assert.notEqual(recurred.first_snapshot_id, recurred.last_snapshot_id);
+    assert.equal(recurred.confirm.observationId, recurred.last_snapshot_id);
+    assert.ok(recurred.judgment_history.some(row => row.kind === "confirmation_reconsidered" && row.previousConfirmation?.reason === "geo_confirmation_scope_changed"));
+    await database.query(`UPDATE evimed_geo.probe_jobs SET status='skipped' WHERE round_id=$1`, [recurred.confirm.roundId]);
+    await database.query(`UPDATE evimed_geo.rounds SET status='done' WHERE id=$1`, [recurred.confirm.roundId]);
+    for (const n of [2,3]) await database.query(`INSERT INTO evimed_geo.rounds (id,user_id,geo_project_id,kind,set_version,engines,planned,status,ref)
+      VALUES ($1,'user_geo_recurrence','geo_recurrence','confirm',1,ARRAY['deepseek'],10,'done',$2::jsonb)`,
+    [`gr_old_${n}`, JSON.stringify({ errorId: old.id, observationId: recurred.last_snapshot_id, questionId: "geo_recurrence_q1", engine: "deepseek" })]);
+    await database.query(`INSERT INTO evimed_geo.snapshots (id,user_id,geo_project_id,engine,question_id,asked_at,status) VALUES ('snap_closed','user_geo_recurrence','geo_recurrence','deepseek','geo_recurrence_q1',$1,'valid')`, [h.clock.now().toISOString()]);
+    await database.query(`UPDATE evimed_geo.errors SET status='closed',closed_snapshot_id='snap_closed',confirm=$2::jsonb WHERE id=$1`,
+      [old.id, JSON.stringify({ status: "skipped", tries: 3, observationId: recurred.last_snapshot_id })]);
+    h.clock.advance(1000);
+    const renewed = await previewGeoConfirmationAuthorization(content, "user_geo_recurrence", "geo_recurrence");
+    await authorizeGeoConfirmation(content, "user_geo_recurrence", "geo_recurrence", "user_geo_recurrence", renewed.token, h.clock.now);
+    h.clock.advance(1000);
+    await enqueueRound(h.deps, { geoProjectId: "geo_recurrence", kind: "baseline", questionIds: ["geo_recurrence_q1"] });
+    await tickProbe({ ...h.deps, maxAsks: 5 });
+    await tickParse({ ...h.deps, maxParse: 5 });
+    const [reopened] = await rows(`SELECT status,confirm,judgment_history FROM evimed_geo.errors WHERE id=$1`, [old.id]);
+    assert.equal(reopened.status, "open");
+    assert.equal(reopened.confirm.status, "pending", "a closed event's exhausted attempts do not consume a new recurrence's allowance");
+    assert.ok(reopened.judgment_history.some(row => row.kind === "business_reopened" && row.previousConfirmation?.tries === 3));
+    await database.query(`UPDATE evimed_geo.errors SET confirm=$2::jsonb WHERE id=$1`, [old.id, JSON.stringify({ status: "skipped", tries: 3, observationId: reopened.confirm.observationId })]);
+    h.clock.advance(1000);
+    await enqueueRound(h.deps, { geoProjectId: "geo_recurrence", kind: "baseline", questionIds: ["geo_recurrence_q1"] });
+    await tickProbe({ ...h.deps, maxAsks: 20 });
+    await tickParse({ ...h.deps, maxParse: 20 });
+    const [sameEvent] = await rows(`SELECT confirm,last_snapshot_id FROM evimed_geo.errors WHERE id=$1`, [old.id]);
+    assert.equal(sameEvent.confirm.tries, 3, "another observation of an open event cannot reset exhausted retries");
+    await database.query(`UPDATE evimed_geo.rounds SET status='done' WHERE geo_project_id='geo_recurrence' AND kind='confirm'`);
+    await assert.rejects(enqueueRound(h.deps, { geoProjectId: "geo_recurrence", kind: "confirm", questionIds: ["geo_recurrence_q1"], engines: ["deepseek"], repeat: 10,
+      ref: { errorId: old.id, eventId: sameEvent.confirm.observationId, observationId: sameEvent.last_snapshot_id, questionId: "geo_recurrence_q1", engine: "deepseek" } }), { code: "geo_confirmation_round_limit" });
+    await assert.rejects(enqueueRound(h.deps, { geoProjectId: "geo_recurrence", kind: "confirm", questionIds: ["geo_recurrence_q1"], engines: ["deepseek"], repeat: 10,
+      ref: { errorId: old.id, eventId: sameEvent.last_snapshot_id, observationId: sameEvent.last_snapshot_id, questionId: "geo_recurrence_q1", engine: "deepseek" } }), { code: "geo_confirmation_scope_changed" });
+  } finally { await h.probe.close(); }
+});
+
+test("another process saving a question set wins before a waiting confirmation can enqueue", options, async () => {
+  await reset();
+  await seed("geo_race", { engines: ["deepseek"], confirmation: true });
+  const h = await harness();
+  const blocker = new pg.Client({ connectionString: isolatedUrl });
+  await blocker.connect();
+  let child;
+  try {
+    await database.query(`INSERT INTO evimed_geo.snapshots (id,user_id,geo_project_id,engine,question_id,asked_at,status) VALUES ('snap_race','user_geo_race','geo_race','deepseek','geo_race_q1',$1,'valid')`, [h.clock.now().toISOString()]);
+    await database.query(`INSERT INTO evimed_geo.errors (id,user_id,geo_project_id,fingerprint,engine,question_id,first_snapshot_id,status,created_at,updated_at) VALUES ('ge_race','user_geo_race','geo_race','fp','deepseek','geo_race_q1','snap_race','open',$1,$1)`, [h.clock.now().toISOString()]);
+    await blocker.query("BEGIN");
+    await blocker.query(`SELECT pg_advisory_xact_lock(hashtext('evimed-geo-set:' || $1))`, ["geo_race"]);
+    const code = `import {ControlPlaneDatabase} from './apps/server/src/controlPlaneDatabase.mjs';
+      import {GeoStore} from './apps/server/src/geoStore.mjs';
+      const db=new ControlPlaneDatabase({databaseUrl:process.env.TEST_URL,databasePoolMax:1,databaseConnectionTimeoutMs:2000});
+      const store=new GeoStore({database:db}); await store.ready();
+      const pid=(await db.query('SELECT pg_backend_pid() AS pid')).rows[0].pid; process.stdout.write(String(pid)+'\\n');
+      await store.writeQuestionSet('user_geo_race','geo_race',{groups:[{name:'new',questions:[{text:'New?',isMeasured:true}]}],contract:{samplingMode:'recurring',engines:['deepseek'],repeats:7}});
+      await db.close();`;
+    child = spawn(process.execPath, ["--input-type=module", "-e", code], { cwd: process.cwd(), env: { ...process.env, TEST_URL: isolatedUrl }, stdio: ["ignore", "pipe", "pipe"] });
+    const childExit = once(child, "exit");
+    const [chunk] = await once(child.stdout, "data");
+    const pid = Number(String(chunk).trim());
+    assert.ok(Number.isInteger(pid));
+    let waiting = false;
+    for (let i = 0; i < 100 && !waiting; i += 1) {
+      waiting = Boolean((await rows(`SELECT 1 FROM pg_locks WHERE pid=$1 AND locktype='advisory' AND NOT granted`, [pid])).length);
+      if (!waiting) await new Promise(resolve => setTimeout(resolve, 10));
+    }
+    assert.ok(waiting, "the other process is waiting for the question-set lock");
+    const pending = enqueueRound(h.deps, { geoProjectId: "geo_race", kind: "confirm", questionIds: ["geo_race_q1"], engines: ["deepseek"], repeat: 10,
+      ref: { errorId: "ge_race", observationId: "snap_race", questionId: "geo_race_q1", engine: "deepseek" } });
+    const rejected = assert.rejects(pending, { code: "geo_confirmation_authorization_required" });
+    await blocker.query("COMMIT");
+    await rejected;
+    const [exit] = await childExit;
+    assert.equal(exit, 0);
+    assert.equal((await rows(`SELECT count(*)::int AS n FROM evimed_geo.rounds WHERE kind='confirm'`))[0].n, 0);
+  } finally {
+    await blocker.query("ROLLBACK").catch(() => {});
+    await blocker.end();
+    child?.kill();
+    await h.probe.close();
+  }
+});
+
+for (const action of ["lock", "project"]) test(`another process changing ${action} scope invalidates a waiting confirmation`, options, async () => {
+  await reset();
+  await seed("geo_cross", { engines: ["deepseek"], confirmation: true });
+  if (action === "lock") await database.query(`UPDATE evimed_geo.question_sets SET locked_at=NULL WHERE geo_project_id='geo_cross'`);
+  const h = await harness();
+  const blocker = new pg.Client({ connectionString: isolatedUrl });
+  await blocker.connect();
+  let child;
+  try {
+    await database.query(`INSERT INTO evimed_geo.snapshots (id,user_id,geo_project_id,engine,question_id,asked_at,status) VALUES ('snap_cross','user_geo_cross','geo_cross','deepseek','geo_cross_q1',$1,'valid')`, [h.clock.now().toISOString()]);
+    await database.query(`INSERT INTO evimed_geo.errors (id,user_id,geo_project_id,fingerprint,engine,question_id,first_snapshot_id,status,created_at,updated_at) VALUES ('ge_cross','user_geo_cross','geo_cross','fp','deepseek','geo_cross_q1','snap_cross','open',$1,$1)`, [h.clock.now().toISOString()]);
+    const code = `import {ControlPlaneDatabase} from './apps/server/src/controlPlaneDatabase.mjs'; import {GeoStore} from './apps/server/src/geoStore.mjs';
+      const db=new ControlPlaneDatabase({databaseUrl:process.env.TEST_URL,databasePoolMax:1,databaseConnectionTimeoutMs:2000});
+      const store=new GeoStore({database:db}); await store.ready();
+      const pid=(await db.query('SELECT pg_backend_pid() AS pid')).rows[0].pid; process.stdout.write(String(pid)+'\\n');
+      await new Promise(resolve=>process.stdin.once('data',resolve));
+      if(process.env.TEST_ACTION==='lock') await store.lockQuestionSet('geo_cross',1,3);
+      else await store.updateProject('user_geo_cross','geo_cross',{coverageDays:180}); await db.close();`;
+    child = spawn(process.execPath, ["--input-type=module", "-e", code], { cwd: process.cwd(), env: { ...process.env, TEST_URL: isolatedUrl, TEST_ACTION: action }, stdio: ["pipe", "pipe", "pipe"] });
+    const childExit = once(child, "exit");
+    const [chunk] = await once(child.stdout, "data");
+    const pid = Number(String(chunk).trim());
+    assert.ok(Number.isInteger(pid));
+    await blocker.query("BEGIN");
+    await blocker.query(`SELECT pg_advisory_xact_lock(hashtext('evimed-geo-set:' || $1))`, ["geo_cross"]);
+    if (action === "project") await blocker.query(`SELECT id FROM evimed_geo.projects WHERE id='geo_cross' FOR UPDATE`);
+    child.stdin.end("go\n");
+    let waiting = false;
+    for (let i = 0; i < 100 && !waiting; i += 1) {
+      waiting = Boolean((await rows(`SELECT 1 FROM pg_stat_activity WHERE pid=$1 AND wait_event_type='Lock'`, [pid])).length);
+      if (!waiting) await new Promise(resolve => setTimeout(resolve, 10));
+    }
+    assert.ok(waiting, "the other process is waiting on the affected scope");
+    const pending = enqueueRound(h.deps, { geoProjectId: "geo_cross", kind: "confirm", questionIds: ["geo_cross_q1"], engines: ["deepseek"], repeat: 10,
+      ref: { errorId: "ge_cross", observationId: "snap_cross", questionId: "geo_cross_q1", engine: "deepseek" } });
+    const rejected = assert.rejects(pending, { code: action === "project" ? "geo_monitoring_authorization_required" : "geo_confirmation_authorization_required" });
+    await blocker.query("COMMIT");
+    await rejected;
+    const [exit] = await childExit;
+    assert.equal(exit, 0);
+    assert.equal((await rows(`SELECT count(*)::int AS n FROM evimed_geo.rounds WHERE kind='confirm'`))[0].n, 0);
+  } finally {
+    await blocker.query("ROLLBACK").catch(() => {});
+    await blocker.end(); child?.kill(); await h.probe.close();
+  }
+});
 
 /** The probe's answers in the baseline: a wrong statement, a suspect that is asked again, a refusal. */
 const baselineAnswers = (/** @type {{ question: string, engine: string, nth: number }} */ { question, engine, nth }) => {
@@ -161,6 +497,7 @@ async function harness(setup = {}) {
   const script = { ask: setup.answers ?? baselineAnswers };
   const probe = await startFakeProbe({ ask: (request) => script.ask(request), providers: setup.providers, async: setup.async });
   const clock = testClock(setup.clock ?? "2026-09-25T15:00:00Z"); // 23:00 in Shanghai: inside the night window
+  store.sampleClock = clock.now;
   const model = fakeModel(judgeAnswers);
   /** @type {any[]} */
   const alerts = [];
@@ -190,7 +527,7 @@ const cell = (cells, where) => cells.find((row) => Object.entries(where).every((
 
 test("a round of 3 questions × 2 engines becomes answers, facts and numbers; a suspect is asked again and alerted, a refusal stays in", options, async () => {
   await reset();
-  await seed("geo_a");
+  await seed("geo_a", { confirmation: true });
   const h = await harness();
   try {
     const round = await enqueueRound(h.deps, { geoProjectId: "geo_a", kind: "baseline" });
@@ -310,7 +647,7 @@ function pick(row) {
 
 test("an S3 error notifies once, is confirmed by ten fresh asks, closes only after a later answer without it, and reopens when it returns", options, async () => {
   await reset();
-  await seed("geo_b");
+  await seed("geo_b", { confirmation: true });
   const h = await harness();
   try {
     await enqueueRound(h.deps, { geoProjectId: "geo_b", kind: "baseline" });
@@ -408,7 +745,7 @@ test("an S3 notice the inbox refused leaves the error untold and is tried again 
 
 test("a wrong statement whose error was never written is recorded by the housekeeping, notified and queued for confirmation, once (Q-6)", options, async () => {
   await reset();
-  await seed("geo_q6", { engines: ["deepseek"] });
+  await seed("geo_q6", { engines: ["deepseek"], confirmation: true });
   const h = await harness({ answers: ({ question }) => (question === Q1 ? { answer: A_WRONG, searchResults: OWNED_LABEL } : { answer: A_RIGHT }) });
   try {
     await enqueueRound(h.deps, { geoProjectId: "geo_q6", kind: "baseline", questionIds: ["geo_q6_q1"] });
@@ -716,12 +1053,18 @@ test("big baseline rounds wait for the night window, small rounds do not, the we
   try {
     const big = await enqueueRound(h.deps, { geoProjectId: "geo_e", kind: "baseline", repeat: 11 });
     assert.equal(big.planned, 66);
+    await database.query(`UPDATE evimed_geo.question_sets SET contract=$2::jsonb WHERE geo_project_id=$1`, ["geo_e", JSON.stringify({ samplingMode: "recurring", engines: ["deepseek", "doubao"], repeats: 2 })]);
+    const content = new GeoStore({ database });
+    const preview = await previewGeoConfirmationAuthorization(content, "user_geo_e", "geo_e");
+    await authorizeGeoConfirmation(content, "user_geo_e", "geo_e", "user_geo_e", preview.token, () => new Date("2026-01-01T00:00:00Z"));
+    await database.query(`INSERT INTO evimed_geo.snapshots (id,user_id,geo_project_id,engine,question_id,asked_at,status) VALUES ('snap_e','user_geo_e','geo_e','deepseek','geo_e_q1','2026-09-18T04:00:00Z','valid')`);
+    await database.query(`INSERT INTO evimed_geo.errors (id,user_id,geo_project_id,fingerprint,engine,question_id,first_snapshot_id,status,created_at,updated_at) VALUES ('error_e','user_geo_e','geo_e','fp','deepseek','geo_e_q1','snap_e','open',$1,$1)`, [h.clock.now().toISOString()]);
     const noon = await tickProbe({ ...h.deps, maxAsks: 5 });
     assert.equal(noon.asked, 0);
     assert.equal(noon.held.night, 66);
     assert.equal(h.probe.asks.length, 0);
 
-    await enqueueRound(h.deps, { geoProjectId: "geo_e", kind: "confirm", questionIds: ["geo_e_q1"], engines: ["deepseek"], repeat: 2 });
+    await enqueueRound(h.deps, { geoProjectId: "geo_e", kind: "confirm", questionIds: ["geo_e_q1"], engines: ["deepseek"], repeat: 2, ref: { errorId: "error_e", questionId: "geo_e_q1", engine: "deepseek" } });
     const small = await tickProbe({ ...h.deps, maxAsks: 5 });
     assert.equal(small.asked, 2, "a confirmation round runs any time");
 
@@ -1018,7 +1361,7 @@ async function seededRound({ project, id, kind, date, factsAt, groups, mentions 
       await database.query(`INSERT INTO evimed_geo.snapshots (id, user_id, round_id, geo_project_id, question_id, engine, asked_at, status, answer_text, citations, surface)
         VALUES ($1, $2, $3, $4, $5, 'deepseek', $6, 'valid', 'a seeded answer', '[]'::jsonb, '{"mode":"web"}'::jsonb)`, [snapshot, `user_${project}`, id, project, questionId, factsAt]);
       await database.query(`INSERT INTO evimed_geo.facts (snapshot_id, user_id, geo_project_id, brands, mentions_ours, first_ours, recommended_ours, retrieval_triggered,
-          statements, failure_mode, judged_at, created_at) VALUES ($1, $2, $3, $4::jsonb, $5, $5, false, false, '[]'::jsonb, $6, $7, $7)`,
+          statements, failure_mode, judged_at, created_at, checks, judge_extract, parser_version) VALUES ($1, $2, $3, $4::jsonb, $5, $5, false, false, '[]'::jsonb, $6, $7, $7, '{"judgementCoverage":{"status":"complete"}}', '{"rubricVersion":"fixture-v1"}', 'parser-v1')`,
       [snapshot, `user_${project}`, project, JSON.stringify(mentioned ? [{ name: "玛仕度肽", ours: true, competitor: false, position: 1, inRecommendation: false, count: 1 }] : []),
         mentioned, mentioned ? "correct" : "omitted", factsAt]);
     }
@@ -1037,35 +1380,126 @@ test("the net effect compares the groups both windows measured: a control group 
     claims: [DOSING],
   });
   const groups = { pg: pilot, ...controls };
+  const skipKimi = async roundId => {
+    await database.query(`UPDATE evimed_geo.rounds SET engines=ARRAY['deepseek','kimi'] WHERE id=$1`, [roundId]);
+    await database.query(`INSERT INTO evimed_geo.probe_jobs(id,user_id,round_id,geo_project_id,question_id,engine,repeat_index,status,attempts,error_code)
+      VALUES($1,'user_geo_arm',$2,'geo_arm','pg_q1','kimi',0,'skipped',0,'engine_paused')`, [`skipped-${roundId}`, roundId]);
+  };
   const net = async (/** @type {string} */ roundId) => (await rows(`SELECT numerator::float8 AS pilot_change, denominator::float8 AS control_change, value::float8 AS net, status, reason
     FROM evimed_geo.metrics WHERE round_id = $1 AND metric_id = 'NET' AND scope = 'pool' AND pool = 'P2' AND variant = 'M-01'`, [roundId]))[0];
 
   // The baseline: the pilot mentions us in 6 of 30 answers, each of the first three control groups in 2 of 10, the fourth in 8 of 10.
   await seededRound({ project: "geo_arm", id: "r_base", kind: "baseline", date: "2026-08-01", factsAt: "2026-08-01T10:00:00Z", groups,
     mentions: { pg: 6, c1: 2, c2: 2, c3: 2, c4: 8 } });
+  await skipKimi("r_base");
   assert.equal((await tickMetrics({ store, now: () => new Date("2026-08-02T00:00:00Z") })).rounds, 1);
   assert.deepEqual((await rows(`SELECT value::float8 AS value, denominator::float8 AS denominator FROM evimed_geo.metrics WHERE round_id = 'r_base' AND scope = 'arm' AND arm = 'control'
     AND pool = 'P2' AND metric_id = 'M-01'`)).map((row) => [row.value, row.denominator]), [[35, 40]], "the baseline's control arm was the four groups");
 
+  // A later rejudgment must not rewrite the already-computed baseline input.
+  await database.query(`UPDATE evimed_geo.facts SET mentions_ours=false, judge_extract='{"rubricVersion":"later"}' WHERE snapshot_id LIKE 'r_base_c1_%'`);
   // The fourth control group is touched by an article after the baseline: it leaves the control arm from now on.
   await database.query(`INSERT INTO evimed_geo.articles (id, user_id, geo_project_id, group_id, status, safety) VALUES ('a_c4', 'user_geo_arm', 'geo_arm', 'c4', 'draft', 'clear')`);
   // Five weeks on: the pilot has risen to 12 of 30, the three clean control groups have not moved (and the fourth is still answered).
   await seededRound({ project: "geo_arm", id: "r_week", kind: "weekly", date: "2026-09-05", factsAt: "2026-09-05T10:00:00Z", groups,
     mentions: { pg: 12, c1: 2, c2: 2, c3: 2, c4: 8 } });
+  await skipKimi("r_week");
   assert.equal((await tickMetrics({ store, now: () => new Date("2026-09-06T00:00:00Z") })).rounds, 1);
 
   // The control arm is c1–c3 in both windows: 20 % then 20 %, no change; the pilot gained 20 points. (Against the baseline's four groups
   // the control arm read 35 % then 20 %, a fall of 15 points that no group suffered, and the net effect 35.)
   const effect = await net("r_week");
+  const [savedNet] = await rows(`SELECT * FROM evimed_geo.metrics WHERE round_id='r_week' AND metric_id='NET' AND scope='pool' AND pool='P2' AND variant='M-01'`);
+  const proofs = await rows(`SELECT generation,round_id,payload FROM evimed_geo.metric_input_snapshots WHERE generation=ANY($1::text[])`, [savedNet.assessment.generations.map(item => item.generation)]);
+  const snapshots = new Map(proofs.map(item => [item.generation, { generation: item.generation, roundId: item.round_id, payload: item.payload }]));
+  const { verifyFrozenNetRow } = await import("../src/geoMetricsJob.mjs");
+  assert.equal(verifyFrozenNetRow(savedNet, snapshots), true);
+  assert.equal(verifyFrozenNetRow({ ...savedNet, value: 999 }, snapshots), false);
+  assert.equal(verifyFrozenNetRow({ ...savedNet, noise_band: 99 }, snapshots), false, "the default threshold is part of the proof");
+  assert.equal(verifyFrozenNetRow(savedNet, new Map()), false);
+  const skippedEngineSnapshots = new Map([...snapshots].map(([key, value]) => {
+    const copy = structuredClone(value); copy.payload.options.engines = ["deepseek", "kimi"]; return [key, copy];
+  }));
+  assert.equal(verifyFrozenNetRow(savedNet, skippedEngineSnapshots), true,
+    "the stable actual engine cohort, not the planned-but-skipped engine, is the proof basis");
   assert.deepEqual({ ...effect }, { pilot_change: 20, control_change: 0, net: 20, status: "ok", reason: "up" });
   // The cells each round stored stay as they were measured.
   assert.deepEqual((await rows(`SELECT value::float8 AS value FROM evimed_geo.metrics WHERE round_id = 'r_base' AND scope = 'arm' AND arm = 'control' AND pool = 'P2' AND metric_id = 'M-01'`)).map((row) => row.value), [35]);
   assert.deepEqual((await rows(`SELECT value::float8 AS value FROM evimed_geo.metrics WHERE round_id = 'r_week' AND scope = 'arm' AND arm = 'control' AND pool = 'P2' AND metric_id = 'M-01'`)).map((row) => row.value), [20]);
+  // A measured noise band carries the exact independent frozen noise generation.
+  await seededRound({ project: "geo_arm", id: "r_noise", kind: "noise", date: "2026-08-20", factsAt: "2026-08-20T10:00:00Z", groups: { pg: pilot }, mentions: { pg: 6 } });
+  await skipKimi("r_noise");
+  for (const question of pilot) {
+    for (const repeat of [0, 1]) await database.query(`INSERT INTO evimed_geo.probe_jobs(id,user_id,round_id,geo_project_id,question_id,engine,repeat_index,status,attempts)
+      VALUES($1,'user_geo_arm','r_noise','geo_arm',$2,'deepseek',$3,'done',1)`, [`noise-job-${question}-${repeat}`, question, repeat]);
+    await database.query(`UPDATE evimed_geo.snapshots SET probe_job_id=$1 WHERE id=$2`, [`noise-job-${question}-0`, `r_noise_${question}`]);
+    await database.query(`INSERT INTO evimed_geo.snapshots(id,user_id,round_id,geo_project_id,question_id,engine,asked_at,status,answer_text,citations,surface,probe_job_id)
+      SELECT $1,user_id,round_id,geo_project_id,question_id,engine,asked_at,status,answer_text,citations,surface,$2 FROM evimed_geo.snapshots WHERE id=$3`, [`r_noise_${question}_repeat`, `noise-job-${question}-1`, `r_noise_${question}`]);
+    await database.query(`INSERT INTO evimed_geo.facts(snapshot_id,user_id,geo_project_id,brands,mentions_ours,first_ours,recommended_ours,retrieval_triggered,statements,failure_mode,judged_at,created_at,checks,judge_extract,parser_version)
+      SELECT $1,user_id,geo_project_id,brands,mentions_ours,first_ours,recommended_ours,retrieval_triggered,statements,failure_mode,judged_at,created_at,checks,judge_extract,parser_version FROM evimed_geo.facts WHERE snapshot_id=$2`, [`r_noise_${question}_repeat`, `r_noise_${question}`]);
+  }
+  await database.query(`UPDATE evimed_geo.facts SET mentions_ours=true,first_ours=true,brands='[{"name":"玛仕度肽","ours":true,"count":1}]'::jsonb
+    WHERE snapshot_id=ANY($1::text[])`, [pilot.slice(6, 10).map(question => `r_noise_${question}_repeat`)]);
+  await measureRound({ store, now: () => new Date("2026-09-06T01:00:00Z") }, "r_noise");
+  await measureRound({ store, now: () => new Date("2026-09-06T02:00:00Z") }, "r_week");
+  const [measuredNet] = await rows(`SELECT * FROM evimed_geo.metrics WHERE round_id='r_week' AND metric_id='NET' AND scope='pool' AND pool='P2' AND variant='M-01'`);
+  assert.equal(measuredNet.noise_measured, true);
+  assert.ok(Number(measuredNet.noise_band) > 0);
+  const refs = [...measuredNet.assessment.generations.map(item => item.generation), measuredNet.assessment.noise.generation];
+  const measuredInputs = await rows(`SELECT generation,round_id,payload FROM evimed_geo.metric_input_snapshots WHERE generation=ANY($1::text[])`, [refs]);
+  const measuredMap = new Map(measuredInputs.map(item => [item.generation, { generation: item.generation, roundId: item.round_id, payload: item.payload }]));
+  assert.equal(verifyFrozenNetRow(measuredNet, measuredMap), true);
+  assert.equal(verifyFrozenNetRow({ ...measuredNet, noise_band: 99 }, measuredMap), false);
+  const noiseKey = measuredNet.assessment.noise.generation;
+  const fastControl = new Map([...measuredMap].map(([key, value]) => {
+    const copy = structuredClone(value);
+    for (const row of copy.payload.rows) Object.assign(row.surface, { deep: false, newChat: false, city: "北京" });
+    return [key, copy];
+  }));
+  assert.equal(verifyFrozenNetRow(measuredNet, fastControl), true, "the same fast sampling surface remains comparable");
+  for (const [field, value] of [["deep", true], ["newChat", true], ["city", "上海"]]) {
+    const altered = new Map(fastControl); const noiseInput = structuredClone(altered.get(noiseKey));
+    for (const row of noiseInput.payload.rows) row.surface[field] = value;
+    altered.set(noiseKey, noiseInput);
+    assert.equal(verifyFrozenNetRow(measuredNet, altered), false, `noise surface ${field} must match the compared samples`);
+  }
+  const harmless = new Map(fastControl); const extra = structuredClone(harmless.get(noiseKey));
+  for (const row of extra.payload.rows) Object.assign(row.surface, { transport: "fixture", responseDigest: "unrelated", measurementContract: { samplingMode: "noise", repeats: 9 } });
+  harmless.set(noiseKey, extra);
+  assert.equal(verifyFrozenNetRow(measuredNet, harmless), true, "transport metadata and different noise repeat counts do not define the sampling surface");
+  for (const field of ["parserVersion", "rubricVersion", "brands"]) {
+    const altered = new Map(measuredMap); const original = structuredClone(altered.get(noiseKey));
+    const input = original.payload.rows.find(row => row.facts);
+    if (field === "parserVersion") input.facts.parserVersion = "different";
+    else if (field === "rubricVersion") input.facts.judgeExtract.rubricVersion = "different";
+    else input.facts.brands = [];
+    altered.set(noiseKey, original);
+    assert.equal(verifyFrozenNetRow(measuredNet, altered), false, `tampered noise ${field} is not proof`);
+  }
+  const missingNoise = new Map(measuredMap); missingNoise.delete(noiseKey);
+  assert.equal(verifyFrozenNetRow(measuredNet, missingNoise), false);
+  await database.query(`UPDATE evimed_geo.snapshots SET surface=jsonb_set(surface,'{deep}','true'::jsonb) WHERE round_id='r_noise'`);
+  await measureRound({ store, now: () => new Date("2026-09-06T02:10:00Z") }, "r_noise");
+  await measureRound({ store, now: () => new Date("2026-09-06T02:20:00Z") }, "r_week");
+  assert.deepEqual([(await net("r_week")).status, (await net("r_week")).reason], ["not_measurable", "noise_basis_unrecorded"]);
+  await database.query(`UPDATE evimed_geo.snapshots SET surface=surface - 'deep' WHERE round_id='r_noise'`);
+  await database.query(`UPDATE evimed_geo.facts SET parser_version='changed',judge_extract='{"rubricVersion":"later"}' WHERE snapshot_id='r_noise_pg_q1'`);
+  assert.equal(verifyFrozenNetRow(measuredNet, measuredMap), true, "later facts never rewrite the frozen proof");
+  await measureRound({ store, now: () => new Date("2026-09-06T03:00:00Z") }, "r_noise");
+  await measureRound({ store, now: () => new Date("2026-09-06T04:00:00Z") }, "r_week");
+  assert.deepEqual([(await net("r_week")).status, (await net("r_week")).reason], ["not_measurable", "noise_basis_unrecorded"]);
+  // Preserve this test's later independent Q3 cases without a noise band.
+  await database.query(`DELETE FROM evimed_geo.metrics WHERE round_id='r_noise' AND metric_id='NOISE'`);
+
   // Each round records which groups its arms were.
   const [recorded] = await rows(`SELECT ref -> 'balance' -> 'arms' AS arms FROM evimed_geo.rounds WHERE id = 'r_week'`);
   assert.deepEqual(recorded.arms, { pilot: ["pg"], control: ["c1", "c2", "c3"] });
   const [baseline] = await rows(`SELECT ref -> 'balance' -> 'arms' AS arms FROM evimed_geo.rounds WHERE id = 'r_base'`);
   assert.deepEqual(baseline.arms, { pilot: ["pg"], control: ["c1", "c2", "c3", "c4"] });
+
+  const frozen = await rows(`SELECT computation_generation FROM evimed_geo.metrics WHERE round_id='r_base' AND scope='arm' LIMIT 1`);
+  assert.ok(frozen[0].computation_generation);
+  assert.equal((await rows(`SELECT count(*)::int AS count FROM evimed_geo.metric_input_snapshots WHERE generation=$1`, [frozen[0].computation_generation]))[0].count, 1);
 
   // A baseline measured before the arms were recorded is compared by the groups its answers belong to: the same number.
   await database.query(`UPDATE evimed_geo.rounds SET ref = ref #- '{balance,arms}' WHERE id = 'r_base'`);
@@ -1078,6 +1512,35 @@ test("the net effect compares the groups both windows measured: a control group 
   await measureRound({ store, now: () => new Date("2026-09-08T00:00:00Z") }, "r_week");
   assert.deepEqual({ ...(await net("r_week")) }, { pilot_change: 20, control_change: 0, net: 20, status: "ok", reason: "up" });
   assert.deepEqual((await rows(`SELECT value::float8 AS value FROM evimed_geo.metrics WHERE round_id = 'r_week' AND scope = 'arm' AND arm = 'control' AND pool = 'P2' AND metric_id = 'M-01'`)).map((row) => row.value), [35]);
+  await assert.rejects(store.writeMetrics({ roundId: "r_week", geoProjectId: "geo_arm", userId: "user_geo_arm", computedAt: new Date(),
+    generation: "atomic-failure-fixture", snapshot: { version: 1, rows: [] }, rows: [{ scope: "arm", arm: "pilot", metricId: "M-01", status: "invalid" }] }));
+  assert.equal((await rows(`SELECT count(*)::int AS count FROM evimed_geo.metric_input_snapshots WHERE generation='atomic-failure-fixture'`))[0].count, 0);
+  for (const [field, change, restore] of [
+    ["judge_extract", `'{}'::jsonb`, `'{"rubricVersion":"fixture-v1"}'::jsonb`],
+    ["judged_at", 'NULL', `'2026-09-05T10:00:00Z'::timestamptz`],
+    ["parser_version", "'changed-parser'", "'parser-v1'"],
+  ]) {
+    await database.query(`UPDATE evimed_geo.facts SET ${field}=${change} WHERE snapshot_id='r_week_pg_q1'`);
+    await measureRound({ store, now: () => new Date("2026-09-09T00:00:00Z") }, "r_week");
+    assert.equal((await net("r_week")).status, "not_measurable");
+    assert.equal((await net("r_week")).net, null);
+    await database.query(`UPDATE evimed_geo.facts SET ${field}=${restore} WHERE snapshot_id='r_week_pg_q1'`);
+  }
+  await database.query(`UPDATE evimed_geo.snapshots SET surface='{"mode":"other"}' WHERE id='r_week_pg_q1'`);
+  await measureRound({ store, now: () => new Date("2026-09-09T00:00:00Z") }, "r_week");
+  assert.equal((await net("r_week")).status, "not_measurable");
+  await database.query(`UPDATE evimed_geo.snapshots SET surface='{"mode":"web"}' WHERE id='r_week_pg_q1'`);
+  await database.query(`UPDATE evimed_geo.questions SET pool='P3' WHERE id='pg_q1'`);
+  await measureRound({ store, now: () => new Date("2026-09-09T00:00:00Z") }, "r_week");
+  assert.equal((await net("r_week")).status, "not_measurable");
+  await database.query(`UPDATE evimed_geo.questions SET pool='P2' WHERE id='pg_q1'`);
+  await database.query(`UPDATE evimed_geo.facts SET parser_version='changed-parser' WHERE snapshot_id='r_week_pg_q1'`);
+  await measureRound({ store, now: () => new Date("2026-09-09T00:00:00Z") }, "r_week");
+  assert.deepEqual([ (await net("r_week")).status, (await net("r_week")).reason ], ["not_measurable", "judge_version_unrecorded"]);
+  await database.query(`UPDATE evimed_geo.facts SET parser_version='parser-v1' WHERE snapshot_id='r_week_pg_q1'`);
+  await database.query(`DELETE FROM evimed_geo.metric_input_snapshots WHERE round_id='r_base'`);
+  await measureRound({ store, now: () => new Date("2026-09-10T00:00:00Z") }, "r_week");
+  assert.deepEqual([ (await net("r_week")).status, (await net("r_week")).reason ], ["not_measurable", "judge_version_unrecorded"]);
 });
 
 test("a round records what it left out: the valid answers nobody judged, beside the counts of every ask (Q-11)", options, async () => {
@@ -1167,7 +1630,7 @@ test("an unreachable probe host pauses every engine through the breaker: its rou
 
 test("a confirmation whose every ask failed at the probe host was not asked: it is skipped and asked again, never read as 「未确认」 (2026-10-25)", options, async () => {
   await reset();
-  await seed("geo_f");
+  await seed("geo_f", { confirmation: true });
   const h = await harness();
   try {
     await enqueueRound(h.deps, { geoProjectId: "geo_f", kind: "baseline" });
@@ -1196,7 +1659,7 @@ test("a confirmation whose every ask failed at the probe host was not asked: it 
 
 test("a provider outage stops the judge without spending attempts; an answer the judge keeps failing on is written unjudged and counted as unparsed", options, async () => {
   await reset();
-  await seed("geo_j");
+  await seed("geo_j", { confirmation: true });
   const h = await harness({ answers: () => ({ answer: A_RIGHT }) });
   let mode = "outage";
   const judge = new GeoJudge(h.config, {
@@ -1468,16 +1931,52 @@ test("the queue leases for its own 360 s probe timeout plus the screenshot and a
 
 test("an error gets one confirmation round: the housekeeping leaves a new error to the parse tick that created it", options, async () => {
   await reset();
-  await seed("geo_n", { engines: ["deepseek"] });
+  await seed("geo_n", { engines: ["deepseek"], confirmation: true });
   const h = await harness({ answers: () => ({ answer: A_RIGHT }) });
   try {
+    await database.query(`INSERT INTO evimed_geo.snapshots (id,user_id,geo_project_id,engine,question_id,asked_at,status) VALUES ('snap_n','user_geo_n','geo_n','deepseek','geo_n_q1',$1,'valid')`, [h.clock.now().toISOString()]);
     await database.query(`INSERT INTO evimed_geo.errors (id, user_id, geo_project_id, fingerprint, engine, question_id, statement, error_type, severity, status,
-        created_at, updated_at) VALUES ('ge_n', 'user_geo_n', 'geo_n', 'fp', 'deepseek', 'geo_n_q1', $1, 'number', 'S2', 'open', $2, $2)`,
+        first_snapshot_id, created_at, updated_at) VALUES ('ge_n', 'user_geo_n', 'geo_n', 'fp', 'deepseek', 'geo_n_q1', $1, 'number', 'S2', 'open', 'snap_n', $2, $2)`,
     [WRONG, h.clock.now().toISOString()]);
     assert.equal((await tickErrors(h.deps)).confirmsQueued, 0, "a second old: its creator is still queueing its round");
     h.clock.advance(61_000);
     assert.equal((await tickErrors(h.deps)).confirmsQueued, 1, "a minute on and still without one: queued here");
     assert.equal((await rows(`SELECT count(*)::int AS n FROM evimed_geo.rounds WHERE kind = 'confirm'`))[0].n, 1);
+  } finally {
+    await h.probe.close();
+  }
+});
+
+test("an error joining an open confirmation reports its actual planned asks", options, async () => {
+  await reset();
+  await seed("geo_reuse", { engines: ["deepseek"], confirmation: true, repeats: 2 });
+  const h = await harness({ answers: () => ({ answer: A_RIGHT }) });
+  try {
+    await database.query(`INSERT INTO evimed_geo.snapshots (id,user_id,geo_project_id,engine,question_id,asked_at,status) VALUES ('snap_reuse','user_geo_reuse','geo_reuse','deepseek','geo_reuse_q1',$1,'valid')`, [h.clock.now().toISOString()]);
+    await database.query(`INSERT INTO evimed_geo.errors (id,user_id,geo_project_id,fingerprint,engine,question_id,first_snapshot_id,status,created_at,updated_at) VALUES ('ge_first','user_geo_reuse','geo_reuse','fp-first','deepseek','geo_reuse_q1','snap_reuse','open',$1,$1)`, [h.clock.now().toISOString()]);
+    h.clock.advance(1);
+    const round = await enqueueRound(h.deps, { geoProjectId: "geo_reuse", kind: "confirm", questionIds: ["geo_reuse_q1"], engines: ["deepseek"], repeat: 2,
+      ref: { errorId: "ge_first", questionId: "geo_reuse_q1", engine: "deepseek" } });
+    await database.query(`INSERT INTO evimed_geo.errors (id, user_id, geo_project_id, fingerprint, engine, question_id, statement, error_type, severity, status,
+        first_snapshot_id, created_at, updated_at) VALUES ('ge_reuse', 'user_geo_reuse', 'geo_reuse', 'fp', 'deepseek', 'geo_reuse_q1', $1, 'number', 'S2', 'open', 'snap_reuse', $2, $2)`,
+    [WRONG, h.clock.now().toISOString()]);
+    h.clock.advance(61_000);
+    await tickErrors(h.deps);
+    const [error] = await rows(`SELECT confirm FROM evimed_geo.errors WHERE id='ge_reuse'`);
+    assert.equal(error.confirm.roundId, round.roundId);
+    assert.equal(error.confirm.asked, 2);
+    h.clock.advance(61_000);
+    await database.query(`INSERT INTO evimed_geo.snapshots (id,user_id,geo_project_id,engine,question_id,asked_at,status) VALUES ('snap_later','user_geo_reuse','geo_reuse','deepseek','geo_reuse_q1',$1,'valid')`, [h.clock.now().toISOString()]);
+    await database.query(`INSERT INTO evimed_geo.errors (id,user_id,geo_project_id,fingerprint,engine,question_id,first_snapshot_id,status,created_at,updated_at) VALUES ('ge_later','user_geo_reuse','geo_reuse','fp-later','deepseek','geo_reuse_q1','snap_later','open',$1,$1)`, [h.clock.now().toISOString()]);
+    h.clock.advance(61_000);
+    await tickErrors(h.deps);
+    const [later] = await rows(`SELECT confirm FROM evimed_geo.errors WHERE id='ge_later'`);
+    assert.equal(later.confirm.status, "unavailable", "a round created before the observation cannot confirm it");
+    const content = new GeoStore({ database });
+    const preview = await previewGeoConfirmationAuthorization(content, "user_geo_reuse", "geo_reuse");
+    await authorizeGeoConfirmation(content, "user_geo_reuse", "geo_reuse", "user_geo_reuse", preview.token, () => new Date("2026-01-01T00:00:01Z"));
+    const oldGenerationError = { id: "ge_reuse", geoProjectId: "geo_reuse" };
+    assert.equal(await store.canJoinConfirmation(oldGenerationError, round.roundId, "snap_reuse"), false, "a previous authorization generation cannot be reused");
   } finally {
     await h.probe.close();
   }
@@ -1694,7 +2193,7 @@ test("an answer is counted on the basis it was judged on, and the count follows 
 
 test("a confirmation that never asked its paused engine is skipped, asked again by its error once the engine is back, and the old round keeps its counts", options, async () => {
   await reset();
-  await seed("geo_s");
+  await seed("geo_s", { confirmation: true });
   const h = await harness();
   try {
     await enqueueRound(h.deps, { geoProjectId: "geo_s", kind: "baseline" });
@@ -1834,6 +2333,244 @@ async function oneEngineRound(h, id, repeat = 1) {
   return enqueueRound(h.deps, { geoProjectId: id, kind: "sentinel", questionIds: [`${id}_q1`], repeat });
 }
 const jobRows = (/** @type {string} */ roundId) => rows(`SELECT status, attempts, error_code, external_ref, submitted_at, lease_until FROM evimed_geo.probe_jobs WHERE round_id = $1 ORDER BY repeat_index`, [roundId]);
+
+/** @param {any} h @param {string} id @param {string} [engine] */
+async function oneConfirmation(h, id, engine = "deepseek") {
+  await database.query(`INSERT INTO evimed_geo.snapshots (id,user_id,geo_project_id,engine,question_id,asked_at,status) VALUES ($1,$2,$3,$6,$4,$5,'valid')`,
+    [`${id}_origin`, `user_${id}`, id, `${id}_q1`, h.clock.now().toISOString(), engine]);
+  await database.query(`INSERT INTO evimed_geo.errors (id,user_id,geo_project_id,fingerprint,engine,question_id,first_snapshot_id,status,created_at,updated_at)
+    VALUES ($1,$2,$3,'fp',$7,$4,$5,'open',$6,$6)`, [`${id}_error`, `user_${id}`, id, `${id}_q1`, `${id}_origin`, h.clock.now().toISOString(), engine]);
+  return enqueueRound(h.deps, { geoProjectId: id, kind: "confirm", questionIds: [`${id}_q1`], engines: [engine], repeat: 1,
+    ref: { errorId: `${id}_error`, observationId: `${id}_origin`, eventId: `${id}_origin`, questionId: `${id}_q1`, engine } });
+}
+
+for (const engine of ["deepseek", "baidu"]) test(`ambiguous accepted ${engine} response does not cause another confirmation round`, options, async () => {
+  await reset(); const id = `geo_no_id_${engine}`;
+  await seed(id, { engines: [engine], confirmation: true, repeats: 1 });
+  let submissions = 0;
+  const inclusion = { engines: () => ["baidu"], submit: async () => { submissions += 1; throw Object.assign(new Error("missing id"), { code: "media_market_response_invalid" }); }, poll: async () => ({ status: "pending" }) };
+  const h = await harness({ answers: () => ({ status: 202 }), inclusion: engine === "baidu" ? inclusion : null });
+  try {
+    const round = await oneConfirmation(h, id, engine);
+    await database.query(`UPDATE evimed_geo.errors SET confirm=$2::jsonb WHERE id=$1`, [`${id}_error`, JSON.stringify({ status: "pending", roundId: round.roundId, observationId: `${id}_origin`, tries: 1 })]);
+    await tickProbe({ ...h.deps, maxAsks: 1 }); await tickErrors(h.deps);
+    const [job] = await jobRows(round.roundId);
+    assert.equal(job.status, "failed"); assert.equal(job.error_code, "delivery_unknown_no_automatic_retry");
+    const [error] = await rows(`SELECT confirm FROM evimed_geo.errors WHERE id=$1`, [`${id}_error`]);
+    assert.equal(error.confirm.status, "unavailable");
+    h.clock.advance(60_000); await tickErrors(h.deps); await tickProbe({ ...h.deps, maxAsks: 1 });
+    assert.equal((await rows(`SELECT count(*)::int AS n FROM evimed_geo.rounds WHERE kind='confirm'`))[0].n, 1);
+    assert.equal(engine === "baidu" ? submissions : h.probe.asks.length, 1);
+  } finally { await h.probe.close(); }
+});
+
+test("delayed acceptance cannot turn a pre-authorization sample into a post-authorization sample", options, async () => {
+  await reset(); await seed("geo_ack", { engines: ["deepseek"] });
+  const h = await harness({ async: { hold: true }, answers: () => ({ answer: A_WRONG, delayMs: 250 }) });
+  store.sampleClock = null;
+  try {
+    const round = await enqueueRound(h.deps, { geoProjectId: "geo_ack", kind: "baseline", questionIds: ["geo_ack_q1"] });
+    const pending = tickProbe({ ...h.deps, maxAsks: 1 });
+    for (let i=0; i<100 && !h.probe.asks.length; i+=1) await new Promise(resolve=>setTimeout(resolve,5));
+    assert.equal(h.probe.asks.length, 1);
+    const content = new GeoStore({ database });
+    const preview = await previewGeoConfirmationAuthorization(content, "user_geo_ack", "geo_ack");
+    const consent = await authorizeGeoConfirmation(content, "user_geo_ack", "geo_ack", "user_geo_ack", preview.token);
+    await pending;
+    const [job] = await rows(`SELECT sample_started_at,submitted_at FROM evimed_geo.probe_jobs WHERE round_id=$1`, [round.roundId]);
+    assert.ok(new Date(job.sample_started_at).getTime() < Date.parse(consent.authorizedAt));
+    h.probe.release(); h.clock.advance(11_000); await tickProbe({ ...h.deps, maxAsks: 1 }); await tickParse({ ...h.deps, maxParse: 5 });
+    const [snapshot] = await rows(`SELECT asked_at,status,answer_text FROM evimed_geo.snapshots WHERE round_id=$1`, [round.roundId]);
+    assert.equal(snapshot.status, "valid"); assert.ok(snapshot.answer_text); assert.equal(new Date(snapshot.asked_at).getTime(),new Date(job.sample_started_at).getTime());
+    const [error] = await rows(`SELECT confirm FROM evimed_geo.errors WHERE geo_project_id='geo_ack'`);
+    assert.equal(error.confirm.status, "unavailable");
+    assert.equal((await rows(`SELECT count(*)::int AS n FROM evimed_geo.rounds WHERE kind='confirm'`))[0].n, 0);
+  } finally { await h.probe.close(); }
+});
+
+test("a legacy accepted reference retains its answer with unknown sample time", options, async () => {
+  await reset(); await seed("geo_unknown_time", { engines: ["deepseek"] });
+  const h = await harness({ async: { hold: true }, answers: () => ({ answer: A_WRONG }) });
+  try {
+    const round = await enqueueRound(h.deps, { geoProjectId: "geo_unknown_time", kind: "baseline", questionIds: ["geo_unknown_time_q1"] });
+    await tickProbe({ ...h.deps, maxAsks: 1 });
+    await database.query(`UPDATE evimed_geo.probe_jobs SET sample_started_at=NULL WHERE round_id=$1`, [round.roundId]);
+    const content = new GeoStore({ database });
+    const preview = await previewGeoConfirmationAuthorization(content, "user_geo_unknown_time", "geo_unknown_time");
+    await authorizeGeoConfirmation(content, "user_geo_unknown_time", "geo_unknown_time", "user_geo_unknown_time", preview.token, () => new Date("2026-01-01T00:00:00Z"));
+    h.probe.release(); h.clock.advance(11_000); await tickProbe({ ...h.deps, maxAsks: 1 }); await tickParse({ ...h.deps, maxParse: 5 });
+    const [snapshot] = await rows(`SELECT asked_at,status,answer_text FROM evimed_geo.snapshots WHERE round_id=$1`, [round.roundId]);
+    assert.equal(snapshot.asked_at, null); assert.equal(snapshot.status, "valid"); assert.ok(snapshot.answer_text);
+    assert.equal((await rows(`SELECT count(*)::int AS n FROM evimed_geo.rounds WHERE kind='confirm'`))[0].n, 0);
+  } finally { await h.probe.close(); }
+});
+
+test("database clock orders post-authorization samples even when the worker clock differs", options, async () => {
+  await reset(); await seed("geo_db_clock", { engines: ["deepseek"] });
+  const h=await harness({ async: { hold: true }, answers: () => ({ answer:A_WRONG }), clock:"2026-01-02T15:00:00Z" });
+  store.sampleClock=null;
+  try {
+    const content=new GeoStore({database});
+    const preview=await previewGeoConfirmationAuthorization(content,"user_geo_db_clock","geo_db_clock");
+    const consent=await authorizeGeoConfirmation(content,"user_geo_db_clock","geo_db_clock","user_geo_db_clock",preview.token);
+    await new Promise(resolve=>setTimeout(resolve,5));
+    const round=await enqueueRound(h.deps,{geoProjectId:"geo_db_clock",kind:"baseline",questionIds:["geo_db_clock_q1"]});
+    await tickProbe({...h.deps,maxAsks:1}); h.probe.release(); h.clock.advance(11_000);
+    await tickProbe({...h.deps,maxAsks:1}); await tickParse({...h.deps,maxParse:5});
+    const [snapshot]=await rows(`SELECT asked_at FROM evimed_geo.snapshots WHERE round_id=$1`,[round.roundId]);
+    assert.ok(new Date(snapshot.asked_at).getTime()>Date.parse(consent.authorizedAt));
+    const [error]=await rows(`SELECT confirm FROM evimed_geo.errors WHERE geo_project_id='geo_db_clock'`);
+    assert.equal(error.confirm.status,"pending");
+  } finally { await h.probe.close(); }
+});
+
+for (const answerStatus of ["valid", "refusal"]) test(`a saved ${answerStatus} confirmation survives a crash before job settlement`, options, async () => {
+  await reset(); const id=`geo_saved_${answerStatus}`;
+  await seed(id, { engines: ["deepseek"], confirmation: true, repeats: 1 });
+  const h=await harness();
+  try {
+    const round=await oneConfirmation(h,id);
+    const [job]=await rows(`SELECT id FROM evimed_geo.probe_jobs WHERE round_id=$1`,[round.roundId]);
+    await database.query(`UPDATE evimed_geo.probe_jobs SET status='leased',attempts=3,lease_until=$2 WHERE id=$1`, [job.id,new Date(h.clock.now().getTime()-1000)]);
+    await database.query(`INSERT INTO evimed_geo.snapshots (id,user_id,geo_project_id,round_id,probe_job_id,engine,question_id,asked_at,status,answer_text)
+      VALUES ($1,$2,$3,$4,$5,'deepseek',$6,$7,$8,'preserved')`, [`${id}_saved`,`user_${id}`,id,round.roundId,job.id,`${id}_q1`,h.clock.now().toISOString(),answerStatus]);
+    await store.recoverExpiredLeases(h.clock.now());
+    const [recovered]=await rows(`SELECT status,attempts,snapshot_id FROM evimed_geo.probe_jobs WHERE id=$1`,[job.id]);
+    assert.deepEqual(recovered,{status:"done",attempts:3,snapshot_id:`${id}_saved`});
+    assert.equal((await rows(`SELECT done FROM evimed_geo.rounds WHERE id=$1`,[round.roundId]))[0].done,1);
+    await tickProbe({ ...h.deps, maxAsks:1 }); assert.equal(h.probe.asks.length,0);
+  } finally { await h.probe.close(); }
+});
+
+for (const rawStatus of ["timeout", "model_failed", "busy"]) test(`accepted confirmation ${rawStatus} is not resubmitted`, options, async () => {
+  await reset();
+  const id = `geo_accepted_${rawStatus}`;
+  await seed(id, { engines: ["deepseek"], confirmation: true, repeats: 1 });
+  const h = await harness({ async: { hold: true }, answers: () => ({ rawStatus, answer: "" }) });
+  try {
+    const round = await oneConfirmation(h, id);
+    await tickProbe({ ...h.deps, maxAsks: 1 });
+    const [accepted] = await jobRows(round.roundId);
+    assert.equal(accepted.attempts, 1); assert.ok(accepted.external_ref);
+    const [jobId] = await rows(`SELECT id FROM evimed_geo.probe_jobs WHERE round_id=$1`, [round.roundId]);
+    await store.requeueJob(jobId.id, { now: h.clock.now(), refundAttempt: true });
+    const [protectedJob] = await jobRows(round.roundId);
+    assert.equal(protectedJob.status, "leased"); assert.equal(protectedJob.external_ref, accepted.external_ref); assert.equal(protectedJob.attempts, 1);
+    h.probe.release(); h.clock.advance(11_000);
+    await tickProbe({ ...h.deps, maxAsks: 1 });
+    for (let n = 0; n < 4; n += 1) { h.clock.advance(60_000); await tickProbe({ ...h.deps, maxAsks: 1 }); }
+    const [job] = await jobRows(round.roundId);
+    assert.equal(job.status, "failed"); assert.equal(job.attempts, 1);
+    assert.equal(job.error_code, "delivery_unknown_no_automatic_retry");
+    assert.equal(job.external_ref, accepted.external_ref);
+    assert.equal(h.probe.asks.length, 1);
+    const [counts] = await rows(`SELECT failed FROM evimed_geo.rounds WHERE id=$1`, [round.roundId]);
+    assert.equal(counts.failed, 1);
+  } finally { await h.probe.close(); }
+});
+
+test("a persisted accepted reference is polled when all acknowledgement writes report failure", options, async () => {
+  await reset(); const id="geo_ack_lost"; await seed(id,{engines:["deepseek"],confirmation:true,repeats:1});
+  const h=await harness({async:{hold:true},answers:()=>({answer:A_RIGHT})});
+  try {
+    const round=await oneConfirmation(h,id);
+    const real=store.holdJob.bind(store);
+    store.holdJob=async (...args)=>{await real(...args);throw new Error("response lost");};
+    try { await tickProbe({...h.deps,maxAsks:1}); } finally { store.holdJob=real; }
+    const [held]=await jobRows(round.roundId); assert.equal(held.status,"leased"); assert.ok(held.external_ref);
+    h.probe.release();h.clock.advance(11_000);await tickProbe({...h.deps,maxAsks:1});
+    assert.equal((await jobRows(round.roundId))[0].status,"done"); assert.equal(h.probe.asks.length,1);
+  } finally { await h.probe.close(); }
+});
+
+test("inclusion acknowledgement persisted before a lost response remains pollable", options, async () => {
+  await reset(); const id="geo_inclusion_ack"; await seed(id,{engines:["baidu"],confirmation:true,repeats:1});
+  let sends=0,polls=0;
+  const inclusion={engines:()=>["baidu"],submit:async()=>{sends+=1;return {requestId:"inclusion-accepted"};},poll:async()=>{polls+=1;return {status:"valid",hit:true};}};
+  const h=await harness({inclusion});
+  try {
+    const round=await oneConfirmation(h,id,"baidu"); const real=store.holdJob.bind(store);
+    store.holdJob=async (...args)=>{await real(...args);throw new Error("response lost");};
+    try { await tickProbe({...h.deps,maxAsks:1}); } finally { store.holdJob=real; }
+    const [held]=await jobRows(round.roundId); assert.equal(held.status,"leased"); assert.equal(held.external_ref,"inclusion-accepted");
+    h.clock.advance(61_000); await tickProbe({...h.deps,maxAsks:1});
+    assert.equal((await jobRows(round.roundId))[0].status,"done"); assert.equal(sends,1); assert.equal(polls,1);
+  } finally { await h.probe.close(); }
+});
+
+test("three synchronous confirmation timeouts spend three attempts and never a fourth", options, async () => {
+  await reset(); await seed("geo_sync_timeout", { engines: ["deepseek"], confirmation: true, repeats: 1 });
+  const h = await harness({ answers: () => ({ rawStatus: "timeout", answer: "" }) });
+  try {
+    const round = await oneConfirmation(h, "geo_sync_timeout");
+    for (let n = 0; n < 5; n += 1) { await tickProbe({ ...h.deps, maxAsks: 1 }); h.clock.advance(5 * 60_000); }
+    const [job] = await jobRows(round.roundId);
+    assert.equal(job.status, "failed"); assert.equal(job.attempts, 3); assert.equal(job.error_code, "delivery_unknown_no_automatic_retry"); assert.equal(h.probe.asks.length, 3);
+    assert.equal((await rows(`SELECT failed FROM evimed_geo.rounds WHERE id=$1`, [round.roundId]))[0].failed, 1);
+  } finally { await h.probe.close(); }
+});
+
+test("three sent confirmation busy responses consume the attempts and never cause a fourth request", options, async () => {
+  await reset(); await seed("geo_confirm_busy", { engines: ["deepseek"], confirmation: true, repeats: 1 });
+  const h = await harness({ answers: () => ({ status: 409 }) });
+  try {
+    const round = await oneConfirmation(h, "geo_confirm_busy");
+    for (let n = 0; n < 5; n += 1) { await tickProbe({ ...h.deps, maxAsks: 1 }); h.clock.advance(5 * 60_000); }
+    const [job] = await jobRows(round.roundId);
+    assert.equal(job.status, "failed"); assert.equal(job.attempts, 3); assert.equal(job.external_ref, null);
+    assert.equal(job.error_code, "delivery_unknown_no_automatic_retry"); assert.equal(h.probe.asks.length, 3);
+  } finally { await h.probe.close(); }
+});
+
+test("confirmation capacity wait before any send refunds its attempt", options, async () => {
+  await reset(); await seed("geo_local_wait", { engines: ["deepseek"], confirmation: true, repeats: 1 });
+  const h = await harness({ providers: () => ({ deepseek: { total: 1, idle: 0, busy: 1, quarantined: 0 } }) });
+  try {
+    const round = await oneConfirmation(h, "geo_local_wait");
+    await tickProbe({ ...h.deps, maxAsks: 1 });
+    const [job] = await jobRows(round.roundId);
+    assert.equal(job.status, "queued"); assert.equal(job.attempts, 0); assert.equal(h.probe.asks.length, 0);
+  } finally { await h.probe.close(); }
+});
+
+test("accepted confirmation poll timeout reaches its deadline as unknown without a new round", options, async () => {
+  await reset(); await seed("geo_poll_deadline", { engines: ["deepseek"], confirmation: true, repeats: 1 });
+  const h = await harness({ config: { geoProbeTaskMaxAgeMinutes: 1 } });
+  let sent = 0, polled = 0;
+  const upstream = { providers: async () => ({ providers: [{ provider: "deepseek", state: "ready" }] }),
+    submit: async ({ onAccepted }) => { sent += 1; await onAccepted({ requestId: "accepted-deadline" }); return { pending: true, requestId: "accepted-deadline" }; },
+    read: async () => { polled += 1; throw Object.assign(new Error("timeout"), { code: "geo_probe_timeout" }); } };
+  try {
+    const round = await oneConfirmation(h, "geo_poll_deadline");
+    await database.query(`UPDATE evimed_geo.errors SET confirm=$2::jsonb WHERE id=$1`, ["geo_poll_deadline_error", JSON.stringify({ status: "pending", roundId: round.roundId, observationId: "geo_poll_deadline_origin", tries: 1 })]);
+    await tickProbe({ ...h.deps, upstream: /** @type {any} */ (upstream), maxAsks: 1 });
+    h.clock.advance(11_000); await tickProbe({ ...h.deps, upstream: /** @type {any} */ (upstream), maxAsks: 1 });
+    assert.equal((await jobRows(round.roundId))[0].status, "leased");
+    h.clock.advance(60_000); await tickProbe({ ...h.deps, upstream: /** @type {any} */ (upstream), maxAsks: 1 });
+    const [job] = await jobRows(round.roundId);
+    assert.equal(job.status, "failed"); assert.equal(job.external_ref, "accepted-deadline");
+    assert.equal(job.error_code, "delivery_unknown_no_automatic_retry"); assert.equal(job.attempts, 1);
+    await tickErrors(h.deps);
+    const [error] = await rows(`SELECT confirm FROM evimed_geo.errors WHERE id='geo_poll_deadline_error'`);
+    assert.equal(error.confirm.status, "unavailable"); assert.equal(error.confirm.reason, "delivery_unknown_no_automatic_retry");
+    h.clock.advance(60_000); await tickErrors(h.deps); await tickProbe({ ...h.deps, upstream: /** @type {any} */ (upstream), maxAsks: 1 });
+    assert.equal(sent, 1); assert.ok(polled >= 2);
+    assert.equal((await rows(`SELECT count(*)::int AS n FROM evimed_geo.rounds WHERE kind='confirm'`))[0].n, 1);
+  } finally { await h.probe.close(); }
+});
+
+test("an accepted confirmation result is retained without another submission", options, async () => {
+  await reset(); await seed("geo_confirm_answer", { engines: ["deepseek"], confirmation: true, repeats: 1 });
+  const h = await harness({ async: { hold: true }, answers: () => ({ answer: A_RIGHT }) });
+  try {
+    const round = await oneConfirmation(h, "geo_confirm_answer");
+    await tickProbe({ ...h.deps, maxAsks: 1 }); h.probe.release(); h.clock.advance(11_000);
+    await tickProbe({ ...h.deps, maxAsks: 1 });
+    const [job] = await jobRows(round.roundId);
+    assert.equal(job.status, "done"); assert.equal(job.attempts, 1); assert.equal(h.probe.asks.length, 1);
+    assert.equal((await rows(`SELECT count(*)::int AS n FROM evimed_geo.snapshots WHERE round_id=$1 AND status='valid'`, [round.roundId]))[0].n, 1);
+  } finally { await h.probe.close(); }
+});
 
 test("an accepted task's id is on its job at once, nothing waits for the answer under the lock, and the task is read on later ticks", options, async () => {
   await reset();

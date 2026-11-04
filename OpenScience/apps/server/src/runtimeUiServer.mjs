@@ -1,6 +1,7 @@
 import {withSessionPromptAdmission} from './runtimePromptAdmission.mjs';
 import { handleManagedBrowserRequest } from './managedBrowserRoutes.mjs';
 import { MODEL_REASONING_EFFORTS } from "./modelReasoningPolicy.mjs";
+import { CHAT_PRESENTATION } from "./dshProfilePatch.mjs";
 /** The native browser application on an isolated origin, with immutable per-frame project bindings. */
 import { createServer } from "node:http";
 import path from "node:path";
@@ -741,6 +742,36 @@ export function createRuntimeUiServer({ config, store, runtimeManager, onGoalBar
         Number(config.maxFileBytes), () => resolveFrame(snapshot, null));
       return;
     }
+    // A scoped frame needs only the platform's public presentation defaults.
+    // Do not forward the kernel's settings document or admit any settings write.
+    if (scoped && method === RUNTIME_UI_SETTINGS_READ) {
+      if (req.method !== "POST" || frame.suffix !== `/api/${RUNTIME_UI_SETTINGS_READ}`) { sendDenied(res, method); return; }
+      const snapshot = { url: req.url, headers: { cookie: req.headers.cookie } };
+      trackFrame(snapshot, claims, res);
+      const generation = runtimeManager.runtimeGeneration(project);
+      if (!generation) throw new HttpError(403, "runtime_ui_frame_invalid", "The runtime generation is unavailable.");
+      const raw = await readBody(req, Math.min(Number(config.maxJsonBytes), 16384));
+      /** @type {any} */ let call = null;
+      try { call = JSON.parse(raw.toString("utf8")); } catch { /* refused below */ }
+      if (!isRuntimeUiSettingsRead(call)) { sendDenied(res, method); return; }
+      const current = await resolveFrame(snapshot, null);
+      if (current.scoped !== scoped || runtimeManager.runtimeGeneration(project) !== generation)
+        throw new HttpError(403, "runtime_ui_frame_invalid", "The shared frame changed.");
+      const payload = JSON.stringify({ type: "server-response", rpcId: call.rpcId, result: { ok: true, value: {
+        writable: false, hasDocument: false, namespaces: [{ ns: "ui-chat", autoGenerate: false,
+          schema: { uid: 3, refs: { "1": { type: "string", meta: {} }, "2": { type: "string", meta: {} },
+            "3": { type: "object", meta: { default: {} }, dict: { transcriptView: 1, linkOpening: 2 } } } },
+          value: CHAT_PRESENTATION, applies: "live", secrets: [], revision: 0 }],
+      } } });
+      await scoped.withAuthority(() => {
+        if (res.destroyed || runtimeManager.runtimeGeneration(project) !== generation)
+          throw new HttpError(403, "runtime_ui_frame_invalid", "The shared frame changed.");
+        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Content-Length": String(Buffer.byteLength(payload)),
+          "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" });
+        res.end(payload);
+      });
+      return;
+    }
     // A denied method this surface answers itself (`RUNTIME_UI_ANSWERED_METHODS`
     // in `@evimed/domain`): the kernel's own reply for "nothing to do", so the
     // page is not told of a failure it did not have. Never forwarded; anything
@@ -881,8 +912,8 @@ export function createRuntimeUiServer({ config, store, runtimeManager, onGoalBar
     // The one settings read a hosted page may make (`RUNTIME_UI_SETTINGS_READ` in `@evimed/domain`, 2026-10-28): the chat's
     // presentation, which the profile sets to the kernel's folded `standard` view. Forwarded only as the exact call, and
     // answered only with the projection `runtimeUiSettingsAnswer` returns; an answer it refuses is refused here, so the
-    // kernel's whole configuration document never reaches the page. A delegated frame is not given it: its own policy
-    // decides what it reads, as before. Everything else in `settings/*` falls through to the deny gate below.
+    // kernel's whole configuration document never reaches the page. Scoped frames receive the fixed presentation above,
+    // not this kernel document. Everything else in `settings/*` falls through to the deny gate below.
     if (method === RUNTIME_UI_SETTINGS_READ && !scoped) {
       if (req.method !== "POST") { sendDenied(res, method); return; }
       const raw = await nativeBody(Math.min(Number(config.maxJsonBytes), 16384));

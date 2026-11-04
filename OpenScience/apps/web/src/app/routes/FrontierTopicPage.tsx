@@ -17,7 +17,7 @@ import {
   type FrontierTopicRole,
   type FrontierTopicSummary,
 } from "@/lib/frontierClient";
-import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
+import { prepareRuntimeUiIntent, newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { toast } from "@/lib/toast";
 import { LoadError } from "@/components/cards/LoadError";
 import { PageShell } from "@/components/layout/PageShell";
@@ -148,7 +148,7 @@ function TopicBody({ page, onItem }: { page: FrontierTopicPageData; onItem: (ite
   };
   const found = ago(topic.acceptedAt);
   // 就此提问: the topic's own question, in the composer for the reader to send or rewrite (a topic is no conversation origin).
-  const ask = () => navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent(topicAskDraft(topic)) } });
+  const ask = () => navigate("/app/chat", { state: { runtimeUiIntent: prepareRuntimeUiIntent(newRuntimeUiIntent(topicAskDraft(topic))) } });
   return (
     <TopicFrame
       title={topic.title}

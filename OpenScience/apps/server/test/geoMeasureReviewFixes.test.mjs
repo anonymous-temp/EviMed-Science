@@ -120,9 +120,10 @@ test("a week is compared with the baseline only on the engines both were measure
     pilot: [point("2026-09-25", 50, FOUR), point("2026-10-05", 60, [...FOUR].reverse())],
     control: [point("2026-09-25", 10, FOUR), point("2026-10-05", 12, FOUR)],
   }), input(FOUR));
-  assert.ok(same.every((row) => row.status === "ok"), JSON.stringify(same));
+  assert.ok(same.filter(row => ["M-01", "M-02", "M-03", "M-06", "M-15", "M-19"].includes(row.variant)).every(row => row.reason === "judge_version_unrecorded" && row.value === null));
+  assert.ok(same.filter(row => !["M-01", "M-02", "M-03", "M-06", "M-15", "M-19"].includes(row.variant)).every((row) => row.status === "ok"), JSON.stringify(same));
   // The domain's rolling windows: the current window averages 50 and 60 (+5), the control's 10 and 12 (+1).
-  assert.ok(same.every((row) => row.numerator === 5 && row.denominator === 1 && row.value === 4), JSON.stringify(same));
+  assert.ok(same.filter(row => row.status === "ok").every((row) => row.numerator === 5 && row.denominator === 1 && row.value === 4), JSON.stringify(same));
 
   // Missing observed versions block an otherwise computable effect, preserving structural failure reasons.
   const unknown = { ...input(FOUR), round: { ...input(FOUR).round, surface: { intervention: { engines: [{ observedVersion: "unknown" }] } } } };
@@ -167,10 +168,10 @@ test("a net effect is not stored from windows under the answer floor, and a comp
     pilot: [point("2026-09-25", 40, 100), point("2026-10-05", 60, 100)], control: [point("2026-09-25", 40, 100), point("2026-10-05", 40, 100)],
   }), input);
   // (The domain's rolling windows overlap this early: the pilot's current window pools 40/100 and 60/100, so +10.)
-  assert.ok(enough.every((row) => row.status === "ok" && row.value === 10 && row.reason === "up"), JSON.stringify(enough[0]));
+  assert.ok(enough.filter(row => !["M-01", "M-02", "M-03", "M-06", "M-15", "M-19"].includes(row.variant)).every((row) => row.status === "ok" && row.value === 10 && row.reason === "up"), JSON.stringify(enough[0]));
   const byMetric = (/** @type {string} */ metric) => enough.filter((row) => row.variant === metric);
-  assert.ok(byMetric("M-01").length > 0 && byMetric("M-01").every((row) => row.noiseBand === 2 && row.noiseMeasured === true), "mention has a noise round");
-  const defaulted = enough.filter((row) => !["M-01", "M-03", "M-10"].includes(String(row.variant)));
+  assert.ok(byMetric("M-01").every(row => row.reason === "judge_version_unrecorded"));
+  const defaulted = enough.filter((row) => !["M-01", "M-02", "M-03", "M-10", "M-06", "M-15", "M-19"].includes(String(row.variant)));
   assert.ok(defaulted.length > 0 && defaulted.every((row) => row.noiseBand === geoConstant("RANKING_NOISE_DEFAULT_THRESHOLD") && row.noiseMeasured === false),
     "every other metric was judged against the default, and says so");
 
@@ -197,8 +198,9 @@ test("a net effect counts the control groups every compared round had, not the o
     latestNoiseBand: async () => ({ value: 2, measured: true }),
     armSeries: async () => structuredClone(series),
     armRounds: async () => rounds,
-    // No answers on file: nothing to compute again, the stored cells stand.
-    roundSkippedEngines: async () => [], roundFactRows: async () => [], round: async () => ({ engines: ENGINES }), projectContext: async () => null,
+    // Legacy rows have no frozen inputs; current facts must not be used to invent their provenance.
+    frozenMetricInput: async () => null,
+    roundSkippedEngines: async () => [], roundFactRows: async () => { throw new Error("Current facts cannot prove a legacy computation"); }, round: async () => ({ engines: ENGINES }), projectContext: async () => null,
   });
   const input = { project: { id: "geo_x" }, round: { id: "r2", setVersion: 5, sampleDate: "2026-10-25" }, controlGroups: 4, engines: ENGINES };
   const rounds = [{ roundId: "r1", date: "2026-09-25", engines: ENGINES, arms: wide }, { roundId: "r2", date: "2026-10-25", engines: ENGINES, arms: narrow }];
@@ -208,10 +210,10 @@ test("a net effect counts the control groups every compared round had, not the o
   const shared = await netEffectRows(storeWith([rounds[0], { ...rounds[1], arms: two }]), { ...input, arms: two });
   assert.ok(shared.every((row) => row.reason === "too_few_control_groups"), "two shared groups are under the table's minimum, whatever the caller counted");
   // Without arms the caller's count and the stored cells are all there is (a caller that does not know its arms).
-  assert.ok((await netEffectRows(storeWith(rounds), input)).every((row) => row.status === "ok"));
-  // A round measured before arms were recorded, with no answers on file, is left as stored and does not narrow what is shared.
+  assert.ok((await netEffectRows(storeWith(rounds), input)).every((row) => row.status === "ok" || row.reason === "judge_version_unrecorded"));
+  // A round without frozen arms cannot establish a new medical NET, even if its old cells remain readable.
   const legacy = await netEffectRows(storeWith([{ ...rounds[0], arms: null }, rounds[1]]), { ...input, arms: narrow });
-  assert.ok(legacy.every((row) => row.status === "ok"), JSON.stringify(legacy[0]));
+  assert.ok(legacy.every((row) => row.status === "ok" || row.reason === "judge_version_unrecorded"), JSON.stringify(legacy[0]));
 });
 
 test("the valid share (M-20) counts every ask at every scope; a question dropped from the rates is not dropped from it (Q-11)", () => {

@@ -1,5 +1,6 @@
+import { sanitizeRuntimeUiHistoryState } from "@/lib/runtimeUiNavigation";
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Link, useNavigate, useParams } from "react-router";
+import { Link, useLocation, useNavigate, useParams } from "react-router";
 import { ExternalLink, Image as ImageIcon, PenLine, Radar } from "lucide-react";
 import {
   geoScreenshotUrl,
@@ -138,6 +139,7 @@ function Answer({
 }) {
   const path = useGeoPath();
   const navigate = useNavigate();
+  const { state } = useLocation();
   const drawer = useGeoDrawerAddress();
   const open = useOpenGeoConversation();
   const handoff = useCorrectionHandoff(geoId, project);
@@ -180,7 +182,7 @@ function Answer({
       options: history.map((entry) => ({ value: entry.snapshotId, label: monthDay(entry.sampleDate) ?? entry.sampleDate })),
       value: snapshot.id,
       // Another day's answer replaces this one in the history: the way back is still the list.
-      onChange: (value) => { if (value && value !== snapshot.id) navigate(path(answerPath(geoId, value)), { replace: true }); },
+      onChange: (value) => { if (value && value !== snapshot.id) navigate(path(answerPath(geoId, value)), { replace: true, state: sanitizeRuntimeUiHistoryState(state) }); },
     }] : undefined,
     actions: screenshot ? (
       <a href={screenshot} target="_blank" rel="noreferrer" className={buttonClasses({ variant: "text", size: "sm" })}>
@@ -288,6 +290,7 @@ function engineWord(sibling: GeoAnswer["siblings"][number]): { text: string; wro
 
 function Engines({ geoId, data, wrongCount }: { geoId: string; data: GeoAnswer; wrongCount: number }) {
   const path = useGeoPath();
+  const { state } = useLocation();
   const current = data.snapshot;
   const siblings = (Array.isArray(data.siblings) ? data.siblings : []).filter((sibling) => sibling && sibling.engine);
   if (!siblings.some((sibling) => sibling.engine === current.engine)) {
@@ -316,7 +319,7 @@ function Engines({ geoId, data, wrongCount }: { geoId: string; data: GeoAnswer; 
           return (
             <li key={sibling.engine} data-geo-sibling={sibling.engine}>
               {sibling.snapshotId && !selected ? (
-                <Link to={path(answerPath(geoId, sibling.snapshotId))} replace className={rowClass}>{label}</Link>
+                <Link to={path(answerPath(geoId, sibling.snapshotId))} replace state={sanitizeRuntimeUiHistoryState(state)} className={rowClass}>{label}</Link>
               ) : (
                 <span aria-current={selected ? "page" : undefined} className={rowClass}>{label}</span>
               )}
@@ -461,6 +464,7 @@ function Elsewhere({
   findings: AnswerFinding[];
 }) {
   const path = useGeoPath();
+  const { state } = useLocation();
   const own = unplaced.map((sentence) => findings.find((finding) => finding.sentence.trim() === sentence.trim())).filter((finding): finding is AnswerFinding => !!finding);
   const count = errors.length + own.length;
   if (count === 0) return null;
@@ -481,7 +485,7 @@ function Elsewhere({
             <li key={error.id} className="flex flex-wrap items-baseline gap-x-2 py-2 text-ui text-text-2">
               <span className="min-w-0">{`“${error.statement}”`}</span>
               {detail && <span className="text-caption text-text-3">{detail}</span>}
-              {where && <Link to={path(answerPath(geoId, where))} replace className="text-caption text-link hover:underline">看那次回答</Link>}
+              {where && <Link to={path(answerPath(geoId, where))} replace state={sanitizeRuntimeUiHistoryState(state)} className="text-caption text-link hover:underline">看那次回答</Link>}
             </li>
           );
         })}

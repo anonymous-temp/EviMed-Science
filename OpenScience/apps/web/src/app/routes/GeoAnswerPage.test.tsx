@@ -1,12 +1,16 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { sessionOwner } from "@/lib/sessionLifecycle";
+import { prepareRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes, useLocation } from "react-router";
+import { MemoryRouter, Route, Routes, useLocation, useNavigate, useParams } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { WebApiError } from "@/lib/apiClient";
 import { useToastStore } from "@/lib/toast";
 import { answerFilled, evidenceFilled, geoProject } from "@/components/geo/__fixtures__/geoTabs";
 import { GeoFrameHarness } from "@/components/geo/__fixtures__/geoFrameHarness";
 import { actionFixture, actionsFilled, clustersFilled, clusterViewFixture, G_BRAND, questionSetFixture } from "@/components/geo/__fixtures__/geoSpine";
+import { geoResultDrawerProps } from "@/components/geo/spine/drawerParams";
+import { WorkspaceSplit } from "@/components/workspace/WorkspaceSplit";
 import { GeoAnswerPage } from "./GeoAnswerPage";
 
 const client = vi.hoisted(() => ({
@@ -386,4 +390,84 @@ describe("one answer", () => {
     renderAnswer();
     expect(await screen.findByText("这条回答不存在或已删除。")).toBeInTheDocument();
   });
+});
+
+
+const pendingAnswerDraft = prepareRuntimeUiIntent({ kind: "open", projectId: "prj_geo_1", sessionId: "ses_geo_1", requestId: "answer-request", draft: "Pending answer draft", owner: sessionOwner() });
+
+function AnswerBesideConversation() {
+  const { snapshotId } = useParams();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const params = new URLSearchParams(location.search);
+  const openConversation = () => {
+    params.set("conversation", "open");
+    params.set("session", "ses_geo_1");
+    void navigate({ search: params.toString() }, { state: { runtimeUiIntent: pendingAnswerDraft, other: "retained" } });
+  };
+  return <>
+    <button onClick={openConversation}>Commit answer handoff</button>
+    <button onClick={() => { void navigate(-1); }}>Answer history back</button>
+    <output aria-label="Answer location">{location.pathname + location.search}</output>
+    <output aria-label="Answer navigation state">{JSON.stringify(location.state)}</output>
+    <WorkspaceSplit open={params.get("conversation") === "open"} retainResults splitOverride collapseTo={location.pathname}
+      {...geoResultDrawerProps(params, location.state, "questions", { snapshotId, analysis: false, distribution: false })}
+      conversation={<input aria-label="Answer composer" />}
+      results={<GeoFrameHarness project={geoProject()} tab="questions"><GeoAnswerPage /></GeoFrameHarness>} />
+  </>;
+}
+
+it.each([
+  { trigger: /对的是每周一次/, statement: "它需要每天注射一次" },
+  { trigger: /对的是并非当天见效/, statement: "它当天见效" },
+])("shows the selected claim on the answer beside an active conversation: $statement", async ({ trigger, statement }) => {
+  const facts = answerFilled.facts;
+  if (!facts) throw new Error("Expected the answer fixture to contain findings.");
+  const second = { ...answerFilled.errors[0], id: "err_second", claimId: "clm_second", statement: "它当天见效" };
+  client.getGeoAnswer.mockResolvedValue({
+    ...answerFilled,
+    snapshot: { ...answerFilled.snapshot, answerText: `${answerFilled.snapshot.answerText}
+
+它当天见效。` },
+    facts: { ...facts, statements: [...facts.statements, { text: "它当天见效", verdict: "wrong", claimId: "clm_second", errorType: "number", evidence: "并非当天见效。" }] },
+    errors: [...answerFilled.errors, second],
+  });
+  render(<MemoryRouter initialEntries={["/app/geo/geo_1/answers/snap_deepseek"]}>
+    <Routes><Route path="/app/geo/:geoId/answers/:snapshotId" element={<AnswerBesideConversation />} /></Routes>
+  </MemoryRouter>);
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole("button", { name: /对的是每周一次/ }));
+  const original = await screen.findByRole("dialog", { name: "讲错的说法" });
+  fireEvent.click(screen.getByRole("button", { name: "Commit answer handoff" }));
+  expect(original).not.toBeVisible();
+  const selected = await screen.findByRole("button", { name: trigger });
+  selected.focus();
+  await user.keyboard("{Enter}");
+  expect(await screen.findByRole("dialog", { name: "讲错的说法" })).toBe(original);
+  expect(original).toHaveTextContent(statement);
+  expect(original).toHaveFocus();
+  expect(JSON.parse(screen.getByLabelText("Answer navigation state").textContent ?? "{}")).toMatchObject({ runtimeUiIntent: pendingAnswerDraft, other: "retained" });
+  expect(screen.getByLabelText("Answer location")).toHaveTextContent("session=ses_geo_1");
+  fireEvent.click(screen.getByRole("button", { name: "Answer history back" }));
+  expect(original).not.toBeVisible();
+});
+
+
+it("retains the pending AI intent on a date replacement and goes back to the previous result", async () => {
+  const state = { runtimeUiIntent: pendingAnswerDraft, other: "retained" };
+  render(<MemoryRouter initialEntries={[
+    { pathname: "/app/geo/geo_1/answers/snap_previous", search: "?conversation=open&session=ses_geo_1", state },
+    { pathname: "/app/geo/geo_1/answers/snap_deepseek", search: "?from=2026-09-01&conversation=open&session=ses_geo_1", state },
+  ]} initialIndex={1}>
+    <Routes><Route path="/app/geo/:geoId/answers/:snapshotId" element={<AnswerBesideConversation />} /></Routes>
+  </MemoryRouter>);
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole("button", { name: /测量日期/ }));
+  await user.click(screen.getByRole("menuitemradio", { name: "9月22日" }));
+  expect(screen.getByLabelText("Answer location")).toHaveTextContent("/answers/snap_deepseek_old");
+  expect(screen.getByLabelText("Answer location")).toHaveTextContent("session=ses_geo_1");
+  expect(JSON.parse(screen.getByLabelText("Answer navigation state").textContent ?? "{}")).toEqual(state);
+  await user.click(screen.getByRole("button", { name: "Answer history back" }));
+  expect(screen.getByLabelText("Answer location")).toHaveTextContent("/answers/snap_previous");
+  expect(JSON.parse(screen.getByLabelText("Answer navigation state").textContent ?? "{}")).toEqual(state);
 });

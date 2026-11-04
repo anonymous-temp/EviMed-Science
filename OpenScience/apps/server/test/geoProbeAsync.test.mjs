@@ -242,6 +242,15 @@ test("submit() returns the accepted task for the caller to hold instead of waiti
   await assert.rejects(client.submit({ question: "test", onAccepted: () => { throw Object.assign(new Error("not recorded"), { code: "geo_probe_result_unavailable" }); } }), { code: "geo_probe_result_unavailable" });
 });
 
+test("a 200 receipt with an id but missing or invalid status is held for polling", async () => {
+  for (const body of [{ request_id: id }, { request_id: id, job_status: "unexpected" }, { request_id: id, job_status: "running", results: [] }]) {
+    const accepted = [];
+    const client = probeUpstream(config, { fetchImpl: async () => json(body) });
+    const result = await client.submit({ question: "test", onAccepted: task => accepted.push(task.requestId) });
+    assert.equal(result.requestId, id); assert.deepEqual(accepted, [id]);
+  }
+});
+
 test("task outcomes are counted once each: accepted, then how the task ended", async () => {
   const outcomes = [];
   const run = async (reply) => {

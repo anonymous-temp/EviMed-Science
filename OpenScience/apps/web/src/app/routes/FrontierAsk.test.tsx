@@ -1,3 +1,4 @@
+import { optionalOpaqueRuntimeUiIntent } from "@/test/runtimeUiIntentAssertions";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
@@ -17,10 +18,9 @@ const detail = (raw: Record<string, unknown>) => parseFrontierItemDetail(raw)!;
 const ID = "a1b2c3d4e5f60718";
 const QUESTIONS = ["这个结果适用于中国患者吗？", "和现有标准治疗比差别在哪？", "安全性数据有哪些？"];
 
-type Intent = { kind: string; draft?: string; originReference?: { kind: string; id: string; title: string } };
 function Probe() {
   const location = useLocation();
-  const intent = (location.state as { runtimeUiIntent?: Intent } | null)?.runtimeUiIntent;
+  const intent = optionalOpaqueRuntimeUiIntent(location.state);
   return <div data-testid="probe">{location.pathname}|{JSON.stringify(intent ? { kind: intent.kind, draft: intent.draft, origin: intent.originReference } : null)}</div>;
 }
 const intentOf = () => JSON.parse(screen.getByTestId("probe").textContent!.split("|").slice(1).join("|")) as { kind: string; draft: string; origin: { kind: string; id: string; title: string } };

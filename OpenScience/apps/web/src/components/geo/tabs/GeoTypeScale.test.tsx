@@ -115,7 +115,8 @@ function typeCombos(root: Element): string[] {
  */
 const CEILING: Readonly<Record<string, readonly string[]>> = Object.freeze({
   总览: ["12/400", "14/400", "18/600", "32/600", "40/600"],
-  可见度: ["12/400", "14/400", "18/600"],
+  // November 4: the leading KPI uses 32/600; four rungs preserve the data-page budget.
+  可见度: ["12/400", "14/400", "18/600", "32/600"],
   准确与安全: ["12/400", "14/400", "18/600", "32/600", "40/600"],
   问题与回答: ["12/400", "14/400", "14/600"],
   // The selected implementation plan now lives inside Sources; its nested headings use the existing fourth rung.

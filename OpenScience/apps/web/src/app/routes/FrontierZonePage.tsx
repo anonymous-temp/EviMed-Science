@@ -16,7 +16,7 @@ import {
   type ZoneOverview as ZoneOverviewData,
 } from "@/lib/evidenceTopicClient";
 import { frontierAbsence, useFrontierFeature } from "@/lib/frontierClient";
-import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
+import { sanitizeRuntimeUiHistoryState, prepareRuntimeUiIntent, newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { toast } from "@/lib/toast";
 import { useWide } from "@/lib/useMediaQuery";
 import { ZoneSubscription } from "@/components/capsule/ZoneSubscription";
@@ -201,9 +201,9 @@ function ZoneBody({ zone, back, editor: Editor, onZone }: {
   const tab = zoneTabOf(params.get("tab"), cardCount > 0);
   const view = useMemo(() => readItemsView(params), [params]);
   const setView = useCallback((patch: Partial<ZoneItemsView>) => {
-    setParams((current) => itemsParams({ ...readItemsView(current), ...patch }), { replace: true, state: location.state });
+    setParams((current) => itemsParams({ ...readItemsView(current), ...patch }), { replace: true, state: sanitizeRuntimeUiHistoryState(location.state) });
   }, [setParams, location.state]);
-  const switchTab = (next: ZoneTab) => setParams(next === "overview" ? new URLSearchParams() : next === "items" ? itemsParams(EMPTY_ITEMS_VIEW) : new URLSearchParams({ tab: next }), { replace: true, state: location.state });
+  const switchTab = (next: ZoneTab) => setParams(next === "overview" ? new URLSearchParams() : next === "items" ? itemsParams(EMPTY_ITEMS_VIEW) : new URLSearchParams({ tab: next }), { replace: true, state: sanitizeRuntimeUiHistoryState(location.state) });
 
   const items = useZoneItems(zone, view, tab === "items");
   const toolbar = useItemsToolbar({ view, set: setView, items, count: view.week ? items.rows.length : items.total });
@@ -257,7 +257,7 @@ function ZoneBody({ zone, back, editor: Editor, onZone }: {
       toast.error("没有复制成功");
     }
   };
-  const research = () => navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent(zoneResearchDraft(zone, overview)) } });
+  const research = () => navigate("/app/chat", { state: { runtimeUiIntent: prepareRuntimeUiIntent(newRuntimeUiIntent(zoneResearchDraft(zone, overview))) } });
 
   const ownUserZone = zone.kind === "user" && zone.canEdit;
   const canMakeZone = useZoneCreate();

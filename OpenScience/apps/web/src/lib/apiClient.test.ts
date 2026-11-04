@@ -1371,17 +1371,17 @@ describe("apiClient budget refusals", () => {
   });
 
   it("reads the HTTP-date form of Retry-After an intermediary may rewrite it into", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-11-03T12:00:00Z"));
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(refusal(undefined, "task_queue_full", 429, {
       "Retry-After": new Date(Date.now() + 45_000).toUTCString(),
     }));
     const client = await loadClient("https://science.example/api");
 
     const error = await client.fetchWebAccountUsage().catch((err: unknown) => err) as InstanceType<typeof client.WebApiError>;
-    expect(error.retryAfterSeconds).toBeGreaterThanOrEqual(40);
-    expect(error.retryAfterSeconds).toBeLessThanOrEqual(45);
+    expect(error.retryAfterSeconds).toBe(45);
     // Not a ceiling, so it gets the retry wording rather than the release one.
-    // The header carries whole seconds, so the observed wait is 44 or 45.
-    expect(client.webErrorMessage(error)).toMatch(/^请求过于频繁，已被暂时限流。请在约 4[45] 秒后重试。$/);
+    // Freeze the clock so asynchronous module loading cannot consume the asserted interval.
+    expect(client.webErrorMessage(error)).toBe("请求过于频繁，已被暂时限流。请在约 45 秒后重试。");
   });
 
   it("says nothing about time when the control plane said nothing", async () => {
@@ -1584,4 +1584,124 @@ it("checks component lifetime again after CSRF readback before sending upload by
  const task = client.invokeCommand("upload_file", {data:"synthetic"}, {projectId:"default", isCurrent:()=>mounted});
  expect(fetchMock).toHaveBeenCalledTimes(1); mounted = false; finish(csrfMeResponse());
  await expect(task).rejects.toBeInstanceOf(StaleSessionError); expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
+it("invalidates cached account, project and CSRF on an external session signal without rebroadcast", async () => {
+  const fetcher = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(responseJson({ user: { id: "a" }, csrfToken: "csrf-a" })).mockResolvedValueOnce(responseJson({ user: { id: "b" }, csrfToken: "csrf-b" }));
+  const client = await loadClient("https://science.example/api");
+  window.sessionStorage.setItem("openScience.projectId", "old-project");
+  await client.fetchWebMe();
+  expect(client.getWebApiRequestHeaders()["X-Open-Science-CSRF"]).toBe("csrf-a");
+  const write = vi.spyOn(Storage.prototype, "setItem");
+  window.dispatchEvent(new StorageEvent("storage", { key: client.WEB_SESSION_SYNC_STORAGE_KEY, newValue: '{"kind":"started"}' }));
+  expect(client.getWebApiRequestHeaders()["X-Open-Science-CSRF"]).toBeUndefined();
+  expect(client.getWebProjectId()).toBe("default");
+  expect((await client.fetchWebMe({ projectId: "default" }))?.user.id).toBe("b");
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  expect(write.mock.calls.filter(([key]) => key === client.WEB_SESSION_SYNC_STORAGE_KEY)).toHaveLength(0);
+});
+
+it("publishes only the latest successful generation-current actor from me", async () => {
+  const client = await loadClient("https://science.example/api");
+  const { sessionGeneration } = await import("./sessionLifecycle");
+  const me = (id: string) => responseJson({ user: { id, tenantId: `tenant-${id}` }, tenant: { id: `tenant-${id}` }, csrfToken: `csrf-${id}` });
+  let resolveSlow!: (response: Response) => void;
+  const fetchMock = vi.spyOn(globalThis, "fetch")
+    .mockImplementationOnce(() => new Promise(resolve => { resolveSlow = resolve; }))
+    .mockResolvedValueOnce(me("a"));
+  const slow = client.fetchWebMe({ silentUnauthorized: true });
+  expect(client.getVerifiedWebActor()).toBeNull();
+  await client.fetchWebMe();
+  const current = { generation: sessionGeneration(), userId: "a", tenantId: "tenant-a", csrf: "csrf-a" };
+  expect(client.getVerifiedWebActor()).toEqual(current);
+  resolveSlow(me("earlier"));
+  await slow;
+  expect(client.getVerifiedWebActor()).toEqual(current);
+  expect(client.getWebApiRequestHeaders()["X-Open-Science-CSRF"]).toBe("csrf-a");
+
+  let resolveFormer!: (response: Response) => void;
+  fetchMock.mockImplementationOnce(() => new Promise(resolve => { resolveFormer = resolve; })).mockResolvedValueOnce(me("b"));
+  const former = client.fetchWebMe({ silentUnauthorized: true });
+  window.dispatchEvent(new StorageEvent("storage", { key: client.WEB_SESSION_SYNC_STORAGE_KEY, newValue: '{"kind":"started"}' }));
+  expect(client.getVerifiedWebActor()).toBeNull();
+  await client.fetchWebMe();
+  resolveFormer(me("a"));
+  await expect(former).rejects.toThrow();
+  expect(client.getVerifiedWebActor()).toEqual({ generation: sessionGeneration(), userId: "b", tenantId: "tenant-b", csrf: "csrf-b" });
+  window.dispatchEvent(new Event(client.WEB_SESSION_ENDED_EVENT));
+  expect(client.getVerifiedWebActor()).toBeNull();
+});
+
+it("does not admit a late me response body after an external boundary", async () => {
+  let finish: ((value: unknown) => void) | null = null;
+  const response = { status: 200, ok: true, json: () => new Promise(resolve => { finish = resolve; }) } as Response;
+  vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(response);
+  const client = await loadClient("https://science.example/api");
+  const reading = client.fetchWebMe();
+  await vi.waitFor(() => expect(finish).not.toBeNull());
+  window.dispatchEvent(new StorageEvent("storage", { key: client.WEB_SESSION_SYNC_STORAGE_KEY, newValue: "signal" }));
+  (finish as unknown as (value: unknown) => void)({ data: { user: { id: "old" }, csrfToken: "stale" } });
+  await expect(reading).rejects.toThrow();
+  expect(client.getWebApiRequestHeaders()["X-Open-Science-CSRF"]).toBeUndefined();
+});
+
+
+it("does not treat another tab's project selection as an account change", async () => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(responseJson({ user: { id: "a" }, csrfToken: "csrf-a" }));
+  const client = await loadClient("https://science.example/api");
+  await client.fetchWebMe();
+  window.dispatchEvent(new StorageEvent("storage", { key: "openScience.projectId", newValue: "another-project" }));
+  expect(client.getWebApiRequestHeaders()["X-Open-Science-CSRF"]).toBe("csrf-a");
+  await client.fetchWebMe();
+  expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+});
+
+it("keeps the selected project in memory when storage is blocked and clears it at a boundary", async () => {
+  const client = await loadClient("https://science.example/api");
+  vi.spyOn(window, "sessionStorage", "get").mockImplementation(() => { throw new DOMException("blocked", "SecurityError"); });
+  client.setWebProjectId("selected-project");
+  expect(client.getWebProjectId()).toBe("selected-project");
+  expect(client.getWebApiRequestHeaders()["X-Open-Science-Project"]).toBe("selected-project");
+  window.dispatchEvent(new StorageEvent("storage", { key: client.WEB_SESSION_SYNC_STORAGE_KEY, newValue: "change" }));
+  expect(client.getWebProjectId()).toBe("default");
+});
+
+it("cannot let an old delayed 401 clear the new account CSRF", async () => {
+  let finish: ((value: Response) => void) | null = null;
+  vi.spyOn(globalThis, "fetch").mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }))
+    .mockResolvedValueOnce(responseJson({ user: { id: "new" }, csrfToken: "csrf-new" }));
+  const client = await loadClient("https://science.example/api");
+  const old = client.fetchWebMe();
+  await vi.waitFor(() => expect(finish).not.toBeNull());
+  window.dispatchEvent(new StorageEvent("storage", { key: client.WEB_SESSION_SYNC_STORAGE_KEY, newValue: "change" }));
+  await client.fetchWebMe({ projectId: "default" });
+  (finish as unknown as (value: Response) => void)(new Response("", { status: 401 }));
+  await expect(old).rejects.toThrow();
+  expect(client.getWebApiRequestHeaders()["X-Open-Science-CSRF"]).toBe("csrf-new");
+});
+
+it("does not rebroadcast when an external recheck gets a 401", async () => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 401 }));
+  const client = await loadClient("https://science.example/api");
+  const writes = vi.spyOn(Storage.prototype, "setItem");
+  const events = vi.fn();
+  window.addEventListener(client.WEB_SESSION_ENDED_EVENT, events);
+  try {
+    expect(await client.fetchWebMe({ projectId: "default", silentUnauthorized: true })).toBeNull();
+    expect(events).not.toHaveBeenCalled();
+    expect(writes.mock.calls.filter(([key]) => key === client.WEB_SESSION_SYNC_STORAGE_KEY)).toHaveLength(0);
+  } finally { window.removeEventListener(client.WEB_SESSION_ENDED_EVENT, events); }
+});
+
+it("masks an old project when storage refuses removal but still permits reading", async () => {
+  const client = await loadClient("https://science.example/api");
+  client.setWebProjectId("old-private-project");
+  const remove = vi.spyOn(Storage.prototype, "removeItem").mockImplementation(function (this: Storage, key: string) {
+    if (key === "openScience.projectId" && this === window.sessionStorage) throw new DOMException("blocked", "SecurityError");
+  });
+  window.dispatchEvent(new StorageEvent("storage", { key: client.WEB_SESSION_SYNC_STORAGE_KEY, newValue: "changed" }));
+  expect(client.getWebProjectId()).toBe("default");
+  client.setWebProjectId("new-project");
+  expect(client.getWebProjectId()).toBe("new-project");
+  remove.mockRestore();
 });

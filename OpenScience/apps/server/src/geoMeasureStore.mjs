@@ -1,4 +1,6 @@
 import { prepareGeoLegacyError, resolveGeoErrorIds } from "./geoLegacyErrorIdentity.mjs";
+import { validateGeoConfirmationRound } from "./geoConfirmationAuthorization.mjs";
+import { GEO_JOB_MAX_ATTEMPTS } from "./geoConfirmationPolicy.mjs";
 import { createHash } from "node:crypto";
 import { geoValueCanonical, geoAutomationEnabled } from "@evimed/domain";
 import { createModuleEvolutionPolicies } from "./moduleEvolutionPolicies.mjs";
@@ -115,6 +117,8 @@ ALTER TABLE evimed_geo.metrics ADD COLUMN IF NOT EXISTS rival text;
 ALTER TABLE evimed_geo.metrics ADD COLUMN IF NOT EXISTS reason text;
 ALTER TABLE evimed_geo.snapshots ADD COLUMN IF NOT EXISTS probe_job_id text;
 ALTER TABLE evimed_geo.probe_jobs ADD COLUMN IF NOT EXISTS external_ref text;
+ALTER TABLE evimed_geo.probe_jobs ADD COLUMN IF NOT EXISTS sample_started_at timestamptz;
+ALTER TABLE evimed_geo.probe_jobs ADD COLUMN IF NOT EXISTS dispatch_started_at timestamptz;
 ALTER TABLE evimed_geo.errors ADD COLUMN IF NOT EXISTS notified_at timestamptz;
 ALTER TABLE evimed_geo.facts ADD COLUMN IF NOT EXISTS registry_key text;
 ALTER TABLE evimed_geo.facts ADD COLUMN IF NOT EXISTS reparsed_at timestamptz;
@@ -175,6 +179,7 @@ export function jobRow(row) {
     repeatIndex: Number(row.repeat_index ?? 0),
     status: String(row.status),
     attempts: Number(row.attempts ?? 0),
+    roundKind: row.round_kind ?? null,
     samplingMode: row.measurement_contract?.samplingMode ?? null,
     runAfter: iso(row.run_after),
     leaseOwner: row.lease_owner ?? null,
@@ -183,6 +188,7 @@ export function jobRow(row) {
     errorCode: row.error_code ?? null,
     externalRef: row.external_ref ?? null,
     submittedAt: iso(row.submitted_at),
+    sampleStartedAt: iso(row.sample_started_at),
   };
 }
 
@@ -242,13 +248,14 @@ export function errorRow(row) {
 
 export class GeoMeasureStore {
   /** @param {{ query: (text: string, values?: unknown[]) => Promise<any>, transaction: (operation: (client: any) => Promise<any>) => Promise<any>, withClient: (operation: (client: any) => Promise<any>) => Promise<any> }} database  a ControlPlaneDatabase
-   * @param {{policies?: any}} [options] */
-  constructor(database, { policies = createModuleEvolutionPolicies() } = {}) {
+   * @param {{policies?: any, sampleClock?: (() => Date) | null}} [options] */
+  constructor(database, { policies = createModuleEvolutionPolicies(), sampleClock = null } = {}) {
     if (!database || typeof database.query !== "function" || typeof database.transaction !== "function") {
       throw new TypeError("The GEO measurement store needs the control-plane database.");
     }
     this.policies = policies;
     this.database = database;
+    this.sampleClock = sampleClock;
   }
 
   /** The schema, and the columns this package writes. Once per database object. */
@@ -461,6 +468,7 @@ export class GeoMeasureStore {
     const requestDigest = createHash("sha256").update(geoValueCanonical({ setVersion: round.setVersion, engines: round.engines,
       contract: round.surface.measurementContract ?? null, jobs, recoveryOf: round.ref?.recoveryOf ?? null })).digest("hex");
     return this.transaction(async (client) => {
+      let confirmationAuthorization = null;
       if (round.ref?.requestKey) {
         await client.query(`SELECT pg_advisory_xact_lock(hashtext('evimed-geo-diagnosis:' || $1))`, [round.geoProjectId]);
         const existing = (await client.query(`SELECT id, set_version, surface, ref FROM evimed_geo.rounds WHERE geo_project_id=$1 AND user_id=$2 AND ref->>'requestKey'=$3`, [round.geoProjectId, round.userId, round.ref.requestKey])).rows[0];
@@ -471,12 +479,14 @@ export class GeoMeasureStore {
       }
       if (round.kind === "confirm") {
         // Serialize automatic acceptance with scope edits and consent withdrawal on the same project row.
+        await client.query(`SELECT pg_advisory_xact_lock(hashtext('evimed-geo-set:' || $1))`, [round.geoProjectId]);
         const current = (await client.query(`SELECT * FROM evimed_geo.projects WHERE id=$1 AND deleted_at IS NULL FOR UPDATE`, [round.geoProjectId])).rows[0];
         const authorized = current ? projectRow(current) : null;
         if (!authorized || authorized.status !== "active" || !geoAutomationEnabled(authorized)
           || round.engines.some((engine) => !authorized.steps.monitoring.automation.engines.includes(engine))) {
           throw new HttpError(409, "geo_monitoring_authorization_required", "Automatic confirmation requires current monitoring authorization for these engines.");
         }
+        confirmationAuthorization = await validateGeoConfirmationRound(client, current, round, jobs);
       }
       if (round.ref?.recoveryOf) {
         // Under the diagnosis lock above: two recoveries of one cell cannot both pass.
@@ -485,7 +495,7 @@ export class GeoMeasureStore {
       }
       await client.query(`INSERT INTO evimed_geo.rounds (id, user_id, geo_project_id, kind, set_version, engines, surface, status, planned, done, failed, ref, created_at)
         VALUES ($1, $2, $3, $4, $5, $6::text[], $7::jsonb, 'queued', $8, 0, 0, $9::jsonb, $10)`,
-      [round.id, round.userId, round.geoProjectId, round.kind, round.setVersion, round.engines, JSON.stringify({ ...round.surface, intervention }), round.planned,
+      [round.id, round.userId, round.geoProjectId, round.kind, round.setVersion, round.engines, JSON.stringify({ ...round.surface, intervention, ...(confirmationAuthorization ? { confirmationAuthorization } : {}) }), round.planned,
         round.ref ? JSON.stringify({ ...round.ref, requestDigest }) : null, round.now.toISOString()]);
       const base = round.now.getTime();
       for (let offset = 0; offset < jobs.length; offset += 200) {
@@ -529,6 +539,27 @@ export class GeoMeasureStore {
     return result.rows[0] ? String(result.rows[0].id) : null;
   }
 
+  /** Existing work may be shared only with an error inside the current consent. @param {any} error @param {string} roundId @param {string | null} observationId */
+  async canJoinConfirmation(error, roundId, observationId) {
+    try {
+      return await this.transaction(async client => {
+        await client.query(`SELECT pg_advisory_xact_lock(hashtext('evimed-geo-set:' || $1))`, [error.geoProjectId]);
+        const project = (await client.query(`SELECT * FROM evimed_geo.projects WHERE id=$1 AND deleted_at IS NULL FOR UPDATE`, [error.geoProjectId])).rows[0];
+        if (!project || project.status !== "active" || !geoAutomationEnabled(projectRow(project))) return false;
+        const row = (await client.query(`SELECT * FROM evimed_geo.rounds WHERE id=$1 AND geo_project_id=$2 AND kind='confirm' AND status IN ('queued','running')`, [roundId, error.geoProjectId])).rows[0];
+        if (!row) return false;
+        const jobs = (await client.query(`SELECT question_id AS "questionId", engine, repeat_index AS "repeatIndex" FROM evimed_geo.probe_jobs WHERE round_id=$1 ORDER BY repeat_index`, [roundId])).rows;
+        await validateGeoConfirmationRound(client, project, { setVersion: Number(row.set_version), engines: row.engines, planned: Number(row.planned),
+          acceptedGeneration: row.surface?.confirmationAuthorization?.generation, createdAt: row.created_at,
+          ref: { errorId: error.id, observationId, eventId: error.confirm?.eventId ?? error.confirm?.observationId ?? observationId } }, jobs, { joining: true });
+        return true;
+      });
+    } catch (cause) {
+      if (cause instanceof HttpError) return false;
+      throw cause;
+    }
+  }
+
   /**
    * Leases whose holder died go back to the queue. A job that holds the request id of an accepted task (an inclusion vendor's or the
    * probe host's) keeps its lease and is polled instead: the task is paid for, and asking again would pay twice.
@@ -549,12 +580,42 @@ export class GeoMeasureStore {
       ON CONFLICT (snapshot_id) DO NOTHING`, [now.toISOString()]);
     const completed = await this.query(`UPDATE evimed_geo.probe_jobs j SET status='done', lease_owner=NULL, lease_until=NULL,
       snapshot_id=(SELECT s.id FROM evimed_geo.snapshots s WHERE s.probe_job_id=j.id AND s.status IN ('valid','refusal') ORDER BY s.asked_at DESC NULLS LAST,s.id DESC LIMIT 1), updated_at=$1
-      FROM evimed_geo.rounds r WHERE r.id=j.round_id AND r.surface->'measurementContract'->>'samplingMode'='one_shot'
-      AND j.status='leased' AND j.lease_until<$1 AND EXISTS (SELECT 1 FROM evimed_geo.snapshots s WHERE s.probe_job_id=j.id AND s.status IN ('valid','refusal')) RETURNING j.id`, [now.toISOString()]);
+      FROM evimed_geo.rounds r WHERE r.id=j.round_id AND (r.surface->'measurementContract'->>'samplingMode'='one_shot' OR r.kind='confirm')
+      AND j.status='leased' AND j.lease_until<$1 AND EXISTS (SELECT 1 FROM evimed_geo.snapshots s WHERE s.probe_job_id=j.id AND s.status IN ('valid','refusal')) RETURNING j.id, j.round_id`, [now.toISOString()]);
+    for (const roundId of new Set(completed.rows.map(row => String(row.round_id)))) await this.transaction(client => recount(client, roundId));
+    await this.transaction(async client => {
+      const unknown = await client.query(`UPDATE evimed_geo.probe_jobs j SET status='failed', error_code='delivery_unknown_no_automatic_retry',
+        snapshot_id=(SELECT s.id FROM evimed_geo.snapshots s WHERE s.probe_job_id=j.id AND s.warnings @> '["delivery_unknown_no_automatic_retry"]'::jsonb ORDER BY s.id DESC LIMIT 1),
+        lease_owner=NULL, lease_until=NULL, updated_at=$1 FROM evimed_geo.rounds r
+        WHERE r.id=j.round_id AND r.kind='confirm' AND (j.status='queued' OR (j.status='leased' AND j.lease_until<$1))
+          AND EXISTS (SELECT 1 FROM evimed_geo.snapshots s WHERE s.probe_job_id=j.id AND s.warnings @> '["delivery_unknown_no_automatic_retry"]'::jsonb)
+        RETURNING j.round_id`, [now.toISOString()]);
+      for (const roundId of new Set(unknown.rows.map(row => String(row.round_id)))) await recount(client, roundId);
+    });
+    // Never submit a legacy confirmation without its acceptance receipt, or
+    // repeat an uncertain delivery after the final permitted attempt. Tasks
+    // with an external ref were accepted upstream and remain pollable.
+    await this.transaction(async client => {
+      const stopped = await client.query(`UPDATE evimed_geo.probe_jobs j SET status='failed',
+        error_code=CASE WHEN j.status='leased' THEN 'delivery_unknown_no_automatic_retry'
+          WHEN r.surface->'confirmationAuthorization'->>'generation' IS NULL THEN 'geo_confirmation_legacy_unapproved'
+          ELSE 'delivery_unknown_no_automatic_retry' END,
+        lease_owner=NULL, lease_until=NULL, updated_at=$1
+        FROM evimed_geo.rounds r WHERE r.id=j.round_id AND r.kind='confirm' AND j.external_ref IS NULL
+          AND (j.status='queued' OR (j.status='leased' AND j.lease_until < $1))
+          AND (r.surface->'confirmationAuthorization'->>'generation' IS NULL OR j.attempts >= $2 OR j.dispatch_started_at IS NOT NULL
+            OR EXISTS (SELECT 1 FROM evimed_geo.snapshots s WHERE s.probe_job_id=j.id AND s.warnings @> '["delivery_unknown_no_automatic_retry"]'::jsonb))
+        RETURNING j.round_id`, [now.toISOString(), GEO_JOB_MAX_ATTEMPTS]);
+      for (const roundId of new Set(stopped.rows.map(row => String(row.round_id)))) await recount(client, roundId);
+    });
     const result = await this.query(`UPDATE evimed_geo.probe_jobs j SET status = CASE WHEN r.surface->'measurementContract'->>'samplingMode' = 'one_shot' THEN 'failed' ELSE 'queued' END,
         error_code = CASE WHEN r.surface->'measurementContract'->>'samplingMode' = 'one_shot' THEN 'delivery_unknown_no_automatic_retry' ELSE j.error_code END,
         lease_owner = NULL, lease_until = NULL, updated_at = $1
-      FROM evimed_geo.rounds r WHERE r.id=j.round_id AND j.status = 'leased' AND j.lease_until < $1 AND j.external_ref IS NULL RETURNING j.id`, [now.toISOString()]);
+      FROM evimed_geo.rounds r WHERE r.id=j.round_id AND j.status = 'leased' AND j.lease_until < $1 AND j.external_ref IS NULL
+        AND (r.kind <> 'confirm' OR (j.dispatch_started_at IS NULL AND j.attempts < $2
+          AND r.surface->'confirmationAuthorization'->>'generation' IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM evimed_geo.snapshots s WHERE s.probe_job_id=j.id AND s.warnings @> '["delivery_unknown_no_automatic_retry"]'::jsonb)))
+      RETURNING j.id`, [now.toISOString(), GEO_JOB_MAX_ATTEMPTS]);
     return (result.rowCount ?? result.rows.length) + (completed.rowCount ?? completed.rows.length);
   }
 
@@ -572,6 +633,9 @@ export class GeoMeasureStore {
           JOIN evimed_geo.rounds r ON r.id = j.round_id
           JOIN evimed_geo.projects p ON p.id = j.geo_project_id
         WHERE j.status = 'queued' AND (j.run_after IS NULL OR j.run_after <= $1)
+          AND (r.kind <> 'confirm' OR (r.surface->'confirmationAuthorization'->>'generation' IS NOT NULL AND j.attempts < $11
+            AND j.dispatch_started_at IS NULL AND NOT EXISTS (SELECT 1 FROM evimed_geo.snapshots s WHERE s.probe_job_id=j.id
+              AND s.warnings @> '["delivery_unknown_no_automatic_retry"]'::jsonb)))
           AND j.engine = ANY($2::text[]) AND NOT (j.engine = ANY($3::text[]))
           AND r.status IN ('queued', 'running') AND p.status = 'active' AND p.deleted_at IS NULL
           AND ($4::boolean OR r.surface->'measurementContract'->>'samplingMode' = 'one_shot' OR NOT (r.kind = ANY($5::text[])) OR r.planned <= $6)
@@ -581,10 +645,12 @@ export class GeoMeasureStore {
         LIMIT 1
         FOR UPDATE OF j SKIP LOCKED
       )
-      UPDATE evimed_geo.probe_jobs j SET status = 'leased', lease_owner = $9, lease_until = $10, attempts = j.attempts + 1, updated_at = $1
-      FROM candidate WHERE j.id = candidate.id RETURNING j.*, (SELECT surface->'measurementContract' FROM evimed_geo.rounds WHERE id=j.round_id) AS measurement_contract`,
+      UPDATE evimed_geo.probe_jobs j SET status = 'leased', lease_owner = $9, lease_until = $10, attempts = j.attempts + 1, updated_at = $1,
+        sample_started_at = coalesce($12::timestamptz, clock_timestamp()), dispatch_started_at=NULL
+      FROM candidate WHERE j.id = candidate.id RETURNING j.*, (SELECT surface->'measurementContract' FROM evimed_geo.rounds WHERE id=j.round_id) AS measurement_contract,
+        (SELECT kind FROM evimed_geo.rounds WHERE id=j.round_id) AS round_kind`,
     [now.toISOString(), engines, paused, nightOpen, [...GEO_NIGHT_ROUND_KINDS], nightMinAsks, weeklyCap, weekStart.toISOString(),
-      owner, leaseUntil.toISOString()]);
+      owner, leaseUntil.toISOString(), GEO_JOB_MAX_ATTEMPTS, this.sampleClock?.().toISOString() ?? null]);
     return result.rows[0] ? jobRow(result.rows[0]) : null;
   }
 
@@ -609,7 +675,7 @@ export class GeoMeasureStore {
    * @param {{ now: Date, engines: string[], limit: number }} options
    */
   async heldJobsToPoll({ now, engines, limit }) {
-    const result = await this.query(`SELECT j.*, r.surface->'measurementContract' AS measurement_contract FROM evimed_geo.probe_jobs j JOIN evimed_geo.rounds r ON r.id=j.round_id WHERE j.status = 'leased' AND j.external_ref IS NOT NULL
+    const result = await this.query(`SELECT j.*, r.kind AS round_kind, r.surface->'measurementContract' AS measurement_contract FROM evimed_geo.probe_jobs j JOIN evimed_geo.rounds r ON r.id=j.round_id WHERE j.status = 'leased' AND j.external_ref IS NOT NULL
       AND j.engine = ANY($2::text[]) AND (j.run_after IS NULL OR j.run_after <= $1) ORDER BY j.run_after NULLS FIRST, j.id LIMIT $3`,
     [now.toISOString(), engines, limit]);
     return result.rows.map(jobRow);
@@ -633,10 +699,31 @@ export class GeoMeasureStore {
    * @param {string} jobId @param {string} externalRef @param {{ now: Date, leaseUntil: Date, runAfter: Date }} at
    */
   async holdJob(jobId, externalRef, { now, leaseUntil, runAfter }) {
-    await this.query(`UPDATE evimed_geo.probe_jobs SET external_ref = $2, lease_until = $3, run_after = $4, updated_at = $5,
+    await this.transaction(async client => {
+    const result = await client.query(`UPDATE evimed_geo.probe_jobs j SET external_ref = $2, lease_until = $3, run_after = $4, updated_at = $5,
+        status=CASE WHEN j.status='failed' AND r.kind='confirm' AND j.error_code='delivery_unknown_no_automatic_retry' AND j.dispatch_started_at IS NOT NULL THEN 'leased' ELSE j.status END,
         submitted_at = CASE WHEN external_ref IS DISTINCT FROM $2 OR submitted_at IS NULL THEN $5::timestamptz ELSE submitted_at END
-      WHERE id = $1`,
+      FROM evimed_geo.rounds r WHERE j.id = $1 AND r.id=j.round_id AND (j.status='leased' OR
+        (j.status='failed' AND r.kind='confirm' AND j.error_code='delivery_unknown_no_automatic_retry' AND j.dispatch_started_at IS NOT NULL AND j.external_ref IS NULL)) RETURNING j.round_id`,
     [jobId, externalRef, leaseUntil.toISOString(), runAfter.toISOString(), now.toISOString()]);
+    const roundId = result.rows[0]?.round_id;
+    if (roundId) {
+      await client.query(`UPDATE evimed_geo.rounds SET status='running',finished_at=NULL WHERE id=$1 AND kind='confirm' AND status IN ('done','partial')`, [roundId]);
+      await client.query(`UPDATE evimed_geo.errors SET judgment_history=judgment_history || jsonb_build_array(jsonb_build_object('kind','late_confirmation_receipt','previousConfirmation',confirm)),
+        confirm=(confirm - 'reason') || '{"status":"pending","stability":"unconfirmed"}'::jsonb
+        WHERE confirm->>'roundId'=$1 AND confirm->>'status'='unavailable' AND confirm->>'reason'='delivery_unknown_no_automatic_retry'`, [roundId]);
+      await recount(client, roundId);
+    }
+    });
+  }
+
+  /** Persist the send boundary while this exact lease is still valid. @param {ReturnType<typeof jobRow>} job */
+  async markConfirmationDispatch(job) {
+    const result = await this.query(`UPDATE evimed_geo.probe_jobs SET dispatch_started_at=clock_timestamp()
+      WHERE id=$1 AND status='leased' AND lease_owner=$2 AND attempts=$3 AND external_ref IS NULL
+        AND lease_until > coalesce($4::timestamptz,clock_timestamp()) RETURNING id`,
+    [job.id, job.leaseOwner, job.attempts, this.sampleClock?.().toISOString() ?? null]);
+    return result.rows.length === 1;
   }
 
   /**
@@ -645,10 +732,12 @@ export class GeoMeasureStore {
    * @param {string} jobId @param {{ now: Date, runAfter?: Date | null, refundAttempt?: boolean, errorCode?: string | null }} options
    */
   async requeueJob(jobId, { now, runAfter = null, refundAttempt = false, errorCode = null }) {
-    await this.query(`UPDATE evimed_geo.probe_jobs SET status = 'queued', lease_owner = NULL, lease_until = NULL, external_ref = NULL, submitted_at = NULL,
-        run_after = $2, attempts = CASE WHEN $3::boolean THEN greatest(attempts - 1, 0) ELSE attempts END,
-        error_code = coalesce($4, error_code), updated_at = $5
-      WHERE id = $1`, [jobId, runAfter ? runAfter.toISOString() : null, refundAttempt, errorCode, now.toISOString()]);
+    await this.query(`UPDATE evimed_geo.probe_jobs j SET status = 'queued', lease_owner = NULL, lease_until = NULL, external_ref = NULL, submitted_at = NULL,
+        run_after = $2, dispatch_started_at=NULL, attempts = CASE WHEN $3::boolean THEN greatest(j.attempts - 1, 0) ELSE j.attempts END,
+        error_code = coalesce($4, j.error_code), updated_at = $5
+      FROM evimed_geo.rounds r WHERE j.id = $1 AND r.id=j.round_id
+        AND (r.kind <> 'confirm' OR (j.status='leased' AND j.external_ref IS NULL))`,
+    [jobId, runAfter ? runAfter.toISOString() : null, refundAttempt, errorCode, now.toISOString()]);
   }
 
   /**
@@ -751,17 +840,17 @@ export class GeoMeasureStore {
 
   /**
    * @param {{ id: string, userId: string, roundId: string | null, geoProjectId: string, questionId: string | null, engine: string,
-   *   askedAt: Date, status: string, answerText: string | null, answerSha256: string | null, citations: unknown[],
+   *   askedAt: Date | null, status: string, answerText: string | null, answerSha256: string | null, citations: unknown[],
    *   screenshotSha256: string | null, surface: Record<string, unknown>, latencyMs: number | null, warnings: unknown[], probeJobId: string | null }} row
    */
   async insertSnapshot(row) {
     await this.query(`INSERT INTO evimed_geo.snapshots (id, user_id, round_id, geo_project_id, question_id, engine, asked_at, status, answer_text,
         answer_sha256, citations, screenshot_sha256, surface, latency_ms, warnings, probe_job_id)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12, $13::jsonb, $14, $15::jsonb, $16)`,
-    [row.id, row.userId, row.roundId, row.geoProjectId, row.questionId, row.engine, row.askedAt.toISOString(), row.status, row.answerText,
+    [row.id, row.userId, row.roundId, row.geoProjectId, row.questionId, row.engine, row.askedAt?.toISOString() ?? null, row.status, row.answerText,
       row.answerSha256, JSON.stringify(row.citations), row.screenshotSha256, JSON.stringify(row.surface),
       // latency_ms is an integer column; the probe reports fractions.
-      row.latencyMs === null || !Number.isFinite(Number(row.latencyMs)) ? null : Math.round(Number(row.latencyMs)),
+      row.latencyMs === null || !Number.isFinite(Number(row.latencyMs)) || Number(row.latencyMs) < 0 || Number(row.latencyMs) > 2147483647 ? null : Math.round(Number(row.latencyMs)),
       JSON.stringify(row.warnings), row.probeJobId]);
   }
 
@@ -1021,7 +1110,10 @@ export class GeoMeasureStore {
           WHEN errors.judgment_state='withdrawn' THEN errors.judgment_history || jsonb_build_array(jsonb_build_object('kind','new_wrong_occurrence','snapshotId',EXCLUDED.last_snapshot_id,'changedAt',$17::text)) ELSE errors.judgment_history END
           || CASE WHEN errors.status='closed' AND ${observedAt} >
             (SELECT asked_at FROM evimed_geo.snapshots WHERE id=errors.closed_snapshot_id AND user_id=errors.user_id AND geo_project_id=errors.geo_project_id AND engine=errors.engine)
-            THEN jsonb_build_array(jsonb_build_object('kind','business_reopened','snapshotId',$7::text,'previousClosedSnapshotId',errors.closed_snapshot_id,'changedAt',$17::text)) ELSE '[]'::jsonb END,
+            THEN jsonb_build_array(jsonb_build_object('kind','business_reopened','snapshotId',$7::text,'previousClosedSnapshotId',errors.closed_snapshot_id,'previousConfirmation',errors.confirm,'changedAt',$17::text)) ELSE '[]'::jsonb END,
+        confirm = CASE WHEN errors.status='closed' AND ${observedAt} >
+            (SELECT asked_at FROM evimed_geo.snapshots WHERE id=errors.closed_snapshot_id AND user_id=errors.user_id AND geo_project_id=errors.geo_project_id AND engine=errors.engine)
+          THEN NULL ELSE errors.confirm END,
         last_snapshot_id = CASE WHEN ${observedAt} IS NOT NULL AND (errors.last_snapshot_id IS NULL OR ${observedAt} >= coalesce(
             (SELECT asked_at FROM evimed_geo.snapshots WHERE id=errors.last_snapshot_id AND user_id=errors.user_id AND geo_project_id=errors.geo_project_id AND engine=errors.engine), '-infinity'::timestamptz))
           THEN EXCLUDED.last_snapshot_id ELSE errors.last_snapshot_id END,
@@ -1084,6 +1176,13 @@ export class GeoMeasureStore {
       const [id] = await resolveGeoErrorIds(client, row.geo_project_id, [errorId], { lock: true });
       if (id) await client.query(`UPDATE evimed_geo.errors SET ${sets.join(", ")} WHERE id = $1`, [id, ...values]);
     });
+  }
+
+  /** Preserve the failed receipt before reconsidering a later observation. @param {string} errorId @param {any} previous @param {any} next */
+  async recordConfirmationReconsideration(errorId, previous, next) {
+    await this.query(`UPDATE evimed_geo.errors SET confirm=$3::jsonb,
+      judgment_history=judgment_history || jsonb_build_array(jsonb_build_object('kind','confirmation_reconsidered','previousConfirmation',$2::jsonb))
+      WHERE id=$1 AND confirm=$2::jsonb`, [errorId, JSON.stringify(previous), JSON.stringify(next)]);
   }
 
   /**
@@ -1354,10 +1453,16 @@ export class GeoMeasureStore {
   /**
    * Replace a round's metric rows with a new computation, in one transaction.
    * @param {{ roundId: string | null, geoProjectId: string, userId: string, computedAt: Date, rows: Array<Record<string, any>>,
-   *   replace?: { scope?: string, metricId?: string } }} batch
+   *   replace?: { scope?: string, metricId?: string }, snapshot?: any, generation?: string | null }} batch
    */
-  async writeMetrics({ roundId, geoProjectId, userId, computedAt, rows, replace = {} }) {
+  async writeMetrics({ roundId, geoProjectId, userId, computedAt, rows, replace = {}, snapshot = null, generation = null }) {
     await this.transaction(async (client) => {
+      await client.query("SELECT pg_advisory_xact_lock(hashtext('geo-metric-round:' || $1))", [String(roundId ?? '')]);
+      if (generation && !snapshot) {
+        const current = await client.query("SELECT 1 FROM evimed_geo.metrics WHERE geo_project_id=$1 AND round_id=$2 AND scope='arm' AND computation_generation=$3 LIMIT 1", [geoProjectId, roundId, generation]);
+        if (!current.rows.length) throw new Error("Metric computation generation was superseded.");
+      }
+      if (snapshot && generation) await client.query(`INSERT INTO evimed_geo.metric_input_snapshots (generation,geo_project_id,user_id,round_id,payload) VALUES ($1,$2,$3,$4,$5::jsonb)`, [generation, geoProjectId, userId, roundId, JSON.stringify(snapshot)]);
       await client.query(`DELETE FROM evimed_geo.metrics WHERE geo_project_id = $1 AND round_id IS NOT DISTINCT FROM $2
         AND ($3::text IS NULL OR scope = $3) AND ($4::text IS NULL OR metric_id = $4)`,
       [geoProjectId, roundId, replace.scope ?? null, replace.metricId ?? null]);
@@ -1370,13 +1475,13 @@ export class GeoMeasureStore {
             row.arm ?? null, row.metricId, row.variant ?? null, row.rival ?? null, row.reason ?? null, row.numerator ?? null,
             row.denominator ?? null, row.value ?? null, row.ciLow ?? null, row.ciHigh ?? null, row.status, row.dataType ?? "measured",
             row.snapshotCount ?? null, row.noiseBand ?? null, row.noiseMeasured ?? null, computedAt.toISOString(),
-            row.assessment == null ? null : JSON.stringify(row.assessment), GEO_MEASUREMENT_METHOD_VERSION);
+            row.assessment == null ? null : JSON.stringify(row.assessment), GEO_MEASUREMENT_METHOD_VERSION, generation);
           const n = values.length;
-          return `(${Array.from({ length: 26 }, (_, index) => `$${n - 25 + index}`).join(", ")})`;
+          return `(${Array.from({ length: 27 }, (_, index) => `$${n - 26 + index}`).join(", ")})`;
         });
         await client.query(`INSERT INTO evimed_geo.metrics (id, user_id, geo_project_id, round_id, scope, pool, engine, group_id, arm, metric_id,
             variant, rival, reason, numerator, denominator, value, ci_low, ci_high, status, data_type, snapshot_count, noise_band, noise_measured,
-            computed_at, assessment, method_version)
+            computed_at, assessment, method_version, computation_generation)
           VALUES ${tuples.join(", ")}`, values);
       }
     });
@@ -1420,6 +1525,20 @@ export class GeoMeasureStore {
     return series;
   }
 
+  /** @param {string} geoProjectId @param {string} roundId @param {string} generation */
+  async frozenNoiseInput(geoProjectId, roundId, generation) {
+    const result = await this.query(`SELECT payload FROM evimed_geo.metric_input_snapshots WHERE geo_project_id=$1 AND round_id=$2 AND generation=$3`, [geoProjectId, roundId, generation]);
+    return result.rows[0]?.payload ?? null;
+  }
+
+  /** @param {string} geoProjectId @param {string} roundId */
+  async frozenMetricInput(geoProjectId, roundId) {
+    const result = await this.query(`SELECT s.generation,s.payload FROM evimed_geo.metric_input_snapshots s
+      JOIN evimed_geo.metrics m ON m.computation_generation=s.generation AND m.geo_project_id=s.geo_project_id AND m.round_id=s.round_id
+      WHERE s.geo_project_id=$1 AND s.round_id=$2 AND m.scope='arm' ORDER BY m.computed_at DESC LIMIT 1`, [geoProjectId, roundId]);
+    return result.rows[0] ? { generation: String(result.rows[0].generation), payload: result.rows[0].payload } : null;
+  }
+
   /**
    * The rounds `armSeries` draws from (baseline or weekly, one question set version, a sample date, arm cells written), oldest
    * first, each with the engines its cross-engine cells were computed over and the groups its two arms were (`noteRoundBalance`; null
@@ -1447,10 +1566,10 @@ export class GeoMeasureStore {
 
   /** The latest noise band of a metric for the project (a `NOISE` row). @param {string} geoProjectId @param {string} metricId */
   async latestNoiseBand(geoProjectId, metricId) {
-    const result = await this.query(`SELECT value, status FROM evimed_geo.metrics WHERE geo_project_id = $1 AND metric_id = 'NOISE' AND variant = $2
+    const result = await this.query(`SELECT value, status, round_id, computation_generation FROM evimed_geo.metrics WHERE geo_project_id = $1 AND metric_id = 'NOISE' AND variant = $2
       ORDER BY computed_at DESC LIMIT 1`, [geoProjectId, metricId]);
     const row = result.rows[0];
-    return row ? { value: num(row.value), measured: row.status === "ok" } : null;
+    return row ? { value: num(row.value), measured: row.status === "ok", roundId: row.round_id ?? null, generation: row.computation_generation ?? null } : null;
   }
 
   /**

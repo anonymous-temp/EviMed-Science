@@ -29,6 +29,8 @@ describe("the ledger status words", () => {
   });
 
   it("keeps the fallback for what the server computes, and never prints the code itself", () => {
+    expect(labelFor(LEDGER_STATUS_LABEL, "replayed")).toBe("已复用原结果");
+    expect(labelFor(LEDGER_STATUS_LABEL, "filesystem_reservation_retained")).toBe("保留待核查目录");
     expect(labelFor(LEDGER_STATUS_LABEL, "a_status_nobody_wrote")).toBe("未登记的状态");
     expect(labelFor(LEDGER_STATUS_LABEL, "")).toBe("未登记的状态");
     expect(labelFor(LEDGER_STATUS_LABEL, "constructor")).toBe("未登记的状态");

@@ -6,7 +6,7 @@ import { geoChatPath } from "@/lib/geoLocation";
 import { chatSessionId } from "@/lib/runLocation";
 import { listWebAgentRuns } from "@/lib/apiClient";
 import { useProjectStore } from "@/lib/projects";
-import { scopedConversationPath, conversationNavigationState, conversationProjectFromLocation, newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
+import { sanitizeRuntimeUiHistoryState, prepareRuntimeUiIntent, scopedConversationPath, conversationNavigationState, conversationProjectFromLocation, newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { Button } from "@/components/ui/Button";
 import { FrameSkeleton } from "./RuntimeUiFrame";
 import { PageTitle } from "@/components/layout/PageTitle";
@@ -42,7 +42,7 @@ export function SessionRoute() {
   const addressedProject = conversationProjectFromLocation(location) ?? ((location.state as { globalAssistant?: boolean } | null)?.globalAssistant ? "default" : null);
   useEffect(() => {
     if (addressedProject) return;
-    navigate(scopedConversationPath(`${location.pathname}${location.search}${location.hash}`, projectId), { replace: true, state: { ...location.state, conversationProjectId: projectId } });
+    navigate(scopedConversationPath(`${location.pathname}${location.search}${location.hash}`, projectId), { replace: true, state: { ...sanitizeRuntimeUiHistoryState(location.state) as Record<string, unknown>, conversationProjectId: projectId } });
   }, [addressedProject, association, location.pathname, location.search, location.hash, location.state, projectId, navigate]);
   useEffect(() => {
     if (!addressedProject || addressedProject !== projectId || !association || (location.state as { globalAssistant?: boolean } | null)?.globalAssistant) return undefined;
@@ -57,7 +57,7 @@ export function SessionRoute() {
         if (!runs.some(run => run.sessionId === sessionId)) return;
       }
       if (!live || useProjectStore.getState().currentId !== projectId) return;
-      navigate(`${geoChatPath(project.id, sessionId)}${location.search}${location.hash}`, { replace: true, state: location.state });
+      navigate(`${geoChatPath(project.id, sessionId)}${location.search}${location.hash}`, { replace: true, state: sanitizeRuntimeUiHistoryState(location.state) });
     }).catch(() => { /* A stale module listing cannot redirect an ordinary conversation. */ });
     return () => { live = false; };
   }, [addressedProject, association, projectId, location.pathname, location.search, location.hash, location.state, navigate]);
@@ -82,7 +82,7 @@ export function GlobalHomeRoute({ projectId = "default", restore = false }: { pr
         if (!live) return;
         const restoring = restore || (location.state as { globalAssistant?: boolean } | null)?.globalAssistant;
         navigate(restoring ? `${location.pathname}${location.search}${location.hash}` : scopedConversationPath("/app/chat", "default"), { replace: true, flushSync: true, state: restoring ? location.state : {
-          ...conversationNavigationState(null, "default"), globalAssistant: true, runtimeUiIntent: newRuntimeUiIntent(),
+          ...conversationNavigationState(null, "default"), globalAssistant: true, runtimeUiIntent: prepareRuntimeUiIntent(newRuntimeUiIntent()),
         } });
       }, controller.signal);
     }).catch(() => { if (live) setError(true); });

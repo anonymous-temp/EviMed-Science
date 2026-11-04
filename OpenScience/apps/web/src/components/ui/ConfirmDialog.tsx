@@ -1,7 +1,6 @@
-import { isComposingKey } from "@/lib/compositionKeys";
-import { useEffect, useId, useRef } from "react";
-import { trapTab, registerFocusLayer, ownsKeyboard } from "@/lib/focusTrap";
+import { useId, useRef } from "react";
 import { Button } from "@/components/ui/Button";
+import { ResultModalSurface, useResultModalFocus } from "@/components/workspace/WorkspaceResultActivity";
 
 /**
  * Component: ConfirmDialog; owner: H; rules: DS21, DESIGN.md component adoption.
@@ -59,43 +58,21 @@ export function ConfirmDialog({
   const cancelRef = useRef<HTMLButtonElement>(null);
   const titleId = useId();
   const bodyId = useId();
-  // Always call the latest callback from the mount-once effect below, so a
-  // parent re-render neither re-focuses nor re-arms the key listener.
-  const cancel = useRef(onCancel);
-  cancel.current = onCancel;
-  const working = useRef(busy && cancellable !== true);
-  working.current = busy && cancellable !== true;
+  const working = busy && cancellable !== true;
+  const modal = useResultModalFocus(dialogRef, "dialog", () => cancelRef.current, () => { if (!working) onCancel(); });
 
-  useEffect(() => {
-    const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const unregister = registerFocusLayer(dialogRef.current);
-    cancelRef.current?.focus();
-    const onKey = (e: KeyboardEvent) => {
-      if (!ownsKeyboard(dialogRef.current, e)) return;
-      if (e.key === "Escape" && !isComposingKey(e)) { e.preventDefault(); e.stopPropagation(); if (!working.current) cancel.current(); }
-      if (e.key === "Tab") trapTab(dialogRef.current, e);
-    };
-    document.addEventListener("keydown", onKey);
-    return () => {
-      unregister();
-      document.removeEventListener("keydown", onKey);
-      trigger?.focus();
-    };
-  }, []);
-
-  return (
-    // The overlay has no keyboard listener on purpose: click-outside cancels,
-    // and the keyboard equivalent is Escape. role="presentation" keeps it
-    // out of the accessibility tree.
+  return <ResultModalSurface scoped={modal.scoped} suspended={modal.suspended}>
+    {/* Escape and clicking the backdrop are equivalent. */}
     <div
       className="fixed inset-0 z-modal flex items-center justify-center bg-scrim p-4"
       onClick={(e) => {
-        if (e.target === e.currentTarget && !working.current) onCancel();
+        if (e.target === e.currentTarget && !working) onCancel();
       }}
       role="presentation"
     >
       <div
         ref={dialogRef}
+        onFocus={modal.onFocus}
         tabIndex={-1}
         role="alertdialog"
         aria-modal="true"
@@ -121,5 +98,5 @@ export function ConfirmDialog({
         </div>
       </div>
     </div>
-  );
+  </ResultModalSurface>;
 }

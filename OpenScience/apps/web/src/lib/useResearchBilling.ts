@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import {
-  fetchWebResearchAllowance, webErrorMessage, WEB_SESSION_ENDED_EVENT, WEB_SESSION_STARTED_EVENT,
+  fetchWebResearchAllowance, webErrorMessage,
   type WebResearchAllowance,
 } from "@/lib/apiClient";
+import { sessionGeneration, subscribeSessionBoundary } from "@/lib/sessionLifecycle";
 
 export interface ResearchBilling {
   /** True only once the deployment has said research billing is on. */
@@ -44,16 +45,16 @@ export function forgetResearchBilling(): void {
 function watchSession(): void {
   if (watching || typeof window === "undefined") return;
   watching = true;
-  window.addEventListener(WEB_SESSION_ENDED_EVENT, forgetResearchBilling);
-  window.addEventListener(WEB_SESSION_STARTED_EVENT, forgetResearchBilling);
+  subscribeSessionBoundary(forgetResearchBilling);
 }
 
 /** One request however many surfaces ask: the read on its way is the answer to all of them. */
 function read(): Promise<void> {
   if (inflight) return inflight;
   watchSession();
+  const owner = sessionGeneration();
   const request: Promise<void> = fetchWebResearchAllowance()
-    .then((allowance) => { if (inflight === request) publish(allowance); })
+    .then((allowance) => { if (sessionGeneration() === owner && inflight === request) publish(allowance); })
     .finally(() => { if (inflight === request) inflight = null; });
   inflight = request;
   return request;
@@ -126,11 +127,12 @@ export function useResearchBilling({ fresh = false }: { fresh?: boolean } = {}):
   // answer held is never drawn for a frame before the read that replaces it.
   const [loading, setLoading] = useState(() => mustAsk(fresh));
   const reload = useCallback(() => {
+    const owner = sessionGeneration();
     setError(null);
     setLoading(true);
     read()
-      .then(undefined, (caught: unknown) => setError(webErrorMessage(caught)))
-      .finally(() => setLoading(false));
+      .then(undefined, (caught: unknown) => { if (owner === sessionGeneration()) setError(webErrorMessage(caught)); })
+      .finally(() => { if (owner === sessionGeneration()) setLoading(false); });
   }, []);
   useEffect(() => {
     if (mustAsk(fresh)) reload();

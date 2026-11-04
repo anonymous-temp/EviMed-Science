@@ -17,6 +17,7 @@ import { createGeoNotifier } from "../src/geoNotify.mjs";
 import { geoRuntimeWrite } from "../src/geoWrites.mjs";
 import { HttpError } from "../src/security.mjs";
 import { runRoleOf } from "@evimed/domain";
+import { authorizeGeoConfirmation, previewGeoConfirmationAuthorization } from "../src/geoConfirmationAuthorization.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (databaseUrl) {
@@ -129,6 +130,54 @@ async function newProject(brand = "玛仕度肽") {
     product: { brandName: brand, genericName: "mazdutide" } });
   return { userId, project, user: { id: userId }, control: { userId, id: project.projectId } };
 }
+
+test("confirmation authorization uses the server preview and never revives after scope changes", options, async () => {
+  const { userId, project } = await newProject();
+  const groups = [{ name: "group", questions: [{ text: "Question?", isMeasured: true }] }];
+  await store.writeQuestionSet(userId, project.id, { groups, contract: { samplingMode: "recurring", engines: ENGINES, repeats: 2 } });
+  const first = await previewGeoConfirmationAuthorization(store, userId, project.id);
+  assert.equal(first.allowed, true);
+  assert.equal(first.repeats, 2);
+  assert.equal(first.questionVersion, 1);
+  assert.equal(first.cost, null);
+  const granted = await authorizeGeoConfirmation(store, userId, project.id, userId, first.token);
+  assert.equal(granted.repeats, 2);
+  await assert.rejects(authorizeGeoConfirmation(store, userId, project.id, userId, first.token), { code: "geo_confirmation_scope_changed" });
+  await store.updateProject(userId, project.id, { engines: ["deepseek"] });
+  await store.updateProject(userId, project.id, { engines: ENGINES });
+  const [row] = await q(`SELECT confirmation_generation, confirmation_authorization FROM evimed_geo.projects WHERE id=$1`, [project.id]);
+  assert.equal(row.confirmation_authorization, null);
+  const restored = await previewGeoConfirmationAuthorization(store, userId, project.id);
+  assert.notEqual(restored.token, first.token);
+  assert.ok(BigInt(row.confirmation_generation) > BigInt(granted.generation));
+  await store.writeQuestionSet(userId, project.id, { groups, contract: { samplingMode: "recurring", engines: ENGINES, repeats: 7 } });
+  await assert.rejects(authorizeGeoConfirmation(store, userId, project.id, userId, restored.token), { code: "geo_confirmation_scope_changed" });
+  assert.equal((await previewGeoConfirmationAuthorization(store, userId, project.id)).repeats, 7);
+  await authorizeAutomation(project);
+  const [legacy] = await q(`SELECT confirmation_authorization FROM evimed_geo.projects WHERE id=$1`, [project.id]);
+  assert.equal(legacy.confirmation_authorization, null, "legacy monitoring consent grants no confirmation authority");
+  const simultaneous = await previewGeoConfirmationAuthorization(store, userId, project.id);
+  const attempts = await Promise.allSettled([
+    authorizeGeoConfirmation(store, userId, project.id, userId, simultaneous.token),
+    authorizeGeoConfirmation(store, userId, project.id, userId, simultaneous.token),
+  ]);
+  assert.equal(attempts.filter(result => result.status === "fulfilled").length, 1);
+  assert.equal(attempts.filter(result => result.status === "rejected").length, 1);
+  const beforeLock = await previewGeoConfirmationAuthorization(store, userId, project.id);
+  await store.lockQuestionSet(project.id, 2, 1);
+  await assert.rejects(authorizeGeoConfirmation(store, userId, project.id, userId, beforeLock.token), { code: "geo_confirmation_scope_changed" });
+  await assert.rejects(previewGeoConfirmationAuthorization(store, "other-user", project.id), { code: "geo_project_not_found" });
+  const racing = await previewGeoConfirmationAuthorization(store, userId, project.id);
+  const secondStore = new GeoStore({ database });
+  const race = await Promise.allSettled([
+    authorizeGeoConfirmation(store, userId, project.id, userId, racing.token),
+    secondStore.writeQuestionSet(userId, project.id, { groups, contract: { samplingMode: "recurring", engines: ENGINES, repeats: 3 } }),
+  ]);
+  assert.equal(race[1].status, "fulfilled");
+  const [afterRace] = await q(`SELECT confirmation_authorization FROM evimed_geo.projects WHERE id=$1`, [project.id]);
+  assert.equal(afterRace.confirmation_authorization, null, "a concurrent new set invalidates the old preview in either lock order");
+  assert.equal((await previewGeoConfirmationAuthorization(store, userId, project.id)).repeats, 3);
+});
 
 /** @param {string} id */
 const reload = async (id) => {

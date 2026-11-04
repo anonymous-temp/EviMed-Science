@@ -16,7 +16,6 @@ import { SimulatedWallet } from "../src/evimedCreditsSimulator.mjs";
 import { auditWallet, clock, databaseOptions as options, databaseUrl, freshPayer, removeWallet } from "./helpers/creditWalletFixture.mjs";
 import { SimulatedWallet as LegacyWallet } from "./helpers/legacyOneNumberWallet.mjs";
 
-const T0 = "2026-10-05T03:00:00.000Z";
 const DAY = 86_400_000;
 /** @type {any} */
 let database;
@@ -41,8 +40,11 @@ after(async () => {
 const units = (/** @type {string} */ value) => researchMoneyUnits(value);
 
 /** The new wallet on its own clock, the old one on the same tables, and a payer for this test. */
-function setup({ startCredits = 200, signupGiftDays = 30 } = {}) {
-  const time = clock(T0);
+async function setup({ startCredits = 200, signupGiftDays = 30 } = {}) {
+  // The old implementation stamps entries with PostgreSQL's clock. Anchor the controlled clock to the same timeline,
+  // so every test, including concurrent old/new writes, remains valid as calendar time advances.
+  const current = (await database.query("SELECT clock_timestamp() AS at")).rows[0].at;
+  const time = clock(new Date(current).toISOString());
   const wallet = new SimulatedWallet({ database, startCredits, signupGiftDays, now: time.now });
   const legacy = new LegacyWallet({ database, startCredits });
   const payer = freshPayer("legacy");
@@ -52,8 +54,15 @@ function setup({ startCredits = 200, signupGiftDays = 30 } = {}) {
 const request = () => `request_${randomUUID().slice(0, 12)}`;
 const run = () => `run_${randomUUID()}`;
 
+/** The legacy implementation uses the database clock for created_at. Place its test entry on the same controlled timeline as the new wallet. */
+async function setLegacyEntryTime(payer, requestId, at) {
+  const changed = await database.query(`UPDATE evimed_credits.simulated_entries SET created_at=$3::timestamptz
+    WHERE payer=$1 AND request_id=$2 AND kind='deduct'`, [payer, requestId, at.toISOString()]);
+  assert.equal(changed.rowCount, 1, "only the intended simulated legacy charge is dated");
+}
+
 test("a sign-up on the old release after the migration gets its sign-up gift lot: the account is not refused every start", options, async () => {
-  const { wallet, legacy, payer } = setup();
+  const { wallet, legacy, payer } = await setup();
   assert.equal((await legacy.balance(payer)).balance, 200, "the old release's first sight: a row of 200, a grant entry, and no lot");
   assert.equal((await database.query("SELECT count(*)::int AS n FROM evimed_credits.simulated_lots WHERE payer=$1", [payer])).rows[0].n, 0);
   const read = await wallet.snapshot(payer);
@@ -73,11 +82,18 @@ test("a sign-up on the old release after the migration gets its sign-up gift lot
 });
 
 test("a run charged on the old release after the migration is drawn from the lots in the normal order: the charge is not refunded, and the gift's expiry does not break the wallet", options, async () => {
-  const { wallet, legacy, time, payer } = setup();
+  const { wallet, legacy, time, payer } = await setup();
   await wallet.snapshot(payer);
   await wallet.credit({ payer, amount: "50", requestId: request(), packageId: null });
-  // The old release charges 7 and then, with a row of 243, tops up and charges again.
-  await legacy.deduct({ payer, requestId: run(), credits: 7 });
+  // The old release charges 7 against the wallet after its 50-credit top-up.
+  const requestId = run();
+  await legacy.deduct({ payer, requestId, credits: 7 });
+  // The old release uses the database's real clock; place this synthetic entry just before the gift's actual expiry,
+  // and move the new wallet to that same instant, so the test is deterministic across calendar dates.
+  const expiry = (await database.query("SELECT expires_at FROM evimed_credits.simulated_lots WHERE payer=$1 AND source='signup'", [payer])).rows[0].expires_at;
+  const chargeAt = new Date(new Date(expiry).getTime() - 1);
+  await setLegacyEntryTime(payer, requestId, chargeAt);
+  time.set(chargeAt.toISOString());
   const row = (await database.query("SELECT balance::text AS balance FROM evimed_credits.simulated_wallets WHERE payer=$1", [payer])).rows[0];
   assert.equal(row.balance, "243.00000000", "the old code moved the row and no lot");
   const read = await wallet.snapshot(payer);
@@ -95,8 +111,30 @@ test("a run charged on the old release after the migration is drawn from the lot
   await auditWallet(database, payer);
 });
 
+for (const offsetMs of [0, 1]) test(`a legacy charge ${offsetMs === 0 ? "at" : "after"} gift expiry draws a valid purchase before the expired gift`, options, async () => {
+  const { wallet, legacy, time, payer } = await setup();
+  await wallet.snapshot(payer);
+  await wallet.credit({ payer, amount: "50", requestId: request(), packageId: null });
+  const expiry = (await database.query("SELECT expires_at FROM evimed_credits.simulated_lots WHERE payer=$1 AND source='signup'", [payer])).rows[0].expires_at;
+  const requestId = run();
+  await legacy.deduct({ payer, requestId, credits: 7 });
+  // At expiry and after it are outside the gift's valid interval. Use the same instant for both wallet clocks.
+  const chargeAt = new Date(new Date(expiry).getTime() + offsetMs);
+  await setLegacyEntryTime(payer, requestId, chargeAt);
+  time.set(chargeAt.toISOString());
+  const read = await wallet.snapshot(payer);
+  assert.deepEqual([read.balance, read.gifted, read.purchased], ["43.00000000", "0.00000000", "43.00000000"]);
+  const { lots, entries } = await auditWallet(database, payer);
+  assert.deepEqual(lots.map(lot => [lot.kind, lot.remaining]), [["gifted", "0.00000000"], ["purchased", "43.00000000"]]);
+  assert.deepEqual(entries.filter(entry => entry.kind === "expire").map(entry => entry.credits), ["200.00000000"]);
+  const draw = await database.query(`SELECT l.kind,d.amount::text AS amount FROM evimed_credits.simulated_draws d
+    JOIN evimed_credits.simulated_entries e ON e.entry_id=d.entry_id
+    JOIN evimed_credits.simulated_lots l ON l.lot_id=d.lot_id WHERE e.payer=$1 AND e.request_id=$2`, [payer, requestId]);
+  assert.deepEqual(draw.rows.map(item => [item.kind, item.amount]), [["purchased", "7.00000000"]]);
+});
+
 test("a top-up on the old release after the migration becomes a purchased lot", options, async () => {
-  const { wallet, legacy, payer } = setup();
+  const { wallet, legacy, payer } = await setup();
   await wallet.snapshot(payer);
   const requestId = request();
   await legacy.topUp({ payer, packageId: "topup-100", requestId });
@@ -112,7 +150,7 @@ test("a top-up on the old release after the migration becomes a purchased lot", 
 });
 
 test("a charge larger than the row the old release left but within the lots no longer throws: the wallet was reconciled first", options, async () => {
-  const { wallet, legacy, payer } = setup();
+  const { wallet, legacy, payer } = await setup();
   await wallet.snapshot(payer);
   // The old release takes 150 of 200: a row of 50 and lots of 200.
   await legacy.deduct({ payer, requestId: run(), credits: 150 });
@@ -125,7 +163,7 @@ test("a charge larger than the row the old release left but within the lots no l
 });
 
 test("a reconcile is idempotent and keyed by entry: reading a wallet twice, or racing the old release, never draws an entry twice", options, async () => {
-  const { wallet, legacy, payer } = setup();
+  const { wallet, legacy, payer } = await setup();
   await wallet.snapshot(payer);
   await legacy.deduct({ payer, requestId: run(), credits: 12 });
   await legacy.topUp({ payer, packageId: "topup-50", requestId: request() });
@@ -141,7 +179,7 @@ test("a reconcile is idempotent and keyed by entry: reading a wallet twice, or r
 });
 
 test("the expiry sweep and every read tolerate a wallet that is not reconciled yet: the old release's row below the lots never throws", options, async () => {
-  const { wallet, legacy, time, payer } = setup();
+  const { wallet, legacy, time, payer } = await setup();
   await wallet.snapshot(payer);
   // Row 188 against lots of 195 — the state that used to make the expiry sweep throw on `balance >= 0`.
   await legacy.deduct({ payer, requestId: run(), credits: 12 });
@@ -154,14 +192,14 @@ test("the expiry sweep and every read tolerate a wallet that is not reconciled y
 });
 
 test("a database that already ran the lots migration is trusted as it stands when the reconcile first arrives: nothing written before is drawn again", options, async () => {
-  const { wallet, payer } = setup();
+  const { wallet, time, payer } = await setup();
   await wallet.snapshot(payer);
   await wallet.settle({ payer, requestId: run(), amount: "5" });
   // The state a wallet is in when it predates the reconcile's column: no high-water mark at all.
   await database.query("ALTER TABLE evimed_credits.simulated_wallets DROP COLUMN reconciled_through");
   const second = new ControlPlaneDatabase({ databaseUrl, databasePoolMax: 2, databaseConnectionTimeoutMs: 3_000 });
   try {
-    const fresh = new SimulatedWallet({ database: second, startCredits: 200, now: clock(T0).now });
+    const fresh = new SimulatedWallet({ database: second, startCredits: 200, now: time.now });
     await fresh.ready();
     const read = await fresh.snapshot(payer);
     assert.equal(read.balance, "195.00000000", "trusted as it stood: the settled charge is not drawn a second time");

@@ -107,10 +107,9 @@ export const FRAME_VOCABULARY = Object.freeze({
   fontFaces: cjkPunctFontFaceCss(),
   // Every tag the platform writes into a conversation (the domain's closed list that a memory write is checked against), so the
   // researcher's own message is drawn without its model-only blocks: `injected` tags go with what they hold, `wrappers` lose only
-  // the tags. `evimed_result_selection` is a result revision's frozen selection (`resultRevision.bind`), the one name in the
-  // underscore form.
+  // the tags. Result-revision selections are included in the same registry as other injected context.
   platformTags: Object.freeze({
-    injected: Object.freeze([...PLATFORM_CONTEXT_TAGS.filter((entry) => entry.role === 'injected').map((entry) => entry.tag), 'evimed_result_selection']),
+    injected: Object.freeze(PLATFORM_CONTEXT_TAGS.filter((entry) => entry.role === 'injected').map((entry) => entry.tag)),
     wrappers: Object.freeze(PLATFORM_CONTEXT_TAGS.filter((entry) => entry.role === 'user-wrapper').map((entry) => entry.tag)),
   }),
   phases: RUN_ACTIVITY_PHASES,

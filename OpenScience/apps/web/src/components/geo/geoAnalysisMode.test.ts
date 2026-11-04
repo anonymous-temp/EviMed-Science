@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { GeoAnalysisDescriptor, GeoAnalysisId } from '@/lib/geoAnalysisClient';
 import { normalizeGeoAnalysisView } from '../../../../server/src/geoAnalysisRegistry.mjs';
-import { GEO_ANALYSIS_OPTIONS, GEO_ANALYSIS_VIEW_FIELDS, geoAnalysisChangeReplaces, geoAnalysisDescriptor, geoAnalysisDescriptorForView, geoAnalysisSearch } from './geoAnalysisMode';
+import { geoSearchWithScope } from '@/lib/geoReadScope';
+import { GEO_ANALYSIS_GROUPS, GEO_ANALYSIS_OPTIONS, GEO_ANALYSIS_VIEW_FIELDS, geoAnalysisChangeReplaces, geoAnalysisDescriptor, geoAnalysisDescriptorForView, geoAnalysisOptionsForTab, geoAnalysisSearch, geoAnalysisTabForView, geoFrozenAnalysisSearch } from './geoAnalysisMode';
 
 describe('GEO main area analysis address', () => {
   it('names all 27 views separately from the business view', () => {
@@ -16,6 +17,39 @@ describe('GEO main area analysis address', () => {
     const returned = new URLSearchParams(geoAnalysisSearch(query, null));
     for (const [key, value] of new URLSearchParams(original)) expect(returned.get(key)).toBe(value);
     expect(returned.has('analysis')).toBe(false);
+  });
+});
+
+it('returns from a frozen analysis to the original filters unless the person explicitly changed them', () => {
+  const original = '?from=2026-10-01&to=2026-10-31&engine=deepseek&pool=P2&cluster=g1&clientTags=a&clientTags=b&session=s1';
+  const opened = geoFrozenAnalysisSearch(original, { viewId: 'V08', metricId: 'M-16', dimension: 'project' }, 'gsel_exact');
+  expect(new URLSearchParams(opened).get('selectionRef')).toBe('gsel_exact');
+  const returned = new URLSearchParams(geoAnalysisSearch(opened, null));
+  for (const key of new Set(new URLSearchParams(original).keys())) expect(returned.getAll(key)).toEqual(new URLSearchParams(original).getAll(key));
+  expect(returned.has('selectionRef')).toBe(false);
+  const changed = geoSearchWithScope(opened, { from: '2026-11-01', engines: ['kimi'] });
+  const changedReturn = new URLSearchParams(geoAnalysisSearch(changed, null));
+  expect(changedReturn.get('from')).toBe('2026-11-01');
+  expect(changedReturn.getAll('engines')).toEqual(['kimi']);
+  expect(changedReturn.has('engine')).toBe(false);
+  expect(changedReturn.has('selectionRef')).toBe(false);
+});
+
+describe('GEO analysis destinations', () => {
+  it('assigns every available analysis exactly once to a work area', () => {
+    const assigned = Object.values(GEO_ANALYSIS_GROUPS).flat();
+    expect(new Set(assigned).size).toBe(assigned.length);
+    expect(new Set(assigned)).toEqual(new Set(GEO_ANALYSIS_OPTIONS.map((item) => item.value)));
+  });
+
+  it('offers only the current result area, while retaining a direct legacy analysis', () => {
+    expect(geoAnalysisOptionsForTab('accuracy').map((item) => item.value)).toEqual(['V13', 'V15', 'V11', 'V12', 'V14']);
+    expect(geoAnalysisOptionsForTab('questions', 'journey').map((item) => item.value)).toEqual(['V10', 'V16']);
+    expect(geoAnalysisOptionsForTab('accuracy', null, 'V26').map((item) => item.value)).toContain('V26');
+    expect(geoAnalysisOptionsForTab('accuracy').map((item) => item.value)).not.toContain('V26');
+    expect(geoAnalysisTabForView('V01')).toBe('visibility');
+    expect(geoAnalysisTabForView('V26')).toBe('plan');
+    expect(geoAnalysisTabForView('V10')).toBe('evidence');
   });
 });
 
@@ -90,6 +124,7 @@ describe('switching the analysis view builds a descriptor the server admits', ()
   it('carries only what means the same in both views', () => {
     expect(geoAnalysisDescriptorForView('V03', { viewId: 'V02', metricId: 'M-05', dimension: 'group', timeGrain: 'round' })).toEqual({ viewId: 'V03', dimension: 'engine', metricId: 'M-05' });
     expect(geoAnalysisDescriptorForView('V08', { viewId: 'V02', metricId: 'M-05', timeGrain: 'round' })).toEqual({ viewId: 'V08', dimension: 'project', timeGrain: 'round' });
+    expect(geoAnalysisDescriptorForView('V05', { viewId: 'V04', metricId: 'M-13' })).toEqual({ viewId: 'V05', dimension: 'group' });
     expect(geoAnalysisDescriptorForView('V19', { viewId: 'V17', sourceType: 'official', sourceRelationship: 'wrong', topN: 5 })).toMatchObject({ viewId: 'V19', sourceType: 'official', sourceRelationship: 'wrong', topN: 5 });
     expect(geoAnalysisDescriptorForView('V26', { viewId: 'V26', strategyVersion: 7, targetVersion: 3 })).toMatchObject({ strategyVersion: 7, targetVersion: 3 });
     expect(geoAnalysisDescriptorForView('V10', { viewId: 'V26', strategyVersion: 7 })).toEqual({ viewId: 'V10', dimension: 'project' });

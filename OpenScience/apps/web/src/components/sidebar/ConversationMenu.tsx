@@ -4,7 +4,7 @@ import { archiveWebAgentRun, cancelWebAgentRun, deleteWebAgentRun, fetchWebMe, r
 import type { Conversation } from "@/lib/conversations";
 import { announceRunsChanged, runTitle } from "@/lib/runPresentation";
 import { chatPath } from "@/lib/runLocation";
-import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
+import { prepareRuntimeUiIntent, newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { isRunning } from "@/components/sidebar/useProjectRuns";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { inputClasses } from "@/components/ui/Input";
@@ -65,7 +65,7 @@ export function ConversationMenu({ conversation, onRenamed, className }: {
 
   /** Leaving a conversation that is no longer listed: the surface goes blank rather than showing a row that is gone. */
   const leaveIfOpen = () => {
-    if (location.pathname === chatPath(conversation.sessionId)) navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent() }, replace: true });
+    if (location.pathname === chatPath(conversation.sessionId)) navigate("/app/chat", { state: { runtimeUiIntent: prepareRuntimeUiIntent(newRuntimeUiIntent()) }, replace: true });
   };
 
   const perform = async (action: () => Promise<unknown>, done: string, failed: string) => {

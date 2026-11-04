@@ -115,3 +115,96 @@ test('QUALITY-Q1: historical Docker witnesses reuse only their exact original ca
   const missingFinal = await pinGeoRunOutputs({ results: f.results, project: host, run, context, transcript: later });
   await assert.rejects(missingFinal.readFile(host, run, relative), { code: 'geo_plan_output_unavailable' }, 'An older original mapping cannot hide the final genuine event without a snapshot');
 });
+
+test('bounded preserved output enumeration exposes overflow without losing its readable prefix', async () => {
+  const { geoStructuredRunPathReceipt } = await import('../src/geoDeliveryImport.mjs');
+  for (const mode of ['strategy','content','signal']) {
+    const name=mode==='strategy'?'strategy.json':'articles.json';
+    const files=Array.from({length:65},(_,i)=>`deliverables/d${i}/${name}`);
+    const input={...run,effectiveAgentId:'geo-content',artifacts:[...files,...files]};
+    const receipt=geoStructuredRunPathReceipt(input,{mode});
+    assert.equal(receipt.total,65);assert.equal(receipt.paths.length,64);assert.equal(receipt.complete,false);
+    assert.equal(geoStructuredRunPathReceipt({...input,artifacts:files.slice(0,64)},{mode}).complete,true);
+  }
+  const f=fixture(),paths=[relative,...Array.from({length:128},(_,i)=>`deliverables/native/f${i}.md`)];
+  const pinned=await pinGeoRunOutputs({results:f.results,project,run,context,paths});
+  assert.equal(pinned.completeness.complete,false);assert.equal(pinned.completeness.pinTotal,129);
+  assert.equal((await pinned.readFile(project,run,relative)).toString(),f.bytes.toString());
+  await assert.rejects(pinned.readFile(project,run,paths[128]),{code:'geo_plan_output_unavailable'});
+});
+
+test('signal discovery and preserved bytes report exact capacity and unavailable snapshots', async () => {
+  const { geoSignalValueRunPathReceipt }=await import('../src/geoDeliveryImport.mjs');
+  const files=Array.from({length:21},(_,i)=>`deliverables/v${i}/geo-value.json`);
+  const signal={...run,effectiveAgentId:'geo-insight',artifacts:[...files,...files]};
+  assert.deepEqual([geoSignalValueRunPathReceipt(signal,{mode:'signal'}).total,geoSignalValueRunPathReceipt(signal,{mode:'signal'}).complete],[21,false]);
+  assert.equal(geoSignalValueRunPathReceipt({...signal,artifacts:files.slice(0,20)},{mode:'signal'}).complete,true);
+  const paths=Array.from({length:128},(_,i)=>`deliverables/d/f${i}.md`),bytes=Buffer.from('preserved');
+  const results={list:async (_owner,scope)=>({items:[{versionId:scope.path,path:scope.path,digest:digest(bytes),producer:{kind:'deliverable',runId:run.id,sessionId:run.sessionId},coverage:{snapshot:'complete',producer:'bound'}}],nextCursor:null}),raw:async()=>({bytes})};
+  const exact=await pinGeoRunOutputs({results,project,run,context,paths:[...paths,...paths]});
+  assert.equal(exact.completeness.pinTotal,128);assert.equal(exact.completeness.complete,false);assert.equal(exact.completeness.unverified,128);
+  assert.equal(exact.completeness.scope,'recorded_run_inventory');assert.equal(exact.completeness.upstreamComplete,null);assert.equal(exact.completeness.continuationAvailable,false);
+  await Promise.all(paths.map(path=>exact.readFile(project,run,path)));assert.equal(exact.completeness.complete,true);
+  const missing=await pinGeoRunOutputs({results:{...results,list:async()=>({items:[],nextCursor:null})},project,run,context,paths:[paths[0]]});
+  assert.equal(missing.completeness.complete,false);assert.equal(missing.completeness.unavailable,1);
+  await assert.rejects(missing.readFile(project,run,paths[0]),{code:'geo_plan_output_unavailable'});
+});
+
+test('bound run import reports truncated discovery and remains explicitly retryable', async () => {
+  const {createGeoDeliveryImport}=await import('../src/geoDeliveryImport.mjs');
+  const files=Array.from({length:65},(_,i)=>`deliverables/d${i}/strategy.json`);
+  let reads=0;
+  const importer=createGeoDeliveryImport({store:{projectByControlProject:async()=>({id:'geo',userId:'owner'})},
+    planningContext:async()=>({mode:'strategy'}),readRunFile:async()=>{reads++;throw new Error('no snapshot');}});
+  const input={...run,artifacts:files};
+  for(let attempt=0;attempt<2;attempt++) {
+    const result=await importer(project,input,{recovery:true,candidateIdentity:`attempt-${attempt}`});
+    assert.equal(result.completeness.complete,false);assert.equal(result.completeness.structuredTotal,65);
+    assert.equal(result.completeness.scope,'business_import_candidates');assert.equal(result.completeness.recordedInventoryByteVerification,'unknown');assert.equal(result.completeness.upstreamComplete,null);assert.equal(result.completeness.continuationAvailable,false);
+    assert.ok(result.failed.includes('geo_plan_output_unavailable'));
+  }
+  assert.equal(reads,128);
+  const exact=await importer(project,{...input,id:'no-snapshot',artifacts:files.slice(0,64)},{recovery:true,candidateIdentity:'missing'});
+  assert.equal(exact.completeness.structuredTotal,64);assert.equal(exact.completeness.complete,false);
+  assert.ok(exact.failed.includes('geo_plan_output_unavailable'));
+});
+
+test('refresh retains ordinary artifacts and exposes incomplete recovery receipt', async () => {
+  const f=fixture(), paths=[relative,...Array.from({length:128},(_,i)=>`deliverables/native/f${i}.md`)];
+  const original={...run,artifacts:paths};let imported=false;
+  const recover=createGeoArtifactRefresh({runs:{list:async()=>[original],refreshArtifacts:async()=>({artifacts:[{path:relative}]})},results:f.results,
+    contexts:{forRun:async()=>context},readTranscript:async()=>transcript(),geo:{store:{projectByControlProject:async()=>({id:'geo'})},
+      importDelivery:async (_project,_run,options)=>{imported=true;assert.equal(options.outputCompleteness.complete,false);
+        assert.equal((await options.readRunFile(project,run,relative)).toString(),f.bytes.toString());return {failed:['geo_plan_output_unavailable']};}}});
+  const result=await recover(project,run.id,{expectedTranscriptSha256:'a'.repeat(64)});
+  assert.equal(imported,true);assert.deepEqual(result.artifacts,[{path:relative}]);
+  assert.equal(result.geoOutputCompleteness.complete,false);assert.ok(result.geoImport.failed.includes('geo_plan_output_unavailable'));
+});
+
+test('receipt distinguishes unread bytes from verified and records later loss or corruption', async () => {
+  const bytes=Buffer.from('original'),files=['deliverables/d/a.md','deliverables/d/b.md'];let mode='ok';
+  const results={list:async (_u,scope)=>({items:[{versionId:scope.path,path:scope.path,digest:digest(bytes),producer:{kind:'deliverable',runId:run.id,sessionId:run.sessionId},coverage:{snapshot:'complete',producer:'bound'}}],nextCursor:null}),
+    raw:async (_u,_p,id)=>{if(id===files[1]&&mode==='missing') throw Object.assign(new Error('missing'),{code:'result_snapshot_unavailable'});return {bytes:id===files[1]&&mode==='corrupt'?Buffer.from('changed'):bytes};}};
+  const pinned=await pinGeoRunOutputs({results,project,run,context,paths:files});
+  assert.equal(pinned.completeness.complete,false);assert.equal(pinned.completeness.unverified,2);
+  await pinned.readFile(project,run,files[0]);assert.equal(pinned.completeness.verified,1);assert.equal(pinned.completeness.unverified,1);
+  mode='missing';await assert.rejects(pinned.readFile(project,run,files[1]),{code:'result_snapshot_unavailable'});
+  assert.equal(pinned.completeness.complete,false);assert.equal(pinned.completeness.unavailable,1);
+  mode='ok';await pinned.readFile(project,run,files[1]);assert.equal(pinned.completeness.complete,false,'a later success does not erase this receipt’s failure');
+  const retried=await pinGeoRunOutputs({results,project,run,context,paths:files});
+  await Promise.all(files.map(file=>retried.readFile(project,run,file)));assert.equal(retried.completeness.complete,true);
+  mode='corrupt';await assert.rejects(retried.readFile(project,run,files[1]),{code:'geo_plan_output_unavailable'});
+  assert.equal(retried.completeness.complete,false);assert.equal(retried.completeness.unavailable,1);
+});
+
+test('refresh reports a missing or changed raw snapshot instead of trusting its index', async () => {
+  for (const mode of ['missing','changed']) {
+    const f=fixture();f.results.raw=async()=>{if(mode==='missing')throw Object.assign(new Error('unavailable'),{code:'result_snapshot_unavailable'});return {bytes:Buffer.from('changed')};};
+    const recover=createGeoArtifactRefresh({runs:{list:async()=>[run],refreshArtifacts:async()=>({artifacts:[{path:relative}]})},results:f.results,
+      contexts:{forRun:async()=>context},readTranscript:async()=>transcript(),geo:{store:{projectByControlProject:async()=>({id:'geo'})},
+        importDelivery:async (_p,_r,options)=>{try{await options.readRunFile(project,run,relative);}catch{return {failed:['geo_plan_output_unavailable']};}throw new Error('expected failed read');}}});
+    const result=await recover(project,run.id,{expectedTranscriptSha256:'a'.repeat(64)});
+    assert.deepEqual(result.artifacts,[{path:relative}]);assert.equal(result.geoOutputCompleteness.complete,false);
+    assert.equal(result.geoOutputCompleteness.unavailable,1);assert.equal(result.geoOutputCompleteness.verified,0);
+  }
+});

@@ -94,8 +94,10 @@ const instant = (value) => {
   }
   return null
 }
+import { dnsKey } from './geoDomains.mjs'
+
 /** @param {string} value */
-const bareDomain = (value) => value.trim().toLowerCase().replace(/^www\./, '')
+const bareDomain = dnsKey
 /** @param {number} left @param {number} right */
 const compareNumbers = (left, right) => (left === right ? 0 : left < right ? -1 : 1)
 
@@ -366,14 +368,15 @@ export function geoActionEntry(entry) {
  * candidates' own order — at most {@link GEO_ACTION_SOURCES}, each once. A source is an address (`domain`) or, for the brand's own
  * channel, a platform (`channel`, no domain): the person publishes there and pastes the link.
  *
- * @param {ReadonlyArray<Record<string, any>>} candidates @param {{ swapped: string | null,
+ * @param {ReadonlyArray<Record<string, any>>} candidates @param {{ swapped: string | null, actionKey: string,
  *   placed: ReadonlyArray<{ domain: string, orderId: string | null, name?: string | null, price?: number | null }>,
  *   modelSources: ReadonlyArray<{ domain: string | null, why: string | null, url?: string | null }>, info?: Record<string, Record<string, any>> }} choice
  */
-function rankedSources(candidates, { swapped, placed, modelSources, info = {} }) {
+function rankedSources(candidates, { swapped, actionKey, placed, modelSources, info = {} }) {
   /** @type {Map<string, Record<string, any>>} */
   const byKey = new Map()
   for (const candidate of candidates) {
+    if (candidate?.actionKey && candidate.actionKey !== actionKey) continue
     const raw = text(candidate?.domain)
     const domain = raw ? bareDomain(raw) : null
     const channel = text(candidate?.channel)
@@ -399,6 +402,7 @@ function rankedSources(candidates, { swapped, placed, modelSources, info = {} })
     const swappedTo = swapped ? bareDomain(swapped) : null
     return {
       domain,
+      ...(text(candidate.canonicalDomain) ? { canonicalDomain: text(candidate.canonicalDomain) } : {}),
       url: domain ? modelSources.find(entry => entry.domain === domain)?.url ?? null : null,
       channel: text(candidate.channel),
       name: text(candidate.name),
@@ -671,7 +675,7 @@ export function deriveGeoActions(input) {
     const placed = facts.orders.filter((order) => [...PLACED_ORDER_STATES, ...PUBLISHED_ORDER_STATES].includes(String(order.state)) && text(order.domain))
       .map((order) => ({ domain: bareDomain(String(order.domain)), orderId: String(order.id), name: text(order.mediaName),
         price: finite(order.settledCny) ?? finite(order.priceCny) }))
-    const sources = rankedSources(list(group ? candidates[group.id] : null), { swapped: text(choice?.sourceDomain), placed, modelSources: entry?.sources ?? [],
+    const sources = rankedSources([...list(candidates[`action:${key}`]),...list(group ? candidates[group.id] : null)], { swapped: text(choice?.sourceDomain), actionKey: key, placed, modelSources: entry?.sources ?? [],
       info: sourceInfo })
     // ---- what happened
     const citedBy = facts.citations.map((item) => ({ engine: text(item.engine), questionId: text(item.questionId), askedAt: text(item.firstSeen), articleId: text(item.articleId) }))
@@ -966,6 +970,7 @@ const clipped = (value, limit) => (value && value.length > limit ? `${value.slic
 function leanSource(source) {
   return {
     ...(source.domain ? { domain: source.domain } : { channel: source.channel }),
+    ...(source.canonicalDomain ? { canonicalDomain: source.canonicalDomain } : {}),
     route: source.route ?? null,
     ...(source.available == null ? {} : { available: source.available }),
     ...(source.price == null ? {} : { price: source.price }),

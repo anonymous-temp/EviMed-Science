@@ -208,3 +208,27 @@ test('the owner\'s read registers a kept conversation only while the running ker
   assert.equal((await header()).body.data.sessionId, 'owner-chat');
   assert.equal((await g.open('editor')).body.data.sessionId, 'owner-chat'); assert.equal(f.creates(), 0);
 });
+
+test('HTTP composition creates one idempotent scoped conversation and pages authorized reads', options, async t => {
+  const f = await fixture(t);
+  const created = await f.call('owner', 'POST', '/api/geo/projects', { brandName: 'Conversation fixture' });
+  assert.equal(created.status, 201, JSON.stringify(created.body));
+  const geo = created.body.data, base = `/api/geo/projects/${geo.id}/conversation`;
+  assert.equal((await f.call('owner', 'POST', `/api/geo/projects/${geo.id}/members`, { userId: 'editor', role: 'editor' })).status, 201);
+  assert.equal((await f.call('owner', 'POST', `/api/geo/projects/${geo.id}/members`, { userId: 'viewer', role: 'viewer' })).status, 201);
+  const primary = await f.call('owner', 'POST', `${base}/open`, { target: { kind: 'primary' } });
+  assert.equal(primary.status, 200, JSON.stringify(primary.body));
+  const input = { target: { kind: 'new', requestId: 'http_fixture_request_1234' } };
+  const first = await f.call('editor', 'POST', `${base}/open`, input);
+  const replay = await f.call('editor', 'POST', `${base}/open`, input);
+  assert.equal(first.status, 200, JSON.stringify(first.body)); assert.equal(replay.status, 200, JSON.stringify(replay.body));
+  assert.equal(first.body.data.sessionId, replay.body.data.sessionId); assert.notEqual(first.body.data.sessionId, primary.body.data.sessionId);
+  assert.equal(f.creates(), 2);
+  assert.equal((await f.call('viewer', 'POST', `${base}/open`, { target: { kind: 'new', requestId: 'http_viewer_request_1234' } })).status, 403);
+  const firstPage = await f.call('viewer', 'GET', `${base}/list?limit=1`);
+  assert.equal(firstPage.status, 200, JSON.stringify(firstPage.body)); assert.equal(firstPage.body.data.items.length, 1); assert.ok(firstPage.body.data.nextCursor);
+  const secondPage = await f.call('viewer', 'GET', `${base}/list?limit=1&cursor=${encodeURIComponent(firstPage.body.data.nextCursor)}`);
+  assert.equal(secondPage.status, 200, JSON.stringify(secondPage.body));
+  assert.deepEqual(new Set([...firstPage.body.data.items, ...secondPage.body.data.items].map(item => item.sessionId)), new Set([primary.body.data.sessionId, first.body.data.sessionId]));
+  assert.equal((await f.call('owner', 'GET', `/api/geo/projects/${geo.id}`)).body.data.sessionId, primary.body.data.sessionId);
+});

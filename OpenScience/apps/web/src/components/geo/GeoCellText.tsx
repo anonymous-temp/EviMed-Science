@@ -28,6 +28,7 @@ export const GEO_ENGINES_DIFFER_WORD = "引擎不同，不可比";
 /** The value on the metric's own scale: 18%, 0.4%, 38. */
 export function formatGeoValue(value: number, unit: GeoUnit = "percent"): string {
   if (unit === "count") return String(Math.round(value));
+  if (unit === "ratio") return `${Math.round(value * 100) / 100} 倍`;
   const rounded = Math.abs(value) >= 1 || value === 0 ? Math.round(value) : Math.round(value * 10) / 10;
   return unit === "percent" ? `${rounded}%` : String(rounded);
 }
@@ -38,6 +39,7 @@ export function geoCellWord(cell: GeoCell | null | undefined, unit: GeoUnit = "p
   if (cell.status === "insufficient") return "样本不足";
   if (cell.status === "absent") return "未测";
   if (cell.status === "not_measurable" && cell.reason === "citations_without_links") return GEO_LINKLESS_WORD;
+  if (cell.status === "not_measurable" && ["judge_version_unrecorded", "noise_basis_unrecorded"].includes(cell.reason ?? "")) return "依据未知，不可比";
   if (cell.status === "not_measurable" && cell.reason === "engines_differ") return GEO_ENGINES_DIFFER_WORD;
   if (cell.status === "not_measurable" && cell.reason === "insufficient_sample") return "样本不足";
   if (cell.status === "not_measurable" && cell.reason === "entity_extraction_incomplete") return "识别未完成";
@@ -52,6 +54,7 @@ export function geoCellWord(cell: GeoCell | null | undefined, unit: GeoUnit = "p
  * none — there was nothing to count.
  */
 export function geoSampleText(cell: GeoCell | null | undefined, unit: GeoUnit = "percent"): string | null {
+  if (unit === "ratio") return null;
   if (!cell || cell.status === "absent" || cell.status === "not_measurable") return null;
   const n = cell.denominator;
   const k = cell.numerator;

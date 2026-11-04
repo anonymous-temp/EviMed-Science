@@ -134,7 +134,7 @@ describe("LoginPage", () => {
     await userEvent.click(screen.getByRole("button", { name: "登录" }));
 
     await waitFor(() => expect(mocks.loginWeb).toHaveBeenCalledWith("alice", "secret"));
-    expect(screen.getByTestId("location")).toHaveTextContent("/app/home");
+    expect(await screen.findByTestId("location")).toHaveTextContent("/app/home");
   });
 
   // Design reference §16.3: signing in puts the reader back at the address they were sent away from.
@@ -504,7 +504,7 @@ describe("LoginPage", () => {
 
     await waitFor(() => expect(mocks.registerWeb).toHaveBeenCalledWith("bob", "another correct horse"));
     expect(mocks.loginWeb).not.toHaveBeenCalled();
-    expect(screen.getByTestId("location")).toHaveTextContent("/app/home");
+    expect(await screen.findByTestId("location")).toHaveTextContent("/app/home");
   });
 
   // Each refusal has a different remedy, and a single "registration failed"

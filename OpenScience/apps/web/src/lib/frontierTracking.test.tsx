@@ -1,8 +1,10 @@
 import { act, fireEvent, render } from "@testing-library/react";
 import { useRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { sessionGeneration } from "./sessionLifecycle";
 import {
   flushFrontierEvents,
+  trackFrontier,
   frontierArrival,
   pendingFrontierEvents,
   resetFrontierTracking,
@@ -12,10 +14,26 @@ import {
   useFrontierReadTracking,
 } from "./frontierTracking";
 
+const { meMock, actor, requestHeaders } = vi.hoisted(() => ({
+  meMock: vi.fn<typeof import("./apiClient").fetchWebMe>(),
+  actor: { current: null as import("./apiClient").VerifiedWebActor | null },
+  requestHeaders: { "X-Open-Science-Project": "default", "X-Open-Science-CSRF": "csrf-token" },
+}));
+
 vi.mock("./apiClient", async (original) => ({
   ...await original<typeof import("./apiClient")>(),
   webApiBase: "",
-  getWebApiRequestHeaders: () => ({ "X-Open-Science-Project": "default", "X-Open-Science-CSRF": "csrf-token" }),
+  getWebApiRequestHeaders: () => requestHeaders,
+  getVerifiedWebActor: () => actor.current?.generation === sessionGeneration() ? actor.current : null,
+  fetchWebMe: (options?: Parameters<typeof import("./apiClient").fetchWebMe>[0]) => {
+    const generation = sessionGeneration();
+    return meMock(options).then(me => {
+      if (generation === sessionGeneration() && me?.user?.id && me.tenant?.id && me.csrfToken) {
+        actor.current = { generation, userId: me.user.id, tenantId: me.tenant.id, csrf: me.csrfToken };
+      }
+      return me;
+    });
+  },
 }));
 
 const LIST = "0f8fad5b-d9cb-469f-a165-70867728950e";
@@ -66,9 +84,24 @@ function Reader({ item, language = "zh", expanded = false, starred = false }: { 
 const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>();
 const ofType = (type: string) => pendingFrontierEvents().filter((event) => event.type === type);
 
+const identity = (id = "user-a", tenantId = "tenant-a", csrfToken = "csrf-token") => ({
+  user: { id, name: id, tenantId },
+  tenant: { id: tenantId, model: "individual-account" as const, role: "owner" as const },
+  csrfToken,
+  project: { id: "default", name: "Default" },
+  projects: [],
+});
+const verified = () => act(async () => { await Promise.resolve(); });
+const forgetDocument = () => { actor.current = null; resetFrontierTracking(); };
+const sessionBoundary = () => window.dispatchEvent(new StorageEvent("storage", { key: "open-science:web-session-sync", newValue: '{"kind":"started"}' }));
+
 beforeEach(() => {
   vi.useFakeTimers();
-  resetFrontierTracking();
+  sessionStorage.clear();
+  forgetDocument();
+  requestHeaders["X-Open-Science-CSRF"] = "csrf-token";
+  meMock.mockReset();
+  meMock.mockResolvedValue(identity());
   FakeObserver.instances = [];
   visibility = "visible";
   vi.stubGlobal("IntersectionObserver", FakeObserver);
@@ -133,7 +166,7 @@ describe("impressions: seen, not rendered", () => {
 });
 
 describe("opens join the list and hand their view to the reading page", () => {
-  it("an open carries list, slot and position, and the reading page carries its view on: dwell on hide, read to the end", () => {
+  it("an open carries list, slot and position, and the reading page carries its view on: dwell on hide, read to the end", async () => {
     serveFrontierList("for-you", LIST, [{ id: "aaaaaaaaaaaa", slot: "personal" }, { id: "cccccccccccc", slot: "explore" }]);
     const feed = render(<Feed ids={["aaaaaaaaaaaa", "cccccccccccc"]} />);
     fireEvent.click(feed.getByText("cccccccccccc"));
@@ -143,13 +176,14 @@ describe("opens join the list and hand their view to the reading page", () => {
     feed.unmount();
     const reader = render(<Reader item="cccccccccccc" />);
     expect(ofType("open"), "the list's open is the open: no second one").toHaveLength(1);
+    await verified();
     // Ten seconds of reading with a scroll, then the tab is switched away.
     act(() => { vi.advanceTimersByTime(5_000); });
     fireEvent.scroll(document);
     act(() => { vi.advanceTimersByTime(5_000); });
     setVisibility("hidden");
-    // The hide reported the dwell and flushed the queue at once: what was sent is what counts.
-    expect(pendingFrontierEvents()).toHaveLength(0);
+    // The kept-alive request carries the dwell. Its IDs remain queued until an acknowledged retry.
+    expect(ofType("dwell")).toHaveLength(1);
     const sent = fetchMock.mock.calls.flatMap(([, init]) => (JSON.parse(String(init?.body)) as { events: Array<{ type: string; value?: number; view?: string; surface: string }> }).events);
     const reported = sent.filter((event) => event.type === "dwell");
     expect(reported).toHaveLength(1);
@@ -245,6 +279,7 @@ describe("delivery", () => {
     serveFrontierList("feed", LIST, [{ id: "aaaaaaaaaaaa", slot: "editorial" }]);
     trackFrontierItemAction("star", "aaaaaaaaaaaa");
     expect(fetchMock).not.toHaveBeenCalled();
+    await verified();
     fetchMock.mockResolvedValueOnce(new Response("{}", { status: 429, headers: { "Retry-After": "30" } }));
     await act(async () => { vi.advanceTimersByTime(4_000); });
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -267,6 +302,7 @@ describe("delivery", () => {
     trackFrontierItemAction("hide", "aaaaaaaaaaaa", { surface: "feed", detail: "not-a-reason" });
     expect(pendingFrontierEvents(), "a reason outside the closed list is never sent").toHaveLength(0);
     trackFrontierItemAction("hide", "aaaaaaaaaaaa", { surface: "feed", detail: "promotional" });
+    await verified();
     flushFrontierEvents("unload");
     expect(beacon).toHaveBeenCalledTimes(1);
     const [url, blob] = beacon.mock.calls[0] as unknown as [string, Blob];
@@ -282,6 +318,308 @@ describe("delivery", () => {
     expect(body.events[0].session).toMatch(/^ses_/);
     expect(Object.keys(body.events[0]).sort(), "no URL, no text, nothing personal: closed words, ids and numbers").toEqual(["at", "detail", "device", "id", "item", "session", "surface", "type"]);
     expect(fetchMock).not.toHaveBeenCalled();
+    expect(pendingFrontierEvents()).toHaveLength(1);
+  });
+});
+
+it("drops A tracking and cannot retry or acknowledge it after an external account change", async () => {
+  let rejectOld: ((reason?: unknown) => void) | null = null;
+  fetchMock.mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectOld = reject; }));
+  trackFrontierItemAction("star", "aaaaaaaaaaaa");
+  await verified();
+  flushFrontierEvents();
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  const signal = (fetchMock.mock.calls[0][1] as RequestInit).signal;
+  window.dispatchEvent(new StorageEvent("storage", { key: "open-science:web-session-sync", newValue: '{"kind":"started"}' }));
+  expect(signal?.aborted).toBe(true);
+  expect(pendingFrontierEvents()).toHaveLength(0);
+  expect(sessionStorage.getItem("evimed.frontier.events")).toBeNull();
+  trackFrontierItemAction("star", "bbbbbbbbbbbb");
+  await act(async () => { (rejectOld as unknown as (reason?: unknown) => void)(new Error("late")); await Promise.resolve(); });
+  expect(pendingFrontierEvents()).toHaveLength(1);
+  await act(async () => { vi.advanceTimersByTime(4000); await Promise.resolve(); });
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+  const sent = String((fetchMock.mock.calls[1][1] as RequestInit).body);
+  expect(sent).toContain("bbbbbbbbbbbb");
+  expect(sent).not.toContain("aaaaaaaaaaaa");
+});
+
+it("does not requeue a previous reader's dwell during unmount after an account change", () => {
+  const view = render(<Reader item="aaaaaaaaaaaa" />);
+  act(() => { vi.advanceTimersByTime(2000); });
+  window.dispatchEvent(new StorageEvent("storage", { key: "open-science:web-session-sync", newValue: '{"kind":"started"}' }));
+  view.unmount();
+  expect(pendingFrontierEvents()).toHaveLength(0);
+  act(() => { vi.advanceTimersByTime(5000); });
+  expect(fetchMock).not.toHaveBeenCalled();
+});
+
+describe("account-bound storage", () => {
+  const key = "evimed.frontier.events";
+  const saved = () => JSON.parse(sessionStorage.getItem(key) ?? "null") as {
+    tenantId: string; userId: string; events: ReturnType<typeof pendingFrontierEvents>;
+  };
+  const star = (item: string) => trackFrontier({ type: "star", surface: "feed", item });
+
+  it("persists the first event synchronously when the shell already verified /me", async () => {
+    actor.current = { generation: sessionGeneration(), tenantId: "tenant-a", userId: "user-a", csrf: "csrf-token" };
+    star("aaaaaaaaaaaa");
+    expect(meMock).not.toHaveBeenCalled();
+    const [first] = pendingFrontierEvents();
+    expect(saved().events).toEqual([first]);
+
+    forgetDocument();
+    meMock.mockRejectedValueOnce(new TypeError("offline"));
+    flushFrontierEvents();
+    await verified();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(saved().events).toEqual([first]);
+    await act(async () => { vi.advanceTimersByTime(4_000); });
+    expect(meMock).toHaveBeenCalledTimes(2);
+    await act(async () => { vi.advanceTimersByTime(1); });
+    expect(String(fetchMock.mock.calls[0][1]?.body)).toContain(first.id);
+    expect(saved().events).toEqual([]);
+  });
+
+  it("adopts a shell snapshot while the queue's own me is slow", async () => {
+    let resolveMe!: (me: ReturnType<typeof identity>) => void;
+    meMock.mockImplementationOnce(() => new Promise(resolve => { resolveMe = resolve; }));
+    star("aaaaaaaaaaaa");
+    actor.current = { generation: sessionGeneration(), tenantId: "tenant-a", userId: "user-a", csrf: "csrf-token" };
+    star("bbbbbbbbbbbb");
+    expect(meMock).toHaveBeenCalledTimes(1);
+    expect(saved().events.map(event => event.item)).toEqual(["aaaaaaaaaaaa", "bbbbbbbbbbbb"]);
+    resolveMe(identity());
+    await verified();
+    expect(pendingFrontierEvents()).toHaveLength(2);
+  });
+
+  it.each(["beacon", "fetch"])("does not reoffer in-flight IDs at hide via %s", async transport => {
+    const beacon = vi.fn(() => transport === "beacon");
+    vi.stubGlobal("navigator", { ...navigator, sendBeacon: beacon });
+    star("aaaaaaaaaaaa");
+    await verified();
+    const [first] = pendingFrontierEvents();
+    fetchMock.mockImplementationOnce(() => new Promise(() => {}));
+    flushFrontierEvents();
+    flushFrontierEvents("unload");
+    expect(beacon).not.toHaveBeenCalled();
+    star("bbbbbbbbbbbb");
+    const second = pendingFrontierEvents()[1];
+    flushFrontierEvents("unload");
+    expect(beacon).toHaveBeenCalledTimes(1);
+    expect(saved().events).toEqual([first, second]);
+    if (transport === "fetch") {
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(String(fetchMock.mock.calls[1][1]?.body)).toContain(second.id);
+      expect(String(fetchMock.mock.calls[1][1]?.body)).not.toContain(first.id);
+    } else expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    forgetDocument();
+    flushFrontierEvents();
+    await verified();
+    await act(async () => { vi.advanceTimersByTime(1); });
+    expect(String(fetchMock.mock.calls.at(-1)?.[1]?.body)).toContain(first.id);
+    expect(String(fetchMock.mock.calls.at(-1)?.[1]?.body)).toContain(second.id);
+    expect(saved().events).toEqual([]);
+    if (transport === "beacon") {
+      vi.useRealTimers();
+      const [, body] = beacon.mock.calls[0] as unknown as [string, Blob];
+      const text = await new Promise<string>(resolve => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.readAsText(body);
+      });
+      expect(text).toContain(second.id);
+      expect(text).not.toContain(first.id);
+    }
+  });
+
+  it("restores after a same-account reload, merges new events, and retries the original IDs", async () => {
+    star("aaaaaaaaaaaa");
+    await verified();
+    const [first] = pendingFrontierEvents();
+    expect(saved()).toMatchObject({ tenantId: "tenant-a", userId: "user-a", events: [first] });
+    expect(sessionStorage.getItem(key)).not.toContain("csrf-token");
+
+    forgetDocument();
+    let resolveMe!: (me: ReturnType<typeof identity>) => void;
+    meMock.mockImplementationOnce(() => new Promise(resolve => { resolveMe = resolve; }));
+    star("bbbbbbbbbbbb");
+    const newId = pendingFrontierEvents()[0].id;
+    flushFrontierEvents();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(saved().events.map(event => event.id)).toEqual([first.id]);
+    resolveMe(identity());
+    await verified();
+
+    expect(pendingFrontierEvents().map(event => [event.id, event.session])).toEqual([[first.id, first.session], [newId, first.session]]);
+    await act(async () => { vi.advanceTimersByTime(4_000); });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(pendingFrontierEvents()).toHaveLength(0);
+    expect(saved().events).toEqual([]);
+  });
+
+  it.each([["user-b", "tenant-a"], ["user-a", "tenant-b"]])("does not restore another account or tenant (%s, %s)", async (user, tenant) => {
+    star("aaaaaaaaaaaa");
+    await verified();
+    const [old] = pendingFrontierEvents();
+    forgetDocument();
+    requestHeaders["X-Open-Science-CSRF"] = "csrf-b";
+    meMock.mockResolvedValue(identity(user, tenant, "csrf-b"));
+    star("bbbbbbbbbbbb");
+    await verified();
+    expect(saved().events.map(event => event.item)).toEqual(["bbbbbbbbbbbb"]);
+    expect(saved().events[0].session).not.toBe(old.session);
+    flushFrontierEvents("unload");
+    expect(String(fetchMock.mock.calls[0][1]?.body)).not.toContain("aaaaaaaaaaaa");
+    expect(new Headers(fetchMock.mock.calls[0][1]?.headers).get("X-Open-Science-CSRF")).toBe("csrf-b");
+  });
+
+  it("ignores a stale identity completion after a session boundary", async () => {
+    let resolveOld!: (me: ReturnType<typeof identity>) => void;
+    meMock.mockImplementationOnce(() => new Promise(resolve => { resolveOld = resolve; }));
+    star("aaaaaaaaaaaa");
+    sessionBoundary();
+    requestHeaders["X-Open-Science-CSRF"] = "csrf-b";
+    meMock.mockResolvedValue(identity("user-b", "tenant-b", "csrf-b"));
+    star("bbbbbbbbbbbb");
+    resolveOld(identity());
+    await verified();
+    flushFrontierEvents();
+    expect(saved()).toMatchObject({ tenantId: "tenant-b", userId: "user-b" });
+    expect(String(fetchMock.mock.calls[0][1]?.body)).toContain("bbbbbbbbbbbb");
+    expect(String(fetchMock.mock.calls[0][1]?.body)).not.toContain("aaaaaaaaaaaa");
+  });
+
+  it("does not adopt provisional events when /me verified a different credential before the boundary arrived", async () => {
+    meMock.mockResolvedValue(identity("user-b", "tenant-b", "csrf-b"));
+    star("aaaaaaaaaaaa");
+    await verified();
+    requestHeaders["X-Open-Science-CSRF"] = "csrf-b";
+    star("cccccccccccc");
+    flushFrontierEvents();
+    flushFrontierEvents("unload");
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(saved()).toBeNull();
+    sessionBoundary();
+    star("bbbbbbbbbbbb");
+    await verified();
+    flushFrontierEvents();
+    expect(String(fetchMock.mock.calls[0][1]?.body)).toContain("bbbbbbbbbbbb");
+    expect(String(fetchMock.mock.calls[0][1]?.body)).not.toMatch(/aaaaaaaaaaaa|cccccccccccc/u);
+  });
+
+  it("rejects the legacy ownerless format", async () => {
+    star("aaaaaaaaaaaa");
+    const [old] = pendingFrontierEvents();
+    await verified();
+    forgetDocument();
+    sessionStorage.setItem(key, JSON.stringify([old]));
+    sessionStorage.setItem("evimed.frontier.session", JSON.stringify({ id: old.session, at: Date.now() }));
+    sessionStorage.setItem("evimed.frontier.open", JSON.stringify({ item: "bbbbbbbbbbbb", view: "view_legacy", at: Date.now() }));
+    const reader = render(<Reader item="bbbbbbbbbbbb" />);
+    await verified();
+    expect(saved().events).toHaveLength(1);
+    expect(saved().events[0]).toMatchObject({ item: "bbbbbbbbbbbb", type: "open", surface: "direct" });
+    expect(saved().events[0].session).not.toBe(old.session);
+    expect(saved().events[0].view).not.toBe("view_legacy");
+    reader.unmount();
+  });
+
+  it("joins a saved open and reader only after the same owner is verified", async () => {
+    const feed = render(<Feed ids={["cccccccccccc"]} />);
+    await verified();
+    fireEvent.click(feed.getByText("cccccccccccc"));
+    const [original] = ofType("open");
+    feed.unmount();
+    forgetDocument();
+    const reader = render(<Reader item="cccccccccccc" />);
+    expect(ofType("open")[0].view).not.toBe(original.view);
+    await verified();
+    trackFrontierItemAction("star", "cccccccccccc");
+    expect(ofType("open").map(event => event.id)).toEqual([original.id]);
+    expect(ofType("star")[0].view).toBe(original.view);
+    reader.unmount();
+  });
+
+  it("does not reuse the saved open after switching identities", async () => {
+    const feed = render(<Feed ids={["cccccccccccc"]} />);
+    await verified();
+    fireEvent.click(feed.getByText("cccccccccccc"));
+    const [original] = ofType("open");
+    feed.unmount();
+    forgetDocument();
+    requestHeaders["X-Open-Science-CSRF"] = "csrf-b";
+    meMock.mockResolvedValue(identity("user-b", "tenant-b", "csrf-b"));
+    const reader = render(<Reader item="cccccccccccc" />);
+    await verified();
+    expect(ofType("open")).toHaveLength(1);
+    expect(ofType("open")[0].view).not.toBe(original.view);
+    reader.unmount();
+  });
+
+  it("pins the verified CSRF token even if shared headers change before the boundary", async () => {
+    star("aaaaaaaaaaaa");
+    await verified();
+    requestHeaders["X-Open-Science-CSRF"] = "csrf-b";
+    fetchMock.mockResolvedValueOnce(new Response("{}", { status: 403 }));
+    flushFrontierEvents();
+    expect(new Headers(fetchMock.mock.calls[0][1]?.headers).get("X-Open-Science-CSRF")).toBe("csrf-token");
+    await verified();
+    expect(saved().events).toEqual([]);
+  });
+
+  it("keeps unacknowledged unload events in storage for the same id to be retried", async () => {
+    const beacon = vi.fn(() => true);
+    vi.stubGlobal("navigator", { ...navigator, sendBeacon: beacon });
+    star("aaaaaaaaaaaa");
+    await verified();
+    const [first] = pendingFrontierEvents();
+    flushFrontierEvents("unload");
+    flushFrontierEvents("unload");
+    expect(beacon).toHaveBeenCalledTimes(1);
+    expect(saved().events).toEqual([first]);
+    forgetDocument();
+    flushFrontierEvents();
+    await verified();
+    await act(async () => { vi.advanceTimersByTime(1); });
+    expect(String(fetchMock.mock.calls[0][1]?.body)).toContain(first.id);
+    expect(saved().events).toEqual([]);
+  });
+
+  it("retains Retry-After across reload and does not let unload bypass it", async () => {
+    star("aaaaaaaaaaaa");
+    await verified();
+    fetchMock.mockResolvedValueOnce(new Response("{}", { status: 429, headers: { "Retry-After": "30" } }));
+    flushFrontierEvents();
+    await verified();
+    forgetDocument();
+    flushFrontierEvents();
+    await verified();
+    flushFrontierEvents("unload");
+    await act(async () => { vi.advanceTimersByTime(29_000); });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await act(async () => { vi.advanceTimersByTime(1_000); });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(pendingFrontierEvents()).toHaveLength(0);
+  });
+
+  it("retries identity and sends from memory when storage is unavailable", async () => {
+    meMock.mockRejectedValueOnce(new TypeError("offline"));
+    const set = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("storage denied"); });
+    try {
+      star("aaaaaaaaaaaa");
+      await verified();
+      flushFrontierEvents("unload");
+      expect(fetchMock).not.toHaveBeenCalled();
+      await act(async () => { vi.advanceTimersByTime(4_000); });
+      expect(meMock).toHaveBeenCalledTimes(2);
+      await act(async () => { vi.advanceTimersByTime(1); });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(pendingFrontierEvents()).toHaveLength(0);
+    } finally {
+      set.mockRestore();
+    }
   });
 });

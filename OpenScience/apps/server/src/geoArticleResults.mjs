@@ -78,6 +78,7 @@ export class GeoArticleResults {
     if (!prepared.referenceId) return null;
     const row = await this.documents.get(project.userId, "result-revision", prepared.referenceId);
     if (!row || row.projectId !== project.id || row.payload.requestedBy !== user.id || row.payload.sessionId !== request.sessionId) throw new HttpError(409, "result_revision_stale", "Reopen the article.");
+    if (row.payload.nativePrincipal && !this.revisions.matchesNativePrincipal(request, row.payload.nativePrincipal)) throw new HttpError(403, "geo_member_forbidden", "The GEO conversation authority changed.");
     if (row.payload.target?.kind === "geo-article" && !(row.payload.state === "bound" && row.payload.promptRequestId === request.requestId)) {
       const article = await this.store.getArticle(prepared.geoId, row.payload.target.articleId);
       const migration = row.payload.migration;
@@ -105,6 +106,61 @@ export class GeoArticleResults {
   constructor({ store, service, results, revisions, documents, cards, parser, report = () => {} }) {
     this.store = store; this.service = service; this.results = results; this.revisions = revisions;
     this.documents = documents; this.cards = cards; this.parser = parser; this.report = report;
+  }
+
+  /** A publication pin is resolved by its own GEO record, including retained user-reported history. */
+  async readPublicationVersion(user, geoId, kind, recordId, versionId, digest, revision, authority) {
+    const pinnedArticle = async () => {
+      if (kind === "orders" && revision === null) {
+        const { order } = await this.service.distributionOrder(user, geoId, recordId);
+        return order.articleResultVersionId === versionId && order.articleDigest === digest ? order.articleId : null;
+      }
+      if (kind === "owned-links") {
+        const value = await this.service.ownedPublicationDetail(user, geoId, recordId, revision === null ? {} : { beforeRevision: revision + 1 });
+        const pin = revision === null ? { articleId: value.link.articleId, resultVersionId: value.link.articleResultVersionId, digest: value.link.articleDigest } : value.history.items.find(item => item.revision === revision);
+        return pin?.resultVersionId === versionId && pin.digest === digest ? pin.articleId : null;
+      }
+      return null;
+    };
+    const articleId = await pinnedArticle();
+    if (!articleId) throw new HttpError(404, "geo_article_not_found", "The published version is unavailable.");
+    const result = await this.readArticleVersion(user, geoId, articleId, versionId, digest, authority);
+    if (await pinnedArticle() !== articleId) throw new HttpError(409, "geo_article_version_changed", "The publication record changed.");
+    return result;
+  }
+
+  /** Read only a version linked to this GEO article, never an arbitrary workspace result. */
+  async readArticleVersion(user, geoId, articleId, versionId, digest, authority) {
+    const identity = await authority.identity(user, geoId, { ability: "read" });
+    const article = await this.store.getArticle(geoId, articleId);
+    const linked = article && (await this.store.articleVersions(geoId, articleId)).find(item => item.resultVersionId === versionId && item.digest === digest);
+    if (!linked) throw new HttpError(404, "geo_article_not_found", "The article version is unavailable.");
+    const result = await this.readVersion(identity.project, versionId);
+    if (result.version.digest !== digest) throw new HttpError(409, "geo_article_bytes_changed", "The article version changed.");
+    const fresh = await authority.identity(user, geoId, { ability: "read" });
+    if (JSON.stringify(fresh.principal) !== JSON.stringify(identity.principal)) throw new HttpError(403, "geo_member_forbidden", "The GEO authority changed.");
+    return { versionId, digest, text: result.text };
+  }
+
+  /** Stage only this article's current bytes and its server-derived producer session. */
+  async stageSelected(user, geoId, articleId, input, authority) {
+    const identity = await authority.identity(user, geoId, { ability: "run" });
+    const article = await this.store.getArticle(geoId, articleId);
+    if (!article || !article.currentResultVersionId || article.currentResultVersionId !== input.versionId || article.contentSha256 !== input.digest) throw new HttpError(409, "geo_article_head_changed", "The article has a newer version.");
+    const association = (await this.store.articleVersions(geoId, articleId)).find(item => item.resultVersionId === input.versionId && item.digest === input.digest);
+    if (!association) throw new HttpError(409, "result_revision_stale", "Reopen the article.");
+    const { version } = await this.results.raw(identity.project.userId, identity.project.id, input.versionId);
+    if (version.digest !== input.digest || !version.producer?.sessionId) throw new HttpError(409, "result_revision_stale", "Reopen the article.");
+    const scope = { kind: "geo", geoProjectId: geoId, sessionId: version.producer.sessionId };
+    const resolved = await authority.resolve(user, scope, { ability: "run" });
+    const target = { kind: "geo-article", geoProjectId: geoId, articleId };
+    const staged = await this.revisions.stage(user.id, version.versionId, { projectId: identity.project.id, digest: version.digest,
+      requestId: input.requestId, sessionId: scope.sessionId, anchor: { kind: "file", elementId: "file", selectedText: "" } }, { project: identity.project, target, principal: resolved.principal });
+    const refreshed = await authority.resolve(user, scope, { ability: "run" });
+    const { rootSessionId: _root, ...principal } = refreshed.principal;
+    if (JSON.stringify(principal) !== JSON.stringify(identity.principal)) throw new HttpError(403, "geo_member_forbidden", "The GEO conversation authority changed.");
+    await this.assertHead(identity.project, { id: geoId }, { target, expectedHeadVersionId: version.versionId, digest: version.digest, projectId: identity.project.id });
+    return staged;
   }
 
   /** Decode only through the existing parser; Word is never interpreted as UTF-8 ZIP bytes. */
@@ -145,6 +201,7 @@ export class GeoArticleResults {
           { projectId: project.id, expectedRevision: row.revision });
         }
       }
+      if (row?.payload?.nativePrincipal && !this.revisions.matchesNativePrincipal(request, row.payload.nativePrincipal)) throw new HttpError(403, "geo_member_forbidden", "The GEO conversation authority changed.");
       if (row?.payload?.target?.kind === "geo-article" && !(row.payload.state === "bound" && row.payload.promptRequestId === request.requestId)) await this.assertHead(project, geo, row.payload);
       return this.revisions.bind(user.id, project, request);
     }

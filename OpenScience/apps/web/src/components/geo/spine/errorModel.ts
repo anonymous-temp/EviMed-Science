@@ -50,7 +50,7 @@ export function errorSourceCounts(errors: readonly Pick<GeoErrorRow, "citedSourc
 export type ErrorShow = "severe" | "open" | "acting" | "all";
 export const ERROR_SHOWS: readonly ErrorShow[] = Object.freeze(["severe", "open", "acting", "all"]);
 
-/** A live error that would reach a patient (S3 or S4). */
+/** A live error with a potentially severe consequence (S3 or S4), not evidence of patient harm. */
 export const isSevereError = (error: Pick<GeoErrorRow, "status" | "severity" | "judgmentState">): boolean =>
   error.judgmentState !== "withdrawn" && error.status !== "closed" && (error.severity === "S3" || error.severity === "S4");
 

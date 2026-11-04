@@ -5,6 +5,7 @@ import { HttpError } from './security.mjs';
 import { packGeoSignalTargets, readGeoSignalTargets, packGeoGroupChange, readGeoGroupChangeMembers } from './geoSignalTargets.mjs';
 import { summarizeGeoSourceReviews } from './geoSourceReviews.mjs';
 import { migrateProductStore } from './productPersistence.mjs';
+import { GEO_SAMPLING_COMPARABILITY } from './geoComparison.mjs';
 
 const digest = value => createHash('sha256').update(canonicalJson(value)).digest('hex');
 const fail = (code, message, status = 409) => new HttpError(status, code, message);
@@ -33,6 +34,14 @@ export function geoSignalErrorOutcome(error, basis) {
  * Associations and reversible dispositions over existing event and run owners. No model, payment or new job engine.
  * Producers supply the immutable event basis; public routes accept only selection and disposition.
  */
+// Historical observations remain readable, but rubric-only signals did not prove the sampling interface.
+export const geoLegacyGroupSignal = row => row.payload.kind === 'group_changed' && (row.payload.basis?.judgeComparability !== 'recorded-rubric-v1'
+  || row.payload.basis?.samplingComparability !== GEO_SAMPLING_COMPARABILITY);
+export const geoSignalDisplayBasis = row => {
+  if (!geoLegacyGroupSignal(row)) return row.payload.basis;
+  const reason = row.payload.basis?.judgeComparability !== 'recorded-rubric-v1' ? 'judge_version_unrecorded' : 'sampling_surface_unverified';
+  return { ...row.payload.basis, cells: (row.payload.basis?.cells ?? []).map(cell => ({ ...cell, delta: null, reason })), comparability: reason };
+};
 export class GeoSignals {
   constructor({ documents, store, service, runs, resultForRun, sourceReviewForRun = null, notify = null, now = () => new Date() }) {
     this.documents = documents; this.store = store; this.service = service; this.runs = runs;
@@ -179,7 +188,7 @@ export class GeoSignals {
     const affectedSteps = [...new Set([row.payload.step,
       ...(row.payload.kind === 'citation_observed' ? ['sources'] : []),
       ...(row.payload.kind === 'error_observed' || row.payload.basis.targets?.some(target => target.type === 'article') || row.payload.basis.targetKinds?.includes('article') || row.payload.basis.articleId ? ['content'] : [])])];
-    return { id: row.id, revision: row.revision, kind: row.payload.kind, step: row.payload.step, affectedSteps, title: row.payload.title,
+    return { id: row.id, revision: row.revision, kind: row.payload.kind, step: row.payload.step, affectedSteps, title: geoLegacyGroupSignal(row) ? '历史观测待核实' : row.payload.title,
       createdAt: row.createdAt, observedAt: row.payload.observedAt, detectedAt: row.payload.detectedAt, disposition: row.payload.disposition,
       ...lifecycle, businessOutcome, actionable: ['pending', 'failed_recoverable'].includes(lifecycle.state) && !['closed', 'withdrawn'].includes(businessOutcome.state)
         && !(row.payload.kind === 'error_observed' && businessOutcome.state === 'unknown'),
@@ -260,7 +269,7 @@ export class GeoSignals {
         catch { groupMembers[side] = { availability: 'unknown', items: [], total: null }; }
       }
     }
-    return { ...await this.projectRow(project, row, execution), groupMembers, basis: row.payload.basis, basisDigest: row.payload.basisDigest,
+    return { ...await this.projectRow(project, row, execution), groupMembers, basis: geoSignalDisplayBasis(row), basisDigest: row.payload.basisDigest,
       targets: await readGeoSignalTargets(this.documents, project, row),
       dispositionReason: row.payload.dispositionReason };
   }
@@ -303,12 +312,12 @@ export class GeoSignals {
       previous = { contextRef: previous.id, sessionId: previous.payload.sessionId, requestId: previous.payload.requestId, runId: exact[0].id, status: exact[0].status };
       if (previous.sessionId !== input.sessionId) throw fail('geo_plan_context_mismatch', 'Continue in the existing conversation.');
     }
-    const basis = { schemaVersion: 1, signal: { id: row.id, revision: row.revision, kind: row.payload.kind, title: row.payload.title,
+    const basis = { schemaVersion: 1, signal: { id: row.id, revision: row.revision, kind: row.payload.kind, title: geoLegacyGroupSignal(row) ? '历史观测待核实' : row.payload.title,
       basisDigest: row.payload.basisDigest, observedAt: row.payload.observedAt, detectedAt: row.payload.detectedAt },
-      event: { ...row.payload.basis, targets: targets.filter(target => focus.includes(target.key)),
+      event: { ...geoSignalDisplayBasis(row), targets: targets.filter(target => focus.includes(target.key)),
         targetSelection: { total: targets.length, selected: focus.length, fullDigest: digest(targets) } }, focusRefs: focus, intent: input.intent, previous, groups: [],
       handlingKey: digest([row.id, row.payload.basisDigest, input.intent, [...focus].sort(), previous?.contextRef ?? null]) };
-    return { basis, draft: `${input.intent === 'correct' ? '请根据原回答和适用条件写纠错内容' : input.intent === 'review' ? '请核查这次资料变化影响的指定结论和稿件版本，说明需要更新、已更新以及仍待核实的部分' : '请解释这条发现及其依据，提出下一步建议'}：${row.payload.title}` };
+    return { basis, draft: `${input.intent === 'correct' ? '请根据原回答和适用条件写纠错内容' : input.intent === 'review' ? '请核查这次资料变化影响的指定结论和稿件版本，说明需要更新、已更新以及仍待核实的部分' : '请解释这条发现及其依据，提出下一步建议'}：${geoLegacyGroupSignal(row) ? '历史观测待核实，判定口径未知，不应推断变化' : row.payload.title}` };
   }
 
   async disposition(user, geoId, id, input) {
@@ -344,7 +353,7 @@ export class GeoSignals {
   /** Called only by the existing leased GEO loop; reads never create notices. */
   async deliver(project, row) {
     this.requireRow(project, row);
-    if (!this.notify || row.payload.disposition === 'ignored') return null;
+    if (!this.notify || row.payload.disposition === 'ignored' || geoLegacyGroupSignal(row)) return null;
     const outcome = await this.businessOutcome(project, row);
     if (row.payload.kind === 'error_observed' && ['closed', 'withdrawn', 'unknown'].includes(outcome.state)) return null;
     if (row.payload.kind === 'order_anomaly' && (outcome.observation === 'historical_episode' || ['cancelled', 'refunded', 'published', 'verified', 'settled'].includes(outcome.state))) return null;

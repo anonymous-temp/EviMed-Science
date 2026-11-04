@@ -361,8 +361,8 @@ describe("准确与安全: the band's toolbar", () => {
     expect(claimKeys()).toEqual(["fp_b"]);
     await userEvent.clear(search);
     await userEvent.type(search, "不存在的词");
-    expect(await screen.findByText("没有符合的说法。")).toBeInTheDocument();
-    const note = screen.getByText("没有符合的说法。").closest("[data-note]") as HTMLElement;
+    expect(await screen.findByText("当前筛选没有符合的说法。")).toBeInTheDocument();
+    const note = screen.getByText("当前筛选没有符合的说法。").closest("[data-note]") as HTMLElement;
     await userEvent.click(within(note).getByRole("button", { name: "清除筛选" }));
     expect(claimKeys()).toEqual(["fp_b", "fp_a"]);
   });
@@ -558,12 +558,69 @@ describe("准确与安全: the charts and the list share one selection", () => {
   });
 });
 
+describe("准确与安全: assessment availability", () => {
+  it("does not claim safety without a measurement", async () => {
+    client.getGeoDiagnosis.mockResolvedValue({ ...diagnosisWith([]), round: null });
+    renderTab();
+    expect(await screen.findByText("尚无本轮测量和医学核查结果，不能判断是否存在讲错。")).toBeInTheDocument();
+    expect(screen.queryByText("没有测到讲错")).toBeNull();
+  });
+  it("limits a measured zero to decidable answers", async () => {
+    const diagnosis = diagnosisWith([]);
+    client.getGeoDiagnosis.mockResolvedValue({ ...diagnosis, failureModes: { ...diagnosis.failureModes,
+      correct: { ...diagnosis.failureModes.correct, status: "ok", numerator: 30, denominator: 40, value: 75 },
+      wrongOurs: { ...diagnosis.failureModes.wrongOurs, status: "ok", numerator: 0, denominator: 40, value: 0 } } });
+    renderTab();
+    expect(await screen.findByText(/记录的讲错我方为 0 次；未判定的回答不能据此判断/)).toBeInTheDocument();
+  });
+  it.each(["unknown", "partial", "refused"] as const)("does not claim zero errors for %s-only answers", async (mode) => {
+    const diagnosis = diagnosisWith([]);
+    const zero = { ...diagnosis.failureModes.correct, status: "ok" as const, numerator: 0, denominator: 40, value: 0 };
+    client.getGeoDiagnosis.mockResolvedValue({ ...diagnosis, failureModes: { ...diagnosis.failureModes,
+      correct: zero, wrongOurs: zero, [mode]: { ...zero, numerator: 40, value: 100 } } });
+    renderTab();
+    expect(await screen.findByText(/医学核查结果不足或尚未完成/)).toBeInTheDocument();
+    expect(screen.queryByText(/讲错我方为 0 次/)).toBeNull();
+    expect(screen.queryByText(/讲错我方 0 次/)).toBeNull();
+    expect(screen.getByRole("group", { name: "严重讲错" })).not.toHaveTextContent("0条");
+  });
+  it("does not treat a small fully judged count as an adequate sample", async () => {
+    const diagnosis = diagnosisWith([]);
+    const cell = { ...diagnosis.failureModes.correct, status: "ok" as const, denominator: 40 };
+    client.getGeoDiagnosis.mockResolvedValue({ ...diagnosis, failureModes: { ...diagnosis.failureModes,
+      correct: { ...cell, numerator: 1 }, wrongOurs: { ...cell, numerator: 0 } } });
+    renderTab();
+    expect(await screen.findByText(/医学核查结果不足或尚未完成/)).toBeInTheDocument();
+  });
+  it("does not claim zero if the error list read fails", async () => {
+    const diagnosis = diagnosisWith([]);
+    const cell = { ...diagnosis.failureModes.correct, status: "ok" as const, denominator: 40 };
+    const measured = { ...diagnosis, failureModes: { ...diagnosis.failureModes,
+      correct: { ...cell, numerator: 30 }, wrongOurs: { ...cell, numerator: 0 } } };
+    client.getGeoDiagnosis.mockImplementation(async (_id: string, _scope: unknown, filters?: GeoErrorFilters) => {
+      if (filters) throw new Error("read failed");
+      return measured;
+    });
+    renderTab();
+    expect(await screen.findByText(/医学核查结果不足或尚未完成/)).toBeInTheDocument();
+    expect(screen.queryByText(/讲错我方为 0 次/)).toBeNull();
+    expect(screen.getByRole("group", { name: "严重讲错" })).not.toHaveTextContent("0条");
+  });
+  it("does not turn an insufficient zero into a measured zero", async () => {
+    const diagnosis = diagnosisWith([]);
+    client.getGeoDiagnosis.mockResolvedValue({ ...diagnosis, failureModes: { ...diagnosis.failureModes,
+      wrongOurs: { ...diagnosis.failureModes.wrongOurs, status: "insufficient", numerator: 0, denominator: 10, value: null } } });
+    renderTab();
+    expect(await screen.findByText(/医学核查结果不足或尚未完成/)).toBeInTheDocument();
+  });
+});
+
 describe("准确与安全: nothing wrong", () => {
   it("draws no list where nothing was measured wrong, and says so once in the chart that would have shown it", async () => {
     client.getGeoDiagnosis.mockResolvedValue(diagnosisWith([]));
     client.getGeoMonitoring.mockResolvedValue({ ...monitoringFilled, newErrors: [] });
     renderTab();
-    expect(await screen.findByText("这一轮没有测到讲错我方的说法。")).toBeInTheDocument();
+    expect(await screen.findByText(/不能判断是否存在讲错|讲错我方为 0 次/)).toBeInTheDocument();
     expect(document.querySelector("[data-geo-error-list]")).toBeNull();
     expect(screen.queryByRole("heading", { name: "讲错清单，按严重度排序" })).toBeNull();
   });

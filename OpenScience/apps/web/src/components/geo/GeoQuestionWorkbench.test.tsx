@@ -1,6 +1,8 @@
+import { sessionOwner } from "@/lib/sessionLifecycle";
+import { prepareRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, useLocation } from 'react-router';
+import { MemoryRouter, parsePath, useLocation } from 'react-router';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { GeoQuestionWorkbench } from './GeoQuestionWorkbench';
 import { geoProject } from './__fixtures__/geoTabs';
@@ -21,8 +23,8 @@ const progress = (patch: Partial<GeoDiagnosisProgress> = {}): GeoDiagnosisProgre
   { jobId: 'ok', questionId: 'q1', text: 'Successful original', originalId: '001', originalGroup: null, engine: 'kimi', status: 'done', answerStatus: 'valid', attempts: 1, errorCode: null, snapshotId: 's1', recoverable: false, deliveryUnknown: false },
   { jobId: 'unknown', questionId: 'q2', text: 'Unknown original', originalId: '0', originalGroup: null, engine: 'kimi', status: 'failed', answerStatus: null, attempts: 1, errorCode: 'delivery_unknown_no_automatic_retry', snapshotId: null, recoverable: true, deliveryUnknown: true },
 ], ...patch });
-function Address() { const location = useLocation(); return <output>{location.search}</output>; }
-function show(path = '/questions', viewer = false) { return render(<MemoryRouter initialEntries={[path]}><GeoQuestionWorkbench geoId="g1" project={geoProject({}, viewer ? { access: { roles: ['viewer'], abilities: ['read'], owner: false } } : {})} data={data} onSaved={vi.fn()} /><Address /></MemoryRouter>); }
+function Address() { const location = useLocation(); return <><output>{location.search}</output><div data-testid="diagnosis-navigation-state">{JSON.stringify(location.state)}</div></>; }
+function show(path = '/questions', viewer = false, state?: unknown) { return render(<MemoryRouter initialEntries={[state ? { ...parsePath(path), state } : path]}><GeoQuestionWorkbench geoId="g1" project={geoProject({}, viewer ? { access: { roles: ['viewer'], abilities: ['read'], owner: false } } : {})} data={data} onSaved={vi.fn()} /><Address /></MemoryRouter>); }
 beforeEach(() => { originals.mockReset(); monitoring.reload.mockReset(); monitoring.useGeoMonitoring.mockReturnValue({ state: { kind: 'ready', data: { measurement: { state: 'measuring', since: null, engines: [] } } }, reload: monitoring.reload }); sessionStorage.clear(); localStorage.clear(); identity.fetchWebMe.mockReset(); identity.fetchWebMe.mockResolvedValue({ user: { id: 'u1' }, tenant: { id: 't1' } }); Object.values(client).forEach(fn => fn.mockReset()); client.getGeoDiagnosisProgress.mockResolvedValue(progress()); client.startGeoDiagnosis.mockResolvedValue({ roundId: 'r1', setVersion: 3 }); client.recoverGeoDiagnosis.mockResolvedValue({ roundId: 'r2', setVersion: 3 }); });
 it('uses shared monitoring for platform pauses and keeps the saved engine selected through unknown and failed reads', async () => {
   monitoring.useGeoMonitoring.mockReturnValue({ state: { kind: 'ready', data: { measurement: { state: 'measuring', since: null, engines: ['kimi'] } } }, reload: monitoring.reload });
@@ -143,18 +145,20 @@ it('saves edits as a new version, keeps original order across groups and reuses 
   expect(client.startGeoDiagnosis).not.toHaveBeenCalled();
 });
 it('retries an ambiguous selected recovery after remount using the identical request and new round', async () => {
+  const state = { runtimeUiIntent: prepareRuntimeUiIntent({ kind: 'open', projectId: 'prj_geo_1', sessionId: 's1', requestId: 'pending-round', draft: 'Pending diagnosis draft', owner: sessionOwner() }) };
   client.recoverGeoDiagnosis.mockRejectedValueOnce(new Error('network')).mockResolvedValueOnce({ roundId: 'r2' });
-  const initial = show('/questions?diagnosisRound=r1'); await screen.findByText(/总任务 102/);
+  const initial = show('/questions?diagnosisRound=r1&conversation=open&session=s1', false, state); await screen.findByText(/总任务 102/);
   await userEvent.click(screen.getByRole('checkbox', { name: /恢复 0/ }));
   await userEvent.click(screen.getByRole('checkbox', { name: /我确认/ }));
   await userEvent.click(screen.getByRole('button', { name: '开始恢复所选 1 项' }));
   await screen.findByRole('alert'); const request = client.recoverGeoDiagnosis.mock.calls[0][2];
   initial.unmount();
   client.getGeoDiagnosisProgress.mockResolvedValue(progress({ cells: progress().cells.map(cell => ({ ...cell, recoverable: false })) }));
-  show('/questions?diagnosisRound=r1'); await screen.findByText(/总任务 102/);
+  show('/questions?diagnosisRound=r1&conversation=open&session=s1', false, state); await screen.findByText(/总任务 102/);
   await userEvent.click(screen.getByRole('button', { name: '开始恢复所选 1 项' }));
   await waitFor(() => expect(client.recoverGeoDiagnosis.mock.calls[1][2]).toEqual(request));
   await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('diagnosisRound=r2'));
+  expect(JSON.parse(screen.getByTestId('diagnosis-navigation-state').textContent ?? '{}')).toEqual(state);
 });
 
 it('does not ask about unknown charges for known failed jobs', async () => {

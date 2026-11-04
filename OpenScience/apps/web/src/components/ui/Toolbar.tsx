@@ -223,6 +223,8 @@ export interface ToolbarProps {
   actionPlan?: PageActionPlan;
   /** The actual selected analysis scope and its configuration action; never a query filter or preference. */
   scopeAction?: { id?: string; label: string; onSelect(): void; disabled?: boolean };
+  /** Individually visible parts of a shared analytical scope. Each opens the scope editor. */
+  scopeParts?: readonly { id: string; label: string; onSelect(): void; disabled?: boolean }[];
   /**
    * The open step's own action (「加问」, 「选目标档」): a quiet text button at the row's end, in the toolbar's own 28 px — never a
    * primary. The page's one primary is the header's (DESIGN.md 「页面结构」 rule 3), and a solid button here made the band 10 px
@@ -894,7 +896,7 @@ function BandSummary({ text, className }: { text: string; className: string }) {
  * Responsive: Available width below 960px selects compact oneRow layout; other rows fold below 640px; a `nowrap` band's own row is one scrolling line on a phone. Narrow filter sheet; measured band overflow folds filters; oneRow has phone search overlay.
  * Verification: Toolbar.test.tsx and Composition.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
  */
-export function Toolbar({ label = "筛选与操作", views, filters: declared = [], navigation = [], actionPlan, scopeAction, contextAction, onClear, onReset, search, summary, actions, selection, className, inBand = false,
+export function Toolbar({ label = "筛选与操作", views, filters: declared = [], navigation = [], actionPlan, scopeAction, scopeParts = [], contextAction, onClear, onReset, search, summary, actions, selection, className, inBand = false,
   oneRow = false, nowrap = false, tokens: given = [], sheetLead, resultCount, searchShortcut = false }: ToolbarProps) {
   const viewportNarrow = useNarrow();
   const row = useRef<HTMLDivElement>(null);
@@ -902,8 +904,9 @@ export function Toolbar({ label = "筛选与操作", views, filters: declared = 
   const containerNarrow = useContainerNarrow(root, oneRow ? 960 : 640);
   const narrow = viewportNarrow || containerNarrow;
   // `nowrap`: the band's own row (no views) at a phone's width is one line that scrolls sideways (see `end`): nothing in it wraps.
-  const oneLine = inBand && narrow && nowrap && !views;
+  const oneLine = inBand && nowrap && !views && (narrow || scopeParts.length > 0);
   const scopeControl = scopeAction && <Button data-toolbar-scope="" size="sm" variant="text" disabled={scopeAction.disabled} onClick={scopeAction.onSelect} className={oneLine ? "shrink-0 whitespace-nowrap" : "h-auto min-h-sm min-w-0 shrink whitespace-normal text-left"}>{scopeAction.label}</Button>;
+  const scopePartControls = scopeParts.map(part => <Button key={part.id} data-toolbar-scope-part={part.id} size="sm" variant="text" disabled={part.disabled} onClick={part.onSelect} className="shrink-0 whitespace-nowrap">{part.label}</Button>);
   const contextControl = contextAction && <Button data-toolbar-context="" size="sm" variant="text" loading={contextAction.loading} disabled={contextAction.disabled} onClick={contextAction.onSelect} className="min-w-0 shrink-0">{contextAction.label}</Button>;
   const searchInput = useRef<HTMLInputElement>(null);
   const [foldOpen, setFoldOpen] = useState(false);
@@ -981,7 +984,7 @@ export function Toolbar({ label = "筛选与操作", views, filters: declared = 
         <div ref={root} data-toolbar="" data-toolbar-layout={one ? narrow ? "compact" : "inline" : undefined} role="group" aria-label={label} className={className}>
           <Tabs label={views.label} items={views.items} value={views.value} onChange={views.onChange} panelId={views.panelId} trailing={(
             <>
-              {scopeControl}
+              {scopePartControls}{scopeControl}
               {inline}
               {!tokensCrowded && tokenNodes}
               {trigger}
@@ -1016,7 +1019,7 @@ export function Toolbar({ label = "筛选与操作", views, filters: declared = 
             </div>
           )}
         </div>
-        {(scopeControl || contextControl || actionPlan || actions) && <div data-toolbar-actions="" className="flex min-w-0 max-w-full items-center justify-between gap-2 py-2">{scopeControl}{contextControl}{actionPlan ? <HeaderActions plan={actionPlan} /> : actions}</div>}
+        {(scopePartControls.length > 0 || scopeControl || contextControl || actionPlan || actions) && <div data-toolbar-actions="" className="flex min-w-0 max-w-full items-center gap-2 overflow-x-auto py-2">{scopePartControls}{scopeControl}{contextControl}{actionPlan ? <HeaderActions plan={actionPlan} /> : actions}</div>}
         {second && (
           // One line, only while something narrows the list or a pinned control has to stay in sight: it scrolls sideways rather than wrap.
           <div data-toolbar-row="" className="-ml-3 flex min-h-11 flex-nowrap items-center gap-1 overflow-x-auto py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -1031,11 +1034,11 @@ export function Toolbar({ label = "筛选与操作", views, filters: declared = 
 
   const controls = (
     <>
-      {scopeControl}
-      {navigation.map((filter, index) => <Inline key={`navigation-${index}`} filter={filter} />)}
+      {scopePartControls}{scopeControl}
+      {navigation.map((filter, index) => oneLine ? <div key={`navigation-${index}`} className="shrink-0"><Inline filter={filter} /></div> : <Inline key={`navigation-${index}`} filter={filter} />)}
       {/* Keep pinned controls in the same child slot when late filters fold or unfold the row, including an open menu's focus. */}
       {declared.map((filter, index) => (!isFolded(filter)
-        ? <Fragment key={`${filter.kind}-${filter.label}-${index}`}><Inline filter={filter} /></Fragment> : null))}
+        ? oneLine ? <div key={`${filter.kind}-${filter.label}-${index}`} className="shrink-0"><Inline filter={filter} /></div> : <Fragment key={`${filter.kind}-${filter.label}-${index}`}><Inline filter={filter} /></Fragment> : null))}
       {filters.length > 0 && (
         // Under the tabs (a phone) the folded chip is the row's first thing, and its text is 12 px in from its ground: it steps out so
         // the text stands on the page's left edge. Without views (or on a row of its own) the whole row does (below).

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { buildGeoFinanceAnalysis } from '../src/geoAnalysisFinance.mjs';
+import { presentGeoAnalysis, freezeGeoAnalysisDocument } from '../src/geoAnalysis.mjs';
 import { geoLedgerBalances } from '../src/geoDistributionMoney.mjs';
 
 const selected = {scope:{timeZone:'Asia/Shanghai'},selection:{reference:'current',memberDigest:'current-digest'},questions:[{id:'q',group_id:'g',set_version:2}],rows:[],computed:{cells:[]}};
@@ -58,6 +59,18 @@ test('frozen target, written baseline and historical measured baseline stay sepa
  const frozen=result.memberItems.get(row.key+':frozenBaseline')[0];assert.equal(frozen.memberReference,'old-selection');assert.equal(frozen.memberDigest,'old-members');
  assert.equal(result.contextualBasis[0].basisDigest,'old-basis');assert.deepEqual(result.contextualBasis[0].costAssumptions,['Cost is estimated']);
  assert.equal(result.contextualBasis[0].currentSelection.reference,'current');
+});
+
+test('frozen exports do not reveal an insufficient M-13 ratio through associated records',()=>{
+ const thin={...frozenCell,metricId:'M-13',value:1.75,numerator:70,denominator:40,status:'insufficient'};
+ const ratioTarget={...target,metricId:'M-13',baseline:null,target:null};
+ const ratioPlan={...plan,basis:{...plan.basis,targets:{...plan.basis.targets,rows:[ratioTarget]},readings:{...plan.basis.readings,selected:{cells:[thin]}}}};
+ const view=presentGeoAnalysis(selected,{viewId:'V26'},{allRows:true,execution:{finance:{plan:ratioPlan}}});
+ assert.equal(view.rows[0].dimensions.objects.find(item=>item.unit==='frozen_metric_readings').value,1.75,'the historical record remains intact in the read model');
+ const doc=freezeGeoAnalysisDocument(view), readable=doc.canonicalMarkdown+JSON.stringify(doc.typedTable);
+ assert.doesNotMatch(readable,/1\.75|数值：70|数值：40|分子：70|分母：40/);
+ assert.match(readable,/样本不足/);
+ assert.equal(doc.cover.analysis.rows[0].dimensions.objects.find(item=>item.unit==='frozen_metric_readings').value,1.75,'the non-rendered export record retains the exact historical evidence');
 });
 
 test('missing historical readings never borrow current values, and absent plans stay unavailable',()=>{

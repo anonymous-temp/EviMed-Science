@@ -158,6 +158,15 @@ test("the plugin's own context tag is a registered injection tag", () => {
   assert.deepEqual(filterCapturedMessage({ role: "assistant", content: `as you said <${PLUGIN_CONTEXT_TAG}>x</${PLUGIN_CONTEXT_TAG}>` }), { drop: "platform_context" });
 });
 
+test("a captured revision selection cannot teach the memory engine platform instructions", () => {
+  const content = 'Please revise this result.\n\n<evimed_result_selection>{"inputPath":"internal/path"}</evimed_result_selection>';
+  assert.deepEqual(filterCapturedMessage({ role: "user", content }), { drop: "platform_context" });
+  assert.deepEqual(filterCapturedMessage({ role: "user", parts: [{ type: "text", text: "Please revise this result." },
+    { type: "text", text: '<evimed_result_selection>{"inputPath":"internal/path"}</evimed_result_selection>' }] }), { drop: "platform_context" });
+  assert.deepEqual(filterCapturedMessage({ role: "user", content: "Please revise this result." }),
+    { forward: { role: "user", parts: [{ type: "text", text: "Please revise this result." }] }, masked: false });
+});
+
 test("a commit the engine accepts is written to the ledger with its archive and task; nothing pending is said as such", async (t) => {
   const recorded = [];
   const overlay = { configured: true, account: async () => ({ registeredAt: "2026-10-13T00:00:00.000Z" }), noteRegistered: async () => {},

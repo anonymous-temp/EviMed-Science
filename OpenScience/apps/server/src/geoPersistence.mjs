@@ -79,8 +79,8 @@ export const GEO_SCHEMA = "evimed_geo";
  * a table nobody cleans up.
  */
 export const GEO_TABLES = Object.freeze([
-  "projects", "claims", "question_sets", "question_groups", "questions", "journeys", "rounds", "probe_jobs", "snapshots", "facts",
-  "errors", "metrics", "strategy", "targets", "placement_plans", "sources", "articles", "article_versions",
+  "projects", "project_create_receipts", "claims", "question_sets", "question_groups", "questions", "journeys", "rounds", "probe_jobs", "snapshots", "facts",
+  "errors", "metrics", "metric_input_snapshots", "strategy", "targets", "placement_plans", "sources", "articles", "article_versions",
   "media", "media_outcomes", "orders", "order_events", "ledger", "topups", "reconciliations", "schedule_marks", "owned_links", "members", "value_profiles",
   "action_choices", "read_selections", "probe_requests", "social_jobs",
 ]);
@@ -127,6 +127,12 @@ CREATE TABLE IF NOT EXISTS evimed_geo.projects (
   updated_at    timestamptz NOT NULL DEFAULT now(),
   deleted_at    timestamptz,
   UNIQUE (user_id, project_id)
+);
+CREATE TABLE IF NOT EXISTS evimed_geo.project_create_receipts (
+  user_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,
+  request_key text NOT NULL, payload_hash text NOT NULL,
+  geo_id text NOT NULL, project_id text NOT NULL, session_id text, bound boolean NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY (user_id, request_key)
 );
 CREATE INDEX IF NOT EXISTS geo_projects_user_idx ON evimed_geo.projects (user_id, updated_at DESC) WHERE deleted_at IS NULL;
 
@@ -398,6 +404,12 @@ CREATE INDEX IF NOT EXISTS geo_metrics_round_idx ON evimed_geo.metrics (round_id
 -- Coverage belongs to the saved computation, including its method version. Historical rows remain unknown.
 ALTER TABLE evimed_geo.metrics ADD COLUMN IF NOT EXISTS assessment jsonb;
 ALTER TABLE evimed_geo.metrics ADD COLUMN IF NOT EXISTS method_version text;
+ALTER TABLE evimed_geo.metrics ADD COLUMN IF NOT EXISTS computation_generation text;
+CREATE TABLE IF NOT EXISTS evimed_geo.metric_input_snapshots (
+  generation text PRIMARY KEY, geo_project_id text NOT NULL, user_id text NOT NULL, round_id text NOT NULL,
+  payload jsonb NOT NULL, created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS geo_metric_inputs_round_idx ON evimed_geo.metric_input_snapshots (geo_project_id, round_id);
 
 CREATE TABLE IF NOT EXISTS evimed_geo.strategy (
   geo_project_id text NOT NULL,
@@ -674,6 +686,8 @@ CREATE INDEX IF NOT EXISTS geo_schedule_marks_open_idx ON evimed_geo.schedule_ma
 -- (entityVocabulary.mjs). NULL means not tagged yet — the vocabulary could not
 -- tag when the product was written — and a pass over those rows tags them.
 ALTER TABLE evimed_geo.projects ADD COLUMN IF NOT EXISTS entity_keys text[];
+ALTER TABLE evimed_geo.projects ADD COLUMN IF NOT EXISTS confirmation_generation bigint NOT NULL DEFAULT 0;
+ALTER TABLE evimed_geo.projects ADD COLUMN IF NOT EXISTS confirmation_authorization jsonb;
 
 -- When the market last took its turn with a project (\`tickOrders\`): the projects are served in turn, the one served longest ago
 -- first, so a tick that stops at its send cap leaves the others at the front of the next one. NULL is not served yet. Not

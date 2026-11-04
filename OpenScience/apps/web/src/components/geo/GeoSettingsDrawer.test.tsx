@@ -1,19 +1,35 @@
+import { optionalOpaqueRuntimeUiIntent } from "@/test/runtimeUiIntentAssertions";
+import { createMemoryRouter, MemoryRouter, useBlocker, useLocation } from "react-router";
+import { RouterProvider } from "react-router/dom";
+import { useState } from "react";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { GEO_PROJECT } from "./__fixtures__/geoProjects";
 import { useToastStore } from "@/lib/toast";
 import { GeoSettingsDrawer } from "./GeoSettingsDrawer";
 import { GEO_AUTOMATION_STOPPED } from "./geoText";
 
-const client = vi.hoisted(() => ({ patchGeoProject: vi.fn() }));
-vi.mock("@/lib/geoClient", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/geoClient")>()), ...client }));
+const client = vi.hoisted(() => ({ patchGeoProject: vi.fn(), openGeoConversation: vi.fn() }));
+vi.mock("@/lib/geoClient", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/geoClient")>()), patchGeoProject: client.patchGeoProject }));
+vi.mock("@/lib/geoNativeClient", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/geoNativeClient")>()), openGeoConversation: client.openGeoConversation }));
 
 const project = { ...GEO_PROJECT };
 
+// The test router's jsdom AbortSignal is not accepted by Node's Request.
+const NativeRequest = globalThis.Request;
+beforeAll(() => {
+  globalThis.Request = class extends NativeRequest {
+    constructor(input: RequestInfo | URL, init?: RequestInit) {
+      super(input, init ? { ...init, signal: undefined } : init);
+    }
+  };
+});
+afterAll(() => { globalThis.Request = NativeRequest; });
+
 function renderDrawer(overrides: Partial<typeof project> = {}) {
   const handlers = { onClose: vi.fn(), onOpen: vi.fn(), onChanged: vi.fn() };
-  const view = render(<GeoSettingsDrawer geoId="geo_masi" project={{ ...project, ...overrides }} {...handlers} />);
+  const view = render(<MemoryRouter><GeoSettingsDrawer geoId="geo_masi" project={{ ...project, ...overrides }} {...handlers} /></MemoryRouter>);
   return { ...view, ...handlers, drawer: () => screen.getByRole("dialog", { name: "项目设置" }) };
 }
 
@@ -26,6 +42,7 @@ const toasts = () => useToastStore.getState().toasts.map((toast) => toast.messag
 
 beforeEach(() => {
   client.patchGeoProject.mockReset().mockResolvedValue({});
+  client.openGeoConversation.mockReset().mockResolvedValue({ projectId: project.projectId, sessionId: project.sessionId, scope: { kind: "geo", geoProjectId: project.id, sessionId: project.sessionId } });
   useToastStore.setState({ toasts: [] });
 });
 
@@ -33,7 +50,7 @@ describe("项目设置", () => {
   it("reads the five settings, each in its own row", () => {
     const { drawer } = renderDrawer();
     const rows = within(drawer()).getAllByRole("region").map((row) => row.getAttribute("aria-label"));
-    expect(rows).toEqual(["测量的 AI 引擎", "覆盖周期", "投放预算", "出品方", "成员"]);
+    expect(rows).toEqual(["自动监测", "测量的 AI 引擎", "覆盖周期", "投放预算", "出品方", "成员"]);
     expect(within(drawer()).getByRole("button", { name: "豆包" })).toHaveAttribute("aria-pressed", "true");
     expect(within(drawer()).getByText("8,000 灵豆 · 每天最多 800 灵豆")).toBeInTheDocument();
   });
@@ -125,4 +142,92 @@ describe("项目设置: a change that ends automatic monitoring says so before a
     await userEvent.click(within(drawer()).getByRole("button", { name: "Kimi" }));
     expect(within(drawer()).getByRole("button", { name: "保存" })).toHaveAttribute("data-action-kind", "set");
   });
+});
+
+
+it("holds monitoring controls and the exact current round in settings", () => {
+  const { drawer } = renderDrawer({ ...agreed(), activeMeasurement: { id: "round_exact", kind: "weekly", status: "running" } });
+  expect(within(drawer()).getByRole("heading", { name: "已开启自动监测" })).toBeVisible();
+  expect(within(drawer()).getByRole("button", { name: "停止自动监测" })).toBeVisible();
+  expect(within(drawer()).getByRole("link", { name: "查看这轮测量" }).getAttribute("href")).toContain("diagnosisRound=round_exact");
+});
+
+
+function renderMonitoringHandoff(shouldBlock = false, initial = "/app/geo/geo_masi/visibility") {
+  const monitoringProject = { ...project, ...agreed(), activeMeasurement: { id: "round_exact", kind: "weekly", status: "running" } } satisfies typeof project;
+
+  function Workspace() {
+    const [open, setOpen] = useState(true);
+    const blocker = useBlocker(shouldBlock);
+    const location = useLocation();
+    return <>
+      <output aria-label="Committed location">{location.pathname + location.search}</output>
+      {blocker.state === "blocked" && <>
+        <button onClick={() => blocker.reset()}>Keep editing</button>
+        <button onClick={() => blocker.proceed()}>Leave</button>
+      </>}
+      {open && <GeoSettingsDrawer geoId={project.id} project={monitoringProject} onClose={() => setOpen(false)} onOpen={() => undefined} onChanged={() => undefined} />}
+    </>;
+  }
+
+  const router = createMemoryRouter([{ path: "*", element: <Workspace /> }], { initialEntries: [initial] });
+  render(<RouterProvider router={router} />);
+  return router;
+}
+
+const settings = () => screen.queryByRole("dialog", { name: "项目设置" });
+const currentRound = () => screen.getByRole("link", { name: "查看这轮测量" });
+const adjustScope = () => screen.getByRole("button", { name: "让 AI 调整监测范围" });
+
+it("closes settings when the exact measurement round has landed", async () => {
+  renderMonitoringHandoff();
+  await userEvent.click(currentRound());
+  expect(screen.getByLabelText("Committed location")).toHaveTextContent("/questions?diagnosisRound=round_exact");
+  expect(settings()).not.toBeInTheDocument();
+});
+
+it("keeps settings when already showing the same measurement round", async () => {
+  renderMonitoringHandoff(false, "/app/geo/geo_masi/questions?diagnosisRound=round_exact");
+  await userEvent.click(currentRound());
+  expect(settings()).toBeVisible();
+});
+
+it("keeps settings through a blocked round navigation until the person lets it land", async () => {
+  renderMonitoringHandoff(true);
+  await userEvent.click(currentRound());
+  expect(settings()).toBeVisible();
+  expect(screen.getByLabelText("Committed location")).toHaveTextContent("/visibility");
+  await userEvent.click(screen.getByRole("button", { name: "Keep editing" }));
+  expect(settings()).toBeVisible();
+  await userEvent.click(currentRound());
+  await userEvent.click(screen.getByRole("button", { name: "Leave" }));
+  expect(screen.getByLabelText("Committed location")).toHaveTextContent("/questions?diagnosisRound=round_exact");
+  expect(settings()).not.toBeInTheDocument();
+});
+
+it("keeps the settings after an AI opening failure and closes them on a successful retry with an unsent draft", async () => {
+  client.openGeoConversation.mockRejectedValueOnce(new Error("unavailable"));
+  const router = renderMonitoringHandoff();
+  await userEvent.click(adjustScope());
+  await waitFor(() => expect(toasts()).toContain("对话暂时无法打开，请稍后重试。"));
+  expect(settings()).toBeVisible();
+  await userEvent.click(adjustScope());
+  await waitFor(() => expect(settings()).not.toBeInTheDocument());
+  expect(optionalOpaqueRuntimeUiIntent(router.state.location.state)).toMatchObject({
+    kind: "open", sessionId: project.sessionId, draft: expect.stringContaining("请核对本项目的持续监测问题集"),
+  });
+  expect(router.state.location.state.runtimeUiIntent).not.toHaveProperty("send");
+});
+
+it("keeps settings when the AI destination is blocked and closes them when an accepted retry lands", async () => {
+  renderMonitoringHandoff(true);
+  await userEvent.click(adjustScope());
+  await screen.findByRole("button", { name: "Keep editing" });
+  expect(settings()).toBeVisible();
+  await userEvent.click(screen.getByRole("button", { name: "Keep editing" }));
+  expect(settings()).toBeVisible();
+  await userEvent.click(adjustScope());
+  await userEvent.click(await screen.findByRole("button", { name: "Leave" }));
+  expect(screen.getByLabelText("Committed location")).toHaveTextContent("conversation=open");
+  expect(settings()).not.toBeInTheDocument();
 });

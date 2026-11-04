@@ -32,38 +32,13 @@
  },
  "platform": {
   "accession": "GPL81",
-  "title": "[MG_U74Av2] Affymetrix Murine Genome U74A Version 2 Array",
-  "organism": "Mus musculus",
-  "taxId": "10090",
-  "technology": "in situ oligonucleotide",
-  "status": {
-   "stated": "Public on Mar 11 2002",
-   "date": "2002-03-11"
-  },
-  "submissionDate": {
-   "stated": "Feb 19 2002",
-   "date": "2002-02-19"
-  },
-  "lastUpdateDate": {
-   "stated": "Feb 18 2018",
-   "date": "2018-02-18"
-  },
-  "rowCount": 12488,
-  "duplicateProbeIds": 0,
-  "bytes": 22564953,
-  "sha256": "be1521a21990ada3dac89e2c855d493e9831612913cb3228f35f9d571a7b22d0",
-  "annotationColumns": {
-   "symbol": "Gene Symbol",
-   "entrez": "ENTREZ_GENE_ID",
-   "title": "Gene Title",
-   "genbank": "GB_ACC",
-   "genomeBuild": null
-  },
   "record": {
-   "available": true
+   "available": false,
+   "state": "timeout",
+   "reason": "deadline",
+   "message": "The platform record stopped arriving after 18808832 bytes (deadline)."
   },
-  "storedFile": "platform.soft.txt.gz",
-  "storedSha256": "bfc84dd0a988fbc7dde4af79b1b01a96e1d0aa0364c26d6202d2435702b787ce"
+  "annotationColumns": null
  },
  "matrix": {
   "file": "GSE5583_series_matrix.txt.gz",
@@ -201,20 +176,16 @@
     "platform": "GPL81"
    },
    "platformRecord": {
-    "status": "ok",
-    "detail": "12488 of 12488 matrix probes are in the platform record's table.",
-    "probesFound": 12488,
-    "probes": 12488
+    "status": "unknown",
+    "detail": "No platform record was read, so probes carry no gene annotation."
    },
    "organism": {
-    "status": "ok",
-    "detail": "The samples' taxon (10090) matches the platform's (10090).",
+    "status": "unknown",
+    "detail": "The samples' or the platform's taxon is not stated.",
     "sampleTaxIds": [
      "10090"
     ],
-    "platformTaxIds": [
-     "10090"
-    ]
+    "platformTaxIds": []
    },
    "genomeBuild": {
     "status": "unknown",

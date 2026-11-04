@@ -4,6 +4,7 @@ import { cell, diagnosisFilled, diagnosisWith, geoProject } from "./__fixtures__
 import {
   actionMarkers,
   changeWord,
+  chartDates,
   comparableRun,
   coverageMarker,
   coverageNotice,
@@ -16,7 +17,10 @@ import {
   overviewTiles,
   readingChange,
   rivalRanking,
+  scheduledAfterObservations,
+  safetyReading,
   severeOpenErrors,
+  standing,
   shownDelta,
   statedValue,
   trendConclusion,
@@ -31,6 +35,27 @@ import {
  */
 
 const project = (overrides: Partial<GeoProject> = {}): GeoProject => geoProject({}, overrides);
+
+it("does not put an overdue planned date after a later observation on the chart", () => {
+  const now = new Date("2026-11-03T04:00:00Z");
+  expect(scheduledAfterObservations("2026-11-02", ["2026-10-27", "2026-11-03"], now)).toBe(false);
+  expect(scheduledAfterObservations("2026-11-02", ["2026-10-27"], now)).toBe(false);
+  expect(scheduledAfterObservations("2026-11-10", ["2026-11-03", "2026-10-27"], now)).toBe(true);
+  expect(scheduledAfterObservations("invalid", ["2026-11-03"], now)).toBe(false);
+  expect(chartDates(null, "2026-11-02", now)).toBe("计划已到期 11月2日");
+  expect(chartDates(null, "2026-11-10", now)).toBe("计划 11月10日");
+});
+
+it("does not turn unknown or insufficient medical judgment into a zero severe-error reading", () => {
+  const diagnosis = diagnosisWith([]);
+  const zero = { ...diagnosis.failureModes.correct, status: "ok" as const, numerator: 0, denominator: 40, value: 0 };
+  const unknown = { ...diagnosis, failureModes: { ...diagnosis.failureModes, correct: zero, wrongOurs: zero, unknown: { ...zero, numerator: 40, value: 100 } } };
+  expect(safetyReading(unknown)).toMatchObject({ kind: "unmeasured", reason: "核查不足" });
+  const enough = { ...unknown, failureModes: { ...unknown.failureModes, correct: { ...zero, numerator: 30, value: 75 } } };
+  expect(safetyReading(enough)).toMatchObject({ kind: "measured", value: 0 });
+  const withRisk = { ...unknown, errorCounts: { ...unknown.errorCounts!, severe: 2 } };
+  expect(safetyReading(withRisk)).toMatchObject({ kind: "measured", value: 2 });
+});
 
 describe("the denominator", () => {
   it("is the round's own, and names every engine it does not cover", () => {
@@ -279,7 +304,8 @@ describe("the ranking", () => {
     // Over the same questions, so one range for every row.
     expect(new Set(rows.map((row) => row.scope)).size).toBe(1);
     const lead = overviewTiles(project(), { ...diagnosisFilled, more })[0];
-    expect([lead.rank, lead.rival]).toEqual(["提及率第 2 / 3", "诺和盈 提及率 31%"]);
+    // Historical summary cells do not carry the paired cohort required for a ranking.
+    expect([lead.rank, lead.rival]).toEqual([null, null]);
   });
 
   it("puts us in it once, marked, beside the rivals actually measured", () => {
@@ -289,6 +315,8 @@ describe("the ranking", () => {
       ["信尔美", 21, true],
     ]);
     expect(rows.filter((row) => row.ours)).toHaveLength(1);
+    expect(standing(project(), diagnosisFilled).rank).toBeNull();
+    expect(headlineSentence(project(), diagnosisFilled)).not.toContain("排第");
   });
 });
 

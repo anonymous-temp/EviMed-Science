@@ -1,3 +1,4 @@
+import { sanitizeRuntimeUiHistoryState } from "@/lib/runtimeUiNavigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router";
 
@@ -86,7 +87,7 @@ export function useAddressOpen(name = "open") {
   const open = useCallback((key: string) => {
     const next = withParam(params, name, key);
     const search = next.toString();
-    if (value !== null) navigate({ search: search ? `?${search}` : "" }, { replace: true, state: location.state });
+    if (value !== null) navigate({ search: search ? `?${search}` : "" }, { replace: true, state: sanitizeRuntimeUiHistoryState(location.state) });
     else navigate({ search: search ? `?${search}` : "" }, { state: { [PUSHED]: name } });
   }, [location.state, name, navigate, params, value]);
 

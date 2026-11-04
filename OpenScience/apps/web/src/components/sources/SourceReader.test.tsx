@@ -1,3 +1,4 @@
+import { expectOpaqueRuntimeUiIntent } from "@/test/runtimeUiIntentAssertions";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation, useParams, useRoutes, useSearchParams } from "react-router";
@@ -349,16 +350,20 @@ describe("a document's page", () => {
 
   describe("「在对话中使用」", () => {
     it("puts a request to use the document in the composer, unsent, in the document's own project — naming it by title and file, never by id or path", async () => {
-      mocks.getSource.mockResolvedValue({ ...guideline, projectId: "paper-1" });
-      renderReader();
+      const source = { ...guideline, id: `src_${"a".repeat(32)}`, projectId: "paper-1" };
+      mocks.getSource.mockResolvedValue(source);
+      renderReader(readerAt(source.id));
+      selectSpy.mockImplementationOnce(async (projectId, land) => { context.projectId = projectId; land?.(); });
       await userEvent.click(await screen.findByRole("button", { name: "在对话中使用" }));
       await waitFor(() => expect(selectSpy).toHaveBeenCalledWith("paper-1", expect.any(Function)));
       const where = await screen.findByText("/app/chat");
-      const intent = JSON.parse(where.getAttribute("data-state")!).runtimeUiIntent;
+      const intent = expectOpaqueRuntimeUiIntent(JSON.parse(where.getAttribute("data-state")!), "paper-1");
       expect(intent.kind).toBe("create");
       expect(intent.draft).toContain("请阅读知识库里的这份资料");
       expect(intent.draft).toContain(`资料：${guideline.display.title}（src_guideline.pdf）`);
-      expect(intent.draft.endsWith("我的问题：")).toBe(true);
+      expect(intent.draft).toMatch(/我的问题：$/u);
+      expect(intent.references).toEqual([{ id: source.id, title: source.display.title }]);
+      expect(intent.draft).not.toContain(source.id);
       expect(intent.draft).not.toMatch(/src_guideline(?!\.pdf)|knowledge-base|\.evimed-derived|workspace/);
     });
 
@@ -369,13 +374,14 @@ describe("a document's page", () => {
       mocks.getKnowledgeStatus.mockResolvedValue(knowledgeStatus);
       renderReader(readerAt(knowledgePage.sourceId));
       await screen.findByRole("heading", { name: "事实时间线" });
+      selectSpy.mockImplementationOnce(async (projectId, land) => { context.projectId = projectId; land?.(); });
       await userEvent.click(screen.getByRole("button", { name: "在对话中使用" }));
       await waitFor(() => expect(selectSpy).toHaveBeenCalledWith("paper-1", expect.any(Function)));
       const where = await screen.findByText("/app/chat");
-      const intent = JSON.parse(where.getAttribute("data-state")!).runtimeUiIntent;
+      const intent = expectOpaqueRuntimeUiIntent(JSON.parse(where.getAttribute("data-state")!), "paper-1");
       expect(intent.draft).toContain("请阅读知识库里的这一页和它引用的资料");
       expect(intent.draft).toContain(`页面：${knowledgePage.title}`);
-      expect(intent.references.map((entry: { id: string }) => entry.id)).toEqual([knowledgePage.sourceId, ...knowledgePage.sources.map((entry) => entry.sourceId)]);
+      expect(intent.references?.map(entry => entry.id)).toEqual([knowledgePage.sourceId, ...knowledgePage.sources.map((entry) => entry.sourceId)]);
     });
 
     it("opens the one project it takes effect in without asking, whatever project the sidebar is in", async () => {

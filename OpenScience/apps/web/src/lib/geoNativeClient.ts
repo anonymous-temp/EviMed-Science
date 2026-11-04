@@ -4,7 +4,7 @@ import type { ReplyCheck } from "./replyChecks";
 
 export interface GeoConversationScope { kind: "geo"; geoProjectId: string; sessionId: string }
 export interface GeoConversationDescriptor { scope: GeoConversationScope; projectId: string; projectName: string; sessionId: string }
-export type GeoConversationOpenTarget = { kind: "primary" } | { kind: "context"; referenceId: string } | { kind: "session"; sessionId: string };
+export type GeoConversationOpenTarget = { kind: "primary" } | { kind: "new"; requestId: string } | { kind: "context"; referenceId: string } | { kind: "session"; sessionId: string };
 export function openGeoConversation(geoId: string, target: GeoConversationOpenTarget): Promise<GeoConversationDescriptor> {
   return productRequest(`/geo/projects/${encodeURIComponent(geoId)}/conversation/open`, "POST", { target });
 }
@@ -21,3 +21,6 @@ export const geoConversationSources = async (scope: GeoConversationScope) => (aw
 export type GeoConversationSourceScopeMode = "project" | "selected";
 /** A selection names its mode as the personal route's does: `selected` with no ids is "no document", never the whole project. */
 export const geoConversationSourceScope = (scope: GeoConversationScope, sourceIds?: string[], sourceScopeMode?: GeoConversationSourceScopeMode) => productRequest<{sourceScope:string[]|null;sourceScopeMode?:GeoConversationSourceScopeMode;originReference?:null}>(`${base(scope)}/source-scope`, sourceIds === undefined ? "GET" : "PUT", sourceIds === undefined ? undefined : {sourceIds, ...(sourceScopeMode === undefined ? {} : {sourceScopeMode})});
+
+export interface GeoConversationSummary { sessionId: string; title: string; createdAt: string | null }
+export const listGeoConversations = (geoId: string, cursor?: string) => productRequest<{items: GeoConversationSummary[]; nextCursor: string | null}>(`/geo/projects/${encodeURIComponent(geoId)}/conversation/list${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`);

@@ -1,5 +1,6 @@
 import { useId, type ReactNode } from "react";
 import { RefreshCw } from "lucide-react";
+import { FilterSelect, type FilterOption } from "@/components/ui/FilterChips";
 import { Button } from "@/components/ui/Button";
 import { HeadingLevelScope, useBlockHeadingLevel } from "@/components/ui/Section";
 import { cn } from "@/lib/cn";
@@ -19,11 +20,19 @@ import { cn } from "@/lib/cn";
  * 264 次有效回答计算」 — instead of repeating it in every cell.
  */
 
+/** Settings for this chart alone; observation filters remain in the page toolbar. */
+export interface ChartSelector {
+  label: string;
+  options: readonly FilterOption<string>[];
+  value: string | null;
+  onChange: (value: string | null) => void;
+}
+
 export type ChartCardState = "content" | "loading" | "empty" | "error";
 
 /**
  * Component: ChartCard; owner: H; rules: DS21, DESIGN.md component adoption.
- * Anatomy: Heading, meta, wrapping legend, plot state and linked shared footnote.
+ * Anatomy: Heading, compact chart-local selectors, meta, wrapping legend, plot state and linked shared footnote.
  * Variants: content/loading/empty/error; explicit or contextual heading level.
  * States: Caller selects state; retry is optional; footnote appears only with content.
  * Hit area: Optional retry uses small secondary Button.
@@ -38,6 +47,7 @@ export function ChartCard({
   level,
   meta,
   legend,
+  selectors,
   footnote,
   state = "content",
   emptyText,
@@ -53,6 +63,8 @@ export function ChartCard({
   level?: 2 | 3 | 4 | 5 | 6;
   /** A count or a link at the heading's right end. */
   meta?: ReactNode;
+  /** Compact chart-local metric or series settings, separate from the page observation scope. */
+  selectors?: readonly ChartSelector[];
   /** The series legend, under the heading on a narrow screen and beside it otherwise. */
   legend?: ReactNode;
   /** The denominator and anything else true of every number in the card. */
@@ -76,7 +88,10 @@ export function ChartCard({
     <section aria-describedby={showsFootnote ? footnoteId : undefined} className={cn("flex min-w-0 flex-col rounded-card border border-border bg-surface p-4", className)}>
       <header className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <Heading className="min-w-0 text-section font-semibold text-text">{title}</Heading>
-        {meta != null && <span className="max-w-full shrink-0 text-caption tabular-nums text-text-3">{meta}</span>}
+        {(selectors?.length || meta != null) && <div className="flex max-w-full flex-wrap items-center gap-2 text-caption tabular-nums text-text-3">
+          {selectors?.map(selector => <FilterSelect key={selector.label} {...selector} />)}
+          {meta != null && <span>{meta}</span>}
+        </div>}
       </header>
       {legend != null && <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">{legend}</div>}
       <div className="mt-3 min-w-0 flex-1">

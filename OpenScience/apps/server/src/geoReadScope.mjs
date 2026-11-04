@@ -1,10 +1,11 @@
 /** One authorized observation selection for GEO pages, the native read tool and exports. No metric formulas live here. */
-import { compareGeoMetricCohorts, geoComparisonContractsMatch, geoComparisonKey as comparisonKey, geoComparableAnswer as comparableAnswer } from "./geoComparison.mjs";
+import { compareGeoMetricCohorts, geoComparisonContractsMatch, geoComparisonCellKey, geoComparisonMembers, geoSamplingCoverage, geoComparisonKey as comparisonKey, geoComparableAnswer as comparableAnswer } from "./geoComparison.mjs";
 import { createHash } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { GEO_ENGINES, GEO_POOLS, GEO_MEASUREMENT_METHOD_VERSION, geoMetricMembers, geoJudgementCoverage,
-  GEO_ERROR_STATUSES, GEO_ERROR_TYPES, GEO_SEVERITIES, geoCoverageKey } from "@evimed/domain";
+  GEO_ERROR_STATUSES, GEO_ERROR_TYPES, GEO_SEVERITIES } from "@evimed/domain";
 import { computeRoundCells } from "./geoMetricsJob.mjs";
+import { withMetricProvenanceRead } from "./geoMetricProvenance.mjs";
 import { GeoMeasureStore, GEO_ROUND_ANSWERED } from "./geoMeasureStore.mjs";
 import { HttpError } from "./security.mjs";
 
@@ -38,7 +39,7 @@ export async function withGeoReadTransaction(store, operation) {
   const result = await database.transaction(async (/** @type {any} */ client) => {
     await client.query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ");
     await client.query("SET LOCAL statement_timeout = '5s'");
-    return database.withTransactionClient(client, () => readTransactions.run({ database, references }, operation));
+    return database.withTransactionClient(client, () => readTransactions.run({ database, references }, () => withMetricProvenanceRead(operation)));
   });
   for (const { selected, project } of references.values()) await store.query(`INSERT INTO evimed_geo.read_selections (id, user_id, geo_project_id, scope, round_ids, data_revision, subset)
     VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7::jsonb) ON CONFLICT (id) DO NOTHING`,
@@ -232,10 +233,7 @@ export function geoRoundReadings(selected, roundId) {
  */
 export function geoSelectionCoverage(rows, setVersion, engine = null) {
   const members = rows.filter((row) => (!engine || row.engine === engine) && (row.status === "refusal" || row.status === "valid" && row.facts));
-  const modes = [...new Set(members.map((row) => JSON.stringify(row.surface ?? null)))];
-  if (modes.length !== 1) return null;
-  const key = geoCoverageKey({ setVersion, pools: [...new Set(members.map((row) => row.pool).filter(Boolean))],
-    engines: [...new Set(members.map((row) => row.engine))], surface: JSON.parse(modes[0]), methodVersion: GEO_MEASUREMENT_METHOD_VERSION });
+  const key = geoSamplingCoverage(members, setVersion);
   return key ? `${key};questions=${digest([...new Set(members.map((row) => row.questionId).filter(Boolean))].sort()).slice(0, 24)}` : null;
 }
 
@@ -324,7 +322,7 @@ export async function readGeoSelectionErrors(store, project, selected, input = {
 
 /** Read under an already authorized project. The reference contains no authority and resolves only within that owner/project.
  * @param {import('./geoStore.mjs').GeoStore} store @param {any} project @param {any} [input]
- * @param {{ history?: boolean, historyLimit?: number, frozenRoundIds?: string[], persist?: boolean, subset?: { keys: string[], eligibleOnly: boolean } | null }} [options]
+ * @param {{ history?: boolean, historyLimit?: number, frozenRoundIds?: string[], persist?: boolean, subset?: { keys?: string[], snapshotIds?: string[], eligibleOnly: boolean } | null }} [options]
  * @returns {Promise<{scope: ReturnType<typeof normalizeGeoReadScope>, selection: any, rounds: any[], rows: any[], computed: ReturnType<typeof computeGeoSelection>, metricOptions: any, questions: any[], comparison: any, subset: any, sourceObservationPlan: any}>}
  */
 export async function readGeoSelection(store, project, input = {}, options = {}) {
@@ -336,7 +334,7 @@ export async function readGeoSelection(store, project, input = {}, options = {})
 }
 
 /** @param {import('./geoStore.mjs').GeoStore} store @param {GeoMeasureStore} measure @param {any} project @param {any} input
- * @param {{ history?: boolean, historyLimit?: number, frozenRoundIds?: string[], subset?: { keys: string[], eligibleOnly: boolean } | null }} options @returns {ReturnType<typeof readGeoSelection>}
+ * @param {{ history?: boolean, historyLimit?: number, frozenRoundIds?: string[], subset?: { keys?: string[], snapshotIds?: string[], eligibleOnly: boolean } | null }} options @returns {ReturnType<typeof readGeoSelection>}
  */
 async function selectGeoRows(store, measure, project, input, { history = false, historyLimit, frozenRoundIds, subset = null } = {}) {
   let scope = normalizeGeoReadScope(geoReadScopeInput(input));
@@ -378,7 +376,8 @@ async function selectGeoRows(store, measure, project, input, { history = false, 
   if (scope.pools.length) add(observed, "coalesce(q.pool, g.pool) = ANY(?::text[])", scope.pools);
   if (scope.clientTags.length) add(observed, "(jsonb_typeof(to_jsonb(q)->'client_tags') = 'array' AND jsonb_exists_any(to_jsonb(q)->'client_tags', ?::text[]))", scope.clientTags);
   if (subset) {
-    add(observed, "jsonb_build_array(s.question_id, s.engine, coalesce(s.surface, '{\"mode\":\"web\"}'::jsonb)->>'mode') IN (SELECT value FROM jsonb_array_elements(?::jsonb))", JSON.stringify(subset.keys.map((key) => JSON.parse(key))));
+    if (Array.isArray(subset.snapshotIds)) add(observed, "s.id = ANY(?::text[])", subset.snapshotIds);
+    else add(observed, "jsonb_build_array(s.question_id, s.engine, coalesce(s.surface, '{\"mode\":\"web\"}'::jsonb)->>'mode') IN (SELECT value FROM jsonb_array_elements(?::jsonb))", JSON.stringify((subset.keys ?? []).map((key) => JSON.parse(key))));
     if (subset.eligibleOnly) observed.push("(s.status = 'refusal' OR s.status = 'valid' AND f.snapshot_id IS NOT NULL AND (f.judged_at IS NOT NULL OR s.surface->>'mode' = 'inclusion'))");
   }
   const beforeDates = [...observed];
@@ -473,10 +472,9 @@ async function selectGeoRows(store, measure, project, input, { history = false, 
     LEFT JOIN evimed_geo.snapshots s ON s.id=j.snapshot_id AND s.geo_project_id=j.geo_project_id AND s.user_id=j.user_id
     WHERE j.geo_project_id=$1 AND j.user_id=$2 AND j.round_id=ANY($3::text[]) AND j.question_id=ANY($4::text[])
       AND (cardinality($5::text[])=0 OR j.engine=ANY($5::text[]))
-      AND ($6::jsonb IS NULL OR jsonb_build_array(j.question_id,j.engine,coalesce(r.surface->>'mode','web'))
-        IN (SELECT value FROM jsonb_array_elements($6::jsonb)))
+      AND ${Array.isArray(subset?.snapshotIds) ? "(j.snapshot_id = ANY($6::text[]))" : "($6::jsonb IS NULL OR jsonb_build_array(j.question_id,j.engine,coalesce(r.surface->>'mode','web')) IN (SELECT value FROM jsonb_array_elements($6::jsonb)))"}
     ORDER BY j.round_id,j.question_id,j.engine,j.repeat_index,j.id LIMIT ${GEO_SELECTION_MAX_ROWS + 1}`,
-  [project.id, project.userId, roundIds, [...questionIds], scope.engines, subset ? JSON.stringify(subset.keys.map(key => JSON.parse(key))) : null,
+  [project.id, project.userId, roundIds, [...questionIds], scope.engines, Array.isArray(subset?.snapshotIds) ? subset.snapshotIds : subset ? JSON.stringify((subset.keys ?? []).map(key => JSON.parse(key))) : null,
     rows.map(row => row.snapshotId)])).rows;
   if (jobs.length > GEO_SELECTION_MAX_ROWS) throw invalid(`Choose a narrower scope: more than ${GEO_SELECTION_MAX_ROWS} planned observations exceed the read limit.`, 422);
   // Failed, skipped and queued jobs may have no snapshot. Source-history
@@ -528,15 +526,35 @@ async function selectGeoRows(store, measure, project, input, { history = false, 
 async function compareGeoSelections(store, measure, project, current, previous, mode) {
   const a = new Set(current.rows.filter(comparableAnswer).map(comparisonKey)), b = new Set(previous.rows.filter(comparableAnswer).map(comparisonKey));
   const common = new Set([...a].filter((id) => b.has(id)));
-  const subset = mode === "common" ? { keys: [...common].sort(), eligibleOnly: true } : null;
-  const left = await selectGeoRows(store, measure, project, { ...current.scope, compareFrom: null, compareTo: null }, { frozenRoundIds: current.roundIds, subset });
-  const right = await selectGeoRows(store, measure, project, previous.scope, { frozenRoundIds: previous.selection.roundIds, subset });
+  const subsetFor = rows => mode === "common" && common.size ? { snapshotIds: rows.filter(row => comparableAnswer(row) && common.has(comparisonKey(row))).map(row => row.snapshotId), eligibleOnly: true } : null;
+  const left = await selectGeoRows(store, measure, project, { ...current.scope, compareFrom: null, compareTo: null }, { frozenRoundIds: current.roundIds, subset: subsetFor(current.rows) });
+  const right = await selectGeoRows(store, measure, project, previous.scope, { frozenRoundIds: previous.selection.roundIds, subset: subsetFor(previous.rows) });
   for (const selected of [left, right]) readTransactions.getStore().references.set(selected.selection.reference, { selected, project });
+  let cells = compareGeoMetricCohorts(left, right, { mode, commonCount: common.size });
+  // Where a whole engine or group is outside the shared surface, keep each side's own observed cell and members, without a delta.
+  if (mode === "common" && common.size && (a.size !== common.size || b.size !== common.size)) {
+    const fullLeft = await selectGeoRows(store, measure, project, { ...current.scope, compareFrom: null, compareTo: null }, { frozenRoundIds: current.roundIds });
+    const fullRight = await selectGeoRows(store, measure, project, previous.scope, { frozenRoundIds: previous.selection.roundIds });
+    for (const selected of [fullLeft, fullRight]) readTransactions.getStore().references.set(selected.selection.reference, { selected, project });
+    const full = new Map(compareGeoMetricCohorts(fullLeft, fullRight, { mode, commonCount: 0 }).map(cell => [geoComparisonCellKey(cell), cell]));
+    const fallback = own => {
+      if (!own || !(geoComparisonMembers(fullLeft, own.current).rows.length || geoComparisonMembers(fullRight, own.previous).rows.length)) return null;
+      Object.defineProperty(own, "cohorts", { value: { current: fullLeft, previous: fullRight }, enumerable: false });
+      return own;
+    };
+    const commonKeys = new Set(cells.map(geoComparisonCellKey));
+    cells = cells.map(cell => {
+      if (geoComparisonMembers(left, cell.current).rows.length && geoComparisonMembers(right, cell.previous).rows.length) return cell;
+      return fallback(full.get(geoComparisonCellKey(cell))) ?? cell;
+    });
+    for (const [key, cell] of full) if (!commonKeys.has(key)) {
+      const own = fallback(cell); if (own) cells.push(own);
+    }
+  }
   const result = { kind: "observational", causal: false, mode, methodVersion: GEO_MEASUREMENT_METHOD_VERSION, consumerModelVersion: "unknown",
     comparable: mode === "common" && common.size > 0 && geoComparisonContractsMatch(left, right), commonQuestionEngineModes: common.size,
     excluded: { current: current.rows.length - left.rows.length, previous: previous.rows.length - right.rows.length },
-    currentSelection: left.selection, previousSelection: right.selection,
-    cells: compareGeoMetricCohorts(left, right, { mode, commonCount: common.size }) };
+    currentSelection: left.selection, previousSelection: right.selection, cells };
   // Raw cohorts are request-local, never serialized into the public comparison response.
   Object.defineProperty(result, "cohorts", { value: { current: left, previous: right }, enumerable: false });
   return result;

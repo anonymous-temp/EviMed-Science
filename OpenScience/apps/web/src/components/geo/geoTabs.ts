@@ -10,6 +10,14 @@ import { GEO_STEP_KEYS, type GeoStepKey } from "@/lib/geoClient";
 
 export type GeoTabKey = "overview" | "visibility" | "accuracy" | "questions" | "sources" | "actions" | "plan" | "evidence";
 
+/** Visible work areas group the existing result addresses; they do not create a second workflow. */
+export type GeoWorkArea = "work" | "analytics" | "content" | "context";
+export function geoWorkArea(tab: GeoTabKey, view?: string | null): GeoWorkArea {
+  if (tab === "overview" || tab === "plan") return "work";
+  if (tab === "evidence" || tab === "questions" && view === "journey") return "context";
+  return tab === "actions" ? "content" : "analytics";
+}
+
 export const GEO_TABS: ReadonlyArray<{ key: GeoTabKey; label: string }> = Object.freeze([
   { key: "overview", label: "总览" },
   { key: "visibility", label: "可见度" },
@@ -133,6 +141,7 @@ export const GEO_MONITORING_TABS: readonly GeoTabKey[] = Object.freeze(
  * and 监测 — stopped being pages.
  */
 export const GEO_TAB_REDIRECTS: Readonly<Record<string, GeoDestination>> = Object.freeze({
+  articles: { tab: "actions" },
   journey: { tab: "questions", view: "journey" },
   diagnosis: { tab: "accuracy" },
   content: { tab: "actions" },

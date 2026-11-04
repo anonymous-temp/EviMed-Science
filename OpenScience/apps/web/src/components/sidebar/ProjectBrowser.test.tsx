@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getWebProjectId, setWebProjectId, WebApiError, type WebAgentRun } from "@/lib/apiClient";
 import { useProjectStore } from "@/lib/projects";
 import { RUNS_CHANGED_EVENT } from "@/lib/runPresentation";
-import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
+import { newRuntimeUiIntent, prepareRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { provideFrameSessionSearch } from "@/lib/runtimeUiBridge";
 import { hintVcrDraftProject } from "@/components/vcr/useVcrProjectIds";
 import { announceOpenStudy } from "@/lib/studyPresence";
@@ -813,6 +813,59 @@ describe("ProjectBrowser — GEO projects", () => {
     expect(screen.getByRole("button", { name: "Paper 1" }).closest("li")?.parentElement).toBe(screen.getByRole("button", { name: "心衰" }).closest("li")?.parentElement);
   });
 
+  it("does not offer project creation while GEO ownership is still being resolved", async () => {
+    let finish!: (value: unknown) => void;
+    mocks.listGeoProjects.mockReturnValue(new Promise(resolve => { finish = resolve; }));
+    renderModules({ geo: true });
+    await screen.findByRole("button", { name: "心衰" });
+    expect(screen.queryByRole("button", { name: "在“心衰”新建对话" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "在“Paper 1”新建对话" })).not.toBeInTheDocument();
+    await act(async () => finish([{ id: "geo_1", projectId: "p-heart", name: "心衰" }]));
+    expect(await screen.findByRole("button", { name: "在“Paper 1”新建对话" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "在“心衰”新建对话" })).not.toBeInTheDocument();
+  });
+
+  it("explains a failed classification and restores ordinary creation after retry", async () => {
+    mocks.listGeoProjects.mockRejectedValue(new Error("503"));
+    renderModules({ geo: true });
+    expect(await screen.findByText(/项目归属暂时无法确认/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "在“Paper 1”新建对话" })).not.toBeInTheDocument();
+    mocks.listGeoProjects.mockResolvedValue([{ id: "geo_1", projectId: "p-heart", name: "心衰" }]);
+    await userEvent.click(screen.getByRole("button", { name: "重试确认" }));
+    expect(await screen.findByRole("button", { name: "在“Paper 1”新建对话" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "在“心衰”新建对话" })).not.toBeInTheDocument();
+  });
+
+  it("says a new project was saved when GEO ownership is still unresolved", async () => {
+    mocks.listGeoProjects.mockReturnValue(new Promise(() => {}));
+    mocks.createWebProject.mockImplementation(async (name: string) => { const project = { id: "p-new", name }; mocks.projects = [...mocks.projects, project]; return project; });
+    renderModules({ geo: true }, "/app/files");
+    await userEvent.click(await screen.findByRole("button", { name: "新建项目" }));
+    await userEvent.type(screen.getByRole("textbox", { name: "新项目名" }), "新研究{Enter}");
+    expect(await screen.findByText(/项目“新研究”已保存/)).toBeInTheDocument();
+    expect(screen.getByTestId("location")).toHaveTextContent("/app/files");
+    expect(screen.queryByRole("button", { name: "在“新研究”新建对话" })).not.toBeInTheDocument();
+  });
+
+  it("offers the GEO project instead of an unproven new session while preserving ordinary creation", async () => {
+    renderModules({ geo: true });
+    await waitFor(() => expect(screen.getByRole("button", { name: "心衰" }).querySelector("svg.lucide-radar")).not.toBeNull());
+    expect(screen.queryByRole("button", { name: "在“心衰”新建对话" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "在“Paper 1”新建对话" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "心衰" }));
+    expect(screen.getByRole("link", { name: "打开 GEO 项目" })).toHaveAttribute("href", "/app/geo/geo_1");
+    await userEvent.click(screen.getByRole("link", { name: "打开 GEO 项目" }));
+    expect(screen.getByTestId("location")).toHaveTextContent("/app/geo/geo_1");
+  });
+
+  it("does not classify an owner project by a shared GEO project with the same control id", async () => {
+    mocks.listGeoProjects.mockResolvedValue([{ id: "shared_geo", projectId: "p-heart", name: "Shared", access: { owner: false, abilities: ["read"], roles: ["viewer"] } }]);
+    renderModules({ geo: true });
+    await waitFor(() => expect(mocks.listGeoProjects).toHaveBeenCalled());
+    expect(await screen.findByRole("button", { name: "在“心衰”新建对话" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "心衰" }).querySelector("svg.lucide-radar")).toBeNull();
+  });
+
   it("uses the canonical GEO name while preserving a newer project rename", async () => {
     mocks.listGeoProjects.mockResolvedValue([{ id: "geo_1", projectId: "p-heart", name: "信尔美" }]);
     renderModules({ geo: true });
@@ -908,6 +961,17 @@ describe("ProjectBrowser — the module the tab's project belongs to", () => {
 describe("ProjectBrowser — 虚拟临床研究 studies", () => {
   beforeEach(() => {
     mocks.getVcrHome.mockResolvedValue({ studies: [{ id: "std_1", projectId: "p-heart", name: "EV-201", status: "active" }] });
+  });
+
+  it("limits this study to its own conversations without switching projects or repeating its name", async () => {
+    mocks.runs["p-heart"] = [run({ id: "study-chat", title: "Study conversation" })];
+    mocks.runs.paper1 = [run({ id: "other-chat", title: "Other conversation" })];
+    render(<MemoryRouter initialEntries={["/app/virtual-research/std_1"]}><ProjectBrowser vcr studyScope="std_1" /><LocationProbe /></MemoryRouter>);
+    expect(await screen.findByText("Study conversation")).toBeInTheDocument();
+    expect(screen.queryByText("Other conversation")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "心衰" })).not.toBeInTheDocument();
+    expect(getWebProjectId()).toBe("default");
+    expect(screen.getByTestId("location")).toHaveTextContent("/app/virtual-research/std_1");
   });
 
   it("lists studies beside ordinary projects with the people icon", async () => {
@@ -1123,7 +1187,7 @@ describe("ProjectBrowser — a study of the 虚拟临床研究 group", () => {
     mocks.runs.default = [run({ id: "old", question: "之前的对话" })];
     const intent = newRuntimeUiIntent();
     render(
-      <MemoryRouter initialEntries={[{ pathname: "/app/chat", state: { runtimeUiIntent: intent } }]}>
+      <MemoryRouter initialEntries={[{ pathname: "/app/chat", state: { runtimeUiIntent: prepareRuntimeUiIntent(intent) } }]}>
         <ProjectBrowser />
       </MemoryRouter>,
     );

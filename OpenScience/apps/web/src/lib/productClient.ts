@@ -1,3 +1,4 @@
+import { assertSessionGeneration, sessionGeneration } from "./sessionLifecycle";
 import { fetchWithWebAuth, WebApiError, webApiBase, webErrorMessage, webRetryAfterSeconds } from "./apiClient";
 
 export interface ProductRecord<T> {
@@ -23,6 +24,7 @@ export type CapsuleRecord = ProductRecord<CapsulePayload>;
 export type CapsuleEntry = ProductRecord<CapsuleEntryPayload>;
 
 export async function productRequest<T>(path: string, method = "GET", body?: unknown, options: { signal?: AbortSignal } = {}): Promise<T> {
+  const owner = sessionGeneration();
   const root = webApiBase.endsWith("/api") ? webApiBase : `${webApiBase}/api`;
   const response = await fetchWithWebAuth(`${root}${path}`, {
     method,
@@ -34,6 +36,7 @@ export async function productRequest<T>(path: string, method = "GET", body?: unk
     if (error && typeof error === "object" && "name" in error && error.name === "AbortError") throw error;
     return null;
   }) as { data?: T; error?: string; code?: string; requestId?: string; details?: unknown } | null;
+  assertSessionGeneration(owner);
   if (!response.ok || !value || !("data" in value)) {
     // `Retry-After` is a header, so a client that reads only the body throws
     // away the one fact that makes a ceiling actionable.

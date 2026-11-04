@@ -10,11 +10,13 @@
     "timeRange": null,
     "results": [
       {
-        "title": "The PRISMA 2020 statement: an updated guideline for reporting ...",
-        "url": "https://www.bmj.com/content/372/bmj.n71",
-        "snippet": "2021/03/29 ... Over the past decade, advances in systematic review methodology and terminology have necessitated an update to the guideline. The PRISMA 2020 ...",
-        "engine": "google cse",
-        "publishedDate": null
+        "title": "The PRISMA 2020 statement: An updated guideline for reporting systematic reviews",
+        "url": "https://www.sciencedirect.com/science/article/pii/S1743919121000406?casa_token=21UUw31v9DAAAAAA#1",
+        "snippet": "guideline ... , policy makers, ... .prisma-statement.org ... We ... the late Douglas G Altman and Alessandro Liberati, whose contributions were fundamental to the development and implementation of the original PRISMA statement. ... We thank the following contributors who provided feedback on a preliminary version of the PRISMA 2020 checklist:",
+        "engine": "deepseek",
+        "publishedDate": "2021-03-29",
+        "site": "ScienceDirect.com",
+        "authority": 4
       },
       {
         "title": "(译)2021 Matthew Page PRISMA 2020声明:系统综述报告的最新指南",
@@ -26,9 +28,11 @@
     ],
     "engines": [
       "bailian",
+      "deepseek"
+    ],
+    "unresponsiveEngines": [
       "google cse"
     ],
-    "unresponsiveEngines": [],
     "provenance": {
       "tool": "web_search",
       "arguments": {
@@ -36,16 +40,16 @@
         "limit": 2
       },
       "scope": {
-        "tenantId": "tool-probe-1cb73eaa",
-        "userId": "tool-probe-1cb73eaa",
-        "projectId": "tool-probe",
-        "workspaceDir": "/workspace/.audit-repo-20261012T071445Z/OpenScience/evals/capability-audit/tool-probe-workspace"
+        "tenantId": "ck-probe-14d43468",
+        "userId": "ck-probe-14d43468",
+        "projectId": "audit-tool-probe",
+        "workspaceDir": "/workspace/.audit-repo-20261104T131143Z/OpenScience/evals/capability-audit/tool-probe-workspace"
       }
     }
   },
   "warnings": [
-    "Open-web results are unreviewed pages, not indexed literature; a claim taken from one needs the primary source before it enters a report.",
-    "Answered by: bailian, google cse. Engine availability is a deployment fact; a thin result set may mean few engines answered, not few pages exist."
+    "Results are search hits, not the pages themselves: read a page before relying on it, and cite the page's own address.",
+    "Answered by: bailian, deepseek. Engine availability is a deployment fact; a thin result set may mean few engines answered, not few pages exist."
   ],
   "next_actions": [
     "Treat every result as an unreviewed page: follow it to the primary record before any claim from it enters a report.",
