@@ -1177,7 +1177,7 @@ export const VCR_UPLOAD_FORMATS = Object.freeze({
   // the matching step reads, is the text either way.
   document: Object.freeze({ txt: "txt", md: "txt", pdf: "pdf", docx: "docx" }),
 });
-/** Extensions of a document that is a picture: it has no text to extract, and says so by name. */
+/** Extensions of a document that is a picture of a page: it has no text layer, so the in-house parser reads it. */
 const IMAGE_DOCUMENT_EXTENSIONS = Object.freeze(["png", "jpg", "jpeg", "gif", "bmp", "tif", "tiff", "webp", "heic", "heif"]);
 /** The formats a record document is converted from rather than read. */
 const CONVERTED_DOCUMENT_FORMATS = Object.freeze(["pdf", "docx"]);
@@ -1217,9 +1217,9 @@ export function safeUploadName(raw, role) {
   }
   const formats = /** @type {Record<string, string>} */ (/** @type {any} */ (VCR_UPLOAD_FORMATS)[role] ?? {});
   if (role === "document" && IMAGE_DOCUMENT_EXTENSIONS.includes(ext)) {
-    // A picture of a record has no text layer: it is refused for that, by name, and
-    // the reader is told what to bring instead (never sent anywhere to be read).
-    throw refuse(422, VCR_DATA_PLANE_CODES.documentNeedsText, "A picture has no text to extract; supply a text version.", { ext });
+    // A picture of a record has no text layer: the in-house parser reads it (`#storeChecked`), and a deployment without one says so there.
+    const shownPicture = cleaned.length > 100 ? `${cleaned.slice(0, 100 - ext.length - 1)}.${ext}` : cleaned;
+    return { name: shownPicture, ext, format: "image" };
   }
   if (!Object.hasOwn(formats, ext)) {
     const hint = /** @type {Record<string, string>} */ (VCR_UNSUPPORTED_FORMAT_HINTS)[ext];
@@ -1943,7 +1943,7 @@ export class VcrDataPlane {
    *   held in FHIR, OMOP or ADaM (`importStandard`); without one the import is
    *   refused by name and ordinary uploads are unaffected.
    */
-  constructor({ store, config, profiler = null, access = null, seal = null, extractor = null, importer = null, erasure = null, now = () => new Date() }) {
+  constructor({ store, config, profiler = null, access = null, seal = null, extractor = null, importer = null, erasure = null, scanReader = null, now = () => new Date() }) {
     if (!store) throw new TypeError("The VCR data plane needs its store.");
     this.store = store;
     this.config = config ?? {};
@@ -1956,6 +1956,8 @@ export class VcrDataPlane {
     this.seal = seal;
     this.extractor = extractor;
     this.importer = importer;
+    /** Reads a scan or a picture of a record with the in-house parser (`createVcrScanReader`); none, and such a file answers that it has no text. */
+    this.scanReader = scanReader;
     /** Withdrawals, retirements and the marks on what was derived from a changed basis (`vcrErasureStore.mjs`); without it the plane only deletes. */
     this.erasure = erasure;
     /** What the plane did for the cloud since this process started: reads by the basis they stood on, and reads it refused; and what it erased. */
@@ -2147,7 +2149,8 @@ export class VcrDataPlane {
     const role = entry.role == null ? "data" : entry.role;
     if (!VCR_SOURCE_FILE_ROLES.includes(role)) throw refuse(400, VCR_DATA_PLANE_CODES.payloadInvalid, `role is one of: ${VCR_SOURCE_FILE_ROLES.join(", ")}.`);
     const named = safeUploadName(entry.name, role);
-    const needsConversion = role === "document" && CONVERTED_DOCUMENT_FORMATS.includes(named.format);
+    const isPicture = role === "document" && named.format === "image";
+    const needsConversion = role === "document" && (CONVERTED_DOCUMENT_FORMATS.includes(named.format) || isPicture);
     // A PDF or Word file is bigger than the text in it: it has its own ceiling
     // (`vcrIntakeMaxBytes`), and the text that comes out is held to the document cap below.
     const cap = needsConversion
@@ -2201,20 +2204,27 @@ export class VcrDataPlane {
         /** @type {string} */
         let documentText;
         if (needsConversion) {
-          // Converted inside the deployment, never sent to the external parsing
-          // service: the original goes to a container with no network and comes back
-          // as text (vcrRecordExtract.mjs). The original's bytes stay here, in the
-          // plane, beside the text — provenance, never read by a runtime.
-          if (!this.extractor?.available) {
+          // A document with a text layer is converted inside the deployment: the original goes to a container with no network and comes back as text. A scan or a picture has no
+          // such layer and goes to the in-house parser (vcrRecordExtract.mjs; owner decision 2026-11-04). The original's bytes stay here, in the plane, beside the text — provenance,
+          // never read by a runtime.
+          if (!isPicture && !this.extractor?.available && !this.scanReader) {
             throw refuse(503, VCR_DATA_PLANE_CODES.documentConverterUnavailable, "This deployment cannot convert PDF or Word files; supply a text version.");
           }
-          const got = await this.extractor.extract({ root, studyId: entry.studyId, path: raw, format: named.format });
-          documentText = got.text;
+          if (isPicture && !this.scanReader) throw refuse(422, VCR_DATA_PLANE_CODES.documentNeedsText, "A picture has no text to extract; supply a text version.", { ext: named.ext });
+          /** @type {{ text: string, extraction: Record<string, any> } | null} */
+          let got = null;
+          if (!isPicture && this.extractor?.available) {
+            try { got = await this.extractor.extract({ root, studyId: entry.studyId, path: raw, format: named.format }); }
+            catch (error) { if (/** @type {any} */ (error)?.code !== VCR_DATA_PLANE_CODES.documentNeedsText || !this.scanReader) throw error; }
+          }
+          got ??= await /** @type {any} */ (this.scanReader).read({ path: raw, ext: named.ext });
+          const read = /** @type {{ text: string, extraction: Record<string, any> }} */ (got);
+          documentText = read.text;
           const originalBytes = await fs.readFile(raw);
           const original = await writeContentAddressed(root, path.posix.join(studyRelative(entry.studyId), "documents"), named.format, originalBytes);
           originalLocation = original.location;
-          detail.original = { sha256: original.sha256, bytes: original.bytes, format: named.format, location: original.location };
-          detail.extraction = got.extraction;
+          detail.original = { sha256: original.sha256, bytes: original.bytes, format: isPicture ? named.ext : named.format, location: original.location };
+          detail.extraction = read.extraction;
         } else {
           const decoded = decodeUploadText(await fs.readFile(raw));
           documentText = decoded.text;
@@ -2226,7 +2236,9 @@ export class VcrDataPlane {
         bytes = Buffer.from(documentText, "utf8");
         extension = "txt";
         detail.chars = documentText.length;
-        if (entry.subject != null && entry.subject !== "") {
+        // A later document of someone the study already has joins them by their pseudonym; the caller has judged that they are the study's.
+        if (entry.subjectKey != null && entry.subjectKey !== "") detail.subjectKey = String(entry.subjectKey);
+        else if (entry.subject != null && entry.subject !== "") {
           detail.subjectKey = pseudonymOf(await studyPseudonymKey(root, entry.studyId), entry.subject);
         }
         if (entry.visibleAt != null && entry.visibleAt !== "") {
@@ -3297,7 +3309,7 @@ export class VcrDataPlane {
       body = (await readStableFileHandle(opened.handle, opened.stat)).toString('utf8');
     } finally { await opened.handle.close(); }
     if (sha256OfBytes(body) !== file.sha256) throw refuse(409, VCR_DATA_PLANE_CODES.fileChanged, "The document's bytes are not the ones that were uploaded.");
-    return { id: file.id, name: file.name, text: body, subjectKey: file.detail?.subjectKey ?? null, visibleAt: file.detail?.visibleAt ?? null };
+    return { id: file.id, name: file.name, text: body, subjectKey: file.detail?.subjectKey ?? null, visibleAt: file.detail?.visibleAt ?? null, ...(file.detail?.extraction?.pageMap ? { pageMap: file.detail.extraction.pageMap } : {}) };
   }
 
   /** @param {{studyId:string,sourceId:string,actor:string,permission:any}} entry */
@@ -3437,7 +3449,7 @@ export class VcrDataPlane {
       detail: { sourceHash, ...this.#basisDetail(authorization) } });
     if (entry.cloudContext) await this.store.recordCloudRead(entry.studyId, file.id, entry.cloudContext);
     return { id: file.id, text: document.text, subjectKey: document.subjectKey, visibleAt: document.visibleAt,
-      projectionHash: null, sourceHash, offsetUnit: 'utf16' };
+      projectionHash: null, sourceHash, offsetUnit: 'utf16', ...(document.pageMap ? { pageMap: document.pageMap } : {}) };
   }
 
   /** Record served geometry, never a clinical completeness assertion or patient text.
@@ -3601,6 +3613,58 @@ export class VcrDataPlane {
   /** @param {{studyId:string,snapshotId:string,subjectKey:string,field:string,principal:string,purpose?:string|null,external?:boolean,cloudContext?:any}} entry */
   async subjectTableEvidence(entry) {
     return (await this.subjectTableEvidenceBatch({ ...entry, fields: [entry.field] }))[entry.field] ?? null;
+  }
+
+  /**
+   * Whether the codes of a snapshot's subject table may go to the configured model providers, on the same basis every other patient
+   * text goes under: the source's cloud permission, or the deployment's agreements. A refusal is `vcr_cloud_processing_not_authorized`
+   * and a withdrawn source is refused. Audited like a cell read (`table.cloud_read`), with the columns named and no value in the record.
+   * @param {{studyId:string,snapshotId:string,principal:string,fields:readonly string[]}} entry
+   * @returns {Promise<{ basis: string }>}
+   */
+  async authorizeSubjectTableCloudRead(entry) {
+    const snapshot = await this.#snapshot(entry.studyId, entry.snapshotId);
+    const source = await this.store.sourceInStudy(entry.studyId, snapshot.sourceId);
+    if (!source || source.status === "withdrawn") throw refuse(403, "vcr_source_withdrawn", "The source is unavailable.");
+    const authorization = this.#cloudBasis(source);
+    await this.store.audit({ studyId: entry.studyId, userId: entry.principal, actor: entry.principal, action: "table.cloud_read", object: snapshot.id,
+      detail: { fields: [...entry.fields].slice(0, 300), use: "column_meaning", ...this.#basisDetail(authorization) } });
+    return { basis: authorization.basis };
+  }
+
+  /**
+   * Whether this source's patient text may go to the configured model now, for a caller that sends something other than a document read (a sample of a table's cells, the names of
+   * files), judged and audited like a read. Throws the refusal a read would.
+   * @param {{ studyId: string, sourceId: string, principal: string, note?: string }} entry
+   */
+  async assertCloudRead(entry) {
+    await this.access.require({ actor: String(entry.principal), studyId: entry.studyId, ability: "read_patient_level", sourceId: entry.sourceId, purpose: "vcr", note: entry.note ?? "cloud sample" });
+    const source = await this.store.sourceInStudy(entry.studyId, entry.sourceId);
+    const authorization = this.#cloudBasis(source);
+    await this.store.audit({ studyId: entry.studyId, userId: entry.principal, actor: entry.principal, action: "source.cloud_sample", object: entry.sourceId, detail: this.#basisDetail(authorization) });
+    return authorization;
+  }
+
+  /** Where a job's list of what it could not read lives: names may be people's, so it stays in the plane, with the study. @param {string} studyId @param {string} jobId */
+  #jobReportPath(studyId, jobId) {
+    if (!ID_PATTERN.test(String(jobId))) throw refuse(400, VCR_DATA_PLANE_CODES.payloadInvalid, "A job id.");
+    return path.join(this.root(), studyRelative(studyId), "job-reports", `${jobId}.jsonl`);
+  }
+
+  /** Add to a job's list, up to `limit` rows; the counts in its result say the rest. @param {string} studyId @param {string} jobId @param {readonly any[]} rows @param {number} limit */
+  async appendJobReport(studyId, jobId, rows, limit) {
+    const file = this.#jobReportPath(studyId, jobId);
+    await fs.mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
+    const held = await fs.readFile(file, "utf8").then((body) => body.split("\n").filter(Boolean).length, () => 0);
+    const room = Math.max(0, limit - held);
+    if (room) await fs.appendFile(file, rows.slice(0, room).map((row) => `${JSON.stringify(row)}\n`).join(""), { mode: 0o600 });
+  }
+
+  /** A job's list, without anyone who has since withdrawn. @param {string} studyId @param {string} jobId @returns {Promise<any[]>} */
+  async readJobReport(studyId, jobId) {
+    const body = await fs.readFile(this.#jobReportPath(studyId, jobId), "utf8").catch(() => "");
+    const withdrawn = await this.erasure?.matchStore?.withdrawnSubjects?.(studyId) ?? new Set();
+    return body.split("\n").filter(Boolean).map((line) => JSON.parse(line)).filter((row) => !row.subjectKey || !withdrawn.has(row.subjectKey));
   }
 
   /**

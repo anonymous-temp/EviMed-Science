@@ -240,7 +240,8 @@ export async function readSubjectNote({ study, subjectKey, documents, roster, ta
     const text = String(record.text);
     const id = String(record.id ?? entry.id);
     if (!documentIds.includes(id)) documentIds.push(id);
-    const numbered = segmentSentences(text).map((sentence) => ({ ...sentence, id: sentences.length + sentence.id, documentId: id }));
+    const pageOf = (/** @type {{ start: number }} */ sentence) => list(record.pageMap).find((page) => sentence.start >= page.start && sentence.start < page.end)?.page;
+    const numbered = segmentSentences(text).map((sentence) => { const page = pageOf(sentence); return { ...sentence, id: sentences.length + sentence.id, documentId: id, ...(page ? { page } : {}) }; });
     sentences.push(...numbered);
     records.push({ documentId: id, text, sentences: numbered });
     identity.push([id, String(record.projectionHash ?? record.sourceHash ?? sha256(text))]);
@@ -1109,7 +1110,7 @@ export function createMatchJudgmentReads({ judgments, documents, subjectTable = 
         if (text != null) await documents.recordWindow?.(study, documentId, text, span.start, span.end);
       }
       const next = offset + page.length;
-      return { available: true, subjectKey, documentHash: note.hash, sentences: page.map((sentence) => ({ id: sentence.id, text: sentence.text, ...(sentence.documentId ? { documentId: sentence.documentId } : { fromTable: true }) })),
+      return { available: true, subjectKey, documentHash: note.hash, sentences: page.map((sentence) => ({ id: sentence.id, text: sentence.text, ...(sentence.page ? { page: sentence.page } : {}), ...(sentence.documentId ? { documentId: sentence.documentId } : { fromTable: true }) })),
         sentencesTotal: note.sentences.length, offset, more: next < note.sentences.length, ...(next < note.sentences.length ? { nextOffset: next } : {}), ...(note.unreadable ? { unreadableDocuments: note.unreadable } : {}) };
     },
 

@@ -2753,6 +2753,7 @@ export {
   segmentSentences,
   segmentCriteria,
   fitMessages,
+  VCR_RECORDS_IMPORT_INPUTS,
   criteriaMessages,
   parseFitAnswer,
   parseCriteriaAnswer,

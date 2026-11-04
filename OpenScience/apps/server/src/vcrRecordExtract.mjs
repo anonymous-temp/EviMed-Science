@@ -7,14 +7,13 @@ import { runPlaneExtraction } from './vcrIntakeStage.mjs';
 /**
  * A patient record as PDF or Word, turned into the text the matching step reads.
  *
- * The conversion runs inside this deployment, in the intake container
- * (`vcrIntakeController.mjs`: no network, no model, no workspace, and of the data
- * plane nothing but one read-only file and one empty directory of its own
- * scratch area). It is NOT sent to the external document-parsing service, by
- * design and by test: a hospital record must not leave the deployment to be read,
- * and nothing here — or in the data plane that calls it — imports
- * `documentParserClient.mjs` (`test/vcrRecordExtract.test.mjs` walks the import
- * graph to prove it).
+ * A document with a text layer is converted inside this deployment, in the intake
+ * container (`vcrIntakeController.mjs`: no network, no model, no workspace, and of
+ * the data plane nothing but one read-only file and one empty directory of its
+ * own scratch area). A scan or a picture has no text layer, and goes to the
+ * in-house document parser (`createVcrScanReader`, owner decision of 2026-11-04,
+ * withdrawing the rule that a patient record is never sent there). The parser is
+ * given the file under a neutral name and asked for its text only.
  *
  * Hidden knowledge:
  *
@@ -26,10 +25,10 @@ import { runPlaneExtraction } from './vcrIntakeStage.mjs';
  * - **The container measures; this module decides.** The script reports the
  *   page count and the characters each page yielded; "scanned" is decided here,
  *   by code, as extracted characters per page under `vcrIntakeMinCharsPerPage`.
- *   A document that fails that is refused with `vcr_document_needs_text`, whose
- *   sentence tells the reader to supply a text version. A text PDF with a few
- *   scanned pages in it passes — most of it is text — and the blank pages are
- *   recorded in the provenance so a reader can see what was not read.
+ *   A document that fails that answers `vcr_document_needs_text`, which the plane
+ *   takes as the parser's turn. A text PDF with a few scanned pages in it passes —
+ *   most of it is text — and the blank pages are recorded in the provenance so a
+ *   reader can see what was not read.
  * - **The text is the contract; the original is provenance.** What this returns
  *   is what the plane stores and the matching step reads, exactly as for a
  *   `.txt` upload. The original's hash, format and page count, and the
@@ -145,6 +144,49 @@ const REFUSALS = Object.freeze({
   unavailable: [503, 'vcr_document_converter_unavailable', 'This deployment cannot convert PDF or Word files.', 'unavailable'],
   changed: [409, 'vcr_intake_input_invalid', 'The staged document is not the file that was uploaded; upload it again.', 'failed'],
 });
+
+/** Pages of a scan kept with its text. A longer record keeps its first pages' numbers and is still read whole. */
+const PAGE_MAP_ENTRIES = 2_000;
+
+/**
+ * A scan or a picture of a record, read by the in-house parser. The original stays where the caller holds it: a parser that is off or fails says so by name, and the same file can be
+ * read later. Page numbers are kept where the parser gives them (it does not always), as offsets into the text.
+ * @param {{ parser?: { configured: boolean, parseBytes: Function } | null, counters?: Record<string, number>, report?: (code: string) => void }} deps
+ */
+export function createVcrScanReader({ parser = null, counters = {}, report = () => {} }) {
+  return {
+    /** Whether anything can be asked. */
+    get available() { return parser?.configured === true; },
+    /** @param {{ path: string, ext: string, signal?: AbortSignal }} input @returns {Promise<{ text: string, extraction: Record<string, any> }>} */
+    async read({ path, ext, signal }) {
+      if (!parser?.configured) {
+        counters.parserUnavailable = (counters.parserUnavailable ?? 0) + 1;
+        throw new HttpError(503, 'vcr_document_parser_unavailable', 'This record is a scan and the document parser is not reachable from this deployment; the original is kept.');
+      }
+      const bytes = await fs.readFile(path);
+      /** @type {any} */
+      let parsed;
+      try {
+        // A chart's file name is a person's more often than not, so it does not travel; and the text is what is wanted, not the bibliographic metadata a model would write about it.
+        parsed = await parser.parseBytes({ bytes, filename: `record.${ext}`, signal, textOnly: true });
+      } catch (error) {
+        const code = String(/** @type {any} */ (error)?.code ?? 'source_parser_failed');
+        report(code);
+        counters.parserFailed = (counters.parserFailed ?? 0) + 1;
+        throw Object.assign(new HttpError(502, 'vcr_document_parser_failed', 'The document parser did not read this record; the original is kept.'), { cause: code });
+      }
+      const text = String(parsed?.text ?? '').replaceAll('\u0000', '');
+      if (!significantChars(text)) throw new HttpError(422, 'vcr_document_needs_text', 'The document parser found no text in this record.');
+      counters.parserRead = (counters.parserRead ?? 0) + 1;
+      const pageMap = Array.isArray(parsed.pageMap) ? parsed.pageMap.slice(0, PAGE_MAP_ENTRIES).map((/** @type {any} */ entry) => ({ page: entry.page, start: entry.start, end: entry.end })) : null;
+      return { text, extraction: {
+        sourceFormat: ext, reader: 'in_house_parser', pages: pageMap?.length ?? null, ...(pageMap?.length ? { pageMap } : {}), significantChars: significantChars(text),
+        textSha256: createHash('sha256').update(text).digest('hex'),
+        extractor: { name: String(parsed.extractor?.name ?? '').slice(0, 60), version: String(parsed.extractor?.version ?? '').slice(0, 40), endpoint: String(parsed.extractor?.endpoint ?? '').slice(0, 20) },
+      } };
+    },
+  };
+}
 
 /**
  * @param {{ config: any, controller?: { runVcrIntake?: Function } | null, counters?: Record<string, number>, report?: (code: string) => void }} deps

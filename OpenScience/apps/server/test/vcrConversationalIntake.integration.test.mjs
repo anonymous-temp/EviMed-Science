@@ -31,8 +31,9 @@ before(async () => {
   vcr = composeVcr({ productDatabase: database, config: { vcrEnabled: true, vcrAudience: 'all', vcrDataPlaneDir: path.join(dir, 'plane') } });
   await vcr.store.ready();
   documents = new ProductDocuments(database);
-  receipts = createVcrUploadReceipts({ documents, sources: { list: async () => ({ items: [] }), get: async () => null } });
-  intake = createVcrDataIntake({ store: vcr.store, dataStore: vcr.dataStore, dataPlane: vcr.dataPlane, sources: receipts, resolveProject: async () => project });
+  receipts = createVcrUploadReceipts({ documents, sources: { list: async () => ({ items: [] }), get: async () => null }, resolveProject: async () => project });
+  vcr.recordsOriginals.receipts = receipts;
+  intake = createVcrDataIntake({ store: vcr.store, dataStore: vcr.dataStore, dataPlane: vcr.dataPlane, sources: receipts, resolveProject: async () => project, recordsImport: vcr.recordsImport });
   vcr.dataIntake = intake;
 });
 after(async () => { await database?.close(); await isolated?.drop(); if (dir) await fs.rm(dir, { recursive: true, force: true }); });
@@ -56,7 +57,8 @@ test('contracts and matching schemas are available before a task exists and pers
   const discovery = await call('read', { what: 'contracts' });
   assert.equal(discovery.status, 200);
   assert.deepEqual(discovery.json.data.writes.decision.required, ['question', 'chosen', 'rationale']);
-  assert.ok(discovery.json.data.dataIntake.import_documents.required.includes('subjectColumn'));
+  assert.match(discovery.json.data.dataIntake.import_documents.subjectColumn, /optional/);
+  assert.deepEqual(discovery.json.data.dataIntake.import_standard.format, ['fhir', 'omop', 'adam']);
   const matching = await call('read', { what: 'matching', filter: { kind: 'contract' } });
   assert.ok(matching.json.data.protocolWrite);
   assert.equal(await count('studies'), 0);
@@ -116,7 +118,7 @@ test('ordinary authenticated file API persists an immutable original receipt wit
     ] });
     const candidates = await app.vcr.patientContext.candidates(nativeOrigin);
     assert.deepEqual(candidates.candidates, []);
-    assert.deepEqual(candidates.uploads, [{ ...handle, name: 'patient.txt' }]);
+    assert.deepEqual(candidates.uploads, [{ ...handle, name: 'patient.txt', format: 'txt' }]);
     assert.ok(!(await app.vcr.dataIntake.read(study, {}, nativeOrigin)).uploads.some(row => row.sourceId === handle.sourceId));
     await assert.rejects(app.vcr.dataIntake(study, { action: 'import', ...handle }, nativeOrigin), { code: 'vcr_intake_source_invalid' });
     study.cloudContext = { runId: nativeOrigin.runId, sessionId: nativeOrigin.rootSessionId };
@@ -178,7 +180,7 @@ test('plain-text receipt selection excludes other accounts, projects and native 
     assert.deepEqual((await patientReceipts.patientCandidates(scope, {})).uploads, []);
     assert.equal(await patientReceipts.readPatientOriginal(scope, handle), null);
   }
-  assert.deepEqual((await patientReceipts.patientCandidates(origin, {})).uploads, [{ ...handle, name: 'selected.md' }]);
+  assert.deepEqual((await patientReceipts.patientCandidates(origin, {})).uploads, [{ ...handle, name: 'selected.md', format: 'md' }]);
   assert.deepEqual((await patientReceipts.readPatientOriginal(origin, handle)).bytes, bytes);
 });
 test('authenticated upload -> real map -> frozen snapshot -> population binds exact saved ids, with no cloud grant', options, async () => {
@@ -351,17 +353,27 @@ test('upload continuation preserves PostgreSQL timestamp precision and does not 
   } while (filter);
   assert.deepEqual(found.slice(0, originals.length), originals.map(row => row.sourceId));
 });
-test('batch matching imports original subject narratives from owned CSV and never manufactures subject ids', options, async () => {
+test('batch matching imports original subject narratives from owned CSV as a job and never manufactures subject ids', options, async () => {
   const study = await vcr.store.taskContext(origin, { create: false });
+  const drain = async () => { for (let turn = 0; turn < 20; turn += 1) { const claimed = await vcr.jobs.claim({ lane: 'slow' }); if (!claimed.length) return; for (const job of claimed) await vcr.jobs.advance(job, { mayYield: true }); } };
   const handle = await receipts.record(project, { name: 'cases.csv', bytes: Buffer.from('case_id,narrative\nP01,Original age 62\nP02,Original age 58\n') });
   const done = await intake(study, { action: 'import_documents', ...handle, subjectColumn: 'case_id', textColumn: 'narrative' }, origin);
-  assert.equal(done.documents.length, 2);
-  assert.ok(done.documents.every(row => row.subjectKey && row.subjectKey !== 'P01' && row.subjectKey !== 'P02'));
-  assert.equal(new Set(done.documents.map(row => row.subjectKey)).size, 2);
-  const again = await intake(study, { action: 'import_documents', ...handle, subjectColumn: 'case_id', textColumn: 'narrative' }, origin);
-  assert.deepEqual(again.documents, done.documents);
-  const duplicate = await receipts.record(project, { name: 'duplicate.csv', bytes: Buffer.from('case_id,narrative\nP01,A\nP01,B\n') });
-  await assert.rejects(intake(study, { action: 'import_documents', ...duplicate, subjectColumn: 'case_id', textColumn: 'narrative' }, origin));
-  await assert.rejects(vcr.documents.runtimeRead({ ...study, cloudContext: { runId: 'automated-run', sessionId: 'root' } }, done.documents[0]),
+  assert.match(done.jobId, /./, 'a job, whatever the size');
+  await drain();
+  const keys = async () => (await vcr.documents.roster(study)).map(row => row.subjectKey);
+  const first = await keys();
+  assert.equal(first.length, 2);
+  assert.ok(first.every(key => key && key !== 'P01' && key !== 'P02'));
+  assert.equal(new Set(first).size, 2);
+  await intake(study, { action: 'import_documents', ...handle, subjectColumn: 'case_id', textColumn: 'narrative' }, origin);
+  await drain();
+  assert.deepEqual(await keys(), first);
+  // Several notes of one person are several documents of that person, no longer a refusal of the file.
+  const several = await receipts.record(project, { name: 'several.csv', bytes: Buffer.from('case_id,narrative\nP01,A\nP01,B\n') });
+  await intake(study, { action: 'import_documents', ...several, subjectColumn: 'case_id', textColumn: 'narrative' }, origin);
+  await drain();
+  assert.equal((await keys()).length, 4);
+  const documents_ = await vcr.documents.roster(study);
+  await assert.rejects(vcr.documents.runtimeRead({ ...study, cloudContext: { runId: 'automated-run', sessionId: 'root' } }, { subjectKey: documents_[0].subjectKey, documentId: documents_[0].id }),
     { code: 'vcr_cloud_processing_not_authorized' }, 'preservation is not a cloud grant');
 });

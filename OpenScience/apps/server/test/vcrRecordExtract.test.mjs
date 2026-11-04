@@ -282,7 +282,9 @@ async function importClosure(entries) {
   return new Set([...seen].map(file => path.relative(SRC, file)));
 }
 
-test('the external document parser is not reachable from the record intake path', async () => {
+// The rule that a patient record is never sent to the in-house parser was withdrawn by the owner on 2026-11-04: a scan goes there, through the reader the plane is handed
+// (`createVcrScanReader`, tested in vcrDataPlaneDocuments and vcrPatientFollowUp). What stays is that nothing on this path imports the parser or a route to it itself.
+test('the record intake path reaches the parser only through the reader it is handed', async () => {
   const entries = ['vcrDataPlane.mjs', 'vcrRecordExtract.mjs', 'vcrIntakeStage.mjs', 'vcrIntakeController.mjs', 'runtimeControllerClient.mjs', 'vcrComposition.mjs'];
   const closure = await importClosure(entries);
   // The walk must have walked: the plane's own dependencies are in it.
@@ -290,7 +292,7 @@ test('the external document parser is not reachable from the record intake path'
   assert.ok(closure.size >= 15, `only ${closure.size} modules were walked`);
   // The parser, and every module that reaches it (the knowledge base, the web reader, the public-source gateway).
   for (const forbidden of ['documentParserClient.mjs', 'sourceService.mjs', 'sourceWorker.mjs', 'webRead.mjs', 'publicSourceGateway.mjs']) {
-    assert.ok(!closure.has(forbidden), `${forbidden} must not be reachable from the record intake path`);
+    assert.ok(!closure.has(forbidden), `${forbidden} is not imported on the record intake path`);
   }
 });
 

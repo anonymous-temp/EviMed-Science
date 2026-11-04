@@ -604,7 +604,7 @@ export class VcrDataStore extends VcrStoreBase {
         `INSERT INTO ${this.schema}.source_files
            (id, source_id, study_id, user_id, role, name, format, location, sha256, bytes, row_count, column_count, profile, detail)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, $14::jsonb)
-         ON CONFLICT (source_id, sha256, role) DO NOTHING RETURNING *`,
+         ON CONFLICT (source_id, sha256, role, (COALESCE(detail->>'subjectKey', ''))) DO NOTHING RETURNING *`,
         [id, required(entry.sourceId, "sourceId"), entry.studyId, required(entry.userId, "userId"), role,
           required(entry.name, "A file name"), required(entry.format, "A file format"), required(entry.location, "A file location"),
           required(entry.sha256, "A file sha256"), Math.max(0, Math.trunc(Number(entry.bytes) || 0)),
@@ -621,8 +621,8 @@ export class VcrDataStore extends VcrStoreBase {
         return { file: vcrSourceFileFromRow(inserted.rows[0]), created: true };
       }
       const existing = await client.query(
-        `SELECT * FROM ${this.schema}.source_files WHERE source_id = $1 AND sha256 = $2 AND role = $3`,
-        [entry.sourceId, entry.sha256, role]);
+        `SELECT * FROM ${this.schema}.source_files WHERE source_id = $1 AND sha256 = $2 AND role = $3 AND COALESCE(detail->>'subjectKey', '') = $4`,
+        [entry.sourceId, entry.sha256, role, String(/** @type {any} */ (entry.detail)?.subjectKey ?? "")]);
       return { file: vcrSourceFileFromRow(existing.rows[0]), created: false };
     });
   }

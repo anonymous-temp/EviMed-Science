@@ -1641,7 +1641,7 @@ export const VCR_MODULE_ERROR_CODES = Object.freeze([
   'vcr_grant_invalid', 'vcr_grant_not_found', 'vcr_grant_owner_only',
   // a PDF or Word record converted to text inside the deployment, and the
   // disposable container that does it (vcrRecordExtract.mjs, vcrIntakeController.mjs)
-  'vcr_document_needs_text', 'vcr_document_unreadable', 'vcr_document_too_long', 'vcr_document_converter_unavailable',
+  'vcr_document_needs_text', 'vcr_document_unreadable', 'vcr_document_too_long', 'vcr_document_converter_unavailable', 'vcr_document_parser_unavailable', 'vcr_document_parser_failed',
   'vcr_intake_busy', 'vcr_intake_timeout', 'vcr_intake_failed', 'vcr_intake_input_invalid',
   'vcr_intake_source_invalid', 'vcr_intake_source_changed', 'vcr_intake_payload_invalid', 'vcr_intake_format_invalid', 'vcr_intake_map_changed',
   // a source held in FHIR, OMOP or ADaM, converted to the module's tables in the same container (vcrImport.mjs)
@@ -2557,6 +2557,8 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_import_unreadable: '这个文件打不开：可能已损坏或加密。请重新导出后再上传。',
   vcr_import_version_unsupported: '这个文件的格式版本暂不支持（SAS 传输文件需为 V5 版）。请重新导出为 V5 的 .xpt 后再上传。',
   vcr_import_converter_unavailable: '本部署暂时不能转换这种标准格式。请先导出为 CSV 后按普通数据文件上传。',
+  vcr_document_parser_unavailable: '这份病历是扫描件或图片，要交给文档解析服务才能读出文字，但解析服务现在没有接通。请稍后再试，或提供文字版。',
+  vcr_document_parser_failed: '文档解析服务这次没有读出这份病历。请稍后再试，或提供文字版。',
   vcr_source_file_not_found: '这个数据文件不存在或已删除。',
   vcr_source_file_frozen: '这个文件已被冻结进快照，不能删除。',
   vcr_source_file_changed: '文件内容与上传时记录的哈希不一致，已拒绝使用。',

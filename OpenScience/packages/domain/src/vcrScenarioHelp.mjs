@@ -58,6 +58,7 @@ export const VCR_RUN_SCENARIO_FIELDS = Object.freeze({
   match_extract: Object.freeze([]),
   // A judging job likewise: the pairs, the settings and the estimate are frozen from a selection.
   match_judge: Object.freeze([]),
+  records_import: Object.freeze([]),
 })
 
 /**

@@ -719,6 +719,12 @@ export function rankJudgments(items) {
 // ---------------------------------------------------------------------------
 
 /**
+ * The first line of a record inside a longer note, by its shape and not its words: a date at the start of the line in any of the forms a chart writes, a ruled line, a Markdown heading, a page feed.
+ * Dates may also start ordinary lines; that only offers another place to cut, and parts are still packed up to the cap.
+ */
+const RECORD_HEADER = /^(?:\f|[-=*_]{3,}\s*$|#{1,6}\s|\[?\d{4}\s*[-/.年]\s*\d{1,2}\s*[-/.月]\s*\d{1,2}|\[?\d{1,2}[-/.]\d{1,2}[-/.]\d{4}\b)/u
+
+/**
  * A patient's records as the parts one call each can read: whole records while they fit, a longer record at its blank lines, and only then
  * at sentences, so a part never ends inside a sentence. A single sentence longer than the cap is a part by itself, over the cap, and never
  * cut. Sentence ids are the caller's and survive the split.
@@ -744,15 +750,26 @@ export function splitNoteParts(records, cap) {
   }
   for (const record of records) {
     if (record.text.length <= cap) { add(record.text, [...record.sentences]); continue }
-    // The record's blank lines divide it where it divides itself; each block is then held whole if it can be, and cut at sentences if not.
+    // A long note is often many records one after another. Each is held whole when it fits, so a part never ends in the middle of a visit.
+    /** @type {Array<any[]>} */
+    const visits = []
+    for (const sentence of record.sentences) {
+      const atLineStart = sentence.start === 0 || record.text[sentence.start - 1] === '\n'
+      if (!visits.length || (atLineStart && RECORD_HEADER.test(sentence.text))) visits.push([])
+      visits[visits.length - 1].push(sentence)
+    }
     /** @type {Array<any[]>} */
     const blocks = []
-    let previous = -1
-    for (const sentence of record.sentences) {
-      const gap = previous < 0 ? '' : record.text.slice(previous, sentence.start)
-      if (previous < 0 || /\n\s*\n/u.test(gap)) blocks.push([])
-      blocks[blocks.length - 1].push(sentence)
-      previous = sentence.end
+    for (const visit of visits) {
+      if (record.text.slice(visit[0].start, visit[visit.length - 1].end).length <= cap) { blocks.push(visit); continue }
+      // A visit too long for one part: its blank lines divide it where it divides itself; each block is then held whole if it can be, and cut at sentences if not.
+      let previous = -1
+      for (const sentence of visit) {
+        const gap = previous < 0 ? '' : record.text.slice(previous, sentence.start)
+        if (previous < 0 || /\n\s*\n/u.test(gap)) blocks.push([])
+        blocks[blocks.length - 1].push(sentence)
+        previous = sentence.end
+      }
     }
     for (const block of blocks) {
       const text = record.text.slice(block[0].start, block[block.length - 1].end)

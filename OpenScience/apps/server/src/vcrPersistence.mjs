@@ -529,6 +529,9 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.source_files (
   created_at   timestamptz NOT NULL DEFAULT now(),
   UNIQUE (source_id, sha256, role)
 );
+-- Two people may have the same words in one source (a template note, 「无特殊」): each keeps their own document (2026-11-04). The same text for the same person is one file.
+ALTER TABLE evimed_vcr.source_files DROP CONSTRAINT IF EXISTS source_files_source_id_sha256_role_key;
+CREATE UNIQUE INDEX IF NOT EXISTS vcr_source_files_identity_idx ON evimed_vcr.source_files (source_id, sha256, role, (COALESCE(detail->>'subjectKey', '')));
 CREATE INDEX IF NOT EXISTS vcr_source_files_source_idx ON evimed_vcr.source_files (source_id, created_at);
 CREATE INDEX IF NOT EXISTS vcr_source_files_study_idx ON evimed_vcr.source_files (study_id);
 

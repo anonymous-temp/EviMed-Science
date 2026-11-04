@@ -82,7 +82,7 @@ import { createVcrEvidencePipeline } from "./vcrEvidence.mjs";
 import { createVcrCorrectionCases } from "./vcrCorrectionCases.mjs";
 import { createVcrCurveEvidence } from "./vcrCurveEvidence.mjs";
 import { createVcrPublicationSources } from "./vcrPublicationSources.mjs";
-import { createIntakeCounters, createVcrRecordExtractor } from "./vcrRecordExtract.mjs";
+import { createIntakeCounters, createVcrRecordExtractor, createVcrScanReader } from "./vcrRecordExtract.mjs";
 import { createVcrCurveDigitizer } from "./vcrCurveDigitizer.mjs";
 import { VcrEvidenceStore } from "./vcrEvidenceStore.mjs";
 import { VcrJobs } from "./vcrJobs.mjs";
@@ -110,7 +110,8 @@ import {
 } from "./vcrMatching.mjs";
 import { VCR_JOB_PURPOSE } from "./vcrJobs.mjs";
 import { createFactExtractor, createMatchBatch, createMatchBatchCounters, createMatchExtractExecutor } from "./vcrMatchBatch.mjs";
-import { createMatchJudge, createMatchJudgeCounters, createMatchJudgeExecutor, createMatchJudgmentReads, createPairJudge, judgmentTargets } from "./vcrMatchJudge.mjs";
+import { createRecordsImport, createRecordsImportExecutor } from "./vcrRecordsImport.mjs";
+import { createMatchJudge, createMatchJudgeCounters, createMatchJudgeExecutor, createMatchJudgmentReads, createPairJudge, judgmentTargets, tableFieldsOf } from "./vcrMatchJudge.mjs";
 import { VcrMatchJudgmentStore } from "./vcrMatchJudgmentStore.mjs";
 import { vcrRuntimeWrite } from "./vcrGateway.mjs";
 import { MATCHING_SNAPSHOT_PREFIX, freezeMatchingInputs, hydrateMatchingInputs, languageCriteriaByKey, matchingSelection, verifyMatchingSnapshot } from "./vcrMatchingSnapshot.mjs";
@@ -1081,7 +1082,7 @@ export function createVcrEngineJobRemover({ config, fetchImpl, engine = null }) 
  *   usageLedger?: any,
  * }} input
  */
-export function composeVcr({ config, productDatabase, projectStore = null, audit = async () => {}, fetchImpl, report = () => {}, connectorCredentials = null, intakeController = null, entityVocabulary = null, sourceChanges = null, officialZoneForKeys = null, predictionRegistry = null, usageLedger = null }) {
+export function composeVcr({ config, productDatabase, projectStore = null, audit = async () => {}, fetchImpl, report = () => {}, connectorCredentials = null, intakeController = null, entityVocabulary = null, sourceChanges = null, officialZoneForKeys = null, predictionRegistry = null, usageLedger = null, dataSemantics = null, documentParser = null, webReader = null }) {
   if (!config?.vcrEnabled || !productDatabase) return null;
 
   // The shared entity vocabulary tags a study with what it is about (`entityVocabulary.mjs`).
@@ -1106,7 +1107,7 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   // A source held in FHIR, OMOP or ADaM is converted in the same container (operation `convert`).
   const importer = createVcrImporter({ config, controller: intakeController, counters: intakeCounters, report });
   const dataPlane = String(config.vcrDataPlaneDir ?? "").trim()
-    ? new VcrDataPlane({ store: dataStore, config, access, extractor, importer, erasure })
+    ? new VcrDataPlane({ store: dataStore, config, access, extractor, importer, erasure, scanReader: createVcrScanReader({ parser: documentParser, counters: intakeCounters, report }) })
     : null;
 
   const engineStatus = vcrEngineStatus(config);
@@ -1214,7 +1215,25 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
     judge: createPairJudge({ config, usageLedger, fetchImpl: call, counters: matchJudgeCounters }),
   });
   const matchJudge = createMatchJudge({ jobs, matchStore, documents, subjectTable, judgments: matchJudgments, config, counters: matchJudgeCounters });
-  const matchJudgmentReads = createMatchJudgmentReads({ judgments: matchJudgments, documents, subjectTable, targets: judgeTargets, matchStore });
+  // Many patients' records taken in as a job. The originals are the upload receipts', which the server builds after this module: until it says so, nothing can be located.
+  const recordsOriginals = { receipts: /** @type {any} */ (null) };
+  if (dataPlane) {
+    jobs.localExecutors["matching.import_records"] = createRecordsImportExecutor({ store, dataStore, dataPlane, config, usageLedger, fetchImpl: call, report,
+      locate: async (owner, handle) => recordsOriginals.receipts?.locate(owner, handle) ?? null });
+  }
+  const recordsImport = dataPlane ? createRecordsImport({ jobs, receipts: () => recordsOriginals.receipts }) : null;
+  // Whether a pseudonym is a person of this study who may be added to: a document, a table row or a judgment says they are, and a withdrawal says they are not any more.
+  const subjectKnown = async (/** @type {any} */ study, /** @type {string} */ subjectKey) => {
+    if ((await matchStore.withdrawnSubjects?.(study.id) ?? new Set()).has(subjectKey)) return false;
+    if ((await documents.roster(study)).some((/** @type {any} */ row) => row.subjectKey === subjectKey)) return true;
+    if ((await tableFieldsOf(subjectTable, study))?.subjects.includes(subjectKey)) return true;
+    return (await matchJudgments.list({ studyId: study.id, subjectKey, limit: 1 })).length > 0;
+  };
+  const matchJudgmentReads = createMatchJudgmentReads({ judgments: matchJudgments, documents, subjectTable, targets: judgeTargets, matchStore, rejudge: matchJudge });
+  // The trials a person holds a verdict about, read again a few at a time; a verdict made of a record that has since changed is marked (G15).
+  const registryWatchCounters = createRegistryWatchCounters();
+  const registryWatch = config.vcrRegistryWatchEnabled !== false
+    ? createRegistryWatch({ judgments: matchJudgments, targets: judgeTargets, config, report, counters: registryWatchCounters }) : null;
 
   const corrections = createVcrCorrectionCases({ store, matchStore, dataPlane, access });
   // The disease packs and the account's library of population definitions: read and written by the study's pages,
@@ -1260,7 +1279,7 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   service.attach({ records });
   composed = {
     publications, simulations, frontierEvents, predictions, records,
-    store, dataStore, matchStore, erasure, candidateStore, patientTrials, evidenceStore, corrections, knowledge, knowledgeStore, longitudinal, matchBatch, matchBatchCounters, matchJudge, matchJudgeCounters, matchJudgments, matchJudgmentReads,
+    store, dataStore, matchStore, erasure, candidateStore, patientTrials, evidenceStore, corrections, knowledge, knowledgeStore, longitudinal, matchBatch, matchBatchCounters, matchJudge, matchJudgeCounters, matchJudgments, matchJudgmentReads, matchResults, registryWatch, registryWatchCounters, registryPages, registryPageCounters, subjectKnown, recordsImport, recordsOriginals,
     access, members, dataPlane, dataPlaneSeam, documents, engine, engineProbe, engineStatus, removeEngineJob, jobs, seal, evidence, matching, registry, service,
     intake: { counters: intakeCounters, extractor, importer, digitizer },
     // Composed later, beside the other modules' workers (server.mjs).

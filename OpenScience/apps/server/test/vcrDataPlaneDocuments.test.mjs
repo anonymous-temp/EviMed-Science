@@ -12,7 +12,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { VcrDataPlane, assertDataPlaneLocation, fileView, safeUploadName } from '../src/vcrDataPlane.mjs';
-import { createVcrRecordExtractor } from '../src/vcrRecordExtract.mjs';
+import { createVcrRecordExtractor, createVcrScanReader } from '../src/vcrRecordExtract.mjs';
 import { streamOf } from './helpers/vcrIntakeData.mjs';
 import { localIntakeController, pythonCan, writeRecordFixtures } from './helpers/vcrIntakeLocal.mjs';
 
@@ -46,7 +46,7 @@ function memoryStore() {
   };
 }
 
-async function world(t, { extractor = 'real', config = {} } = {}) {
+async function world(t, { extractor = 'real', config = {}, scanReader = null } = {}) {
   const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'vcr-plane-docs-')));
   t.after(() => fs.rm(root, { recursive: true, force: true }));
   const planeDir = path.join(root, 'plane');
@@ -58,7 +58,7 @@ async function world(t, { extractor = 'real', config = {} } = {}) {
   const store = memoryStore();
   const calls = [];
   const converter = extractor === 'real' ? createVcrRecordExtractor({ config: appConfig, controller: localIntakeController(appConfig, { calls }) }) : extractor;
-  const plane = new VcrDataPlane({ store, config: appConfig, access: { require: async () => ({ allowed: true }) }, extractor: converter });
+  const plane = new VcrDataPlane({ store, config: appConfig, access: { require: async () => ({ allowed: true }) }, extractor: converter, scanReader });
   const fixtures = await writeRecordFixtures(root);
   const upload = async (name, bytes, extra = {}) => plane.storeUpload({
     actor: 'owner', studyId: STUDY, sourceId: SOURCE, name, role: 'document', subject: 'S-001', stream: streamOf(bytes), ...extra,
@@ -130,7 +130,7 @@ test('a text PDF is converted, and the same PDF twice is the same file', { skip:
   assert.equal(w.store.files.length, 1);
 });
 
-test('a scanned PDF and a picture are refused by name, store nothing, and are never sent anywhere', { skip: !HAVE_PYPDF && 'pypdf is needed' }, async t => {
+test('with no parser, a scanned PDF and a picture answer that they have no text and store nothing', { skip: !HAVE_PYPDF && 'pypdf is needed' }, async t => {
   const w = await world(t);
   await assert.rejects(w.upload('scan.pdf', await w.read('scan.pdf')), { status: 422, code: 'vcr_document_needs_text' });
   await assert.rejects(w.upload('image-only.docx', await w.read('image-only.docx')), { status: 422, code: 'vcr_document_needs_text' });
@@ -142,6 +142,29 @@ test('a scanned PDF and a picture are refused by name, store nothing, and are ne
   assert.equal(w.store.files.length, 0);
   assert.deepEqual(await inDir(w.planeDir, 'documents'), [], 'nothing was written to the plane');
   assert.deepEqual(await inDir(w.planeDir, 'incoming'), [], 'the raw upload is removed');
+});
+
+test('with the in-house parser, a scanned PDF and a picture are read there, under a neutral name, for the text alone; a text PDF stays in the deployment', { skip: !HAVE_PYPDF && 'pypdf is needed' }, async t => {
+  const asked = [];
+  const parser = { configured: true, async parseBytes(input) { asked.push(input); return { text: `扫描件的文字足够长，可以读：${input.filename}`, pageMap: [{ page: 1, start: 0, end: 14, status: 'ok' }], extractor: { name: 'evimed-extract', version: 't', endpoint: 'parse' } }; } };
+  const w = await world(t, { scanReader: createVcrScanReader({ parser }) });
+  const scan = await w.upload('张三的扫描件.pdf', await w.read('scan.pdf'));
+  assert.equal(scan.file.detail.extraction.reader, 'in_house_parser');
+  assert.deepEqual(scan.file.detail.extraction.pageMap, [{ page: 1, start: 0, end: 14 }]);
+  assert.deepEqual([asked[0].filename, asked[0].textOnly], ['record.pdf', true]);
+  assert.equal(scan.file.detail.original.format, 'pdf');
+  const picture = await w.upload('page.JPG', Buffer.from('jpeg bytes'));
+  assert.equal(picture.file.detail.original.format, 'jpg');
+  assert.equal(asked.at(-1).filename, 'record.jpg');
+  const count = asked.length;
+  await w.upload('lab.pdf', await w.read('text.pdf'));
+  assert.equal(asked.length, count, 'a document with a text layer is not sent anywhere');
+  const down = await world(t, { scanReader: createVcrScanReader({ parser: { configured: false } }) });
+  await assert.rejects(down.upload('fax.png', Buffer.from('x')), { status: 503, code: 'vcr_document_parser_unavailable' });
+  const broken = await world(t, { scanReader: createVcrScanReader({ parser: { configured: true, async parseBytes() { throw Object.assign(new Error('x'), { code: 'source_parser_timeout' }); } } }) });
+  await assert.rejects(broken.upload('fax.png', Buffer.from('x')), { status: 502, code: 'vcr_document_parser_failed' });
+  const empty = await world(t, { scanReader: createVcrScanReader({ parser: { configured: true, async parseBytes() { return { text: '   ' }; } } }) });
+  await assert.rejects(empty.upload('fax.png', Buffer.from('x')), { status: 422, code: 'vcr_document_needs_text' });
 });
 
 test('an old .doc says what to save it as, and an unknown extension lists what a document may be', async t => {

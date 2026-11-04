@@ -93,7 +93,7 @@ export function vcrJobNoticeText({ resultKind, stage = null, label = null, state
   const what = resultKind === "trial_scenario"
     ? (/** @type {Record<string, string>} */ ({ analytic: "方案计算", simulation: "方案模拟", assurance: "成功把握计算" })[String(stage)] ?? "方案模拟")
     : (/** @type {Record<string, string>} */ ({ population: "人群生成", patient_set: "虚拟患者生成", comparator: "对照分析", design_grid: "设计网格",
-      accrual_forecast: "入组预测", matching: "匹配评估", match_extract: "病历阅读", match_judge: "患者与试验判定", population_check: "人群核对" })[resultKind] ?? "计算");
+      accrual_forecast: "入组预测", matching: "匹配评估", match_extract: "病历阅读", match_judge: "患者与试验判定", records_import: "导入病历", population_check: "人群核对" })[resultKind] ?? "计算");
   const name = clip(String(label ?? "").replace(/^[A-Z]\d*\s+/, ""), 24);
   if (state === "failed") {
     const code = typeof error?.code === "string" ? error.code : "";
@@ -136,7 +136,10 @@ export function vcrJobNoticeText({ resultKind, stage = null, label = null, state
     const finished = measure("pairs_finished");
     const total = measure("pairs_total");
     const failed = measure("pairs_failed");
-    headline = finished && total ? `判定了 ${count(finished.value)}/${count(total.value)} 对${failed && failed.value > 0 ? `，${count(failed.value)} 对没判成` : ""}` : null;
+    const changed = typeof result?.diagnostics?.changes?.sentence === "string" ? result.diagnostics.changes.sentence.replace(/。$/u, "") : "";
+    headline = changed ? changed : finished && total ? `判定了 ${count(finished.value)}/${count(total.value)} 对${failed && failed.value > 0 ? `，${count(failed.value)} 对没判成` : ""}` : null;
+  } else if (resultKind === "records_import") {
+    headline = typeof result?.diagnostics?.statement === "string" ? result.diagnostics.statement.replace(/。$/u, "") : null;
   } else if (resultKind === "population_check") {
     const compared = measure("variables_compared");
     const apart = measure("variables_apart");

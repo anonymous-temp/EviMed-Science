@@ -36,10 +36,11 @@ export const VCR_MATCH_BATCH_SCHEMA = 1
 export const VCR_MATCH_BATCH_METHODS = Object.freeze({
   'matching.extract': Object.freeze({ version: '1.1.0', modelTier: null }),
   'matching.judge': Object.freeze({ version: '1.0.0', modelTier: null }),
+  'matching.import_records': Object.freeze({ version: '1.0.0', modelTier: null }),
 })
-export const VCR_MATCH_BATCH_JOBS = Object.freeze({ match_extract: 'matching.extract', match_judge: 'matching.judge' })
+export const VCR_MATCH_BATCH_JOBS = Object.freeze({ match_extract: 'matching.extract', match_judge: 'matching.judge', records_import: 'matching.import_records' })
 /** The local methods that call a model per record: they run on a worker loop of their own so that a long job does not hold the short ones. */
-export const VCR_SLOW_LOCAL_METHODS = Object.freeze(['matching.extract', 'matching.judge'])
+export const VCR_SLOW_LOCAL_METHODS = Object.freeze(['matching.extract', 'matching.judge', 'matching.import_records'])
 
 export const VCR_MATCH_BATCH_LIMITS = Object.freeze({
   /** Hard ceiling of a roster in one job, whatever a deployment configures. */
@@ -72,6 +73,9 @@ export const VCR_MATCH_JUDGE_LIMITS = Object.freeze({
   overheadTokens: 1500,
 })
 
+/** The originals one import names: a folder's files arrive as handles one by one, and each is only a few words in the scenario. */
+export const VCR_RECORDS_IMPORT_INPUTS = 5000
+
 /** The model the estimate is priced on when a deployment names none. */
 export const VCR_MATCH_BATCH_DEFAULT_MODEL = 'deepseek-flash'
 
@@ -94,6 +98,7 @@ const count = (value) => (Number.isFinite(Number(value)) && Number(value) > 0 ? 
 export function validateMatchBatchScenario(method, scenario) {
   if (!Object.hasOwn(VCR_MATCH_BATCH_METHODS, method)) return [{ code: 'method_unknown', field: 'method', detail: 'Unknown batch matching method.' }]
   if (method === 'matching.judge') return validateMatchJudgeScenario(scenario)
+  if (method === 'matching.import_records') return validateRecordsImportScenario(scenario)
   const problems = []
   const bad = (/** @type {string} */ field, /** @type {string} */ detail) => problems.push({ code: 'scenario_field_invalid', field: `scenario.${field}`, detail })
   const allowed = ['protocolVersionId', 'asOf', 'subjects', 'variables', 'estimate', 'chain', 'prefilter', 'prefiltered', 'model', 'questionsDigest']
@@ -116,6 +121,22 @@ export function validateMatchBatchScenario(method, scenario) {
   if (scenario.chain != null && (typeof scenario.chain !== 'string' || !ID.test(scenario.chain))) bad('chain', 'An id.')
   if (scenario.prefilter != null && typeof scenario.prefilter !== 'boolean') bad('prefilter', 'true or false.')
   if (scenario.model != null && (typeof scenario.model !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(scenario.model))) bad('model', 'A model name.')
+  return problems
+}
+
+/**
+ * The scenario of a `records_import` job: handles of originals and what the caller said of them. No path and no file name: those stay with the receipt.
+ * @param {Record<string, any>} scenario @returns {Array<{ code: string, field: string, detail: string }>}
+ */
+function validateRecordsImportScenario(scenario) {
+  const problems = []
+  const bad = (/** @type {string} */ field, /** @type {string} */ detail) => problems.push({ code: 'scenario_field_invalid', field: `scenario.${field}`, detail })
+  for (const key of Object.keys(scenario)) if (!['mode', 'inputs', 'columns', 'format', 'name', 'chain'].includes(key)) problems.push({ code: 'scenario_field_unknown', field: `scenario.${key}`, detail: 'Unused scenario field.' })
+  if (!['notes', 'standard'].includes(scenario.mode)) bad('mode', 'notes or standard.')
+  if (!Array.isArray(scenario.inputs) || !scenario.inputs.length || scenario.inputs.length > VCR_RECORDS_IMPORT_INPUTS
+    || scenario.inputs.some((entry) => typeof entry?.sourceId !== 'string' || !SUBJECT.test(entry.sourceId) || !Number.isSafeInteger(entry?.generation) || !/^[a-f0-9]{64}$/.test(String(entry?.sha256)))) bad('inputs', `One to ${VCR_RECORDS_IMPORT_INPUTS} original handles.`)
+  if (scenario.mode === 'standard' && (scenario.inputs?.length !== 1 || !['fhir', 'omop', 'adam'].includes(scenario.format))) bad('format', 'One original and fhir, omop or adam.')
+  if (scenario.columns != null && (typeof scenario.columns !== 'object' || Array.isArray(scenario.columns))) bad('columns', 'The columns the caller named.')
   return problems
 }
 

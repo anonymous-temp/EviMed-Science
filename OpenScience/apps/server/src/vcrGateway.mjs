@@ -120,7 +120,9 @@ const REGISTRY_MARGIN_MS = 3_000;
 const REGISTRY_DEADLINE_MS = 20_000;
 const readFilterFields = Object.freeze(["id", "parentId", "kind", "limit", "offset", "registryId", "registry", "snapshotId", "sourceId", "subjectKey", "documentId", "protocolVersionId", "beforeSeq", "query", "cursor", "collection", "collectionRevision",
   // `what: candidates` (M1): the search a run writes and what it knows of the patient. Their shape is `candidateRequest`'s, in `vcrCandidateSearch.mjs`.
-  "condition", "terms", "age", "sex", "region", "status"]);
+  "condition", "terms", "age", "sex", "region", "status",
+  // `what: patient_context`: the next page of the project's knowledge-base documents, beside the page of attachments.
+  "knowledgeCursor"]);
 /** The filter keys only `what: candidates` takes. */
 const CANDIDATE_FILTER_FIELDS = Object.freeze(["condition", "terms", "age", "sex", "region", "status"]);
 const WRITE_MAX_ITEMS = 200;
@@ -262,6 +264,10 @@ function readRequest(body) {
       throw gatewayError(400, 'vcr_read_filter_invalid', 'cursor is the exact continuation returned by the preceding page.');
     }
     filter.cursor = raw.cursor;
+  }
+  if (raw.knowledgeCursor != null) {
+    if (body.what !== 'patient_context' || typeof raw.knowledgeCursor !== 'string' || !/^[A-Za-z0-9_-]{1,2048}$/.test(raw.knowledgeCursor)) throw gatewayError(400, 'vcr_read_filter_invalid', 'knowledgeCursor is the exact continuation returned by the preceding page.');
+    filter.knowledgeCursor = raw.knowledgeCursor;
   }
   for (const key of ["id", "parentId", "kind", "registryId", "registry", "snapshotId", "sourceId", "subjectKey", "documentId", "protocolVersionId"]) {
     if (raw[key] == null) continue;
@@ -2775,7 +2781,7 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
         work = async () => ({ what: request.what, ...(request.what === 'data_intake'
           ? await vcr.dataIntake?.read(study, request.filter, origin) ?? { available: false, code: 'vcr_gateway_unavailable' }
           : request.what==='patient_context'
-          ? origin && vcr.patientContext?.candidates ? await vcr.patientContext.candidates(origin,request.filter) : {candidates:[],nextBeforeSeq:null}
+          ? origin && vcr.patientContext?.candidates ? await vcr.patientContext.candidates(origin,request.filter,study) : {candidates:[],nextBeforeSeq:null}
           : await vcr.service.runtimeRead(study, request.what, request.filter, { signal: requestAbort.signal, ownerView })) });
       } else if (operation === "write") {
         const request = writeRequest(body);

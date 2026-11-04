@@ -522,7 +522,7 @@ export const VCR_TAB_LABELS_ZH = Object.freeze({
  */
 export const VCR_RESULT_KIND_TABS = Object.freeze({
   population: 'population', patient_set: 'patients', comparator: 'comparator', trial_scenario: 'trial', design_grid: 'trial',
-  accrual_forecast: 'trial', matching: 'matching', match_extract: 'matching', match_judge: 'matching', evidence_pool: 'data', snapshot_profile: 'data', population_check: 'population',
+  accrual_forecast: 'trial', matching: 'matching', match_extract: 'matching', match_judge: 'matching', records_import: 'matching', evidence_pool: 'data', snapshot_profile: 'data', population_check: 'population',
 })
 /**
  * The writes that put a patient's matching on the matching tab. A matching is judged at the write -- there is no job to finish -- so
@@ -860,6 +860,8 @@ export const VCR_JOB_KINDS = frozen([
   // --- appended (2026-11-04): patient and trial judged by the model, pair by pair (owner decisions 2026-11-04) ---
   'match_judge',
   'forecast_trajectories', 'evaluate_forecast', 'compare_forecasts', 'benchmark_trial_effect',
+  // --- appended (2026-11-04): many patients' records taken in as a job ---
+  'records_import',
 ])
 /**
  * Which of the seven steps an engine job belongs to, by its kind: the step bar's dot and the activity strip say "the patients are
@@ -878,7 +880,7 @@ export const VCR_JOB_KIND_STEPS = Object.freeze({
   covariate_set_comparator: 'comparator', negative_control_comparator: 'comparator', tipping_point: 'comparator',
   prognostic_adjustment_comparator: 'comparator',
   design_analytic: 'trial', design_simulation: 'trial', design_grid: 'trial', assurance: 'trial', procova: 'trial', accrual_forecast: 'trial',
-  match_criteria: 'matching', match_extract: 'matching', match_judge: 'matching',
+  match_criteria: 'matching', match_extract: 'matching', match_judge: 'matching', records_import: 'matching',
 })
 export const VCR_JOB_STATES = frozen(['queued', 'running', 'succeeded', 'failed', 'canceled', 'awaiting_budget'])
 export const VCR_JOB_STATE_LABELS_ZH = Object.freeze({

@@ -344,10 +344,11 @@ export class DocumentParserClient {
   /**
    * Parse bytes that never became a file — the entry point for a caller that
    * holds a download in memory (contract X2). `engine` as for `parse`.
-   * @param {{bytes:Uint8Array,filename:string,mediaType?:string,sha256?:string,signal?:AbortSignal,
+   * `textOnly` asks for the text and not the bibliographic metadata a model writes over its first and last pages: what a patient's record is read with.
+   * @param {{bytes:Uint8Array,filename:string,mediaType?:string,sha256?:string,signal?:AbortSignal,textOnly?:boolean,
    *   engine?:((file:{name:string,bytes:Buffer,signal?:AbortSignal})=>Promise<{text?:string}>)|null}} input
    */
-  async parseBytes({ bytes, filename, mediaType = "application/octet-stream", sha256 = "", signal: callerSignal = undefined, engine = null }) {
+  async parseBytes({ bytes, filename, mediaType = "application/octet-stream", sha256 = "", signal: callerSignal = undefined, engine = null, textOnly = false }) {
     if (callerSignal?.aborted) throw parserError(409, "source_parser_canceled", "Document parsing was canceled.");
     if (!(bytes instanceof Uint8Array)) throw new TypeError("Document bytes are required.");
     const name = path.basename(String(filename ?? "")).trim();
@@ -375,10 +376,11 @@ export class DocumentParserClient {
     const signal = callerSignal ? AbortSignal.any([callerSignal, controller.signal]) : controller.signal;
     try {
       let answer;
-      let endpoint = "extract";
+      let endpoint = textOnly ? "parse" : "extract";
       try {
-        answer = await this.#withRetries(EXTRACT_PATH, request, signal);
+        answer = await this.#withRetries(textOnly ? PARSE_PATH : EXTRACT_PATH, request, signal);
       } catch (error) {
+        if (textOnly) throw error;
         // The metadata model failing is not the text failing: fall back once to
         // the text-only endpoint rather than lose the document (see the header).
         if (error?.code !== "source_parser_upstream_error") throw error;

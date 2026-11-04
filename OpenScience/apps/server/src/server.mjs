@@ -2928,6 +2928,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // A record document to text and a figure to curve points run in the runtime
     // controller's disposable container, like a document export does.
     intakeController,
+    // A scan or a picture of a record is read by the in-house parser (owner decision 2026-11-04); the plane's own conversion handles a document with a text layer.
+    documentParser,
     entityVocabulary,
     sourceChanges,
     // The batch reading of patient records calls the model through the same usage ledger every control-plane call goes through (purpose vcr).
@@ -6004,10 +6006,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       await writeFileAtomicNoFollow(project.baseDir, full, bytes, { mode: 0o600 });
     }) }) : null;
   if (vcr && vcrUploadReceipts) vcr.dataIntake = createVcrDataIntake({ store: vcr.store, dataStore: vcr.dataStore, dataPlane: vcr.dataPlane,
-    sources: vcrUploadReceipts, resolveProject: sourceProject,
+    sources: vcrUploadReceipts, resolveProject: sourceProject, recordsImport: vcr.recordsImport,
     sourceScope: origin => conversationSourceScope(origin, origin.rootSessionId) });
   if (vcr) vcr.patientContext = createVcrPatientContext({ store:vcr.store,dataStore:vcr.dataStore,dataPlane:vcr.dataPlane,documents:vcr.documents,
-    sources:sourceService, uploadReceipts:vcrUploadReceipts,
+  if (vcr?.recordsOriginals) vcr.recordsOriginals.receipts = vcrUploadReceipts;
+    sources:sourceService, uploadReceipts:vcrUploadReceipts, rejudge:vcr.matchJudge?.rejudge ? (study,input) => vcr.matchJudge.rejudge(study,input) : null, subjectKnown:vcr.subjectKnown,
     isHumanMessage: async (origin,message) => (await agentRuns.list(await sourceProject(origin))).some(run => run.sessionId === origin.rootSessionId
       && run.automated !== true && (Number.isSafeInteger(message.turnStartSeq) && run.nativeTurn?.startSeq === message.turnStartSeq
         || message.sourceRequestId && run.kernelRequestIds?.includes(message.sourceRequestId))),
