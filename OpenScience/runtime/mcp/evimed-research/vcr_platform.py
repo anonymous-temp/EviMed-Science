@@ -150,6 +150,15 @@ OBJECT_SHAPES = {
 RECORD_KINDS = tuple(OBJECT_SHAPES["population (definition)"] + OBJECT_SHAPES["patient_set (scenario)"])
 # The kinds whose scenario states the truth a design assumes: a number read in a paper can be tied to its field there (`sources`).
 SOURCE_KINDS = ("design_analytic", "design_simulation", "design_grid", "assurance", "procova")
+
+# The generic design kinds the model opens first. A question that has a method of its own is answered by that kind, and in three live conversations
+# (2026-11-04: dose escalation, a single-arm look every ten patients, a three-level composite) the model had shaped a generic kind and then wrote its own
+# simulation for what another kind computes. The pointer rides on the shape answer, where the model is already choosing, and not in the tool description.
+DESIGN_POINTER_KINDS = ("design_analytic", "design_simulation", "design_grid")
+DESIGN_POINTER = ("This kind designs one trial of the usual kinds. If the question is of another sort, shape that kind instead of writing your own simulation: "
+                  "design_dose (3+3, BOIN, CRM, Keyboard: which dose is chosen), design_bayesian (a single-arm trial looked at every few patients: BOP2, "
+                  "predictive monitoring, against Simon), design_confirmatory (futility stops, sample-size re-estimation, multi-arm selection, enrichment), "
+                  "design_win_ratio (death, then admissions, then a score, compared in order), network_meta (which of several treatments is best).")
 HELP_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "vcr_scenario_help.json")
 # Where the VCR methods are in the runtime image. They are capability skill bodies, which delegation injects into a planned
 # capability's run; a plain conversation in a study uses these tools too and its skill catalogue does not list them, so the tools
@@ -1135,6 +1144,8 @@ def shape(arguments: dict) -> dict:
             data["rules"] = [_rule_line(rule) for rule in method["rules"]]
         if method.get("gridCells"):
             notes.append("A grid has at most %s cells (designs x truths), and every cell is a valid scenario of its own." % method["gridCells"])
+        if kind in DESIGN_POINTER_KINDS:
+            notes.append(DESIGN_POINTER)
         if kind == "literature_population":
             # On 2026-11-01 the run read this path's evidence bindings, saw no source to bind a pasted table to, and left for its own R.
             notes.append("A baseline table the person pasted, with no paper preserved to bind its numbers to, goes through generate_population with the "

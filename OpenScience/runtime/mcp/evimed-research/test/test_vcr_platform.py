@@ -332,6 +332,17 @@ class VcrToolDefinitionTests(unittest.TestCase):
         notes = vcr_platform.shape({"kind": "literature_population"})["data"]["notes"]
         self.assertTrue(any("generate_population" in note for note in notes))
 
+    def test_the_shape_of_a_generic_design_names_the_kinds_that_answer_dose_finding_single_arm_looks_composites_and_networks(self):
+        # Live 2026-11-04: the model shaped a generic design kind and then wrote its own simulation of what design_dose / design_bayesian compute.
+        for kind in ("design_analytic", "design_simulation", "design_grid"):
+            notes = " ".join(vcr_platform.shape({"action": "shape", "kind": kind})["data"]["notes"])
+            for other in ("design_dose", "design_bayesian", "design_confirmatory", "design_win_ratio", "network_meta"):
+                self.assertIn(other, notes, (kind, other))
+        self.assertTrue(all(kind in vcr_platform.JOB_KINDS for kind in ("design_dose", "design_bayesian", "design_confirmatory", "design_win_ratio", "network_meta")))
+        # A kind that is not a generic design carries no pointer.
+        notes = " ".join(vcr_platform.shape({"action": "shape", "kind": "design_dose"}).get("data", {}).get("notes", []))
+        self.assertNotIn("instead of writing your own simulation", notes)
+
     def test_every_row_of_shape_says_what_it_asks_of_a_person_and_no_object_does(self):
         # C2: the role is read off the schema by the platform (research_fact: required, no default, not a choice of words; defaultable: the
         # rest), printed on every key, and explained once.
