@@ -44,7 +44,7 @@ import {
 } from "@evimed/domain";
 
 import { VCR_FIELD_MAP_STATES, VCR_FIELD_ROLES, VCR_SOURCE_FILE_ROLES } from "./vcrPersistence.mjs";
-import { VcrStoreBase, vcrId } from "./vcrStoreBase.mjs";
+import { VcrStoreBase, lockSubject, vcrId } from "./vcrStoreBase.mjs";
 import { HttpError } from './security.mjs';
 
 export { VCR_FIELD_MAP_STATES, VCR_FIELD_ROLES, VCR_SOURCE_FILE_ROLES };
@@ -521,6 +521,11 @@ export class VcrDataStore extends VcrStoreBase {
         [entry.sourceId, status]);
       const source = vcrSourceFromRow(result.rows[0]);
       if (source) {
+        // A model's reasons about what this source held may repeat it, and nothing is frozen on them: they go with it, as an erasure takes them.
+        if (status === "withdrawn") {
+          await client.query(`DELETE FROM ${this.schema}.match_judgments j WHERE j.study_id = $1 AND j.document_ids ?| ARRAY(
+            SELECT id FROM ${this.schema}.source_files WHERE source_id = $2 AND study_id = $1 UNION SELECT id FROM ${this.schema}.document_projections WHERE source_id = $2 AND study_id = $1)`, [source.studyId, source.id]);
+        }
         await this.audit({
           client, studyId: source.studyId, userId: entry.userId ?? source.userId, actor: entry.actor ?? "",
           action: "source.status", object: source.id, detail: { status },
@@ -600,6 +605,13 @@ export class VcrDataStore extends VcrStoreBase {
     const role = oneOf(VCR_SOURCE_FILE_ROLES, entry.role, "A file role");
     const id = sourceFileId();
     return this.transaction(async (client) => {
+      // A person who withdrew is not stored again, whatever was in flight: the same lock their withdrawal holds, so this is either in its list or finds it on record.
+      const subjectKey = role === "document" ? String(/** @type {any} */ (entry.detail)?.subjectKey ?? "") : "";
+      if (subjectKey) {
+        await lockSubject(client, entry.studyId, subjectKey, { shared: true });
+        const gone = await client.query(`SELECT 1 FROM ${this.schema}.subject_withdrawals WHERE study_id = $1 AND subject_key = $2`, [entry.studyId, subjectKey]);
+        if (gone.rowCount) throw new HttpError(409, "vcr_subject_withdrawn", "This person has withdrawn consent; nothing more of theirs is stored.");
+      }
       const inserted = await client.query(
         `INSERT INTO ${this.schema}.source_files
            (id, source_id, study_id, user_id, role, name, format, location, sha256, bytes, row_count, column_count, profile, detail)
@@ -641,6 +653,64 @@ export class VcrDataStore extends VcrStoreBase {
     return rows.map(vcrSourceFileFromRow);
   }
 
+  /**
+   * The study's documents, what a roster plans from: no profile and no extraction detail, which is most of what a row weighs on a study of thousands.
+   * @param {string} studyId @param {string | null} [subjectKey]
+   * @returns {Promise<Array<{ id: string, sourceId: string, name: string, chars: number | null, subjectKey: string | null, visibleAt: string | null }>>}
+   */
+  async listDocumentRows(studyId, subjectKey = null) {
+    const rows = await this.rows(`SELECT id, source_id, name, detail->>'chars' AS chars, detail->>'subjectKey' AS subject_key, detail->>'visibleAt' AS visible_at FROM ${this.schema}.source_files
+      WHERE study_id = $1 AND role = 'document' AND erased_at IS NULL AND ($2::text IS NULL OR detail->>'subjectKey' = $2) ORDER BY created_at, id`, [studyId, subjectKey]);
+    return rows.map((row) => ({ id: String(row.id), sourceId: String(row.source_id), name: String(row.name), chars: row.chars == null ? null : Number(row.chars), subjectKey: row.subject_key ?? null, visibleAt: row.visible_at ?? null }));
+  }
+
+  /**
+   * What one import already took, for a later batch of it: its source, the entries, and what each person of the study holds, so a limit on a person is one count and not a read per row.
+   * @param {string} studyId @param {string} batch
+   */
+  async importProgress(studyId, batch) {
+    const entries = await this.rows(`SELECT source_id, detail->'import'->>'entry' AS entry FROM ${this.schema}.source_files WHERE study_id = $1 AND detail->'import'->>'batch' = $2`, [studyId, batch]);
+    const people = await this.rows(`SELECT detail->>'subjectKey' AS subject_key, count(*)::int AS documents, COALESCE(sum((detail->>'chars')::bigint), 0)::bigint AS chars FROM ${this.schema}.source_files
+      WHERE study_id = $1 AND role = 'document' AND erased_at IS NULL AND detail->>'subjectKey' IS NOT NULL GROUP BY 1`, [studyId]);
+    const imported = await this.one(`SELECT count(DISTINCT detail->>'subjectKey')::int AS people, COALESCE(sum(bytes), 0)::bigint AS bytes FROM ${this.schema}.source_files WHERE study_id = $1 AND detail->'import'->>'batch' = $2`, [studyId, batch]);
+    return { sourceId: entries[0]?.source_id ? String(entries[0].source_id) : null, entries: entries.map((row) => String(row.entry ?? "")).filter(Boolean),
+      perPerson: new Map(people.map((row) => [String(row.subject_key), { documents: Number(row.documents), chars: Number(row.chars) }])), people: Number(imported?.people ?? 0), bytes: Number(imported?.bytes ?? 0) };
+  }
+
+  /**
+   * Whether what was read of a person may still be used: whether they withdrew, which of these documents and reviewed texts are still live, whether a document has since been given a reviewed text
+   * this reading did not use, and the sources behind them. Nothing of any text.
+   * @param {string} studyId @param {string} subjectKey @param {readonly string[]} documentIds @param {readonly string[]} snapshotIds
+   */
+  async recordStanding(studyId, subjectKey, documentIds, snapshotIds) {
+    const row = await this.one(`SELECT EXISTS (SELECT 1 FROM ${this.schema}.subject_withdrawals w WHERE w.study_id = $1 AND w.subject_key = $2) AS withdrawn,
+        (SELECT array_agg(f.id) FROM ${this.schema}.source_files f WHERE f.study_id = $1 AND f.id = ANY($3::text[]) AND f.erased_at IS NULL) AS files,
+        (SELECT array_agg(p.id) FROM ${this.schema}.document_projections p WHERE p.study_id = $1 AND p.id = ANY($3::text[]) AND p.retired_at IS NULL) AS projections,
+        (SELECT array_agg(p.id) FROM ${this.schema}.document_projections p WHERE p.study_id = $1 AND p.document_id = ANY($3::text[]) AND p.retired_at IS NULL AND NOT (p.id = ANY($3::text[]))) AS newer,
+        (SELECT array_agg(DISTINCT source) FROM (
+          SELECT f.source_id AS source FROM ${this.schema}.source_files f WHERE f.study_id = $1 AND f.id = ANY($3::text[])
+          UNION SELECT p.source_id FROM ${this.schema}.document_projections p WHERE p.study_id = $1 AND p.id = ANY($3::text[])
+          UNION SELECT s.source_id FROM ${this.schema}.snapshots s WHERE s.study_id = $1 AND s.id = ANY($4::text[])) held) AS sources`, [studyId, subjectKey, [...documentIds], [...snapshotIds]]);
+    const live = new Set([...(row?.files ?? []), ...(row?.projections ?? [])].map(String));
+    return { withdrawn: row?.withdrawn === true, gone: documentIds.filter((id) => !live.has(String(id))).map(String), newer: (row?.newer ?? []).map(String), sourceIds: (row?.sources ?? []).map(String) };
+  }
+
+  /**
+   * The source of each document or reviewed text named.
+   * @param {string} studyId @param {readonly string[]} documentIds @returns {Promise<Map<string, string>>}
+   */
+  async sourcesOfDocuments(studyId, documentIds) {
+    if (!documentIds.length) return new Map();
+    const rows = await this.rows(`SELECT id, source_id FROM ${this.schema}.source_files WHERE study_id = $1 AND id = ANY($2::text[]) AND erased_at IS NULL
+      UNION SELECT id, source_id FROM ${this.schema}.document_projections WHERE study_id = $1 AND id = ANY($2::text[]) AND retired_at IS NULL`, [studyId, [...documentIds]]);
+    return new Map(rows.map((row) => [String(row.id), String(row.source_id)]));
+  }
+
+  /** @param {string} studyId @param {string} subjectKey */
+  async isSubjectWithdrawn(studyId, subjectKey) {
+    return Boolean(await this.one(`SELECT 1 FROM ${this.schema}.subject_withdrawals WHERE study_id = $1 AND subject_key = $2`, [studyId, subjectKey]));
+  }
+
   /** @param {string} studyId @param {string} fileId */
   async getSourceFile(studyId, fileId) {
     return vcrSourceFileFromRow(await this.one(
@@ -657,6 +727,8 @@ export class VcrDataStore extends VcrStoreBase {
       const row = (await client.query(
         `SELECT * FROM ${this.schema}.source_files WHERE id = $1 AND study_id = $2 FOR UPDATE`, [entry.fileId, entry.studyId])).rows[0];
       if (!row) return { removed: null, frozen: false };
+      // A judgment being saved for this person waits, and then finds the document gone.
+      if (row.detail?.subjectKey) await lockSubject(client, entry.studyId, String(row.detail.subjectKey));
       const used = await client.query(
         `SELECT 1 FROM ${this.schema}.snapshots WHERE source_id = $1 AND file_hashes @> $2::jsonb LIMIT 1`,
         [row.source_id, JSON.stringify([{ id: entry.fileId }])]);

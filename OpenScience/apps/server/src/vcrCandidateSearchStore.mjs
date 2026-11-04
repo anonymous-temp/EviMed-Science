@@ -57,7 +57,8 @@ export class VcrCandidateSearchStore extends VcrStoreBase {
     await this.transaction(async (client) => {
       await client.query(
         `INSERT INTO ${VCR_SCHEMA}.candidate_searches (id, study_id, user_id, subject_key, request, registries, rerank, collection, found, items)
-         VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7::jsonb,$8::jsonb,$9,$10::jsonb)`,
+         SELECT $1::text,$2::text,$3::text,$4::text,$5::jsonb,$6::jsonb,$7::jsonb,$8::jsonb,$9::integer,$10::jsonb
+         WHERE $4::text IS NULL OR NOT EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.subject_withdrawals w WHERE w.study_id = $2::text AND w.subject_key = $4::text)`,
         [id, study.id, study.userId, entry.subjectKey ?? null, JSON.stringify(entry.request), JSON.stringify(entry.registries),
           entry.rerank ? JSON.stringify(entry.rerank) : null, entry.collection ? JSON.stringify(entry.collection) : null, entry.found, JSON.stringify(entry.items)]);
       await client.query(

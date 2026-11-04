@@ -8,8 +8,9 @@
  *   thinking setting and the producer. A later job, a re-claimed one or a restart finds the row and pays nothing; a failed row is replaced
  *   the next time the pair is tried, and a finished one is never overwritten by a job. A conversation's own later answer replaces its
  *   earlier one, because that is the same producer changing its mind on the same inputs.
- * - **A withdrawn person has no row, whatever is in flight.** `save` writes nothing once the withdrawal is on record, so a job that was already
- *   holding the record's text cannot put a judgment back after `vcrErasureStore` took them away.
+ * - **A withdrawn person has no row, whatever is in flight, and neither does a deleted document.** `save` writes nothing once the withdrawal is on record or, for a job or a conversation,
+ *   once a document the answer read has gone, so a job that was already holding the record's text cannot put a judgment back after `vcrErasureStore` took it away. The two share a lock per
+ *   person (`lockSubject`), so a save caught between an erasure's delete and its commit waits and then finds nothing to stand on.
  * - **Deletion follows the study.** The rows cascade with their study, so a project's and an account's deletion take them in the transaction
  *   that removes the study; a soft-deleted study keeps them unreachable, as it keeps its facts.
  * - **`basis_changed` is text with two writers.** The erasure store writes a plain cause word (`document`, `permission`, ...); the registry watch writes
@@ -20,7 +21,7 @@
  */
 
 import { VCR_SCHEMA } from "./vcrPersistence.mjs";
-import { VcrStoreBase, vcrId } from "./vcrStoreBase.mjs";
+import { VcrStoreBase, lockSubject, vcrId } from "./vcrStoreBase.mjs";
 
 /** The key that says two rows are the same judgment, in code. @param {Record<string, any>} row */
 export const judgmentKey = (row) => [row.subjectKey, row.targetKind, row.targetId, row.targetHash, row.documentHash, row.mode, row.promptVersion, row.model, row.thinking, row.producer].join("\u0000");
@@ -28,6 +29,8 @@ export const judgmentKey = (row) => [row.subjectKey, row.targetKind, row.targetI
 /** The kind of the registry watch's mark, and the words a reader shows for it. */
 export const REGISTRY_RECORD_BASIS = "registry_record";
 export const REGISTRY_RECORD_LABEL = "登记记录已更新，结论来自旧版本";
+/** What stands in a job's frozen roster in place of someone who withdrew: a position in the job's marks still means the same pair, and the job no longer names them. */
+export const WITHDRAWN_SUBJECT_MARK = "withdrawn";
 /** What the watch's mark starts with, as a `LIKE` pattern: the column is text, and a cause word is not JSON. */
 const REGISTRY_MARK_PATTERN = `{"kind":"${REGISTRY_RECORD_BASIS}"%`;
 /** A trial read from a frozen collection is never refreshed: its text is the collection's, not the registry's. */
@@ -62,16 +65,23 @@ function judgmentOf(row) {
 /** The store of judgments. @extends VcrStoreBase */
 export class VcrMatchJudgmentStore extends VcrStoreBase {
   /**
-   * Write one judgment. Answers the stored row, or null when the person's consent has been withdrawn.
+   * Write one judgment. Answers the stored row, or null when the person's consent has been withdrawn or, for a finished row that says `liveDocuments`, when a document it read has gone since: a
+   * job still holding that text writes nothing of it back. Under the person's shared lock (`lockSubject`), so a save racing an erasure either comes before it, and the erasure takes the row, or
+   * comes after it, and finds what the erasure left.
    * @param {{ studyId: string, userId: string, subjectKey: string, targetKind: string, targetId: string, targetHash?: string, documentHash?: string, mode: string, promptVersion: string,
    *   model?: string, thinking?: string, producer: string, status: string, errorCode?: string | null, fit?: number | null, confidence?: number | null, verdict?: string | null,
-   *   answer?: Record<string, any>, usage?: Record<string, any>, documentIds?: readonly string[], jobId?: string | null }} entry
+   *   answer?: Record<string, any>, usage?: Record<string, any>, documentIds?: readonly string[], jobId?: string | null, liveDocuments?: boolean }} entry
    */
   async save(entry) {
-    const row = await this.one(`INSERT INTO ${VCR_SCHEMA}.match_judgments
+    return this.transaction(async (client) => {
+      await lockSubject(client, entry.studyId, entry.subjectKey, { shared: true });
+      const row = (await client.query(`INSERT INTO ${VCR_SCHEMA}.match_judgments
       (id, study_id, user_id, subject_key, target_kind, target_id, target_hash, document_hash, mode, prompt_version, model, thinking, producer, status, error_code, fit, confidence, verdict, answer, usage, document_ids, job_id)
       SELECT $1::text,$2::text,$3::text,$4::text,$5::text,$6::text,$7::text,$8::text,$9::text,$10::text,$11::text,$12::text,$13::text,$14::text,$15::text,$16::integer,$17::double precision,$18::text,$19::jsonb,$20::jsonb,$21::jsonb,$22::text
       WHERE NOT EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.subject_withdrawals w WHERE w.study_id=$2::text AND w.subject_key=$4::text)
+        AND (NOT $23::boolean OR NOT EXISTS (SELECT 1 FROM jsonb_array_elements_text($21::jsonb) named(id)
+          WHERE NOT EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.source_files f WHERE f.study_id=$2::text AND f.id=named.id AND f.erased_at IS NULL)
+            AND NOT EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.document_projections p WHERE p.study_id=$2::text AND p.id=named.id AND p.retired_at IS NULL)))
       ON CONFLICT (study_id, subject_key, target_kind, target_id, target_hash, document_hash, mode, prompt_version, model, thinking, producer) DO UPDATE SET
         status=EXCLUDED.status, error_code=EXCLUDED.error_code, fit=EXCLUDED.fit, confidence=EXCLUDED.confidence, verdict=EXCLUDED.verdict, answer=EXCLUDED.answer, usage=EXCLUDED.usage,
         document_ids=EXCLUDED.document_ids, job_id=EXCLUDED.job_id, basis_changed=NULL, updated_at=now()
@@ -79,13 +89,14 @@ export class VcrMatchJudgmentStore extends VcrStoreBase {
       RETURNING *`,
     [vcrId("matchJudgment"), entry.studyId, entry.userId, entry.subjectKey, entry.targetKind, entry.targetId, entry.targetHash ?? "", entry.documentHash ?? "", entry.mode, entry.promptVersion,
       entry.model ?? "", entry.thinking ?? "", entry.producer, entry.status, entry.errorCode ?? null, entry.fit ?? null, entry.confidence ?? null, entry.verdict ?? null,
-      JSON.stringify(entry.answer ?? {}), JSON.stringify(entry.usage ?? {}), JSON.stringify(entry.documentIds ?? []), entry.jobId ?? null]);
-    if (row) return judgmentOf(row);
-    // Nothing written: a finished row is what is held for this key, or the person has withdrawn.
-    const held = await this.one(`SELECT * FROM ${VCR_SCHEMA}.match_judgments WHERE study_id=$1 AND subject_key=$2 AND target_kind=$3 AND target_id=$4 AND target_hash=$5 AND document_hash=$6
-      AND mode=$7 AND prompt_version=$8 AND model=$9 AND thinking=$10 AND producer=$11`,
-    [entry.studyId, entry.subjectKey, entry.targetKind, entry.targetId, entry.targetHash ?? "", entry.documentHash ?? "", entry.mode, entry.promptVersion, entry.model ?? "", entry.thinking ?? "", entry.producer]);
-    return held ? judgmentOf(held) : null;
+      JSON.stringify(entry.answer ?? {}), JSON.stringify(entry.usage ?? {}), JSON.stringify(entry.documentIds ?? []), entry.jobId ?? null, entry.liveDocuments === true && entry.status === "done"])).rows[0];
+      if (row) return judgmentOf(row);
+      // Nothing written: a finished row is what is held for this key, or what it read has gone.
+      const held = (await client.query(`SELECT * FROM ${VCR_SCHEMA}.match_judgments WHERE study_id=$1 AND subject_key=$2 AND target_kind=$3 AND target_id=$4 AND target_hash=$5 AND document_hash=$6
+        AND mode=$7 AND prompt_version=$8 AND model=$9 AND thinking=$10 AND producer=$11`,
+      [entry.studyId, entry.subjectKey, entry.targetKind, entry.targetId, entry.targetHash ?? "", entry.documentHash ?? "", entry.mode, entry.promptVersion, entry.model ?? "", entry.thinking ?? "", entry.producer])).rows[0];
+      return held ? judgmentOf(held) : null;
+    });
   }
 
   /**

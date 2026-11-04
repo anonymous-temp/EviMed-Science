@@ -110,7 +110,7 @@ import {
   VCR_MATCHING_VOCABULARY_VERSION, VCR_MATCHING_EVALUATOR_VERSION, matchingInputDigest, assessSubject, eligibilityCounts, frozenAsOf, criterionLanguageKeys, requiresLanguageJudgment,
 } from "./vcrMatching.mjs";
 import { VCR_JOB_PURPOSE } from "./vcrJobs.mjs";
-import { createFactExtractor, createMatchBatch, createMatchBatchCounters, createMatchExtractExecutor } from "./vcrMatchBatch.mjs";
+import { createFactExtractor, createMatchBatch, createMatchBatchCounters, createMatchExtractExecutor, matchBatchMinCell } from "./vcrMatchBatch.mjs";
 import { createRecordsImport, createRecordsImportExecutor } from "./vcrRecordsImport.mjs";
 import { createLongTableReader } from "./vcrLongTables.mjs";
 import { VcrCandidateRerank, createRerankMeter } from "./vcrCandidateRerank.mjs";
@@ -459,12 +459,12 @@ export function vcrDocumentsSeam({ dataPlane, passagesMinChars = 40_000 }) {
     /**
      * Every record of the study with its owner and length, no text: what the batch reading plans from (D4). A record whose person
      * the plane did not note is not a record of anyone and is left out.
-     * @param {any} study
+     * @param {any} study @param {string | null} [subjectKey] one person's, when a job has to read them again
      * @returns {Promise<Array<{ id: string, subjectKey: string, chars: number | null }>>}
      */
-    async roster(study) {
+    async roster(study, subjectKey = null) {
       if (!dataPlane) return [];
-      const listed = await dataPlane.listDocuments({ studyId: study.id, principal: study.userId });
+      const listed = await dataPlane.listDocuments({ studyId: study.id, principal: study.userId, subjectKey });
       return listed.filter((/** @type {any} */ entry) => entry.subjectKey)
         .map((/** @type {any} */ entry) => ({ id: String(entry.id), subjectKey: String(entry.subjectKey), chars: Number.isFinite(Number(entry.chars)) ? Number(entry.chars) : null, visibleAt: entry.visibleAt ?? null }));
     },
@@ -472,6 +472,17 @@ export function vcrDocumentsSeam({ dataPlane, passagesMinChars = 40_000 }) {
     async longTables(study) {
       const opened = await dataPlane?.openLongTables?.({ studyId: study.id, principal: study.userId, purpose: VCR_JOB_PURPOSE, cloudContext: study.cloudContext ?? null });
       return opened ? createLongTableReader(opened) : null;
+    },
+    /** Whether what was read of this person may still go to a model: null when it may, otherwise why not (`VcrDataPlane.recordStands`).
+     * @param {any} study @param {{ subjectKey: string, documentIds?: readonly string[], snapshotIds?: readonly string[] }} input */
+    async recordStands(study, input) {
+      return dataPlane ? dataPlane.recordStands({ studyId: study.id, ...input }) : null;
+    },
+    /** What this reader may see of saved judgments, by what each read (`VcrDataPlane.judgeRecordReads`).
+     * @param {any} study @param {{ id: string } | null} viewer @param {ReadonlyArray<{ documentIds?: readonly string[], snapshots?: ReadonlyArray<{ id: string, fields?: readonly string[] }> }>} records */
+    async judgeReads(study, viewer, records) {
+      if (!dataPlane || !viewer) return { patientLevel: false, permitted: records.map(() => false) };
+      return dataPlane.judgeRecordReads({ studyId: study.id, principal: viewer.id, records, purpose: VCR_JOB_PURPOSE });
     },
     /** What a run was shown of a document, for the reading it has been through: the same record a window read writes.
      * @param {any} study @param {string} documentId @param {string} text @param {number} start @param {number} end */
@@ -1208,6 +1219,7 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   }, { fetchImpl: call, report });
   const evidence = createVcrEvidencePipeline({
     store: evidenceStore, registry, jobs, trialCorpus, reranker: candidateReranker, searches: candidateSearches, meter: rerankMeter,
+    summaryCloudAllowed: dataPlane ? (/** @type {{ studyId: string, subjectKey?: string | null }} */ entry) => dataPlane.subjectCloudAllowed(entry) : null,
     retrieval: { retrieveMax: config.vcrCandidateRetrieveMax, deadlineMs: config.vcrCandidateRetrieveDeadlineMs, concurrency: config.vcrCandidateRetrieveConcurrency },
   });
   jobs.baselineVerifier = input => evidence.verifyBaselineTable(input);
@@ -1280,6 +1292,7 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   // Many patients' records taken in as a job. The originals are the upload receipts', which the server builds after this module: until it says so, nothing can be located.
   const recordsOriginals = { receipts: /** @type {any} */ (null) };
   if (dataPlane) {
+    dataPlane.attach({ originals: { forget: (/** @type {{ userId: string, projectId: string }} */ owner, /** @type {readonly string[]} */ digests) => recordsOriginals.receipts?.forgetOriginals?.(owner, digests) ?? 0 } });
     jobs.localExecutors["matching.import_records"] = createRecordsImportExecutor({ store, dataStore, dataPlane, config, usageLedger, fetchImpl: call, report,
       locate: async (owner, handle) => recordsOriginals.receipts?.locate(owner, handle) ?? null });
   }
@@ -1306,7 +1319,7 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
     platform: { enabled: Boolean(config.vcrPlatformPacksEnabled), publisherId: PLATFORM_PUBLISHER_USER_ID, sourceChanges, entityVocabulary, officialZoneForKeys,
       people: (ids) => store.personNames(ids) } });
   // The matching page's reader of the saved judgments, and the start of the judging job from the page.
-  const matchResults = new VcrMatchResults({ database: productDatabase, judgments: matchJudgments, documents, matchStore });
+  const matchResults = new VcrMatchResults({ database: productDatabase, judgments: matchJudgments, documents, matchStore, minCell: matchBatchMinCell(config) });
   service.attach({ corrections, knowledge, engineProbe, erasure, matchJudgments: matchJudgmentReads, matchJudge, matchResults });
   // The study's project carries the study's name: the first definition names a draft, and the sidebar lists projects. A project the
   // researcher renamed since is left alone, like GEO's — the old name is the study's own, or one nobody gave.
@@ -1573,7 +1586,7 @@ export function vcrMetricFamilies(enabled, snapshot) {
       Object.entries(snapshot.matchBatch).map(([kind, value]) => ({ labels: { kind }, value: Number(value) })));
   }
   if (snapshot.matchJudge) {
-    add("match_judge_total", "What judging patients against trials did since this process started: jobs started, pairs judged and failed, model calls retried, jobs stopped by a budget or a run of upstream failures, and jobs canceled.", "counter",
+    add("match_judge_total", "What judging patients against trials did since this process started: jobs started, pairs judged and failed, model calls retried, jobs stopped by a budget, a ceiling or a run of upstream failures, jobs canceled, and records that changed under a job.", "counter",
       Object.entries(snapshot.matchJudge).map(([kind, value]) => ({ labels: { kind }, value: Number(value) })));
   }
   if (snapshot.registryWatch) {

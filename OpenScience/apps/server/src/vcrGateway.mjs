@@ -3051,7 +3051,7 @@ async function startJob(vcr, study, request, { ownerView = false } = {}) {
     if (typeof vcr.service.forModel !== "function") throw gatewayError(503, "vcr_gateway_unavailable", "这份读取结果无法确认不含小样本格子，已整体拒绝。");
     // A selection that names a search (`searchId`, with `candidateLimit`) takes its trials from that search's receipt, in the order the search kept them.
     const selection = await resolveSearchSelection(vcr, study, request.selection);
-    return vcr.service.forModel(await vcr.matchJudge.start(study, selection), { projection: "match_judge_start", ownerView });
+    return vcr.service.forModel(await vcr.matchJudge.start(study, selection, { exact: ownerView === true }), { projection: "match_judge_start", ownerView });
   }
   if (request.kind === "pool_evidence") {
     if (!vcr.evidence?.poolParameter) throw gatewayError(503, "vcr_gateway_unavailable", "证据参数化未接入本部署：这一步暂不可用。");

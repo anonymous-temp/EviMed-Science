@@ -1,6 +1,7 @@
 /** Successful authenticated uploads retain original bytes without publishing them to the knowledge base.
  * Uses the existing account/project document ledger and project storage deletion lifecycle. */
 import { createHash } from 'node:crypto';
+import fs from 'node:fs/promises';
 import path from 'node:path';
 import { HttpError, openScopedFileNoFollow, readStableFileHandle, resolveScopedPath, writeFileAtomicNoFollow } from './security.mjs';
 import { VCR_DATA_INTAKE_CONTRACT } from './vcrDataIntake.mjs';
@@ -121,8 +122,8 @@ export function createVcrUploadReceipts({ documents, sources, write, clone = nul
       return patientReceipt(row) || archiveReceipt(row) ? null : row;
     },
     /**
-     * Where an original of this project stands, for a job that streams it: its own bytes are checked by whoever reads them, against the digest held here. No bytes are read here, and the
-     * job's scenario names the handle and never the path, because a chart's file name is a person's more often than not.
+     * Where an original of this project stands, for a job to take it from: the plane's `stageOriginal`, which never follows a link and holds what it copies to the digest given here, because this
+     * directory is one a run can write to. No bytes are read here, and the job's scenario names the handle and never the path, because a chart's file name is a person's more often than not.
      * @param {{ userId: string, projectId: string }} owner @param {{ sourceId: string, generation: number, sha256: string }} handle
      */
     async locate(owner, { sourceId, generation, sha256 }) {
@@ -141,6 +142,32 @@ export function createVcrUploadReceipts({ documents, sources, write, clone = nul
       const row = await findReceipt(origin.userId, sourceId);
       if (!row || row.projectId !== origin.projectId || (row.payload.sessionId != null && row.payload.sessionId !== origin.rootSessionId)) return null;
       return receiptHandle(row);
+    },
+    /**
+     * A person withdrew: the uploads whose bytes were their document go, with their receipts. By digest, within this project; a planted link is removed, never followed.
+     * @param {{ userId: string, projectId: string }} owner @param {readonly string[]} digests @returns {Promise<number>} how many went
+     */
+    async forgetOriginals(owner, digests) {
+      if (!resolveProject || !digests.length) return 0;
+      const found = await documents.database.query(`SELECT id, payload FROM evimed_product.documents WHERE user_id=$1 AND project_id=$2 AND kind='preferences' AND deleted_at IS NULL
+        AND payload->>'recordType'=$3 AND payload->'fingerprint'->>'sha256'=ANY($4::text[])`, [owner.userId, owner.projectId, recordType, [...digests]]);
+      if (!found.rows.length) return 0;
+      const project = await resolveProject(owner);
+      if (project.id !== owner.projectId || project.userId !== owner.userId) return 0;
+      let gone = 0;
+      for (const row of found.rows) {
+        const relative = String(row.payload?.paths?.[0] ?? '');
+        const sha256 = String(row.payload?.fingerprint?.sha256 ?? '');
+        if (relative !== originalPath(sha256, path.posix.basename(relative))) continue;
+        const file = resolveScopedPath(project.baseDir, relative);
+        await fs.rm(file, { force: true });
+        // The digest's folder holds this upload's file and nothing else of ours; another receipt of the same bytes under another name keeps it.
+        await fs.rmdir(path.dirname(file)).catch(() => {});
+        const held = await documents.get(owner.userId, 'preferences', row.id);
+        if (held) await documents.remove(owner.userId, 'preferences', row.id, held.revision);
+        gone += 1;
+      }
+      return gone;
     },
     async readPatientOriginal(origin, { sourceId, generation, sha256 }) {
       if (!resolveProject || !/^upl_[a-f0-9]{40}$/.test(sourceId) || !Number.isSafeInteger(generation)

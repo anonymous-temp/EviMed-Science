@@ -37,6 +37,7 @@ function memoryStore() {
       return { file, created: true };
     },
     async listSourceFilesForStudy() { return [...files]; },
+    async isSubjectWithdrawn() { return false; },
     async getSourceFile(studyId, id) { return files.find(file => file.id === id) ?? null; },
     async deleteSourceFile({ fileId }) {
       const index = files.findIndex(file => file.id === fileId);
@@ -147,7 +148,7 @@ test('with no parser, a scanned PDF and a picture answer that they have no text 
 test('with the in-house parser, a scanned PDF and a picture are read there, under a neutral name, for the text alone; a text PDF stays in the deployment', { skip: !HAVE_PYPDF && 'pypdf is needed' }, async t => {
   const asked = [];
   const parser = { configured: true, async parseBytes(input) { asked.push(input); return { text: `扫描件的文字足够长，可以读：${input.filename}`, pageMap: [{ page: 1, start: 0, end: 14, status: 'ok' }], extractor: { name: 'evimed-extract', version: 't', endpoint: 'parse' } }; } };
-  const w = await world(t, { scanReader: createVcrScanReader({ parser }) });
+  const w = await world(t, { config: { vcrProviderAgreements: true, deepseekBaseUrl: 'https://api.example.org' }, scanReader: createVcrScanReader({ parser }) });
   const scan = await w.upload('张三的扫描件.pdf', await w.read('scan.pdf'));
   assert.equal(scan.file.detail.extraction.reader, 'in_house_parser');
   assert.deepEqual(scan.file.detail.extraction.pageMap, [{ page: 1, start: 0, end: 14 }]);
@@ -161,9 +162,9 @@ test('with the in-house parser, a scanned PDF and a picture are read there, unde
   assert.equal(asked.length, count, 'a document with a text layer is not sent anywhere');
   const down = await world(t, { scanReader: createVcrScanReader({ parser: { configured: false } }) });
   await assert.rejects(down.upload('fax.png', Buffer.from('x')), { status: 503, code: 'vcr_document_parser_unavailable' });
-  const broken = await world(t, { scanReader: createVcrScanReader({ parser: { configured: true, async parseBytes() { throw Object.assign(new Error('x'), { code: 'source_parser_timeout' }); } } }) });
+  const broken = await world(t, { config: { vcrProviderAgreements: true, deepseekBaseUrl: 'https://api.example.org' }, scanReader: createVcrScanReader({ parser: { configured: true, async parseBytes() { throw Object.assign(new Error('x'), { code: 'source_parser_timeout' }); } } }) });
   await assert.rejects(broken.upload('fax.png', Buffer.from('x')), { status: 502, code: 'vcr_document_parser_failed' });
-  const empty = await world(t, { scanReader: createVcrScanReader({ parser: { configured: true, async parseBytes() { return { text: '   ' }; } } }) });
+  const empty = await world(t, { config: { vcrProviderAgreements: true, deepseekBaseUrl: 'https://api.example.org' }, scanReader: createVcrScanReader({ parser: { configured: true, async parseBytes() { return { text: '   ' }; } } }) });
   await assert.rejects(empty.upload('fax.png', Buffer.from('x')), { status: 422, code: 'vcr_document_needs_text' });
 });
 
