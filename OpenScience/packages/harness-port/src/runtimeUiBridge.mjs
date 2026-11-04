@@ -6,9 +6,7 @@ import { mainViewSession } from './runtimeUiKit.mjs';
  * session id or a child's catalogue address); `sessions.open` and
  * `sessions.openSubagent` are gone.
  */
-/** The kernel's automation-tasks page (`PANEL_ID` of `dsh-client-ui-schedule`). */
-const SCHEDULED_TASKS_PANEL = 'schedules';
-export const inject = ['sessions', 'conversation', 'connection', 'workspaces', 'uiWorkspace', 'layout'];
+export const inject = ['sessions', 'conversation', 'connection', 'workspaces', 'uiWorkspace'];
 
 /**
  * The frame's half of the channel to the hosted shell.
@@ -98,6 +96,22 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     if (attached.workspaceId !== workspace.workspaceId || !workspaceContains(attached, sessionId)) throw new Error('Native workspace attachment unavailable');
     return sessionId;
   }
+  /** The kernel's automation-tasks page (`PANEL_ID` of `dsh-client-ui-schedule`). Inside the body: bodies travel as text, without their module. */
+  const SCHEDULED_TASKS_PANEL = 'schedules';
+  /** Optional, like every service of a page (`RUNTIME_UI_OPTIONAL_SERVICES`): a required one that is absent would park this whole bridge. @type {any} */
+  let layout = null;
+  ctx.inject?.(['layout'], (/** @type {any} */ scope) => { layout = scope.layout; });
+  /**
+   * Show one of the kernel's main-view pages. Its row registers the page in its own time, and `selectPanel` throws on one it does not
+   * know yet. A page that never comes leaves the conversation open, which is what the person would have without it.
+   * @param {string} panel
+   */
+  async function showPanel(panel) {
+    for (let attempt = 0; attempt < 50 && !disposed; attempt += 1) {
+      if (layout?.hasMainPanel(panel)) { layout.selectPanel(panel); return; }
+      await new Promise(resolve => (target.setTimeout ?? globalThis.setTimeout)(resolve, 100));
+    }
+  }
   /** @param {any} command */
   function schedule(command) {
     const { requestId, intent, request } = command;
@@ -137,7 +151,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
         target.__EVIMED_RESULT_REVISION__?.clear(); target.__EVIMED_GEO_PLAN__?.clear(); target.__EVIMED_VCR_SELECTION__?.clear();
         ctx.uiWorkspace.openSession(sessionId);
         // After the open, which clears the main view's panel: the kernel's own task page, the one global page the shell asks for.
-        if (intent.panel === SCHEDULED_TASKS_PANEL) ctx.layout.selectPanel(SCHEDULED_TASKS_PANEL);
+        if (intent.panel === SCHEDULED_TASKS_PANEL) await showPanel(SCHEDULED_TASKS_PANEL);
         let draftRestored;
         if (intent.draft !== undefined || intent.resultRevision || intent.geoPlanContext || (Array.isArray(intent.references) && intent.references.length)) {
           const scope = ctx.sessions.scope(sessionId);
