@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "statistical-analysis",
-  "version": "sha256:dd8ca61811a637f2adb685188cd438a61f1699620100b4d952c8b6c85eeda0cb",
+  "version": "sha256:4026d384f691d2369ec0c53a9e0c1b1b4af92a6d6fe3fb23d6494ec24b6788bb",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 22,
@@ -700,6 +700,34 @@
                     "maxLength": 128
                   },
                   "description": "Former names of this column: a renamed column keeps what is known about it."
+                },
+                "concept": {
+                  "type": "string",
+                  "maxLength": 80,
+                  "description": "The variable a study's criteria ask about that this column answers."
+                },
+                "valueMap": {
+                  "type": "object",
+                  "properties": {
+                    "values": {
+                      "type": "object",
+                      "maxProperties": 30,
+                      "additionalProperties": {
+                        "type": "string",
+                        "enum": [
+                          "present",
+                          "absent",
+                          "unknown"
+                        ]
+                      },
+                      "description": "What each code means for the event the column records (0 absent, 1 present)."
+                    },
+                    "measurement": {
+                      "type": "boolean",
+                      "description": "A number in the column is a measured value, not an indicator."
+                    }
+                  },
+                  "additionalProperties": false
                 }
               },
               "required": [

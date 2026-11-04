@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-matching",
-  "version": "sha256:c5a9581273eb3eb204cac63d2731c44b620c77074dda52c1cddc478630d6a8e6",
+  "version": "sha256:91268a2fef53262a74a827d69f46c1cae155b79f08f0ec0597bb61f06a0ae0d5",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 30,
@@ -832,6 +832,34 @@
                     "maxLength": 128
                   },
                   "description": "Former names of this column: a renamed column keeps what is known about it."
+                },
+                "concept": {
+                  "type": "string",
+                  "maxLength": 80,
+                  "description": "The variable a study's criteria ask about that this column answers."
+                },
+                "valueMap": {
+                  "type": "object",
+                  "properties": {
+                    "values": {
+                      "type": "object",
+                      "maxProperties": 30,
+                      "additionalProperties": {
+                        "type": "string",
+                        "enum": [
+                          "present",
+                          "absent",
+                          "unknown"
+                        ]
+                      },
+                      "description": "What each code means for the event the column records (0 absent, 1 present)."
+                    },
+                    "measurement": {
+                      "type": "boolean",
+                      "description": "A number in the column is a measured value, not an indicator."
+                    }
+                  },
+                  "additionalProperties": false
                 }
               },
               "required": [
@@ -1454,7 +1482,7 @@
     {
       "name": "mcp__evimed__term_normalize",
       "source": "mcp",
-      "description": "Normalize a medical term using a deterministic bilingual vocabulary. Deterministic and offline by default; set annotate to also look the term up in PubTator3 and return its concept identifiers, which is what a relation query in literature_search is addressed with. An annotation is an identifier, not a normalization. Set mesh to map an English term to its MeSH descriptor: entry terms, tree numbers, narrower descriptors and a PubMed query that searches them.",
+      "description": "Normalize a medical term, Chinese or English. With the deployment's terminology file, `matches` give the entities the term names: English and Chinese names, synonyms, codes (ICD-10, MeSH, NCIt, HPO, HGNC, CIViC) and their source and version; without it a short built-in table answers and the answer says so. A match is a name and its codes, not a finding about a patient. scale returns the wording of a scale the term names (ECOG, Karnofsky, NYHA, Child-Pugh, Glasgow Coma). annotate adds PubTator3 concept identifiers, which a relation query in literature_search is addressed with; mesh maps an English term to its MeSH descriptor (entry terms, tree numbers, a PubMed query).",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1477,6 +1505,42 @@
             "type": "boolean"
           },
           "mesh": {
+            "type": "boolean"
+          },
+          "language": {
+            "type": "string",
+            "enum": [
+              "zh",
+              "en"
+            ]
+          },
+          "kinds": {
+            "type": "array",
+            "maxItems": 12,
+            "items": {
+              "type": "string",
+              "enum": [
+                "disease",
+                "finding",
+                "drug",
+                "chemical",
+                "gene",
+                "variant",
+                "procedure",
+                "lab",
+                "anatomy",
+                "organism",
+                "phenotype",
+                "other"
+              ]
+            }
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10
+          },
+          "scale": {
             "type": "boolean"
           }
         },
@@ -1557,7 +1621,7 @@
     {
       "name": "mcp__evimed__vcr_read",
       "source": "mcp",
-      "description": "Read this conversation's research. what=study opens compact context and enables specialist tools. patient_context lists original text uploads and authenticated human messages (messageSeq); follow nextUploadRead for more uploads. subject_document reads original material; kind=sentences numbers it. trial_registry_record reads one registry (filter registryId). contracts gives write syntax before any task exists; data_intake lists upload handles; candidate_trials reads patient trial matches. Any eligibility verdict you deliver is copied from the saved read-back (matching or candidate_trials with filter.subjectKey), never retyped.",
+      "description": "Read this conversation's research. what=study opens compact context and enables specialist tools. patient_context lists original uploads (text, PDF, Word, scans), knowledge-base documents, this study's patients and authenticated human messages (messageSeq); follow nextUploadRead for more uploads. subject_document reads original material; kind=sentences numbers it. trial_registry_record reads one registry (filter registryId). contracts gives write syntax before any task exists; data_intake lists upload handles; candidate_trials reads patient trial matches. Any eligibility verdict you deliver is copied from the saved read-back (matching or candidate_trials with filter.subjectKey), never retyped.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1786,7 +1850,7 @@
     {
       "name": "mcp__evimed__vcr_write",
       "source": "mcp",
-      "description": "Save research objects, never calculated results. data_intake imports/maps/freezes uploads (read contracts). patient_context takes data={sourceId,generation,sha256} from uploads, {sourceId} for a knowledge-base original, or {messageSeq} for a human case. task_context opens a task. A fact for structured screening states only what its quote says: what the text does not mention is unknown, never negated. trial_judgment saves your own judgment of a patient against a trial or protocol, with sentence ids as evidence. A candidate_trial's criteria are that one trial's own eligibility lines. Use the VCR workflow skill for object contracts (read /opt/evimed/capability-skills/vcr-matching/SKILL.md before matching a patient to trials; vcr-protocol, vcr-evidence, vcr-analysis and vcr-package sit beside it; none is in the skill catalogue) and vcr_simulate action=shape for numerical inputs.",
+      "description": "Save research objects, never calculated results. data_intake imports/maps/freezes uploads (read contracts). patient_context takes data={sourceId,generation,sha256} from uploads, {sourceId} for a knowledge-base original, or {messageSeq} for a human case; add subjectKey when it is about a patient already here, and their trials are re-judged. task_context opens a task. A fact for structured screening states only what its quote says: what the text does not mention is unknown, never negated. trial_judgment saves your own judgment of a patient against a trial or protocol, with sentence ids as evidence. A candidate_trial's criteria are that one trial's own eligibility lines. Use the VCR workflow skill for object contracts (read /opt/evimed/capability-skills/vcr-matching/SKILL.md before matching a patient to trials; vcr-protocol, vcr-evidence, vcr-analysis and vcr-package sit beside it; none is in the skill catalogue) and vcr_simulate action=shape for numerical inputs.",
       "inputSchema": {
         "type": "object",
         "properties": {
