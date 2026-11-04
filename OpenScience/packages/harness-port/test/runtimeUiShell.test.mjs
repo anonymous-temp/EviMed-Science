@@ -257,6 +257,16 @@ test("LoopX's goal bar gets the lower edge it was drawn without, and the dock's 
   assert.match(surfaces.goalbar.css, /\._xPytW_panel\{[^}]*border-bottom:0/);
 });
 
+test("LoopX's goal bar shows a reader its progress, state and button, never its product name or the goal's internal id", () => {
+  const css = shellStylesheet(GEOMETRY_KERNEL_PIN);
+  const bar = '[data-slot="conversation.input.dock"] > [class$="_dock"] > section[aria-busy]';
+  assert.ok(css.includes(`${bar} [class$="_brand"],${bar} [class$="_goalId"]{display:none !important}`));
+  // What the bundle draws: its name and the goal's id as literal text, in the two elements the rule names, beside what stays.
+  assert.match(surfaces.goalbar.html, /<span class="_xPytW_brand">LoopX<\/span><span class="_xPytW_goalId"[^>]*>workspace-goal<\/span>/);
+  for (const stays of ['_progressText', '_status', '_action']) assert.ok(surfaces.goalbar.html.includes(`_xPytW${stays}"`), `${stays} is drawn`);
+  assert.doesNotMatch(css, /\[class\$="_(?:progress|progressText|status|action)"\]\{display:none/);
+});
+
 test("the `/` menu's skill rows show their name alone; the commands' own Chinese lines stay", () => {
   const css = shellStylesheet(GEOMETRY_KERNEL_PIN);
   assert.ok(css.includes('[id^="dsh-slash-option-skill-"] [class$="_itemDescription"]{display:none}'));

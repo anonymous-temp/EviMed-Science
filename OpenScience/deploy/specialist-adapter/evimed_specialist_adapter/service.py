@@ -12,6 +12,7 @@ import json
 import os
 import re
 import secrets
+import signal
 import stat
 import subprocess
 import sys
@@ -395,6 +396,17 @@ def _heartbeat(
 
     def beat() -> None:
         while not stop.wait(_HEARTBEAT_SECONDS):
+            # The job's whole directory is gone: its account or project was deleted while it ran. Nobody will read what it writes, and a
+            # file it writes now would put back a directory the deletion took (2026-11-03: a report written 34 seconds after an account was
+            # deleted). The worker started this process group for the job, so ending the group ends the engine with it.
+            if not state_path.parent.exists():
+                for group in set(isolated_job.RUNNING_GROUPS):
+                    try:
+                        os.killpg(group, signal.SIGKILL)
+                    except OSError:
+                        pass
+                os.killpg(os.getpgrp(), signal.SIGKILL)
+                return
             try:
                 current = read(state_path)
                 if current.get("status") != "running" or current.get("workerPid") != pid:

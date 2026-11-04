@@ -334,6 +334,9 @@ import { createAutopilotRoutes } from "./autopilotRoutes.mjs";
 import { researchDbCredentialsFromConfig } from "./researchDbCredentials.mjs";
 import { createResearchDbPublisher } from "./researchDbPublish.mjs";
 import { RESEARCH_GOAL_ROUTE, researchGoalBlock, researchGoalPrompt } from "./researchGoal.mjs";
+import { ResearchGoals } from "./researchGoalService.mjs";
+import { createResearchGoalRoutes } from "./researchGoalRoutes.mjs";
+import { researchGoalMetricFamilies } from "./researchGoalMetrics.mjs";
 import { researchDbMetricFamilies } from "./researchDbMetrics.mjs";
 import { createResearchDbRoutes } from "./researchDbRoutes.mjs";
 import { ResearchDbStaging } from "./researchDbStaging.mjs";
@@ -4386,6 +4389,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   /** @type {{ origins: EvidenceOrigins, publisher: EvidenceCardFromResult | null, continuation: EvidenceContinuation, authors: EvidenceAuthors,
    *   verification: ReturnType<typeof createEvidenceSourceVerification> } | null} */
   let evidencePublish = null;
+  /** 主动科研's long research goals (`researchGoalService.mjs`); composed further down, once what it acts through exists. @type {ResearchGoals | null} */
+  let researchGoals = null;
   agentRuns = new AgentRunStore(researchSessions, {
     authorizeReservation: (project, input) => {
       if (!isDataAnalysisProject(project)) return;
@@ -4735,6 +4740,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // an evaluation harness says so at dispatch (`automated`), and an
       // autopilot episode or its verification is known here — the episode's
       // digest is its result, and that is an ordinary notice.
+      // A goal's round: a person's stop, and the guard over rounds without progress and over the goal's spend. Never throws.
+      await researchGoals?.observeRound(project, run);
       if (notificationService && runFinishedReachesInbox(run, {
         internalProject: internalFor(project.userId, project.id),
         automated: automatedRun(run), autopilotOwned: autopilotOwned === true,
@@ -7254,6 +7261,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (await personalLibraryRoutes(req, res)) return;
       if (await library.routes(req, res)) return;
       if (await researchDbRoutes(req, res)) return;
+      if (await researchGoalRoutes(req, res)) return;
       if (await autopilotRoutes(req, res)) return;
       if (await evidenceUpkeepRoutes(req, res)) return;
       if (await evidenceZoneRoutes(req, res)) return;
@@ -8242,6 +8250,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           await resident.delivered();
         });
         const run = pluginService ? await pluginService.withAdmission(ctx.project, dispatch) : await dispatch();
+        if (researchGoal) await researchGoals?.register(ctx.project, { sessionId: body.sessionId }).catch(() => {});
         sendJson(res, 202, { data: run });
         return;
       }
@@ -8546,6 +8555,15 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         await removeVcrArtifacts({ dataPlaneDir: config.vcrDataPlaneDir, artifacts: vcrArtifacts, engineRemove: vcr?.removeEngineJob ?? null,
           report: (code) => process.stderr.write(`vcr deletion cleanup: ${code}\n`) });
         taskManager.purgeUser(user);
+        // A job a specialist engine was running ends itself when it sees its directory gone, a heartbeat later, and may have written once more
+        // first (2026-11-03: a report written 34 seconds after the deletion put the account's directory back). So the directory is looked at
+        // again after the deletion. Not if the same name has registered since; a restart in between leaves it to the operator's audit.
+        for (const delay of [60_000, 300_000]) {
+          setTimeout(() => {
+            void store.userById(user.id).then((again) => (again ? null : fsp.rm(path.join(config.dataDir, "users", user.id), { recursive: true, force: true })))
+              .catch(() => process.stderr.write("account directory sweep failed\n"));
+          }, delay).unref();
+        }
         void memoryIndexWorker?.drainWithdrawals();
         clearSessionCookie(res, config.sessionCookieName);
         if (capsuleTransferService) await capsuleTransferService.finishAccountDeletion(user.id);
@@ -9040,6 +9058,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   }
   const geoNativeSelectionRequests = new WeakSet();
   const runtimeUi = createRuntimeUiServer({
+    onGoalBarAction: (project, sessionId, op) => researchGoals?.noteBarAction(project, sessionId, op) ?? Promise.resolve(),
     resolveDelegatedFrame: (user, delegation, options) => resolveGeoFrame(user, { kind: "geo", geoProjectId: delegation.geoProjectId, sessionId: delegation.rootSessionId }, delegation, options),
     createDelegatedPolicy: async ({ user, project, claims }) => new GeoNativeFramePolicy({ authority: geoNativeAuthority,
       runtimeManager, config, user, project, claims, acceptInput: null, nativeInputs: geoNativeInputs }),
@@ -9335,6 +9354,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
 
   const pauseRecurringWork = () => {
     recurringWorkStarted = false;
+    void researchGoals?.stop();
     evolution?.worker.stop();
     rsiOnline?.worker.stop();
     sourceSyncWorker?.pause();
@@ -9373,6 +9393,60 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   let officialPublishRun = false;
   let legacyMemoryRetired = false;
   let handbookArmRetired = false;
+  // A turn the control plane starts on a research goal: to take it up again, or to set it again. Automated (it teaches nothing and nobody is
+  // waiting on it), on the answer line the goal was set on, kept under the goal's first question like LoopX's own rounds.
+  const dispatchResearchGoalTurn = async (/** @type {any} */ project, /** @type {{ sessionId: string, text: string, route: string, question: string, system?: string }} */ turn) => {
+    const user = await store.userById(project.userId);
+    const answerAgent = (await agentRegistry).get(OPEN_DOMAIN_ANSWER_AGENT_ID);
+    const dispatch = () => agentRuns.dispatch(project, {
+      sessionId: turn.sessionId, dispatchId: randomId("goal_"), waitForRoom: true, automated: true, question: turn.question,
+      effectiveAgentId: answerAgent?.id ?? null, effectiveAgentVersion: answerAgent?.version ?? null,
+      effectiveRuntimeAgent: answerAgent?.runtimeAgent ?? null, effectiveRouteReason: turn.route,
+    }, async (/** @type {any} */ session, /** @type {any} */ dispatchedRun) => {
+      const resident = await residentProfiles.forDispatch(project.userId, { projectId: project.id, sessionId: session.sessionId, attended: false });
+      const prepared = await prepareOwnedResearchContext(project, session, { query: turn.text, resident, specialists: [], attended: false, routedSpecialist: null }, dispatchedRun);
+      await runtimeManager.startWhenRoom(project);
+      await runtimeManager.dispatchPrompt(project, session.sessionId, {
+        recordPromptActor: (/** @type {any} */ request) => recordExtensionPromptActor(user, project, request),
+        text: turn.text,
+        system: `${prepared.system}${turn.system ?? ""}`,
+        routedCapability: prepared.routedCapability,
+        memoryContext: prepared.memoryContext,
+        agent: session.runtimeAgent ?? answerAgent?.runtimeAgent ?? null,
+        model: `deepseek/${config.deepseekModel}`,
+        runId: dispatchedRun.id,
+        requestId: dispatchedRun.kernelRequestIds?.at(-1),
+        strictContext: true,
+        unattended: true,
+      });
+      await resident.delivered();
+    });
+    return pluginService ? pluginService.withAdmission(project, dispatch) : dispatch();
+  };
+  researchGoals = productDocuments && productDatabase && config.loopxEnabled !== false && config.researchGoalWatchEnabled !== false ? new ResearchGoals({
+    documents: productDocuments, database: productDatabase, agentRuns, runtimeManager, store,
+    dispatchTurn: dispatchResearchGoalTurn,
+    // A note to a round at work, the way a person's correction reaches it. The round is LoopX's, so nobody is attending it.
+    steerRound: async (project, run, text) => {
+      const requestId = randomId("req_");
+      await agentRuns.recordCorrection(project, run.id, requestId, text);
+      const user = await store.userById(project.userId);
+      await runtimeManager.dispatchPrompt(project, run.sessionId, {
+        recordPromptActor: (/** @type {any} */ request) => recordExtensionPromptActor(user, project, request),
+        text: `<evimed-correction>${text}</evimed-correction>`, runId: run.id, requestId, mode: "steer", strictContext: true, unattended: true,
+      });
+    },
+    // The next automatic round of a goal whose pause did not hold: stopped by the platform, so it is not charged to anyone's decision.
+    cancelRound: async (project, run) => {
+      await runtimeManager.cancelRuntimeSession(project, run.sessionId).catch(() => {});
+      return agentRuns.cancelRun(project, run.id, { by: "platform" });
+    },
+    notify: notificationService ? (userId, item) => notificationService.create(userId, item) : undefined,
+    claimingAllowed: () => !maintenanceService || maintenanceService.claimingAllowed(),
+    limits: config.researchGoalLimits,
+    log: (line) => process.stderr.write(`${line}\n`),
+  }) : null;
+  const researchGoalRoutes = createResearchGoalRoutes({ store, goals: researchGoals });
   const startRecurringWork = async () => {
     if (recurringWorkStarted || (maintenanceService && !maintenanceService.claimingAllowed())) return;
     recurringWorkStarted = true;
@@ -9386,6 +9460,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       hostedExtensions?.worker.start();
       memoryIndexWorker?.start();
       nativeMemoryWorker.start();
+      researchGoals?.start();
       openVikingEngine?.start();
       sourceWorker?.start();
       knowledgePagesWorker?.start();
@@ -9673,6 +9748,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (capsuleCleanupTimer) clearInterval(capsuleCleanupTimer);
       await capsuleCleanupRun;
       if (researchDbCleanupTimer) clearInterval(researchDbCleanupTimer);
+      await researchGoals?.stop();
       await researchDbCleanupRun;
       // The pass that publishes the official packs at start writes into the database and the data directory: let it end first.
       await officialPacks?.idle();
@@ -11180,6 +11256,8 @@ async function operatorMetricsText({ webVitals = null, judgeService = null, open
   for (const family of dataAnalysisMetricFamilies()) addMetric(lines, family.name, family.help, family.type, family.series);
   // The research-database connector's imports by outcome and its refusals and bitten limits by reason (researchDbMetrics.mjs).
   for (const family of researchDbMetricFamilies()) addMetric(lines, family.name, family.help, family.type, family.series);
+  // What the control plane did about long research goals, by event (researchGoalMetrics.mjs).
+  for (const family of researchGoalMetricFamilies()) addMetric(lines, family.name, family.help, family.type, family.series);
   // Model requests booked uncertain, by why (usageLedger.mjs): a burst is a
   // provider or a caller losing calls, and shows here while it happens.
   const uncertain = usageUncertainMetricFamily();

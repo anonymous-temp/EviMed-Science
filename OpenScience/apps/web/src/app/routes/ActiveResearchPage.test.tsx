@@ -1,8 +1,9 @@
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { useTaskPane } from "@/lib/taskPane";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { WebApiError } from "@/lib/apiClient";
 import { useToastStore } from "@/lib/toast";
 import { ActiveResearchPage } from "./ActiveResearchPage";
 
@@ -11,11 +12,13 @@ const skillMocks = vi.hoisted(() => ({ listPlatformSkills: vi.fn() }));
 vi.mock("@/lib/skillLibraryClient", () => skillMocks);
 const dbMocks = vi.hoisted(() => ({ researchDatabaseStatus: vi.fn(), listResearchDatabases: vi.fn(), listResearchDatabaseTables: vi.fn(), saveResearchDatabase: vi.fn(), snapshotResearchDatabase: vi.fn(), removeResearchDatabase: vi.fn() }));
 vi.mock("@/lib/researchDatabaseClient", () => dbMocks);
+const goalMocks = vi.hoisted(() => ({ listResearchGoals: vi.fn(), pauseResearchGoal: vi.fn(), resumeResearchGoal: vi.fn() }));
+vi.mock("@/lib/researchGoalClient", () => goalMocks);
 const dispatchMocks = vi.hoisted(() => ({ startResearchGoal: vi.fn() }));
 vi.mock("@/lib/dispatch", async (original) => ({ ...(await original<object>()), startResearchGoal: dispatchMocks.startResearchGoal }));
-const mocks = vi.hoisted(() => ({ listAgendas: vi.fn(), listWebAgentRuns: vi.fn(), steerWebAgentRun: vi.fn(), listEpisodes: vi.fn(), getResearchState: vi.fn(), addAgendaMaterials: vi.fn(), removeAgendaMaterial: vi.fn(), cancelEpisode: vi.fn(), followUpAgenda: vi.fn(), runAgendaNow: vi.fn(), pickFiles: vi.fn(), uploadFilesToWorkspace: vi.fn(), sha256Hex: vi.fn(), partition: vi.fn() }));
+const mocks = vi.hoisted(() => ({ listAgendas: vi.fn(), listWebAgentRuns: vi.fn(), steerWebAgentRun: vi.fn(), cancelWebAgentRun: vi.fn(), listEpisodes: vi.fn(), getResearchState: vi.fn(), addAgendaMaterials: vi.fn(), removeAgendaMaterial: vi.fn(), cancelEpisode: vi.fn(), followUpAgenda: vi.fn(), runAgendaNow: vi.fn(), pickFiles: vi.fn(), uploadFilesToWorkspace: vi.fn(), sha256Hex: vi.fn(), partition: vi.fn() }));
 vi.mock("@/lib/autopilotClient", () => mocks);
-vi.mock("@/lib/apiClient", async (original) => ({ ...(await original<object>()), getWebProjectId: () => identity.projectId, listWebAgentRuns: mocks.listWebAgentRuns, steerWebAgentRun: mocks.steerWebAgentRun }));
+vi.mock("@/lib/apiClient", async (original) => ({ ...(await original<object>()), getWebProjectId: () => identity.projectId, listWebAgentRuns: mocks.listWebAgentRuns, steerWebAgentRun: mocks.steerWebAgentRun, cancelWebAgentRun: mocks.cancelWebAgentRun }));
 vi.mock("@/lib/backend", async (original) => ({ ...(await original<object>()), pickFiles: mocks.pickFiles, uploadFilesToWorkspace: mocks.uploadFilesToWorkspace }));
 vi.mock("@/lib/fileDigest", () => ({ sha256Hex: mocks.sha256Hex }));
 vi.mock("@/lib/knowledgeBaseFiles", async (original) => ({ ...(await original<object>()), partitionKnowledgeBaseFiles: mocks.partition }));
@@ -41,6 +44,10 @@ describe("active research workspace", () => {
   beforeEach(() => {
     identity.projectId = "project-a"; sessionStorage.clear(); dispatchMocks.startResearchGoal.mockReset(); skillMocks.listPlatformSkills.mockReset().mockResolvedValue({ items: [{ id: "loopx:loopx" }] }); Object.values(mocks).forEach(fn => fn.mockReset()); Object.values(dbMocks).forEach(fn => fn.mockReset()); dbMocks.listResearchDatabases.mockResolvedValue({ items: [] }); dbMocks.researchDatabaseStatus.mockResolvedValue({ available: true });
     mocks.listWebAgentRuns.mockResolvedValue([]);
+    // A deployment without the goal service, unless a test says otherwise: the page reads a goal by its rounds alone.
+    Object.values(goalMocks).forEach(fn => fn.mockReset());
+    goalMocks.listResearchGoals.mockResolvedValue({ available: false, goals: [] });
+    goalMocks.pauseResearchGoal.mockResolvedValue({ sessionId: "goal-session", status: "paused" }); goalMocks.resumeResearchGoal.mockResolvedValue({ sessionId: "goal-session", status: "active" });
     mocks.listAgendas.mockResolvedValue({ items: [task("b", "已完成研究"), task("a", "进行中研究")], nextCursor: null, available: true });
     mocks.listEpisodes.mockImplementation(async (_project: string, agendaId?: string) => ({ items: agendaId === "a" ? [running] : agendaId === "b" ? [finished] : [finished, running], nextCursor: null }));
     mocks.getResearchState.mockImplementation(async (id: string) => states(id));
@@ -232,6 +239,163 @@ describe("active research workspace", () => {
     expect(await screen.findByText("长期研究暂时无法载入。")).toBeInTheDocument();
     expect(screen.queryByText(/写下研究目标/)).not.toBeInTheDocument();
     expect(screen.queryByRole("status", { name: "正在载入研究" })).not.toBeInTheDocument();
+  });
+  describe("a long goal's own state", () => {
+    const ASKED = "评估心衰队列的再入院风险";
+    const anchor = { id: "anchor-run", sessionId: "goal-session", question: `/loopx ${ASKED}`, effectiveRouteReason: "research-goal", startedAt: "2026-11-03T00:00:00Z", finishedAt: "2026-11-03T00:10:00Z", status: "succeeded" };
+    const round = (id: string, startedAt: string, status = "succeeded", extra: Record<string, unknown> = {}) => ({ id, sessionId: "goal-session", automated: true, effectiveRouteReason: "loopx-continuation", goal: { id: "goal", runId: "anchor-run" }, startedAt, finishedAt: status === "running" ? null : startedAt.replace("T0", "T1"), status, ...extra });
+    const resting = [anchor, round("round-1", "2026-11-03T01:00:00Z")];
+    const goalState = (status: string, reason: string | null = null) => ({ available: true, goals: [{ sessionId: "goal-session", status, reason, statusAt: "2026-11-03T02:00:00Z", goalId: "goal", progress: null }] });
+    const showGoal = async (runs: unknown[], states: unknown) => {
+      mocks.listWebAgentRuns.mockResolvedValue(runs); goalMocks.listResearchGoals.mockResolvedValue(states);
+      renderPage(); await screen.findByText("cohort.csv");
+      const card = await within(await screen.findByLabelText("研究队列")).findByRole("button", { name: ASKED });
+      await userEvent.setup().click(card);
+      return { card, row: within(screen.getByLabelText("当前研究")) };
+    };
+
+    it.each([
+      ["active", null, "进行中", ["暂停"], null],
+      ["paused", "person", "已暂停", ["继续"], null],
+      ["paused", "no_progress", "已暂停", ["继续"], "连续几轮没有新的产出，已自动暂停。"],
+      ["paused", "budget", "已暂停", ["继续"], "到了这项研究的花费上限，已自动暂停。"],
+      ["stopped", "person", "已停止", ["继续"], null],
+      ["finished", null, "已完成", [], null],
+      ["waiting", null, "等你决定", ["继续"], "还有没做完的部分，AI 没有继续。"],
+      ["interrupted", "runtime_stopped", "已中断", ["继续"], "运行被中断后没能自动接上。"],
+    ])("says a goal at rest that the control plane reports %s (%s) as %s, with the buttons that fit it", async (status, reason, word, buttons, note) => {
+      const { card, row } = await showGoal(resting, goalState(status, reason));
+      expect(card).toHaveTextContent(word);
+      expect(card).not.toHaveTextContent("本轮完成");
+      for (const label of ["暂停", "继续"]) {
+        if (buttons.includes(label)) expect(row.getByRole("button", { name: label })).toBeEnabled(); else expect(row.queryByRole("button", { name: label })).not.toBeInTheDocument();
+      }
+      // No round is going, so there is nothing to stop; the conversation stays.
+      expect(row.queryByRole("button", { name: "停止本轮" })).not.toBeInTheDocument();
+      expect(row.getByRole("button", { name: "打开对话" })).toBeInTheDocument();
+      if (note) expect(row.getByText(note)).toBeInTheDocument(); else expect(row.queryByText(/已自动暂停|没能自动接上|AI 没有继续/)).not.toBeInTheDocument();
+      expect(document.body).not.toHaveTextContent(/loopx|目标 ID|配额|结算|回写/i);
+    });
+    it("says a goal between two rounds is going, and that the next round starts at once", async () => {
+      const { card } = await showGoal(resting, goalState("active"));
+      expect(card).toHaveTextContent("下一轮马上开始");
+      expect(within(screen.getByLabelText("研究队列")).getByText(/2 项进行中/)).toBeInTheDocument();
+    });
+    it("offers to pause and to stop the round that is going, whatever the goal's state, and stops it through the run's own route", async () => {
+      const user = userEvent.setup(); mocks.cancelWebAgentRun.mockResolvedValue({});
+      const { card, row } = await showGoal([anchor, round("round-1", "2026-11-03T01:00:00Z"), round("round-2", "2026-11-03T02:00:00Z", "running")], goalState("finished"));
+      expect(card).toHaveTextContent("进行中");
+      expect(row.getByRole("button", { name: "暂停" })).toBeEnabled();
+      expect(row.queryByRole("button", { name: "继续" })).not.toBeInTheDocument();
+      goalMocks.listResearchGoals.mockClear();
+      await user.click(row.getByRole("button", { name: "停止本轮" }));
+      expect(mocks.cancelWebAgentRun).toHaveBeenCalledWith("round-2");
+      await waitFor(() => expect(goalMocks.listResearchGoals).toHaveBeenCalled());
+    });
+    it("does not offer to pause a goal that is already paused, nor to resume one whose round is going", async () => {
+      const { row } = await showGoal([anchor, round("round-2", "2026-11-03T02:00:00Z", "running")], goalState("paused", "person"));
+      expect(row.queryByRole("button", { name: "暂停" })).not.toBeInTheDocument();
+      expect(row.queryByRole("button", { name: "继续" })).not.toBeInTheDocument();
+      expect(row.getByRole("button", { name: "停止本轮" })).toBeInTheDocument();
+    });
+    it("pauses and resumes through the goal's routes and reads the goals again at once, so the page says what happened", async () => {
+      const user = userEvent.setup();
+      const { card, row } = await showGoal(resting, goalState("active"));
+      goalMocks.listResearchGoals.mockClear(); goalMocks.listResearchGoals.mockResolvedValue(goalState("paused", "person"));
+      await user.click(row.getByRole("button", { name: "暂停" }));
+      expect(goalMocks.pauseResearchGoal).toHaveBeenCalledWith("project-a", "goal-session");
+      await waitFor(() => expect(card).toHaveTextContent("已暂停"));
+      expect(goalMocks.listResearchGoals).toHaveBeenCalled();
+      goalMocks.listResearchGoals.mockClear(); goalMocks.listResearchGoals.mockResolvedValue(goalState("active"));
+      await user.click(await row.findByRole("button", { name: "继续" }));
+      expect(goalMocks.resumeResearchGoal).toHaveBeenCalledWith("project-a", "goal-session");
+      await waitFor(() => expect(card).toHaveTextContent("下一轮马上开始"));
+    });
+    it("says a refused resume in plain words and leaves the goal where it was", async () => {
+      const user = userEvent.setup();
+      goalMocks.resumeResearchGoal.mockRejectedValue(new WebApiError("busy", { status: 409, code: "agent_run_active" }));
+      const { card, row } = await showGoal(resting, goalState("paused", "person"));
+      await user.click(row.getByRole("button", { name: "继续" }));
+      expect(await screen.findByRole("alert")).toBeInTheDocument();
+      expect(card).toHaveTextContent("已暂停");
+    });
+    it("reads a goal by its rounds alone where the deployment keeps no goal state, with no pause or resume", async () => {
+      const { card, row } = await showGoal(resting, { available: false, goals: [{ sessionId: "goal-session", status: "paused", reason: "person", statusAt: null, goalId: "goal", progress: null }] });
+      expect(card).toHaveTextContent("本轮完成");
+      for (const label of ["暂停", "继续", "停止本轮"]) expect(row.queryByRole("button", { name: label })).not.toBeInTheDocument();
+      expect(row.getByRole("button", { name: "打开对话" })).toBeInTheDocument();
+    });
+    it("reads a goal by its rounds when the control plane has no state for it", async () => {
+      const { card } = await showGoal(resting, { available: true, goals: [{ sessionId: "another-session", status: "paused", reason: "person", statusAt: null, goalId: "x", progress: null }] });
+      expect(card).toHaveTextContent("本轮完成");
+    });
+    it("keeps the last state it had when a later read of it fails, and says nothing of it", async () => {
+      const user = userEvent.setup();
+      const { card } = await showGoal(resting, goalState("paused", "budget"));
+      expect(card).toHaveTextContent("已暂停");
+      goalMocks.listResearchGoals.mockReset().mockRejectedValue(new Error("offline"));
+      await user.click(screen.getByRole("button", { name: "stream: ended" }));
+      await waitFor(() => expect(goalMocks.listResearchGoals).toHaveBeenCalled());
+      expect(card).toHaveTextContent("已暂停");
+      expect(screen.queryByText("长期研究暂时无法载入。")).not.toBeInTheDocument();
+      expect(screen.getByText("到了这项研究的花费上限，已自动暂停。")).toBeInTheDocument();
+    });
+    it("totals what every round cost, the way the observatory says a cost, and says nothing where no round reported one", async () => {
+      const usage = (costCny: number) => ({ usage: { requests: 1, inputTokens: 1, cachedInputTokens: 0, outputTokens: 1, costCny } });
+      const { row } = await showGoal([{ ...anchor, ...usage(0.5) }, round("round-1", "2026-11-03T01:00:00Z", "succeeded", usage(1.25)), round("round-2", "2026-11-03T02:00:00Z", "succeeded", usage(0.004))], goalState("active"));
+      expect(row.getByText("长期研究 · 已推进 3 轮 · 累计消耗 1.75 灵豆")).toBeInTheDocument();
+    });
+    it("reads a small total as under a hundredth, and an unreported cost as none shown", async () => {
+      const usage = (costCny: number) => ({ usage: { requests: 1, inputTokens: 1, cachedInputTokens: 0, outputTokens: 1, costCny } });
+      const first = await showGoal([anchor, round("round-1", "2026-11-03T01:00:00Z", "succeeded", usage(0.004))], goalState("active"));
+      expect(first.row.getByText("长期研究 · 已推进 2 轮 · 累计消耗 不足 0.01 灵豆")).toBeInTheDocument();
+      cleanup();
+      const second = await showGoal(resting, goalState("active"));
+      expect(second.row.getByText("长期研究 · 已推进 2 轮")).toBeInTheDocument();
+    });
+    it("lists a file one round after round rewrote once, from the newest round", async () => {
+      const user = userEvent.setup();
+      await showGoal([{ ...anchor, outputFiles: ["output/report.docx"] }, round("round-1", "2026-11-03T01:00:00Z", "succeeded", { outputFiles: ["output/report.docx", "output/notes.md"], presentedFiles: ["output/report.docx"] }),
+        round("round-2", "2026-11-03T02:00:00Z", "succeeded", { presentedFiles: ["output/report.docx"] })], goalState("active"));
+      await user.click(screen.getByRole("tab", { name: "结果" }));
+      const files = within(screen.getByLabelText("研究文件")).getAllByRole("link");
+      expect(files.map(link => link.textContent)).toEqual(["report.docx", "notes.md"]);
+      expect(files[0]).toHaveAttribute("href", "/app/runs/round-2/files/output/report.docx");
+      expect(files[1]).toHaveAttribute("href", "/app/runs/round-1/files/output/notes.md");
+    });
+    it("counts a person's message between two rounds, and a turn started to take the goal up again, as rounds of it", async () => {
+      const { card, row } = await showGoal([anchor, round("round-1", "2026-11-03T01:00:00Z"),
+        { id: "said", sessionId: "goal-session", question: "先看一下亚组", startedAt: "2026-11-03T02:00:00Z", status: "running" },
+        { id: "other", sessionId: "other-session", question: "与它无关", startedAt: "2026-11-03T02:30:00Z", status: "running" }], goalState("active"));
+      expect(row.getByText(/已推进 3 轮/)).toBeInTheDocument();
+      expect(card).toHaveTextContent("进行中");
+      expect(card).toHaveTextContent("本轮");
+    });
+  });
+  describe("the conversation inside the page", () => {
+    const original = window.innerHeight;
+    let spy: { mockRestore: () => void } | null = null;
+    afterEach(() => { Object.defineProperty(window, "innerHeight", { value: original, configurable: true }); spy?.mockRestore(); spy = null; });
+    const goalRun = { id: "goal-run", sessionId: "goal-session", automated: true, effectiveRouteReason: "loopx-continuation", goal: { id: "goal", runId: null }, startedAt: "2026-10-28T01:00:00Z", status: "running" };
+    const rect = (top: number) => { spy = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ top, left: 0, right: 0, bottom: 0, width: 0, height: 0, x: 0, y: top, toJSON: () => ({}) }); };
+    it("is as tall as the window leaves below its top, and follows the window", async () => {
+      const user = userEvent.setup();
+      Object.defineProperty(window, "innerHeight", { value: 900, configurable: true }); rect(85);
+      mocks.listWebAgentRuns.mockResolvedValue([goalRun]);
+      renderPage(); await screen.findByText("cohort.csv");
+      await user.click(within(screen.getByLabelText("研究队列")).getByRole("button", { name: "长期研究" }));
+      await user.click(screen.getByRole("tab", { name: "对话" }));
+      const pane = screen.getByRole("region", { name: "原生研究对话" });
+      expect(pane).toHaveStyle({ height: "815px" });
+      expect(pane).not.toHaveClass("min-h-screen");
+      Object.defineProperty(window, "innerHeight", { value: 700, configurable: true });
+      act(() => { window.dispatchEvent(new Event("resize")); });
+      expect(pane).toHaveStyle({ height: "615px" });
+      // A window too short for a conversation keeps a floor.
+      Object.defineProperty(window, "innerHeight", { value: 300, configurable: true });
+      act(() => { window.dispatchEvent(new Event("resize")); });
+      expect(pane).toHaveStyle({ height: "360px" });
+    });
   });
   describe("reading again while the page is open", () => {
     const settle = () => act(async () => { await Promise.resolve(); });

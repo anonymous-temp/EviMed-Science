@@ -51,10 +51,11 @@ let counter = 0;
  * own copy reads neither from its environment.
  * @param {{ launcher: string, shm?: string }} options
  */
-async function runnerWith({ launcher, shm = "/dev/shm" }) {
+async function runnerWith({ launcher, shm = "/dev/shm", loopx = "/runtime/home/.loopx" }) {
   const text = runnerSource
     .replace(/^launcher_pattern=.*$/m, `launcher_pattern='${launcher}'`)
-    .replace(/^shm_dir=.*$/m, `shm_dir='${shm}'`);
+    .replace(/^shm_dir=.*$/m, `shm_dir='${shm}'`)
+    .replace(/^loopx_home=.*$/m, `loopx_home='${loopx}'`);
   assert.notEqual(text, runnerSource, "the two lines the test replaces are still there");
   const file = path.join(scratch, `runner-${(counter += 1)}.sh`);
   await writeFile(file, text);
@@ -130,6 +131,19 @@ test("without a shared-memory directory the grants are the kernel's own, and a r
   const present = await runnerWith({ launcher, shm: scratch });
   const readOnly = fixture.cases[0];
   assert.deepEqual(parse(/** @type {string[]} */ (await recorded(run(present, readOnly.runnerCommand.slice(1)).out))).grants, parse(readOnly.builtin.slice(1)).grants);
+});
+
+test("LoopX's own directory is granted to a workspace-write command when it exists, and to no read-only one", async () => {
+  const launcher = await fakeLauncher();
+  const present = await runnerWith({ launcher, shm: path.join(scratch, "no-such-directory"), loopx: scratch });
+  const write = fixture.cases[1];
+  const granted = parse(/** @type {string[]} */ (await recorded(run(present, write.runnerCommand.slice(1)).out)));
+  assert.deepEqual(granted.grants, [...parse(write.builtin.slice(1)).grants, `--rw ${scratch}`].sort());
+  assert.deepEqual(granted.command, write.command, "the command, byte for byte");
+  const readOnly = fixture.cases[0];
+  assert.deepEqual(parse(/** @type {string[]} */ (await recorded(run(present, readOnly.runnerCommand.slice(1)).out))).grants, parse(readOnly.builtin.slice(1)).grants);
+  const missing = await runnerWith({ launcher, shm: path.join(scratch, "no-such-directory"), loopx: path.join(scratch, "no-such-loopx") });
+  assert.deepEqual(parse(/** @type {string[]} */ (await recorded(run(missing, write.runnerCommand.slice(1)).out))).grants, parse(write.builtin.slice(1)).grants);
 });
 
 test("the command's arguments reach the launcher exactly, whatever they look like", async () => {
