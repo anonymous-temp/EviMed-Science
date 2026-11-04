@@ -269,8 +269,11 @@ vcr_longitudinal_summary <- function(sim, ids, model, max_lines = 12L) {
     rows[[length(rows) + 1L]] <- list(label = paste0(a$label, "完成全部随访的比例"),
                                       value = list(value = round(100 * mean(sim$observed[sim$arm == a$z, J]), 1), unit = "%"))
   }
+  # With a dropout that depends on the outcome, or a rescue medication (1.2.0), the difference of the people still followed is not an estimand's true
+  # effect and the page says whose difference it is; a scenario that states neither keeps the 1.1.0 words to the letter
+  completers_only <- !is.null(model$dropoutModel) || !is.null(model$rescue)
   diff_last <- if (all(c("treated", "control") %in% names(stats_by_arm))) stats_by_arm$treated[[J]]$mean - stats_by_arm$control[[J]]$mean else NA_real_
-  if (is.finite(diff_last)) rows[[length(rows) + 1L]] <- list(label = "末次随访两组均值之差", value = list(value = .vcr_sig(diff_last)))
+  if (is.finite(diff_last)) rows[[length(rows) + 1L]] <- list(label = if (completers_only) "末次随访两组均值之差（只含没有脱落的人）" else "末次随访两组均值之差", value = list(value = .vcr_sig(diff_last)))
   pick <- .vcr_longitudinal_examples(sim, model$slope, model$effect)
   names_ <- c("斜率偏低的虚拟患者", "斜率居中的虚拟患者", "斜率偏高的虚拟患者")
   at <- if (length(pick) == 3L) 1:3 else seq_along(pick)
@@ -280,7 +283,12 @@ vcr_longitudinal_summary <- function(sim, ids, model, max_lines = 12L) {
   if (!is.null(est)) panels[[2L]] <- list(key = "estimands", title = "按不同的估计目标，末次随访的效应", kind = "binary",
     note = "每个虚拟患者在两个组下的完整轨迹都已生成，所以两种估计目标的真值是已知的", rows = .vcr_longitudinal_estimand_rows(est), series = list())
   list(
-    headline = if (is.finite(diff_last)) sprintf("到最后一个时间点，试验组与对照组的平均值相差 %s", .vcr_fmt(diff_last)) else NULL,
+    # the difference of the people still followed at the last visit: with dropout that depends on the outcome (and with rescue) it is not either estimand's
+    # true effect (a table of mechanisms read -4.1, -3.4, -3.8 and -2.9 for a true -4.8), and the headline says whose difference it is
+    headline = if (!is.finite(diff_last)) NULL
+               else if (!completers_only) sprintf("到最后一个时间点，试验组与对照组的平均值相差 %s", .vcr_fmt(diff_last))
+               else sprintf("到最后一个时间点，没有脱落的人里，试验组与对照组的平均值相差 %s%s", .vcr_fmt(diff_last),
+                            if (!is.null(est)) "；这只看没有脱落的人，不是任何一种估计目标的真值（真值见下面一栏）" else "；这只看没有脱落的人，脱落与结局有关时它会偏离真正的效应"),
     trajectories = list(xLabel = "随访时间", yLabel = "结局指标", ticks = as.list(.vcr_fmt(t)), series = series),
     expected = c(list(visits = unname(t)), implied),
     observed = lapply(stats_by_arm, function(summ) lapply(summ, function(r) list(

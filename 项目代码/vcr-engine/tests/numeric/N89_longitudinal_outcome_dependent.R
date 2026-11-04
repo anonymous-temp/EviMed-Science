@@ -174,3 +174,23 @@ vcr_case("N89f", c("AC-04", "AC-26"), function() {
          identical(unique(d$source), "synthetic") && all(d$rescue %in% c(0L, 1L)),
        detail = sprintf("a job with a plateau, a MAR dropout model and a rescue medication: the table carries a 0/1 rescue column (a scenario without one has none), the result carries both estimands with the people each needs and the page's panel names the treatment-policy and the hypothetical strategy; a population column called rescue is refused; %d rows, all synthetic, no real patient", nrow(d)))
 })
+
+vcr_case("N89g", c("AC-11", "AC-29"), function() {
+  # Review stats2 finding 25: the headline of a longitudinal result, 'the two arms' means differ by X at the last visit', is the difference of the people still
+  # followed, and with dropout that depends on the outcome it is not either estimand's effect (a true -4.80 read -4.06, -3.42, -3.76 and -2.89 under four
+  # mechanisms) while the page put it first and unlabelled. The number is the completers' difference recomputed from the table; the headline now says whose it is and
+  # that the estimands' true values are the panel beside it (the engine's own: the effect times the time scale, -0.6 x 8 = -4.8 at the last visit).
+  sc <- .n89_scenario(3000, -0.6, 0.06, rescue = list(perVisit = 0.05, effect = -2, logOddsPerSd = 0.5))
+  sc$dropoutModel <- list(mechanism = "mnar", logOddsPerSd = 3)
+  dir <- tempfile("n89g"); dir.create(dir); on.exit(unlink(dir, recursive = TRUE), add = TRUE)
+  r <- .n89_run(sc, 8911L, "g", NULL, dir)
+  d <- vcr_test_table(r, "virtual-patients", dir)
+  last <- d[d$visit == max(d$visit), ]
+  completers <- mean(last$y[last$arm == 1L]) - mean(last$y[last$arm == 0L])
+  head_value <- as.numeric(regmatches(r$diagnostics$headline, regexpr("-?[0-9]+\\.?[0-9]*(?= *；)", r$diagnostics$headline, perl = TRUE)))
+  hyp <- r$diagnostics$estimands$hypothetical$effect
+  panel_rows <- unlist(lapply(r$diagnostics$panels, function(p) vapply(p$rows, function(x) x$label, character(1))))
+  list(pass = grepl("没有脱落的人", r$diagnostics$headline, fixed = TRUE) && grepl("不是任何一种估计目标的真值", r$diagnostics$headline, fixed = TRUE) && length(head_value) == 1L &&
+         abs(head_value - completers) < 0.01 && abs(hyp - (-4.8)) < 1e-9 && abs(completers - hyp) > 0.5 && any(grepl("只含没有脱落的人", panel_rows, fixed = TRUE)),
+       detail = sprintf("MNAR dropout, rescue: the headline says it is the difference of the people still followed (%.2f, recomputed from the table: %.2f), not an estimand's true value (hypothetical effect %.2f); %s", head_value, completers, hyp, r$diagnostics$headline))
+})
