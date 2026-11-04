@@ -98,7 +98,7 @@ const TRIAL = (n) => `NCT0000000${n}`;
 
 /** One judgment row the way the job writes it. */
 async function save(studyId, entry) {
-  return context.app.vcr.matchJudgments.save({ studyId, userId: accounts.owner, targetHash: "t", documentHash: "d", promptVersion: entry.mode === "fit" ? "fit-1" : "criteria-2", model: "deepseek-flash", thinking: "high", producer: "job",
+  return context.app.vcr.matchJudgments.save({ studyId, userId: accounts.owner, targetHash: "t", documentHash: "d", promptVersion: entry.mode === "fit" ? "fit-1" : "criteria-3", model: "deepseek-flash", thinking: "high", producer: "job",
     status: "done", ...entry });
 }
 const clause = (number, kind, label, basis, reason, evidence = []) => ({ number, kind, clause: `条款 ${number}`, label, reason, sentenceIds: evidence.map((item) => item.sentenceId), evidence, basis });
@@ -243,7 +243,7 @@ const fitOf = (i) => (i % 11 === 0 ? 30 : 90);
 test("five thousand people are one page: the tallies equal the domain's verdict over every person, a filter and a page cut the list, and the funnel counts each clause", options, async (t) => {
   await db().query(`INSERT INTO evimed_vcr.match_judgments (id, study_id, user_id, subject_key, target_kind, target_id, target_hash, document_hash, mode, prompt_version, model, thinking, producer, status,
         fit, confidence, verdict, answer, usage, document_ids, job_id, created_at, updated_at)
-      SELECT 'mjd_scale' || i, $1, $3, 'P-' || lpad(i::text, 5, '0'), 'protocol_version', $2, 'th', 'dh' || i, 'criteria', 'criteria-2', 'deepseek-flash', 'high', 'job', 'done',
+      SELECT 'mjd_scale' || i, $1, $3, 'P-' || lpad(i::text, 5, '0'), 'protocol_version', $2, 'th', 'dh' || i, 'criteria', 'criteria-3', 'deepseek-flash', 'high', 'job', 'done',
         CASE WHEN i % 11 = 0 THEN 30 ELSE 90 END, 0.7, 'possible',
         jsonb_build_object('target', jsonb_build_object('kind', 'protocol_version', 'id', $2::text, 'title', '规模测试方案'), 'eligibilitySource', 'protocol',
           'rows', (SELECT jsonb_agg(jsonb_build_object('number', n, 'kind', CASE WHEN n <= 6 THEN 'inclusion' ELSE 'exclusion' END, 'clause', '条款 ' || n,
@@ -259,7 +259,7 @@ test("five thousand people are one page: the tallies equal the domain's verdict 
   await insertJob(study.id, { direction: "trial_to_patient", protocolVersionId: PROTOCOL, subjects: Array.from({ length: PEOPLE + 40 }, (_, at) => `P-${String(at + 1).padStart(5, "0")}`), fit: true, topK: 20, thinking: "high", estimate: { cost: 12.5, currency: "CNY" } }, "succeeded");
   // Another study's rows under the same keys must not show here.
   await db().query(`INSERT INTO evimed_vcr.match_judgments (id, study_id, user_id, subject_key, target_kind, target_id, target_hash, document_hash, mode, prompt_version, model, thinking, producer, status, fit, answer)
-    VALUES ('mjd_other', $1, $2, 'P-00001', 'protocol_version', $3, 'th', 'dh', 'criteria', 'criteria-2', 'm', 'high', 'job', 'done', 99, '{"rows": [], "missing": []}'::jsonb)`, [other.id, accounts.owner, PROTOCOL]);
+    VALUES ('mjd_other', $1, $2, 'P-00001', 'protocol_version', $3, 'th', 'dh', 'criteria', 'criteria-3', 'm', 'high', 'job', 'done', 99, '{"rows": [], "missing": []}'::jsonb)`, [other.id, accounts.owner, PROTOCOL]);
 
   const expected = { eligible: 0, possible: 0, insufficient: 0, ineligible: 0 };
   for (let i = 1; i <= PEOPLE; i += 1) expected[trialVerdict({ fit: fitOf(i), criteria: mixOf(i), missing: [] }).verdict] += 1;
@@ -483,4 +483,26 @@ test("the pages the browser reads are the fixtures the web tests draw from: a pa
     if (write) writeFileSync(new URL(file, FIXTURES), text);
     else assert.equal(text, readFileSync(new URL(file, FIXTURES), "utf8"), `${file} differs from what the service now sends; regenerate with VCR_VIEWS_WRITE_FIXTURES=1 and read the diff`);
   }
+});
+
+test("a trial whose registry record changed is marked on its row, the person's page offers to judge those again, and the people of a protocol are not touched", options, async () => {
+  const seeded = await seedJudged({ app: context.app, call, owner: accounts.owner }, "登记记录变了");
+  const base = `/api/vcr/studies/${seeded.study.id}/matching/judged`;
+  const read = async (/** @type {string} */ query) => { const answer = await call("owner", "GET", `${base}?${query}`); assert.equal(answer.status, 200, answer.text); return answer.body.data; };
+  const before = await read(`direction=patient_to_trial&subjectKey=${seeded.patient}`);
+  assert.equal(before.stale, undefined, "nothing changed yet");
+  assert.ok(before.trials.every((trial) => trial.basisChanged === undefined));
+  assert.equal(before.label, vcrSubjectLabel(seeded.patient));
+
+  const marked = await context.app.vcr.matchJudgments.markRegistryChanged({ studyId: seeded.study.id, targetId: trialId(1), hash: "a-newer-record", at: "2026-11-04T09:00:00.000Z" });
+  assert.ok(marked.marked > 0, "the watch marked the judgments of that trial");
+  const after = await read(`direction=patient_to_trial&subjectKey=${seeded.patient}`);
+  assert.deepEqual(after.stale, { label: "登记记录已更新，可重新判定", count: 1, registryIds: [trialId(1)] });
+  const changed = after.trials.filter((trial) => trial.basisChanged);
+  assert.deepEqual(changed.map((trial) => trial.registryId), [trialId(1)]);
+  assert.deepEqual(changed[0].basisChanged.kind, "registry_record");
+  assert.match(changed[0].basisChanged.label, /登记记录/);
+  const protocol = await read(`direction=trial_to_patient&protocolVersionId=${seeded.protocolId}`);
+  assert.equal(protocol.changed, 0, "a protocol's people have no registry record");
+  assert.ok(protocol.people.every((person) => person.basisChanged === undefined));
 });
