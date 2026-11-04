@@ -97,6 +97,7 @@ it("scrubs legacy history without resolving or copying the old draft and referen
   expect(clean).toEqual({ runtimeUiIntent: { kind: intent.kind, projectId: intent.projectId, requestId: intent.requestId, sessionId: intent.sessionId }, userFlag: "retained" });
   expect(runtimeUiIntentFromState(clean, intent.projectId)).toBeNull();
   expect(sanitizeRuntimeUiHistoryState(clean)).toBe(clean);
+});
 
 it("may ask for the kernel's scheduled-task page, and for no other", () => {
   const intent = { ...newRuntimeUiIntent(undefined, "session-tasks"), panel: "schedules" as const };
