@@ -77,6 +77,7 @@ import { VcrErasureStore } from "./vcrErasureStore.mjs";
 import { createVcrEngineClient } from "./vcrEngineClient.mjs";
 import { createVcrEngineProbe } from "./vcrEngineProbe.mjs";
 import { matchingVariablesOf, subjectTableFacts } from "./vcrMatchingTable.mjs";
+import { ensureTableMeaning } from "./vcrTableMeaning.mjs";
 import { createVcrTrialCorpus } from "./vcrTrialCorpus.mjs";
 import { createVcrEvidencePipeline } from "./vcrEvidence.mjs";
 import { createVcrCorrectionCases } from "./vcrCorrectionCases.mjs";
@@ -269,7 +270,7 @@ export function matchingContextOf(inputs) {
  *
  * @param {{ matchStore: VcrMatchStore, store: VcrStore,
  *   documents?: { read: (study: any, input: { subjectKey: string, documentId: string }) => Promise<{ text: string } | null> } | null,
- *   subjectTable?: { read: (study: any) => Promise<any> } | null }} parts
+ *   subjectTable?: { read: (study: any, options?: { variables?: readonly string[] | null, propose?: boolean }) => Promise<any> } | null }} parts
  */
 export function vcrMatchingExecutor({ matchStore, store, documents = null, subjectTable = null }) {
   /** @param {{ job: Record<string, any>, onProgress: (progress: { done: number, total: number }) => Promise<unknown> }} input */
@@ -305,7 +306,8 @@ export function vcrMatchingExecutor({ matchStore, store, documents = null, subje
     /** @type {any} */
     let tableRead = null;
     if (subjectTable) {
-      try { tableRead = await subjectTable.read(study); }
+      // What the table's codes mean was settled when the inputs were frozen; a running job reads it and never asks the model.
+      try { tableRead = await subjectTable.read(study, { variables: matchingVariablesOf(criteria), propose: false }); }
       catch (error) { tableRead = { available: false, reason: String(/** @type {any} */ (error)?.code ?? "vcr_subject_table_unreadable") }; }
     }
     if (snapshot.subjectTable && tableRead?.available && matchingTableIdentity(tableRead) !== snapshot.subjectTable.identity) {
@@ -397,7 +399,9 @@ export function vcrMatchingExecutor({ matchStore, store, documents = null, subje
         // The subject table, by what it was and what of it answered: names and counts, never a cell.
         ...(subjectTable ? { subjectTable: tableFacts
           ? { snapshotId: tableRead.snapshotId, rows: tableFacts.rows, subjects: tableFacts.subjects.length, notEvaluated: tableFacts.notEvaluated,
-            variablesMapped: tableFacts.mapped, variablesUnmapped: tableFacts.unmapped, variablesAmbiguous: tableFacts.ambiguous, withheld: tableRead.withheld }
+            variablesMapped: tableFacts.mapped, variablesUnmapped: tableFacts.unmapped, variablesAmbiguous: tableFacts.ambiguous, withheld: tableRead.withheld,
+            // Whether the meaning of the table's codes could be proposed when the inputs were frozen (`vcrTableMeaning.mjs`).
+            ...(snapshot.subjectTable?.meaning ? { meaning: snapshot.subjectTable.meaning } : {}) }
           : { available: false, reason: String(tableRead?.reason ?? "unavailable"), ...(tableRead?.fields?.length ? { fields: tableRead.fields } : {}) } } : {}),
       },
       tables: [],
@@ -577,14 +581,25 @@ export function vcrDocumentsSeam({ dataPlane, passagesMinChars = 40_000 }) {
  * The subject-table seam of the matching flow: the plane's judged read of the study's subject table for the study's
  * owner, and the identity (snapshot and hash) a job freezes so a changed table is a different job. A refusal is an
  * answer — `{ available: false, reason }` — never an error that stops the other sources.
- * @param {{ dataPlane: VcrDataPlane | null }} parts
+ *
+ * Asked for the `variables` of a set of criteria, a read also carries what the table's columns mean for them (`meaning`, its
+ * `meaningDigest` and `meaningStatus`; `vcrTableMeaning.mjs`): what is recorded, and with `propose` one model call for what is
+ * not. `semantics` is the dataset-semantics service, given as a function because it is built after this module.
+ * @param {{ dataPlane: VcrDataPlane | null, semantics?: (() => any) | null, config?: Record<string, any>, usageLedger?: any, fetchImpl?: typeof fetch, callModel?: Function }} parts
  */
-export function vcrSubjectTableSeam({ dataPlane }) {
+export function vcrSubjectTableSeam({ dataPlane, semantics = null, config = {}, usageLedger = null, fetchImpl = undefined, callModel = undefined }) {
   return {
-    /** @param {any} study */
-    async read(study) {
+    /** @param {any} study @param {{ variables?: readonly string[] | null, propose?: boolean }} [options] */
+    async read(study, { variables = null, propose = false } = {}) {
       if (!dataPlane) return { available: false, reason: "vcr_data_plane_unavailable" };
-      return dataPlane.subjectTableForMatching({ studyId: study.id, principal: study.userId, purpose: VCR_JOB_PURPOSE });
+      const table = await dataPlane.subjectTableForMatching({ studyId: study.id, principal: study.userId, purpose: VCR_JOB_PURPOSE });
+      if (!table.available || !variables?.length) return table;
+      const found = await ensureTableMeaning({
+        study, table, variables, semantics: semantics?.() ?? null, config, usageLedger, fetchImpl, callModel, propose,
+        authorizeCloud: ({ fields }) => dataPlane.authorizeSubjectTableCloudRead({ studyId: study.id, snapshotId: table.snapshotId, principal: study.userId, fields }),
+      });
+      return { ...table, meaning: found.meaning, meaningDigest: found.digest,
+        meaningStatus: { status: found.status, ...(found.code ? { code: found.code } : {}), ...(found.message ? { message: found.message } : {}) } };
     },
     /** @param {any} study */
     async identity(study) {
@@ -596,7 +611,8 @@ export function vcrSubjectTableSeam({ dataPlane }) {
 
 /** A table version includes the field definitions used to interpret its cells, never the cells themselves. @param {any} table */
 function matchingTableIdentity(table) {
-  return matchingInputDigest({snapshotId:table.snapshotId,sha256:table.sha256??null,header:table.header,columns:table.columns,withheld:table.withheld??[]});
+  // What the columns' codes mean joins the identity only when a meaning is recorded for the criteria's variables: a study without one keeps the identity it had.
+  return matchingInputDigest({snapshotId:table.snapshotId,sha256:table.sha256??null,header:table.header,columns:table.columns,withheld:table.withheld??[],...(table.meaningDigest?{meaning:table.meaningDigest}:{})});
 }
 
 /** The frozen inputs of one matching job, and the facts token that keeps two runs of different facts apart. */
@@ -838,12 +854,13 @@ export function vcrMatchingSeam({ matchStore, store, documents = null, subjectTa
       let frozenTable = null;
       const tableIdentity = subjectTable?.identity ? await subjectTable.identity(study).catch(() => null) : null;
       if (subjectTable?.read) {
-        const table = await subjectTable.read(study).catch(() => null);
+        // Freezing is where the meaning of the table's codes is settled: asked once, recorded, and the job runs on what was recorded.
+        const table = await subjectTable.read(study, { variables: matchingVariablesOf(criteria), propose: true }).catch(() => null);
         if (table?.available) {
           const candidates = subjectTableFacts({...table,variables:[],limit:Number.POSITIVE_INFINITY}).subjects.map(row=>row.subjectKey);
           const withdrawn = await matchStore.withdrawnSubjects?.(study.id) ?? new Set();
           roster.push(...candidates.filter(key=>!roster.includes(key) && !withdrawn.has(key)));
-          frozenTable = {snapshotId:table.snapshotId,sha256:table.sha256??null,identity:matchingTableIdentity(table),subjects:candidates};
+          frozenTable = {snapshotId:table.snapshotId,sha256:table.sha256??null,identity:matchingTableIdentity(table),subjects:candidates,...(table.meaningStatus?{meaning:table.meaningStatus}:{})};
         }
       }
       if (selection.subjectKeys?.some(key => !roster.includes(key))) throw new HttpError(404, 'vcr_subject_not_found', 'A requested subject is not in this study at this time.');
@@ -1080,7 +1097,8 @@ export function createVcrEngineJobRemover({ config, fetchImpl, engine = null }) 
  *   officialZoneForKeys?: ((keys: string[]) => Promise<string | null>) | null,
  *   predictionRegistry?: { register: (prediction: Record<string, any>) => Promise<any> } | null,
  *   usageLedger?: any,
- * }} input
+ *   dataSemantics?: (() => any) | null,
+ * }} input `dataSemantics`: the dataset-semantics service, as a function (it is built after this module); where it is off, the codes of a table stay unread.
  */
 export function composeVcr({ config, productDatabase, projectStore = null, audit = async () => {}, fetchImpl, report = () => {}, connectorCredentials = null, intakeController = null, entityVocabulary = null, sourceChanges = null, officialZoneForKeys = null, predictionRegistry = null, usageLedger = null, dataSemantics = null, documentParser = null, webReader = null }) {
   if (!config?.vcrEnabled || !productDatabase) return null;
@@ -1129,7 +1147,7 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   // Patient documents are read through the plane's own judged, audited reader;
   // with no plane there are none, and a fact a run wrote about a document is void.
   const documents = vcrDocumentsSeam({ dataPlane, passagesMinChars: Number(config.vcrPassagesMinChars) > 0 ? Number(config.vcrPassagesMinChars) : undefined });
-  const subjectTable = dataPlane ? vcrSubjectTableSeam({ dataPlane }) : null;
+  const subjectTable = dataPlane ? vcrSubjectTableSeam({ dataPlane, semantics: dataSemantics, config, usageLedger, fetchImpl }) : null;
   const jobs = new VcrJobs({
     store, config, engine, report, dataPlane, engineObserver: engineProbe,
     localExecutors: { "matching.evaluate": vcrMatchingExecutor({ matchStore, store, documents, subjectTable }) },

@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { columnForVariable, matchingVariablesOf, subjectTableFacts } from "../src/vcrMatchingTable.mjs";
-import { assessSubject } from "../src/vcrMatching.mjs";
+import { cellPresence, columnForVariable, columnsWithMeaning, matchingVariablesOf, subjectTableFacts } from "../src/vcrMatchingTable.mjs";
+import { assessSubject, storedExclusion } from "../src/vcrMatching.mjs";
 
 test("the variables a criterion asks are collected through every connective, its applicability included, and a language node asks the model", () => {
   const criteria = [
@@ -84,4 +84,113 @@ test("the facts feed the one evaluator: unknown where the table holds nothing, a
   assert.equal(second.age, "not_satisfied");
   assert.equal(second.hb, "unknown");
   assert.equal(second.washout, "unknown");
+});
+
+// ---------------------------------------------------------------------------
+// What a filled cell means (G7) and which column answers a variable (G21)
+// ---------------------------------------------------------------------------
+
+const DM_COLUMNS = [
+  { name: "age", source: "AGE", concept: "age", unit: "year", type: "integer" },
+  { name: "DIABETES", source: "DIABETES", concept: "", unit: null, type: "integer" },
+];
+const DM_CRITERIA = [
+  { id: "age", kind: "inclusion", criterionType: "demographic", requirement: { op: "compare", variable: "age", comparator: "gte", value: 18 } },
+  // An exclusion is stored as the negation of the condition it names.
+  { id: "dm", kind: "exclusion", criterionType: "condition", requirement: storedExclusion({ op: "present", variable: "diabetes" }) },
+];
+/** The model's reading of a yes/no column: these codes are absent, these present. */
+const yesNo = (absent, present) => ({ columns: { DIABETES: { concept: "diabetes", valueMap: { values: { ...Object.fromEntries(absent.map((code) => [code, "absent"])), ...Object.fromEntries(present.map((code) => [code, "present"])) }, measurement: false } } } });
+/** The verdict of one person whose DIABETES cell is `cell`, read through `meaning`. */
+function verdictFor(cell, meaning) {
+  const built = subjectTableFacts({ header: ["USUBJID", "age", "DIABETES"], rows: [["P1", "50", cell]], snapshotId: "s1", columns: DM_COLUMNS, variables: ["age", "diabetes"], meaning });
+  const assessment = assessSubject({ studyId: "s", subjectKey: "P1", criteria: DM_CRITERIA, facts: built.subjects[0].facts, asOf: "2026-10-05T00:00:00.000Z" });
+  return { summary: assessment.summary, dm: assessment.judgments.find((judgment) => judgment.criterionId === "dm"), facts: built.subjects[0].facts };
+}
+
+test("G7: 0, No, 否, 无, false and N are denials under the model's map: an exclusion on the column does not exclude them, and 1, 是 and Yes do", () => {
+  for (const cell of ["0", "No", "否", "无", "false", "N"]) {
+    const { summary, dm, facts } = verdictFor(cell, yesNo([cell], ["1", "是", "Yes", "true", "Y"]));
+    assert.equal(summary, "eligible", `${cell} is not excluded`);
+    assert.equal(dm.state, "satisfied", cell);
+    assert.equal(facts.find((fact) => fact.variable === "diabetes").presence, "absent", cell);
+  }
+  for (const cell of ["1", "是", "Yes", "true", "Y"]) {
+    const { summary, dm } = verdictFor(cell, yesNo(["0", "No", "否", "无", "false", "N"], [cell]));
+    assert.equal(summary, "ineligible", `${cell} is excluded`);
+    assert.equal(dm.state, "not_satisfied", cell);
+  }
+});
+
+test("G7: a code the map does not name, a code the map calls unknown and no map at all read unknown, never excluded", () => {
+  const named = yesNo(["0"], ["1"]);
+  for (const [cell, meaning, label] of [["2", named, "a code the model did not name"], ["N/A", { columns: { DIABETES: { concept: "diabetes", valueMap: { values: { "N/A": "unknown", "1": "present" }, measurement: false } } } }, "unknown by the model's word"],
+    ["1", { columns: { DIABETES: { concept: "diabetes" } } }, "a concept with no value map"], ["1", null, "no meaning at all"]]) {
+    const { summary, dm } = verdictFor(cell, meaning);
+    // The column is reached by its name and the cell is filled: what is missing is the reading of the code, and the gap says so.
+    assert.equal(summary, "insufficient_evidence", label);
+    assert.equal(dm.state, "unknown", label);
+    assert.equal(dm.missing[0].reason, "coding_unmapped", label);
+  }
+});
+
+test("G7: a declared type does not make a code an indicator: the integer column holding 0 is a denial only because the map says so", () => {
+  const { facts } = verdictFor("0", { columns: { DIABETES: { concept: "diabetes" } } });
+  assert.equal(facts.find((fact) => fact.variable === "diabetes").presence, "unknown");
+  assert.equal(facts.find((fact) => fact.variable === "diabetes").value, 0, "the number is still the number");
+});
+
+test("a comparison reads the value and never asks what 0 means: ecog <= 1 holds for 0 whatever the map says", () => {
+  const columns = [{ name: "ECOG", source: "ECOG", concept: "ecog", unit: null, type: "integer" }];
+  const criteria = [{ id: "ecog", kind: "inclusion", criterionType: "performance", requirement: { op: "compare", variable: "ecog", comparator: "lte", value: 1 } }];
+  const odd = { columns: { ECOG: { valueMap: { values: { "0": "absent" }, measurement: false } } } };
+  for (const meaning of [null, odd, { columns: { ECOG: { valueMap: { values: {}, measurement: true } } } }]) {
+    const built = subjectTableFacts({ header: ["USUBJID", "ECOG"], rows: [["P1", "0"], ["P2", "3"]], snapshotId: "s1", columns, variables: ["ecog"], meaning });
+    const states = built.subjects.map((subject) => assessSubject({ studyId: "s", subjectKey: subject.subjectKey, criteria, facts: subject.facts, asOf: "2026-10-05T00:00:00.000Z" }).judgments[0].state);
+    assert.deepEqual(states, ["satisfied", "not_satisfied"]);
+  }
+  // and a text column still compares for equality, as it always did
+  const sex = subjectTableFacts({ header: ["USUBJID", "sex"], rows: [["P1", "F"]], snapshotId: "s1", columns: COLUMNS, variables: ["sex"], meaning: { columns: { sex: { valueMap: { values: { F: "absent" }, measurement: false } } } } });
+  const female = [{ id: "f", kind: "inclusion", criterionType: "demographic", requirement: { op: "compare", variable: "sex", comparator: "eq", value: "female" } }];
+  assert.equal(assessSubject({ studyId: "s", subjectKey: "P1", criteria: female, facts: sex.subjects[0].facts, asOf: "2026-10-05T00:00:00.000Z" }).judgments[0].state, "satisfied");
+});
+
+test("format needs no map: a real date in a date column is the event, and a number in a measurement column is the measurement being there", () => {
+  assert.equal(cellPresence("2026-08-01", { type: "date" }, undefined), "present");
+  assert.equal(cellPresence("unknown", { type: "date" }, undefined), "unknown");
+  assert.equal(cellPresence("128", { type: "number" }, { values: {}, measurement: true }), "present");
+  assert.equal(cellPresence("0", { type: "number" }, { values: {}, measurement: true }), "present", "a measured zero is a measurement");
+  assert.equal(cellPresence("n/a", { type: "number" }, { values: {}, measurement: true }), "unknown");
+  assert.equal(cellPresence("128", { type: "number" }, { values: {}, measurement: false }), "unknown", "a number is not an indicator unless the map says what it indicates");
+  assert.equal(cellPresence("128", { type: "number" }, undefined), "unknown");
+  assert.equal(cellPresence("constructor", { type: "text" }, { values: {}, measurement: false }), "unknown", "a code is looked up as its own key, never as a property");
+  // the same through the evaluator, on a window-less question about a prior therapy
+  const columns = [{ name: "last_chemo", source: "CHEMO_DT", concept: "last_chemo", unit: null, type: "date" }, { name: "hb", source: "HGB", concept: "hb", unit: "g/L", type: "number" }];
+  const built = subjectTableFacts({ header: ["USUBJID", "last_chemo", "hb"], rows: [["P1", "2026-08-01", "128"]], snapshotId: "s1", columns, variables: ["last_chemo", "hb"],
+    meaning: { columns: { hb: { valueMap: { values: {}, measurement: true } } } } });
+  const criteria = [
+    { id: "prior", kind: "inclusion", criterionType: "prior_treatment", requirement: { op: "present", variable: "last_chemo" } },
+    { id: "hb", kind: "inclusion", criterionType: "lab", requirement: { op: "present", variable: "hb" } },
+  ];
+  const states = assessSubject({ studyId: "s", subjectKey: "P1", criteria, facts: built.subjects[0].facts, asOf: "2026-10-05T00:00:00.000Z" }).judgments.map((judgment) => judgment.state);
+  assert.deepEqual(states, ["satisfied", "satisfied"]);
+});
+
+test("G21: a variable the model chose reaches its column by the concept the meaning recorded; the field map's concept stands, and two columns of one concept answer nothing", () => {
+  const columns = [{ name: "EGFR_STATUS", source: "EGFR", concept: "", unit: null, type: "text" }, { name: "hb", source: "HGB", concept: "haemoglobin", unit: "g/L", type: "number" }];
+  const meaning = { columns: { EGFR_STATUS: { concept: "egfr_mutation" }, hb: { concept: "something_else" } } };
+  assert.deepEqual(columnForVariable("egfr_mutation", columns), { column: null, ambiguous: false }, "by exact name alone nothing answers");
+  assert.equal(columnForVariable("egfr_mutation", columnsWithMeaning(columns, meaning)).column.name, "EGFR_STATUS");
+  assert.equal(columnForVariable("something_else", columnsWithMeaning(columns, meaning)).column, null, "the field map already named that column");
+  assert.equal(columnForVariable("haemoglobin", columnsWithMeaning(columns, meaning)).column.name, "hb");
+  const twice = columnsWithMeaning(columns, { columns: { EGFR_STATUS: { concept: "x" }, hb: { concept: "" } } }).map((column) => (column.name === "hb" ? { ...column, concept: "x" } : column));
+  assert.deepEqual(columnForVariable("x", twice), { column: null, ambiguous: true });
+
+  const built = subjectTableFacts({ header: ["USUBJID", "EGFR_STATUS", "hb"], rows: [["P1", "Positive", "120"], ["P2", "Negative", "120"]], snapshotId: "s1", columns, variables: ["egfr_mutation"],
+    meaning: { columns: { EGFR_STATUS: { concept: "egfr_mutation", valueMap: { values: { Positive: "present", Negative: "absent" }, measurement: false } } } } });
+  assert.deepEqual(built.mapped, [{ variable: "egfr_mutation", column: "EGFR_STATUS" }]);
+  const inclusion = [{ id: "egfr", kind: "inclusion", criterionType: "biomarker", requirement: { op: "present", variable: "egfr_mutation" } }];
+  const states = built.subjects.map((subject) => assessSubject({ studyId: "s", subjectKey: subject.subjectKey, criteria: inclusion, facts: subject.facts, asOf: "2026-10-05T00:00:00.000Z" }).judgments[0].state);
+  assert.deepEqual(states, ["satisfied", "not_satisfied"]);
+  assert.deepEqual(subjectTableFacts({ header: ["USUBJID", "EGFR_STATUS"], rows: [["P1", "Positive"]], snapshotId: "s1", columns, variables: ["egfr_mutation"] }).unmapped, ["egfr_mutation"], "without the meaning it is unmapped, as before");
 });

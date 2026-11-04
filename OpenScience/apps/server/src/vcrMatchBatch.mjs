@@ -40,7 +40,7 @@ import { HttpError } from './security.mjs';
 import { callModelForControlPlane } from './modelGateway.mjs';
 import { assessSubject, frozenAsOf, ambiguousCriterionLanguageKeys } from './vcrMatching.mjs';
 import { languageCriteriaByKey } from './vcrMatchingSnapshot.mjs';
-import { matchingVariablesOf, subjectTableFacts } from './vcrMatchingTable.mjs';
+import { columnReadsPresence, matchingVariablesOf, presenceVariablesOf, subjectTableFacts } from './vcrMatchingTable.mjs';
 import { locatePassages, passageTerms } from './vcrPassages.mjs';
 
 /** Bumped when the instructions change enough that a record read under the old ones should be read again. */
@@ -285,10 +285,14 @@ export async function planBatch({ study, selection: raw = {}, matchStore, docume
   /** @type {any} */
   let tableRead = null;
   if (subjectTable?.read) {
-    try { tableRead = await subjectTable.read(study); } catch { tableRead = null; }
+    // Starting a reading is where the meaning of the table's codes is settled (asked once, recorded): without it a cell of 0 or 否 would clear nobody.
+    try { tableRead = await subjectTable.read(study, { variables: wanted, propose: true }); } catch { tableRead = null; }
   }
   const tableFacts = tableRead?.available ? subjectTableFacts({ ...tableRead, variables: wanted, limit: Number.POSITIVE_INFINITY }) : null;
-  const answeredByTable = tableFacts ? tableFacts.mapped.map((entry) => entry.variable) : [];
+  // A column answers a variable the criteria ask the presence of only if its codes can be read; otherwise the record is still asked.
+  const presence = new Set(presenceVariablesOf(criteria));
+  const answeredByTable = tableFacts
+    ? tableFacts.mapped.filter(({ variable, column }) => !presence.has(variable) || columnReadsPresence(tableRead.columns.find((/** @type {any} */ item) => item.name === column), tableRead.meaning)).map((entry) => entry.variable) : [];
   const variables = wanted.filter((variable) => !answeredByTable.includes(variable));
   const questionsDigest = matchExtractDigest(variables, criteria, String(latest.id));
   if (!variables.length) {

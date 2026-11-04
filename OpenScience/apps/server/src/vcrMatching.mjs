@@ -658,6 +658,19 @@ function conflictingEvidence(variable, decisive) {
 }
 
 /**
+ * What a fact says about the event for a `present` / `absent` question. A cell of the subject table keeps its polarity for a
+ * comparison and says whether the event is there in `presence` (`vcrMatchingTable.mjs`): `0` and `No` are filled cells, and a denial.
+ * Every other fact says it in its polarity, as it always did.
+ * @param {any} fact @returns {any[]}
+ */
+function presenceReading(fact) {
+  if (fact.presence === undefined) return [fact];
+  if (fact.presence === "present") return [{ ...fact, polarity: "affirmed" }];
+  if (fact.presence === "absent") return [{ ...fact, polarity: "negated" }];
+  return [];
+}
+
+/**
  * `present` / `absent`.
  *
  * The four readings that matter, and why (C2-19): a denial is evidence the
@@ -670,8 +683,10 @@ function conflictingEvidence(variable, decisive) {
  */
 function evaluatePresence(node, context) {
   const variable = String(node.variable ?? "");
-  const all = factsFor(context, variable);
-  if (!all.length) return unknownBecause(variable, "not_recorded");
+  const found = factsFor(context, variable);
+  const all = found.flatMap(presenceReading);
+  // A filled cell whose code the column's meaning does not read is a cell, and not an answer: the person is neither in nor out.
+  if (!all.length) return found.length ? unknownBecause(variable, "coding_unmapped", found.map(citation)) : unknownBecause(variable, "not_recorded");
   const affirmed = all.filter((fact) => String(fact?.polarity ?? "affirmed") === "affirmed");
   const negated = all.filter((fact) => {
     if (fact?.polarity !== "negated") return false;

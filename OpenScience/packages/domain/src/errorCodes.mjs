@@ -1607,6 +1607,7 @@ export const VCR_WRITE_ISSUE_CODES = Object.freeze([
 export const VCR_MODULE_ERROR_CODES = Object.freeze([
   'vcr_task_context_deleted', 'vcr_completion_canceled', 'vcr_completion_disclosed', 'vcr_completion_notice_failed', 'vcr_completion_observed', 'vcr_completion_exhausted', 'vcr_finish_hooks_exhausted', 'vcr_completion_origin_invalid', 'vcr_completion_origin_unavailable', 'vcr_completion_unavailable', 'vcr_invocation_unavailable', 'vcr_job_advance_failed', 'vcr_model_version_changed', 'vcr_patient_context_invalid', 'vcr_object_reference_invalid',
   'vcr_backup_status_unavailable', 'vcr_backup_unhealthy', 'vcr_backup_references_missing', 'vcr_subject_table_unreadable',
+  'vcr_table_meaning_not_proposed', 'vcr_table_meaning_failed', 'vcr_table_meaning_not_recorded',
   'registry_reported_not_site_confirmed',
   'vcr_clinical_fact_invalid',
   'vcr_cloud_permission_invalid',
@@ -2236,6 +2237,9 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_backup_status_unavailable: '恢复备份状态暂时无法核对。',
   vcr_backup_unhealthy: '恢复备份尚未通过检查。',
   vcr_subject_table_unreadable: '这份受试者数据表现在读不出来；这次匹配只用病历文档和已有事实，其余步骤照常。',
+  vcr_table_meaning_not_proposed: '这次没能让 AI 读懂数据表里各列取值的含义：「有、无」一类的条件会显示为未记载，不会被当作已排除；其余照常。',
+  vcr_table_meaning_failed: 'AI 没有给出数据表各列取值含义的可用答案；这些取值按「不详」处理，其余照常。',
+  vcr_table_meaning_not_recorded: '数据表各列取值的含义没能记下来；这些取值按「不详」处理，其余照常。',
   vcr_backup_references_missing: '这一轮恢复备份没有做成：数据库记录的部分文件在备份时被删除了，下一轮会重新备份；PostgreSQL 备份不受影响。',
   review_proof_stale: '复核对应的报告或数据版本已变更，原文件仍保留。',
   document_review_conversion_incomplete: '复核后的文件转换尚未完成，原文件仍可下载。',

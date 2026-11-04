@@ -420,7 +420,7 @@ function listed(about, assessment) {
  *
  * @param {{ candidateStore: import("./vcrCandidateTrialStore.mjs").VcrCandidateTrialStore, matchStore?: any,
  *   documents?: { read: (study: any, input: { subjectKey: string, documentId: string }) => Promise<{ text: string } | null> } | null,
- *   subjectTable?: { read: (study: any) => Promise<any> } | null, config?: Record<string, any>, report?: (code: string) => void,
+ *   subjectTable?: { read: (study: any, options?: { variables?: readonly string[] | null, propose?: boolean }) => Promise<any> } | null, config?: Record<string, any>, report?: (code: string) => void,
  *   now?: () => Date }} parts
  */
 export function createPatientTrials({ candidateStore, matchStore = null, documents = null, subjectTable = null, config = {}, report = () => {}, now = () => new Date() }) {
@@ -432,13 +432,16 @@ export function createPatientTrials({ candidateStore, matchStore = null, documen
   /**
    * The table of the study's patients, once for a whole evaluation. A table that cannot be read is a note on the answer and nothing else:
    * the criteria that needed it read as unknown.
-   * @param {any} study @param {Array<{ code: string }>} notes
+   * @param {any} study @param {Array<{ code: string }>} notes @param {readonly string[]} variables the variables the trials' criteria ask: what the columns' codes mean for them is read with the table
    */
-  async function readTable(study, notes) {
+  async function readTable(study, notes, variables) {
     if (!subjectTable) return null;
     try {
-      const table = await subjectTable.read(study);
-      if (table?.available) return table;
+      const table = await subjectTable.read(study, { variables, propose: true });
+      if (table?.available) {
+        if (table.meaningStatus?.status === "not_proposed") notes.push({ code: "vcr_table_meaning_not_proposed" });
+        return table;
+      }
       notes.push({ code: String(table?.reason ?? "vcr_subject_table_unreadable") });
     } catch (error) {
       notes.push({ code: String(/** @type {any} */ (error)?.code ?? "vcr_subject_table_unreadable") });
@@ -496,8 +499,8 @@ export function createPatientTrials({ candidateStore, matchStore = null, documen
       const trials = held.filter((trial) => (criteriaOf.get(trial.id) ?? []).length > 0);
       if (!subjects.length || !trials.length) return { evaluated, unavailable, notes };
       const at = frozenAsOf(asOf ?? now().toISOString());
-      const table = await readTable(study, notes);
       const variables = matchingVariablesOf(trials.flatMap((trial) => criteriaOf.get(trial.id) ?? []));
+      const table = await readTable(study, notes, variables);
       const keyAt = table ? table.header.indexOf("USUBJID") : -1;
 
       for (const subjectKey of subjects) {

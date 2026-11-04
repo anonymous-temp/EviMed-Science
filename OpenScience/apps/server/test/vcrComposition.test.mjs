@@ -969,3 +969,29 @@ test('matching result reads omit repeated schema/terminology and preserve narrow
  const contract=await seam.runtimeRead({id:'std_1'},{kind:'contract'});assert.ok(contract.factContract);assert.equal(contract.factRule,FACT_EVIDENCE_RULE);assert.ok(contract.protocolWrite.data.criteria[0].requirement);assert.equal('terminology' in contract,false);
  const terminology=await seam.runtimeRead({id:'std_1'},{kind:'terminology'});assert.ok(terminology.terminology);
 });
+
+test("the meaning of a table's codes is settled when the inputs are frozen, a running job reads it without asking, and a corrected map is a changed input", async () => {
+  /** @type {any[]} */ const asks = [];
+  let digest = "meaning-1";
+  const subjectTableSeam = { async read(_study, options = {}) {
+    asks.push(options);
+    return { ...subjectTable(), ...(digest ? { meaningDigest: digest } : {}), meaningStatus: { status: "proposed" } };
+  } };
+  const matchStore = matchStoreDouble({ async listCriteria() { return TABLE_CRITERIA; }, async listFacts() { return []; } });
+  matchStore.candidateSubjects = async () => [];
+  const study = await owner.studyById();
+  const frozen = await vcrMatchingSeam({ matchStore, store: owner, subjectTable: subjectTableSeam, now: () => new Date(AS_OF) }).matchScenario(study);
+  assert.deepEqual(asks.at(-1), { variables: ["age", "creatinine", "myocardial_infarction", "sex"], propose: true }, "freezing is where the meaning is asked for");
+  const job = { ...tableJob(), inputs: frozen.inputs, scenario: frozen.scenario };
+  const execute = vcrMatchingExecutor({ matchStore, store: owner, subjectTable: subjectTableSeam });
+  const result = await execute({ job, onProgress: async () => {} });
+  assert.deepEqual(asks.at(-1), { variables: ["age", "creatinine", "myocardial_infarction", "sex"], propose: false }, "a running job never asks");
+  assert.deepEqual(result.diagnostics.subjectTable.meaning, { status: "proposed" }, "the result says what became of the meaning when it was frozen");
+  // a researcher corrected a map between the freeze and the run: the job's inputs are not the ones it was frozen with
+  digest = "meaning-2";
+  await assert.rejects(execute({ job, onProgress: async () => {} }), (error) => /** @type {any} */ (error).code === "vcr_matching_input_changed");
+  // a study with no meaning keeps the identity it had: freezing with and without a digest differ only by it
+  digest = "";
+  const bare = await vcrMatchingSeam({ matchStore, store: owner, subjectTable: subjectTableSeam, now: () => new Date(AS_OF) }).matchScenario(study);
+  await execute({ job: { ...tableJob(), inputs: bare.inputs, scenario: bare.scenario }, onProgress: async () => {} });
+});

@@ -383,6 +383,8 @@ test("a table of the study's patients is read for the facts a trial asks about, 
     available: true, snapshotId: "snp_table", sha256: "e".repeat(64), header: ["USUBJID", "AGE", "EGFR"],
     rows: [["P-9", "55", "L858R"], ["P-8", "30", ""]],
     columns: [{ name: "AGE", concept: "age", type: "integer", unit: "year" }, { name: "EGFR", concept: "egfr_mutation", type: "string" }], withheld: [],
+    // What the dataset recorded about the column's codes: L858R is the mutation being there. A filled cell is a value, and is no answer until a meaning reads it.
+    meaning: { columns: { EGFR: { valueMap: { values: { L858R: "present" }, measurement: false } } } },
   };
   const trials = seam({ subjectTable: { async read() { reads += 1; return table; } } });
   const written = await trials.writeTrial(study, { trial: trialOf("NCT06000071"), criteria: [AGE_18, ECOG, EGFR], subjectKeys: ["P-9"] });
@@ -392,6 +394,14 @@ test("a table of the study's patients is read for the facts a trial asks about, 
   const age = detail.judgments.find((judgment) => judgment.criterionId === written.criteria[0].id);
   assert.match(age.evidence[0].quote, /age/, "the evidence names the column");
   assert.ok(!JSON.stringify(age.evidence).includes("55"), "and not the value in it");
+
+  // The same table with no recorded meaning: the cell is filled and its code is unread, so the biomarker is unknown, never taken for present.
+  const unreadCodes = seam({ subjectTable: { async read() { return { ...table, meaning: null }; } } });
+  const codes = await unreadCodes.evaluate(study, { subjectKeys: ["P-9"], trialIds: [written.trial.id] });
+  assert.equal(codes.evaluated[0].summary, "insufficient_evidence");
+  // and when the meaning could not be proposed the answer says so, as a note beside the rest
+  const noted = seam({ subjectTable: { async read() { return { ...table, meaning: null, meaningStatus: { status: "not_proposed", code: "upstream_unavailable" } }; } } });
+  assert.deepEqual((await noted.evaluate(study, { subjectKeys: ["P-9"], trialIds: [written.trial.id] })).notes, [{ code: "vcr_table_meaning_not_proposed" }]);
 
   const refused = seam({ subjectTable: { async read() { throw Object.assign(new Error("no grant"), { code: "vcr_access_denied" }); } } });
   const unread = await refused.evaluate(study, { subjectKeys: ["P-9"] });
