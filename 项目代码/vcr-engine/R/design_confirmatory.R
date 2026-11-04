@@ -80,6 +80,19 @@ VCR_CONFIRMATORY_NULL_RATE_RATIO <- 1
 #' The null effect of an endpoint, on the scale the effects are stated in.
 .vcr_conf_null_value <- function(endpoint) if (identical(endpoint, "time_to_event")) 1 else 0
 
+#' The effect a size is planned for is a benefit: a hazard ratio or rate ratio below 1, a difference on the side `hypothesis.direction` names.
+#' The validator refuses a scenario whose planned effect is a harm before a handler runs; this is the same rule where a handler is called
+#' with a scenario that was not validated, so that a size is never planned for power against a harm.
+.vcr_conf_require_benefit <- function(p, effect, field) {
+  against <- if (p$endpoint %in% c("continuous", "binary")) (if (identical(p$direction, "lower_better")) effect > 0 else effect < 0) else effect > 1
+  if (isTRUE(against)) {
+    vcr_abort("effect_against_direction", field, if (p$endpoint %in% c("continuous", "binary"))
+      sprintf("A size is planned for a benefit, and this effect is on the wrong side of hypothesis.direction (%s): a design cannot be sized to reach power for it.", p$direction)
+      else "A size is planned for a benefit, and a ratio above 1 is a harm (more events): a design cannot be sized to reach power for it.")
+  }
+  invisible(effect)
+}
+
 #' The event-time conversion of the control median and the dropout the way the other design methods read them.
 .vcr_conf_tte_context <- function(sc, p) {
   acc <- sc$accrual
@@ -158,7 +171,7 @@ VCR_CONFIRMATORY_NULL_RATE_RATIO <- 1
     if (is.null(fut$binding)) p <- .vcr_conf_assume(p, "design.futility.binding", FALSE)
   }
   futility <- list(spending = as.character(fut[["spending"]] %||% "obrien_fleming"), gamma = vcr_scalar(fut$gamma, NULL), binding = isTRUE(fut$binding))
-  effect <- vcr_scalar(tr$plannedEffect)
+  effect <- .vcr_conf_require_benefit(p, vcr_scalar(tr$plannedEffect), "scenario.truth.plannedEffect")
   k <- length(p$rates)
   gs <- vcr_rpact_design(p$rates, p$alpha, p$power, p[["spending"]], p$gamma, futility)
   op <- vcr_rpact_operating(gs)
@@ -246,7 +259,7 @@ VCR_CONFIRMATORY_NULL_RATE_RATIO <- 1
   zone <- if (is.null(d$promisingZone)) NULL else list(lower = vcr_scalar(d$promisingZone$lower), upper = vcr_scalar(d$promisingZone$upper))
   if (is.null(d$conditionalPower)) p <- .vcr_conf_assume(p, "design.conditionalPower", cp)
   if (is.null(d$maxSampleSizeFactor)) p <- .vcr_conf_assume(p, "design.maxSampleSizeFactor", factor)
-  planned_effect <- vcr_scalar(tr$plannedEffect)
+  planned_effect <- .vcr_conf_require_benefit(p, vcr_scalar(tr$plannedEffect), "scenario.truth.plannedEffect")
   null_value <- .vcr_conf_null_value(p$endpoint)
   stated <- vcr_num(tr$effects)
   asked <- unique(c(stated, planned_effect))
@@ -475,6 +488,7 @@ VCR_CONFIRMATORY_NULL_RATE_RATIO <- 1
 .vcr_conf_count <- function(job) {
   sc <- job$scenario; p <- .vcr_conf_note_defaults(.vcr_conf_common(sc), sc)
   d <- sc$design; tr <- sc$truth
+  .vcr_conf_require_benefit(p, vcr_scalar(tr$rateRatio), "scenario.truth.rateRatio")
   exposure <- vcr_scalar(tr$exposureTime, 1)
   if (is.null(tr$exposureTime)) p <- .vcr_conf_assume(p, "truth.exposureTime", exposure)
   gs <- if (length(p$rates)) vcr_rpact_design(p$rates, p$alpha, p$power, p[["spending"]], p$gamma, NULL) else NULL

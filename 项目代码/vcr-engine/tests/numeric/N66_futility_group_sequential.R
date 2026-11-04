@@ -167,7 +167,12 @@ vcr_case("N66h", c("AC-29", "AC-26"), function() {
              ssr = gap(power_of(ss("lower_better", -0.15, 0.7, "binary")), power_of(ss("higher_better", 0.15, 0.3, "binary"))))
   # and a harm is a harm: the same differences against the direction reject almost never
   harm <- power_of(ma("higher_better", c(-0.1, -0.15), 0.3, "binary"))[1]
-  ok <- c(unlist(table), same_cont = same_cont, same_bin = same_bin, bit_cont, bin_complement = all(z_bin < 4), harm = harm < 0.02)
+  # and the handler refuses the same planned harm when it is called with a scenario nobody validated
+  direct <- function(sc) tryCatch({ vcr_job_design_confirmatory(list(scenario = sc, seed = 1L)); "no refusal" }, vcr_refusal = function(e) e$issue$code)
+  handler <- c(direct(list(design = fut, endpoint = list(type = "continuous"), hypothesis = list(direction = "higher_better"), truth = list(plannedEffect = -0.4, sd = 1))),
+               direct(list(design = fut, endpoint = list(type = "time_to_event"), truth = list(plannedEffect = 1.4, controlMedian = 12), accrual = list(duration = 12, followup = 24))),
+               direct(list(design = list(kind = "count_endpoint"), truth = list(controlEventRate = 1, rateRatio = 1.4, overdispersion = 0.5))))
+  ok <- c(unlist(table), same_cont = same_cont, same_bin = same_bin, bit_cont, bin_complement = all(z_bin < 4), harm = harm < 0.02, handler = all(handler == "effect_against_direction"))
   list(pass = all(ok), detail = sprintf("%d cells of the table of signs (planned effect on the benefit side sized, on the harm side refused as effect_against_direction, for futility, re-estimation and the count rate ratio; no direction refused); a lower-is-better mean equals the higher-is-better one with the sign turned in the design sizes and bit for bit in the multi-arm, enrichment and re-estimation simulations; a lower-is-better risk of 0.7 against 0.6/0.55 is its complement 0.3 against 0.4/0.45 within %.2f errors (multi-arm %.2f, enrichment %.2f, re-estimation %.2f); effects against the direction reject %.4f of the trials%s",
                                         length(table), max(z_bin), z_bin[["multi"]], z_bin[["enrich"]], z_bin[["ssr"]], harm, if (all(ok)) "" else paste0("; FAILED: ", paste(names(ok)[!ok], collapse = ","))))
 })
