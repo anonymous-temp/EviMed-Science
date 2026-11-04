@@ -373,6 +373,8 @@ function GroupJourney() {
 }
 
 it("opens a cross-page group link and can select the same hidden group again by keyboard", async () => {
+  let complete: (value: unknown) => void = () => undefined;
+  openNative.mockImplementationOnce(() => new Promise(resolve => { complete = resolve; }));
   const pending = prepareRuntimeUiIntent({ kind: "open", projectId: target.projectId, sessionId: target.sessionId, requestId: "pending-native", draft: "Pending native draft", owner: sessionOwner() });
   render(<MemoryRouter initialEntries={[{ pathname: "/app/geo/geo_1/visibility", search: "?conversation=open&session=ses_1", state: { runtimeUiIntent: pending, extra: "kept" } }]}><GroupJourney /></MemoryRouter>);
   const user = userEvent.setup();
@@ -384,7 +386,17 @@ it("opens a cross-page group link and can select the same hidden group again by 
   expect(screen.getByLabelText("Group location")).toHaveTextContent("session=ses_1");
   expect(JSON.parse(screen.getByLabelText("Group state").textContent ?? "{}")).toMatchObject({ runtimeUiIntent: pending, extra: "kept" });
   await user.click(screen.getByRole("button", { name: "Ask about group" }));
-  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(openNative).toHaveBeenCalledOnce();
+  expect(screen.getByRole("dialog", { name: "Group detail" })).toBeVisible();
+  expect(optionalOpaqueRuntimeUiIntent(JSON.parse(screen.getByLabelText("Group state").textContent ?? "{}"))?.draft).toBe("Pending native draft");
+  await act(async () => complete({
+    projectId: target.projectId, sessionId: target.sessionId,
+    scope: { kind: "geo", geoProjectId: target.geoId, sessionId: target.sessionId },
+  }));
+  await waitFor(() => {
+    expect(optionalOpaqueRuntimeUiIntent(JSON.parse(screen.getByLabelText("Group state").textContent ?? "{}"))?.draft).toBe("Keep this group draft");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
   const samePage = screen.getByRole("link", { name: "Open current group" });
   samePage.focus();
   await user.keyboard("{Enter}");
