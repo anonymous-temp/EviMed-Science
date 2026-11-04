@@ -51,7 +51,8 @@ before(async () => {
   await vcr.store.ready();
   documents = new ProductDocuments(database);
   receipts = createVcrUploadReceipts({ documents, sources: null, resolveProject: async () => project });
-  intake = createVcrPatientContext({ store: vcr.store, dataStore: vcr.dataStore, dataPlane: vcr.dataPlane, documents: vcr.documents, uploadReceipts: receipts,
+  vcr.recordsOriginals.receipts = receipts;
+  intake = createVcrPatientContext({ store: vcr.store, dataStore: vcr.dataStore, dataPlane: vcr.dataPlane, documents: vcr.documents, uploadReceipts: receipts, documentJobs: vcr.patientDocuments,
     sources: { list: async () => library, get: async () => null }, rejudge: (target, input) => vcr.matchJudge.rejudge(target, input), subjectKnown: vcr.subjectKnown, isHumanMessage: async () => true,
     transcript: async () => ({ sessionId: "root", exhausted: true, messages: messages.map((message) => ({ role: "user", source: "user", seq: message.seq, parts: [{ type: "text", text: message.text }] })) }) });
   study = await vcr.store.createStudy({ userId: "owner", projectId: "project", name: "Follow-up", question: "q", dataTier: "T0" });
@@ -131,14 +132,43 @@ test("a person who is not in this study, or who withdrew, cannot be added to", o
   await assert.rejects(() => intake(conversation(), { messageSeq: say(17, "ECOG 1。"), subjectKey: person.subjectKey }, origin), { code: "vcr_subject_not_found" });
 });
 
-test("a scan goes to the parser under a neutral name for its text alone, keeps its page numbers, and its handle is its identity", options, async () => {
+test("a scan goes to the parser under a neutral name for its text alone, as a job: the call answers at once, keeps its page numbers, and its handle is its identity", options, async () => {
   const handle = await receipts.record(project, { name: "张三-出院小结.pdf", bytes: Buffer.from("%PDF-1.4 scanned"), sessionId: "root" });
   assert.match(handle.sourceId, /^upl_/);
   const { uploads } = await intake.candidates(origin, {}, study);
   assert.deepEqual(uploads.map((row) => row.format), ["pdf"], "the read lists it");
+  const calls = parser.calls.length;
+  const started = await intake({ ...conversation(), completionOrigin: origin }, handle, origin);
+  assert.deepEqual([started.ok, started.converting, started.state], [true, true, "queued"], JSON.stringify(started.issues));
+  assert.equal(parser.calls.length, calls, "nothing is read while the call is open");
+  assert.equal(started.documentId, undefined);
+  assert.ok(started.subjectKey, "the person is named at once, for what is said next");
+  assert.ok(started.subjectLabel);
+  assert.match(started.statement, /转成文字/);
+  const job = await vcr.jobs.get(study.id, started.jobId);
+  assert.equal(job.kind, "records_import");
+  assert.deepEqual(job.checkpoint.conversationOrigin, origin, "its finish comes back to this conversation by the path every job's does");
+  const twice = await intake({ ...conversation(), completionOrigin: origin }, handle, origin);
+  assert.deepEqual([twice.jobId, twice.alreadyRunning], [started.jobId, true], "asking again finds the same job");
+  // While the parser reads, no connection sits in a transaction.
+  const holding = parser.parseBytes;
+  /** @type {number[]} */
+  const open = [];
+  parser.parseBytes = async (input) => {
+    open.push(Number((await database.query("SELECT count(*)::integer AS n FROM pg_stat_activity WHERE datname = current_database() AND state LIKE 'idle in transaction%'")).rows[0].n));
+    return holding.call(parser, input);
+  };
+  await runJobs();
+  parser.parseBytes = holding;
+  assert.deepEqual(open, [0], "the conversion holds no transaction");
+  assert.equal((await vcr.jobs.get(study.id, started.jobId)).state, "succeeded");
+  // Now it is there, and the same call finds it without reading it again.
+  const before = parser.calls.length;
   const saved = await intake(conversation(), handle, origin);
   assert.equal(saved.ok, true, JSON.stringify(saved.issues));
+  assert.equal(saved.subjectKey, started.subjectKey);
   assert.equal(saved.readBy, "in_house_parser");
+  assert.equal(parser.calls.length, before);
   assert.deepEqual(parser.calls.at(-1), { filename: "record.pdf", textOnly: true }, "the name does not travel and no model writes metadata");
   const file = await vcr.dataStore.getSourceFile(study.id, saved.documentId);
   assert.deepEqual(file.detail.extraction.pageMap.map((row) => row.page), [1, 2]);
@@ -151,21 +181,44 @@ test("a scan goes to the parser under a neutral name for its text alone, keeps i
   assert.deepEqual(sentences.sentences.map((row) => row.page), [1, 2], "evidence can say which page");
 });
 
-test("a parser that is off or fails is a plain answer with the file kept, and the same call reads it later", options, async () => {
+test("a parser that is off or fails ends the job with the file kept and the reason said, and the same call reads it later", options, async () => {
   const handle = await receipts.record(project, { name: "scan.png", bytes: Buffer.from("not really a picture"), sessionId: "root" });
   parser.configured = false;
   const off = await intake(conversation(), handle, origin);
-  assert.deepEqual([off.ok, off.kept, off.issues[0].code], [false, true, "vcr_document_parser_unavailable"]);
-  assert.match(off.issues[0].message, /原件已保留/);
-  assert.deepEqual(off.retry.data, handle);
+  assert.equal(off.converting, true);
+  await runJobs();
+  const stopped = await vcr.jobs.get(study.id, off.jobId);
+  assert.equal(stopped.state, "failed");
+  assert.equal(stopped.error.code, "vcr_document_parser_unavailable");
+  assert.match(stopped.error.message, /原件已保留/);
   parser.configured = true;
   parser.fail = "source_parser_internal_error";
-  const failed = await intake(conversation(), handle, origin);
-  assert.deepEqual([failed.ok, failed.kept, failed.issues[0].code], [false, true, "vcr_document_parser_failed"]);
+  const failing = await intake(conversation(), handle, origin);
+  assert.notEqual(failing.jobId, off.jobId, "an ended job is a new attempt");
+  await runJobs();
+  assert.equal((await vcr.jobs.get(study.id, failing.jobId)).error.code, "vcr_document_parser_failed");
   parser.fail = null;
+  const third = await intake(conversation(), handle, origin);
+  await runJobs();
+  assert.equal((await vcr.jobs.get(study.id, third.jobId)).state, "succeeded");
   const read = await intake(conversation(), handle, origin);
   assert.equal(read.ok, true);
+  assert.equal(read.subjectKey, off.subjectKey, "the same person all along");
   assert.deepEqual(parser.calls.at(-1), { filename: "record.png", textOnly: true });
+});
+
+test("a scan about someone the study has joins them when it is read, and what they have is judged again", options, async () => {
+  const first = await intake(conversation(), { messageSeq: say(31, "男性，70 岁。") }, origin);
+  assert.equal(first.ok, true);
+  const handle = await receipts.record(project, { name: "follow-up.pdf", bytes: Buffer.from("%PDF-1.4 later"), sessionId: "root" });
+  const asked = await intake(conversation(), { ...handle, subjectKey: first.subjectKey }, origin);
+  assert.equal(asked.subjectKey, first.subjectKey);
+  assert.equal(asked.converting, true);
+  await runJobs();
+  const read = await intake(conversation(), { ...handle, subjectKey: first.subjectKey }, origin);
+  assert.equal(read.subjectKey, first.subjectKey);
+  const mine = (await vcr.documents.roster(study)).filter((row) => row.subjectKey === first.subjectKey);
+  assert.ok(mine.some((row) => row.id === read.documentId || row.documentId === read.documentId));
 });
 
 test("a text record longer than a document is several documents of one person, and a Word file with no converter reaches the parser", options, async () => {
@@ -177,6 +230,8 @@ test("a text record longer than a document is several documents of one person, a
   const mine = (await vcr.documents.roster(study)).filter((row) => row.subjectKey === saved.subjectKey);
   assert.equal(mine.length, saved.documents);
   const word = await receipts.record(project, { name: "note.docx", bytes: Buffer.from("PK\u0003\u0004 word"), sessionId: "root" });
+  await intake(conversation(), word, origin);
+  await runJobs();
   assert.equal((await intake(conversation(), word, origin)).readBy, "in_house_parser");
 });
 

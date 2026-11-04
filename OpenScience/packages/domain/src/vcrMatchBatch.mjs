@@ -131,8 +131,11 @@ export function validateMatchBatchScenario(method, scenario) {
 function validateRecordsImportScenario(scenario) {
   const problems = []
   const bad = (/** @type {string} */ field, /** @type {string} */ detail) => problems.push({ code: 'scenario_field_invalid', field: `scenario.${field}`, detail })
-  for (const key of Object.keys(scenario)) if (!['mode', 'inputs', 'columns', 'format', 'name', 'chain'].includes(key)) problems.push({ code: 'scenario_field_unknown', field: `scenario.${key}`, detail: 'Unused scenario field.' })
-  if (!['notes', 'standard'].includes(scenario.mode)) bad('mode', 'notes or standard.')
+  for (const key of Object.keys(scenario)) if (!['mode', 'inputs', 'columns', 'format', 'name', 'chain', 'subjectKey'].includes(key)) problems.push({ code: 'scenario_field_unknown', field: `scenario.${key}`, detail: 'Unused scenario field.' })
+  if (!['notes', 'standard', 'document'].includes(scenario.mode)) bad('mode', 'notes, standard or document.')
+  // One conversation's attachment read into one person's record: nothing is proposed, and the person is known or new.
+  if (scenario.mode === 'document' && scenario.inputs?.length !== 1) bad('inputs', 'One original.')
+  if (scenario.subjectKey != null && (scenario.mode !== 'document' || typeof scenario.subjectKey !== 'string' || !SUBJECT.test(scenario.subjectKey))) bad('subjectKey', 'The pseudonym of the person a document joins.')
   if (!Array.isArray(scenario.inputs) || !scenario.inputs.length || scenario.inputs.length > VCR_RECORDS_IMPORT_INPUTS
     || scenario.inputs.some((entry) => typeof entry?.sourceId !== 'string' || !SUBJECT.test(entry.sourceId) || !Number.isSafeInteger(entry?.generation) || !/^[a-f0-9]{64}$/.test(String(entry?.sha256)))) bad('inputs', `One to ${VCR_RECORDS_IMPORT_INPUTS} original handles.`)
   if (scenario.mode === 'standard' && (scenario.inputs?.length !== 1 || !['fhir', 'omop', 'adam'].includes(scenario.format))) bad('format', 'One original and fhir, omop or adam.')

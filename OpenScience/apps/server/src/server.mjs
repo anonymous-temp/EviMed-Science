@@ -6022,7 +6022,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     sources: vcrUploadReceipts, resolveProject: sourceProject, recordsImport: vcr.recordsImport,
     sourceScope: origin => conversationSourceScope(origin, origin.rootSessionId) });
   if (vcr) vcr.patientContext = createVcrPatientContext({ store:vcr.store,dataStore:vcr.dataStore,dataPlane:vcr.dataPlane,documents:vcr.documents,
-    sources:sourceService, uploadReceipts:vcrUploadReceipts, rejudge:vcr.matchJudge?.rejudge ? (study,input) => vcr.matchJudge.rejudge(study,input) : null, subjectKnown:vcr.subjectKnown,
+    sources:sourceService, uploadReceipts:vcrUploadReceipts, documentJobs:vcr.patientDocuments, rejudge:vcr.matchJudge?.rejudge ? (study,input) => vcr.matchJudge.rejudge(study,input) : null, subjectKnown:vcr.subjectKnown,
     isHumanMessage: async (origin,message) => (await agentRuns.list(await sourceProject(origin))).some(run => run.sessionId === origin.rootSessionId
       && run.automated !== true && (Number.isSafeInteger(message.turnStartSeq) && run.nativeTurn?.startSeq === message.turnStartSeq
         || message.sourceRequestId && run.kernelRequestIds?.includes(message.sourceRequestId))),
