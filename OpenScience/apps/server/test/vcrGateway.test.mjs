@@ -1726,7 +1726,7 @@ test("a conversation's matching write and a job's status carry the entry to the 
   const { call } = conversationCalls("https://evimed.example");
   const write = await call("write", { what: "patient_context", data: { messageSeq: 1 } });
   assert.equal(write.status, 200);
-  assert.deepEqual(write.json().data.resultEntry, { studyId: "std_task", tab: "matching", label: "在“匹配”页查看", url: "https://evimed.example/app/virtual-research/std_task/matching" });
+  assert.deepEqual(write.json().data.resultEntry, { studyId: "std_task", tab: "matching", label: "在“匹配”页查看", object: "P-1", url: "https://evimed.example/app/virtual-research/std_task/matching?object=P-1" });
   const status = await call("simulate", { action: "status", jobId: "job_1" });
   assert.equal(status.status, 200);
   assert.equal(status.json().data.state, "running");
@@ -1736,7 +1736,7 @@ test("a conversation's matching write and a job's status carry the entry to the 
 test("a deployment with no public address still names the page; and a write that wrote nothing has no entry", async () => {
   const { call, made } = conversationCalls();
   const write = await call("write", { what: "patient_context", data: { messageSeq: 1 } });
-  assert.deepEqual(write.json().data.resultEntry, { studyId: "std_task", tab: "matching", label: "在“匹配”页查看" });
+  assert.deepEqual(write.json().data.resultEntry, { studyId: "std_task", tab: "matching", label: "在“匹配”页查看", object: "P-1" });
   made.vcr.patientContext = async () => ({ ok: false, issues: [{ code: "vcr_patient_context_invalid" }] });
   const refused = await call("write", { what: "patient_context", data: { messageSeq: 2 } });
   assert.equal(refused.json().data.resultEntry, undefined);

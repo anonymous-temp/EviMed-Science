@@ -20,7 +20,7 @@ test('static discovery exposes every validator operation and every example valid
 
 test('patient intake discovery distinguishes exact receipt fields, KB sources and human messages', () => {
   const contract = vcrContractsRead().writes.patient_context;
-  assert.deepEqual(contract.fields, ['messageSeq', 'sourceId', 'generation', 'sha256']);
+  assert.deepEqual(contract.fields, ['messageSeq', 'sourceId', 'generation', 'sha256', 'subjectKey']);
   assert.deepEqual(contract.oneOf.map(shape => shape.required), [['messageSeq'], ['sourceId', 'generation', 'sha256'], ['sourceId']]);
   assert.match(contract.discovery, /nextUploadRead/);
 });
