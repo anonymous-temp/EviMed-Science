@@ -207,6 +207,16 @@ class VcrToolDefinitionTests(unittest.TestCase):
         self.assertIn("validate", definitions["vcr_simulate"]["inputSchema"]["properties"]["action"]["enum"])
         self.assertNotIn("validate", definitions["vcr_simulate"]["description"], "it is found in the schema and in the answer of shape, not in the description")
 
+    def test_the_one_line_a_general_conversation_always_reads_names_dose_finding_and_the_comparison_of_several_drugs(self):
+        # Live check 2026-11-04: a pasted small table of three drugs asked for the best one was worked out in a script of the conversation's own (no
+        # vcr tool opened), and dose escalation reached the engine in two of five runs. The line stays within its cap and says both, in the words a
+        # person uses, beside what it already covered; shortened elsewhere (the pointer to the result page, the examples of dose finding) to fit.
+        description = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}["vcr_simulate"]["description"]
+        self.assertLessEqual(len(description), 420)
+        for words in ("sample size", "power or events", "comparing designs", "dose finding", "synthetic cohort", "baseline table", "external control",
+                      "comparing several drugs", "network meta-analysis"):
+            self.assertIn(words, description)
+
     def test_a_refusal_the_gateway_answers_with_400_is_the_run_s_to_fix(self):
         # "Go on without the study" is for a module that is not there, not for a sentence that says what to write first.
         fixable = vcr_platform.VcrPlatformError("vcr_simulate_subject_required", "first write a trial_scenario", status=400)

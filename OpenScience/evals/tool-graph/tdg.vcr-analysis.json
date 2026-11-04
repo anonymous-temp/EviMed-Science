@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-analysis",
-  "version": "sha256:b55109d3f6882d177fa0735904cd476463975ee6f50cd8e5a50a801172befcc6",
+  "version": "sha256:13786960522dce9d3a1301eb178c11c42c6ac1185920df6fb03f3fd072b55c9c",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 34,
@@ -1440,7 +1440,7 @@
     {
       "name": "mcp__evimed__vcr_simulate",
       "source": "mcp",
-      "description": "A human trial's sample size, power or events, comparing designs, a synthetic population from a paper's baseline, an external control: calculate here, not in a script of your own. No study needed; the first start opens a result page with versions and premises. action=shape with kind gives exact fields; do not guess keys. Long jobs resume here if they outlive this turn. modelId requires modelVersion.",
+      "description": "A human trial's sample size, power or events, comparing designs, dose finding, a synthetic cohort from a baseline table, an external control, comparing several drugs (network meta-analysis): calculate here, not in your own script. No study needed; a start opens a result page. action=shape with kind gives exact fields; do not guess keys. Long jobs resume here if they outlive this turn. modelId requires modelVersion.",
       "inputSchema": {
         "type": "object",
         "properties": {
