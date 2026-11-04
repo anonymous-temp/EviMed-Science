@@ -1244,14 +1244,15 @@ jobs:
           dir="$RUNNER_TEMP/vcr-confirmatory"
           rm -rf "$dir"; mkdir -p "$dir/in" "$dir/out"; chmod 0777 "$dir/out"
           cat > "$dir/in/job.json" <<'JSON'
-          {"jobId": "job_ci_confirmatory", "studyId": "std_ci", "kind": "design_confirmatory", "method": "design.confirmatory", "methodVersion": "1.0.0",
+          {"jobId": "job_ci_confirmatory", "studyId": "std_ci", "kind": "design_confirmatory", "method": "design.confirmatory", "methodVersion": "1.2.0",
            "protocolVersion": 1, "seed": 20261103, "cpuSecondsLimit": 600, "cores": 2, "inputs": [{"kind": "assumption", "id": "asm_ci@1"}],
            "scenario": {"design": {"kind": "sample_size_reestimation", "informationRates": [0.5, 1], "conditionalPower": 0.8, "maxSampleSizeFactor": 1.5},
+                        "hypothesis": {"direction": "higher_better"},
                         "endpoint": {"type": "continuous"}, "truth": {"plannedEffect": 0.4, "effects": [0.3], "sd": 1}, "analysis": {"alpha": 0.025, "power": 0.9}}}
           JSON
           limits=(--rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges:true --pids-limit 128 --memory 4g --cpus 2 --tmpfs /tmp:size=512m,mode=1777)
           # docker's --ulimit has no address-space type, so the shell sets the limit the service sets on a job (VCR_ENGINE_MEMORY_BYTES, 3 GiB in compose).
-          timeout 900 docker run "${limits[@]}" -v "$dir/in:/in:ro" -v "$dir/out:/out" --entrypoint sh "$EVIMED_VCR_ENGINE_IMAGE" -c 'ulimit -v 3145728; exec Rscript /opt/vcr-engine/service/run_job.R /in/job.json /out'
+          timeout 900 docker run "${limits[@]}" -v "$dir/in:/in:ro" -v "$dir/out:/out" --entrypoint sh "$EVIMED_VCR_ENGINE_IMAGE" -c 'ulimit -v 3145728; exec Rscript /opt/vcr-engine/service/run_job.R /in/job.json /out' || echo "run_job exited $?; the assertions below say why"
           timeout 120 docker run "${limits[@]}" --entrypoint sh "$EVIMED_VCR_ENGINE_IMAGE" -c "ulimit -v 3145728; exec Rscript -e 'library(dosresmeta); cat(\"dosresmeta\", as.character(packageVersion(\"dosresmeta\")), \"\\n\")'"
           DIR="$dir" node --input-type=module <<'JS'
           import assert from 'node:assert/strict';
