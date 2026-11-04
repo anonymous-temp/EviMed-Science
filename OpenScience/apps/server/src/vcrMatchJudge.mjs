@@ -1066,8 +1066,12 @@ export function presentJudgment(fit, criteria) {
     eligibilitySource: anchor.answer?.eligibilitySource ?? null,
     producer: anchor.producer, model: anchor.model, thinking: anchor.thinking, judgedAt: anchor.updatedAt,
     ...(basisChanged ? { basisChanged } : {}),
+    ...(isRegistryMark(basisChanged) && anchor.targetKind === 'candidate_trial' ? { rejudge: { reason: REGISTRY_RECORD_BASIS, label: '重新判定', subjectKey: anchor.subjectKey, registryIds: [anchor.targetId] } } : {}),
   };
 }
+
+/** Whether a row's `basisChanged` is the registry watch's mark: the record the verdict was made of has changed since. @param {any} basisChanged */
+const isRegistryMark = (basisChanged) => basisChanged?.kind === REGISTRY_RECORD_BASIS;
 
 /**
  * Reading the judgments of a study and writing the conversation's: the `ranking` of `vcr_read`, the numbered sentences a conversation reads a record through,
@@ -1080,13 +1084,9 @@ export function presentJudgment(fit, criteria) {
  *   rejudge?: { rejudge?: (study: any, input: { subjectKey: string, reason: string, targetIds: string[] }) => Promise<{ jobId: string } | null> } | null,
  *   report?: (code: string) => void, now?: () => Date }} deps
  */
-    ...(isRegistryMark(basisChanged) && anchor.targetKind === 'candidate_trial' ? { rejudge: { reason: REGISTRY_RECORD_BASIS, label: '重新判定', subjectKey: anchor.subjectKey, registryIds: [anchor.targetId] } } : {}),
-export function createMatchJudgmentReads({ judgments, documents, subjectTable = null, targets, matchStore, windowChars = 20_000 }) {
+export function createMatchJudgmentReads({ judgments, documents, subjectTable = null, targets, matchStore, windowChars = 20_000, rejudge = null, report = () => {}, now = () => new Date() }) {
   /** @param {any} study @param {string} subjectKey */
   const noteFor = async (study, subjectKey) => {
-/** Whether a row's `basisChanged` is the registry watch's mark: the record the verdict was made of has changed since. @param {any} basisChanged */
-const isRegistryMark = (basisChanged) => basisChanged?.kind === REGISTRY_RECORD_BASIS;
-
     const roster = (await documents.roster(study)).filter((/** @type {any} */ row) => String(row.subjectKey) === subjectKey);
     return readSubjectNote({ study, subjectKey, documents, roster, table: await tableFieldsOf(subjectTable, study), long: await documents.longTables?.(study).catch(() => null) ?? null });
   };
@@ -1141,9 +1141,6 @@ const isRegistryMark = (basisChanged) => basisChanged?.kind === REGISTRY_RECORD_
       const fit = pair.fitRow ? whole.get(pair.fitRow.id) ?? null : null, criteria = pair.criteriaRow ? whole.get(pair.criteriaRow.id) ?? null : null;
       return fit || criteria ? [presentJudgment(fit, criteria)] : [];
     });
-    // The trials of this person whose verdict rests on a record that has since changed, whatever page they are on: one action judges them again.
-    const stale = order === 'target' && subjectKey
-      ? ranked.filter((pair) => isRegistryMark(pair.fitRow?.basisChanged) || isRegistryMark(pair.criteriaRow?.basisChanged)).map((pair) => String(pair.targetId)).slice(0, VCR_MATCH_JUDGE_LIMITS.trials) : [];
     return { ranking: await Promise.all(presented.map((row) => projected(study, row))), finished: ranked.length, failedPairs: failed.length, ...(failed.length ? { failed: failed.slice(0, 50) } : {}), more: ranked.length > offset + limit,
       ...(stale.length ? { rejudge: { reason: REGISTRY_RECORD_BASIS, label: '登记记录已更新，可重新判定', subjectKey, registryIds: stale } } : {}) };
   };
