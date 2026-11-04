@@ -225,7 +225,7 @@ export const NUMERIC_REFERENCES = {
   // design.simulate (group-sequential MaxCombo and modestly weighted designs): the simulated boundaries against the analytic Lan-DeMets ones, a separate run's type I error, gsDesign2::gs_power_combo
   N90a: { methods: ['design.simulate'], anchors: ['gs <- vcr_group_sequential(rates, 0.025, "obrien_fleming")', 'z <- (b$bounds - gs$criticalValues) / se'] },
   N90b: { methods: ['design.simulate'], anchors: ['v <- .n90_trials(sc, 9003L, 6000L, list(bounds = b$bounds, logrank = TRUE))', 'same <- identical(one$bounds, two$bounds)'] },
-  N90c: { methods: ['design.simulate'], anchors: ['ref <- suppressMessages(gsDesign2::gs_power_combo(enroll_rate = enroll, fail_rate = fail, fh_test = fh, ratio = 1, binding = FALSE,', 'gap <- abs(mine - ups$probability)'] },
+  N90c: { methods: ['design.simulate'], anchors: ['ref <- suppressMessages(gsDesign2::gs_power_combo(enroll_rate = enroll, fail_rate = fail, fh_test = fh, ratio = 1, binding = FALSE,', 'z_law <- (alt_cal - ups$probability) / binom_se(alt_cal, 6000L)', 'ok <- c(law = all(abs(z_law) < 3.5), pipeline = all(abs(z_pipe) < 3.5)'] },
   N90e: { methods: ['design.simulate'], anchors: ['ref1 <- vcr_analyse_logrank(look1, 0.025, 1, 1); refK <- vcr_analyse_logrank(d, 0.025, 1, 1)', 'z_bias <- abs(bw[1] - bl[1]) / sqrt(bw[2]^2 + bl[2]^2)'] },
   // patients.longitudinal 1.2.0: output hashes of the previous release, a mixed model and a plain comparison against the known effect under MCAR, MAR and MNAR dropout, the two estimands of a rescue medication
   N89a: { methods: ['patients.longitudinal'], anchors: ['recorded <- c("1.0.0|0" = "230ba3da3e3b6117b1f8c73757f74b7dd1ca5ccc4da00575dbf6771b583fc97a"', 'same <- same && identical(fp, recorded[[key]])'] },

@@ -55,7 +55,7 @@ vcr_case("N89a", c("AC-31", "AC-04"), function() {
 })
 
 vcr_case("N89b", c("AC-11", "AC-29"), function() {
-  if (!requireNamespace("nlme", quietly = TRUE)) return(list(pass = TRUE, detail = "skipped: nlme (R's recommended package) is not installed"))
+  if (!requireNamespace("nlme", quietly = TRUE)) return(list(pass = FALSE, detail = "error: nlme (R's recommended package, the cross-check of the mixed model) is not installed (the run must not skip silently)"))
   # 6,000 per arm, 5 visits (0 to 8), effect -0.6 on the slope: the mean difference at the last visit is -4.8. Dropout starts at 6% per visit at an
   # average outcome and rises by a factor of e^5 per standard deviation (higher values leave sooner); MAR reads the previous value, MNAR the value at the visit.
   truth_slope <- -0.6; truth_last <- -4.8
@@ -80,7 +80,7 @@ vcr_case("N89b", c("AC-11", "AC-29"), function() {
 })
 
 vcr_case("N89c", c("AC-11", "AC-29"), function() {
-  if (!requireNamespace("nlme", quietly = TRUE)) return(list(pass = TRUE, detail = "skipped: nlme (R's recommended package) is not installed"))
+  if (!requireNamespace("nlme", quietly = TRUE)) return(list(pass = FALSE, detail = "error: nlme (R's recommended package, the cross-check of the mixed model) is not installed (the run must not skip silently)"))
   n <- 8000L
   sc <- .n89_scenario(n, -0.6, 0, rescue = list(perVisit = 0.05, effect = -6, logOddsPerSd = 3))
   dir <- tempfile("n89c"); dir.create(dir); on.exit(unlink(dir, recursive = TRUE), add = TRUE)
