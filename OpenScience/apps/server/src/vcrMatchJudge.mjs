@@ -1141,6 +1141,9 @@ export function createMatchJudgmentReads({ judgments, documents, subjectTable = 
       const fit = pair.fitRow ? whole.get(pair.fitRow.id) ?? null : null, criteria = pair.criteriaRow ? whole.get(pair.criteriaRow.id) ?? null : null;
       return fit || criteria ? [presentJudgment(fit, criteria)] : [];
     });
+    // The trials of this person whose verdict rests on a record that has since changed, whatever page they are on: one action judges them again.
+    const stale = order === 'target' && subjectKey
+      ? ranked.filter((pair) => isRegistryMark(pair.fitRow?.basisChanged) || isRegistryMark(pair.criteriaRow?.basisChanged)).map((pair) => String(pair.targetId)).slice(0, VCR_MATCH_JUDGE_LIMITS.trials) : [];
     return { ranking: await Promise.all(presented.map((row) => projected(study, row))), finished: ranked.length, failedPairs: failed.length, ...(failed.length ? { failed: failed.slice(0, 50) } : {}), more: ranked.length > offset + limit,
       ...(stale.length ? { rejudge: { reason: REGISTRY_RECORD_BASIS, label: '登记记录已更新，可重新判定', subjectKey, registryIds: stale } } : {}) };
   };
