@@ -41,8 +41,15 @@ export async function ensureDatabase(databaseUrl) {
   try {
     const found = await client.query('SELECT 1 FROM pg_database WHERE datname = $1', [name]);
     if (found.rowCount) return false;
-    await client.query(`CREATE DATABASE "${name}"`);
-    return true;
+    // Two runners creating a database at the same moment make PostgreSQL refuse one ("source database is being accessed by other users"): ask again.
+    for (let attempt = 0; ; attempt += 1) {
+      try { await client.query(`CREATE DATABASE "${name}"`); return true; } catch (error) {
+        const code = /** @type {any} */ (error)?.code;
+        if (code === '42P04') return false;
+        if (code !== '55006' || attempt >= 8) throw error;
+        await new Promise((resolve) => { setTimeout(resolve, 250 * (attempt + 1)); });
+      }
+    }
   } finally {
     await client.end();
   }

@@ -30,10 +30,10 @@ export function clausesOfPrompt(user) {
 }
 
 /**
- * @param {{ expectThinking?: 'off' | 'high' | null, expectKey?: string | null, latencyMs?: number, failWhen?: ((index: number, body: any) => number | null) | null, contentWhen?: ((index: number, body: any) => string | null) | null, port?: number }} [options]
+ * @param {{ expectThinking?: 'off' | 'high' | null, expectKey?: string | null, latencyMs?: number, failWhen?: ((index: number, body: any) => number | null) | null, contentWhen?: ((index: number, body: any) => string | null) | null, keepPrompts?: boolean, port?: number }} [options]
  * @returns {Promise<{ url: string, requests: any[], violations: string[], close: () => Promise<void> }>}
  */
-export async function startFakeProvider({ expectThinking = null, expectKey = null, latencyMs = 0, failWhen = null, contentWhen = null, port = 0 } = {}) {
+export async function startFakeProvider({ expectThinking = null, expectKey = null, latencyMs = 0, failWhen = null, contentWhen = null, keepPrompts = false, port = 0 } = {}) {
   /** @type {any[]} */ const requests = [];
   /** @type {string[]} */ const violations = [];
   const server = http.createServer((req, res) => {
@@ -47,7 +47,7 @@ export async function startFakeProvider({ expectThinking = null, expectKey = nul
       const messages = Array.isArray(body.messages) ? body.messages : [];
       const system = String(messages[0]?.content ?? ''), user = String(messages.at(-1)?.content ?? '');
       const criteria = system.includes('at the criterion level');
-      requests.push({ path: req.url, model: body.model, thinking, reasoningEffort: body.reasoning_effort ?? null, jsonMode: body.response_format?.type === 'json_object', maxTokens: body.max_tokens ?? null, criteria, userChars: user.length });
+      requests.push({ path: req.url, model: body.model, thinking, reasoningEffort: body.reasoning_effort ?? null, jsonMode: body.response_format?.type === 'json_object', maxTokens: body.max_tokens ?? null, criteria, userChars: user.length, ...(keepPrompts ? { system, user } : {}) });
       if (expectThinking && thinking !== expectThinking) violations.push(`request ${index}: thinking ${thinking}, wanted ${expectThinking}`);
       if (expectKey && req.headers.authorization !== `Bearer ${expectKey}`) violations.push(`request ${index}: wrong credentials`);
       if (!/\/chat\/completions$/u.test(String(req.url))) { res.writeHead(404).end('{}'); return; }

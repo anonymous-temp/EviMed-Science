@@ -10,6 +10,10 @@
  *
  *   node dev_job.mjs --board sigir --arm flash-high --mode fit --thinking high --concurrency 8
  *
+ * Boards beyond the first three: `--board n2c2` (F: the n2c2 cohort-selection notes, one protocol of thirteen criteria against the patients of
+ * `--split train-dev|train-heldout`; the sealed `test` split is refused without `--unseal`) and `--board sigir-zh|trec2021-zh-dev|trec2022-zh-dev`
+ * (G: the same candidates with the note translated into Chinese by prepare_zh.mjs). See extra_boards.mjs and README.md.
+ *
  * An arm is an experiment name. Each arm has its own study per board, so results never mix; the same arm run again continues
  * from the judgment ledger and pays nothing twice. Guards, in the order they act: the peak window (full price), the campaign's
  * cap (one append-only spend ledger across every arm), the DeepSeek balance floor (`budget.py`), then the same three again while
@@ -33,6 +37,8 @@ import { planMatchJudge } from '../../apps/server/src/vcrMatchJudge.mjs';
 import { createVcrTrialCorpus } from '../../apps/server/src/vcrTrialCorpus.mjs';
 import { BOARDS, JOB_TRIALS, SPLITS, collectionManifestOf, criterionRecord, fail, loadCases, noteForUpload, protocolOf, rankingRecord } from './board_cases.mjs';
 import { bestOf, rankingSteps, stageTwoWanted, stepRemaining } from './steps.mjs';
+import { EXTRA_BOARDS, boardNames, boardSpec, loadExtraCases } from './extra_boards.mjs';
+import { n2c2Protocol, n2c2Record } from './n2c2_board.mjs';
 import { DEFAULT_DB_NAME, dropDatabase, ensureDatabase, scratchUrl, takeRunnerLock } from './devdb.mjs';
 import { DEFAULT_CAP_CNY, DEFAULT_FLOOR_CNY, GuardStop, createBalanceChecker, createSpendLedger, preflight, watch } from './spend.mjs';
 
@@ -45,7 +51,7 @@ const ARM = /^[a-z0-9][a-z0-9_-]{0,39}$/u;
 export const EXIT = Object.freeze({ finished: 0, error: 1, refused: 2, stopped: 3, failedPairs: 4 });
 
 const OPTIONS = {
-  board: { type: 'string' }, split: { type: 'string', default: 'dev' }, arm: { type: 'string' }, mode: { type: 'string' },
+  board: { type: 'string' }, split: { type: 'string' }, arm: { type: 'string' }, mode: { type: 'string' },
   thinking: { type: 'string', default: 'high' }, 'top-k': { type: 'string' }, concurrency: { type: 'string', default: '8' },
   'limit-patients': { type: 'string' }, out: { type: 'string' }, 'cap-cny': { type: 'string', default: String(DEFAULT_CAP_CNY) },
   'floor-cny': { type: 'string', default: String(DEFAULT_FLOOR_CNY) }, 'allow-peak': { type: 'boolean', default: false },
@@ -53,6 +59,7 @@ const OPTIONS = {
   'data-dir': { type: 'string' }, boards: { type: 'string' }, 'key-file': { type: 'string' }, 'base-url': { type: 'string', default: 'https://api.deepseek.com' },
   model: { type: 'string', default: 'deepseek-flash' }, 'db-url': { type: 'string' }, 'db-name': { type: 'string', default: DEFAULT_DB_NAME },
   tg2: { type: 'string' }, tg1: { type: 'string' }, labels: { type: 'string' }, 'eval-python': { type: 'string' },
+  'n2c2-boards': { type: 'string' }, 'n2c2-labels': { type: 'string' }, 'n2c2-root': { type: 'string' }, 'zh-boards': { type: 'string' }, unseal: { type: 'boolean', default: false },
   'expected-output-tokens': { type: 'string' }, 'job-retries': { type: 'string', default: '1' }, 'job-trials': { type: 'string', default: String(JOB_TRIALS) }, 'progress-seconds': { type: 'string', default: '60' }, 'check-minutes': { type: 'string', default: '5' }, help: { type: 'boolean', default: false },
 };
 
@@ -71,13 +78,19 @@ export function parseOptions(argv, env = process.env) {
   const { values } = parseArgs({ args: argv, options: OPTIONS, allowPositionals: false });
   if (values.help) return { help: true };
   const board = /** @type {keyof typeof BOARDS} */ (values.board);
-  if (!board || !BOARDS[board]) throw fail(`--board is one of ${Object.keys(BOARDS).join(', ')}.`, 'option_invalid');
+  const spec = board ? boardSpec(board) : null;
+  if (!board || !spec) throw fail(`--board is one of ${boardNames().join(', ')}.`, 'option_invalid');
+  const extra = Object.hasOwn(EXTRA_BOARDS, board) ? EXTRA_BOARDS[board] : null;
+  const split = values.split ?? (board === 'n2c2' ? 'train-dev' : 'dev');
   if (!values.arm || !ARM.test(values.arm)) throw fail('--arm names the experiment: lowercase letters, digits, - and _ (at most 40).', 'option_invalid');
-  if (!SPLITS.includes(String(values.split))) throw fail(`--split is one of ${SPLITS.join(', ')}.`, 'option_invalid');
-  const criterionBoard = BOARDS[board].answer === 'criteria';
+  const splits = extra ? extra.splits : SPLITS;
+  if (!splits.includes(split)) throw fail(`--split for ${board} is one of ${splits.join(', ')}.`, 'option_invalid');
+  if (board === 'n2c2' && split === 'test' && !values.unseal) throw fail('The n2c2 test split is sealed: it is run once, by the owner, with --unseal. Nothing in this stream passes it.', 'test_sealed');
+  const criterionBoard = spec.answer === 'criteria' || spec.answer === 'protocol';
   const mode = values.mode ?? (criterionBoard ? 'criteria' : 'fit');
   if (!MODES.includes(mode)) throw fail(`--mode is one of ${MODES.join(', ')}.`, 'option_invalid');
-  if (criterionBoard && mode === 'fit') throw fail('The criterion board is answered clause by clause: use --mode criteria or both.', 'option_invalid');
+  if (criterionBoard && mode === 'fit') throw fail('This board is answered clause by clause: use --mode criteria or both.', 'option_invalid');
+  if (board === 'n2c2' && mode !== 'criteria') throw fail('The n2c2 board is one protocol against many patients: use --mode criteria.', 'option_invalid');
   if (!['off', 'high'].includes(String(values.thinking))) throw fail('--thinking is off or high.', 'option_invalid');
   const topKText = values['top-k'];
   const topK = topKText === 'all' ? 'all' : topKText == null ? (mode === 'criteria' || criterionBoard ? 'all' : 10) : whole(topKText, '--top-k', 0, 500);
@@ -87,17 +100,21 @@ export function parseOptions(argv, env = process.env) {
   const dataDir = values['data-dir'] ?? env.VCR_BOARDS_DATA;
   const boards = values.boards ?? env.VCR_BOARDS_INPUTS;
   if (!dataDir) throw fail('--data-dir (or VCR_BOARDS_DATA) names the private directory for outputs and the spend ledger.', 'option_missing');
-  if (!boards) throw fail('--boards (or VCR_BOARDS_INPUTS) names the prepared inputs directory.', 'option_missing');
+  if (!boards && board !== 'n2c2') throw fail('--boards (or VCR_BOARDS_INPUTS) names the prepared inputs directory.', 'option_missing');
+  const n2c2Boards = values['n2c2-boards'] ?? env.VCR_BOARDS_N2C2 ?? null, zhBoards = values['zh-boards'] ?? env.VCR_BOARDS_ZH ?? null;
+  if (board === 'n2c2' && !n2c2Boards) throw fail('--n2c2-boards (or VCR_BOARDS_N2C2) names board F\'s prepared directory (prepare_f.mjs).', 'option_missing');
+  if (extra?.source === 'zh' && !zhBoards) throw fail('--zh-boards (or VCR_BOARDS_ZH) names board G\'s prepared directory (prepare_zh.mjs).', 'option_missing');
   const planOnly = Boolean(values['plan-only']);
   const keyFile = values['key-file'] ?? env.OPEN_SCIENCE_DEEPSEEK_API_KEY_FILE;
   if (!keyFile && !planOnly) throw fail('--key-file (or OPEN_SCIENCE_DEEPSEEK_API_KEY_FILE) names the DeepSeek key file; the key is never printed.', 'option_missing');
   return {
-    help: false, board, split: String(values.split), arm: values.arm, mode, thinking: String(values.thinking), topK,
+    help: false, board, split, arm: values.arm, unseal: Boolean(values.unseal), n2c2Boards: n2c2Boards ? path.resolve(n2c2Boards) : null, zhBoards: zhBoards ? path.resolve(zhBoards) : null,
+    n2c2Labels: values['n2c2-labels'] ?? env.VCR_BOARDS_N2C2_LABELS ?? null, n2c2Root: values['n2c2-root'] ?? env.EVIMED_N2C2_ROOT ?? null, mode, thinking: String(values.thinking), topK,
     concurrency: whole(values.concurrency, '--concurrency', 1, 64),
     limitPatients: values['limit-patients'] == null ? null : whole(values['limit-patients'], '--limit-patients', 1, 100_000),
     out: values.out ? path.resolve(values.out) : null, capCny: Number(values['cap-cny']), floorCny: Number(values['floor-cny']),
     allowPeak: Boolean(values['allow-peak']), planOnly, score,
-    dataDir: path.resolve(dataDir), boardsDir: path.resolve(boards), keyFile: keyFile ? path.resolve(keyFile) : null, baseUrl: String(values['base-url']), model: String(values.model),
+    dataDir: path.resolve(dataDir), boardsDir: boards ? path.resolve(boards) : null, keyFile: keyFile ? path.resolve(keyFile) : null, baseUrl: String(values['base-url']), model: String(values.model),
     dbUrl: values['db-url'] ?? env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? null, dbName: String(values['db-name']),
     tg2: values.tg2 ?? env.VCR_BOARDS_TG2 ?? null, tg1: values.tg1 ?? env.VCR_BOARDS_TG1 ?? null, labels: values.labels ?? env.VCR_BOARDS_LABELS ?? null,
     evalPython: values['eval-python'] ?? env.VCR_BOARDS_PYTHON ?? 'python3',
@@ -123,9 +140,14 @@ export async function runDevJob(o, deps = {}) {
   const log = deps.log ?? ((/** @type {string} */ line) => process.stdout.write(`${line}\n`));
   const now = deps.now ?? (() => new Date());
   const startedAt = Date.now();
-  const spec = BOARDS[/** @type {keyof typeof BOARDS} */ (o.board)];
+  const spec = /** @type {NonNullable<ReturnType<typeof boardSpec>>} */ (boardSpec(o.board));
   const criterionBoard = spec.answer === 'criteria';
-  const cases = loadCases(o.boardsDir, o.board, { split: o.split, limit: o.limitPatients });
+  const rankingBoard = spec.answer === 'ranking';
+  const n2c2 = o.board === 'n2c2';
+  const extraBoard = Object.hasOwn(EXTRA_BOARDS, o.board);
+  const cases = extraBoard
+    ? loadExtraCases(/** @type {string} */ (n2c2 ? o.n2c2Boards : o.zhBoards), o.board, { split: o.split, limit: o.limitPatients, unseal: o.unseal })
+    : loadCases(o.boardsDir, o.board, { split: o.split, limit: o.limitPatients });
   if (!cases.length) throw fail('No cases for this board and split.', 'no_cases');
 
   const outDir = o.out ?? path.join(o.dataDir, 'dev-job', o.arm, o.board);
@@ -145,7 +167,7 @@ export async function runDevJob(o, deps = {}) {
   /** @type {Record<string, number>} */
   const reports = {};
   const planeDir = path.join(o.dataDir, 'dev-job', 'plane');
-  const manifest = criterionBoard ? '' : collectionManifestOf(o.boardsDir, cases);
+  const manifest = rankingBoard ? collectionManifestOf(o.boardsDir, cases) : '';
   let stopSignal = /** @type {GuardStop | null} */ (null);
   const onSignal = () => { stopSignal = stopSignal ?? new GuardStop('signal', 'Interrupted: the run stops cleanly and resumes from its ledger.'); };
   if (deps.signals !== false) for (const name of ['SIGINT', 'SIGTERM']) process.on(name, onSignal);
@@ -173,19 +195,31 @@ export async function runDevJob(o, deps = {}) {
     const source = sources.find((/** @type {any} */ row) => row.name === 'board-notes') ?? await vcr.dataPlane.registerSource({ userId: OWNER, studyId: study.id, name: 'board-notes' });
     const pseudonymKey = await studyPseudonymKey(planeDir, study.id);
     const subjectOf = (/** @type {string} */ patientId) => pseudonymOf(pseudonymKey, patientId);
-    const held = new Set((await vcr.dataPlane.listDocuments({ studyId: study.id, principal: OWNER })).map((/** @type {any} */ row) => row.subjectKey));
+    const heldDocuments = new Map();
+    for (const document of await vcr.dataPlane.listDocuments({ studyId: study.id, principal: OWNER })) heldDocuments.set(document.subjectKey, (heldDocuments.get(document.subjectKey) ?? 0) + 1);
+    const held = new Set(heldDocuments.keys());
+    const textStream = (/** @type {string} */ text) => (async function* () { yield Buffer.from(text, 'utf8'); })();
     let uploaded = 0;
     for (const row of cases) {
+      if (n2c2) {
+        // A patient's record is its dated documents. One that stopped half way is uploaded again whole: the same bytes are the same file.
+        if ((heldDocuments.get(subjectOf(row.patientId)) ?? 0) >= row.records.length) continue;
+        for (const [index, record] of row.records.entries()) {
+          await vcr.dataPlane.storeUpload({ actor: OWNER, studyId: study.id, sourceId: source.id, name: `${row.patientId}-${index}.txt`, role: 'document', subject: row.patientId, visibleAt: `${record.date}T00:00:00Z`, stream: textStream(record.text) });
+        }
+        uploaded += 1;
+        continue;
+      }
       if (held.has(subjectOf(row.patientId))) continue;
       const text = noteForUpload(o.board, row.note);
-      await vcr.dataPlane.storeUpload({ actor: OWNER, studyId: study.id, sourceId: source.id, name: `${row.patientId}.txt`, role: 'document', subject: row.patientId, stream: (async function* () { yield Buffer.from(text, 'utf8'); })() });
+      await vcr.dataPlane.storeUpload({ actor: OWNER, studyId: study.id, sourceId: source.id, name: `${row.patientId}.txt`, role: 'document', subject: row.patientId, stream: textStream(text) });
       uploaded += 1;
     }
     fs.writeFileSync(armFile, `${JSON.stringify({ settings, studyId: study.id, sourceId: source.id, startedAt: arm.startedAt ?? now().toISOString() }, null, 2)}\n`);
 
     // --- what will be judged ------------------------------------------------------------------------------------------
     let collection = null;
-    if (!criterionBoard) {
+    if (rankingBoard) {
       const corpus = createVcrTrialCorpus(manifest);
       collection = { id: corpus?.id, revision: corpus?.revision };
       await corpus?.close();
@@ -198,11 +232,12 @@ export async function runDevJob(o, deps = {}) {
     const items = [];
     /** @type {Map<string, ReturnType<typeof protocolOf> & { versionId: string }>} */
     const protocols = new Map();
+    let n2c2Version = '';
     const fitOn = o.mode !== 'criteria';
     const topK = o.mode === 'fit' ? 0 : o.topK;
     const selectionOf = (/** @type {string} */ subjectKey, /** @type {readonly string[]} */ ids, /** @type {{ fit: boolean, topK: number | 'all' }} */ step) => ({
       direction: 'patient_to_trial', subjectKey, registryIds: [...ids], collection: collection?.id, collectionRevision: collection?.revision, fit: step.fit, topK: step.topK, thinking: o.thinking });
-    if (!criterionBoard) {
+    if (rankingBoard) {
       for (const row of cases) {
         const subjectKey = subjectOf(row.patientId);
         const all = row.candidateIds.map(String);
@@ -213,6 +248,16 @@ export async function runDevJob(o, deps = {}) {
           items.push({ key: `${row.patientId}#best`, patientIds: [row.patientId], subjectKeys: [subjectKey], targetIds: step.ids, step, follow: { k: follow, ids: all }, selection: null });
         }
       }
+    } else if (n2c2) {
+      // One protocol, the thirteen criteria in the guide's words, against the whole roster of the split.
+      const protocol = n2c2Protocol();
+      const found = (await vcr.matchStore.protocols(study.id)).find((/** @type {any} */ version) => version.sourceRef === protocol.key);
+      const versionId = found?.id ?? (await vcr.matchStore.saveProtocolVersion({ studyId: study.id, userId: OWNER, title: protocol.title, sourceRef: protocol.key, criteria: protocol.criteria })).id;
+      n2c2Version = String(versionId);
+      const subjectKeys = cases.map((row) => subjectOf(row.patientId));
+      const step = { ids: [n2c2Version], fit: false, topK: /** @type {'all'} */ ('all') };
+      items.push({ key: 'n2c2', patientIds: cases.map((row) => row.patientId), subjectKeys, targetIds: [n2c2Version], step,
+        selection: { direction: 'trial_to_patient', protocolVersionId: n2c2Version, subjectKeys, fit: false, topK: 'all', thinking: o.thinking } });
     } else {
       const existing = await vcr.matchStore.protocols(study.id);
       /** @type {Map<string, { patientIds: string[] }>} */
@@ -332,8 +377,13 @@ export async function runDevJob(o, deps = {}) {
     }
     if (work.length) {
       // The collection must open before anything is paid for: a mismatched revision would fail every pair.
-      if (!criterionBoard) {
-        const first = await vcr.evidence.judgmentRecord({ userId: OWNER, registryId: String(cases[0].candidateIds[0]), collection: collection?.id, collectionRevision: collection?.revision });
+      if (rankingBoard) {
+        // A loaded machine can make the reader's first answer slow; ask a few times before calling the collection unreadable.
+        let first = await vcr.evidence.judgmentRecord({ userId: OWNER, registryId: String(cases[0].candidateIds[0]), collection: collection?.id, collectionRevision: collection?.revision });
+        for (let again = 0; again < 3 && first.status !== 'ok' && /timeout|busy|worker/u.test(String(first.reason ?? '')); again += 1) {
+          await new Promise((resolve) => { setTimeout(resolve, 2000); });
+          first = await vcr.evidence.judgmentRecord({ userId: OWNER, registryId: String(cases[0].candidateIds[0]), collection: collection?.id, collectionRevision: collection?.revision });
+        }
         if (first.status !== 'ok') throw fail(`The board's collection does not open (${first.reason ?? first.status}).`, 'collection_unreadable');
       }
       try {
@@ -382,7 +432,12 @@ export async function runDevJob(o, deps = {}) {
       for (let attempt = 0; attempt <= o.jobRetries; attempt += 1) {
         const started = await vcr.matchJudge.start(study, selection, { actor: OWNER });
         myJobs.push(String(started.jobId));
-        const claimed = await vcr.jobs.claim({ lane: 'slow' });
+        // The queue can answer an empty claim for a moment (a busy database, a lease being settled): ask again a few times before giving up.
+        let claimed = await vcr.jobs.claim({ lane: 'slow' });
+        for (let again = 0; again < 5 && !claimed.some((/** @type {any} */ row) => String(row.id) === String(started.jobId)); again += 1) {
+          await new Promise((resolve) => { setTimeout(resolve, 300 * (again + 1)); });
+          claimed = await vcr.jobs.claim({ lane: 'slow' });
+        }
         const job = claimed.find((/** @type {any} */ row) => String(row.id) === String(started.jobId));
         if (!job) throw fail(`The job ${started.jobId} was not claimable (${claimed.length} other job(s) claimed).`, 'job_not_claimed');
         currentJob = { studyId: study.id, id: String(job.id) };
@@ -436,7 +491,10 @@ export async function runDevJob(o, deps = {}) {
     const records = [];
     for (const row of cases) {
       const subjectKey = subjectOf(row.patientId);
-      if (!criterionBoard) {
+      if (n2c2) {
+        const page = await vcr.matchJudgmentReads.forProtocol(study, n2c2Version, { subjectKey, limit: 1, offset: 0 });
+        records.push(n2c2Record({ case: row, judgment: page.ranking[0], failed: await failedOf(subjectKey, () => n2c2Version), usage: await usageOf(subjectKey) }));
+      } else if (rankingBoard) {
         /** @type {any[]} */ const ranking = [];
         for (let offset = 0; ; offset += 500) {
           const page = await vcr.matchJudgmentReads.forSubject(study, subjectKey, { limit: 500, offset });
@@ -502,6 +560,7 @@ export async function runDevJob(o, deps = {}) {
  * @param {Record<string, any>} o @param {typeof BOARDS[keyof typeof BOARDS]} spec @param {string} outDir @param {string} file @param {(line: string) => void} log
  */
 export async function scoreRun(o, spec, outDir, file, log) {
+  if (spec.scorer === 'f') return scoreN2c2(o, outDir, file, log);
   const missing = [spec.scorer !== 'c' && !o.tg2 && '--tg2', spec.scorer === 'a' && !o.tg1 && '--tg1', spec.scorer === 'c' && !o.labels && '--labels'].filter(Boolean);
   if (missing.length) { log(`[dev_job] not scored: ${missing.join(', ')} needed (or VCR_BOARDS_TG2, VCR_BOARDS_TG1, VCR_BOARDS_LABELS).`); return { skipped: missing }; }
   const args = ['-I', '-B', path.join(HERE, 'score.py'), spec.scorer, '--boards', o.boardsDir, '--work', path.join(outDir, 'score-work'), '--out', path.join(outDir, 'score')];
@@ -509,6 +568,26 @@ export async function scoreRun(o, spec, outDir, file, log) {
   if (spec.scorer === 'a') args.push('--tg1', o.tg1, '--judgments', `${spec.cohort}=${file}`);
   else args.push('--judgments', file);
   if (spec.scorer === 'c') args.push('--labels', o.labels);
+  const code = await new Promise((resolve) => {
+    const child = spawn(o.evalPython, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    child.stdout.on('data', (chunk) => process.stdout.write(chunk));
+    child.stderr.on('data', (chunk) => process.stderr.write(chunk));
+    child.once('error', () => resolve(127));
+    child.once('close', (status) => resolve(status ?? 1));
+  });
+  if (code !== 0) log(`[dev_job] score.py exited ${code}`);
+  return { exitCode: code, out: path.join(outDir, 'score') };
+}
+
+/**
+ * Board F's scorer: `score.py f` reads the labels and the official evaluator in its own process and prints aggregates only.
+ * @param {Record<string, any>} o @param {string} outDir @param {string} file @param {(line: string) => void} log
+ */
+async function scoreN2c2(o, outDir, file, log) {
+  const missing = [!o.n2c2Labels && '--n2c2-labels', !o.n2c2Root && '--n2c2-root'].filter(Boolean);
+  if (missing.length) { log(`[dev_job] not scored: ${missing.join(', ')} needed (or VCR_BOARDS_N2C2_LABELS, EVIMED_N2C2_ROOT).`); return { skipped: missing }; }
+  const args = ['-I', '-B', path.join(HERE, 'score.py'), 'f', '--n2c2-boards', o.n2c2Boards, '--labels', o.n2c2Labels, '--n2c2-root', o.n2c2Root, '--split', o.split,
+    '--judgments', file, '--work', path.join(outDir, 'score-work'), '--out', path.join(outDir, 'score'), '--python', o.evalPython];
   const code = await new Promise((resolve) => {
     const child = spawn(o.evalPython, args, { stdio: ['ignore', 'pipe', 'pipe'] });
     child.stdout.on('data', (chunk) => process.stdout.write(chunk));

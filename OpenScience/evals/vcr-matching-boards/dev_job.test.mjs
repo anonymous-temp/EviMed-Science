@@ -405,10 +405,11 @@ describe('the loop on a synthetic board', { skip: !SERVER_URL && 'OPEN_SCIENCE_T
   });
 
   test('a balance that falls under the floor mid-run stops it cleanly with partial results, and the next run does only the rest', async () => {
-    const provider = await startFakeProvider({ latencyMs: 40 });
+    const provider = await startFakeProvider({ latencyMs: 150 });
     try {
+      // Healthy at the start and under the floor once a few calls have been made, whatever the machine's speed.
       let reads = 0;
-      const balance = async () => ({ code: ++reads === 1 ? 0 : 2, balance: reads === 1 ? 500 : 120, line: '' });
+      const balance = async () => (++reads === 1 || provider.requests.length < 3 ? { code: 0, balance: 500, line: '' } : { code: 2, balance: 120, line: '' });
       const stopped = await run(['--concurrency', '2', '--check-minutes', '0.001'], provider.url, { balance }, 'stop-mid');
       assert.equal(stopped.exitCode, EXIT.stopped, stopped.lines.join('\n'));
       assert.equal(stopped.summary.stopped.code, 'balance_floor');

@@ -559,6 +559,12 @@ def provenance(boards):
 
 
 def main():
+    if len(sys.argv) > 1 and sys.argv[1] == "f":  # board F has its own module and its own inputs
+        from score_f import cli
+        return cli(sys.argv[2:])
+    if len(sys.argv) > 1 and sys.argv[1] == "d":  # board D scores owner-supplied pair files
+        from score_d import cli
+        return cli(sys.argv[2:])
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = parser.add_subparsers(dest="board", required=True)
     for name in ("a", "b", "c"):

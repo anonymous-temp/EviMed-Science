@@ -140,3 +140,46 @@ answers (criterion) through the real converter and evaluators.
 prints only `balance CNY <n>` and exits 2 under the floor, 3 when the balance cannot be read, 4 when `--require-off-peak` and it is
 peak. Peak is weekdays 01:00-04:00 and 06:00-10:00 UTC. `is_off_peak()` is importable for runners. The key is never printed or put on
 a command line.
+
+## Boards F, G and D (added 2026-11-04)
+
+These live apart from A to C: their prepared inputs are in their own private directories and `prepare.py`'s digests do not cover them.
+
+### F: n2c2 2018 Track 1, real notes
+
+`prepare_f.mjs --n2c2-root <dir> --out <inputs> --labels-out <labels>` writes `F-n2c2/cases.jsonl` (one case per training patient: the file's
+own `Record date:` blocks as dated records) and, apart, `F-n2c2/labels.jsonl`. The split is the n2c2 README's: 40 development patients by the
+fixed salted hash of `evals/vcr-matching/n2c2/data.mjs`, the other 162 held out (ids digests `abf3d521...` and `966c56cf...`, checked by a test).
+`dev_job.mjs --board n2c2 --split train-dev|train-heldout --n2c2-boards <inputs> --n2c2-labels <labels> --n2c2-root <dir>` uploads each record as
+a document dated by its record date and judges one protocol, the thirteen criteria in the annotation guide's wording (`n2c2/criteria.mjs`), against
+the whole roster in one job, clause k being tag k. The **sealed test split is refused** by the loader and by the options unless `--unseal` is passed,
+which only the owner does; `prepare_f.mjs` does not write the test notes without `--with-test`; the sealed gold archive is never opened here.
+
+`score.py f` reads each label as met, not met or neither (`not enough information`, `not applicable`, no answer), keeps `included` and `not included`
+as the model gave them, silent or stated, and reads the rest in four ways: (a) wrong, in the denominator (accuracy only); (b) not met, the unfavourable
+reading and the annotators' convention; (c) as (b) except ENGLISH and MAKES-DECISIONS, met (guide section 4); (d) met, the favourable reading. The
+unchanged `track1_eval.py` (digest pinned) scores (b), (c) and (d) and must equal the module's own micro and macro F1 or nothing is written. Reported:
+accuracy and micro F1 with a patient bootstrap, macro F1, per criterion, the unknown share and its kinds, the model's yes and no by basis, a
+majority baseline learnt from the patients outside the split, completion and cost. Aggregates only; no note is read by the scorer.
+
+### G: Chinese robustness
+
+`prepare_zh.mjs` translates the SIGIR notes and the TREC 2021 and 2022 development-topic notes once, on `deepseek-flash` with thinking off, through the
+control plane's gateway call (so the usage ledger books it), under the same guards and a stage budget (default CNY 2). The instruction forbids adding,
+omitting, explaining and inferring, and leaves numbers, units and dates as written; code checks the numbers (a multiset, asked again once, counted when
+it still differs) and that the result is Chinese. Each board is written once with its hashes (`A-sigir-zh`, `A-trec2021-zh-dev`, `A-trec2022-zh-dev`);
+the trials, candidate lists, collections and qrels are A's, so `dev_job.mjs --board sigir-zh --zh-boards <dir> --boards <A's inputs>` changes only the
+language of the note. Score with `score.py a` as for A; the dev-topic and finished variants are the ones that apply.
+
+### D: patient-level eligibility (VERDICT's form)
+
+Read at stanford-oval/clinical-trial-matching, commit `a56e3ed09f10928dd033baefb1b78856943aa99f` (Apache-2.0), with `gh api`, no clone. Their F1
+(`scripts/tables/table2_trec2021_f1.py`): a pair is `<patient>__<NCT>`, the frozen file holds `{pair, gold}` with gold `eligible` or `ineligible`, a
+system's answer is `eligible` or not, eligible is the positive class, P = tp/(tp+fp), R = tp/(tp+fn), F1 = 2PR/(P+R), accuracy = (tp+tn)/n. **The
+pair files are not obtainable:** at that commit the repository holds only a demo pair; `data/headline/`, `data/gold/`, `dataset/clinical_trial/sigir/`
+and every `verdicts.jsonl` the documents mention are not in it (no commit in its history touches `dataset/`), the SIGIR gold is the majority of five LM judges (3 of 5),
+not a human label, and the 363 TREC 2021 pairs (`test_clean_tagged.jsonl`, built from an unreleased compiled pair set by taking every fifth NCT and dropping
+73 pairs their parser could not use) are in `svpo-rl`, a private repository. So there is no board data; `score.py d --pairs <their-shaped file> --judgments <file>`
+is ready for files the owner obtains. The mapping from our verdict: eligible to eligible; ineligible and insufficient to ineligible; `possible` reported both
+ways (`possible_is_eligible`, `possible_is_ineligible`); a pair without a verdict is reported both left out and as ineligible. Their reported numbers
+(VERDICT F1 0.863 on 539 SIGIR pairs by their own judges' gold; 0.828 on TREC 2021 with GPT-5-mini) are their authors' own and not paired with ours.
