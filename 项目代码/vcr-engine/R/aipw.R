@@ -259,6 +259,13 @@ vcr_job_aipw <- function(job, output_dir = NULL, cancel_file = NULL, ...) {
                                 if (!is.null(trim_info)) list(trim = trim_info))))
   }
 
+  # An arm with no event up to tau has constant Kaplan-Meier pseudo-observations: the arm's estimate is a number (1, or tau), but its
+  # influence function is identically zero, so the standard error and the interval of the difference come from the OTHER arm alone and are
+  # an artefact, not knowledge (all censored: a difference of 0 with a standard error of 3e-16; one arm with no events: an interval as narrow
+  # as one arm's). The estimate is kept and said to be limited; the standard errors and intervals are withheld.
+  no_event_arm <- if (tte) vapply(0:1, function(a) { i <- rows_kept[treat_k == a]; !any(status[i] == 1L & time[i] <= tau) }, logical(1)) else c(FALSE, FALSE)
+  degenerate <- any(no_event_arm)
+
   # the whole pipeline in every resample: the trimming, both models refitted, the estimate recomputed
   k <- length(core$estimates)
   B <- vcr_bootstrap_replicates(vcr_scalar(job$replicates, NULL))
@@ -326,7 +333,8 @@ vcr_job_aipw <- function(job, output_dir = NULL, cancel_file = NULL, ...) {
   verdict <- if (reads_balance) vcr_balance_verdict(balance) else NULL
   # before the verdict, a weighted covariate still apart by the floor was said by this one code and nothing else
   smd_notice <- !reads_balance && is.finite(max(abs(balance$smdAdjusted))) && max(abs(balance$smdAdjusted)) >= limits_used$smdFloor
-  limited_by <- c(if (bs$failureShare > 0.01) "bootstrap_failure_share",
+  limited_by <- c(if (degenerate) "arm_without_events_before_tau",
+                  if (bs$failureShare > 0.01) "bootstrap_failure_share",
                   if (trimmed_someone) "target_population_trimmed",
                   if (length(tt_limits)) "target_trial_item_cannot_be_emulated",
                   if (smd_notice) "standardized_difference_above_floor",
@@ -339,7 +347,7 @@ vcr_job_aipw <- function(job, output_dir = NULL, cancel_file = NULL, ...) {
                           riskRatio = if (binary && is.finite(core$influence$seLogRiskRatio)) list(se = core$influence$seLogRiskRatio, scale = "log risk ratio") else NULL,
                           oddsRatio = if (binary && is.finite(core$influence$seLogOddsRatio)) list(se = core$influence$seLogOddsRatio, scale = "log odds ratio") else NULL,
                           basis = "efficient influence function of the ATT with the nuisance estimates plugged in; it ignores the estimation of the two models")
-  list(status = "succeeded", measures = measures, conclusion = if (length(limited_by)) "limited" else "estimable", counts = counts,
+  res <- list(status = "succeeded", measures = measures, conclusion = if (length(limited_by)) "limited" else "estimable", counts = counts,
        diagnostics = c(list(
          method = "aipw", estimand = "ATT", endpoint = endpoint, scale = scale_word,
          nuisance = list(propensity = list(covariates = as.list(ps_covs), family = "binomial", converged = core$psConverged),
@@ -370,4 +378,14 @@ vcr_job_aipw <- function(job, output_dir = NULL, cancel_file = NULL, ...) {
        tables = .vcr_tables_of(list(
          vcr_write_table(balance, "balance", output_dir),
          vcr_write_table(data.frame(row = which(keep)[rows_kept], arm = treat_k, propensity = core$e, oddsWeight = core$w, outcomePrediction = core$m0), "weights", output_dir))))
+  if (degenerate) {
+    withheld <- c("aipw_difference_influence", "aipw_difference_se_influence", "aipw_difference_se_bootstrap")
+    res$measures <- lapply(Filter(function(m) !(m$name %in% withheld), res$measures), function(m) { if (identical(m$name, "aipw_difference")) m$interval <- NULL; m })
+    res$diagnostics$influence <- list(withheld = TRUE, basis = "the Kaplan-Meier influence function of an arm with no event up to tau is zero, so a standard error from it describes the other arm only")
+    res$diagnostics$bootstrap <- NULL; res$diagnostics$varianceComparison <- NULL
+    res$diagnostics$timeToEvent$noEventArm <- list(
+      arms = as.list(c("control", "treated")[no_event_arm]),
+      reason = "an arm has no event up to tau: its estimate is the Kaplan-Meier value of an arm that never failed, and no standard error or interval is reported for the difference")
+  }
+  res
 }

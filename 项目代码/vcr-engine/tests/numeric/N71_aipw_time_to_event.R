@@ -129,3 +129,43 @@ vcr_case("N71c", c("AC-08", "AC-11", "AC-30"), function() {
        detail = sprintf("true restricted-mean ATT %.5f; bias (Monte-Carlo error, in errors) both right %.4f (%.4f, %.1f), outcome wrong %.4f (%.4f, %.1f), score wrong %.4f (%.4f, %.1f), both wrong %.4f (%.4f, %.1f); %d trials of 1000",
                         truth, bias[["rr"]], mcse[["rr"]], z[["rr"]], bias[["rw"]], mcse[["rw"]], z[["rw"]], bias[["wr"]], mcse[["wr"]], z[["wr"]], bias[["ww"]], mcse[["ww"]], z[["ww"]], R))
 })
+
+vcr_case("N71d", c("AC-08", "AC-30"), function() {
+  # An arm with no event up to tau. The Kaplan-Meier value of such an arm is a number (survival 1, restricted mean tau) and the mean of its
+  # pseudo-observations equals it, but their spread is zero, so a standard error from the influence function (and the bootstrap's, which has
+  # nothing to resample in that arm) describes the OTHER arm alone: all censored gave a difference of 0 with a standard error of 3e-16, one
+  # arm without events an interval as narrow as one arm's, both `estimable`. The estimate stays (held to survfit and survRM2) and is
+  # `limited` with the reason; no standard error or interval is reported for the difference; an ordinary trial still gets its interval.
+  suppressMessages(library(survRM2))
+  set.seed(20261104L, kind = VCR_RNG_KIND)
+  mk <- function(arm, time, status) data.frame(USUBJID = sprintf("S%05d", seq_along(arm)), arm = arm, x1 = stats::rnorm(length(arm)), x2 = stats::rnorm(length(arm)), time = time, status = status)
+  one <- function(d, scenario, id) {
+    ev <- data.frame(USUBJID = d$USUBJID, PARAMCD = "OS", AVAL = d$time, CNSR = 1L - d$status)
+    dir <- tempfile(id); dir.create(dir); on.exit(unlink(dir, recursive = TRUE), add = TRUE)
+    vcr_test_run(.n71_job(d, ev, id, scenario = scenario, replicates = 200L), output_dir = dir)
+  }
+  v <- function(r, name) { m <- Filter(function(x) identical(x$name, name), r$measures); if (length(m)) m[[1]] else NULL }
+  limited <- function(r) identical(r$status, "succeeded") && identical(r$conclusion, "limited") && "arm_without_events_before_tau" %in% unlist(r$diagnostics$limitedBy) &&
+    is.null(v(r, "aipw_difference")$interval) && is.null(v(r, "aipw_difference_se_influence")) && is.null(v(r, "aipw_difference_se_bootstrap")) && is.null(v(r, "aipw_difference_influence"))
+  # (1) all censored: survival at tau 6 is 1 in both arms, the difference 0
+  d1 <- mk(rep(0:1, each = 150L), stats::runif(300, 8, 20), integer(300))
+  r1 <- one(d1, list(summary = "survival", tau = 6), "n71d1")
+  sf1 <- vapply(0:1, function(a) { x <- d1[d1$arm == a, ]; summary(survival::survfit(survival::Surv(time, status) ~ 1, data = x), times = 6)$surv }, numeric(1))
+  # (2) the control arm never fails, the treated arm always does
+  d2 <- mk(rep(0:1, each = 100L), c(stats::runif(100, 4, 10), stats::runif(100, 0.1, 4)), c(integer(100), rep(1L, 100)))
+  r2 <- one(d2, list(summary = "survival", tau = 3), "n71d2")
+  sf2 <- summary(survival::survfit(survival::Surv(time, status) ~ 1, data = d2[d2$arm == 1L, ]), times = 3)$surv
+  r3 <- one(d2, list(summary = "rmst", tau = 3), "n71d3")
+  rm3 <- survRM2::rmst2(d2$time, d2$status, d2$arm, tau = 3)
+  # (3) an ordinary trial: events in both arms, the interval is there and nothing is limited by this rule
+  set.seed(20261108L, kind = VCR_RNG_KIND); d <- .n71_gen(1000L)
+  r4 <- one(d, list(summary = "rmst", tau = 5), "n71d4")
+  ok <- c(all_censored = limited(r1) && abs(v(r1, "aipw_difference")$value) < 1e-12 && max(abs(sf1 - 1)) < 1e-12,
+          one_arm = limited(r2) && abs(v(r2, "outcome_mean_treated")$value - sf2) < 1e-9 && abs(v(r2, "outcome_mean_control_adjusted")$value - 1) < 1e-9,
+          rmst = limited(r3) && abs(v(r3, "outcome_mean_treated")$value - rm3$RMST.arm1$rmst[["Est."]]) < 1e-9 && abs(v(r3, "outcome_mean_control_adjusted")$value - 3) < 1e-9,
+          ordinary = !("arm_without_events_before_tau" %in% unlist(r4$diagnostics$limitedBy)) && !is.null(v(r4, "aipw_difference")$interval) && !is.null(v(r4, "aipw_difference_se_influence")))
+  list(pass = all(ok), detail = sprintf("all censored (survival at 6: survfit %s): difference %.3g, %s, no standard error or interval; control never fails, treated always does (tau 3): treated survival %.6f vs survfit %.6f, adjusted control %.6f, limited; restricted mean: treated %.6f vs survRM2 %.6f, control %.3f = tau; an ordinary trial keeps its interval (%s)%s",
+                                        paste(format(sf1), collapse = "/"), v(r1, "aipw_difference")$value, r1$conclusion, v(r2, "outcome_mean_treated")$value, sf2, v(r2, "outcome_mean_control_adjusted")$value,
+                                        v(r3, "outcome_mean_treated")$value, rm3$RMST.arm1$rmst[["Est."]], v(r3, "outcome_mean_control_adjusted")$value, r4$conclusion,
+                                        if (all(ok)) "" else paste0("; FAILED: ", paste(names(ok)[!ok], collapse = ","))))
+})
