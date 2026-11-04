@@ -387,6 +387,23 @@ test("a withdrawal in flight: nothing of the person is put back", async () => {
   assert.equal(result.status, "failed", "nothing is saved, so nothing finished");
 });
 
+test("everyone on the frozen roster having withdrawn is a job that judged nobody", async () => {
+  const f = fixture({ scenario: toB, withdrawn: new Set(["P-1", "P-2", "P-3"]) });
+  const result = await f.run(f.job({ topK: 0 }));
+  assert.deepEqual([result.status, result.conclusion, result.diagnostics.issues[0].code], ["failed", "not_estimable", "vcr_match_nothing_finished"]);
+  assert.equal(f.provider.calls.length, 0);
+});
+
+test("a long record that fails on a later part still bills the parts it read", async () => {
+  const down = Object.assign(new Error("400"), { code: "model_gateway_upstream_error", upstreamStatus: 400 });
+  const long = `${"既往体健。".repeat(7000)}\n\n${"复查无异常。".repeat(7000)}`;
+  const f = fixture({ text: { d1: long }, roster: [ROSTER[0]], script: ({ index }) => (index === 2 ? { throw: down } : null) });
+  const result = await f.run(f.job({ topK: 0, trials: [{ registry: "clinicaltrials.gov", registryId: "NCT00000001" }] }));
+  assert.equal(result.diagnostics.used.calls, 1);
+  assert.equal(result.diagnostics.used.inputTokens, 100);
+  assert.deepEqual(result.diagnostics.failures, { model_gateway_upstream_error: 1 });
+});
+
 test("a withdrawn person is not read at all", async () => {
   const f = fixture({ scenario: toB, withdrawn: new Set(["P-2"]) });
   const result = await f.run(f.job({ topK: 0 }));

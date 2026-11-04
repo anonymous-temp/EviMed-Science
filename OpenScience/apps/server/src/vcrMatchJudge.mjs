@@ -328,7 +328,7 @@ async function judgeFit({ judge, study, jobId, note, target, thinking, cap }) {
   /** @type {any[]} */ const calls = [];
   for (const part of parts) {
     const messages = fitMessages({ title: target.title, summary: target.summary, eligibility: target.eligibility, note: part.text, conditions: target.conditions, interventions: target.interventions });
-    const answered = await judge.call({ study, jobId, messages, thinking });
+    const answered = await judge.call({ study, jobId, messages, thinking }).catch((error) => { throw Object.assign(error, { calls }); });
     calls.push(answered);
     answers.push(parseFitAnswer(answered.content));
   }
@@ -347,7 +347,7 @@ async function judgeCriteria({ judge, study, jobId, note, target, thinking, cap 
   /** @type {any[]} */ const calls = [];
   for (const part of parts) {
     const messages = criteriaMessages({ title: target.title, summary: target.summary, criteria: target.clauses, sentences: part.sentences, conditions: target.conditions, interventions: target.interventions });
-    const answered = await judge.call({ study, jobId, messages, thinking });
+    const answered = await judge.call({ study, jobId, messages, thinking }).catch((error) => { throw Object.assign(error, { calls }); });
     calls.push(answered);
     answers.push(parseCriteriaAnswer(answered.content, { criteria: target.clauses, sentences: part.sentences }));
   }
@@ -611,8 +611,8 @@ export function createMatchJudgeExecutor({ store, matchStore, judgments, documen
         tally[mode].done += 1; counters.pairsDone += 1;
       } catch (error) {
         const code = String(/** @type {any} */ (error)?.code ?? 'vcr_match_judge_failed');
-        const calls = list(/** @type {any} */ (error)?.calls);
-        const usage = account(calls.length ? calls : /** @type {any} */ (error)?.usage ? [{ usage: /** @type {any} */ (error).usage }] : []);
+        // What the failing pair already paid for is in the bill: the parts before it, and a cut-off answer's own words.
+        const usage = account([...list(/** @type {any} */ (error)?.calls), .../** @type {any} */ (error)?.usage ? [{ usage: /** @type {any} */ (error).usage }] : []]);
         tally[mode].failed += 1; counters.pairsFailed += 1;
         failures[code] = (failures[code] ?? 0) + 1;
         report(code);
@@ -688,7 +688,9 @@ export function createMatchJudgeExecutor({ store, matchStore, judgments, documen
     await onProgress({ done: finished, total: progressTotal });
 
     const scenarioHash = /^[a-f0-9]{64}$/.test(String(job.scenarioHash ?? '')) ? String(job.scenarioHash) : createHash('sha256').update(canonicalScenarioJson(scenario)).digest('hex');
-    const outcome = resultOutcome({ finished: finishedPairs, total, failed: failedPairs + tally.criteria.failed, stopped: Boolean(stopped) || canceled, failures, noun: '对', verb: '判定' });
+    // Everyone on the frozen roster having withdrawn since is a job that judged nobody, not a clean one.
+    const outcome = total ? resultOutcome({ finished: finishedPairs, total, failed: failedPairs + tally.criteria.failed, stopped: Boolean(stopped) || canceled, failures, noun: '对', verb: '判定' })
+      : { status: 'failed', conclusion: 'not_estimable', issues: [{ code: 'vcr_match_nothing_finished', message: '这一批的受试者都已撤回同意，没有可判定的。' }] };
     /** @type {Record<string, any>} */
     const result = {
       jobId, protocolVersion: VCR_ENGINE_PROTOCOL_VERSION, status: outcome.status, method: 'matching.judge', methodVersion: VCR_MATCH_BATCH_METHODS['matching.judge'].version,

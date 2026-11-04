@@ -731,7 +731,10 @@ def read(arguments: dict) -> dict:
                 next_actions.append("Deliver from this read-back: copy summary, each judgment's state and applicable and the evidence quotes as saved; if your own reasoning differs, say so beside the saved verdict, do not replace it.")
         else:
             next_actions.append("Read one returned subjectKey to obtain its saved assessment and quoted evidence; use filter.id for one criterion if needed.")
-    if what == "candidate_trials" and data.get("subjectKey") and data.get("ranking"):
+    judged = what in ("candidate_trials", "matching") and isinstance(data.get("ranking"), list) and data["ranking"] and isinstance(data["ranking"][0], dict) and data["ranking"][0].get("verdictLabel")
+    if judged:
+        next_actions.append("ranking holds the saved judgments, in order: copy verdictLabel, reasons and each clause's display words and evidence from it, and say how many pairs finished (finished) and which did not (failed, by code). Never report a pair it does not hold.")
+    elif what == "candidate_trials" and data.get("subjectKey") and data.get("ranking"):
         next_actions.append("ranking holds this patient's saved verdict for each trial, in the platform's order. A delivered per-trial table copies registryId, eligibility, criteriaCounts and evidenceGaps from it; a criterion belongs to the trial it was saved under, so never move one between trials.")
         next_actions.append("Say how much is decided with each trial (decided of applicable: unknown and waiting criteria stay in the total) and, from undecided, which criteria are open and why. status is the registry's word as of statusAsOf, not a place at a centre. The order puts trials the patient is not excluded from first and the better-decided first; 符合 says the stated criteria are met, it is not a recommendation.")
     if what == "subject_document" and isinstance(data.get("passages"), list) and data.get("passageSearch") is not None:
@@ -741,15 +744,15 @@ def read(arguments: dict) -> dict:
     if what == "subject_document" and isinstance(data.get("long"), dict):
         next_actions.append("This record is long: ask for the part a criterion bears on by repeating the read with filter.id (a criterion id) or filter.query (a few words) instead of reading every window.")
     if what == "candidates" and data.get("collection") and data.get("available") is not False:
-        next_actions.append("Carry each candidate’s collection and collectionRevision into trial_registry_record and candidate_trial items. "
+        next_actions.append("Judge them with vcr_simulate kind match_judge, selection {subjectKey, registryIds, collection, collectionRevision}; carry the same collection and collectionRevision into trial_registry_record. "
                             "Use the collection's snapshot date for registry fields, and keep retrieval rank separate from eligibility.")
     elif what == "candidates" and data.get("available") is not False:
         next_actions.append("Say in the reply what data.coverage says: the registries searched and the day (asOf), any that failed and why, and that CDE and ICTRP are not covered. "
                             "These are listings found by the search you wrote, merged and de-duplicated; their order is not a ranking and none is a judgement about the patient.")
         next_actions.append("A field listed in a candidate's unknown is one the registry did not state, so the candidate was kept, not cleared: ChiCTR gives no sex, age or "
                             "country and no eligibility text. leftOut counts what a record's own stated status, age, sex or country ruled out.")
-        next_actions.append("To judge the patient against a candidate, read its record with trial_registry_record, then write candidate_trial with the registry, its id and the "
-                            "criteria in the record's own words; a candidate marked parsedBefore can be written with only registry, id and subjectKeys while its record is unchanged.")
+        next_actions.append("To judge the patient against these candidates, start vcr_simulate kind match_judge with selection {subjectKey, registryIds}. A handful may be judged here: "
+                            "read the numbered clauses with trial_registry_record and the numbered sentences with subject_document, then save with vcr_write what trial_judgment.")
     if what == 'report_model':
         next_actions.append('For longitudinal report numbers, append the exact field inside a record summary to its numberPath, without another .summary segment. For example: longitudinal.byId.<id>.groups[0].requested. Use vcr_read longitudinal filter.id for one full record when this report model is large; only fields actually returned are bindable.')
     if what == 'longitudinal':

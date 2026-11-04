@@ -274,3 +274,65 @@ test("nothing finished is a failed job with its reason on the row, never a succe
   assert.equal(job.error.code, "insufficient_quota");
   assert.equal((await studies.rows("SELECT 1 FROM evimed_vcr.results WHERE study_id=$1", [f.study.id])).length, 0);
 });
+
+const CHAT = (content) => new Response(JSON.stringify({ id: "x", model: "deepseek-flash", choices: [{ finish_reason: "stop", message: { role: "assistant", content } }], usage: { prompt_tokens: 40, completion_tokens: 10, prompt_cache_hit_tokens: 20 } }), { status: 200, headers: { "content-type": "application/json" } });
+const CTGOV = (id) => ({ protocolSection: { identificationModule: { nctId: id, briefTitle: `Trial ${id}` }, descriptionModule: { briefSummary: "Summary" }, statusModule: { overallStatus: "RECRUITING" }, conditionsModule: { conditions: ["NSCLC"] }, designModule: { phases: ["PHASE2"] },
+  armsInterventionsModule: { interventions: [{ type: "DRUG", name: "Osimertinib" }] }, eligibilityModule: { eligibilityCriteria: "Inclusion Criteria:\n* Age >= 18\nExclusion Criteria:\n* Pregnancy" } } });
+
+test("the whole path on the composed module: a record read through the plane, a live registry, a model double, the saved ranking and a conversation's write", options, async () => {
+  /** @type {string[]} */ const asked = [];
+  const fetchImpl = async (input, init) => {
+    const url = String(input);
+    if (url.includes("clinicaltrials.gov")) { asked.push(url); return new Response(JSON.stringify(CTGOV(/NCT\d{8}/.exec(url)[0])), { status: 200, headers: { "content-type": "application/json" } }); }
+    const body = JSON.parse(init.body);
+    assert.equal(body.model, "deepseek-flash");
+    const system = body.messages[0].content;
+    asked.push(system.includes("criterion level") ? "criteria" : "fit");
+    return CHAT(system.includes("criterion level") ? '{"1":["年龄 62 岁",[0],"included"],"2":["未提及妊娠",[],"not excluded"]}' : '{"score":85,"confidence":0.7,"eligible_reasons":"1. 年龄符合","missing_information":"","ineligible_reasons":"","rationale":"1. 符合"}');
+  };
+  const config = { vcrEnabled: true, vcrAudience: "all", vcrDataPlaneDir: directory, deepseekBaseUrl: "https://api.example.org", deepseekApiKey: "test", deepseekModel: "deepseek-flash", vcrProviderAgreements: true, vcrMatchJudgeTopK: 1, vcrMatchJudgeConcurrency: 2, vcrLocalConcurrency: 2 };
+  const composed = composeVcr({ config, productDatabase: database, fetchImpl });
+  await composed.store.ready();
+  const target = await composed.store.createStudy({ userId: "owner", projectId: `prj_${++sequence}`, name: `Whole path ${sequence}`, question: "q", dataTier: "T0" });
+  const source = await composed.dataPlane.registerSource({ userId: "owner", studyId: target.id, name: "Synthetic notes" });
+  const upload = async (text, subject) => (await composed.dataPlane.storeUpload({ actor: "owner", studyId: target.id, sourceId: source.id, name: "note.txt", role: "document", subject, stream: streamOf(text) })).file;
+  const file = await upload("年龄 62 岁。肺腺癌 IV 期。", "A-REAL-ID");
+  const subjectKey = file.detail.subjectKey;
+
+  const started = await composed.matchJudge.start(target, { subjectKey, registryIds: ["NCT00000001", "NCT00000002"] });
+  assert.equal(started.state, "queued", JSON.stringify(started));
+  assert.match(started.statement, /判定 2 对/);
+  const [claimed] = await composed.jobs.claim({ lane: "slow" });
+  const ended = await composed.jobs.advance(claimed);
+  assert.equal(ended.action, "finished");
+  assert.deepEqual(asked.filter((entry) => entry === "fit" || entry === "criteria").sort(), ["criteria", "fit", "fit"]);
+  assert.equal(asked.filter((entry) => entry.includes("clinicaltrials.gov")).length, 2, "a registry record is read once for the job");
+
+  const row = await composed.store.one("SELECT conclusion, diagnostics FROM evimed_vcr.results WHERE study_id=$1", [target.id]);
+  assert.deepEqual([row.conclusion, row.diagnostics.finished, row.diagnostics.total, row.diagnostics.used.calls], ["estimable", 2, 2, 3]);
+  assert.equal(row.diagnostics.used.currency, "CNY");
+  assert.ok(row.diagnostics.used.cost > 0);
+
+  const context = { ...target, cloudContext: { runId: "run_whole", sessionId: "session_whole" } };
+  const read = await composed.service.runtimeRead(context, "candidate_trials", { subjectKey });
+  assert.equal(read.ranking.length, 2);
+  const first = read.ranking[0];
+  assert.deepEqual([first.target.registry, first.verdict, first.verdictLabel, first.fit, first.eligibilitySource], ["clinicaltrials.gov", "eligible", "符合", 85, "registry"]);
+  assert.deepEqual(first.criteria.map((entry) => [entry.number, entry.display]), [[1, "符合"], [2, "未见记载，按未排除"]]);
+  assert.deepEqual(first.criteria[0].evidence.map((item) => [item.text, item.documentId]), [["年龄 62 岁。", file.id]], "evidence read back from the record, under the cloud path");
+
+  const { documentHash, sentences } = await composed.service.runtimeRead(context, "subject_document", { subjectKey, kind: "sentences" });
+  assert.deepEqual(sentences.map((entry) => entry.id), [0, 1]);
+  const written = await composed.matchJudgmentReads.writeConversation(context, { subjectKey, registryId: "NCT00000003", fit: 12, confidence: 0.9, reasons: { ineligible: ["诊断不符"] },
+    criteria: [{ number: 1, reason: "62 岁", sentenceIds: [0], label: "included" }, { number: 2, reason: "妊娠", sentenceIds: [1], label: "excluded" }], documentHash });
+  assert.deepEqual([written.verdict, written.notices], ["ineligible", []]);
+  const after = await composed.service.runtimeRead(context, "candidate_trials", { subjectKey });
+  assert.deepEqual(after.ranking.map((entry) => entry.target.id), ["NCT00000001", "NCT00000002", "NCT00000003"], "a stated disqualifier sorts last");
+  assert.equal(after.ranking[2].producer, "conversation");
+
+  // A withdrawal takes all of it, and the read says the person is gone.
+  await composed.dataPlane.withdrawSubject({ studyId: target.id, actor: "owner", subjectKey, reason: "consent withdrawn" });
+  assert.equal(await count(target.id), 0);
+  assert.equal((await composed.service.runtimeRead(context, "candidate_trials", { subjectKey })).withdrawn, true);
+  assert.equal((await composed.service.runtimeRead(context, "subject_document", { subjectKey, kind: "sentences" })).code, "vcr_document_withdrawn");
+});
