@@ -72,15 +72,13 @@
       "id": "P-0201",
       "summary": "6 条满足 · 0 条未知 · 0 条待复评",
       "eligibility": "eligible",
-      "open": [],
-      "priority": null
+      "open": []
     },
     {
       "id": "P-0207",
       "summary": "6 条满足 · 0 条未知 · 0 条待复评",
       "eligibility": "eligible",
-      "open": [],
-      "priority": null
+      "open": []
     },
     {
       "id": "P-0192",
@@ -97,12 +95,7 @@
           "state": "pending_recheck",
           "note": "10 月 18 日 复评"
         }
-      ],
-      "priority": {
-        "label": "临床优先级（不是获益概率）",
-        "score": 0.8,
-        "rationale": "ECOG 1，一线含铂后进展"
-      }
+      ]
     },
     {
       "id": "P-0233",
@@ -124,8 +117,7 @@
           "state": "unknown",
           "note": null
         }
-      ],
-      "priority": null
+      ]
     },
     {
       "id": "P-0240",
@@ -137,8 +129,7 @@
           "code": "I2",
           "state": "not_satisfied"
         }
-      ],
-      "priority": null
+      ]
     },
     {
       "id": "P-0251",
@@ -150,8 +141,7 @@
           "code": "I1",
           "state": "not_satisfied"
         }
-      ],
-      "priority": null
+      ]
     }
   ],
   "selected": {
@@ -159,8 +149,7 @@
       "id": "P-0201",
       "summary": "6 条满足 · 0 条未知 · 0 条待复评",
       "eligibility": "eligible",
-      "open": [],
-      "priority": null
+      "open": []
     },
     "assessmentId": "mas_1",
     "facts": [
@@ -286,7 +275,6 @@
       "text": "符合：全部适用的入排条件都满足",
       "note": null
     },
-    "priority": null,
     "reviewedBy": null,
     "reviewedByName": null
   },
@@ -310,7 +298,6 @@
       "count": 1
     }
   ],
-  "pendingReview": null,
   "protocol": {
     "version": 1,
     "title": "EV-201 方案 v1"

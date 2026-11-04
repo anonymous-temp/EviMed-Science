@@ -120,6 +120,7 @@ import { createMatchJudge, createMatchJudgeCounters, createMatchJudgeExecutor, c
 import { VcrMatchJudgmentStore } from "./vcrMatchJudgmentStore.mjs";
 import { VcrRegistryPageStore, createRegistryPageCounters, createRegistryPages } from "./vcrRegistryPages.mjs";
 import { createRegistryWatch, createRegistryWatchCounters } from "./vcrRegistryWatch.mjs";
+import { VcrMatchResults } from "./vcrMatchResults.mjs";
 import { vcrRuntimeWrite } from "./vcrGateway.mjs";
 import { MATCHING_SNAPSHOT_PREFIX, freezeMatchingInputs, hydrateMatchingInputs, languageCriteriaByKey, matchingSelection, verifyMatchingSnapshot } from "./vcrMatchingSnapshot.mjs";
 

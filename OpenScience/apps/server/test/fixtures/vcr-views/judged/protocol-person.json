@@ -1,0 +1,668 @@
+{
+  "available": true,
+  "direction": "trial_to_patient",
+  "protocolVersionId": "prt_screen",
+  "held": true,
+  "progress": {
+    "total": 16,
+    "finished": 13,
+    "failed": 1,
+    "waiting": 2,
+    "state": "running",
+    "jobId": "job_fixed",
+    "startedAt": "2026-11-04T08:00:00.000Z",
+    "cost": {
+      "ceiling": 12.5,
+      "spent": 0.2955,
+      "currency": "CNY"
+    }
+  },
+  "tallies": {
+    "eligible": 5,
+    "possible": 2,
+    "insufficient": 2,
+    "ineligible": 4
+  },
+  "people": [
+    {
+      "kind": "protocol",
+      "id": "prt_screen",
+      "registry": null,
+      "registryId": null,
+      "title": "EV-201 方案 v1",
+      "url": null,
+      "phase": "",
+      "status": "",
+      "statusAsOf": null,
+      "subjectKey": "P-0302",
+      "verdict": "eligible",
+      "verdictLabel": "符合",
+      "fit": 94,
+      "fitLevel": "high",
+      "fitLabel": "高",
+      "confidence": 0.7,
+      "confidenceLabel": "一般",
+      "why": "病历有记载",
+      "counts": {
+        "support": 7,
+        "against": 0,
+        "silent": 1,
+        "open": 0,
+        "notApplicable": 0
+      },
+      "judgedAt": "2026-11-04T08:00:00.000Z",
+      "producer": "job"
+    },
+    {
+      "kind": "protocol",
+      "id": "prt_screen",
+      "registry": null,
+      "registryId": null,
+      "title": "EV-201 方案 v1",
+      "url": null,
+      "phase": "",
+      "status": "",
+      "statusAsOf": null,
+      "subjectKey": "P-0307",
+      "verdict": "eligible",
+      "verdictLabel": "符合",
+      "fit": 86,
+      "fitLevel": "high",
+      "fitLabel": "高",
+      "confidence": 0.7,
+      "confidenceLabel": "一般",
+      "why": "病历有记载",
+      "counts": {
+        "support": 7,
+        "against": 0,
+        "silent": 1,
+        "open": 0,
+        "notApplicable": 0
+      },
+      "judgedAt": "2026-11-04T08:00:00.000Z",
+      "producer": "job"
+    },
+    {
+      "kind": "protocol",
+      "id": "prt_screen",
+      "registry": null,
+      "registryId": null,
+      "title": "EV-201 方案 v1",
+      "url": null,
+      "phase": "",
+      "status": "",
+      "statusAsOf": null,
+      "subjectKey": "P-0312",
+      "verdict": "eligible",
+      "verdictLabel": "符合",
+      "fit": 85,
+      "fitLevel": "high",
+      "fitLabel": "高",
+      "confidence": 0.7,
+      "confidenceLabel": "一般",
+      "why": "病历有记载",
+      "counts": {
+        "support": 8,
+        "against": 0,
+        "silent": 0,
+        "open": 0,
+        "notApplicable": 0
+      },
+      "judgedAt": "2026-11-04T08:00:00.000Z",
+      "producer": "job"
+    },
+    {
+      "kind": "protocol",
+      "id": "prt_screen",
+      "registry": null,
+      "registryId": null,
+      "title": "EV-201 方案 v1",
+      "url": null,
+      "phase": "",
+      "status": "",
+      "statusAsOf": null,
+      "subjectKey": "P-0310",
+      "verdict": "eligible",
+      "verdictLabel": "符合",
+      "fit": 82,
+      "fitLevel": "high",
+      "fitLabel": "高",
+      "confidence": 0.7,
+      "confidenceLabel": "一般",
+      "why": "病历有记载",
+      "counts": {
+        "support": 7,
+        "against": 0,
+        "silent": 1,
+        "open": 0,
+        "notApplicable": 0
+      },
+      "judgedAt": "2026-11-04T08:00:00.000Z",
+      "producer": "job"
+    },
+    {
+      "kind": "protocol",
+      "id": "prt_screen",
+      "registry": null,
+      "registryId": null,
+      "title": "EV-201 方案 v1",
+      "url": null,
+      "phase": "",
+      "status": "",
+      "statusAsOf": null,
+      "subjectKey": "P-0308",
+      "verdict": "eligible",
+      "verdictLabel": "符合",
+      "fit": 80,
+      "fitLevel": "high",
+      "fitLabel": "高",
+      "confidence": 0.7,
+      "confidenceLabel": "一般",
+      "why": "病历有记载",
+      "counts": {
+        "support": 8,
+        "against": 0,
+        "silent": 0,
+        "open": 0,
+        "notApplicable": 0
+      },
+      "judgedAt": "2026-11-04T08:00:00.000Z",
+      "producer": "job"
+    },
+    {
+      "kind": "protocol",
+      "id": "prt_screen",
+      "registry": null,
+      "registryId": null,
+      "title": "EV-201 方案 v1",
+      "url": null,
+      "phase": "",
+      "status": "",
+      "statusAsOf": null,
+      "subjectKey": "P-0192",
+      "verdict": "possible",
+      "verdictLabel": "可能符合",
+      "fit": 91,
+      "fitLevel": "high",
+      "fitLabel": "高",
+      "confidence": 0.8,
+      "confidenceLabel": "较高",
+      "why": "近 4 周内是否化疗",
+      "counts": {
+        "support": 3,
+        "against": 0,
+        "silent": 3,
+        "open": 1,
+        "notApplicable": 1
+      },
+      "judgedAt": "2026-11-04T08:00:00.000Z",
+      "producer": "job"
+    },
+    {
+      "kind": "protocol",
+      "id": "prt_screen",
+      "registry": null,
+      "registryId": null,
+      "title": "EV-201 方案 v1",
+      "url": null,
+      "phase": "",
+      "status": "",
+      "statusAsOf": null,
+      "subjectKey": "P-0303",
+      "verdict": "possible",
+      "verdictLabel": "可能符合",
+      "fit": 90,
+      "fitLevel": "high",
+      "fitLabel": "高",
+      "confidence": 0.7,
+      "confidenceLabel": "一般",
+      "why": "没有写近期是否化疗",
+      "counts": {
+        "support": 6,
+        "against": 0,
+        "silent": 1,
+        "open": 1,
+        "notApplicable": 0
+      },
+      "judgedAt": "2026-11-04T08:00:00.000Z",
+      "producer": "job"
+    },
+    {
+      "kind": "protocol",
+      "id": "prt_screen",
+      "registry": null,
+      "registryId": null,
+      "title": "EV-201 方案 v1",
+      "url": null,
+      "phase": "",
+      "status": "",
+      "statusAsOf": null,
+      "subjectKey": "P-0304",
+      "verdict": "insufficient",
+      "verdictLabel": "证据不足",
+      "fit": 40,
+      "fitLevel": "low",
+      "fitLabel": "低",
+      "confidence": 0.7,
+      "confidenceLabel": "一般",
+      "why": "没有影像报告，可测量病灶不明",
+      "counts": {
+        "support": 6,
+        "against": 0,
+        "silent": 0,
+        "open": 1,
+        "notApplicable": 1
+      },
+      "judgedAt": "2026-11-04T08:00:00.000Z",
+      "producer": "job"
+    },
+    {
+      "kind": "protocol",
+      "id": "prt_screen",
+      "registry": null,
+      "registryId": null,
+      "title": "EV-201 方案 v1",
+      "url": null,
+      "phase": "",
+      "status": "",
+      "statusAsOf": null,
+      "subjectKey": "P-0311",
+      "verdict": "insufficient",
+      "verdictLabel": "证据不足",
+      "fit": 35,
+      "fitLevel": "low",
+      "fitLabel": "低",
+      "confidence": 0.7,
+      "confidenceLabel": "一般",
+      "why": "没有写近期是否化疗",
+      "counts": {
+        "support": 7,
+        "against": 0,
+        "silent": 0,
+        "open": 1,
+        "notApplicable": 0
+      },
+      "judgedAt": "2026-11-04T08:00:00.000Z",
+      "producer": "job"
+    },
+    {
+      "kind": "protocol",
+      "id": "prt_screen",
+      "registry": null,
+      "registryId": null,
+      "title": "EV-201 方案 v1",
+      "url": null,
+      "phase": "",
+      "status": "",
+      "statusAsOf": null,
+      "subjectKey": "P-0306",
+      "verdict": "ineligible",
+      "verdictLabel": "不符合",
+      "fit": 30,
+      "fitLevel": "low",
+      "fitLabel": "低",
+      "confidence": 0.7,
+      "confidenceLabel": "一般",
+      "why": "2 周前刚完成化疗",
+      "counts": {
+        "support": 7,
+        "against": 1,
+        "silent": 0,
+        "open": 0,
+        "notApplicable": 0
+      },
+      "judgedAt": "2026-11-04T08:00:00.000Z",
+      "producer": "job"
+    },
+    {
+      "kind": "protocol",
+      "id": "prt_screen",
+      "registry": null,
+      "registryId": null,
+      "title": "EV-201 方案 v1",
+      "url": null,
+      "phase": "",
+      "status": "",
+      "statusAsOf": null,
+      "subjectKey": "P-0301",
+      "verdict": "ineligible",
+      "verdictLabel": "不符合",
+      "fit": 20,
+      "fitLevel": "low",
+      "fitLabel": "低",
+      "confidence": 0.7,
+      "confidenceLabel": "一般",
+      "why": "头颅 MRI 提示活动性脑转移",
+      "counts": {
+        "support": 7,
+        "against": 1,
+        "silent": 0,
+        "open": 0,
+        "notApplicable": 0
+      },
+      "judgedAt": "2026-11-04T08:00:00.000Z",
+      "producer": "job"
+    },
+    {
+      "kind": "protocol",
+      "id": "prt_screen",
+      "registry": null,
+      "registryId": null,
+      "title": "EV-201 方案 v1",
+      "url": null,
+      "phase": "",
+      "status": "",
+      "statusAsOf": null,
+      "subjectKey": "P-0305",
+      "verdict": "ineligible",
+      "verdictLabel": "不符合",
+      "fit": 18,
+      "fitLevel": "minimal",
+      "fitLabel": "很低",
+      "confidence": 0.7,
+      "confidenceLabel": "一般",
+      "why": "头颅 MRI 提示活动性脑转移",
+      "counts": {
+        "support": 7,
+        "against": 1,
+        "silent": 0,
+        "open": 0,
+        "notApplicable": 0
+      },
+      "judgedAt": "2026-11-04T08:00:00.000Z",
+      "producer": "job"
+    },
+    {
+      "kind": "protocol",
+      "id": "prt_screen",
+      "registry": null,
+      "registryId": null,
+      "title": "EV-201 方案 v1",
+      "url": null,
+      "phase": "",
+      "status": "",
+      "statusAsOf": null,
+      "subjectKey": "P-0309",
+      "verdict": "ineligible",
+      "verdictLabel": "不符合",
+      "fit": 15,
+      "fitLevel": "minimal",
+      "fitLabel": "很低",
+      "confidence": 0.7,
+      "confidenceLabel": "一般",
+      "why": "头颅 MRI 提示活动性脑转移",
+      "counts": {
+        "support": 7,
+        "against": 1,
+        "silent": 0,
+        "open": 0,
+        "notApplicable": 0
+      },
+      "judgedAt": "2026-11-04T08:00:00.000Z",
+      "producer": "job"
+    }
+  ],
+  "total": 13,
+  "offset": 0,
+  "limit": 25,
+  "more": false,
+  "clauses": {
+    "judgedPeople": 13,
+    "rows": [
+      {
+        "number": 5,
+        "kind": "exclusion",
+        "clause": "活动性脑转移",
+        "support": 9,
+        "against": 3,
+        "silent": 1,
+        "open": 0,
+        "notApplicable": 0
+      },
+      {
+        "number": 8,
+        "kind": "exclusion",
+        "clause": "近 4 周内接受过化疗",
+        "support": 9,
+        "against": 1,
+        "silent": 0,
+        "open": 3,
+        "notApplicable": 0
+      },
+      {
+        "number": 6,
+        "kind": "exclusion",
+        "clause": "间质性肺病史",
+        "support": 8,
+        "against": 0,
+        "silent": 5,
+        "open": 0,
+        "notApplicable": 0
+      },
+      {
+        "number": 4,
+        "kind": "inclusion",
+        "clause": "至少一个可测量病灶",
+        "support": 11,
+        "against": 0,
+        "silent": 1,
+        "open": 1,
+        "notApplicable": 0
+      },
+      {
+        "number": 1,
+        "kind": "inclusion",
+        "clause": "年龄 18 岁及以上",
+        "support": 13,
+        "against": 0,
+        "silent": 0,
+        "open": 0,
+        "notApplicable": 0
+      },
+      {
+        "number": 2,
+        "kind": "inclusion",
+        "clause": "组织学确诊的非小细胞肺癌",
+        "support": 13,
+        "against": 0,
+        "silent": 0,
+        "open": 0,
+        "notApplicable": 0
+      },
+      {
+        "number": 3,
+        "kind": "inclusion",
+        "clause": "ECOG 评分 0–1 分",
+        "support": 13,
+        "against": 0,
+        "silent": 0,
+        "open": 0,
+        "notApplicable": 0
+      },
+      {
+        "number": 7,
+        "kind": "exclusion",
+        "clause": "妊娠或哺乳期",
+        "support": 11,
+        "against": 0,
+        "silent": 0,
+        "open": 0,
+        "notApplicable": 2
+      }
+    ]
+  },
+  "failed": {
+    "count": 1,
+    "reasons": [
+      {
+        "reason": "模型回答超时",
+        "count": 1
+      }
+    ],
+    "listed": [
+      {
+        "subjectKey": "P-0313",
+        "kind": "protocol",
+        "id": "prt_screen",
+        "registryId": null,
+        "title": "EV-201 方案 v1",
+        "reason": "模型回答超时",
+        "at": "2026-11-04T08:00:00.000Z"
+      }
+    ]
+  },
+  "changed": 0,
+  "selected": {
+    "kind": "protocol",
+    "id": "prt_screen",
+    "registry": null,
+    "registryId": null,
+    "title": "EV-201 方案 v1",
+    "url": null,
+    "phase": "",
+    "status": "",
+    "statusAsOf": null,
+    "subjectKey": "P-0192",
+    "verdict": "possible",
+    "verdictLabel": "可能符合",
+    "fit": 91,
+    "fitLevel": "high",
+    "fitLabel": "高",
+    "confidence": 0.8,
+    "confidenceLabel": "较高",
+    "why": "近 4 周内是否化疗",
+    "counts": {
+      "support": 3,
+      "against": 0,
+      "silent": 3,
+      "open": 1,
+      "notApplicable": 1
+    },
+    "judgedAt": "2026-11-04T08:00:00.000Z",
+    "producer": "job",
+    "groups": {
+      "support": [
+        "肺腺癌、EGFR 阳性、ECOG 1 分，符合方案的入选条件"
+      ],
+      "open": [
+        "近 4 周内是否化疗"
+      ]
+    },
+    "summary": null,
+    "clauses": [
+      {
+        "number": 1,
+        "kind": "inclusion",
+        "clause": "年龄 18 岁及以上",
+        "label": "included",
+        "basis": "stated",
+        "display": "符合",
+        "stance": "support",
+        "reason": "62 岁",
+        "evidence": [
+          {
+            "sentenceId": 0,
+            "text": "患者男，62岁，2025年3月确诊肺腺癌，EGFR 19del 阳性。",
+            "documentId": "sfl_fixed",
+            "start": 0,
+            "end": 35
+          }
+        ]
+      },
+      {
+        "number": 2,
+        "kind": "inclusion",
+        "clause": "组织学确诊的非小细胞肺癌",
+        "label": "included",
+        "basis": "stated",
+        "display": "符合",
+        "stance": "support",
+        "reason": "肺腺癌",
+        "evidence": [
+          {
+            "sentenceId": 0,
+            "text": "患者男，62岁，2025年3月确诊肺腺癌，EGFR 19del 阳性。",
+            "documentId": "sfl_fixed",
+            "start": 0,
+            "end": 35
+          }
+        ]
+      },
+      {
+        "number": 3,
+        "kind": "inclusion",
+        "clause": "ECOG 评分 0–1 分",
+        "label": "included",
+        "basis": "stated",
+        "display": "符合",
+        "stance": "support",
+        "reason": "ECOG 1 分",
+        "evidence": [
+          {
+            "sentenceId": 1,
+            "text": "ECOG 评分 1 分。",
+            "documentId": "sfl_fixed",
+            "start": 36,
+            "end": 48
+          }
+        ]
+      },
+      {
+        "number": 4,
+        "kind": "inclusion",
+        "clause": "至少一个可测量病灶",
+        "label": "included",
+        "basis": "silent",
+        "display": "未见记载，按符合",
+        "stance": "silent",
+        "reason": "病历没有写病灶，按符合",
+        "evidence": []
+      },
+      {
+        "number": 5,
+        "kind": "exclusion",
+        "clause": "活动性脑转移",
+        "label": "not_excluded",
+        "basis": "silent",
+        "display": "未见记载，按未排除",
+        "stance": "silent",
+        "reason": "病历没有脑转移的记载，按未排除",
+        "evidence": []
+      },
+      {
+        "number": 6,
+        "kind": "exclusion",
+        "clause": "间质性肺病史",
+        "label": "not_excluded",
+        "basis": "silent",
+        "display": "未见记载，按未排除",
+        "stance": "silent",
+        "reason": "病历没有间质性肺病的记载，按未排除",
+        "evidence": []
+      },
+      {
+        "number": 7,
+        "kind": "exclusion",
+        "clause": "妊娠或哺乳期",
+        "label": "not_applicable",
+        "basis": "silent",
+        "display": "不适用",
+        "stance": "not_applicable",
+        "reason": "男性，不适用",
+        "evidence": []
+      },
+      {
+        "number": 8,
+        "kind": "exclusion",
+        "clause": "近 4 周内接受过化疗",
+        "label": "not_enough_information",
+        "basis": "silent",
+        "display": "未见记载，需确认",
+        "stance": "open",
+        "reason": "没有写近期是否化疗",
+        "evidence": []
+      }
+    ],
+    "withheld": 0
+  }
+}

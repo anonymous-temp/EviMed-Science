@@ -1418,10 +1418,9 @@ function forecastView(forecast, now) {
   };
 }
 
-// --- 匹配与招募 ---------------------------------------------------------------------------------------------------------------------
+// --- 患者匹配 -----------------------------------------------------------------------------------------------------------------------
 
 const SUMMARY_ORDER = Object.freeze(["eligible", "insufficient_evidence", "pending", "ineligible"]);
-/** The most citations a criterion row shows under its verdict. */
 
 /**
  * The words under a citation for what it did not print: a unit read by the domain's table (`unitBasis`), a date taken from another
@@ -1563,7 +1562,8 @@ function presentPatientTrials(bundle, held) {
 }
 
 /**
- * `GET /api/vcr/studies/:id/matching`.
+ * `GET /api/vcr/studies/:id/matching`: the earlier path's assessments (what a patient or a protocol with nothing in the model's judgments still draws). What the model judged is
+ * read from `matching/judged` (`vcrMatchResults.mjs`).
  * @param {Record<string, any>} bundle @param {{ view?: string | null, candidate?: string | null, direction?: string | null }} [query]
  */
 export function presentMatchingTab(bundle, query = {}) {
@@ -1573,7 +1573,7 @@ export function presentMatchingTab(bundle, query = {}) {
     return { view, available: false, unavailable: { code: "vcr_matching_unavailable", message: "匹配评估在本部署尚未接入；其余步骤照常。" },
       funnel: [], candidates: [], selected: null, gaps: [], counts: null };
   }
-  const { criteria, tallies, openByAssessment, gapsByCriterion, pendingReview, subjects, protocol } = match;
+  const { criteria, tallies, openByAssessment, gapsByCriterion, subjects, protocol } = match;
   /** The names the data tab lists the reviewed documents under, by the id a citation carries (the document's own or its reviewed text's). @type {Map<string, string>} */
   const documentNames = match.documentNames instanceof Map ? match.documentNames : new Map();
   const codes = criterionCodes(criteria);
@@ -1608,7 +1608,6 @@ export function presentMatchingTab(bundle, query = {}) {
       // The rules this person fails, by code: where to look first in their rule-by-rule judgement.
       ...(judged.some((/** @type {any} */ open) => open.state === "not_satisfied")
         ? { failed: judged.filter((/** @type {any} */ open) => open.state === "not_satisfied").map((/** @type {any} */ open) => ({ code: criterionCode(open.criterionId), state: open.state })) } : {}),
-      priority: row.priority ? { label: text(object(row.priority).label) ?? "临床优先级（不是获益概率）", score: numeric(object(row.priority).score), rationale: text(object(row.priority).rationale) } : null,
     };
   };
   const candidates = ordered.slice(0, 50).map(candidateOf);
@@ -1636,7 +1635,6 @@ export function presentMatchingTab(bundle, query = {}) {
       ],
       criteria: rows,
       verdict,
-      priority: chosen.priority,
       // The id says that somebody countersigned (the page offers the countersignature only where nobody has); the name is what is shown.
       reviewedBy: selectedAssessment.reviewedBy ?? null,
       reviewedByName: personName(bundle.people, selectedAssessment.reviewedBy),
@@ -1685,7 +1683,6 @@ export function presentMatchingTab(bundle, query = {}) {
       ? { basisUpdated: { count: subjects.filter((row) => row.basis === "updated").length, subjects: subjects.filter((row) => row.basis === "updated").slice(0, 50).map((row) => String(row.subjectKey)) } } : {}),
     selected,
     gaps,
-    pendingReview: pendingReview.length ? { count: pendingReview.length, subjects: pendingReview.slice(0, 20) } : null,
     protocol: protocol ? { version: protocol.version, title: text(protocol.title) } : null,
     counts: total ? countsView({ realPatients: total }, { tier: study.dataTier }) : null,
   };

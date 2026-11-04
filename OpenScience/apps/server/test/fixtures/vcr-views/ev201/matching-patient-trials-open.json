@@ -269,8 +269,7 @@
       "id": "P-0192",
       "summary": "2 条满足 · 0 条未知 · 0 条待复评",
       "eligibility": "eligible",
-      "open": [],
-      "priority": null
+      "open": []
     }
   ],
   "selected": {
@@ -278,8 +277,7 @@
       "id": "P-0192",
       "summary": "2 条满足 · 0 条未知 · 0 条待复评",
       "eligibility": "eligible",
-      "open": [],
-      "priority": null
+      "open": []
     },
     "assessmentId": "mas_4",
     "facts": [
@@ -345,12 +343,10 @@
       "text": "符合：全部适用的入排条件都满足",
       "note": null
     },
-    "priority": null,
     "reviewedBy": null,
     "reviewedByName": null
   },
   "gaps": [],
-  "pendingReview": null,
   "protocol": {
     "version": 1,
     "title": "EV-201 方案 v1"

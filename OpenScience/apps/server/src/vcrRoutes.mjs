@@ -60,7 +60,8 @@ import {vcrAnalyticComputationBasis} from './vcrScientificBasis.mjs';
 import {
   VCR_ACTIONS, VCR_ASSESSMENT_KEY, VCR_ASSESSMENT_LIMITS, VCR_ASSESSMENT_RATING_FIELDS, VCR_ASSESSMENT_TEXT_FIELDS, VCR_RATINGS,
   VCR_ASSUMPTION_SOURCE_KINDS, VCR_CRITERION_STATES, VCR_DATA_TIERS, VCR_EXPORT_KINDS, VCR_INTENDED_USES, VCR_JOB_KINDS,
-  VCR_JOB_METHODS, VCR_MEMBER_ROLES, VCR_RETIRED_MEMBER_ROLE_LABELS_ZH, VCR_REVIEW_KINDS, VCR_STEPS, VCR_TABS, VCR_USER_STUDY_STATUSES, VCR_VALUE_SOURCES, capabilityTitle, roleAllows } from "@evimed/domain";
+  VCR_JOB_METHODS, VCR_MATCH_EXPORT_FORMATS, VCR_MATCH_EXPORT_KINDS, VCR_MEMBER_ROLES, VCR_RETIRED_MEMBER_ROLE_LABELS_ZH, VCR_REVIEW_KINDS, VCR_STEPS, VCR_TABS, VCR_USER_STUDY_STATUSES, VCR_VALUE_SOURCES, capabilityTitle, roleAllows } from "@evimed/domain";
+import { MATCH_PAGE } from "./vcrMatchResults.mjs";
 
 import { createReadStream } from "node:fs";
 
@@ -91,6 +92,9 @@ export const VCR_ROUTE_ERROR_CODES = Object.freeze([
   "vcr_study_paused",
   // 「为该患者找试验」 for a patient the study does not hold.
   "vcr_subject_not_found",
+  // The page's 「继续」 when everything asked for has been judged, and a read of a protocol the study does not hold.
+  "vcr_match_judge_nothing_to_resume",
+  "vcr_protocol_version_not_found",
   "vcr_name_invalid",
   "vcr_conversation_busy",
   "vcr_conversation_unavailable",
@@ -178,6 +182,11 @@ export const VCR_ROUTE_ABILITIES = Object.freeze({
   "GET /studies/:id/population/rows": ["read"],
   "POST /studies/:id/trial-search": ["run"],
   "POST /studies/:id/rejudge": ["run"],
+  // What the judging job and the conversation saved: read by anyone who reads the study (a sentence is shown under the reader's own grant);
+  // starting it and downloading it also need patient-level access, which the handler asks for beside the ability listed here.
+  "GET /studies/:id/matching/judged": ["read"],
+  "POST /studies/:id/matching/judge": ["run"],
+  "GET /studies/:id/matching/export": ["export"],
   "GET /studies/:id/jobs": ["read"],
   "GET /studies/:id/jobs/:job": ["read"],
   "POST /studies/:id/jobs": ["run"],
@@ -392,7 +401,7 @@ function wholeNumber(value, field, max) {
  *     rename?: (ownerId: string, projectId: string, name: string, previousName: string) => Promise<unknown>,
  *     remove?: (user: any, projectId: string) => Promise<unknown> } | null,
  *   orchestrator?: any, jobs?: any, exporter?: any, members?: any, matching?: any, assessments?: any, dataPlane?: any,
- *   evidence?: any, evidenceStore?: any, corrections?: any, knowledge?: any, publications?: any, predictions?: any, records?: any, startStudy?: (user: any, study: any, input: any) => Promise<any> }} dependencies
+ *   evidence?: any, evidenceStore?: any, corrections?: any, knowledge?: any, publications?: any, predictions?: any, records?: any, matchResults?: any, matchJudge?: any, startStudy?: (user: any, study: any, input: any) => Promise<any> }} dependencies
  *   `store` is the platform's, for the session and the CSRF check only;
  *   `vcrStore` is the module's own (defaults to the service's).
  */
@@ -777,6 +786,119 @@ export function createVcrRoutes(dependencies) {
         return reply(presentLongitudinal(await save(study,body,String(user.id)),shown),201);
       }
       throw new HttpError(404,'not_found','Longitudinal route not found.');
+    }
+
+    // --- patient matching results: what the judging job and the conversation saved ---------------------------------
+    // The page's reader of `match_judgments` (`vcrMatchResults.mjs`), the page's start of the judging job, and the files. Nothing here
+    // judges anything; the job and the conversation do, and a failed read is an error, never an empty list.
+    if (section === "matching" && parts.length === 4 && ["judged", "judge", "export"].includes(parts[3])) {
+      const reader = service.packages?.matchResults ?? dependencies.matchResults ?? null;
+      const keyOf = (/** @type {string} */ field, /** @type {unknown} */ value) => {
+        if (typeof value !== "string" || !SUBJECT_KEY.test(value)) throw new HttpError(400, "vcr_payload_invalid", `${field} is the study's own key.`);
+        return value;
+      };
+      // `orNone`: a read of a study that has no protocol version yet is a page with nothing judged on it, not a missing route.
+      const scopeOf = async (/** @type {any} */ study, /** @type {Record<string, any>} */ source, orNone = false) => {
+        const direction = source.direction;
+        if (direction === "patient_to_trial") return { direction, subjectKey: keyOf("subjectKey", source.subjectKey), protocolVersionId: null };
+        if (direction === "trial_to_patient") {
+          const named = source.protocolVersionId;
+          if (named != null && (typeof named !== "string" || !ID.test(named))) throw new HttpError(400, "vcr_payload_invalid", "protocolVersionId is a protocol version of this study.");
+          const found = named ?? (await service.packages?.matchStore?.latestProtocol?.(study.id))?.id ?? null;
+          if (!found && !orNone) throw new HttpError(404, "vcr_protocol_version_not_found", "这项研究还没有方案版本。");
+          return { direction, subjectKey: null, protocolVersionId: String(found ?? "") };
+        }
+        throw new HttpError(400, "vcr_payload_invalid", "direction is patient_to_trial or trial_to_patient.");
+      };
+
+      if (parts[3] === "judged" && method === "GET") {
+        const { study } = await authorize(id, "read");
+        if (!reader) throw UNAVAILABLE();
+        const query = Object.fromEntries(url.searchParams);
+        // Asked for nothing in particular, it says where the newest work is, so a link to the page lands there.
+        if (query.direction === undefined) return reply({ available: true, latest: await reader.latest(study.id) });
+        const scope = await scopeOf(study, query, true);
+        if (scope.direction === "patient_to_trial") {
+          const target = query.target === undefined ? null : String(query.target);
+          if (target !== null && !/^[A-Za-z0-9_.:-]{1,160}$/u.test(target)) throw new HttpError(400, "vcr_payload_invalid", "target is a registry number or a protocol version.");
+          return reply({ available: true, ...await reader.forPatient(study, String(scope.subjectKey), { target, viewer: user }) });
+        }
+        const verdict = query.verdict === undefined || query.verdict === "" ? null : String(query.verdict);
+        if (verdict !== null && !["eligible", "possible", "insufficient", "ineligible"].includes(verdict)) throw new HttpError(400, "vcr_payload_invalid", "verdict is eligible, possible, insufficient or ineligible.");
+        const whole = (/** @type {string} */ field, /** @type {number} */ fallback, /** @type {number} */ most) => {
+          if (query[field] === undefined) return fallback;
+          const value = Number(query[field]);
+          if (!Number.isInteger(value) || value < 0 || value > most) throw new HttpError(400, "vcr_payload_invalid", `${field} is a whole number from 0 to ${most}.`);
+          return value;
+        };
+        const subjectKey = query.subjectKey === undefined || query.subjectKey === "" ? null : keyOf("subjectKey", query.subjectKey);
+        return reply({ available: true, ...await reader.forProtocol(study, String(scope.protocolVersionId), {
+          verdict, offset: whole("offset", 0, 1_000_000), limit: Math.max(1, whole("limit", MATCH_PAGE.default, MATCH_PAGE.most)), subjectKey, viewer: user }) });
+      }
+
+      if (parts[3] === "judge" && method === "POST") {
+        const body = await bodyOf(req, maxJsonBytes, ["direction", "subjectKey", "protocolVersionId", "subjectKeys", "resume"]);
+        const { study } = await authorize(id, "run");
+        await requireAbility(study, "read_patient_level");
+        const judge = service.packages?.matchJudge ?? dependencies.matchJudge ?? null;
+        if (!judge?.start || !reader) throw UNAVAILABLE();
+        if (body.resume != null && typeof body.resume !== "boolean") throw new HttpError(400, "vcr_payload_invalid", "resume is true or false.");
+        const scope = await scopeOf(study, body);
+        /** @type {Record<string, any>} */
+        let selection;
+        if (body.resume === true) {
+          // The rest: what never ran and what failed, under the settings the earlier job ran with, so the pairs already judged are found in the ledger and not paid for again.
+          const left = await reader.resumeSelection(study, scope);
+          if (!left.ids.length) throw new HttpError(409, "vcr_match_judge_nothing_to_resume", "没有需要继续判定的了。");
+          selection = scope.direction === "patient_to_trial"
+            ? { direction: scope.direction, subjectKey: scope.subjectKey, registryIds: left.ids, ...left.settings }
+            : { direction: scope.direction, protocolVersionId: scope.protocolVersionId, subjectKeys: left.ids, ...left.settings };
+        } else {
+          // A patient's trials are the ones a search found; the page names none of them.
+          if (scope.direction !== "trial_to_patient") throw new HttpError(400, "vcr_payload_invalid", "给患者找试验从检索开始；这里只能继续没有判完的。");
+          selection = { direction: scope.direction, protocolVersionId: scope.protocolVersionId, ...(body.subjectKeys == null ? {} : { subjectKeys: body.subjectKeys }) };
+        }
+        const started = await audited("vcr.match_judge.start", (result) => ({ code: String(result?.jobId ?? id), detail: `${scope.direction} ${body.resume === true ? "resume" : "start"}` }),
+          { code: id, detail: scope.direction }, () => judge.start(study, selection, { actor: "page" }));
+        return reply(started, 201);
+      }
+
+      if (parts[3] === "export" && method === "GET") {
+        const { study } = await authorize(id, "export");
+        await requireAbility(study, "read_patient_level");
+        if (!reader) throw UNAVAILABLE();
+        const query = Object.fromEntries(url.searchParams);
+        const format = query.format === undefined ? "csv" : String(query.format);
+        const kind = query.kind === undefined ? "pairs" : String(query.kind);
+        if (!VCR_MATCH_EXPORT_FORMATS.includes(/** @type {any} */ (format))) throw new HttpError(400, "vcr_export_kind_invalid", `format is one of ${VCR_MATCH_EXPORT_FORMATS.join(", ")}.`);
+        if (!VCR_MATCH_EXPORT_KINDS.includes(/** @type {any} */ (kind))) throw new HttpError(400, "vcr_export_kind_invalid", `kind is one of ${VCR_MATCH_EXPORT_KINDS.join(", ")}.`);
+        const scope = await scopeOf(study, query);
+        const file = await reader.exporter(study, { format: /** @type {'csv' | 'json'} */ (format), kind: /** @type {'pairs' | 'clauses'} */ (kind), direction: /** @type {'patient_to_trial' | 'trial_to_patient'} */ (scope.direction),
+          subjectKey: scope.subjectKey, protocolVersionId: scope.protocolVersionId });
+        res.writeHead(200, { "Content-Type": file.contentType, "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff", "Content-Disposition": `attachment; filename="${file.filename}"` });
+        // Written a few pairs at a time with the response's own back-pressure, so five thousand people are never one string in memory.
+        const sink = {
+          write: async (/** @type {string} */ chunk) => {
+            if (res.destroyed || res.writableEnded) throw new Error("The reader closed the download.");
+            if (res.write(chunk)) return;
+            await new Promise((resolve) => {
+              const done = () => { res.off("drain", done); res.off("close", done); resolve(null); };
+              res.once("drain", done);
+              res.once("close", done);
+            });
+          },
+        };
+        try {
+          await file.run(sink);
+          await audit("vcr.match_export", "completed", { userId: user.id, code: id, detail: `${scope.direction} ${kind} ${format} ${file.rows}` }).catch(() => null);
+          res.end();
+        } catch (error) {
+          // The status line is gone: a download that stops short is told by the connection ending, not by a file that looks whole.
+          await audit("vcr.match_export", "failed", { userId: user.id, code: id, detail: `${scope.direction} ${kind} ${format}` }).catch(() => null);
+          res.destroy(error instanceof Error ? error : undefined);
+        }
+        return true;
+      }
     }
 
     // --- the seven tabs --------------------------------------------------------

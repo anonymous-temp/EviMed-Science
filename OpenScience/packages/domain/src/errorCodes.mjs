@@ -1678,7 +1678,7 @@ export const VCR_MODULE_ERROR_CODES = Object.freeze([
   // the batch reading of patient records (vcrMatchBatch.mjs) and the short record of a result (vcrResultRecord.mjs)
   'vcr_extract_failed', 'vcr_extract_incomplete', 'vcr_extract_timeout', 'vcr_extract_unreadable', 'vcr_extract_context_too_large', 'vcr_extract_questions_invalid', 'vcr_extract_replan_required', 'vcr_result_not_found',
   // judging patients against trials (vcrMatchJudge.mjs)
-  'vcr_match_answer_unreadable', 'vcr_match_judge_cut_off', 'vcr_match_judge_failed', 'vcr_match_judge_incomplete', 'vcr_match_judge_network', 'vcr_match_judge_nothing_to_read', 'vcr_match_judge_timeout',
+  'vcr_match_answer_unreadable', 'vcr_match_judge_cut_off', 'vcr_match_judge_failed', 'vcr_match_judge_incomplete', 'vcr_match_judge_network', 'vcr_match_judge_nothing_to_read', 'vcr_match_judge_nothing_to_resume', 'vcr_match_judge_timeout',
   'vcr_match_no_patient_text', 'vcr_match_note_changed', 'vcr_match_nothing_finished', 'vcr_match_stopped_early',
   // jobs, derived tables and the orchestrator's step notes
   'vcr_derived_table_missing', 'vcr_population_profile_missing', 'vcr_derived_table_unsupported', 'vcr_engine_table_invalid', 'vcr_job_attempts_exhausted',
@@ -2625,6 +2625,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_match_judge_incomplete: '模型没有把回答写完，这一对没有判成；再启动同样的选择会再判它。',
   vcr_match_judge_network: '连不上模型服务，这一对没有判成；再启动同样的选择会再判它。',
   vcr_match_judge_nothing_to_read: '没有可判定的内容：先写入病历或入排条件，再判定。',
+  vcr_match_judge_nothing_to_resume: '没有需要继续判定的了：已经判完，或剩下的不用再试。',
   vcr_match_judge_timeout: '模型回答超时，这一对没有判成；再启动同样的选择会再判它。',
   vcr_match_no_patient_text: '这位受试者没有可读的病历或表格；写入后再判定。',
   vcr_match_note_changed: '这份病历在读取之后变了，句子编号已不对应：重新读一次再写。',
