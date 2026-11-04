@@ -62,7 +62,7 @@ import { extractSelection } from "./vcrMatchBatch.mjs";
 import { locateSourceText, OTHER_TRIAL_MIN_SOURCE_CHARS, sourceTextLength } from "./vcrPatientTrials.mjs";
 import { factsOnSameWords, surfaceBasis } from "./vcrFactBasis.mjs";
 import { dataIntakeShapeValid } from "./vcrDataIntake.mjs";
-import { VCR_CONVERSATION_STUDY_NAME, clinicalFactIssues, clinicalFactPolarity, clinicalNumericValue } from "@evimed/domain";
+import { VCR_CONVERSATION_STUDY_NAME, VCR_JOB_STATES, clinicalFactIssues, clinicalFactPolarity, clinicalNumericValue } from "@evimed/domain";
 import { createHash } from "node:crypto";
 import { VCR_LONGITUDINAL_JOBS, VCR_LONGITUDINAL_ERROR_CODES } from '@evimed/domain';
 
@@ -237,7 +237,14 @@ function readRequest(body) {
   if (typeof body.what !== "string" || !VCR_READ_WHATS.includes(body.what)) {
     throw gatewayError(400, "vcr_read_what_invalid", `what must be one of: ${VCR_READ_WHATS.join(", ")}.`);
   }
-  const raw = object(body.filter);
+  // A job's row calls its state `state`, and the filter that picks jobs by it is `status` (the one name a candidate search has too): a call that
+  // wrote `state` meant that filter, so it is read as it, once, and the answer says so (the way the near-miss words of a write are).
+  /** @type {Array<{ from: string, as: string }>} */
+  const readAs = [];
+  const written = object(body.filter);
+  /** @type {Record<string, any>} */
+  const raw = written.state != null && written.status == null && !readFilterFields.includes("state")
+    ? (() => { readAs.push({ from: "state", as: "status" }); const { state, ...rest } = written; return { ...rest, status: state }; })() : written;
   if (body.filter != null && (typeof body.filter !== "object" || Array.isArray(body.filter)
     || Object.keys(raw).some((key) => !readFilterFields.includes(key)))) {
     throw gatewayError(400, "vcr_read_filter_invalid", `filter takes only: ${readFilterFields.join(", ")}.`);
@@ -255,7 +262,13 @@ function readRequest(body) {
     if (!ID.test(String(raw[key]))) throw gatewayError(400, "vcr_read_filter_invalid", `filter.${key} is not an id.`);
     filter[key] = String(raw[key]);
   }
-  if (CANDIDATE_FILTER_FIELDS.some((key) => raw[key] != null)) {
+  if (raw.status != null && body.what === "jobs") {
+    if (typeof raw.status !== "string" || !VCR_JOB_STATES.includes(raw.status)) {
+      throw gatewayError(400, "vcr_read_filter_invalid", `filter.status for jobs is one of: ${VCR_JOB_STATES.join(", ")}.`);
+    }
+    filter.status = raw.status;
+  }
+  if (CANDIDATE_FILTER_FIELDS.some((key) => raw[key] != null && !(key === "status" && body.what === "jobs"))) {
     if (body.what !== "candidates") throw gatewayError(400, "vcr_read_filter_invalid", `filter.${CANDIDATE_FILTER_FIELDS.find((key) => raw[key] != null)} belongs to what: candidates.`);
     // The request's own checks answer in words (`candidateRequest`); this only carries the keys through, bounded.
     const asked = candidateRequest(raw);
@@ -283,7 +296,7 @@ function readRequest(body) {
     }
     filter.offset = raw.offset;
   }
-  return { what: body.what, filter };
+  return { what: body.what, filter, readAs };
 }
 
 /** @param {Record<string, any>} body */
@@ -2705,7 +2718,8 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
           ? await vcr.dataIntake?.read(study, request.filter, origin) ?? { available: false, code: 'vcr_gateway_unavailable' }
           : request.what==='patient_context'
           ? origin && vcr.patientContext?.candidates ? await vcr.patientContext.candidates(origin,request.filter) : {candidates:[],nextBeforeSeq:null}
-          : await vcr.service.runtimeRead(study, request.what, request.filter)) });
+          : await vcr.service.runtimeRead(study, request.what, request.filter)),
+          ...(request.readAs.length ? { filterRead: request.readAs, note: "filter 里写的 state 已按 status 读（任务行里叫 state，过滤字段叫 status，取值 queued、running、succeeded、failed、canceled、awaiting_budget）；下次直接写 status。" } : {}) });
       } else if (operation === "write") {
         const request = writeRequest(body);
         // The token names the runtime, and a runtime reserved for one dispatch names that dispatch: with the

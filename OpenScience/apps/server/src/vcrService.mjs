@@ -1066,6 +1066,8 @@ export class VcrService {
     };
     // The saved comparison a link names (`?object=`): the comparison tab's headline follows it, and the newest stays without one.
     if (tab === "comparator" && typeof query.object === "string") bundle.askedComparator = query.object;
+    // and the trial tab's (a saved design's id, or the key a computed design is filed under): the first sentence and the premises follow it
+    if (tab === "trial" && typeof query.object === "string") bundle.askedObject = query.object;
     // What the study's data intake waits on a person for: said on the overview, where the study is read, and not only inside 数据接入.
     if (tab === 'overview') {
       bundle.intakeNeeds = intakeNeedsOf(await this.packages.dataPlane?.intakeRows?.(study).catch(() => null));
@@ -1842,7 +1844,12 @@ export class VcrService {
         return { results: results.slice(0, limit).map((result) => this.#resultView(result, stale)), more: results.length > limit };
       }
       case "report_model": return { model: await this.reportModel(study, { kind: filter.kind ? String(filter.kind) : null }) };
-      case "jobs": return { jobs: await this.store.jobs(study.id, limit) };
+      case "jobs": {
+        // by state when the call asks (`filter.status`): the newest of that state, not the state's share of the newest `limit`
+        const status = typeof filter.status === "string" ? filter.status : null;
+        const rows = await this.store.jobs(study.id, status ? Math.max(limit, 200) : limit);
+        return { jobs: status ? rows.filter((job) => job.state === status).slice(0, limit) : rows };
+      }
       case "generated_records": {
         if (!filter.id) throw failure(400, "vcr_read_filter_invalid", "Specify the saved result id.");
         if (!this.packages.records?.modelRead) return { available: false, code: "vcr_records_unavailable" };

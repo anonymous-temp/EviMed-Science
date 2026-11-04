@@ -195,6 +195,29 @@ test("read and write vocabularies are closed, and the filter fields are too", as
   }
 });
 
+test("a job's row calls its state `state` and the filter that picks jobs by it `status`: the near-miss is read as the word it means, and the answer says so (live check 2026-11-04)", async () => {
+  const { calls, handler } = fixture();
+  const ask = async (body) => { const res = response(); await handler(request("/internal/vcr/v1/read", body), res); return res; };
+  const state = await ask({ what: "jobs", filter: { state: "running", limit: 5 } });
+  assert.equal(state.status, 200, JSON.stringify(state.json()));
+  assert.deepEqual(calls.at(-1), ["read", "jobs", { status: "running", limit: 5 }], "the service reads the word it means");
+  assert.deepEqual(state.json().data.filterRead, [{ from: "state", as: "status" }]);
+  assert.match(state.json().data.note, /state 已按 status 读/);
+  // the word itself is not a near-miss: nothing is said
+  const plain = await ask({ what: "jobs", filter: { status: "succeeded" } });
+  assert.equal(plain.status, 200);
+  assert.deepEqual(calls.at(-1), ["read", "jobs", { status: "succeeded" }]);
+  assert.equal(plain.json().data.filterRead, undefined);
+  // a job state is one of the closed list; an unknown one is refused in words, and so is the filter on a read that has no states
+  for (const bad of [{ what: "jobs", filter: { status: "finished" } }, { what: "jobs", filter: { state: "done" } }, { what: "results", filter: { state: "running" } }]) {
+    const res = await ask(bad);
+    assert.deepEqual([res.status, res.json().code], [400, "vcr_read_filter_invalid"], JSON.stringify(bad));
+  }
+  // both written: the call's own `status` stands and `state` stays an unknown key
+  const both = await ask({ what: "jobs", filter: { state: "running", status: "queued" } });
+  assert.deepEqual([both.status, both.json().code], [400, "vcr_read_filter_invalid"]);
+});
+
 test("the registry search keys belong to what: candidates, are checked in words, and reach the service bounded (M1)", async () => {
   const { calls, handler } = fixture();
   const ask = async (body) => { const res = response(); await handler(request("/internal/vcr/v1/read", body), res); return res; };
