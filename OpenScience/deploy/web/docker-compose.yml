@@ -895,6 +895,14 @@ services:
       OPEN_SCIENCE_VCR_REGISTRY_PAGE_DAYS:
       OPEN_SCIENCE_VCR_REGISTRY_PAGE_FAILURE_HOURS:
       OPEN_SCIENCE_VCR_REGISTRY_PAGE_TIMEOUT_MS:
+      OPEN_SCIENCE_VCR_MIN_CELL_SIZE:
+      OPEN_SCIENCE_VCR_DERIVED_TABLE_MAX_BYTES:
+      OPEN_SCIENCE_VCR_FORECAST_PROVIDERS_FILE: ${OPEN_SCIENCE_VCR_FORECAST_HOST_DIR:+/run/evimed/vcr-forecast/providers.json}
+      # Numerical validation is operator-installed evidence, never a model
+      # write. Set the container path only when its read-only host file exists.
+      OPEN_SCIENCE_VCR_METHOD_VALIDATION_FILE: ${OPEN_SCIENCE_VCR_METHOD_VALIDATION_HOST_FILE:+/run/evimed/vcr-method-validation.json}
+      # The engine's bearer token and receipt key are files, like every other
+      # key this service holds (bound below; /dev/null where the deployment has
       # no engine, which reads as none). The bearer token is required; signing
       # is optional, with job/input identity and output hashes checked always.
       OPEN_SCIENCE_VCR_ENGINE_TOKEN_FILE: /run/secrets/vcr-engine-token

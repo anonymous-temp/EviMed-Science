@@ -27,7 +27,12 @@ export const LONG_KIND_LABELS_ZH = Object.freeze({ condition: '诊断', lab: '�
 /** A person's lines in one record, and their characters: enough for any set of criteria, well inside one call. */
 export const LONG_LIMITS = Object.freeze({ lines: 300, chars: 20_000, perConcept: 5, keptWhileReading: 4_000, windowPeople: 300, conceptsOffered: 400 });
 
-/** The columns of the converter's tables and of CDISC's, by what a header must hold. Order matters: the most specific first. */
+/** @typedef {{ kind: string, requires: readonly string[], date?: readonly string[], concept?: readonly string[], value?: readonly string[], detail?: readonly string[], until?: string, comparator?: string, unit?: string }} LongShape */
+
+/**
+ * The columns of the converter's tables and of CDISC's, by what a header must hold. Order matters: the most specific first.
+ * @type {ReadonlyArray<Readonly<LongShape>>}
+ */
 export const LONG_SHAPES = Object.freeze([
   { kind: 'condition', requires: ['onset_date', 'clinical_status'], date: ['onset_date', 'recorded_date'], concept: ['display', 'code'], detail: ['clinical_status'], until: 'abatement_date' },
   { kind: 'lab', requires: ['effective_date', 'value_number'], date: ['effective_date'], concept: ['component_display', 'display', 'component_code', 'code'], value: ['value_text', 'value_number'], comparator: 'value_comparator', unit: 'value_unit' },
@@ -39,7 +44,7 @@ export const LONG_SHAPES = Object.freeze([
   { kind: 'adverse', requires: ['AEDECOD'], date: ['ASTDT', 'AESTDTC'], concept: ['AEDECOD', 'AETERM'], until: 'AENDT' },
   { kind: 'medication', requires: ['CMDECOD'], date: ['ASTDT', 'CMSTDTC'], concept: ['CMDECOD', 'CMTRT'], until: 'AENDT' },
   { kind: 'lab', requires: ['PARAM', 'AVAL'], date: ['ADT', 'ADTM'], concept: ['PARAM', 'PARAMCD'], value: ['AVALC', 'AVAL'], unit: 'AVALU' },
-].map(Object.freeze));
+].map((shape) => Object.freeze(shape)));
 
 /** The tables `vcr_import_convert.py` writes. */
 const CONVERTER_TABLE = /^(?:fhir|omop|adam)_/u;
@@ -73,9 +78,10 @@ export function longRowLine(shape, cell, names = null) {
 
 /**
  * The rows a record shows, chronologically, and what is left out. Pure: dates and the chosen concepts decide, nothing reads language.
- * @param {ReadonlyArray<{ date: string, concept: string, line: string }>} rows @param {ReadonlySet<string>} relevant
+ * @template {{ date: string, concept: string, line: string }} Row
+ * @param {ReadonlyArray<Row>} rows @param {ReadonlySet<string>} relevant
  * @param {{ lines?: number, chars?: number, perConcept?: number }} [limits]
- * @returns {{ chosen: Array<{ date: string, concept: string, line: string }>, leftOut: { rows: number, earliest: string | null } | null }}
+ * @returns {{ chosen: Row[], leftOut: { rows: number, earliest: string | null } | null }}
  */
 export function chooseLongRows(rows, relevant, { lines = LONG_LIMITS.lines, chars = LONG_LIMITS.chars, perConcept = LONG_LIMITS.perConcept } = {}) {
   const newestFirst = [...rows].sort((a, b) => b.date.localeCompare(a.date) || a.line.localeCompare(b.line));

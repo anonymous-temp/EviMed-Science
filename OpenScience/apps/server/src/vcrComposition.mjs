@@ -603,7 +603,7 @@ export function vcrDocumentsSeam({ dataPlane, passagesMinChars = 40_000 }) {
  * Asked for the `variables` of a set of criteria, a read also carries what the table's columns mean for them (`meaning`, its
  * `meaningDigest` and `meaningStatus`; `vcrTableMeaning.mjs`): what is recorded, and with `propose` one model call for what is
  * not. `semantics` is the dataset-semantics service, given as a function because it is built after this module.
- * @param {{ dataPlane: VcrDataPlane | null, semantics?: (() => any) | null, config?: Record<string, any>, usageLedger?: any, fetchImpl?: typeof fetch, callModel?: Function }} parts
+ * @param {{ dataPlane: VcrDataPlane | null, semantics?: (() => any) | null, config?: Record<string, any>, usageLedger?: any, fetchImpl?: typeof fetch, callModel?: typeof import('./modelGateway.mjs').callModelForControlPlane }} parts
  */
 export function vcrSubjectTableSeam({ dataPlane, semantics = null, config = {}, usageLedger = null, fetchImpl = undefined, callModel = undefined }) {
   return {

@@ -1219,6 +1219,23 @@ function vcrSettings(overrides) {
     vcrRegistryPageDays: integer("vcrRegistryPageDays", "OPEN_SCIENCE_VCR_REGISTRY_PAGE_DAYS", 7, 1, 365),
     vcrRegistryPageFailureHours: integer("vcrRegistryPageFailureHours", "OPEN_SCIENCE_VCR_REGISTRY_PAGE_FAILURE_HOURS", 6, 1, 168),
     vcrRegistryPageTimeoutMs: integer("vcrRegistryPageTimeoutMs", "OPEN_SCIENCE_VCR_REGISTRY_PAGE_TIMEOUT_MS", 45_000, 5_000, 150_000),
+    // The smallest cell a model is shown (vcrService.minCell): a deployment may raise the domain's floor, never lower it.
+    vcrMinCellSize: integer("vcrMinCellSize", "OPEN_SCIENCE_VCR_MIN_CELL_SIZE", VCR_MIN_CELL_SIZE, VCR_MIN_CELL_SIZE, 1_000),
+    // The largest derived table — reconstructed pseudo-patients, a forecast's probabilities — the control plane stores from an engine job (vcrJobs).
+    vcrDerivedTableMaxBytes: integer("vcrDerivedTableMaxBytes", "OPEN_SCIENCE_VCR_DERIVED_TABLE_MAX_BYTES", 256 * 1024 * 1024, 1024 * 1024, 2 * 1024 * 1024 * 1024),
+    // Request authentication is required; receipt signing is optional, and a
+    // receipt is our own evidence of what the engine ran — it labels a result,
+    // it never decides whether a person may have one (owner ruling 2026-10-04).
+    // A receipt key that is configured and unreadable or short is therefore a
+    // readiness failure and a log line, not a reason to refuse every engine step:
+    // the key stays empty, results are verified by the output hash and the job's
+    // echoed identity (which always run), and each is recorded `signed: false`.
+    // The request token is not like that: it authenticates the engine's caller,
+    // and a bad one leaves the engine unconfigured. Readiness names only the
+    // error, never the secret.
+    vcrEngineToken: engineToken.value,
+    vcrEngineTokenError: engineToken.error,
+    vcrEngineReceiptKey: engineReceiptKey.value,
     vcrEngineReceiptKeyError: engineReceiptKey.error,
     vcrEngineConfigured: Boolean(engineUrl) && Boolean(engineToken.value) && !engineToken.error,
     // One at a time on the shared host (plan §11.4).
