@@ -8,6 +8,7 @@ import { VcrVersionComparison } from "../VcrVersionComparison";
 import { VcrWinRatioDesigns } from "../VcrWinRatioDesigns";
 import { useRef, useState } from "react";
 import { CircleCheck, PenLine, TriangleAlert } from "lucide-react";
+import { useSearchParams } from "react-router";
 import { getVcrTrial, recordVcrDecision, type VcrDesign, type VcrPremise, type VcrStudy, type VcrTrialTab as TrialData } from "@/lib/vcrClient";
 import { webErrorMessage } from "@/lib/apiClient";
 import { toast } from "@/lib/toast";
@@ -102,7 +103,10 @@ type TrialView = "designs" | "schedule" | "regulatory";
  * record, behind a press on it; the check is a ✓ or a ⚠ with the two numbers, and no sentence about it stands on the page.
  */
 export function TrialTab({ studyId, study }: { studyId: string; study: VcrStudy }) {
-  const { state, reload } = useVcrLoad(`${studyId}:trial`, () => getVcrTrial(studyId));
+  // The design a reply's link named (`?object=`) is what the first sentence and the premises are about; without one it is the most recent.
+  const [params] = useSearchParams();
+  const object = params.get("object");
+  const { state, reload } = useVcrLoad(`${studyId}:trial:${object ?? ""}`, () => getVcrTrial(studyId, object ? { object } : undefined));
   if (state.kind === "loading") return <VcrTabSkeleton />;
   if (state.kind === "error") return <VcrTabError message={state.message} onRetry={reload} />;
   return <TrialView studyId={studyId} study={study} data={state.data} reload={reload} />;

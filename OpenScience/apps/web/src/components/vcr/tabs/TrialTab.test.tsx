@@ -56,6 +56,19 @@ beforeEach(() => {
   installVcrServer(network.productRequest);
 });
 
+describe("试验 · which design the page is about", () => {
+  it("opens on the design a reply's link named (`?object=`), and on the most recent without one", async () => {
+    draw();
+    await trialDrawn();
+    expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/trial`);
+    expect(network.productRequest.mock.calls.every(([path]) => !String(path).includes("object="))).toBe(true);
+    const calls = network.productRequest.mock.calls.length;
+    renderTab(<TrialTab studyId={STUDY_ID} study={ev201()} />, { route: "/?object=scn_2" });
+    await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/trial?object=scn_2`));
+    expect(network.productRequest.mock.calls.length).toBeGreaterThan(calls);
+  });
+});
+
 describe("试验 · the designs", () => {
   it("lists every design, greys the dominated one with the server's own sentence and no numbers", async () => {
     const { container } = draw();

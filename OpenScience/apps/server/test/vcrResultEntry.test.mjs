@@ -101,12 +101,14 @@ test("P2-10 the two computations whose completion only the conversation heard ha
 });
 
 // 2026-11-02: a reply said an E-value of 3.0 and the page 2.22, the newest comparison of the study. The comparison tab opens on the saved
-// comparison its link names; no other tab reads a name.
-test("the link to the comparison tab names the saved comparison the answer is about, and no other tab names one", () => {
+// comparison its link names, and since 2026-11-04 the trial tab on the design; no other tab reads a name.
+test("the link to the comparison tab and to the trial tab names the saved object the answer is about, and no other tab names one", () => {
   const entry = vcrResultEntry({ studyId: "std_conv", tab: "comparator", publicUrl: PUBLIC, object: "cmp_3a" });
   assert.deepEqual(entry, { studyId: "std_conv", tab: "comparator", label: "在“对照”页查看", object: "cmp_3a", url: "https://evimed.example/app/virtual-research/std_conv/comparator?object=cmp_3a" });
   assert.deepEqual(vcrResultEntry({ studyId: "std_conv", tab: "comparator", publicUrl: "" , object: "cmp_3a" }), { studyId: "std_conv", tab: "comparator", label: "在“对照”页查看", object: "cmp_3a" });
-  assert.equal(vcrResultEntry({ studyId: "std_conv", tab: "trial", publicUrl: PUBLIC, object: "scn_1" }).url, "https://evimed.example/app/virtual-research/std_conv/trial");
+  // (2026-11-04: the trial tab reads one too -- a page of several designs is about the one the link names; see vcrTrialPage.test.mjs)
+  assert.equal(vcrResultEntry({ studyId: "std_conv", tab: "trial", publicUrl: PUBLIC, object: "scn_1" }).url, "https://evimed.example/app/virtual-research/std_conv/trial?object=scn_1");
+  assert.equal(vcrResultEntry({ studyId: "std_conv", tab: "population", publicUrl: PUBLIC, object: "scn_1" }).url, "https://evimed.example/app/virtual-research/std_conv/population", "no other tab names one");
   for (const object of ["", "../x", "a/b", "x".repeat(161), null, 5]) assert.equal(vcrResultEntry({ studyId: "std_conv", tab: "comparator", publicUrl: PUBLIC, object }).url, "https://evimed.example/app/virtual-research/std_conv/comparator", String(object));
   // a start's answer names the comparison it filed the job under; a status answer is given the job's own record of it
   const started = { jobId: "job_1", state: "queued", subject: { kind: "comparator", id: "cmp_3a", version: 1 } };

@@ -38,7 +38,8 @@ test("a finished design_dose job reaches the trial tab: its own kind, the trial 
 test("four designs on one curve sit side by side, with the difference against the one asked about and the error of the differences", () => {
   const each = card("compare");
   assert.equal(each.form, "dose_finding");
-  assert.equal(each.title, "BOIN 与 3+3、Keyboard、CRM 的对比");
+  // (the people it ran with are part of what it is -- 2026-11-04: the same designs at 30 and at 18 people were three cards called alike)
+  assert.equal(each.title, "BOIN 与 3+3、Keyboard、CRM 的对比，最多 30 人");
   assert.match(each.question, /几种设计选对最大耐受剂量的概率、超量给药的人数差多少/);
   assert.deepEqual(each.table.rows.map((row) => row.label), ["BOIN", "3+3", "Keyboard", "CRM"]);
   assert.deepEqual(each.table.rows.map((row) => row.role), ["asked", "compared", "compared", "compared"]);

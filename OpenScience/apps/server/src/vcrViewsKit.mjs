@@ -398,6 +398,7 @@ export const MEASURE_META = Object.freeze({
   stop_futility_probability: { label: "在这次分析因无效停止的概率", unit: "%", percent: true },
   stop_efficacy_probability: { label: "在这次分析提前宣布成功的概率", unit: "%", percent: true },
   expected_sample_size_null: { label: "无效应时的期望样本量", unit: "例" },
+  first_stage_stop_probability_null: { label: "无效应时在第一阶段就停止的概率", unit: "%", percent: true },
   simon_expected_sample_size_null: { label: "Simon 最优设计无效应时的期望样本量", unit: "例" },
   expected_sample_size_saving_null: { label: "无效应时比 Simon 最优设计少的期望样本量", unit: "例" },
   success_threshold: { label: "成功阈值（后验概率）", unit: "%", percent: true },

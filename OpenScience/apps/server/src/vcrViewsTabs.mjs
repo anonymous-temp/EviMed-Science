@@ -72,7 +72,7 @@ import { presentTargetTrial } from "./vcrTargetTrialView.mjs";
 import { localCalibrationView } from "./vcrLocalCalibration.mjs";
 import {
   abilitiesOf, assumptionSummary, assumptionValue, designsSentence, nodeLabel, notEstimableDesign, presentDesigns, reviewContextOf,
-  presentModelCard, registryDesignWords, resultNode, scenarioName, valueString,
+  presentModelCard, registryDesignWords, resultNode, scenarioName, simonBoundaryText, valueString,
 } from "./vcrViews.mjs";
 import {
   allResultsOf, countsView, finite, intervalView, letterCode, list, markFor, measureLabel, measureValue, naturalScale, numeric, object,
@@ -1055,21 +1055,60 @@ const TRUTH_LABELS = Object.freeze(/** @type {Record<string, string>} */ ({
 }));
 
 /**
- * The trial tab's first sentence: what each design needs where the closed form computed it, then how the designs did where they
- * were simulated. Every number is a measure of the design's own results, formatted here.
- * @param {ReadonlyArray<Record<string, any>>} designs
+ * What a design needs, in the words of the first sentence: the events and patients the closed form computed, or -- for Simon's two-stage design,
+ * which has neither -- its answer: the stage sizes, the boundaries, the expected size and the chance of stopping early under the null, the type I
+ * error and the power. `named` adds what the design is after its letter, for a page that speaks of one design among many.
+ * @param {Record<string, any>} design @param {boolean} [named]
  */
-export function trialHeadline(designs) {
-  const needs = designs.filter((design) => !design.dominated).map((design) => {
-    const events = numeric(design.measures.required_events?.value);
-    const patients = design.measures.sample_size?.source === "calculated" ? numeric(design.measures.sample_size?.value) : null;
-    if (events === null && patients === null) return null;
-    return `方案 ${design.code} 需要 ${[events !== null ? `${Math.round(events).toLocaleString("en-US")} 例事件` : null,
-      patients !== null ? `${Math.round(patients).toLocaleString("en-US")} 名患者` : null].filter(Boolean).join("、")}`;
-  }).filter(Boolean).slice(0, 3);
+function designNeeds(design, named = false) {
+  const word = `方案 ${design.code}${named && text(design.name) && design.name !== `方案 ${design.code}` ? `（${design.name}）` : ""}`;
+  const simon = design.simon?.optimal;
+  if (simon) {
+    const percent = (/** @type {unknown} */ x, /** @type {number} */ decimals = 1) => (numeric(x) === null ? null : `${roundTo(Number(x) * 100, decimals)}%`);
+    const tail = [numeric(simon.expectedNull) !== null ? `零假设下期望入组 ${roundTo(Number(simon.expectedNull), 1)} 例` : null,
+      percent(simon.earlyStopNull) ? `第一阶段就停止的概率 ${percent(simon.earlyStopNull)}` : null].filter(Boolean).join("，");
+    const error = [percent(simon.typeOneError, 2) ? `I 类错误 ${percent(simon.typeOneError, 2)}` : null, percent(simon.power) ? `功效 ${percent(simon.power)}` : null].filter(Boolean).join("，");
+    const minimax = design.simon.minimax ? `；总例数最少的设计共 ${design.simon.minimax.n} 例` : "";
+    return `${word} 的 Simon 两阶段最优设计：${simonBoundaryText(simon)}${tail ? `；${tail}` : ""}${error ? `；${error}` : ""}${minimax}`;
+  }
+  const events = numeric(design.measures.required_events?.value);
+  const patients = design.measures.sample_size?.source === "calculated" ? numeric(design.measures.sample_size?.value) : null;
+  if (events === null && patients === null) return null;
+  return `${word} 需要 ${[events !== null ? `${Math.round(events).toLocaleString("en-US")} 例事件` : null,
+    patients !== null ? `${Math.round(patients).toLocaleString("en-US")} 名患者` : null].filter(Boolean).join("、")}`;
+}
+
+/**
+ * The trial tab's first sentence. Up to three designs, each says what it needs where the closed form computed it, then how the designs did
+ * where they were simulated. More than three designs, or a link that names one (`object=`), is about ONE design -- the one named, else the most
+ * recent -- the same the premises and the data-generation lines read, with the others a count: a sentence of the first three was about designs the
+ * page was no longer reading. Every number is a measure of the design's own results, formatted here.
+ * @param {ReadonlyArray<Record<string, any>>} designs @param {{ primary?: Record<string, any> | null, asked?: boolean }} [options]
+ */
+export function trialHeadline(designs, { primary = null, asked = false } = {}) {
+  const live = designs.filter((design) => !design.dominated);
+  if (primary && (asked || live.length > 3)) {
+    const own = designNeeds(primary, true);
+    const others = live.filter((design) => design.id !== primary.id).length;
+    return own ? `${own}${others ? `；页面上另有 ${others} 个方案，各在下面的表里` : ""}。` : null;
+  }
+  const needs = live.map((design) => designNeeds(design)).filter(Boolean).slice(0, 3);
   const sentence = designsSentence(designs);
   const parts = [...needs, ...(sentence && designs.some((design) => design.measures.power || design.measures.assurance) ? [sentence] : [])];
   return parts.length ? `${parts.join("；")}。` : (sentence ? `${sentence}。` : null);
+}
+
+/**
+ * The first sentence of a page whose subject is a card of a design the conversation computed (a re-estimation, a dose-finding comparison, a
+ * Bayesian design, a hierarchical composite): the card's own title and its first numbers, and the fixed designs of the page as the baselines
+ * they are. The composite's number comes first: the single-endpoint sizes beside it are what it is read against.
+ * @param {Record<string, any>} card @param {ReadonlyArray<Record<string, any>>} designs
+ */
+function cardHeadline(card, designs) {
+  const numbers = list(card.headline).map(object).slice(0, 3).map((entry) => `${entry.label} ${valueString(object(entry.value))}`);
+  if (!numbers.length) return null;
+  const baselines = designs.filter((design) => !design.dominated).map((design) => designNeeds(design)).filter(Boolean).slice(0, 3);
+  return `${card.title}：${numbers.join("；")}${baselines.length ? `。作为对照，${baselines.join("；")}` : ""}。`;
 }
 
 /**
@@ -1154,11 +1193,32 @@ export function presentTrialTab(bundle) {
   const { rows: designRows, designs } = presentDesigns(bundle);
   const live = designs.filter((design) => !design.dominated);
   // The counts belong to the design a person chose, else to the last one still in the running.
-  const headlineRow = designRows.find((row) => row.chosen && row._result) ?? [...designRows].reverse().find((row) => !row.dominated && row._result) ?? null;
+  // What the page is about. A link that names a design (`?object=`, the id of a design or of a card's subject) is about that one; else the design
+  // the researcher chose; else the most recent -- of the fixed designs and of the cards the conversation computed -- and the first sentence, the
+  // premises and the data-generation lines all read that one (they once read different ones once the page held more than three designs).
+  const asked = typeof bundle.askedObject === "string" ? bundle.askedObject : null;
+  const cards = {
+    confirmatoryDesigns: presentConfirmatoryDesigns(bundle, { nodeOf: resultNode }),
+    doseDesigns: presentDoseDesigns(bundle, { nodeOf: resultNode }),
+    bayesianDesigns: presentBayesianDesigns(bundle, { nodeOf: resultNode }),
+    winRatioDesigns: presentWinRatioDesigns(bundle, { nodeOf: resultNode }),
+  };
+  const everyResult = allResultsOf(bundle);
+  const cardRows = Object.values(cards).flat().map((card) => {
+    const result = everyResult.find((row) => row.id === card.id);
+    return { card, subjectId: text(result?.subjectId), createdAt: String(result?.createdAt ?? "") };
+  });
+  const askedRow = asked ? designRows.find((row) => row.id === asked && row._result) ?? null : null;
+  const askedCard = asked && !askedRow ? cardRows.find((entry) => entry.subjectId === asked || entry.card.id === asked) ?? null : null;
+  const chosenRow = designRows.find((row) => row.chosen && row._result) ?? null;
+  const newestRow = askedRow ?? chosenRow ?? [...designRows].reverse().find((row) => !row.dominated && row._result) ?? null;
+  const newestCard = asked || chosenRow ? null : [...cardRows].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null;
+  const primaryCard = askedCard ?? (newestCard && (!newestRow || newestCard.createdAt > String(newestRow._result?.createdAt ?? "")) ? newestCard : null);
+  const headlineRow = newestRow;
   const decision = decisions[0] ?? null;
   const columnSpec = [
     ["required_events", "所需事件数", "例"], ["sample_size", "样本量", "例"], ["expected_events", "期望事件数", null], ["power", "功效", "%"], ["assurance", "成功把握", "%"],
-    ["type_one_error", "I 类错误", "%"], ["bias", "偏倚", null], ["coverage", "覆盖率", "%"], ["expected_sample_size", "期望样本量", "例"], ["duration_months", "平均研究时长", "月"], ["last_patient_in_months", "末例入组（入组假设模拟）", "月"], ["cost", "成本", "万元"],
+    ["type_one_error", "I 类错误", "%"], ["bias", "偏倚", null], ["coverage", "覆盖率", "%"], ["expected_sample_size", "期望样本量", "例"], ["expected_sample_size_null", "无效应时的期望样本量", "例"], ["first_stage_stop_probability_null", "无效应时在第一阶段就停止的概率", "%"], ["duration_months", "平均研究时长", "月"], ["last_patient_in_months", "末例入组（入组假设模拟）", "月"], ["cost", "成本", "万元"],
   ];
   // The type I error is a column as soon as a design waits for one (the check follows the result): a cell that says 排队中 needs its column.
   const columns = columnSpec
@@ -1225,10 +1285,10 @@ export function presentTrialTab(bundle) {
   });
   const goal = text(decision?.question) ?? text(object(grid?.comparisonGoal).text) ?? null;
   return {
-    headline: trialHeadline(designs),
-    ademp: adempOf(bundle, headlineRow?._scenario ?? scenarios[0] ?? null, object(headlineRow?._result?.diagnostics), headlineRow?._stages ?? {}),
+    headline: (primaryCard ? cardHeadline(primaryCard.card, designs) : null) ?? trialHeadline(designs, { primary: headlineRow ? designs.find((design) => design.id === headlineRow.id) : null, asked: Boolean(askedRow) }),
+    ademp: primaryCard ? adempOf(bundle, null) : adempOf(bundle, headlineRow?._scenario ?? scenarios[0] ?? null, object(headlineRow?._result?.diagnostics), headlineRow?._stages ?? {}),
     // 「这个结论的前提」: the numbers the headline design's result stands on, where each came from, and the defaults among them.
-    premises: headlineRow ? vcrPremises("trial", trialPremiseInput(bundle, headlineRow)) : [],
+    premises: primaryCard ? list(primaryCard.card.premises) : headlineRow ? vcrPremises("trial", trialPremiseInput(bundle, headlineRow)) : [],
     // What the sample size rests on, one input at a time, and the power the effect's published shrinkage leaves (C6).
     sensitivity: trialSensitivity(headlineRow),
     // The yardstick the trade-off is drawn against when nobody wrote one: alpha and the target power (C7).
@@ -1254,12 +1314,12 @@ export function presentTrialTab(bundle) {
     // The base rates of development, two sources side by side, beside an assurance (E6): a reference, never this trial's probability.
     successRates: designs.some((design) => design.measures.assurance) ? vcrSuccessRatesPage() : null,
     // The confirmatory designs the conversation computed (design_confirmatory): a card each, with its own premises and baselines.
-    confirmatoryDesigns: presentConfirmatoryDesigns(bundle, { nodeOf: resultNode }),
+    confirmatoryDesigns: cards.confirmatoryDesigns,
     // The dose-finding designs (design_dose) and the Bayesian designs without MCMC (design_bayesian) the conversation computed: a card each.
-    doseDesigns: presentDoseDesigns(bundle, { nodeOf: resultNode }),
-    bayesianDesigns: presentBayesianDesigns(bundle, { nodeOf: resultNode }),
+    doseDesigns: cards.doseDesigns,
+    bayesianDesigns: cards.bayesianDesigns,
     // The hierarchical composite endpoints compared by win ratio (design_win_ratio) the conversation computed: a card each.
-    winRatioDesigns: presentWinRatioDesigns(bundle, { nodeOf: resultNode }),
+    winRatioDesigns: cards.winRatioDesigns,
     milestones,
     // The protocol's visit schedule (「访视日程」) and the study's regulatory contacts (「监管沟通记录」): records, not results.
     schedule: reportSchedule(bundle.schedule),

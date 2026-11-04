@@ -17,6 +17,8 @@ import { VCR_MATCHING_WRITE_WHATS, VCR_RESULT_KIND_TABS, VCR_TABS, VCR_TAB_LABEL
 
 /** A study id the application is willing to put in an address (the same shape the shell bounds it by). */
 const STUDY_ID = /^[A-Za-z0-9_-]{1,160}$/;
+/** What the trial tab is asked about: the id of a saved design, or the key a computed design is filed under (`cd:design:endpoint:digest`). */
+const TRIAL_OBJECT = /^[A-Za-z0-9_:.-]{1,200}$/;
 
 /**
  * The absolute address of one tab of one study, or null when the deployment has no public address (a relative one would resolve to
@@ -38,13 +40,16 @@ export function vcrResultAddress(publicUrl, studyId, tab, object = null) {
  *
  * The comparison tab shows one saved comparison as its headline, the newest unless the link says which: a reply that cites a result
  * computed for one comparison links that comparison, so a later sensitivity analysis written in the same study does not change the
- * number the reader finds (2026-11-02: the reply said an E-value of 3.0 and the page 2.22). `object` is that comparison's id; no other tab reads one.
+ * number the reader finds (2026-11-02: the reply said an E-value of 3.0 and the page 2.22). `object` is that comparison's id. The trial tab
+ * reads one too (2026-11-04): a page of four designs and a re-estimation had a first sentence about the first three and premises about the
+ * last, so a link names the design the reply is about; no other tab reads one.
  * @param {{ studyId: unknown, tab: unknown, publicUrl?: unknown, object?: unknown }} input
  * @returns {{ studyId: string, tab: string, label: string, url?: string, object?: string } | null}
  */
 export function vcrResultEntry({ studyId, tab, publicUrl = null, object = null }) {
   if (typeof studyId !== "string" || !STUDY_ID.test(studyId) || typeof tab !== "string" || !/** @type {readonly string[]} */ (VCR_TABS).includes(tab)) return null;
-  const saved = tab === "comparator" && typeof object === "string" && STUDY_ID.test(object) ? object : null;
+  // (the key of a card's subject is not an id: `cd:` + design + endpoint + a digest, `wr:` + a digest; the trial tab reads it)
+  const saved = (tab === "comparator" || tab === "trial") && typeof object === "string" && (tab === "trial" ? TRIAL_OBJECT : STUDY_ID).test(object) ? object : null;
   const url = vcrResultAddress(publicUrl, studyId, tab, saved);
   return { studyId, tab, label: `在“${/** @type {Record<string, string>} */ (VCR_TAB_LABELS_ZH)[tab]}”页查看`, ...(saved ? { object: saved } : {}), ...(url ? { url } : {}) };
 }
