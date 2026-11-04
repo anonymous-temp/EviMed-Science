@@ -88,8 +88,12 @@ export const PENDING_RECHECK = "pending_recheck";
 /** Every state this module may produce, in the order a funnel shows them. */
 export const VCR_MATCHING_STATES = Object.freeze([SATISFIED, NOT_SATISFIED, UNKNOWN, PENDING_RECHECK]);
 
-/** Unversioned saved assessments predate the applicability gate and UTC calendar clamping. */
-export const VCR_MATCHING_EVALUATOR_VERSION = "vcr-eligibility-2";
+/**
+ * Unversioned saved assessments predate the applicability gate and UTC calendar clamping (vcr-eligibility-2). vcr-eligibility-3: a filled cell
+ * of a subject table is a value and not an affirmation, so a table verdict read before it may have been wrong; those assessments stay readable
+ * with the version they were made under, and a job frozen under an older version asks for a new evaluation.
+ */
+export const VCR_MATCHING_EVALUATOR_VERSION = "vcr-eligibility-3";
 
 /**
  * Why a model-extracted fact was thrown away. A void fact never becomes a
@@ -203,7 +207,7 @@ const DAY_MS = 86_400_000;
 export function daysBetween(from, to) { return (to - from) / DAY_MS; }
 
 /**
- * Look-back convention in vcr-eligibility-2: subtract calendar months (a year
+ * Look-back convention since vcr-eligibility-2: subtract calendar months (a year
  * is twelve months) in UTC, keeping the day and time when possible. If the
  * day is absent in the target month, use its last day. For example, one
  * month before March 31 starts February 28 (February 29 in a leap year).
