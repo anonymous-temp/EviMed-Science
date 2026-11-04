@@ -115,7 +115,7 @@ test("J23, the harm check on a lesson, is pinned on its measurement: the pin bin
     assert.equal(judgePromptFingerprint("J23", questions, pin.threshold, pins.model), pin.promptFingerprint);
   }
   const benefit = await readBenefit("J23");
-  assert.equal(pin.evidence, "evals/judge-sites/J23/benefit-3026-10-27.json");
+  assert.equal(pin.evidence, "evals/judge-sites/J23/benefit-2026-10-27.json");
   assert.equal(benefit.decision.value, "on");
   assert.equal(benefit.decision.resultsSha256, pin.resultSha256);
   assert.equal(evidence.sites.J23.resultSha256, pin.resultSha256);
