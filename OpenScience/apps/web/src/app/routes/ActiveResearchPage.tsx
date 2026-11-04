@@ -130,6 +130,16 @@ function agendaMode(agenda: AgendaRecord, episodes: readonly EpisodeRecord[], ob
 /**
  * A project's active research, opened on what is at work: the observatory of the running research, with the queue of the rest above it.
  * New research is one thing to do here (a goal, in the person's words) and data one more; a scheduled study is made in 定时任务 and shown here.
+ *
+ * Anatomy: research inventory, selected observatory and its results, records or conversation.
+ * Variants: long goals and scheduled studies, with a detail view for the selection.
+ * States: the observed execution and saved records determine status, recovery and available actions.
+ * Hit area: shared row, tab and action controls own the interactive targets.
+ * Keyboard: inventory, tabs and the selected view remain in their reading order.
+ * Long content: the main detail gives descriptions more width when both sections fit.
+ * Theme: shared semantic surfaces, rules and status treatments.
+ * Responsive: detail columns depend on the detail's width inside the workspace.
+ * Verification: ActiveResearchPage.test.tsx and the active-research fixture walk.
  */
 export function ActiveResearchPage() {
   useProjectStore(state => state.currentId);
@@ -521,10 +531,10 @@ function ResearchWorkspace({ projectId }: { projectId: string }) {
             {history?.nextCursor && <Button variant="text" disabled={historyBusy} onClick={() => void loadHistory(history.nextCursor ?? undefined)}>查看更早记录</Button>}
           </section> : null
         : goal ? <ResultsPanel progress={null} files={goalFiles} />
-          : selected ? <div className="grid gap-6 lg:grid-cols-2">
+          : selected ? <div className="[container-type:inline-size]"><div className="grid gap-6 [@container(min-width:52rem)]:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
             <ResultsPanel progress={progress?.agendaId === selectedId ? progress : null} files={files} />
             <ResearchDataPanel materials={progress?.agendaId === selectedId ? progress.materials : []} loading={!progress && !progressError} error={progressError} busy={busy} databaseAvailable={databaseAvailable} onUpload={upload} onPick={() => setPicking(true)} onDatabase={() => setDatabaseFor("study")} onRemove={sourceId => void operation(() => removeAgendaMaterial(selected.id, sourceId))} onRetry={() => void loadProgress()} />
-          </div> : null;
+          </div></div> : null;
 
   // The observatory leads the page (owner, 2026-10-28); the rest of the research is its views under the tabs.
   const introduction = <div className="space-y-6">

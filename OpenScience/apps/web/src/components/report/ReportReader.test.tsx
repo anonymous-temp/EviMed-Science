@@ -142,6 +142,22 @@ describe("ReportReader", () => {
     expect(within(table).getByText("⚠ 引文未在原文中找到")).toBeInTheDocument();
   });
 
+  it("jumps from the wide source summary to the full, version-bound source cards", async () => {
+    const wide = vi.spyOn(window, "matchMedia").mockImplementation((query: string) => ({
+      matches: query === "(min-width: 1024px)", media: query, onchange: null,
+      addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {}, dispatchEvent: () => false,
+    }) as unknown as MediaQueryList);
+    try {
+      renderReader();
+      const summary = await screen.findByRole("complementary", { name: "报告来源摘要" });
+      await userEvent.click(within(summary).getByRole("button", { name: "查看全部来源" }));
+      expect(document.activeElement?.querySelector("[data-source-count]")).toBeInTheDocument();
+      expect(document.querySelectorAll("[data-source-count]")).toHaveLength(1);
+    } finally {
+      wide.mockRestore();
+    }
+  });
+
   // 「未核对」 once stood for three things: the checks still on their way, the checks that could not be read, and a claim nobody checked.
   // The column is ✓, ⚠ or blank now, and 核对中 only while they are on their way.
   it("reads 核对中 on the matrix tab while the checks are on their way, and the marks once they arrive", async () => {

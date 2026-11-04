@@ -4756,13 +4756,14 @@ export function addressProbe([kind]) {
     return { ...base, found: Boolean(list), selected: selected[0] ?? null };
   }
   if (kind === "memory" || kind === "memory-overview") {
-    // The page's sections are the links of the left column's navigation, named 记忆 (the inbox's toolbar has a tab list of its own, 消息视图).
+    // The lists use their own navigation. The overview uses the capsule heading and category entries in its wider layout.
     const list = [...document.querySelectorAll("nav[aria-label='记忆']")].find(visible);
     const tabs = list ? [...list.querySelectorAll("a")].filter(visible) : [];
     const selected = tabs.find((el) => el.getAttribute("aria-current") === "page");
+    const overview = kind === "memory-overview" && [...document.querySelectorAll("[data-memory-frame='overview']")].some(visible);
     const box = [...document.querySelectorAll("main input")].find((el) => el.getAttribute("aria-label") === "搜索记忆" && visible(el));
     const ranges = [...document.querySelectorAll("[role='group'][aria-label='时间范围'] button[aria-pressed='true']")].filter(visible);
-    return { ...base, found: tabs.length > 0, selected: selected ? words(selected) : null, query: box ? box.value : null, ...(kind === "memory-overview" ? { range: ranges[0] ? words(ranges[0]) : null } : {}) };
+    return { ...base, found: overview || tabs.length > 0, selected: overview ? "总览" : selected ? words(selected) : null, query: box ? box.value : null, ...(kind === "memory-overview" ? { range: ranges[0] ? words(ranges[0]) : null } : {}) };
   }
   return null;
 }
@@ -4794,8 +4795,9 @@ export function memoryReady(wanted) {
   const main = document.querySelector("main");
   const visible = (el) => el.getBoundingClientRect().width > 0 && el.getBoundingClientRect().height > 0;
   if (!main || location.pathname !== (wanted.overview ? "/app/memory/overview" : "/app/memory")) return false;
+  const overview = wanted.overview && [...main.querySelectorAll("[data-memory-frame='overview']")].some(visible);
   const selected = [...main.querySelectorAll("nav[aria-label='记忆'] [aria-current='page']")].find(visible);
-  if (!selected || (wanted.selected && !selected.textContent?.trim().startsWith(wanted.selected))) return false;
+  if (overview ? wanted.selected && wanted.selected !== "总览" : !selected || (wanted.selected && !selected.textContent?.trim().startsWith(wanted.selected))) return false;
   const box = [...main.querySelectorAll("input")].find((el) => el.getAttribute("aria-label") === "搜索记忆" && visible(el));
   // The 收到的 list has no search: its one action is in the toolbar, and the box is not there to wait for.
   const searchless = wanted.selected === "收到的";

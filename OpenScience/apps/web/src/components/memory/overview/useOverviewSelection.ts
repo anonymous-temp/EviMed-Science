@@ -8,8 +8,8 @@ import type { RangeKey } from "./memoryOverviewModel";
  * selection that narrows the chart, the relation and topic panel and the table behind them together.
  *
  * Choosing which of the two panels is shown (`explore`) pushes an entry, so Back steps back through it; narrowing — a range, the week a cell
- * selected, a topic, the search, only what needs a look — replaces, so Back does not walk through every choice; a mark that opens in the
- * drawer pushes, so Back closes it first (`useAddressOpen`). A parameter at its default is not written, so the plain address is the plain page.
+ * selected, a topic, the search, only what needs a look — replaces, so Back does not walk through every choice; a preview or drawer pushes,
+ * so Back closes it first (`useAddressOpen`). A parameter at its default is not written, so the plain address is the plain page.
  */
 /** The three pictures of what is remembered. */
 export type ExploreView = "star" | "graph" | "topics";
@@ -70,6 +70,7 @@ export function useOverviewSelection() {
   const selection = useMemo(() => parseSelection(params), [params]);
   const search = useAddressText("q", 80);
   const drawer = useAddressOpen("open");
+  const preview = useAddressOpen("preview");
 
   /** Choosing a panel pushes an entry. */
   const setExplore = useCallback((explore: ExploreView) => {
@@ -87,5 +88,5 @@ export function useOverviewSelection() {
     setParams((current) => selectionParams({ ...DEFAULT_SELECTION, explore: parseSelection(current).explore }, current), { replace: true });
   }, [search, setParams]);
 
-  return { selection: { ...selection, q: search.committed }, search, setExplore, narrow, clear, drawer };
+  return { selection: { ...selection, q: search.committed }, search, setExplore, narrow, clear, drawer, preview };
 }
