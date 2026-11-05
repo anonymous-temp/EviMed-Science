@@ -191,6 +191,7 @@ test('the real memory gateway rejects a cross-project uncommitted native alias b
   const server=createServer((req,res)=>{void handler(req,res,()=>{});});server.listen(0,'127.0.0.1');await once(server,'listening');t.after(()=>new Promise(resolve=>{server.closeAllConnections();server.close(resolve);}));
   const base=`http://127.0.0.1:${server.address().port}${MEMORY_GATEWAY_PATH}`,write=project=>fetch(`${base}/api/v1/sessions/dsh-same/messages`,{method:'POST',headers:{authorization:`Bearer ${project}`,'content-type':'application/json'},body:JSON.stringify({role:'user',content:`Private ${project} bytes.`})});
   assert.equal((await write('default')).status,200);assert.equal((await write('other')).status,403);
+  assert.equal((await fetch(`${base}/api/v1/sessions/dsh-same/commit`,{method:'POST',headers:{authorization:'Bearer other','content-type':'application/json'},body:'{}'})).status,403);
   assert.equal(f.stub.sessions.get(`${f.engineUser}/dsh-same`).messages.length,1);
   assert.equal(await f.overlay.projectOfSession(f.userId,'dsh-same'),'default');
 });
