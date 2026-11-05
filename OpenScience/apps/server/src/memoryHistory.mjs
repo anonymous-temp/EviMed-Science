@@ -43,10 +43,12 @@ function hydrateMessages(input) {
 /** Exchange-led topic windows, with one adjacent message carried into the next.
  * These are dated context, never user facts. Structural grouping deliberately
  * does not guess semantic topics from keywords. Text is filtered before cutting.
- * @param {any[]} input */
-export function historyChunks(input) {
+ * @param {any[]} input @param {{ sourceIndices?: number[] | null }} [options] */
+export function historyChunks(input, { sourceIndices = null } = {}) {
   const messages = [];
-  for (const [index, body] of input.entries()) {
+  for (const [position, body] of input.entries()) {
+    const index = sourceIndices ? sourceIndices[position] : position;
+    if (!Number.isSafeInteger(index) || index < 0 || index >= MAX_MESSAGES) throw new Error('memory_history_archive_too_large');
     const decision = filterCapturedMessage(body);
     if (!('forward' in decision)) continue;
     const text = decision.forward.parts.map(part => part.text).join('\n');
@@ -130,22 +132,24 @@ export class MemoryHistory {
     const bytes = Buffer.byteLength(raw);
     if (!await this.ledger.bindArchive(commit, context, source, hash(raw), bytes)) throw new Error('memory_history_source_changed');
     if (bytes > MAX_ARCHIVE_BYTES) throw new Error('memory_history_archive_too_large');
-    const messages = [];
-    for (const line of raw.split('\n')) {
+    const messages = [], sourceIndices = [];
+    const sourceLines = raw.split('\n').filter(line=>line.trim());
+    if (sourceLines.length > MAX_MESSAGES) throw new Error('memory_history_archive_too_large');
+    for (const [sourceIndex,line] of sourceLines.entries()) {
       if (!line.trim()) continue;
       let message; try { message = JSON.parse(line); } catch { throw new Error('memory_history_archive_invalid'); }
       // An unknown timestamp cannot distinguish human and automated turns in a
       // mixed conversation. eligible() excludes any such automated conversation.
-      if (await this.admitMessage(context, source, message)) messages.push(message);
+      if (await this.admitMessage(context, source, message)) { messages.push(message); sourceIndices.push(sourceIndex); }
       if (messages.length > MAX_MESSAGES) throw new Error('memory_history_archive_too_large');
     }
     const resources = this.resourcesFor(context), root = this.root(context, source);
     const removedIndices = new Set();
     for (const [index,message] of messages.entries()) {
       const text = messageText(message);
-      if (text && await this.ledger.rejected(context,[text])) removedIndices.add(index);
+      if (text && await this.ledger.rejected(context,[text])) removedIndices.add(sourceIndices[index]);
     }
-    const chunks = historyChunks(messages);
+    const chunks = historyChunks(messages,{ sourceIndices });
     if (!chunks.length) return { state: messages.length ? 'excluded' : 'unavailable', reason: messages.length ? 'no_admissible_text' : 'message_admission', messages: 0, chunks: 0 };
     let indexed = 0, refused = 0, rejected = 0;
     for (const [index, chunk] of chunks.entries()) {
@@ -238,7 +242,7 @@ export class MemoryHistory {
         const archiveMessages = [];
         for (const line of raw.split('\n').filter(entry=>entry.trim())) {
           let message; try { message=JSON.parse(line); } catch { throw new Error('memory_history_privacy_unavailable'); }
-          if (await this.admitMessage(context,verified,message)) archiveMessages.push(message);
+          archiveMessages.push(message);
           if (archiveMessages.length>MAX_MESSAGES) throw new Error('memory_history_privacy_unavailable');
         }
         originals.set(meta.archive_uri,archiveMessages);
