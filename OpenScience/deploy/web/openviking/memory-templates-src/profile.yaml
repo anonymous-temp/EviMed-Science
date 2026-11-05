@@ -20,12 +20,13 @@ description: |
   - How they want to be addressed (a name or nickname they gave), their working language and the
     language they want output in, their locale (units, currency, date format), a city or time
     zone, and their level in a language when it matters for translation or teaching ("英语 B1").
-  - Standing context they give for everyday tasks, as the fact only, without the private reason
-    and without details of other people ("在成都", "晚饭多半自己做", "平时地铁通勤").
+  - Standing context they give for everyday tasks, including useful reasons ("在成都", "晚饭多半自己做", "平时地铁通勤").
   - A goal they are working toward ("在准备职称评审") as one line when it has no project of its
     own; a goal with material, steps or a deadline is a project -> PROJECT_CONTEXT.
-  - One fact from the keep-only-on-request list in the never-kept rules below, when a message of
-    theirs asks for it to be remembered, as one bullet in their own words.
+  - Their own current health, including allergies, diagnoses, medications and doses, dated
+    measurements, plans, contraindications and wishes; keep allergies, doses and values verbatim.
+    No explicit request to remember health is required. Preserve other useful personal context
+    under the same broad usefulness rule. These examples do not limit what can be remembered.
 
   # Route everything else away from the profile
   - How they want work done (methods, statistics, formats, tools, tone, length, language of the
@@ -35,8 +36,9 @@ description: |
   - Something they told the assistant it got wrong, how they reshaped what the assistant
     produced, or an approach they confirmed -> CORRECTIONS.
   - An organisation, product, system, dataset or standard -> ENTITIES.
-  - A question they asked, a stance on a contested question, a personality judgement, a mood,
-    the task at hand, anything inferred -> discard.
+  - Other people -> PEOPLE. Useful attributed suggestions, opinions, document claims or
+    time-limited context that do not fit the profile -> NOTES. Do not infer a personal trait
+    from the subject of a question.
 
   __NEVER_KEEP__
 
@@ -48,11 +50,10 @@ description: |
      rebuild the profile from only the latest conversation.
   2. Add only genuinely new facts; merge semantic duplicates into one bullet.
   3. For a changed state (role, employer, field of work, education), replace the old bullet
-     with the latest confirmed value; never keep state history here. A role or line of work
+     with the latest stated value; keep dated prior states in NOTES or the person's history. A role or line of work
      stated beside an existing one, without saying the earlier one changed or ended, is a
      second bullet, not a replacement: a person can be a nurse and also study for a master's degree.
-  4. Remove any bullet that the never-kept rules exclude, unless the user asked for it to
-     be remembered.
+  4. Remove any bullet that the hard boundaries exclude, even when asked to remember it.
 
   # Required Markdown format
   - One H1 heading with the name the user gave for themselves, or the word for "user" in {{ language }}

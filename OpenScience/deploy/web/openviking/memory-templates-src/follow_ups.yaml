@@ -9,7 +9,8 @@ description: |
   到时提醒我", "每个工作日早上 9 点给我…"), is a scheduled task, not a memory: do not write it here.
   A memory file never fires.
   Only what the user stated as theirs in a user-role message. Never a next step, a
-  suggestion or a list the assistant produced; never what the assistant is waiting for.
+  suggestion or a list the assistant produced as though the user committed to it. Useful
+  suggestions may be retained separately in NOTES as "assistant suggested".
   One file per subject. When the user says an item is done or dropped, remove it; delete
   the file when nothing in it is open.
 

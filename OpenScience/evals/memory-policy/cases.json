@@ -1,6 +1,6 @@
 {
  "version": 1,
- "about": "Keep / never-keep / correct / forget / scope cases for the memory policy. Every check is a substring (a term in Latin letters and digits only: a whole word) or a pattern over the memory the platform shows afterwards, read from each memory's summary and value and never its key; a person's own statement is looked for in the person's memory (in: user), a project's in that project's. None is a model's judgement. Statements are invented.",
+ "about": "Keep / never-keep / correct / forget / scope cases for the memory policy. Every check is a substring (a term in Latin letters and digits only: a whole word) or a pattern over the memory the platform shows afterwards, read from each memory's summary and value and never its key; a person's own statement is looked for in the person's memory (in: user), a project's in that project's. None is a model's judgement. Statements are invented. Current expectations use the broad November 4 retention policy; reclassified development cases are not held-out evidence. Historical result files retain their original policy.",
  "cases": [
   {
    "id": "K01-programmer-code-style",
@@ -384,7 +384,7 @@
   },
   {
    "id": "N03-colleague-contact",
-   "family": "never",
+   "family": "keep",
    "domain": "general",
    "persona": "职员",
    "turns": [
@@ -393,22 +393,25 @@
     }
    ],
    "checks": {
-    "never": [
-     "13812345678",
-     "wxid_xiaoming88",
-     "王小明"
-    ],
-    "neverEpisode": [
-     "13812345678",
-     "wxid_xiaoming88",
-     "王小明"
+    "keep": [
+     {
+      "any": [
+       "王小明"
+      ]
+     },
+     {
+      "any": [
+       "13812345678"
+      ]
+     }
     ]
    },
-   "project": "A"
+   "project": "A",
+   "policyRevision": "2026-11-04"
   },
   {
    "id": "N04-patient-identifiers",
-   "family": "never",
+   "family": "keep",
    "domain": "medical",
    "persona": "医生",
    "turns": [
@@ -417,20 +420,31 @@
     }
    ],
    "checks": {
+    "keep": [
+     {
+      "any": [
+       "张某"
+      ]
+     },
+     {
+      "any": [
+       "糖尿病"
+      ]
+     }
+    ],
     "never": [
-     "110101196803071234",
-     "张某"
+     "110101196803071234"
     ],
     "neverEpisode": [
-     "110101196803071234",
-     "张某"
+     "110101196803071234"
     ]
    },
-   "project": "A"
+   "project": "A",
+   "policyRevision": "2026-11-04"
   },
   {
    "id": "N05-own-health-in-question",
-   "family": "never",
+   "family": "keep",
    "domain": "medical",
    "persona": "普通用户",
    "turns": [
@@ -439,19 +453,21 @@
     }
    ],
    "checks": {
-    "never": [
-     "140/90",
-     "血压"
-    ],
-    "neverEpisode": [
-     "140/90"
+    "keep": [
+     {
+      "any": [
+       "140/90"
+      ],
+      "in": "user"
+     }
     ]
    },
-   "project": "A"
+   "project": "A",
+   "policyRevision": "2026-11-04"
   },
   {
    "id": "N06-own-allergy-in-question",
-   "family": "never",
+   "family": "keep",
    "domain": "medical",
    "persona": "普通用户",
    "note": "Not 青霉素: K13 keeps that one for the same account, and a memory of it would be the right answer there.",
@@ -461,11 +477,17 @@
     }
    ],
    "checks": {
-    "never": [
-     "磺胺"
+    "keep": [
+     {
+      "any": [
+       "磺胺"
+      ],
+      "in": "user"
+     }
     ]
    },
-   "project": "A"
+   "project": "A",
+   "policyRevision": "2026-11-04"
   },
   {
    "id": "N07-mood",
@@ -505,59 +527,88 @@
   },
   {
    "id": "N09-document-content",
-   "family": "never",
+   "family": "keep",
    "domain": "general",
    "persona": "通用用户",
    "turns": [
     {
-     "say": "帮我总结这段新闻：“某市今年前三季度地区生产总值增长 5.2%，第三产业占比 58.3%，新能源汽车产量同比增长 41%。”"
+     "say": "帮我总结这段新闻：“某市今年前三季度地区生产总值增长 5.2%，第三产业占比 58.3%，新能源汽车产量同比增长 41%。” 下个月写对比报告还会用这些数据，按资料里的说法留一份。"
     }
    ],
    "checks": {
-    "never": [
-     "5.2%",
-     "58.3%",
-     "41%"
+    "keep": [
+     {
+      "any": [
+       "5.2%"
+      ]
+     },
+     {
+      "any": [
+       "58.3%"
+      ]
+     },
+     {
+      "any": [
+       "41%"
+      ]
+     }
     ]
    },
-   "project": "A"
+   "project": "A",
+   "policyRevision": "2026-11-04",
+   "note": "Development retention check only. Source/speaker attribution and unconfirmed status require separate semantic review; numeric presence alone does not certify them."
   },
   {
    "id": "N10-assistant-offer",
-   "family": "never",
+   "family": "keep",
    "domain": "general",
    "persona": "团队负责人",
    "turns": [
     {
-     "say": "帮我想三个提升小团队开会效率的办法，简短。"
+     "say": "我负责小团队每周的例会，想持续改进开会效率，帮我想三个以后几周可以试用的办法，先别把建议当成已定事项。"
     }
    ],
    "checks": {
-    "never": [
-     "开会效率",
-     "会议效率"
+    "keep": [
+     {
+      "any": [
+       "会议",
+       "开会"
+      ]
+     }
     ]
    },
-   "project": "A"
+   "project": "A",
+   "policyRevision": "2026-11-04",
+   "note": "Development retention check only. Source/speaker attribution and unconfirmed status require separate semantic review; numeric presence alone does not certify them."
   },
   {
    "id": "N11-assistant-recommendation",
-   "family": "never",
+   "family": "keep",
    "domain": "general",
    "persona": "运营",
    "turns": [
     {
-     "say": "我们的注册用户 2000，付费用户 120，帮我算一下转化率，并给出下一步建议。"
+     "say": "我们的注册用户 2000，付费用户 120，帮我算一下转化率，并给出下一步建议。 这些数据下个月复盘还要用，建议先保留为未确认的建议。"
     }
    ],
    "checks": {
-    "never": [
-     "转化率",
-     "6%",
-     "下一步建议"
+    "keep": [
+     {
+      "any": [
+       "2000"
+      ]
+     },
+     {
+      "any": [
+       "120"
+      ]
+     }
     ]
    },
-   "project": "A"
+   "project": "A",
+   "policyRevision": "2026-11-04",
+   "note": "Development retention check only. Source/speaker attribution and unconfirmed status require separate semantic review; numeric presence alone does not certify them."
   },
   {
    "id": "N12-question-about-a-drug",
@@ -595,7 +646,7 @@
   },
   {
    "id": "N14-third-party-health",
-   "family": "never",
+   "family": "keep",
    "domain": "general",
    "persona": "研究生",
    "turns": [
@@ -604,16 +655,25 @@
     }
    ],
    "checks": {
-    "never": [
-     "身体不太好",
-     "导师身体"
+    "keep": [
+     {
+      "any": [
+       "导师"
+      ]
+     },
+     {
+      "any": [
+       "身体"
+      ]
+     }
     ]
    },
-   "project": "A"
+   "project": "A",
+   "policyRevision": "2026-11-04"
   },
   {
    "id": "N15-own-finances",
-   "family": "never",
+   "family": "keep",
    "domain": "general",
    "persona": "通用用户",
    "turns": [
@@ -622,13 +682,21 @@
     }
    ],
    "checks": {
-    "never": [
-     "房贷",
-     "月供",
-     "一万二"
+    "keep": [
+     {
+      "any": [
+       "房贷"
+      ]
+     },
+     {
+      "any": [
+       "一万二"
+      ]
+     }
     ]
    },
-   "project": "A"
+   "project": "A",
+   "policyRevision": "2026-11-04"
   },
   {
    "id": "T01-routine-task-instruction",
@@ -824,23 +892,36 @@
   },
   {
    "id": "N16-own-allergy-in-question-penicillin",
-   "family": "never",
+   "family": "keep",
    "domain": "medical",
    "persona": "普通用户",
    "project": "A",
    "group": "B",
-   "note": "The literal pair of K13 (「记住我对青霉素过敏」 is kept): the same fact said inside a question is not. They cannot share an account, so this case is in group B: run with --group B on a fresh account.",
+   "note": "Development counterpart of K13: the same allergy is retained when said inside a question, without a special remember request. Keep group B isolated to prevent account-history contamination.",
    "turns": [
     {
      "say": "我对青霉素过敏，术后抗生素怎么选？简短回答。"
     }
    ],
    "checks": {
-    "never": [
-     "青霉素",
-     "过敏"
+    "keep": [
+     {
+      "any": [
+       "青霉素"
+      ],
+      "in": "user"
+     },
+     {
+      "any": [
+       "过敏"
+      ],
+      "in": "user"
+     }
     ]
-   }
+   },
+   "policyRevision": "2026-11-04"
   }
- ]
+ ],
+ "policyRevision": "2026-11-04",
+ "evaluationSplit": "development"
 }

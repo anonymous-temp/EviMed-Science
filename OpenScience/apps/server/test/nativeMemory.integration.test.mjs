@@ -109,7 +109,11 @@ test("an edit is a compare-and-swap on the text last read, and it is revisioned 
   assert.equal(history[0].actor, "user");
   assert.equal(history[0].before, "Answers as short paragraphs.");
   // A secret-shaped edit is refused at the door.
-  await assert.rejects(store.update(userId, record.id, { value: "my phone is 13800138000", expectedVersion: edited.version }), (error) => error.code === "memory_content_refused");
+  await assert.rejects(store.update(userId, record.id, { value: "ID 110101199001011237", expectedVersion: edited.version }), (error) => error.code === "memory_content_refused");
+  const contactUri = seed("project_facts/contact.md", "Contact for follow-up.", { type: "project_facts" });
+  const contact = (await store.records(userId)).find((entry) => entry.uri === contactUri);
+  const savedContact = await store.update(userId, contact.id, { value: "Phone 13800138000, e-mail someone@example.org", expectedVersion: contact.version });
+  assert.equal(savedContact.value, "Phone 13800138000, e-mail someone@example.org");
   // Undo goes back to what the file said, and a second undo has nothing of the user's own to restore beyond that.
   const undone = await store.undo(userId, record.id, { expectedVersion: edited.version });
   assert.equal(undone.undone, "restored");
@@ -227,7 +231,10 @@ test("remember from the page goes through the engine as a conversation, shows as
   await store.remember(userId, { text: "默认项目里的一句话", projectId: "default", projectName: "默认" }).catch(() => null);
   assert.doesNotMatch(JSON.stringify(seen), /这段对话在用户的项目/);
   await assert.rejects(store.remember(userId, { text: "   " }), (error) => error.code === "memory_payload_invalid");
-  await assert.rejects(store.remember(userId, { text: "my phone is 13800138000 please keep it" }), (error) => error.code === "memory_content_refused");
+  await store.remember(userId, { text: "my phone is 13800138000 and email someone@example.org please keep them" });
+  assert.match(JSON.stringify(seen), /13800138000.*someone@example.org/);
+  await assert.rejects(store.remember(userId, { text: "ID 110101199001011237" }), (error) => error.code === "memory_content_refused");
+  await assert.rejects(store.remember(userId, { text: "password: secret123" }), (error) => error.code === "memory_content_refused");
   assert.ok(root.startsWith("viking://user/"));
   await worker.processCommits({ userId });
   assert.equal((await store.profile(userId)).pending.length, 0, "settled: the ledger row is complete and the text cleared");
@@ -270,7 +277,7 @@ test("the worker enters an idle commit it never saw, ingests the diff into revis
 
 test("the checks after the fact: an identifier, platform text and a line the person removed are taken out of what the engine wrote, with the reason", options, async (t) => {
   const { userId, store, worker, overlay, stub, engineUser, sessions, root, seed } = await fixture(t);
-  assert.equal(lineRefusal("- My e-mail is someone@example.org", new Set()), "identifier_shape");
+  assert.equal(lineRefusal("- My e-mail is someone@example.org", new Set()), null);
   assert.equal(lineRefusal("- Likes tea", new Set()), null);
   assert.equal(lineRefusal("- Likes tea", new Set([lineFingerprint("Likes tea")])), "rejected_line");
   assert.deepEqual(cleanBody("# T\n- keep\n- 13800138000 is the phone", new Set()).hasStatements, true);
@@ -282,6 +289,8 @@ test("the checks after the fact: an identifier, platform text and a line the per
       { uri: `viking://user/${user}/memories/preferences/old.md`, memory_type: "preferences", after: "Likes tea." },
       { uri: `viking://user/${user}/memories/preferences/contact.md`, memory_type: "preferences", after: "- Reach me at someone@example.org\n- Prefers morning meetings" },
       { uri: `viking://user/${user}/memories/preferences/phone.md`, memory_type: "preferences", after: "Phone 13800138000" },
+      { uri: `viking://user/${user}/memories/preferences/id.md`, memory_type: "preferences", after: "ID 110101199001011237" },
+      { uri: `viking://user/${user}/memories/preferences/key.md`, memory_type: "preferences", after: "password: secret123" },
     ],
   });
   const session = "dsh-session_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
@@ -290,11 +299,13 @@ test("the checks after the fact: an identifier, platform text and a line the per
   await worker.scanArchives(userId);
   await worker.processCommits({ userId });
   assert.equal(await sessions.read(userId, `${root}/preferences/old.md`), null, "the line the person deleted is deleted again");
-  assert.equal(await sessions.read(userId, `${root}/preferences/contact.md`), "- Prefers morning meetings", "the line with an address leaves, the other stays");
-  assert.equal(await sessions.read(userId, `${root}/preferences/phone.md`), null, "a file left with no statement is removed");
-  const why = (await overlay.revisionsOf(userId, `${root}/preferences/contact.md`)).find((revision) => revision.actor === "platform");
+  assert.equal(await sessions.read(userId, `${root}/preferences/contact.md`), "- Reach me at someone@example.org\n- Prefers morning meetings", "useful email and preference both stay");
+  assert.equal(await sessions.read(userId, `${root}/preferences/phone.md`), "Phone 13800138000", "phone context is eligible");
+  assert.equal(await sessions.read(userId, `${root}/preferences/id.md`), null, "government ID is still refused");
+  assert.equal(await sessions.read(userId, `${root}/preferences/key.md`), null, "password is still refused");
+  const why = (await overlay.revisionsOf(userId, `${root}/preferences/id.md`)).find((revision) => revision.actor === "platform");
   assert.match(why.reason, /identifier_shape/);
-  assert.equal(nativeMemoryCounters().checkActions.identifier_shape, 2, "the e-mail line and the phone line");
+  assert.equal(nativeMemoryCounters().checkActions.identifier_shape, 2, "the government ID and password lines");
   assert.equal(nativeMemoryCounters().checkActions.rejected_line, 1);
 });
 

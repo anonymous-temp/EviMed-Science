@@ -171,27 +171,23 @@ test("repetition across conversations (owner decision 6): kept after the second,
   assert.deepEqual(alone.replay.messages.filter((message) => message.role === "user").length, 2, "the same choice twice inside one conversation");
   assert.equal(alone.replay.seed, undefined);
   assert.deepEqual(scoreNative(alone, {}, 0), []);
-  assert.deepEqual(scoreNative(alone, { "preferences/format.md": "- 汇总表要带透视表" }, 1), ['carries "透视表"', "1 memory operations > 0"]);
+  assert.deepEqual(scoreNative(alone, { "preferences/format.md": "- 汇总表要带透视表" }, 1), ["1 preference"]);
   const different = by("e3c");
   assert.deepEqual(scoreNative(different, {}, 0, {}), []);
-  assert.deepEqual(scoreNative(different, { "preferences/format.md": "- 月度汇总用折线图" }, 1, {}), ['carries "折线图"', "1 memory operations > 0"]);
+  assert.deepEqual(scoreNative(different, { "preferences/format.md": "- 月度汇总用折线图" }, 1, {}), ["1 preference"]);
 });
 
-test("a misbelief or a passing symptom is written as nothing, and the case fails on the line it must not carry", async () => {
+test("beliefs and symptoms are retained with attribution and dates; semantic errors require reading", async () => {
   const { by } = await nextRound();
-  for (const [prefix, line] of [["m01", "- 相信人只用了大脑的 10%"], ["m02", "- 认为糖会让孩子多动"], ["m03", "- 认同酸性体质致癌的说法"]]) {
+  for (const prefix of ["m01", "m02", "m03", "s01", "s03"]) {
     const item = by(prefix);
-    assert.equal(item.class, "refuse-misconception");
-    assert.deepEqual(scoreNative(item, {}, 0), [], prefix);
-    assert.ok(scoreNative(item, { "profile.md": line }, 1).length > 0, `${prefix} fails when the belief is written`);
+    assert.equal(item.decidable, false, `${prefix}: a substring cannot establish attribution or chronicity`);
+    assert.match(item.judge, /origin.*current-vs-historical/);
+    assert.ok(scoreNative(item, {}, 0).length > 0, `${prefix}: useful content is required`);
   }
-  for (const [prefix, line] of [["s01", "- 经常头疼"], ["s02", "- 常处理 58 岁胸痛患者"], ["s03", "- 习惯熬夜，每天睡四个小时"]]) {
-    const item = by(prefix);
-    assert.equal(item.class, "refuse-symptom-as-trait");
-    assert.deepEqual(scoreNative(item, {}, 0), [], prefix);
-    assert.ok(scoreNative(item, { "profile.md": line }, 1).length > 0, `${prefix} fails when the symptom becomes a trait`);
-  }
-  // The misconception cases state the belief in the person's own message and say it was corrected or not theirs: the corrections are the assistant's.
+  const patient = by("s02");
+  assert.ok(scoreNative(patient, { "profile.md": "- 常处理 58 岁胸痛患者 V1–V4" }, 1).length > 0, "a patient is not the user's trait");
+  assert.deepEqual(scoreNative(patient, { "people/病例1.md": "- 58 岁，胸痛 3 小时，V1–V4 ST 段抬高" }, 1), []);
   assert.ok(by("m02").replay.messages.some((message) => message.role === "assistant" && /并不成立/.test(message.text)));
 });
 

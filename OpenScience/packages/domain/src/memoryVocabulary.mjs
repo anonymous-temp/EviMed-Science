@@ -369,14 +369,15 @@ function luhnValid(digits) {
 }
 
 const RESIDENT_ID = /(?<![0-9A-Za-z])[1-9]\d{5}(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}[\dXx](?![0-9A-Za-z])/g
-const MOBILE = /(?<![0-9])(?:\+?86[- ]?)?1[3-9]\d{9}(?![0-9])/g
 const CARD = /(?<![0-9])(?:\d[ -]?){15,18}\d(?![0-9])/g
-const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g
 const KEY_FORMAT = /\b(?:sk|pk|rk)-[A-Za-z0-9_-]{16,}|\bAKIA[0-9A-Z]{16}\b|\bgh[pousr]_[A-Za-z0-9]{30,}|\bBearer\s+[A-Za-z0-9._~+/-]{20,}/g
-const KEY_ASSIGNMENT = /(?:api[ _-]?key|access[ _-]?token|secret|password|passwd|密码|口令|密钥|令牌)\s*(?:is|为|是|[:=：])\s*\S{6,}/i
+const KEY_ASSIGNMENT = /(?:api[ _-]?key|access[ _-]?token|secret|password|passwd|密码|口令|密钥|令牌)\s*(?:is|为|是|[:=：])\s*\S+/i
 // The same assignment, for masking: what is blanked is the value alone, and it is the run of printable ASCII after the label — a
 // password typed in a Chinese sentence ends where the sentence goes on, not at the next space (there may be none).
-const KEY_ASSIGNMENT_VALUE = /((?:api[ _-]?key|access[ _-]?token|secret|password|passwd|密码|口令|密钥|令牌)\s*(?:is|为|是|[:=：])\s*)[\x21-\x7E]{6,}(?<![,.;:!?)\]}])/gi
+const KEY_ASSIGNMENT_VALUE = /((?:api[ _-]?key|access[ _-]?token|secret|password|passwd|密码|口令|密钥|令牌)\s*(?:is|为|是|[:=：])\s*)[\x21-\x7E]+(?<![,.;:!?)\]}])/gi
+// Explicit verification-code labels distinguish secrets from doses, dates and contact numbers.
+const VERIFICATION_CODE = /((?:verification[ _-]?code|one[ -]?time[ _-]?(?:password|code)|OTP|验证码|校验码|动态口令)\s*(?:(?:is|为|是|[:=：])\s*)?)\d{4,8}(?!\d)/gi
+
 const KEY_FORMAT_MORE = /\bxox[abeprs]-[A-Za-z0-9-]{10,}|\bAIza[0-9A-Za-z_-]{35}\b|\bglpat-[A-Za-z0-9_-]{20,}|\b[rsp]k_(?:live|test)_[A-Za-z0-9]{16,}/g
 // A bare run that may be a secret: the candidates are the long runs of the key alphabet, and `isTokenShaped` decides which of
 // them are. A 40-character slug (`pneumonia-associated-with-…`), a naming convention (`NOAC_AF_cohort_2018_2024_…_cleaned`) and a
@@ -438,9 +439,9 @@ function longTokensIn(value) {
  * that passes Luhn, an e-mail address, a provider key's format, a secret
  * assigned to a name, a long bare token. Format checks, like a DOI or a PMID —
  * decidable from the token itself (principle 5) — and the only part of 「never
- * keep a patient's or anyone's identifiers, or a credential」 code can hold; the
+ * keep government or bank numbers, or a credential」 code can hold; the
  * rest is the extraction model's (2026-10-12 replay: a patient's ID card,
- * phone and admission details reached project facts, and a regex over words
+ * government identifiers reached project facts, and a regex over words
  * like 「我患有」 had been standing in for the judgement).
  * @param {unknown} text @returns {string[]} the kinds found, in a fixed order
  */
@@ -449,10 +450,8 @@ export function identifierShapesIn(text) {
   /** @type {string[]} */
   const found = []
   if (new RegExp(RESIDENT_ID.source).test(value)) found.push('resident_id')
-  if (new RegExp(MOBILE.source).test(value)) found.push('mobile')
   if ([...value.matchAll(CARD)].some((match) => { const digits = match[0].replace(/[ -]/g, ''); return digits.length >= 16 && luhnValid(digits) })) found.push('card')
-  if (new RegExp(EMAIL.source).test(value)) found.push('email')
-  if (new RegExp(KEY_FORMAT.source).test(value) || new RegExp(KEY_FORMAT_MORE.source).test(value) || KEY_ASSIGNMENT.test(value) || longTokensIn(value).length > 0) found.push('credential')
+  if (new RegExp(KEY_FORMAT.source).test(value) || new RegExp(KEY_FORMAT_MORE.source).test(value) || KEY_ASSIGNMENT.test(value) || new RegExp(VERIFICATION_CODE.source, 'i').test(value) || longTokensIn(value).length > 0) found.push('credential')
   return found
 }
 
@@ -466,11 +465,10 @@ export function maskIdentifiers(text) {
   const masked = '[已省略]'
   return String(text ?? '')
     .replace(RESIDENT_ID, masked)
-    .replace(MOBILE, masked)
     .replace(CARD, (match) => { const digits = match.replace(/[ -]/g, ''); return digits.length >= 16 && luhnValid(digits) ? masked : match })
-    .replace(EMAIL, masked)
     .replace(KEY_FORMAT, masked)
     .replace(KEY_FORMAT_MORE, masked)
+    .replace(VERIFICATION_CODE, (_match, label) => `${label}${masked}`)
     .replace(KEY_ASSIGNMENT_VALUE, (_match, label) => `${label}${masked}`)
     .replace(LONG_TOKEN, (run) => (isTokenShaped(run) ? masked : run))
 }

@@ -236,9 +236,9 @@ test("contact details are useful context while identifiers and credentials stay 
     assert.deepEqual(identifierShapesIn(text), []);
     assert.equal(maskIdentifiers(text), text);
   }
-  const text = "李医生 13800138000 anna@example.com 身份证110101199001011234 银行卡4111111111111111 password: secret123";
-  assert.deepEqual(identifierShapesIn(text), ["resident_id", "card", "credential"]);
-  assert.equal(maskIdentifiers(text), "李医生 13800138000 anna@example.com 身份证[已省略] 银行卡[已省略] password: [已省略]");
+  const mixed = "李医生 13800138000 anna@example.com 身份证110101199001011234 银行卡4111111111111111 password: secret123";
+  assert.deepEqual(identifierShapesIn(mixed), ["resident_id", "card", "credential"]);
+  assert.equal(maskIdentifiers(mixed), "李医生 13800138000 anna@example.com 身份证[已省略] 银行卡[已省略] password: [已省略]");
   for (const text of ["HbA1c 8.2%，2026-11-04 起二甲双胍 500 mg 每日两次", "eGFR 38 mL/min/1.73m²；复查 2026-12-01"]) {
     assert.deepEqual(identifierShapesIn(text), []);
     assert.equal(maskIdentifiers(text), text);

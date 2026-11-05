@@ -2,7 +2,7 @@
   "id": "c18-assistant-proposal-not-adopted",
   "class": "refuse-assistant-proposal",
   "observedIn": "written for the memory-capsule rectification on 2026-10-23 (research G §6, C18); every name, number and identifier is invented",
-  "expected": "Nothing is filed: the assistant's offer was not taken up in the person's own reply.",
+  "expected": "A worthwhile assistant offer may be retained as an unconfirmed suggestion in NOTES; never as the user's task or adopted preference.",
   "decidable": true,
   "replay": {
     "synthetic": true,
@@ -35,5 +35,7 @@
       "follow_up",
       "preference"
     ]
-  }
+  },
+  "evaluationSplit": "development",
+  "policyRevision": "2026-11-04"
 }
