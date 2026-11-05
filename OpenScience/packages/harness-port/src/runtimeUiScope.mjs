@@ -186,8 +186,8 @@ export class NativeUiScope {
     if (method === 'skills/list') {
       // Another person's personal skills are in the owner's runtime, and an absolute path of it is no business of a member's.
       if (!Array.isArray(value?.skills)) return dropped();
-      return kept({ ...value, skills: value.skills.filter(item => record(item) && !String(item.name ?? '').startsWith('personal-'))
-        .map(({ path: _path, ...item }) => item) });
+      return kept({ ...value, skills: value.skills.filter((/** @type {any} */ item) => record(item) && !String(item.name ?? '').startsWith('personal-'))
+        .map((/** @type {any} */ item) => { const { path: _path, ...rest } = item; return rest; }) });
     }
     if (method === 'job/list') {
       if (value?.type !== 'rows' || !Array.isArray(value.jobs)) return dropped();
