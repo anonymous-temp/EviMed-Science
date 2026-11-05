@@ -32,3 +32,12 @@ test('encrypted capsule export and confirmed import preserve original uncertaint
   const records=await f.app.capsuleService.entries(f.user.id,imported.id),received=records.items[0].payload;
   assert.equal(received.origin,'imported');assert.equal(received.attribution.confirmed,false);assert.equal(received.sourcePrivacy.classification,'unclassified');
 });
+
+test('a trusted resident source receipt survives the run ledger as private original evidence',options,async t=>{
+  const f=await fixture(t),owner=await f.app.store.userById(f.user.id),project=await f.app.store.requireProject(owner,'default');
+  await f.app.researchSessions.put(project,'source-receipt',{mode:'open-domain'});const run=await f.app.agentRuns.start(project,{sessionId:'source-receipt'});
+  try{
+    await f.app.agentRuns.recordLearning(project,run.id,{recalledMemories:[{id:'memo',kind:'note',scope:'user',sourcePrivacy:{schemaVersion:1,classification:'private',reasons:['person-context']},originalSources:[{id:'native-source',contentDigest:'a'.repeat(64),sourcePrivacy:{schemaVersion:1,classification:'ordinary',reasons:['bounded-visible-reference']},attribution:{schemaVersion:1,origins:['engine'],confirmed:false}}]}]});
+    const stored=(await f.app.agentRuns.list(project)).find(item=>item.id===run.id);assert.equal(stored.sourcePrivacy.classification,'private');assert.equal(stored.originalSources[0].id,'native-source');assert.equal(stored.originalSources[0].attribution.confirmed,false);
+  }finally{await f.app.agentRuns.closeProject(project);}
+});
