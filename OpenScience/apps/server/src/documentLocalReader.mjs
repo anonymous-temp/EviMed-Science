@@ -10,9 +10,9 @@ import { runIntakeAttempt } from "./vcrIntakeStage.mjs";
  * by the same operation that locates a parsed table on its page
  * (`materials`, `source_material_extract.py`), and what comes back is plain text:
  *
- * - a PDF's text layer page by page, written as the service writes it
- *   (`[Page N]` lines), so the page map and every quotation's page work the same;
- *   a page with no text layer stays a page with no text;
+ * - a PDF's text layer page by page with a page map, as the client reads the
+ *   service's answer, so every quotation's page works the same; a page with no text
+ *   layer stays a page with no text;
  * - a Word file's paragraphs and table rows, with no page markers (the file has
  *   no page source);
  * - slides under `[Slide N]` lines, and a workbook's sheets under `[Sheet: name]`
@@ -21,10 +21,8 @@ import { runIntakeAttempt } from "./vcrIntakeStage.mjs";
  * Hidden knowledge:
  *
  * - **No text is no text.** A scanned PDF has no text layer; the container does no
- *   OCR. When no page has any text this answers an empty string, not the page
- *   markers: the ingestion then keeps the file as an original with no text
- *   (`source_original_no_text`) instead of storing a document that is only
- *   `[Page 1] [Page 2]`.
+ *   OCR. When no page has any text this answers an empty string: the ingestion
+ *   then keeps the file as an original with no text (`source_original_no_text`).
  * - **A deployment without a controller, or with an image that predates this
  *   format, cannot read.** The container answers `refused` and this throws
  *   `document_local_read_unavailable` / `document_local_read_refused`; the caller
@@ -137,14 +135,13 @@ export function createLocalDocumentReader({ config, controller = null, report = 
       }
       const version = String(result.extractor?.version ?? "1.1.0");
       const partial = result.truncated || result.pagesRead < result.pages ? { read: pages.length, of: Number(result.pages) } : undefined;
-      // A scan: no page has a text layer. Nothing is not the page markers around nothing.
+      // A scan: no page has a text layer.
       if (!pages.some((/** @type {string} */ page) => page.trim())) return { text: "", version, ...(partial ? { partial } : {}) };
       let text = "";
       /** @type {{ page: number, start: number, end: number, status: string }[]} */
       const pageMap = [];
       pages.forEach((/** @type {string} */ page, index) => {
         if (index) text += "\n\n";
-        text += `[Page ${index + 1}]\n`;
         const start = text.length;
         text += page;
         pageMap.push({ page: index + 1, start, end: text.length, status: page.trim() ? "ok" : "empty" });

@@ -71,13 +71,13 @@ async function setup(t) {
   return { dataDir, config, calls, reader };
 }
 
-test("a real PDF is read page by page through the staged-attempt path, with [Page N] lines the page map is built on", { skip: !havePython }, async (t) => {
+test("a real PDF is read page by page through the staged-attempt path, with its page map and no page lines in the text", { skip: !havePython }, async (t) => {
   const { reader, calls } = await setup(t);
   const pdf = contractSamplePdf();
   const read = await reader.read({ bytes: pdf, name: "sample.pdf", sha256: sha(pdf), format: "pdf" });
   assert.deepEqual(calls, ["materials"]);
-  assert.equal(read.text, `[Page 1]\n${SAMPLE_TEXT}`);
-  assert.deepEqual(read.pageMap, [{ page: 1, start: 9, end: 9 + SAMPLE_TEXT.length, status: "ok" }]);
+  assert.equal(read.text, SAMPLE_TEXT);
+  assert.deepEqual(read.pageMap, [{ page: 1, start: 0, end: SAMPLE_TEXT.length, status: "ok" }]);
   assert.equal(read.text.slice(read.pageMap[0].start, read.pageMap[0].end), SAMPLE_TEXT);
 });
 
@@ -126,7 +126,7 @@ test("the whole fallback, end to end: no parser configured, a real PDF in, proto
   const result = await new DocumentParserClient({ localReader: reader }).parseBytes({ bytes: pdf, filename: "指南.pdf", sha256: sha(pdf) });
   assert.equal(result.protocolVersion, 1);
   assert.deepEqual([result.extractor.name, result.extractor.parser, result.extractor.fallbackFor], ["evimed-local-reader", "local-fallback", "source_parser_unconfigured"]);
-  assert.equal(result.text, `[Page 1]\n${SAMPLE_TEXT}`);
+  assert.equal(result.text, SAMPLE_TEXT);
   assert.equal(result.pageMap.length, 1);
   assert.equal(result.units[0].status, "extracted");
 });

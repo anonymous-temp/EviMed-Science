@@ -10251,11 +10251,12 @@ async function operatorMetricsText({ webVitals = null, judgeService = null, open
     addMetric(
       lines,
       "open_science_openviking_model_budget_cny",
-      "The OpenViking service's own model money per rolling 24 hours (0 = no cap) and what is committed against it; committed is absent when the ledger could not be read.",
+      "The OpenViking service's own model money per rolling 24 hours (0 = no cap), for each purpose on its own, and what each has committed; committed is absent when the ledger could not be read.",
       "gauge",
       [
         { value: Number(modelPath.budgetCny ?? 0), labels: { kind: "budget" } },
-        ...(modelPath.spentCny == null ? [] : [{ value: Number(modelPath.spentCny), labels: { kind: "committed" } }]),
+        ...Object.entries(modelPath.spentCny ?? {}).filter(([, value]) => value != null)
+          .map(([purpose, value]) => ({ value: Number(value), labels: { kind: "committed", purpose } })),
       ],
     );
   }

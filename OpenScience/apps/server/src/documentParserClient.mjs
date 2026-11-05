@@ -211,38 +211,43 @@ function mapMetadata(data) {
 }
 
 /**
- * The page map of a PDF text that carries engine A's `[Page N]` lines, in UTF-16
- * offsets of `text` — which is what JavaScript counts, so no conversion is
- * needed. A page runs from the end of its marker line to the start of the next
- * marker (the last, to the end of the text), so the text between two markers is
- * exactly that page's. A page with nothing on it, or that the service said OCR
+ * The page map of a PDF text that carries engine A's `[Page N]` lines, and the
+ * text with those lines taken out, in UTF-16 offsets — which is what JavaScript
+ * counts, so no conversion is needed. The markers are the service's way of saying
+ * where a page starts, not part of the document: left in, they came back in search
+ * snippets and broke a quotation that crossed a page (2026-11-05). A page's span is
+ * its own text and nothing else. A page with nothing on it, or that the service said OCR
  * found nothing on (`pdf_ocr_empty_page`), is `empty`. Markers that are not
  * strictly increasing are no page map: it is dropped with its reason and the
  * document is kept. No marker at all (engine B, a Word file, a plain text) is no
  * map and no reason. `parse_info.page_count` is not used to invent pages the text
  * does not mark.
  * @param {string} text @param {unknown} warnings parse_info.warnings
- * @returns {{ pageMap?: { page: number, start: number, end: number, status: string }[], dropped?: string }}
+ * @returns {{ text: string, pageMap?: { page: number, start: number, end: number, status: string }[], dropped?: string }}
  */
 function pagesFromMarkers(text, warnings) {
   const markers = [...text.matchAll(PAGE_MARKER)];
-  if (!markers.length) return {};
+  if (!markers.length) return { text };
   const emptyByWarning = new Set(Array.isArray(warnings)
     ? warnings.filter((entry) => entry?.code === "pdf_ocr_empty_page" && Number.isSafeInteger(entry.source_number)).map((entry) => entry.source_number)
     : []);
   const pageMap = [];
   let previousPage = 0;
+  let stripped = text.slice(0, markers[0].index ?? 0);
   for (let index = 0; index < markers.length; index += 1) {
     const marker = markers[index];
     const page = Number(marker[1]);
-    if (!Number.isSafeInteger(page) || page <= previousPage) return { dropped: "pages_inconsistent" };
+    if (!Number.isSafeInteger(page) || page <= previousPage) return { text, dropped: "pages_inconsistent" };
     previousPage = page;
-    const start = (marker.index ?? 0) + marker[0].length + (text[(marker.index ?? 0) + marker[0].length] === "\n" ? 1 : 0);
-    const end = index + 1 < markers.length ? (markers[index + 1].index ?? text.length) : text.length;
-    if (end < start) return { dropped: "pages_inconsistent" };
-    pageMap.push({ page, start, end, status: !text.slice(start, end).trim() || emptyByWarning.has(page) ? "empty" : "ok" });
+    const bodyStart = (marker.index ?? 0) + marker[0].length + (text[(marker.index ?? 0) + marker[0].length] === "\n" ? 1 : 0);
+    const bodyEnd = index + 1 < markers.length ? (markers[index + 1].index ?? text.length) : text.length;
+    if (bodyEnd < bodyStart) return { text, dropped: "pages_inconsistent" };
+    const body = text.slice(bodyStart, bodyEnd);
+    const start = stripped.length;
+    stripped += body;
+    pageMap.push({ page, start, end: stripped.length, status: !body.trim() || emptyByWarning.has(page) ? "empty" : "ok" });
   }
-  return { pageMap };
+  return { text: stripped, pageMap };
 }
 
 /** What a parse covered: a unit per page when pages arrived, one unit for the
@@ -529,12 +534,11 @@ export class DocumentParserClient {
   /** @param {{envelope:any,headers:Headers,empty?:boolean}} answer @param {boolean} metadataAsked */
   #apiResult({ envelope, headers, empty = false }, metadataAsked) {
     const data = envelope.data;
-    const text = data.content;
-    if (text.length > this.maxTextBytes) throw parserError(502, "source_parser_response_too_large", "Parser full text exceeded its limit.");
+    if (data.content.length > this.maxTextBytes) throw parserError(502, "source_parser_response_too_large", "Parser full text exceeded its limit.");
     // A failed analysis is a 200 with the whole text and `metadata: null`: the document arrives without metadata.
     const metadata = metadataAsked && data.metadata && typeof data.metadata === "object" ? mapMetadata(data.metadata) : undefined;
     const info = data.parse_info && typeof data.parse_info === "object" ? data.parse_info : null;
-    const { pageMap, dropped } = pagesFromMarkers(text, info?.warnings);
+    const { text, pageMap, dropped } = pagesFromMarkers(data.content, info?.warnings);
     const cost = Number(headers.get("x-quota-cost"));
     const remainingHeader = headers.get("x-quota-remaining");
     const remaining = Number(remainingHeader);

@@ -262,12 +262,12 @@ test("a parsed document keeps its checked metadata, its page map and a paged ind
     assert.equal(done.payload.analysis.pageCount, 2);
     assert.equal(done.payload.extractor.quota.remaining, 41);
     const capture = await app.sourceService.loadCapture(user.id, done);
-    // The page map is built from the service's [Page N] lines; the CRLF inside page one is folded by the capture, and the map moved with it.
-    assert.deepEqual(capture.pageMap, [{ page: 1, start: 9, end: 24, status: "ok" }, { page: 2, start: 33, end: content.length - 1, status: "ok" }]);
-    assert.equal(capture.input.text.slice(33), "第二页：利伐沙班 15 mg 每日一次。");
+    // The page map is built from the service's [Page N] lines, which leave the text; the CRLF inside page one is folded by the capture, and the map moved with it.
+    assert.deepEqual(capture.pageMap, [{ page: 1, start: 0, end: 15, status: "ok" }, { page: 2, start: 15, end: 35, status: "ok" }]);
+    assert.equal(capture.input.text.slice(15), "第二页：利伐沙班 15 mg 每日一次。");
     const index = await readFile(path.join(project.baseDir, done.payload.outputs.artifactPath), "utf8");
     assert.match(index, /^# 房颤抗凝治疗专家共识$/m);
     assert.match(index, /^DOI: 10\.1234\/afib\.2024\.1$/m);
-    assert.match(index, /^<!-- page 1 -->\n第一页：房颤患者的抗凝治疗。\n\[Page 2\]\n<!-- page 2 -->\n第二页：利伐沙班 15 mg 每日一次。$/m);
+    assert.match(index, /^<!-- page 1 -->\n第一页：房颤患者的抗凝治疗。\n<!-- page 2 -->\n第二页：利伐沙班 15 mg 每日一次。$/m);
   } finally { await close(); }
 });

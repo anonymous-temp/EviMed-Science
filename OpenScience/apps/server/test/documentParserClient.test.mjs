@@ -199,7 +199,7 @@ test("engine A gets the bytes, their checksum, the name, the format and the meta
   assert.equal(request.form.get("extract_metadata"), "true", "metadata is asked for, as it always was");
 
   assert.equal(result.protocolVersion, 1);
-  assert.equal(result.text, "[Page 1]\n第一页正文\n\n[Page 2]\n第二页正文", "the text is the content, markers included");
+  assert.equal(result.text, "第一页正文\n\n第二页正文", "the text is the document's: the service's page lines are not part of it");
   assert.equal(result.summary, "本研究评估了……", "the abstract is the summary when there is one");
   assert.deepEqual(result.metadata, {
     title: "利伐沙班在老年房颤患者中的安全性",

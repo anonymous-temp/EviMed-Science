@@ -122,7 +122,7 @@ test("the documented engine-A answer becomes protocol v1 with its page map, diag
   await withServer({ [ROUTE_A]: await recorded("engine-a-pdf-success.json") }, async ({ baseUrl, seen }) => {
     const result = await clientFor(baseUrl).parseBytes({ bytes: PDF, filename: "sample.pdf", mediaType: "application/pdf" });
     const data = (await body("engine-a-pdf-success.json")).data;
-    assert.equal(result.text, data.content, "the text is the content, untouched, markers included");
+    assert.equal(result.text, String(data.content).replace(/^\[Page \d+\]\n/gm, ""), "the text is the content without the service's page lines");
     assert.deepEqual(result.pageMap.map((page) => [page.page, page.status]), [[1, "ok"], [2, "empty"]], "page 2 carries the service's own empty-page warning");
     assert.equal(result.text.slice(result.pageMap[0].start, result.pageMap[0].end).trim(), "文档正文第一页。");
     assert.equal(result.extractor.endpoint, "engine-a");
