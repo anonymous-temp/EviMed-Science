@@ -465,7 +465,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
   /** @type {Map<string, string>} */
   const known = new Map();
 
-  const { card, line, title, tone, tag, quiet, button, step, stepTitle } = frameStyles();
+  const { card, line, title, tone, tag, step, stepTitle } = frameStyles();
 
   /** The run state for the conversation on screen, or null. */
   function useLive() {
