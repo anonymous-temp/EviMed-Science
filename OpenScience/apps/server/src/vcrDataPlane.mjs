@@ -1968,6 +1968,8 @@ export class VcrDataPlane {
     this.seal = seal;
     this.extractor = extractor;
     this.importer = importer;
+    /** Called after a snapshot is frozen, to label the verdicts of the people it names (a label, never a condition). @type {((input: { studyId: string, userId: string }) => Promise<void>) | null} */
+    this.afterSnapshotFrozen = null;
     /** Reads a scan or a picture of a record with the in-house parser (`createVcrScanReader`); none, and such a file answers that it has no text. */
     this.scanReader = scanReader;
     /** Withdrawals, retirements and the marks on what was derived from a changed basis (`vcrErasureStore.mjs`); without it the plane only deletes. */
@@ -2839,6 +2841,8 @@ export class VcrDataPlane {
           throw error;
         });
     }
+    // New structured data for people who already hold verdicts: what was concluded rested on less, and says so. A label, never a condition of the snapshot.
+    try { await this.afterSnapshotFrozen?.({ studyId: entry.studyId, userId: entry.userId }); } catch { this.counters.marksFailed += 1; }
     return { snapshot, profile, tables };
   }
 

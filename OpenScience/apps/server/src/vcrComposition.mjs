@@ -1183,6 +1183,14 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   // with no plane there are none, and a fact a run wrote about a document is void.
   const documents = vcrDocumentsSeam({ dataPlane, passagesMinChars: Number(config.vcrPassagesMinChars) > 0 ? Number(config.vcrPassagesMinChars) : undefined });
   const subjectTable = dataPlane ? vcrSubjectTableSeam({ dataPlane, semantics: dataSemantics, config, usageLedger, fetchImpl }) : null;
+  // A frozen snapshot is new structured data for the people it names: those who already hold a verdict have it marked as resting on an older record, as a new document does.
+  if (dataPlane && subjectTable) {
+    dataPlane.afterSnapshotFrozen = async (/** @type {{ studyId: string, userId: string }} */ { studyId, userId }) => {
+      const study = await store.getStudy(userId, studyId);
+      const people = (await tableFieldsOf(subjectTable, study))?.subjects ?? [];
+      if (people.length) await erasure.markSubjectsChanged({ studyId, subjectKeys: people });
+    };
+  }
   const jobs = new VcrJobs({
     store, config, engine, report, dataPlane, engineObserver: engineProbe,
     localExecutors: { "matching.evaluate": vcrMatchingExecutor({ matchStore, store, documents, subjectTable }) },

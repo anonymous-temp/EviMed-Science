@@ -417,6 +417,18 @@ export class VcrErasureStore extends VcrStoreBase {
   }
 
   /**
+   * People have new structured data (a snapshot was frozen): the finished judgments they hold rested on less. Each is marked as a new document marks it, keeping its verdict; a mark the
+   * registry watch or an earlier change wrote is left as it is. Only the people who hold a verdict are touched, in one statement.
+   * @param {{ studyId: string, subjectKeys: readonly string[] }} input @returns {Promise<number>}
+   */
+  async markSubjectsChanged({ studyId, subjectKeys }) {
+    if (!subjectKeys.length) return 0;
+    const result = await this.query(`UPDATE ${VCR_SCHEMA}.match_judgments SET basis_changed='document'
+      WHERE study_id=$1 AND subject_key=ANY($2::text[]) AND status='done' AND basis_changed IS NULL`, [studyId, [...subjectKeys]]);
+    return result.rowCount ?? 0;
+  }
+
+  /**
    * The marks on some assessments, by id.
    * @param {string} studyId @param {readonly string[]} assessmentIds
    * @returns {Promise<Map<string, { cause: string, markedAt: string | null }>>}
