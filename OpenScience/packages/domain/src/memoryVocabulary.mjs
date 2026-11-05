@@ -371,10 +371,53 @@ function luhnValid(digits) {
 const RESIDENT_ID = /(?<![0-9A-Za-z])[1-9]\d{5}(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}[\dXx](?![0-9A-Za-z])/g
 const CARD = /(?<![0-9])(?:\d[ -]?){15,18}\d(?![0-9])/g
 const KEY_FORMAT = /\b(?:sk|pk|rk)-[A-Za-z0-9_-]{16,}|\bAKIA[0-9A-Z]{16}\b|\bgh[pousr]_[A-Za-z0-9]{30,}|\bBearer\s+[A-Za-z0-9._~+/-]{20,}/g
-// One captured assignment grammar is used for detection and masking, so a value accepted by one cannot leak through the
-// other. Values include Unicode and punctuation-only passwords. ASCII punctuation inside an unquoted token belongs to
-// the secret; explicit quotes can enclose whitespace. A placeholder is already masked and is not a fresh secret on reread.
-const KEY_ASSIGNMENT_VALUE = /((?:api[ _-]?key|access[ _-]?token|secret|password|passwd|密码|口令|密钥|令牌|verification[ _-]?code|one[ -]?time[ _-]?(?:password|code)|OTP|验证码|校验码|动态口令)\s*(?:(?:is|为|是)\s*(?:[:=：]\s*)?|[:=：]\s*))(?!(?:[:=：]\s*)?\[已省略\](?=$|[\s,，。；;]))("[^"\n]+"|'[^'\n]+'|“[^”\n]+”|‘[^’\n]+’|[^\s，。；]+)/gi
+// Assignment labels are structural. A small value scanner is shared by detection and masking: quotes may contain
+// whitespace, escaped quotes and line breaks, while every ASCII punctuation character inside an unquoted token is secret.
+const SECRET_ASSIGNMENT_PREFIX = /(?:api[ _-]?key|access[ _-]?token|secret|password|passwd|密码|口令|密钥|令牌|verification[ _-]?code|one[ -]?time[ _-]?(?:password|code)|OTP|验证码|校验码|动态口令)\s*(?:(?:is\b|为|是)\s*(?:[:=：]\s*)?|[:=：]\s*)/gi
+const IDENTIFIER_MASK = '[已省略]'
+const SECRET_QUOTES = new Map([['"', '"'], ["'", "'"], ['“', '”'], ['‘', '’']])
+
+/** The assigned values, including delimiters when quoted. @param {string} text @returns {{ start: number, end: number }[]} */
+function assignedSecretsIn(text) {
+  const spans = []
+  let coveredUntil = 0
+  for (const match of text.matchAll(SECRET_ASSIGNMENT_PREFIX)) {
+    if (match.index < coveredUntil) continue
+    const start = match.index + match[0].length
+    let end = start
+    const closeQuote = SECRET_QUOTES.get(text[start])
+    if (closeQuote) {
+      end += 1
+      while (end < text.length) {
+        const character = text[end++]
+        if (character === '\\' && end < text.length) end += 1
+        else if (character === closeQuote) break
+      }
+      // An unfinished quoted value consumes the remaining input; no suffix may escape as ordinary prose.
+    } else {
+      while (end < text.length && !/[\s，。；]/.test(text[end])) end += 1
+      // A final prose comma/semicolon followed by whitespace is outside the token. Internal punctuation is always kept
+      // inside the secret, and a punctuation-only password is still a value.
+      if (end > start + 1 && /[,;]$/.test(text.slice(start, end)) && /\s/.test(text.charAt(end))) end -= 1
+    }
+    coveredUntil = end
+    if (end > start && text.slice(start, end) !== IDENTIFIER_MASK) spans.push({ start, end })
+  }
+  return spans
+}
+
+/** Replace the same spans detection recognizes, skipping nested labels within an already masked value. @param {string} text */
+function maskAssignedSecrets(text) {
+  let masked = ''
+  let from = 0
+  for (const { start, end } of assignedSecretsIn(text)) {
+    if (start < from) continue
+    masked += text.slice(from, start) + IDENTIFIER_MASK
+    from = end
+  }
+  return masked + text.slice(from)
+}
+
 // Verification codes also occur directly after their label, without an assignment separator ("OTP 843021"). Explicit
 // alphanumeric assignments use the same grammar above; this numeric form does not reinterpret ordinary prose as a code.
 const VERIFICATION_CODE = /((?:verification[ _-]?code|one[ -]?time[ _-]?(?:password|code)|OTP|验证码|校验码|动态口令)\s*)\d{4,8}(?!\d)/gi
@@ -452,7 +495,7 @@ export function identifierShapesIn(text) {
   const found = []
   if (new RegExp(RESIDENT_ID.source).test(value)) found.push('resident_id')
   if ([...value.matchAll(CARD)].some((match) => { const digits = match[0].replace(/[ -]/g, ''); return digits.length >= 16 && luhnValid(digits) })) found.push('card')
-  if (new RegExp(KEY_FORMAT.source).test(value) || new RegExp(KEY_FORMAT_MORE.source).test(value) || new RegExp(KEY_ASSIGNMENT_VALUE.source, 'i').test(value) || new RegExp(VERIFICATION_CODE.source, 'i').test(value) || longTokensIn(value).length > 0) found.push('credential')
+  if (new RegExp(KEY_FORMAT.source).test(value) || new RegExp(KEY_FORMAT_MORE.source).test(value) || assignedSecretsIn(value).length > 0 || new RegExp(VERIFICATION_CODE.source, 'i').test(value) || longTokensIn(value).length > 0) found.push('credential')
   return found
 }
 
@@ -463,19 +506,12 @@ export function identifierShapesIn(text) {
  * @param {unknown} text @returns {string}
  */
 export function maskIdentifiers(text) {
-  const masked = '[已省略]'
-  return String(text ?? '')
+  const masked = IDENTIFIER_MASK
+  const safe = String(text ?? '')
     .replace(RESIDENT_ID, masked)
     .replace(CARD, (match) => { const digits = match.replace(/[ -]/g, ''); return digits.length >= 16 && luhnValid(digits) ? masked : match })
     .replace(KEY_FORMAT, masked)
     .replace(KEY_FORMAT_MORE, masked)
     .replace(VERIFICATION_CODE, (_match, label) => `${label}${masked}`)
-    .replace(KEY_ASSIGNMENT_VALUE, (match, label, secret, offset, input) => {
-      // Only a final prose comma/semicolon followed by whitespace sits outside the token. An internal separator, or
-      // punctuation inside quotes, is part of the value and must never leave a password suffix behind.
-      const proseSuffix = !/^["'“‘]/.test(secret) && secret.length > 1 && /[,;]$/.test(secret)
-        && /\s/.test(input.charAt(offset + match.length)) ? secret.slice(-1) : ''
-      return `${label}${masked}${proseSuffix}`
-    })
-    .replace(LONG_TOKEN, (run) => (isTokenShaped(run) ? masked : run))
+  return maskAssignedSecrets(safe).replace(LONG_TOKEN, (run) => (isTokenShaped(run) ? masked : run))
 }
