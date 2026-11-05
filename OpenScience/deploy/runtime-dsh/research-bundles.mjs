@@ -97,6 +97,27 @@ export function inspect(id, profile = DEFAULT_PROFILE, root = DEFAULT_ROOT) {
   return receipt;
 }
 
+/** Put the exact native set immediately before the socket without reordering other bundles. */
+export function orderNativeBundles(bundles) {
+  const nativeNames = IDS.map(id => `@evimed/${id}`);
+  if (!Array.isArray(bundles) || [...nativeNames, '@evimed/dsh-socket'].some(name => bundles.filter(value => value === name).length !== 1)) {
+    throw new Error('research_bundle_order_invalid');
+  }
+  const ordered = bundles.filter(name => !nativeNames.includes(name));
+  ordered.splice(ordered.indexOf('@evimed/dsh-socket'), 0, ...nativeNames);
+  return ordered;
+}
+
+function order() {
+  const packageFile = path.join(DEFAULT_PROFILE, 'package.json');
+  const pkg = JSON.parse(fs.readFileSync(packageFile, 'utf8'));
+  const ordered = orderNativeBundles(pkg.dsh?.profile?.bundles);
+  if (canonical(ordered) !== canonical(pkg.dsh.profile.bundles)) {
+    pkg.dsh.profile.bundles = ordered;
+    fs.writeFileSync(packageFile, JSON.stringify(pkg, null, 2) + '\n');
+  }
+}
+
 async function install({ offline = false } = {}) {
   const profile = DEFAULT_PROFILE, root = DEFAULT_ROOT;
   fs.mkdirSync(path.join(root, 'tarballs'), { recursive: true });
@@ -120,14 +141,8 @@ async function install({ offline = false } = {}) {
   });
   run('dsh', ['plugin', '--profile', 'evimed-runtime', 'add', '--save-prod', '--save-exact', '--ignore-scripts', ...managerArgs, ...tarballs],
     { env: { ...process.env, DSH_HOME: path.dirname(path.dirname(profile)) } });
-  const packageFile = path.join(profile, 'package.json'), pkg = JSON.parse(fs.readFileSync(packageFile,'utf8'));
-  const nativeNames = IDS.map(id => `@evimed/${id}`);
-  const bundles = pkg.dsh.profile.bundles;
-  const before = bundles.filter(name => !nativeNames.includes(name));
-  const socket = before.indexOf('@evimed/dsh-socket');
-  if (socket < 0) throw new Error('research_socket_not_installed');
-  before.splice(socket, 0, ...nativeNames);pkg.dsh.profile.bundles = before;
-  fs.writeFileSync(packageFile, JSON.stringify(pkg,null,2)+'\n');
+  order();
+  const packageFile = path.join(profile, 'package.json');
   // The upstream manager writes 0600. Runtime and inspector run unprivileged;
   // the immutable image manifest contains public package coordinates only.
   fs.chmodSync(packageFile, 0o644);
@@ -140,5 +155,6 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   if (action === 'install' && (!id || id === '--offline')) await install({ offline: id === '--offline' });
   else if (action === 'inspect' && id) console.log(JSON.stringify(inspect(id)));
   else if (action === 'record' && !id) record();
+  else if (action === 'order' && !id) order();
   else throw new Error('research_command_invalid');
 }

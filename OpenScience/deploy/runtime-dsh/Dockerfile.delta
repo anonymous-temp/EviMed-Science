@@ -329,6 +329,10 @@ RUN set -eux; \
   test -f "${DSH_HOME_SEED}/profiles/evimed-runtime/node_modules/@openviking/dsh-memory-plugin/package.json" \
     || { echo "this base image predates the OpenViking memory plugin the socket configures (deps-version.json openviking.plugin); build the full runtime image" >&2; exit 1; }; \
   node /usr/local/bin/evimed-research-bundles.mjs install --offline; \
+  node /usr/local/lib/evimed/loopx-compat.mjs --order-profile "${DSH_HOME_SEED}/profiles/evimed-runtime/package.json"; \
+  node /usr/local/lib/evimed/install-openviking-plugin.mjs order "${DSH_HOME_SEED}/profiles/evimed-runtime/package.json"; \
+  node /usr/local/bin/evimed-research-bundles.mjs order; \
+  node -e 'const fs=require("node:fs");const file=process.argv[1],profile=JSON.parse(fs.readFileSync(file,"utf8")),name="@evimed/dsh-search-topics",bundles=profile.dsh.profile.bundles;if(bundles.filter(value=>value===name).length!==1)throw Error("Search topics bundle is not selected exactly once");profile.dsh.profile.bundles=[...bundles.filter(value=>value!==name),name];fs.writeFileSync(file,JSON.stringify(profile,null,2)+"\n")' "${DSH_HOME_SEED}/profiles/evimed-runtime/package.json"; \
   DSH_HOME="${DSH_HOME_SEED}" dsh --profile evimed-runtime --dump-config > /opt/evimed/dump-config.baseline.json 2> /opt/evimed/dump-config.stderr; \
   cat /opt/evimed/dump-config.stderr >&2; \
   if grep -E "patch( insert)?: entry .* not found" /opt/evimed/dump-config.stderr; then echo "a bundle patch names a row no earlier bundle makes" >&2; exit 1; fi; \

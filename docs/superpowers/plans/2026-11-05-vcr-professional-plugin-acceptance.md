@@ -256,6 +256,28 @@ trees. Its installed shared report bytes were read back and matched. This is
 not acceptance of every unrelated phase of the complete delta Dockerfile and
 it did not publish or deploy an image.
 
+## Complete numerical/reference result and final build-order correction
+
+Integrated source `d997066d2` passed the complete Web CI job, including 10,328
+ordinary backend tests, the separate durable PostgreSQL product-state run and
+all 578 frontend files / 7,359 tests. Its numerical job passed 499/499,
+499 declared and none skipped. N62 compatibility and N78 controlled partial
+imputation both passed. The real-engine seam, R library, public dataset,
+gallery and knowledge-plugin checks also passed. The optional production E2E
+was skipped, consistent with this task's no-deployment boundary.
+
+The same source's full Docker build refused a fresh-profile ordering mismatch:
+legacy LoopX/OpenViking finalizers ran after native installation and changed
+which bundle block immediately preceded the socket. The strict native order
+operation now finalizes the same canonical ordering in full and delta builds,
+then the existing byte comparison and seal run. The actual Linux helper chain
+reproduced the failure and the correction restored the unchanged baseline,
+with zero stderr and unchanged receipt bytes. Sixteen tests, resealing,
+non-root inspection of all five bundles and non-root official seed-sync dump
+passed. The [regression ledger](../../../OpenScience/evals/vcr-hosted-native/LOCAL-REGRESSION-20261106.md)
+keeps this order proof distinct from the subsequent full-image workflow.
+No numerical source was changed by this build-only correction.
+
 ## Remaining scientific and release boundaries
 
 - Synthetic fidelity and utility have the red/unavailable results stated above;

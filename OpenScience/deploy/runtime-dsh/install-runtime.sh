@@ -665,6 +665,7 @@ profile_seed() {
   # Reconciliation follows pnpm's package-name order; our patch must run after LoopX's and the OpenViking plugin's, whose rows it configures.
   node /usr/local/lib/evimed/loopx-compat.mjs --order-profile "${DSH_HOME_SEED}/profiles/evimed-runtime/package.json"
   node /usr/local/lib/evimed/install-openviking-plugin.mjs order "${DSH_HOME_SEED}/profiles/evimed-runtime/package.json"
+  node /usr/local/bin/evimed-research-bundles.mjs order
   # Keep this independent host bundle last in both a fresh build and an offline delta.
   node -e 'const fs=require("node:fs");const file=process.argv[1],profile=JSON.parse(fs.readFileSync(file,"utf8")),name="@evimed/dsh-search-topics",bundles=profile.dsh.profile.bundles;if(bundles.filter(value=>value===name).length!==1)throw Error("Search topics bundle is not selected exactly once");profile.dsh.profile.bundles=[...bundles.filter(value=>value!==name),name];fs.writeFileSync(file,JSON.stringify(profile,null,2)+"\n")' "${DSH_HOME_SEED}/profiles/evimed-runtime/package.json"
   node /usr/local/lib/evimed/install-openviking-plugin.mjs verify "${DSH_HOME_SEED}/profiles/evimed-runtime/node_modules/@openviking/dsh-memory-plugin"

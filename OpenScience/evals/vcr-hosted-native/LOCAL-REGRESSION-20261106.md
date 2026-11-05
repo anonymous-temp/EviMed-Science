@@ -64,6 +64,35 @@ complete manifest test file passed 10/10, including exact 128-entry admission,
 129-entry rejection, malformed last-entry checks and valid JSON exceeding the
 byte bound. No clinical calculation or engine numerical source changed.
 
+## Integrated CI and fresh-profile order follow-up
+
+At `d997066d2`, the complete Web job passed: 10,328 ordinary backend tests
+passed (3,635 database-dependent cases were left to the separate database
+runner), the durable product-state step passed, and all 578 frontend files /
+7,359 tests passed. The real-engine seam, public dataset, gallery, pinned R
+library and knowledge-plugin checks passed. The numerical job completed
+499/499, with 499 declared and none skipped. This is algorithm/reference
+qualification, not clinical predictive validation. Production E2E was skipped.
+
+The full Docker build then exposed a deterministic order difference missed by
+the earlier warm-profile rehearsal. The native installer placed its five
+bundles immediately before the socket; subsequent existing LoopX/OpenViking
+ordering helpers moved their own bundles into that same position. All rows
+and values were present, but the resulting order differed from the attested
+baseline. A reusable strict native ordering operation now runs after the
+legacy ordering helpers in both full and delta builds, before dump/diff/seal;
+search-topics remains last. The baseline, pins, receipt bytes and authorization
+rules were not changed.
+
+Sixteen regression/phase-contract cases passed, including exact identity,
+missing/duplicate rejection, idempotence and unrelated-order preservation.
+The real Linux image's existing legacy helpers reproduced the CI difference;
+the new operation restored the exact `db4be956…` baseline with empty stderr,
+without changing receipts. After sealing, all five UID 10001 inspections and
+a fresh official seed-sync / UID 10001 native dump passed. This new source
+requires the next revision's complete image build; a local order proof is not
+reported as a successful full Docker workflow.
+
 ## Platform and test-environment findings
 
 - macOS `/var` and `/tmp` aliases conflicted with exact-realpath checks, and long
