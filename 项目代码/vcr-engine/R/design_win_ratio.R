@@ -333,7 +333,7 @@ vcr_job_design_win_ratio <- function(job, output_dir = NULL, cancel_file = NULL,
   cores <- vcr_cores(job$cores)
   seed <- vcr_scalar(job$seed, 1)
   floor_ <- as.integer(vcr_replicate_floor(p$is_null))
-  want <- as.integer(min(vcr_scalar(job$replicates, floor_), vcr_max_replicates()))
+  want <- as.integer(min(max(floor_, vcr_scalar(job$replicates, floor_)), vcr_max_replicates()))
   if (is.null(job$replicates)) p <- .vcr_wr_assume(p, "trials", want, basis = if (p$is_null) "default: the null-scenario floor of simulated trials" else "default: the floor of simulated trials under an alternative")
   searched <- NULL; issues <- list()
   if (p$search) {

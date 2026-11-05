@@ -159,3 +159,14 @@ vcr_case("N82i", c("AC-07", "AC-28"), function() {
   list(pass = refused(falling, "scenario.truth.toxicity") && refused(skel, "scenario.design.crm.skeleton") && refused(flat_skel, "scenario.design.crm.skeleton") && identical(plateau$status, "succeeded"),
        detail = sprintf("falling curve: %s; falling skeleton: %s; skeleton with a tie: %s; a plateau in the curve: %s", code(falling), code(skel), code(flat_skel), code(plateau)))
 })
+
+vcr_case("N82j", c("AC-31", "AC-38"), function() {
+  # The replicate floor of every other simulated kind holds here too: five trials asked are raised to the floor (5,000 under an alternative), and the
+  # precision of the answer is that of the trials that ran. Reference: a binomial standard error at the trials that ran, sqrt(p (1 - p) / n).
+  r <- .n82_job(list(kind = "boin", maxPatients = 30), trials = 5L)
+  floor_ <- vcr_domain()$limits$replicatesAltMin
+  cell <- .n82_cell(r, 1L, "correct_dose_probability")
+  list(pass = identical(r$status, "succeeded") && identical(r$diagnostics$replicatesCompleted, as.integer(floor_)) && abs(cell$mcse - sqrt(cell$value * (1 - cell$value) / floor_)) < 1e-12,
+       detail = sprintf("5 trials asked: %d ran (the floor is %d), correct dose %.4f with a Monte-Carlo error of %.4f (binomial %.4f)",
+                        as.integer(r$diagnostics$replicatesCompleted), as.integer(floor_), cell$value, cell$mcse, sqrt(cell$value * (1 - cell$value) / floor_)))
+})

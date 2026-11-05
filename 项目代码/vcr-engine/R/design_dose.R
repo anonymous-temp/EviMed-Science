@@ -442,7 +442,8 @@ vcr_dose_select_isotonic <- function(N, Y, target, cutoff) {
 .vcr_dose_finding <- function(job, progress = NULL) {
   sc <- job$scenario
   p <- .vcr_dose_read(sc)
-  want <- as.integer(vcr_scalar(job$replicates, VCR_DOSE_DEFAULT_TRIALS))
+  # the floor every simulated kind keeps (the alternative floor: a dose-finding curve has no null): fewer trials asked are raised to it
+  want <- as.integer(max(vcr_replicate_floor(FALSE), vcr_scalar(job$replicates, VCR_DOSE_DEFAULT_TRIALS)))
   if (is.null(job$replicates)) p <- .vcr_dose_assume(p, "trials", want, basis = "default: simulated trials per design")
   tables <- .vcr_dose_tables(p)
   seed <- vcr_scalar(job$seed, 1)

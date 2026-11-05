@@ -306,7 +306,7 @@ vcr_case("N87i", c("AC-28", "AC-31"), function() {
   # finds no time (the budgets the review saw depend on the machine); the search ran for real. The size it found is kept, limited, not verified, with no count
   # of trials, and a job that is stopped before ANY trial runs names no count of replicates (it used to echo the 5,000 and the 200,000 it was asked for).
   ss <- .n87_scenario(n = 100, dropout = 0.05, events = FALSE, shift = 0.6, hr = 0.8, thr = 0.1); ss$design$nTreat <- NULL; ss$design$nControl <- NULL; ss$analysis$power <- 0.8
-  want <- 1500L; orig <- .vcr_wr_run
+  want <- as.integer(vcr_domain()$limits$replicatesAltMin); orig <- .vcr_wr_run   # the trial count a run asked for is raised to this floor
   .vcr_wr_run <<- function(p, n1, n0, trials, ...) if (identical(as.integer(trials), want)) list(values = NULL, stopped = "cpu_budget") else orig(p, n1, n0, trials, ...)
   on.exit(.vcr_wr_run <<- orig, add = TRUE)
   kept <- vcr_test_run(vcr_test_job("design.win_ratio", ss, seed = 8743L, replicates = want, cores = 1L))
@@ -322,4 +322,12 @@ vcr_case("N87i", c("AC-28", "AC-31"), function() {
          identical(none$status, "failed") && length(none$measures) == 0L && is.null(none$replicates) && identical(dose$status, "failed") && length(dose$measures) == 0L && is.null(dose$replicates),
        detail = sprintf("the size search found %s per arm and the run after it found no time: the size is kept (%s, limited, not verified, %s trials counted) and equals the size of the unstopped job (%s); a win-ratio job and a dose-finding job stopped before any trial name no count of replicates (%s and %s; they used to echo 50,000 and 200,000)",
                         if (length(size)) size[[1]]$value else "none", kept$status, kept$replicates %||% "no", free_size, none$replicates %||% "none", dose$replicates %||% "none"))
+})
+
+vcr_case("N87j", c("AC-31", "AC-38"), function() {
+  # The replicate floor holds here as in every other simulated kind: 5 trials asked under an alternative are raised to its floor.
+  alt <- vcr_test_run(vcr_test_job("design.win_ratio", .n87_scenario(n = 30, events = FALSE), seed = 8791L, replicates = 5L, cores = vcr_cores(NULL)))
+  lim <- vcr_domain()$limits
+  list(pass = identical(alt$status, "succeeded") && identical(alt$diagnostics$replicatesCompleted, as.integer(lim$replicatesAltMin)),
+       detail = sprintf("5 trials asked under an alternative: %s ran (the floor is %d)", format(alt$diagnostics$replicatesCompleted), as.integer(lim$replicatesAltMin)))
 })
