@@ -1142,10 +1142,6 @@ function vcrSettings(overrides) {
     // here only on 2026-10-10 — until then the variable reached nothing and the deadline was always 20 s.
     vcrTrialCorpusManifest: String(read("vcrTrialCorpusManifest", "OPEN_SCIENCE_VCR_TRIAL_CORPUS_MANIFEST", "") ?? "").trim(),
     vcrRegistryTimeoutMs: integer("vcrRegistryTimeoutMs", "OPEN_SCIENCE_VCR_REGISTRY_TIMEOUT_MS", 20_000, 5_000, 60_000),
-    // The most candidate trials one study holds (「给患者找试验」, vcrPatientTrials): each one costs an evaluation for every patient the
-    // study judges against it, so the count is bounded; a trial the study already holds can always be updated. Counter:
-    // `open_science_vcr_patient_trials_total{kind="capReached"}`.
-    vcrCandidateTrialsMax: integer("vcrCandidateTrialsMax", "OPEN_SCIENCE_VCR_CANDIDATE_TRIALS_MAX", 60, 1, 500),
     // The most trials one `vcr_read what: candidates` list returns (vcrCandidateSearch, M1). Each one is a record the run may read and
     // structure, so the list is cut to what a reader can go through; the registries are asked for twice as many because some are left out by
     // what their records state. Unset = 20.
@@ -1174,11 +1170,7 @@ function vcrSettings(overrides) {
     // How long a research tool's first call waits for its turn to reach the run ledger. A turn typed in the kernel's composer is adopted
     // after the routing decision, whose own limit is 20 s; a call refused meanwhile told the run to go on without the study. The tool waits 30 s for its answer. Unset = 20 s.
     vcrRunAdoptionWaitMs: integer("vcrRunAdoptionWaitMs", "OPEN_SCIENCE_VCR_RUN_ADOPTION_WAIT_MS", 20_000, 0, 120_000),
-    // Batch matching (remediation plan D4, vcrMatchBatch): the most people one batch reads the records of (a roster larger than this is read
-    // in batches, each start taking the next people not yet read), how many records are read at once, and how long one record's model call
-    // may take. A start states the cost of its batch before it begins; a batch is bounded so that stated cost is a bounded one.
-    vcrMatchBatchMaxSubjects: integer("vcrMatchBatchMaxSubjects", "OPEN_SCIENCE_VCR_MATCH_BATCH_MAX_SUBJECTS", 300, 1, 5_000),
-    vcrMatchExtractConcurrency: integer("vcrMatchExtractConcurrency", "OPEN_SCIENCE_VCR_MATCH_EXTRACT_CONCURRENCY", 3, 1, 8),
+    // How long one model call of reading a table's codes may take (vcrTableMeaning).
     vcrMatchExtractTimeoutMs: integer("vcrMatchExtractTimeoutMs", "OPEN_SCIENCE_VCR_MATCH_EXTRACT_TIMEOUT_MS", 90_000, 10_000, 300_000),
     // Judging patients against trials (vcrMatchJudge, owner decisions 2026-11-04). How many pairs are judged at once; how many of a person's best-ranked trials are judged
     // clause by clause (0 none, "all" every pair); thinking `high` or `off`, recorded on every row; the output allowance of one call, which reasoning counts towards, so an
