@@ -51,6 +51,19 @@ current source. The image source checker verified all 11 package trees. This is
 a focused native-refresh proof, not a run of every legacy phase in the complete
 `Dockerfile.delta` recipe. No image was published or deployed by this rehearsal.
 
+## Release-input capacity follow-up
+
+The integrated Linux ordinary-server run at `ef9c9ebd4` reduced the earlier
+nine failures to four tests sharing one newly exposed cause: the six newly
+bound package roots increased the release input inventory from 94 to 100,
+while the manifest schema still capped it at 96. The schema now admits at
+most 128 bindings through an exported constant. This changes no source
+binding, path, duplicate or digest rule; the independent 128 KiB reader limit
+is unchanged. The actual generated 100-entry manifest was 18,108 bytes. The
+complete manifest test file passed 10/10, including exact 128-entry admission,
+129-entry rejection, malformed last-entry checks and valid JSON exceeding the
+byte bound. No clinical calculation or engine numerical source changed.
+
 ## Platform and test-environment findings
 
 - macOS `/var` and `/tmp` aliases conflicted with exact-realpath checks, and long

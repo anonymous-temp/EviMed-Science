@@ -6,6 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import {
+  MAX_RELEASE_MANIFEST_INPUTS,
   digestDirectory,
   readReleaseManifestFile,
   runtimeReleasePolicyError,
@@ -160,6 +161,12 @@ test("release manifest generator records exact images, tools, skills, and source
         "packages/contracts/healthflux/candidates.json",
         "packages/design-tokens",
         "packages/harness-port",
+        "packages/research-plugin-runtime",
+        "packages/virtual-trial",
+        "packages/virtual-cohort",
+        "packages/virtual-patient",
+        "packages/synthetic-control",
+        "packages/virtual-research-suite",
         // The independent search-topics bundle the runtime image COPYs whole and installs as a host plugin (merge of the Gitee main, 2026-10-31).
         "packages/search-topics",
         "deploy/runtime-dsh",
@@ -339,6 +346,38 @@ test("release manifest validation rejects unpinned images and undeclared fields"
     () => validateReleaseManifest(secret),
     (err) => err?.code === "release_manifest_fields_invalid",
   );
+});
+
+test("release source inputs accept the exact capacity and refuse one additional binding", async (t) => {
+  const manifest = structuredClone(releaseManifestFixture);
+  manifest.inputs = Array.from({ length: MAX_RELEASE_MANIFEST_INPUTS }, (_, index) => ({
+    path: `packages/release-source-${index}`, digest: `sha256:${"d".repeat(64)}`,
+  }));
+  assert.equal(validateReleaseManifest(manifest), manifest);
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "release-input-capacity-"));
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  const output = path.join(tmp, "manifest.json");
+  await writeFile(output, JSON.stringify(manifest));
+  assert.deepEqual(readReleaseManifestFile(output).manifest, manifest);
+
+  const overflow = structuredClone(manifest);
+  overflow.inputs.push({ path: "packages/one-too-many", digest: `sha256:${"e".repeat(64)}` });
+  assert.throws(() => validateReleaseManifest(overflow), { code: "release_manifest_inputs_invalid" });
+
+  // The last newly admitted row still receives every source-binding guard.
+  for (const [entry, code] of [
+    [{ ...manifest.inputs.at(-1), path: "../outside" }, "release_manifest_input_path_invalid"],
+    [{ ...manifest.inputs.at(-1), path: manifest.inputs[0].path }, "release_manifest_input_duplicate"],
+    [{ ...manifest.inputs.at(-1), digest: "sha256:invalid" }, "release_manifest_digest_invalid"],
+  ]) {
+    const invalid = structuredClone(manifest);
+    invalid.inputs[MAX_RELEASE_MANIFEST_INPUTS - 1] = entry;
+    assert.throws(() => validateReleaseManifest(invalid), { code });
+  }
+
+  // Valid JSON and an admitted row count cannot bypass the independent byte bound.
+  await writeFile(output, `${" ".repeat(128 * 1024)}${JSON.stringify(manifest)}`);
+  assert.equal(readReleaseManifestFile(output).error, "release_manifest_file_too_large");
 });
 
 test("release manifest reader refuses symbolic links", async () => {
