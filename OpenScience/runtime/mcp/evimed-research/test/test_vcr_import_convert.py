@@ -144,11 +144,15 @@ class FhirSample(unittest.TestCase):
         for kind, read in (("Patient", 11), ("Condition", 298), ("Observation", 2850), ("MedicationRequest", 172), ("Procedure", 1341), ("Encounter", 413)):
             got = coverage_of(self.result, kind)
             self.assertEqual((got["status"], got["records"], got["imported"]), ("imported", read, read), kind)
-        unread = {"AllergyIntolerance": 11, "Device": 39, "DiagnosticReport": 780, "DocumentReference": 413, "EpisodeOfCare": 413, "Immunization": 143,
+        unread = {"AllergyIntolerance": 11, "Device": 39, "DiagnosticReport": 780, "EpisodeOfCare": 413, "Immunization": 143,
                   "Location": 44, "Organization": 43, "Practitioner": 43, "PractitionerRole": 43, "ServiceRequest": 413, "Specimen": 413}
         for kind, read in unread.items():
             got = coverage_of(self.result, kind)
             self.assertEqual((got["status"], got["reason"], got["records"], got["imported"]), ("skipped", "unsupported_resource_type", read, 0), kind)
+        # Its 413 notes (jq: every DocumentReference holds one plain-text attachment inline) arrive as documents of their patients.
+        notes = coverage_of(self.result, "DocumentReference")
+        self.assertEqual((notes["status"], notes["records"], notes["imported"], notes.get("skipped")), ("imported", 413, 413, None))
+        self.assertEqual(self.result["notes"]["count"], 413)
         # The export's own log is not a resource file.
         log = coverage_of(self.result, "log.ndjson")
         self.assertEqual((log["status"], log["reason"], log["records"]), ("skipped", "not_fhir_resources", 4))
@@ -198,7 +202,8 @@ class FhirSample(unittest.TestCase):
             out = pathlib.Path(scratch) / "out"
             out.mkdir()
             convert.run({"format": "fhir", "extension": "zip", "file": {"sha256": hashlib.sha256(SMART.read_bytes()).hexdigest(), "bytes": SMART.stat().st_size}}, source, out)
-            everything = "".join(path.read_text(encoding="utf-8") for path in out.iterdir())
+            # The tables carry nothing that identifies a person. The notes file is not a table: it is what the hospital's notes say, as documents.
+            everything = "".join(path.read_text(encoding="utf-8") for path in out.iterdir() if path.name != "notes.jsonl")
         # The first patient's name, her social-security and driver's-licence numbers, her birth date, her address town.
         for identifying in ("Hyatt152", "Brandon214", "999-59-5908", "S99990168", "1978-05-12", "Parsons", "555-352-7285", "Nelida367"):
             self.assertNotIn(identifying, everything)
@@ -356,7 +361,7 @@ class FhirRefusals(unittest.TestCase):
             # wc -c of the tables: observation 1.1 MB and procedure 0.3 MB pass 100,000 bytes; the other four do not.
             self.assertEqual({item["table"]: item["reason"] for item in result["coverage"]["skippedTables"]},
                              {"fhir_observation": "table_too_large", "fhir_procedure": "table_too_large"})
-            self.assertEqual(sorted(path.name for path in out.iterdir()), sorted([item["file"] for item in result["tables"]]),
+            self.assertEqual(sorted(path.name for path in out.iterdir() if path.name != "notes.jsonl"), sorted([item["file"] for item in result["tables"]]),
                              "no partial table and no .part file is left in the output directory")
 
     def test_a_table_past_the_column_limit_is_skipped(self):
@@ -549,6 +554,108 @@ class OmopShapes(unittest.TestCase):
         self.assertEqual(sorted(tables), ["omop_person"])
         self.assertEqual(coverage_of(result, "condition_occurrence")["reason"], "text_encoding")
         self.assertEqual(result["tables"][0]["name"], "omop_person")
+
+
+
+def run_notes(data, form, extension):
+    """The converter on some bytes, and the lines of the notes file it leaves (empty when it left none)."""
+    with tempfile.TemporaryDirectory() as scratch:
+        source = pathlib.Path(scratch) / f"import.{extension}"
+        source.write_bytes(data)
+        out = pathlib.Path(scratch) / "out"
+        out.mkdir()
+        request = {"format": form, "extension": extension, "file": {"sha256": hashlib.sha256(data).hexdigest(), "bytes": len(data)}, "limits": {}}
+        result = convert.run(request, source, out)
+        path = out / "notes.jsonl"
+        lines = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()] if path.exists() else []
+        if result.get("notes"):
+            assert hashlib.sha256(path.read_bytes()).hexdigest() == result["notes"]["sha256"]
+            assert (result["notes"]["count"], result["notes"]["bytes"]) == (len(lines), path.stat().st_size)
+        else:
+            assert not path.exists()
+        return result, lines
+
+
+class Notes(unittest.TestCase):
+    """A hospital's narrative notes arrive as documents of the person, and what could not be read is named."""
+
+    @staticmethod
+    def note(note_id, patient, **attachment):
+        return {"resourceType": "DocumentReference", "id": note_id, "subject": {"reference": f"Patient/{patient}"}, "date": "2021-03-04T09:30:00+08:00",
+                "type": {"coding": [{"code": "11506-3", "display": "Progress note"}]}, "content": [{"attachment": attachment}]}
+
+    def test_fhir_inline_and_base64_text_arrive_and_a_url_a_pdf_and_bad_bytes_are_listed(self):
+        import base64
+        text = "主诉：胸闷三天。既往2型糖尿病。"
+        encoded = lambda raw: base64.b64encode(raw).decode("ascii")  # noqa: E731
+        data = ndjson(
+            {"resourceType": "Patient", "id": "p-1", "gender": "female", "birthDate": "1960-01-01"},
+            {"resourceType": "Condition", "id": "c-1", "subject": {"reference": "Patient/p-1"}, "code": {"coding": [{"code": "44054006"}]}, "onsetDateTime": "2020-01-01"},
+            self.note("n1", "p-1", contentType="text/plain; charset=utf-8", data=encoded(text.encode("utf-8"))),
+            self.note("n2", "p-1", contentType="text/plain", url="http://hospital.example/n2"),
+            self.note("n3", "p-1", contentType="application/pdf", data=encoded(b"%PDF-1.4")),
+            self.note("n4", "p-1", contentType="text/plain", data=encoded(b"\xff\xfe\x00bad")),
+            self.note("n5", "p-1", contentType="text/plain", data="not base64 !!"),
+            self.note("n6", "nobody-reference", contentType="text/plain", data=encoded(b"   ")),
+            {"resourceType": "DocumentReference", "id": "n7", "content": [{"attachment": {"contentType": "text/plain", "data": encoded(b"x")}}]},
+        )
+        result, lines = run_notes(data, "fhir", "ndjson")
+        self.assertEqual(lines, [{"subject": "p-1", "date": "2021-03-04", "title": "Progress note", "text": text}])
+        reference = coverage_of(result, "DocumentReference")
+        self.assertEqual((reference["records"], reference["imported"]), (7, 1))
+        self.assertEqual(reference["skipped"], {"attachment_url_only": 1, "attachment_not_plain_text": 1, "attachment_not_readable": 2, "empty_note": 1, "no_patient_reference": 1})
+        self.assertEqual(result["notes"]["count"], 1)
+        # A note is never a cell of a table.
+        self.assertNotIn("胸闷", json.dumps(result["coverage"], ensure_ascii=False))
+
+    def test_the_public_sample_notes_belong_to_the_patients_the_tables_name(self):
+        result, lines = run_notes(SMART.read_bytes(), "fhir", "zip")
+        self.assertEqual(len(lines), 413)
+        with tempfile.TemporaryDirectory() as scratch:
+            source = pathlib.Path(scratch) / "import.zip"
+            source.write_bytes(SMART.read_bytes())
+            out = pathlib.Path(scratch) / "out"
+            out.mkdir()
+            convert.run({"format": "fhir", "extension": "zip", "file": {"sha256": hashlib.sha256(SMART.read_bytes()).hexdigest(), "bytes": SMART.stat().st_size}}, source, out)
+            patients = {row["patient_id"] for row in rows_of(list(csv.reader(io.StringIO((out / "fhir_patient.csv").read_text(encoding="utf-8")))))}
+        self.assertTrue({line["subject"] for line in lines} <= patients, "a note's subject is the id the patient table uses, so the pseudonym is the same")
+        self.assertTrue(all(line["date"] and line["text"] for line in lines))
+
+    def test_a_file_with_no_note_leaves_no_notes_file(self):
+        result, lines = run_notes(ndjson({"resourceType": "Patient", "id": "p-1"}, {"resourceType": "Encounter", "id": "e", "subject": {"reference": "Patient/p-1"}, "period": {"start": "2020-01-01"}}), "fhir", "ndjson")
+        self.assertEqual((lines, "notes" in result), ([], False))
+
+    def test_omop_note_rows_arrive_with_their_date_and_title_and_the_rest_is_counted(self):
+        long_text = "x" * (convert.MAX_NOTE_CHARS + 1)
+        data = csv_zip({
+            "person.csv": [["person_id", "gender_concept_id", "year_of_birth"], ["1", "8507", "1970"], ["2", "8532", "1980"]],
+            "condition_occurrence.csv": [["person_id", "condition_concept_id", "condition_start_date"], ["1", "201826", "2012-01-01"]],
+            "note.csv": [["note_id", "person_id", "note_date", "note_title", "note_text"],
+                         ["1", "1", "2021-05-06", "出院小结", "诊断：肺腺癌。\n无化疗史。"], ["2", "2", "20210507", "", "复查正常"], ["3", "", "2021-05-06", "", "orphan"],
+                         ["4", "1", "2021-05-06", "", "  "], ["5", "2", "2021-05-06", "", long_text]],
+            "note_nlp.csv": [["note_nlp_id", "note_id"], ["1", "1"]],
+        })
+        result, lines = run_notes(data, "omop", "zip")
+        self.assertEqual([(line["subject"], line["date"], line["title"], line["text"]) for line in lines],
+                         [("1", "2021-05-06", "出院小结", "诊断：肺腺癌。\n无化疗史。"), ("2", "2021-05-07", "", "复查正常")])
+        note = coverage_of(result, "note")
+        self.assertEqual((note["records"], note["imported"], note["status"]), (5, 2, "imported"))
+        self.assertEqual(note["skipped"], {"missing_person_id": 1, "empty_note": 1, "note_too_long": 1})
+        self.assertEqual(coverage_of(result, "note_nlp")["reason"], "unsupported_table")
+
+    def test_notes_past_the_bound_are_counted_and_never_cut(self):
+        import base64
+        original = convert.MAX_NOTES
+        convert.MAX_NOTES = 2
+        try:
+            body = lambda n: base64.b64encode(f"note {n}".encode()).decode("ascii")  # noqa: E731
+            data = ndjson({"resourceType": "Patient", "id": "p-1"}, {"resourceType": "Encounter", "id": "e", "subject": {"reference": "Patient/p-1"}, "period": {"start": "2020-01-01"}},
+                          *[self.note(f"n{n}", "p-1", contentType="text/plain", data=body(n)) for n in range(4)])
+            result, lines = run_notes(data, "fhir", "ndjson")
+        finally:
+            convert.MAX_NOTES = original
+        self.assertEqual([line["text"] for line in lines], ["note 0", "note 1"])
+        self.assertEqual(coverage_of(result, "DocumentReference")["skipped"], {"over_note_limit": 2})
 
 
 class OmopRefusals(unittest.TestCase):

@@ -107,6 +107,8 @@ import { constants as fsConstants, createReadStream } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { spawn } from "node:child_process";
+import { createInterface } from "node:readline";
+import { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 
 import {
@@ -2584,14 +2586,56 @@ export class VcrDataPlane {
         actor, studyId: entry.studyId, sourceId: entry.sourceId, columns: merged.columns, by: "import",
         reason: `Generated from ${done.standard.name ?? format} ${done.standard.release ?? done.standard.version ?? ""}`.trim(),
       });
+      const notes = done.notes ? await this.#storeImportedNotes(entry, source, done, format) : null;
       return {
         format, standard: done.standard, converter: done.converter, input: { ...done.input, format },
+        ...(notes ? { notes } : {}),
         tables, files: stored.map((result) => result.file), created: stored.filter((result) => result.created).length,
         fieldMap: { hash: proposed.hash, state: proposed.source.fieldMapState, entries: merged.columns.length, trimmed: merged.trimmed,
           columnSourcesDeclared: merged.sourcesDeclared, entryIssues: proposed.entryIssues, mapIssues: proposed.mapIssues },
         coverage: done.coverage,
       };
     });
+  }
+
+  /**
+   * The narrative notes of a standard-format import (FHIR DocumentReference, OMOP note), each stored as a document of its person through the one path every note takes: the pseudonym,
+   * the original's retention and the audit are the ones a pasted or imported note gets. One that cannot be stored is counted by its code and the rest go on.
+   * @param {{ actor: string, studyId: string, sourceId: string }} entry @param {any} source @param {{ openNotes: () => Promise<any>, input: { sha256: string } }} done @param {string} format
+   * @returns {Promise<{ read: number, stored: number, repeated: number, failed: Record<string, number> }>}
+   */
+  async #storeImportedNotes(entry, source, done, format) {
+    const opened = await done.openNotes();
+    const counts = { read: 0, stored: 0, repeated: 0, /** @type {Record<string, number>} */ failed: {} };
+    try {
+      const lines = createInterface({ input: Readable.from(opened.stream()), crlfDelay: Infinity });
+      for await (const line of lines) {
+        if (!line.trim()) continue;
+        counts.read += 1;
+        const failed = (/** @type {string} */ code) => { counts.failed[code] = (counts.failed[code] ?? 0) + 1; };
+        /** @type {any} */
+        let note;
+        try { note = JSON.parse(line); } catch { failed("note_unreadable"); continue; }
+        const subject = typeof note?.subject === "string" ? note.subject.trim() : "";
+        const body = typeof note?.text === "string" ? note.text : "";
+        if (!subject || !body.trim()) { failed("note_unreadable"); continue; }
+        const stamp = /^\d{4}-\d{2}-\d{2}$/u.test(String(note.date ?? "")) ? `${note.date}T00:00:00.000Z` : null;
+        try {
+          const result = await this.#storeChecked({
+            actor: entry.actor, studyId: entry.studyId, sourceId: entry.sourceId, name: "note.txt", role: "document", subject, ...(stamp && Number.isFinite(Date.parse(stamp)) ? { visibleAt: stamp } : {}),
+            importedFrom: { kind: "standard_import", format, uploadSha256: done.input.sha256, note: counts.read },
+            stream: (async function* () { yield Buffer.from(body, "utf8"); })(),
+          }, source);
+          if (result.created === false) counts.repeated += 1; else counts.stored += 1;
+        } catch (error) {
+          if (!(error instanceof HttpError) || error.status >= 500) throw error;
+          failed(String(error.code));
+        }
+      }
+    } finally {
+      await opened.close();
+    }
+    return counts;
   }
 
   /**

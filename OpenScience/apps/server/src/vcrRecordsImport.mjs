@@ -72,6 +72,30 @@ const SKIP_LABELS = Object.freeze({
   vcr_document_parser_failed: '解析服务没读出来', vcr_document_parser_unavailable: '解析服务没接通', vcr_document_needs_text: '读不出文字', vcr_document_unreadable: '文件打不开',
   vcr_document_converter_unavailable: '转换服务没接通', vcr_data_file_too_large: '文件太大', vcr_document_too_long: '页数太多', vcr_intake_timeout: '转换超时', vcr_intake_failed: '转换没完成',
 });
+/** Why a hospital export's note was not taken, in the words the statement uses; by the converter's code, or the plane's. */
+const NOTE_REASONS = Object.freeze({
+  attachment_url_only: '只给了链接，没有读取', attachment_not_plain_text: '不是纯文本（PDF、网页等）', attachment_not_readable: '内容无法解码', no_attachment: '没有附件', no_patient_reference: '看不出是哪位患者',
+  missing_person_id: '看不出是哪位患者', empty_note: '内容为空', note_too_long: '单份太长', over_note_limit: '超过一次导入的份数上限', note_unreadable: '内容无法解读', vcr_subject_withdrawn: '已撤回同意',
+});
+
+/**
+ * What became of a hospital export's notes (FHIR DocumentReference, OMOP note), as one clause of the import's statement: how many arrived and what could not be read, with the reason.
+ * Empty when the export had none. Pure.
+ * @param {any} standard the import's outcome: `coverage`, and `notes` (what the plane stored)
+ */
+export function noteStatement(standard) {
+  const inputs = list(standard?.coverage?.inputs).filter((/** @type {any} */ item) => item.kind === 'DocumentReference' || item.kind === 'note');
+  if (!inputs.length) return '';
+  /** @type {Record<string, number>} */
+  const unread = {};
+  for (const item of inputs) for (const [code, howMany] of Object.entries(object(item.skipped))) unread[code] = (unread[code] ?? 0) + Number(howMany);
+  for (const [code, howMany] of Object.entries(object(standard?.notes?.failed))) unread[code] = (unread[code] ?? 0) + Number(howMany);
+  const arrived = Number(standard?.notes?.stored ?? 0) + Number(standard?.notes?.repeated ?? 0);
+  const lost = Object.values(unread).reduce((sum, howMany) => sum + howMany, 0);
+  const why = Object.entries(unread).sort((a, b) => b[1] - a[1]).map(([code, howMany]) => `${/** @type {Record<string, string>} */ (NOTE_REASONS)[code] ?? '其他原因'} ${howMany} 份`).join('、');
+  return `；病历文本收下 ${arrived} 份${lost ? `，${lost} 份没读到（${why}）` : ''}`;
+}
+
 const IGNORED_ENTRY = /(^|\/)(__MACOSX|\.DS_Store|Thumbs\.db|desktop\.ini)(\/|$)|(^|\/)\./u;
 
 const extensionOf = (/** @type {string} */ name) => path.posix.extname(name).slice(1).toLowerCase();
@@ -423,7 +447,7 @@ export function createRecordsImportExecutor({ store, dataStore, dataPlane, locat
         counts.read = list(imported.tables).reduce((sum, table) => sum + Number(table.rows ?? 0), 0);
         counts.stored = list(imported.tables).filter((table) => table.stored).length;
         for (const table of list(imported.tables)) if (!table.stored) skip(String(table.reason ?? 'table_not_stored'));
-        return outcome({ standard: { format: scenario.format, snapshotId: frozen.snapshot.id, coverage: imported.coverage, analysisTables: list(frozen.tables?.registered).map((row) => row.shape), tables: list(imported.tables).map((table) => ({ name: table.name, rows: table.rows, stored: table.stored })) } });
+        return outcome({ standard: { format: scenario.format, snapshotId: frozen.snapshot.id, coverage: imported.coverage, analysisTables: list(frozen.tables?.registered).map((row) => row.shape), ...(imported.notes ? { notes: imported.notes } : {}), tables: list(imported.tables).map((table) => ({ name: table.name, rows: table.rows, stored: table.stored })) } });
       } catch (error) {
         const code = String(/** @type {any} */ (error)?.code ?? 'vcr_import_failed');
         report(code);
@@ -738,7 +762,7 @@ function finishImport({ jobId, job, scenario, startedAt, now, counts, skipped, s
   const conclusion = status === 'failed' ? 'not_estimable' : counts.skipped || canceled ? 'limited' : 'estimable';
   const reasons = Object.entries(skipped).sort((a, b) => Number(b[1]) - Number(a[1])).map(([code, count]) => `${/** @type {Record<string, string>} */ (SKIP_LABELS)[code] ?? '其他原因'} ${count} 份`).join('、');
   const statement = failed ? String(failed.message) : standard
-    ? `已导入 ${counts.stored} 张表、${counts.read} 行${counts.skipped ? `，${counts.skipped} 张没有收下（${reasons}）` : ''}。`
+    ? `已导入 ${counts.stored} 张表、${counts.read} 行${counts.skipped ? `，${counts.skipped} 张没有收下（${reasons}）` : ''}${noteStatement(standard)}。`
     : `读了 ${counts.read} 份，收下 ${counts.stored} 份（${counts.people} 位患者）${counts.repeated ? `，${counts.repeated} 份之前已收下` : ''}${counts.skipped ? `，跳过 ${counts.skipped} 份（${reasons}）` : ''}。`;
   const issues = failed ? [{ code: String(failed.code), message: String(failed.message) }] : counts.skipped ? [{ code: 'vcr_import_some_skipped', message: statement }] : [];
   /** @type {Record<string, any>} */
