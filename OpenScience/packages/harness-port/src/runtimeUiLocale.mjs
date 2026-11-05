@@ -192,6 +192,18 @@ export function evimedDictionaries() {
     trajectory: {
       'view.trajectory': '运行',
     },
+    // The `/model` command of the kernel's model-selection row, which stays mounted for the composer's seat. This deployment runs
+    // one model and the person chooses a thinking strength, so the command is worded as that (2026-11-05); the one list it opens
+    // names its entry from host data, which no locale key reaches.
+    model: {
+      'command.label': '思考强度',
+      'command.description': '选择本会话的思考强度',
+      'menu.aria': '思考强度',
+      'menu.model': '思考强度',
+      'search.placeholder': '搜索…',
+      'search.empty': '没有匹配项。',
+      'empty.models': '暂无可选项',
+    },
     // The goal bar of the LoopX plugin (`dsh-loopx-plugin`, pinned in deps-version.json `loopx`). Its own
     // Chinese names the vendor and an internal lane (「LoopX 目标状态」「Agent 通道待办」); the product calls
     // the feature 长任务, as the /loopx-init command does. Keys are the plugin's, recorded in
