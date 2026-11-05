@@ -32,7 +32,7 @@ function fixedAdmission(answer = {}) {
   return { asked, admit: async (caller) => { asked.push(caller.engineSessionId ?? null); return { ...base, ...(typeof answer === "function" ? answer(caller) : answer) }; } };
 }
 
-async function fixture(t, { admission = fixedAdmission(), config = {}, overlay = null, stubOptions = {}, memoryTool = null, capsuleSearch = null, timeoutMs = 4_000, project = {} } = {}) {
+async function fixture(t, { admission = fixedAdmission(), config = {}, overlay = null, stubOptions = {}, memoryTool = null, capsuleSearch = null, historySearch = null, timeoutMs = 4_000, project = {} } = {}) {
   resetNativeMemoryMetrics();
   const stub = await startOpenVikingStub(t, stubOptions);
   const client = new OpenVikingClient({ openVikingUrl: stub.url, openVikingApiKey: stub.apiKey, openVikingAccount: "evimed" });
@@ -42,7 +42,7 @@ async function fixture(t, { admission = fixedAdmission(), config = {}, overlay =
     config: { memoryEngineEnabled: true, memoryEnabled: true, ...config },
     runtimeManager: { assertActiveEviMedWorkloadToken: async (token) => { if (token === TOKEN) return { userId: USER, projectId: "p1" }; throw new Error("no"); } },
     store: { userById: async (id) => (id === USER ? { id } : null), requireProject: async (_user, id) => ({ id, userId: USER, ...project }) },
-    sessions, admission, overlay, memoryTool, capsuleSearch,
+    sessions, admission, overlay, memoryTool, capsuleSearch, historySearch,
   });
   const server = createServer((req, res) => { void handler(req, res, (failure) => failures.push(failure)); });
   server.listen(0, "127.0.0.1");
@@ -930,3 +930,30 @@ for (const [content, safe] of [
     ]);
   });
 }
+
+
+test('the existing REST/MCP search appends original excerpts after current memory and capsule notes, never context/profile', async t => {
+  const asked = [];
+  const historySearch = async request => { asked.push(request); return [{ conversationTitle: 'Original study', conversationUrl: '/app/chat/session_a', messages: [{ sourceRole: 'assistant', date: null, text: 'Assistant suggested a crossover design.', contextOnly: true, confirmed: false }] }]; };
+  const { stub, call, mcp } = await fixture(t, { config: { memoryHistorySearchEnabled: true }, historySearch,
+    capsuleSearch: async () => [{ source: 'capsule', content: 'Current capsule preference' }] });
+  stub.seedMemory(OV_USER, 'preferences/current.md', 'Current distilled preference', { type: 'preferences' });
+  const rpc = await mcp({ jsonrpc: '2.0', id: 81, method: 'tools/call', params: { name: 'search', arguments: { query: 'preference', limit: 4 } } });
+  const blocks = rpc.messages[0].result.content;
+  assert.equal(blocks.length, 3); assert.match(blocks[0].text, /Current distilled/); assert.match(blocks[1].text, /Current capsule/); assert.match(blocks[2].text, /Original study/);
+  assert.match(blocks[2].text, /assistant.*unknown/); assert.equal(asked[0].user.id, USER); assert.equal(asked[0].project.id, 'p1');
+  const rest = await call('POST', '/api/v1/search/search', { query: 'preference' }); assert.equal(rest.json.result.history.length, 1);
+  await call('POST', '/api/v1/search/search', { query: 'preference', mode: 'context' });
+  await call('POST', '/api/v1/search/search', { query: 'preference', target_uri: `${ROOT}/memories/preferences` });
+  assert.equal(asked.length, 2);
+});
+
+test('history search failure, feature off and recall refusal preserve existing memory results without raw material', async t => {
+  for (const settings of [{ memoryHistorySearchEnabled: false }, { memoryHistorySearchEnabled: true }]) {
+    const { call } = await fixture(t, { config: settings, historySearch: async () => { throw new Error('history unavailable'); } });
+    const answer = await call('POST', '/api/v1/search/search', { query: 'anything' }); assert.equal(answer.status, 200); assert.equal(answer.json.result.history, undefined);
+  }
+  let asked = false;
+  const { call } = await fixture(t, { config: { memoryHistorySearchEnabled: true }, admission: fixedAdmission({ recall: false }), historySearch: async () => { asked = true; return []; } });
+  await call('POST', '/api/v1/search/search', { query: 'anything' }); assert.equal(asked, false);
+});

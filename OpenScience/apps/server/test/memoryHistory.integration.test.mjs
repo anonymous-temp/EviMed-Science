@@ -70,3 +70,38 @@ test('cleanup obligations survive owner deletion and recreated accounts use disj
   assert.ok((await f.database.query("SELECT uri FROM evimed_memory.history_chunks WHERE owner_id=$1 AND state='withdrawn' AND cleaned_at IS NULL", [f.userId])).rows.length > 0);
   f.failDeletes(false); await f.service.drainDeletes(); assert.equal(f.files.size, 0);
 });
+
+
+test('shared project history checks only that namespace rejection ledger', options, async t => {
+  const f = await setup(t); await f.service.ingestArchive(f.commit, f.context);
+  await f.overlay.reject(f.userId, `gp-${'a'.repeat(24)}:preferences`, 'viking://user/gp-aaaaaaaaaaaaaaaaaaaaaaaa/memories/preferences/a.md', ['I prefer trial tables.']);
+  assert.equal((await search(f)).length, 1, 'another namespace cannot suppress personal history');
+});
+
+test('project deletion fences a new in-flight archive and reset rejects undated old archives', options, async t => {
+  const f = await setup(t); await f.service.ingestArchive(f.commit, f.context);
+  await f.service.deleteProject(f.userId, 'default'); assert.deepEqual(await search(f), []);
+  await f.service.ingestArchive(f.commit, f.context); await f.service.drainDeletes(); assert.equal(f.files.size, 0);
+});
+
+test('a crashed writer that lands after successful cleanup remains covered by durable re-sweep', options, async t => {
+  const f = await setup(t); await f.service.ingestArchive(f.commit, f.context);
+  const [uri, bytes] = [...f.files][0]; await f.service.eraseAccount(f.userId); await f.service.drainDeletes();
+  assert.equal(f.files.size, 0); f.files.set(uri, bytes); // accepted engine write lands after the writer process died
+  await f.database.query("UPDATE evimed_memory.history_chunks SET cleaned_at=clock_timestamp()-interval '2 hours' WHERE uri=$1", [uri]);
+  await f.service.drainDeletes(); assert.equal(f.files.size, 0);
+});
+
+test('history flag disables capture/search without disabling already owed cleanup', options, async t => {
+  const f = await setup(t); f.service.config.memoryHistorySearchEnabled = false;
+  await f.service.ingestArchive(f.commit, f.context); assert.equal(f.files.size, 0); assert.deepEqual(await search(f), []);
+  f.service.config.memoryHistorySearchEnabled = true; await f.service.ingestArchive(f.commit, f.context);
+  f.service.config.memoryHistorySearchEnabled = false; await f.service.eraseAccount(f.userId); await f.service.drainDeletes(); assert.equal(f.files.size, 0);
+});
+
+test('hard boundary changes withdraw existing history before any later recall', options, async t => {
+  const f = await setup(t); await f.service.ingestArchive(f.commit, f.context);
+  f.service.eligible = async () => false;
+  assert.deepEqual(await search(f), []);
+  await f.service.drainDeletes(); assert.equal(f.files.size, 0);
+});
