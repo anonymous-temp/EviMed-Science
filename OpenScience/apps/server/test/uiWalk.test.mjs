@@ -24,17 +24,17 @@ import {
   matrixFindings, matrixProbe, matrixRoute, measure, measureStructure, MISSING_RECORDS, ORIGINAL_MIN_WIDTH,
   pageFindings, pageProbe, PAGE_PROBES, pdfFrameReady, pdfPreviewFindings, pdfProbe, pdfSourceTitle, pickVcrStudies, probeFindings,
   readerFindings, readerProbe, readerReady, RETIRED_NAMES, ROUTES, ROW_CLICK_PAGES, rowClickFindings, rowClickShown,
-  rowClickVerdict, rowProbe, sameBox, SECTION_SHAPES_BY_PAGE, skillCreateFindings, skillCreateProbe, skillReturnProbe, sourceReaderRoute, structureFindings, tabOrderFindings,
+  rowClickVerdict, rowProbe, schedulesFindings, schedulesProbe, SECTION_SHAPES_BY_PAGE, skillCreateFindings, skillCreateProbe, skillReturnProbe, sourceReaderRoute, structureFindings, tabOrderFindings,
   OPERATOR_SENTENCES, addressAct, ADDRESS_CASES, addressOpenFindings, addressProbe, addressStateFindings, addressStateHolds, AXE_RULES_PER_NOTICE, AXE_TAGS, axeLoaded, axeNotices,
   axeRun, axeVersionOf, composerFindings, composerProbe, COMPOSER_BOTTOM_PX, loadAxeSource, scanWithAxe,
   asFinding, CAPTURE_MAX_SLICES, CAPTURE_QUALITY, findingText, STEP_TARGETS,
-  discoverCalculationHistory, discoverEmptyTaskProject, PAGE_TEMPLATES, handoffFindings, handoffProbe, HANDOFF_FIELDS, knowledgeGraphFindings, KNOWLEDGE_VIEWS, memoryDrawerFindings, memoryOverviewFindings, MEMORY_OVERVIEW_TILES, navigateForWalk, replaceWalkPage, walkFailureDiagnostics, assertWalkAuthenticated, recoverWalkLoad, routeLoadProbe, memoryRowCoverage, dailyRowCoverage, taskPageFindings, taskPaneReady, TYPE_PAIR_NOTICE, unexpectedRefusals, TOPICS_READ, VCR_TABS_WALK,
+  discoverCalculationHistory, PAGE_TEMPLATES, handoffFindings, handoffProbe, HANDOFF_FIELDS, knowledgeGraphFindings, KNOWLEDGE_VIEWS, memoryDrawerFindings, memoryOverviewFindings, MEMORY_OVERVIEW_TILES, navigateForWalk, replaceWalkPage, walkFailureDiagnostics, assertWalkAuthenticated, recoverWalkLoad, routeLoadProbe, memoryRowCoverage, dailyRowCoverage, TYPE_PAIR_NOTICE, unexpectedRefusals, TOPICS_READ, VCR_TABS_WALK,
 } from "../../../scripts/ops/ui-walk.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
 /** The pages the walk finds by an id in a list the deployment answers, so that no static route names them. */
-const DISCOVERED_PAGES = ["autopilot-first", "calculation-history", "geo-answer", "frontier-item", "frontier-zone", "frontier-zone-items", "frontier-evidence", "frontier-author", "frontier-event", "frontier-topic", "frontier-congress", "evidence-matrix", "files-reader"];
+const DISCOVERED_PAGES = ["calculation-history", "geo-answer", "frontier-item", "frontier-zone", "frontier-zone-items", "frontier-evidence", "frontier-author", "frontier-event", "frontier-topic", "frontier-congress", "evidence-matrix", "files-reader"];
 
 /** The address a page of the walk is opened at, with the fake deployment's ids filled in for the pages it discovers. */
 function routeOf(name) {
@@ -85,7 +85,7 @@ test("every page the router serves at a fixed address is walked, or says why it 
   const router = await readFile(path.join(repoRoot, "apps/web/src/app/router.tsx"), "utf8");
   const app = router.slice(router.indexOf('path: "/app"'), router.indexOf('{ path: "*", element: <NotFound /> }'));
   // One route with an optional last parameter serves the fixed page in front of it too: `autopilot/:taskId?` is /app/autopilot (the list)
-  // and /app/autopilot/<id> (one task), and R13 made the task page one route with the list. An address with any other parameter, or a
+  // and /app/autopilot/<id> (one task), and the router redirects it to the conversation. An address with any other parameter, or a
   // splat, is not a fixed page: its pages are found from the deployment's lists (`discoverRoutes`).
   const pages = [...new Set([...app.matchAll(/\{ path: "([^"]+)", element: <(\w+)/g)]
     .filter(([, , element]) => element !== "Navigate")
@@ -97,6 +97,7 @@ test("every page the router serves at a fixed address is walked, or says why it 
     "/app/home": "the global entry is covered by OPEN_SCIENCE_WALK_CHAT=1, which verifies the default conversation",
     "/app/chat": "the conversation is the kernel's own frame; OPEN_SCIENCE_WALK_CHAT=1 opens it",
     "/app/handoff": "opens only with a hand-off in the address; without one it returns to the conversation",
+    "/app/autopilot": "a redirect to the conversation, where the kernel's own 定时任务 page is drawn in its frame; OPEN_SCIENCE_WALK_CHAT=1 opens it and reads the frame (`chat-schedules`)",
     "/app/runs": "a redirect to the newest run's conversation, decided at run time",
     "/app/files/open": "a compiled file named by its place: it reads the file and goes to the document's page, which `files-reader` walks",
     "/app/memory/map": "a redirect to 总览 (2026-10-27): the map's relation graph and topics are a panel of it; the router test holds each address it carries over",
@@ -803,6 +804,11 @@ function context() {
         url: () => "https://evimed.example.org/__evimed/f/x",
         evaluate: async (fn, arg) => {
           if (typeof fn === "function" && fn.name === "composerProbe") return composerRead(Boolean(arg && arg[0] && arg[0].operator), phone);
+          // FAKE_SCHEDULES=heading|button: the kernel's 定时任务 page with another h1, or without 「新建」; =blank: no page drawn yet.
+          if (typeof fn === "function" && fn.name === "schedulesProbe") {
+            const mode = process.env.FAKE_SCHEDULES || "";
+            return { headings: mode === "blank" ? [] : [mode === "heading" ? "自动化" : "定时任务"], newButton: mode !== "button" && mode !== "blank" };
+          }
           return { composer: !chatFailing(), stats: [] };
         },
       }],
@@ -828,7 +834,7 @@ function context() {
           poisoned = true;
           throw Error("page.goto: net::ERR_NETWORK_CHANGED");
         }
-        url = target.endsWith("/app/home") ? new URL(process.env.FAKE_HOME_REDIRECT === "stuck" ? "/app/home" : "/app/chat" + (process.env.FAKE_HOME_SESSION ? "/ses_new" : "") + "?project=" + (process.env.FAKE_HOME_PROJECT || "default"), target).href : target; routeSettled = false; dialogOpen = false; axeInjected = false; log({ goto: target });
+        url = target.endsWith("/app/autopilot") && process.env.FAKE_SCHEDULES !== "stay" ? new URL("/app/chat?project=default", target).href : target.endsWith("/app/home") ? new URL(process.env.FAKE_HOME_REDIRECT === "stuck" ? "/app/home" : "/app/chat" + (process.env.FAKE_HOME_SESSION ? "/ses_new" : "") + "?project=" + (process.env.FAKE_HOME_PROJECT || "default"), target).href : target; routeSettled = false; dialogOpen = false; axeInjected = false; log({ goto: target });
         if (process.env.FAKE_ROUTE_LOAD && phone && target.endsWith("/std_a/comparator")) {
           loadAttempts++;
           for (const handler of consoles) handler({ type: () => "error", text: () => "Failed to load resource: net::ERR_NETWORK_CHANGED" });
@@ -917,12 +923,7 @@ function context() {
         if (typeof fn === "function" && fn.name === "pageProbe") return probe(arg[0], arg[1], target().search);
         if (typeof fn === "function" && fn.name === "afterClickProbe") {
           if (arg[0] === "sourceDrawer") return { dialog: process.env.FAKE_AFTER !== "bad", drawers: process.env.FAKE_AFTER === "bad" ? 0 : 1 };
-          // The task page, as the shell draws it with the runtime not started: the frame's container is placed over the pane and holds no iframe.
-          // FAKE_AFTER=bad: a time zone shown by its identifier, a box for typing of the page's own, a frame that is not over the pane.
-          const pane = { left: 300, top: 120, width: 900, height: 700 };
-          const bad = process.env.FAKE_AFTER === "bad";
-          return { path: "/app/autopilot/task_1", layout: "split", list: true, main: true, bar: true, marked: 1, pane: "conversation", paneBox: pane, surface: "task",
-            holderBox: bad ? { ...pane, top: 300 } : pane, frameBox: null, editors: bad ? 1 : 0, inputsInMain: 0, dialogs: 0, zoneIds: bad ? ["Asia/Shanghai"] : [] };
+          return null;
         }
         if (typeof fn === "function" && fn.name === "clickNamed") {
           const [role, name] = arg;
@@ -1299,8 +1300,10 @@ test("the chat page, when asked for, is the one page allowed to start the runtim
   assert.equal(report.pages["chat@desktop"].loadedRoute, "/app/chat?project=default");
   assert.equal(report.steps["chat-cleanup-cover"].loadedRoute, "/app/chat?project=default");
   assert.deepEqual([...new Set(log.slice(0, chatAt).filter((entry) => entry.start).map((entry) => entry.verdict))], ["aborted"]);
-  // The conversation's own start is let through; the cleanup cover that follows it is answered by the walk itself, and never reaches the runtime.
-  assert.deepEqual(log.slice(chatAt).filter((entry) => entry.start).map((entry) => entry.verdict), ["allowed", "fulfilled"]);
+  // The conversation's own start is let through, and so is the one /app/autopilot makes (the kernel's 定时任务 page needs the runtime);
+  // the cleanup cover that follows is answered by the walk itself, and never reaches the runtime.
+  assert.deepEqual(log.slice(chatAt).filter((entry) => entry.start).map((entry) => entry.verdict), ["allowed", "allowed", "fulfilled"]);
+  assert.ok(log.some((entry) => entry.goto?.endsWith("/app/autopilot")));
 });
 
 /** What the walk asked of the product's API through the browser context, in order: `{ method, path, data, headers }`. */
@@ -1521,7 +1524,7 @@ test("a row that shows nothing when clicked fails the page it is on, on every pa
   for (const name of ROW_CLICK_PAGES) for (const list of lists(name)) assert.ok(report.failures.includes(sentence(name, list)), `${name}: ${list}`);
   assert.ok(report.failures.includes("memory-overview@desktop: pressing the first row opened no drawer"));
   assert.equal(report.failures.length, ROW_CLICK_PAGES.size + 1 + 2, report.failures.filter((line) => !line.includes("showed nothing")).join("\n"));
-  for (const name of ["frontier-zones", "geo", "geo-accuracy", "geo-questions", "inbox", "geo-sources", "autopilot", "files"]) assert.ok(ROW_CLICK_PAGES.has(name), name);
+  for (const name of ["frontier-zones", "geo", "geo-accuracy", "geo-questions", "inbox", "geo-sources", "files"]) assert.ok(ROW_CLICK_PAGES.has(name), name);
   // 设置 › 账户 is rows with their own buttons and no list that opens anything (the fixture walk could only report it unobservable).
   assert.equal(ROW_CLICK_PAGES.has("account"), false);
 });
@@ -1532,10 +1535,10 @@ test("a row that is a link to an outside address is not a row that shows nothing
   assert.deepEqual(report.pages["frontier@desktop"].rowClicks, [{ label: "资料清单", shown: true }]);
 });
 
-test("a row that is the open one of its list is not a row that shows nothing: 定时任务 opens its first task beside the list before the walk presses it", async () => {
+test("a row that is the open one of its list is not a row that shows nothing: a master/detail page opens its first item beside the list before the walk presses it", async () => {
   const { code, stdout, stderr, report } = await walk({ FAKE_ROWS: "open" });
   assert.equal(code, 0, stdout + stderr);
-  assert.deepEqual(report.pages["autopilot@desktop"].rowClicks[0], { label: "资料清单", shown: true, after: report.pages["autopilot@desktop"].rowClicks[0].after });
+  assert.deepEqual(report.pages["inbox@desktop"].rowClicks[0], { label: "资料清单", shown: true });
   assert.equal(report.failures.some((line) => line.includes("showed nothing")), false);
 });
 
@@ -1549,7 +1552,7 @@ test("with two lists on a page the walk loads the page again before the second c
   assert.deepEqual(events.map((entry) => (entry.rowClick ? `click ${entry.index}` : "goto")), ["goto", "click 第一张清单", "goto", "click 第二张清单", "goto", "goto", "goto"]);
 });
 
-test("R13 first-row clicks: 循证 GEO's groups and findings are clicked like any row, the task page and the drawer are read", async () => {
+test("R13 first-row clicks: 循证 GEO's groups and findings are clicked like any row, the source drawer is read", async () => {
   const { code, stdout, stderr, log, report } = await walk();
   assert.equal(code, 0, stdout + stderr);
   // R19 (GEOB): the groups of 问题与回答 and the findings of 准确与安全 are rows that open a drawer, so nothing is opened or linked first.
@@ -1562,11 +1565,6 @@ test("R13 first-row clicks: 循证 GEO's groups and findings are clicked like an
   assert.deepEqual(sourceRows.map((row) => row.label), ["发现与处理记录", "信源"]);
   assert.equal(sourceRows[0].after, undefined);
   assert.deepEqual(sourceRows[1].after, { dialog: true, drawers: 1 });
-  assert.equal(report.pages["autopilot@desktop"].rowClicks[0].after.pane, "conversation");
-  // The walk starts no runtime, so the task's frame container is compared and an INFO line says there was no iframe to compare: no walk
-  // could fill it, so it is not a coverage gap (a fixture walk accepts none).
-  assert.ok(report.info.includes("autopilot@desktop: the frame's container is placed over the pane, and holds no iframe (the walk starts no runtime), so only the container was compared"), report.info.join("\n"));
-  assert.equal(report.notices.some((line) => line.includes("holds no iframe")), false);
   // The knowledge base: a PDF opened on its own page, then the way back to a long list with the search it was found by.
   assert.ok(report.steps["files-return"].browserBack && report.steps["files-return"].back);
   assert.deepEqual(log.filter((entry) => entry.fill).map((entry) => [entry.fill, entry.value]).filter(([name]) => name === "搜索资料和内容"), [["搜索资料和内容", "一份指南"]]);
@@ -1666,7 +1664,6 @@ test("the refusals a page is walked to meet are not failures, and any other refu
   assert.deepEqual(unexpectedRefusals("extensions-skill-missing", ["404 /api/skills/impeccable-audit-missing", "500 /api/skills"]), ["500 /api/skills"]);
   assert.deepEqual(unexpectedRefusals("memory-shared-missing", ["404 /api/capsules/shares/x", "410 /api/capsules/shares/x", "403 /api/capsules"]), ["403 /api/capsules"]);
   // The kernel's frame of a conversation that opens on landing is refused because the walk starts no runtime; nothing else on that page, and not on any other page.
-  assert.deepEqual(unexpectedRefusals("autopilot", ["503 /api/runtime-ui/frames", "503 /api/agendas", "500 /api/runtime-ui/frames"]), ["503 /api/agendas", "500 /api/runtime-ui/frames"]);
   assert.deepEqual(unexpectedRefusals("geo", ["503 /api/runtime-ui/frames"]), ["503 /api/runtime-ui/frames"]);
   assert.deepEqual(unexpectedRefusals("geo-overview", ["503 /api/runtime-ui/frames", "503 /api/geo/projects/g1", "500 /api/runtime-ui/frames"]), ["503 /api/geo/projects/g1", "500 /api/runtime-ui/frames"]);
   // 医学检索: an account with no EviMed login is refused (403) and a deployment without the service answers 503, and the results page is walked to say
@@ -2020,8 +2017,8 @@ test("a page probe is judged on what it exists to guard, and a probe that read n
   }
 });
 
-test("what a first row opened to is read while it is open: a source's drawer, a task's own page", () => {
-  assert.deepEqual(AFTER_CLICK_KIND, { "geo-sources": "sourceDrawer", autopilot: "taskPage" });
+test("what a first row opened to is read while it is open: a source's drawer", () => {
+  assert.deepEqual(AFTER_CLICK_KIND, { "geo-sources": "sourceDrawer" });
   // R13 (E-15): a source opens a drawer holding data-geo-source-drawer, and no longer its conditions in the row.
   const drawer = node("div", { attrs: { role: "dialog" } }, [node("div", { attrs: { "data-geo-source-drawer": "example.org" } }, [node("p", { text: "正在读取引用它的回答" })])]);
   assert.deepEqual(inPage(page(header(), drawer), () => afterClickProbe(["sourceDrawer"])), { dialog: true, drawers: 1 });
@@ -2041,94 +2038,7 @@ test("the after-click probe reads the list it is about: 信源's first row, afte
   assert.equal(afterClickIndex("geo-sources", ["发现与处理记录", "信源"]), 1);
   assert.equal(afterClickIndex("geo-sources", ["信源"]), 0);
   assert.equal(afterClickIndex("geo-sources", ["发现与处理记录"]), -1, "a page without its 信源 list is read by nothing, and says so");
-  assert.equal(afterClickIndex("autopilot", ["即将执行", "已暂停"]), 0, "a page with no named list reads its first");
   assert.equal(afterClickIndex("inbox", ["消息"]), -1);
-});
-
-/** The task page as the shell draws it: the list beside the task, the task bar, and a pane the kernel's frame is placed over. */
-function taskPage({ pane = "conversation", frame = true, holder = true, extra = [], barText = "每周一、周五 07:30 · 中国标准时间 · 下次 10月12日 07:30", dialog = false, layout = "split", marked = true, surface = "task" } = {}) {
-  const paneBox = { w: 900, h: 700, left: 300 };
-  return node("body", {}, [
-    node("div", { attrs: { "data-session-surface": surface } }, holder ? [node("div", { attrs: { "data-task-frame": "" }, ...paneBox }, frame ? [node("iframe", { attrs: { title: "对话" }, ...paneBox })] : [])] : []),
-    node("main", {}, [node("div", { attrs: { "data-autopilot-layout": layout } }, [
-      node("section", { attrs: { "data-task-list": "" } }, [
-        node("input", { attrs: { type: "search", "aria-label": "搜索任务" } }),
-        node("ul", {}, [node("li", {}, [node("a", { attrs: { "data-row-title": "", "data-task-id": "task_1", ...(marked ? { "aria-current": "page" } : {}) }, text: "每周文献" })])]),
-      ]),
-      node("section", { attrs: { "data-task-main": "" } }, [
-        node("header", { attrs: { "data-task-bar": "" } }, [node("h2", { text: "每周文献" }), node("p", { text: barText })]),
-        ...(pane ? [node("div", { attrs: { role: "region", "data-task-pane": pane }, ...paneBox })] : []),
-        ...extra,
-      ]),
-      ...(dialog ? [node("div", { attrs: { role: "dialog" } })] : []),
-    ])]),
-  ]);
-}
-
-test("the task page is read for its hooks, its pane, the frame over it and what the page does not draw; every verdict is a notice, bar the time-zone identifier", () => {
-  const read = (root, path = "/app/autopilot/task_1") => inPage(root, () => afterClickProbe(["taskPage"]), { path });
-  const good = read(taskPage());
-  assert.deepEqual(good, {
-    path: "/app/autopilot/task_1", layout: "split", list: true, main: true, bar: true, marked: 1, pane: "conversation", surface: "task",
-    paneBox: { left: 300, top: 0, width: 900, height: 700 }, holderBox: { left: 300, top: 0, width: 900, height: 700 }, frameBox: { left: 300, top: 0, width: 900, height: 700 },
-    editors: 0, inputsInMain: 0, dialogs: 0, zoneIds: [],
-  });
-  // With the runtime up the iframe is compared; the same rectangle passes in silence.
-  assert.deepEqual(taskPageFindings("autopilot", good), { failures: [], notices: [], info: [] });
-
-  // The walk starts no runtime: the container is over the pane and holds no iframe, and the notice says what was and was not compared.
-  const bare = read(taskPage({ frame: false }));
-  assert.equal(bare.frameBox, null);
-  assert.deepEqual(taskPageFindings("autopilot", bare), { failures: [], notices: [], info: ["autopilot@desktop: the frame's container is placed over the pane, and holds no iframe (the walk starts no runtime), so only the container was compared"] });
-
-  // A frame that is not over the pane, a text box of the page's own, a dialog, an unmarked row, a missing surface: each its own notice.
-  const off = { ...good, frameBox: { ...good.frameBox, top: 40 } };
-  assert.deepEqual(taskPageFindings("autopilot", off).notices, ["autopilot@desktop: the kernel frame is 900×700 at 300,40 and the pane 900×700 at 300,0 (the same rectangle)"]);
-  assert.deepEqual(taskPageFindings("autopilot", { ...good, holderBox: { ...good.holderBox, width: 880 }, frameBox: null }).notices,
-    ["autopilot@desktop: the kernel frame's container is 880×700 at 300,0 and the pane 900×700 at 300,0 (the same rectangle)"]);
-  assert.equal(sameBox(good.paneBox, { ...good.paneBox, left: good.paneBox.left + 2 }), true);
-  assert.equal(sameBox(good.paneBox, { ...good.paneBox, left: good.paneBox.left + 3 }), false);
-  assert.equal(sameBox(null, good.paneBox), false);
-  const typed = read(taskPage({ extra: [node("textarea", { attrs: { "aria-label": "补充" } })], dialog: true, marked: false, surface: "hidden" }));
-  assert.deepEqual([typed.editors, typed.dialogs, typed.marked], [1, 1, 0]);
-  assert.deepEqual(taskPageFindings("autopilot", typed).notices, [
-    "autopilot@desktop: 0 row(s) of the list are marked as the open task (aria-current=page; one)",
-    "autopilot@desktop: the task page draws 1 text box(es) of its own; the conversation's input is the kernel's, inside the frame",
-    "autopilot@desktop: 1 dialog(s) open on the task page right after the task opened (the conversation is not in a dialog)",
-    "autopilot@desktop: the conversation surface reads hidden while the task's conversation is on (task)",
-  ]);
-  // The list's own search is not a text box of the page's main area, and the sidebar's search is the shell's.
-  assert.equal(read(taskPage({ extra: [node("input", { attrs: { type: "checkbox" } })] })).inputsInMain, 0);
-  assert.equal(read(taskPage({ extra: [node("input", { attrs: { type: "search" } })] })).inputsInMain, 1);
-
-  // A pane that is not the conversation has no frame placed over it: said, not judged. A page with no pane yet is not observable either.
-  assert.deepEqual(taskPageFindings("autopilot", read(taskPage({ pane: "never-run", holder: false }))).notices,
-    ["autopilot@desktop: not observable: the first task's pane reads never-run, so no conversation frame is placed over it"]);
-  assert.deepEqual(taskPageFindings("autopilot", read(taskPage({ pane: null, holder: false }))).notices,
-    ["autopilot@desktop: not observable: the task's pane (data-task-pane) had not rendered, so the conversation's place was not read"]);
-  assert.deepEqual(taskPageFindings("autopilot", read(taskPage({ holder: false }))).notices,
-    ["autopilot@desktop: not observable: the pane reads conversation and no frame container (data-task-frame) is placed over it"]);
-  // The single column (the list is the page, or the task is): no list beside the task to mark, no list required.
-  assert.deepEqual(taskPageFindings("autopilot", read(taskPage({ layout: "single", marked: false, frame: false, holder: false, pane: "waiting" }))).notices,
-    ["autopilot@desktop: not observable: the first task's pane reads waiting, so no conversation frame is placed over it"]);
-  // A click that did not go to a task's page reads nothing of it.
-  assert.deepEqual(taskPageFindings("autopilot", { ...good, path: "/app/autopilot" }).notices,
-    ["autopilot@desktop: not observable: the first row did not go to a task's own page (the address is /app/autopilot), so the task page was not read"]);
-  // An account with no task: its first row is an example, and an example opens the form for a new task, which is no task's page.
-  assert.deepEqual(taskPageFindings("autopilot", { ...good, path: "/app/autopilot/new", bar: false }).notices,
-    ["autopilot@desktop: not observable: the first row did not go to a task's own page (the address is /app/autopilot/new), so the task page was not read"]);
-  assert.deepEqual(taskPageFindings("autopilot", { ...good, path: "/app/autopilot/newer" }).notices, []);
-  assert.deepEqual(taskPageFindings("autopilot", null), { failures: [], notices: [], info: [] });
-  assert.deepEqual(afterClickFindings("autopilot", "taskPage", good), { failures: [], notices: [], info: [] });
-  assert.deepEqual(afterClickFindings("autopilot", "taskPage", null), { failures: [], notices: [] });
-
-  // The one failure is carried over from the drawer: a time zone is named, never shown by its identifier.
-  const named = read(taskPage({ barText: "每天 07:00 · Asia/Shanghai · 下次 10月12日 07:00" }));
-  assert.deepEqual(named.zoneIds, ["Asia/Shanghai"]);
-  assert.deepEqual(taskPageFindings("autopilot", named).failures, ["autopilot@desktop: the task bar names a time zone by its identifier: Asia/Shanghai"]);
-  // The pane's wait is the pane being on the page.
-  assert.equal(inPage(taskPage(), () => taskPaneReady()), true);
-  assert.equal(inPage(taskPage({ pane: null }), () => taskPaneReady()), false);
 });
 
 test("a PDF's original is wide on the document's page and fit to the width; a column that is too narrow or a viewer without the fragment fails", () => {
@@ -2405,8 +2315,8 @@ test("a page that regresses on what R11 fixed fails the walk and names the page 
   };
   const sidebar = await failures({ FAKE_STRUCTURE: "sidebar" });
   assert.equal(sidebar.code, 1);
-  assert.ok(sidebar.failures.includes("autopilot@desktop: 2 sidebar landmarks named 侧栏 (exactly one)"));
-  assert.ok((await failures({ FAKE_STRUCTURE: "nolink" })).failures.includes("autopilot@phone: the sidebar has no link to the conversation"));
+  assert.ok(sidebar.failures.includes("frontier@desktop: 2 sidebar landmarks named 侧栏 (exactly one)"));
+  assert.ok((await failures({ FAKE_STRUCTURE: "nolink" })).failures.includes("frontier@phone: the sidebar has no link to the conversation"));
   assert.ok((await failures({ FAKE_STRUCTURE: "notinert" })).failures.includes("files@phone: the closed sidebar is not inert — its links are still tab stops"));
   assert.ok((await failures({ FAKE_STRUCTURE: "tabs" })).failures.some((failure) => /^files@phone: with the sidebar closed, Tab reaches it: /.test(failure)));
   assert.ok((await failures({ FAKE_STRUCTURE: "scroller" })).failures.includes("files@desktop: 1 region(s) scroll sideways and are no tab stop and hold none: table"));
@@ -2427,7 +2337,6 @@ test("a page that regresses on what R11 fixed fails the walk and names the page 
   assert.ok((await failures({ FAKE_BACK: "stay" })).failures.includes("extensions-skill-missing@desktop: 回到技能列表 goes to /app/extensions/skills/impeccable-audit-missing (/app/extensions/installed)"));
   const after = await failures({ FAKE_AFTER: "bad" });
   assert.ok(after.failures.includes("geo-sources@desktop: clicking the first source opened no drawer (a dialog holding data-geo-source-drawer)"));
-  assert.ok(after.failures.includes("autopilot@desktop: the task bar names a time zone by its identifier: Asia/Shanghai"));
   assert.ok((await failures({ FAKE_PDF: "narrow" })).failures.includes("files@desktop: the original of a PDF is 559 px wide on its page (at least 560)"));
   assert.ok((await failures({ FAKE_SKILL: "bare" })).failures.includes("extensions-installed@desktop: the creation form has 0 caption(s) under its fields (two)"));
   // The old drawer opening in place of the page's creation mode is a failure that says what opened.
@@ -2571,6 +2480,45 @@ test("the composer is read inside the kernel's frame: the room under it, the chi
   assert.deepEqual(composerFindings("desktop", { ...phone, rowLines: 2, scrollsSideways: true }).notices, []);
 });
 
+test("the kernel's 定时任务 page is read inside the frame: a heading that reads 定时任务 and a visible 「新建」, after the address ended on the conversation", () => {
+  const frame = (headings, buttons) => page(...headings.map((text) => node("h1", { text })), ...buttons.map((text) => node("button", { text })));
+  const read = (root) => inPage(root, () => schedulesProbe());
+  const good = read(frame(["定时任务"], ["新建", "已开启"]));
+  assert.deepEqual(good, { headings: ["定时任务"], newButton: true });
+  assert.deepEqual(schedulesFindings("/app/chat", good), []);
+  assert.deepEqual(schedulesFindings("/app/chat/ses_1", good), []);
+  // Exact text: a heading that only contains the words, or a button that says more, is not the page.
+  assert.deepEqual(read(frame(["定时任务设置"], ["新建任务"])), { headings: ["定时任务设置"], newButton: false });
+  assert.equal(read(frame([], ["新建"])).headings.length, 0);
+  // Each defect is its own failure, and a page that cannot be read is one too: nothing here passes by not looking.
+  assert.deepEqual(schedulesFindings("/app/chat", { headings: ["自动化"], newButton: true }), ["autopilot@desktop: the kernel frame's h1 does not read 定时任务 (“自动化”)"]);
+  assert.deepEqual(schedulesFindings("/app/chat", { headings: [], newButton: true }), ["autopilot@desktop: the kernel frame's h1 does not read 定时任务 (no visible h1)"]);
+  assert.deepEqual(schedulesFindings("/app/chat", { headings: ["定时任务"], newButton: false }), ["autopilot@desktop: the kernel frame draws no 「新建」 button on the 定时任务 page"]);
+  assert.deepEqual(schedulesFindings("/app/autopilot", good), ["autopilot@desktop: /app/autopilot ended on /app/autopilot, not on the conversation page (/app/chat)"]);
+  assert.deepEqual(schedulesFindings("/app/chatter", good), ["autopilot@desktop: /app/autopilot ended on /app/chatter, not on the conversation page (/app/chat)"]);
+  assert.deepEqual(schedulesFindings("/app/chat", null), ["autopilot@desktop: not observable: no kernel frame drew a page, so the 定时任务 page was not read"]);
+});
+
+test("with the chat asked for, the walk opens /app/autopilot, reads the kernel's 定时任务 page, and fails when it is not there", async () => {
+  const ok = await walk({ OPEN_SCIENCE_WALK_CHAT: "1" });
+  assert.equal(ok.code, 0, ok.stdout + ok.stderr);
+  assert.deepEqual(ok.report.steps["chat-schedules"], { target: ok.report.steps["chat-schedules"].target, path: "/app/chat", headings: ["定时任务"], newButton: true });
+  // Without the chat page the walk does not look, and no view of the old page is walked.
+  const bare = await walk();
+  assert.equal(bare.report.steps?.["chat-schedules"], undefined);
+  assert.equal(Object.keys(bare.report.pages).some((name) => name.startsWith("autopilot")), false);
+  for (const [mode, sentence] of [
+    ["heading", "autopilot@desktop: the kernel frame's h1 does not read 定时任务 (“自动化”)"],
+    ["button", "autopilot@desktop: the kernel frame draws no 「新建」 button on the 定时任务 page"],
+    ["blank", "autopilot@desktop: the kernel frame's h1 does not read 定时任务 (no visible h1)"],
+    ["stay", "autopilot@desktop: /app/autopilot ended on /app/autopilot, not on the conversation page (/app/chat)"],
+  ]) {
+    const bad = await walk({ OPEN_SCIENCE_WALK_CHAT: "1", FAKE_SCHEDULES: mode });
+    assert.equal(bad.code, 1, mode);
+    assert.ok(bad.report.failures.includes(sentence), `${mode}: ${bad.report.failures.join("\n")}`);
+  }
+});
+
 test("with the chat asked for, the walk reads the composer at both widths, restores the window, and fails nothing", async () => {
   const { code, stdout, stderr, log, report } = await walk({ OPEN_SCIENCE_WALK_CHAT: "1" });
   assert.equal(code, 0, stdout + stderr);
@@ -2607,7 +2555,7 @@ test("with the chat asked for, the walk reads the composer at both widths, resto
 });
 
 test("the pages the reference named have a section budget, and stacking more fails them like every other page", () => {
-  for (const name of ["inbox", "geo", "frontier-zones", "autopilot", "account"]) {
+  for (const name of ["inbox", "geo", "frontier-zones", "account"]) {
     assert.ok(Number.isInteger(SECTION_SHAPES_BY_PAGE[name]), `${name} has a section budget`);
   }
   const stacked = ["ul>li", "table>thead+tbody", "svg>g", "section>h2+ul"];
@@ -3246,33 +3194,6 @@ test("calculation history discovery requires its real purpose, successful job, c
   assert.equal(await discover({ "https://walk.test/api/vcr/studies/calc/jobs": { jobs: [] } }), null);
   assert.equal(await discover({ "https://walk.test/api/vcr/studies/calc/jobs/job-real/result": {} }), null);
   assert.equal(await discoverCalculationHistory({}, "https://walk.test", [studies[0]]), null);
-});
-
-test("the first-use state of 定时任务 is found in a project of the account that holds no task, and nowhere else", async () => {
-  const base = "https://walk.test";
-  const project = (id, extra = {}) => ({ id, name: id, archivedAt: null, ...extra });
-  const task = (extra = {}) => ({ id: "t", payload: { title: "每周文献", ...extra } });
-  const discover = (answers, failures = []) => discoverEmptyTaskProject({ request: { get: async (url) => {
-    const answer = answers[url.slice(base.length)];
-    if (answer === undefined) return { ok: () => false, status: () => 404, json: async () => ({}) };
-    return { ok: () => true, status: () => 200, json: async () => ({ data: answer }) };
-  } } }, base, failures);
-  const lists = (byProject) => Object.fromEntries(Object.entries(byProject).map(([id, page]) => [`/api/autopilot/agendas?projectId=${id}`, page]));
-  // The fixture's shape: the default project holds the tasks, a study's project none; the production walk's throwaway account has only the default one, empty.
-  assert.equal(await discover({ "/api/projects": [project("default"), project("vcr-ev201")], ...lists({ default: { items: [task()], available: true }, "vcr-ev201": { items: [], available: true } }) }), "vcr-ev201");
-  assert.equal(await discover({ "/api/projects": [project("default")], ...lists({ default: { items: [], available: true } }) }), "default");
-  // A deleted task is not a task; an archived project, a project whose scheduling is not offered and a list that cannot be read are not the page.
-  assert.equal(await discover({ "/api/projects": [project("default")], ...lists({ default: { items: [task({ archivedAt: "2026-10-01T00:00:00Z" })], available: true } }) }), "default");
-  assert.equal(await discover({ "/api/projects": [project("a", { archivedAt: "2026-10-01T00:00:00Z" }), project("b"), project("c")], ...lists({ a: { items: [], available: true }, b: { items: [], available: false } }) }), null);
-  assert.equal(await discover({ "/api/projects": [project("default"), project("other")], ...lists({ default: { items: [task()] }, other: { items: [task()] } }) }), null);
-  assert.equal(await discover({}), null);
-  // A read the deployment fails is a failure of the walk's own, not an account with nothing.
-  const failures = [];
-  assert.equal(await discoverEmptyTaskProject({ request: { get: async () => ({ ok: () => false, status: () => 502, json: async () => ({}) }) } }, base, failures), null);
-  assert.equal(failures.length, 1);
-  // The page is a view of the table with its own template, held to the page's section budget, and it is walked from its own address.
-  assert.ok(PAGE_TEMPLATES.views.some((view) => view.view === "autopilot-first" && view.discovered && view.template === "T2" && view.rows === false));
-  assert.equal(SECTION_SHAPES_BY_PAGE["autopilot-first"], 2);
 });
 
 test("Inbox selection controls get no budget allowance, and selection controls outside one named toolbar fail", () => {

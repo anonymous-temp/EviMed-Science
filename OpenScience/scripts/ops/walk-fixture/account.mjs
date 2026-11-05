@@ -1,9 +1,8 @@
 /**
  * What an account that has been used for a few weeks holds besides the modules' own data, for the walk's fixture: the things remembered
- * about the person and the project (the memory page and its map), three scheduled tasks, and an inbox of forty-odd notices from two
+ * about the person and the project (the memory page and its map), and an inbox of forty-odd notices from two
  * sources. The memories are files of the memory engine's, written into the engine's stand-in the way the engine's own extraction would
- * have (each with the overlay's revision that dates it); the rest through the platform's own stores (`autopilotService.create`,
- * `notificationService.create`); every sentence is invented.
+ * have (each with the overlay's revision that dates it); the rest through the platform's own stores (`notificationService.create`); every sentence is invented.
  */
 
 import path from "node:path";
@@ -38,13 +37,6 @@ const MEMORIES = [
   ["project", "follow_up", "follow_up.registry_number", "拿到注册号后补进方案与论文的方法部分。", "inferred", 0.5, 18],
   ["project", "follow_up", "follow_up.safety_table", "安全性表格还缺注射部位反应的数据，向数据组要。", "inferred", 0.5, 9],
   ["project", "run_summary", "run_summary.literature_scan", "9 月 28 日的文献扫描：检出 41 篇，纳入 12 篇，三篇需要补全文。", "system", 0.3, 19],
-];
-
-/** The three scheduled tasks: [title, instruction, hour, task types]. */
-const TASKS = [
-  ["每日行业要闻", "每天早上整理前一天与糖尿病药物治疗有关的新闻、监管动态和重要论文，按重要程度排序，每条一句话。", 7, ["routine"]],
-  ["每周工作汇总", "每周五下午汇总本周的对话、文件与待办，写成一页纸的周报，并列出下周要做的三件事。", 16, ["routine"]],
-  ["心衰证据追踪", "追踪射血分数保留心衰的新随机试验与指南更新，有新的证据时对照现有结论并说明差别。", 8, ["literature-sentinel", "evidence-update"]],
 ];
 
 /** The methods learned from the account's work: [name, title, line, what it is for, what it is not for, what it does]. */
@@ -167,15 +159,6 @@ export async function furnishAccount(app, user, ids, { log, engine }) {
     }
     log(`account: ${METHODS.length} learned methods`);
   } else log("account: no learning service on the control plane; no methods");
-
-  // ---- scheduled tasks (made, not started: nothing here can run one). Each has its conversation, as the first execution would open it
-  // (`conversation`): the task page places the kernel's frame over that pane, which is what the walk reads.
-  for (const [title, prompt, scheduleHour, taskTypes] of TASKS) {
-    const agenda = await app.autopilotService.create(user.id, { projectId: "default", title, prompt, topics: [title], taskTypes, dailyBudgetCny: 3, weeklyBudgetCny: 15, maxEpisodeCny: 2,
-      scheduleHour, timeZone: "Asia/Shanghai" });
-    await app.autopilotService.conversation(user.id, agenda.id);
-  }
-  log(`account: ${TASKS.length} scheduled tasks`);
 
   // ---- the inbox: twenty-four notices about the GEO project and twenty about the studies
   const at = (/** @type {number} */ hoursAgo) => new Date(now - hoursAgo * 3_600_000);
