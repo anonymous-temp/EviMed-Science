@@ -4,7 +4,7 @@
  * labelled with the source's new state.
  *
  * The result side — which versions name the source, which calculations among their value bindings do, the impact rows,
- * the inbox notice and the continuation of an authorized agenda — stays in `resultImpact.mjs`, which asks this module
+ * and the inbox notice — stays in `resultImpact.mjs`, which asks this module
  * for the rest. Registered by one line (`new ResultImpactService({ knowledge })`) and absent, the impact path is what it
  * was.
  *
@@ -233,28 +233,4 @@ export class KnowledgeChangeService {
     try { return { items: [...(await this.#methodsLinked(ownerId, versionIds)).values()] }; }
     catch (error) { this.report(codeOf(error)); return { unknown: "lookup_failed" }; }
   }
-}
-
-/**
- * The agenda the researcher already runs for a result: the one whose episode produced it, or one of the calculations it
- * rests on, found by the run each version records — never by a topic or a title. Only a running agenda (enabled and
- * active, not archived) is returned; a paused or not-started one is not a standing authorization, and a result nobody's
- * agenda produced has none, so its impact waits for the researcher's own choice. Absent or failing, there is none.
- * @param {{ results: any, autopilot: any }} dependencies
- * @returns {(ownerId: string, impact: any) => Promise<string | null>}
- */
-export function producingAgenda({ results, autopilot }) {
-  return async (ownerId, impact) => {
-    const projectId = impact.projectId;
-    const versionIds = [impact.payload.versionId, ...(impact.payload.affected?.calculations?.items ?? []).map((/** @type {any} */ item) => item.versionId)];
-    for (const versionId of versionIds) {
-      const runId = (await results.get(ownerId, projectId, versionId).catch(() => null))?.producer?.runId;
-      if (!runId) continue;
-      const agendaId = (await autopilot.episodeForRun(ownerId, projectId, runId).catch(() => null))?.payload?.agendaId;
-      if (typeof agendaId !== "string") continue;
-      const agenda = await autopilot.get(ownerId, agendaId).catch(() => null);
-      if (agenda?.projectId === projectId && agenda.payload.enabled && agenda.payload.status === "active" && !agenda.payload.archivedAt) return agendaId;
-    }
-    return null;
-  };
 }

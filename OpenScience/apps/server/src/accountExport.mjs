@@ -300,15 +300,14 @@ const payloadProjections = {
       // What the run left, from the domain's own closed projection; absent until the run ends.
       ...(payload.outcome ? { outcome: projectCorrectionOutcome(payload.outcome) } : {}) };
   },
-  // Which source changed under which result, and whether research continued.
+  // Which source changed under which result.
   "result-impact": payload => {
     recorded(payload, "result-impact");
     return { ...pick(payload, ["schemaVersion", "recordType", "versionId", "effect", "claimIds", "coverage", "historicalResultPreserved", "recomputed", "observedAt"]),
       source: pick(payload.source, ["id", "digest", "versionId", "doi", "contentDigest", "replacedBy"]),
       // What was found to rest on the source (N15): the calculations, memories and learned methods, as the closed record.
       ...(projectAffected(payload.affected) ? { affected: projectAffected(payload.affected) } : {}),
-      sourceStatus: pick(payload.sourceStatus, ["state", "checkedAt", "reason", "updates"]),
-      continuation: pick(payload.continuation, ["status", "reason", "agendaId", "episodeId", "requestedAt", "scheduledAt"]) };
+      sourceStatus: pick(payload.sourceStatus, ["state", "checkedAt", "reason", "updates"]) };
   },
   // Two record types share this kind: the frozen recipe of an engine result,
   // and one request to calculate or recalculate.

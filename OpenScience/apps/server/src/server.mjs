@@ -56,7 +56,7 @@ import { bindVcrConversationReference, validateVcrConversationReference } from "
 import { ResultRevisionService } from "./resultRevision.mjs";
 import { ResultCorrectionService } from "./resultCorrection.mjs";
 import { createResultReuseRoutes } from "./resultReuseRoutes.mjs";
-import { KnowledgeChangeService, producingAgenda } from "./knowledgeChange.mjs";
+import { KnowledgeChangeService } from "./knowledgeChange.mjs";
 import { KnowledgePageService } from "./knowledgePageService.mjs";
 import { createKnowledgePageRoutes } from "./knowledgePageRoutes.mjs";
 import { KnowledgePageWorker } from "./knowledgePageWorker.mjs";
@@ -2414,10 +2414,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // The model decision before each episode: metered under purpose `autopilot`,
     // and absent it the date rotation chooses (autopilotNextAction.mjs).
     planner: autopilotPlanner,
-    authorizeContinuation: async (userId, projectId, binding) => {
-      if (!resultImpacts) throw new HttpError(409, "result_impact_source_unavailable", "Research continuation is unavailable.");
-      await resultImpacts.assertContinuation(userId, projectId, binding);
-    },
   }) : null;
   const autopilotRoutes = createAutopilotRoutes({ store, service: autopilotService, enabled: config.autopilotEnabled, maxJsonBytes: config.maxJsonBytes,
     // One execution's own stop: the run is stopped the way its own cancel stops it (`stopRunForUser`), so the episode folds as
@@ -3364,9 +3360,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       pagesQuoting: (userId, projectId, sourceId) => knowledgePages ? knowledgePages.pagesQuoting(userId, projectId, sourceId) : [] },
     report: code => { void securityAudit(config, "knowledge.change", "failed", { code }).catch(() => {}); } });
   const resultImpacts = resultProvenance ? new ResultImpactService({ documents: productDocuments, results: resultProvenance,
-    autopilot: autopilotService, notifications: notificationService, knowledge: knowledgeChange, sourceChanges,
-    authorizeContinuation: autopilotService && config.sourceChangeRecheckLimit > 0 ? producingAgenda({ results: resultProvenance, autopilot: autopilotService }) : null,
-    autoRecheckLimit: config.sourceChangeRecheckLimit,
+    notifications: notificationService, knowledge: knowledgeChange, sourceChanges,
     report: code => { void securityAudit(config, "result.impact", "failed", { code }).catch(() => {}); } }) : null;
   // Keeping the evidence cards current and answering a reader's challenge (evidenceCurrency.mjs, evidenceChallenges.mjs; flywheel F13, F14). Composed with
   // the frontier and switched by OPEN_SCIENCE_EVIDENCE_UPKEEP_ENABLED; off, the routes answer 404 and the worker's `evidence-upkeep` loop does not exist. The
@@ -3441,7 +3435,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       const version = await resultProvenance.get(user.id, projectId, versionId);
       if (typeof version?.path === "string" && version.path) await learningEvidence.noteFileUse(await store.requireProject(user, projectId), { path: version.path });
     } });
-  const resultImpactRoutes = createResultImpactRoutes({ store, service: resultImpacts, maxJsonBytes: config.maxJsonBytes });
+  const resultImpactRoutes = createResultImpactRoutes({ store, service: resultImpacts });
   const resultCapture = resultProvenance ? createResultProducerCapture({ service: resultProvenance,
     runtimeWorkspaceRoot: project => runtimeManager.runtimeWorkspaceRoot(project),
     onFailure: failure => { void securityAudit(config, "result.capture", "failed", failure).catch(() => {}); } }) : null;

@@ -921,16 +921,6 @@ test("children the caller seeds are fetched even though the parent log names non
   assert.equal(collected[2].label, "subagent", "a child with no label still has a usable one");
 });
 
-test("stopping a logical autopilot scope preserves the real attempt, not its unsent predecessor", () => {
-  const logical = `episode-${"a".repeat(32)}-v1`;
-  const old = { id: "old", dispatchId: logical, status: "failed", dispatchStatus: "rejected", errorCode: "product_job_lease_lost" };
-  const sent = { id: "new", dispatchId: `${logical}-a2`, status: "succeeded" };
-  assert.deepEqual(runsToReadBeforeStop([old, sent], { boundedRunId: logical }), [sent]);
-  assert.deepEqual(runsToReadBeforeStop([old, { ...sent, transcript: {} }], { boundedRunId: logical }), []);
-  assert.deepEqual(runsToReadBeforeStop([old, sent], { boundedRunId: logical, captured: id => id === "new" }), []);
-  assert.deepEqual(runsToReadBeforeStop([sent], { boundedRunId: logical.slice(0, -3) }), []);
-});
-
 test("an excerpt drops a message by the shape of a credential or an identifier, wherever it sits in the message, and never because a sentence mentions a password", () => {
   const messages = [
     { sessionId: "ses_root", seq: 1, parts: [{ type: "text", text: "把表里的密码列和 token 列去掉，再按科室汇总" }] },

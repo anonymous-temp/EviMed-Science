@@ -26,7 +26,6 @@ export type ResultImpact = ProductRecord<{
   affected?: ResultImpactAffected | null;
   historicalResultPreserved: boolean;
   recomputed: boolean;
-  continuation: { status: "awaiting_user" | "preparing" | "scheduled" | "unavailable"; agendaId?: string; episodeId?: string };
 }>;
 
 const impactPath = (projectId: string) => `/projects/${encodeURIComponent(projectId)}/result-impacts`;

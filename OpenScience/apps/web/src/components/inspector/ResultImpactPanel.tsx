@@ -78,11 +78,11 @@ function ImpactItem({ impact }: { impact: ResultImpact }) {
   // A file the knowledge base holds in a newer version is not a publisher's notice: it says so itself.
   const replaced = status.updates.some(update => update.kind === "replaced");
   return <section aria-label={`来源更新 ${impact.payload.source.id}`} className="space-y-2 rounded-card border border-border p-3">
-    <p className="break-all text-caption">{impact.payload.continuation.status === "unavailable" ? "原来源已不可用" : replaced ? "资料库中的文件" : impact.payload.source.doi ?? impact.payload.source.id}</p>
+    <p className="break-all text-caption">{status.state === "unavailable" ? "原来源已不可用" : replaced ? "资料库中的文件" : impact.payload.source.doi ?? impact.payload.source.id}</p>
     {replaced ? <Tag tone="warn">资料库文件已有新版本</Tag> : <SourceUpdateBadges updates={status.updates} updateStatus={status} />}
     <p className="text-caption text-muted">{status.state === "changed" ? "来源有了变化，依赖它的部分值得核对。这不说明原来的结论有误，尚未重新计算。" : "来源更新情况无法确认，不能据此判断结论已改变。"} 历史结果已保留。</p>
     {impact.payload.claimIds.length > 0 && <p className="text-caption">涉及 {impact.payload.claimIds.length} 处结论</p>}
-    {impact.payload.affected && impact.payload.continuation.status !== "unavailable" && <ul aria-label="依赖该来源的内容" className="list-disc space-y-1 pl-5 text-caption">
+    {impact.payload.affected && status.state !== "unavailable" && <ul aria-label="依赖该来源的内容" className="list-disc space-y-1 pl-5 text-caption">
       {affectedLines(impact.payload.affected).map(line => <li key={line}>{line}</li>)}
     </ul>}
   </section>;

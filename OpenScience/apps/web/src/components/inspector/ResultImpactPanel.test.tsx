@@ -9,7 +9,7 @@ vi.mock("@/lib/resultImpactClient", () => ({ listResultImpacts: api.list, checkR
 const changed: ResultImpact = { id: "impact_1", revision: 4, createdAt: "", updatedAt: "", deletedAt: null, payload: {
   versionId: "rv_old", source: { id: "source_1", doi: "10.1234/paper" },
   sourceStatus: { state: "changed", checkedAt: "2026-10-02T00:00:00Z", updates: [{ kind: "correction", noticeDoi: "10.1234/correction", date: null, source: "publisher" }] },
-  effect: "potentially_affected", claimIds: ["C1"], historicalResultPreserved: true, recomputed: false, continuation: { status: "awaiting_user" },
+  effect: "potentially_affected", claimIds: ["C1"], historicalResultPreserved: true, recomputed: false
 } };
 function mount(versionId = "rv_old") { return render(<ResultImpactPanel key={versionId} projectId="p" versionId={versionId} digest="selected_digest" />); }
 beforeEach(() => {
