@@ -9,8 +9,8 @@
     "unchanged": [],
     "queue_status": {
       "Semantic": {
-        "processed": 2,
-        "requeue_count": 27,
+        "processed": 1,
+        "requeue_count": 0,
         "error_count": 0,
         "errors": []
       },

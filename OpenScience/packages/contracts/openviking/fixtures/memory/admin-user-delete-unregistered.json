@@ -1,6 +1,6 @@
 {
   "note": "Deleting a trusted user who has files but is not in the register yet (first seen less than the flush interval ago): NOT FOUND, and the files stay.",
-  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.1.1",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.3",
   "request": {
     "method": "DELETE",
     "path": "/api/v1/admin/accounts/evimed/users/fx-user-f",

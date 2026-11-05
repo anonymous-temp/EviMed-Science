@@ -226,22 +226,29 @@ test("a Compile runtime the server says it does not have, or that is not configu
   }
 });
 
-test("a probe that ends any way but \"no files\" says what the engine said, and is stopped if it ran", async () => {
+test("a probe that does not end in the runtime's own result says what the engine said, and is stopped if it ran", async () => {
   // Authored: the task's `error` text. A runtime that did not receive the caller's identity ends the probe with a refusal of its own
   // (what v0.5.0 did without its shim: 401 "Trusted OpenViking chat requires X-OpenViking-Account and X-OpenViking-User").
   {
-    const { fetchImpl } = await readyWith((exchange) => (isPoll(exchange) && exchange.response.result.status === "failed"
-      ? withTask(exchange, { error: "UNAUTHENTICATED: Trusted OpenViking chat requires X-OpenViking-Account and X-OpenViking-User" }) : null));
+    const { fetchImpl } = await readyWith((exchange) => (isPoll(exchange) && exchange.response.result.status === "completed"
+      ? withTask(exchange, { status: "failed", stage: "failed", result: null, error: "UNAUTHENTICATED: Trusted OpenViking chat requires X-OpenViking-Account and X-OpenViking-User" }) : null));
     const { engine } = engineFor(fetchImpl);
     const status = await engine.check();
     assert.equal(status.facts.compileIdentity.code, "openviking_compile_probe_unexpected");
     assert.match(String(status.facts.compileIdentity.reason), /Trusted OpenViking chat requires/);
     assert.deepEqual(status.degraded, ["knowledge"]);
   }
-  // Authored: a task that completes (an empty source no longer ends the compile at once) is cancelled and reported.
+  // Authored: a task the server completed itself (the incremental settlement, `result: {}`) says nothing about the runtime.
   {
-    const { fetchImpl, seen } = await readyWith((exchange) => (isPoll(exchange) && exchange.response.result.status === "failed"
-      ? withTask(exchange, { status: "completed", stage: "completed", error: null }) : null));
+    const { fetchImpl } = await readyWith((exchange) => (isPoll(exchange) && exchange.response.result.status === "completed" ? withTask(exchange, { result: {} }) : null));
+    const { engine } = engineFor(fetchImpl);
+    const status = await engine.check();
+    assert.equal(status.facts.compileIdentity.code, "openviking_compile_probe_unexpected");
+    assert.match(String(status.facts.compileIdentity.reason), /without the Compile runtime reading/);
+  }
+  // Authored: a probe that runs on into writing pages is cancelled and reported.
+  {
+    const { fetchImpl, seen } = await readyWith((exchange) => (isPoll(exchange) && exchange.response.result.status === "running" ? withTask(exchange, { stage: "compile: agent" }) : null));
     const { engine } = engineFor(fetchImpl);
     const status = await engine.check();
     assert.equal(status.facts.compileIdentity.code, "openviking_compile_probe_unexpected");
@@ -283,6 +290,20 @@ test("a new volume's first minutes read as registration pending, never as missin
   assert.equal(engine.ready("nativeMemory").code, "openviking_registration_pending");
 });
 
+test("the compile identity is proven once per engine version: a full run of the empty source is a paid planning call", async () => {
+  const first = await replay("engine-check-ready");
+  const { engine } = engineFor(first.fetchImpl);
+  assert.equal((await engine.check()).facts.compileIdentity.ok, true);
+  assert.equal(engine.counters.compileProbes, 1);
+  assert.equal(engine.identityProven.version, `v${pin.version}`);
+  const second = await replay("engine-check-ready");
+  const { engine: again } = engineFor(second.fetchImpl);
+  again.identityProven = engine.identityProven;
+  assert.equal((await again.check()).facts.compileIdentity.ok, true);
+  assert.equal(again.counters.compileProbes, 0);
+  assert.ok(!second.seen.some((request) => String(request.path ?? request.url ?? request).includes("/api/v1/compile")));
+});
+
 test("a skill whose stored bytes are not the pinned ones is reported and left alone", async () => {
   // Somebody put it there. Replacing it is an operator's decision; compiling with it is nobody's.
   let served = 0;
@@ -316,7 +337,7 @@ test("another release answering on the same configuration is a version mismatch,
   const { fetchImpl } = await replay("engine-check-ready");
   const { engine } = engineFor(fetchImpl, { pinned: { ...pin, version: "0.5.1" } });
   const status = await engine.check();
-  assert.deepEqual(status.facts.version, { ok: false, code: "openviking_version_mismatch", expected: "v0.5.1", version: "v0.5.1.1" });
+  assert.deepEqual(status.facts.version, { ok: false, code: "openviking_version_mismatch", expected: "v0.5.1", version: `v${pin.version}` });
   assert.deepEqual(status.degraded.sort(), ["knowledge", "nativeMemory"]);
   assert.equal(engine.ready("nativeMemory").fact, "version");
 });

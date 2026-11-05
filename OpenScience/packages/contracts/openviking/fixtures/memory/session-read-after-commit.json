@@ -1,6 +1,6 @@
 {
   "note": "Session metadata after one commit.",
-  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.1.1",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.3",
   "request": {
     "method": "GET",
     "path": "/api/v1/sessions/dsh-session_fixture0000000000000000000000000001",
@@ -16,8 +16,8 @@
     "status": "ok",
     "result": {
       "session_id": "dsh-session_fixture0000000000000000000000000001",
-      "created_at": "2026-10-23T05:37:57.205Z",
-      "updated_at": "2026-10-23T05:38:12.660Z",
+      "created_at": "2026-11-05T08:11:45.160Z",
+      "updated_at": "2026-11-05T08:11:59.327Z",
       "created_by_account_id": "evimed",
       "created_by_user_id": "fx-user-a",
       "message_count": 0,
@@ -26,12 +26,12 @@
         "total": 3,
         "memory_write": 3
       },
-      "last_commit_at": "2026-10-23T05:38:11.505Z",
+      "last_commit_at": "2026-11-05T08:11:57.822Z",
       "llm_token_usage": {
-        "prompt_tokens": 20200,
-        "completion_tokens": 147,
-        "total_tokens": 20347,
-        "cached_tokens": 19968,
+        "prompt_tokens": 27988,
+        "completion_tokens": 142,
+        "total_tokens": 28130,
+        "cached_tokens": 768,
         "reasoning_tokens": 0
       },
       "embedding_token_usage": {
@@ -51,7 +51,7 @@
         "keep_recent_count": 0,
         "min_commit_interval_seconds": 0
       },
-      "last_message_at": "2026-10-23T05:37:57.866Z",
+      "last_message_at": "2026-11-05T08:11:45.211Z",
       "last_auto_commit_at": "",
       "last_idle_commit_accepted_at": "",
       "total_message_count": 2,

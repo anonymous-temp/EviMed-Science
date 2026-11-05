@@ -5,7 +5,7 @@
       "items": [
         {
           "seq": 1,
-          "recorded_at": "2026-10-23T05:47:12.547913+00:00",
+          "recorded_at": "2026-11-05T08:44:14.155535+00:00",
           "kind": "created",
           "status": "pending",
           "stage": null,
@@ -14,7 +14,7 @@
         },
         {
           "seq": 2,
-          "recorded_at": "2026-10-23T05:47:12.548821+00:00",
+          "recorded_at": "2026-11-05T08:44:14.156622+00:00",
           "kind": "stage_changed",
           "status": "pending",
           "stage": "queued",
@@ -23,7 +23,7 @@
         },
         {
           "seq": 3,
-          "recorded_at": "2026-10-23T05:47:13.215493+00:00",
+          "recorded_at": "2026-11-05T08:44:14.760161+00:00",
           "kind": "status_changed",
           "status": "running",
           "stage": "submitting",
@@ -32,7 +32,7 @@
         },
         {
           "seq": 4,
-          "recorded_at": "2026-10-23T05:47:13.215493+00:00",
+          "recorded_at": "2026-11-05T08:44:14.760161+00:00",
           "kind": "stage_changed",
           "status": "running",
           "stage": "submitting",
@@ -41,7 +41,7 @@
         },
         {
           "seq": 5,
-          "recorded_at": "2026-10-23T05:47:13.471088+00:00",
+          "recorded_at": "2026-11-05T08:44:14.909078+00:00",
           "kind": "stage_changed",
           "status": "running",
           "stage": "compile: collecting_context",
@@ -52,12 +52,12 @@
       "dropped_count": 0,
       "started_mid_task": false
     },
-    "task_id": "cmp_cd2843026bd7ef9f27c5aa57d05b048d03c2e488943f7ac7b049594694d593c4",
+    "task_id": "cmp_722f9bc21a6b739db36ae2ebaba84ab41dd9e1939902091ab7ad5260b886a8bf",
     "task_type": "compile",
     "status": "running",
-    "created_at": 1792734432.5474696,
-    "updated_at": 1792734433.4710822,
-    "processing_seconds": 3.0007083415985107,
+    "created_at": 1793868254.1551142,
+    "updated_at": 1793868254.909075,
+    "processing_seconds": 2.442789077758789,
     "resource_id": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources",
     "meta": {
       "request": {
@@ -65,14 +65,18 @@
           "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources"
         ],
         "to": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki",
-        "skill": "viking://agent/skills/llm-wiki"
+        "skill": "viking://agent/skills/llm-wiki",
+        "compile": {
+          "mode": "incremental",
+          "trigger": "manual"
+        }
       }
     },
     "stage": "compile: collecting_context",
     "result": null,
     "error": null,
-    "created_at_iso": "2026-10-23T05:47:12.547470+00:00",
-    "updated_at_iso": "2026-10-23T05:47:13.471082+00:00"
+    "created_at_iso": "2026-11-05T08:44:14.155114+00:00",
+    "updated_at_iso": "2026-11-05T08:44:14.909075+00:00"
   },
   "error": null,
   "telemetry": null,

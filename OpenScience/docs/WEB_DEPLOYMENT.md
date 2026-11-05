@@ -1190,7 +1190,7 @@ groups the account's memories into topics when they changed. `OPEN_SCIENCE_MEMOR
 researcher's rename, merge or dismissal of a topic costs no call and is kept through every regrouping; the grouping lives in
 `evimed_memory.topic_sets` and goes with the account and with a memory reset.
 
-### OpenViking as an engine (v0.5.1.1)
+### OpenViking as an engine (v0.5.3)
 
 Until 2026-10-13 the `evimed-openviking` service was a derived recall index and nothing else. It is now also an engine: it
 extracts an account's memory from sessions with its own templates, holds the documents pushed to it as resources, and compiles
@@ -1255,10 +1255,17 @@ flight is the one thing nothing converts; delete `secrets/openviking-ov.conf` an
 and the new rendering has no `compile_api` section: a file left as it was points Compile at the dead shim port and every compile fails; the
 generated keys are kept); release through the normal path (the release's compose has no `entrypoint:` override and no shim mounts, so
 `evimed-openviking-init` and `evimed-openviking` are recreated from the new image); wait for
-`checks.memoryIndex.engine.ok` (the `version` fact says `v0.5.1.1`; `compileIdentity` takes about 30 s and `memoryTemplates` may say
+`checks.memoryIndex.engine.ok` (the `version` fact says `v0.5.3` on the new pin; `compileIdentity` takes about 30 s and `memoryTemplates` may say
 `openviking_registration_pending` for up to ten minutes on a volume the engine registers anew); watch
 `open_science_native_memory_turn_commits_total{outcome}` and the `memory-extraction` and `knowledge` spend for 24 h; keep the
 pre-upgrade volume copy for seven days.
+
+Moving v0.5.1.1 to v0.5.3 (the pin of 2026-11-05; the rehearsal on a copy of the production volume comes first, and the way back is the backup, as above): the
+same steps apply, and the stored `ov.conf` stays valid (its rendering did not change, so it is not deleted). Two differences to expect: the `version` fact says
+`v0.5.3` only if the image was built with that tag as its version argument (the rehearsal reads it), and the first start copies the packaged compile skills and memory
+templates into each account's `viking://system/` and records a manifest, which takes a moment per account. A write-back to a knowledge page is still refused when the
+page is no longer the one that was read, but it is the control plane that decides: v0.5.3 removed the engine's `expected_sha256`, so the page is read again just
+before the write and the short window between the two is not closed by the engine any more.
 
 Moving an existing deployment to v0.5.0: back up the volume first (a v0.5.0 write is not readable by v0.4.x; the way back is
 the backup), add `OPEN_SCIENCE_OPENVIKING_MODEL_KEY_HOST_FILE` to `.env`, delete `secrets/openviking-ov.conf` and re-run

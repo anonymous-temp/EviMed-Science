@@ -1,0 +1,21 @@
+{
+  "status": "error",
+  "error": {
+    "code": "INVALID_ARGUMENT",
+    "message": "Invalid request parameters: body.operations.0.expected_sha256: Extra inputs are not permitted",
+    "details": {
+      "validation_errors": [
+        {
+          "loc": [
+            "body",
+            "operations",
+            "0",
+            "expected_sha256"
+          ],
+          "message": "Extra inputs are not permitted",
+          "type": "extra_forbidden"
+        }
+      ]
+    }
+  }
+}

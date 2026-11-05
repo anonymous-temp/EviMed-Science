@@ -88,7 +88,7 @@ services:
   # is kept in it: there is no second memory engine to fall back to, and a
   # deployment that skipped it has memory off.
   evimed-openviking:
-    image: ${OPEN_SCIENCE_OPENVIKING_IMAGE:-ghcr.io/volcengine/openviking:v0.5.1.1@sha256:551b1ae00f59fd7b1a2434ecc10a4860be34aae8b7627f5f57240be355b23217}
+    image: ${OPEN_SCIENCE_OPENVIKING_IMAGE:-ghcr.io/volcengine/openviking:v0.5.3@sha256:57d3fd8873dbb78e5ccfdc57481006e6fbe765390ea18cd4a6b2f62da8aa104d}
     environment:
       # The built-in VikingBot is the runtime of Compile (the official
       # `llm-wiki` and `knowledge-graph` skills). It binds the container's
@@ -180,7 +180,7 @@ services:
   # data directory the server would otherwise have to be root to create, and
   # refuses to finish when a release file the server needs cannot be read.
   evimed-openviking-init:
-    image: ${OPEN_SCIENCE_OPENVIKING_IMAGE:-ghcr.io/volcengine/openviking:v0.5.1.1@sha256:551b1ae00f59fd7b1a2434ecc10a4860be34aae8b7627f5f57240be355b23217}
+    image: ${OPEN_SCIENCE_OPENVIKING_IMAGE:-ghcr.io/volcengine/openviking:v0.5.3@sha256:57d3fd8873dbb78e5ccfdc57481006e6fbe765390ea18cd4a6b2f62da8aa104d}
     user: "0:0"
     entrypoint: ["python", "-c"]
     command:

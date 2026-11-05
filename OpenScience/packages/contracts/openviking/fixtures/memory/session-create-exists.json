@@ -1,6 +1,6 @@
 {
   "note": "The same create again: the plugin treats 409 ALREADY_EXISTS as success.",
-  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.1.1",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.3",
   "request": {
     "method": "POST",
     "path": "/api/v1/sessions",

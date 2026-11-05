@@ -1,9 +1,9 @@
 {
   "note": "Its task: what the extraction did with self memory disabled.",
-  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.1.1",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.3",
   "request": {
     "method": "GET",
-    "path": "/api/v1/tasks/10362945-22f5-4a18-a1fc-ac8f5e51cc36",
+    "path": "/api/v1/tasks/697a34f9-2eec-4a52-991a-522c484abfcd",
     "headers": {
       "X-API-Key": "recorded-against-a-real-server",
       "X-OpenViking-Account": "evimed",
@@ -15,12 +15,12 @@
   "response": {
     "status": "ok",
     "result": {
-      "task_id": "10362945-22f5-4a18-a1fc-ac8f5e51cc36",
+      "task_id": "697a34f9-2eec-4a52-991a-522c484abfcd",
       "task_type": "session_commit",
       "status": "completed",
-      "created_at": 1792733918.6656811,
-      "updated_at": 1792733919.5276818,
-      "processing_seconds": 0.02955794334411621,
+      "created_at": 1793866342.5286403,
+      "updated_at": 1793866343.465409,
+      "processing_seconds": 0.0140380859375,
       "resource_id": "dsh-session_fixture0000000000000000000000000001",
       "meta": {},
       "stage": "completed",
@@ -42,35 +42,37 @@
           "events",
           "follow_ups",
           "identity",
+          "observations",
           "preferences",
           "profile",
           "project_context",
           "project_facts",
+          "recent_work",
           "soul"
         ],
         "agent_evolution_enabled": false,
         "agent_memory_skip_reason": "agent_evolution_disabled",
         "token_usage": {
           "llm": {
-            "prompt_tokens": 40646,
-            "completion_tokens": 151,
-            "total_tokens": 40797,
-            "cached_tokens": 39808,
+            "prompt_tokens": 56305,
+            "completion_tokens": 146,
+            "total_tokens": 56451,
+            "cached_tokens": 28416,
             "reasoning_tokens": 0
           },
           "embedding": {
             "total_tokens": 108
           },
           "total": {
-            "total_tokens": 40905,
-            "cached_tokens": 39808,
+            "total_tokens": 56559,
+            "cached_tokens": 28416,
             "reasoning_tokens": 0
           }
         }
       },
       "error": null,
-      "created_at_iso": "2026-10-23T05:38:38.665681+00:00",
-      "updated_at_iso": "2026-10-23T05:38:39.527682+00:00"
+      "created_at_iso": "2026-11-05T08:12:22.528640+00:00",
+      "updated_at_iso": "2026-11-05T08:12:23.465409+00:00"
     },
     "error": null,
     "telemetry": null,
