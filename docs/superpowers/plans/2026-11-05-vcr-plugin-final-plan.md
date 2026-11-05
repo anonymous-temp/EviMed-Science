@@ -167,7 +167,7 @@ is reassigned to the four-plugin team.
       source/result hashes. Keep inferred and reported outcomes distinct.
 - [x] Reconcile superseded plans with this checklist. Keep old reports immutable
       as historical evidence; add successor links where needed.
-- [ ] Verify the paused diagnostic account/database using the original ownership
+- [x] Verify the paused diagnostic account/database using the original ownership
       receipts; reconcile its settled partial ledger and delete only those
       owned resources. Do not restart the blinded diagnostic to satisfy cleanup.
 - [x] Agree shared contract ownership with the parallel matching/plugin work.

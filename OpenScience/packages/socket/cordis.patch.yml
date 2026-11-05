@@ -67,12 +67,16 @@
 # immutable project generation overrides the exact row in its profile patch.
 - id: evimed-virtual-trial
   disabled: true
+# Cohort tools stay inactive until their exact bundle is admitted by the verified project generation.
 - id: evimed-virtual-cohort
   disabled: true
+# Patient tools require the verified project generation; installation alone grants no access to records or models.
 - id: evimed-virtual-patient
   disabled: true
+# Comparator tools are enabled only by the verified project generation, with data authorization checked separately.
 - id: evimed-synthetic-control
   disabled: true
+# The optional suite stays inactive until admitted and must not implicitly install or authorize sibling bundles.
 - id: evimed-virtual-research-suite
   disabled: true
 

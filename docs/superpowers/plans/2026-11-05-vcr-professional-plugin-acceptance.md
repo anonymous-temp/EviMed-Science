@@ -208,6 +208,33 @@ Current source evidence is the revision-specific [web workflow receipt](https://
 Do not borrow the algorithm baseline's 492/492 as the new revision's result, or
 interpret skipped production E2E as successful production qualification.
 
+## Historical test-resource reconciliation and configuration attestation
+
+The paused 310-packet TrialGPT diagnostic was not resumed. Its preserved partial
+close records 272 attempts, 267 accepted, five failed and 38 untouched, with
+terminal usage. These are diagnostic machine outputs, not clinical labels or
+new matching results. The original loopback cluster identity matches; its owned
+test database and runner no longer exist. Prior account/database cleanup events
+and usage remain preserved. A subsequent ownership audit verified the frozen
+account-shell hash, campaign/binding/lifecycle, no active process/open file or
+container mount, no symlink escape and an external provider-key location. Only
+the leftover exclusive environment's data subtree was removed. Attempt/freeze,
+partial-close, budget, binding/lifecycle and cleanup evidence were retained;
+key contents were not read and the external provider key was not touched.
+
+CI at `32c39b25b` passed the native preparation fixtures and capability audit,
+but exposed a stale composition attestation: the new 216-row baseline still
+carried the previous 210-row digest. A fresh native dump from immutable R11
+image `sha256:c47119638d055344e294ab8f0507b511edb95a70cd73b9232f4f479994592940`
+was produced through the production seed-sync entry, as UID 10001, read-only
+root and no network. It matches the tracked baseline byte for byte, SHA-256
+`db4be956364d81b41cb23840399ab488edf0088b104dae6522024802faa7a4a1`,
+with empty stderr and all 81 invariants passing. The provenance digest and exact
+inventory tests were updated; individual reasons were added above the five
+bundle overrides. No setting, upstream pin or invariant was relaxed. All
+17 composition/security mutation tests then passed. Full lint/types and the
+78-check hosted compliance audit passed locally.
+
 ## Remaining scientific and release boundaries
 
 - Synthetic fidelity and utility have the red/unavailable results stated above;
