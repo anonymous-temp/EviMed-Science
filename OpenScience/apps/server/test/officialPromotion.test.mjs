@@ -219,6 +219,26 @@ test('a recreated author cannot inherit a pending promotion or trigger its delay
   assert.ok(records(f).every(row => row.payload.status === 'rejected' && row.payload.text === null));
 });
 
+test('an older active record cannot replace the specific candidate that supplied a withdrawn vote', async () => {
+  let armed = false;
+  const f = build({ review: async () => {
+    if (armed) {
+      armed = false;
+      const peer = records(f).find(row => row.payload.derivedFrom?.methodId === 'new-witness-record');
+      await f.documents.put(PLATFORM_PUBLISHER_USER_ID, 'preferences', peer.id, { ...peer.payload, status: 'rejected', text: null, derivedFrom: null }, { expectedRevision: peer.revision });
+    }
+    return { independent: true, general: true, class: 'numbers-and-tables' };
+  } });
+  await f.promotion.consider(method('new-two')); await f.promotion.consider(method('old-partner')); await f.promotion.tick();
+  assert.equal(records(f).filter(row => row.payload.status === 'active').length, 2);
+  await f.promotion.consider(method('new-one'));
+  const newer = method('new-two'); newer.method.id = 'new-witness-record'; newer.method.payload.contentDigest = 'sha256:bbbb';
+  await f.promotion.consider(newer); armed = true;
+  const target = records(f).find(row => row.payload.derivedFrom?.userId === 'new-one');
+  await f.promotion.tick();
+  assert.equal(records(f).find(row => row.id === target.id)?.payload.status, 'awaiting_corroboration');
+});
+
 test("the model's answer is closed: anything but a general verdict with a listed class is dropped, a refusal is a rejection, and a judge that fails is tried again and then gives up", async () => {
   for (const [answer, reason] of [[{ general: false, class: "other" }, "not_general"], [{ general: true, class: "a made-up class" }, "judge_invalid"], [{ general: "yes" }, "judge_invalid"], [null, "judge_invalid"]]) {
     const f = build({ judge: async () => answer });
