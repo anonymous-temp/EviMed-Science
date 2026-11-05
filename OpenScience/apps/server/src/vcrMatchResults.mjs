@@ -362,10 +362,12 @@ export class VcrMatchResults extends VcrStoreBase {
         LIMIT ${Math.floor(this.mostPairs) * 2})
       SELECT ${COLUMNS}, k.answered, k.support, k.against, k.not_applicable, k.silent, k.nei, k.silent_against, k.against_reason, k.support_reason, k.open_reason, u.unanswered, nf.newer_error, nf.newer_at
       FROM newest nw JOIN ${S}.match_judgments j ON j.id = nw.id ${COUNTS}
-      LEFT JOIN LATERAL (
-        SELECT f.error_code AS newer_error, f.updated_at AS newer_at FROM ${S}.match_judgments f
-        WHERE j.status = 'done' AND f.study_id = j.study_id AND f.subject_key = j.subject_key AND f.target_kind = j.target_kind AND f.target_id = j.target_id AND f.mode = j.mode
-          AND f.status = 'failed' AND f.updated_at > j.updated_at ORDER BY f.updated_at DESC LIMIT 1) nf ON true`, [studyId, subjectKey, targetKind, targetId]);
+      LEFT JOIN (
+        SELECT DISTINCT ON (f.subject_key, f.target_kind, f.target_id, f.mode) f.subject_key, f.target_kind, f.target_id, f.mode, f.error_code AS newer_error, f.updated_at AS newer_at
+        FROM ${S}.match_judgments f
+        WHERE f.study_id = $1 AND f.status = 'failed' AND ($2::text IS NULL OR f.subject_key = $2) AND ($3::text IS NULL OR f.target_kind = $3) AND ($4::text IS NULL OR f.target_id = $4)
+        ORDER BY f.subject_key, f.target_kind, f.target_id, f.mode, f.updated_at DESC) nf
+        ON j.status = 'done' AND nf.subject_key = j.subject_key AND nf.target_kind = j.target_kind AND nf.target_id = j.target_id AND nf.mode = j.mode AND nf.newer_at > j.updated_at`, [studyId, subjectKey, targetKind, targetId]);
   }
 
   /**
@@ -632,11 +634,12 @@ export class VcrMatchResults extends VcrStoreBase {
         SELECT DISTINCT ON (j.subject_key) j.id, j.study_id, j.subject_key, j.target_kind, j.target_id, j.status, j.document_hash, j.target_hash, j.updated_at FROM ${S}.match_judgments j
         WHERE j.study_id = $1 AND j.target_kind = 'protocol_version' AND j.target_id = $2 AND j.mode = 'criteria' AND ${NOT_WITHDRAWN}
         ORDER BY j.subject_key, (j.status = 'done') DESC, j.updated_at DESC, j.id),
+      scores AS (
+        SELECT DISTINCT ON (f.subject_key) f.subject_key, f.document_hash, f.target_hash, f.updated_at FROM ${S}.match_judgments f
+        WHERE f.study_id = $1 AND f.target_kind = 'protocol_version' AND f.target_id = $2 AND f.mode = 'fit' AND f.status = 'done'
+        ORDER BY f.subject_key, f.updated_at DESC, f.id),
       newest AS (
-        SELECT r.id FROM ranked r
-        LEFT JOIN LATERAL (SELECT f.document_hash, f.target_hash, f.updated_at FROM ${S}.match_judgments f
-          WHERE f.study_id = r.study_id AND f.subject_key = r.subject_key AND f.target_kind = r.target_kind AND f.target_id = r.target_id AND f.mode = 'fit' AND f.status = 'done'
-          ORDER BY f.updated_at DESC, f.id LIMIT 1) fit ON r.status = 'done'
+        SELECT r.id FROM ranked r LEFT JOIN scores fit ON fit.subject_key = r.subject_key AND r.status = 'done'
         WHERE NOT (fit.updated_at IS NOT NULL AND fit.updated_at >= r.updated_at AND (fit.document_hash <> r.document_hash OR fit.target_hash <> r.target_hash)))`;
     const [answered, unanswered, people] = await Promise.all([
       this.rows(`${newest}
