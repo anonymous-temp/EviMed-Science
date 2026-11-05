@@ -9,11 +9,6 @@
 // It is a double with real bounds (a listing is paged at the limit it was asked for), because a double that ignores a
 // limit hides the paging bug the real server would show.
 
-import { createHash } from "node:crypto";
-
-/** @param {Buffer | string} bytes */
-const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
-
 /** @typedef {{ content: Buffer, tags: string[], modTime: string }} StubFile */
 
 /**

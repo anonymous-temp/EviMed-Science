@@ -69,7 +69,7 @@ const PARSE_TIMEOUT_MS = 300_000;
 /** The task states after which a compile will not change. */
 export const COMPILE_TERMINAL_STATES = Object.freeze(["completed", "failed", "cancelled"]);
 
-/** @param {string} text */
+/** @param {string | Buffer} text */
 const sha256 = (text) => createHash("sha256").update(text).digest("hex");
 
 /** A tag list as a record: `["src=…","sha=…"]` → `{ src, sha }`. Tags that are not `k=v` are left out. @param {unknown} tags */
