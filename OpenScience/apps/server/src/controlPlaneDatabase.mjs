@@ -324,11 +324,15 @@ export class ControlPlaneDatabase {
           "SELECT current_setting('statement_timeout') AS statement_timeout, current_setting('lock_timeout') AS lock_timeout",
         ))?.rows?.[0];
         await scoped.client.query(`SAVEPOINT ${name}`);
+        const commitStart = scoped.outcome?.commitHooks.length ?? 0;
         try {
           const result = await this.atomicTransactions.run(atomic, () => operation(scoped.client));
           atomic.open = false;
           await atomic.serial;
-          if (rollbackOnly) await scoped.client.query(`ROLLBACK TO SAVEPOINT ${name}`);
+          if (rollbackOnly) {
+            await scoped.client.query(`ROLLBACK TO SAVEPOINT ${name}`);
+            scoped.outcome?.commitHooks.splice(commitStart);
+          }
           await scoped.client.query(`RELEASE SAVEPOINT ${name}`);
           if (typeof bounds?.statement_timeout === "string" && typeof bounds?.lock_timeout === "string") {
             await scoped.client.query("SELECT set_config('statement_timeout', $1, true), set_config('lock_timeout', $2, true)",
@@ -336,6 +340,7 @@ export class ControlPlaneDatabase {
           }
           return result;
         } catch (error) {
+          scoped.outcome?.commitHooks.splice(commitStart);
           atomic.open = false;
           await atomic.serial;
           await scoped.client.query(`ROLLBACK TO SAVEPOINT ${name}`).catch(() => {});
@@ -348,8 +353,8 @@ export class ControlPlaneDatabase {
       return this.enqueueScoped(scoped, enclosing ?? scoped, run);
     }
     await this.migrate();
-    /** @type {{ hooks: Array<(error: unknown) => unknown>, settled: boolean }} */
-    const outcome = { hooks: [], settled: false };
+    /** @type {{ hooks: Array<(error: unknown) => unknown>, commitHooks: Array<()=>unknown>, settled: boolean }} */
+    const outcome = { hooks: [], commitHooks: [], settled: false };
     let committed = false, failure = null, result;
     try {
       result = await this.withClient(async (client) => {
@@ -377,9 +382,23 @@ export class ControlPlaneDatabase {
         // A hook records its own failure; the transaction's outcome stands.
         try { await this.withoutTransactionClient(() => hook(failure?.error ?? null)); } catch { /* recorded by the hook */ }
       }
+    } else {
+      for (const hook of outcome.commitHooks) {
+        try { await this.withoutTransactionClient(hook); } catch { /* an observer never reverses a committed transaction */ }
+      }
     }
     if (failure) throw failure.error;
     return result;
+  }
+
+  /** Register an observer of committed state. Savepoint rollback drops that
+   * savepoint's observers; outer rollback drops all. Runs after client release,
+   * outside the owned scope. @param {()=>unknown} hook */
+  afterCommit(hook) {
+    const outcome = this.transactionClients.getStore()?.outcome;
+    if (!outcome || outcome.settled) return false;
+    outcome.commitHooks.push(hook);
+    return true;
   }
 
   /** Run `hook(error)` once the outermost transaction of the caller's scope
