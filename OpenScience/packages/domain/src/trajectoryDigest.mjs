@@ -27,7 +27,7 @@
  *  - `outcome` — `{ status, repaired }`.
  *
  * Pure: the transcript and the ledger's record of the run in, plain data out. A request or an intervention whose text carries a
- * credential or an identifier BY SHAPE (`identifierShapesIn`: an ID number, a phone, a card, an e-mail, a provider key, a secret assigned
+ * credential or an identifier BY SHAPE (`methodSourceIdentifierShapesIn`: an ID number, a phone, a card, an e-mail, a provider key, a secret assigned
  * to a name) is dropped, and `dropped.sensitive` counts it, because an input that silently lost the decisive message produces a confident
  * method about something that did not happen. Not by word: a keyword pattern over language (`password`, 密码, 我患有) dropped 「把密码列去掉」
  * and every request that merely mentioned a token, and deciding what a sentence is about is the model's (2026-10-25, E6).
@@ -37,9 +37,12 @@
  * @module trajectoryDigest
  */
 
+import { ownTurnStarts, rootSessionOf } from './runTurnIdentity.mjs'
+export { ownTurnStarts, rootSessionOf } from './runTurnIdentity.mjs'
 import { cleanArtifactShapes } from './artifactShape.mjs'
 import { fileFormatOf } from './fileDeliverable.mjs'
-import { PLATFORM_CONTEXT_TAGS, carriesPlatformContext, identifierShapesIn, stripPlatformTags, unwrapUserWrappers } from './memoryVocabulary.mjs'
+import { PLATFORM_CONTEXT_TAGS, carriesPlatformContext, stripPlatformTags, unwrapUserWrappers } from './memoryVocabulary.mjs'
+import { methodSourceIdentifierShapesIn } from './methodSourcePrivacy.mjs'
 import { isMcpToolName, isPlatformChoreographyTool, mcpToolBaseName } from './toolNames.mjs'
 
 /** Bounds on what a digest holds: the size of a model's input, not a policy. */
@@ -85,38 +88,6 @@ export function transcriptMessageText(message) {
     .join('\n')
 }
 
-/**
- * The turns of the root session that belong to the run, by the rule the ledger assigns history with: a turn one of the run's
- * own request ids entered, or the native turn it was adopted from when it has no request ids. Null when the run names neither
- * (a record from before turn identity), and then every turn is read.
- * @param {readonly any[]} messages the run's own (root) session @param {any} run
- * @returns {Set<number> | null}
- */
-export function ownTurnStarts(messages, run) {
-  const requestIds = new Set(Array.isArray(run?.kernelRequestIds) ? run.kernelRequestIds : [])
-  /** @type {Set<number>} */
-  const turns = new Set()
-  for (const message of messages) {
-    if (message?.role === 'user' && message.source === 'user' && Number.isSafeInteger(message.turnStartSeq)
-      && requestIds.has(message.sourceRequestId)) turns.add(message.turnStartSeq)
-  }
-  if (!requestIds.size && Number.isSafeInteger(run?.nativeTurn?.startSeq)) turns.add(run.nativeTurn.startSeq)
-  return turns.size ? turns : null
-}
-
-/**
- * The run's root session and its messages. A stored transcript carries `sessionId` on every line; a live one does not, and
- * then every message is the root's.
- * @param {{ header?: any, messages?: readonly any[] } | null | undefined} transcript @param {any} run
- * @returns {{ sessionId: string | null, messages: any[] }}
- */
-export function rootSessionOf(transcript, run) {
-  const declared = typeof run?.sessionId === 'string' && run.sessionId ? run.sessionId : null
-  const fromHeader = (transcript?.header?.sessions ?? []).find((/** @type {any} */ session) => session?.parentSessionId == null)?.sessionId
-  const sessionId = declared ?? (typeof fromHeader === 'string' && fromHeader ? fromHeader : null)
-  const messages = (transcript?.messages ?? []).filter((/** @type {any} */ message) => !sessionId || message?.sessionId === undefined || message.sessionId === sessionId)
-  return { sessionId, messages }
-}
 
 /**
  * The messages the researcher typed into the run once it was going, in order. Two structural marks, never the words:
@@ -206,7 +177,7 @@ export function trajectoryDigest(transcript, run, options = {}) {
   const turns = ownTurnStarts(root, run)
   let sensitive = 0
   /** @param {string} text */
-  const unsafe = (text) => { if (identifierShapesIn(text).length) { sensitive += 1; return true } return false }
+  const unsafe = (text) => { if (methodSourceIdentifierShapesIn(text).length) { sensitive += 1; return true } return false }
 
   // On a research goal's route the gesture at the head of the message is the platform's, not the person's.
   const goalGesture = startedAsResearchGoal(run) ? RESEARCH_GOAL_GESTURE : /^$/

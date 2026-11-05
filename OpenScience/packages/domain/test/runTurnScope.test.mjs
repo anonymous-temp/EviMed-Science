@@ -70,5 +70,6 @@ test('a continued child needs exact owned turns and a live transcript cannot be 
   const bounded = { ...saved, header: { ...saved.header, sessions: [saved.header.sessions[0],
     { ...saved.header.sessions[1], runTurnOwnership: { schema: 'child-run-turns/1', runId: 'run', turnStartSeqs: [10] } }] } };
   assert.deepEqual(scopeRunTranscript(bounded, run).messages.map(row => row.parts[0].tool ?? row.sourceRequestId), ['current', 'current_child_tool']);
-  assert.equal(scopeRunTranscript({ sessionId: 'foreign', messages: [user(1, 0, 'current', 'foreign')] }, run).runScope.available, false);
+  const { sessionId: _sourceSession, ...unqualified } = user(1, 0, 'current');
+  assert.equal(scopeRunTranscript({ sessionId: 'foreign', messages: [unqualified] }, run).runScope.available, false);
 });
