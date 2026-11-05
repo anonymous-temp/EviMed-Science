@@ -431,7 +431,7 @@ export function createVcrRoutes(dependencies) {
       get jobs() { return dependencies.jobs ?? null; },
       get exporter() { return dependencies.exporter ?? dependencies.orchestrator ?? null; },
       get members() { return dependencies.members ?? null; },
-      get matching() { return dependencies.matching ?? null; },
+      get matching() { return dependencies.matching ?? service.packages?.matching ?? null; },
       get assessments() { return dependencies.assessments ?? service.packages?.matching ?? null; },
       // The data plane, reached through the service's seam (`intake`): the routes
       // are composed before the module is, and the seam is where the plane lives.
@@ -816,7 +816,7 @@ export function createVcrRoutes(dependencies) {
         if (!reader) throw UNAVAILABLE();
         const query = Object.fromEntries(url.searchParams);
         // Asked for nothing in particular, it says where the newest work is, so a link to the page lands there.
-        if (query.direction === undefined) return reply({ available: true, latest: await reader.latest(study.id) });
+        if (query.direction === undefined) return reply({ available: true, latest: await reader.latest(study.id, query.only === "trial_to_patient" || query.only === "patient_to_trial" ? query.only : null) });
         const scope = await scopeOf(study, query, true);
         if (scope.direction === "patient_to_trial") {
           const target = query.target === undefined ? null : String(query.target);

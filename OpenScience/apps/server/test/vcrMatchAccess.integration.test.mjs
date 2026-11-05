@@ -185,3 +185,14 @@ test("S4: a withdrawn person's page holds nothing, and the newest-work link does
   assert.notEqual(latest.body.data.latest?.subjectKey, key);
   await vcr.store.query("UPDATE evimed_vcr.jobs SET state='canceled', lease_owner=NULL, lease_until=NULL WHERE id=$1", [started.jobId]);
 });
+
+test("the page's 开始评估 reaches the matching package (it answered 503 vcr_unavailable once the contact service left), and the rule file is behind the same export route", options, async () => {
+  const started = await call("owner", "POST", `/api/vcr/studies/${seeded.study.id}/jobs`, { kind: "match_criteria", selection: { direction: "trial_to_patient" } });
+  assert.notEqual(started.status, 503, started.text);
+  assert.notEqual(started.body?.code, "vcr_unavailable");
+  const file = await call("owner", "GET", `/api/vcr/studies/${seeded.study.id}/matching/export?direction=trial_to_patient&source=rules&kind=pairs&format=csv`);
+  assert.equal(file.status, 200, file.text);
+  assert.match(file.text, /^﻿?患者,结论,满足,不满足,未知,待复评,评估时间,判定方式/u);
+  const viewer = await call("viewer", "GET", `/api/vcr/studies/${seeded.study.id}/matching/export?direction=trial_to_patient&source=rules&kind=pairs&format=csv`);
+  assert.equal(viewer.status, 403, "the same ability check as the judged file");
+});
