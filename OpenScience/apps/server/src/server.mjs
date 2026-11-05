@@ -5835,11 +5835,13 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     },
     removeDerived: async (project, row) => {
       if (nativeMemory.configured) await nativeMemory.removeConversationSource(project.userId, project.id, row.sessionIds);
-      for (const run of await agentRuns.list(project)) if (row.sessionIds.includes(run.sessionId) && !run.deleted) await agentRuns.recordRunLabels(project, run.id, { deleted: true });
+      const removedRuns = await agentRuns.removeConversationSource(project, row.sessionIds);
+      for (const runId of removedRuns) preStopTranscripts.take(runId);
     },
   }) : null;
   runtimeManager.sourceDeletion = sourceDeletion;
   researchSessions.sourceDeletion = sourceDeletion;
+  agentRuns.sourceDeletion = sourceDeletion;
   nativeMemory.sourceDeletion = sourceDeletion;
   nativeMemoryOverlay.sourceDeletion = sourceDeletion;
   const sourceDeletionRoutes = createConversationSourceDeletionRoutes({ store, service: sourceDeletion });

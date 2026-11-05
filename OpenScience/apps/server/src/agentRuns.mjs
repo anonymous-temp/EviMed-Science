@@ -28,7 +28,7 @@ import {
   validateClinicalEvidencePackage,
 } from "./clinicalEvidenceQuality.mjs";
 import { delegatedChildrenOf, socketToolResult, transcriptToLedgerMessages } from "./dshRuntimeAdapter.mjs";
-import { readVerifiedRunTranscript } from "./runTranscripts.mjs";
+import { transcriptPath, readVerifiedRunTranscript } from "./runTranscripts.mjs";
 import {
   clinicalSafetyCautionNotice,
   describedQualityNotices,
@@ -4429,6 +4429,7 @@ export function isResearcherRun(run) {
 export class AgentRunStore {
   constructor(researchSessions, options = {}) {
     this.researchSessions = researchSessions;
+    /** @type {any} */ this.sourceDeletion = null;
     this.nativeInputs = options.nativeInputs ?? null;
     this.authorizeReservation = options.authorizeReservation ?? (async () => {});
     this.agentRegistry = Promise.resolve(options.agentRegistry);
@@ -4744,10 +4745,11 @@ export class AgentRunStore {
    * @param {any} project @returns {Promise<string | null>}
    */
   async lastSessionId(project) {
+    const deletedSources = new Set(this.sourceDeletion ? await this.sourceDeletion.ledger.deletedIds(project) : []);
     let latest = null;
     let at = "";
     for (const run of foldEvents(parseEvents(await readLedgerText(project, this.maxBytes))).values()) {
-      if (!isResearcherRun(run)) continue;
+      if (!isResearcherRun(run) || deletedSources.has(run.sessionId)) continue;
       const moved = [run.lastProgressAt, run.finishedAt, run.startedAt].filter((value) => typeof value === "string").sort().at(-1) ?? "";
       if (moved > at) {
         at = moved;
@@ -4767,8 +4769,9 @@ export class AgentRunStore {
    * @returns {Promise<Record<string, any>[]>}
    */
   async researcherRuns(project, { includeManaged = false } = {}) {
+    const deletedSources = new Set(this.sourceDeletion ? await this.sourceDeletion.ledger.deletedIds(project) : []);
     return [...foldEvents(parseEvents(await readLedgerText(project, this.maxBytes))).values()]
-      .filter(includeManaged ? isResearcherOwnedWork : isResearcherRun);
+      .filter(includeManaged ? isResearcherOwnedWork : isResearcherRun).filter(run => !deletedSources.has(run.sessionId));
   }
 
   /**
@@ -4856,9 +4859,39 @@ export class AgentRunStore {
     return { runCount: runs.length, lastActivityAt: last };
   }
 
+  /** Erase source-only ledger words and transcript snapshots while retaining file inventory and operational receipts.
+   * @param {any} project @param {string[]} sessionIds */
+  async removeConversationSource(project, sessionIds) {
+    const deleted = new Set(sessionIds);
+    return withProjectStorageMutation(project, async () => {
+      const events = parseEvents(await readLedgerText(project, this.maxBytes));
+      const targets = [...foldEvents(events).values()].filter(run => deleted.has(run.sessionId));
+      if (targets.some(run => run.status === 'running')) throw new HttpError(409, 'runtime_busy', 'The source still has active work.');
+      const ids = new Set(targets.map(run => run.id));
+      const keep = new Set(['event','id','at','createdAt','startedAt','finishedAt','durationMs','status','dispatchId','dispatchStatus',
+        'sessionId','mode','agentId','agentVersion','runtimeAgent','effectiveAgentId','effectiveAgentVersion','effectiveRuntimeAgent','effectiveRouteReason',
+        'model','accountCreatedAt','automated','kernelRequestIds','requestIds','nativeTurn','kind','messages','toolCalls','lastProgressAt',
+        'artifacts','unverifiedArtifacts','outputFiles','presentedFiles','errorCode','errorSubCode','canceledBy','verification','usage',
+        'transcriptSha256','inventorySha256']);
+      const cleaned = events.filter(event => !ids.has(event.id) || event.event !== 'native-workflow').map(event => !ids.has(event.id) ? event
+        : Object.fromEntries(Object.entries(event).filter(([key]) => keep.has(key))));
+      for (const run of targets) {
+        const file = transcriptPath(project, run.id);
+        await assertNoSymlinkPath(project.rootDir, file, { allowMissingTail: true });
+        await rm(file, { force: true });
+        this.dispatchedBriefs.delete(run.id); this.progressTrackers.delete(run.id);
+        cleaned.push({ event: 'notice', id: run.id, at: this.now().toISOString(), qualityNotices: [], deleted: true });
+      }
+      foldEvents(cleaned); // Validate the rewritten ledger before replacing its bytes.
+      await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), cleaned.map(event => JSON.stringify(event)).join('\n') + (cleaned.length ? '\n' : ''), { encoding: 'utf8', mode: 0o600 });
+      return [...ids];
+    });
+  }
+
   async list(project) {
     const events = parseEvents(await readLedgerText(project, this.maxBytes));
     const runs = [...foldEvents(events).values()];
+    const deletedSources = new Set(this.sourceDeletion ? await this.sourceDeletion.ledger.deletedIds(project) : []);
     // `phase` is a projection, never a stored field (§7.1.1): computed fresh on
     // every read from the same four ledger values every other reader already
     // sees, plus a diagnostic walk of this run's own events that counts an
@@ -4866,6 +4899,8 @@ export class AgentRunStore {
     return runs
       .map((run) => {
         const history = runPhaseHistory(events, run.id);
+        if (deletedSources.has(run.sessionId)) return { ...run, deleted: true, question: null, title: 'Conversation removed',
+          steers: [], goal: null, nativeWorkflow: null, deliverables: [], progress: undefined, qualityNotices: [], transcript: undefined };
         return {
           ...run,
           phase: history.phase,
@@ -7843,6 +7878,7 @@ export class AgentRunStore {
    */
   async adoptRuntimeSession(project, sessionId, routed = {}) {
     const id = safeId(sessionId, "runtime session id");
+    await this.sourceDeletion?.assertAvailable(project, id);
     if (routed.transcript) return this.adoptRuntimeTurns(project, id, routed.transcript, routed.routeTurn, { forkedFrom: routed.forkedFrom ?? null });
     const existing = (await this.list(project)).find((run) => run.sessionId === id);
     if (existing) return existing;
