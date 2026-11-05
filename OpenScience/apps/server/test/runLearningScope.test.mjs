@@ -38,3 +38,11 @@ test('a live message explicitly attributed to another session is not relabelled 
   input.sessions[0].transcript.messages[1].sessionId = 'foreign';
   assert.equal(collectedRunScope(input.run, input.sessions).scope.available, false);
 });
+
+test('explicit malformed seed metadata is not replaced with an unseeded assertion', async () => {
+  const { collectedRunScope } = await load();
+  for (const bad of [null, '3', -2, 1.5]) {
+    const input = fixture(); input.sessions[0].transcript.seedEndSeq = bad;
+    assert.equal(collectedRunScope(input.run, input.sessions).scope.available, false);
+  }
+});

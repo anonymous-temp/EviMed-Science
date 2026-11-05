@@ -22,6 +22,21 @@ import { TRANSCRIPT_DIR_NAME, transcriptPath } from "../src/runTranscripts.mjs";
 const ROOT = "ses_root";
 const CHILD = "ses_child";
 
+test('distillation excerpts exclude other root turns even when the saved raw history contains them', () => {
+  const saved = { header: { runId: 'current', completeness: 'complete', sessions: [{ sessionId: ROOT, parentSessionId: null, seedEndSeq: -1 }] }, messages: [
+    { sessionId: ROOT, role: 'user', source: 'user', sourceRequestId: 'old', seq: 1, turnStartSeq: 0, parts: [{ type: 'text', text: 'Previous private task' }] },
+    { sessionId: ROOT, role: 'assistant', seq: 2, turnStartSeq: 0, parts: [{ type: 'text', text: 'Previous answer must not teach this run' }] },
+    { sessionId: ROOT, role: 'user', source: 'user', sourceRequestId: 'now', seq: 11, turnStartSeq: 10, parts: [{ type: 'text', text: 'Summarize this new task' }] },
+    { sessionId: ROOT, role: 'assistant', seq: 12, turnStartSeq: 10, parts: [{ type: 'text', text: 'Current answer' }] },
+  ] };
+  const input = buildDistillationInput({ run: { id: 'current', sessionId: ROOT, kernelRequestIds: ['now'] }, trigger: 'edit_diff', transcript: saved });
+  assert.ok(!JSON.stringify(input).includes('Previous'));
+  assert.ok(JSON.stringify(input.transcriptExcerpts).includes('Current answer'));
+  const legacy = buildDistillationInput({ run: { id: 'legacy', sessionId: ROOT }, trigger: 'edit_diff', transcript: saved });
+  assert.deepEqual(legacy.transcriptExcerpts, []);
+  assert.equal(saved.messages.length, 4);
+});
+
 /** @param {number} seq @param {string} text @param {Record<string, any>} [extra] */
 const user = (seq, text, extra = {}) => ({ sessionId: ROOT, role: "user", source: "user", seq, turn: 1, turnStartSeq: 1, sourceRequestId: "req_1", parts: [{ type: "text", text }], ...extra });
 /** @param {number} seq @param {string} text @param {string} [sessionId] */
