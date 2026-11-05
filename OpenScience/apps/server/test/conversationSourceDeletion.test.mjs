@@ -86,3 +86,34 @@ test('session control maps and native added events remove complete deleted recor
     {type:'baseline',value:{projections:{b:{values:{answer:'kept'}}}}});
   assert.equal(filterDeletedConversationValue({type:'emit',event:'api-session/added',args:[{sessionId:'a',title:'secret'}]},gone),null);
 });
+
+import { AgentRunStore } from '../src/agentRuns.mjs';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import os from 'node:os';
+
+test('source cleanup erases target ledger words and preserved transcripts while keeping independent work and file inventory', async t => {
+  const root=await mkdtemp(path.join(os.tmpdir(),'source-ledger-'));
+  const project={userId:'u',id:'p',rootDir:root,workspaceDir:path.join(root,'workspace'),metaDir:path.join(root,'.openscience')};
+  await mkdir(project.workspaceDir,{recursive:true});await mkdir(project.metaDir,{recursive:true});
+  const store=new AgentRunStore({get:async(_p,id)=>({sessionId:id,mode:'open-domain',agentId:null,agentVersion:null,runtimeAgent:null})},{model:'deepseek/fixture',readSessionHistory:async()=>[],monitorIntervalMs:60000});
+  t.after(async()=>{await store.closeProject(project);await rm(root,{recursive:true,force:true});});
+  const a=await store.start(project,{sessionId:'a'}), b=await store.start(project,{sessionId:'b'});
+  await store.recordRunLabels(project,a.id,{question:'Source A secret'});await store.recordRunLabels(project,b.id,{question:'Independent B question'});
+  await store.closeProject(project);
+  const ledger=path.join(project.metaDir,'runs.jsonl');
+  const events=(await readFile(ledger,'utf8')).trim().split('\n').map(JSON.parse);
+  for(const event of events)if(event.id===a.id&&event.event==='finished')event.outputFiles=['report.txt'];
+  await writeFile(ledger,events.map(JSON.stringify).join('\n')+'\n');
+  await mkdir(path.join(project.metaDir,'transcripts'),{recursive:true});
+  await writeFile(path.join(project.metaDir,'transcripts',a.id+'.jsonl'),'Source A secret');
+  await writeFile(path.join(project.metaDir,'transcripts',b.id+'.jsonl'),'Independent B transcript');
+  await writeFile(path.join(project.workspaceDir,'report.txt'),'Useful deliverable');
+  await store.removeConversationSource(project,['a']);
+  assert.doesNotMatch(await readFile(ledger,'utf8'),/Source A secret/);
+  await assert.rejects(readFile(path.join(project.metaDir,'transcripts',a.id+'.jsonl')),{code:'ENOENT'});
+  assert.equal(await readFile(path.join(project.metaDir,'transcripts',b.id+'.jsonl'),'utf8'),'Independent B transcript');
+  assert.equal(await readFile(path.join(project.workspaceDir,'report.txt'),'utf8'),'Useful deliverable');
+  const list=await store.list(project);assert.equal(list.find(run=>run.id===b.id).question,'Independent B question');
+  assert.deepEqual(list.find(run=>run.id===a.id).outputFiles,['report.txt']);
+});
