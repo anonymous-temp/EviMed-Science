@@ -76,3 +76,29 @@ test('a nested transaction bounds only its own statements: its SET LOCAL timeout
     assert.deepEqual(await bounds(), before, 'rolled back: the same')
   }))
 })
+
+test('commit observers run after releasing the client and outside its transaction scope', options, async () => {
+  const seen = [];
+  assert.equal(typeof database.afterCommit, 'function');
+  assert.equal(database.afterCommit(() => assert.fail('No transaction exists')), false);
+  await database.transaction(client => database.withTransactionClient(client, async () => {
+    assert.equal(database.afterCommit(async () => { assert.equal(database.transactionScope(), null); seen.push((await database.query('SELECT 7 AS value')).rows[0].value); }), true);
+    assert.deepEqual(seen, []);
+  }));
+  assert.deepEqual(seen, [7]);
+});
+
+test('rollback and rollback-only savepoints discard their own commit observers', options, async () => {
+  const seen = [];
+  assert.equal(typeof database.afterCommit, 'function');
+  await database.transaction(client => database.withTransactionClient(client, async () => {
+    database.afterCommit(() => seen.push('outer'));
+    await assert.rejects(database.transaction(async () => { database.afterCommit(() => seen.push('failed child')); throw new Error('rollback child'); }));
+    await database.transaction(async () => { database.afterCommit(() => seen.push('read only')); }, { rollbackOnly: true });
+    await database.transaction(async () => { database.afterCommit(() => seen.push('committed child')); });
+    assert.deepEqual(seen, []);
+  }));
+  assert.deepEqual(seen, ['outer', 'committed child']);
+  await assert.rejects(database.transaction(client => database.withTransactionClient(client, async () => { database.afterCommit(() => seen.push('failed outer')); throw new Error('rollback outer'); })));
+  assert.deepEqual(seen, ['outer', 'committed child']);
+});
