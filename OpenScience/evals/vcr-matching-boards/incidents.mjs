@@ -37,7 +37,8 @@ export function findings(expect, entry) {
   for (const want of clauses ?? []) {
     const row = (entry.criteria ?? []).find((candidate) => clauseMatches(candidate, want.contains));
     if (!row) { out.push(`no clause holds "${want.contains}"`); continue; }
-    if (!want.labels.includes(row.label)) out.push(`"${want.contains}": ${row.label}, wanted ${want.labels.join(' or ')}`);
+    const label = String(row.label ?? '').replaceAll('_', ' ');
+    if (!want.labels.includes(label)) out.push(`"${want.contains}": ${label}, wanted ${want.labels.join(' or ')}`);
     if (want.evidence && !(row.sentenceIds ?? []).length) out.push(`"${want.contains}": no sentence behind it`);
   }
   return out;

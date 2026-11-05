@@ -468,6 +468,16 @@ test('a verdict: silence does not block', () => {
   assert.equal(trialVerdict({ criteria: [row('not_applicable', 'silent')] }).verdict, 'eligible')
 })
 
+test('a verdict: clear clauses do not overrule a trial-level reading that finds the person outside', () => {
+  // Measured: an 8-year-old against an adults' trial, the age in the registry and in no clause, cleared every clause and scored 0.
+  const clear = [row('included', 'stated'), row('not_excluded', 'silent')]
+  assert.deepEqual([trialVerdict({ fit: 0, criteria: clear }).verdict, trialVerdict({ fit: 0, criteria: clear }).label], ['ineligible', '不符合'])
+  assert.equal(trialVerdict({ fit: VCR_FIT_BANDS.insufficient, criteria: clear }).verdict, 'possible')
+  assert.equal(trialVerdict({ fit: VCR_FIT_BANDS.eligible - 1, criteria: clear }).verdict, 'possible')
+  assert.equal(trialVerdict({ fit: VCR_FIT_BANDS.eligible, criteria: clear }).verdict, 'eligible')
+  assert.equal(trialVerdict({ fit: 5, criteria: [row('not_enough_information', 'silent')] }).verdict, 'ineligible')
+})
+
 test('a verdict: an open prerequisite the score reads against is insufficient', () => {
   assert.equal(trialVerdict({ fit: 30, criteria: [row('not_enough_information', 'silent')] }).verdict, 'insufficient')
   assert.equal(trialVerdict({ fit: VCR_FIT_BANDS.possible, criteria: [row('not_enough_information', 'silent')] }).verdict, 'possible')

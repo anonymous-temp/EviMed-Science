@@ -904,9 +904,10 @@ const statedDisqualifier = (row) => row.basis === 'stated' && (row.label === 'ex
  * The verdict of one pair, from the trial-level score and the clause rows. A label, not a gate. Each branch:
  *
  * 1. A clause the note states against the patient: `ineligible`, and it says which. Evidence outranks a score.
- * 2. Clause rows and nothing against: everything resolved in the patient's favour is `eligible`; anything left open (not enough information, a
- *    silent clause read against the patient, a clause the model did not answer) is `possible`, because a routine item is settled at
- *    screening, unless a score below 50 says the model found a prerequisite missing, which is `insufficient`.
+ * 2. Clause rows and nothing against: a score below 20 is `ineligible` whatever the clauses say, because only the trial-level reading sees what the registry states beyond them
+ *    (an 8-year-old in an adults' trial clears every clause and scores 0). Otherwise everything resolved in the patient's favour is `eligible`, or `possible` when a score below 80
+ *    reads it less surely; anything left open (not enough information, a silent clause read against the patient, a clause the model did not answer) is `possible`, because a
+ *    routine item is settled at screening, unless a score below 50 says the model found a prerequisite missing, which is `insufficient`.
  * 3. No clause rows, only the score: its bands. A band of 80 and up with something still missing is `possible`. Below 50, a model that says why it does not fit and finds nothing missing
  *    has said no, whichever band the number fell in: `ineligible`.
  * 4. Neither: `insufficient`.
@@ -922,8 +923,10 @@ export function trialVerdict({ fit = null, criteria = null, missing = null, miss
   if (against.length) return said('ineligible', 'stated_disqualifier', against.flatMap((row) => row.number ?? []))
   if (rows.length) {
     const open = rows.filter((row) => row.label === 'not_enough_information' || row.label === 'excluded' || row.label === 'not_included').length + (missing?.length ?? 0)
-    if (!open) return said('eligible', 'all_resolved')
-    return Number.isFinite(fit) && Number(fit) < VCR_FIT_BANDS.possible ? said('insufficient', 'prerequisite_open') : said('possible', 'items_open')
+    const scored = Number.isFinite(fit)
+    if (scored && Number(fit) < VCR_FIT_BANDS.insufficient) return said('ineligible', 'fit_band')
+    if (!open) return scored && Number(fit) < VCR_FIT_BANDS.eligible ? said('possible', 'readings_differ') : said('eligible', 'all_resolved')
+    return scored && Number(fit) < VCR_FIT_BANDS.possible ? said('insufficient', 'prerequisite_open') : said('possible', 'items_open')
   }
   if (!Number.isFinite(fit)) return said('insufficient', 'no_judgment')
   const score = Number(fit)
