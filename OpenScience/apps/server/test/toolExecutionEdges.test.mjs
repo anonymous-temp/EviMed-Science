@@ -272,3 +272,24 @@ test("a stored trace is read back for its run, and a missing, foreign, old-schem
     await rm(rootDir, { recursive: true, force: true });
   }
 });
+
+test('persistent evidence uses only current turns and the actual ordinary agent scope', async () => {
+  const { persistExecutedToolEdges, persistToolTraces, readToolTraces } = await import('../src/toolExecutionEdges.mjs');
+  const fs = await import('node:fs/promises'), nodePath = await import('node:path'), os = await import('node:os');
+  const rootDir = await fs.mkdtemp(nodePath.join(os.tmpdir(), 'tool-current-run-'));
+  try {
+    const project = { id: 'p', rootDir, metaDir: nodePath.join(rootDir, '.openscience') };
+    const run = { id: 'current', sessionId: 'root', kernelRequestIds: ['now'], effectiveAgentId: 'open-domain-answer' };
+    const messages = [
+      { role: 'user', source: 'user', sourceRequestId: 'old', seq: 1, turnStartSeq: 0, parts: [{ type: 'text', text: 'Old task' }] },
+      { role: 'assistant', seq: 2, turnStartSeq: 0, parts: [call('old_tool', {}, 'old')] },
+      { role: 'user', source: 'user', sourceRequestId: 'now', seq: 11, turnStartSeq: 10, parts: [{ type: 'text', text: 'New task' }] },
+      { role: 'assistant', seq: 12, turnStartSeq: 10, parts: [call('search', {}, { doi: '10.1001/JAMA.2020.1234' }), call('fetch', { doi: '10.1001/JAMA.2020.1234' }, 'preserved')] },
+    ];
+    const sessions = [{ sessionId: 'root', parentSessionId: null, capability: null, transcript: { sessionId: 'root', messages } }];
+    const edges = await persistExecutedToolEdges({ project, run, sessions });
+    assert.equal(edges.edges, 1, 'ordinary work is filed under its actual agent scope');
+    await persistToolTraces({ project, run, sessions });
+    assert.deepEqual((await readToolTraces(project, run.id)).flatMap(trace => trace.steps.map(step => step.tool)), ['search', 'fetch']);
+  } finally { await fs.rm(rootDir, { recursive: true, force: true }); }
+});

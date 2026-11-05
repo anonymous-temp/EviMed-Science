@@ -160,6 +160,18 @@ function usesDouble() {
 /** @param {string} source */
 const transcriptOf = (source) => ({ header: {}, messages: [{ sessionId: "s", role: "assistant", parts: [{ type: "tool", tool: "bash", status: "completed", input: { command: `python3 - <<'EOF'\n${source}\nEOF` } }] }] });
 
+test('a repeated script in an earlier turn is not an occurrence of the current run', options, async () => {
+  const uses = usesDouble();
+  const oldTool = { ...transcriptOf(CLEAN).messages[0], sessionId: 'c', seq: 2, turnStartSeq: 0 };
+  const saved = { header: { runId: 'current', sessions: [{ sessionId: 'c', parentSessionId: null, seedEndSeq: -1 }] }, messages: [
+    { sessionId: 'c', seq: 1, turnStartSeq: 0, role: 'user', source: 'user', sourceRequestId: 'old', parts: [{ type: 'text', text: 'Previous analysis' }] }, oldTool,
+    { sessionId: 'c', seq: 11, turnStartSeq: 10, role: 'user', source: 'user', sourceRequestId: 'now', parts: [{ type: 'text', text: 'A new question without code' }] },
+  ] };
+  const lessons = new ScriptLessons({ uses: /** @type {any} */ (uses), execute, readTranscript: async () => saved });
+  assert.deepEqual(await lessons.afterSettle({ userId: 'u1', id: 'p' }, { id: 'current', sessionId: 'c', kernelRequestIds: ['now'] }), { recorded: 0, queued: [] });
+  assert.equal(uses.rows.length, 0);
+});
+
 test("the same program in three runs of two conversations queues one lesson; the third run of one conversation, a repeat of one run and a one-liner do not", options, async () => {
   const uses = usesDouble();
   /** @type {any[]} */ const queued = [];
