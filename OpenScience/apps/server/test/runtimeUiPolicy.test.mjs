@@ -2642,3 +2642,14 @@ test('ordinary native HTTP and mux fence deleted identities and recheck in-fligh
   assert.equal((await c.next()).type,'error');
   assert.equal(f.received.some(frame=>frame.streamId==='deleted-read'),false);
 });
+
+test('raw native upload repeats its source fence after runtime startup even without an upload receipt observer', {timeout:10000}, async t=>{
+  let deleted=false;
+  const sourceDeletion={authorize:async()=>{},projectValue:async(_p,_m,_a,value)=>({forward:true,value}),assertAvailable:async()=>{if(deleted)throw new HttpError(404,'runtime_session_not_found','Conversation not found.');}};
+  const f=await fixture(t,{}, {}, {sourceDeletion});
+  f.manager.proxy=RuntimeManager.prototype.proxy.bind(f.manager);
+  const start=f.manager.start;f.manager.start=async project=>{deleted=true;return start(project);};
+  let reached=0;f.upstream.on('request',(req,res)=>{reached++;req.resume();res.writeHead(200,{'content-type':'application/json'});res.end('{"ok":true}');});
+  const response=await fetch(`${f.base}/api/session/uploadFileBinary?sessionId=a&name=test.txt`,{method:'POST',headers:{cookie:f.cookie,Origin:UI_ORIGIN,'content-type':'application/octet-stream'},body:'source bytes'});
+  assert.equal(response.status,404);assert.equal(reached,0);
+});
