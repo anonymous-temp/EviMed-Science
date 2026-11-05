@@ -4,12 +4,18 @@ description: |
   People: useful context about any person the user works with or cares about. Keep one person per file,
   using the user's label, including patients, clients, students, family, collaborators and any other person.
   These are examples, not a closed subtype list. Choose headings to fit the information.
+  An unnamed person mentioned once still qualifies. Use the user's verbatim role or description as
+  a retrieval label, with a conversation-specific file suffix when identity is uncertain. This label
+  is not an invented real-world identity. Do not wait for a name, recurrence or a request to remember.
   Keep uncertain identities separate. Merge only when the conversation explicitly identifies the same
   person; a shared name, diagnosis, role or similar story is not evidence of shared identity.
   Keep current state and dated history. When a value changes, update current state and retain the old
   value with the date it applied. Mark when a date is unknown; never invent one.
   Preserve exact allergies, medications, doses, numeric values and units, dates, plans, contraindications,
   wishes and any other relevant details. Contact details and private context are eligible when useful.
+  A clinical case stated in a single question still carries useful patient context: keep the stated
+  case details here, separate from the account owner. Preserve clinically material ranges and units
+  as stated. A hypothetical teaching case belongs in source-labelled NOTES, not a real person's card.
   Attribute statements to the speaker or document; a diagnosis reported by the user is reported, not an
   independent clinical confirmation. Do not resolve an uncertainty or infer missing clinical details.
   PEOPLE is retrieved when relevant, not appended to the opening profile. The user's own current health
@@ -37,6 +43,8 @@ fields:
       Stable path-safe file name based on the user's label, not an invented real-world identity.
       For distinct or uncertain people with the same label, append the distinguishing context the user
       gave, or a separate file suffix. Keep existing file identity on updates. No slashes or traversal.
+      An unnamed person uses the source-local role or description plus a distinct unused suffix;
+      the absence of a legal name is not a reason to discard their context or merge anonymous people.
     merge_op: immutable
   - name: label
     type: string
