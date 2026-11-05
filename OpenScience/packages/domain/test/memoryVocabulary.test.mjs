@@ -282,3 +282,17 @@ for (const [source, expected] of [
     assert.deepEqual(identifierShapesIn(expected), [], "redaction must be stable on the next read");
   });
 }
+
+for (const [source, expected] of [
+  [String.raw`password: "ab\" cD9!"`, "password: [已省略]"],
+  [String.raw`password: 'ab\' cD9!'`, "password: [已省略]"],
+  ['password: "ab cD9!', "password: [已省略]"],
+  ['password: "ab\ncD9!"', "password: [已省略]"],
+  [String.raw`password: "ab\" cD9!", then proceed`, "password: [已省略], then proceed"],
+]) {
+  test(`quoted assigned secrets are masked across escapes and incomplete quotes: ${JSON.stringify(source)}`, () => {
+    assert.deepEqual(identifierShapesIn(source), ["credential"]);
+    assert.equal(maskIdentifiers(source), expected);
+    assert.deepEqual(identifierShapesIn(expected), []);
+  });
+}

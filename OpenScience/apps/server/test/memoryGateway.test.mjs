@@ -910,3 +910,23 @@ test("secret grammar leaves useful medical values and contacts unchanged", () =>
     });
   }
 });
+
+for (const [content, safe] of [
+  [String.raw`password: "ab\" cD9!"`, "password: [已省略]"],
+  [String.raw`password: 'ab\' cD9!'`, "password: [已省略]"],
+  ['password: "ab cD9!', "password: [已省略]"],
+  ['password: "ab\ncD9!"', "password: [已省略]"],
+  [String.raw`password: "ab\" cD9!", then proceed`, "password: [已省略], then proceed"],
+]) {
+  test(`captured quoted secret has no suffix at the engine: ${JSON.stringify(content)}`, async (t) => {
+    assert.deepEqual(filterCapturedMessage({ role: "user", content }), {
+      forward: { role: "user", parts: [{ type: "text", text: safe }] }, masked: true,
+    });
+    const { stub, call } = await fixture(t);
+    await call("POST", "/api/v1/sessions", { session_id: SESSION });
+    assert.equal((await call("POST", `/api/v1/sessions/${SESSION}/messages`, { role: "user", content })).status, 200);
+    assert.deepEqual(stub.sent("POST", `/api/v1/sessions/${SESSION}/messages`).map((request) => request.body), [
+      { role: "user", parts: [{ type: "text", text: safe }] },
+    ]);
+  });
+}
