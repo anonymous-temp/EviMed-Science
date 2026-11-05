@@ -155,7 +155,8 @@
     "@deepseek-ai/dsh-typert-protocol": "dependency",
     "@deepseek-ai/dsh-scope": "dependency",
     "@deepseek-ai/dsh-system-prompt": "dependency",
-    "@deepseek-ai/dsh-plugin-manager": "dependency"
+    "@deepseek-ai/dsh-plugin-manager": "dependency",
+    "@deepseek-ai/dsh-tool-executor-native": "dependency"
   },
   "providers": {
     "compaction": {

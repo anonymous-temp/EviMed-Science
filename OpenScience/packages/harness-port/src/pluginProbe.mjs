@@ -247,9 +247,9 @@ export async function verifyCitationAgent(ctx, agent) {
   /** @type {{ ok: boolean, code: string | null } | null} */
   let upstream = null
   if (config.enabled) {
-    const [{ Context }, { ToolRuntime }, { SystemPrompt }] = await Promise.all([
+    const [{ Context }, { ToolRuntime }, { SystemPrompt }, { NativeToolExecutor }] = await Promise.all([
       loadHarnessModule('@deepseek-ai/cordis'), loadHarnessModule('@deepseek-ai/dsh-tools'),
-      loadHarnessModule('@deepseek-ai/dsh-system-prompt'),
+      loadHarnessModule('@deepseek-ai/dsh-system-prompt'), loadHarnessModule('@deepseek-ai/dsh-tool-executor-native'),
     ])
     // Use the identical registered definitions in an owned native pipeline.
     // Native argument/output validation and cancellation still apply, while
@@ -258,14 +258,18 @@ export async function verifyCitationAgent(ctx, agent) {
     try {
       new SystemPrompt(isolated, { includeHarnessIdentity: false, includeRuntimeContext: false })
       const pipeline = new ToolRuntime(isolated)
+      // From 0.2.2 a registry runs nothing by itself: its executor is the composition's `tool-executor-native`, and a call is a batch of one.
+      pipeline.setExecutor(new NativeToolExecutor(isolated))
       for (const name of tools) pipeline.register(ctx.tools.get(name, agent))
       // One call, `cite_health`: it exercises the registered definition, the
       // managed transport and the token, and it is the whole of what the
       // source is asked. A DOI lookup used to follow it, a second Crossref
       // request per probe that proved nothing about the configuration.
       await agent.runMaintenance(async (/** @type {AbortSignal} */ signal) => {
-        const result = await pipeline.execute({ agent, callId: `evimed-plugin-cite_health-${Date.now()}`, name: 'cite_health',
-          arguments: {}, signal: AbortSignal.any([signal, AbortSignal.timeout(config.timeoutMs + 2000)]) })
+        const batch = await pipeline.execute({ agent,
+          calls: [{ type: 'tool-call', id: `evimed-plugin-cite_health-${Date.now()}`, name: 'cite_health', arguments: '{}' }],
+          signal: AbortSignal.any([signal, AbortSignal.timeout(config.timeoutMs + 2000)]) })
+        const result = batch.results[0].result
         // The native pipeline refusing the registered definition -- its input
         // or output schema, a denial -- is the registration failing, not the
         // source: `cite_health` reports a transport or source failure in its
