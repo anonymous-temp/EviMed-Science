@@ -1,5 +1,5 @@
 {
-  "upstreamCommit": "c2dea8005f851ce064223b78c2c7d5634807b9fb",
+  "upstreamCommit": "178a8cdfb41b51e7d24c4bf79a13cc54981e0ee8",
   "evidenceKind": "pinned-lifecycle-startup-config",
   "botInMemoryRead": false,
   "files": [
@@ -12,14 +12,14 @@
     {
       "path": "openviking/server/bootstrap.py",
       "installedPath": "/app/.venv/lib/python3.13/site-packages/openviking/server/bootstrap.py",
-      "gitBlob": "b85deca763bcf35acd4d58fc862a65ae4dafc912",
-      "sha256": "43a3bce7eb0d0d39286b0f818aa95dd9027a98490d9c58236d5e4ce8e51cd323"
+      "gitBlob": "94af8cf29af9604aa31a286a8c08385324a5e5a8",
+      "sha256": "d59508afcd709820d33a88ffd97dbe7802c7e1cbe90df4d1c11edf419d98ee7a"
     },
     {
       "path": "openviking_cli/utils/config/open_viking_config.py",
       "installedPath": "/app/.venv/lib/python3.13/site-packages/openviking_cli/utils/config/open_viking_config.py",
-      "gitBlob": "faf905f20bcd34a4a2c80bbb3356c7e570dabd72",
-      "sha256": "50e010853c0e4e14be6bdf770725dd17867cbb1e619df4e91f26876c72d138e0"
+      "gitBlob": "2ec00f733b295d276797c410cb24a7ec326b10c0",
+      "sha256": "82145352b3ddcdb11586ccd223623da98c4554aa81d8d892a6945af0856c4220"
     },
     {
       "path": "openviking/config/config_file.py",
@@ -30,8 +30,8 @@
     {
       "path": "openviking/server/routers/skills.py",
       "installedPath": "/app/.venv/lib/python3.13/site-packages/openviking/server/routers/skills.py",
-      "gitBlob": "5ed325154c2fa546385486484175d3e0044828b2",
-      "sha256": "4dbd00ff7c33018591386b90e67420a2e92d682188d721ede777389b8e644459"
+      "gitBlob": "5369db75ce1f6c7c540ffe22e3984cd11d0ebd59",
+      "sha256": "6f8d188e7a4f6bb8f38df0637858a8c38ccdc6bf18b9e3ac43dbaed0058e21c6"
     },
     {
       "path": "bot/vikingbot/cli/commands.py",
@@ -54,38 +54,38 @@
     {
       "path": "bot/vikingbot/compile/service.py",
       "installedPath": "/app/.venv/lib/python3.13/site-packages/vikingbot/compile/service.py",
-      "gitBlob": "fc38dbc00eeed9c2034bb6923febeef7abc1af76",
-      "sha256": "3ae68507a4c9fd6154edc714c2dd430937ada98c4402591ad494372bb87af9b1"
+      "gitBlob": "45bd2049dd01c4f8d64b95ff72502472753ec388",
+      "sha256": "bd55cd3c371743699524ac3de3b8547eb6a7f4979765c334fbae8a9a68b70e2d"
     },
     {
       "path": "bot/vikingbot/compile/pipeline_agent.py",
       "installedPath": "/app/.venv/lib/python3.13/site-packages/vikingbot/compile/pipeline_agent.py",
-      "gitBlob": "fd336760368307cf7709c9c1f9b1b89e7df57360",
-      "sha256": "a40c74b7bda2183c23dec082810233055151d63782333fe3eb19a9fe92b3b3a3"
+      "gitBlob": "aafbc98d46076f671a2cccd40a8174dafd385bb4",
+      "sha256": "6673538391bf8c9949fc933a692b87325e71fc1a238ea14b3b95f86fe5bb1fe7"
     },
     {
       "path": "bot/vikingbot/compile/entry.py",
       "installedPath": "/app/.venv/lib/python3.13/site-packages/vikingbot/compile/entry.py",
-      "gitBlob": "8768dceb8d42f2290aa15b71d18fa2037348c8cb",
-      "sha256": "edb31ee90faf3103a8e9bf6c067050dbe5b7b4bf9e1a6cb3f8e0688d689f1cf6"
+      "gitBlob": "8853a65b27b8aeae4e7b30b315430882a75b90f4",
+      "sha256": "97d471883976b1c231768d81dfdaeca30920a9e471a9bb1cac4ae174c0baafeb"
     },
     {
       "path": "bot/vikingbot/compile/file_ops.py",
       "installedPath": "/app/.venv/lib/python3.13/site-packages/vikingbot/compile/file_ops.py",
-      "gitBlob": "f759140aa27731286f94d5c5332d5d269f9a18be",
-      "sha256": "300efc256ea9e6f4fe6acf4c42db24e46b86d9a378bdfd642d1396b459b7018d"
+      "gitBlob": "1aeb2fe2e7c27f0e89cdb1cfc218a05d85ab29a5",
+      "sha256": "2ddedc9fb58e3fc6dc1860f0f8dbea89cdc9107c2207f790aba4b7ec9c1eeda3"
     },
     {
       "path": "bot/vikingbot/compile/models.py",
       "installedPath": "/app/.venv/lib/python3.13/site-packages/vikingbot/compile/models.py",
-      "gitBlob": "ebb503528f749dcae18894cf2c552fc63c5f4cae",
-      "sha256": "fe68e1ab806fde34bdde5b1d0d459746c91225919390738f2caf1e7a3a15e5fe"
+      "gitBlob": "bca25a71ed666e352a041e5dac6e6b5c78d0e143",
+      "sha256": "d5738569ba8b4bd4c55855e8c52bd1e17b7f31975415f43ee47e8ba1ed7d4726"
     },
     {
       "path": "bot/vikingbot/compile/ops/finalize.py",
       "installedPath": "/app/.venv/lib/python3.13/site-packages/vikingbot/compile/ops/finalize.py",
-      "gitBlob": "47b5f0169581baabe85017e43a03431ac42d1947",
-      "sha256": "7ee0d330d86dbd8beaebf333979e833f20821ea1446a854fc5314ebf7c98ff16"
+      "gitBlob": "940c54732a814ec4f9202ca60e0681acda9ae9ff",
+      "sha256": "9d5a0dbab50dec34effe2028dd6b77ba97ecad2fca716956290cc55c856db6ae"
     },
     {
       "path": "bot/vikingbot/compile/ops/map.py",
@@ -96,8 +96,8 @@
     {
       "path": "bot/vikingbot/compile/ops/reduce.py",
       "installedPath": "/app/.venv/lib/python3.13/site-packages/vikingbot/compile/ops/reduce.py",
-      "gitBlob": "eb7af8d550cd795af9081fd2067a182990d04eb1",
-      "sha256": "0e7a93335270f970db2e426b81029bca15263a5c650b27201a719ac062f44f62"
+      "gitBlob": "441f70f023cda741d1eca6f597ed172397a7dcf5",
+      "sha256": "87b65abd809cc8ba540b7dbc6bb02fb51af5eb378fc2d8a1442fdfa4c90981d9"
     },
     {
       "path": "bot/vikingbot/compile/ops/shuffle.py",
@@ -108,14 +108,14 @@
     {
       "path": "bot/vikingbot/compile/pipeline.py",
       "installedPath": "/app/.venv/lib/python3.13/site-packages/vikingbot/compile/pipeline.py",
-      "gitBlob": "a53b2a92ec24431c915467fb22d8f014770a142a",
-      "sha256": "2cca7925c508173952257fa25fa73ffc4589d9bdbddae48ab29761b16b200dc7"
+      "gitBlob": "f042fe02e4bab60a57a7eb132436758f7df32fc7",
+      "sha256": "7445bd6e6ff2ada9c1acb3151d9ebd90505871ac50f17b5ed981634ad60f6bed"
     },
     {
       "path": "bot/vikingbot/compile/pipeline_io.py",
       "installedPath": "/app/.venv/lib/python3.13/site-packages/vikingbot/compile/pipeline_io.py",
-      "gitBlob": "8171933610e78cfe96e5009e25a368ab71c1128b",
-      "sha256": "0d1aa54c685dcbbbaadeeb664c15bdd1884c71bacffe0eb1b49e7fdc36541233"
+      "gitBlob": "64dea47107e012f31648e9985be2b04b9994b3e6",
+      "sha256": "f67f85ebf151ede34991c223663007e2cf0dcb6be5b597342f471d0b4632d41c"
     },
     {
       "path": "bot/vikingbot/compile/plan.py",
@@ -126,8 +126,8 @@
     {
       "path": "bot/vikingbot/compile/review.py",
       "installedPath": "/app/.venv/lib/python3.13/site-packages/vikingbot/compile/review.py",
-      "gitBlob": "09bcecc96ffd06d077bb8cd589f1bb0ce55fa780",
-      "sha256": "3a8225ea81989b58d3c105d948316267f8e5f46e1eb9c79beb6f6daad941a401"
+      "gitBlob": "2da76487364657409b002eff9fb86cd6a9d1487f",
+      "sha256": "221461f7ed4684c826c5edbf4e57b75e1b3d42218008c0b223311445ca7f641d"
     },
     {
       "path": "bot/vikingbot/compile/router.py",
@@ -138,21 +138,21 @@
     {
       "path": "bot/vikingbot/compile/sandbox.py",
       "installedPath": "/app/.venv/lib/python3.13/site-packages/vikingbot/compile/sandbox.py",
-      "gitBlob": "9a933551d6a402d929efb70f0a6dac2b612bbcdf",
-      "sha256": "47c98c5763cfe16bedfd0d37bba6177737fe7c4d60c1dd87842811b40ac8cf33"
+      "gitBlob": "597a8a6ce32798c311fc545f0a5bfa4a2dbd106b",
+      "sha256": "5187c635600e4168e2e1723864eabe4f431681387a6f675cfd0313c6a88c84ca"
     },
     {
       "path": "bot/vikingbot/compile/skill_resources.py",
       "installedPath": "/app/.venv/lib/python3.13/site-packages/vikingbot/compile/skill_resources.py",
-      "gitBlob": "796ae05e7a80340f79bd7724a0772d8fe1ca110a",
-      "sha256": "f2a24434148f782193b7200c87570207eefca7364b96971353cd57b49769d2b7"
+      "gitBlob": "e2f9b1c29bbd6d9e82cf1d5147e9750ca751ec07",
+      "sha256": "16a2153cfc4b3c54a5281b880ad5e8ec43a9cdeeffe8c630b3724c29f231a500"
     },
     {
       "path": "bot/vikingbot/compile/renderer.py",
       "installedPath": "/app/.venv/lib/python3.13/site-packages/vikingbot/compile/renderer.py",
-      "gitBlob": "f22c1212bd71fd1ef6f58829642b7d513b711fa9",
-      "sha256": "4f85342a71b9ccba9d72515f3144119d820e4ed4991ba5d74578305d83d2caf9"
+      "gitBlob": "9a72aa35ca049f9b0e812139015286c3fe5fc4f9",
+      "sha256": "95f5a3b736999cb5bb0340e14f1cbff1f828703fcace2fb98d2ace32254f3fe3"
     }
   ],
-  "imageDigest": "sha256:551b1ae00f59fd7b1a2434ecc10a4860be34aae8b7627f5f57240be355b23217"
+  "imageDigest": "sha256:57d3fd8873dbb78e5ccfdc57481006e6fbe765390ea18cd4a6b2f62da8aa104d"
 }
