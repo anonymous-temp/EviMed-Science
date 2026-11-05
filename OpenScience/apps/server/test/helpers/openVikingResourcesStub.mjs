@@ -1,7 +1,7 @@
 // An OpenViking that holds files in memory and answers the Resources and Compile routes the way v0.5.1.1 does (except `batch-write`, which is v0.5.3's) — the
 // envelopes, the status codes and the quirks the client was written against (`fs/ls` paging with `has_more` beside
 // `result`, `create` an alias of `replace`, `replace` creating a file that is not there, `batch-write` with no hash
-// precondition (an `expected_sha256` is a 422; `path_busy` while a directory is processed), a finished compile
+// precondition (an `expected_sha256` is a 400 INVALID_ARGUMENT; `path_busy` while a directory is processed), a finished compile
 // reporting every file as updated, a task that is gone answering 404, a compile's tokens in `meta.pipeline.tokens`). A
 // compile does what the test tells it to: `compile` is called with the request and the store, and whatever it writes
 // into the target is what the "engine" produced.
@@ -97,7 +97,7 @@ export function createOpenVikingStub({ compile = () => {}, compileUsage = { inpu
           const held = files.get(target);
           // v0.5.3: the operation model forbids unknown keys, and `expected_sha256` is one (PR #6615).
           const unknown = Object.keys(operation).filter((key) => !["uri", "content", "content_base64", "mode", "tags", "tag_mode", "acl"].includes(key));
-          if (unknown.length) return json(422, { status: "error", result: null, error: { code: "INVALID_ARGUMENT", message: `Extra inputs are not permitted: ${unknown.join(", ")}` } });
+          if (unknown.length) return json(400, { status: "error", result: null, error: { code: "INVALID_ARGUMENT", message: `Invalid request parameters: body.operations.0.${unknown[0]}: Extra inputs are not permitted` } });
           (held ? updated : created).push(target);
           files.set(target, { content: Buffer.from(String(operation.content ?? ""), "utf8"), tags: held?.tags ?? [], modTime: stamp() });
         }

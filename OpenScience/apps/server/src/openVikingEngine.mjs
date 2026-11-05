@@ -296,7 +296,10 @@ export class OpenVikingEngine {
       submitted = await this.client.request({
         method: "POST", path: "/api/v1/compile", openVikingUser: OPENVIKING_ENGINE_USER,
         idempotencyKey: `evimed-compile-probe-${randomBytes(12).toString("hex")}`,
-        body: { from: [sources], to: `${COMPILE_PROBE_ROOT}/wiki`, skill: skillUri(OPENVIKING_SKILL_NAMES[0]) },
+        // `mode: "full"` since v0.5.3: a compile is incremental by default and the server settles an incremental compile of an empty
+        // source itself (completed in 0.04 s with `result: {}`, recorded 2026-11-05) without the Compile runtime ever reading the
+        // directory, which proves nothing about the identity it runs as. A full one is handed to the runtime.
+        body: { from: [sources], to: `${COMPILE_PROBE_ROOT}/wiki`, skill: skillUri(OPENVIKING_SKILL_NAMES[0]), args: { mode: "full" } },
       });
     } catch (error) {
       // 503 UNAVAILABLE at submission is the server saying it has no Compile runtime at all.

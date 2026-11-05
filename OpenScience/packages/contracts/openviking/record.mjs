@@ -1,6 +1,6 @@
 // Re-records the wire fixtures of this directory from a running OpenViking server of the pinned release.
 //
-//   OV_URL=http://127.0.0.1:19330 OV_KEY_FILE=<root key file> OV_ACCOUNT=<throwaway account> node record.mjs <out dir> [top|engine|memory|knowledge ...]
+//   OV_URL=http://127.0.0.1:19330 OV_KEY_FILE=<root key file> OV_ACCOUNT=<throwaway account> node record.mjs <out dir> [top|engine|memory|knowledge|consolidation ...]
 //
 // Nothing is authored. Each file is an exchange the server really answered: the requests are the ones this repository's
 // `OpenVikingClient` and `OpenVikingEngine` build (the top-level files and `engine/`) or the plain HTTP calls the two earlier
@@ -20,7 +20,7 @@ import { OpenVikingEngine } from "../../../apps/server/src/openVikingEngine.mjs"
 import { OPENVIKING_MEMORY_TYPES } from "../../../apps/server/src/openVikingLayout.mjs";
 
 const OUT = path.resolve(process.argv[2] ?? "");
-const WANT = new Set(process.argv.slice(3).length ? process.argv.slice(3) : ["top", "engine", "memory", "knowledge"]);
+const WANT = new Set(process.argv.slice(3).length ? process.argv.slice(3) : ["top", "engine", "memory", "knowledge", "consolidation"]);
 const BASE = (process.env.OV_URL ?? "http://127.0.0.1:19330").replace(/\/+$/, "");
 const KEY = fs.readFileSync(process.env.OV_KEY_FILE ?? "", "utf8").trim();
 const ACCOUNT = process.env.OV_ACCOUNT ?? `rec-${randomBytes(4).toString("hex")}`;
@@ -395,6 +395,32 @@ async function recordMemory() {
 }
 
 // ----------------------------------------------------------------------------------------------------------------------
+// The memory consolidation (`compile --skill memory` over an account's memories root), asked by itself: it is not part of the
+// memory set, which needs no model call of its own beyond extraction. `node record.mjs <out> consolidation`.
+
+async function recordConsolidation() {
+  const USER = "fx-consolidation";
+  const root = `viking://user/${USER}/memories`;
+  await raw(USER, "POST", `/api/v1/admin/accounts/${ACCOUNT}/users`, { user_id: USER, role: "user" });
+  for (const [name, text] of [["answer-structure", "- 回答一律先给结论，再给依据。"], ["units", "- 图纸里的尺寸单位一律用毫米。"], ["format", "- 计算书用 Word 格式。"]]) {
+    await raw(USER, "POST", "/api/v1/content/write", { uri: `${root}/preferences/self/${name}.md`, content: text, mode: "create", wait: true });
+  }
+  const submitted = await raw(USER, "POST", "/api/v1/compile", { to: root, skill: "memory", instruction: "Consolidate these memories; keep every distinct fact." }, { headers: { "Idempotency-Key": `rec-consolidation-${randomBytes(8).toString("hex")}` } });
+  const taskId = submitted.json?.result?.task_id;
+  if (!taskId) throw new Error(`the consolidation was not accepted: ${submitted.status} ${submitted.text.slice(0, 300)}`);
+  await pollTask(USER, taskId, { limitMs: 600_000 });
+  const task = await raw(USER, "GET", `/api/v1/tasks/${taskId}`);
+  write("memory/consolidation-task.json", {
+    note: "The task of a memory consolidation (POST /api/v1/compile {to: <memories root>, skill: memory, instruction}) read back after it ended; three preference files written for it, recorded by record.mjs.",
+    recordedFrom: IMAGE,
+    request: { method: "GET", path: `/api/v1/tasks/${taskId}`, headers: { ...task.sent, "X-API-Key": KEY_PLACEHOLDER } },
+    status: task.status, contentType: task.contentType, response: task.json ?? task.text,
+  });
+  console.log("consolidation", task.json?.result?.status);
+  if (!process.env.OV_KEEP_ACCOUNT) await raw(USER, "DELETE", `/api/v1/admin/accounts/${ACCOUNT}/users/${USER}`);
+}
+
+// ----------------------------------------------------------------------------------------------------------------------
 // Resources, Compile, tasks, search and skills (the knowledge lab's recorder). Files are bare bodies; the provenance holds
 // the method, path, body and status of each.
 
@@ -447,20 +473,20 @@ async function recordKnowledge() {
     { uri: `${P}/sources/edges.jsonl`, content: "{\"from\":\"a\",\"relation\":\"part_of\",\"label\":\"属于\",\"to\":\"b\",\"evidence\":[\"x\"]}\n", mode: "upsert" }] }, { note: "upsert takes extensions that content/write create refuses" });
   await rec("content-write-create-extension-refused", "POST", "/api/v1/content/write", { uri: `${P}/sources/table2.csv`, content: "a,b\n", mode: "create", processing_mode: "vectors_only" }, { note: "create allows only .md .txt .json .yaml .yml .toml .py .js .ts" });
 
-  // The write-back the control plane makes of a page a person edited: one checked batch-write operation.
+  // The write-back the control plane makes of a page a person edited. Until v0.5.2 it was one checked batch-write operation naming
+  // `expected_sha256`; v0.5.3 removed the key (the operation model forbids unknown keys), so the check is the control plane's
+  // (it downloads the page and compares) and the engine is only asked for the unconditional replace.
   const wikiProbe = `${P}/wiki-write-back`;
   await raw(USER, "POST", "/api/v1/fs/mkdir", { uri: wikiProbe });
   const pageUri = `${wikiProbe}/page.md`;
   const pageOne = "---\ntype: concept\ntitle: 写回检验\n---\n\n# 写回检验\n\n第一版。\n";
   await rec("content-write-page-seed", "POST", "/api/v1/content/write", { uri: pageUri, content: pageOne, mode: "replace", wait: true }, { note: "a page of a compiled tree, written in the default mode (summary and vector follow)" });
-  await rec("content-download-page", "GET", `/api/v1/content/download?${q({ uri: pageUri })}`, undefined, { binary: true, note: "the stored bytes: their sha256 is the hash a write-back names" });
+  await rec("content-download-page", "GET", `/api/v1/content/download?${q({ uri: pageUri })}`, undefined, { binary: true, note: "the stored bytes: their sha256 is the hash the control plane compares before a write-back" });
   const pageTwo = pageOne.replace("第一版", "第二版");
-  await rec("content-batch-write-checked", "POST", "/api/v1/content/batch-write", { root_uri: wikiProbe, wait: true, operations: [{ uri: pageUri, content: pageTwo, mode: "replace", expected_sha256: sha256(pageOne) }] }, { note: "a write-back that names the hash of the page it replaces: written" });
-  await rec("content-batch-write-checked-stale", "POST", "/api/v1/content/batch-write", { root_uri: wikiProbe, wait: true, operations: [{ uri: pageUri, content: pageOne.replace("第一版", "第三版"), mode: "replace", expected_sha256: sha256(pageOne) }] }, { note: "the same hash after the page changed: 409 CONFLICT 'Content revision changed', nothing written" });
-  await rec("content-batch-write-checked-stale-skipped", "POST", "/api/v1/content/batch-write", { root_uri: wikiProbe, wait: true, skip_conflicts: true, operations: [{ uri: pageUri, content: pageOne.replace("第一版", "第三版"), mode: "replace", expected_sha256: sha256(pageOne) }] }, { note: "with skip_conflicts the same refusal is a 200 whose result lists the conflicts" });
-  await rec("content-batch-write-checked-missing", "POST", "/api/v1/content/batch-write", { root_uri: wikiProbe, wait: true, operations: [{ uri: `${wikiProbe}/gone.md`, content: "x\n", mode: "replace", expected_sha256: sha256("x") }] }, { note: "a hash for a file that is not there: 409 CONFLICT 'Expected content no longer exists'" });
-  await rec("content-batch-write-checked-busy-first", "POST", "/api/v1/content/batch-write", { root_uri: wikiProbe, wait: false, operations: [{ uri: pageUri, content: pageTwo.replace("第二版", "第四版"), mode: "replace", expected_sha256: sha256(pageTwo) }] }, { note: "wait false: answers at once with a task id while the summary and vector are processed" });
-  await rec("content-batch-write-checked-busy", "POST", "/api/v1/content/batch-write", { root_uri: wikiProbe, wait: false, operations: [{ uri: pageUri, content: pageTwo.replace("第二版", "第五版"), mode: "replace", expected_sha256: sha256(pageTwo.replace("第二版", "第四版")) }] }, { note: "a second write to the same directory while the first is processed: 409 CONFLICT, conflict_type path_busy, retryable" });
+  await rec("content-batch-write-key-refused", "POST", "/api/v1/content/batch-write", { root_uri: wikiProbe, wait: true, operations: [{ uri: pageUri, content: pageTwo, mode: "replace", expected_sha256: sha256(pageOne) }] }, { note: "the v0.5.2 checked write: v0.5.3 refuses the key (400 INVALID_ARGUMENT, extra_forbidden) and writes nothing" });
+  await rec("content-batch-write-page", "POST", "/api/v1/content/batch-write", { root_uri: wikiProbe, wait: true, operations: [{ uri: pageUri, content: pageTwo, mode: "replace" }] }, { note: "the write-back as the control plane makes it: one unconditional replace, answered when the summary and the vector are done" });
+  await rec("content-batch-write-page-busy-first", "POST", "/api/v1/content/batch-write", { root_uri: wikiProbe, wait: false, operations: [{ uri: pageUri, content: pageTwo.replace("第二版", "第四版"), mode: "replace" }] }, { note: "wait false: answers at once with a task id while the summary and vector are processed" });
+  await rec("content-batch-write-page-busy", "POST", "/api/v1/content/batch-write", { root_uri: wikiProbe, wait: false, operations: [{ uri: pageUri, content: pageTwo.replace("第二版", "第五版"), mode: "replace" }] }, { note: "a second write to the same directory while the first is processed" });
   await waitIdle(USER);
   await raw(USER, "DELETE", `/api/v1/fs?${q({ uri: wikiProbe, recursive: "true" })}`);
 
@@ -586,6 +612,7 @@ try {
   if (WANT.has("engine")) await recordEngine();
   if (WANT.has("memory")) await recordMemory();
   if (WANT.has("knowledge")) await recordKnowledge();
+  if (WANT.has("consolidation")) await recordConsolidation();
 } finally {
   if (process.env.OV_KEEP_ACCOUNT !== "1") {
     const removed = await raw(null, "DELETE", `/api/v1/admin/accounts/${ACCOUNT}`);

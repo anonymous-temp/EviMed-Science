@@ -316,7 +316,7 @@ test("another release answering on the same configuration is a version mismatch,
   const { fetchImpl } = await replay("engine-check-ready");
   const { engine } = engineFor(fetchImpl, { pinned: { ...pin, version: "0.5.1" } });
   const status = await engine.check();
-  assert.deepEqual(status.facts.version, { ok: false, code: "openviking_version_mismatch", expected: "v0.5.1", version: "v0.5.1.1" });
+  assert.deepEqual(status.facts.version, { ok: false, code: "openviking_version_mismatch", expected: "v0.5.1", version: `v${pin.version}` });
   assert.deepEqual(status.degraded.sort(), ["knowledge", "nativeMemory"]);
   assert.equal(engine.ready("nativeMemory").fact, "version");
 });

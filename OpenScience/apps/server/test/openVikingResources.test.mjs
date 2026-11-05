@@ -118,10 +118,10 @@ test("a document that is not in the engine yet is created by the same one replac
 
 test("a page is written back after the check the engine no longer makes: read again, written only when it still hashes to what was read", async () => {
   // v0.5.3 removed `expected_sha256` from the batch-write operation (it forbids unknown keys), so the checked write is this side's: the
-  // recorded success/busy bodies are v0.5.1.1's and only their envelope is used.
-  const pageBody = (await fixture("provenance")).fixtures["content-batch-write-checked"].request_body;
-  const written = readdress(await fixture("content-batch-write-checked"));
-  const busy = await fixture("content-batch-write-checked-busy");
+  // recorded success/busy bodies are v0.5.3's.
+  const pageBody = (await fixture("provenance")).fixtures["content-batch-write-page"].request_body;
+  const written = readdress(await fixture("content-batch-write-page"));
+  const busy = await fixture("content-batch-write-page-busy");
   assert.equal(pageBody.operations[0].mode, "replace");
   const uri = `${OUR_ROOT}/wiki/concept/page.md`;
   const read = Buffer.from("---\ntype: concept\n---\n\nold\n");

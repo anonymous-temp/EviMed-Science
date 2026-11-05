@@ -22,8 +22,7 @@ control plane compares). `llm-wiki` is a system asset of the engine from v0.5.3 
 the plugin, the skills and the examples are Apache-2.0.
 
 The fixtures below were recorded on v0.5.1.1 and are history until `record.mjs` replaces them on a v0.5.3 engine. Known to differ at
-v0.5.3 and not yet re-recorded: `content-batch-write-checked*` (the operation model forbids `expected_sha256`: the stale, missing and
-busy cases no longer come from the engine), `health` (the `version` string), the compile task fixtures (a compile is incremental by
+v0.5.3 and not yet re-recorded: `content-batch-write-checked*` (renamed: the operation model forbids `expected_sha256`; see `content-batch-write-key-refused` and `-page*`), `health` (the `version` string), the compile task fixtures (a compile is incremental by
 default and the renderer no longer rebuilds index navigation) and the skill listings.
 
 ## Candidate rehearsal (2026-10-23; not admitted)
@@ -162,7 +161,7 @@ Measured on the lab of 2026-10-23 unless a line says it is read from upstream's 
 - **`completed` is not "complete".** A failed job of the pipeline leaves the task `completed` with `meta.pipeline.errors` and a
   "Partial output" line in `result.warnings` (reported as `warnings` on the task and on the round). And a compile of the same
   three short documents wrote only `index.md`, with no error and no warning, on 2 of 9 runs (4 to 6 pages on the others, and the recorder asks again until a run writes the pages the other fixtures are read against);
-  `result.page_count` is 0 even on a good run, so `created` is the only count that says what was written.
+  `result.page_count` is 0 even on a good run, so `created` is the only count that says what was written. (At v0.5.3, recorded 2026-11-05: `page_count` is 6 for a six-page wiki, `link_count` 0, and `link_report` is gone from the result.)
 - **At v0.5.3 the engine has no such precondition** (read at the tag: `BatchWriteOperation` forbids unknown keys and `expected_sha256`
   was removed by PR #6615, which keeps manual edits of Compile outputs as versions instead). The control plane keeps its contract
   (`OpenVikingResources.writePage`): it downloads the page, compares the digest with the one the caller read, answers
