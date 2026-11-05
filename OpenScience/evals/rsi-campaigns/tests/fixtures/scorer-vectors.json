@@ -3483,5 +3483,104 @@
    "chars": 429,
    "alwaysOnChars": 429
   }
+ ],
+ "judgeNoise": [
+  {
+   "name": "binary, three passes, one reversed pair",
+   "perUnit": {
+    "a": {
+     "1": 1.0,
+     "2": 1.0,
+     "3": 1.0
+    },
+    "b": {
+     "1": 0.0,
+     "2": 0.0,
+     "3": 0.0
+    },
+    "c": {
+     "1": 1.0,
+     "2": 0.0,
+     "3": 1.0
+    },
+    "d": {
+     "1": 0.0,
+     "2": 1.0,
+     "3": 0.0
+    }
+   },
+   "units": 4,
+   "withRepeats": 4,
+   "noiseSd": 0.408248290463863,
+   "noiseBand95": 0.8001666493091715,
+   "agreement": 0.75,
+   "comparisons": 8,
+   "ties": 10
+  },
+  {
+   "name": "shares, with a unit one pass judged",
+   "perUnit": {
+    "a": {
+     "1": 0.9,
+     "2": 0.8
+    },
+    "b": {
+     "1": 0.5,
+     "2": 0.3
+    },
+    "c": {
+     "1": 0.4,
+     "2": 0.35
+    },
+    "d": {
+     "1": 0.6
+    }
+   },
+   "units": 4,
+   "withRepeats": 3,
+   "noiseSd": 0.09354143466934854,
+   "noiseBand95": 0.18334121195192313,
+   "agreement": 0.6666666666666666,
+   "comparisons": 3,
+   "ties": 0
+  },
+  {
+   "name": "a judge that tells nothing apart has no agreement",
+   "perUnit": {
+    "a": {
+     "1": 0.5,
+     "2": 0.5
+    },
+    "b": {
+     "1": 0.5,
+     "2": 0.5
+    }
+   },
+   "units": 2,
+   "withRepeats": 2,
+   "noiseSd": 0.0,
+   "noiseBand95": 0.0,
+   "agreement": null,
+   "comparisons": 0,
+   "ties": 1
+  },
+  {
+   "name": "one pass has no band",
+   "perUnit": {
+    "a": {
+     "1": 1.0
+    },
+    "b": {
+     "1": 0.0
+    }
+   },
+   "units": 2,
+   "withRepeats": 0,
+   "noiseSd": null,
+   "noiseBand95": null,
+   "agreement": null,
+   "comparisons": 0,
+   "ties": 0
+  }
  ]
 }

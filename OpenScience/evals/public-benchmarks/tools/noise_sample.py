@@ -19,12 +19,14 @@ the packets as they were then; a repeat must see the same packet bytes).
 
 `band` reads those files (and, with --pairwise, a drb_pairwise.py order file and the pairwise verdict lines judged over it, swapped couples
 of passes; repeatable) and writes the judge's measurement, `judge-noise/2` (stdout or --out), per judged family and per form:
-  {"schema": "judge-noise/2", "scale": "verdict-0-1", "families": {"rcb": {"absolute": R}, "drb": {"absolute": R, "pairwise": R}, "bixbench": {"absolute": R}}}
+  {"schema": "judge-noise/2", "scale": "verdict-0-1", "families": {"rcb": {"absolute": R}, "drb": {"absolute": R, "pairwise": R}, "bixbench": {"absolute": R}, "frontier-source": {"absolute": R}}}
 Every number of a record R is on the scale of the verdict the lab scores (export_harness_arms.py), 0 to 1, of the unit a verdict scores:
   rcb absolute       a report, score / 100 (the percent dialect)
   drb absolute       a report, the RACE ratio (race)
   bixbench absolute  a capsule, the share of its questions judged correct (the questions dialect), over the questions it has a verdict for in
                      every pass that judged it (a capsule in one pass only has no repeat)
+  frontier-source absolute  a rewrite, the share of its fidelity questions judged correct (module_arms.mjs packets, one question: the questions dialect). Not part of the
+                     fixed sample above: its verdict files are what `claude_judge.py remap --dialect questions --bench-key frontier-source --out <verdicts>/frontier-source` writes
   drb pairwise       a comparison (one task of an order file: a candidate's report against the baseline's), (3 + s) / 6 per pass with s the
                      criterion-weighted preference of the pass (drb_pairwise.aggregate `perPass.total`, toward the order file's arm a; the
                      band and the agreement do not depend on which arm it leans toward)
@@ -160,12 +162,13 @@ def absolute_units(verdict_dir, bench, field, scale):
     return per_unit
 
 
-def bixbench_units(verdict_dir):
-    """({capsule: {pass: share correct}}, questions, question flip rate): the share over the questions a capsule has a verdict for in every pass that judged it."""
+def question_units(verdict_dir, bench):
+    """({unit: {pass: share correct}}, questions, question flip rate) of a family judged by questions: the share over the questions a unit (a capsule, a rewrite) has a verdict for in
+    every pass that judged it. The question id is what follows the last `#`: a remapped run key can hold one of its own (`#r<repeat>`)."""
     verdicts = {}  # (capsule, question) -> {pass: 1.0 | 0.0}
-    for k, f in pass_files(verdict_dir, 'bixbench').items():
+    for k, f in pass_files(verdict_dir, bench).items():
         for row in read_lines(f):
-            capsule, _, question = row['key'].partition('#')
+            capsule, _, question = row['key'].rpartition('#')
             verdicts.setdefault((capsule, question), {})[k] = 1.0 if row.get('verdict') == 'correct' else 0.0
     by_capsule = {}
     for (capsule, question), by_pass in verdicts.items():
@@ -204,9 +207,10 @@ def band(verdict_dir, pairwise=()):
         per_unit = absolute_units(verdict_dir, bench, field, scale)
         if per_unit:
             families.setdefault(bench, {})['absolute'] = record('absolute', unit, per_unit, absolute_agreement(per_unit))
-    per_unit, questions, flip = bixbench_units(verdict_dir)
-    if per_unit:
-        families['bixbench'] = {'absolute': {**record('absolute', 'capsule', per_unit, absolute_agreement(per_unit)), 'questions': questions, 'questionFlipRate': flip}}
+    for bench, unit in (('bixbench', 'capsule'), ('frontier-source', 'rewrite')):
+        per_unit, questions, flip = question_units(verdict_dir, bench)
+        if per_unit:
+            families[bench] = {'absolute': {**record('absolute', unit, per_unit, absolute_agreement(per_unit)), 'questions': questions, 'questionFlipRate': flip}}
     if pairwise:
         per_unit, couples = pairwise_units(pairwise)
         families.setdefault('drb', {})['pairwise'] = record('pairwise', 'comparison', per_unit, agreement_of(couples))

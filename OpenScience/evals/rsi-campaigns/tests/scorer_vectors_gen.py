@@ -12,7 +12,8 @@ The expected values are produced by code that is not the JS port:
 tests/test_scorer_vectors.py rebuilds the vectors from these functions and fails when the file or either scorer has drifted;
 tests/skillScorers.test.mjs asserts the JS ports reproduce the file.
 The `mbc` section (score_shortanswer.py) and the `harnessDigest` section (export_harness_arms.py) belong to the harness-patch
-campaigns (evals/rsi-campaigns/harness_scorers.mjs, harness_campaign.mjs).
+campaigns (evals/rsi-campaigns/harness_scorers.mjs, harness_campaign.mjs). The `judgeNoise` section pins the figures of
+noise_sample.py, the one measurement of a judge (`band`).
 """
 import difflib
 import importlib.util
@@ -336,6 +337,23 @@ def tool_patch_digest_cases():
     return rows
 
 
+def judge_noise_cases():
+    """noise_sample.py's figures of a judge's repeated verdicts, over units as `band` reads them: {unit: {pass: score}}."""
+    noise = _load('noise_sample')
+    cases = [
+        ('binary, three passes, one reversed pair', {'a': {1: 1.0, 2: 1.0, 3: 1.0}, 'b': {1: 0.0, 2: 0.0, 3: 0.0}, 'c': {1: 1.0, 2: 0.0, 3: 1.0}, 'd': {1: 0.0, 2: 1.0, 3: 0.0}}),
+        ('shares, with a unit one pass judged', {'a': {1: 0.9, 2: 0.8}, 'b': {1: 0.5, 2: 0.3}, 'c': {1: 0.4, 2: 0.35}, 'd': {1: 0.6}}),
+        ('a judge that tells nothing apart has no agreement', {'a': {1: 0.5, 2: 0.5}, 'b': {1: 0.5, 2: 0.5}}),
+        ('one pass has no band', {'a': {1: 1.0}, 'b': {1: 0.0}}),
+    ]
+    rows = []
+    for name, per_unit in cases:
+        band, (agreement, comparisons, ties) = noise.band_numbers(per_unit), noise.absolute_agreement(per_unit)
+        rows.append({'name': name, 'perUnit': {unit: {str(k): v for k, v in by_pass.items()} for unit, by_pass in per_unit.items()}, 'units': band['units'], 'withRepeats': band['withRepeats'],
+                     'noiseSd': band['noiseSd'], 'noiseBand95': band['noiseBand95'], 'agreement': agreement, 'comparisons': comparisons, 'ties': ties})
+    return rows
+
+
 def ratio_pairs():
     """Pairs of strings (a seeded generator): small alphabets and repeats, short and past the autojunk threshold of 200."""
     rng = random.Random(20261031)
@@ -379,6 +397,7 @@ def build():
         'mbc': mbc_cases(),
         'harnessDigest': harness_digest_cases(),
         'toolPatchDigest': tool_patch_digest_cases(),
+        'judgeNoise': judge_noise_cases(),
     }
 
 

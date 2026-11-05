@@ -6,6 +6,7 @@ import { preservedConversationHistory } from './conversationHistory.mjs';
 import { createRsiIncidentExports } from './rsiIncidentExports.mjs';
 import { loadRsiOnlineConfiguration } from './rsiOnlineConfiguration.mjs';
 import { createRsiOssTransport } from './rsiOssTransport.mjs';
+import { createRsiDirectoryTransport } from './rsiDirectoryTransport.mjs';
 import { createRsiOnlineWorker } from './rsiOnlineWorker.mjs';
 import { callModelForControlPlane } from './modelGateway.mjs';
 import { createRsiDeploymentAuthority, createRsiTrustRegistry } from './rsiDeploymentAuthority.mjs';
@@ -128,6 +129,13 @@ export function createRsiBundlePoller({ transport, importer, documents, owner, j
   /** @param {{cursor?:string}} [input] @param {{id?:string}|null} [job] */
   async function poll({ cursor } = {}, job = null) {
     if (!configured()) return { state: 'waiting' };
+    // What an earlier round committed and could not finish comes before anything new: it holds the surface a new bundle would wait for.
+    let resumed = 0;
+    try {
+      const activations = await importer.resumeActivations?.();
+      resumed = activations?.resumed ?? 0;
+      for (const code of activations?.failed ?? []) report(CLOSED_CODE.test(code) ? code : 'campaign_activation_resume_failed');
+    } catch (error) { report(closedCode(error)); }
     const page = await transport.listBundles(cursor);
     /** @type {Record<string, number>} */
     const outcomes = {};
@@ -142,7 +150,7 @@ export function createRsiBundlePoller({ transport, importer, documents, owner, j
         await jobs.enqueue(jobOwner, 'rsi-bundle-poll', page.cursor ? { cursor: page.cursor } : {}, { projectId, idempotencyKey: `rsi-bundle-poll:after:${job.id}`, runAfter: new Date(now().getTime() + delayMs) });
       } catch (error) { if (error?.code !== 'product_job_idempotency_conflict') throw error; }
     }
-    return { processed: page.keys.length, outcomes };
+    return { processed: page.keys.length, outcomes, ...(resumed ? { resumed } : {}) };
   }
   return { poll, intake };
 }
@@ -191,16 +199,22 @@ export function createRsiIncidentExtractor({ config, usageLedger, model, binding
 // A read that may succeed a moment later; any other failure to read the agreement means none is in force.
 const TRANSIENT_READ_ERRORS = new Set(['EMFILE', 'ENFILE', 'EIO', 'EAGAIN', 'EBUSY', 'EINTR']);
 
+/** The deployment file names the transport: a directory the pull timer fills, or the OSS channels. @param {any} section */
+const createRsiTransport = section => section?.kind === 'directory' ? createRsiDirectoryTransport(section) : createRsiOssTransport(section);
+
 /** Offline experiment code is deliberately absent. Without the deployment file nothing is created: no publisher account
- * or project, transport, cloud SDK, importer, poll or timer. A valid transport section alone admits withdrawals; new
- * exports and imports need every binding.
+ * or project, transport, cloud SDK, importer, poll or timer. What each path asks for is its own: a withdrawal, a valid OSS transport section;
+ * an import, a transport with the trust records, the evaluator registry and the serving adapters; a new incident export, all of that with
+ * the agreement. A directory deployment has no incident channel, so nothing is offered, extracted or uploaded on it.
  * @param {any} dependencies */
-export async function createRsiOnlineRuntime({ config, store, documents, jobs, database, agentRuns, assertModelAccess, usageLedger, servingAdapters, canRun = async () => true, authority = null, trust = null, transportFactory = createRsiOssTransport, model = callModelForControlPlane, report = () => {} }) {
+export async function createRsiOnlineRuntime({ config, store, documents, jobs, database, agentRuns, assertModelAccess, usageLedger, servingAdapters, canRun = async () => true, authority = null, trust = null, transportFactory = createRsiTransport, model = callModelForControlPlane, report = () => {}, now = () => new Date() }) {
   // Withdrawal remains addressable without provisioning an otherwise disabled module.
   const binding = { userId: PLATFORM_PUBLISHER_USER_ID, projectId: EVIDENCE_PROJECT_ID };
   const optedIn = Boolean(config.rsiOnlineConfigFile);
   const loaded = await loadRsiOnlineConfiguration(config.rsiOnlineConfigFile);
   const online = loaded.configuration;
+  const incidentChannel = Boolean(loaded.transport) && loaded.transport.kind !== 'directory';
+  if (optedIn) for (const issue of loaded.issues) report(issue);
   let publisherReady = false, transport = null;
   if (loaded.transport) {
     try { await ensureEvidenceProject(store); publisherReady = true; } catch { report('rsi_deployment_binding_unavailable'); }
@@ -214,17 +228,18 @@ export async function createRsiOnlineRuntime({ config, store, documents, jobs, d
     try { trust = await createRsiTrustRegistry(online, servingAdapters); } catch { report('rsi_deployment_binding_unavailable'); }
   }
   const agreementId = authority?.agreementId;
-  const canWithdraw = () => Boolean(publisherReady && transport?.available === true);
-  const configured = () => Boolean(canWithdraw() && online && authority?.isBound?.(online) === true && trust?.isBound?.(online) === true && servingAdapters);
+  const canWithdraw = () => Boolean(incidentChannel && publisherReady && transport?.available === true);
+  const canImport = () => Boolean(publisherReady && transport?.available === true && online && trust?.isBound?.(online) === true && servingAdapters);
+  const canExport = () => Boolean(canWithdraw() && canImport() && authority?.isBound?.(online) === true);
   const readAuthorizedTranscript = createRsiAuthorizedTranscriptReader({ store, agentRuns, agreementId, authority, assertModelAccess });
   const incidents = createRsiIncidentExports({ documents, jobs, deploymentOwnerId: binding.userId, deploymentProjectId: binding.projectId,
-    configured, canWithdraw, readAuthorizedTranscript, putObject: input => transport.putObject(input), headObject: input => transport.headObject(input),
-    extract: createRsiIncidentExtractor({ config, usageLedger, model, binding, online, configured }) });
+    configured: canExport, canWithdraw, readAuthorizedTranscript, ...(incidentChannel ? { putObject: input => transport.putObject(input), headObject: input => transport.headObject(input) } : {}),
+    extract: createRsiIncidentExtractor({ config, usageLedger, model, binding, online, configured: canExport }) });
   const publicationOwner = servingAdapters?.publicationOwnerId ?? PLATFORM_PUBLISHER_USER_ID;
   // The importer also reconciles journals left by an earlier configuration (stop, roll back), so it exists whenever the
   // deployment opted in, bound or not.
-  const importer = optedIn && servingAdapters ? new RsiCampaignImporter({ database, owner: publicationOwner,
-    isBound: configured, validateAdmission: row => trust?.validateAdmission(row) ?? false, currentTarget: servingAdapters.currentTarget, adapters: servingAdapters.adapters,
+  const importer = optedIn && servingAdapters ? new RsiCampaignImporter({ database, owner: publicationOwner, now: () => now().toISOString(),
+    isBound: canImport, validateAdmission: row => trust?.validateAdmission(row) ?? false, currentTarget: servingAdapters.currentTarget, adapters: servingAdapters.adapters,
     verificationOptions: envelope => trust.verificationOptions(envelope, online), activationPolicy: manifest => trust.activationPolicy(manifest, online),
     verifyObservation: servingAdapters.verifyObservation }) : null;
   if (importer) {
@@ -236,7 +251,7 @@ export async function createRsiOnlineRuntime({ config, store, documents, jobs, d
     });
   }
   const poller = importer ? createRsiBundlePoller({ transport: { listBundles: cursor => transport.listBundles(cursor), readBundle: digest => transport.readBundle(digest) },
-    importer, documents, owner: publicationOwner, jobs, jobOwner: binding.userId, projectId: binding.projectId, configured, report }) : null;
+    importer, documents, owner: publicationOwner, jobs, jobOwner: binding.userId, projectId: binding.projectId, configured: canImport, report, now }) : null;
   /** @type {string|null|undefined} the agreement the journals were last reconciled with in this process */
   let sweptAgreement;
   async function sweepAgreement() {
@@ -251,13 +266,14 @@ export async function createRsiOnlineRuntime({ config, store, documents, jobs, d
     if (result.invalidated.length) report('rsi_incident_agreement_withdrawn');
     return result;
   }
-  const worker = createRsiOnlineWorker({ jobs, owner: binding.userId, configured: canWithdraw, incidents, sweep: sweepAgreement, canRun, report,
+  const worker = createRsiOnlineWorker({ jobs, owner: binding.userId, configured: () => canWithdraw() || canImport(), incidents, sweep: sweepAgreement, canRun, report,
     pollBundles: poller ? poller.poll : async () => ({ state: 'waiting' }) });
-  if (configured() && poller) await jobs.enqueue(binding.userId, 'rsi-bundle-poll', {}, { projectId: binding.projectId, idempotencyKey: 'rsi-bundle-poll:bootstrap' });
-  return { worker, importer, configured, canWithdraw, sweepAgreement, configurationIssues: loaded.issues,
+  if (canImport() && poller) await jobs.enqueue(binding.userId, 'rsi-bundle-poll', {}, { projectId: binding.projectId, idempotencyKey: 'rsi-bundle-poll:bootstrap' });
+  return { worker, importer, configured: canImport, canExport, canWithdraw, sweepAgreement, configurationIssues: loaded.issues,
     invalidateSource: input => incidents.invalidateSource(input),
     async offerRun(project, runId) {
-      if (!configured() || isInternalProject(project.id)) return null;
+      if (loaded.transport?.kind === 'directory') return { offered: false, reason: 'rsi_incident_channel_absent' };
+      if (!canExport() || isInternalProject(project.id)) return null;
       const user = await store.userById(project.userId);
       if (!user) return null;
       const authorized = await store.requireProject(user, project.id);

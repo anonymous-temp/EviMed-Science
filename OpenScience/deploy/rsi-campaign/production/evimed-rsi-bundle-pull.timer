@@ -1,0 +1,9 @@
+[Unit]
+Description=Hourly pull of signed RSI bundles: a month's campaign ends at no fixed hour, and a bundle's validity is days
+[Timer]
+OnCalendar=hourly
+RandomizedDelaySec=300
+Persistent=true
+Unit=evimed-rsi-bundle-pull.service
+[Install]
+WantedBy=timers.target

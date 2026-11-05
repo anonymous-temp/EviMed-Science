@@ -30,6 +30,13 @@ const args = rest.map(translate);
 appendFileSync(process.env.FAKE_DOCKER_LOG, `${JSON.stringify({ image, script, args, network: flags['--network'], user: flags['--user'], mounts: mounts.map(([, container]) => container), envFile: flags['--ENVFILE'] ?? null })}\n`);
 const stubbed = basename(script ?? '');
 if (stubbed === 'lab_bootstrap.mjs' || stubbed === 'evaluator.mjs') process.exit(0);
+// FAKE_FINALIZE stands in for the signer: `refuse:<code>` refuses as finalize.mjs does, `sign:<bytes>` writes the bundle where the month's finalize.json says. Unset, the real script runs.
+if (stubbed === 'finalize.mjs' && process.env.FAKE_FINALIZE) {
+  const [mode, ...rest] = process.env.FAKE_FINALIZE.split(':');
+  if (mode === 'refuse') { console.error(JSON.stringify({ status: 'refused', reason: rest.join(':') })); process.exit(1); }
+  writeFileSync(join(mounts.find(([, container]) => container === '/srv/rsi-lab/state')[0], 'current', 'bundle.json'), rest.join(':'));
+  process.exit(0);
+}
 if (stubbed === 'run.mjs') {
   const out = args[args.indexOf('--out-dir') + 1];
   if (args[0] === 'run' && out) { mkdirSync(out, { recursive: true }); writeFileSync(join(out, 'run.json'), JSON.stringify({ status: 'not-qualified', reason: 'campaign_stubbed_runner' })); }

@@ -39,11 +39,15 @@ test('path order and absolute checkout location do not affect identity', async (
 
 test('checked-in frontier consumer has a qualified closure independent of UI rebuilds', async () => {
   const rootDir = fileURLToPath(new URL('../../../', import.meta.url))
-  const settings = { model: 'deepseek-flash', provider: 'deepseek', node: process.version }
+  const settings = { model: 'deepseek-flash', provider: 'deepseek', scoreVersion: 'frontier-score-test', node: process.version }
   const actual = await computeRsiDependencyClosure({ rootDir, surface: 'frontier-selection', settings })
   assert.equal(actual.qualified, true, actual.issues.join(','))
-  assert.ok(actual.entries.some(entry => entry.path === 'packages/domain/src/frontierMix.mjs'))
-  assert.ok(actual.entries.some(entry => entry.path === 'apps/server/src/frontierTagSeed.json'))
+  // What decides selection and nothing beside it: an unrelated release, a pipeline or another domain module, no longer moves the digest.
+  assert.deepEqual(actual.entries.map(entry => entry.path), ['apps/server/src/frontierSelection.mjs', 'packages/domain/src/frontier-selection.json', 'packages/domain/src/frontierGenres.mjs', 'packages/domain/src/frontierMix.mjs', 'packages/domain/src/frontierSelection.mjs', 'packages/domain/src/frontierVocabulary.mjs'])
+  assert.deepEqual(actual.dependencies, [])
+  const { scoreVersion, ...unscored } = settings
+  assert.deepEqual((await computeRsiDependencyClosure({ rootDir, surface: 'frontier-selection', settings: unscored })).issues, ['campaign_closure_configuration_unknown'], 'what a score means is not optional')
+  assert.notEqual((await computeRsiDependencyClosure({ rootDir, surface: 'frontier-selection', settings: { ...settings, scoreVersion: `${scoreVersion}-2` } })).dependencyDigest, actual.dependencyDigest, 'a new scale is a new consumer')
   const copy = await mkdtemp(path.join(tmpdir(), 'rsi-frontier-'))
   try {
     for (const entry of actual.entries) {
@@ -60,6 +64,37 @@ test('checked-in frontier consumer has a qualified closure independent of UI reb
     await writeFile(path.join(copy, 'packages/domain/src/frontierMix.mjs'), 'export const changed=true')
     assert.notEqual((await computeRsiDependencyClosure({ rootDir: copy, surface: 'frontier-selection', settings })).dependencyDigest, actual.dependencyDigest)
   } finally { await rm(copy, { recursive: true, force: true }) }
+})
+test('the module consumers have qualified closures from their real roots, one per surface, each bound to what the prompt under test runs in', async () => {
+  const rootDir = fileURLToPath(new URL('../../../', import.meta.url))
+  const settings = { model: 'deepseek-flash', provider: 'deepseek' }
+  const closures = {}
+  for (const surface of ['frontier-edit', 'frontier-screen', 'autopilot-planner']) {
+    closures[surface] = await computeRsiDependencyClosure({ rootDir, surface, settings })
+    assert.equal(closures[surface].qualified, true, `${surface}: ${closures[surface].issues.join(',')}`)
+    assert.ok(closures[surface].entries.some(entry => entry.path === 'apps/server/src/moduleEvolutionPolicies.mjs'), 'the serving validation is in it')
+    assert.ok(closures[surface].entries.some(entry => entry.path === 'apps/server/src/modelGateway.mjs'), 'the call the prompt goes out on is in it')
+  }
+  assert.ok(closures['frontier-edit'].entries.some(entry => entry.path === 'apps/server/src/frontierEditor.mjs' || entry.path === 'apps/server/src/frontierNumbers.mjs'))
+  assert.ok(closures['autopilot-planner'].entries.some(entry => entry.path === 'apps/server/src/autopilotNextAction.mjs'))
+  assert.equal(new Set(Object.values(closures).map(closure => closure.dependencyDigest)).size, 3, 'a surface is part of the digest, so two surfaces of one editor never certify each other')
+  assert.notEqual((await computeRsiDependencyClosure({ rootDir, surface: 'frontier-edit', settings: { ...settings, model: 'deepseek-other' } })).dependencyDigest, closures['frontier-edit'].dependencyDigest, 'the solver is part of it')
+  // A module with no profile stays refused; settings a profile requires are not optional.
+  assert.deepEqual((await computeRsiDependencyClosure({ rootDir, surface: 'geo-supplements', settings })).issues, ['campaign_closure_profile_unknown'])
+  assert.deepEqual((await computeRsiDependencyClosure({ rootDir, surface: 'autopilot-planner', settings: {} })).issues, ['campaign_closure_configuration_unknown'])
+})
+test('a dynamic edge is declared or refused: without its declarations the planner\'s graph does not qualify, and a changed reader falls out of its declaration', async () => {
+  const { RSI_DEPENDENCY_PROFILES } = await import('../src/rsiDependencyClosure.mjs')
+  const rootDir = fileURLToPath(new URL('../../../', import.meta.url))
+  const settings = { model: 'deepseek-flash', provider: 'deepseek' }
+  const planner = RSI_DEPENDENCY_PROFILES['autopilot-planner']
+  for (const relative of Object.keys(planner.runtimeFileDependencies)) {
+    const { [relative]: _dropped, ...rest } = planner.runtimeFileDependencies
+    const registry = { 'autopilot-planner': { ...planner, runtimeFileDependencies: rest } }
+    assert.deepEqual((await computeRsiDependencyClosure({ rootDir, surface: 'autopilot-planner', settings, registry })).issues, ['campaign_closure_runtime_files_undeclared'], relative)
+    const stale = { 'autopilot-planner': { ...planner, runtimeFileDependencies: { ...rest, [relative]: { sourceDigest: 'f'.repeat(64), resources: [] } } } }
+    assert.deepEqual((await computeRsiDependencyClosure({ rootDir, surface: 'autopilot-planner', settings, registry: stale })).issues, ['campaign_closure_runtime_files_undeclared'], `${relative}, stale`)
+  }
 })
 test('external versions are derived from owning manifest and affected lock closure', async () => {
   const rootDir = await mkdtemp(path.join(tmpdir(), 'rsi-lock-'))

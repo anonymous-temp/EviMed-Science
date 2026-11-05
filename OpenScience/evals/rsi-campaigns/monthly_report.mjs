@@ -4,6 +4,7 @@
  *
  *   node monthly_report.mjs <run-dir> <month>
  */
+import { createHash } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
@@ -19,6 +20,8 @@ const labels = labelsFile ?? (phased.length ? { items: sum('items'), labelled: s
 const supply = supplyFile?.development ? supplyFile : null;
 // The plan records `incumbent: null` for an export that carried no baseline identity (an older export script): the month is measured, and cannot be imported.
 const baselineBound = plan ? plan.incumbent != null : null;
+// Whether the consumer production serves is the one this lab measured (`plan.consumer`, compared before anything was spent); a plan from before the field says nothing.
+const consumerBound = plan?.consumer ? plan.consumer.bound : null;
 const evaluation = resume?.checkpoint?.evaluation ?? null;
 const quantities = evaluation?.quantities?.superiority?.quality_superiority ?? null;
 // What confirmation measured, read from its own observations: shown even when the statistics could not decide.
@@ -31,6 +34,10 @@ const observed = (() => {
   return differences.length ? { groups: differences.length, meanDifference: differences.reduce((a, b) => a + b, 0) / differences.length, better: differences.filter((d) => d > 0).length, worse: differences.filter((d) => d < 0).length } : null;
 })();
 const outcome = status?.outcome ?? resume?.qualification ?? resume?.status ?? run?.status ?? 'not-run';
+// What this month sent out: the signed bundle `finalize` left, by the digest that names it in outbox/bundles (the monthly script publishes before it reports). A rehearsal never finalizes.
+const bundleBytes = outcome === 'qualified' ? await readFile(join(dir, 'bundle.json')).catch(() => null) : null;
+const bundleSha256 = bundleBytes?.length ? createHash('sha256').update(bundleBytes).digest('hex') : null;
+const published = bundleSha256 ? { bundleSha256, path: `outbox/bundles/${bundleSha256}.json` } : null;
 // Fewer measured confirmation days than the procedure's minimum: the statistics give no verdict and no alpha was reserved (directional.mjs).
 const directional = evaluation?.directional ?? null;
 const report = {
@@ -46,8 +53,7 @@ const report = {
   labelling: labels ? { items: labels.items ?? null, labelled: labels.labelled ?? null, labelCounts: labels.labelCounts ?? null, costCny: labels.costCny ?? null, stopped: labels.stopped ?? null } : null,
   // A month whose development found no candidate never labels its confirmation month (`decide` records its counts as null); null here is not known, false is "not labelled (yet)".
   confirmationLabelled: supply ? supply.confirmation?.labelled != null : null,
-  baselineBound, releaseEligible: false,
-  note: 'Lab-only trial: no bundle is imported into production in this phase.',
+  baselineBound, consumerBound, published, releaseEligible: published !== null,
 };
 const pct = (value) => value == null ? '—' : `${(value * 100).toFixed(1)}%`;
 /** A count the run did not measure or label is unknown, not zero and not `null`. */
@@ -59,8 +65,11 @@ const juryCost = (report.jury?.costCny ?? 0) + (report.labelling?.costCny ?? 0);
 const lines = [
   `# 前沿精选阈值战役 · ${month}`, '',
   `- 结论：**${directional ? `方向性参考，不是合格结论（确认期可测 ${directional.groups} 天，低于登记统计程序的 ${directional.minimum} 天下限，本季度 α 未动用）`
-    : { qualified: '候选通过（仅实验机，未导入生产）', 'not-qualified': '候选未通过', inconclusive: '证据不足', 'not-run': '本月未运行' }[outcome] ?? outcome}**${report.reason ? `（${report.reason}）` : ''}`,
+    : { qualified: '候选通过', 'finalize-refused': '候选通过统计，但定稿被拒，本月尚未发布', 'not-importable': '候选通过统计，但本月不能导入生产', 'not-qualified': '候选未通过', inconclusive: '证据不足', 'not-run': '本月未运行' }[outcome] ?? outcome}**${report.reason ? `（${report.reason}）` : ''}`,
+  ...(published ? [`- 已发布 bundle：sha256 ${published.bundleSha256}。生产只有安装了导入层才会取走它：先影子运行，达到登记的执行量后自动全量，再达到一次后自动晋升为生产策略，不需要人工批准；没有安装导入层的生产不受影响。`] : []),
+  ...(outcome === 'finalize-refused' ? ['- 定稿被拒：没有发布 bundle，生产不受影响。下次启动会重做证据并重新定稿。'] : []),
   ...(baselineBound === false ? ['- 生产导出缺少基线身份，本月结论只作实验机参考，不能导入'] : []),
+  ...(consumerBound === false ? [plan.consumer.production ? '- 生产的选择逻辑与实验机不同（依赖摘要不一致），本月结论只作实验机参考，不能导入；用生产的提交重建实验机镜像后，下月才能导入' : '- 生产导出没有选择逻辑的依赖摘要，本月结论只作实验机参考，不能导入'] : []),
   `- 基线阈值 ${report.frozenPolicy?.baselineThreshold ?? supply?.settings?.threshold ?? '—'}，开发期选出的候选阈值 ${report.frozenPolicy?.threshold ?? '无'}`,
   report.confirmation ? `- 确认期：${report.confirmation.groups} 天，按天加权准确率平均差 ${pct(report.confirmation.meanDifference)}，单侧下界 ${pct(report.confirmation.lowerBound)}（α=${report.confirmation.testAlpha.toFixed(4)}），候选入选量为基线的 ${report.confirmation.volumeRatio == null ? '—' : `${(report.confirmation.volumeRatio * 100).toFixed(0)}%`}`
     : observed ? `- 确认期：测了 ${observed.groups} 天，候选比基线平均 ${pct(observed.meanDifference)}（${observed.better} 天更好、${observed.worse} 天更差）；统计未下结论：${report.statisticsReasons.join('；') || report.reason || '—'}`
@@ -69,7 +78,13 @@ const lines = [
   ...(report.confirmationLabelled === false && !supply.developmentChoice?.frozen ? ['- 确认期未标注：开发期没有选出候选，确认月未被标注、未被打开，本季度 α 未动用'] : []),
   supply?.drift?.length ? `- 实验机选择器与生产不一致的文件：${supply.drift.join('、')}` : '- 实验机选择器与生产一致',
   report.jury ? `- 标注：${report.jury.model ?? '未记录模型'} 双盲评审，校准 κ=${report.jury.metrics?.pickKappa?.toFixed(3) ?? '—'}、精选精确率 ${pct(report.jury.metrics?.pickPrecision)}、召回率 ${pct(report.jury.metrics?.pickRecall)}、弃权 ${pct(report.jury.metrics?.abstentionRate)}；本月标注 ${report.labelling?.labelled == null ? '未标注' : labelled(report.labelling.labelCounts)}${report.labelling?.stopped ? `（已中止：${report.labelling.stopped}）` : ''}，花费约 ¥${juryCost.toFixed(2)}` : '- 标注：未进行',
-  '', '本阶段只在实验机运行，不向生产导入任何候选。',
+  // The three places a round's money is metered (round_spend.mjs prints them for the other campaigns): this surface spends only the lab's, on its jury; it replays production's
+  // selector over recorded days, so it runs no lane solver and has no Claude role.
+  '', '## 费用', '',
+  `- 实验机账本：${report.jury?.costCny != null || report.labelling?.costCny != null ? `陪审团 ${report.jury?.model ?? '未记录模型'} 约 ¥${juryCost.toFixed(2)}（校准加标注，按实验机预算账本计价）` : '未提供（本月没有标注记录）'}`,
+  '- 求解器（DeepSeek）：无（本战役重放生产的选择器，不运行 lane 求解器）',
+  '- Claude：无（本战役没有 Claude 角色，陪审团是 Qwen）',
+  '', published ? '生产是否已导入、现在生效的是什么，以生产上的 rsi-policy-stop.mjs --surface frontier-selection 为准。' : plan?.idPrefix ? '这是一次演练，不发布 bundle，生产不受影响。' : '本月没有发布 bundle，生产不受影响。',
 ];
 await writeFile(join(dir, 'report.json'), `${JSON.stringify(report, null, 1)}\n`);
 await writeFile(join(dir, 'report.md'), `${lines.join('\n')}\n`);

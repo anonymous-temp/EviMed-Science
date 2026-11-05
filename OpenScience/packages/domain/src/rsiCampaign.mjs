@@ -7,8 +7,9 @@ export const RSI_CAMPAIGN_CLAIMS = Object.freeze(['efficiency', 'targeted-repair
 /** `consumer` is also the key of a quarter's error budget (campaign_runner.mjs): surfaces that change one consumer draw on one ledger, and renaming a consumer starts a new one. */
 export const RSI_CAMPAIGN_SURFACES = Object.freeze({
   'frontier-selection': { kind: 'policy', consumer: 'frontier-mix', activation: 'shadow' },
-  'frontier-screen': { kind: 'policy', consumer: 'frontier-screen', activation: 'shadow' },
-  'frontier-edit': { kind: 'policy', consumer: 'frontier-edit', activation: 'shadow' },
+  // One class, one closure of it, one policy document: one consumer, because a new surface name never buys a fresh error budget (2026-11-05).
+  'frontier-screen': { kind: 'policy', consumer: 'frontier-editor', activation: 'shadow' },
+  'frontier-edit': { kind: 'policy', consumer: 'frontier-editor', activation: 'shadow' },
   'autopilot-planner': { kind: 'policy', consumer: 'autopilot-planner', activation: 'cohort' },
   'geo-supplements': { kind: 'policy', consumer: 'geo-capability', activation: 'cohort' },
   'capability-skill': { kind: 'skill', consumer: 'dsh-capability', activation: 'cohort' },
@@ -19,6 +20,12 @@ export const RSI_CAMPAIGN_SURFACES = Object.freeze({
   'tool-patch': { kind: 'tool-patch', consumer: 'dsh-harness', activation: 'shadow' },
   'isolated-tool': { kind: 'isolated-tool', consumer: 'isolated-executor', activation: 'cohort' },
 })
+/**
+ * How far a `frontier-selection` candidate may move the day's selected volume, as a ratio to the incumbent's over the same days, safety alerts counted on both sides. One rule, named once: the
+ * development choice refuses a line outside it (`chooseFrontierCandidate`), the confirmation refuses a month outside it (`campaign_volume_guard`), and the online fuse stops a campaign outside it
+ * (`rsiCampaignFuse`, the installed activation policy, `rsi-online-records.py`). Otherwise a line could spend its alpha offline and be stopped in shadow. `minPicks` is the online reading's floor.
+ */
+export const RSI_FRONTIER_VOLUME_BOUND = Object.freeze({ max: 1.1, min: 0.5, minPicks: 50 })
 /** Surfaces whose candidates come from a registered grid (a threshold sweep) with no model call: the only ones whose manifest may name no improver. */
 export const RSI_REGISTERED_GRID_SURFACES = Object.freeze(['frontier-selection'])
 /**

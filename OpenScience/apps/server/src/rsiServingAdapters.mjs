@@ -6,17 +6,20 @@ import { HttpError } from './security.mjs'
 import { rsiDigest } from './rsiCampaignBundle.mjs'
 import { computeRsiDependencyClosure } from './rsiDependencyClosure.mjs'
 import { validateModuleEvolutionPolicy } from './moduleEvolutionPolicies.mjs'
-import { frontierSelectThreshold } from './frontierPipeline.mjs'
+import { frontierDayVolume, frontierSelectThreshold } from './frontierSelection.mjs'
+import { rsiClosureSettings } from './rsiClosureSettings.mjs'
 import { frontierMixSelect, PLATFORM_PUBLISHER_USER_ID } from '@evimed/domain'
 import { AUTOPILOT_PLANNER_INSTRUCTIONS } from './autopilotNextAction.mjs'
 
-const components = Object.freeze({
+/** Each surface a campaign can change: the module and the one component of its policy. */
+export const RSI_POLICY_COMPONENTS = Object.freeze({
   'frontier-selection': ['frontier', 'selectionThreshold'],
   'frontier-screen': ['frontier', 'screenInstructions'],
   'frontier-edit': ['frontier', 'editInstructions'],
   'autopilot-planner': ['autopilot', 'plannerInstructions'],
   'geo-supplements': ['geo', 'supplements'],
 })
+const components = RSI_POLICY_COMPONENTS
 /** @param {string} code */
 function refuse(code) { throw new HttpError(409, code, 'Campaign serving adapter refused.') }
 /** The code defaults of a module's policy: what serves while no module-policy row is active. @param {string} moduleId @param {any} config */
@@ -95,7 +98,7 @@ export function createRsiServingAdapters({ config, service, database, documents 
   async function closureFor(surface) {
     const known = closures.get(surface)
     if (known) return known
-    const computing = computeClosure({ rootDir: path.resolve(rootDir), surface, settings: { model: config.frontierModel ?? config.deepseekModel, provider: 'deepseek' } })
+    const computing = computeClosure({ rootDir: path.resolve(rootDir), surface, settings: rsiClosureSettings(surface, config.frontierModel ?? config.deepseekModel) })
     closures.set(surface, computing)
     try {
       const closure = await computing
@@ -173,6 +176,47 @@ export function createRsiServingAdapters({ config, service, database, documents 
         return receipt
       })
     },
+    /** A campaign that earned it: its one component becomes the module's own policy, what `rsiIncumbent` reads, beside whatever else that policy holds. In the importer's transaction, so
+     * the journal and the document move together. Its provenance names the campaign and the revision it replaced, which is what `restorePromoted` goes back to. @param {any} input */
+    async promote(input) {
+      return fenced(input.transactionClient, async client => {
+        const component = components[input.surface]
+        if (!component) refuse('campaign_serving_scope_unsupported')
+        const target = await currentTarget(input.surface, client)
+        if (!target.qualified || target.dependencyDigest !== input.dependencyDigest || target.baselineRevision !== input.previousRevision) refuse('campaign_target_changed')
+        const version = await read(client, input.revision)
+        if (!version || version.payload.surface !== input.surface || rsiDigest(version.payload.files) !== input.candidateDigest) refuse('campaign_installed_bytes_changed')
+        const moduleOwner = await service.owner(), documentId = `evolution-module-policy-${component[0]}`
+        const current = await read(client, documentId, moduleOwner)
+        const saved = await documents.put(moduleOwner, 'knowledge', documentId, { recordType: 'evolution-module-policy', surface: input.surface, status: 'active', policy: { ...(current?.payload.status === 'active' ? current.payload.policy : {}), ...parseRsiPolicyCandidate(input.surface, version.payload.files) },
+          campaignId: input.campaignId, operationId: input.operationId, candidateDigest: input.candidateDigest, previousRevision: input.previousRevision }, { expectedRevision: current?.revision ?? 0, transactionClient: client })
+        return { installed: true, operationId: input.operationId, revisionId: `${documentId}:${saved.revision}` }
+      })
+    },
+    /** The operator's stop of a promoted policy (scripts/ops/rsi-policy-stop.mjs): the revision it replaced, or the code default, in force again as a new revision of the document, with the
+     * reason; every earlier revision stays in the ledger. What this writes carries no campaign's operation, so a second restore finds nothing promoted and changes nothing. A module's surfaces share
+     * one document, so only the surface the promotion names may restore it. @param {{surface:string,reason:string,at:string}} input */
+    async restorePromoted({ surface, reason, at }) {
+      return fenced(null, async client => {
+        const component = components[surface]
+        if (!component) refuse('campaign_serving_scope_unsupported')
+        const moduleOwner = await service.owner(), documentId = `evolution-module-policy-${component[0]}`
+        const current = await read(client, documentId, moduleOwner)
+        if (!current?.payload.operationId || current.payload.status !== 'active') return { restored: false, revisionId: (await incumbent(component[0], client)).revisionId }
+        if (current.payload.surface !== surface) refuse('campaign_policy_surface_mismatch')
+        const { previousRevision } = current.payload, revision = /^evolution-module-policy-[a-z]+:(\d+)$/.exec(previousRevision ?? '')?.[1]
+        const stopped = { recordType: 'evolution-module-policy', surface, restoredFrom: previousRevision, stoppedRevision: `${documentId}:${current.revision}`, stoppedOperationId: current.payload.operationId, stopReason: reason, stoppedAt: at }
+        /** @type {Record<string, any>} */
+        let payload = { ...stopped, status: 'stopped' }
+        if (revision) {
+          const rows = await client.query("SELECT payload FROM evimed_product.revisions WHERE user_id=$1 AND kind='knowledge' AND id=$2 AND revision=$3", [moduleOwner, documentId, Number(revision)])
+          if (rows.rows[0]?.payload?.status !== 'active' || !validateModuleEvolutionPolicy(component[0], rows.rows[0].payload.policy)) refuse('campaign_rollback_incompatible')
+          payload = { ...stopped, status: 'active', policy: rows.rows[0].payload.policy }
+        }
+        await documents.put(moduleOwner, 'knowledge', documentId, payload, { expectedRevision: current.revision, transactionClient: client })
+        return { restored: true, revisionId: (await incumbent(component[0], client)).revisionId }
+      })
+    },
   }
   /** @param {string} moduleId @param {any} context */
   async function readPolicy(moduleId, context = {}) {
@@ -188,7 +232,11 @@ export function createRsiServingAdapters({ config, service, database, documents 
     const revoked = await fenced(null, client => read(client, id(['revoked', surface, selection.revision])))
     if (revoked) return baseline
     const version = await fenced(null, client => read(client, selection.revision))
-    if (!version || version.payload.surface !== surface || rsiDigest(version.payload.files) !== version.payload.candidateDigest) return baseline
+    if (!version || version.payload.surface !== surface || rsiDigest(version.payload.files) !== version.payload.candidateDigest) {
+      // The candidate in force no longer has its bytes: the journal stops at this read, not at its expiry.
+      if (selection.operationId) await halt(selection.operationId, 'campaign_installed_bytes_changed')
+      return baseline
+    }
     return { revisionId: selection.revision, policy: { ...baseline.policy, ...parseRsiPolicyCandidate(surface, version.payload.files) }, selection }
   }
   /** Same frozen pool, actual selector, incumbent-only publication for a shared feed.
@@ -212,20 +260,20 @@ export function createRsiServingAdapters({ config, service, database, documents 
       return result
     }
     if (!witness) return result
+    let observed = null
     try {
       await fenced(null, async client => { if (!await read(client, witness.id)) await insert(client, witness.id, { ...witness, recordType: 'rsi-consumer-witness' }) })
-      if (observationReporter) await observationReporter(witness)
+      if (observationReporter) observed = await observationReporter(witness)
     } catch {
       failed('rsi_serving_observation_failed')
-      // A regression the campaign never heard of must not keep its candidate serving: fail safe to the incumbent.
-      if (witness.outcome === 'critical') await halt(selection.operationId)
     }
-    return witness.outcome === 'critical' ? incumbentResult : result
+    // The fuse stopped the candidate on this very round: its picks are not the round's.
+    return ['stopped', 'rolled-back'].includes(observed?.state) ? incumbentResult : result
   }
-  /** @param {string} operationId */
-  async function halt(operationId) {
+  /** @param {string} operationId @param {string} [reason] */
+  async function halt(operationId, reason = 'campaign_observation_unrecorded') {
     halted.add(operationId)
-    try { await importer?.halt?.(operationId, 'campaign_observation_unrecorded') } catch { failed('rsi_serving_halt_unrecorded') }
+    try { await importer?.halt?.(operationId, reason) } catch { failed('rsi_serving_halt_unrecorded') }
   }
   /** Same frozen pool, actual selector: the witness of one execution, or none when there is nothing to observe.
    * @param {any} frozen @param {any} selection @param {any} context @param {any} result */
@@ -233,14 +281,14 @@ export function createRsiServingAdapters({ config, service, database, documents 
     const candidateRevision = selection.shadowRevision ?? (selection.arm === 'candidate' ? selection.revision : null)
     const consumerTarget = await currentTarget('frontier-selection', null)
     if (!consumerTarget.qualified) return {}
-    let version, candidateResult = result
+    let version, candidateResult = result, candidateLine = null
     if (candidateRevision) {
       const revoked = await fenced(null, client => read(client, id(['revoked', 'frontier-selection', candidateRevision])))
       if (revoked) return {}
       version = await fenced(null, client => read(client, candidateRevision))
       if (!version || version.payload.surface !== 'frontier-selection' || rsiDigest(version.payload.files) !== version.payload.candidateDigest) refuse('campaign_installed_bytes_changed')
-      const candidate = parseRsiPolicyCandidate('frontier-selection', version.payload.files)
-      if (selection.shadowRevision) candidateResult = frontierMixSelect({ ...structuredClone(frozen), threshold: candidate.selectionThreshold })
+      candidateLine = parseRsiPolicyCandidate('frontier-selection', version.payload.files).selectionThreshold
+      if (selection.shadowRevision) candidateResult = frontierMixSelect({ ...structuredClone(frozen), threshold: candidateLine })
     }
     // A control observation must still bind the candidate under observation. The
     // importer supplies its immutable identity, never the model or the client.
@@ -248,18 +296,15 @@ export function createRsiServingAdapters({ config, service, database, documents 
     if (!candidateDigest) return {}
     const baseline = await fenced(null, client => incumbent('frontier', client))
     const incumbentResult = frontierMixSelect({ ...structuredClone(frozen), threshold: baseline.policy.selectionThreshold })
-    const protectedIds = new Set(frozen.candidates.filter(row => row.safety).map(row => row.id))
-    const candidateIds = new Set(candidateResult.picks.map(row => row.id))
-    const regression = incumbentResult.picks.some(row => protectedIds.has(row.id) && !candidateIds.has(row.id))
     const arm = selection.shadowRevision ? 'shadow' : selection.arm
+    const day = new Date(context.now ?? Date.now()).toISOString().slice(0, 10)
     const witness = { id: `rsi-witness:${rsiDigest([selection.operationId, selection.stageIndex ?? 0, context.executionId, frozen])}`, operationId: selection.operationId,
-      candidateDigest, revision: candidateRevision ?? selection.revision, arm, outcome: regression ? 'critical' : 'ok',
-      ...(regression ? { criticalCode: 'deterministic-regression' } : {}), stageIndex: selection.stageIndex ?? 0,
-      day: new Date(context.now ?? Date.now()).toISOString().slice(0, 10), inputHash: rsiDigest(frozen),
+      candidateDigest, revision: candidateRevision ?? selection.revision, arm, outcome: 'ok', stageIndex: selection.stageIndex ?? 0,
+      day, poolDay: context.day ?? day, inputHash: rsiDigest(frozen),
       consumerDigest: consumerTarget.dependencyDigest,
-      consumerSourceDigest: rsiDigest(consumerTarget.entries.filter(entry => ['apps/server/src/frontierPipeline.mjs', 'packages/domain/src/frontierMix.mjs'].includes(entry.path))),
+      consumerSourceDigest: rsiDigest(consumerTarget.entries.filter(entry => ['apps/server/src/frontierSelection.mjs', 'packages/domain/src/frontierMix.mjs'].includes(entry.path))),
       incumbentRevision: baseline.revisionId, incumbentResultDigest: rsiDigest(incumbentResult), candidateResultDigest: rsiDigest(candidateResult),
-      incumbentPicks: incumbentResult.picks.length, candidatePicks: candidateResult.picks.length }
+      incumbentPicks: frontierDayVolume(frozen, baseline.policy.selectionThreshold), candidatePicks: frontierDayVolume(frozen, candidateLine ?? baseline.policy.selectionThreshold) }
     return { witness, incumbentResult }
   }
 

@@ -3,7 +3,8 @@ import { createRsiOssClient } from './rsiOssClient.mjs';
 import { canonicalRsiJson } from './rsiCampaignBundle.mjs';
 
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
-const MAX_BUNDLE = 5 * 1024 * 1024;
+/** The largest bundle file either transport carries. */
+export const RSI_BUNDLE_MAX_BYTES = 5 * 1024 * 1024;
 const id = value => { if (typeof value !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,159}$/.test(value)) throw new Error('rsi_oss_identity_invalid'); return value; };
 const hash = value => { if (typeof value !== 'string' || !/^[a-f0-9]{64}$/.test(value)) throw new Error('rsi_oss_digest_invalid'); return value; };
 const incidentKey = (stream, generation) => `rsi/v1/incidents/${id(stream)}/${generation}.json`;
@@ -82,8 +83,8 @@ export async function createRsiOssTransport(config, options = {}) {
     assertIncidentCurrent,
     async readIncident(streamId) { return assertIncidentCurrent(streamId); },
     async listIncidents(cursor) { requireRole('lab'); return list('incidentBucket', 'rsi/v1/incidents/', cursor); },
-    async exportBundle(envelope) { requireRole('lab'); const bytes = Buffer.from(JSON.stringify(envelope)); if (bytes.length > MAX_BUNDLE) throw new Error('rsi_oss_bundle_unbounded'); const digest = sha(bytes); await immutable('bundleBucket', bundleKey(digest), bytes, digest); return { digest }; },
-    async readBundle(digest) { requireRole('production'); const value = await read('bundleBucket', bundleKey(digest), MAX_BUNDLE); if (value && value.digest !== digest) throw new Error('rsi_oss_object_changed'); return value; },
+    async exportBundle(envelope) { requireRole('lab'); const bytes = Buffer.from(JSON.stringify(envelope)); if (bytes.length > RSI_BUNDLE_MAX_BYTES) throw new Error('rsi_oss_bundle_unbounded'); const digest = sha(bytes); await immutable('bundleBucket', bundleKey(digest), bytes, digest); return { digest }; },
+    async readBundle(digest) { requireRole('production'); const value = await read('bundleBucket', bundleKey(digest), RSI_BUNDLE_MAX_BYTES); if (value && value.digest !== digest) throw new Error('rsi_oss_object_changed'); return value; },
     async listBundles(cursor) { requireRole('production'); return list('bundleBucket', 'rsi/v1/bundles/', cursor); },
   };
 }

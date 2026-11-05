@@ -65,6 +65,8 @@ KEYS=(-v "$ETC/keys/evaluator.pem":/run/rsi-keys/evaluator.pem:ro)
 POLL=${RSI_LAB_POLL_SECONDS:-300}
 
 log "skill campaign $MONTH $COMMAND image $IMAGE"
+# The round's money, when the operator sent it (round_spend.mjs): the report reads the file and checks its own digest, so it has no sidecar. Written as the steps' user, or the report cannot read it and says 未提供.
+round_spend() { [ ! -s "$INBOX/$NAME/round-spend.json" ] || install -o "${OWNER%%:*}" -g "${OWNER##*:}" -m 0640 "$INBOX/$NAME/round-spend.json" "$RUN/round-spend.json"; }
 # No candidate earned a confirmation (the operator writes mode=development-only): recompute the registered development
 # choice in the lab image, sign the report, open nothing.
 if [ -s "$INBOX/$NAME/mode" ] && grep -qx development-only "$INBOX/$NAME/mode"; then
@@ -72,6 +74,7 @@ if [ -s "$INBOX/$NAME/mode" ] && grep -qx development-only "$INBOX/$NAME/mode"; 
   SLICE=$(python3 -c 'import json,sys;print(",".join(str(x) for x in json.load(open(sys.argv[1]))["failureCalculators"]))' "$INBOX/$NAME/registration.json")
   step develop lab none "$IMAGE" evals/rsi-campaigns/skill_assemble.mjs --development-only --development "$IN/development.json" --candidates "$IN/candidates.json" \
     --failure-calculators "$SLICE" --month "$MONTH" --out-dir "$C" || exit 6
+  round_spend
   lab none "$IMAGE" evals/rsi-campaigns/skill_report.mjs "$C" "$MONTH" >> "$RUN/launcher.log" 2>&1 || true
   [ -s "$RUN/report.json" ] && sealed "${KEYS[@]}" \
     -v "$STATE":/srv/rsi-lab/state "$IMAGE" evals/rsi-campaigns/evaluator.mjs report "$C/report.json" /run/rsi-keys/evaluator.pem "$C/report.signed.json" >> "$RUN/launcher.log" 2>&1 || true
@@ -88,6 +91,7 @@ step assemble lab none "$IMAGE" evals/rsi-campaigns/skill_assemble.mjs --develop
   --candidates "$IN/candidates.json" --failure-calculators "$SLICE" --month "$MONTH" --out-dir "$C" || exit 6
 ARGS=(--manifest "$C/manifest.json" --inputs "$C/inputs.json" --config /run/rsi-lab/config.json --out-dir "$C/run")
 report() {
+  round_spend
   lab none "$IMAGE" evals/rsi-campaigns/skill_report.mjs "$C" "$MONTH" >> "$RUN/launcher.log" 2>&1 || true
   [ -s "$RUN/report.json" ] && sealed "${KEYS[@]}" \
     -v "$STATE":/srv/rsi-lab/state "$IMAGE" evals/rsi-campaigns/evaluator.mjs report "$C/report.json" /run/rsi-keys/evaluator.pem "$C/report.signed.json" >> "$RUN/launcher.log" 2>&1 || true

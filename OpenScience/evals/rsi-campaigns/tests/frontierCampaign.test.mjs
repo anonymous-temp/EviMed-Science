@@ -206,8 +206,7 @@ test('the volume guard excludes a candidate that selects too much, however well 
   const refused = chooseFrontierCandidate(evaluation, reg);
   assert.deepEqual([refused.frozen, refused.reason], [null, 'campaign_no_improving_candidate']);
   assert.deepEqual([refused.candidates[0].volumeRatio, refused.candidates[0].eligible], [2, false], 'the default ceiling is 1.1 of the baseline volume');
-  assert.deepEqual(chooseFrontierCandidate(evaluation, { ...reg, maxVolumeRatio: 1.9 }).frozen, null);
-  assert.deepEqual(chooseFrontierCandidate(evaluation, { ...reg, maxVolumeRatio: 2 }).frozen, { threshold: 60 }, 'a ratio equal to the ceiling is allowed');
+  assert.deepEqual(chooseFrontierCandidate(evaluation, { ...reg, maxVolumeRatio: 2 }).frozen, null, 'a registration may narrow the bound and never widen it: a line outside it would be stopped online');
 });
 
 test('a candidate that loses a baseline safety pick is never frozen and its lost picks are the critical violations', () => {
@@ -288,7 +287,29 @@ test('the consumer identity pins the selector files and this adapter, and is sta
   for (const name of ['frontier_campaign.mjs', 'frontier_selection.mjs']) {
     assert.equal(own[`evals/rsi-campaigns/${name}`], sha(readFileSync(new URL(`../${name}`, import.meta.url))), name);
   }
-  assert.ok(identity.components.some((row) => row.path.endsWith('frontierPipeline.mjs')) && identity.components.some((row) => row.path.endsWith('frontierMix.mjs')), 'production selector files are in');
+  assert.ok(identity.components.some((row) => row.path.endsWith('apps/server/src/frontierSelection.mjs')) && identity.components.some((row) => row.path.endsWith('frontierMix.mjs')), 'what decides selection is the identity');
+  assert.ok(!identity.components.some((row) => row.path.endsWith('frontierPipeline.mjs')), 'the pipeline around it is not');
   assert.equal(identity.selectorSha256.length, 64);
   assert.deepEqual(await frontierCampaignConsumerIdentity(), identity);
 });
+
+test('one bound, one rule: a line outside the online volume bound is refused at the development choice, before it can spend alpha and be stopped in shadow', async () => {
+  const { RSI_FRONTIER_VOLUME_BOUND } = await import('../../../packages/domain/src/rsiCampaign.mjs');
+  const { FRONTIER_CAMPAIGN_REGISTRATION } = await import('../frontier_assemble.mjs');
+  assert.deepEqual([RSI_FRONTIER_VOLUME_BOUND.max, RSI_FRONTIER_VOLUME_BOUND.min], [1.1, 0.5]);
+  assert.deepEqual([FRONTIER_CAMPAIGN_REGISTRATION.maxVolumeRatio, FRONTIER_CAMPAIGN_REGISTRATION.minVolumeRatio], [RSI_FRONTIER_VOLUME_BOUND.max, RSI_FRONTIER_VOLUME_BOUND.min], 'the registration names the same numbers');
+  const arm = (quality, selected) => ({ quality, selected, lostSafety: [] });
+  const evaluation = (arms) => ({ eligible: true, days: [{ day: '2026-10-20', measured: true, arms }] });
+  const registration = { baselineThreshold: 64, thresholds: [64, 68, 72, 76] };
+  // The best line selects under half the baseline: it is not chosen, and the next best inside the bound is.
+  const low = chooseFrontierCandidate(evaluation({ 64: arm(0.5, 100), 68: arm(0.6, 60), 72: arm(0.7, 50), 76: arm(0.9, 49) }), registration);
+  assert.deepEqual(low.frozen, { threshold: 72 }, 'exactly half is inside the bound');
+  assert.equal(low.candidates.find((c) => c.threshold === 76).eligible, false);
+  // A line above the bound, as before.
+  const high = chooseFrontierCandidate(evaluation({ 64: arm(0.5, 100), 68: arm(0.9, 111), 72: arm(0.6, 110), 76: arm(0.7, 49) }), registration);
+  assert.deepEqual(high.frozen, { threshold: 72 }, 'exactly 1.1 is inside the bound');
+  // Nothing inside: nothing is frozen, and the reason is the usual one.
+  const none = chooseFrontierCandidate(evaluation({ 64: arm(0.5, 100), 68: arm(0.9, 40), 72: arm(0.9, 45), 76: arm(0.9, 120) }), registration);
+  assert.deepEqual([none.frozen, none.reason], [null, 'campaign_no_improving_candidate']);
+});
+

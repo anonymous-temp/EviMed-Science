@@ -241,3 +241,37 @@ test('selection prefers the active campaign over a later write to an old decided
  assert.equal(journal.rows[0].payload.stopReason,'campaign_observation_unrecorded')
  assert.equal((await importer.select(f.target.surface,{userId:'u',projectId:'p'})).operationId,undefined)
 }))
+test('a campaign that earns it is promoted in the fenced transaction and is over: nothing it no longer needs can stop it, and an unwitnessed promotion moves nothing',skip,()=>withDatabase(async(database,owner)=>{
+ const f=await fixture(database,owner),p=progressionAdapters(f,{mode:'shadow',afterShadow:'global',allowExpansion:true,minExecutions:1,minDays:1,maxErrors:0})
+ const adapter=f.options.adapters.policy
+ let answer={installed:false}
+ adapter.promote=async input=>{assert.ok(input.transactionClient);return answer}
+ let row=await p.importer.importBundle(f.envelope)
+ row=await p.importer.observe('bundle',execution(row,1));assert.equal(row.mode,'global')
+ // A promotion the adapter does not witness leaves the journal and the witness's marker as they were: the same witness counts when it is heard again.
+ await assert.rejects(p.importer.observe('bundle',execution(row,2)),{code:'campaign_promotion_unwitnessed'})
+ const held=await database.query("SELECT payload FROM evimed_product.documents WHERE user_id=$1 AND payload->>'recordType'='rsi-campaign-import'",[owner]);assert.deepEqual([held.rows[0].payload.state,held.rows[0].payload.observations.candidateExecutions],['exposed',0])
+ answer={installed:true,operationId:row.operationId,revisionId:'promoted-revision'}
+ row=await p.importer.observe('bundle',execution(row,2));assert.deepEqual([row.state,row.promotedRevision],['promoted','promoted-revision']);assert.ok(row.promotedAt)
+ assert.equal(await p.importer.hasCampaign(f.target.surface),false,'the surface is free')
+ // Settled: a later witness, a halt, the journal's own expiry, revoked trust and a moved target leave it alone, and selection names what the module now serves.
+ assert.equal((await p.importer.observe('bundle',execution(row,3))).state,'promoted')
+ assert.equal((await p.importer.halt(row.operationId,'campaign_operator_stop')).state,'promoted')
+ f.options.now=()=> '2026-10-28T12:00:00Z';f.options.validateAdmission=async()=>false
+ const late=new RsiCampaignImporter(f.options)
+ f.target.baselineRevision='promoted-revision'
+ assert.deepEqual(await late.select(f.target.surface,{userId:'u',projectId:'p'}),{revision:'promoted-revision',arm:'control'})
+ assert.equal((await late.resume('bundle')).state,'promoted')
+ assert.equal((await late.importBundle(f.envelope)).state,'rejected','an expired bundle stays refused at the door')
+ const stored=await database.query("SELECT payload FROM evimed_product.documents WHERE user_id=$1 AND payload->>'recordType'='rsi-campaign-import'",[owner]);assert.equal(stored.rows[0].payload.state,'promoted')
+}))
+test('without a promote the end of the last stage stays broadly active, and a volume reading is the latest of its day',skip,()=>withDatabase(async(database,owner)=>{
+ const f=await fixture(database,owner),p=progressionAdapters(f,{mode:'global',allowGlobal:true,allowExpansion:true,minExecutions:3,minDays:1,maxErrors:0,volumeBound:{max:1.1,min:0.5,minPicks:50}})
+ let row=await p.importer.importBundle(f.envelope)
+ row=await p.importer.observe('bundle',execution(row,1,{day:'2026-10-26',poolDay:'2026-10-25',incumbentPicks:3,candidatePicks:1}))
+ row=await p.importer.observe('bundle',execution(row,2,{day:'2026-10-26',poolDay:'2026-10-25',incumbentPicks:30,candidatePicks:25}))
+ assert.deepEqual(row.observations.volumeByDay,{'2026-10-25':{incumbentPicks:30,candidatePicks:25}},'the pool\'s day, by its latest reading: the morning\'s few items are not added to the evening\'s')
+ row=await p.importer.observe('bundle',execution(row,3,{day:'2026-10-26',poolDay:'not-a-day',incumbentPicks:2.5,candidatePicks:1}))
+ assert.deepEqual(Object.keys(row.observations.volumeByDay),['2026-10-25'],'a malformed count is no reading')
+ assert.equal(row.state,'broadly-active')
+}))

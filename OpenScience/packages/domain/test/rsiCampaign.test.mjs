@@ -132,6 +132,11 @@ test('only a registered-grid surface names no improver; an empty judge list is t
   assert.deepEqual(rsiCampaignIssues(old), ['campaign_manifest_invalid', 'campaign_model_invalid'])
 })
 
+test('frontier-screen and frontier-edit change one class and one policy document, so they are one consumer, and one error budget', () => {
+  assert.equal(RSI_CAMPAIGN_SURFACES['frontier-screen'].consumer, RSI_CAMPAIGN_SURFACES['frontier-edit'].consumer)
+  assert.notEqual(RSI_CAMPAIGN_SURFACES['frontier-edit'].consumer, RSI_CAMPAIGN_SURFACES['frontier-selection'].consumer)
+})
+
 test('the harness-patch and tool-patch surfaces are two registered shadow surfaces of one consumer (the runtime image, so one error budget), each with its own kind, and a manifest names the kind of its own surface', () => {
   assert.deepEqual(RSI_CAMPAIGN_SURFACES['harness-patch'], { kind: 'harness-patch', consumer: 'dsh-harness', activation: 'shadow' })
   assert.deepEqual(RSI_CAMPAIGN_SURFACES['tool-patch'], { kind: 'tool-patch', consumer: 'dsh-harness', activation: 'shadow' })

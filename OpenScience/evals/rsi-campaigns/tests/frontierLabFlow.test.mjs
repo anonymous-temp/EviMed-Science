@@ -13,6 +13,8 @@ import { join } from 'node:path';
 import { rsiCampaignIssues } from '../../../packages/domain/src/rsiCampaign.mjs';
 import { rsiLabConfigurationIssues } from '../../../apps/server/src/rsiLabConfiguration.mjs';
 import { rsiIncumbent, rsiPolicyDefaults } from '../../../apps/server/src/rsiServingAdapters.mjs';
+import { computeRsiDependencyClosure } from '../../../apps/server/src/rsiDependencyClosure.mjs';
+import { rsiClosureSettings } from '../../../apps/server/src/rsiClosureSettings.mjs';
 import { replayFrontierPool } from '../frontier_selection.mjs';
 import { frontierDayPool, frontierDaysSource, labConfiguration } from '../profiles/benign_fixture.mjs';
 import { loadGoldRows } from '../frontier_labels.mjs';
@@ -29,6 +31,8 @@ const INCUMBENT = { revisionId: rsiIncumbent('frontier', null, rsiPolicyDefaults
 /** The pinned rubric, exemplar set and model: the lab's answer cache is keyed on this string. */
 const JURY_VERSION = 'frontier-jury-v1:7ac3c0f634c5';
 const SECRET = 'sk-flow-SECRET-0123456789abcdef';
+/** What this tree's selection consumer is: the digest production's export says it serves, unless a test says otherwise. */
+const LAB_CONSUMER = (await computeRsiDependencyClosure({ rootDir: repo, surface: 'frontier-selection', settings: rsiClosureSettings('frontier-selection') })).dependencyDigest;
 /** CNY of one fake call: 1000 cached and 500 uncached prompt tokens and 20 output tokens at qwen3.8-max's 1.5 / 12 / 36 per million. */
 const CALL_CNY = (1000 * 1.5 + 500 * 12 + 20 * 36) / 1e6;
 const sha = (bytes) => createHash('sha256').update(bytes).digest('hex');
@@ -55,7 +59,7 @@ function exportFor(month, { perfectBaseline = false } = {}) {
   }
   return { schema: 'rsi-frontier-export-v1', exportedAt: `${month}-01T00:00:00Z`, releaseId: 'release-flow.1', from: `${dev}-01`, to: `${conf}-28`,
     settings: { threshold: BASELINE, thresholdSource: 'config', preprintPlaces: 2, preprintMinScore: 50, scoreVersion: 'current', timeZone: 'Asia/Shanghai' },
-    incumbent: INCUMBENT, consumer: [], days, texts, signals: {} };
+    incumbent: INCUMBENT, consumerDigest: LAB_CONSUMER, consumer: [], days, texts, signals: {} };
 }
 
 /** A lab host's tree as directories: the lab's state, inbox and outbox, its owner inputs and credentials, and the stand-in docker on PATH. `key: false` leaves the jury's key out. */
@@ -711,6 +715,31 @@ test('an export from before the incumbent identity does not stop the month: it i
   const text = await t.text('outbox', CURRENT, 'report.md');
   assert.equal(text.split('\n').filter((line) => line.includes('生产导出缺少基线身份，本月结论只作实验机参考，不能导入')).length, 1, 'said once, in one line');
   assert.ok(!/null|undefined/.test(text), 'no raw null in the report');
+});
+
+test('a month whose production consumer is not this lab\'s is still measured to its end, reported as not importable, and its baseline can never be imported', async () => {
+  for (const [what, digest, line] of [['moved', 'f'.repeat(64), /生产的选择逻辑与实验机不同（依赖摘要不一致），本月结论只作实验机参考，不能导入/], ['not said', undefined, /生产导出没有选择逻辑的依赖摘要，本月结论只作实验机参考，不能导入/]]) {
+    const document = exportFor(CURRENT);
+    if (digest) document.consumerDigest = digest; else delete document.consumerDigest;
+    const t = await tree(document);
+    ok(await t.lab(), `lab, ${what}`);
+    assert.deepEqual((await t.steps()).filter((step) => /^(decide|merge|build|run)$/.test(step)), ['decide', 'merge', 'build', 'run'], what);
+    assert.deepEqual((await t.read('state', CURRENT, 'plan.json')).consumer, { production: digest ?? null, lab: LAB_CONSUMER, bound: false }, 'said before anything was spent');
+    const manifest = await t.read('state', CURRENT, 'manifest.json');
+    assert.deepEqual(rsiCampaignIssues(manifest), []);
+    assert.equal(manifest.target.baselineRevision, 'unbound-consumer:release-flow.1', what);
+    assert.equal((await t.read('state', CURRENT, 'supply.json')).consumer.bound, false);
+    const report = await t.read('outbox', CURRENT, 'report.json');
+    assert.deepEqual([report.consumerBound, report.baselineBound], [false, true]);
+    const text = await t.text('outbox', CURRENT, 'report.md');
+    assert.match(text, line);
+    assert.equal(text.split('\n').filter((row) => row.includes('本月结论只作实验机参考')).length, 1, 'said once');
+  }
+  const same = await tree(exportFor(CURRENT, { perfectBaseline: true }));
+  ok(await same.lab(), 'lab, the same consumer');
+  assert.equal((await same.read('state', CURRENT, 'plan.json')).consumer.bound, true);
+  assert.equal((await same.read('outbox', CURRENT, 'report.json')).consumerBound, true);
+  assert.ok(!(await same.text('outbox', CURRENT, 'report.md')).includes('选择逻辑'));
 });
 
 test('a month with no candidate from development and no incumbent ends there and still says the export carried no baseline', async () => {

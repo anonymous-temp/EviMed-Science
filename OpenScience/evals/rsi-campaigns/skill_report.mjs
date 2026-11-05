@@ -6,6 +6,7 @@
  */
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { moneyLines, readRoundSpend } from './round_spend.mjs';
 
 const read = async (path) => { try { return JSON.parse(await readFile(path, 'utf8')); } catch { return null; } };
 const pct = (value) => (Number.isFinite(value) ? `${(value * 100).toFixed(1)}%` : '—');
@@ -29,6 +30,8 @@ async function main() {
   // (`inconclusive`, sparse population); that is a directional reading and never a qualification. Decided from the counts, not from the refusal's wording.
   const groups = inputs?.registration?.statistics?.G_target ?? null, sliceGroups = supply?.confirmation?.sliceGroups ?? null, minimum = inputs?.registration?.statistics?.procedure?.minimum_slice_groups ?? null;
   const directional = Boolean(confirmation) && qualification !== 'qualified' && Number.isFinite(minimum) && ((Number.isFinite(groups) && groups < minimum) || (Number.isFinite(sliceGroups) && sliceGroups < minimum));
+  // The round's money in its three places, from round-spend.json when the operator sent one (round_spend.mjs); 未提供 otherwise.
+  const roundSpend = await readRoundSpend(dir);
   const report = {
     type: 'rsi-capability-skill-report-v1', month, campaignId: checkpoint?.campaignId ?? null,
     status: run?.status ?? devOnly?.status ?? 'not-run', qualification, directional: directional ? { groups, sliceGroups, minimum } : null,
@@ -41,6 +44,7 @@ async function main() {
       repeats: supply?.confirmation?.repeats ?? null, baseline: base ? { overall: base.overall, slice: base.slice } : null,
       candidate: cand ? { overall: cand.overall, slice: cand.slice } : null, costCny: supply?.confirmation?.costCny ?? null } : null,
     statistics: evaluation ? { decision: evaluation.decision, reasons: evaluation.reasons ?? [], quantities: evaluation.quantities ?? null, scope: evaluation.scope ?? null } : null,
+    spend: roundSpend.spend ? { label: roundSpend.spend.label, digest: roundSpend.spend.digest } : null,
     scorer: inputs?.registration?.scorer ?? 'medcalc',
     failureCalculators: inputs?.registration?.failureCalculators ?? inputs?.registration?.failureSlice ?? null,
   };
@@ -61,6 +65,7 @@ async function main() {
     ...(report.confirmation?.costCny ? [`- 成本：${JSON.stringify(report.confirmation.costCny)} 元`] : []),
     ...(directional ? ['- 方向性：组数不足时，登记的统计程序自己拒绝给出判定；上面的差异只说明方向，不能当作合格结果。', '- 本活动未动用本季度 α；确认集按“方向性”开启，之后不再作为合格活动的确认集。'] : []),
     ...(report.statistics ? ['', '## 统计', '', `- 判定 ${report.statistics.decision}；${(report.statistics.reasons ?? []).join('；') || '无附加原因'}`] : []),
+    '', '## 费用', '', ...moneyLines(roundSpend),
     '', '本阶段不向生产导入任何东西；通过只代表一项提议：把该技能加入平台技能库。',
   ];
   await writeFile(join(dir, 'report.json'), `${JSON.stringify(report, null, 2)}\n`);

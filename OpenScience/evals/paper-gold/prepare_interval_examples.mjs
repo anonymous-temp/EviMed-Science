@@ -4,7 +4,11 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { calibrationTextView } from '../../apps/server/src/paperGoldCalibration.mjs';
+/** Deterministic text derivative of a preserved XML full text; the original bytes stay authoritative. @param {string} xml */
+const calibrationTextView=xml=>xml.replace(/<!--[\s\S]*?-->/g,'').replace(/<\/?(?:p|title|sec|abstract|table|tr|td|th|list-item|ref|caption|article-title)\b[^>]*>/gi,'\n')
+ .replace(/<[^>]*>/g,'').replace(/&#(x[0-9a-f]+|\d+);/gi,(_,code)=>String.fromCodePoint(code[0].toLowerCase()==='x'?parseInt(code.slice(1),16):Number(code)))
+ .replace(/&(lt|gt|quot|apos|amp);/g,(_,name)=>({lt:'<',gt:'>',quot:'"',apos:"'",amp:'&'}[name]))
+ .replace(/[ \t\r]+/g,' ').replace(/ *\n */g,'\n').replace(/\n{3,}/g,'\n\n').trim();
 const root=process.argv[2];if(!root)throw new Error('Supply the protected evaluation-control directory.');
 const manifest=JSON.parse(await fs.readFile(new URL('./calibration-manifest.json',import.meta.url),'utf8'));
 const digest=x=>createHash('sha256').update(x).digest('hex');

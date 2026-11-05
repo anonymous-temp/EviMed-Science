@@ -298,8 +298,13 @@ def judge_once(cli, model, effort, parse, prompt, packet, scratch_dir, timeout):
     status = result.get('api_error_status') if isinstance(result.get('api_error_status'), int) and not isinstance(result.get('api_error_status'), bool) else None
     if result.get('is_error') or code != 0:
         raise CallFailure(failure_of(status, text, True))
-    usd = float(result.get('total_cost_usd') or 0) if _number(result.get('total_cost_usd')) else 0.0
+    usd = float(result['total_cost_usd']) if _number(result.get('total_cost_usd')) else None  # None: the CLI reported no cost, which is not a zero
     return parse(text, packet), usd
+
+
+def usd_text(usd):
+    """The log's figure for a call: the API-equivalent USD, or `none` when the CLI reported none (round_spend.mjs reads `none` as unreported)."""
+    return 'none' if usd is None else f'{usd:.4f}'
 
 
 def claim_parts(parts, record):
@@ -346,7 +351,7 @@ def judge(args):
             with lock:
                 state['skipped'] += 1
             return
-        last, records, usd = 'judge_not_asked', None, 0.0
+        last, records, usd = 'judge_not_asked', None, None
         for attempt in range(1, args.attempts + 1):
             if stop.is_set():
                 break
@@ -373,8 +378,8 @@ def judge(args):
             tmp.write_text('\n'.join(stamped(records, packet, who)) + '\n', encoding='utf-8')
             tmp.replace(target)
             state['done'] += 1
-            state['usd'] += usd
-            note(f'ok {packet.key} p{packet.pass_no} usd {usd:.4f}')
+            state['usd'] += usd or 0.0
+            note(f'ok {packet.key} p{packet.pass_no} usd {usd_text(usd)}')
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.concurrency) as pool:
         list(pool.map(one, pending))

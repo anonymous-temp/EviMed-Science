@@ -2,6 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { promisify } from 'node:util';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -139,3 +140,32 @@ test('a month with no measured confirmation day is reported as directional, 0 da
   assert.match(text, /结论：\*\*方向性参考，不是合格结论（确认期可测 0 天，低于登记统计程序的 25 天下限，本季度 α 未动用）\*\*/);
   assert.ok(!/null|undefined|NaN/.test(text), text);
 });
+
+test('the report says what happened to the bundle: published with its digest and who would import it, refused by name, not importable, or nothing', async () => {
+  const measured = { 'supply.json': SUPPLY, 'calibration.json': CALIBRATION, 'labels.json': LABELS };
+  const bytes = '{"signed":"bundle"}\n', digest = createHash('sha256').update(bytes).digest('hex');
+  const dir = await mkdtemp(join(tmpdir(), 'rsi-report-'));
+  try {
+    await writeFile(join(dir, 'bundle.json'), bytes);
+    await writeFile(join(dir, 'outcome.json'), JSON.stringify(outcome('qualified', null)));
+    await execFileAsync(process.execPath, [script, dir, '2026-11']);
+    const json = JSON.parse(await readFile(join(dir, 'report.json'), 'utf8')), text = await readFile(join(dir, 'report.md'), 'utf8');
+    assert.deepEqual([json.published, json.releaseEligible], [{ bundleSha256: digest, path: `outbox/bundles/${digest}.json` }, true]);
+    assert.ok(text.includes(digest));
+    assert.match(text, /结论：\*\*候选通过\*\*/);
+    assert.match(text, /生产只有安装了导入层才会取走它/);
+    assert.ok(!/仅实验机|未导入生产|不向生产导入/.test(text), text);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+  const none = await report({ ...measured, 'outcome.json': outcome('not-qualified', 'campaign_no_improving_candidate') });
+  assert.deepEqual([none.json.published, none.json.releaseEligible], [null, false]);
+  assert.match(none.text, /本月没有发布 bundle，生产不受影响/);
+  const refused = await report({ ...measured, 'outcome.json': outcome('finalize-refused', 'campaign_statistics_timeout') });
+  assert.match(refused.text, /结论：\*\*候选通过统计，但定稿被拒，本月尚未发布\*\*（campaign_statistics_timeout）/);
+  assert.match(refused.text, /下次启动会重做证据并重新定稿/);
+  assert.match((await report({ ...measured, 'outcome.json': outcome('not-importable', 'campaign_export_consumer_changed') })).text, /结论：\*\*候选通过统计，但本月不能导入生产\*\*（campaign_export_consumer_changed）/);
+  // A qualified verdict with no bundle (a rehearsal) publishes nothing and says so.
+  const rehearsal = await report({ ...measured, 'plan.json': { idPrefix: 'rehearsal-', incumbent: null }, 'outcome.json': outcome('qualified', null) });
+  assert.deepEqual([rehearsal.json.published, rehearsal.json.releaseEligible], [null, false]);
+  assert.match(rehearsal.text, /演练，不发布 bundle/);
+});
+

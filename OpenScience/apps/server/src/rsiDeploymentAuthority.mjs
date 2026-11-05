@@ -45,12 +45,14 @@ export function validateRsiActivationPolicies(policies) {
   if (!policies || typeof policies !== 'object' || Array.isArray(policies)) throw new Error('rsi_activation_policy_invalid');
   const result = {};
   for (const [surface, policy] of Object.entries(policies)) {
-    if (!Object.hasOwn(RSI_CAMPAIGN_SURFACES, surface) || !only(policy, ['mode','allowGlobal','allowExpansion','afterShadow','cohortPercent','cohortSteps','minExecutions','minDays','maxErrors'])
+    if (!Object.hasOwn(RSI_CAMPAIGN_SURFACES, surface) || !only(policy, ['mode','allowGlobal','allowExpansion','afterShadow','cohortPercent','cohortSteps','minExecutions','minDays','maxErrors','volumeBound'])
       || !['shadow','cohort','global'].includes(policy.mode) || typeof policy.allowExpansion !== 'boolean' || typeof policy.allowGlobal !== 'boolean'
       || !Number.isSafeInteger(policy.minExecutions) || policy.minExecutions < 1 || policy.minExecutions > 1000000
       || !Number.isSafeInteger(policy.minDays) || policy.minDays < 1 || policy.minDays > 90
       || !Number.isSafeInteger(policy.maxErrors) || policy.maxErrors < 0 || policy.maxErrors > 1000
       || policy.mode === 'global' && !policy.allowGlobal
+      || policy.volumeBound !== undefined && (!only(policy.volumeBound, ['max','min','minPicks']) || !Number.isFinite(policy.volumeBound.max) || policy.volumeBound.max < 1 || policy.volumeBound.max > 100
+        || !Number.isFinite(policy.volumeBound.min) || policy.volumeBound.min < 0 || policy.volumeBound.min > 1 || !Number.isSafeInteger(policy.volumeBound.minPicks) || policy.volumeBound.minPicks < 1 || policy.volumeBound.minPicks > 1000000)
       || policy.afterShadow !== undefined && (policy.mode !== 'shadow' || surface !== 'frontier-selection' || policy.afterShadow !== 'global' || !policy.allowGlobal || !policy.allowExpansion)) throw new Error('rsi_activation_policy_invalid');
     if (policy.mode === 'cohort') {
       if (!Array.isArray(policy.cohortSteps) || policy.cohortSteps.length < 1 || policy.cohortSteps.length > 10

@@ -3,6 +3,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { createRsiServingAdapters } from '../src/rsiServingAdapters.mjs'
+import { rsiClosureSettings } from '../src/rsiClosureSettings.mjs'
+import { FRONTIER_SCORE_VERSION } from '../src/frontierEditor.mjs'
 
 const client = { query: async () => ({ rows: [] }) }
 /** @param {(surface:string)=>any} closure */
@@ -21,7 +23,8 @@ test('a qualified closure is computed once per surface and process, however many
   assert.equal(calls.length, 1)
   assert.deepEqual(targets.map(target => target.dependencyDigest), Array(3).fill('digest-frontier-selection'))
   assert.equal(calls[0].surface, 'frontier-selection')
-  assert.deepEqual(calls[0].settings, { model: 'deepseek-flash', provider: 'deepseek' }, 'the settings that bind the digest are the process\'s')
+  assert.deepEqual(calls[0].settings, rsiClosureSettings('frontier-selection'), 'the settings that bind the digest are the process\'s, and what a score means among them')
+  assert.equal(calls[0].settings.scoreVersion, FRONTIER_SCORE_VERSION)
   await serving.currentTarget('autopilot-planner', client)
   assert.deepEqual(calls.map(call => call.surface), ['frontier-selection', 'autopilot-planner'], 'each surface has its own closure')
   assert.equal((await adapters(qualified).serving.currentTarget('frontier-selection', client)).dependencyDigest, 'digest-frontier-selection', 'another process computes its own')

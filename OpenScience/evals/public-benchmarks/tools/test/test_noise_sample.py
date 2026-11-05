@@ -91,6 +91,21 @@ class Noise(unittest.TestCase):
         self.assertEqual(bix['agreement'], 1.0)
         self.assertEqual(ns.band(self.root / 'nothing')['families'], {})
 
+    def test_frontier_source_is_a_family_of_rewrites_and_a_repeat_in_the_run_key_keeps_its_rewrites_apart(self):
+        # what claude_judge.py remap writes for module_arms.mjs packets: a run key, a repeat when the round has them, one question per rewrite
+        d = self.root / 'noise'
+        fx.write_jsonl(d / 'frontier-source.p1.jsonl', [{'key': 'frontier-source/base/c1#r0#supported', 'verdict': 'correct'}, {'key': 'frontier-source/base/c1#r1#supported', 'verdict': 'incorrect'}, {'key': 'frontier-source/base/c2#r0#supported', 'verdict': 'correct'}])
+        fx.write_jsonl(d / 'frontier-source.p2.jsonl', [{'key': 'frontier-source/base/c1#r0#supported', 'verdict': 'correct'}, {'key': 'frontier-source/base/c1#r1#supported', 'verdict': 'incorrect'}, {'key': 'frontier-source/base/c2#r0#supported', 'verdict': 'incorrect'}])
+        record = ns.band(d)['families']['frontier-source']['absolute']
+        self.assertEqual((record['form'], record['scale'], record['unit'], record['units'], record['withRepeats']), ('absolute', 'verdict-0-1', 'rewrite', 3, 3))
+        # the variances of [1, 1], [0, 0] and [1, 0] are 0, 0 and 0.5
+        self.assertAlmostEqual(record['noiseSd'], math.sqrt(0.5 / 3))
+        self.assertAlmostEqual(record['noiseBand95'], 1.96 * math.sqrt(0.5 / 3))
+        self.assertEqual((record['questions'], record['questionFlipRate']), (3, 1 / 3))
+        # c1#r0 above c1#r1 in both passes is the one pair told apart in both
+        self.assertEqual((record['agreement'], record['comparisons'], record['ties']), (1.0, 1, 2))
+        self.assertNotIn('bixbench', ns.band(d)['families'])
+
     def test_absolute_agreement_is_the_order_of_two_units_kept_by_a_second_judging_and_a_constant_judge_has_none(self):
         # three reports, two passes: (A, B) and (A, C) keep their order, (B, C) is reversed
         per_unit = {'A': {1: 0.9, 2: 0.8}, 'B': {1: 0.5, 2: 0.3}, 'C': {1: 0.4, 2: 0.35}}

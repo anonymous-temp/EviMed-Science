@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { rsiDigest } from '../../../apps/server/src/rsiCampaignBundle.mjs';
 import { computeRsiDependencyClosure } from '../../../apps/server/src/rsiDependencyClosure.mjs';
+import { rsiClosureSettings } from '../../../apps/server/src/rsiClosureSettings.mjs';
 import { createRsiServingAdapters, rsiIncumbent, rsiPolicyDefaults } from '../../../apps/server/src/rsiServingAdapters.mjs';
 import { rsiCampaignIssues, rsiCompatibilityIssues } from '../../../packages/domain/src/rsiCampaign.mjs';
 import { RSI_QUARTER_ALPHA } from '../campaign_runner.mjs';
@@ -18,6 +19,8 @@ import { BENIGN_PROCEDURE, STATISTICS_MODULE_PATH, STATISTICS_PYTHON, frontierDa
 
 const execFileAsync = promisify(execFile);
 const root = new URL('../../../', import.meta.url).pathname;
+/** What this tree's selection consumer is: the digest production's export says it serves, unless a test says otherwise. */
+const LAB_CONSUMER = (await computeRsiDependencyClosure({ rootDir: root, surface: 'frontier-selection', settings: rsiClosureSettings('frontier-selection') })).dependencyDigest;
 const assembleScript = new URL('../frontier_assemble.mjs', import.meta.url).pathname;
 const NOW = '2026-10-26T00:00:00Z';
 const BASELINE = 64;
@@ -34,7 +37,7 @@ function exportDocument() {
   return {
     schema: 'rsi-frontier-export-v1', exportedAt: '2026-10-01T00:00:00Z', releaseId: 'release-test.1', from: '2026-08-01', to: '2026-09-30',
     settings: { threshold: BASELINE, thresholdSource: 'test', preprintPlaces: 2, preprintMinScore: 50, scoreVersion: 'current', timeZone: 'Asia/Shanghai' },
-    incumbent: INCUMBENT, consumer: [], days: [...august, ...september, ...thin, incomplete], texts: {}, signals: {},
+    incumbent: INCUMBENT, consumerDigest: LAB_CONSUMER, consumer: [], days: [...august, ...september, ...thin, incomplete], texts: {}, signals: {},
   };
 }
 const allRows = (document) => document.days.flatMap((day) => day.rows);
@@ -237,7 +240,7 @@ test('an assembled campaign passes the manifest contract and registers the measu
     for (const row of manifest.data.sources) assert.equal(row.digest, rsiDigest(inputs.sources[row.id]), row.id);
     assert.equal(manifest.registration.digest, rsiDigest(inputs.registration));
     assert.deepEqual(inputs.target, manifest.target);
-    const closure = await computeRsiDependencyClosure({ rootDir: root, surface: 'frontier-selection', settings: { model: 'deepseek-flash', provider: 'deepseek' } });
+    const closure = await computeRsiDependencyClosure({ rootDir: root, surface: 'frontier-selection', settings: rsiClosureSettings('frontier-selection') });
     assert.equal(manifest.target.dependencyDigest, closure.dependencyDigest);
     assert.equal(manifest.target.baselineRevision, INCUMBENT.revisionId, 'the baseline is the incumbent identity the export carries, as it is');
     assert.match(manifest.target.baselineRevision, /^default:[a-f0-9]{64}$/);
