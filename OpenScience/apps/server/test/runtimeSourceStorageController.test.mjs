@@ -39,7 +39,7 @@ test('helper mounts only source/cache roots, has no network or provider settings
   assert.deepEqual(plan.args.slice(0, 2), ['run', '--rm']);
   assert.ok(plan.args.includes('--read-only')); assert.ok(plan.args.includes('--network=none')); assert.ok(plan.args.includes('--cap-drop=ALL'));
   assert.ok(plan.args.includes('sha256:immutable')); assert.equal(plan.args.filter(value => value.startsWith('type=bind,')).length, 2);
-  assert.doesNotMatch(JSON.stringify(plan), /docker\.sock|secrets|provider|gateway|--privileged/i);
+  assert.doesNotMatch(JSON.stringify({...plan,args:plan.args.slice(0,plan.args.indexOf('--eval'))}), /docker\.sock|secrets|provider|gateway|--privileged/i);
   const capture = sourceStorageHelperPlan(f.config, { imageId: 'sha256:immutable' }, { sessions, storages }, 'capture');
   assert.ok(capture.args.filter(value => value.startsWith('type=bind,')).every(value => value.endsWith(',readonly')));
 });

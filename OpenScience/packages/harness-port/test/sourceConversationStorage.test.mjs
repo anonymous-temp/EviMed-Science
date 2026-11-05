@@ -5,6 +5,7 @@ import path from 'node:path';
 import test from 'node:test';
 
 const load = () => import('../src/sourceConversationStorage.mjs');
+/** @param {string} id @param {Record<string, any>} [extra] */
 const header = (id, extra = {}) => ({ id, version: 4, createdAt: 1, cwd: '/workspace', isSeeded: false, delegationDepth: 0, ...extra });
 
 test('the pinned layout encodes UTF-16 and distinguishes absent cwd from slash cwd', async () => {
@@ -34,7 +35,7 @@ test('purge removes only proven directories and matching native references, and 
     const cache = Object.fromEntries(rows.map(row => [row.id, { title: row.id }]));
     const native = {
       headers: async () => { const found = []; for (const row of rows) if (await fs.stat(path.join(paths.sessions, sourceSessionRelativePath(row))).catch(() => null)) found.push(row); return found; },
-      scrubReferences: async ids => { for (const id of ids) delete cache[id]; for (const row of Object.values(workspaces)) row.sessionIds = row.sessionIds.filter(id => !ids.has(id)); global = { ...global, archivedSessionIds: global.archivedSessionIds.filter(id => !ids.has(id)), pinnedSessionIds: global.pinnedSessionIds.filter(id => !ids.has(id)) }; },
+      scrubReferences: async (/** @type {Set<string>} */ ids) => { for (const id of ids) delete cache[id]; for (const row of Object.values(workspaces)) row.sessionIds = row.sessionIds.filter(id => !ids.has(id)); global = { ...global, archivedSessionIds: global.archivedSessionIds.filter(id => !ids.has(id)), pinnedSessionIds: global.pinnedSessionIds.filter(id => !ids.has(id)) }; },
     };
     const frozen = await captureSourceStorage(paths, 'a', native);
     assert.equal(frozen.root.id, 'a');

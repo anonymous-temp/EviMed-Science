@@ -31,7 +31,8 @@
     "./runtime-ui-panels": "./src/runtimeUiPanels.mjs",
     "./runtime-ui-styles": "./src/runtimeUiStyles.mjs",
     "./personal-skills": "./src/personalSkills.mjs",
-    "./extension-preparation": "./src/extensionPreparation.mjs"
+    "./extension-preparation": "./src/extensionPreparation.mjs",
+    "./source-conversation-storage": "./src/sourceConversationStorage.mjs"
   },
   "scripts": {
     "test": "node --import ../../scripts/test/localhostProbeGuard.mjs --test test/*.test.mjs",
