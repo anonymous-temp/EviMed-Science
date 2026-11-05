@@ -1,3 +1,4 @@
+import { SourceConversationDelete } from "./SourceConversationDelete";
 import { flushSync } from "react-dom";
 import { useUnsavedGuard } from "@/lib/useUnsavedGuard";
 import { useEffect, useRef, useState } from "react";
@@ -328,6 +329,9 @@ export function FactDrawer({ item, formerly = [], projectName, conversations, si
                   {conversations?.[source.titleKey ?? source.sessionId] ? `来源对话：《${memoryExcerpt(conversations[source.titleKey ?? source.sessionId], 40)}》` : "来源对话"}
                   {formatDay(source.at) ? `（${formatDay(source.at)}）` : ""}
                 </ConversationLink>
+              )}
+              {source && (record.scope === "project" ? record.scopeId : source.projectId) && (
+                <SourceConversationDelete projectId={(record.scope === "project" ? record.scopeId : source.projectId)!} sessionId={source.sessionId} onChanged={onChanged} />
               )}
               {materials.map((material) => (
                 <Link key={material.id} to={readerPath(material.id, { scope: null, kind: null, q: "" })} className="block max-w-measure rounded text-left text-ui text-accent underline underline-offset-4 hover:decoration-2">
