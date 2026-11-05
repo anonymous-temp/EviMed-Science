@@ -126,3 +126,13 @@ test('reading an independent transcript preserves literal objects that happen to
   const transcript={sessionId:'b',messages:[{role:'user',parts:[{type:'text',data:{id:'a',content:'An independent literal example'}}]}]};
   assert.deepEqual(await service.projectValue({},'session/page',{args:{request:{sessionId:'b'}}},transcript),{forward:true,value:transcript});
 });
+
+test('pending deletion refreshes the trusted transitive managed closure before late child disclosure or input',async()=>{
+  const row={id:'deletion',rootSessionId:'a',sessionIds:['a'],frozen:{root:{id:'a',createdAt:1,cwd:'/workspace',isSeeded:false}},cleanup:'pending',sourceRemoved:false};
+  const root=row.frozen.root;
+  const service=new ConversationSourceDeletionService({ledger:{pendingForProject:async()=>[row],get:async(_p,id)=>row.sessionIds.includes(id)?row:null,deletedIds:async()=>row.sessionIds,extendSessions:async(_r,ids)=>row.sessionIds=[...new Set([...row.sessionIds,...ids])]},runtime:{captureConversationSource:async()=>({root,sessions:[root,{id:'late',origin:'subagent',parentSession:'a'},{id:'grand',origin:'subagent',parentSession:'late'}]})},resolveProject:async()=>{},removeHistory:async()=>{},removeDerived:async()=>{}});
+  await assert.rejects(service.authorize({},'session/page',{args:{request:{sessionId:'grand'}}}),{status:404});
+  assert.equal((await service.projectValue({},'$events',{args:{}},{type:'emit',event:'api-session/added',args:[{sessionId:'late',origin:'subagent',parentSessionId:'a'}]})).forward,false);
+  const kept=await service.projectValue({},'session/list',{args:{}},{items:[{sessionId:'late',origin:'subagent',parentSessionId:'a'},{sessionId:'fork',isSeeded:true,parentSessionId:'a'}]});
+  assert.deepEqual(kept.value.items,[{sessionId:'fork',isSeeded:true,parentSessionId:'a'}]);
+});
