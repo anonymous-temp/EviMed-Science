@@ -140,12 +140,8 @@ export const routes: RouteObject[] = [
         { path: "files/open", element: <KnowledgeOpenPage /> },
         // One route for the list and a document in its pane, so choosing another document does not remount the list.
         { path: "files/:sourceId?", element: <KnowledgePage /> },
-        // 「定时任务」 are the kernel's own automation tasks now (owner, 2026-11-04): the sidebar's address opens their page in the
-        // project's frame, and an old task link lands there too. The old page below goes when production has run on them.
-        // 「定时任务」: the list at `/app/autopilot`, one task and its conversation at `/app/autopilot/:taskId`. One route, with or
-        // without the id, so opening a task from the list is not a remount (the kernel's frame is placed over the task's pane
-        // by `SessionFrameHost`). `?task=` and `?digest=` are the old addresses and are resolved by the page.
-        { path: "autopilot/:taskId?", element: <ScheduledTasksPage /> },
+        // 「定时任务」 are the kernel's own automation tasks (owner, 2026-11-04): this address opens their page in the project's frame.
+        { path: "autopilot", element: <ScheduledTasksPage /> },
         { path: "active-research", element: <ActiveResearchPage /> },
         { path: "memory", element: <MemoryHubPage /> },
         // 「记忆地图」 was a tab until 2026-10-27, and is part of 总览 now: an old address goes there with what it can carry over.

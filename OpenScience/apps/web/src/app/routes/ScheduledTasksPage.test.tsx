@@ -11,7 +11,7 @@ function Landed() {
 }
 function open(address: string) {
   render(<MemoryRouter initialEntries={[address]}><Routes>
-    <Route path="/app/autopilot/:taskId?" element={<ScheduledTasksPage />} />
+    <Route path="/app/autopilot" element={<ScheduledTasksPage />} />
     <Route path="/app/chat" element={<Landed />} />
   </Routes></MemoryRouter>);
   return JSON.parse(screen.getByTestId("landed").textContent ?? "{}") as { path: string; state: { runtimeUiIntent?: Record<string, unknown> } };
@@ -29,7 +29,7 @@ describe("定时任务", () => {
   });
 
   it("takes an old task link there too, and carries nothing of it into the address", () => {
-    for (const address of ["/app/autopilot/task_123", "/app/autopilot?task=task_123", "/app/autopilot?digest=d1"]) {
+    for (const address of ["/app/autopilot?task=task_123", "/app/autopilot?digest=d1"]) {
       cleanup();
       const landed = open(address);
       expect(landed.path, address).toBe("/app/chat");

@@ -35,11 +35,6 @@ export function listResultImpacts(projectId: string, versionId: string, cursor?:
   if (cursor) query.set("cursor", cursor);
   return productRequest<ProductPage<ResultImpact>>(`${impactPath(projectId)}?${query}`);
 }
-export function continueResultImpact(projectId: string, impact: ResultImpact, agendaId: string) {
-  return productRequest<ResultImpact>(`${impactPath(projectId)}/${encodeURIComponent(impact.id)}/continue`, "POST", {
-    agendaId, expectedRevision: impact.revision,
-  });
-}
 export interface ResultSourceCheck {
   versionId: string; digest: string;
   /** `viaCalculation` names the calculation among the result's value bindings whose own recorded input this source is. */

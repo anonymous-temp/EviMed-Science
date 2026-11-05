@@ -1,13 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router";
 import { Button } from "@/components/ui/Button";
 import { Disclosure } from "@/components/ui/Disclosure";
-import { inputClasses } from "@/components/ui/Input";
 import { SourceUpdateBadges } from "@/components/markdown-viewer/SourceUpdateBadges";
 import { Tag } from "@/components/ui/Tag";
-import { listAgendas, type AgendaRecord } from "@/lib/autopilotClient";
 import { productErrorMessage } from "@/lib/productClient";
-import { checkResultSourceUpdates, continueResultImpact, listResultImpacts, type ResultImpact, type ResultImpactAffected, type ResultSourceCheck } from "@/lib/resultImpactClient";
+import { checkResultSourceUpdates, listResultImpacts, type ResultImpact, type ResultImpactAffected, type ResultSourceCheck } from "@/lib/resultImpactClient";
 
 /** Current source notices are advisory; the selected historical result stays frozen. */
 export function ResultImpactPanel({ projectId, versionId, digest }: { projectId: string; versionId: string; digest: string }) {
@@ -47,7 +44,7 @@ export function ResultImpactPanel({ projectId, versionId, digest }: { projectId:
     } catch (caught) { if (mounted.current) setCheckError(productErrorMessage(caught)); }
     finally { if (mounted.current) setChecking(false); }
   };
-  return <Disclosure summary="来源更新与后续研究" defaultOpen>
+  return <Disclosure summary="来源更新" defaultOpen>
     <div className="space-y-3 py-3">
       <Button variant="secondary" loading={checking} disabled={checking} onClick={() => void checkUpdates()}>检查来源更新</Button>
       {checkError && <p role="alert" className="text-error">{checkError}</p>}
@@ -55,7 +52,7 @@ export function ResultImpactPanel({ projectId, versionId, digest }: { projectId:
       {items === null && !error && <p role="status" className="text-muted">正在查询来源更新</p>}
       {error && <div role="alert" className="space-y-2"><p className="text-error">{error}</p><Button variant="secondary" onClick={() => items === null ? setAttempt(value => value + 1) : void loadMore()}>重试来源更新</Button></div>}
       {items?.length === 0 && <p className="text-muted">暂无此版本的来源更新记录，更新状态尚未确认。</p>}
-      {items?.map(impact => <ImpactItem key={impact.id} impact={impact} projectId={projectId} onUpdate={updated => setItems(current => current?.map(row => row.id === updated.id ? updated : row) ?? null)} onRefresh={() => setAttempt(value => value + 1)} />)}
+      {items?.map(impact => <ImpactItem key={impact.id} impact={impact} />)}
       {cursor && <Button variant="text" loading={busy} onClick={() => void loadMore()}>更多来源更新</Button>}
     </div>
   </Disclosure>;
@@ -76,33 +73,7 @@ function affectedLines(affected: ResultImpactAffected): string[] {
   return lines;
 }
 
-function ImpactItem({ impact, projectId, onUpdate, onRefresh }: { impact: ResultImpact; projectId: string; onUpdate: (impact: ResultImpact) => void; onRefresh: () => void }) {
-  const [agendas, setAgendas] = useState<AgendaRecord[] | null>(null);
-  const [agendaId, setAgendaId] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [attempt, setAttempt] = useState(0);
-  const mounted = useRef(true);
-  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
-  const actionable = impact.payload.effect === "potentially_affected" && impact.payload.sourceStatus.state === "changed" && impact.payload.continuation.status !== "scheduled";
-  useEffect(() => {
-    if (!actionable) return;
-    let disposed = false;
-    setAgendas(null); setError(null); setAgendaId("");
-    void listAgendas(projectId).then(page => {
-      if (!disposed) setAgendas(page.items.filter(row => row.payload.enabled && row.payload.status === "active" && !row.payload.archivedAt));
-    }).catch(caught => { if (!disposed) setError(productErrorMessage(caught)); });
-    return () => { disposed = true; };
-  }, [projectId, actionable, attempt]);
-  const proceed = async () => {
-    if (!agendas?.some(agenda => agenda.id === agendaId) || busy) return;
-    setBusy(true); setError(null);
-    try {
-      const updated = await continueResultImpact(projectId, impact, agendaId);
-      if (mounted.current) onUpdate(updated);
-    } catch (caught) { if (mounted.current) setError(productErrorMessage(caught)); }
-    finally { if (mounted.current) setBusy(false); }
-  };
+function ImpactItem({ impact }: { impact: ResultImpact }) {
   const status = impact.payload.sourceStatus;
   // A file the knowledge base holds in a newer version is not a publisher's notice: it says so itself.
   const replaced = status.updates.some(update => update.kind === "replaced");
@@ -114,11 +85,5 @@ function ImpactItem({ impact, projectId, onUpdate, onRefresh }: { impact: Result
     {impact.payload.affected && impact.payload.continuation.status !== "unavailable" && <ul aria-label="依赖该来源的内容" className="list-disc space-y-1 pl-5 text-caption">
       {affectedLines(impact.payload.affected).map(line => <li key={line}>{line}</li>)}
     </ul>}
-    {impact.payload.continuation.status === "scheduled" ? <p role="status">已安排后续研究，只重新核对上面列出的部分，其余结果不会重新运行。<Link to="/app/autopilot" className="text-accent hover:underline">查看研究议程</Link></p> : actionable && <>
-      {agendas === null && !error && <p role="status" className="text-muted">正在读取研究议程</p>}
-      {agendas?.length === 0 && <p className="text-muted">需要已有且正在进行的研究议程。<Link to="/app/autopilot" className="text-accent hover:underline">查看研究议程</Link></p>}
-      {Boolean(agendas?.length) && <><label className="block text-caption">选择已有研究议程<select aria-label={`研究议程 ${impact.payload.source.id}`} className={inputClasses({ className: "mt-2" })} value={agendaId} disabled={busy} onChange={event => setAgendaId(event.target.value)}><option value="">请选择</option>{agendas!.map(agenda => <option key={agenda.id} value={agenda.id}>{agenda.payload.title}</option>)}</select></label><Button variant="secondary" disabled={!agendaId} loading={busy} onClick={() => void proceed()}>在此议程中继续研究</Button></>}
-    </>}
-    {error && <div role="alert" className="space-y-2"><p className="text-error">{error}</p><Button variant="text" onClick={() => agendas === null ? setAttempt(value => value + 1) : onRefresh()}>刷新并重试</Button></div>}
   </section>;
 }

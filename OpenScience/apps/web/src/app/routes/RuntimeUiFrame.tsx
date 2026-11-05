@@ -8,7 +8,6 @@ import { createWebRuntimeUiFrame, fetchWebRuntimeStatus, listWebAgentRuns, listW
 import { sessionOwner, subscribeSessionBoundary } from "@/lib/sessionLifecycle";
 import { prepareRuntimeUiIntent, scopedConversationPath, conversationNavigationState, acknowledgeRuntimeUiIntent, pendingRuntimeUiIntent, registerPendingRuntimeUiIntent, newRuntimeUiIntent, runtimeUiIntentFromState, runtimeUiIntentMarkerFromState, runtimeUiIntentWasLost, type RuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { bindConversationCapability, conversationCapability } from "@/lib/dispatch";
-import { TASKS_PATH, taskPath } from "@/lib/taskLocation";
 import { saveToKnowledgeBase } from "@/lib/sourceClient";
 import { listPath } from "@/lib/knowledgeNav";
 import { getWebSessionSourceScope, putWebSessionSourceScope } from "@/lib/apiClient";
@@ -898,7 +897,7 @@ export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwne
           // The materials of the project on screen: a bare /app/files is the account's, which the frame's rail did not mean.
           "new-task": "/app/chat", knowledge: listPath({ scope: projectId, kind: null, q: "" }),
           memory: "/app/memory", capabilities: "/app/capabilities", account: "/app/account",
-          geo: "/app/geo", "virtual-research": "/app/virtual-research", autopilot: TASKS_PATH,
+          geo: "/app/geo", "virtual-research": "/app/virtual-research", autopilot: "/app/autopilot",
         };
         const to = routes[String(message.destination)];
         if (!to) return;
@@ -910,13 +909,6 @@ export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwne
           const tab = isGeoTab(typeof message.tab === "string" ? message.tab : null) ? message.tab as string : null;
           if (scope) navigate(`/app/geo/${encodeURIComponent(scope.geoProjectId)}${tab ? `/${tab}` : ""}`);
           else void geoProjectPath(projectId, tab).then((path) => navigate(path));
-          return;
-        }
-        if (message.destination === "autopilot") {
-          // 「打开」 on the card of a task a conversation made: that task's page, in the project on screen. The id is the control
-          // plane's own shape, bounded here as the session ids are; anything else opens the list, where the task is, if it is anywhere.
-          incoming.current = message.seq;
-          navigate(taskPath(typeof message.taskId === "string" && SESSION_ID.test(message.taskId) ? message.taskId : null));
           return;
         }
         // A brief from a capability card in the kernel's hero. Bounded here as

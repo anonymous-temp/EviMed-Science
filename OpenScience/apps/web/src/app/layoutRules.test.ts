@@ -14,7 +14,7 @@ import baseline from "./layout-baseline.json";
  * deletes the file and turns the counts into zero.
  *
  *  1. **A grey sentence with no action.** In a page or tab component (`app/**`, and `components/` of geo, vcr, memory, sources,
- *     frontier, inbox, autopilot, capsule, settings and skills), a `<p>` / `<span>` / `<div>` / `<li>` of at least 14 Chinese
+ *     frontier, inbox, activeResearch, capsule, settings and skills), a `<p>` / `<span>` / `<div>` / `<li>` of at least 14 Chinese
  *     characters in `text-text-2`, `text-text-3` or `text-muted` that holds no clickable thing is a line nobody can act on —
  *     how a thing was made, what it may be used for, what the engine did. The cure is the model's context, a log or an
  *     operator's view; or, where the person can do something about it, a `Note` with that action; or, where it is a conclusion,

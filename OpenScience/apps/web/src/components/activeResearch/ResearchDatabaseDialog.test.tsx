@@ -24,7 +24,7 @@ const imported = (patch: Partial<ResearchDatabaseSnapshot> = {}): ResearchDataba
   sourceId: "src-one", capturedAt: "2026-10-28T08:00:00Z", title: "public.cohort", rowCount: 1, columns: 3, truncated: false, oversizedValuesWithheld: false, partial: false,
   totalRows: 1, totalRowsExact: true, stoppedBy: null, withheldCells: 0, droppedColumnCount: 0, droppedColumns: [], sidecar: "knowledge-base/databases/cohort.import.json", version: 1, ...patch,
 });
-const show = () => { const onCaptured = vi.fn(), onClose = vi.fn(); const view = render(<ResearchDatabaseDialog projectId="p1" agendaId="a1" onClose={onClose} onCaptured={onCaptured} />); return { onCaptured, onClose, view }; };
+const show = () => { const onCaptured = vi.fn(), onClose = vi.fn(); const view = render(<ResearchDatabaseDialog projectId="p1" onClose={onClose} onCaptured={onCaptured} />); return { onCaptured, onClose, view }; };
 const pickCohort = async (user: ReturnType<typeof userEvent.setup>) => { await user.selectOptions(await screen.findByLabelText("数据表"), "public.cohort"); };
 
 describe("research database dialog", () => {
@@ -53,9 +53,9 @@ describe("research database dialog", () => {
     expect(within(screen.getByLabelText("数据表")).getByRole("option", { name: "lab.results · 1 列" })).toBeInTheDocument();
     await pickCohort(user);
     expect(screen.getByText("导入的列 · 3/3")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "导入到本研究" }));
-    await waitFor(() => expect(mocks.snapshotResearchDatabase).toHaveBeenCalledWith("conn-one", { projectId: "p1", requestId: expect.any(String), agendaId: "a1", schema: "public", table: "cohort", columns: [] }));
-    expect(await screen.findByText("已导入 cohort，只导入了一部分：前 20,000 行（共 52,340 行） × 3 列；3 个单元格过大未导入；2 列类型不支持未导入。已加入本研究。")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "导入到知识库" }));
+    await waitFor(() => expect(mocks.snapshotResearchDatabase).toHaveBeenCalledWith("conn-one", { projectId: "p1", requestId: expect.any(String), schema: "public", table: "cohort", columns: [] }));
+    expect(await screen.findByText("已导入 cohort，只导入了一部分：前 20,000 行（共 52,340 行） × 3 列；3 个单元格过大未导入；2 列类型不支持未导入。已存入知识库。")).toBeInTheDocument();
     expect(callbacks.onCaptured).toHaveBeenCalledOnce();
   });
   it("imports only the columns left ticked", async () => {
@@ -63,20 +63,20 @@ describe("research database dialog", () => {
     mocks.snapshotResearchDatabase.mockResolvedValue(imported({ rowCount: 10, columns: 2 }));
     show(); await pickCohort(user);
     await user.click(screen.getByRole("checkbox", { name: "admitted_at" }));
-    await user.click(screen.getByRole("button", { name: "导入到本研究" }));
+    await user.click(screen.getByRole("button", { name: "导入到知识库" }));
     await waitFor(() => expect(mocks.snapshotResearchDatabase.mock.calls[0][1].columns).toEqual(["age", "outcome"]));
     await user.click(screen.getByRole("button", { name: "全部选择" }));
     expect(screen.getByText("导入的列 · 3/3")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "全部取消" }));
-    expect(screen.getByRole("button", { name: "导入到本研究" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "导入到知识库" })).toBeDisabled();
   });
   it("reuses the same import request id after an uncertain failure", async () => {
     const user = userEvent.setup(); mocks.listResearchDatabases.mockResolvedValue(saved);
     mocks.snapshotResearchDatabase.mockRejectedValueOnce(new Error("network")).mockResolvedValueOnce(imported());
     show(); await pickCohort(user);
-    await user.click(screen.getByRole("button", { name: "导入到本研究" }));
+    await user.click(screen.getByRole("button", { name: "导入到知识库" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("如果不确定是否已导入");
-    await user.click(screen.getByRole("button", { name: "导入到本研究" }));
+    await user.click(screen.getByRole("button", { name: "导入到知识库" }));
     await waitFor(() => expect(mocks.snapshotResearchDatabase).toHaveBeenCalledTimes(2));
     expect(mocks.snapshotResearchDatabase.mock.calls[0]).toEqual(mocks.snapshotResearchDatabase.mock.calls[1]);
   });
@@ -84,7 +84,7 @@ describe("research database dialog", () => {
     const user = userEvent.setup(); mocks.listResearchDatabases.mockResolvedValue(saved);
     mocks.snapshotResearchDatabase.mockRejectedValueOnce(new WebApiError("refused", { status, code: "research_db_selection_invalid" })).mockResolvedValueOnce(imported());
     const first = show(); await pickCohort(user);
-    await user.click(screen.getByRole("button", { name: "导入到本研究" }));
+    await user.click(screen.getByRole("button", { name: "导入到知识库" }));
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("暂不支持导入");
     expect(alert).not.toHaveTextContent("如果不确定");
@@ -93,7 +93,7 @@ describe("research database dialog", () => {
     // Nothing is left to carry over a reload, and the next attempt is a new request.
     first.view.unmount(); show(); await pickCohort(user);
     expect(screen.queryByText(/上次导入还没有确认结果/)).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "导入到本研究" }));
+    await user.click(screen.getByRole("button", { name: "导入到知识库" }));
     await waitFor(() => expect(mocks.snapshotResearchDatabase).toHaveBeenCalledTimes(2));
     expect(mocks.snapshotResearchDatabase.mock.calls[1][1].requestId).not.toBe(mocks.snapshotResearchDatabase.mock.calls[0][1].requestId);
   });
@@ -127,13 +127,13 @@ describe("research database dialog", () => {
     const user = userEvent.setup(); mocks.listResearchDatabases.mockResolvedValue(saved);
     mocks.snapshotResearchDatabase.mockRejectedValue(new Error("network"));
     const first = show(); await pickCohort(user);
-    await user.click(screen.getByRole("button", { name: "导入到本研究" })); await screen.findByRole("alert");
+    await user.click(screen.getByRole("button", { name: "导入到知识库" })); await screen.findByRole("alert");
     const requestId = mocks.snapshotResearchDatabase.mock.calls[0][1].requestId;
     expect(sessionStorage.getItem("evimed.research-db.snapshot.p1.a1")).toBe(requestId);
     first.view.unmount(); show();
     expect(await screen.findByText(/上次导入还没有确认结果/)).toBeInTheDocument();
     await pickCohort(user);
-    await user.click(screen.getByRole("button", { name: "导入到本研究" })); await waitFor(() => expect(mocks.snapshotResearchDatabase).toHaveBeenCalledTimes(2));
+    await user.click(screen.getByRole("button", { name: "导入到知识库" })); await waitFor(() => expect(mocks.snapshotResearchDatabase).toHaveBeenCalledTimes(2));
     expect(mocks.snapshotResearchDatabase.mock.calls[1][1].requestId).toBe(requestId);
     expect(JSON.stringify(sessionStorage)).not.toContain("cohort");
   });
@@ -152,10 +152,10 @@ describe("research database dialog", () => {
     const user = userEvent.setup(); mocks.listResearchDatabases.mockResolvedValue(saved);
     let release: (value: unknown) => void = () => {}; mocks.snapshotResearchDatabase.mockReturnValue(new Promise(resolve => { release = resolve; })); show();
     await pickCohort(user);
-    await user.click(screen.getByRole("button", { name: "导入到本研究" }));
+    await user.click(screen.getByRole("button", { name: "导入到知识库" }));
     expect(screen.getByLabelText("数据表")).toBeDisabled(); expect(screen.getByLabelText("数据库连接")).toBeDisabled();
     release(imported({ rowCount: 1, columns: 3 }));
-    expect(await screen.findByText("已导入 cohort：1 行 × 3 列，已加入本研究。")).toBeInTheDocument();
+    expect(await screen.findByText("已导入 cohort：1 行 × 3 列，已存入知识库。")).toBeInTheDocument();
   });
   it("says when the account can read no table, and lets a table listing failure be retried", async () => {
     const user = userEvent.setup(); mocks.listResearchDatabases.mockResolvedValue(saved);
@@ -167,7 +167,7 @@ describe("research database dialog", () => {
   it("tells the person before importing what the table will lose: the row limit, the columns of a type that is not read, the columns past the limit", async () => {
     const user = userEvent.setup(); mocks.listResearchDatabases.mockResolvedValue(saved); show();
     await user.selectOptions(await screen.findByLabelText("数据表"), "lab.wide");
-    expect(screen.getByText("导入后存为知识库里的数据表，并加入本研究。单次最多导入 20,000 行、64 列；单个单元格超过 32 KB 的内容不会导入。")).toBeInTheDocument();
+    expect(screen.getByText("导入后存为知识库里的数据表。单次最多导入 20,000 行、64 列；单个单元格超过 32 KB 的内容不会导入。")).toBeInTheDocument();
     expect(screen.getByText("2 列的类型暂不支持，不会导入：notes（jsonb）、stay（interval）。")).toBeInTheDocument();
     expect(screen.getByText("另有 36 列超出 64 列的上限，不会导入。")).toBeInTheDocument();
     expect(screen.queryByText(/只会导入表里靠前的/)).not.toBeInTheDocument();
@@ -212,7 +212,7 @@ describe("research database dialog", () => {
   ])("answers a %s %s with the registry's sentence, and forgets the request: this attempt did not happen", async (status, code) => {
     const user = userEvent.setup(); mocks.listResearchDatabases.mockResolvedValue(saved);
     mocks.snapshotResearchDatabase.mockRejectedValueOnce(new WebApiError("refused", { status, code })); show(); await pickCohort(user);
-    await user.click(screen.getByRole("button", { name: "导入到本研究" }));
+    await user.click(screen.getByRole("button", { name: "导入到知识库" }));
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent(errorCodeMessage(code));
     expect(alert).not.toHaveTextContent("如果不确定"); expect(alert).not.toHaveTextContent(code);
@@ -235,7 +235,7 @@ describe("research database dialog", () => {
   it("keeps the request of an import the service failed on its own side, and says the person may need to look", async () => {
     const user = userEvent.setup(); mocks.listResearchDatabases.mockResolvedValue(saved);
     mocks.snapshotResearchDatabase.mockRejectedValueOnce(new WebApiError("down", { status: 503, code: "research_db_unavailable" })); show(); await pickCohort(user);
-    await user.click(screen.getByRole("button", { name: "导入到本研究" }));
+    await user.click(screen.getByRole("button", { name: "导入到知识库" }));
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent(errorCodeMessage("research_db_unavailable")); expect(alert).toHaveTextContent("如果不确定是否已导入");
     expect(screen.getByText(/上次导入还没有确认结果/)).toBeInTheDocument();
@@ -247,8 +247,8 @@ describe("research database dialog", () => {
     mocks.snapshotResearchDatabase.mockResolvedValueOnce(imported({ rowCount: 20000, truncated: true, partial: true, totalRows: 52340, totalRowsExact: false, stoppedBy: "rows" }))
       .mockResolvedValueOnce(imported({ rowCount: 300, columns: 1 }));
     show(); await pickCohort(user);
-    await user.click(screen.getByRole("button", { name: "导入到本研究" }));
-    const text = "已导入 cohort，只导入了一部分：前 20,000 行（共约 52,340 行） × 3 列。已加入本研究。";
+    await user.click(screen.getByRole("button", { name: "导入到知识库" }));
+    const text = "已导入 cohort，只导入了一部分：前 20,000 行（共约 52,340 行） × 3 列。已存入知识库。";
     const confirmation = await screen.findByText(text);
     expect(screen.getByRole("dialog").querySelector("footer")).toContainElement(confirmation);
     expect(screen.getByText("取的是表里靠前的行（按存放顺序，不是随机抽样），不能代表整张表。")).toBeInTheDocument();
@@ -267,22 +267,22 @@ describe("research database dialog", () => {
       .mockResolvedValueOnce(imported({ rowCount: 20000, truncated: true, partial: true, totalRows: 52340, stoppedBy: "rows", version: 2 }))
       .mockResolvedValueOnce(imported({ rowCount: 300, columns: 1 }));
     show(); await pickCohort(user);
-    await user.click(screen.getByRole("button", { name: "导入到本研究" }));
+    await user.click(screen.getByRole("button", { name: "导入到知识库" }));
     await screen.findByText(/已导入 cohort，只导入了一部分/);
     expect(screen.queryByText(/第 2 版/)).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "导入到本研究" }));
-    expect(await screen.findByText("这是 cohort 的第 2 版，本研究里已改用这一版。")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "导入到知识库" }));
+    expect(await screen.findByText("这是 cohort 的第 2 版，已改用这一版。")).toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText("数据表"), "lab.small");
-    await user.click(screen.getByRole("button", { name: "导入到本研究" }));
-    expect(await screen.findByText("已导入 lab.small：300 行 × 1 列，已加入本研究。")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "导入到知识库" }));
+    expect(await screen.findByText("已导入 lab.small：300 行 × 1 列，已存入知识库。")).toBeInTheDocument();
     expect(screen.queryByText(/只导入了一部分/)).not.toBeInTheDocument(); expect(screen.queryByText(/第 2 版/)).not.toBeInTheDocument();
   });
 
   it("does not draw a complete import as a warning", async () => {
     const user = userEvent.setup(); mocks.listResearchDatabases.mockResolvedValue(saved);
     mocks.snapshotResearchDatabase.mockResolvedValue(imported({ rowCount: 1200, totalRows: 1200 })); show(); await pickCohort(user);
-    await user.click(screen.getByRole("button", { name: "导入到本研究" }));
-    const status = (await screen.findByText("已导入 cohort：1,200 行 × 3 列，已加入本研究。")).closest("[role=status]") as HTMLElement;
+    await user.click(screen.getByRole("button", { name: "导入到知识库" }));
+    const status = (await screen.findByText("已导入 cohort：1,200 行 × 3 列，已存入知识库。")).closest("[role=status]") as HTMLElement;
     expect(status.className).not.toMatch(/warn/);
   });
 

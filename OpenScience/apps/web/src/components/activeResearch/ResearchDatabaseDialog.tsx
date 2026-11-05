@@ -36,7 +36,7 @@ const refusedRequest = (caught: unknown) => caught instanceof WebApiError
  * Responsive: fields stack inside the bounded dialog.
  * Verification: ResearchDatabaseDialog.test.tsx; a live connection needs the deployment's database settings.
  */
-export function ResearchDatabaseDialog({ projectId, agendaId, onClose, onCaptured }: { projectId: string; agendaId?: string; onClose: () => void; onCaptured: () => void }) {
+export function ResearchDatabaseDialog({ projectId, onClose, onCaptured }: { projectId: string; onClose: () => void; onCaptured: () => void }) {
   const [connections, setConnections] = useState<ResearchDatabaseRef[] | null>(null);
   const [selected, setSelected] = useState("");
   const [adding, setAdding] = useState(false);
@@ -52,7 +52,7 @@ export function ResearchDatabaseDialog({ projectId, agendaId, onClose, onCapture
   const [imported, setImported] = useState<ImportOutcome | null>(null);
   const lock = useRef(false); const alive = useRef(true); const reads = useRef(0); const tableReads = useRef(0);
   const [storageAvailable, setStorageAvailable] = useState(true);
-  const saveKey = `evimed.research-db.save.${projectId}`; const snapshotKey = `evimed.research-db.snapshot.${projectId}.${agendaId ?? "knowledge-base"}`;
+  const saveKey = `evimed.research-db.save.${projectId}`; const snapshotKey = `evimed.research-db.snapshot.${projectId}.knowledge-base`;
   const readRequest = (key: string) => { try { return sessionStorage.getItem(key); } catch { return null; } };
   const persistRequest = (key: string, value: string | null) => { try { if (value) sessionStorage.setItem(key, value); else sessionStorage.removeItem(key); } catch { setStorageAvailable(false); } };
   const saveRequest = useRef<string | null>(readRequest(saveKey)); const snapshotRequest = useRef<string | null>(readRequest(snapshotKey));
@@ -111,7 +111,7 @@ export function ResearchDatabaseDialog({ projectId, agendaId, onClose, onCapture
   const capture = () => { if (!chosen) return; void act(async () => {
     const requested = everyColumn ? [] : picked;
     snapshotRequest.current ??= crypto.randomUUID(); persistRequest(snapshotKey, snapshotRequest.current); setSnapshotPending(true);
-    const result = await snapshotResearchDatabase(selected, { projectId, requestId: snapshotRequest.current, ...(agendaId ? { agendaId } : {}), schema: chosen.schema, table: chosen.table, columns: requested });
+    const result = await snapshotResearchDatabase(selected, { projectId, requestId: snapshotRequest.current, schema: chosen.schema, table: chosen.table, columns: requested });
     if (!alive.current) return;
     forgetSnapshot();
     setImported(importOutcome(result, tableLabel(chosen)));
@@ -156,7 +156,7 @@ export function ResearchDatabaseDialog({ projectId, agendaId, onClose, onCapture
         </>)}
         <div className="flex flex-wrap justify-between gap-2">
           <Button variant="text" disabled={busy} onClick={revoke}>移除这个连接</Button>
-          <Button disabled={busy || !chosen || picked.length === 0} onClick={capture}>{agendaId ? "导入到本研究" : "导入到知识库"}</Button>
+          <Button disabled={busy || !chosen || picked.length === 0} onClick={capture}>导入到知识库</Button>
         </div>
       </section>}
     </fieldset>}

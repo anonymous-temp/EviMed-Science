@@ -49,7 +49,7 @@ export async function productRequest<T>(path: string, method = "GET", body?: unk
 }
 
 /**
- * What Sources, Capsules, Autopilot, Memory and Duplicates say when an action
+ * What Sources, Capsules, Memory and Duplicates say when an action
  * is refused.
  *
  * One line of dictionary lookup replaced a table that answered
@@ -59,9 +59,9 @@ export async function productRequest<T>(path: string, method = "GET", body?: unk
  *
  * Two of the old special cases were deleted rather than kept:
  *   - `product_state_unavailable` answered 「科研记忆服务暂时不可用」, but
- *     `sourceRoutes`, `autopilotRoutes` and `pluginRoutes` raise the same code,
+ *     `sourceRoutes` and `pluginRoutes` raise the same code,
  *     so the Sources page named the memory service when source storage was
- *     down. It is a 503 and the shared 503 sentence is true of all four.
+ *     down. It is a 503 and the shared 503 sentence is true of all three.
  *   - The 401 case is now the shared one, word for word.
  */
 export function productErrorMessage(error: unknown): string {

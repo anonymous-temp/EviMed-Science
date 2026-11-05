@@ -26,7 +26,6 @@ export const listEvolutionDecisions = () => productRequest<ProductRecord<Evoluti
 export const getEvolutionDecision = (id: string) => productRequest<ProductRecord<EvolutionDecision>>(`/evolution/decisions/${encodeURIComponent(id)}`);
 export const resolveEvolutionDecision = (id: string, input: {expectedRevision: number; option?: string; text?: string; delegate?: boolean}) => productRequest<ProductRecord<EvolutionDecision>>(`/evolution/decisions/${encodeURIComponent(id)}/resolve`, 'POST', input);
 export const listEvolutionOpportunities = (projectId: string) => productRequest<ProductRecord<EvolutionOpportunity>[]>(`/evolution/opportunities?projectId=${encodeURIComponent(projectId)}`);
-export const adoptEvolutionOpportunity = (projectId: string, opportunityId: string) => productRequest<{id: string}>('/evolution/opportunities/adopt', 'POST', {projectId, opportunityId});
 export function downloadEvolutionRequirements(tool: EvolutionTool) {
   const blob = new Blob([JSON.stringify(tool.dataRequirements, null, 2)], {type: 'application/json'});
   const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = `${tool.id}-data-requirements.json`; anchor.click(); URL.revokeObjectURL(url);

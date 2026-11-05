@@ -1440,7 +1440,7 @@ describe("apiClient budget refusals", () => {
   });
 });
 
-// The capsule/autopilot/sources client builds its own WebApiError from the same
+// The capsule/sources client builds its own WebApiError from the same
 // envelope, and its message map is what those pages show. "操作未完成，请重试"
 // is advice that cannot work when the ceiling that refused is a spent week.
 describe("productClient budget refusals", () => {
@@ -1464,7 +1464,7 @@ describe("productClient budget refusals", () => {
       ));
     const product = await loadProductClient("https://science.example/api");
 
-    const error = await product.productRequest("/autopilot/agendas", "POST", { title: "夜间检索" }).catch((err: unknown) => err);
+    const error = await product.productRequest("/sources", "POST", { title: "夜间检索" }).catch((err: unknown) => err);
     expect(product.productErrorMessage(error)).toBe("近 24 小时额度已达上限：上限 5.00 CNY，已占用 5.00 CNY。");
   });
 
@@ -1488,11 +1488,11 @@ describe("productClient budget refusals", () => {
     return product.productErrorMessage(error);
   }
 
-  // `product_state_unavailable` is raised by sourceRoutes, autopilotRoutes,
-  // pluginRoutes and capsuleGateway alike, and the old table answered all four
+  // `product_state_unavailable` is raised by sourceRoutes,
+  // pluginRoutes and capsuleGateway alike, and the old table answered all three
   // with 「科研记忆服务暂时不可用」 — so the Sources page named the memory
   // service when source storage was down. The status sentence is true of all
-  // four, which is what a shared sentence has to be.
+  // three, which is what a shared sentence has to be.
   it("stops naming the memory service when a different subsystem is the one that is down", async () => {
     await expect(productMessage(
       { error: "Source analysis storage is unavailable.", code: "product_state_unavailable" }, 503,

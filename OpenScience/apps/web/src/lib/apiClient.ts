@@ -169,7 +169,7 @@ let lastUsageBudgetRefusal: WebUsageBudgetRefusal | null = null;
  *
  *  In memory only, and deliberately not presented as more than that: a reload
  *  or a second tab starts blank, and a refusal raised inside a server-side
- *  worker (an autopilot episode, a source-understanding job) never passes
+ *  worker (a source-understanding job) never passes
  *  through a browser at all. The durable answer is for `/api/account/usage` to
  *  report the configured ceilings and the current rolling committed spend, so
  *  the account page can state the position without a remembered exception;
@@ -266,7 +266,7 @@ export function webRetryAfterHint(error: WebApiError): string | null {
   const code = error.code ?? "";
   // A spend ceiling only: a runtime hold or a rate limit does free completely
   // at its stated time, and telling someone their 额度 is releasing when the
-  // autopilot merely holds the runtime would be a different false claim.
+  // a bounded run merely holds the runtime would be a different false claim.
   const spendCeiling = error.details !== null || code === "usage_budget_exceeded" || /^credits_/.test(code);
   if (spendCeiling) return `${wait}后额度开始释放（按滚动窗口逐笔释放，不是整点清零）。`;
   return `请在${wait}后重试。`;
@@ -692,8 +692,6 @@ export interface WebMemoryProfile {
   /** Memories in force, run summaries not included. */
   activeCount: number;
   pendingCount: number;
-  /** Run summaries: 「做过的研究」, never counted as memory in force. */
-  episodeCount?: number;
   /** What each conversation was about, by its id: the 《…》 in 「来自 9月12日《…》」. */
   conversations?: Record<string, string>;
   /** Per record id. A record with no entry has never been used. */
@@ -880,7 +878,7 @@ export interface WebAgentRun {
   durationMs: number | null;
   errorCode: string | null;
   /** Files the delivery gate accepted. Only these are graded output, and the
-   *  control plane reads verification results and agenda deltas out of this
+   *  control plane reads verification results out of this
    *  list — which is why ungraded files are a separate field rather than a
    *  wider meaning for this one. */
   artifacts: string[];

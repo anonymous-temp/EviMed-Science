@@ -1,93 +1,65 @@
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { MemoryRouter } from "react-router";
-import { NewTaskPane, type NewTaskDraft } from "@/components/autopilot/NewTaskPane";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router";
+import { runtimeUiIntentFromState } from "@/lib/runtimeUiNavigation";
 import { EvolutionOpportunities } from "./EvolutionOpportunities";
 
-const client = vi.hoisted(() => ({ useEvolutionAccess: vi.fn(), listEvolutionOpportunities: vi.fn(), adoptEvolutionOpportunity: vi.fn() }));
+const client = vi.hoisted(() => ({ useEvolutionAccess: vi.fn(), listEvolutionOpportunities: vi.fn() }));
 vi.mock("@/lib/evolutionClient", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/evolutionClient")>()), ...client }));
-const autopilot = vi.hoisted(() => ({ createAgenda: vi.fn(), startAgenda: vi.fn(), updateAgenda: vi.fn(), getAgenda: vi.fn() }));
-vi.mock("@/lib/autopilotClient", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/autopilotClient")>()), ...autopilot }));
-vi.mock("@/lib/sourceList", () => ({ listAllSources: vi.fn() }));
 
-const opportunity = (id: string, title: string, description?: string) => ({ id, revision: 1, payload: { title, description, projectId: "project-one", origin: "evolution" } });
+const opportunity = (id: string, title: string, description?: string, prompt?: string) => ({ id, revision: 1, payload: { title, description, prompt, projectId: "project-one", origin: "evolution" } });
 
-describe("研究机会, a group of the scheduled tasks", () => {
+let landed: { pathname: string; state: unknown } | null = null;
+/** The draft the conversation was opened with, read back the way the chat surface reads it. */
+const draftOf = () => runtimeUiIntentFromState(landed?.state, (landed?.state as { runtimeUiIntent: { projectId: string } }).runtimeUiIntent.projectId)?.draft;
+function Landing() { const location = useLocation(); landed = { pathname: location.pathname, state: location.state }; return null; }
+const show = () => render(<MemoryRouter initialEntries={["/here"]}><Routes>
+  <Route path="/here" element={<EvolutionOpportunities projectId="project-one" />} />
+  <Route path="/app/chat" element={<Landing />} />
+</Routes></MemoryRouter>);
+
+describe("研究机会", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.clearAllMocks(); landed = null;
     client.useEvolutionAccess.mockReturnValue({ enabled: true, operator: false });
     client.listEvolutionOpportunities.mockResolvedValue([]);
   });
 
-  it("is a group of rows — the suggestion, what it is about, and one button to make it a task", async () => {
-    client.listEvolutionOpportunities.mockResolvedValue([opportunity("op-1", "跟进 SGLT2 抑制剂的新试验", "最近两个月有三项新的随机对照试验。")]);
-    const adopted = vi.fn();
-    client.adoptEvolutionOpportunity.mockResolvedValue({ id: "agenda-new" });
-    render(<EvolutionOpportunities projectId="project-one" onAdopted={adopted} />);
+  it("is a group of rows, and adopting one opens a new conversation with its brief as the draft", async () => {
+    client.listEvolutionOpportunities.mockResolvedValue([opportunity("op-1", "跟进 SGLT2 抑制剂的新试验", "最近两个月有三项新的随机对照试验。", "检索最近两个月 SGLT2 抑制剂的新试验并汇总。")]);
+    show();
     const group = await screen.findByRole("region", { name: "研究机会" });
     expect(group).toHaveTextContent("跟进 SGLT2 抑制剂的新试验");
     expect(group).toHaveTextContent("最近两个月有三项新的随机对照试验。");
-    await userEvent.click(within(group).getByRole("button", { name: "创建研究议程" }));
-    await waitFor(() => expect(adopted).toHaveBeenCalledWith("agenda-new"));
-    expect(client.adoptEvolutionOpportunity).toHaveBeenCalledWith("project-one", "op-1");
+    await userEvent.click(within(group).getByRole("button", { name: "在对话中开始" }));
+    await waitFor(() => expect(landed?.pathname).toBe("/app/chat"));
+    expect(draftOf()).toBe("检索最近两个月 SGLT2 抑制剂的新试验并汇总。");
   });
 
-  // Creating a task is the page's new-task pane since 2026-10-28 (the dialog only edits), and the opportunities sit under its form.
-  it("locks draft creation and the examples while adopting an opportunity", async () => {
-    client.listEvolutionOpportunities.mockResolvedValue([opportunity("op-1", "跟进新试验")]);
-    let finish!: (value: { id: string }) => void;
-    client.adoptEvolutionOpportunity.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
-    const drafts: NewTaskDraft[] = []; const adopted = vi.fn();
-    render(<MemoryRouter><NewTaskPane projectId="project-one" examples onChooseExample={() => {}} onDraftChange={draft => drafts.push(draft)} onRecorded={() => {}} onSaved={() => {}} onAdopted={adopted} /></MemoryRouter>);
-    await userEvent.click(await screen.findByRole("button", { name: "创建研究议程" }));
-    await userEvent.type(screen.getByLabelText("任务指令"), "不要同时创建第二项任务");
-    expect(screen.getByLabelText("任务指令")).toHaveValue("");
-    expect(screen.getByRole("button", { name: "创建并启用" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "行业要闻日报" })).toBeDisabled();
-    expect(drafts.at(-1)?.locked).toBe(true);
-    await act(async () => { finish({ id: "adopted-task" }); });
-    expect(adopted).toHaveBeenCalledWith("adopted-task");
-    expect(drafts.at(-1)?.locked).toBe(false);
-  });
-  it("preserves a dirty task draft instead of replacing it with an opportunity", async () => {
-    client.listEvolutionOpportunities.mockResolvedValue([opportunity("op-1", "跟进新试验")]);
-    render(<MemoryRouter><NewTaskPane projectId="project-one" onChooseExample={() => {}} onDraftChange={() => {}} onRecorded={() => {}} onSaved={() => {}} onAdopted={() => {}} /></MemoryRouter>);
-    await userEvent.type(screen.getByLabelText("任务指令"), "保留这个未保存的任务");
-    const adopt = await screen.findByRole("button", { name: "创建研究议程" });
-    expect(adopt).toBeDisabled();
-    await userEvent.click(adopt);
-    expect(client.adoptEvolutionOpportunity).not.toHaveBeenCalled();
-    expect(screen.getByLabelText("任务指令")).toHaveValue("保留这个未保存的任务");
-  });
-  it("does not allow adoption while a form save is pending", async () => {
-    client.listEvolutionOpportunities.mockResolvedValue([opportunity("op-1", "跟进新试验")]);
-    autopilot.createAgenda.mockImplementationOnce(() => new Promise(() => {}));
-    render(<MemoryRouter><NewTaskPane projectId="project-one" onChooseExample={() => {}} onDraftChange={() => {}} onRecorded={() => {}} onSaved={() => {}} onAdopted={() => {}} /></MemoryRouter>);
-    await screen.findByRole("button", { name: "创建研究议程" });
-    await userEvent.type(screen.getByLabelText("任务指令"), "每天一份简报");
-    await userEvent.click(screen.getByRole("button", { name: "创建并启用" }));
-    const action = await screen.findByRole("button", { name: "创建研究议程" });
-    await waitFor(() => expect(action).toBeDisabled());
-    await userEvent.click(action);
-    expect(client.adoptEvolutionOpportunity).not.toHaveBeenCalled();
+  it("uses the title and the summary when the opportunity has no brief of its own", async () => {
+    client.listEvolutionOpportunities.mockResolvedValue([opportunity("op-1", "跟进新试验", "有三项新的试验。")]);
+    show();
+    await userEvent.click(await screen.findByRole("button", { name: "在对话中开始" }));
+    await waitFor(() => expect(landed?.pathname).toBe("/app/chat"));
+    expect(draftOf()).toBe("跟进新试验\n\n有三项新的试验。");
   });
 
   it("is not drawn when there is nothing to suggest, nor when the account has no evolution, nor while it is being read", async () => {
-    const { container, unmount } = render(<EvolutionOpportunities projectId="project-one" onAdopted={() => {}} />);
+    const { container, unmount } = show();
     await waitFor(() => expect(client.listEvolutionOpportunities).toHaveBeenCalled());
     expect(container).toBeEmptyDOMElement();
     unmount();
     client.useEvolutionAccess.mockReturnValue({ enabled: false, operator: false });
     client.listEvolutionOpportunities.mockClear();
-    const off = render(<EvolutionOpportunities projectId="project-one" onAdopted={() => {}} />);
+    const off = show();
     expect(off.container).toBeEmptyDOMElement();
     expect(client.listEvolutionOpportunities).not.toHaveBeenCalled();
   });
 
   it("says when the suggestions could not be read, with a retry, rather than looking empty", async () => {
     client.listEvolutionOpportunities.mockRejectedValueOnce(new Error("offline")).mockResolvedValueOnce([opportunity("op-2", "补充亚组分析")]);
-    render(<EvolutionOpportunities projectId="project-one" onAdopted={() => {}} />);
+    show();
     const group = await screen.findByRole("region", { name: "研究机会" });
     await userEvent.click(within(group).getByRole("button", { name: "重试" }));
     expect(await screen.findByText("补充亚组分析")).toBeInTheDocument();

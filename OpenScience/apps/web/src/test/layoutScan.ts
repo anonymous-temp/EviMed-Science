@@ -16,7 +16,7 @@ import ts from "typescript";
  */
 
 /** The page and tab components: where the rules are held (the primitives and the chrome are the sanctioned makers). */
-const PAGE_DIRECTORIES = /^(app\/|components\/(geo|vcr|memory|sources|frontier|inbox|autopilot|capsule|settings|skills)\/)/;
+const PAGE_DIRECTORIES = /^(app\/|components\/(geo|vcr|memory|sources|frontier|inbox|activeResearch|capsule|settings|skills)\/)/;
 
 /** Whether a path (relative to `src`) is a page or a tab component. */
 export function isPageFile(relative: string): boolean {
