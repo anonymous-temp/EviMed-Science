@@ -6,18 +6,19 @@ import { join } from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { sourceCitationReferences } from '@evimed/domain'
-import { answerQuestion, renderHits } from '../lib/answer.mjs'
+import { answerQuestion, answerQuestionBrowse, renderHits } from '../lib/answer.mjs'
+import { BROWSE_MAX_TOOL_CALLS, createBrowseStore, lineStats, runBrowseTool } from '../lib/browse.mjs'
 import { QUOTE_LIMITS, checkAnswerCitations, checkCitation, parseMarkers, sourceMarker, stripMarkers } from '../lib/citations.mjs'
 import { QUESTIONS_PER_TOPIC, checkCorpus, checkTopic, collapse, loadCorpus, loadRunCorpus, loadTopic, sourceIdFor } from '../lib/corpus.mjs'
-import { PAGE_ARM_IDS, THRESHOLDS, decide } from '../lib/decide.mjs'
+import { NON_INFERIORITY, PAGE_ARM_IDS, THRESHOLDS, decide, decideNonInferior } from '../lib/decide.mjs'
 import { judgeAnswer, parseJudgement, scoreJudgement } from '../lib/judge.mjs'
 import { buildKnowledgeBase, treesFor } from '../lib/kb.mjs'
 import { BudgetExceeded, PRICES, createLlm, ledgerTotal, priceCall, readUsage } from '../lib/llm.mjs'
-import { ANSWER_SYSTEM, ARMS, ARM_B_REMOVED, DECOMPOSITION_GUIDANCE, JUDGE_SYSTEM, sha256 } from '../lib/prompts.mjs'
+import { ANSWER_SYSTEM, ANSWER_SYSTEM_BROWSE, ARMS, ARM_B_REMOVED, DECOMPOSITION_GUIDANCE, JUDGE_SYSTEM, sha256 } from '../lib/prompts.mjs'
 import { Bm25Index, buildIndex, chunkText, stem, tokenize } from '../lib/retrieval.mjs'
 import { BOOTSTRAP_SEED, mean, pairedBootstrap, percentile, seededRandom } from '../lib/stats.mjs'
 import { summarizeRunDirectory } from '../lib/store.mjs'
-import { ARM_IDS, RUNNABLE_ARM_IDS, renderTable, summarize } from '../lib/summary.mjs'
+import { ARM_IDS, DEFAULT_ARM_IDS, RUNNABLE_ARM_IDS, renderTable, summarize } from '../lib/summary.mjs'
 import { adoptUpstreamTrees, readUpstreamTrees, rewriteSourceLinks, treeForRep, upstreamPageRecords, upstreamTreeStats } from '../lib/upstream.mjs'
 
 const A = `src_${'a'.repeat(32)}`
@@ -535,8 +536,9 @@ test('every arm shares one answering prompt, the recorded runs\' prompts unchang
 })
 
 test('arm B is on record only: a new run cannot ask it, and building its knowledge base says why', () => {
-  assert.deepEqual(ARM_IDS, ['A', 'Aprime', 'B', 'C'])
-  assert.deepEqual(RUNNABLE_ARM_IDS, ['A', 'Aprime', 'C'])
+  assert.deepEqual(ARM_IDS, ['A', 'Aprime', 'B', 'C', 'G'])
+  assert.deepEqual(RUNNABLE_ARM_IDS, ['A', 'Aprime', 'C', 'G'])
+  assert.deepEqual(DEFAULT_ARM_IDS, ['A', 'Aprime', 'C'])
   const topic = { id: 't', documents: [{ sourceId: A, title: 'T', text: 'alpha beta gamma.' }] }
   assert.throws(() => buildKnowledgeBase({ scope: 'topic', arm: 'B', topic, corpus: [topic], rep: 1 }), (error) => error.message === ARM_B_REMOVED)
   assert.match(ARM_B_REMOVED, /removed on 2026-10-13/)
@@ -690,4 +692,144 @@ test('a run copies the trees it searches into its own directory once, and from t
     assert.deepEqual(adoptUpstreamTrees({ from: exported, to: runTrees, topicId: AF }).map((tree) => tree.sha256), first.map((tree) => tree.sha256))
     assert.deepEqual(adoptUpstreamTrees({ from: exported, to: runTrees, topicId: 'sglt2-hf-ckd' }), [])
   } finally { rmSync(dir, { recursive: true, force: true }) }
+})
+
+
+// --- arm G: browse only (list, grep, read), and its non-inferiority rule ---------------------------------------------------
+
+const BROWSE_DOCS = [
+  { sourceId: A, title: 'Apixaban trial', text: 'Apixaban trial.\nJournal (2011).\n\nApixaban reduced major bleeding compared with warfarin.\nAPIXABAN lowered stroke by 21%.\n' },
+  { sourceId: `src_${'b'.repeat(32)}`, title: 'Dabigatran trial', text: `Dabigatran trial.\n${'x'.repeat(500)} apixaban` },
+]
+
+test('arm G keeps the recorded prompt of A, replaces only the sentences naming kb_search, and its prompt hash is stable', () => {
+  assert.equal(`${ANSWER_SYSTEM}${ARMS.A.systemSuffix}`, ANSWER_SYSTEM)
+  assert.notEqual(ANSWER_SYSTEM_BROWSE, ANSWER_SYSTEM)
+  assert.ok(!ANSWER_SYSTEM_BROWSE.includes('kb_search'))
+  for (const tool of ['kb_list', 'kb_grep', 'kb_read']) assert.ok(ANSWER_SYSTEM_BROWSE.includes(tool))
+  assert.ok(ANSWER_SYSTEM_BROWSE.includes(`at most ${BROWSE_MAX_TOOL_CALLS} times`))
+  assert.equal(BROWSE_MAX_TOOL_CALLS, 12)
+  // Everything else of the prompt is byte for byte the recorded one.
+  const rest = (text) => text.split('\n\n').slice(1).join('\n\n')
+  assert.equal(rest(ANSWER_SYSTEM_BROWSE), rest(ANSWER_SYSTEM))
+  assert.equal(ARMS.G.runnable, true)
+  assert.equal(ARMS.G.pages, false)
+  assert.match(sha256(ANSWER_SYSTEM_BROWSE), /^[a-f0-9]{64}$/)
+})
+
+test('the browse tools list, grep as a case-insensitive literal bounded like the gateway, and read numbered lines', () => {
+  const store = createBrowseStore(BROWSE_DOCS)
+  assert.match(store.list(), new RegExp(`${A}\tApixaban trial`))
+  const grep = store.grep('apixaban')
+  assert.match(grep, new RegExp(`${A}:4: Apixaban reduced major bleeding`))
+  assert.match(grep, new RegExp(`${A}:5: APIXABAN lowered stroke`))
+  assert.ok(grep.startsWith('4 matches'))
+  // The match text is the line's first 400 characters, as the gateway cuts it.
+  assert.ok(grep.split('\n').pop().length <= `src_${'b'.repeat(32)}:2: `.length + 400)
+  // A literal, not a pattern.
+  assert.match(store.grep('21%'), /21%/)
+  assert.match(store.grep('a.b'), /No line holds/)
+  assert.match(store.grep(' '), /needs a pattern/)
+  assert.match(store.grep('apixaban', 'src_nope'), /No document has the id/)
+  assert.match(store.grep('apixaban', A), /^3 matches/)
+  const many = createBrowseStore([{ sourceId: A, title: 'T', text: Array.from({ length: 80 }, (_, i) => `line ${i} needle`).join('\n') }])
+  const limited = many.grep('needle')
+  assert.match(limited, /^50 matches \(stopped at the limit of 50; there are more\)/)
+  assert.equal(limited.split('\n').length, 51)
+  // Read: numbered, 1-based, default 200, at most 400 lines, and says where to go on.
+  const read = store.read(A)
+  assert.match(read, /lines 1-5 of 5/)
+  assert.match(read, /\n4\tApixaban reduced major bleeding/)
+  assert.match(many.read(A), /lines 1-80 of 80/)
+  const long = createBrowseStore([{ sourceId: A, title: 'T', text: Array.from({ length: 500 }, (_, i) => `l${i}`).join('\n') }])
+  assert.match(long.read(A), /lines 1-200 of 500; more follows, read on from offset 200/)
+  assert.match(long.read(A, 100, 400), /lines 101-500 of 500/)
+  assert.match(long.read(A, 0, 401), /limit must be an integer between 1 and 400/)
+  assert.match(long.read(A, 600, 10), /none at offset 600/)
+  const huge = createBrowseStore([{ sourceId: A, title: 'T', text: `${'y'.repeat(90_000)}\nsecond` }])
+  assert.ok(huge.read(A).length < 80_300)
+  const wide = createBrowseStore([{ sourceId: A, title: 'T', text: `${'z'.repeat(50_000)}\n${'w'.repeat(50_000)}` }])
+  assert.match(wide.read(A), /lines 1-1 of 2; more follows/)
+})
+
+test('a browse answer counts each of the three tools against twelve and stops serving after that', async () => {
+  const store = createBrowseStore(BROWSE_DOCS)
+  const tool = (id, name, args) => ({ id, type: 'function', function: { name, arguments: JSON.stringify(args) } })
+  const llm = fakeLlm([
+    { role: 'assistant', content: '', tool_calls: [tool('c1', 'kb_list', {}), tool('c2', 'kb_grep', { pattern: 'bleeding' })] },
+    { role: 'assistant', content: '', tool_calls: [tool('c3', 'kb_read', { doc: A })] },
+    { content: `Apixaban bled less. ${marker(A, 'Apixaban reduced major bleeding compared with warfarin')}` },
+  ])
+  const result = await answerQuestionBrowse({ llm, model: 'm', question: 'Does apixaban bleed less?', store, label: 'answer:t' })
+  assert.equal(result.toolCalls, 3)
+  assert.deepEqual(result.searches.map((entry) => entry.tool), ['kb_list', 'kb_grep', 'kb_read'])
+  assert.equal(llm.log[0].messages[0].content, ANSWER_SYSTEM_BROWSE)
+  assert.deepEqual(llm.log[0].tools.map((entry) => entry.function.name), ['kb_list', 'kb_grep', 'kb_read'])
+  assert.equal(result.finished, true)
+  const greedy = fakeLlm([(request) => (request.toolChoice === 'none' ? { content: 'enough' } : { role: 'assistant', content: '', tool_calls: [tool(`g${request.messages.length}`, 'kb_list', {})] })])
+  const capped = await answerQuestionBrowse({ llm: greedy, model: 'm', question: 'Q?', store, label: 'answer:t' })
+  assert.equal(capped.toolCalls, 12)
+  assert.equal(capped.answer, 'enough')
+  assert.match(runBrowseTool(store, 'kb_search', '{}').content, /Unknown tool/)
+  assert.match(runBrowseTool(store, 'kb_read', '{not json').content, /not valid JSON/)
+})
+
+test('buildKnowledgeBase gives arm G the documents of its scope, lines unchanged', () => {
+  const topic = { id: 't', documents: BROWSE_DOCS }
+  const other = { id: 'u', documents: [{ sourceId: `src_${'c'.repeat(32)}`, title: 'Other', text: 'one\ntwo' }] }
+  assert.equal(buildKnowledgeBase({ scope: 'topic', arm: 'G', topic, corpus: [topic, other], rep: 1 }).list().split('\n').length, 3)
+  assert.equal(buildKnowledgeBase({ scope: 'pooled', arm: 'G', topic, corpus: [topic, other], rep: 1 }).list().split('\n').length, 4)
+  const stats = lineStats(BROWSE_DOCS)
+  assert.equal(stats.over400, 1)
+  assert.equal(stats.max, 509)
+})
+
+test('the non-inferiority thresholds are the ones fixed on 2026-11-05 and written in the README', () => {
+  assert.deepEqual(NON_INFERIORITY.synthesis, { meanAtLeast: -0.05, ciLowerAtLeast: -0.10 })
+  assert.deepEqual(NON_INFERIORITY.single, { meanAtLeast: -0.05, ciLowerAtLeast: -0.10 })
+  assert.equal(NON_INFERIORITY.citation.verifiedRateDropAtMost, 0.03)
+  assert.equal(NON_INFERIORITY.minRepsPerCell, 3)
+  assert.deepEqual(NON_INFERIORITY.judgeSanity, THRESHOLDS.judgeSanity)
+  const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8')
+  assert.ok(readme.includes('Non-inferiority of arm G'))
+  for (const needle of ['mean ≥ −0.05', 'lower bound ≥ −0.10', 'control − 0.03']) assert.ok(readme.includes(needle), needle)
+})
+
+function nonInferiorSummary() {
+  return {
+    coverage: { expectedCells: 54, completeCells: 54, minRepsPerCell: 3 },
+    coverageByArm: { A: { expectedCells: 27, completeCells: 27 }, G: { expectedCells: 27, completeCells: 27 } },
+    judgeSanity: { n: 27, referenceMean: 0.97, emptyMean: 0.01 },
+    categories: { synthesis: { diffs: { 'G-A': diff(-0.05, -0.1, 0.02) } }, single: { diffs: { 'G-A': diff(-0.05, -0.1, 0.02, 12) } } },
+    citations: { overall: { A: { verifiedRate: 0.9 }, G: { verifiedRate: 0.87 } } },
+  }
+}
+
+test('decideNonInferior: the boundary is on the passing side and each row closes the verdict on its own', () => {
+  const passing = decideNonInferior(nonInferiorSummary(), 'G', 'A')
+  assert.equal(passing.open, true, passing.reasons.join('\n'))
+  const cases = [
+    ['synthesis mean', (s) => { s.categories.synthesis.diffs['G-A'] = diff(-0.051, -0.09, 0.02) }, /synthesis G - A is inferior/],
+    ['synthesis lower bound', (s) => { s.categories.synthesis.diffs['G-A'] = diff(0, -0.101, 0.1) }, /synthesis G - A is inferior/],
+    ['single mean', (s) => { s.categories.single.diffs['G-A'] = diff(-0.051, -0.09, 0.02) }, /single G - A is inferior/],
+    ['single lower bound', (s) => { s.categories.single.diffs['G-A'] = diff(0, -0.101, 0.1) }, /single G - A is inferior/],
+    ['citations', (s) => { s.citations.overall.G.verifiedRate = 0.869 }, /citation verified rate G 0\.869 is more than 0\.03 below A 0\.900/],
+    ['judge', (s) => { s.judgeSanity.emptyMean = 0.2 }, /judge sanity/],
+  ]
+  for (const [name, mutate, pattern] of cases) {
+    const summary = nonInferiorSummary()
+    mutate(summary)
+    const verdict = decideNonInferior(summary, 'G', 'A')
+    assert.equal(verdict.open, false, name)
+    assert.ok(verdict.reasons.some((reason) => reason.startsWith('FAIL: ') && pattern.test(reason)), `${name}: ${verdict.reasons.join(' | ')}`)
+  }
+  const partial = nonInferiorSummary()
+  partial.coverageByArm.G.completeCells = 26
+  assert.deepEqual([decideNonInferior(partial, 'G', 'A').open, decideNonInferior(partial, 'G', 'A').inconclusive], [false, true])
+  const fewReps = nonInferiorSummary()
+  fewReps.coverage.minRepsPerCell = 2
+  assert.equal(decideNonInferior(fewReps, 'G', 'A').inconclusive, true)
+  const noSanity = nonInferiorSummary()
+  noSanity.judgeSanity = null
+  assert.equal(decideNonInferior(noSanity, 'G', 'A').open, false)
 })

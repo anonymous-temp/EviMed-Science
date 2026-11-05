@@ -1,5 +1,6 @@
 // Answering one question with `kb_search` over an index, in one of the arms.
-import { ARMS, ANSWER_SYSTEM, KB_SEARCH_TOOL } from './prompts.mjs'
+import { BROWSE_MAX_TOOL_CALLS, BROWSE_TOOLS, runBrowseTool } from './browse.mjs'
+import { ARMS, ANSWER_SYSTEM, ANSWER_SYSTEM_BROWSE, KB_SEARCH_TOOL } from './prompts.mjs'
 
 export const MAX_TOOL_CALLS = 6
 export const TOP_K = 5
@@ -67,6 +68,61 @@ export async function answerQuestion({ llm, model, arm, question, index, label, 
           searches.push({ query, hits: hits.map((hit) => ({ id: hit.docId, kind: hit.kind, start: hit.start })) })
           content = renderHits(query, hits, used)
         }
+      }
+      messages.push({ role: 'tool', tool_call_id: call.id, content })
+    }
+  }
+  return { answer, finished, toolCalls: used, searches, tokens, cost }
+}
+
+/**
+ * Arm G: the same loop with the three browsing tools over a store of the documents (`createBrowseStore`). Every call of any of
+ * the tools counts once against `BROWSE_MAX_TOOL_CALLS`; `searches` records each call (tool, arguments) for the run record.
+ * @param {{ llm: { chat: Function }, model: string, question: string, store: ReturnType<typeof import('./browse.mjs').createBrowseStore>, label: string,
+ *   temperature?: number, thinking?: 'enabled' | 'disabled', seed?: number, meta?: Record<string, unknown> }} options
+ */
+export async function answerQuestionBrowse({ llm, model, question, store, label, temperature = 0.7, thinking = 'disabled', seed, meta = {} }) {
+  const messages = [{ role: 'system', content: ANSWER_SYSTEM_BROWSE }, { role: 'user', content: question }]
+  const searches = []
+  const tokens = { prompt: 0, completion: 0, total: 0, calls: 0 }
+  let cost = 0
+  let used = 0
+  let nudged = false
+  let answer = ''
+  let finished = false
+  for (let turn = 0; turn < BROWSE_MAX_TOOL_CALLS + 4; turn += 1) {
+    const exhausted = used >= BROWSE_MAX_TOOL_CALLS
+    const result = await llm.chat({
+      label, model, messages, temperature, thinking, seed, maxTokens: 3000, meta,
+      tools: BROWSE_TOOLS, toolChoice: exhausted ? 'none' : 'auto',
+    })
+    tokens.prompt += result.usage.promptTokens
+    tokens.completion += result.usage.completionTokens
+    tokens.total += result.usage.totalTokens
+    tokens.calls += 1
+    cost += result.cost
+    const message = result.message
+    const calls = message.tool_calls ?? []
+    if (!calls.length) {
+      if (!String(message.content ?? '').trim() && !nudged) {
+        nudged = true
+        messages.push({ role: 'assistant', content: message.content ?? '' }, { role: 'user', content: 'Give your final answer now.' })
+        continue
+      }
+      answer = String(message.content ?? '')
+      finished = true
+      break
+    }
+    messages.push({ role: 'assistant', content: message.content ?? '', tool_calls: message.tool_calls, ...(message.reasoning_content ? { reasoning_content: message.reasoning_content } : {}) })
+    for (const call of calls) {
+      let content
+      if (used >= BROWSE_MAX_TOOL_CALLS) {
+        content = `The limit of ${BROWSE_MAX_TOOL_CALLS} tool calls is used up. Answer now from what you have already read.`
+      } else {
+        used += 1
+        const ran = runBrowseTool(store, call.function?.name ?? '', call.function?.arguments ?? '')
+        searches.push(ran.call)
+        content = `Call ${used} of ${BROWSE_MAX_TOOL_CALLS}\n${ran.content}`
       }
       messages.push({ role: 'tool', tool_call_id: call.id, content })
     }

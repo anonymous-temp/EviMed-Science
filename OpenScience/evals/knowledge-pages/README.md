@@ -17,9 +17,31 @@ On 2026-10-12 the pages of the platform's self-built compiler (`capabilities/kno
 | **A** | runnable | The project's documents. The status quo. |
 | **A′** | runnable | The documents, and the prompt gains one sentence: *when a question spans several documents, first split it into sub-questions, search for each one separately, and then combine what you found into one answer.* |
 | **C** | runnable, not yet run | The documents and the pages of one tree compiled by OpenViking's official `llm-wiki` skill and exported from the engine. No sentence. |
+| **G** | runnable, no pages | The documents are not searched at all. The model has `kb_list`, `kb_grep` and `kb_read` (below) and no `kb_search`. |
 | **B** | on record only | The documents and the pages of the self-built compiler. No sentence. Its records stay under `results/2026-10-12-*` and `--stage summarize` recomputes them; a new run refuses `--arms B` and says why. |
 
 The bar for a page arm is A′, the cheapest alternative aimed at the same weakness. Every arm answers with one system prompt (`lib/prompts.mjs`), unchanged since the recorded runs (a test pins its hash, and the judge's, against `results/2026-10-12-three-arm/config.json`); only A′ appends the sentence. Its paragraph telling the model to cite the document a page names, never the page, is inert in A and A′.
+
+### Arm G: browse only (2026-11-05)
+
+The question: the platform keeps its own passage index behind `kb_search` beside OpenViking, which already holds every document; can the conversation do without it, with only what `kb_browse` (`apps/server/src/kbBrowseGateway.mjs`) offers? Arm G answers from the same documents with three in-process tools (`lib/browse.mjs`) that mirror it and bound it the way the gateway does:
+
+- `kb_list()`: every document's id and title.
+- `kb_grep(pattern, doc?)`: a case-insensitive literal (not a regular expression) over all documents or one; at most 50 matches, each document id, line number and the line's first 400 characters; says when it stopped at the limit.
+- `kb_read(doc, offset?, limit?)`: numbered lines, default 200, at most 400 lines and 80,000 characters per answer.
+
+A document keeps the line structure of its file; nothing is re-wrapped, so a long line is one match and one numbered line. The system prompt is `ANSWER_SYSTEM_BROWSE` (`lib/prompts.mjs`): `ANSWER_SYSTEM` with the sentence naming `kb_search` as the way to read the knowledge base replaced by one naming the three tools, and its call allowance (6 searches) by 12 calls of the three tools together, because a model that browses needs more calls than one that searches. `ANSWER_SYSTEM` is untouched (arms A, A′ and C keep the recorded hash); the new prompt's hash is in `config.json` (`answerSystemBrowseSha256`). Citation rules, the judge, the metrics and the repetitions are unchanged. `--arms G` asks it; it is not in the default arms.
+
+**Non-inferiority of arm G to A** (`decideNonInferior(summary, 'G', 'A')`, `NON_INFERIORITY`, pinned by the tests; `summary.json` → `decisions.G_vs_A`). The thresholds were fixed on 2026-11-05, before any result of this comparison existed. Arm G is non-inferior only if **all** hold:
+
+| # | Check | Threshold |
+|---|---|---|
+| 0 | Data | every cell of both arms has ≥ 3 judged repetitions and the judge sanity check passed; otherwise `inconclusive: true` |
+| 1 | Synthesis, G − A | mean ≥ −0.05 and 95% CI lower bound ≥ −0.10 |
+| 2 | Single-fact, G − A | mean ≥ −0.05 and 95% CI lower bound ≥ −0.10 |
+| 3 | Citations | pooled `verifiedRate` of G ≥ that of the control − 0.03 (control − 0.03) |
+
+Tokens, cost per answer, tool calls per answer and failures are reported, not gating. The pooled run (`--kb-scope pooled`, 24 documents) is the primary verdict and the per-topic run the sensitivity check.
 
 ## Design
 
