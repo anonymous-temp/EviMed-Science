@@ -20,3 +20,15 @@ test('native capsule preview retains useful uncertain content and requires a dig
   const selected=await previewFor({scopes:['workstyle','+knowledge'],includePrivateEntries:[{id:entry.id,sha256:entry.sha256}]});
   const kept=selected.entries.find(row=>row.id===entry.id);assert.equal(kept.included,true);assert.equal(kept.attribution.confirmed,false);assert.equal(kept.sourcePrivacy.classification,'unclassified');
 });
+
+test('encrypted capsule export and confirmed import preserve original uncertainty and private source lineage',options,async t=>{
+  const f=await fixture(t);f.seed('notes/person-constraint.md','Assistant suggested discussing alternatives after a patient declined transfusion.',{type:'notes'});
+  const capsule=await f.app.capsuleService.ownCapsule(f.user.id,{create:true}),request=async(route,body,headers=f.headers)=>{const response=await fetch(`${f.base}/api/capsules${route}`,{method:'POST',headers,body:JSON.stringify(body)});assert.ok(response.ok,`${response.status} ${await response.clone().text()}`);return (await response.json()).data;};
+  const offered=await request(`/${capsule.id}/exports/preview`,{scopes:['workstyle','+knowledge']}),entry=offered.entries.find(row=>row.content.includes('transfusion'));
+  const exported=await request(`/${capsule.id}/exports`,{password:'test-only-attribution-export',scopes:['workstyle','+knowledge'],includePrivateEntries:[{id:entry.id,sha256:entry.sha256}]});
+  const preview=await request('/transfers/preview',{archive:exported.archive,password:'test-only-attribution-export'});
+  assert.equal(preview.entries[0].origin,'unknown');assert.equal(preview.entries[0].attribution.confirmed,false);assert.equal(preview.entries[0].sourcePrivacy.classification,'unclassified');
+  const imported=await request('/transfers/import',{archive:exported.archive,password:'test-only-attribution-export',expectedDigest:preview.archiveSha256,confirmed:true});
+  const records=await f.app.capsuleService.entries(f.user.id,imported.id),received=records.items[0].payload;
+  assert.equal(received.origin,'imported');assert.equal(received.attribution.confirmed,false);assert.equal(received.sourcePrivacy.classification,'unclassified');
+});
