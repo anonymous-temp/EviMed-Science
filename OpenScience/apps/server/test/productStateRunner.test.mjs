@@ -29,7 +29,7 @@ test('product suites receive separate databases and failed files still release o
   assert.match(names[1], /^evimed_test_extension_worker_[a-f0-9]{12}$/);
   assert.match(names[2], /^evimed_test_product_[a-f0-9]{12}$/);
   assert.deepEqual(f.queries, names.flatMap(name => [`CREATE DATABASE "${name}"`, `DROP DATABASE "${name}" WITH (FORCE)`]));
-  for (const row of f.invocations) { assert.equal(row.options.timeout, 210000); assert(row.args.includes('--test-concurrency=1')); }
+  for (const row of f.invocations) { assert.equal(row.options.timeout, 330000); assert(row.args.includes('--test-concurrency=1')); }
   assert(f.closed());
 });
 
