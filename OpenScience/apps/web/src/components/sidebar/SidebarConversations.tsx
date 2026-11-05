@@ -147,7 +147,7 @@ export function SidebarConversations({ geoId, geo, vcr, onCurrentModule }: { geo
       if (current()) setData({ ...acc, failed: [...new Set([...acc.failed, ...failures])], loading: false });
     })();
     return () => { cancelled = true; };
-  }, [key, generation, geo, vcr, geoId, scope]);
+  }, [key, base, generation, geo, vcr, geoId, scope]);
 
   async function loadMore(id: string) {
     const cursor = view.cursors[id], project = view.projects.find(row => row.id === id); if (!cursor || !project) return;
