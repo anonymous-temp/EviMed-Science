@@ -211,7 +211,11 @@ export class MemoryHistoryLedger {
       WHERE ($1::text IS NULL OR h.owner_id=$1) GROUP BY h.state`, [ownerId]);
     const counts = { queued: 0, indexing: 0, complete: 0, excluded: 0, partial: 0, unavailable: 0, withdrawn: 0 };
     for (const row of result.rows) counts[row.state] = Number(row.n);
-    return counts;
+    const pending = await this.database.query(`SELECT count(*)::integer AS n FROM evimed_memory.native_commits c
+      JOIN evimed_control.users u ON u.id=c.user_id
+      WHERE c.state='completed' AND ($1::text IS NULL OR c.user_id=$1) AND NOT EXISTS
+        (SELECT 1 FROM evimed_memory.history_archives h WHERE h.owner_id=c.user_id AND h.owner_created_at=u.created_at::text AND h.archive_uri=c.archive_uri)`, [ownerId]);
+    return { ...counts, undiscovered: Number(pending.rows[0]?.n ?? 0) };
   }
   async removeResource(row) {
     await this.client.remove(row.owner_id, row.uri, { openVikingUser: row.namespace_id });
