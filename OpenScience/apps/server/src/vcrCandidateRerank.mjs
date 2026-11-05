@@ -304,3 +304,12 @@ export function createRerankMeter(usageLedger) {
     });
   };
 }
+
+/**
+ * The booking of a rerank request's spend for the account that asked: a study's owner, or the owner of a conversation that has no study yet (the same account and project the
+ * conversation's other calls are booked to, with the run). None without a meter or without a person to book it to (an evaluation harness).
+ * @param {ReturnType<typeof createRerankMeter>} meter @param {any} study
+ */
+export function rerankBillFor(meter, study) {
+  return meter && study?.userId && study.projectId ? (/** @type {{ tokens: number, requestId: string | null, model: string }} */ spend) => meter(study, spend) : null;
+}

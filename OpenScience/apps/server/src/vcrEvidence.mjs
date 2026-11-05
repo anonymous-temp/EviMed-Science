@@ -106,7 +106,7 @@ import {
   candidateQueries, candidateRequest, chictrCandidate, coverageSentence, ctgovCandidate, ctisCandidate, filterCandidates, fuseRanked, interleave,
   mergeCandidates, presentCandidate, registryOutcome,
 } from "./vcrCandidateSearch.mjs";
-import { rerankCandidates } from "./vcrCandidateRerank.mjs";
+import { rerankBillFor, rerankCandidates } from "./vcrCandidateRerank.mjs";
 import { retrieveCandidates } from "./vcrCandidateRetrieve.mjs";
 import { summaryStamp } from "./vcrCandidateSearchStore.mjs";
 import { EVIDENCE_ARM_ROLES } from "./vcrEvidenceStore.mjs";
@@ -1312,8 +1312,8 @@ export function createVcrEvidencePipeline({ store, registry = null, trialCorpus 
     ? "按与你写的患者摘要的相关程度排序（重排序），不是适合程度的判断；重排之前是各登记库按检索词优先级融合、再轮流排列的检索顺序。"
     : "各登记库按检索词优先级融合后轮流排列的检索顺序，不是适合程度的排序。");
 
-  /** The booking of a rerank request's spend for the owner of the study the search belongs to; none without a study (an evaluation harness) or a meter. @param {any} study */
-  const billFor = (study) => (meter && study?.id && study.userId && study.projectId ? (/** @type {{ tokens: number, requestId: string | null, model: string }} */ spend) => meter(study, spend) : null);
+  /** The booking of a rerank request's spend: for the study's owner, or for the conversation's when it has no study yet (`rerankBillFor`). @param {any} study */
+  const billFor = (study) => rerankBillFor(meter, study);
 
   /** What a rerank did, as the receipt and the answer keep it. @param {Awaited<ReturnType<typeof rerankCandidates>>} outcome @param {boolean} summaryGiven */
   const rerankRecord = (outcome, summaryGiven) => ({

@@ -6,7 +6,7 @@ import { after, before, test } from "node:test";
 
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { UsageLedger } from "../src/usageLedger.mjs";
-import { VcrCandidateRerank, createRerankMeter, rerankCandidates } from "../src/vcrCandidateRerank.mjs";
+import { VcrCandidateRerank, createRerankMeter, rerankBillFor, rerankCandidates } from "../src/vcrCandidateRerank.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (databaseUrl) {
@@ -72,4 +72,15 @@ test("a rerank model with no price row is booked with its tokens and unpriced, a
   assert.equal(last.cost, 0);
   assert.equal(Number(last.cache_miss_tokens), 500);
   assert.equal(createRerankMeter(null), null);
+});
+
+test("a conversation with no study yet is billed to its own account and run; with no account there is nobody to bill", options, async () => {
+  const meter = createRerankMeter(ledger);
+  const before = (await rows()).length;
+  const bill = rerankBillFor(meter, { id: null, userId: owner, projectId: "default", scope: "conversation", executionOrigin: { runId: null } });
+  assert.equal(typeof bill, "function");
+  await bill({ tokens: 1_000, requestId: "dash-3", model: "qwen3-rerank" });
+  assert.equal((await rows()).length, before + 1);
+  assert.equal(rerankBillFor(meter, { id: null }), null);
+  assert.equal(rerankBillFor(null, { id: "s", userId: owner, projectId: "default" }), null);
 });
