@@ -182,7 +182,7 @@ test("the model reads through the service: a person's ranking, a protocol's peop
   assert.deepEqual([read.ranking[0].verdict, read.ranking[0].verdictLabel, read.ranking[0].fit], ["possible", "可能符合", 70]);
   const nobody = await vcr.service.runtimeRead(context, "candidate_trials", { subjectKey: "NO-ONE" });
   assert.deepEqual(nobody.ranking, [], "a person with no judgment reads today's answer");
-  assert.ok(Array.isArray(nobody.requests));
+  assert.equal("requests" in nobody, false, "no write can answer a language request, so none is offered");
   await vcr.matchJudgments.save(head(f.target.id, { subjectKey: f.s1, targetKind: "protocol_version", targetId: "prt_x", documentIds: [f.one.id] }));
   const protocol = await vcr.service.runtimeRead(context, "matching", { protocolVersionId: "prt_x" });
   assert.deepEqual(protocol.ranking.map((row) => [row.subjectKey, row.target.kind]), [[f.s1, "protocol_version"]]);
