@@ -49,8 +49,8 @@ test("a verification run is marked in the run list, an ordinary or scheduled run
     // "Last open" reopens a conversation of the person's, never a verification, however recent.
     assert.equal(await app.agentRuns.lastSessionId(project), "ses_ordinary");
     assert.deepEqual([verification, programme, ordinary, scheduled].map((run) => isResearcherRun(run)), [false, false, true, false]);
-    assert.deepEqual((await app.agentRuns.researcherRuns(project, { includeManaged: true })).map((run) => run.dispatchId).sort(),
-      ["episode-00112233445566778899aabbccddeeff", "ordinary-turn-1"].sort(), "a managed execution counts as the researcher's work, its verification does not");
+    assert.deepEqual((await app.agentRuns.researcherRuns(project, { includeManaged: true })).map((run) => run.dispatchId), ["ordinary-turn-1"],
+      "only the person's own turn counts as their work: neither a scheduled execution nor its verification does");
   } finally {
     await app.close();
     await rm(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
