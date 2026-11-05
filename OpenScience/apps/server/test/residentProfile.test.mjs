@@ -371,3 +371,10 @@ test("other people cannot become the owner's opening profile", () => {
  const rendered = renderResidentProfile({capsuleFacts:[fact({factKind:"person",content:"Patient A allergy"}),fact({factKind:"note",content:"Ordinary separate note"}),fact({factKind:"profile",content:"Owner profession"})]});
  assert.ok(!rendered.profile.includes("Patient A")); assert.ok(!rendered.profile.includes("Ordinary separate")); assert.ok(rendered.profile.includes("Owner profession"));
 });
+
+test('a resident project memo preserves original source attribution and privacy instead of asserting explicit human facts',()=>{
+  const original={id:'native-a',origin:'engine',attribution:{schemaVersion:1,origins:['engine'],confirmed:false},sourcePrivacy:{schemaVersion:1,classification:'private',reasons:['person-context']},contentDigest:'a'.repeat(64)};
+  const memo=projectCardMemo('project-a',[{slot:'constraints',text:'Assistant suggested checking constraints.',originalSources:[original]}]);
+  assert.equal(memo.origin,'engine');assert.equal(memo.attribution.confirmed,false);assert.equal(memo.sourcePrivacy.classification,'private');assert.equal(memo.originalSources[0].id,'native-a');
+  assert.match(renderMemoryContext([memo]),/origin="engine-derived"/);
+});
