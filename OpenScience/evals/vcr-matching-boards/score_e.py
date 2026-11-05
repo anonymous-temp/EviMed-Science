@@ -175,7 +175,10 @@ OFFICIAL = {
     2023: {"topics": 37, "runs": 33, "top": {"run": "gpt_weighted (patient2trial, automatic)", "ndcg10": 0.8109, "p10": 0.7351},
            "csiroUq": {"run": "GPT4 (CSIRO-UQ-ielab)", "ndcg10": 0.7363, "p10": 0.5108}, "csiroMed": {"run": "qe_prr_ft_rf (CSIROmed)", "ndcg10": 0.7378, "p10": 0.5270},
            "median": {"ndcg10": 0.6414, "p10": 0.4189},
-           "sameNineDevTopics": {"top": 0.8228, "median": 0.5522, "csiroUq": 0.6554, "csiroMed": 0.7201}},
+           "sameNineDevTopics": {"top": 0.8228, "median": 0.5522, "csiroUq": 0.6554, "csiroMed": 0.7201},
+           # The 28 scorable test topics, averaged here from the same per-topic files. The 2021 and 2022 PDFs draw their per-topic values as a chart, so those years have the whole-set mean only.
+           "sameTestTopics": {"topics": 28, "top": {"run": "gpt_weighted", "ndcg10": 0.8070, "p10": 0.7071}, "median": {"ndcg10": 0.6680, "p10": 0.4321},
+                              "csiroUq": {"ndcg10": 0.7623, "p10": 0.5429}, "csiroMed": {"ndcg10": 0.7435, "p10": 0.5464}}},
 }
 # Figures quoted by others before this check, and what the check found (all second-hand until confirmed here).
 SECOND_HAND = {
@@ -265,6 +268,10 @@ def reference_markdown(years):
     for year in sorted(set(years) & set(OFFICIAL)):
         row = OFFICIAL[year]
         out.append(f"| {year} | {row['topics']} | {row['runs']} | {row['top']['run']} | {row['top']['ndcg10']:.4f} | {row['top']['p10']:.4f} | {row['median']['ndcg10']:.4f} | {row['median']['p10']:.4f} |")
+    same = OFFICIAL[2023]["sameTestTopics"]
+    if 2023 in years:
+        out += ["", f"These are whole-set means. Run on the {same['topics']} scorable 2023 test topics, the track's runs read: top {same['top']['run']} {same['top']['ndcg10']:.4f} / {same['top']['p10']:.4f}, median {same['median']['ndcg10']:.4f} / {same['median']['p10']:.4f}, "
+                f"CSIRO-UQ {same['csiroUq']['ndcg10']:.4f} / {same['csiroUq']['p10']:.4f}, CSIROmed {same['csiroMed']['ndcg10']:.4f} / {same['csiroMed']['p10']:.4f}. Per-topic values for 2021 and 2022 are published only as charts, so a test-topic figure for those years is set against the whole-set mean."]
     out += ["", "Second-hand figures quoted before, as checked against those files:", ""] + [f"- {claim}: {verdict}" for claim, verdict in SECOND_HAND.items()] + [""]
     return "\n".join(out)
 
