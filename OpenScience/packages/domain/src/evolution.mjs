@@ -27,7 +27,7 @@ export const EVOLUTION_ORIGINS = Object.freeze(['literature', 'tool-result', 'pl
 export const EVOLUTION_BUILD_FORMS = Object.freeze(['compose', 'extend', 'wrap', 'rewrite', 'new-capability'])
 export const EVOLUTION_CASE_GROUPS = Object.freeze(['development', 'confirmation', 'audit', 'prospective'])
 export const EVOLUTION_TOOL_STATES = Object.freeze(['staged', 'active', 'alias', 'retired'])
-export const EVOLUTION_JOB_KINDS = Object.freeze(['evolution-event', 'evolution-scout', 'evolution-build', 'evolution-evaluate', 'evolution-decision', 'evolution-digest', 'evolution-maintain', 'evolution-self-check', 'evolution-plan', 'evolution-mission', 'evolution-mission-heavy', 'evolution-meta', 'evolution-research', 'evolution-audit'])
+export const EVOLUTION_JOB_KINDS = Object.freeze(['evolution-event', 'evolution-scout', 'evolution-build', 'evolution-evaluate', 'evolution-decision', 'evolution-digest', 'evolution-maintain', 'evolution-plan', 'evolution-mission', 'evolution-mission-heavy', 'evolution-meta', 'evolution-research', 'evolution-audit'])
 /**
  * What a decision's option can do, as the control plane's executor knows it (`evolutionComposition.mjs`). This list is
  * closed, and it is what stops the engine: an option whose operation is not here is refused when it is chosen, by a

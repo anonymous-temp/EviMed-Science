@@ -18,10 +18,6 @@ export function createEvolutionRoutes({ store, service, decisions, worker, confi
       await store.requireProject(user, projectId);
       sendJson(res, 200, { data: await service.availableTools({}) }); return true;
     }
-    if (req.method === 'GET' && url.pathname === '/api/evolution/opportunities') {
-      const projectId = url.searchParams.get('projectId'); await store.requireProject(user, projectId);
-      sendJson(res, 200, { data: (await service.opportunities(user.id)).filter((/** @type {any} */ row) => row.payload.projectId === projectId) }); return true;
-    }
     if (!await isOperator(user)) throw new HttpError(403, 'evolution_operator_required', 'Evolution is available to operators only.');
     // The capability map is the evolution engine's own model of what the platform can do (task family x capability), not a
     // researcher's page: operators only, and read-only. It is the weekly map the mission job already saved; opening it

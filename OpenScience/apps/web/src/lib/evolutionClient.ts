@@ -14,7 +14,6 @@ export interface EvolutionDecision {
   /** Set while the review that decides an expired card could not be had; it is asked again and then the conservative option is taken. */
   expiry?: {state: 'review-unavailable' | 'conservative-taken'; attempts: number; of: number};
 }
-export interface EvolutionOpportunity { title: string; description?: string; prompt?: string; projectId: string; origin: string; }
 export function useEvolutionAccess() {
   const [access, setAccess] = useState({ enabled: false, operator: false });
   useEffect(() => { let active = true; void fetchWebMe().then(me => { if (active) setAccess({ enabled: me?.evolutionEnabled === true, operator: me?.operator === true }); }).catch(() => {}); return () => { active = false; }; }, []);
@@ -25,7 +24,6 @@ export const listEvolutionDossiers = () => productRequest<ProductRecord<{ title?
 export const listEvolutionDecisions = () => productRequest<ProductRecord<EvolutionDecision>[]>('/evolution/decisions');
 export const getEvolutionDecision = (id: string) => productRequest<ProductRecord<EvolutionDecision>>(`/evolution/decisions/${encodeURIComponent(id)}`);
 export const resolveEvolutionDecision = (id: string, input: {expectedRevision: number; option?: string; text?: string; delegate?: boolean}) => productRequest<ProductRecord<EvolutionDecision>>(`/evolution/decisions/${encodeURIComponent(id)}/resolve`, 'POST', input);
-export const listEvolutionOpportunities = (projectId: string) => productRequest<ProductRecord<EvolutionOpportunity>[]>(`/evolution/opportunities?projectId=${encodeURIComponent(projectId)}`);
 export function downloadEvolutionRequirements(tool: EvolutionTool) {
   const blob = new Blob([JSON.stringify(tool.dataRequirements, null, 2)], {type: 'application/json'});
   const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = `${tool.id}-data-requirements.json`; anchor.click(); URL.revokeObjectURL(url);
