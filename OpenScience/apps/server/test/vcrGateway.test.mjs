@@ -8,7 +8,8 @@ import assert from "node:assert/strict";
 import { Readable } from "node:stream";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
-import { VCR_EXPORT_KINDS as ALL_EXPORT_KINDS, VCR_EXPORT_KIND_LABELS_ZH, VCR_MODEL_DOCUMENT_KINDS, VCR_MODEL_DOCUMENT_SECTIONS } from "@evimed/domain";
+import { VCR_EXPORT_KINDS as ALL_EXPORT_KINDS, VCR_EXPORT_KIND_LABELS_ZH, VCR_MODEL_DOCUMENT_KINDS, VCR_MODEL_DOCUMENT_SECTIONS, VCR_JOB_METHODS, VCR_ENGINE_METHODS } from "@evimed/domain";
+import { projectResearchInvocation } from '@evimed/research-plugin-runtime/hosted-protocol';
 
 /** The documents a run writes. A result record is the platform's own, from one result (D7): no run is sent out for it and none fills it. */
 const VCR_EXPORT_KINDS = ALL_EXPORT_KINDS.filter((kind) => kind !== "result_record");
@@ -1554,7 +1555,7 @@ test('native model calculations require the exact immutable string model version
  base.vcr.service.modelScenario=async(_user,_id,_kind,scenario)=>scenario;base.vcr.service.modelExecution=async(_user,_study,id,kind,scenario)=>{seen.push({id,kind,scenario});return{id,version:'1.0.0'};};
  base.vcr.store.trialScenarios=async()=>[DESIGN_A];
  const handler=createVcrGatewayHandler(config,runtimeManager,{vcr:base.vcr});
- const body={action:'start',kind:'design_simulation',scenario:{design:{kind:'two_arm_fixed'}},modelId:'mdl_source',modelVersion:'1.0.0'};
+ const body=projectResearchInvocation('virtual_trial_start',{method:'design.simulate',scenario:{design:{kind:'two_arm_fixed'}},modelId:'mdl_source',modelVersion:'1.0.0'}, {jobMethods:VCR_JOB_METHODS,methods:VCR_ENGINE_METHODS}).body;
  const success=response();await handler(request('/internal/vcr/v1/simulate',body),success);assert.equal(success.status,200);assert.equal(seen.length,1);
  const stale=response();await handler(request('/internal/vcr/v1/simulate',{...body,modelVersion:'1.0.1'}),stale);assert.equal(stale.status,409);assert.equal(stale.json().code,'vcr_model_version_changed');
  const invalid=response();await handler(request('/internal/vcr/v1/simulate',{...body,modelVersion:1}),invalid);assert.equal(invalid.status,400);

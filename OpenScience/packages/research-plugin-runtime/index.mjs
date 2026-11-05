@@ -1,4 +1,5 @@
 import { catalogue } from './catalogue.mjs'
+import { hostedReferenceParameters } from './hostedProtocol.mjs'
 import { renderResearchReport } from './report.mjs'
 import { randomUUID } from 'node:crypto'
 import { readFile, realpath } from 'node:fs/promises'
@@ -60,7 +61,10 @@ export function createLocalAdapter({ workspace, engineRoot, rscript = 'Rscript' 
       return { method, ...snapshot.methods[method], scenarioSchema: snapshot.scenarioSchemas?.[method] ?? null }
     },
     /** @param {ResearchRequest} request */
-    async start({ method, scenario, version, inputs, seed = 1, replicates, sources, cpuSecondsLimit = 600 }) {
+    async start(request) {
+      const { method, scenario, version, inputs, seed = 1, replicates, sources, cpuSecondsLimit = 600 } = request
+      if (Object.keys(hostedReferenceParameters).some(key => request[key] !== undefined)) throw new Error('hosted_reference_unavailable_use_local_inputs')
+      if (Object.keys(request).some(key => !['method', 'scenario', 'version', 'inputs', 'seed', 'replicates', 'sources', 'cpuSecondsLimit'].includes(key))) throw new Error('invalid_research_request')
       if (sources !== undefined && (!Array.isArray(sources) || sources.length > 8 || sources.some(source => !validSource(source)))) throw new Error('invalid_sources')
       const snapshot = JSON.parse(await readFile(join(engineRoot, 'R', 'domain-snapshot.json'), 'utf8'))
       const kind = Object.keys(snapshot.jobMethods).find((key) => snapshot.jobMethods[key] === method)
@@ -194,7 +198,7 @@ async function registerConfiguredResearchTools(ctx, { name, methods, mode, works
       return { ok: true, data: await forCall(call).describe(method) }
     } },
     { name: `${name}_start`, description: `${overview?.task ?? 'Virtual research'}. Start a research computation using an installed method. Available method IDs: ${methods.join(', ')}. Use only explicit assumptions and authorized inputs.`,
-      parameters: { method: { type: 'string', required: true }, scenario: { type: 'object', additionalProperties: true, required: true }, version: { type: 'string' }, inputs: { type: 'array', items: { type: 'object', additionalProperties: true, properties: {} } }, sources: { type: 'array', description: 'At most 8 source assertions: publication {field, publication, quote} or user {origin: user, field, value, quote, unit, context, sessionId?, messageSeq?}. Assertions need independent verification.', items: { type: 'object', additionalProperties: true, properties: {} } }, seed: { type: 'integer' }, replicates: { type: 'integer' }, cpuSecondsLimit: { type: 'integer' } },
+      parameters: { method: { type: 'string', required: true }, scenario: { type: 'object', additionalProperties: true, required: true }, version: { type: 'string' }, inputs: { type: 'array', items: { type: 'object', additionalProperties: true, properties: {} } }, sources: { type: 'array', description: 'At most 8 source assertions: publication {field, publication, quote} or user {origin: user, field, value, quote, unit, context, sessionId?, messageSeq?}. Assertions need independent verification.', items: { type: 'object', additionalProperties: true, properties: {} } }, seed: { type: 'integer' }, replicates: { type: 'integer' }, cpuSecondsLimit: { type: 'integer' }, ...hostedReferenceParameters },
       execute: async (args, call) => ({ ok: true, data: await pluginFor(call).start(args) }) },
     { name: `${name}_read`, description: 'Read the state and result of a research job.', parameters: { jobId: { type: 'string', required: true } }, execute: async ({ jobId }, call) => ({ ok: true, data: await pluginFor(call).read(jobId) }) },
     { name: `${name}_report`, description: 'Compose an inspectable report from a completed research job, preserving its assumptions and limitations.', parameters: { jobId: { type: 'string', required: true } }, execute: async ({ jobId }, call) => {

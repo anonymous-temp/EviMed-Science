@@ -1220,7 +1220,7 @@ test("the guidance offers the capability catalogue as an index of professional w
   // A plan is for one of these deliverables; an ordinary file task is simply done.
   assert.doesNotMatch(text, /需要产出文件的任务，先写计划/);
   assert.match(text, /用户要的正是其中一种正式交付物时才用它：调用 `evimed_plan`/);
-  assert.match(text, /把所作的假设写进结果里/, "a runtime without the ask-user tool is told to write the assumption down");
+  assert.match(text, /清楚标注假设/, "an authorized hypothetical demonstration must label its assumptions");
   assert.ok(!/evimed_review_run/.test(text), "a disabled capability must not be advertised");
   assert.ok(CONTRACT_KINDS.includes("clinical-evidence-report"));
   // With the tool mounted, a question is for what changes the next step, never a ceremony (principle 17).
@@ -1233,7 +1233,8 @@ test("the guidance offers the capability catalogue as an index of professional w
   assert.doesNotMatch(asking, /一次问清/);
   // A question nobody answered is not the reply. On a real session a clinical question (「INR 3.8，今晚这顿还吃不吃」)
   // was answered with two questions and nothing else once the card could not be drawn (2026-10-13).
-  assert.match(asking, /提问没有得到回答时，照最合理的理解做完，把还需要用户确认的点写在回答里，不提提问的事/);
+  assert.match(asking, /提问没有得到回答时，已有输入的部分照常完成/);
+  assert.match(asking, /列出所需信息，不补造/);
   assert.match(asking, /自动续跑和定时触发的轮次不追问/);
   assert.doesNotMatch(asking, /本部署不接受运行中追问/);
 });

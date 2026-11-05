@@ -13,6 +13,10 @@ test('research tools project only their owned methods and immutable arguments', 
   assert.equal(projectResearchInvocation('virtual_trial_describe', { method: 'evidence.network' }, registry).body.action, 'shape')
   assert.throws(() => projectResearchInvocation('virtual_trial_start', { method: 'design.analytic', scenario: {}, projectId: 'other' }, registry))
   assert.throws(() => projectResearchInvocation('virtual_trial_start', { method: 'design.analytic', scenario: {}, version: 'wrong' }, registry))
+  const references = { subjectId: 'patients-owned', modelId: 'model-owned', modelVersion: '1.0.0', reconstructionResultId: 'result-owned' }
+  const projected = projectResearchInvocation('virtual_patient_start', { method: 'patients.longitudinal', scenario: {}, ...references }, registry)
+  assert.deepEqual(Object.fromEntries(Object.entries(projected.body).filter(([key]) => Object.hasOwn(references, key))), references)
+  assert.throws(() => projectResearchInvocation('virtual_cohort_start', { method: 'cohort.build', scenario: {}, selection: { sourceId: 'matching-only' } }, registry))
   assert.deepEqual(projectResearchInvocation('synthetic_control_report', { jobId: 'owned' }, registry),
     { operation: 'simulate', body: { action: 'status', jobId: 'owned' } })
 })

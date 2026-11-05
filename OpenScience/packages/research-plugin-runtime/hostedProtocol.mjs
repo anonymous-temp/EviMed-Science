@@ -1,5 +1,13 @@
 import { catalogue, sharedEvidenceMethods } from './catalogue.mjs'
 
+/** Owned references returned by the host; the gateway reauthorizes each one. */
+export const hostedReferenceParameters = Object.freeze({
+  subjectId: { type: 'string', description: 'Existing hosted research object returned by the host. Required when the method operates on that object.' },
+  modelId: { type: 'string', description: 'Hosted registered model identifier.' },
+  modelVersion: { type: 'string', description: 'Exact immutable hosted model version returned with modelId.' },
+  reconstructionResultId: { type: 'string', description: 'Hosted preserved reconstruction result identifier.' },
+})
+
 /** One projection shared by the runtime sender and native transcript verifier.
  * It grants nothing: the existing VCR gateway still authenticates the workload,
  * conversation, source grants and owned job on every operation.
@@ -10,7 +18,7 @@ export function projectResearchInvocation(tool, args, { jobMethods, methods }) {
   if (!match || !args || typeof args !== 'object' || Array.isArray(args)) throw new Error('research_invocation_invalid')
   const plugin = catalogue.find(item => item.id === match[1].replaceAll('_', '-'))
   const action = match[2]
-  const allowed = action === 'start' ? ['method', 'scenario', 'version', 'inputs', 'seed', 'replicates', 'sources', 'cpuSecondsLimit']
+  const allowed = action === 'start' ? ['method', 'scenario', 'version', 'inputs', 'seed', 'replicates', 'sources', 'cpuSecondsLimit', ...Object.keys(hostedReferenceParameters)]
     : action === 'describe' ? ['method'] : ['jobId']
   if (Object.keys(args).some(key => !allowed.includes(key))) throw new Error('research_invocation_invalid')
   if (action === 'start' || action === 'describe') {
@@ -20,7 +28,7 @@ export function projectResearchInvocation(tool, args, { jobMethods, methods }) {
     if (action === 'describe') return { operation: 'simulate', body: { action: 'shape', kind } }
     if (!args.scenario || typeof args.scenario !== 'object' || Array.isArray(args.scenario)) throw new Error('research_scenario_required')
     return { operation: 'simulate', body: { action: 'start', kind, scenario: args.scenario,
-      ...Object.fromEntries(['inputs', 'seed', 'replicates', 'sources', 'cpuSecondsLimit'].filter(key => args[key] !== undefined).map(key => [key, args[key]])) } }
+      ...Object.fromEntries(['inputs', 'seed', 'replicates', 'sources', 'cpuSecondsLimit', ...Object.keys(hostedReferenceParameters)].filter(key => args[key] !== undefined).map(key => [key, args[key]])) } }
   }
   if (typeof args.jobId !== 'string' || !args.jobId || args.jobId.length > 200) throw new Error('research_job_required')
   return { operation: 'simulate', body: { action: action === 'cancel' ? 'cancel' : 'status', jobId: args.jobId } }

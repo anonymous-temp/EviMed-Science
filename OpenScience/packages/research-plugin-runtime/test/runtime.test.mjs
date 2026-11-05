@@ -7,6 +7,15 @@ import { createLocalAdapter, createPlugin } from '../index.mjs'
 
 const engineRoot = resolve(import.meta.dirname, '../../../../项目代码/vcr-engine')
 
+test('standalone refuses hosted-only references and unknown fields before starting work', async () => {
+  const workspace = await mkdtemp(join(tmpdir(), 'vcr-local-inputs-'))
+  try {
+    const adapter = createLocalAdapter({ workspace, engineRoot })
+    await assert.rejects(adapter.start({ method: 'patients.longitudinal', scenario: {}, subjectId: 'hosted-patient' }), /hosted_reference_unavailable/)
+    await assert.rejects(adapter.start({ method: 'design.analytic', scenario: {}, subject: 'unrecognized' }), /invalid_research_request/)
+  } finally { await rm(workspace, { recursive: true, force: true }) }
+})
+
 test('method admission never passes unsupported calls to the host', async () => {
   let calls = 0
   const plugin = createPlugin({ methods: ['design.analytic'], adapter: { start: async () => { calls++; return { jobId: 'job' } } } })
