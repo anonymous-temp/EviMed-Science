@@ -201,3 +201,18 @@ test('the real memory gateway rejects a cross-project uncommitted native alias b
   assert.equal(f.stub.sessions.get(`${f.engineUser}/dsh-same`).messages.length,1);
   assert.equal(await f.overlay.projectOfSession(f.userId,'dsh-same'),'default');
 });
+
+test('the native owner fence spans gateway admission through binding and final client effects',options,async t=>{
+  const f=await fixture(t);let release,entered,touched=false;
+  const gate=new Promise(resolve=>release=resolve),bound=new Promise(resolve=>entered=resolve),note=f.overlay.noteSession.bind(f.overlay);
+  f.overlay.noteSession=async(...args)=>{await note(...args);entered();await gate;};
+  f.sessions.client.writeAdmission=(userId,operation)=>withNativeMemoryWrite(f.database,userId,operation);
+  const handler=createMemoryGatewayHandler({config:{memoryEngineEnabled:true,memoryEnabled:true},runtimeManager:{assertActiveEviMedWorkloadToken:async()=>({userId:f.userId,projectId:'default'})},
+    store:{userById:async()=>({id:f.userId}),requireProject:async()=>({userId:f.userId,id:'default',projectCreatedAt:f.projectCreatedAt})},sessions:f.sessions,overlay:f.overlay,admission:{admit:async()=>({learn:true,recall:true,sessionId:'inflight'})}});
+  const server=createServer((req,res)=>{void handler(req,res,()=>{});});server.listen(0,'127.0.0.1');await once(server,'listening');t.after(()=>new Promise(resolve=>{server.closeAllConnections();server.close(resolve);}));
+  const writing=fetch(`http://127.0.0.1:${server.address().port}${MEMORY_GATEWAY_PATH}/api/v1/sessions/dsh-inflight/messages`,{method:'POST',headers:{authorization:'Bearer owner','content-type':'application/json'},body:JSON.stringify({role:'user',content:'In-flight source bytes.'})});
+  await bound;
+  try{await assert.rejects(withNativeMemoryWrite(f.database,f.userId,async()=>{touched=true;},{exclusive:true}),{code:'memory_source_cleanup_busy'});assert.equal(touched,false);}
+  finally{release();await writing;}
+  assert.equal((await writing).status,200);assert.equal(await withNativeMemoryWrite(f.database,f.userId,async()=>true,{exclusive:true}),true);
+});
