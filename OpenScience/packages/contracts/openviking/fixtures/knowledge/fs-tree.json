@@ -5,16 +5,16 @@
       "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources",
       "size": 0,
       "isDir": true,
-      "modTime": "2026-10-23T05:45:50.000Z",
+      "modTime": "2026-11-05T08:13:21.000Z",
       "rel_path": "sources",
-      "abstract": "本目录是一组围绕时间同步与边缘网关产品的技术资料集合，内容涵盖协议说明、产品规格、管理界面文档，以及若干结构化数据文件。从样本来看，目录主要覆盖 Alpha 协议这一轻量时间同步协议的基本参数与参考实现、Beta 网关这一边缘网关产品的版本与设备支持能力、Gamma 仪表盘这一 Web 管理界面的端口与用途，并附带图关系数据与门店编码对照表等辅助数据。资料以参考性、说明性文档为主，适合需要了解相关协议参数、产品规格或进行设备选型与运维的技术人员查阅。",
+      "abstract": "本目录汇集了一组围绕 Lumen 工作组技术生态的参考性资料，主要覆盖 Alpha 时间同步协议、Beta 边缘网关、Gamma 仪表盘等产品与组件的基本说明，同时包含一份图关系边数据文件和一份门店编码对照表。从样本来看，目录内容以简洁的产品参考说明与结构化数据为主，侧重介绍协议用途、发布信息、通信端口、同步周期、版本规格与界面功能等关键信息，适合需要快速了解相关技术组件基本情况的技术人员、选型人员、网络管理员或运维人员查阅。",
       "tags": []
     },
     {
       "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/edges.jsonl",
       "size": 77,
       "isDir": false,
-      "modTime": "2026-10-23T05:45:38.000Z",
+      "modTime": "2026-11-05T08:12:58.000Z",
       "rel_path": "sources/edges.jsonl",
       "abstract": "",
       "tags": []
@@ -23,7 +23,7 @@
       "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000001.md",
       "size": 342,
       "isDir": false,
-      "modTime": "2026-10-23T05:45:27.000Z",
+      "modTime": "2026-11-05T08:12:35.000Z",
       "rel_path": "sources/src_00000000000000000000000000000001.md",
       "abstract": "",
       "tags": [
@@ -35,7 +35,7 @@
       "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000002.md",
       "size": 275,
       "isDir": false,
-      "modTime": "2026-10-23T05:45:27.000Z",
+      "modTime": "2026-11-05T08:12:35.000Z",
       "rel_path": "sources/src_00000000000000000000000000000002.md",
       "abstract": "",
       "tags": [
@@ -47,7 +47,7 @@
       "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000003.md",
       "size": 222,
       "isDir": false,
-      "modTime": "2026-10-23T05:45:27.000Z",
+      "modTime": "2026-11-05T08:12:35.000Z",
       "rel_path": "sources/src_00000000000000000000000000000003.md",
       "abstract": "",
       "tags": []
@@ -56,7 +56,7 @@
       "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/table.csv",
       "size": 25,
       "isDir": false,
-      "modTime": "2026-10-23T05:45:38.000Z",
+      "modTime": "2026-11-05T08:12:58.000Z",
       "rel_path": "sources/table.csv",
       "abstract": "",
       "tags": []
@@ -65,7 +65,7 @@
       "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/uploaded",
       "size": 0,
       "isDir": true,
-      "modTime": "2026-10-23T05:46:37.000Z",
+      "modTime": "2026-11-05T08:13:44.000Z",
       "rel_path": "uploaded",
       "abstract": "# viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/uploaded [Directory abstract is not ready]",
       "tags": []
@@ -74,7 +74,7 @@
       "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/uploaded/upload-sample.md",
       "size": 222,
       "isDir": false,
-      "modTime": "2026-10-23T05:46:37.000Z",
+      "modTime": "2026-11-05T08:13:44.000Z",
       "rel_path": "uploaded/upload-sample.md",
       "abstract": "",
       "tags": [

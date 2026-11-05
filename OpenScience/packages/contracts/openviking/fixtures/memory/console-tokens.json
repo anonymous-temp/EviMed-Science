@@ -1,6 +1,6 @@
 {
   "note": "This user's own token usage per day (LLM input/output, embedding input).",
-  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.1.1",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.3",
   "request": {
     "method": "GET",
     "path": "/api/v1/console/tokens?start_date=2026-10-22&end_date=2026-10-24&timezone=UTC",
@@ -27,9 +27,9 @@
         },
         {
           "date": "2026-10-23",
-          "vlm_input": 40646,
-          "vlm_output": 151,
-          "embedding_input": 185
+          "vlm_input": 0,
+          "vlm_output": 0,
+          "embedding_input": 0
         },
         {
           "date": "2026-10-24",

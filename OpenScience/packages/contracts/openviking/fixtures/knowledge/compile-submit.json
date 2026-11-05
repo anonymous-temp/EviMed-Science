@@ -1,11 +1,11 @@
 {
   "status": "ok",
   "result": {
-    "task_id": "cmp_cd2843026bd7ef9f27c5aa57d05b048d03c2e488943f7ac7b049594694d593c4",
+    "task_id": "cmp_68843718a4f3ee26fb03a0c8bcf9d4ce29f5d0a18646249c8569fc2a17febaed",
     "task_type": "compile",
     "status": "pending",
-    "created_at": 1792734432.5474696,
-    "updated_at": 1792734432.5488167,
+    "created_at": 1793866445.051372,
+    "updated_at": 1793866445.0542648,
     "processing_seconds": null,
     "resource_id": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources",
     "meta": {
@@ -14,14 +14,18 @@
           "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources"
         ],
         "to": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki",
-        "skill": "viking://agent/skills/llm-wiki"
+        "skill": "viking://agent/skills/llm-wiki",
+        "compile": {
+          "mode": "incremental",
+          "trigger": "manual"
+        }
       }
     },
     "stage": "queued",
     "result": null,
     "error": null,
-    "created_at_iso": "2026-10-23T05:47:12.547470+00:00",
-    "updated_at_iso": "2026-10-23T05:47:12.548817+00:00"
+    "created_at_iso": "2026-11-05T08:14:05.051372+00:00",
+    "updated_at_iso": "2026-11-05T08:14:05.054265+00:00"
   },
   "error": null,
   "telemetry": null,

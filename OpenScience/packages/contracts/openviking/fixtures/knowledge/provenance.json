@@ -1,6 +1,6 @@
 {
-  "recorded_from": "ghcr.io/volcengine/openviking:v0.5.1.1",
-  "recorded_at": "2026-10-23T05:50:23Z",
+  "recorded_from": "ghcr.io/volcengine/openviking:v0.5.3",
+  "recorded_at": "2026-11-05T08:18:13Z",
   "auth_mode": "trusted (X-API-Key root + X-OpenViking-Account: evimed + X-OpenViking-User)",
   "account": "evimed",
   "user": "u-0f1e2d3c4b5a69788796a5b4",
@@ -223,133 +223,6 @@
         "sha256": "95f7ddd1c4ec873073eb9ade92d11a592baf1535c79f96b3b9a99accec6422d1"
       }
     },
-    "content-batch-write-checked": {
-      "file": "content-batch-write-checked.json",
-      "method": "POST",
-      "path": "/api/v1/content/batch-write",
-      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
-      "request_headers": {},
-      "request_body": {
-        "root_uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki-write-back",
-        "wait": true,
-        "operations": [
-          {
-            "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki-write-back/page.md",
-            "content": "---\ntype: concept\ntitle: 写回检验\n---\n\n# 写回检验\n\n第二版。\n",
-            "mode": "replace",
-            "expected_sha256": "95f7ddd1c4ec873073eb9ade92d11a592baf1535c79f96b3b9a99accec6422d1"
-          }
-        ]
-      },
-      "status": 200,
-      "note": "a write-back that names the hash of the page it replaces: written"
-    },
-    "content-batch-write-checked-stale": {
-      "file": "content-batch-write-checked-stale.json",
-      "method": "POST",
-      "path": "/api/v1/content/batch-write",
-      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
-      "request_headers": {},
-      "request_body": {
-        "root_uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki-write-back",
-        "wait": true,
-        "operations": [
-          {
-            "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki-write-back/page.md",
-            "content": "---\ntype: concept\ntitle: 写回检验\n---\n\n# 写回检验\n\n第三版。\n",
-            "mode": "replace",
-            "expected_sha256": "95f7ddd1c4ec873073eb9ade92d11a592baf1535c79f96b3b9a99accec6422d1"
-          }
-        ]
-      },
-      "status": 409,
-      "note": "the same hash after the page changed: 409 CONFLICT 'Content revision changed', nothing written"
-    },
-    "content-batch-write-checked-stale-skipped": {
-      "file": "content-batch-write-checked-stale-skipped.json",
-      "method": "POST",
-      "path": "/api/v1/content/batch-write",
-      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
-      "request_headers": {},
-      "request_body": {
-        "root_uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki-write-back",
-        "wait": true,
-        "skip_conflicts": true,
-        "operations": [
-          {
-            "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki-write-back/page.md",
-            "content": "---\ntype: concept\ntitle: 写回检验\n---\n\n# 写回检验\n\n第三版。\n",
-            "mode": "replace",
-            "expected_sha256": "95f7ddd1c4ec873073eb9ade92d11a592baf1535c79f96b3b9a99accec6422d1"
-          }
-        ]
-      },
-      "status": 200,
-      "note": "with skip_conflicts the same refusal is a 200 whose result lists the conflicts"
-    },
-    "content-batch-write-checked-missing": {
-      "file": "content-batch-write-checked-missing.json",
-      "method": "POST",
-      "path": "/api/v1/content/batch-write",
-      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
-      "request_headers": {},
-      "request_body": {
-        "root_uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki-write-back",
-        "wait": true,
-        "operations": [
-          {
-            "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki-write-back/gone.md",
-            "content": "x\n",
-            "mode": "replace",
-            "expected_sha256": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
-          }
-        ]
-      },
-      "status": 409,
-      "note": "a hash for a file that is not there: 409 CONFLICT 'Expected content no longer exists'"
-    },
-    "content-batch-write-checked-busy-first": {
-      "file": "content-batch-write-checked-busy-first.json",
-      "method": "POST",
-      "path": "/api/v1/content/batch-write",
-      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
-      "request_headers": {},
-      "request_body": {
-        "root_uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki-write-back",
-        "wait": false,
-        "operations": [
-          {
-            "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki-write-back/page.md",
-            "content": "---\ntype: concept\ntitle: 写回检验\n---\n\n# 写回检验\n\n第四版。\n",
-            "mode": "replace",
-            "expected_sha256": "dcfa6d2ee7728354a1514182cb35d1ae5fc1c1b8750d7e6c3de5dfb787a8276f"
-          }
-        ]
-      },
-      "status": 200,
-      "note": "wait false: answers at once with a task id while the summary and vector are processed"
-    },
-    "content-batch-write-checked-busy": {
-      "file": "content-batch-write-checked-busy.json",
-      "method": "POST",
-      "path": "/api/v1/content/batch-write",
-      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
-      "request_headers": {},
-      "request_body": {
-        "root_uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki-write-back",
-        "wait": false,
-        "operations": [
-          {
-            "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki-write-back/page.md",
-            "content": "---\ntype: concept\ntitle: 写回检验\n---\n\n# 写回检验\n\n第五版。\n",
-            "mode": "replace",
-            "expected_sha256": "8a1a545316a0374556ec9a3349880619b3d9256d750e0a668b5c476187bfbe8f"
-          }
-        ]
-      },
-      "status": 409,
-      "note": "a second write to the same directory while the first is processed: 409 CONFLICT, conflict_type path_busy, retryable"
-    },
     "resources-temp-upload": {
       "file": "resources-temp-upload.json",
       "method": "POST",
@@ -366,7 +239,7 @@
       "as_user": "u-0f1e2d3c4b5a69788796a5b4",
       "request_headers": {},
       "request_body": {
-        "temp_file_id": "upload_dd4cf872781b4414be9a3062377ea8d4.md",
+        "temp_file_id": "upload_e26825f4c94f4008921ce35bf7163016.md",
         "to": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/uploaded",
         "wait": true,
         "args": {
@@ -699,7 +572,7 @@
     "tasks-get-without-events": {
       "file": "tasks-get-without-events.json",
       "method": "GET",
-      "path": "/api/v1/tasks/cmp_cd2843026bd7ef9f27c5aa57d05b048d03c2e488943f7ac7b049594694d593c4",
+      "path": "/api/v1/tasks/cmp_68843718a4f3ee26fb03a0c8bcf9d4ce29f5d0a18646249c8569fc2a17febaed",
       "as_user": "u-0f1e2d3c4b5a69788796a5b4",
       "request_headers": {},
       "request_body": null,
@@ -727,7 +600,7 @@
     "tasks-get-other-user": {
       "file": "tasks-get-other-user.json",
       "method": "GET",
-      "path": "/api/v1/tasks/cmp_cd2843026bd7ef9f27c5aa57d05b048d03c2e488943f7ac7b049594694d593c4",
+      "path": "/api/v1/tasks/cmp_68843718a4f3ee26fb03a0c8bcf9d4ce29f5d0a18646249c8569fc2a17febaed",
       "as_user": "u-aa11bb22cc33dd44ee55ff66",
       "request_headers": {},
       "request_body": null,
@@ -813,7 +686,7 @@
     "tasks-cancel": {
       "file": "tasks-cancel.json",
       "method": "POST",
-      "path": "/api/v1/tasks/cmp_11929cbe580980eb169a23f762fb79a3da180b4a087656141813281ab2de0a12/cancel",
+      "path": "/api/v1/tasks/cmp_d5b0483edd326222a8ed30ec04a21f0ddb8b2aaec1f8a1649f802825f5d6558a/cancel",
       "as_user": "u-0f1e2d3c4b5a69788796a5b4",
       "request_headers": {},
       "request_body": null,
@@ -829,7 +702,7 @@
     "tasks-cancel-terminal": {
       "file": "tasks-cancel-terminal.json",
       "method": "POST",
-      "path": "/api/v1/tasks/cmp_11929cbe580980eb169a23f762fb79a3da180b4a087656141813281ab2de0a12/cancel",
+      "path": "/api/v1/tasks/cmp_d5b0483edd326222a8ed30ec04a21f0ddb8b2aaec1f8a1649f802825f5d6558a/cancel",
       "as_user": "u-0f1e2d3c4b5a69788796a5b4",
       "request_headers": {},
       "request_body": null,
@@ -854,6 +727,27 @@
       "request_body": null,
       "status": 200,
       "note": "deleting again"
+    },
+    "content-batch-write-key-refused": {
+      "file": "content-batch-write-key-refused.json",
+      "method": "POST",
+      "path": "/api/v1/content/batch-write",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": {
+        "root_uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki-write-back",
+        "wait": true,
+        "operations": [
+          {
+            "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki-write-back/page.md",
+            "content": "---\ntype: concept\ntitle: 写回检验\n---\n\n# 写回检验\n\n第二版。\n",
+            "mode": "replace",
+            "expected_sha256": "95f7ddd1c4ec873073eb9ade92d11a592baf1535c79f96b3b9a99accec6422d1"
+          }
+        ]
+      },
+      "status": 400,
+      "note": "the v0.5.2 checked write: v0.5.3 refuses the key (400 INVALID_ARGUMENT, extra_forbidden) and writes nothing"
     }
   }
 }

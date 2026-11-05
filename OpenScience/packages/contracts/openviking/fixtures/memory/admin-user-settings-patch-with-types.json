@@ -1,6 +1,6 @@
 {
   "note": "A settings PATCH that carries the type allowlist. A PATCH without memory_types leaves the user with every registered type (see admin-user-settings-pause.json): the deployment default no longer applies to that user.",
-  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.1.1",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.3",
   "request": {
     "method": "PATCH",
     "path": "/api/v1/admin/accounts/evimed/users/fx-user-a/settings",
@@ -23,7 +23,9 @@
           "project_context",
           "decisions",
           "follow_ups",
-          "project_facts"
+          "project_facts",
+          "observations",
+          "recent_work"
         ]
       }
     }
@@ -50,12 +52,15 @@
           "decisions",
           "entities",
           "follow_ups",
+          "observations",
           "preferences",
           "profile",
           "project_context",
-          "project_facts"
+          "project_facts",
+          "recent_work"
         ]
-      }
+      },
+      "ttl": null
     },
     "error": null,
     "telemetry": null,

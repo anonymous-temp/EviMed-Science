@@ -1,6 +1,6 @@
 {
   "note": "search/find scoped to one directory.",
-  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.1.1",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.3",
   "request": {
     "method": "POST",
     "path": "/api/v1/search/find",
@@ -26,7 +26,7 @@
           "context_type": "memory",
           "uri": "viking://user/fx-user-a/memories/evimed/user/preference/rec3.md",
           "level": 2,
-          "score": 0.7958158254623413,
+          "score": 0.795685887336731,
           "abstract": "偏好 / 报告语言\n\n报告一律用中文撰写。",
           "tags": []
         },
@@ -34,7 +34,7 @@
           "context_type": "memory",
           "uri": "viking://user/fx-user-a/memories/evimed/user/preference/rec2.md",
           "level": 2,
-          "score": 0.6617963314056396,
+          "score": 0.6617540717124939,
           "abstract": "偏好 / 检索范围\n\n检索默认限定近五年的英文与中文文献。",
           "tags": []
         },
@@ -42,7 +42,7 @@
           "context_type": "memory",
           "uri": "viking://user/fx-user-a/memories/evimed/user/preference/rec1.md",
           "level": 2,
-          "score": 0.6097908020019531,
+          "score": 0.609632134437561,
           "abstract": "第二次 create。",
           "tags": []
         }
