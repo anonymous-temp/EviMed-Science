@@ -2666,3 +2666,34 @@ test('native Remote file-upload fallback retains only upstream-confirmed origina
   await c.next();
   assert.equal(successes.length, 1); assert.deepEqual(successes[0].bytes, bytes); assert.equal(successes[0].sessionId, 's1');
 });
+
+test('a shared native frame reads the skill catalogue and the GoalBar of its own conversation, projected, and nothing of another', { timeout: 10000 }, async t => {
+  const shared = { allowed: true, inputs: [], locked: false };
+  const f = await fixture(t, {}, {}, { shared });
+  const reached = [];
+  f.manager.proxy = RuntimeManager.prototype.proxy.bind(f.manager);
+  f.upstream.on('request', (req, res) => {
+    const parts = []; req.on('data', part => parts.push(part));
+    req.on('end', () => {
+      const body = JSON.parse(Buffer.concat(parts).toString()); reached.push(body.method);
+      const value = body.method === 'skills/list' ? { skills: [{ name: 'literature', description: 'd', path: '/home/owner/skills/literature/SKILL.md' }, { name: 'personal-owner-only', path: '/x' }] }
+        : { v: 'loopx_goalbar_response_v2', op: body.payload.op, sessionId: body.payload.sessionId, result: { kind: 'absent' } };
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ type: 'server-response', rpcId: body.rpcId, result: { ok: true, value } }));
+    });
+  });
+  const rpc = (method, payload) => fetch(`${f.base}/api/${method}`, { method: 'POST', headers: { cookie: f.cookie, Origin: UI_ORIGIN, 'content-type': 'application/json' },
+    body: JSON.stringify({ type: 'client-request', rpcId: `rpc-${reached.length}`, method, payload }) });
+  const skills = await rpc('skills/list', { args: { request: { sessionId: 'shared-root' } } });
+  assert.equal(skills.status, 200);
+  assert.deepEqual((await skills.json()).result.value, { skills: [{ name: 'literature', description: 'd' }] });
+  assert.equal((await rpc('skills/list', { args: { request: { sessionId: 'private-owner' } } })).status, 403);
+  const bar = (op, sessionId) => ({ v: 'loopx_goalbar_request_v2', op, sessionId, ...(op === 'start' ? { expected: { goalId: 'g', loopxAgentId: 'a' } } : {}) });
+  const read = await rpc('loopx.goalbar', bar('read', 'shared-root'));
+  assert.equal(read.status, 200); assert.equal((await read.json()).result.value.result.kind, 'absent');
+  assert.equal((await rpc('loopx.goalbar', bar('read', 'private-owner'))).status, 403);
+  assert.equal((await rpc('loopx.goalbar', bar('start', 'shared-root'))).status, 403);
+  assert.deepEqual(reached, ['skills/list', 'loopx.goalbar']);
+  shared.allowed = false;
+  assert.equal((await rpc('skills/list', { args: { request: { sessionId: 'shared-root' } } })).status, 403);
+});

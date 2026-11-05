@@ -95,6 +95,10 @@ export class NativeUiScope {
 
   /** Authorization ceiling, additional to ordinary hosted methods/path/body limits. @param {string} method @param {any} payload */
   permits(method, payload) {
+    // The LoopX GoalBar's HTTP endpoint carries its own envelope, not `args`. Only the reads (the bar's snapshot and its watch) of a
+    // conversation this frame can read are admitted; starting or pausing a goal is a turn of a person and goes through the prompt path.
+    if (method === 'loopx.goalbar') return record(payload) && Object.keys(payload).length === 3 && payload.v === 'loopx_goalbar_request_v2'
+      && (payload.op === 'read' || payload.op === 'watch') && this.readable(payload.sessionId);
     const args = payload?.args, request = args?.request;
     if (!record(payload) || Object.keys(payload).length !== 1 || !record(args)) return false;
     if (DISCOVERY.has(method)) return method === 'session/list' ? record(args._request) && Object.keys(args).length === 1 && Object.keys(args._request).length === 0 : Object.keys(args).length === 0;
@@ -103,6 +107,8 @@ export class NativeUiScope {
     if (['session/page', 'session/follow'].includes(method)) return this.addressAllowed(request?.address);
     if (['session/prompt', 'session/cancel', 'session/attachment', 'session/projections'].includes(method)) return request?.sessionId === this.rootSessionId;
     if (['fileReferences/list', 'fileUploads/upload'].includes(method)) return args.agentId === this.rootSessionId;
+    // The skill catalogue behind the composer's `/` and `@` suggestions: a read of one conversation this frame can read.
+    if (method === 'skills/list') return Object.keys(args).length === 1 && record(request) && Object.keys(request).length === 1 && this.readable(request.sessionId);
     if (method === 'job/list') return this.readable(request?.sessionId);
     if (['job/follow', 'job/kill'].includes(method)) return this.readable(request?.sessionId) && Boolean(this.jobs.get(request.sessionId)?.has(request.jobId));
     if (method === '$events/result') {
@@ -138,7 +144,7 @@ export class NativeUiScope {
   access() {
     return { type: 'baseline', owner: false, grants: [
       { resource: { kind: 'global' }, actions: [...DISCOVERY, 'workspace/create', ...WORKSPACE_READS] },
-      { resource: { kind: 'session', id: this.rootSessionId }, actions: ['session/page', 'session/follow', 'session/projections', 'session/prompt', 'session/cancel', 'session/attachment', 'fileUploads/upload', 'fileReferences/list', 'job/list', 'job/follow', 'job/kill', 'userQuestions/answer', 'userQuestions/attachWait'] },
+      { resource: { kind: 'session', id: this.rootSessionId }, actions: ['skills/list', 'session/page', 'session/follow', 'session/projections', 'session/prompt', 'session/cancel', 'session/attachment', 'fileUploads/upload', 'fileReferences/list', 'job/list', 'job/follow', 'job/kill', 'userQuestions/answer', 'userQuestions/attachWait'] },
       ...[...this.children.keys()].map(id => ({ resource: { kind: 'session', id }, actions: ['session/page', 'session/follow', 'job/list', 'job/follow', 'job/kill', 'userQuestions/answer', 'userQuestions/attachWait'] })),
     ] };
   }
@@ -176,6 +182,13 @@ export class NativeUiScope {
     if (method === 'remoteAccess/follow') return value?.type === 'baseline' ? kept(this.access()) : dropped();
     if (method === 'session/modelCatalog') return kept(this.modelCatalog(value));
     if (method === '$events') return this.event(value);
+    if (method === 'loopx.goalbar') return value?.v === 'loopx_goalbar_response_v2' && value.sessionId === payload.sessionId ? kept(value) : dropped();
+    if (method === 'skills/list') {
+      // Another person's personal skills are in the owner's runtime, and an absolute path of it is no business of a member's.
+      if (!Array.isArray(value?.skills)) return dropped();
+      return kept({ ...value, skills: value.skills.filter(item => record(item) && !String(item.name ?? '').startsWith('personal-'))
+        .map(({ path: _path, ...item }) => item) });
+    }
     if (method === 'job/list') {
       if (value?.type !== 'rows' || !Array.isArray(value.jobs)) return dropped();
       const jobs = rows(value.jobs).filter(job => job.owner === payload.args.request.sessionId);
