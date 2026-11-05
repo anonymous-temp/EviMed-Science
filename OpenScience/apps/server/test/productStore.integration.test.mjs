@@ -67,10 +67,10 @@ test("document removal is scoped, reversible and revision guarded", options, asy
 });
 
 test("document pagination has bounded distinct pages and validates its vocabulary", options, async () => {
-  for (let i = 0; i < 3; i++) await documents.put(owner, "agenda", randomUUID(), { title: `Question ${i}` }, { expectedRevision: 0 });
-  const first = await documents.list(owner, "agenda", { limit: 2 });
+  for (let i = 0; i < 3; i++) await documents.put(owner, "plugin", randomUUID(), { title: `Question ${i}` }, { expectedRevision: 0 });
+  const first = await documents.list(owner, "plugin", { limit: 2 });
   assert.equal(first.items.length, 2);
-  const second = await documents.list(owner, "agenda", { limit: 2, cursor: first.nextCursor });
+  const second = await documents.list(owner, "plugin", { limit: 2, cursor: first.nextCursor });
   assert.equal(second.items.length, 1);
   assert.equal(new Set([...first.items, ...second.items].map((x) => x.id)).size, 3);
   await assert.rejects(documents.get(owner, "arbitrary_sql_table", "x"), { code: "product_kind_invalid" });
@@ -133,8 +133,8 @@ test("expired leases can be reclaimed but the prior worker cannot complete them"
 });
 
 test("canceling a job removes execution authority and records a readable terminal state", options, async () => {
-  const row = await jobs.enqueue(owner, "episode", { agendaId: "one" }, { idempotencyKey: randomUUID() });
-  const lease = await jobs.claim(["episode"], "worker-a", { leaseMs: 1000 });
+  const row = await jobs.enqueue(owner, "notify", { agendaId: "one" }, { idempotencyKey: randomUUID() });
+  const lease = await jobs.claim(["notify"], "worker-a", { leaseMs: 1000 });
   await assert.rejects(jobs.cancel(other, row.id), { code: "product_job_not_found" });
   await jobs.cancel(owner, row.id);
   assert.equal((await jobs.get(owner, row.id)).status, "canceled");
@@ -175,8 +175,8 @@ test("a write that drops the earlier revisions leaves the record only as it now 
 
 test("lease completion, failure and renewal recheck time after waiting for a row lock", options, async () => {
   for (const action of ["finish", "fail", "renew"]) {
-    const row = await jobs.enqueue(owner, "verify", { action }, { idempotencyKey: randomUUID() });
-    const lease = await jobs.claim(["verify"], "slow-worker", { leaseMs: 1000 });
+    const row = await jobs.enqueue(owner, "notify", { action }, { idempotencyKey: randomUUID() });
+    const lease = await jobs.claim(["notify"], "slow-worker", { leaseMs: 1000 });
     const blocker = await database.pool.connect();
     await blocker.query("BEGIN");
     await blocker.query("SELECT id FROM evimed_product.jobs WHERE id=$1 FOR UPDATE", [row.id]);
