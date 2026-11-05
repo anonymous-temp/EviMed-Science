@@ -78,3 +78,24 @@ test('deleted source history is scrubbed after another source replaces the curre
   assert.equal(await f.sessions.read(f.userId,uri),'# Profile\n- Independent current B.');
   assert.ok((await f.overlay.revisionsOf(f.userId,uri)).every(row=>![row.before,row.after].filter(Boolean).some(text=>text.includes('Private historical A.'))));
 });
+
+import { withNativeMemoryWrite } from '../src/nativeMemoryWriteFence.mjs';
+test('account-native exclusion defers same-owner writers while preserving independent owners and resumes after cleanup',options,async t=>{
+  const f=await fixture(t);let release,entered;
+  const waiting=new Promise(resolve=>release=resolve), inside=new Promise(resolve=>entered=resolve);
+  const exclusive=withNativeMemoryWrite(f.database,f.userId,async()=>{entered();await waiting;},{exclusive:true});
+  await inside;
+  await assert.rejects(withNativeMemoryWrite(f.database,f.userId,async()=>assert.fail('must not write')),{code:'memory_source_cleanup_busy'});
+  assert.equal(await withNativeMemoryWrite(f.database,'independent-owner',async()=>true),true);
+  release();await exclusive;assert.equal(await withNativeMemoryWrite(f.database,f.userId,async()=>true),true);
+});
+
+test('a changed mixed body is deferred and retried without overwriting a concurrent independent addition',options,async t=>{
+  const f=await fixture(t),uri=f.seed('profile.md','# Profile\n- Source A.\n- Independent B.',{type:'profile'});
+  await f.overlay.upsertFile({userId:f.userId,uri,memoryType:'profile',body:'# Profile\n- Source A.\n- Independent B.'});
+  await f.overlay.syncOrigins(f.userId,uri,{after:'# Profile\n- Source A.\n- Independent B.',origin:{engineSession:'dsh-a',projectId:'default'}});
+  const rawFiles=f.store.rawFiles.bind(f.store);let changed=false;
+  f.store.rawFiles=async(...args)=>{const files=await rawFiles(...args);if(!changed){changed=true;await f.sessions.replace(f.userId,uri,'# Profile\n- Source A.\n- Independent B.\n- Independent C.');}return files;};
+  await assert.rejects(f.store.removeConversationSource(f.userId,'default',['a']),{code:'memory_source_body_changed'});
+  assert.match(await f.sessions.read(f.userId,uri),/Independent C/);
+});
