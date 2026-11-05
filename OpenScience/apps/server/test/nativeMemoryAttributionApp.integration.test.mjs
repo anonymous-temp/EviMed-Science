@@ -31,6 +31,12 @@ test('encrypted capsule export and confirmed import preserve original uncertaint
   const imported=await request('/transfers/import',{archive:exported.archive,password:'test-only-attribution-export',expectedDigest:preview.archiveSha256,confirmed:true});
   const records=await f.app.capsuleService.entries(f.user.id,imported.id),received=records.items[0].payload;
   assert.equal(received.origin,'imported');assert.equal(received.attribution.confirmed,false);assert.equal(received.sourcePrivacy.classification,'unclassified');
+  await f.app.capsuleService.enableReceived(f.user.id,imported.id);
+  const ownerRecall=await f.app.capsuleService.recall(f.user.id,{query:'transfusion'});assert.equal(ownerRecall.items[0].sourcePrivacy.classification,'unclassified');
+  const {recallForAgent}=await import('../src/agentMemoryRecall.mjs');
+  const external=await recallForAgent({capsules:f.app.capsuleService},{user:{id:f.user.id}},{query:'transfusion',methods:'none',capsuleIds:[imported.id]});
+  assert.equal(external.items.some(item=>String(item.content).includes('transfusion')),false,'share consent does not authorize external integration recall');
+
 });
 
 test('a trusted resident source receipt survives the run ledger as private original evidence',options,async t=>{
