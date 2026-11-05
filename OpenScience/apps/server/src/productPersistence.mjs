@@ -6,7 +6,7 @@ export const PRODUCT_KINDS = Object.freeze([
   "capsule", "fact", "method", "source", "source-unit", "knowledge", "profile",
   "agenda", "episode", "digest", "notification", "preferences", "plugin", "price-list",
   // One long research goal: what the control plane keeps about it between its rounds (`researchGoalService.mjs`).
-  "research-goal",
+  "research-goal", "patient-matching-task", "patient-matching-continuation", "patient-matching-lifecycle",
   // The candidates one project is mounting under trial. One row per project,
   // written only by an evaluation identity, read by every launch of that
   // project. Its own kind rather than a field on `method`, because it is a
@@ -38,7 +38,7 @@ export const PRODUCT_JOB_KINDS = Object.freeze(["ingest", "distill", "consolidat
   "ov-resource-sync", "geo-judgment-recheck",
   // A finished run's reaction window closing (`learningEvidence.mjs`): thirty minutes after it ended, the run is read for the evidence
   // the researcher left (a follow-up, a correction) or its silence, and a routine is looked for.
-  "learning-evidence"]);
+  "learning-evidence", "patient-matching-continuation", "patient-matching-lifecycle-apply"]);
 
 /**
  * What the researcher did, as a closed vocabulary.

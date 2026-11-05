@@ -12,6 +12,8 @@ export function patientMatchingConfiguration(overrides = {}, environment = proce
     revision: defaults.revision,
     reasoningModel,
     embeddingModel: String(overrides.vcrMatchEmbeddingModel ?? (environment.OPEN_SCIENCE_VCR_MATCH_EMBEDDING_MODEL?.trim() || defaults.embeddingModel)),
+    embeddingApiBase: String(overrides.vcrMatchEmbeddingApiBase ?? (environment.OPEN_SCIENCE_VCR_MATCH_EMBEDDING_API_BASE?.trim() || defaults.embeddingApiBase)),
+    embeddingDimensions: defaults.embeddingDimensions,
     rerankModel: String(overrides.vcrMatchRerankModel ?? (environment.OPEN_SCIENCE_VCR_MATCH_RERANK_MODEL?.trim() || defaults.rerankModel)),
     rerankApiBase: String(overrides.vcrMatchRerankApiBase ?? (environment.OPEN_SCIENCE_VCR_MATCH_RERANK_API_BASE?.trim() || defaults.rerankApiBase)),
     triageModel: defaults.triageModel,

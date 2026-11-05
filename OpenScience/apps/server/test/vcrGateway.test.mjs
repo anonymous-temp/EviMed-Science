@@ -1597,9 +1597,9 @@ test("a protocol needs only its words: clause text is enough, a pasted text is n
   assert.deepEqual(pasted.results?.find((/** @type {any} */ row) => row.clauses)?.clauses, { inclusion: 2, exclusion: 1, noSection: 0 });
   // A line that names no section is a requirement as written, and the answer says so for the run to look again.
   const none = await write({ protocolText: "Adults with asthma\n\nNo prior biologics" });
-  assert.deepEqual(saved.at(-1).criteria.map((/** @type {any} */ row) => row.kind), ["inclusion", "inclusion"]);
+  assert.deepEqual(saved.at(-1).criteria.map((/** @type {any} */ row) => row.kind), ['unclassified','unclassified']);
   const said = none.results?.find((/** @type {any} */ row) => row.clauses);
-  assert.deepEqual(said.clauses, { inclusion: 2, exclusion: 0, noSection: 2 });
+  assert.deepEqual(said.clauses, { inclusion: 0, exclusion: 0, noSection: 2 });
   assert.match(said.note, /没有写明/);
   // A clause longer than a language node holds keeps all its words in the source text.
   const long = "x".repeat(6000);

@@ -118,7 +118,7 @@ test("background work in an internal project never reaches the inbox as a person
 test("a shutdown tells the learning worker first, before it closes anything a job is waiting on", () => {
   // Otherwise what the shutdown ends reads as the job's own failure and costs one
   // of its three attempts — one per release.
-  const close = /async close\(\) \{[\s\S]*?\n    \},/.exec(serverSource.slice(serverSource.indexOf("runtimeUi.listen();")))?.[0] ?? "";
+  const close = /async close\([^\n]*\) \{[\s\S]*?\n    \},/.exec(serverSource.slice(serverSource.indexOf("runtimeUi.listen();")))?.[0] ?? "";
   const interrupt = close.indexOf("learningWorker?.interrupt();");
   const closed = close.indexOf("await learningWorker?.close();");
   assert.ok(interrupt > 0 && closed > interrupt, "interrupt() must come before the worker is closed in close()");
@@ -263,7 +263,7 @@ test("a terminal write in flight is waited for before the store it writes into g
   // races the runtime teardown the write depends on.
   assert.match(serverSource, /const learningWrites = new Set\(\);/);
   assert.match(serverSource, /await trackLearningWrite\(\(async \(\) => \{/);
-  const close = /async close\(\) \{[\s\S]*?\n    \},/.exec(serverSource);
+  const close = /async close\([^\n]*\) \{[\s\S]*?\n    \},/.exec(serverSource);
   assert.ok(close, "close is gone; this test now checks nothing");
   // A loop, not one snapshot: a run reaching its terminal hook while an earlier
   // write is being awaited is invisible to `[...learningWrites]` taken once.

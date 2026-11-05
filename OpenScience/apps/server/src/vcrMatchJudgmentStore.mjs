@@ -187,7 +187,7 @@ export class VcrMatchJudgmentStore extends VcrStoreBase {
       RETURNING *`,
     [vcrId("matchJudgment"), entry.studyId, entry.userId, entry.subjectKey, entry.targetKind, entry.targetId, entry.targetHash ?? "", entry.documentHash ?? "", entry.mode, entry.promptVersion,
       entry.model ?? "", entry.thinking ?? "", entry.producer, entry.status, entry.errorCode ?? null, entry.fit ?? null, entry.confidence ?? null, entry.verdict ?? null,
-      JSON.stringify(entry.answer ?? {}), JSON.stringify(entry.usage ?? {}), JSON.stringify(entry.documentIds ?? []), entry.jobId ?? null, entry.liveDocuments === true && entry.status === "done"])).rows[0];
+      JSON.stringify(entry.answer ?? {}), JSON.stringify(entry.usage ?? {}), JSON.stringify(entry.documentIds ?? []), entry.jobId ?? null, entry.liveDocuments === true])).rows[0];
       if (row) return judgmentOf(row);
       // Nothing written: a finished row is what is held for this key, or what it read has gone.
       const held = (await client.query(`SELECT * FROM ${VCR_SCHEMA}.match_judgments WHERE study_id=$1 AND subject_key=$2 AND target_kind=$3 AND target_id=$4 AND target_hash=$5 AND document_hash=$6

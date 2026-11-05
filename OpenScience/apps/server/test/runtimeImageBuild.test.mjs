@@ -191,20 +191,21 @@ test("the seam check exempts the wire methods the platform registers itself, all
   const { ownWireNamespaces, wireSurfaceFindings } = await import("../../../scripts/ops/wire-surface.mjs");
   const manifest = JSON.parse(await read("packages/harness-port/seam-manifest.json"));
   const own = ownWireNamespaces(path.join(repoRoot, "packages/harness-port/src"));
-  assert.deepEqual([...own].sort(), ["evimedPlugins", "evimedSkills"]);
+  assert.deepEqual([...own].sort(), ["evimedPlugins", "evimedSkills", "patientMatching"]);
 
   const declared = [...manifest.wire.unary, ...manifest.wire.denied];
   const ours = declared.filter((name) => own.has(name.split("/")[0]));
   assert.equal(ours.filter((name) => name.startsWith("evimedSkills/")).length, 3);
+  assert.deepEqual(ours.filter((name) => name.startsWith("patientMatching/")).sort(), ["patientMatching/cancel", "patientMatching/status"]);
   // The kernel ships everything the manifest names except what the platform registers.
   const shipped = declared.filter((name) => !ours.includes(name));
   const streams = Object.values(manifest.wire.streamEndpoints);
   assert.deepEqual(wireSurfaceFindings({ declared, shipped, streams, own }), { unclassified: [], phantom: [] });
 
-  // The old rule, for the record: one namespace exempted by prefix left these three.
+  // The old rule, for the record: one namespace exempted by prefix misses the later services.
   assert.deepEqual(
     wireSurfaceFindings({ declared, shipped, streams, own: new Set(["evimedPlugins"]) }).phantom,
-    ["evimedSkills/list", "evimedSkills/read", "evimedSkills/snapshotBuiltin"],
+    ["evimedSkills/list", "evimedSkills/read", "evimedSkills/snapshotBuiltin", "patientMatching/cancel", "patientMatching/status"],
   );
   // Both directions still find a finding: a retired upstream method is a phantom,
   // an `evimed…/` name nothing registers is a phantom, and a method the kernel

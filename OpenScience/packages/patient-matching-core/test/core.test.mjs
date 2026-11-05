@@ -18,6 +18,15 @@ const decision = (overrides = {}) => ({ schemaVersion: '1', decisionId: 'decisio
 const project = (decisions = [decision()], extra = {}) => projectMatchingResult({ task: task(), resultId: 'result-a', revision: '1', decisions, profileDigest, ...extra })
 const errorCode = (code) => (error) => error.code === code
 
+test('unsectioned source criteria keep an unclassified kind until the clinical model interprets them', () => {
+  const registry = { sourceId: 'registry-a', revision: '1', digest: contentDigest('Age'), kind: 'registry' }
+  const profile = { schemaVersion: '1', scope, trialId: pair.trialId, source: registry, profileDigest, criteria: [{ criterionId: 'c1', kind: 'unclassified', text: 'Age', span: { start: 0, end: 3 } }], arms: [] }
+  const value = decision({ sourceRefs: [source, registry], criteria: [{ criterionId: 'c1', kind: 'exclusion', verdict: 'not-satisfied', basis: 'stated', evidenceIds: [], assumptions: [], reason: 'Clinical interpretation' }] })
+  validatePairDecision(value, { task: task(), trialProfile: profile })
+  profile.criteria[0].kind = 'inclusion'
+  assert.throws(() => validatePairDecision(value, { task: task(), trialProfile: profile }), errorCode('invalid_id_mapping'))
+})
+
 function release() {
   const model = (provider, modelId) => ({ provider, model: modelId, revision: 'revision-a', digest: profileDigest })
   const artifact = (name) => ({ package: name, version: '0.1.0', integrity: `sha512-${Buffer.alloc(64).toString('base64')}` })
@@ -197,7 +206,8 @@ test('source/profile cache reuses unchanged context and isolates revisions, scop
   assert.equal(cache.get({ ...key, profile: { version: '2' } }), undefined)
   assert.notEqual(sourceIdentity(source), sourceIdentity({ ...source, kind: 'protocol' }))
   assert.throws(() => canonicalJson({ value: undefined }))
-  assert.throws(() => canonicalJson([, 'sparse']))
+  const sparseArray=Array(2);sparseArray[1]='sparse'
+  assert.throws(() => canonicalJson(sparseArray))
 })
 
 test('evidence addressing checks exact preserved text without clinical language heuristics', () => {
@@ -335,4 +345,21 @@ test('reports and evaluator receive the exact saved clinical labels/order withou
   assert.deepEqual(input.results[0].finalOrder, result.finalOrder)
   assert.deepEqual(reportInputFromResult(result, scope).rows, input.results[0].rows)
   assert.throws(() => reportInputFromResult(result, { ...scope, actorId: 'someone-else' }), errorCode('scope_mismatch'))
+})
+
+test('runtime failure checkpoints have no clinical judgment or recommendation', () => {
+  const runtime = decision({ state: 'failed', clinicalEligibility: 'not-assessed', recommendation: { priority: null, rationale: '' }, criteria: [], unresolvedFacts: [], assumptions: [], producer: { kind: 'runtime', modelProfileDigest: profileDigest, executionId: 'execution-a' } })
+  validatePairDecision(runtime)
+  assert.equal(project([runtime]).state, 'failed')
+  for (const mutate of [d => { d.state = 'complete' }, d => { d.criteria = decision().criteria }, d => { d.recommendation.priority = 0.5 }, d => { d.recommendation.rationale = 'Clinical advice' }, d => { d.assumptions = ['Invented fact'] }, d => { d.unresolvedFacts = ['Clinical inference'] }, d => { d.extraClinicalClaim = 'Invented' }]) {
+    const invalid = structuredClone(runtime); mutate(invalid); assert.throws(() => validatePairDecision(invalid))
+  }
+})
+
+test('computed decisions require a preserved complete computation receipt at the shared contract boundary',()=>{
+  const d=decision({criteria:decision().criteria.map(item=>({...item,basis:'computed'}))});
+  const bundle={schemaVersion:'1',scope,bundleId:'evidence-a',sources:[source],patientPassages:[{evidenceId:'e1',subjectKey:pair.subjectKey,source,text:'patient evidence',span:{start:0,end:16}}],knowledgePassages:[],limitations:[]};
+  assert.throws(()=>validatePairDecision(d,{evidenceBundle:bundle}),errorCode('missing_computation'));
+  bundle.computations=[{schemaVersion:'1',scope,receiptId:'calc-a',calculator:{id:'bmi',version:'1',digest:profileDigest},state:'complete',operands:[{name:'weight',value:80,unit:'kg',source,evidenceId:'e1'}],missingInputs:[],exactCheck:'verified',cacheIdentity:profileDigest,result:{value:20,unit:'kg/m2'}}];
+  validatePairDecision(d,{evidenceBundle:bundle});
 })

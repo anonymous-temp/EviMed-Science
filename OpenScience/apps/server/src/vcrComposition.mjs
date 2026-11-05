@@ -1362,7 +1362,7 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   composed = {
     publications, simulations, frontierEvents, predictions, records,
     store, dataStore, matchStore, erasure, candidateStore, candidateSearches, candidateReranker, clauseDefinitionCounters, patientTrials, evidenceStore, corrections, knowledge, knowledgeStore, longitudinal, matchJudge, matchJudgeCounters, matchJudgments, matchJudgmentReads, matchResults, registryWatch, registryWatchCounters, registryPages, registryPageCounters, subjectKnown, recordsImport, recordsOriginals, patientDocuments,
-    access, members, dataPlane, dataPlaneSeam, documents, engine, engineProbe, engineStatus, removeEngineJob, jobs, seal, evidence, matching, registry, service,
+    access, members, dataPlane, dataPlaneSeam, documents, subjectTable, engine, engineProbe, engineStatus, removeEngineJob, jobs, seal, evidence, matching, registry, service,
     intake: { counters: intakeCounters, extractor, importer, digitizer },
     // Composed later, beside the other modules' workers (server.mjs).
     notifier: null, orchestrator: null, worker: null, exporter: null, review: null,

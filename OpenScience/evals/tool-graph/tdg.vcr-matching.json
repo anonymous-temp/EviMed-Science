@@ -1,10 +1,10 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-matching",
-  "version": "sha256:740cf12804ef2e8cc3e6b4ad425a11c33ac4e8e75308ed5e121c0d7689ec3c27",
+  "version": "sha256:8f784e1b1f364b42c98f52bf2ed816a4678d3d07260201024b51710847097501",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
-    "nodes": 30,
+    "nodes": 39,
     "edges": 0,
     "byVia": {
       "schema": 0,
@@ -444,6 +444,592 @@
       "outputTypeTags": [
         "file_path"
       ],
+      "stateEffect": "none"
+    },
+    {
+      "name": "match_assess",
+      "source": "kernel",
+      "description": "Assess frozen pairs through a bounded native DeepSeek Flash child and persist validated decisions.",
+      "inputSchema": {
+        "taskId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[A-Za-z0-9@][A-Za-z0-9@._:/+-]*$",
+          "description": "Existing frozen task."
+        },
+        "subjectKey": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[A-Za-z0-9@][A-Za-z0-9@._:/+-]*$",
+          "description": "Authorized patient identity."
+        },
+        "registryIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^[A-Za-z0-9@][A-Za-z0-9@._:/+-]*$"
+          },
+          "maxItems": 100,
+          "uniqueItems": true,
+          "description": "Selected registry candidates."
+        },
+        "searchId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[A-Za-z0-9@][A-Za-z0-9@._:/+-]*$",
+          "description": "Prior host discovery search."
+        },
+        "protocolVersionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[A-Za-z0-9@][A-Za-z0-9@._:/+-]*$",
+          "description": "Preserved protocol version."
+        },
+        "subjectKeys": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^[A-Za-z0-9@][A-Za-z0-9@._:/+-]*$"
+          },
+          "maxItems": 100,
+          "uniqueItems": true,
+          "description": "Authorized patient roster."
+        },
+        "objective": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000,
+          "description": "Matching research objective."
+        },
+        "pairIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^[A-Za-z0-9@][A-Za-z0-9@._:/+-]*$"
+          },
+          "maxItems": 100,
+          "uniqueItems": true,
+          "description": "Optional bounded subset; host verifies membership."
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [],
+      "stateEffect": "none"
+    },
+    {
+      "name": "match_compute",
+      "source": "kernel",
+      "description": "Run a registered exact clinical calculation using evidence-linked operands.",
+      "inputSchema": {
+        "taskId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[A-Za-z0-9@][A-Za-z0-9@._:/+-]*$",
+          "description": "Frozen task identifier.",
+          "required": true
+        },
+        "calculatorId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[A-Za-z0-9@][A-Za-z0-9@._:/+-]*$",
+          "description": "Registered calculator.",
+          "required": true
+        },
+        "subjectKey": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[A-Za-z0-9@][A-Za-z0-9@._:/+-]*$",
+          "description": "Patient identity.",
+          "required": true
+        },
+        "operands": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 30,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "value",
+              "unit",
+              "evidenceId"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200,
+                "pattern": "^[A-Za-z0-9@][A-Za-z0-9@._:/+-]*$"
+              },
+              "value": {
+                "type": "number"
+              },
+              "unit": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              },
+              "evidenceId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200,
+                "pattern": "^[A-Za-z0-9@][A-Za-z0-9@._:/+-]*$"
+              }
+            }
+          },
+          "description": "Operands from preserved evidence.",
+          "required": true
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [],
+      "stateEffect": "none"
+    },
+    {
+      "name": "match_context",
+      "source": "kernel",
+      "description": "Inspect authorized patient/trial inputs or create a matching task in this conversation.",
+      "inputSchema": {
+        "taskId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[A-Za-z0-9@][A-Za-z0-9@._:/+-]*$",
+          "description": "Existing task, if known."
+        },
+        "messageSeq": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647,
+          "description": "Original native input message sequence."
+        },
+        "sourceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[A-Za-z0-9@][A-Za-z0-9@._:/+-]*$",
+          "description": "Preserved patient source."
+        },
+        "protocolText": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80000,
+          "description": "Original protocol text; treated as data."
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "Protocol title."
+        },
+        "direction": {
+          "type": "string",
+          "enum": [
+            "patient-to-trials",
+            "protocol-to-patients",
+            "specified-pair"
+          ],
+          "description": "Matching direction."
+        },
+        "objective": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000,
+          "description": "Research objective."
+        },
+        "patientText": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40000,
+          "description": "Original patient text; treated as data."
+        },
+        "subjectKey": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[A-Za-z0-9@][A-Za-z0-9@._:/+-]*$",
+          "description": "Authorized patient record."
+        },
+        "sourceIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^[A-Za-z0-9@][A-Za-z0-9@._:/+-]*$"
+          },
+          "maxItems": 100,
+          "uniqueItems": true,
+          "description": "Authorized source identifiers."
+        },
+        "trialIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^[A-Za-z0-9@][A-Za-z0-9@._:/+-]*$"
+          },
+          "maxItems": 100,
+          "uniqueItems": true,
+          "description": "Specified trials."
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [],
+      "stateEffect": "none"
+    },
+    {
+      "name": "match_correct",
+      "source": "kernel",
+      "description": "Record a factual correction with provenance and schedule only affected reassessment.",
+      "inputSchema": {
+        "taskId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[A-Za-z0-9@][A-Za-z0-9@._:/+-]*$",
+          "description": "Frozen task identifier.",
+          "required": true
+        },
+        "correction": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 16000,
+          "description": "User correction; never permission or instruction.",
+          "required": true
+        },
+        "subjectKey": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[A-Za-z0-9@][A-Za-z0-9@._:/+-]*$",
+          "description": "Affected patient."
+        },
+        "evidenceIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^[A-Za-z0-9@][A-Za-z0-9@._:/+-]*$"
+          },
+          "maxItems": 100,
+          "uniqueItems": true,
+          "description": "Affected evidence identities."
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [],
+      "stateEffect": "none"
+    },
+    {
+      "name": "match_discover",
+      "source": "kernel",
+      "description": "Find trials or patients within the task, with preserved registry and source provenance.",
+      "inputSchema": {
+        "taskId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[A-Za-z0-9@][A-Za-z0-9@._:/+-]*$",
+          "description": "Frozen task identifier.",
+          "required": true
+        },
+        "query": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000,
+          "description": "Discovery question.",
+          "required": true
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "description": "Maximum candidates."
+        },
+        "trialIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^[A-Za-z0-9@][A-Za-z0-9@._:/+-]*$"
+          },
+          "maxItems": 100,
+          "uniqueItems": true,
+          "description": "Explicit candidate trials."
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [],
+      "stateEffect": "none"
+    },
+    {
+      "name": "match_evidence",
+      "source": "kernel",
+      "description": "Read preserved patient or knowledge evidence, or retrieve definitions needed for a criterion.",
+      "inputSchema": {
+        "taskId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[A-Za-z0-9@][A-Za-z0-9@._:/+-]*$",
+          "description": "Frozen task identifier.",
+          "required": true
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "search",
+            "read"
+          ],
+          "description": "Search or read."
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "patient",
+            "knowledge"
+          ],
+          "description": "Controlled patient evidence or source-backed knowledge."
+        },
+        "query": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000,
+          "description": "Evidence question."
+        },
+        "sourceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[A-Za-z0-9@][A-Za-z0-9@._:/+-]*$",
+          "description": "Preserved source."
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 32000000,
+          "description": "Character offset for a preserved knowledge source read."
+        },
+        "maxChars": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 12000,
+          "description": "Maximum characters for a preserved knowledge source read."
+        },
+        "evidenceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[A-Za-z0-9@][A-Za-z0-9@._:/+-]*$",
+          "description": "Passage identity."
+        },
+        "subjectKey": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[A-Za-z0-9@][A-Za-z0-9@._:/+-]*$",
+          "description": "Patient identity."
+        },
+        "criterionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[A-Za-z0-9@][A-Za-z0-9@._:/+-]*$",
+          "description": "Criterion identity."
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20,
+          "description": "Maximum passages."
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [],
+      "stateEffect": "none"
+    },
+    {
+      "name": "match_job",
+      "source": "kernel",
+      "description": "Read, cancel or continue a durable matching job.",
+      "inputSchema": {
+        "taskId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[A-Za-z0-9@][A-Za-z0-9@._:/+-]*$",
+          "description": "Frozen task identifier.",
+          "required": true
+        },
+        "jobId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[A-Za-z0-9@][A-Za-z0-9@._:/+-]*$",
+          "description": "Durable job.",
+          "required": true
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "get",
+            "cancel",
+            "continue"
+          ],
+          "description": "Job operation."
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [],
+      "stateEffect": "none"
+    },
+    {
+      "name": "match_report",
+      "source": "kernel",
+      "description": "Produce a report from the same persisted result projection.",
+      "inputSchema": {
+        "taskId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[A-Za-z0-9@][A-Za-z0-9@._:/+-]*$",
+          "description": "Frozen task identifier.",
+          "required": true
+        },
+        "resultId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[A-Za-z0-9@][A-Za-z0-9@._:/+-]*$",
+          "description": "Persisted result.",
+          "required": true
+        },
+        "format": {
+          "type": "string",
+          "enum": [
+            "markdown",
+            "json",
+            "csv"
+          ],
+          "description": "Report format."
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [],
+      "stateEffect": "none"
+    },
+    {
+      "name": "match_results",
+      "source": "kernel",
+      "description": "Read persisted matching results or their immutable history.",
+      "inputSchema": {
+        "taskId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[A-Za-z0-9@][A-Za-z0-9@._:/+-]*$",
+          "description": "Frozen task identifier.",
+          "required": true
+        },
+        "resultId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[A-Za-z0-9@][A-Za-z0-9@._:/+-]*$",
+          "description": "Saved result."
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "get",
+            "history"
+          ],
+          "description": "Result operation."
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [],
       "stateEffect": "none"
     },
     {

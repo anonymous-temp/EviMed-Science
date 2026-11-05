@@ -238,7 +238,7 @@ Numbers, ordering, counts and clinical labels come from the same result artifact
 
 ### Small, explicit professional tool surface
 
-Proposed tool names are not currently registered. Existing `vcr_*` calls remain compatible aliases into this implementation during migration, not a second implementation.
+These tools are implemented in the independent native bundle; the execution evidence and remaining gates are recorded in [the implementation ledger](2026-11-05-vcr-matching-plugin-v3-execution.md). Existing `vcr_*` calls retain compatibility through the host bridge.
 
 | Tool | Single responsibility | Key result |
 |---|---|---|
@@ -414,7 +414,7 @@ Existing authorization, patient isolation, source erasure, budgets and engineeri
 
 - Run the bounded campaign in section 10 at one selected release; correct only observed failures and rerun affected cases.
 - Generate the unified score/report artifact, including English SIGIR, per-year TREC, source/knowledge coverage, clinical error classes and actual workflow timing.
-- Commit/push, CI, package publication, host-adapter integration, candidate validation and deployment remain separate observable states. This task produces the architecture proposal and discovery evidence only.
+- Commit/push, CI, package publication, host-adapter integration, candidate validation and deployment remain separate observable states. The owner subsequently authorized implementation and a bounded full validation campaign; current evidence is tracked in the implementation ledger.
 
 ## 12. V2 decisions replaced and retained
 
@@ -436,6 +436,16 @@ Retained findings: low fit is not ineligibility; missingness is not a universal 
 
 This proposal includes the functional workflows, current backend coupling, paper-derived design choices, authenticated provider-catalog discovery, target algorithm composition, native execution contract, professional tool surface, data/report schemas, independent package lifecycle and migration/acceptance sequence.
 
-The current code is **not yet** an independently installable matching plugin. The host ABI, contained worker, modern provider request adapters, native batch-decision integration and independent publication process remain to be implemented and verified. Catalog visibility does not prove inference permission, latency, clinical performance or a particular endpoint's request limits. Paper results are not interchangeable with EviMed's official benchmark profiles.
+At the original design freeze, the code was **not yet** an independently installable matching plugin. [The implementation ledger](2026-11-05-vcr-matching-plugin-v3-execution.md) now records the implemented candidate and exact observed verification. The host ABI, contained worker, modern provider request adapters, native batch-decision integration and independent publication process remain to be implemented and verified. Catalog visibility does not prove inference permission, latency, clinical performance or a particular endpoint's request limits. Paper results are not interchangeable with EviMed's official benchmark profiles.
 
 The new documents contain no source credentials or private configuration locations. Original benchmark score files are unchanged. No inference, model benchmark, package publication, database migration or deployment was performed while writing this architecture.
+
+
+## 14. Approved execution and budget
+
+The owner authorized implementation with V4.1 Flash only, then approved a total CNY500 budget for the full original-English SIGIR and TREC2021/2022/2023 campaign. The current [execution ledger](2026-11-05-vcr-matching-plugin-v3-execution.md) and its exact artifact/provider/runtime receipts supersede proposal-only status statements above. A completed score, pushed source, independent publication, deployment and clinical acceptance remain distinct states. No translated-SIGIR score or Pro escalation is part of this execution.
+
+
+## 15. Owner closeout instruction
+
+The owner stopped remaining TREC work, then SIGIR/all leaderboard execution. Preserve completed historical scores and the new partial artifacts, report them without claiming a new complete benchmark result, and skip the remaining paid campaign. Finish the functional implementation and necessary engineering checks, then commit and push. Do not open a PR, merge main, publish packages or deploy. Current evidence: [execution ledger](2026-11-05-vcr-matching-plugin-v3-execution.md), [TREC closeout](2026-11-05-vcr-matching-trec-closeout.md).

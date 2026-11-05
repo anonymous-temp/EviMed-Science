@@ -26,6 +26,21 @@ import { jevTransport } from "./jevTransport.mjs";
 import { createJudgeService } from './judgeService.mjs';
 import { createJudgeGatewayHandler, JUDGE_GATEWAY_PATH } from './judgeGateway.mjs';
 import { createVcrCloudEgress, createVcrSessionResolver } from './vcrCloudEgress.mjs';
+import { createPatientMatchingHostAdapter } from './patientMatchingHostAdapter.mjs';
+import { createPatientMatchingGatewayHandler, PATIENT_MATCHING_GATEWAY_PATH } from './patientMatchingGateway.mjs';
+import { verifyPatientMatchingInvocation } from './patientMatchingInvocation.mjs';
+import { installPatientMatchingLegacyBridge } from './patientMatchingLegacyBridge.mjs';
+import { createPatientMatchingModelPorts } from './patientMatchingModels.mjs';
+import { createPatientMatchingDiscovery } from './patientMatchingDiscovery.mjs';
+import { createPatientMatchingTrialResource } from './patientMatchingTrialResource.mjs';
+import { createPatientMatchingKnowledge } from './patientMatchingKnowledge.mjs';
+import { createPatientMatchingWorkerClient } from './patientMatchingWorkerClient.mjs';
+import { PatientMatchingContinuation } from './patientMatchingContinuation.mjs';
+import { patientMatchingDispatchDescriptor, patientMatchingContinuationOptions } from './patientMatchingRuntimeBinding.mjs';
+import { PatientMatchingLifecycleService, PatientMatchingLifecycleWorker } from './patientMatchingLifecycle.mjs';
+import { loadPatientMatchingDeployment } from './patientMatchingDeployment.mjs';
+import { createPatientMatchingRoutes } from './patientMatchingRoutes.mjs';
+
 import { VcrStore } from './vcrStore.mjs';
 import { deploymentCloudPermission, vcrCloudDestinations } from './vcrCloudProjection.mjs';
 import { DocumentExportService, freezeArtifactDocument, freezeResultVersionDocument } from "./documentExport.mjs";
@@ -6072,6 +6087,74 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       && run.automated !== true && (Number.isSafeInteger(message.turnStartSeq) && run.nativeTurn?.startSeq === message.turnStartSeq
         || message.sourceRequestId && run.kernelRequestIds?.includes(message.sourceRequestId))),
     transcript:async (origin,options={}) => runtimeManager.sessionTranscript(await sourceProject(origin),origin.rootSessionId,{wake:false,...options}) });
+  // A deployment owns the exact first-party release. An absent optional catalogue leaves generic work usable.
+  let patientMatchingCatalogue = [];
+  try { patientMatchingCatalogue = overrides.patientMatchingCatalogue ?? loadPatientMatchingDeployment(config); }
+  catch { process.stderr.write('patient matching: patient_matching_catalogue_unavailable\n'); }
+  const patientMatchingLifecycle = vcr && productDatabase && pluginService && patientMatchingCatalogue.length ? new PatientMatchingLifecycleService(productDatabase, {
+    config, catalogue: patientMatchingCatalogue, runtime: runtimeManager, plugins: pluginService,
+    access: (user, projectId, options) => extensionAccess.project(user, projectId, options),
+    ledgerBusy: async project => (await agentRuns.list(project)).some(run => ['running','queued'].includes(run.status))
+      || (await productDatabase.query("SELECT 1 FROM evimed_product.jobs WHERE user_id=$1 AND project_id=$2 AND kind='patient-matching-continuation' AND status IN ('queued','running') LIMIT 1",[project.userId,project.id])).rows.length>0,
+    workerImageIdentity: async () => (await runtimeManager.inspectPatientMatchingWorker()).imageId,
+  }) : null;
+  const patientMatchingLifecycleWorker = patientMatchingLifecycle ? new PatientMatchingLifecycleWorker({service:patientMatchingLifecycle}) : null;
+  runtimeManager.patientMatchingGenerationResolver = patientMatchingLifecycle ? project => patientMatchingLifecycle.selectForRuntime(project) : null;
+  /** @type {any} */ let patientMatchingAdapter = null;
+  /** @type {PatientMatchingContinuation|null} */ let patientMatchingContinuation = null;
+  const patientMatchingModels = createPatientMatchingModelPorts({config,usageLedger,
+    authorize: async (envelope, action) => {
+      if(!patientMatchingAdapter) throw new HttpError(503,'patient_matching_unavailable','Patient matching is unavailable.');
+      const actor=await patientMatchingAdapter.authorizeModel(envelope,action);
+      await assertVcrCloudAccess?.({...actor,sessionId:envelope.origin.rootSessionId},{input:envelope.input});
+      await createVcrCloudEgress({store:vcr.store,resolveSession:async()=>envelope.origin.rootSessionId,destinations:()=>[action.destination],deployment:()=>deploymentCloudPermission(config)})({...actor,sessionId:envelope.origin.rootSessionId},{input:envelope.input});
+      return actor;
+    } });
+  let patientMatchingIndex = overrides.patientMatchingIndex ?? null;
+  if(!patientMatchingIndex && productDatabase && config.patientMatchingTrialIndexManifest) {
+    const resourceReady=createPatientMatchingTrialResource({manifestPath:config.patientMatchingTrialIndexManifest,database:productDatabase,models:patientMatchingModels,
+      authorize:envelope=>patientMatchingAdapter.authorizeModel(envelope)}).catch(()=>{process.stderr.write('patient matching: patient_matching_index_resource_unavailable\n');return null;});
+    patientMatchingIndex={query:async envelope=>(await resourceReady)?.query(envelope)??{status:'unsupported',summary:'The matching index resource is unavailable.',data:{code:'patient_matching_index_resource_unavailable'},artifacts:[]}};
+  }
+  if(vcr && productDocuments) {
+    const calculate=createPatientMatchingWorkerClient({socketPath:config.patientMatchingWorkerSocket,tokenFile:config.patientMatchingWorkerTokenFile});
+    patientMatchingAdapter=createPatientMatchingHostAdapter({vcr,documents:productDocuments,config,modelPorts:patientMatchingModels,indexPorts:patientMatchingIndex,
+      calculate:async(input,options)=>{await runtimeManager.inspectPatientMatchingWorker();return calculate(input,options);},
+      knowledge:createPatientMatchingKnowledge({sources:sourceService,index:kbIndex,sourceScope:origin=>conversationSourceScope(origin,origin.rootSessionId)}),
+      discover:createPatientMatchingDiscovery({vcr,models:patientMatchingModels,index:patientMatchingIndex,priorityEnabled:config.patientMatchingPriorityEnabled,assertCurrent:envelope=>patientMatchingAdapter.authorizeModel(envelope)}),
+      onPending:(origin,taskId)=>patientMatchingContinuation?.enqueue(origin,taskId),
+      onCancel:async(origin,taskId)=>runtimeManager.cancelPatientMatchingTask(await sourceProject(origin),taskId) });
+    patientMatchingContinuation=new PatientMatchingContinuation({jobs:productJobs,documents:productDocuments,adapter:patientMatchingAdapter,
+      allowed:async origin => {
+        const project=await sourceProject(origin),descriptor=await patientMatchingDispatchDescriptor({lifecycle:patientMatchingLifecycle,runtime:runtimeManager,project});
+        return descriptor?.generation===origin.pluginGeneration;
+      },
+      resolve:async origin=>{
+        const user=await store.userById(origin.userId),project=await sourceProject(origin);
+        if(!user || !await researchSessions.get(project,origin.rootSessionId))throw new HttpError(404,'patient_matching_origin_unavailable','The original conversation is unavailable.');
+        return {user,project,sessionId:origin.rootSessionId};
+      },runs:project=>agentRuns.list(project),
+      dispatch:async(continuationContext,request)=>{
+        const continuation=patientMatchingContinuationOptions({runs:await agentRuns.list(continuationContext.project),conversation:await researchSessions.get(continuationContext.project,request.sessionId),
+          sessionId:request.sessionId,originRunId:request.options.originRunId,text:request.text});
+        return dispatchChannelRun(continuationContext.user,continuationContext.project,request.sessionId,request.dispatchId,request.text,{...request.options,...continuation});
+      },notify:async(origin,taskId)=>{await notificationService?.create(origin.userId,{noticeType:'notify',projectId:origin.projectId,title:'患者匹配需要继续',body:'已保存当前结果，可回到原对话继续。',source:{type:'thread',id:origin.rootSessionId},idempotencyKey:`matching-attention:${taskId}`});},
+      report:code=>process.stderr.write(`patient matching continuation: ${code}\n`),
+    });
+    installPatientMatchingLegacyBridge({vcr,adapter:patientMatchingAdapter,documents:productDocuments,resolveOrigin:async study=>{
+      if(study.scope!=='conversation'||!study.conversationSessionId)return null;
+      const project=await sourceProject({userId:study.userId,projectId:study.projectId}),descriptor=await patientMatchingDispatchDescriptor({lifecycle:patientMatchingLifecycle,runtime:runtimeManager,project});
+      const original=(await agentRuns.list(project)).find(run=>run.sessionId===study.conversationSessionId);
+      return descriptor?{userId:study.userId,projectId:study.projectId,rootSessionId:study.conversationSessionId,pluginGeneration:descriptor.generation,runId:study.executionOrigin?.runId??original?.id??null}:null;
+    }});
+  }
+  const patientMatchingGatewayHandler=createPatientMatchingGatewayHandler(config,runtimeManager,{vcr,adapter:patientMatchingAdapter,
+    resolveInvocation:async(identity,request)=>{
+      const project=await sourceProject(identity);return verifyPatientMatchingInvocation({request,project,runtimeManager,
+        resolveSession:(ownedProject,id)=>runtimeEventPump.sessionOwner(ownedProject,id),runs:async()=>(await agentRuns.list(project)).filter(run=>run.status==='running'),
+        resolveTool:async(ownedProject,name)=>patientMatchingLifecycle?.resolveTool(ownedProject,name),authenticatedUserId:String(identity.userId),adoptionWaitMs:config.vcrRunAdoptionWaitMs});
+    },report:code=>process.stderr.write(`patient matching gateway: ${code}\n`)});
+  const patientMatchingRoutes=createPatientMatchingRoutes({store,lifecycle:patientMatchingLifecycle,access:(user,projectId,options)=>extensionAccess.project(user,projectId,options)});
   const vcrGatewayHandler = createVcrGatewayHandler(config, runtimeManager, {
     vcr,
     resolveStudyConversation,
@@ -6762,6 +6845,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           capsuleCleanupRun,
           autopilotScheduleRun,
           pluginApplyWorker?.running,
+          patientMatchingLifecycleWorker?.running,
+          patientMatchingContinuation?.ticking,
           personalSkillWorker?.running,
           hostedExtensions?.preparation.running,
           hostedExtensions?.worker.running,
@@ -7208,6 +7293,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
                   ? reviewGatewayHandler
                   : pathname.startsWith(`${GEO_GATEWAY_PATH}/`)
                     ? geoGatewayHandler
+                    : pathname === PATIENT_MATCHING_GATEWAY_PATH
+                      ? patientMatchingGatewayHandler
                     : pathname.startsWith(`${VCR_GATEWAY_PATH}/`)
                       ? vcrGatewayHandler
                       : pathname.startsWith(`${EXTENSION_GATEWAY_PATH}/`)
@@ -7339,6 +7426,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (await resultSourceUpdatesRoutes(req, res)) return;
       if (await resultReplayRoutes(req, res)) return;
       if (await availability.routes(req, res)) return;
+      if (await patientMatchingRoutes(req, res)) return;
       if (await vcrRoutes(req, res)) return;
       if (await im.routes(req, res)) return;
       if (await routingDecisionRoutes(req, res)) return;
@@ -9424,7 +9512,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     void Promise.resolve(managedBrowser.pause?.()).catch(() => {
       process.stderr.write("managed browser pause: cleanup remains unconfirmed\n");
     });
-    for (const worker of [pluginApplyWorker, personalSkillWorker, hostedExtensions?.preparation, hostedExtensions?.worker, memoryIndexWorker, nativeMemoryWorker, sourceWorker, knowledgePagesWorker, sourceSyncWorker, autopilotWorker, learningWorker, im.worker, kbIndex, frontier?.worker, review?.worker,
+    for (const worker of [patientMatchingLifecycleWorker, patientMatchingContinuation, pluginApplyWorker, personalSkillWorker, hostedExtensions?.preparation, hostedExtensions?.worker, memoryIndexWorker, nativeMemoryWorker, sourceWorker, knowledgePagesWorker, sourceSyncWorker, autopilotWorker, learningWorker, im.worker, kbIndex, frontier?.worker, review?.worker,
       geo?.worker, vcr?.worker, evolution?.worker, credits?.worker, documentExportWorker, resultReplayWorker, availability.worker]) {
       if (worker?.timer) clearInterval(worker.timer);
       if (worker) worker.timer = null;
@@ -9522,6 +9610,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       await initializeRsiOnline().catch(() => { process.stderr.write("rsi: rsi_online_initialization_failed\n"); });
       managedBrowser.start?.();
       pluginApplyWorker?.start();
+      patientMatchingLifecycleWorker?.start();
+      patientMatchingContinuation?.start();
       if (config.runtimeMode === "kernel") personalSkillWorker?.start();
       hostedExtensions?.preparation.start();
       hostedExtensions?.worker.start();
@@ -9715,6 +9805,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // 「虚拟临床研究」, on the same terms.
     vcr,
     vcrService: vcr?.service ?? null,
+    patientMatchingAdapter,
+    patientMatchingLifecycle,
+    patientMatchingLifecycleWorker,
+    patientMatchingContinuation,
     capsuleService,
     officialPacks,
     packOutcomes,
@@ -9820,6 +9914,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       await researchDbCleanupRun;
       // The pass that publishes the official packs at start writes into the database and the data directory: let it end first.
       await officialPacks?.idle();
+      await patientMatchingContinuation?.stop();
+      await patientMatchingLifecycleWorker?.close();
       await pluginApplyWorker?.close();
       await personalSkillWorker?.close();
       await hostedExtensions?.preparation.close();

@@ -1,3 +1,8 @@
+import patientMatchingTools from './patientMatchingTools.json' with { type: 'json' }
+
+/** Admitted first-party names; actual availability is an installed generation's native registry. */
+export const PATIENT_MATCHING_TOOL_NAMES = Object.freeze([...patientMatchingTools])
+
 /**
  * Tool names, in one place.
  *
@@ -400,6 +405,7 @@ export const RUNTIME_LEAKAGE_TOOL_TOKENS = Object.freeze([
   'evimed_',
   ...MCP_TOOL_NAMES,
   ...SOCKET_TOOL_NAME_LIST,
+  ...PATIENT_MATCHING_TOOL_NAMES,
 ])
 
 /**
@@ -458,6 +464,7 @@ export function isPlatformChoreographyTool(name) {
 export const MOUNTED_TOOL_NAMES = Object.freeze([
   ...KERNEL_MOUNTED_TOOL_NAMES,
   ...SOCKET_TOOL_NAME_LIST,
+  ...PATIENT_MATCHING_TOOL_NAMES,
 ])
 
 /**

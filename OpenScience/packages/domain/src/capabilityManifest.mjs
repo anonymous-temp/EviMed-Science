@@ -16,7 +16,7 @@ import { ARTIFACT_ROLES } from './artifactPresentation.mjs';
 
 import { isContractKind } from './contractKinds.mjs'
 import { SAFETY_CLASSES } from './contractKinds.mjs'
-import { MCP_TOOL_NAMES, SOCKET_TOOL_NAMES, SOCKET_TOOL_NAME_LIST, mcpToolBaseName, mcpToolName } from './toolNames.mjs'
+import { MCP_TOOL_NAMES, SOCKET_TOOL_NAMES, SOCKET_TOOL_NAME_LIST, PATIENT_MATCHING_TOOL_NAMES, mcpToolBaseName, mcpToolName } from './toolNames.mjs'
 
 /**
  * Tools every delegated child gets regardless of its manifest (§9.5 step 3).
@@ -181,7 +181,7 @@ export function validateCapabilityManifest(value) {
 
   const tools = toStringArray(raw.tools)
   for (const tool of tools) {
-    if (SOCKET_TOOL_NAME_LIST.includes(tool)) continue
+    if (SOCKET_TOOL_NAME_LIST.includes(tool) || PATIENT_MATCHING_TOOL_NAMES.includes(tool)) continue
     if (DELEGATION_BASE_TOOLS.includes(tool)) continue
     if (MCP_TOOL_NAMES.includes(tool)) continue
     const base = mcpToolBaseName(tool)

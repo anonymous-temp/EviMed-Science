@@ -480,7 +480,9 @@
       "rerankModel": "qwen3.7-text-rerank",
       "rerankApiBase": "https://dashscope.aliyuncs.com/compatible-api/v1/reranks",
       "triageModel": "jev-1.14.0",
-      "proEscalation": false
+      "proEscalation": false,
+      "embeddingApiBase": "https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings",
+      "embeddingDimensions": 1024
     }
   }
 }

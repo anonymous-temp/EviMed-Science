@@ -43,6 +43,7 @@ import {
 import { HttpError } from './security.mjs';
 import { callModelForControlPlane } from './modelGateway.mjs';
 import { patientMatchingConfiguration } from './patientMatchingConfiguration.mjs';
+import { nativeDecisionProjection, legacyMatchingVerdict } from './patientMatchingProjection.mjs';
 import { matchBatchMinCell, resultOutcome } from './vcrMatchBatch.mjs';
 import { LONG_LIMITS, acceptLongShapes, acceptRelevance, longRelevanceMessages, longShapeMessages } from './vcrLongTables.mjs';
 import { REGISTRY_RECORD_BASIS, WITHDRAWN_SUBJECT_MARK, judgingProgress, judgmentKey, newerFailureOf, REJUDGE_FAILED_NOTE_ZH, recordGapOf, standingRows } from './vcrMatchJudgmentStore.mjs';
@@ -425,8 +426,16 @@ export function judgmentTargets({ evidence = null, matchStore, pages = null }) {
       // A rule saved with no words has nothing for a model to read. It stays out of what is asked, and every row made from this version says how many there were (`recordGapOf`).
       const worded = (/** @type {any} */ row) => Boolean(String(row.sourceText ?? '').trim());
       const clausesWithoutWords = criteria.filter((/** @type {any} */ row) => !worded(row)).length;
-      for (const [kind, heading] of [['inclusion', 'Inclusion Criteria:'], ['exclusion', 'Exclusion Criteria:']]) {
-        const rows = criteria.filter((/** @type {any} */ row) => (row.kind ?? 'inclusion') === kind && worded(row));
+      if(typeof version?.originalEligibilityText==='string'){
+        eligibility=version.originalEligibilityText;
+        for(const row of criteria.filter(worded)){
+          const start=row.sourceLocator?.start,end=row.sourceLocator?.end;
+          if(!Number.isSafeInteger(start)||!Number.isSafeInteger(end)||start<0||end<=start||end>eligibility.length)throw failure('vcr_protocol_source_mismatch','A protocol clause no longer resolves to its preserved original text.');
+          clauses.push({number:clauses.length+1,kind:row.kind==='unclassified'?'unsectioned':row.kind,text:eligibility.slice(start,end),start,end,...(row.id?{criterionId:String(row.id)}:{})});
+        }
+      }else{
+      for (const [kind, heading] of [['inclusion', 'Inclusion Criteria:'], ['exclusion', 'Exclusion Criteria:'],['unsectioned','Other eligibility criteria (section not stated):']]) {
+        const rows = criteria.filter((/** @type {any} */ row) => (row.kind==='unclassified'?'unsectioned':row.kind ?? 'inclusion') === kind && worded(row));
         if (!rows.length) continue;
         eligibility += `${eligibility ? '\n\n' : ''}${heading}`;
         for (const row of rows) {
@@ -435,6 +444,7 @@ export function judgmentTargets({ evidence = null, matchStore, pages = null }) {
           clauses.push({ number: clauses.length + 1, kind, text, start: eligibility.length, end: eligibility.length + text.length, ...(row.id ? { criterionId: String(row.id) } : {}) });
           eligibility += text;
         }
+      }
       }
       const title = String(version?.title ?? '');
       return { kind: 'protocol_version', id: protocolVersionId, title, summary: '', eligibility, conditions: [], interventions: [], clauses, hash: sha256(canonicalScenarioJson({ title, eligibility })), ...(clausesWithoutWords ? { clausesWithoutWords } : {}),
@@ -1282,8 +1292,9 @@ export function presentJudgment(fit, criteria) {
   const scored = standing.fit, clauses = standing.criteria;
   const rows = list(clauses?.answer?.rows);
   const missing = list(clauses?.answer?.missing);
-  const reasons = object(scored?.answer?.reasons);
-  const judged = trialVerdict({ fit: scored?.fit ?? clauses?.fit ?? null, criteria: clauses ? rows : null, missing: clauses ? missing : null, missingReasons: list(reasons.missing), ineligibleReasons: list(reasons.ineligible) });
+  const native = clauses?.answer?.coreDecision ? nativeDecisionProjection(clauses.answer.coreDecision).rows[0] : null;
+  const reasons = object(scored?.answer?.reasons ?? (native ? clauses?.answer?.reasons : null));
+  const judged = native ? { verdict: legacyMatchingVerdict(native.clinicalEligibility) } : trialVerdict({ fit: scored?.fit ?? clauses?.fit ?? null, criteria: clauses ? rows : null, missing: clauses ? missing : null, missingReasons: list(reasons.missing), ineligibleReasons: list(reasons.ineligible) });
   const newestOf = clauses && scored ? ((clauses.updatedAt ?? '') > (scored.updatedAt ?? '') ? clauses : scored) : clauses ?? scored;
   const anchor = newestOf ?? fit ?? criteria;
   const basisChanged = scored?.basisChanged ?? clauses?.basisChanged ?? null;

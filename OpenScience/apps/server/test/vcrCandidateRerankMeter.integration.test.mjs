@@ -2,6 +2,7 @@
 // The endpoint is a double; the ledger is the real one on PostgreSQL.
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { REFERENCE_PRICE_LIST } from '@evimed/domain';
 import { after, before, test } from "node:test";
 
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
@@ -59,7 +60,7 @@ test("a rerank request is booked under purpose vcr at the provider's token count
     assert.equal(Number(row.cache_miss_tokens), 2_000_000);
     assert.equal(Number(row.output_tokens), 0);
     assert.equal(row.provider_request_id, "dash-1");
-    assert.equal(row.price_version, "evimed-reference-2026-11-04");
+    assert.equal(row.price_version, REFERENCE_PRICE_LIST.version);
   }
 });
 

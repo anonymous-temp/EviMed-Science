@@ -17,6 +17,9 @@ COPY packages/harness-port/package.json packages/harness-port/package.json
 COPY packages/search-topics/package.json packages/search-topics/package.json
 COPY packages/socket/package.json packages/socket/package.json
 COPY packages/contracts/package.json packages/contracts/package.json
+COPY packages/patient-matching-core/package.json packages/patient-matching-core/package.json
+COPY packages/patient-matching-plugin/package.json packages/patient-matching-plugin/package.json
+COPY packages/patient-matching-worker/package.json packages/patient-matching-worker/package.json
 
 # The store is a build cache, so a changed lockfile fetches only what moved,
 # and fewer parallel fetches keep the serving host answering: a from-scratch
@@ -51,6 +54,7 @@ RUN python3 runtime/mcp/evimed-research/build_sider_cache.py
 RUN node scripts/build/vendor-geo-skills.mjs --index
 
 RUN pnpm --filter @evimed/dsh-socket prepack
+RUN pnpm --filter @evimed/patient-matching-worker build
 
 ARG VITE_OPEN_SCIENCE_API_URL=/api
 ENV VITE_OPEN_SCIENCE_API_URL=${VITE_OPEN_SCIENCE_API_URL}

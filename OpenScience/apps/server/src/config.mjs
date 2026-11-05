@@ -1160,6 +1160,13 @@ function vcrSettings(overrides) {
     // (unset follows the key; `=false` turns it off). One request's limit, all requests' limit, and the documents of a batch (the model takes 500 in one request; a
     // smaller batch keeps one call's tokens and time small). Counters: `open_science_vcr_candidate_rerank_total`.
     patientMatchingProfile: patientMatchingConfiguration(overrides),
+    patientMatchingPriorityEnabled: overrides.patientMatchingPriorityEnabled ?? boolEnv("OPEN_SCIENCE_PATIENT_MATCHING_PRIORITY_ENABLED", false),
+    patientMatchingTrialIndexManifest: String(overrides.patientMatchingTrialIndexManifest ?? process.env.OPEN_SCIENCE_PATIENT_MATCHING_TRIAL_INDEX_MANIFEST ?? ''),
+    patientMatchingCataloguePath: String(overrides.patientMatchingCataloguePath ?? process.env.OPEN_SCIENCE_PATIENT_MATCHING_CATALOGUE ?? ''),
+    patientMatchingWorkerSocket: String(overrides.patientMatchingWorkerSocket ?? process.env.OPEN_SCIENCE_PATIENT_MATCHING_WORKER_SOCKET ?? ''),
+    patientMatchingWorkerTokenFile: String(overrides.patientMatchingWorkerTokenFile ?? process.env.OPEN_SCIENCE_PATIENT_MATCHING_WORKER_TOKEN_FILE ?? ''),
+    patientMatchingWorkerContainer: String(overrides.patientMatchingWorkerContainer ?? process.env.OPEN_SCIENCE_PATIENT_MATCHING_WORKER_CONTAINER ?? ''),
+    patientMatchingWorkerImageDigest: String(overrides.patientMatchingWorkerImageDigest ?? process.env.OPEN_SCIENCE_PATIENT_MATCHING_WORKER_IMAGE_DIGEST ?? ''),
     vcrMatchRerankEnabled: process.env.OPEN_SCIENCE_VCR_MATCH_RERANK_ENABLED == null || process.env.OPEN_SCIENCE_VCR_MATCH_RERANK_ENABLED === ""
       ? (overrides.vcrMatchRerankEnabled ?? null) : (overrides.vcrMatchRerankEnabled ?? boolEnv("OPEN_SCIENCE_VCR_MATCH_RERANK_ENABLED", true)),
     vcrMatchRerankTimeoutMs: integer("vcrMatchRerankTimeoutMs", "OPEN_SCIENCE_VCR_MATCH_RERANK_TIMEOUT_MS", 8_000, 1_000, 60_000),

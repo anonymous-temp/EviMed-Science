@@ -7,6 +7,8 @@ import {assertExtensionAssessmentAuthority} from './extensionAssessmentAuthority
 import { createDocumentRenderController } from "./documentRenderController.mjs";
 import { createVcrIntakeController } from "./vcrIntakeController.mjs";
 import { createSkillValidationController } from "./skillValidationController.mjs";
+import { inspectPatientMatchingWorker } from "./patientMatchingLifecycleWorkerIdentity.mjs";
+import { verifyPatientMatchingGeneration, patientMatchingGenerationRoot, PATIENT_MATCHING_RUNTIME_ROOT } from "./patientMatchingLifecycleArtifacts.mjs";
 import { verifyExtensionGeneration, extensionGenerationRoot } from "./extensionGenerationService.mjs";
 import { canonicalJson, isolatedToolRowIsAdmitted } from "@evimed/domain";
 import { verifyPersonalSkillGeneration } from "./personalSkillGenerationService.mjs";
@@ -599,6 +601,8 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
     const pluginConfig = payload.pluginConfig;
     if (!pluginConfig || Object.keys(pluginConfig).sort().join(",") !== "enabled,revision,settings") throw new HttpError(400, "plugin_config_invalid", "Fixed plugin settings are required.");
     validatePluginConfig({ expectedRevision: pluginConfig.revision, enabled: pluginConfig.enabled, settings: pluginConfig.settings }, config.publicSourceGatewayTimeoutMs ?? 15000);
+    const matching = payload.patientMatchingGeneration ? await verifyPatientMatchingGeneration(config, project, payload.patientMatchingGeneration) : null;
+    if (matching && inspectRuntimeImage(config).imageId !== matching.runtimeImageDigest) throw controllerFailure(409, 'patient_matching_release_invalid', 'The matching runtime image changed.');
     const extension = payload.extensionGeneration ? await verifyGeneration(project, payload.extensionGeneration) : null;
     if (extension) {
       if (inspectRuntimeImage(config).imageId !== extension.identity.baseRuntimeImageDigest) throw controllerFailure(409, 'extension_contract_invalid', 'The selected runtime image changed.');
@@ -618,8 +622,9 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
     }
     const contextGeneration = payload.contextGeneration ? await verifyContextGeneration(config, project, payload.contextGeneration) : null;
     const plan = buildRuntimeLaunchPlan(config, project, port, { modelGatewayProfile: payload.modelGatewayProfile ?? "", contextGeneration, capsuleGatewayUrl, revisionGatewayUrl, publicSourceGatewayUrl, memoryGatewayUrl, attendancePublicKey, geoSkills, pluginConfig, platformSkillGeneration: platform?.reference ?? null, disabledPlatformSkills: personal?.platformSkills?.disabled ?? [], disabledClientBundles: personal?.platformSkills?.disabledPlugins ?? [],
-      personalSkillGeneration: personal?.reference ?? null, personalSkillImageId: personal?.identity.baseRuntimeImageDigest ?? null, extensionGeneration: extension?.reference ?? null, extensionImageId: extension?.identity.baseRuntimeImageDigest ?? null });
+      patientMatchingGeneration: matching, personalSkillGeneration: personal?.reference ?? null, personalSkillImageId: personal?.identity.baseRuntimeImageDigest ?? null, extensionGeneration: extension?.reference ?? null, extensionImageId: extension?.identity.baseRuntimeImageDigest ?? null });
     plan.platformSkillGeneration = platform;
+    plan.patientMatchingGeneration = matching;
     if (plan.releaseProvenance) logUnverifiedRelease(project, plan.releaseProvenance);
     await cleanupRuntime(project);
     reserveRuntimeCapacity(project);
@@ -676,6 +681,25 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
           await new Promise(resolve => setTimeout(resolve, 100));
         }
         if (!proved) throw controllerFailure(503, 'runtime_start_failed', 'Runtime personal skill mount could not be inspected.');
+      }
+      if (matching) {
+        let proved = false;
+        const expected = path.join(patientMatchingGenerationRoot(config, matching.reference), 'selected');
+        for (let attempt = 0; attempt < 50; attempt++) {
+          const inspected = spawnSync(config.runtimeContainerBin, ['inspect', '--format', '{{json .}}', plan.containerName], { encoding: 'utf8', timeout: 5000, maxBuffer: 65536 });
+          if (inspected.status === 0) {
+            let state; try { state = JSON.parse(inspected.stdout); } catch { throw controllerFailure(503, 'runtime_start_failed', 'Matching mount verification failed.'); }
+            const mount = state.HostConfig?.Mounts?.find(item => item.Target === PATIENT_MATCHING_RUNTIME_ROOT);
+            const relative = path.relative(config.dataDir, expected).split(path.sep).join('/');
+            proved = state.Image === matching.runtimeImageDigest && mount?.ReadOnly === true
+              && (config.runtimeDataVolume ? mount.Type === 'volume' && mount.Source === config.runtimeDataVolume && mount.VolumeOptions?.Subpath === relative : mount.Type === 'bind' && mount.Source === expected)
+              && state.Mounts?.some(item => item.Destination === PATIENT_MATCHING_RUNTIME_ROOT && item.RW === false);
+            if (!proved) throw controllerFailure(503, 'runtime_start_failed', 'The matching mount did not match its generation.');
+            await verifyPatientMatchingGeneration(config, project, matching.reference); break;
+          }
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        if (!proved) throw controllerFailure(503, 'runtime_start_failed', 'The matching mount could not be inspected.');
       }
       if (extension) {
         let proved = false;
@@ -910,6 +934,10 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
         sendJson(res, 200, { data: dockerInfo(config) });
         return;
       }
+      if (req.method === "GET" && url.pathname === "/v1/patient-matching/worker") {
+        if (url.search) throw controllerFailure(400, "runtime_controller_payload_invalid", "Worker inspection takes no parameters.");
+        sendJson(res, 200, { data: inspectPatientMatchingWorker(config) }); return;
+      }
       if (req.method === "GET" && url.pathname === "/v1/docker/runtime-image") {
         sendJson(res, 200, { data: inspectRuntimeImage(config) });
         return;
@@ -932,7 +960,7 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
         // Protocol 8 deliberately accepts this exact version-7 citation shape;
         // Selected extension generations add only a fixed opaque immutable reference.
         const allowed = url.pathname === "/v1/runtime/start"
-          ? ["userId", "projectId", "activeWorkspace", "port", "password", "capsuleGatewayUrl", "revisionGatewayUrl", "publicSourceGatewayUrl", "pluginConfig", "personalSkillGeneration", "extensionGeneration", "platformSkillGeneration", "memoryGatewayUrl", "geoSkills", "modelGatewayProfile", "contextGeneration", "attendancePublicKey"]
+          ? ["userId", "projectId", "activeWorkspace", "port", "password", "capsuleGatewayUrl", "revisionGatewayUrl", "publicSourceGatewayUrl", "pluginConfig", "personalSkillGeneration", "extensionGeneration", "platformSkillGeneration", "memoryGatewayUrl", "geoSkills", "modelGatewayProfile", "contextGeneration", "attendancePublicKey", "patientMatchingGeneration"]
           : ["userId", "projectId", "activeWorkspace"];
         assertExactKeys(payload, allowed);
         const project = await projectFromReference(config, payload);

@@ -22,7 +22,7 @@ import {
   verifyModelGatewayRuntimeToken,
 } from "../src/runtimeManager.mjs";
 import { FRONTIER_LANES, FRONTIER_SPECIALTIES, GEO_ENGINES, GEO_POOLS, GEO_READ_WHATS, GEO_SOCIAL_PLATFORMS, GEO_SOCIAL_SORTS, GEO_WRITE_WHATS,
-  MCP_SERVER_NAME, MCP_TOOL_BASE_NAMES, MCP_TOOL_PREFIX } from "@evimed/domain";
+  MCP_SERVER_NAME, MCP_TOOL_BASE_NAMES, MCP_TOOL_PREFIX, PATIENT_MATCHING_TOOL_NAMES } from "@evimed/domain";
 import { GEO_ANALYSIS_REGISTRY } from "../src/geoAnalysisRegistry.mjs";
 import { GEO_READ_FILTER_FIELDS } from "../src/geoGateway.mjs";
 import { GEO_READ_MAX_ITEMS } from "../src/geoService.mjs";
@@ -1250,16 +1250,18 @@ test("the GEO tools offer exactly the domain's vocabularies and the gateway's ow
   assert.equal(social.properties.query.maxLength, SOCIAL_MAX_QUERY_LENGTH);
 });
 
-// The other half: what an agent package may ask for has to be something the
-// server offers. The registry used to keep its own copy of the list, which is
-// how a manifest could name a tool nobody publishes.
-test("every tool an agent package may declare is one the server publishes", async () => {
+// Declarable MCP tools must be published; optional native tools must belong to
+// their own manifest. Neither inventory can silently admit or shadow the other.
+test("every declarable tool belongs to the published MCP roster or the exact native manifest", async () => {
   const { EVIMED_AGENT_TOOL_IDS } = await import("../src/agentRegistry.mjs");
+  const { TOOL_MANIFEST } = await import("../../../packages/patient-matching-plugin/src/manifest.mjs");
+  const native = new Set(TOOL_MANIFEST.map(tool => tool.name));
   const published = new Set(await publishedToolNames());
-  for (const tool of EVIMED_AGENT_TOOL_IDS) {
-    assert.ok(published.has(tool), `agent packages may declare "${tool}", which the MCP server does not publish`);
-  }
-  // `health` is an operator probe, so it is published but not declarable.
+  assert.deepEqual([...PATIENT_MATCHING_TOOL_NAMES], [...native], "native admission data must match the owning manifest");
+  assert.deepEqual([...native].filter(tool => published.has(tool)), [], "native names cannot shadow MCP tools");
+  assert.deepEqual([...EVIMED_AGENT_TOOL_IDS].filter(tool => !native.has(tool)).sort(), [...published].filter(tool => tool !== "health").sort(), "the declarable MCP subset must equal its published roster without the operator probe");
+  assert.deepEqual([...EVIMED_AGENT_TOOL_IDS].filter(tool => native.has(tool)).sort(), [...native].sort(), "every native manifest tool must be admitted");
+  // `health` remains an operator probe, published but never declarable.
   assert.equal(EVIMED_AGENT_TOOL_IDS.has("health"), false);
   assert.equal(published.has("health"), true);
 });

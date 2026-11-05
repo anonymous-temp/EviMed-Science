@@ -3,20 +3,73 @@
   "reasoningModel": "deepseek-flash",
   "proEscalation": false,
   "milestones": {
-    "M0": "in_progress",
-    "M1": "pending",
-    "M2": "pending",
-    "M3": "pending",
-    "M4": "pending",
-    "M5": "pending"
+    "M0": "implemented; production host compatibility and source authority verified",
+    "M1": "native bundle qualified on pinned DSH; cancellation and disabled general path verified",
+    "M2": "implemented/qualified; partial TREC index retained building, remaining owner-skipped",
+    "M3": "source/knowledge/calculation integrated; historical0.1.0 single-case workflow; current0.1.1 synthetic runtime and failure isolation qualified",
+    "M4": "local release candidate and lifecycle verified; publication/deployment not performed",
+    "M5": "export/preparation tooling implemented; all remaining paid evaluation owner-skipped; no new official score"
   },
-  "publication": "not_started",
+  "publication": "not_performed",
   "deployment": "not_authorized",
   "completedComponents": {
-    "coreContracts": "20 behavioral cases, spec and code-quality review approved",
+    "coreContracts": "0.1.1 contracts/projection; model complete records and empty runtime failures; source-bound per-row validation",
     "flashConfiguration": "dedicated matching profile; explicit Pro rejection; frozen-model provenance checked",
     "nativeModelOptions": "supported DSH agentOptions forwarded through harness port; regression and typecheck passed",
-    "ciSnapshot": "regenerated guidance source snapshot"
+    "ciSnapshot": "regenerated guidance source snapshot",
+    "nativeTools": "nine manifest-generated tools and a loadable professional skill",
+    "hostAdapter": "original-source binding, transactional saved results, erasure and actual actor readback",
+    "modelPorts": "Qwen3.7 embedding20-item1024-dim and single-request500-item rerank; optional Jev1.14; kernel-purpose budget accounting",
+    "nativeClinicalReference": "historical0.1.0 only: one real Flash child, BMI20, shared saved-result equality; no current0.1.1 clinical claim",
+    "independentCandidate": "qualified exact native tarball and actual contained image; protected immutable generation lifecycle",
+    "evaluationProjection": "native saved finalOrder to unchanged official scorers; missing topic and metric profile accounting",
+    "failureIsolation": "canonical pair bundle binding; valid siblings retained; failed attempts checkpointed; explicit resume epoch"
   },
-  "currentWork": "M1 native bundle, managed tool execution and independent packaging"
+  "currentWork": "Engineering implementation, necessary scoped checks, documentation and reviews complete. Deliver by committing and pushing this source revision; no paid evaluation, publication, main integration or deployment.",
+  "updatedAt": "2026-11-05T16:32:21.189914+00:00",
+  "budget": {
+    "totalCny": 500,
+    "scope": "all DeepSeek, Bailian and Jev campaign calls together",
+    "source": "explicit owner instruction in this chat",
+    "hardCeiling": true
+  },
+  "nativeArtifactSha256": "5dc7fdad212913b026ef31ce22af251681a275b11ad820b54f06da3569e13b96",
+  "workerImageDigest": "sha256:8460aaf89a8f65b07c4a8a03a0cd18dc10623b6d3a99802aa23b79283be0c96d",
+  "performanceClaim": "No new official TREC or SIGIR leaderboard score. Historical scores unchanged; stopped partial work is not scored as zero.",
+  "ownerStop": {
+    "trec": true,
+    "sigir": true,
+    "otherLeaderboards": true,
+    "noAutomaticResume": true,
+    "remainingAuthorized": "functional code fixes, necessary offline engineering checks, documentation, commit and push",
+    "deployment": false
+  },
+  "partialExecution": {
+    "trec2021_2022Indexed": 232180,
+    "trec2021_2022Expected": 375580,
+    "trec2023Indexed": 0,
+    "sigirCurrentValidClinicalPairs": 686,
+    "sigirRequestedPairs": 3835,
+    "sigirFullyCompleteTopics": 3,
+    "sigirRequestedTopics": 58,
+    "sigirOfficialScore": null,
+    "trecCurrentOfficialScore": null
+  },
+  "costCloseout": {
+    "settledReferenceCostCny": 53.39247588,
+    "uncertainUpperExposureCny": 15.151263,
+    "totalCommittedExposureCny": 68.54373888,
+    "remainingOf500Cny": 431.45626112,
+    "reservedRows": 0,
+    "method": "Usage-ledger reference prices with actual returned tokens; uncertain calls remain at their full reservation bound; supplier invoices not reconciled."
+  },
+  "nativeArtifactVersion": "0.1.1",
+  "nativeArtifactQualification": "Pinned DSH0.2.1-rc.5 synthetic install/status/managed-child/failure-checkpoint/cancel/disposal/disabled-conversation proofs; zero paid calls.",
+  "historicalClinicalArtifact": {
+    "version": "0.1.0",
+    "sha256": "33fa64d754ac018816e80826f786b35def898062f7a16cfcd2486dbb38284d59",
+    "scope": "Historical single clinical fixture and stopped partial campaign only; never relabeled0.1.1."
+  },
+  "engineeringVerification": "engineering-verification.json",
+  "fullLinuxCi": "Check the pushed revision workflow; no current full-suite-green claim."
 }

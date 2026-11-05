@@ -185,6 +185,20 @@ a rename upstream is one file. `packages/harness-port/seam-manifest.json` lists 
 contact point and is the single source that the port's exports, the startup probe, the
 lint allow-list, the contract tests and the method allow-list all derive from.
 
+The optional patient-matching bundle registers the fixed authenticated Remote method
+`patientMatching/status` through `harness-port`'s `registerPatientMatchingStatus`.
+It accepts no wire arguments and reads the actual global tool definitions plus the
+registered `patient-matching` skill without executing a tool or requesting a model.
+Its manifest-order inventory is generated from the bundle's `TOOL_MANIFEST` into
+`packages/domain/src/patientMatchingTools.json`; a stale-data test prevents a separate
+host-side tool list. When the bundle is disabled, this service is absent. Runtime
+activation compares this proof with the mounted immutable release and runtime epoch;
+the status alone does not authorize patient data or establish clinical validity.
+The companion fixed Remote method `patientMatching/cancel` accepts only `taskId` and
+invokes the bundle-owned abort callback for that task; the control plane verifies task
+ownership before calling. Caller cancellation, an accepted `match_job` cancellation and
+this Remote share the native execution signal, collection and awaited disposal path.
+
 `packages/socket` (`@evimed/dsh-socket`) is the composition layer: the `evimed-universal`
 preset and its plugins are what turn a bare kernel into the EviMed runtime. A bare kernel
 started from a binary has no tool chain at all — the preset, the capability manifests and

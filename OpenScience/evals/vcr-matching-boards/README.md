@@ -103,6 +103,134 @@ answers stay under `--work`. Resamples default to 10,000 with a fixed seed; inte
   GPT-4 must reproduce at 886/1015 or the scorer stops.
 - Completion: patients with a record and finished, pairs judged and unjudged, failures by code, tokens and cost when reported.
 
+## Native plugin saved-result export (M5)
+
+`native_projection.mjs` is a pure adapter from the new core's actual saved matching-result JSONL to this directory's existing
+ranking input. It calls `metricInputFromResults` to validate the core invariants and supplied metric profile. It never calls a
+model, reads a label/qrels file, reruns eligibility, derives a score from eligibility, reranks, or removes unjudged positions.
+The official scorers above remain unchanged. `dev_job.mjs` and `e2e_e.mjs` use the historical judge path; their outputs are
+not evidence that the native plugin ran. Do not run them and report their scores as native-plugin scores.
+
+Only original English `sigir` with `trialgpt-judged-pair-ranking`, or `trec2021`, `trec2022`, `trec2023` with `trec-full-corpus`,
+are accepted. Translated board names, non-English declarations and the translated cases' `translatedFrom` marker are refused.
+For full TREC, freeze each topic's actual retrieved candidate list, including candidates absent from qrels; do not substitute
+the judged-pair Board A pools. The full-corpus provenance belongs to the frozen corpus manifest and metric profile.
+
+Inputs are one native core result per JSONL line, the complete requested `cases.jsonl`, and an operator-supplied profile JSON:
+
+```json
+{
+  "schemaVersion": "1",
+  "board": "sigir",
+  "language": "en",
+  "casesDigest": "sha256:<canonical cases digest>",
+  "plugin": {
+    "generation": "<exact saved pluginGeneration>",
+    "artifactDigest": "sha256:<installed bundle digest from its release receipt>",
+    "profileDigest": "sha256:<exact saved profileDigest>"
+  },
+  "metricProfile": {
+    "id": "trialgpt-judged-pair-ranking",
+    "revision": "<frozen profile revision>",
+    "scorer": { "id": "trialgpt-official", "version": "<pinned scorer version>", "digest": "sha256:<reviewed scorer digest>" },
+    "inputManifestDigest": "sha256:<frozen input manifest digest>",
+    "corpusDigest": "sha256:<frozen corpus digest>",
+    "aggregation": "official-profile",
+    "mappingPolicyDigest": "sha256:<native mapping digest>"
+  },
+  "bindings": [{
+    "patientId": "sigir-<topic>",
+    "scope": { "tenantId": "<saved tenant>", "projectId": "<saved project>", "actorId": "<saved actor>", "conversationId": "<saved conversation>" },
+    "subjectKey": "<saved subject key>", "resultId": "<saved result id>", "revision": "<saved revision>",
+    "pairs": [{ "trialId": "<saved trial id>", "registryId": "NCT00000001" }]
+  }]
+}
+```
+
+Replace every placeholder with the frozen campaign's actual identity. Every requested topic needs one binding and every
+candidate one explicit trial-to-NCT mapping. Optional `armId` is matched exactly; two arms cannot silently collapse to one
+NCT. A result can contain several subjects if each is explicitly bound; every saved pair must be accounted for exactly once.
+The adapter rejects a different scope, subject, revision, selected pair set, plugin generation or profile digest. It does not
+choose a latest revision. Declare a topic with no saved result using `resultId: null, revision: null`; keep its scope, subject
+and entire requested candidate mapping. A non-null identity whose result is absent is an input error.
+
+Use the normal core metric-profile fields for TREC, with `id: "trec-full-corpus"` and its frozen aggregation/scorer identities.
+The upstream scorer/input-manifest/corpus and installed-bundle digests are supplied provenance, not independently verified by
+this adapter. The exporter verifies the exact saved generation/profile and cases/mapping identities and records both the
+canonical saved-result digest and original input-file byte digests. Preserve the source manifests and release receipt with it.
+
+To seal the cases and mapping fields once, before scoring with labels still separate (commands run from repository root):
+
+```sh
+node --input-type=module - /private/sigir-inputs/A-sigir/cases.jsonl /private/native-profile.draft.json /private/native-profile.json <<'JS'
+import fs from 'node:fs';
+import { profileIdentity } from './OpenScience/packages/patient-matching-core/index.mjs';
+import { nativeMappingDigest } from './OpenScience/evals/vcr-matching-boards/native_projection.mjs';
+const [casesFile, draftFile, frozenFile] = process.argv.slice(2);
+const cases = fs.readFileSync(casesFile, 'utf8').split('\n').filter(s => s.trim()).map(s => JSON.parse(s));
+const profile = JSON.parse(fs.readFileSync(draftFile, 'utf8'));
+profile.casesDigest = profileIdentity(cases);
+profile.metricProfile.mappingPolicyDigest = nativeMappingDigest(profile);
+fs.writeFileSync(frozenFile, JSON.stringify(profile, null, 2) + '\n', { flag: 'wx' });
+JS
+node OpenScience/evals/vcr-matching-boards/native_projection.mjs \
+  --cases /private/sigir-inputs/A-sigir/cases.jsonl --results /private/native-saved.jsonl \
+  --profile /private/native-profile.json --out /private/sigir-native-export
+```
+
+The output directory must be new. It contains `judgments.jsonl` and `receipt.json`. Each native saved row, including failed,
+unsupported, pending and stale rows, keeps its position in `finalOrder`. `fit` copies only an existing current recommendation
+priority; `confidence` stays null because the core has no confidence field. A current `verdict` copies the native eligibility
+enum without reinterpretation; a non-current verdict is null, with its historical eligibility/state retained under `native`.
+Unfinished rows also appear in `failed` with `native_<state>`. These codes describe saved work states, not fabricated provider
+error details. No usage is invented; retain the originating runtime usage receipt separately.
+
+For English SIGIR, use the unchanged converter and official scorer (the prepared board directory must hold the same complete
+case list that was frozen in the profile):
+
+```sh
+python3 -I -B OpenScience/evals/vcr-matching-boards/to_official.py \
+  --cases /private/sigir-inputs/A-sigir/cases.jsonl --judgments /private/sigir-native-export/judgments.jsonl \
+  --out /private/sigir-converted
+python3 -I -B OpenScience/evals/vcr-matching-boards/score.py a \
+  --boards /private/sigir-inputs --tg2 /private/TrialGPT2 --tg1 /private/TrialGPT1 \
+  --work /private/sigir-native-score-work --out /private/sigir-native-score \
+  --python /private/venv/bin/python --judgments sigir=/private/sigir-native-export/judgments.jsonl
+```
+
+For full TREC, export each year's complete frozen topic list separately, then use the existing per-year scorer directly:
+
+```sh
+python3 -I -B OpenScience/evals/vcr-matching-boards/score_e.py end2end \
+  --qrels-dir /private/official-qrels \
+  --judgments 2021=/private/trec2021-native-export/judgments.jsonl \
+    2022=/private/trec2022-native-export/judgments.jsonl 2023=/private/trec2023-native-export/judgments.jsonl \
+  --out /private/trec-native-score --trec-eval /private/trec_eval
+```
+
+All requested topics are emitted, including those with no saved result. SIGIR's existing converter supplies the entire
+candidate input order for a missing result, so that topic remains in the official denominator with an explicitly unjudged
+fallback; it is not necessarily a zero score. Full TREC receives an empty ranking for a missing result, which scores zero
+on scorable topics. `score_e.py` still skips topics absent from its official qrels. Its existing judged-condensed columns
+remain secondary; they never replace the uncondensed saved order. Retain the export receipt's complete requested-topic and
+pair counts beside the scorer's actual topic denominator.
+
+Legacy completion fields are not native completion measures: `to_official.py` counts every ranking entry as judged, including
+saved unfinished positions, while `score_e.py` uses non-null `fit`, which can also omit a completed decision whose priority
+was unset. The adapter receipt is authoritative for native current/failed/pending/unsupported/stale/missing counts and original
+source/result identities. Use the all-topic metric as the comparison; a finished-only subset is a separate diagnostic.
+
+The adapter tests use the published one-child synthetic clinical saved result and revalidated synthetic ordering/state
+variants. They exercise the existing Python converter and full-TREC scorer's missing-topic denominator using synthetic qrels
+inside the scorer test only. They make no provider calls or downloads:
+
+```sh
+node --test --experimental-test-coverage OpenScience/evals/vcr-matching-boards/native_projection.test.mjs
+```
+
+This establishes export plumbing readiness only. No full English SIGIR or full-corpus TREC native-plugin campaign has been
+run by this change, and no performance improvement or clinical-validation result is implied.
+
 ## What the numbers can and cannot be compared with
 
 - TrialGPT 2.0 scored every judged pair of the qrels pools. TrialGPT 1.0's reported 0.7275 and 0.6688 are on the judged pairs

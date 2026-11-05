@@ -79,7 +79,7 @@ export function validateTrialProfile(profile) {
   array(profile.criteria, 'trialProfile.criteria', (criterion, path) => {
     object(criterion, path)
     identifier(criterion.criterionId, `${path}.criterionId`)
-    oneOf(criterion.kind, ['inclusion', 'exclusion'], `${path}.kind`)
+    oneOf(criterion.kind, ['inclusion', 'exclusion', 'unclassified'], `${path}.kind`)
     text(criterion.text, `${path}.text`)
     span(criterion.span, `${path}.span`)
   })
@@ -95,7 +95,7 @@ export function validateTrialProfile(profile) {
   unique(profile.arms, 'trialProfile.arms', (arm) => arm.armId)
   if (profile.logic !== undefined) {
     const visited = new Set()
-    function node(value, path, depth = 0) {
+    const node = function(value, path, depth = 0) {
       check(depth < 64, path, 'criterion graph too deep')
       object(value, path)
       check(!visited.has(value), path, 'cyclic criterion graph')
@@ -119,7 +119,9 @@ export function validateEvidenceBundle(bundle) {
   identifier(bundle.bundleId, 'evidenceBundle.bundleId')
   validateSourceRefs(bundle.sources, 'evidenceBundle.sources')
   const sources = new Map(bundle.sources.map((source) => [source.sourceId, sourceIdentity(source)]))
-  for (const [collection, kinds] of [['patientPassages', ['patient']], ['knowledgePassages', ['knowledge', 'protocol', 'registry']]]) {
+  /** @type {Array<[string, string[]]>} */
+  const collections = [['patientPassages', ['patient']], ['knowledgePassages', ['knowledge', 'protocol', 'registry']]]
+  for (const [collection, kinds] of collections) {
     array(bundle[collection], `evidenceBundle.${collection}`, (passage, path) => {
       object(passage, path)
       identifier(passage.evidenceId, `${path}.evidenceId`)
@@ -229,7 +231,9 @@ export function validateCriterionMapping(criteria, expectedIds, { allowPartial =
   return criteria
 }
 
-/** Clinical labels arrive from the model. Code checks their shape and support identities only. */
+/** Clinical labels arrive from the model. Code checks their shape and support identities only.
+ * @param {any} decision @param {{task?:any,trialProfile?:any,evidenceBundle?:any}} [options]
+ */
 export function validatePairDecision(decision, { task, trialProfile, evidenceBundle } = {}) {
   scoped(decision, 'decision')
   identifier(decision.decisionId, 'decision.decisionId')
@@ -258,7 +262,11 @@ export function validatePairDecision(decision, { task, trialProfile, evidenceBun
   if (decision.state === 'complete') check(decision.sourceRefs.length > 0, 'decision.sourceRefs', 'completed decision requires source identity')
   digest(decision.profileDigest, 'decision.profileDigest')
   object(decision.producer, 'decision.producer', ['kind', 'modelProfileDigest', 'executionId'])
-  check(decision.producer.kind === 'model', 'decision.producer.kind', 'clinical judgment requires model execution')
+  oneOf(decision.producer.kind, ['model', 'runtime'], 'decision.producer.kind')
+  if (decision.producer.kind === 'runtime') {
+    object(decision, 'decision', ['schemaVersion','decisionId','revision','scope','subjectKey','trialId','armId','state','clinicalEligibility','recommendation','criteria','sourceRefs','profileDigest','producer','unresolvedFacts','assumptions','evidenceBundleId'])
+    check(decision.state !== 'complete' && decision.clinicalEligibility === 'not-assessed' && priority === null && decision.recommendation.rationale === '' && decision.criteria.length === 0 && decision.unresolvedFacts?.length === 0 && decision.assumptions?.length === 0, 'decision.producer', 'runtime records cannot carry clinical judgments or facts')
+  }
   digest(decision.producer.modelProfileDigest, 'decision.producer.modelProfileDigest')
   identifier(decision.producer.executionId, 'decision.producer.executionId')
   strings(decision.unresolvedFacts, 'decision.unresolvedFacts')
@@ -281,7 +289,7 @@ export function validatePairDecision(decision, { task, trialProfile, evidenceBun
       criteria = criteria.filter((criterion) => arm.criterionIds.includes(criterion.criterionId))
     }
     validateCriterionMapping(decision.criteria, criteria.map((criterion) => criterion.criterionId), { allowPartial: decision.state !== 'complete' })
-    for (const criterion of decision.criteria) check(criteria.find((item) => item.criterionId === criterion.criterionId)?.kind === criterion.kind, 'decision.criteria.kind', 'criterion kind differs from source profile', 'invalid_id_mapping')
+    for (const criterion of decision.criteria) check(['unclassified', criterion.kind].includes(criteria.find((item) => item.criterionId === criterion.criterionId)?.kind), 'decision.criteria.kind', 'criterion kind differs from source profile', 'invalid_id_mapping')
   }
   if (evidenceBundle) {
     validateEvidenceBundle(evidenceBundle)
@@ -289,6 +297,11 @@ export function validatePairDecision(decision, { task, trialProfile, evidenceBun
     check(decision.evidenceBundleId === evidenceBundle.bundleId, 'decision.evidenceBundleId', 'evidence bundle differs', 'invalid_id_mapping')
     if (decision.state === 'complete') for (const source of evidenceBundle.sources) {
       check(boundSources.get(source.sourceId) === sourceIdentity(source), 'decision.sourceRefs', 'evidence context source is not bound to decision', 'source_mismatch')
+    }
+    if (decision.criteria.some(criterion => criterion.basis === 'computed')) {
+      const computations = evidenceBundle.computations ?? []
+      array(computations, 'evidenceBundle.computations')
+      check(computations.some(receipt => { validateComputationReceipt(receipt); assertScope(decision.scope, receipt.scope); return receipt.state === 'complete' }), 'decision.criteria.basis', 'computed judgment requires a preserved complete computation', 'missing_computation')
     }
     const evidence = new Map([...evidenceBundle.patientPassages, ...evidenceBundle.knowledgePassages].map((passage) => [passage.evidenceId, passage]))
     for (const criterion of decision.criteria) for (const id of criterion.evidenceIds) {

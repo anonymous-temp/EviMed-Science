@@ -190,7 +190,7 @@ test("the method allow-list is derived from the seam manifest, and 0.1.1's dotte
   // on the proxy as well), `remoteAccess/follow` (open there: the page's own
   // access snapshot) and `terminal/attach` in place of `follow`, `resize` and
   // `write`; the adapter calls none of them.
-  assert.equal(ALLOWED_WIRE_METHODS.size + DENIED_WIRE_METHODS.size, 151);
+  assert.equal(ALLOWED_WIRE_METHODS.size + DENIED_WIRE_METHODS.size, 153);
   for (const method of ALLOWED_WIRE_METHODS) {
     assert.ok(!DENIED_WIRE_METHODS.has(method), `${method} is both allowed and denied`);
   }

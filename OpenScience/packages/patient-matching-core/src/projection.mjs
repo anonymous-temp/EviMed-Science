@@ -126,7 +126,9 @@ export function projectMatchingResult({ task, resultId, revision, decisions, cur
   })
 }
 
-/** Read a saved artifact without rerunning clinical judgment or changing its saved order. */
+/** Read a saved artifact without rerunning clinical judgment or changing its saved order.
+ * @param {any} result @param {{scope?:any}} [options]
+ */
 export function validateMatchingResult(result, { scope } = {}) {
   object(result, 'result')
   check(result.schemaVersion === '1' && result.projectionVersion === PROJECTION_VERSION, 'result', 'unsupported saved projection', 'unsupported_schema')
@@ -189,7 +191,11 @@ export function validateMatchingResult(result, { scope } = {}) {
       continue
     }
     // A stale row preserves a completed historical decision. Other states keep their actual work state.
-    validatePairDecision({ ...row, schemaVersion: '1', scope: result.scope, revision: row.decisionRevision, state: row.state === 'stale' ? 'complete' : row.state })
+    validatePairDecision({ schemaVersion: '1', scope: result.scope, decisionId: row.decisionId, revision: row.decisionRevision,
+      subjectKey: row.subjectKey, trialId: row.trialId, ...(row.armId === undefined ? {} : { armId: row.armId }),
+      state: row.state === 'stale' ? 'complete' : row.state, clinicalEligibility: row.clinicalEligibility, recommendation: row.recommendation,
+      criteria: row.criteria, sourceRefs: row.sourceRefs, profileDigest: row.profileDigest, producer: row.producer,
+      evidenceBundleId: row.evidenceBundleId, unresolvedFacts: row.unresolvedFacts, assumptions: row.assumptions })
     const expectedReasons = refreshReasonsFor(row, result)
     check(row.staleReasons.length === expectedReasons.length, 'result.rows.staleReasons', 'refresh reasons differ from frozen/current source context', 'source_mismatch')
     for (const expected of expectedReasons) check(row.staleReasons.some((reason) => reason.reason === expected.reason && reason.sourceId === expected.sourceId), 'result.rows.staleReasons', 'missing source/profile refresh reason', 'source_mismatch')

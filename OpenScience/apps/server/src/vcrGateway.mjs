@@ -799,9 +799,9 @@ function criteriaOfProtocolText(text, index, issues) {
   const clauses = segmentCriteria(text);
   if (!clauses.length) return refuse("protocolText 里没有读到条件。");
   return {
-    candidates: clauses.map((clause) => ({ kind: clause.kind === "exclusion" ? "exclusion" : "inclusion", sourceText: `${clause.lead ? `${clause.lead} ` : ""}${clause.text}`.replace(/\s*[\r\n]+\s*/gu, " "),
-      sourceLocator: { start: clause.start, end: clause.end } })),
-    clauses: { inclusion: clauses.filter((clause) => clause.kind === "inclusion").length + clauses.filter((clause) => clause.kind === "unsectioned").length,
+    candidates: clauses.map((clause) => ({ kind: clause.kind === 'unsectioned' ? 'unclassified' : clause.kind, sourceText: `${clause.lead ? `${clause.lead} ` : ""}${clause.text}`.replace(/\s*[\r\n]+\s*/gu, " "),
+      sourceLocator: { start: clause.start, end: clause.end,sectionKind:clause.kind } })),
+    clauses: { inclusion: clauses.filter((clause) => clause.kind === "inclusion").length,
       exclusion: clauses.filter((clause) => clause.kind === "exclusion").length, noSection: clauses.filter((clause) => clause.kind === "unsectioned").length },
   };
 }
@@ -838,6 +838,7 @@ async function checkedCriteria(deps, rows, issues, what) {
     if (what === "protocol" || Array.isArray(row.criteria)) {
       const rest = Object.fromEntries(Object.entries(row).filter(([key]) => key !== "criteria" && key !== "protocolText"));
       versionRow = { ...versionRow, ...rest };
+      if(what==='protocol'&&typeof row.protocolText==='string')versionRow.usdm={...object(versionRow.usdm),originalEligibilityText:row.protocolText};
     }
     for (const [at, candidate] of candidates.entries()) {
       const nested = what === "protocol" || Array.isArray(row.criteria);
@@ -872,7 +873,7 @@ function checkedCriterion(deps, candidate, index, where, issues) {
   const item = new Item({ row: object(candidate), index, issues, study: deps.study, store: deps.store });
   item.prefix = where;
   if (!item.only(CRITERION_FIELDS)) return null;
-  const kind = item.choice("kind", ["inclusion", "exclusion"], { required: true });
+  const kind = item.choice("kind", ["inclusion", "exclusion",'unclassified'], { required: true });
   const criterionType = item.choice("criterionType", VCR_CRITERION_TYPES, { fallback: "other", words: vcrWordList("criterion", "criterionType") });
   // The words are what a model judges, so a criterion always has them; the grammar is what a table is screened by, so it may be left out.
   const written = item.str("sourceText", { max: CLAUSE_TEXT_MAX, preserve: true, required: true });

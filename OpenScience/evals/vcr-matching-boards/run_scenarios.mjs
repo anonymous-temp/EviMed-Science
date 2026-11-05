@@ -422,7 +422,7 @@ export async function runTurn({ conn, sessionId, spec, index, env, previous, rea
     const answer = await conn.call('POST', '/api/files/upload', { root: 'workspace', path: `inputs/${file.name}`, data: bytes.toString('base64'), encoding: 'base64' });
     uploads.push({ name: file.name, sha256: hash(bytes), sourceId: answer?.source?.id ?? null, vcrInput: answer?.vcrInput ?? null, vcrInputWarning: answer?.vcrInputWarning ?? null });
   }
-  const run = await conn.call('POST', '/api/agent-runs/dispatch', { sessionId, dispatchId: `scn-${randomUUID()}`, text, automated: conn.attended === false, line: 'answer' });
+  const run = await conn.call('POST', '/api/agent-runs/dispatch', { sessionId, dispatchId: `scn-${randomUUID()}`, text, automated: true, line: 'answer' });
   let memory = { lastChangeAt: Date.now(), signature: '' };
   let status = 'timed_out', jobs = /** @type {any[]} */ ([]), runs = /** @type {any[]} */ ([]);
   while (Date.now() - started < timeoutMs) {

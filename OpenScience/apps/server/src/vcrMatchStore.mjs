@@ -176,7 +176,7 @@ export class VcrMatchStore extends VcrStoreBase {
              (id, study_id, protocol_version_id, user_id, ordinal, kind, criterion_type,
               requirement, applicability, source_text, source_locator, evidence_needed, review_state)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10, $11::jsonb, $12::jsonb, $13) RETURNING *`,
-          [vcrId("criterion"), studyId, id, userId, index + 1, criterion?.kind === "exclusion" ? "exclusion" : "inclusion",
+          [vcrId("criterion"), studyId, id, userId, index + 1, criterion?.kind === "unclassified" ? 'unclassified' : criterion?.kind === "exclusion" ? "exclusion" : "inclusion",
             criterion?.criterionType ?? "other", JSON.stringify(criterion?.requirement ?? {}),
             criterion?.applicability ? JSON.stringify(criterion.applicability) : null, String(criterion?.sourceText ?? ""),
             JSON.stringify(criterion?.sourceLocator ?? {}), JSON.stringify(criterion?.evidenceNeeded ?? []),
@@ -220,7 +220,7 @@ export class VcrMatchStore extends VcrStoreBase {
              review_state = EXCLUDED.review_state
            RETURNING *`,
           [criterion?.id ?? vcrId("criterion"), studyId, protocolVersionId, userId, ordinal,
-            criterion?.kind === "exclusion" ? "exclusion" : "inclusion", criterion?.criterionType ?? "other",
+            criterion?.kind === "unclassified" ? 'unclassified' : criterion?.kind === "exclusion" ? "exclusion" : "inclusion", criterion?.criterionType ?? "other",
             JSON.stringify(criterion?.requirement ?? {}), criterion?.applicability ? JSON.stringify(criterion.applicability) : null,
             String(criterion?.sourceText ?? ""), JSON.stringify(criterion?.sourceLocator ?? {}),
             JSON.stringify(criterion?.evidenceNeeded ?? []), criterion?.reviewState ?? "ai_set"],
@@ -263,9 +263,9 @@ export class VcrMatchStore extends VcrStoreBase {
 
   /** @param {string} studyId @param {string|null} [id] */
   async protocols(studyId, id = null) {
-    return (await this.rows(`SELECT id,version,title,source_ref FROM ${VCR_SCHEMA}.protocol_versions
+    return (await this.rows(`SELECT id,version,title,source_ref,usdm FROM ${VCR_SCHEMA}.protocol_versions
       WHERE study_id=$1 AND ($2::text IS NULL OR id=$2) ORDER BY version DESC LIMIT 200`, [studyId,id]))
-      .map(row => ({ id: row.id, version: Number(row.version), title: row.title ?? '', sourceRef: row.source_ref ?? null }));
+      .map(row => ({ id: row.id, version: Number(row.version), title: row.title ?? '', sourceRef: row.source_ref ?? null,...(typeof row.usdm?.originalEligibilityText==='string'?{originalEligibilityText:row.usdm.originalEligibilityText}:{}) }));
   }
 
   /** The newest protocol version of a study. @param {string} studyId */

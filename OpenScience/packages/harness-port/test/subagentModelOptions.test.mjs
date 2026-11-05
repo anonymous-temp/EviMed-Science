@@ -11,7 +11,7 @@ test('native activation carries explicit model options instead of silently inher
     captured = input;
     return { childId: input.childId, messageId: 'm1', result: Promise.resolve({ stopReason: 'completed', structured: {} }), async dispose() {} };
   } } };
-  const run = await startSubagent(ctx, { capability: 'patient-matching', label: 'Matching', prompt: 'Read the supplied case.', tools: [], persona: '', outputSchema: { type: 'object', properties: {} }, maxDepth: 1, agentOptions: options }, parent, new AbortController().signal);
+  const run = await startSubagent(ctx, { capability: 'patient-matching', label: 'Matching', prompt: 'Read the supplied case.', tools: [], persona: '', outputSchema: { type: 'object', properties: {} }, maxDepth: 1, agentOptions: options }, parent, new globalThis.AbortController().signal);
   assert.deepEqual(captured.request.agentOptions, options);
   assert.equal(captured.request.parent, parent);
   assert.notEqual(captured.request.agentOptions, options);

@@ -4,7 +4,7 @@ import { priceUsage, priceListFor, REFERENCE_PRICE_LIST } from '../index.mjs'
 
 // Verified against https://api-docs.deepseek.com/zh-cn/quick_start/pricing/ on 2026-09-10.
 test('the versioned model reference prices match the current CNY table', () => {
-  assert.equal(REFERENCE_PRICE_LIST.version, 'evimed-reference-2026-11-04')
+  assert.equal(REFERENCE_PRICE_LIST.version, 'evimed-reference-2026-11-05')
   /** @type {[string, number, number][]} */
   const cases = [['deepseek-flash', 10, 5], ['deepseek-v4-flash', 10, 5], ['deepseek-v4-flash-vision-exp', 10, 5], ['deepseek-v4-pro', 36, 18]]
   for (const [model, peak, off] of cases) {

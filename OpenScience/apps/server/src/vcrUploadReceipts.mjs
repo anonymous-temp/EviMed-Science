@@ -174,6 +174,12 @@ export function createVcrUploadReceipts({ documents, sources, write, clone = nul
       }
       return gone;
     },
+    async patientHandle(origin,sourceId) {
+      if(!/^upl_[a-f0-9]{40}$/.test(sourceId))return null;
+      const row=await findReceipt(origin.userId,sourceId);
+      return patientReceipt(row)&&row.projectId===origin.projectId&&(row.payload.sessionId==null||row.payload.sessionId===origin.rootSessionId)
+        &&row.payload.connector?.type==='upload'&&row.payload.paths?.length===1?receiptHandle(row):null;
+    },
     async readPatientOriginal(origin, { sourceId, generation, sha256 }) {
       if (!resolveProject || !/^upl_[a-f0-9]{40}$/.test(sourceId) || !Number.isSafeInteger(generation)
         || typeof sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(sha256)) return null;

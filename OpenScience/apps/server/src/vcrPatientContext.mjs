@@ -115,6 +115,9 @@ export function createPatientDocumentRead({ store, dataStore, dataPlane, jobs, r
 
 export function createVcrPatientContext({ store, dataStore, dataPlane, documents, transcript, isHumanMessage, sources = null, uploadReceipts = null, rejudge = null, subjectKnown = null, documentJobs = null }) {
   const intake = async (study, input, origin) => {
+    if(input?.sourceId?.startsWith('upl_')&&input.generation==null&&input.sha256==null&&uploadReceipts?.patientHandle){
+      const handle=await uploadReceipts.patientHandle(origin,input.sourceId);if(!handle)throw invalid();input={...input,...handle};
+    }
     if (!dataPlane || !origin || study?.userId !== origin.userId || study.projectId !== origin.projectId
       || !input || typeof input !== 'object' || Array.isArray(input)
       || Object.keys(input).some(key => !['messageSeq','sourceId','generation','sha256','subjectKey'].includes(key))
@@ -205,6 +208,37 @@ export function createVcrPatientContext({ store, dataStore, dataPlane, documents
       ...(uploads.length > 1 ? {documents:uploads.length} : {}),...(upload.file.detail.extraction?.reader ? {readBy:upload.file.detail.extraction.reader} : {}),
       ...(rejudging ? {rejudging:{jobIds:rejudging.jobs.map(job => job.jobId),statement:rejudging.statement}} : {}),
       basis:provenance.kind,valueSource:'extracted'};
+  };
+  /** Resolve original user material without creating a patient. Protocol intake uses this
+   * same authenticated conversation/upload boundary, before preserving its own version. */
+  intake.original = async (origin,input) => {
+    if(!origin||!input||Object.keys(input).some(key=>!['messageSeq','sourceId','generation','sha256'].includes(key))||input.messageSeq!=null&&input.sourceId!=null)throw invalid();
+    if(input.sourceId?.startsWith('upl_')){
+      let handle=input;
+      if(input.generation==null||input.sha256==null){
+        const selected=await uploadReceipts?.patientHandle?.(origin,input.sourceId);
+        if(!selected)throw invalid();handle={sourceId:input.sourceId,generation:selected.generation,sha256:selected.sha256};
+      }
+      const original=await uploadReceipts?.readPatientOriginal(origin,handle);
+      if(!original||!['txt','md'].includes(original.format))throw new HttpError(409,'vcr_document_needs_text','Preserve a text rendition of this protocol before selecting its original.');
+      return {text:original.bytes.toString('utf8'),provenance:original.provenance};
+    }
+    if(input.sourceId!=null){
+      if(!sources||typeof input.sourceId!=='string'||!ID.test(input.sourceId)||input.generation!=null||input.sha256!=null)throw invalid();
+      const source=await sources.get(origin.userId,input.sourceId);
+      if(source?.userId!==origin.userId||source.projectId!==origin.projectId||source.payload?.connector?.type!=='upload'||source.payload.publication?.current===false||!source.payload.paths?.length
+        ||source.payload.paths.some(item=>item.startsWith(`${VCR_UPLOAD_ORIGINALS_DIR}/`)||sourceOriginOf({connectorType:source.payload.connector.type,path:item})!=='upload'))throw invalid();
+      const capture=await sources.loadCapture(origin.userId,source);
+      if(!capture?.input?.text)throw invalid();
+      return {text:capture.input.text,provenance:{kind:'owned_upload',sourceId:source.id,generation:source.payload.generation,sha256:source.payload.analysis.textSha256}};
+    }
+    if(!Number.isSafeInteger(input.messageSeq)||input.messageSeq<1||input.generation!=null||input.sha256!=null)throw invalid();
+    const page=await transcript(origin,{maxPages:4,beforeSeq:input.messageSeq+1});
+    const message=page?.sessionId===origin.rootSessionId?page.messages.find(item=>item.seq===input.messageSeq&&item.role==='user'&&item.source==='user'):null;
+    if(!message||!await isHumanMessage(origin,message))throw invalid();
+    const text=message.parts.filter(part=>part.type==='text').map(part=>part.text).join('\n');
+    if(!text.trim()||Buffer.byteLength(text)>VCR_PATIENT_CONTEXT_MAX_BYTES)throw invalid();
+    return {text,provenance:{kind:'authenticated_user_message',sessionId:origin.rootSessionId,messageSeq:message.seq,sha256:digest(text)}};
   };
   intake.candidates = async (origin, {beforeSeq=undefined,limit=20,cursor=undefined,knowledgeCursor=undefined} = {}, study = null) => {
     if(beforeSeq!=null && !Number.isSafeInteger(beforeSeq) || !Number.isSafeInteger(limit) || limit<1 || limit>20) throw invalid();

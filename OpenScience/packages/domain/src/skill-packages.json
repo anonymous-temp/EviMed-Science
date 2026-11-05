@@ -1222,11 +1222,14 @@
       "id": "capability/vcr-matching",
       "name": "vcr-matching",
       "origin": "capability",
-      "version": "1.8.3",
+      "version": "1.9.0",
       "source": {"kind":"release"},
-      "digest": "sha256:9a9e86121a146397a7b675f20c8aae1d8ac17a621beadfac74fe4dc511953751",
+      "digest": "sha256:e00a61e9a1c9c087e79b77598484fe7ecd599293c3c660db5a9aa96c6d6f1575",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"dfb070a1d5a9ad024d1ad9b20312e0dac72def8a9269a63f27d33bb2774ff9dd"}],
+      "references": [
+        {"path":"capability.yaml","sha256":"7f17c564817ab9d88f34b81ac2efc3aeada782a1bf61c025280a5d6487527f0c"},
+        {"path":"references/legacy-matching.md","sha256":"e20816938dc79be93e9c669c9ff91dd85786664b00bb5e8fe6bd48a0488bc17e"}
+      ],
       "dependencies": [
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"dataset_semantics","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -1243,7 +1246,7 @@
         {
           "name": "vcr-matching-assessment",
           "kind": "deliverable",
-          "summary": "Judge eligibility in either direction from original case records and the trial's own eligibility text: a whole-pair judgment for every pair, clause by clause for the best-ranked, with sentence evidence and a visible label for what the record does not say. No recruitment operations.",
+          "summary": "Use the installed patient-matching plugin for source-backed eligibility assessment in either direction, native evidence and calculation, saved results and reports. Clinical eligibility and recommendation remain separate; missing evidence remains explicit.",
           "summaryZh": "把病例或患者队列与试验条件逐条判断，保留病历依据，没写的条款标明怎么判的。",
           "accepts": ["studyId","protocolVersionId","subjectKeys","direction","asOf"],
           "produces": ["matching-assessment.md","revision-notes.md"],

@@ -280,11 +280,14 @@ test("the workflow that gates every PR runs the gates ci:web runs", async () => 
     typecheck: /pnpm --filter @ai4s\/web typecheck\b/,
     "build:web": /pnpm --filter @ai4s\/web build\b/,
     "audit:capabilities": /pnpm check:capabilities\b/,
-    // `pnpm test:packages`, which CI runs, is exactly these four.
+    // `pnpm test:packages` is the shared package gate, including optional matching packages.
     "test:domain": /pnpm test:packages\b/,
     "test:port": /pnpm test:packages\b/,
     "test:socket": /pnpm test:packages\b/,
     "test:contracts": /pnpm test:packages\b/,
+    "test:patient-matching-core": /pnpm test:packages\b/,
+    "test:patient-matching-plugin": /pnpm test:packages\b/,
+    "test:patient-matching-worker": /pnpm test:packages\b/,
     // `pnpm lint`, which CI now runs, chains desktop + server + domain + port
     // + socket. Verified against package.json rather than assumed.
     "lint:server": /pnpm lint\b/,

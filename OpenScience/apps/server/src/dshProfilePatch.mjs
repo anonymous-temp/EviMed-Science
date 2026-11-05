@@ -92,6 +92,7 @@ export const HOSTED_PERMISSION_PRESET_DESCRIPTION = "只能读写本项目的工
  * @property {string[]} [disabledPlatformSkills]
  * @property {string} [extensionProjectionFile]
  * @property {string} [extensionGatewayUrl]
+ * @property {{entrypoint:string,endpoint:string,tokenFile:string}} [patientMatching]
  * @property {string} capsuleGatewayUrl
  * @property {string} [revisionGatewayUrl]
  * @property {{revision:number,enabled:boolean,settings:{timeoutMs:number}}} [pluginConfig]
@@ -341,8 +342,19 @@ export function renderProfilePatch(input) {
     ...presetRows(input),
     ...hostedBrowserPanelRows(input),
     ...clientBundleRows(input),
+    ...patientMatchingRows(input),
   ];
   return `${rows.join("\n")}\n`;
+}
+
+/** First-party native code is a verified read-only mount selected before boot. No package-provided patch is evaluated.
+ * @param {ProfilePatchInput} input @returns {string[]} */
+function patientMatchingRows(input) {
+  if (!input.patientMatching) return [];
+  const { entrypoint, endpoint, tokenFile } = input.patientMatching;
+  if (entrypoint !== '/opt/evimed/patient-matching/package/index.mjs' || !endpoint || !tokenFile) throw new TypeError('Invalid patient matching native projection.');
+  return ['- insert:', '    - id: evimed-patient-matching', `      name: ${yamlScalar(entrypoint)}`, '      config:', '        enabled: true',
+    `        endpoint: ${yamlScalar(endpoint)}`, `        tokenFile: ${yamlScalar(tokenFile)}`];
 }
 
 /**

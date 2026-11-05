@@ -40,6 +40,8 @@ import { canonicalJson } from "@evimed/domain";
 import { CITE_VERSION } from "./pinnedVersions.mjs";
 import { SEARCH_TOPICS_RUNTIME_DIR, SEARCH_TOPICS_TOKEN_FILE, SEARCH_TOPICS_NATIVE_PATH, SEARCH_TOPICS_MAX_BYTES,
   searchTopicsSource, searchTopicsImageVersion, projectSearchTopics, supportsSearchTopicRecommendations } from './searchTopicsRuntime.mjs';
+import { inspectPatientMatchingWorker } from "./patientMatchingLifecycleWorkerIdentity.mjs";
+import { patientMatchingGenerationRoot, validatePatientMatchingReference, verifyPatientMatchingGeneration, PATIENT_MATCHING_RUNTIME_ROOT, PATIENT_MATCHING_TOOLS } from "./patientMatchingLifecycleArtifacts.mjs";
 import { extensionGenerationRoot, validateExtensionGenerationReference, verifyExtensionGeneration } from "./extensionGenerationService.mjs";
 import { PERSONAL_SKILLS_RUNTIME_DIR, personalGenerationRoot, samePersonalPackages, validatePersonalGenerationReference, verifyPersonalSkillGeneration } from "./personalSkillGenerationService.mjs";
 // Knowledge-base search reaches the MCP server by this one variable (2026-09-20).
@@ -2269,6 +2271,7 @@ export function dshProfileInput(config, project, plan, model, workloadTokenPath)
     capsuleMethodsDir: capsuleMethodsRuntimePath(plan),
     extensionProjectionFile: plan.extensionGeneration?.reference ? "/opt/evimed/extensions/projection.json" : "",
     extensionGatewayUrl: plan.extensionGeneration?.reference ? extensionGatewayEndpointUrl(config) : "",
+    ...(plan.patientMatchingGeneration ? { patientMatching: { entrypoint: `${PATIENT_MATCHING_RUNTIME_ROOT}/package/index.mjs`, endpoint: new URL("/internal/patient-matching/v1/port", plan.modelGatewayUrl ?? modelGatewayProviderUrl(config)).href, tokenFile: workloadTokenPath } } : {}),
     personalSkillsDir: plan.personalSkillsRuntimeDir ?? PERSONAL_SKILLS_RUNTIME_DIR,
     disabledPlatformSkills: plan.personalSkillGeneration?.platformSkills?.disabled ?? [],
     platformSkillsDir: plan.platformSkillGeneration ? (plan.platformSkillsRuntimeDir ?? PLATFORM_SKILLS_RUNTIME_DIR) : "",
@@ -2664,7 +2667,7 @@ export function pluginUpstreamHealth(value) {
 /** @param {any} config @param {any} project @param {number} port
  * @param {{modelGatewayProfile?:string,contextGeneration?:any,disabledPlatformSkills?:string[],disabledClientBundles?:string[],capsuleGatewayUrl?:string,revisionGatewayUrl?:string,publicSourceGatewayUrl?:string,webSearchGatewayUrl?:string,memoryGatewayUrl?:string,
  *   attendancePublicKey?:string,geoSkills?:boolean,pluginConfig?:any,platformSkillGeneration?:any,personalSkillGeneration?:any,
- *   personalSkillImageId?:string|null,extensionGeneration?:any,extensionImageId?:string|null,installedSearchTopicsVersion?:string}} [options]
+ *   personalSkillImageId?:string|null,extensionGeneration?:any,extensionImageId?:string|null,patientMatchingGeneration?:any,installedSearchTopicsVersion?:string}} [options]
  * `attendancePublicKey` is a public Ed25519 verifier, never a runtime signing key. */
 export function buildRuntimeLaunchPlan(config, project, port, {
   modelGatewayProfile = "",
@@ -2689,6 +2692,7 @@ export function buildRuntimeLaunchPlan(config, project, port, {
   disabledClientBundles = [],
   extensionGeneration = null,
   extensionImageId = null,
+  patientMatchingGeneration = null,
   contextGeneration = null,
   installedSearchTopicsVersion = undefined,
 } = {}) {
@@ -2759,6 +2763,8 @@ export function buildRuntimeLaunchPlan(config, project, port, {
     const capsuleMethodsLive = capsuleMethodsDirectoryPresent(capsuleMethodsDir);
     const capsuleMethodsRuntimeDir = capsuleMethodsRuntimePath({ capsuleMethodCount, capsuleMethodsLive });
     if (sharedPaths && (personalSkillGeneration || extensionGeneration)) throw new HttpError(409, "runtime_context_unverified", "Shared runtimes cannot mount personal extension generations.");
+    if (sharedPaths && patientMatchingGeneration) throw new HttpError(409, "runtime_context_unverified", "Shared runtimes cannot mount matching code.");
+    const matchingReference = patientMatchingGeneration ? validatePatientMatchingReference(project, patientMatchingGeneration.reference) : null;
     const extensionReference = extensionGeneration ? validateExtensionGenerationReference(project, extensionGeneration) : null;
     if (extensionReference && !/^sha256:[a-f0-9]{64}$/.test(String(extensionImageId))) throw new HttpError(400, "extension_contract_invalid", "An immutable extension runtime image is required.");
     if (extensionImageId && personalSkillImageId && extensionImageId !== personalSkillImageId) throw new HttpError(400, "extension_contract_invalid", "Runtime generation images must agree.");
@@ -2849,6 +2855,7 @@ export function buildRuntimeLaunchPlan(config, project, port, {
               `${dockerRuntimeMount(config, capsuleMethodsDir, runtimeCapsuleMethodsDir)},readonly`,
             ]
           : []),
+        ...(matchingReference ? ["--mount", `${dockerRuntimeMount(config, path.join(patientMatchingGenerationRoot(config, matchingReference), "selected"), PATIENT_MATCHING_RUNTIME_ROOT)},readonly`] : []),
         ...(extensionReference ? ["--mount", `${dockerRuntimeMount(config, path.join(extensionGenerationRoot(config, extensionReference), "selected"), "/opt/evimed/extensions")},readonly`] : []),
         ...(platformReference ? ["--mount", `${dockerRuntimeMount(config, path.join(platformSkillGenerationRoot(config, platformReference), "skills"), PLATFORM_SKILLS_RUNTIME_DIR)},readonly`] : []),
         ...(personalReference ? ["--mount", `${dockerRuntimeMount(config, path.join(personalGenerationRoot(config, personalReference), 'skills'), PERSONAL_SKILLS_RUNTIME_DIR)},readonly`] : []),
@@ -3370,7 +3377,7 @@ export function runtimeNetworkRequiresEgressOptIn(mode, internalNetworkName = ""
  *
  * @typedef {object} RuntimeProvider
  * @property {'docker'|'agentbay'} name
- * @property {(project: Record<string, any>, input: { port: number, pluginConfig: any, capsuleMethodsMounted: number, platformSkillGeneration?: any, personalSkillGeneration?: any, extensionGeneration?: any, memoryGatewayUrl?: string, geoSkills?: boolean, modelGatewayProfile?: string, contextGeneration?:any }) => Promise<Record<string, any>>} prepare
+ * @property {(project: Record<string, any>, input: { port: number, pluginConfig: any, capsuleMethodsMounted: number, platformSkillGeneration?: any, personalSkillGeneration?: any, extensionGeneration?: any, patientMatchingGeneration?:any, memoryGatewayUrl?: string, geoSkills?: boolean, modelGatewayProfile?: string, contextGeneration?:any }) => Promise<Record<string, any>>} prepare
  *   the launch plan: `sandboxMode`, `runtimeUrl`, `socketPath`, `proxyWorkspaceDir`, `containerName`, …
  * @property {(project: Record<string, any>, plan: Record<string, any>, options: { budgetScope?: any }) => Promise<Record<string, any>>} bootstrap
  *   writes the profile patch, the credentials and the tokens where the kernel reads them
@@ -3432,8 +3439,8 @@ export class DockerRuntimeProvider {
     if (checked.status !== 0 || checked.stdout.trim() !== imageId) throw new HttpError(503, 'runtime_image_unavailable', 'The pinned personal-skill runtime image is unavailable.');
   }
 
-  /** @param {Record<string, any>} project @param {{ port: number, pluginConfig: any, capsuleMethodsMounted: number, platformSkillGeneration?:any, personalSkillGeneration?:any, extensionGeneration?:any, memoryGatewayUrl?: string, geoSkills?: boolean, modelGatewayProfile?: string, contextGeneration?:any }} input */
-  async prepare(project, { port, pluginConfig, capsuleMethodsMounted, platformSkillGeneration = null, personalSkillGeneration = null, extensionGeneration = null, memoryGatewayUrl = "", geoSkills = false, modelGatewayProfile = "", contextGeneration = null }) {
+  /** @param {Record<string, any>} project @param {{ port: number, pluginConfig: any, capsuleMethodsMounted: number, platformSkillGeneration?:any, personalSkillGeneration?:any, extensionGeneration?:any, patientMatchingGeneration?:any, memoryGatewayUrl?: string, geoSkills?: boolean, modelGatewayProfile?: string, contextGeneration?:any }} input */
+  async prepare(project, { port, pluginConfig, capsuleMethodsMounted, platformSkillGeneration = null, personalSkillGeneration = null, extensionGeneration = null, patientMatchingGeneration = null, memoryGatewayUrl = "", geoSkills = false, modelGatewayProfile = "", contextGeneration = null }) {
     const manager = this.manager;
     if (contextGeneration) contextGeneration = await verifyContextGeneration(this.config, project, contextGeneration.reference);
     // Before the plan, for the same reason as the capsule methods: the
@@ -3445,6 +3452,7 @@ export class DockerRuntimeProvider {
     // an entry that later applies reaches a runtime that is already up. A shared context never mounts one.
     if (!contextGeneration) await manager.ensureLibraryView(project);
     if (extensionGeneration) await manager.prepareGeneration(project, extensionGeneration);
+    if (patientMatchingGeneration) await manager.preparePatientMatchingGeneration(project, patientMatchingGeneration);
     const personal = personalSkillGeneration?.reference ? await verifyPersonalSkillGeneration(this.config, project, personalSkillGeneration.reference,
       personalSkillGeneration.identity.baseRuntimeImageDigest) : null;
     if (personal) await this.assertPersonalImage(personal.identity.baseRuntimeImageDigest);
@@ -3455,12 +3463,13 @@ export class DockerRuntimeProvider {
     }
     const plan = buildRuntimeLaunchPlan(this.config, project, port, { pluginConfig, platformSkillGeneration: platformSkillGeneration?.reference ?? null, personalSkillGeneration: personal?.reference ?? null,
       personalSkillImageId: personal?.identity.baseRuntimeImageDigest ?? null, disabledPlatformSkills: personal?.platformSkills?.disabled ?? [], disabledClientBundles: personal?.platformSkills?.disabledPlugins ?? [], extensionGeneration: extensionGeneration?.reference ?? null,
-      extensionImageId: extensionGeneration?.identity.baseRuntimeImageDigest ?? null, memoryGatewayUrl, geoSkills, modelGatewayProfile, contextGeneration,
+      extensionImageId: extensionGeneration?.identity.baseRuntimeImageDigest ?? null, patientMatchingGeneration, memoryGatewayUrl, geoSkills, modelGatewayProfile, contextGeneration,
       ...(this.config.searchTopicsEnabled === true && manager.runtimeController
         ? { installedSearchTopicsVersion: String((await manager.inspectRuntimeImage())?.searchTopicsVersion ?? '') } : {}) });
     plan.platformSkillGeneration = platformSkillGeneration;
     plan.personalSkillGeneration = personal ? { ...personalSkillGeneration, platformSkills: personal.platformSkills } : personalSkillGeneration;
     plan.extensionGeneration = extensionGeneration;
+    plan.patientMatchingGeneration = patientMatchingGeneration;
     plan.pluginConfig = pluginConfig;
     if (plan.releaseProvenance) await manager.recordUnverifiedRelease(project, plan.releaseProvenance);
     await Promise.all(plan.runtimeDirs.map((dir) => fs.mkdir(dir, { recursive: true, mode: 0o700 })));
@@ -3538,6 +3547,7 @@ export class DockerRuntimeProvider {
         plan.modelGatewayProfile,
         plan.contextGeneration?.reference ?? null,
         String(plan.attendancePublicKey ?? ""),
+        plan.patientMatchingGeneration?.reference ?? null,
       );
       child = new RemoteRuntimeProcess(
         manager.runtimeController,
@@ -3681,6 +3691,8 @@ export class RuntimeManager {
     this.personalSkillOverrides = new Map();
     /** @type {any} Cold selection reauthorizes current account/project/config state in the composition root. */
     this.extensionGenerationResolver = null;
+    this.patientMatchingGenerationResolver = null;
+    this.patientMatchingGenerationOverrides = new Map();
     this.extensionGenerationOverrides = new Map();
     /** Deployment-owned descriptor tuples; no development artifact defaults. */
     this.extensionArtifacts = new Map();
@@ -4591,6 +4603,10 @@ export class RuntimeManager {
     return this.inspectRuntimeImage();
   }
 
+  async inspectPatientMatchingWorker() {
+    return this.runtimeController ? this.runtimeController.inspectPatientMatchingWorker() : inspectPatientMatchingWorker(this.config);
+  }
+
   async inspectRuntimeImage() {
     if (this.runtimeController) return this.runtimeController.inspectRuntimeImage();
     if (this.config.runtimeSandboxMode !== 'docker') return null;
@@ -4924,7 +4940,25 @@ export class RuntimeManager {
       const modelGatewayScope = this.pendingModelGatewayScopes.get(key) ?? null;
       if (this.config.runtimeMode === "kernel") {
         let runtime;
-        try { runtime = await this.startKernel(project, modelGatewayScope, modelGatewayProfile); }
+        const boot = async () => {
+          const candidate = await this.startKernel(project, modelGatewayScope, modelGatewayProfile);
+          this.runtimes.set(key, candidate);
+          try { if (candidate.patientMatchingGeneration) await this.probePatientMatchingGeneration(project, candidate.patientMatchingGeneration); }
+          catch (error) { await this.closeRejectedStart(project, candidate, error); throw error; }
+          return candidate;
+        };
+        try { runtime = await boot(); }
+        catch (error) {
+          // A failed optional native bundle cannot take the ordinary assistant away. Explicit lifecycle applies
+          // own their rollback and do not enter this fallback.
+          const matching = !this.patientMatchingGenerationOverrides.has(key) && this.patientMatchingGenerationResolver
+            ? await this.patientMatchingGenerationResolver(project).catch(() => null) : null;
+          if (!matching) throw error;
+          this.noteStartFinding(project, 'patient_matching_start_failed', error);
+          this.patientMatchingGenerationOverrides.set(key, null);
+          try { runtime = await boot(); }
+          finally { this.patientMatchingGenerationOverrides.delete(key); }
+        }
         finally { if (!runtime) this.startingWorkloads.delete(key); }
         if (attempt) { attempt.runtime = runtime; attempt.generation = typeof runtime.modelGatewayTokenJti === "string" ? runtime.modelGatewayTokenJti : null; }
         created = runtime;
@@ -5145,7 +5179,12 @@ export class RuntimeManager {
     // And whether the project is a 「循证 GEO」 one: the method pack is mounted for it alone (`geoSkillsFor`).
     const geoSkills = await this.geoSkillsFor(project);
     const remediation = contextGeneration ? await remediateStartupContext(this.config, project, contextPolicy) : [];
-    const plan = await this.provider.prepare(project, { port, pluginConfig, capsuleMethodsMounted, platformSkillGeneration, personalSkillGeneration, extensionGeneration, memoryGatewayUrl, geoSkills, modelGatewayProfile, contextGeneration });
+    let patientMatchingGeneration = this.patientMatchingGenerationOverrides.get(key) ?? null;
+    if (!contextGeneration && !this.patientMatchingGenerationOverrides.has(key) && this.patientMatchingGenerationResolver) {
+      try { patientMatchingGeneration = await this.patientMatchingGenerationResolver(project); if (patientMatchingGeneration) await this.preparePatientMatchingGeneration(project, patientMatchingGeneration); }
+      catch (error) { this.noteStartFinding(project, "patient_matching_generation_unavailable", error); patientMatchingGeneration = null; }
+    }
+    const plan = await this.provider.prepare(project, { port, pluginConfig, capsuleMethodsMounted, platformSkillGeneration, personalSkillGeneration, extensionGeneration, patientMatchingGeneration, memoryGatewayUrl, geoSkills, modelGatewayProfile, contextGeneration });
 
     // Nothing is copied into a project any more: the image carries the skill
     // roots and the agent packages read-only, shared across every project. The
@@ -5298,6 +5337,8 @@ export class RuntimeManager {
       builtinPlugins: { annotation: this.config.runtimeAnnotationEnabled !== false && !(personalSkillGeneration?.platformSkills?.disabledPlugins ?? []).includes('annotation'),
         mermaid: this.config.runtimeMermaidEnabled !== false && !(personalSkillGeneration?.platformSkills?.disabledPlugins ?? []).includes('mermaid') },
       extensionGeneration,
+      patientMatchingGeneration,
+      patientMatchingProven: false,
       // The memory gateway address this runtime was launched with (empty when the deployment has no memory engine).
       memoryGatewayUrl: String(plan.memoryGatewayUrl ?? ""),
       // Whether it was launched with the GEO method pack mounted.
@@ -7317,6 +7358,43 @@ export class RuntimeManager {
     }
   }
   currentGeneration(project) { return this.runtimes.get(this.key(project))?.extensionGeneration ?? null; }
+  /** First-party projection, deliberately separate from third-party doc bridge admission. */
+  currentPatientMatchingGeneration(project) { const runtime = this.runtimes.get(this.key(project)); return runtime?.patientMatchingProven ? runtime.patientMatchingGeneration ?? null : null; }
+  /** Cancel only a task already authorized by the matching host, without stopping unrelated conversation work.
+   * @param {any} project @param {string} taskId */
+  async cancelPatientMatchingTask(project, taskId) {
+    if (!/^matchTask_[A-Za-z0-9]{1,100}$/.test(taskId)) throw new HttpError(400, 'patient_matching_task_invalid', 'Invalid matching task.');
+    const runtime = this.runtimes.get(this.key(project));
+    if (!runtime || !this.currentPatientMatchingGeneration(project)) return { cancelled: false };
+    return this.callKernel(runtime, project, 'patientMatching/cancel', { taskId }, AbortSignal.timeout(10000));
+  }
+  async preparePatientMatchingGeneration(project, candidate) {
+    if (this.config.runtimeProvider === 'agentbay' || this.config.runtimeSandboxMode !== 'docker') throw new HttpError(503, 'patient_matching_unavailable', 'Patient matching requires an immutable native code mount.');
+    const manifest = await verifyPatientMatchingGeneration(this.config, project, candidate.reference);
+    if (canonicalJson(manifest) !== canonicalJson(candidate) || (await this.inspectRuntimeImage())?.imageId !== manifest.runtimeImageDigest) throw new HttpError(409, 'patient_matching_release_invalid', 'Patient matching runtime identity changed.');
+    return manifest;
+  }
+  /** Only the lifecycle worker holding the exclusive idle project fence calls replacement. */
+  async replacePatientMatchingGeneration(project, candidate) {
+    if (candidate) await this.preparePatientMatchingGeneration(project, candidate);
+    if (await this.pluginRuntimeBusy(project)) throw new HttpError(409, 'plugin_runtime_busy', 'The runtime has active or queued native work.');
+    const key = this.key(project); this.patientMatchingGenerationOverrides.set(key, candidate);
+    try { await this.startAdmitted(project, { replaceRuntime: async () => { if (this.runtimes.has(key)) await this.stop(project); } }); return { joined: true }; }
+    finally { this.patientMatchingGenerationOverrides.delete(key); }
+  }
+  async probePatientMatchingGeneration(project, expected) {
+    const runtime = this.runtimes.get(this.key(project)), generation = this.runtimeGeneration(project);
+    if (!runtime || !generation || canonicalJson(runtime.patientMatchingGeneration?.reference ?? null) !== canonicalJson(expected?.reference ?? null)) throw new HttpError(409, 'patient_matching_release_invalid', 'The native matching runtime changed.');
+    if (expected) {
+      await this.preparePatientMatchingGeneration(project, expected);
+      const proof = await this.callKernel(runtime, project, 'patientMatching/status', {}, AbortSignal.timeout(10000));
+      if (proof?.enabled !== true || proof.skill !== 'patient-matching' || canonicalJson(proof.tools) !== canonicalJson(PATIENT_MATCHING_TOOLS)) throw new HttpError(502, 'patient_matching_probe_failed', 'The native matching inventory did not match.');
+    }
+    if (this.runtimeGeneration(project) !== generation) throw new HttpError(409, 'patient_matching_release_invalid', 'The native matching runtime changed.');
+    runtime.patientMatchingProven = true;
+    return { runtimeGeneration: generation, reference: expected?.reference ?? null };
+  }
+
   /** Factual target registry lookup, always bound to the same live runtime epoch. @param {any} project @param {string} sessionId */
   async extensionInvocationFacts(project, sessionId) {
     const runtime = this.runtimes.get(this.key(project)), generation = this.runtimeGeneration(project);

@@ -952,6 +952,7 @@ export function registerSkill(ctx, skill) {
     name: skill.name,
     description: skill.description,
     content: skill.content,
+    source: 'runtime',
     // `whenToUse` is a declared field of `SkillSummary`, and the catalog the
     // model reads surfaces it as routing guidance. Under `metadata` it is
     // parsed-frontmatter cargo the catalog never shows, so the skill was
@@ -1640,3 +1641,5 @@ export {
   pinOpenVikingPluginEnvironment,
   registerMemoryBridge,
 } from './src/memoryBridge.mjs'
+
+export { registerPatientMatchingStatus } from './src/patientMatchingStatus.mjs'

@@ -252,7 +252,7 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.criteria (
   protocol_version_id text NOT NULL REFERENCES evimed_vcr.protocol_versions(id) ON DELETE CASCADE,
   user_id             text NOT NULL,
   ordinal             integer NOT NULL,
-  kind                text NOT NULL CHECK (kind IN ('inclusion', 'exclusion')),
+  kind                text NOT NULL CHECK (kind IN ('inclusion', 'exclusion', 'unclassified')),
   criterion_type      text NOT NULL CHECK (criterion_type IN ${inList(VCR_CRITERION_TYPES)}),
   requirement         jsonb NOT NULL DEFAULT '{}'::jsonb,
   source_text         text NOT NULL DEFAULT '',

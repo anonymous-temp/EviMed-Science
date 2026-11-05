@@ -269,6 +269,7 @@ const roleHolds = (role, ability) => roleAllows(role, ability);
 export function vcrRoutePattern(pathname) {
   const parts = pathname.slice("/api/vcr".length).split("/").filter(Boolean);
   if (parts[0] === "studies" && parts[2] === "records" && parts.length === 4) return "/api/vcr/studies/:id/records/:result";
+  if(parts[0]==='studies'&&parts[2]==='matching'&&parts[3]==='native'&&parts[5]==='reports'&&parts.length===7)return '/api/vcr/studies/:id/matching/native/:task/reports/:result';
   if (!parts.length) return "/api/vcr";
   if (parts[0] === "models") return "/api/vcr/models";
   if (parts[0] === "precedents") return "/api/vcr/precedents";
@@ -421,7 +422,8 @@ export function createVcrRoutes(dependencies) {
     catch { throw new HttpError(400, "vcr_path_invalid", "Invalid 虚拟临床研究 path."); }
     // The generated records are a file: `…/records/<result>.csv` and its sibling `<result>.quality.json` — the one place a path segment has a dot.
     const records = /^\/api\/vcr\/studies\/([A-Za-z0-9_-]{1,80})\/records\/([A-Za-z0-9_-]{1,80})\.(csv|quality\.json)$/.exec(url.pathname);
-    if (!records && parts.some((part) => !ID.test(part))) throw new HttpError(404, "not_found", "虚拟临床研究 route not found.");
+    const matchingReport=/^\/api\/vcr\/studies\/([A-Za-z0-9_-]{1,80})\/matching\/native\/([A-Za-z0-9_-]{1,80})\/reports\/([A-Za-z0-9_-]{1,80})\.(md|json|csv)$/.exec(url.pathname);
+    if (!records && !matchingReport && parts.some((part) => !ID.test(part))) throw new HttpError(404, "not_found", "虚拟临床研究 route not found.");
     const method = req.method ?? "GET";
     const reply = (/** @type {any} */ value, status = 200) => { sendJson(res, status, { data: value }); return true; };
     // Read at request time: packages composed after the routes attach to the
@@ -788,6 +790,21 @@ export function createVcrRoutes(dependencies) {
       throw new HttpError(404,'not_found','Longitudinal route not found.');
     }
 
+    // Native report resources retain no independent patient text; each download reads the saved, currently permitted result.
+    if (section === 'matching' && parts[3] === 'native' && parts.length === 7 && parts[5] === 'reports' && method === 'GET') {
+      const { study } = await authorize(id, 'export');
+      await requireAbility(study, 'read_patient_level');
+      const native = service.packages?.patientMatching;
+      if (!native) throw UNAVAILABLE();
+      const match = /^([A-Za-z0-9_-]+)\.(md|json|csv)$/.exec(parts[6]);
+      if (!match) throw new HttpError(404, 'not_found', 'Report was not found.');
+      const result = await native.pageResult(study, String(user.id), parts[4], match[1]);
+      const { renderPatientMatchingReport } = await import('./patientMatchingReport.mjs');
+      const artifact = renderPatientMatchingReport(result, match[2] === 'md' ? 'markdown' : match[2]);
+      res.writeHead(200, { 'Content-Type': artifact.contentType, 'Content-Disposition': `attachment; filename="matching-${match[1]}.${artifact.extension}"`, 'Cache-Control': 'no-store' });
+      res.end(artifact.text);
+      return true;
+    }
     // --- patient matching results: what the judging job and the conversation saved ---------------------------------
     // The page's reader of `match_judgments` (`vcrMatchResults.mjs`), the page's start of the judging job, and the files. Nothing here
     // judges anything; the job and the conversation do, and a failed read is an error, never an empty list.
@@ -1460,7 +1477,9 @@ export function createVcrRoutes(dependencies) {
         if (!hooks.jobs?.get || !hooks.jobs?.resultOf) throw UNAVAILABLE();
         const job = await hooks.jobs.get(study.id, parts[3]);
         if (!job) throw new HttpError(404, "vcr_job_not_found", "Job not found.");
-        const result = await hooks.jobs.resultOf(study.id, parts[3]);
+        if(job.native)await requireAbility(study,'read_patient_level');
+        const result = await hooks.jobs.resultOf(study.id, parts[3], ...(job.native?[{actorId:String(user.id)}]:[]));
+        if (job.native) return reply({ jobId: parts[3], result, records: { available: false, state: 'unavailable' } });
         if (!result) return reply({ jobId: parts[3], result: null, records: { available: false,
           state: ["queued", "running", "awaiting_budget"].includes(job.state) ? "pending" : "unavailable" } });
         const records_ = dependencies.records ?? service.packages?.records;

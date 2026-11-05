@@ -39,6 +39,8 @@ import {
 } from "@evimed/domain";
 
 import { presentJudgment } from "./vcrMatchJudge.mjs";
+import { legacyMatchingVerdict } from './patientMatchingProjection.mjs';
+import { rankMatchingResults } from '@evimed/patient-matching-core';
 import { phaseLabel, registryStatusLabel } from "./vcrPatientTrials.mjs";
 import { REGISTRY_RECORD_BASIS, REJUDGE_FAILED_NOTE_ZH, WITHDRAWN_SUBJECT_MARK, basisChangedOf, judgingProgress, recordGapOf, standingRows } from "./vcrMatchJudgmentStore.mjs";
 import { VCR_SCHEMA } from "./vcrPersistence.mjs";
@@ -70,6 +72,13 @@ const pick = (source, keys) => Object.fromEntries(keys.filter((key) => source[ke
 const clip = (/** @type {string | null} */ value, max = TEXT_MAX) => (value && value.length > max ? `${value.slice(0, max - 1)}…` : value);
 /** @param {unknown} value @returns {string} The day, as the page prints one. */
 const day = (value) => (value ? new Date(/** @type {any} */ (value)).toISOString().slice(0, 10) : "");
+/** Native pairs retain their host-selected input order and the core's own exclusion ordering.
+ * Historical pairs keep the existing order in the supplied list. */
+function orderWithNativeProjection(pairs) {
+  const native=pairs.filter(pair=>pair.nativeTaskId).sort((a,b)=>a.nativeTaskId===b.nativeTaskId?a.nativeInputIndex-b.nativeInputIndex:String(b.judgedAt).localeCompare(String(a.judgedAt)));
+  const ranked=rankMatchingResults(native.map(pair=>({...pair,state:pair.basisChanged?'stale':pair.nativeState??'complete',current:!pair.basisChanged&&pair.nativeState==='complete',clinicalEligibility:pair.nativeEligibility,recommendation:{priority:null,rationale:''}})),{order:'input'});
+  return [...ranked,...pairs.filter(pair=>!pair.nativeTaskId)];
+}
 
 // ---------------------------------------------------------------------------
 // Pure parts
@@ -119,7 +128,7 @@ export function csvCell(value) {
 export const csvLine = (cells) => `${cells.map(csvCell).join(",")}\r\n`;
 
 /** The section a clause stands in; one under no section says so, and is no inclusion. @param {unknown} kind */
-const kindOf = (kind) => (kind === "exclusion" || kind === "unsectioned" ? kind : "inclusion");
+const kindOf = (kind) => (kind==='unclassified'?'unsectioned':kind === "exclusion" || kind === "unsectioned" ? kind : "inclusion");
 
 /** The clause rows of a pair in the shape the page and the files read. @param {any} presented a `presentJudgment` answer */
 function clauseRows(presented) {
@@ -360,7 +369,9 @@ export class VcrMatchResults extends VcrStoreBase {
         WHERE j.study_id = $1 AND ($2::text IS NULL OR j.subject_key = $2) AND ($3::text IS NULL OR j.target_kind = $3) AND ($4::text IS NULL OR j.target_id = $4) AND ${NOT_WITHDRAWN}
         ORDER BY j.subject_key, j.target_kind, j.target_id, j.mode, (j.status = 'done') DESC, j.updated_at DESC, j.id
         LIMIT ${Math.floor(this.mostPairs) * 2})
-      SELECT ${COLUMNS}, k.answered, k.support, k.against, k.not_applicable, k.silent, k.nei, k.silent_against, k.against_reason, k.support_reason, k.open_reason, u.unanswered, nf.newer_error, nf.newer_at
+      SELECT ${COLUMNS}, j.answer #>> '{matchingProjection,rows,0,clinicalEligibility}' AS native_eligibility, j.answer #>> '{matchingProjection,rows,0,state}' AS native_state,
+        j.answer->>'matchingTaskId' AS native_task_id, (j.answer->>'matchingInputIndex')::int AS native_input_index,
+        k.answered, k.support, k.against, k.not_applicable, k.silent, k.nei, k.silent_against, k.against_reason, k.support_reason, k.open_reason, u.unanswered, nf.newer_error, nf.newer_at
       FROM newest nw JOIN ${S}.match_judgments j ON j.id = nw.id ${COUNTS}
       LEFT JOIN (
         SELECT DISTINCT ON (f.subject_key, f.target_kind, f.target_id, f.mode) f.subject_key, f.target_kind, f.target_id, f.mode, f.error_code AS newer_error, f.updated_at AS newer_at
@@ -417,7 +428,7 @@ export class VcrMatchResults extends VcrStoreBase {
       const later = [fit, criteria].filter((row) => row?.newer_at).sort((a, b) => String(iso(b.newer_at)).localeCompare(String(iso(a.newer_at))))[0] ?? null;
       const counts = clauses ? countsOf(clauses) : null;
       const score = scored?.fit ?? clauses?.fit ?? null;
-      const verdict = verdictOfCounts({ fit: score, counts, missingReasons: Number(scored?.missing_reasons ?? 0), ineligibleReasons: Number(scored?.ineligible_reasons ?? 0) });
+      const verdict = anchor.native_eligibility ? { verdict: legacyMatchingVerdict(anchor.native_eligibility) } : verdictOfCounts({ fit: score, counts, missingReasons: Number(scored?.missing_reasons ?? 0), ineligibleReasons: Number(scored?.ineligible_reasons ?? 0) });
       const identity = scored ?? clauses;
       done.push({
         record: recordOfPair(scored, clauses),
@@ -426,6 +437,7 @@ export class VcrMatchResults extends VcrStoreBase {
         fitRowId: scored?.id ?? null, criteriaRowId: clauses?.id ?? null, fit: score === null ? null : Number(score),
         confidence: (scored?.confidence ?? clauses?.confidence) === null || (scored?.confidence ?? clauses?.confidence) === undefined ? null : Number(scored?.confidence ?? clauses?.confidence),
         verdict: verdict.verdict, counts, producer: String(anchor.producer), judgedAt: iso(anchor.updated_at), basisChanged: basisMarkOf(scored?.basis_changed ?? clauses?.basis_changed ?? null),
+        nativeTaskId:anchor.native_task_id??null,nativeInputIndex:Number(anchor.native_input_index??0),nativeEligibility:anchor.native_eligibility??null,nativeState:anchor.native_state??null,
         eligibilitySource: anchor.eligibility_source ?? scored?.eligibility_source ?? null, judgedByClauses: Boolean(clauses), older: standing.older, recordGap: gapOfRow(anchor),
         ...(later ? { rejudgeFailure: { code: later.newer_error ?? "vcr_match_judge_failed", at: iso(later.newer_at) } } : {}),
         ...(criteria?.status === "failed" ? { clauseFailure: criteria.error_code ?? "vcr_match_judge_failed", clauseFailedAt: iso(criteria.updated_at) } : {}),
@@ -559,12 +571,12 @@ export class VcrMatchResults extends VcrStoreBase {
   async forPatient(study, subjectKey, { target = null, viewer = null } = {}) {
     const pairs = await this.#pairs(study.id, { subjectKey });
     const { left: _left, settings: _settings, waitingIds: _waitingIds, ...progress } = await this.#progress(study.id, { direction: "patient_to_trial", subjectKey }, pairs);
-    const ranked = rankJudgments(pairs.done.map((pair) => ({ ...pair, id: pair.targetId, criteria: pair.counts && pair.counts.against > 0 ? [{ label: "excluded", basis: "stated" }] : [] })));
+    const ranked = orderWithNativeProjection(rankJudgments(pairs.done.map((pair) => ({ ...pair, id: pair.targetId, criteria: pair.counts && pair.counts.against > 0 ? [{ label: "excluded", basis: "stated" }] : [] }))));
     await this.#judgeReaders(study, viewer, ranked);
     const trials = ranked.map((pair, index) => ({ rank: index + 1, ...this.#listed(pair) }));
     const failures = this.#failures(pairs);
     const search = searchLineOf(await this.searches?.latest?.(study, { subjectKey }).catch(() => null) ?? null);
-    const chosen = ranked.find((pair) => pair.targetId === target) ?? ranked[0] ?? null;
+    const chosen = target===null ? ranked[0]??null : ranked.find((pair) => pair.targetId === target)??null;
     // The trials whose verdict rests on a registry record that has changed since: the page offers to judge those again, and says so in words.
     const stale = ranked.filter((pair) => pair.basisChanged?.kind === REGISTRY_RECORD_BASIS).map((pair) => String(pair.targetId));
     return {
@@ -589,8 +601,8 @@ export class VcrMatchResults extends VcrStoreBase {
     const tallies = Object.fromEntries(VERDICTS.map((name) => [name, 0]));
     for (const pair of pairs.done) tallies[pair.verdict] += 1;
     const fitOf = (/** @type {any} */ pair) => (Number.isFinite(pair.fit) ? Number(pair.fit) : -1);
-    const ordered = pairs.done.filter((pair) => !verdict || pair.verdict === verdict).sort((a, b) =>
-      VERDICTS.indexOf(a.verdict) - VERDICTS.indexOf(b.verdict) || fitOf(b) - fitOf(a) || (b.confidence ?? -1) - (a.confidence ?? -1) || (a.subjectKey < b.subjectKey ? -1 : a.subjectKey > b.subjectKey ? 1 : 0));
+    const ordered = orderWithNativeProjection(pairs.done.filter((pair) => !verdict || pair.verdict === verdict).sort((a, b) =>
+      VERDICTS.indexOf(a.verdict) - VERDICTS.indexOf(b.verdict) || fitOf(b) - fitOf(a) || (b.confidence ?? -1) - (a.confidence ?? -1) || (a.subjectKey < b.subjectKey ? -1 : a.subjectKey > b.subjectKey ? 1 : 0)));
     const start = Math.max(0, Math.floor(offset));
     const size = Math.max(1, Math.min(MATCH_PAGE.most, Math.floor(limit)));
     const chosen = subjectKey ? pairs.done.find((pair) => pair.subjectKey === subjectKey) ?? null : null;
@@ -749,7 +761,7 @@ export class VcrMatchResults extends VcrStoreBase {
     const scope = direction === "patient_to_trial" ? { subjectKey } : { targetKind: "protocol_version", targetId: protocolVersionId };
     const pairs = await this.#pairs(study.id, scope);
     const { left: _left, settings: _settings, waitingIds, ...progress } = await this.#progress(study.id, { direction, subjectKey, protocolVersionId }, pairs);
-    const ordered = [...pairs.done].sort((a, b) => (a.subjectKey < b.subjectKey ? -1 : a.subjectKey > b.subjectKey ? 1 : a.targetId < b.targetId ? -1 : a.targetId > b.targetId ? 1 : 0));
+    const ordered = orderWithNativeProjection([...pairs.done].sort((a, b) => (a.subjectKey < b.subjectKey ? -1 : a.subjectKey > b.subjectKey ? 1 : a.targetId < b.targetId ? -1 : a.targetId > b.targetId ? 1 : 0)));
     const exportedAt = now().toISOString();
     const stamp = exportedAt.slice(0, 10);
     const filename = `matching-${direction === "patient_to_trial" ? "patient" : "protocol"}-${kind}-${stamp}.${format}`;

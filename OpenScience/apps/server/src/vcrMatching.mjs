@@ -1140,12 +1140,12 @@ export function evaluateCriterion(criterion, context) {
     catch { return unknownBecause("", "evaluation_error"); }
   };
   const applicability = criterion?.applicability == null ? verdict(SATISFIED) : evaluate(criterion.applicability);
-  const requirement = evaluate(criterion?.requirement);
+  const requirement = criterion?.kind==='unclassified'?unknownBecause(String(criterion?.id??''),'section_not_stated'):evaluate(criterion?.requirement);
   const applicabilityUnresolved = applicability.state === UNKNOWN || applicability.state === PENDING_RECHECK;
   const requirementState = VCR_CRITERION_STATES.includes(requirement.state) ? requirement.state : UNKNOWN;
   return {
     criterionId: String(criterion?.id ?? ""),
-    kind: criterion?.kind === "exclusion" ? "exclusion" : "inclusion",
+    kind: criterion?.kind==='unclassified'?'unclassified':criterion?.kind === "exclusion" ? "exclusion" : "inclusion",
     criterionType,
     state: applicabilityUnresolved && requirementState !== SATISFIED ? UNKNOWN : requirementState,
     applicable: applicability.state !== NOT_SATISFIED,

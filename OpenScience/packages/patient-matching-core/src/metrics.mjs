@@ -2,13 +2,15 @@ import { array, check, digest, identifier, object, text } from './validation.mjs
 import { validateMatchingResult } from './projection.mjs'
 
 /** Metadata only. Official scorers remain external and retain their own denominators. */
-export const METRIC_PROFILES = Object.freeze(Object.fromEntries([
+/** @type {Array<[string, Record<string,string>]>} */
+const definitions = [
   ['trialgpt-judged-pair-ranking', { task: 'judged-pair-ranking', corpus: 'judged-pairs', aggregation: 'official-profile' }],
   ['trec-full-corpus', { task: 'retrieval', corpus: 'full-corpus', aggregation: 'per-year-official-profile' }],
   ['nih-target-recovery', { task: 'target-recovery', corpus: 'declared-targets', aggregation: 'official-profile' }],
   ['n2c2-official-mapping', { task: 'criterion-classification', corpus: 'official-patient-criteria', aggregation: 'official-profile' }],
   ['clinical-product-behavior', { task: 'product-behavior', corpus: 'frozen-workflow-cases', aggregation: 'declared-case-accounting' }],
-].map(([id, profile]) => [id, Object.freeze({ id, ...profile })])))
+]
+export const METRIC_PROFILES = Object.freeze(Object.fromEntries(definitions.map(([id, profile]) => [id, Object.freeze({ id, ...profile })])))
 
 export function validateMetricProfile(profile) {
   object(profile, 'metricProfile', ['id', 'revision', 'scorer', 'inputManifestDigest', 'corpusDigest', 'aggregation', 'mappingPolicyDigest'])

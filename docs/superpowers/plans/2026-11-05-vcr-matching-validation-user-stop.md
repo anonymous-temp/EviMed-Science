@@ -1,0 +1,13 @@
+# Matching validation: owner-requested stop
+
+The owner stopped TREC and then SIGIR leaderboard evaluation. All campaign processes, owned curl processes and listeners were closed. Paid execution is disabled, no automatic resume is authorized, and no new official score or ranking level is claimed. Engineering closeout, commit and push remain separate from deployment, which is not authorized.
+
+The original English SIGIR scope contained 58 judged topics and 3,835 pairs, from 59 original queries with one zero-candidate query excluded. At stop, 32 topics had started, 31 had saved native projections and 3 were complete. The saved work contained **686 current valid clinical pairs, 1,470 pending pairs and 1,679 missing pairs**. PostgreSQL independently confirmed the 686 current decisions. All 32 completed Qwen candidate orders were retained. These partial results qualify the measured 0.1.0 artifact only; they do not validate a future 0.1.1 implementation or establish clinical accuracy.
+
+TREC produced no fresh native clinical or retrieval score. Its 2021/2022 shared index stopped at **232,180 of 375,580 records**, still `building`; the 451,538-record 2023 index did not start. This is a user-skipped engineering stage, not a model-performance failure or zero score. Prepared sources, partial vectors and historical results remain preserved separately.
+
+Across all providers and the seven earlier qualification calls, usage-ledger settled reference cost was **CNY 53.39247588**; supplier invoices were not reconciled. Cancellation left an additional **CNY 15.151263** conservatively uncertain, including 23 native reservations whose completed provider responses could not be recovered. No refund was guessed. The combined upper exposure is **CNY 68.54373888**, below the unchanged CNY 500 ceiling; no open reserved rows remain. This bookkeeping closeout made no provider or balance calls.
+
+Three source phases and both explicit repair receipts are preserved. The final phase's 377 archived source files were checked against their frozen digest with no mismatches. Raw notes, rationales, per-patient values, credentials, database addresses and private paths are excluded from the public [aggregate receipt](2026-11-05-vcr-matching-plugin-v3-assets/validation-user-stop.json).
+
+The run identified an engineering failure-isolation gap: an invalid native structured output can end a patient's execution while later selected pairs remain pending. It also exposed asynchronous proxy finalizers that could outlive a closed HTTP socket. Follow-up changes are limited to code and offline checks; the stopped data and counts are not relabeled as results of that later implementation.

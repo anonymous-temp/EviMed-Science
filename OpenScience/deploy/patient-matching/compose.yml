@@ -1,0 +1,24 @@
+# Optional contained worker. Mount the same private socket directory into the control plane.
+services:
+  patient-matching-worker:
+    container_name: ${OPEN_SCIENCE_PATIENT_MATCHING_WORKER_CONTAINER:-evimed-patient-matching-worker}
+    image: ${PATIENT_MATCHING_WORKER_IMAGE:?An immutable matching worker image is required}
+    user: ${PATIENT_MATCHING_WORKER_UID:-1000}:${PATIENT_MATCHING_WORKER_GID:-1000}
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 32
+    mem_limit: 256m
+    cpus: 1
+    tmpfs: [/tmp:rw,noexec,nosuid,size=16m]
+    environment:
+      PATIENT_MATCHING_WORKER_SOCKET: /run/patient-matching/worker.sock
+      PATIENT_MATCHING_WORKER_TOKEN_FILE: /run/patient-matching/worker.token
+    volumes:
+      - ${PATIENT_MATCHING_WORKER_RUN_DIR:?Private matching worker socket directory is required}:/run/patient-matching:rw
+    restart: unless-stopped
+
+  open-science-web:
+    volumes:
+      - ${PATIENT_MATCHING_WORKER_RUN_DIR:?Private matching worker socket directory is required}:/run/patient-matching:ro
