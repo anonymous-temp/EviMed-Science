@@ -4,6 +4,7 @@
 // 2026-10-23, `provenance.json` beside them): served over real HTTP, so a parse that only works on a hand-shaped
 // object fails, and what the client asked is asserted against what the recording was asked.
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import http from "node:http";
 import test from "node:test";
@@ -115,44 +116,49 @@ test("a document that is not in the engine yet is created by the same one replac
   });
 });
 
-test("a page is written back as one checked operation: the hash it was read at, and a changed page is refused and left alone", async () => {
+test("a page is written back after the check the engine no longer makes: read again, written only when it still hashes to what was read", async () => {
+  // v0.5.3 removed `expected_sha256` from the batch-write operation (it forbids unknown keys), so the checked write is this side's: the
+  // recorded success/busy bodies are v0.5.1.1's and only their envelope is used.
   const pageBody = (await fixture("provenance")).fixtures["content-batch-write-checked"].request_body;
   const written = readdress(await fixture("content-batch-write-checked"));
-  const stale = await fixture("content-batch-write-checked-stale");
-  const missing = await fixture("content-batch-write-checked-missing");
   const busy = await fixture("content-batch-write-checked-busy");
   assert.equal(pageBody.operations[0].mode, "replace");
-  assert.match(pageBody.operations[0].expected_sha256, /^[a-f0-9]{64}$/);
   const uri = `${OUR_ROOT}/wiki/concept/page.md`;
-  const hash = "a".repeat(64);
-  await withEngine(() => ({ body: written }), async ({ resources, seen }) => {
+  const read = Buffer.from("---\ntype: concept\n---\n\nold\n");
+  const hash = createHash("sha256").update(read).digest("hex");
+  /** The engine holds `read` and accepts the write. */
+  const holding = (/** @type {{ path: string }} */ request) => (request.path === "/api/v1/content/download" ? { bytes: read } : { body: written });
+  await withEngine(holding, async ({ resources, seen }) => {
     const done = await resources.writePage(USER, uri, "---\ntype: concept\n---\n\nnew\n", { expectedSha256: hash });
-    assert.equal(seen.length, 1);
-    assert.equal(seen[0].path, "/api/v1/content/batch-write");
-    assert.deepEqual(seen[0].body, { root_uri: `${OUR_ROOT}/wiki/concept`, wait: true, operations: [{ uri, content: "---\ntype: concept\n---\n\nnew\n", mode: "replace", expected_sha256: hash }] });
+    assert.deepEqual(seen.map((request) => request.path), ["/api/v1/content/download", "/api/v1/content/batch-write"]);
+    assert.equal(seen[0].query.get("uri"), uri);
+    assert.deepEqual(seen[1].body, { root_uri: `${OUR_ROOT}/wiki/concept`, wait: true, operations: [{ uri, content: "---\ntype: concept\n---\n\nnew\n", mode: "replace" }] });
     assert.equal(done.bytes, Buffer.byteLength("---\ntype: concept\n---\n\nnew\n"));
-    assert.equal(seen[0].headers["x-openviking-user"], openVikingUserId(USER));
-    assert.equal(seen[0].headers["x-openviking-role"], undefined);
+    assert.equal(seen[1].headers["x-openviking-user"], openVikingUserId(USER));
+    assert.equal(seen[1].headers["x-openviking-role"], undefined);
   });
   // A save that must answer at once does not wait for the summary and the vector.
-  await withEngine(() => ({ body: written }), async ({ resources, seen }) => {
+  await withEngine(holding, async ({ resources, seen }) => {
     await resources.writePage(USER, uri, "x\n", { expectedSha256: hash, wait: false });
-    assert.equal(seen[0].body.wait, false);
+    assert.equal(seen[1].body.wait, false);
   });
-  // The page is not the one that was read: 409 CONFLICT "Content revision changed" (or the file is gone) is the caller's
-  // `knowledge_page_engine_changed`; a directory still being processed is the client's own conflict, which the caller retries.
-  for (const refusal of [stale, missing]) {
-    await withEngine(() => ({ status: 409, body: refusal }), async ({ resources, seen }) => {
-      await assert.rejects(() => resources.writePage(USER, uri, "x\n", { expectedSha256: hash }), { code: "knowledge_page_engine_changed", status: 409 });
-      assert.equal(seen.length, 1, "a changed page was retried");
-    });
-  }
+  // The page is not the one that was read, or is gone: the caller's `knowledge_page_engine_changed`, and nothing is written.
+  await withEngine((request) => (request.path === "/api/v1/content/download" ? { bytes: Buffer.from("changed by a compile\n") } : { body: written }), async ({ resources, seen }) => {
+    await assert.rejects(() => resources.writePage(USER, uri, "x\n", { expectedSha256: hash }), { code: "knowledge_page_engine_changed", status: 409 });
+    assert.deepEqual(seen.map((request) => request.path), ["/api/v1/content/download"], "a changed page was written or retried");
+  });
+  await withEngine((request) => (request.path === "/api/v1/content/download"
+    ? { status: 404, body: { status: "error", result: null, error: { code: "NOT_FOUND", message: "File not found" } } } : { body: written }), async ({ resources, seen }) => {
+    await assert.rejects(() => resources.writePage(USER, uri, "x\n", { expectedSha256: hash }), { code: "knowledge_page_engine_changed", status: 409 });
+    assert.equal(seen.length, 1);
+  });
+  // A directory still being processed is the client's own conflict, which the caller retries.
   assert.equal(busy.error.details.conflict_type, "path_busy");
-  await withEngine(() => ({ status: 409, body: busy }), async ({ resources }) => {
+  await withEngine((request) => (request.path === "/api/v1/content/download" ? { bytes: read } : { status: 409, body: busy }), async ({ resources }) => {
     await assert.rejects(() => resources.writePage(USER, uri, "x\n", { expectedSha256: hash }), (error) => error.code === "memory_index_conflict" && error.upstreamDetails?.retryable === true && error.upstreamDetails?.conflict_type === "path_busy");
   });
   // No write goes out without the hash it is checked against.
-  await withEngine(() => ({ body: written }), async ({ resources, seen }) => {
+  await withEngine(holding, async ({ resources, seen }) => {
     for (const bad of [undefined, "", "abc", "A".repeat(64)]) {
       await assert.rejects(() => resources.writePage(USER, uri, "x\n", { expectedSha256: /** @type {any} */ (bad) }), { code: "knowledge_write_back_invalid" });
     }

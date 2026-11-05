@@ -52,7 +52,7 @@ export class OpenVikingStub {
     /** @type {Set<string>} `${user}/${target}` privacy configurations a v0.5.2 engine keeps beside a session; an engine without any answers 404 to the delete, as v0.5.1.1 does */
     this.privacyConfigs = new Set();
     /** What `/health` says the engine is. */
-    this.version = "v0.5.1.1";
+    this.version = "v0.5.3";
     /** @type {any[]} every request, in order */
     this.requests = [];
     this.taskSeq = 0;

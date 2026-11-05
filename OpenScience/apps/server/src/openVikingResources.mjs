@@ -313,28 +313,30 @@ export class OpenVikingResources {
 
   /**
    * Write one page of a compiled tree back — a person's edit, or their blocks put back after a compile — as a checked write:
-   * one `batch-write` operation that names the hash of the bytes the caller last read (`expectedSha256`), so a page the
-   * engine's own Compile changed since is not overwritten. Unlike a source it is written in the engine's default mode, so
-   * the page's summary and vector follow its new text; `wait` (the default) answers once that is done, which is also what
-   * keeps the next write to the same directory from finding it busy. A page whose bytes are no longer the ones named
-   * answers `knowledge_page_engine_changed` (409) and is not written; a directory still being processed answers the
-   * client's `memory_index_conflict` (retryable). Before v0.5.1 the route had no precondition and the caller had to make
-   * sure no compile was writing the same target.
+   * the page is downloaded first and written only if its bytes still hash to `expectedSha256`, the digest of the bytes the caller
+   * last read, so a page the engine's own Compile changed since is not overwritten. Unlike a source it is written in the engine's
+   * default mode, so the page's summary and vector follow its new text; `wait` (the default) answers once that is done, which is
+   * also what keeps the next write to the same directory from finding it busy. A page whose bytes are no longer the ones named (or
+   * that is gone) answers `knowledge_page_engine_changed` (409) and is not written; a directory still being processed answers the
+   * client's `memory_index_conflict` (retryable). The comparison is this side's since v0.5.3: v0.5.1 and v0.5.2 checked it inside
+   * the engine's file locks with `expected_sha256` on the `batch-write` operation, and v0.5.3 removed the key (its operation model
+   * forbids unknown keys, so sending it is a 4xx). The read and the write are two requests: a change that lands between them is
+   * not seen, which the page worker's round discipline (a save is queued while a compile runs) keeps from happening.
    * @param {string} userId @param {string} uri @param {string} content
    * @param {{ expectedSha256: string, wait?: boolean }} options `expectedSha256`: the hex digest of the file as last read
    */
   async writePage(userId, uri, content, { expectedSha256, wait = true }) {
     if (!/^[a-f0-9]{64}$/.test(String(expectedSha256 ?? ""))) throw new HttpError(500, "knowledge_write_back_invalid", "A write-back always names the hash of the page it replaces.");
+    const changed = () => new HttpError(409, "knowledge_page_engine_changed", "The page in the engine is not the one this write was made against.");
+    const held = await this.download(userId, uri);
+    if (!held || sha256(held) !== expectedSha256) throw changed();
     const parent = String(uri).slice(0, String(uri).lastIndexOf("/"));
     try {
       await this.client.request({ method: "POST", path: "/api/v1/content/batch-write", userId, timeoutMs: WRITE_TIMEOUT_MS,
-        body: { root_uri: parent, wait: Boolean(wait), operations: [{ uri, content: String(content ?? ""), mode: "replace", expected_sha256: expectedSha256 }] } });
+        body: { root_uri: parent, wait: Boolean(wait), operations: [{ uri, content: String(content ?? ""), mode: "replace" }] } });
     } catch (error) {
-      // 409 is two refusals: the directory is still being processed (`path_busy`, retryable), and the page is not the
-      // one that was read ("Content revision changed", or no longer there).
-      if (/** @type {any} */ (error)?.code === "memory_index_conflict" && /** @type {any} */ (error)?.upstreamDetails?.conflict_type !== "path_busy") {
-        throw new HttpError(409, "knowledge_page_engine_changed", "The page in the engine is not the one this write was made against.");
-      }
+      // 409 is two refusals: the directory is still being processed (`path_busy`, retryable), and anything else the engine refuses.
+      if (/** @type {any} */ (error)?.code === "memory_index_conflict" && /** @type {any} */ (error)?.upstreamDetails?.conflict_type !== "path_busy") throw changed();
       throw error;
     }
     return { uri, bytes: Buffer.byteLength(String(content ?? "")) };
