@@ -1,0 +1,30 @@
+{
+  "code": 200,
+  "message": "success",
+  "uuid": "3A1B0C2D-0000-4000-8000-000000000001",
+  "timestamp": 1781164620,
+  "elapsed_ms": 2400,
+  "data": {
+    "content": "标题：某项临床研究\n正文……",
+    "format": "pdf",
+    "media_type": "application/pdf",
+    "parse_info": {
+      "parser": "native-pdf",
+      "parser_version": "13",
+      "page_count": 1,
+      "ocr_pages": [],
+      "warnings": []
+    },
+    "metadata": {
+      "title": "某项临床研究",
+      "authors": null,
+      "abstract": null,
+      "keywords": null,
+      "publication_date": null,
+      "source": null,
+      "doi": null
+    },
+    "metadata_status": "succeeded",
+    "metadata_error": null
+  }
+}
