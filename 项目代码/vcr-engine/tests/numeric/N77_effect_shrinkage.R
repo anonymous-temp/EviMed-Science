@@ -59,11 +59,15 @@ vcr_case("N77b", c("AC-08", "AC-30"), function() {
   repl_int <- stats::integrate(function(s) dens(s) * (1 - stats::pnorm(zq - s)), -80, 80, rel.tol = 1e-12, subdivisions = 4000L)$value
   r4 <- vcr_shrink_one(2.2 * 0.2, 0.2, mix = m4)
   d_int <- c(abs(r4$correctSign - sign_int), abs(r4$replication - repl_int))
+  # and the same estimate through the job (the method as it is dispatched, its default mixture), held to the same two independent integrals
+  jr <- vcr_test_run(.n77_job(list(list(id = "paper", estimate = 0.44, se = 0.2)), "n77b_job"))
+  jrow <- jr$diagnostics$shrinkage$rows[[1]]
+  d_job <- if (identical(jr$status, "succeeded")) c(abs(jrow$correctSign - sign_int), abs(jrow$replication - repl_int), abs(vcr_measure_value(jr, "replication_probability") - repl_int)) else Inf
   # a replication of the same precision is futureSe = se; the posterior weights sum to one
   r5 <- vcr_shrink_one(0.44, 0.2, future_se = 0.2, mix = m4)
-  list(pass = max(abs(got - want)) < 1e-9 && max(d_int) < 1e-9 && abs(r5$futureSuccess - r5$replication) < 1e-14 && abs(sum(p4$w) - 1) < 1e-14,
-       detail = sprintf("one component (tau^2 = 4): shrunken %.6f (closed form %.6f), interval %.5f to %.5f, sign %.6f, exaggeration median %.6f (folded-normal median by uniroot), replication %.6f, a trial of half the standard error %.6f: largest difference %.1e; four-component mixture at z = 2.2: sign %.6f and replication %.6f against the integral %.6f and %.6f (%.1e); futureSe = se is the replication",
-                        got["shrunken"], want["shrunken"], got["lo"], got["hi"], got["sign"], got["expo"], got["repl"], got["fut"], max(abs(got - want)), r4$correctSign, r4$replication, sign_int, repl_int, max(d_int)))
+  list(pass = max(abs(got - want)) < 1e-9 && max(d_int) < 1e-9 && max(d_job) < 1e-9 && abs(r5$futureSuccess - r5$replication) < 1e-14 && abs(sum(p4$w) - 1) < 1e-14,
+       detail = sprintf("one component (tau^2 = 4): shrunken %.6f (closed form %.6f), interval %.5f to %.5f, sign %.6f, exaggeration median %.6f (folded-normal median by uniroot), replication %.6f, a trial of half the standard error %.6f: largest difference %.1e; four-component mixture at z = 2.2: sign %.6f and replication %.6f against the integral %.6f and %.6f (%.1e); the same estimate through the job: sign %.6f, replication %.6f (largest difference from the integrals %.1e); futureSe = se is the replication",
+                        got["shrunken"], want["shrunken"], got["lo"], got["hi"], got["sign"], got["expo"], got["repl"], got["fut"], max(abs(got - want)), r4$correctSign, r4$replication, sign_int, repl_int, max(d_int), jrow$correctSign %||% NA_real_, jrow$replication %||% NA_real_, max(d_job)))
 })
 
 vcr_case("N77c", c("AC-08", "AC-25"), function() {
