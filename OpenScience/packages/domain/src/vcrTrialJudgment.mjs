@@ -938,10 +938,9 @@ export function trialVerdict({ fit = null, criteria = null, missing = null, miss
 }
 
 /**
- * Judgments in the order a reader wants them: by fit, then by confidence, then by id, so the same rows always come back in the same order. A judgment
- * with no score sorts after those with one, and among those a stated disqualifier goes last. A clause-level disqualifier does not move a scored trial:
- * measured on SIGIR's 3,835 pairs, moving them gave nDCG@10 .652 against .669 for fit alone, with those labels about half right on the annotated clauses.
- * The verdict and the clause still say it. Pure; the input is not touched.
+ * Judgments in the order a reader wants them: a trial with a stated disqualifier goes last, so the chip and the order say the same thing, and otherwise by fit, then by confidence,
+ * then by id, so the same rows always come back in the same order. A judgment with no score sorts after those with one. On SIGIR's 3,835 pairs moving the stated disqualifiers
+ * changed nDCG@10 by -.0045 on the same rows, inside what a rerun moves it (A/A -.0127 [-.0325, .0078]), and a board scored at fit alone has no clause rows to move. Pure; the input is not touched.
  * @template {{ id?: string | number, fit?: number | null, confidence?: number | null, criteria?: ReadonlyArray<{ label?: string, basis?: string }> | null }} T
  * @param {readonly T[]} items @returns {T[]}
  */
@@ -949,10 +948,10 @@ export function rankJudgments(items) {
   /** @param {number | null | undefined} value */
   const known = (value) => (Number.isFinite(value) ? Number(value) : -1)
   return [...items].sort((a, b) => {
+    const against = Number((a.criteria ?? []).some(statedDisqualifier)) - Number((b.criteria ?? []).some(statedDisqualifier))
+    if (against) return against
     const fit = known(b.fit) - known(a.fit)
     if (fit) return fit
-    const against = Number((a.criteria ?? []).some(statedDisqualifier)) - Number((b.criteria ?? []).some(statedDisqualifier))
-    if (against && known(a.fit) < 0) return against
     const confidence = known(b.confidence) - known(a.confidence)
     if (confidence) return confidence
     const left = String(a.id ?? ''), right = String(b.id ?? '')

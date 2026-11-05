@@ -508,7 +508,7 @@ test('a verdict: the score alone uses its bands', () => {
   assert.equal(trialVerdict({ fit: null, criteria: [] }).because, 'no_judgment')
 })
 
-test('an order: by fit, then confidence, then id; a clause-level disqualifier moves only rows with no score; deterministic', () => {
+test('an order: a stated disqualifier last, then by fit, confidence and id; deterministic', () => {
   const items = [
     { id: 'c', fit: 90, confidence: 0.5 },
     { id: 'a', fit: 90, confidence: 0.9 },
@@ -518,9 +518,9 @@ test('an order: by fit, then confidence, then id; a clause-level disqualifier mo
     { id: 'f', fit: null, confidence: null },
   ]
   const before = JSON.stringify(items)
-  assert.deepEqual(rankJudgments(items).map((item) => item.id), ['d', 'a', 'b', 'c', 'e', 'f'])
+  assert.deepEqual(rankJudgments(items).map((item) => item.id), ['a', 'b', 'c', 'e', 'f', 'd'])
   assert.equal(JSON.stringify(items), before, 'the input is not touched')
-  assert.deepEqual(rankJudgments([...items].reverse()).map((item) => item.id), ['d', 'a', 'b', 'c', 'e', 'f'])
+  assert.deepEqual(rankJudgments([...items].reverse()).map((item) => item.id), ['a', 'b', 'c', 'e', 'f', 'd'])
   assert.deepEqual(rankJudgments([{ id: 'x', criteria: [row('excluded', 'stated')] }, { id: 'y' }]).map((item) => item.id), ['y', 'x'], 'with no score the disqualifier still goes last')
 })
 

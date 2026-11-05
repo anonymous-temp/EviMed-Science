@@ -50,7 +50,7 @@ function TrialRow({ trial, current, onPick }: { trial: VcrJudgedPair; current: b
 /**
  * 给患者找试验: one patient's trials as the judging job and the conversation saved them.
  *
- * The list fills in as trials are judged — most promising first by the model's fit score, a stated disqualifier shown on the row and in the sheet and moving only a trial with no score — with the plain state
+ * The list fills in as trials are judged — most promising first by the model's fit score, the ones a stated condition rules out last — with the plain state
  * 「已完成 n / m」, and a run that failed or stopped short says so and offers the rest; it never reads as 「还没有找过」. A trial opens
  * into what the model made of it in three groups (what supports it, what rules it out, what is still to check) and then every clause
  * with the patient's own sentences and the way into the record at each.
