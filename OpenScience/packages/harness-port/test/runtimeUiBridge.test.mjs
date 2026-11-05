@@ -108,7 +108,7 @@ test('the scheduled-task page is waited for while the kernel registers it, and a
   f.ctx.dispose();
 
   // A page that never registers: the wait is bounded, the navigation still completes and the draft is still put in.
-  const g = fixture(); g.target.setTimeout = (/** @type {() => void} */ fn) => setImmediate(fn);
+  const g = fixture(); /** @type {any} */ (g.target).setTimeout = (/** @type {() => void} */ fn) => { setImmediate(fn); return 0; };
   apply(g.ctx, {}, g.target); await settle();
   g.panels.clear();
   g.navigate({ intent: { kind: 'create', sessionId: 'session-new', draft: 'Plan it', panel: 'schedules' } });
@@ -120,7 +120,7 @@ test('the scheduled-task page is waited for while the kernel registers it, and a
 
 test('a kernel with no layout service opens the conversation and ignores the page it was asked to show', async () => {
   // The page is waited for in a bounded loop, as when it never registers; the clock is the test's.
-  const f = fixture(); f.withoutLayout(); f.target.setTimeout = (/** @type {() => void} */ fn) => setImmediate(fn);
+  const f = fixture(); f.withoutLayout(); /** @type {any} */ (f.target).setTimeout = (/** @type {() => void} */ fn) => { setImmediate(fn); return 0; };
   apply(f.ctx, {}, f.target); await settle();
   f.navigate({ intent: { kind: 'create', sessionId: 'session-new', draft: 'Plan it', panel: 'schedules' } });
   for (let turn = 0; turn < 80; turn += 1) await settle();
