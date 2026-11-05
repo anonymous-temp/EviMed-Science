@@ -101,3 +101,48 @@ vcr_case("N82g", c("AC-37"), function() {
   list(pass = identical(r$status, "succeeded") && r$diagnostics$replicatesCompleted == 10000L && secs < 120,
        detail = sprintf("the default %d trials of BOIN, 3+3, the keyboard design and CRM on a six-dose curve: %.1f s (the default CPU budget is 600 s, the run stops at 540)", as.integer(r$diagnostics$replicatesCompleted), secs))
 })
+
+vcr_case("N82h", c("AC-28", "AC-29"), function() {
+  # 3+3 honours the starting dose. Reference: a plain sequential simulator of the traditional rule written out for one trial at a time (three patients
+  # per cohort, three more at 1/3, a dose with 2 or more of 3 or 6 too toxic, one dose down after it, the MTD is the highest dose with at most 1 of 6,
+  # and a dose stepped down onto without a cohort of its own gets its six), started at dose 3 on the default curve. Mean patients at each dose and the
+  # probability of selecting each dose are within 4 combined standard errors of it, through `boin` + compare and through `three_plus_three` alone.
+  ptrue <- unlist(.n82_curve); K <- length(ptrue); start <- 3L
+  one <- function() {
+    N <- integer(K); Y <- integer(K); d <- start; down <- FALSE; sel <- 0L
+    repeat {
+      t <- sum(stats::runif(3L) < ptrue[d]); N[d] <- N[d] + 3L; Y[d] <- Y[d] + t
+      n <- N[d]; y <- Y[d]
+      if (y >= 2L) {
+        if (d == 1L) { sel <- 0L; break }
+        l <- d - 1L; down <- TRUE
+        if (N[l] >= 6L) { sel <- l; break }
+        d <- l
+      } else if (n == 3L && (y == 1L || down)) { next }
+      else if (down) { sel <- d; break }
+      else if (d == K) { sel <- K; break }
+      else d <- d + 1L
+    }
+    c(N, sel)
+  }
+  set.seed(8208L)
+  M <- 20000L
+  ref <- t(vapply(seq_len(M), function(i) one(), numeric(K + 1L)))
+  ref_pat <- colMeans(ref[, 1:K]); ref_pat_se <- apply(ref[, 1:K], 2, stats::sd) / sqrt(M)
+  ref_sel <- vapply(0:K, function(j) mean(ref[, K + 1L] == j), numeric(1))
+  z_max <- 0; text <- character()
+  for (case in list(list(kind = "boin", compare = list("three_plus_three")), list(kind = "three_plus_three", compare = NULL))) {
+    r <- .n82_job(Filter(Negate(is.null), list(kind = case$kind, compare = case$compare, maxPatients = 30, startDose = start)), trials = M, seed = 8208L)
+    idx <- which(vapply(r$diagnostics$doseFinding$designs, function(d) identical(d$kind, "three_plus_three"), logical(1)))
+    pat <- vapply(seq_len(K), function(j) .n82_cell(r, idx, sprintf("patients_dose_%d", j))$value, numeric(1))
+    pat_se <- vapply(seq_len(K), function(j) .n82_cell(r, idx, sprintf("patients_dose_%d", j))$mcse, numeric(1))
+    sel <- vapply(seq_len(K), function(j) .n82_cell(r, idx, sprintf("select_dose_%d", j))$value, numeric(1))
+    none <- .n82_cell(r, idx, "select_none_probability")$value
+    z1 <- (pat - ref_pat) / sqrt(pat_se^2 + ref_pat_se^2 + 1e-12)
+    es <- sqrt(c(none, sel) * (1 - c(none, sel)) / M + ref_sel * (1 - ref_sel) / M + 1e-12)
+    z2 <- (c(none, sel) - ref_sel) / es
+    z_max <- max(z_max, abs(z1), abs(z2))
+    text <- c(text, sprintf("%s: patients at doses 1-2 %.2f/%.2f (reference %.2f/%.2f)", case$kind, pat[1], pat[2], ref_pat[1], ref_pat[2]))
+  }
+  list(pass = z_max < 4, detail = sprintf("start dose 3, %d trials: %s; largest difference %.2f combined standard errors (limit 4)", M, paste(text, collapse = "; "), z_max))
+})

@@ -321,9 +321,9 @@ vcr_dose_select_isotonic <- function(N, Y, target, cutoff) {
 
 #' 3+3, every trial at once. See the file header for the rule. Cohorts of three; `mode` 0 is escalating, 1 is stepping down after a dose
 #' exceeded the MTD. A trial that is done holds the dose it selected (0: none).
-.vcr_dose_run_three_plus_three <- function(U, ptrue) {
+.vcr_dose_run_three_plus_three <- function(U, ptrue, start = 1L) {
   T <- nrow(U); K <- length(ptrue)
-  d <- rep.int(1L, T); N <- matrix(0L, T, K); Y <- matrix(0L, T, K)
+  d <- rep.int(as.integer(start), T); N <- matrix(0L, T, K); Y <- matrix(0L, T, K)
   used <- rep.int(0L, T); down <- rep(FALSE, T); done <- rep(FALSE, T); sel <- rep.int(0L, T)
   repeat {
     act <- which(!done)
@@ -335,7 +335,8 @@ vcr_dose_select_isotonic <- function(N, Y, target, cutoff) {
     used[act] <- ua + 3L
     nd <- N[idx]; yd <- Y[idx]
     expand <- nd == 3L & yd == 1L                      # 1/3: three more at the same dose
-    pass <- (nd == 3L & yd == 0L) | (nd == 6L & yd <= 1L)
+    # stepping down onto a dose that has had no cohort yet (a starting dose above 1), 0/3 is not enough to call it the MTD: three more
+    pass <- (nd == 3L & yd == 0L & !down[act]) | (nd == 6L & yd <= 1L)
     fail <- (nd == 3L & yd >= 2L) | (nd == 6L & yd >= 2L)
     # a dose that passed: stepping down, it is the MTD; escalating, go up unless it is the top dose
     at_top <- pass & !down[act] & da == K
@@ -391,7 +392,7 @@ vcr_dose_select_isotonic <- function(N, Y, target, cutoff) {
   out <- list()
   for (kind in p$kinds) {
     out[[kind]] <- switch(kind,
-      three_plus_three = .vcr_dose_run_three_plus_three(U, p$tox),
+      three_plus_three = .vcr_dose_run_three_plus_three(U, p$tox, p$start),
       boin = .vcr_dose_run_table(U, p$tox, tables$boin, p$start, p$cohort, p$max_n, p$target, p$boin_cut),
       keyboard = .vcr_dose_run_table(U, p$tox, tables$keyboard, p$start, p$cohort, p$max_n, p$target, p$key_cut),
       crm = .vcr_dose_run_crm(U, p$tox, p$skeleton, p$start, p$cohort, p$max_n, p$target, p$crm_sd, p$restrict))
