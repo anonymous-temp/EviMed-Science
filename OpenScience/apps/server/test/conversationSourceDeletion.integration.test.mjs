@@ -173,3 +173,24 @@ test('empty SQL receipts do not prove an uncommitted native source session absen
   await assert.rejects(f.store.removeConversationSource(f.userId,'default',['unrecorded'],{projectCreatedAt:f.projectCreatedAt}),{code:'memory_source_lineage_unverified'});
   assert.ok(f.stub.sessions.has(`${f.engineUser}/dsh-unrecorded`));
 });
+
+test('cleanup-only native ingestion refuses an update without an exact typed before-image',options,async t=>{
+  const f=await fixture(t),source=await f.commitConversation('a',[{role:'user',text:'Source A.'}],{projectId:'default'}),commit=await f.overlay.commit(f.userId,source.archive_uri),uri=f.seed('preferences/source.md','Independent B.\nSource A.',{type:'preferences'});
+  const malformed={archive_uri:source.archive_uri,operations:{adds:[],updates:[{uri,memory_type:'preferences',after:'Independent B.\nSource A.'}],deletes:[]}};
+  await assert.rejects(f.worker.ingest(commit,malformed,{sourceDeleted:true}),{code:'memory_source_lineage_unverified'});
+  assert.equal((await f.overlay.originsOf(f.userId,[uri])).get(uri),undefined);assert.equal(await f.sessions.read(f.userId,uri),'Independent B.\nSource A.');
+});
+
+import { createServer } from 'node:http';
+import { once } from 'node:events';
+import { createMemoryGatewayHandler, MEMORY_GATEWAY_PATH } from '../src/memoryGateway.mjs';
+test('the real memory gateway rejects a cross-project uncommitted native alias before writing its bytes',options,async t=>{
+  const f=await fixture(t);await f.database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'other','Other source',1048576)",[f.userId]);
+  const handler=createMemoryGatewayHandler({config:{memoryEngineEnabled:true,memoryEnabled:true},runtimeManager:{assertActiveEviMedWorkloadToken:async token=>({userId:f.userId,projectId:token})},
+    store:{userById:async()=>({id:f.userId}),requireProject:async(_user,id)=>({userId:f.userId,id,name:id,projectCreatedAt:(await f.database.query('SELECT created_at::text AS stamp FROM evimed_control.projects WHERE user_id=$1 AND id=$2',[f.userId,id])).rows[0].stamp})},sessions:f.sessions,overlay:f.overlay,admission:{admit:async()=>({learn:true,recall:true,sessionId:'same'})}});
+  const server=createServer((req,res)=>{void handler(req,res,()=>{});});server.listen(0,'127.0.0.1');await once(server,'listening');t.after(()=>new Promise(resolve=>{server.closeAllConnections();server.close(resolve);}));
+  const base=`http://127.0.0.1:${server.address().port}${MEMORY_GATEWAY_PATH}`,write=project=>fetch(`${base}/api/v1/sessions/dsh-same/messages`,{method:'POST',headers:{authorization:`Bearer ${project}`,'content-type':'application/json'},body:JSON.stringify({role:'user',content:`Private ${project} bytes.`})});
+  assert.equal((await write('default')).status,200);assert.equal((await write('other')).status,403);
+  assert.equal(f.stub.sessions.get(`${f.engineUser}/dsh-same`).messages.length,1);
+  assert.equal(await f.overlay.projectOfSession(f.userId,'dsh-same'),'default');
+});
