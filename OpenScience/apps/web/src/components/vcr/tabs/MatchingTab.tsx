@@ -107,7 +107,7 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
     }).then((page): MatchingPage => ({ ...page, askedFor }));
   });
   // What the model judged for what the reader chose: one patient's trials, or one protocol's people. Nothing is asked until a patient is chosen.
-  const judgedLoad = useVcrLoad<VcrJudged | null>(`${studyId}:matching-judged:${direction}:${protocolVersionId ?? "latest"}`, () => {
+  const judgedLoad = useVcrLoad<VcrJudged | null>(`${studyId}:matching-judged:${direction}:${protocolVersionId ?? "latest"}${direction === "patient_to_trial" ? `:${candidate ?? ""}` : ""}`, () => {
     if (direction === "patient_to_trial") {
       return candidate ? getVcrJudged(studyId, { direction, subjectKey: candidate, target: trial }) : Promise.resolve(null);
     }
@@ -119,8 +119,8 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
     // An empty id is the select's own 请选择患者: nobody asked for.
     setCandidate(id || null);
     setTrial(null);
-    // Same key, a new round: the tab stays on screen while the person loads.
-    reloadAll();
+    // The judged page's key follows the patient, so a read that fails for the new patient is a failure and never the last patient's page under the new name.
+    reload();
   };
   const pickTrial = (id: string | null) => {
     setTrial(id);
@@ -134,7 +134,13 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
   const narrowRules = (next: RuleVerdict | null) => { setRuleVerdict(next); setRuleOffset(0); reload(); };
   const pageRules = (next: number) => { setRuleOffset(next); reload(); };
 
-  const switchDirection = (next: Direction) => { touched.current = true; setDirection(next); setCandidate(null); setTrial(null); setVerdict(null); setOffset(0); setPerson(null); setRuleVerdict(null); setRuleOffset(0); };
+  const switchDirection = (next: Direction) => {
+    touched.current = true; setDirection(next); setCandidate(null); setTrial(null); setVerdict(null); setOffset(0); setPerson(null); setRuleVerdict(null); setRuleOffset(0);
+    // To the protocols' side with none chosen yet: land on the newest protocol that was judged, as the first load does, and not on whichever the list starts with.
+    if (next === "trial_to_patient" && protocolVersionId === null) {
+      void getVcrJudgedLatest(studyId, "trial_to_patient").then((latest) => { if (latest?.direction === "trial_to_patient") setProtocolVersionId((now) => now ?? latest.protocolVersionId); }).catch(() => undefined);
+    }
+  };
 
   // Once per visit: a study with a patient and no protocol opens on that patient. A later click on the other direction stays there.
   const opened = useRef(false);

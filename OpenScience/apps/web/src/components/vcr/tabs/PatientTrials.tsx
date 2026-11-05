@@ -14,7 +14,7 @@ import { useVcrRun } from "../useVcrRun";
 import { VCR_TRIAL_SEARCH_FAILED } from "../vcrText";
 import { FIND_TRIALS_LABEL } from "../vcrActionWords";
 import { fitText, JudgedPairDetail, RegistryLink, statusLine, VerdictTag } from "./JudgedPair";
-import { JudgedFailures, JudgedProgressNote } from "./JudgedProgress";
+import { JudgedFailures, JudgedProgressNote, judgedCountLabel } from "./JudgedProgress";
 import { MatchingExport } from "./MatchingExport";
 
 /**
@@ -98,7 +98,7 @@ export function PatientTrials({ studyId, study, judged, picked, onPick, onChange
   return (
     <Section
       title={`${judged.label} 的试验`}
-      count={`已完成 ${progress.finished} / ${progress.total}`}
+      count={judgedCountLabel(progress)}
       toolbar={(
         <div className="flex flex-wrap items-center gap-2">
           <MatchingExport studyId={studyId} where={{ direction: "patient_to_trial", subjectKey: subject }} abilities={study.abilities} />

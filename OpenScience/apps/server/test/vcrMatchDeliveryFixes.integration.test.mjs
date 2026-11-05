@@ -69,6 +69,8 @@ test("a re-judgment that failed leaves the last verdict, marked, and the pair ow
   await runJobs();
   const before = await vcr.matchResults.forPatient(study, subjectKey, { viewer });
   assert.equal(before.progress.state, "done");
+  assert.equal((await vcr.matchResults.latest(study.id, "patient_to_trial")).subjectKey, subjectKey);
+  assert.equal(await vcr.matchResults.latest(study.id, "trial_to_patient"), null, "only a patient was judged, so there is no protocol to land on");
   model.failFit = true; model.failCriteria = true;
   await intake(conv(), { messageSeq: say("补充：已怀孕，脑转移。"), subjectKey }, origin);
   await runJobs();
@@ -97,6 +99,9 @@ test("a re-judgment that failed leaves the last verdict, marked, and the pair ow
   await runJobs();
   const after = await vcr.matchResults.forPatient(study, subjectKey, { viewer });
   assert.equal(after.progress.state, "done");
+  // The cost is the whole of this person's judging, not the newest job's: three jobs have run, and the sum of what the first and the last spent is under it.
+  assert.ok(before.progress.cost.spent > 0, "the first job spent something");
+  assert.ok(after.progress.cost.spent > before.progress.cost.spent, `${after.progress.cost.spent} > ${before.progress.cost.spent}`);
   assert.equal(after.failed.count, 0);
   assert.ok(after.trials.every((trial) => !trial.clausesNote));
   // The pair was judged twice, on two notes: the sheet says what the reading before was.

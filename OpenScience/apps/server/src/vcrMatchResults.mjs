@@ -489,11 +489,18 @@ export class VcrMatchResults extends VcrStoreBase {
     const jobs = await this.judgments.jobsOf({ studyId, direction, subjectKey, protocolVersionId, limit: JOBS_READ });
     const withdrawn = direction === "trial_to_patient" ? new Set((await this.rows(`SELECT subject_key FROM ${S}.subject_withdrawals WHERE study_id = $1`, [studyId])).map((row) => String(row.subject_key))) : new Set();
     const { latest, running: _running, ...standing } = judgingProgress({ direction, jobs, done, failed, withdrawn });
-    // What the job says it spent: every call, the ones whose row a later try replaced and the ones that wrote no row. The rows say it while a batch is out, and when the job kept no account.
-    const spent = latest ? await this.one(`SELECT sum(NULLIF(usage ->> 'cost', '')::numeric)::float AS cost,
-        (SELECT (r.diagnostics #>> '{used,cost}')::float FROM ${S}.results r JOIN ${S}.executions e ON e.id = r.execution_id WHERE e.job_id = $2 ORDER BY r.created_at DESC LIMIT 1) AS accounted
-        FROM ${S}.match_judgments WHERE study_id = $1 AND job_id = $2`, [studyId, String(latest.id)]) : null;
-    const spentAmounts = [spent?.accounted, latest?.carried_cost, spent?.cost].filter((value) => value != null && Number.isFinite(Number(value))).map(Number);
+    // What the judging of this scope has cost, every job of it and not only the newest (a continuation is a job of its own): for each job what it says it spent — every call, the ones whose
+    // row a later try replaced and the ones that wrote no row — or, when it kept no account, what its rows say. The ceiling below is the newest job's own.
+    const jobIds = jobs.map((job) => String(job.id));
+    const [rowCosts, accounted] = jobIds.length ? await Promise.all([
+      this.rows(`SELECT job_id, sum(NULLIF(usage ->> 'cost', '')::numeric)::float AS cost FROM ${S}.match_judgments WHERE study_id = $1 AND job_id = ANY($2::text[]) GROUP BY job_id`, [studyId, jobIds]),
+      this.rows(`SELECT DISTINCT ON (e.job_id) e.job_id, (r.diagnostics #>> '{used,cost}')::float AS accounted FROM ${S}.results r JOIN ${S}.executions e ON e.id = r.execution_id
+        WHERE e.job_id = ANY($1::text[]) ORDER BY e.job_id, r.created_at DESC`, [jobIds]),
+    ]) : [[], []];
+    const fromRows = new Map(rowCosts.map((row) => [String(row.job_id), row.cost]));
+    const fromAccount = new Map(accounted.map((row) => [String(row.job_id), row.accounted]));
+    const perJob = jobs.map((job) => [fromAccount.get(String(job.id)), job.carried_cost, fromRows.get(String(job.id))].filter((value) => value != null && Number.isFinite(Number(value))).map(Number)).filter((amounts) => amounts.length).map((amounts) => Math.max(...amounts));
+    const spentAmounts = perJob.length ? [perJob.reduce((sum, value) => sum + value, 0)] : [];
     const estimate = object(object(latest?.scenario).estimate);
     return {
       ...standing,
@@ -526,15 +533,19 @@ export class VcrMatchResults extends VcrStoreBase {
     return { ids: left, settings };
   }
 
-  /** Where the page should open when it is asked for nothing in particular: the newest thing worked on. @param {string} studyId */
-  async latest(studyId) {
+  /**
+   * Where the page should open when it is asked for nothing in particular: the newest thing worked on, or the newest of one direction.
+   * @param {string} studyId @param {'patient_to_trial' | 'trial_to_patient' | null} [only]
+   */
+  async latest(studyId, only = null) {
+    const kind = only === "patient_to_trial" ? "candidate_trial" : only === "trial_to_patient" ? "protocol_version" : null;
     const row = await this.one(`SELECT * FROM (
         SELECT j.subject_key, j.target_kind, j.target_id, j.updated_at FROM ${S}.match_judgments j WHERE j.study_id = $1 AND ${NOT_WITHDRAWN}
         UNION ALL
         SELECT CASE WHEN scenario ->> 'direction' = 'patient_to_trial' THEN scenario -> 'subjects' ->> 0 END, CASE WHEN scenario ->> 'direction' = 'patient_to_trial' THEN 'candidate_trial' ELSE 'protocol_version' END,
           scenario ->> 'protocolVersionId', created_at FROM ${S}.jobs WHERE study_id = $1 AND kind = 'match_judge'
           AND NOT (scenario ->> 'direction' = 'patient_to_trial' AND scenario -> 'subjects' ->> 0 = '${WITHDRAWN_SUBJECT_MARK}')) newest
-      ORDER BY updated_at DESC LIMIT 1`, [studyId]);
+      WHERE ($2::text IS NULL OR target_kind = $2) ORDER BY updated_at DESC LIMIT 1`, [studyId, kind]);
     if (!row) return null;
     return row.target_kind === "candidate_trial" ? { direction: "patient_to_trial", subjectKey: String(row.subject_key) } : { direction: "trial_to_patient", protocolVersionId: String(row.target_id) };
   }

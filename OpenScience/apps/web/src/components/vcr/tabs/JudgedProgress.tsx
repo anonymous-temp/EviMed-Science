@@ -14,9 +14,21 @@ export function money(value: number): string {
 function costClause(progress: VcrJudgedProgress): string | null {
   const cost = progress.cost;
   if (!cost) return null;
-  const ceiling = cost.ceiling === null ? null : `预计最多 ${money(cost.ceiling)}`;
-  const spent = cost.spent === null ? null : `已用 ${money(cost.spent)}`;
+  // The ceiling is the newest round's own; what was spent is the whole of this scope's judging, every round of it.
+  const ceiling = cost.ceiling === null ? null : `这一轮预计最多 ${money(cost.ceiling)}`;
+  const spent = cost.spent === null ? null : `累计已用 ${money(cost.spent)}`;
   return [ceiling, spent].filter(Boolean).join("，") || null;
+}
+
+/** The second stage (clause by clause) is what is still running: every pair has its whole-pair verdict and the clause calls are out. */
+function clauseStageRunning(progress: VcrJudgedProgress): boolean {
+  return progress.state === "running" && progress.finished !== null && progress.finished === progress.total && (progress.clauses?.left ?? 0) > 0;
+}
+
+/** The count in a page's heading: 「已完成 n / m」, and while the clause calls are still out, that it is the whole-pair stage that is done. */
+export function judgedCountLabel(progress: VcrJudgedProgress): string {
+  if (progress.finished === null || progress.total === null) return "";
+  return clauseStageRunning(progress) ? `整体判定已完成 ${progress.finished} / ${progress.total} · 逐条判定进行中` : `已完成 ${progress.finished} / ${progress.total}`;
 }
 
 /**
@@ -45,31 +57,36 @@ export function JudgedProgressNote({ progress, noun, mayRun, busy, onResume, onS
   const clausesWord = owed > 0 && progress.clauses?.wanted ? `，逐条判了 ${progress.clauses.done ?? 0} / ${progress.clauses.wanted}` : "";
   const tail = `${noun}${failed}${clausesWord}${cost ? `；${cost}` : ""}。`;
   // A count of people too small to show this reader is not a zero: the sentence goes without it.
-  const howFar = (lead: string): NoteResult => (progress.finished !== null && progress.total !== null
-    ? [`${lead}已完成 `, { n: progress.finished }, " / ", { n: progress.total }, ` ${tail}`]
-    : [`${lead}少于 `, { n: VCR_MIN_CELL_SIZE }, ` 人时不显示具体人数${failed}${cost ? `；${cost}` : ""}。`]);
+  const howFar = (lead: string, after = ""): NoteResult => (progress.finished !== null && progress.total !== null
+    ? [`${lead}${clauseStageRunning(progress) ? "整体判定已完成 " : "已完成 "}`, { n: progress.finished }, " / ", { n: progress.total }, ` ${tail}${after}`]
+    : [`${lead}少于 `, { n: VCR_MIN_CELL_SIZE }, ` 人时不显示具体人数${failed}${cost ? `；${cost}` : ""}。${after}`]);
   if (progress.state === "running" || progress.state === "waiting_budget") {
     const waiting = progress.state === "waiting_budget";
     return (
       <div data-vcr-judged-progress={progress.state}>
         <Note
           tone={waiting ? "warn" : "default"}
-          result={howFar(waiting ? "判定暂停，等研究的计算预算：" : "正在判定：")}
+          result={howFar(waiting ? "判定暂停，等研究的计算预算：" : clauseStageRunning(progress) ? "正在逐条判定：" : "正在判定：")}
           action={mayRun && progress.jobId ? <Button size="sm" variant="secondary" actionKind="set" loading={busy} onClick={onStop}>停止这批判定</Button> : undefined}
         />
       </div>
     );
   }
   // What a continuation starts: what never ran, what failed, and the pairs whose clauses are owed.
-  const left = (progress.waiting ?? 0) + (progress.failed ?? 0) + owed;
+  const unit = noun.slice(0, 1);
+  const notDone = (progress.waiting ?? 0) + (progress.failed ?? 0);
+  const left = notDone + owed;
   const leftHidden = progress.waiting === null || progress.failed === null || progress.clauses?.left === null;
   if (progress.state === "stopped" && (left > 0 || leftHidden)) {
+    // Two kinds of leftover are named as what they are: the ones with no verdict yet, and the ones with a verdict whose clause by clause is not done. One kind keeps the short button.
+    const both = notDone > 0 && owed > 0 && !leftHidden;
+    const rest = both ? `还差：${notDone} ${noun}还没判出结论，${owed} ${noun}的逐条判定没做完。` : "";
     return (
       <div data-vcr-judged-progress="stopped">
         <Note
           tone="warn"
-          result={howFar("判定没有做完：")}
-          action={mayRun ? <Button size="sm" variant="secondary" actionKind="start" loading={busy} onClick={onResume}>{leftHidden ? "继续判定剩下的" : `继续判定剩下的 ${left} ${noun.slice(0, 1)}`}</Button> : undefined}
+          result={howFar("判定没有做完：", rest)}
+          action={mayRun ? <Button size="sm" variant="secondary" actionKind="start" loading={busy} onClick={onResume}>{leftHidden || both ? "继续判定剩下的" : `继续判定剩下的 ${left} ${unit}`}</Button> : undefined}
         />
       </div>
     );

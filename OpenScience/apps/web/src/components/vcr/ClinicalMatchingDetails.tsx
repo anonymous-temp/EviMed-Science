@@ -343,10 +343,13 @@ export function useMatchingControls({ studyId, data, direction, protocolId, subj
   const byRules = data.evaluateBy === 'rules' || onRules === true;
   const actions: VcrToolbarAction[] = [];
   // Starting the judging of the protocol in view, for everyone registered or for the patient chosen.
-  if (canRun && protocols.length > 0 && roster.length > 0 && !needsPatient) {
+  // One action for one meaning: it starts the protocols chosen under 「比较多个方案」 when any are, else the one in view. A patient's page of judged trials has its own
+  // 「开始为该患者找试验」 (the search that finds and judges them), so the band does not offer a second start there.
+  const choosing = panel.length > 0 ? panel : [viewing];
+  if (canRun && protocols.length > 0 && (roster.length > 0 || panel.length > 1) && !needsPatient && !(judged && way === 'patient_to_trial')) {
     actions.push({
-      key: 'evaluate', label: '开始评估', kind: 'start', loading: evaluation.busy || settling,
-      onSelect: () => { if (!evaluation.busy && !settling) void evaluation.evaluate({ protocolVersionIds: [viewing], direction: way, byRules, ...scope }); },
+      key: 'evaluate', label: panel.length > 1 ? '开始评估所选方案' : '开始评估', kind: 'start', loading: evaluation.busy || settling,
+      onSelect: () => { if (!evaluation.busy && !settling) void evaluation.evaluate({ protocolVersionIds: choosing, direction: way, byRules, ...scope }); },
     });
   }
 
@@ -370,10 +373,7 @@ export function useMatchingControls({ studyId, data, direction, protocolId, subj
     <Disclosure summary="比较多个方案">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <ProtocolChecklist protocols={protocols} chosen={panel} onChange={setPanel} />
-        <div className="flex flex-wrap items-start gap-2">
-          {canRun && <Button actionKind="start" loading={evaluation.busy} disabled={evaluation.busy || settling || !panel.length || needsPatient}
-            onClick={() => void evaluation.evaluate({ protocolVersionIds: panel, direction: way, byRules, ...scope })}>开始评估所选方案</Button>}
-        </div>
+        {canRun && <p className="text-caption text-text-3 md:col-span-2">{panel.length > 1 ? '点上方的「开始评估所选方案」一起评估勾选的方案。' : '勾选两个以上方案，再点上方的「开始评估」。'}</p>}
         {(data.comparisons ?? []).length > 0 && (
           <List label="各方案的评估情况" divided className="md:col-span-2">
             {data.comparisons?.map(entry => (

@@ -136,6 +136,19 @@ describe('evaluating from the controls',()=>{
     expect(await screen.findByRole('status')).toHaveTextContent('已开始 1 项评估，共 6 对，预计最多 1.50 灵豆；随时可以停止，判完的会保留。1 项暂不可用。');
     expect(screen.queryByRole('alert')).toBeNull();
   });
+  it('offers one start for one meaning: the several protocols ticked are started by the same button, and a patient\'s judged page has its own search and no second start in the band',async()=>{
+    controls();
+    expect(screen.getAllByRole('button',{name:/^开始评估/})).toHaveLength(1);
+    fireEvent.click(screen.getByText('比较多个方案'));
+    expect(screen.queryByRole('button',{name:'开始评估所选方案'})).toBeNull();
+    for(const box of within(screen.getByRole('group',{name:'选择方案（最多 10 项）'})).getAllByRole('checkbox'))fireEvent.click(box);
+    expect(screen.getAllByRole('button',{name:/^开始评估/})).toHaveLength(1);
+    expect(screen.getByRole('button',{name:'开始评估所选方案'})).toBeInTheDocument();
+  });
+  it('a patient page of judged trials has no 开始评估 in the band: 开始为该患者找试验 on the page is its start',()=>{
+    controls(page({direction:'patient_to_trial'}),{judged:true,subjectKey:'P-001'});
+    expect(screen.queryByRole('button',{name:/^开始评估/})).toBeNull();
+  });
   it('says a batch already out is that batch, and not a second one',async()=>{
     api.judge.mockResolvedValue({jobId:'job',state:'running',alreadyRunning:true,pairs:6,ceiling:1.5,currency:'CNY'});
     controls();
@@ -539,12 +552,11 @@ describe('clinical matching controls',()=>{
     const data={protocols:[{id:'p1',version:1,title:'方案一'},{id:'p2',version:2,title:'方案二'}],direction:'patient_to_trial',candidateRoster:['P-001']} as unknown as VcrMatchingTab;
     render(<Controls data={data}/>);
     fireEvent.click(screen.getByText('比较多个方案'));
-    const button=screen.getByRole('button',{name:'开始评估所选方案'});
-    expect(button).toBeDisabled();
+    // An action that cannot work is not offered: with no patient chosen there is no start, whatever is ticked.
     for(const box of within(screen.getByRole('group',{name:'选择方案（最多 10 项）'})).getAllByRole('checkbox'))fireEvent.click(box);
-    expect(button).toBeDisabled();
+    expect(screen.queryByRole('button',{name:/^开始评估/})).toBeNull();
     await choose('患者','P-001');
-    fireEvent.click(button);
+    fireEvent.click(screen.getByRole('button',{name:'开始评估所选方案'}));
     await waitFor(()=>expect(api.judge).toHaveBeenCalledTimes(2));
     expect(api.judge.mock.calls).toEqual([['s1',{direction:'trial_to_patient',protocolVersionId:'p1',subjectKeys:['P-001']}],['s1',{direction:'trial_to_patient',protocolVersionId:'p2',subjectKeys:['P-001']}]]);
     expect(await screen.findByRole('status')).toHaveTextContent('已开始 2 项评估');

@@ -97,7 +97,7 @@ describe("给患者找试验 — the trials fill in as the job judges them", () 
   it("says the job is out, with its ceiling and what it has cost, and stops this job — not the study", async () => {
     await patientPage({ [`POST ${MATCHING.replace("/matching", "")}/jobs/job_fixed/cancel`]: { job: { id: "job_fixed" }, canceled: true } });
     const note = document.querySelector("[data-vcr-judged-progress='running']") as HTMLElement;
-    expect(note).toHaveTextContent("正在判定：已完成 5 / 8 个试验，其中 2 个没判成；预计最多 1.50 灵豆，已用 0.13 灵豆。");
+    expect(note).toHaveTextContent("正在判定：已完成 5 / 8 个试验，其中 2 个没判成；这一轮预计最多 1.50 灵豆，累计已用 0.13 灵豆。");
     await userEvent.click(within(note).getByRole("button", { name: "停止这批判定" }));
     await waitFor(() => expect(server.calls.some((call) => call.method === "POST" && call.path === `/vcr/studies/${STUDY_ID}/jobs/job_fixed/cancel`)).toBe(true));
     expect(server.calls.some((call) => call.path.endsWith("/cancel") && !call.path.includes("/jobs/"))).toBe(false);
@@ -280,6 +280,50 @@ describe("给患者找试验 — every state", () => {
     expect(document.querySelector("[data-vcr-judged-cut]")).toHaveTextContent("超过一次能读的上限");
     expect(screen.getByText("重新判定没有完成，这里仍是上一次的结论")).toBeInTheDocument();
     expect(screen.getByText("这条结论没有读全：1 份病历没能读取。")).toBeInTheDocument();
+  });
+
+  it("while the clause calls are still out the heading and the sentence say that it is the whole-pair stage that is done", async () => {
+    await patientPage({ [JUDGED]: judged((page) => { page.progress = { ...page.progress, state: "running", total: 10, finished: 10, failed: 0, waiting: 0, clauses: { wanted: 5, done: 3, left: 2 } }; return page; }) });
+    expect(screen.getByRole("heading", { name: "P-0192 的试验" }).closest("section")).toHaveTextContent("整体判定已完成 10 / 10 · 逐条判定进行中");
+    expect(document.querySelector("[data-vcr-judged-progress='running']")).toHaveTextContent("正在逐条判定：整体判定已完成 10 / 10 个试验，逐条判了 3 / 5");
+  });
+
+  it("what is left is named as two things when it is two: trials with no verdict, and trials whose clause by clause is not done", async () => {
+    await patientPage({ [JUDGED]: judged((page) => { page.progress = { ...page.progress, state: "stopped", total: 10, finished: 8, failed: 0, waiting: 2, clauses: { wanted: 8, done: 5, left: 3 } }; return page; }) });
+    const note = document.querySelector("[data-vcr-judged-progress='stopped']") as HTMLElement;
+    expect(note).toHaveTextContent("还差：2 个试验还没判出结论，3 个试验的逐条判定没做完。");
+    expect(within(note).getByRole("button", { name: "继续判定剩下的" })).toBeInTheDocument();
+  });
+
+  it("a patient whose page cannot be read is a failure with 重试, and never the last patient's trials under the new name", async () => {
+    let failFor: string | null = null;
+    server = installVcrServer(network.productRequest, { [JUDGED]: (request: { query: URLSearchParams }) => {
+      if (failFor && request.query.get("subjectKey") === failFor) throw new WebApiError("x", { status: 500, code: "internal_error" });
+      return judged()(request);
+    } });
+    draw(<MatchingTab studyId={STUDY_ID} study={study()} />);
+    await userEvent.click(await screen.findByRole("button", { name: "给患者找试验" }));
+    await userEvent.click(await screen.findByRole("button", { name: /^患者/ }));
+    await userEvent.click(await screen.findByRole("menuitemradio", { name: "P-0192" }));
+    await screen.findByRole("heading", { name: "P-0192 的试验" });
+    await userEvent.click(await screen.findByRole("button", { name: /^患者/ }));
+    const others = (await screen.findAllByRole("menuitemradio")).filter((item) => item.textContent?.trim() !== "P-0192" && !/请选择/.test(item.textContent ?? ""));
+    expect(others.length).toBeGreaterThan(0);
+    failFor = others[0].textContent!.trim();
+    await userEvent.click(others[0]);
+    expect(await screen.findByRole("button", { name: "重试" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "P-0192 的试验" })).toBeNull();
+  });
+
+  it("switching to the protocols' side lands on the newest protocol that was judged, not the first in the list", async () => {
+    server = installVcrServer(network.productRequest, { [JUDGED]: (request: { query: URLSearchParams }) => {
+      if (request.query.get("direction") === null) return { available: true, latest: request.query.get("only") === "trial_to_patient" ? { direction: "trial_to_patient", protocolVersionId: "prt_judged" } : null };
+      return judged()(request);
+    } });
+    draw(<MatchingTab studyId={STUDY_ID} study={study()} />);
+    await userEvent.click(await screen.findByRole("button", { name: "给患者找试验" }));
+    await userEvent.click(await screen.findByRole("button", { name: "给试验找患者" }));
+    await waitFor(() => expect(judgedReads(server).some((query) => query.get("direction") === "trial_to_patient" && query.get("protocolVersionId") === "prt_judged")).toBe(true));
   });
 
   it("the sheet of a pair judged again says in one line what the reading before it was", async () => {
@@ -481,7 +525,7 @@ describe("给试验找患者 — a protocol's people", () => {
   it("says how far the job is, its ceiling and what it has cost, and stops this job", async () => {
     await protocolPage({ [`POST /vcr/studies/${STUDY_ID}/jobs/job_fixed/cancel`]: { job: { id: "job_fixed" }, canceled: true } });
     const note = document.querySelector("[data-vcr-judged-progress='running']") as HTMLElement;
-    expect(note).toHaveTextContent("正在判定：已完成 13 / 16 位患者，其中 1 位没判成；预计最多 12.50 灵豆，已用 0.30 灵豆。");
+    expect(note).toHaveTextContent("正在判定：已完成 13 / 16 位患者，其中 1 位没判成；这一轮预计最多 12.50 灵豆，累计已用 0.30 灵豆。");
     await userEvent.click(within(note).getByRole("button", { name: "停止这批判定" }));
     await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/jobs/job_fixed/cancel`, "POST", expect.anything()));
   });

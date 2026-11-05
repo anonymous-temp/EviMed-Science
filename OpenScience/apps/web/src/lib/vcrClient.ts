@@ -2785,8 +2785,8 @@ export async function downloadVcrMatching(studyId: string, request: VcrMatchExpo
 }
 
 /** Where the matching page should open when nothing says where: the newest work of the study. */
-export async function getVcrJudgedLatest(studyId: string): Promise<{ direction: "patient_to_trial"; subjectKey: string } | { direction: "trial_to_patient"; protocolVersionId: string } | null> {
-  const latest = obj(obj(await productRequest<unknown>(`${study(studyId)}/matching/judged`)).latest);
+export async function getVcrJudgedLatest(studyId: string, only?: "patient_to_trial" | "trial_to_patient"): Promise<{ direction: "patient_to_trial"; subjectKey: string } | { direction: "trial_to_patient"; protocolVersionId: string } | null> {
+  const latest = obj(obj(await productRequest<unknown>(`${study(studyId)}/matching/judged${only ? `?only=${only}` : ""}`)).latest);
   if (latest.direction === "patient_to_trial" && text(latest.subjectKey)) return { direction: "patient_to_trial", subjectKey: String(latest.subjectKey) };
   if (latest.direction === "trial_to_patient" && text(latest.protocolVersionId)) return { direction: "trial_to_patient", protocolVersionId: String(latest.protocolVersionId) };
   return null;
