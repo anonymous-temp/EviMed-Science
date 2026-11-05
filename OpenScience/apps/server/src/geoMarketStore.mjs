@@ -359,6 +359,7 @@ export function mapOrder(row) {
     geoProjectId: row.geo_project_id,
     articleId: row.article_id,
     articleResultVersionId: row.article_result_version_id ?? null, articleDigest: row.article_digest ?? null,
+    domainFreshRequired: row.domain_fresh_required === true,
     mediaType: row.media_type,
     resourceId: row.resource_id,
     vendorOrderNid: row.vendor_order_nid ?? null,
@@ -854,7 +855,7 @@ export class GeoMarketStore {
   /**
    * Create orders, each with its first event (→ `planned`), in one transaction.
    * @param {Array<{ id?: string, userId: string, geoProjectId: string, articleId: string, mediaType: string, resourceId: string,
-   *   priceCny: number, reserveCny: number, detail?: Record<string, any> }>} orders
+   *   priceCny: number, reserveCny: number, detail?: Record<string, any>, domainFreshRequired?: boolean }>} orders
    * @param {string} at
    */
   async insertOrders(orders, at) {
@@ -870,6 +871,7 @@ export class GeoMarketStore {
       priceCny: assertAmount(order.priceCny),
       reserveCny: assertAmount(order.reserveCny),
       detail: assertDetail(order.detail ?? {}),
+      domainFreshRequired: order.domainFreshRequired === true,
     }));
     if (!rows.length) return [];
     try {
@@ -879,9 +881,9 @@ export class GeoMarketStore {
           const article = (await client.query(`SELECT current_result_version_id, content_sha256 FROM evimed_geo.articles WHERE geo_project_id=$1 AND id=$2 FOR SHARE`,
             [row.geoProjectId, row.articleId])).rows[0];
           const inserted = await client.query(`INSERT INTO evimed_geo.orders (id, user_id, geo_project_id, article_id, media_type, resource_id,
-              state, reserve_cny, price_cny, checks, created_at, updated_at, article_result_version_id, article_digest)
-            VALUES ($1, $2, $3, $4, $5, $6, 'planned', $7, $8, '[]'::jsonb, $9, $9, $10, $11) RETURNING *`,
-          [row.id, row.userId, row.geoProjectId, row.articleId, row.mediaType, row.resourceId, row.reserveCny, row.priceCny, when, article?.current_result_version_id ?? null, article?.current_result_version_id ? article.content_sha256 : null]);
+              state, reserve_cny, price_cny, checks, created_at, updated_at, article_result_version_id, article_digest, domain_fresh_required)
+            VALUES ($1, $2, $3, $4, $5, $6, 'planned', $7, $8, '[]'::jsonb, $9, $9, $10, $11, $12) RETURNING *`,
+          [row.id, row.userId, row.geoProjectId, row.articleId, row.mediaType, row.resourceId, row.reserveCny, row.priceCny, when, article?.current_result_version_id ?? null, article?.current_result_version_id ? article.content_sha256 : null, row.domainFreshRequired]);
           await insertEvent(client, { orderId: row.id, at: when, fromState: null, toState: "planned", detail: row.detail });
           created.push(mapOrder(inserted.rows[0]));
         }
