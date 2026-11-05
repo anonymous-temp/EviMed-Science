@@ -22,6 +22,21 @@ CREATE TABLE IF NOT EXISTS evimed_memory.history_fences (
   permanent boolean NOT NULL, cutoff timestamptz NOT NULL DEFAULT clock_timestamp(),
   PRIMARY KEY(owner_id,owner_created_at,project_id,project_created_at,session_id)
 );
+-- Discovery/retry progress is metadata only. Completed archives do not need
+-- another memory extraction; this queue indexes their existing original text.
+CREATE TABLE IF NOT EXISTS evimed_memory.history_archives (
+  owner_id text NOT NULL, owner_created_at text NOT NULL, archive_uri text NOT NULL,
+  engine_session text NOT NULL, namespace_id text NOT NULL DEFAULT '', project_id text,
+  project_created_at text, commit_created_at timestamptz, source_hash text,
+  state text NOT NULL DEFAULT 'queued' CHECK(state IN ('queued','indexing','complete','excluded','partial','unavailable','withdrawn')),
+  reason text NOT NULL DEFAULT '', message_count integer NOT NULL DEFAULT 0,
+  indexed_chunks integer NOT NULL DEFAULT 0, archive_bytes integer NOT NULL DEFAULT 0,
+  attempts integer NOT NULL DEFAULT 0, next_attempt_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  lease_until timestamptz, updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  PRIMARY KEY(owner_id,owner_created_at,archive_uri)
+);
+CREATE INDEX IF NOT EXISTS history_archives_due ON evimed_memory.history_archives(next_attempt_at,updated_at)
+  WHERE state IN ('queued','indexing','unavailable','partial');
 ALTER TABLE evimed_memory.history_fences ADD COLUMN IF NOT EXISTS project_created_at text NOT NULL DEFAULT '';
 ALTER TABLE evimed_memory.history_fences DROP CONSTRAINT IF EXISTS history_fences_pkey;
 ALTER TABLE evimed_memory.history_fences ADD PRIMARY KEY(owner_id,owner_created_at,project_id,project_created_at,session_id);
@@ -110,6 +125,10 @@ export class MemoryHistoryLedger {
           await c.query(`INSERT INTO evimed_memory.history_fences(owner_id,owner_created_at,project_id,project_created_at,session_id,permanent)
             VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(owner_id,owner_created_at,project_id,project_created_at,session_id) DO UPDATE SET
             permanent=history_fences.permanent OR EXCLUDED.permanent,cutoff=clock_timestamp()`, [ownerId, stamp, projectId, projectStamp, sessionId, permanent]);
+          await c.query(`UPDATE evimed_memory.history_archives SET state='withdrawn',reason='lifecycle_fence',lease_until=NULL,updated_at=clock_timestamp()
+            WHERE owner_id=$1 AND owner_created_at=$2 AND ($3='' OR project_id=$3)
+              AND ($4='' OR engine_session='dsh-' || $4) AND ($5='' OR project_created_at IS NULL OR project_created_at=$5)`,
+          [ownerId,stamp,projectId,sessionId,projectStamp]);
           await c.query(`UPDATE evimed_memory.history_chunks SET state='withdrawn',cleaned_at=NULL,lease_until=NULL,updated_at=clock_timestamp()
             WHERE owner_id=$1 AND owner_created_at=$2 AND ($3='' OR project_id=$3) AND ($4='' OR session_id=$4)
               AND ($5='' OR project_created_at=$5)`, [ownerId, stamp, projectId, sessionId, projectStamp]);
@@ -130,6 +149,69 @@ export class MemoryHistoryLedger {
       WHERE uri IN (SELECT uri FROM evimed_memory.history_chunks WHERE state='withdrawn' AND (cleaned_at IS NULL OR cleaned_at<clock_timestamp()-interval '1 hour')
         AND (lease_until IS NULL OR lease_until<clock_timestamp()) ORDER BY updated_at LIMIT 100 FOR UPDATE SKIP LOCKED) RETURNING *`);
     return result.rows;
+  }
+  async discoverArchives(limit = 100) {
+    await this.migrate();
+    const result = await this.database.query(`INSERT INTO evimed_memory.history_archives
+      (owner_id,owner_created_at,archive_uri,engine_session,project_id,commit_created_at)
+      SELECT c.user_id,u.created_at::text,c.archive_uri,c.engine_session,c.project_id,c.created_at
+      FROM evimed_memory.native_commits c JOIN evimed_control.users u ON u.id=c.user_id
+      LEFT JOIN evimed_memory.history_archives h ON h.owner_id=c.user_id AND h.owner_created_at=u.created_at::text AND h.archive_uri=c.archive_uri
+      WHERE c.state='completed' AND h.archive_uri IS NULL
+      ORDER BY c.created_at,c.user_id,c.archive_uri LIMIT $1 ON CONFLICT DO NOTHING RETURNING archive_uri`, [Math.max(1, Math.min(100, limit))]);
+    return result.rows.length;
+  }
+  async claimArchives(limit = 4) {
+    await this.migrate();
+    const result = await this.database.query(`UPDATE evimed_memory.history_archives h SET state='indexing',attempts=h.attempts+1,
+      lease_until=clock_timestamp()+interval '10 minutes',updated_at=clock_timestamp()
+      WHERE (owner_id,owner_created_at,archive_uri) IN (
+        SELECT a.owner_id,a.owner_created_at,a.archive_uri FROM evimed_memory.history_archives a
+        JOIN evimed_control.users u ON u.id=a.owner_id AND u.created_at::text=a.owner_created_at
+        WHERE a.state IN ('queued','indexing','unavailable','partial') AND a.next_attempt_at<=clock_timestamp()
+        AND (a.lease_until IS NULL OR a.lease_until<clock_timestamp())
+        ORDER BY a.next_attempt_at,a.updated_at,a.owner_id,a.archive_uri LIMIT $1 FOR UPDATE OF a SKIP LOCKED) RETURNING h.*`, [Math.max(1, Math.min(4, limit))]);
+    return result.rows;
+  }
+  async startArchive(commit, context) {
+    await this.migrate();
+    const result = await this.database.query(`INSERT INTO evimed_memory.history_archives
+      (owner_id,owner_created_at,archive_uri,engine_session,namespace_id,project_id,commit_created_at)
+      VALUES($1,$2,$3,$4,$5,$6,$7::timestamptz) ON CONFLICT(owner_id,owner_created_at,archive_uri)
+      DO UPDATE SET namespace_id=EXCLUDED.namespace_id,project_id=COALESCE(history_archives.project_id,EXCLUDED.project_id)
+      RETURNING *`, [context.ownerId,context.ownerCreatedAt,commit.archiveUri,commit.engineSession,context.namespaceId,commit.projectId,commit.createdAt ?? null]);
+    return result.rows[0];
+  }
+  async bindArchive(commit, context, source, sourceHash, bytes) {
+    return this.locked(context.ownerId, async c => {
+      const result = await c.query(`UPDATE evimed_memory.history_archives SET source_hash=COALESCE(source_hash,$4),project_created_at=$5,archive_bytes=$6
+        WHERE owner_id=$1 AND owner_created_at=$2 AND archive_uri=$3 AND (source_hash IS NULL OR source_hash=$4) AND state<>'withdrawn' RETURNING archive_uri`,
+      [context.ownerId,context.ownerCreatedAt,commit.archiveUri,sourceHash,source.projectCreatedAt,bytes]);
+      if (result.rows.length) return true;
+      await c.query(`UPDATE evimed_memory.history_chunks SET state='withdrawn',cleaned_at=NULL,lease_until=NULL,updated_at=clock_timestamp()
+        WHERE owner_id=$1 AND owner_created_at=$2 AND archive_uri=$3`, [context.ownerId,context.ownerCreatedAt,commit.archiveUri]);
+      return false;
+    });
+  }
+  async finishArchive(commit, context, state, { reason = '', messages = 0, chunks = 0 } = {}) {
+    await this.migrate();
+    await this.database.query(`UPDATE evimed_memory.history_archives SET state=$4,reason=$5,message_count=$6,indexed_chunks=$7,
+      lease_until=NULL,next_attempt_at=clock_timestamp()+CASE WHEN $4='partial' THEN interval '1 day' ELSE interval '1 minute' END,
+      updated_at=clock_timestamp() WHERE owner_id=$1 AND owner_created_at=$2 AND archive_uri=$3 AND state<>'withdrawn'`,
+    [context.ownerId,context.ownerCreatedAt,commit.archiveUri,state,String(reason).slice(0,100),messages,chunks]);
+  }
+  async alreadyIndexed(meta, digest) {
+    const row = await this.lookup(meta.ownerId,meta.ownerCreatedAt,meta.namespaceId,meta.projectId,meta.projectCreatedAt,meta.uri);
+    return row?.digest === digest;
+  }
+  async archiveCoverage(ownerId = null) {
+    await this.migrate();
+    const result = await this.database.query(`SELECT h.state,count(*)::integer AS n FROM evimed_memory.history_archives h
+      JOIN evimed_control.users u ON u.id=h.owner_id AND u.created_at::text=h.owner_created_at
+      WHERE ($1::text IS NULL OR h.owner_id=$1) GROUP BY h.state`, [ownerId]);
+    const counts = { queued: 0, indexing: 0, complete: 0, excluded: 0, partial: 0, unavailable: 0, withdrawn: 0 };
+    for (const row of result.rows) counts[row.state] = Number(row.n);
+    return counts;
   }
   async removeResource(row) {
     await this.client.remove(row.owner_id, row.uri, { openVikingUser: row.namespace_id });

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { MemoryHistory, MemoryHistoryLedger } from '../src/memoryHistory.mjs';
+import { projectNativeMemoryNamespace } from '../src/openVikingLayout.mjs';
 import { nativeIntegration } from './helpers/nativeFixture.mjs';
 const { options, fixture } = nativeIntegration();
 
@@ -124,6 +125,8 @@ test('changed project incarnation gets a distinct root and an old project fence 
   const f = await setup(t); await f.service.ingestArchive(f.commit, f.context);
   await f.service.deleteProject(f.userId, 'default');
   f.service.resolveSource = async c => ({ projectId: c.projectId, projectCreatedAt: '2026-02-01T00:00:00Z', sessionId: c.engineSession?.slice(4), conversationTitle: 'New project', conversationUrl: '/app/chat/session_a' });
+  const next = await f.commitConversation('new', [{ role: 'user', text: 'New project trial table request.' }], { projectId: 'default' });
+  f.commit = { ...f.commit, engineSession: next.session, archiveUri: next.archive_uri };
   await f.service.ingestArchive(f.commit, f.context); await f.service.drainDeletes();
   assert.equal((await search(f)).length, 1);
 });
@@ -155,7 +158,7 @@ test('backfill honors prior reset fences and excluded conversations without revi
   await f.service.reset(f.userId); await f.service.backfill(); assert.equal(f.files.size, 0); assert.deepEqual(await search(f), []);
   assert.equal((await f.service.coverage(f.userId)).withdrawn, 1);
   const g = await setup(t); await g.worker.processCommits({ userId: g.userId }); g.service.contexts.forUri = async () => g.context; g.service.eligible = async () => false;
-  await g.service.backfill(); assert.equal(g.files.size, 0); assert.equal((await g.service.coverage(g.userId)).excluded, 1);
+  await g.service.backfill(); assert.equal(g.files.size, 0); assert.equal((await g.service.coverage(g.userId)).withdrawn, 1);
 });
 
 test('backfill reports oversized/unavailable archives honestly rather than calling empty coverage complete', options, async t => {
@@ -164,4 +167,47 @@ test('backfill reports oversized/unavailable archives honestly rather than calli
   f.context.sessions.read = async (owner, uri, options) => uri.endsWith('/messages.jsonl') ? 'x'.repeat(2_000_001) : read(owner, uri, options);
   await f.service.backfill(); const coverage = await f.service.coverage(f.userId);
   assert.equal(coverage.partial, 1); assert.equal(coverage.complete, 0); assert.equal(f.files.size, 0);
+});
+
+
+test('backfill keeps equal session names in personal and shared namespaces separate, including short Chinese rejections', options, async t => {
+  const f = await setup(t); await f.worker.processCommits({ userId: f.userId });
+  const namespace = projectNativeMemoryNamespace({ ownerId: f.userId, ownerCreatedAt: f.context.ownerCreatedAt,
+    projectId: 'shared', projectCreatedAt: '2026-01-01T00:00:00Z' });
+  const sessions = f.sessions.forNamespace(namespace); await sessions.register(f.userId);
+  await sessions.createSession(f.userId, f.commit.engineSession);
+  await sessions.addMessage(f.userId, f.commit.engineSession, { role: 'user', content: '对方说青霉素过敏，需要核对药物。' });
+  const accepted = (await sessions.commit(f.userId, f.commit.engineSession)).result;
+  await f.overlay.recordCommit({ userId: f.userId, engineSession: f.commit.engineSession, projectId: 'shared', archiveUri: accepted.archive_uri, origin: 'gateway', state: 'completed' });
+  const shared = { ...f.context, kind: 'geo-project', projectId: 'shared', namespaceId: namespace.engineUser, userRoot: sessions.userRoot(f.userId), sessions };
+  f.service.contexts.forUri = async (_owner, uri) => uri.startsWith(shared.userRoot) ? shared : f.context;
+  f.service.contexts.forProject = async project => project.id === 'shared' ? shared : f.context;
+  await f.service.backfill();
+  const sharedSearch = () => f.service.search({ user: { id: f.userId }, project: { id: 'shared', userId: f.userId }, query: '过敏' });
+  assert.equal((await search(f)).length, 1); assert.equal((await sharedSearch()).length, 1);
+  await f.overlay.reject(f.userId, `${namespace.engineUser}:notes`, `${shared.userRoot}/memories/notes/a.md`, ['青霉素过敏'], { origin: 'edit' });
+  assert.deepEqual(await sharedSearch(), []); assert.equal((await search(f)).length, 1);
+  await f.overlay.unreject(f.userId, `${namespace.engineUser}:notes`, ['青霉素过敏']);
+  assert.equal((await sharedSearch()).length, 1, 'explicit owner restore releases that namespace rejection');
+});
+
+test('short removed Chinese text is dropped as a whole history hit while unrelated retained facts remain searchable', options, async t => {
+  const f = await setup(t); f.service.contexts.forUri = async () => f.context;
+  const second = await f.commitConversation('short', [{ role: 'user', text: '我吃素，希望聚餐时准备蔬菜。' }], { projectId: 'default' });
+  await f.worker.processCommits({ userId: f.userId });
+  await f.overlay.reject(f.userId, 'notes', `${f.root}/notes/a.md`, ['我吃素']);
+  await f.service.backfill();
+  const hits = await search(f); assert.equal(hits.length, 1); assert.ok(!hits.some(hit => hit.sessionId === second.session.slice(4)));
+  assert.equal((await f.service.coverage(f.userId)).partial, 1);
+});
+
+test('backfill source digest rejects changed archive bytes on retry and does not re-extract or publish changed text', options, async t => {
+  const f = await setup(t); await f.worker.processCommits({ userId: f.userId }); f.service.contexts.forUri = async () => f.context;
+  f.failWrites(true); await f.service.backfill(); f.failWrites(false);
+  const read = f.context.sessions.read.bind(f.context.sessions);
+  f.context.sessions.read = async (owner, uri, options) => uri.endsWith('/messages.jsonl') ? JSON.stringify({ role: 'user', content: 'Replacement archive bytes must not appear.' }) : read(owner, uri, options);
+  await f.database.query("UPDATE evimed_memory.history_archives SET next_attempt_at=clock_timestamp()-interval '1 second',lease_until=NULL WHERE owner_id=$1", [f.userId]);
+  await f.service.backfill(); assert.equal(f.files.size, 0);
+  const row = (await f.database.query('SELECT state,reason FROM evimed_memory.history_archives WHERE owner_id=$1', [f.userId])).rows[0];
+  assert.equal(row.state, 'unavailable'); assert.equal(row.reason, 'memory_history_source_changed');
 });

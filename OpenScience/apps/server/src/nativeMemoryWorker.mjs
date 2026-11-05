@@ -192,7 +192,7 @@ export class NativeMemoryWorker {
 
   /** What readiness reports: whether the worker applies here, whether it is running, and what its last pass did. */
   status() {
-    return { applicable: this.applicable, running: Boolean(this.timer), last: { ...this.last } };
+    return { applicable: this.applicable, running: Boolean(this.timer), last: { ...this.last }, ...(this.history ? { history: this.history.status() } : {}) };
   }
 
   start() {
@@ -219,7 +219,7 @@ export class NativeMemoryWorker {
     let commits = 0;
     let accounts = 0;
     try {
-      if (this.history) await this.history.drainDeletes();
+      if (this.history) { await this.history.drainDeletes(); await this.history.backfill(); }
       // The offers of the page's import that nobody saved are not kept past their hour (a saved one a day: what was saved is the engine's).
       await this.overlay.deleteExpiredImports().catch(() => 0);
       for (const userId of await this.overlay.accounts()) {

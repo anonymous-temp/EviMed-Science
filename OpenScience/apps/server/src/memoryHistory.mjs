@@ -65,6 +65,7 @@ export class MemoryHistory {
   constructor({ config, ledger, contexts, resolveSource, eligible, admitMessage, resourcesFor = context => new OpenVikingResources({ client: context.sessions.client }) }) {
     this.config = config; this.ledger = ledger; this.contexts = contexts;
     this.resolveSource = resolveSource; this.eligible = eligible; this.admitMessage = admitMessage; this.resourcesFor = resourcesFor;
+    this.lastBackfill = { at: null, discovered: 0, processed: 0, failed: 0, coverage: null };
   }
   get enabled() { return this.config.memoryHistorySearchEnabled === true; }
 
@@ -74,16 +75,33 @@ export class MemoryHistory {
 
   async ingestArchive(commit, context) {
     if (!this.enabled || !this.ledger || !context?.ownerCreatedAt) return;
+    const progress = await this.ledger.startArchive(commit, context);
+    if (['complete','excluded','withdrawn'].includes(progress.state)) return;
+    try {
+      const outcome = await this.indexArchive(commit, context);
+      await this.ledger.finishArchive(commit, context, outcome.state, outcome);
+    } catch (error) {
+      const code = String(error?.code ?? error?.message ?? '');
+      const reason = /^memory_history_[a-z_]+$/.test(code) ? code : 'memory_history_index_unavailable';
+      await this.ledger.finishArchive(commit, context, reason === 'memory_history_archive_too_large' ? 'partial' : 'unavailable', { reason });
+      throw error;
+    }
+  }
+
+  async indexArchive(commit, context) {
     const archive = parseArchiveUri(commit.archiveUri);
-    if (!archive || archive.userRoot !== context.userRoot || archive.session !== commit.engineSession || !platformSessionOf(commit.engineSession)) return;
+    if (!archive || archive.userRoot !== context.userRoot || archive.session !== commit.engineSession || !platformSessionOf(commit.engineSession)) return { state: 'excluded', reason: 'not_original_conversation' };
     // A saved native association is provenance, never permission. Re-resolve
     // the first-party conversation and all exclusion classes on every retry.
     const source = await this.resolveSource(commit, context);
-    if (!source || source.sessionId !== platformSessionOf(commit.engineSession) || !source.projectId || !source.projectCreatedAt) return;
-    if (!await this.eligible(context, source)) { await this.removeConversation({ ...context, projectId: source.projectId, projectCreatedAt: source.projectCreatedAt }, source.sessionId); return; }
+    if (!source || source.sessionId !== platformSessionOf(commit.engineSession) || !source.projectId || !source.projectCreatedAt) throw new Error('memory_history_source_unproven');
+    if (!await this.eligible(context, source)) { await this.removeConversation({ ...context, projectId: source.projectId, projectCreatedAt: source.projectCreatedAt }, source.sessionId); return { state: 'withdrawn', reason: 'conversation_excluded' }; }
+    if (commit.createdAt && Date.parse(commit.createdAt) < Date.parse(source.projectCreatedAt)) return { state: 'withdrawn', reason: 'project_incarnation_changed' };
     const raw = await context.sessions.read(commit.userId, `${commit.archiveUri}/messages.jsonl`);
     if (raw === null) throw new Error('memory_history_archive_unavailable');
-    if (Buffer.byteLength(raw) > MAX_ARCHIVE_BYTES) throw new Error('memory_history_archive_too_large');
+    const bytes = Buffer.byteLength(raw);
+    if (!await this.ledger.bindArchive(commit, context, source, hash(raw), bytes)) throw new Error('memory_history_source_changed');
+    if (bytes > MAX_ARCHIVE_BYTES) throw new Error('memory_history_archive_too_large');
     const messages = [];
     for (const line of raw.split('\n')) {
       if (!line.trim()) continue;
@@ -95,6 +113,8 @@ export class MemoryHistory {
     }
     const resources = this.resourcesFor(context), root = this.root(context, source);
     const chunks = historyChunks(messages);
+    if (!chunks.length) return { state: messages.length ? 'excluded' : 'unavailable', reason: messages.length ? 'no_admissible_text' : 'message_admission', messages: 0, chunks: 0 };
+    let indexed = 0, refused = 0, rejected = 0;
     for (const [index, chunk] of chunks.entries()) {
       const uri = `${root}/${hash(source.sessionId).slice(0, 24)}/${hash(commit.archiveUri).slice(0, 24)}-${index}.md`;
       const dates = chunk.messages.map(message => message.date);
@@ -102,16 +122,49 @@ export class MemoryHistory {
       const meta = { ownerId: context.ownerId, ownerCreatedAt: context.ownerCreatedAt, namespaceId: context.namespaceId, projectId: source.projectId,
         projectCreatedAt: source.projectCreatedAt, sessionId: source.sessionId, archiveUri: commit.archiveUri, uri, minimumDate };
       const body = JSON.stringify({ messages: chunk.messages });
-      if (!await this.ledger.reserve(meta, hash(body))) continue;
+      if (await this.ledger.rejected(context, chunk.messages.map(message => message.text))) { rejected++; continue; }
+      if (await this.ledger.alreadyIndexed(meta, hash(body))) { indexed++; continue; }
+      if (!await this.ledger.reserve(meta, hash(body))) { refused++; continue; }
       await resources.writeHistory(context.ownerId, uri, body);
       // A reset/deletion that raced the slow write already fenced search. Keep
       // its physical cleanup obligation even if this removal fails or we crash.
       if (!await this.ledger.ready(meta)) {
+        refused++;
         await this.ledger.markCleanup(uri);
         try { await resources.removeSource(context.ownerId, uri); await this.ledger.cleaned(uri); } catch { /* durable retry, below */ }
+      } else indexed++;
+    }
+    return { state: refused ? 'withdrawn' : rejected ? 'partial' : 'complete', reason: refused ? 'lifecycle_fence' : rejected ? 'removed_content' : '', messages: messages.length, chunks: indexed };
+  }
+
+  /** Fair bounded discovery + leased processing of retained completed archives.
+   * Native commits remain untouched: no re-extraction and no second copy of
+   * source text. Expired leases resume after a crashed process; source hashes
+   * and per-chunk registry entries prevent changed-source or duplicate writes.
+   */
+  async backfill() {
+    if (!this.enabled) return;
+    const discovered = await this.ledger.discoverArchives();
+    let processed = 0, failed = 0;
+    for (const row of await this.ledger.claimArchives()) {
+      const commit = { userId: row.owner_id, archiveUri: row.archive_uri, engineSession: row.engine_session,
+        projectId: row.project_id, createdAt: row.commit_created_at?.toISOString?.() ?? row.commit_created_at };
+      let context;
+      try {
+        context = await this.contexts.forUri(row.owner_id, row.archive_uri);
+        if (context.ownerCreatedAt !== row.owner_created_at) throw new Error('memory_history_source_unproven');
+        await this.ingestArchive(commit, context); processed++;
+      } catch {
+        failed++;
+        // Resolution itself can fail before ingestArchive has a context. The
+        // discovered owner incarnation is sufficient for recording retry only.
+        if (!context) await this.ledger.finishArchive(commit, { ownerId: row.owner_id, ownerCreatedAt: row.owner_created_at }, 'unavailable', { reason: 'memory_history_context_unavailable' });
       }
     }
+    this.lastBackfill = { at: new Date().toISOString(), discovered, processed, failed, coverage: await this.ledger.archiveCoverage() };
   }
+  async coverage(ownerId) { return this.ledger.archiveCoverage(ownerId); }
+  status() { return { enabled: this.enabled, backfill: { ...this.lastBackfill } }; }
 
   async search({ user, project, query, limit = 5 }) {
     if (!this.enabled || !query?.trim()) return [];
