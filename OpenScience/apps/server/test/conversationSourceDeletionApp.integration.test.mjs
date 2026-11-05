@@ -174,3 +174,26 @@ test('a previously restored source fact is hidden immediately while its source c
   assert.equal((await fetch(`${base}/api/projects/default/conversations/a/source`,{method:'DELETE',headers})).status,202);
   assert.deepEqual(await app.nativeMemory.files(user.id),[]);assert.ok((await overlay.sensitiveUris(user.id)).includes(uri));
 });
+
+test('native personal facts from a replacement project incarnation are never attributed to its old source tombstone',options,async t=>{
+  const {app,base,headers,user,stub,engineUser}=await fixture(t),owner=await app.store.userById(user.id),overlay=app.nativeMemory.overlay;
+  await app.store.createProject(owner,'reused','Original project');const old=await app.store.requireProject(owner,'reused'),root=app.nativeMemory.sessions.userRoot(user.id);
+  const oldUri=stub.seedMemory(engineUser,'preferences/old.md','Old source fact.',{type:'preferences'}),oldArchive=`${root}/sessions/dsh-same/history/archive_001`;
+  const oldCommit=await overlay.recordCommit({userId:user.id,archiveUri:oldArchive,engineSession:'dsh-same',projectId:'reused',origin:'gateway',state:'completed'});
+  await overlay.upsertFile({userId:user.id,uri:oldUri,memoryType:'preferences',body:'Old source fact.'});
+  await overlay.addRevision({userId:user.id,uri:oldUri,memoryType:'preferences',change:'added',actor:'engine',after:'Old source fact.',engineSession:'dsh-same',archiveUri:oldArchive,sourceProjectId:'reused',sourceProjectCreatedAt:oldCommit.projectCreatedAt});
+  await overlay.syncOrigins(user.id,oldUri,{after:'Old source fact.',origin:{engineSession:'dsh-same',archiveUri:oldArchive,projectId:'reused',projectCreatedAt:oldCommit.projectCreatedAt}});
+  app.runtimeManager.captureConversationSource=async()=>({root:{id:'same',createdAt:1,cwd:'/workspace',isSeeded:false},sessions:[{id:'same'}]});
+  app.runtimeManager.purgeConversationSource=async()=>({sourceRemoved:false,reason:'runtime_busy'});
+  assert.equal((await fetch(`${base}/api/projects/reused/conversations/same/source`,{method:'DELETE',headers})).status,202);
+  await app.store.database.query("UPDATE evimed_control.projects SET created_at=created_at+interval '1 second' WHERE user_id=$1 AND id='reused'",[user.id]);
+  const replacement=await app.store.requireProject(owner,'reused'),newUri=stub.seedMemory(engineUser,'preferences/new.md','New independent fact.',{type:'preferences'}),newArchive=`${root}/sessions/dsh-same/history/archive_002`;
+  const fresh=await overlay.recordCommit({userId:user.id,archiveUri:newArchive,engineSession:'dsh-same',projectId:'reused',origin:'gateway',state:'completed'});
+  await overlay.upsertFile({userId:user.id,uri:newUri,memoryType:'preferences',body:'New independent fact.'});
+  await overlay.addRevision({userId:user.id,uri:newUri,memoryType:'preferences',change:'added',actor:'engine',after:'New independent fact.',engineSession:'dsh-same',archiveUri:newArchive,sourceProjectId:'reused',sourceProjectCreatedAt:fresh.projectCreatedAt});
+  await overlay.syncOrigins(user.id,newUri,{after:'New independent fact.',origin:{engineSession:'dsh-same',archiveUri:newArchive,projectId:'reused',projectCreatedAt:fresh.projectCreatedAt}});
+  assert.equal(await app.sourceDeletion.ledger.get(replacement,'same'),null);
+  const hidden=await app.sourceDeletion.ledger.hiddenMemoryUris(user.id);assert.ok(hidden.includes(oldUri));assert.equal(hidden.includes(newUri),false);
+  assert.ok((await app.nativeMemory.records(user.id)).some(record=>record.value==='New independent fact.'));
+  assert.equal((await app.sourceDeletion.ledger.get({...old,sourceProjectCreatedAt:oldCommit.projectCreatedAt},'same')),null,'current SQL authority is not replaced by a stale object');
+});
