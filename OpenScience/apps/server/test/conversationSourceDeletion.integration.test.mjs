@@ -99,3 +99,12 @@ test('a changed mixed body is deferred and retried without overwriting a concurr
   await assert.rejects(f.store.removeConversationSource(f.userId,'default',['a']),{code:'memory_source_body_changed'});
   assert.match(await f.sessions.read(f.userId,uri),/Independent C/);
 });
+
+test('a source version restored by an earlier ordinary undo is still removed after its origin row was pruned',options,async t=>{
+  const f=await fixture(t),uri=f.seed('profile.md','# Profile\n- Source A restored.',{type:'profile'}),archive=await f.commitConversation('a',[{role:'user',text:'Source A restored.'}],{projectId:'default'});
+  await f.overlay.addRevision({userId:f.userId,uri,memoryType:'profile',change:'added',actor:'engine',after:'# Profile\n- Source A restored.',engineSession:archive.session,archiveUri:archive.archive_uri,projectId:null});
+  await f.overlay.addRevision({userId:f.userId,uri,memoryType:'profile',change:'restored',actor:'user',after:'# Profile\n- Source A restored.',reason:'undo',projectId:null});
+  await f.overlay.upsertFile({userId:f.userId,uri,memoryType:'profile',body:'# Profile\n- Source A restored.'});
+  await f.store.removeConversationSource(f.userId,'default',['session_a']);
+  assert.equal(await f.sessions.read(f.userId,uri),null);
+});
