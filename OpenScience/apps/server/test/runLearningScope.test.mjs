@@ -32,3 +32,9 @@ test('a partial seed-unknown source or a mismatched live session stays unavailab
   input.sessions[0].transcript.truncated = false; input.sessions[0].transcript.sessionId = 'foreign';
   assert.equal(collectedRunScope(input.run, input.sessions).scope.available, false);
 });
+
+test('a live message explicitly attributed to another session is not relabelled by collection', async () => {
+  const { collectedRunScope } = await load(), input = fixture();
+  input.sessions[0].transcript.messages[1].sessionId = 'foreign';
+  assert.equal(collectedRunScope(input.run, input.sessions).scope.available, false);
+});
