@@ -35,11 +35,11 @@ import { DEFAULT_CAP_CNY, DEFAULT_FLOOR_CNY, GuardStop, createBalanceChecker, cr
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REAL_PROVIDER = 'https://api.deepseek.com';
-const ACTIVE = new Set(['queued', 'running', 'planned', 'dispatching', 'starting', 'waiting']);
-const JOB_TERMINAL = new Set(['completed', 'succeeded', 'done', 'failed', 'canceled', 'cancelled']);
-const sleep = (/** @type {number} */ ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
-const hash = (/** @type {Buffer | string} */ bytes) => createHash('sha256').update(bytes).digest('hex');
-const rows = (/** @type {any} */ value) => (Array.isArray(value) ? value : value?.runs ?? value?.items ?? []);
+export const ACTIVE = new Set(['queued', 'running', 'planned', 'dispatching', 'starting', 'waiting']);
+export const JOB_TERMINAL = new Set(['completed', 'succeeded', 'done', 'failed', 'canceled', 'cancelled']);
+export const sleep = (/** @type {number} */ ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
+export const hash = (/** @type {Buffer | string} */ bytes) => createHash('sha256').update(bytes).digest('hex');
+export const rows = (/** @type {any} */ value) => (Array.isArray(value) ? value : value?.runs ?? value?.items ?? []);
 
 export const EXIT = Object.freeze({ finished: 0, error: 1, refused: 2, stopped: 3, unsettled: 4 });
 export const ARMS = Object.freeze(['job', 'native']);
@@ -235,9 +235,9 @@ export function ownedProcesses(...dirs) {
 /**
  * Start `product_server.mjs` and wait until it answers and has written its receipt. The child is this process's own; stopping it
  * asks it to close (its shutdown stops the runtimes it started), then ends it, then reaps any kernel still carrying this run's paths.
- * @param {Record<string, any>} o @param {{ manifest?: string, dataDir: string, databaseUrl: string, log?: (line: string) => void }} input
+ * @param {Record<string, any>} o @param {{ manifest?: string, dataDir: string, databaseUrl: string, log?: (line: string) => void, extraEnv?: Record<string, string> }} input `extraEnv` is added to the server's environment (a scenario that needs a registry that cannot be reached preloads a module through it)
  */
-export async function startServer(o, { manifest = '', dataDir, databaseUrl, log = () => {} }) {
+export async function startServer(o, { manifest = '', dataDir, databaseUrl, log = () => {}, extraEnv = {} }) {
   const port = await freePort();
   // A runtime's control socket lives under the data directory and a unix socket path is at most 107 bytes; the control plane refuses a
   // longer one (and refuses a data directory that is a link), so the server's data directory is a short real one beside the stack.
@@ -250,7 +250,7 @@ export async function startServer(o, { manifest = '', dataDir, databaseUrl, log 
     PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '', LANG: 'C.UTF-8', TZ: 'UTC', TMPDIR: process.env.TMPDIR ?? '/tmp',
     OS: o.tree, TREE_DIR: o.liveRoot, LIVE_DIR: o.liveRoot, LIVE_DATA: liveData, LIVE_PORT: String(port), LIVE_DATABASE_URL: databaseUrl, DSH_BIN: o.dshBin,
     EVAL_DEEPSEEK_KEY_FILE: o.keyFile, VCR_BENCHMARK_BUDGET_FILE: path.join(dataDir, 'budget.json'), VCR_BENCHMARK_BUDGET_CNY: String(o.budgetCny),
-    VCR_STARTUP_RECEIPT: receiptFile, PRODUCT_MODEL_BASE_URL: o.baseUrl, PRODUCT_JUDGE_CONCURRENCY: String(o.concurrency), PRODUCT_RUN_CAP_CNY: String(o.runCapCny ?? 4), PRODUCT_ACCOUNT_CAP_CNY: String(o.accountCapCny ?? 5), ...(manifest ? { VCR_COLLECTION_MANIFEST: manifest } : {}),
+    VCR_STARTUP_RECEIPT: receiptFile, PRODUCT_MODEL_BASE_URL: o.baseUrl, PRODUCT_JUDGE_CONCURRENCY: String(o.concurrency), PRODUCT_RUN_CAP_CNY: String(o.runCapCny ?? 4), PRODUCT_ACCOUNT_CAP_CNY: String(o.accountCapCny ?? 5), ...(manifest ? { VCR_COLLECTION_MANIFEST: manifest } : {}), ...extraEnv,
   };
   const logFile = path.join(dataDir, 'server.log');
   const out = fs.openSync(logFile, 'a', 0o600);
@@ -474,7 +474,7 @@ export function summarizeTranscript(transcript) {
 const VERDICT_WORDS = Object.freeze({ eligible: '符合', possible: '可能符合', insufficient: '证据不足', ineligible: '不符合' });
 
 /** Which of the four verdicts a line states. @param {string} line @returns {Set<string>} */
-function verdictsInLine(line) {
+export function verdictsInLine(line) {
   const found = new Set();
   let text = String(line);
   // The longer phrases first, each removed once read, so that "不符合" and "可能符合" are not also "符合".
@@ -570,6 +570,7 @@ export async function createSavedReader({ databaseUrl, tree }) {
   const config = loadConfig({ databaseUrl, stateStore: 'postgres', deepseekApiKey: 'reader-only-no-calls', vcrEnabled: true, vcrAudience: 'all', vcrDataPlaneDir: '' });
   const vcr = composeVcr({ config, productDatabase: database });
   return {
+    database,
     close: () => database.close(),
     /** @param {{ userId: string, projectId: string }} input */
     async read({ userId, projectId }) {
@@ -602,7 +603,7 @@ export async function createSavedReader({ databaseUrl, tree }) {
 }
 
 /** The account's model usage, from the ledger, while the account still exists. @param {any} database @param {string} userId */
-async function usageOf(database, userId) {
+export async function usageOf(database, userId) {
   const result = await database.query(`SELECT COALESCE(purpose, '(none)') AS purpose, COALESCE(sum(CASE WHEN status = 'released' THEN 0 ELSE COALESCE(actual_cost, reserved_cost) END), 0)::float AS cny,
     COALESCE(sum(COALESCE(cache_hit_tokens, 0) + COALESCE(cache_miss_tokens, 0)), 0)::float AS input, COALESCE(sum(COALESCE(output_tokens, 0)), 0)::float AS output, count(*)::int AS calls,
     count(*) FILTER (WHERE status IN ('reserved', 'uncertain'))::int AS unsettled

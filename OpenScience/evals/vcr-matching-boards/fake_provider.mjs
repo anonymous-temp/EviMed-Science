@@ -47,7 +47,7 @@ export async function startFakeProvider({ expectThinking = null, expectKey = nul
       const messages = Array.isArray(body.messages) ? body.messages : [];
       const system = String(messages[0]?.content ?? ''), user = String(messages.at(-1)?.content ?? '');
       const criteria = system.includes('at the criterion level');
-      requests.push({ path: req.url, model: body.model, thinking, reasoningEffort: body.reasoning_effort ?? null, jsonMode: body.response_format?.type === 'json_object', maxTokens: body.max_tokens ?? null, criteria, userChars: user.length, ...(keepPrompts ? { system, user } : {}) });
+      requests.push({ path: req.url, model: body.model, thinking, reasoningEffort: body.reasoning_effort ?? null, jsonMode: body.response_format?.type === 'json_object', tools: Array.isArray(body.tools) ? body.tools.map((/** @type {any} */ tool) => String(tool?.name ?? tool?.function?.name ?? '')) : null, maxTokens: body.max_tokens ?? null, criteria, userChars: user.length, ...(keepPrompts ? { system, user } : {}) });
       if (expectThinking && thinking !== expectThinking) violations.push(`request ${index}: thinking ${thinking}, wanted ${expectThinking}`);
       if (expectKey && req.headers.authorization !== `Bearer ${expectKey}`) violations.push(`request ${index}: wrong credentials`);
       if (/\/anthropic\/v1\/messages$/u.test(String(req.url))) {

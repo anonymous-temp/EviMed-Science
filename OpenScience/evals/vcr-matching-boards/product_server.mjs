@@ -11,7 +11,7 @@
  *
  * Environment (all required unless marked): OS, TREE_DIR, LIVE_DIR, LIVE_DATA, LIVE_PORT, LIVE_DATABASE_URL (a local evimed_test_*),
  * DSH_BIN, EVAL_DEEPSEEK_KEY_FILE, VCR_BENCHMARK_BUDGET_FILE (absolute), VCR_BENCHMARK_BUDGET_CNY, VCR_STARTUP_RECEIPT,
- * VCR_COLLECTION_MANIFEST (optional: the frozen trial collection of a ranking board), PRODUCT_MODEL_BASE_URL (optional),
+ * VCR_COLLECTION_MANIFEST (optional: the frozen trial collection of a ranking board), PRODUCT_MODEL_BASE_URL (optional), PRODUCT_ENGINE_STANDIN (optional, 1),
  * PRODUCT_JUDGE_CONCURRENCY (optional).
  */
 import { execFileSync } from 'node:child_process';
@@ -42,11 +42,12 @@ process.env.VCR_BENCHMARK_INSTANCE = instance;
 process.env.EVAL_CAPTURE_REQUEST_BODIES = 'false';
 process.env.LIVE_PORT = String(port);
 
-// The conversation is offered `vcr_simulate`, the tool that starts the judging job, only when the deployment has the deterministic VCR engine composed
-// (a URL and a token). The judging job itself is local to the control plane and never calls the engine, so a stand-in is enough to make the tool
-// appear as it does in production: a URL nothing listens on and a random token. Engine-backed kinds would refuse, which no board here asks for.
+// `vcr_simulate`, the tool that starts the judging job, is offered without the deterministic VCR engine (judging patients is local to the control plane,
+// and only `evidence_pool` waits for the engine), so no stand-in engine is composed here. PRODUCT_ENGINE_STANDIN=1 brings back the old one: a URL
+// nothing listens on and a random token, for a run that wants the engine-backed tools offered and refusing.
 const engineToken = path.join(process.env.LIVE_DATA, 'engine-token');
-if (!fsSync.existsSync(engineToken)) fsSync.writeFileSync(engineToken, randomBytes(48).toString('base64url'), { mode: 0o600 });
+const standIn = process.env.PRODUCT_ENGINE_STANDIN === '1';
+if (standIn && !fsSync.existsSync(engineToken)) fsSync.writeFileSync(engineToken, randomBytes(48).toString('base64url'), { mode: 0o600 });
 process.env.LIVE_ENV = JSON.stringify({
   OPEN_SCIENCE_NATIVE_MEMORY_TURN_COMMIT_ENABLED: 'false', OPEN_SCIENCE_MEMORY_ENABLED: 'false', OPEN_SCIENCE_MEMORY_RECALL_ENABLED: 'false', OPEN_SCIENCE_LEARNING_ENABLED: 'false',
   OPEN_SCIENCE_EVOLUTION_ENABLED: 'false', OPEN_SCIENCE_AUTOPILOT_ENABLED: 'false', OPEN_SCIENCE_LOOPX_ENABLED: 'false',
@@ -56,7 +57,7 @@ process.env.LIVE_ENV = JSON.stringify({
   ...(manifest ? { OPEN_SCIENCE_VCR_TRIAL_CORPUS_MANIFEST: manifest } : {}),
 });
 process.env.LIVE_OVERRIDES = JSON.stringify({
-  devAuth: false, authMode: 'local', selfRegistrationEnabled: true, databaseUrl: process.env.LIVE_DATABASE_URL, databaseUrlFile: '', deepseekBaseUrl: modelBase, vcrEngineUrl: 'http://127.0.0.1:9', vcrEngineTokenFile: engineToken,
+  devAuth: false, authMode: 'local', selfRegistrationEnabled: true, databaseUrl: process.env.LIVE_DATABASE_URL, databaseUrlFile: '', deepseekBaseUrl: modelBase, ...(standIn ? { vcrEngineUrl: 'http://127.0.0.1:9', vcrEngineTokenFile: engineToken } : {}),
   publicUrl: `http://127.0.0.1:${port}`, localAutoConfig: false, deepseekModel: 'deepseek-flash', runtimeUiProxyEnabled: true, host: '127.0.0.1', runtimeUiPort: 0,
   maxProjectsPerUser: 100, userDailySpendLimit: Number(process.env.PRODUCT_ACCOUNT_CAP_CNY ?? 5), userRunSpendLimit: Number(process.env.PRODUCT_RUN_CAP_CNY ?? 4),
   nativeMemoryTurnCommitEnabled: false, memoryEnabled: false, memoryRecallEnabled: false, learningEnabled: false, evolutionEnabled: false, autopilotEnabled: false, loopxEnabled: false,
