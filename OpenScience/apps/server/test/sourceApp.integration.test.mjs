@@ -227,13 +227,15 @@ test("the page's own upload command makes a source, whatever the file's format",
 test("a parsed document keeps its checked metadata, its page map and a paged index.md", {
   skip: !databaseUrl && "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured",
 }, async () => {
-  const content = "第一页：房颤患者的抗凝治疗。\r\n第二页：利伐沙班 15 mg 每日一次。";
+  const content = "[Page 1]\n第一页：房颤患者的抗凝治疗。\r\n[Page 2]\n第二页：利伐沙班 15 mg 每日一次。";
   const seen = [];
   const documentParserFetch = async (url, init) => {
     seen.push({ url: String(url), authorization: init.headers.authorization });
     return new Response(JSON.stringify({ code: 200, message: "success", uuid: "U-1", timestamp: 1, elapsed_ms: 5, data: {
-      title: "房颤抗凝治疗专家共识", authors: ["王五"], abstract: "", doi: "10.1234/afib.2024.1", content,
-      pages: [{ index: 1, start: 0, end: 16, status: "ok" }, { index: 2, start: 16, end: content.length, status: "ok" }],
+      content, format: "pdf", media_type: "application/pdf",
+      parse_info: { parser: "native-pdf", parser_version: "13", page_count: 2, ocr_pages: [], warnings: [] },
+      metadata: { title: "房颤抗凝治疗专家共识", authors: ["王五"], abstract: null, keywords: null, publication_date: null, source: null, doi: "10.1234/afib.2024.1" },
+      metadata_status: "succeeded", metadata_error: null,
     } }), { status: 200, headers: { "x-quota-cost": "1", "x-quota-remaining": "41" } });
   };
   const sourceMetadataFetch = async () => new Response(JSON.stringify({ message: { title: ["房颤抗凝治疗专家共识"] } }), { status: 200 });
@@ -253,19 +255,19 @@ test("a parsed document keeps its checked metadata, its page map and a paged ind
     const done = await settle(app, user.id, source.id);
     assert.equal(done.payload.status, "complete");
     assert.deepEqual(seen.map((request) => [new URL(request.url).pathname, request.authorization]),
-      [["/api/v1/extract/text/file", "Bearer sk-test-only"]]);
+      [["/api/v1/parse/engine-a/file", "Bearer sk-test-only"]]);
     assert.equal(done.payload.metadata.title, "房颤抗凝治疗专家共识");
     assert.equal(done.payload.metadata.doi, "10.1234/afib.2024.1");
     assert.equal(done.payload.metadata.doiCheck.status, "verified");
     assert.equal(done.payload.analysis.pageCount, 2);
     assert.equal(done.payload.extractor.quota.remaining, 41);
     const capture = await app.sourceService.loadCapture(user.id, done);
-    // The CRLF inside page one is folded by the capture, and the page map moved with it.
-    assert.deepEqual(capture.pageMap, [{ page: 1, start: 0, end: 15, status: "ok" }, { page: 2, start: 15, end: content.length - 1, status: "ok" }]);
-    assert.equal(capture.input.text.slice(15), "第二页：利伐沙班 15 mg 每日一次。");
+    // The page map is built from the service's [Page N] lines; the CRLF inside page one is folded by the capture, and the map moved with it.
+    assert.deepEqual(capture.pageMap, [{ page: 1, start: 9, end: 24, status: "ok" }, { page: 2, start: 33, end: content.length - 1, status: "ok" }]);
+    assert.equal(capture.input.text.slice(33), "第二页：利伐沙班 15 mg 每日一次。");
     const index = await readFile(path.join(project.baseDir, done.payload.outputs.artifactPath), "utf8");
     assert.match(index, /^# 房颤抗凝治疗专家共识$/m);
     assert.match(index, /^DOI: 10\.1234\/afib\.2024\.1$/m);
-    assert.match(index, /^<!-- page 1 -->\n第一页：房颤患者的抗凝治疗。\n<!-- page 2 -->\n第二页：利伐沙班 15 mg 每日一次。$/m);
+    assert.match(index, /^<!-- page 1 -->\n第一页：房颤患者的抗凝治疗。\n\[Page 2\]\n<!-- page 2 -->\n第二页：利伐沙班 15 mg 每日一次。$/m);
   } finally { await close(); }
 });

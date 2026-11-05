@@ -86,12 +86,12 @@
     "githubRepo": "OpenListTeam/OpenList"
   },
   "evimed-extract": {
-    "version": "0.5.0",
-    "docsCommit": "83f79c4",
-    "revision": "evimed-extract@0.5.0",
+    "version": "1.0.0",
+    "docsCommit": "7f79242",
+    "revision": "evimed-extract@1.0.0",
     "contractDir": "packages/contracts/evimed-extract",
     "recordedAgainst": "the parser team's test environment (its address is not published; a deployment names its parser in OPEN_SCIENCE_DOCUMENT_PARSER_URL)",
-    "notes": "The team's own document-parsing API (docs/api/API.md v0.5.0, read at commit 83f79c4), which replaced the self-hosted MinerU container outright on 2026-09-20: no fallback parser, no comparison run, MinerU deleted in the same change. It is reached over HTTP with a Bearer key its own admin console issues (OPEN_SCIENCE_DOCUMENT_PARSER_TOKEN_FILE), text by Alibaba DocMind and bibliographic metadata by a model over the first and last 8,000 characters. `revision` is the label the knowledge-base index is keyed by, together with each file's SHA-256: the service reports no version of its own, so moving this label is what re-indexes every document parsed under the old one. `testServer` is the only address the owner gave and the compose default; production listens on 9021 per the service's env templates, on a host not yet named. The service is not polled by the nightly matrix (there is no release feed to poll); `contractAtPin` replays the fixtures recorded off the live server, and `scripts/ops/record-parser-contract.mjs` records the authenticated samples once the key exists."
+    "notes": "The team's own document-parsing API (API.md v1.0.0 of 2026-10-27, develop at 7f79242), which replaced the self-hosted MinerU container outright on 2026-09-20 and replaced its own routes on 2026-10-27: the single-engine /api/v1/extract/text/file and /api/v1/parse/file now answer 404, and the routes are POST /api/v1/parse/engine-a/file and /engine-b/file (engine A: page markers, parse_info, OCR, every format we read; engine B: higher quality, fewer formats, no parse_info; the service never switches between them, OPEN_SCIENCE_DOCUMENT_PARSER_ENGINE chooses). Every business route needs a Bearer key its own console issues (OPEN_SCIENCE_DOCUMENT_PARSER_TOKEN_FILE) with the scope `parse` for the text and `extract` for the optional metadata. When the service cannot answer for a PDF, Word, slides or workbook the same text is read from the original bytes in the runtime controller's intake container (documentLocalReader.mjs, labelled evimed-local-reader / local-fallback). `revision` is the label the knowledge-base index is keyed by, together with each file's SHA-256, and a document keeps the label it was parsed under: moving it affects documents parsed from now on. The service is not polled by the nightly matrix (there is no release feed to poll); the contract fixtures are the documented answers of API.md v1.0.0 (nothing could be recorded: the key was refused when this was written), and `scripts/ops/record-parser-contract.mjs` records the real ones once a working key exists."
   },
   "openviking": {
     "version": "0.5.1.1",

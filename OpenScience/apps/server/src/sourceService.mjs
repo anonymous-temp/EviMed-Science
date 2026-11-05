@@ -307,7 +307,7 @@ export function sourceIndexDocument({ original, sha256, extractor, text: body, p
 /**
  * The key a source's text is indexed under, with its SHA-256 and text digest.
  * The in-house parser's version is the configured revision label itself
- * (`evimed-extract@0.5.0`); a local read or an older parser is `name@version`.
+ * (`evimed-extract@1.0.0`); a local read or an older parser is `name@version`.
  * @param {{ name?: string, version?: string, parser?: string } | null | undefined} extractor
  */
 export function extractorRevision(extractor) {

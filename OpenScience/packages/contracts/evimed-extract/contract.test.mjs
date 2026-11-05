@@ -7,12 +7,14 @@
  * owns is the client (`apps/server/src/documentParserClient.mjs`), the revision
  * label that keys the knowledge-base index, and the fixtures that pin the wire.
  *
- * Every fixture was recorded off the running test server (see
- * `fixtures/provenance.json`), and each is served over real HTTP to the real
- * client, so a parse that only works on a hand-shaped object fails here. The
- * authenticated samples appear once the service key exists and
- * `scripts/ops/record-parser-contract.mjs` has run; until then their replay is
- * skipped with the reason stated, which is not the same as passing.
+ * `health.json` was recorded off the running test server; every other fixture is
+ * an answer written out from API.md v1.0.0 and marked `documented` in
+ * `fixtures/provenance.json` (the new credential answered 401 when this was
+ * written, so nothing could be recorded). Each is served over real HTTP to the
+ * real client, so a parse that only works on a hand-shaped object fails here;
+ * `scripts/ops/record-parser-contract.mjs` replaces the documented ones with
+ * recordings once a working key exists, and a test below keeps the two kinds
+ * from being confused.
  */
 
 import assert from "node:assert/strict";
@@ -74,10 +76,13 @@ test("the pin is defined once, with the contract version and the documentation i
 test("the fixtures were recorded against the contract this pin names", () => {
   assert.equal(provenance.contractVersion, pin.version);
   assert.equal(provenance.docsCommit, pin.docsCommit);
-  assert.equal(provenance.server, pin.recordedAgainst);
-  // The walk must prove it walked: two recordings exist from the first day.
-  assert.ok(Object.keys(provenance.fixtures).length >= 2);
-  assert.ok("health.json" in provenance.fixtures && "extract-missing-file.json" in provenance.fixtures);
+  assert.equal(JSON.stringify(provenance).match(/https?:\/\/\d+\.\d+\.\d+\.\d+/), null, "no server address is written into the repository");
+  // The walk must prove it walked: the recording and the documented answers all exist.
+  assert.ok(Object.keys(provenance.fixtures).length >= 8);
+  assert.ok("health.json" in provenance.fixtures && "engine-a-pdf-success.json" in provenance.fixtures);
+  for (const [name, entry] of Object.entries(provenance.fixtures)) {
+    if (name !== "health.json") assert.equal(typeof entry.documented, "boolean", `${name} says whether it is a documented answer or a recording`);
+  }
 });
 
 test("every derived copy of the revision and the address equals the pin", async () => {
@@ -105,66 +110,82 @@ test("health, as the deployed build answers it, reads as healthy", async () => {
   });
 });
 
-test("an error answer with no error code is still classified by its status", async () => {
-  // The deployed build answers `data: null` — there is no `error_code` to read.
-  const route = await recorded("extract-missing-file.json");
-  assert.equal(JSON.parse(route.body.toString("utf8")).data, null, "the recording is the no-error-code shape");
-  await withServer({ "POST /api/v1/extract/text/file": route }, async ({ baseUrl, seen }) => {
-    const client = new DocumentParserClient({ baseUrl, revision: pin.revision, sleep: async () => {} });
-    await assert.rejects(
-      client.parseBytes({ bytes: Buffer.from("%PDF-1.4\n"), filename: "指南.pdf", mediaType: "application/pdf" }),
-      (error) => error.code === "source_parser_rejected" && error.status === 502,
-    );
-    assert.equal(seen.length, 1, "a 400 is final on the first answer");
-    const body = seen[0].body.toString("utf8");
-    assert.match(String(seen[0].headers["content-type"]), /^multipart\/form-data; boundary=/);
-    for (const field of ["file", "checksum", "filename", "format"]) assert.ok(body.includes(`name="${field}"`), `the upload names ${field}`);
-    assert.equal(seen[0].headers.authorization, undefined, "no key configured, no header sent");
+const PDF = Buffer.from("%PDF-1.4\n");
+const ROUTE_A = "POST /api/v1/parse/engine-a/file";
+const ROUTE_B = "POST /api/v1/parse/engine-b/file";
+/** @param {string} baseUrl @param {Record<string, unknown>} [options] */
+const clientFor = (baseUrl, options = {}) => new DocumentParserClient({ baseUrl, token: "replay", revision: pin.revision, sleep: async () => {}, ...options });
+/** @param {string} name */
+const body = async (name) => JSON.parse((await fixtureBytes(name)).toString("utf8"));
+
+test("the documented engine-A answer becomes protocol v1 with its page map, diagnosis and the route and header the API asks for", async () => {
+  await withServer({ [ROUTE_A]: await recorded("engine-a-pdf-success.json") }, async ({ baseUrl, seen }) => {
+    const result = await clientFor(baseUrl).parseBytes({ bytes: PDF, filename: "sample.pdf", mediaType: "application/pdf" });
+    const data = (await body("engine-a-pdf-success.json")).data;
+    assert.equal(result.text, data.content, "the text is the content, untouched, markers included");
+    assert.deepEqual(result.pageMap.map((page) => [page.page, page.status]), [[1, "ok"], [2, "empty"]], "page 2 carries the service's own empty-page warning");
+    assert.equal(result.text.slice(result.pageMap[0].start, result.pageMap[0].end).trim(), "文档正文第一页。");
+    assert.equal(result.extractor.endpoint, "engine-a");
+    assert.equal(result.extractor.parseInfo.pageCount, 2);
+    assert.equal(seen[0].headers.authorization, "Bearer replay");
+    const form = seen[0].body.toString("utf8");
+    for (const field of ["file", "checksum", "filename", "extract_metadata"]) assert.ok(form.includes(`name="${field}"`), `the upload names ${field}`);
   });
 });
 
-// The authenticated samples, replayed once recorded. Each lists what the
-// client must make of it; a sample absent from provenance.json is skipped
-// with its reason rather than passed.
-const authenticated = [
-  ["extract-success.json", "POST /api/v1/extract/text/file", async (client) => {
-    const result = await client.parseBytes({ bytes: Buffer.from("%PDF-1.4\n"), filename: "sample.pdf", mediaType: "application/pdf" });
-    const data = JSON.parse((await fixtureBytes("extract-success.json")).toString("utf8")).data;
-    assert.equal(result.text, data.content, "the text is the content, untouched");
-    assert.equal(result.extractor.endpoint, "extract");
-    if (typeof data.title === "string" && data.title.trim()) assert.equal(result.metadata?.title, data.title.trim());
-  }],
-  ["parse-success.json", "POST /api/v1/parse/file", null],
-  ["extract-unsupported-format.json", "POST /api/v1/extract/text/file", async (client) => {
-    await assert.rejects(client.parseBytes({ bytes: Buffer.from("%PDF-1.4\n"), filename: "sample.pdf" }),
-      (error) => error.code === "source_format_unsupported" && error.status === 415);
-  }],
-  ["extract-checksum-failed.json", "POST /api/v1/extract/text/file", async (client) => {
-    await assert.rejects(client.parseBytes({ bytes: Buffer.from("%PDF-1.4\n"), filename: "sample.pdf" }),
-      (error) => error.code === "source_parser_checksum_failed" && error.status === 422);
-  }],
-  ["extract-unauthorized.json", "POST /api/v1/extract/text/file", async (client) => {
-    await assert.rejects(client.parseBytes({ bytes: Buffer.from("%PDF-1.4\n"), filename: "sample.pdf" }),
-      (error) => error.code === "source_parser_auth_failed");
-  }],
-];
+test("the documented metadata answer is read, and a null metadata (a failed analysis) still delivers the text", async () => {
+  await withServer({ [ROUTE_A]: await recorded("engine-a-metadata-success.json") }, async ({ baseUrl }) => {
+    const result = await clientFor(baseUrl).parseBytes({ bytes: PDF, filename: "sample.pdf" });
+    assert.deepEqual(result.metadata, { title: "某项临床研究" });
+    assert.equal(result.extractor.metadataStatus, "succeeded");
+  });
+  const failed = await body("engine-a-metadata-success.json");
+  failed.data.metadata = null;
+  failed.data.metadata_status = "failed";
+  failed.data.metadata_error = "metadata_timeout";
+  await withServer({ [ROUTE_A]: { status: 200, headers: { "content-type": "application/json" }, body: JSON.stringify(failed) } }, async ({ baseUrl }) => {
+    const result = await clientFor(baseUrl).parseBytes({ bytes: PDF, filename: "sample.pdf" });
+    assert.equal(result.text, failed.data.content);
+    assert.equal("metadata" in result, false);
+  });
+});
 
-for (const [name, route, check] of authenticated) {
-  test(`recorded ${name} replays through the client`, async (t) => {
-    if (!provenance.fixtures[name]) {
-      t.skip("not recorded yet: needs the service-issued key (scripts/ops/record-parser-contract.mjs)");
-      return;
-    }
-    if (!check) {
-      // The text-only answer is the fallback's; its shape must still be one
-      // the client accepts: a string `content` under `data`.
-      const body = JSON.parse((await fixtureBytes(name)).toString("utf8"));
-      assert.equal(typeof body.data?.content, "string");
-      return;
-    }
-    const answer = await recorded(name);
-    await withServer({ [route]: answer }, async ({ baseUrl }) => {
-      await check(new DocumentParserClient({ baseUrl, token: "replay", revision: pin.revision, sleep: async () => {} }));
+test("engine B is its own route, and its answer (null format, no parse_info, no markers) is read", async () => {
+  await withServer({ [ROUTE_B]: await recorded("engine-b-success.json") }, async ({ baseUrl, seen }) => {
+    const result = await clientFor(baseUrl, { engine: "engine-b" }).parseBytes({ bytes: PDF, filename: "sample.pdf" });
+    assert.equal(result.text, "引擎 B 的正文。");
+    assert.equal(result.extractor.endpoint, "engine-b");
+    assert.equal("pageMap" in result, false);
+    assert.equal(seen.length, 1);
+  });
+});
+
+for (const [name, route, check] of [
+  ["error-invalid-api-key.json", ROUTE_A, (error) => error.code === "source_parser_auth_failed" && error.status === 502],
+  ["error-insufficient-scope.json", ROUTE_A, (error) => error.code === "source_parser_scope_denied"],
+  ["error-quota-exhausted.json", ROUTE_A, (error) => error.code === "source_parser_quota_exhausted" && error.status === 503],
+]) {
+  test(`the documented ${name} is classified by its status and named`, async () => {
+    await withServer({ [route]: await recorded(name) }, async ({ baseUrl, seen }) => {
+      await assert.rejects(clientFor(baseUrl).parseBytes({ bytes: PDF, filename: "sample.pdf" }), check);
+      assert.ok(seen.length <= 2, "a refused request is final (one more only for the metadata scope)");
     });
   });
 }
+
+test("the documented empty-content answer is a document with no text, not a failure", async () => {
+  await withServer({ [ROUTE_A]: await recorded("error-empty-content.json") }, async ({ baseUrl }) => {
+    const result = await clientFor(baseUrl).parseBytes({ bytes: PDF, filename: "scan.pdf" });
+    assert.equal(result.text, "");
+    assert.equal(result.units[0].status, "no_content");
+  });
+});
+
+test("the routes the service retired on 2026-10-27 answer 404 and are named, not retried", async () => {
+  await withServer({}, async ({ baseUrl, seen }) => {
+    const parser = clientFor(baseUrl);
+    await assert.rejects(parser.parseBytes({ bytes: PDF, filename: "sample.pdf" }), (error) => error.code === "source_parser_route_missing");
+    assert.equal(seen.length, 1);
+    assert.equal(parser.status().route, "missing");
+  });
+});

@@ -119,6 +119,19 @@ function parseDisabledSocketPlugins(ids) {
 }
 
 /**
+ * Which of the document parsing service's two engines reads a document. They are not a primary and a standby, so a
+ * misspelt value is refused here rather than sent to a route that does not exist.
+ * @param {unknown} value
+ * @returns {'engine-a'|'engine-b'}
+ */
+export function parseDocumentParserEngine(value) {
+  const engine = String(value ?? '').trim().toLowerCase();
+  if (engine === '' || engine === 'engine-a') return 'engine-a';
+  if (engine === 'engine-b') return 'engine-b';
+  throw new Error(`OPEN_SCIENCE_DOCUMENT_PARSER_ENGINE must be engine-a or engine-b, got ${JSON.stringify(String(value))}.`);
+}
+
+/**
  * How the ask-user tool waits for the person: the kernel's own two modes, named for what the turn does.
  * `attended` is the blocking tool every shipped preset uses. `timed` returns "pending" after the tool's own deadline so the
  * model carries on with work that does not depend on the answer, and the answer, whenever it comes, arrives as a message.
@@ -3009,6 +3022,9 @@ export function loadConfig(overrides = {}) {
       overrides.memoryIndexReconcileMs ?? process.env.OPEN_SCIENCE_MEMORY_INDEX_RECONCILE_MS ?? 300_000,
     ),
     documentParserUrl: String(overrides.documentParserUrl ?? process.env.OPEN_SCIENCE_DOCUMENT_PARSER_URL ?? "").replace(/\/+$/, ""),
+    // Which of the service's two parsing engines reads a document (`engine-a` | `engine-b`; documentParserClient.mjs). They
+    // are not a primary and a standby: the service never switches, so this is the one place it is chosen.
+    documentParserEngine: parseDocumentParserEngine(overrides.documentParserEngine ?? process.env.OPEN_SCIENCE_DOCUMENT_PARSER_ENGINE),
     documentParserToken: documentParserSecret.value,
     documentParserTokenSource: documentParserSecret.source,
     documentParserTokenError: documentParserSecret.error,

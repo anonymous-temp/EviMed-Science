@@ -19,7 +19,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 import source_material_extract as extract  # noqa: E402
-from test_vcr_record_extract import pdf_bytes  # noqa: E402
+from test_vcr_record_extract import docx_bytes, para, pdf_bytes  # noqa: E402
 
 try:
     import openpyxl  # noqa: F401
@@ -99,7 +99,7 @@ class PdfPages(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             self.assertEqual(run(stage(tmp, "document.pdf", b"not a pdf at all", "pdf"))["reason"], "not_pdf")
         with tempfile.TemporaryDirectory() as tmp:
-            self.assertEqual(run(stage(tmp, "document.pdf", pdf_bytes([["x"]]), "docx"))["reason"], "request_invalid")
+            self.assertEqual(run(stage(tmp, "document.pdf", pdf_bytes([["x"]]), "rtf"))["reason"], "request_invalid")
 
     def test_a_file_name_that_is_a_path_is_refused(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -211,6 +211,55 @@ class SpreadsheetCells(unittest.TestCase):
             result = run(stage(tmp, "data.xlsx", junk.getvalue(), "xlsx"))
         self.assertEqual(result["reason"], "not_xlsx")
         self.assertNotIn("secret", json.dumps(result))
+
+
+def pptx_bytes(slides, order=None):
+    """A minimal .pptx: one part per slide, and ``sldIdLst`` naming them in ``order`` (default: as given)."""
+    a = "http://schemas.openxmlformats.org/drawingml/2006/main"
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("[Content_Types].xml", '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>')
+        ids, rels = [], []
+        for index, lines in enumerate(slides, start=1):
+            body = "".join("<a:p><a:r><a:t>%s</a:t></a:r></a:p>" % line for line in lines)
+            archive.writestr("ppt/slides/slide%d.xml" % index, '<?xml version="1.0" encoding="UTF-8"?><p:sld xmlns:a="%s" xmlns:p="urn:p"><p:cSld><p:spTree><p:sp><p:txBody>%s</p:txBody></p:sp></p:spTree></p:cSld></p:sld>' % (a, body))
+            rels.append('<Relationship Id="rId%d" Type="slide" Target="slides/slide%d.xml"/>' % (index, index))
+            ids.append('<p:sldId id="%d" r:id="rId%d"/>' % (255 + index, index))
+        if order:
+            ids = [ids[i - 1] for i in order]
+        archive.writestr("ppt/presentation.xml", '<?xml version="1.0"?><p:presentation xmlns:p="urn:p" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><p:sldIdLst>%s</p:sldIdLst></p:presentation>' % "".join(ids))
+        archive.writestr("ppt/_rels/presentation.xml.rels", '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">%s</Relationships>' % "".join(rels))
+    return buffer.getvalue()
+
+
+class OfficeText(unittest.TestCase):
+    def test_a_word_file_is_read_as_text_with_no_invented_pages(self):
+        data = docx_bytes(para("Methods") + para("Rivaroxaban 15 mg qd"), app_pages=3)
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = stage(tmp, "document.docx", data, "docx")
+            result = run(directory)
+            text = (directory / "output" / "text.txt").read_text(encoding="utf-8")
+        self.assertEqual((result["outcome"], result["format"]), ("text", "docx"))
+        self.assertEqual(text, "Methods\nRivaroxaban 15 mg qd")
+        self.assertNotIn("[Page", text)
+
+    def test_slides_come_in_presentation_order_under_slide_markers(self):
+        data = pptx_bytes([["First"], ["Second", "line two"]], order=[2, 1])
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = stage(tmp, "deck.pptx", data, "pptx")
+            result = run(directory)
+            text = (directory / "output" / "text.txt").read_text(encoding="utf-8")
+        self.assertEqual((result["outcome"], result["pages"]), ("text", 2))
+        self.assertEqual(text, "[Slide 1]\nSecond\nline two\n\n[Slide 2]\nFirst")
+
+    def test_a_zip_that_is_not_an_office_file_is_refused_by_name(self):
+        junk = io.BytesIO()
+        with zipfile.ZipFile(junk, "w") as target:
+            target.writestr("hello.txt", "secret")
+        with tempfile.TemporaryDirectory() as tmp:
+            refused = run(stage(tmp, "deck.pptx", junk.getvalue(), "pptx"))
+        self.assertEqual((refused["outcome"], refused["reason"]), ("refused", "corrupt"))
+        self.assertNotIn("secret", json.dumps(refused))
 
 
 if __name__ == "__main__":

@@ -317,6 +317,7 @@ import { createSourceUnderstandingRuntime } from "./sourceUnderstandingRuntime.m
 import { MethodDescriber } from "./methodDisplay.mjs";
 import { removeSourceCopies, sourceAttemptId, sourceReadCopyDirectory } from "./sourceFiles.mjs";
 import { DocumentParserClient } from "./documentParserClient.mjs";
+import { createLocalDocumentReader } from "./documentLocalReader.mjs";
 import { createConfiguredWebRenderer } from "./webRender.mjs";
 import { createWebReader, webReadMetricFamilies, webReadTransportFor, webReadUserAgent } from "./webRead.mjs";
 import { edgeFetch, edgeMetricFamilies, edgeProxyFromConfig, fetchWithEdge } from "./edgeProxy.mjs";
@@ -1881,9 +1882,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const documentParser = new DocumentParserClient({
     baseUrl: config.documentParserUrl,
     token: config.documentParserToken,
+    engine: config.documentParserEngine,
     revision: config.documentParserRevision,
     timeoutMs: config.documentParserTimeoutMs,
     fetchImpl: overrides.documentParserFetch ?? globalThis.fetch,
+    report: (code, fields) => process.stderr.write(`document-parser: ${code} ${JSON.stringify(fields ?? {})}\n`),
   });
   const openListClient = config.openListUrl && config.openListToken && !config.openListTokenError
     ? new OpenListClient({
@@ -2110,6 +2113,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // The disposable intake container's client, shared by 「虚拟临床研究」's conversions
   // and the source-material read (a PDF's pages, a spreadsheet's cells).
   const intakeController = overrides.vcrIntakeController ?? new RuntimeControllerClient(config);
+  // When the parsing service cannot give a PDF, Word, slides or workbook, the same text is read from the original bytes in
+  // that container (`documentLocalReader.mjs`); one path for the knowledge base and for `web_read`.
+  documentParser.useLocalReader(createLocalDocumentReader({ config, controller: intakeController,
+    report: (code) => process.stderr.write(`document-parser: local_read_failed ${code}\n`) }));
   const sourceWorker = sourceService && config.sourceIngestionEnabled ? new SourceIngestionWorker({
     jobs: productJobs,
     sources: sourceService,
@@ -10050,6 +10057,21 @@ async function operatorMetricsText({ webVitals = null, judgeService = null, open
       "Whether OpenList's tenant root holds a storage to import from (0 while the check reports openlist_storage_missing).",
       "gauge", { value: openListCheck.storage === "mounted" ? 1 : 0 });
   }
+  // The parsing service's health says nothing about this deployment's key or route (it answers 200 either way), and its
+  // outage is a green check that reads from the local fallback, so both are scraped here: one gauge for whether the
+  // service is usable and why not, one counter for what each parse came to (the service, the local reading that stood
+  // in for it, or a failure by code).
+  const parserCheck = /** @type {any} */ (readiness.checks.documentParser ?? {});
+  if (parserCheck.state) {
+    addMetric(lines, "open_science_document_parser_usable",
+      "Whether the document parsing service can be used by this deployment (1), or why not (0, with the warning code); a PDF or Office file is read locally while it is 0.",
+      "gauge", { value: parserCheck.state === "ready" ? 1 : 0, labels: { engine: String(parserCheck.engine ?? ""), code: String(parserCheck.warning ?? "none") } });
+  }
+  if (documentParser?.counters?.().length) {
+    addMetric(lines, "open_science_document_parser_parses_total",
+      "Parses by outcome: api (the service), api_empty (read, no text), local_fallback (read from the original bytes when the service could not, by the service's failure code), local_failed, failed, metadata_scope_denied.",
+      "counter", documentParser.counters().map((/** @type {any} */ row) => ({ value: row.value, labels: { outcome: row.outcome, code: row.code } })));
+  }
   if (openList?.probeCounts?.size) {
     addMetric(lines, "open_science_openlist_storage_probes_total",
       "Authenticated OpenList tenant-root listings made by the storage probe, by outcome (mounted, missing or an error code).",
@@ -10798,22 +10820,40 @@ async function readinessStatus(config, store, runtimeManager, memorySettings = n
   };
 }
 
-/** The parser is the parser team's own service. Required means configured and
- *  answering healthy. A key is not part of it: the service answers without one
- *  (measured 2026-09-22 — parse and extract both 200 with no Authorization
- *  header), and one is sent only if the deployment has a key file with
- *  something in it. Until then readiness demanded a key the service does not
- *  ask for, so production switched the check off and the parser's health went
- *  unwatched, and `authenticated: false` read as "cannot parse" — it never
- *  meant that. `credential` says what is sent, `none` or `file`. */
+/** The parser is the parser team's own service, and its outage costs document
+ *  text and nothing else: a PDF, Word, slides or workbook are still read from
+ *  their original bytes in the intake container (`documentLocalReader.mjs`), and
+ *  text, code and data never needed it. So this check is green whatever the
+ *  service does, and says what an operator needs on a green check: `state`
+ *  `degraded` with a `warning` naming the cause — not configured, not
+ *  answering, the key refused (401), the key without the scope (403), the route
+ *  gone (404, the API moved again) or a failure the last real parse met. Health
+ *  alone is not enough: the service answers `/health` 200 whatever the key is,
+ *  so the credential and the route are probed through the engine's own route
+ *  without a document (`probe`, uncharged), and what real parses met is added.
+ *  `credential` says what is sent, `none` or `file`. */
 async function readinessDocumentParser(config, parser) {
   const credential = config.documentParserToken ? "file" : "none";
-  if (!config.requireDocumentParser) {
-    return { required: false, configured: Boolean(config.documentParserUrl), credential };
+  const base = { required: Boolean(config.requireDocumentParser), configured: Boolean(config.documentParserUrl), credential, engine: config.documentParserEngine };
+  if (config.documentParserTokenError) return { ...base, state: "degraded", warning: config.documentParserTokenError };
+  if (!config.documentParserUrl || !parser) {
+    return { ...base, state: config.requireDocumentParser ? "degraded" : "off", ...(config.requireDocumentParser ? { warning: "document_parser_unconfigured" } : {}) };
   }
-  if (config.documentParserTokenError) throw readinessFailure(config.documentParserTokenError);
-  if (!config.documentParserUrl || !parser) throw readinessFailure("document_parser_unconfigured");
-  return { required: true, ...(await parser.health()) };
+  /** @type {string | null} */
+  let warning = null;
+  /** @type {Record<string, unknown>} */
+  let health = {};
+  try { health = await parser.health(); } catch (error) { warning = /** @type {any} */ (error)?.code ?? "source_parser_unavailable"; }
+  await parser.probe().catch(() => {});
+  const status = parser.status();
+  if (!warning) {
+    if (status.auth === "rejected") warning = "source_parser_auth_failed";
+    else if (status.route === "missing") warning = "source_parser_route_missing";
+    else if (status.auth === "scope_denied") warning = "source_parser_scope_denied";
+  }
+  return { ...base, ...health, auth: status.auth, route: status.route, metadata: status.metadata, localReader: status.localReader,
+    ...(status.lastFailure ? { lastFailure: status.lastFailure } : {}),
+    state: warning ? "degraded" : "ready", ...(warning ? { warning } : {}) };
 }
 
 /** Whether 连接网盘 can work, exercised rather than pinged: the connector's
