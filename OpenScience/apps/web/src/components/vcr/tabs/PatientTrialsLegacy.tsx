@@ -1,4 +1,5 @@
 import { CircleCheck, ExternalLink, TriangleAlert } from "lucide-react";
+import { vcrSubjectLabel } from "@evimed/domain";
 import {
   runVcrTrialSearch,
   type VcrClinicalTimelineEntry,
@@ -158,7 +159,7 @@ export function PatientTrialsLegacy({ studyId, study, page, roster, asked, picke
     return (
       <div data-vcr-patient-trials-empty="none">
         <EmptyState
-          title={patientTrialsNoneSentence(subject)}
+          title={patientTrialsNoneSentence(vcrSubjectLabel(subject))}
           action={mayRun ? <Button actionKind="start" loading={busy} onClick={ask}>{FIND_TRIALS_LABEL}</Button> : undefined}
         />
       </div>
@@ -176,7 +177,7 @@ export function PatientTrialsLegacy({ studyId, study, page, roster, asked, picke
 
   return (
     <Section
-      title={`${subject} 的试验`}
+      title={`${vcrSubjectLabel(subject)} 的试验`}
       count={`${page.trials.length} 项`}
       toolbar={mayRun ? <Button variant="secondary" size="sm" actionKind="start" loading={busy} onClick={ask}>{FIND_TRIALS_LABEL}</Button> : undefined}
     >
