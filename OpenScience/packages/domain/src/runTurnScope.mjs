@@ -27,6 +27,7 @@ export function scopeRunTranscript(transcript, run) {
   if (transcript?.header && (!Number.isSafeInteger(rootRecord?.seedEndSeq) || rootRecord.seedEndSeq < -1)) return empty('root_seed_scope_unavailable');
   if (typeof transcript?.header?.runId === 'string' && run?.id && transcript.header.runId !== run.id) return empty('captured_run_mismatch');
   const liveSeed = transcript?.seedEndSeq;
+  if (transcript && Object.hasOwn(transcript, 'seedEndSeq') && (typeof liveSeed !== 'number' || !Number.isSafeInteger(liveSeed) || liveSeed < -1)) return empty('root_seed_scope_unavailable');
   const rootSeed = rootRecord?.seedEndSeq ?? (typeof liveSeed === 'number' && Number.isSafeInteger(liveSeed) ? liveSeed : -1);
   const root = rawRoot.filter(row => row?.seeded !== true && (rootSeed < 0 || Number.isSafeInteger(row?.seq) && row.seq > rootSeed));
   /** @type {any[]} */

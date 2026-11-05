@@ -166,7 +166,7 @@ function toolSequence(calls) {
  * @param {any} run the ledger's record of the run: `sessionId`, `kernelRequestIds`, `nativeTurn`, `status`, `repairRounds`, `artifacts`,
  *   `unverifiedArtifacts`, `outputFiles`
  * @param {{ shapes?: Readonly<Record<string, unknown>> | null, reactions?: readonly TrajectoryReaction[], attempts?: number,
- *   toolTraces?: readonly { steps?: readonly { tool?: unknown, turn?: number }[] }[] | null }} [options]
+ *   toolTraces?: readonly { runId?:string, sessionId?:string, steps?: readonly { tool?: unknown, turn?: number, turnStartSeq?:number }[] }[] | null }} [options]
  *   `shapes`: file path to the shape read from it (`apps/server/src/artifactShapes.mjs`). `reactions`: what the person did after
  *   the run was going that the transcript does not hold. `attempts`: the largest number of submissions any deliverable took.
  *   `toolTraces`: the run's executed tool trace, one entry per session (`apps/server/src/toolExecutionEdges.mjs`, `readToolTraces`).
@@ -249,7 +249,18 @@ export function trajectoryDigest(transcript, run, options = {}) {
     if (artifacts.length >= limits.artifacts) break
   }
 
-  const executed = (scoped.runScope.available ? options.toolTraces ?? [] : []).flatMap((trace) => (Array.isArray(trace?.steps) ? trace.steps : []).map((step) => String(step?.tool ?? '')))
+  const allowedTurns = new Map()
+  for (const message of scoped.messages) {
+    const id = message.sessionId ?? scoped.runScope.rootSessionId
+    const allowed = allowedTurns.get(id) ?? new Set()
+    allowed.add(message.turnStartSeq)
+    allowedTurns.set(id, allowed)
+  }
+  const executed = (scoped.runScope.available ? options.toolTraces ?? [] : [])
+    .filter(trace => trace.runId === run?.id && allowedTurns.has(trace.sessionId))
+    .flatMap(trace => (Array.isArray(trace?.steps) ? trace.steps : [])
+      .filter(step => Number.isSafeInteger(step?.turnStartSeq) && allowedTurns.get(trace.sessionId).has(step.turnStartSeq))
+      .map(step => String(step?.tool ?? '')))
   const tools = toolSequence(executed.length
     ? executed
     : (transcript?.messages ?? []).flatMap((message) => (message?.parts ?? []).filter((/** @type {any} */ part) => part?.type === 'tool').map((/** @type {any} */ part) => String(part.tool ?? ''))))

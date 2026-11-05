@@ -41,6 +41,7 @@ import path from "node:path";
 import { referenceIdentifiers } from "@evimed/domain/clinical-evidence";
 
 import { readTextFileNoFollow, withProjectStorageMutation, writeFileAtomicNoFollow } from "./security.mjs";
+import { collectedRunScope } from "./runLearningScope.mjs";
 
 /** How many characters of one tool result are scanned for identifiers. */
 const MAX_SCANNED_CHARS = 200_000;
@@ -107,10 +108,10 @@ export function carriedIdentifiers(value) {
  * exactly that until it was checked against the adapter.
  *
  * @param {{transcript?: any}} session
- * @returns {{tool: string, input: unknown, output: unknown, turn: number}[]}
+ * @returns {{tool: string, input: unknown, output: unknown, turn: number, turnStartSeq?:number}[]}
  */
 export function completedToolCalls(session) {
-  /** @type {{tool: string, input: unknown, output: unknown, turn: number, seq: number}[]} */
+  /** @type {{tool: string, input: unknown, output: unknown, turn: number, seq: number, turnStartSeq?:number}[]} */
   const calls = [];
   let index = 0;
   for (const message of session?.transcript?.messages ?? []) {
@@ -124,6 +125,7 @@ export function completedToolCalls(session) {
         input: part.input,
         output: part.output,
         turn: Number(message?.turn) || 0,
+        ...(Number.isSafeInteger(message?.turnStartSeq) ? { turnStartSeq: message.turnStartSeq } : {}),
         seq: Number(part.completedSeq) || index,
       });
     }
@@ -237,15 +239,18 @@ export function toolEdgePath(project, runId) {
  * `path_forbidden` on every single call, which is exactly how the transcript
  * writer silently recorded nothing until it was caught.
  *
- * @param {{project: any, run: {id: string}, sessions: readonly any[]}} input
+ * @param {{project: any, run: any, sessions: readonly any[], childTurnOwnership?:readonly any[]}} input
  * @returns {Promise<{path: string | null, edges: number}>}
  */
-export async function persistExecutedToolEdges({ project, run, sessions }) {
-  const receipts = executedToolEdges({ runId: run.id, sessions });
-  if (!receipts.length) return { path: null, edges: 0 };
+export async function persistExecutedToolEdges({ project, run, sessions, childTurnOwnership = [] }) {
+  const selected = collectedRunScope(run, sessions, { childTurnOwnership });
+  const receipts = executedToolEdges({ runId: run.id, sessions: selected.sessions, capability: run.effectiveAgentId });
   const absolute = toolEdgePath(project, run.id);
   await withProjectStorageMutation(project, async () => {
     await writeFileAtomicNoFollow(project.rootDir, absolute, serializeExecutedEdges(receipts), { encoding: "utf8", mode: 0o600 });
+    await writeFileAtomicNoFollow(project.rootDir, `${absolute}.attempt.json`, `${JSON.stringify({ schema: 'tool-edge-attempt/1',
+      runId: run.id, scope: selected.scope, observedCalls: sessions.reduce((n, s) => n + completedToolCalls(s).length, 0),
+      scopedCalls: selected.sessions.reduce((n, s) => n + completedToolCalls(s).length, 0), edges: receipts.length })}\n`, { encoding: 'utf8', mode: 0o600 });
   });
   return { path: path.relative(project.rootDir, absolute), edges: receipts.length };
 }
@@ -256,6 +261,7 @@ export async function persistExecutedToolEdges({ project, run, sessions }) {
  * @typedef {object} ToolTraceStep
  * @property {number} turn
  * @property {string} tool
+ * @property {number} [turnStartSeq]
  */
 
 /**
@@ -282,7 +288,8 @@ export function toolTraces(input) {
   /** @type {{capability: string | null, sessionId: string, runId: string, steps: ToolTraceStep[]}[]} */
   const traces = [];
   for (const session of input.sessions ?? []) {
-    const steps = completedToolCalls(session).map((call) => ({ turn: call.turn, tool: call.tool }));
+    const steps = completedToolCalls(session).map((call) => ({ turn: call.turn, tool: call.tool,
+      ...(call.turnStartSeq === undefined ? {} : { turnStartSeq: call.turnStartSeq }) }));
     if (steps.length) traces.push({ capability: String(session?.capability ?? "") || null, sessionId: String(session?.sessionId ?? ""), runId, steps });
   }
   return traces;
@@ -292,7 +299,7 @@ export function toolTraces(input) {
 export const TRACE_DIR_NAME = "tool-traces";
 
 /** The schema a trace file carries; a file of another one (the arguments-and-digests shape that was written until 2026-10-25) is not read. */
-export const TOOL_TRACE_SCHEMA = "tool-trace/2";
+export const TOOL_TRACE_SCHEMA = "tool-trace/3";
 
 /** @param {{ metaDir: string }} project @param {string} runId @returns {string} */
 export function tracePath(project, runId) {
@@ -301,14 +308,15 @@ export function tracePath(project, runId) {
 
 /**
  * Write one run's tool traces beside its edge receipts.
- * @param {{project: any, run: {id: string}, sessions: readonly any[]}} input
+ * @param {{project: any, run: any, sessions: readonly any[], childTurnOwnership?:readonly any[]}} input
  * @returns {Promise<{path: string | null, traces: number, steps: number}>}
  */
-export async function persistToolTraces({ project, run, sessions }) {
-  const traces = toolTraces({ runId: run.id, sessions });
-  if (!traces.length) return { path: null, traces: 0, steps: 0 };
+export async function persistToolTraces({ project, run, sessions, childTurnOwnership = [] }) {
+  const selected = collectedRunScope(run, sessions, { childTurnOwnership });
+  const traces = toolTraces({ runId: run.id, sessions: selected.sessions });
   const absolute = tracePath(project, run.id);
-  const text = `${JSON.stringify({ schemaVersion: TOOL_TRACE_SCHEMA, runId: run.id, traces })}\n`;
+  const text = `${JSON.stringify({ schemaVersion: TOOL_TRACE_SCHEMA, runId: run.id, scope: selected.scope,
+    observedCalls: sessions.reduce((n, s) => n + completedToolCalls(s).length, 0), traces })}\n`;
   await withProjectStorageMutation(project, async () => {
     await writeFileAtomicNoFollow(project.rootDir, absolute, text, { encoding: "utf8", mode: 0o600 });
   });
@@ -332,13 +340,14 @@ export async function readToolTraces(project, runId) {
     const text = await readTextFileNoFollow(project.rootDir, tracePath(project, runId), "");
     if (!text) return [];
     const parsed = JSON.parse(text);
-    if (parsed?.schemaVersion !== TOOL_TRACE_SCHEMA || parsed.runId !== runId || !Array.isArray(parsed.traces)) return [];
-    return parsed.traces.filter((/** @type {any} */ trace) => Array.isArray(trace?.steps)).map((/** @type {any} */ trace) => ({
+    if (parsed?.schemaVersion !== TOOL_TRACE_SCHEMA || parsed.runId !== runId || !Array.isArray(parsed.traces)
+      || parsed.scope?.schema !== 'run-turn-scope/1' || parsed.scope.runId !== runId || !parsed.scope.available) return [];
+    return parsed.traces.filter((/** @type {any} */ trace) => trace?.runId === runId && Array.isArray(trace?.steps)).map((/** @type {any} */ trace) => ({
       capability: typeof trace.capability === "string" && trace.capability ? trace.capability : null,
       sessionId: String(trace.sessionId ?? ""),
       runId,
-      steps: trace.steps.filter((/** @type {any} */ step) => typeof step?.tool === "string" && step.tool)
-        .map((/** @type {any} */ step) => ({ turn: Number(step.turn) || 0, tool: step.tool })),
+      steps: trace.steps.filter((/** @type {any} */ step) => typeof step?.tool === "string" && step.tool && Number.isSafeInteger(step.turnStartSeq) && step.turnStartSeq >= 0)
+        .map((/** @type {any} */ step) => ({ turn: Number(step.turn) || 0, tool: step.tool, turnStartSeq: step.turnStartSeq })),
     }));
   } catch {
     return [];

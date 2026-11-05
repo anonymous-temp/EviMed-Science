@@ -35,7 +35,7 @@
 
 import { createHash } from "node:crypto";
 
-import { methodSourceIdentifierShapesIn } from "@evimed/domain";
+import { methodSourceIdentifierShapesIn, scopeRunTranscript } from "@evimed/domain";
 
 import { CONVERSATION_SCOPE, learningScopeOf } from "./learningTriggers.mjs";
 import { readRunTranscript } from "./runTranscripts.mjs";
@@ -399,7 +399,8 @@ export class ScriptLessons {
       if (!this.execute) return none;
       const transcript = await this.readTranscript(project, run.id).catch(() => null);
       if (!transcript) { this.#count("no_transcript"); return none; }
-      const found = pythonSnippetsOf(transcript).slice(0, SCRIPT_LIMITS.snippetsPerRun);
+      const scoped = scopeRunTranscript(transcript, run);
+      const found = pythonSnippetsOf(scoped).slice(0, SCRIPT_LIMITS.snippetsPerRun);
       this.#count("snippets", found.length);
       const sources = found.filter((source) => {
         if (source.length > SCRIPT_LIMITS.snippetChars) return false;

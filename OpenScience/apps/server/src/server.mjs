@@ -4894,12 +4894,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             // The call sequence itself, not only the pairs it implies: what the learning loop's trajectory digest reads as the order of
             // the work's tools (`readToolTraces`, in `MethodDistillationRuns`).
             const traced = await persistToolTraces({ project, run, sessions });
-            if (written.edges || traced.traces) {
-              await securityAudit(config, "run.tool.edges", "ok", {
-                userId: project.userId, projectId: project.id, runId: run.id,
-                code: `edges:${written.edges} traces:${traced.traces} steps:${traced.steps}`,
-              });
-            }
+            await securityAudit(config, "run.tool.edges", "ok", {
+              userId: project.userId, projectId: project.id, runId: run.id,
+              code: `edges:${written.edges} traces:${traced.traces} steps:${traced.steps}`,
+            });
           } catch (error) {
             await securityAudit(config, "run.tool.edges", "failed", {
               userId: project.userId, projectId: project.id, runId: run.id,

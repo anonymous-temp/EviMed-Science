@@ -61,7 +61,7 @@ function delegatedRun() {
   messages.push(call(130, "evimed_submit_deliverable", CHILD), call(131, "evimed_package_check", CHILD), call(132, "evimed_revise_deliverable", CHILD),
     call(133, "evimed_render_report", CHILD), call(134, "present", CHILD), said(135, "已提交，锚点与回执已更新。", CHILD));
   return {
-    transcript: { header: { completeness: "complete", sessions: [{ sessionId: ROOT, parentSessionId: null }, { sessionId: CHILD, parentSessionId: ROOT }] }, messages },
+    transcript: { header: { completeness: "complete", runChildSessionIds: [CHILD], sessions: [{ sessionId: ROOT, parentSessionId: null, seedEndSeq: -1 }, { sessionId: CHILD, parentSessionId: ROOT, seedEndSeq: -1, runTurnOwnership: { schema: "child-run-turns/1", runId: "run_1", turnStartSeqs: [1] } }] }, messages },
     run: { id: "run_1", sessionId: ROOT, kernelRequestIds: ["req_1"], status: "succeeded", effectiveAgentId: "clinical-evidence-synthesis", artifacts: ["report/weekly.md"] },
   };
 }
@@ -91,7 +91,7 @@ test("the first request and the intervention survive a long delegated run, and n
 test("REVIEWFIX 9 the excerpts of a research goal's run show the person's sentence, without the gesture that started it, and no other run's message is touched", () => {
   const goal = "评估心衰队列的再入院风险";
   const messages = [user(2, researchGoalPrompt(goal)), said(3, "我先看已有资料。"), user(4, "只看近五年的", { sourceRequestId: "req_2" }), said(5, "好的。")];
-  const transcript = { header: { completeness: "complete", sessions: [{ sessionId: ROOT, parentSessionId: null }] }, messages };
+  const transcript = { header: { completeness: "complete", sessions: [{ sessionId: ROOT, parentSessionId: null, seedEndSeq: -1 }] }, messages };
   const started = { id: "run_g", sessionId: ROOT, kernelRequestIds: ["req_1"], status: "succeeded", effectiveRouteReason: "research-goal" };
   const input = buildDistillationInput({ run: started, trigger: "correction", transcript });
   const shown = input.transcriptExcerpts.flatMap((excerpt) => excerpt.messages).filter((message) => message.role === "user").map((message) => message.parts[0].text);
@@ -132,7 +132,7 @@ test("a follow-up and a corrected result are interventions with no place in the 
 
 test("a routine carries each member's digest and no raw lines, and a lesson with nothing to anchor on reads none", () => {
   const { transcript, run } = delegatedRun();
-  const peer = { runId: "run_0", transcript: { ...transcript, header: { completeness: "complete" } }, run: { ...run, id: "run_0", kernelRequestIds: ["req_1"] },
+  const peer = { runId: "run_0", transcript: { ...transcript, header: { completeness: "complete", sessions: transcript.header.sessions.map(row => ({ ...row, ...(row.runTurnOwnership ? { runTurnOwnership: { ...row.runTurnOwnership, runId: "run_0" } } : {}) })), runChildSessionIds: [CHILD] } }, run: { ...run, id: "run_0", kernelRequestIds: ["req_1"] },
     shapes: { "report/weekly.md": { format: "md", labels: ["Summary", "Findings"] } } };
   const input = buildDistillationInput({ run, trigger: "routine", transcript, peerRuns: [peer] });
   assert.deepEqual(input.transcriptExcerpts, []);
@@ -310,7 +310,7 @@ async function projectWith(root) {
   await mkdir(path.join(project.workspaceDir, "report"), { recursive: true });
   await writeFile(path.join(project.workspaceDir, "report/weekly.md"), "# 周报\n## 总览\n## 下周计划\n");
   const { transcript, run } = delegatedRun();
-  const header = { schemaVersion: 1, runId: run.id, capturedAt: "2026-10-23T00:00:00.000Z", completeness: "complete", sessions: transcript.header.sessions, missing: [] };
+  const header = { schemaVersion: 1, runId: run.id, capturedAt: "2026-10-23T00:00:00.000Z", completeness: "complete", runChildSessionIds: [CHILD], sessions: transcript.header.sessions, missing: [] };
   await writeFile(transcriptPath(project, run.id), `${[JSON.stringify(header), ...transcript.messages.map((message) => JSON.stringify(message))].join("\n")}\n`);
   return { project, run };
 }
@@ -352,7 +352,10 @@ test("a routine's peer is digested from its own ledger record, and the lesson's 
   t.after(() => rm(root, { recursive: true, force: true }));
   const { project, run } = await projectWith(root);
   const peerRun = { ...run, id: "run_0", outputFiles: ["report/weekly.md"], artifacts: [] };
-  await writeFile(transcriptPath(project, "run_0"), await (await import("node:fs/promises")).readFile(transcriptPath(project, run.id)));
+  const originalLines = (await (await import("node:fs/promises")).readFile(transcriptPath(project, run.id), 'utf8')).trim().split('\n').map(line => JSON.parse(line));
+  originalLines[0].runId = 'run_0';
+  for (const session of originalLines[0].sessions) if (session.runTurnOwnership) session.runTurnOwnership.runId = 'run_0';
+  await writeFile(transcriptPath(project, "run_0"), originalLines.map(row => JSON.stringify(row)).join('\n') + '\n');
   /** @type {any[]} */ const dispatched = [];
   const asked = [];
   const distillation = new MethodDistillationRuns({
@@ -375,10 +378,13 @@ test("the tool order the distillation is shown is the run's executed trace when 
   t.after(() => rm(root, { recursive: true, force: true }));
   const { project, run } = await projectWith(root);
   const { persistToolTraces } = await import("../src/toolExecutionEdges.mjs");
-  const completed = (/** @type {string} */ tool, /** @type {number} */ turn) => ({ role: "tool", turn, parts: [{ type: "tool", tool, status: "completed", input: {}, output: "ok" }] });
-  await persistToolTraces({ project, run, sessions: [{ sessionId: ROOT, capability: null, transcript: { messages: [completed("web_search", 0), completed("evimed_plan", 0), completed("bash", 1)] } }] });
+  const completed = (/** @type {string} */ tool, /** @type {number} */ turn) => ({ role: "tool", turn, turnStartSeq: 1, seq: turn + 3, parts: [{ type: "tool", tool, status: "completed", input: {}, output: "ok" }] });
+  await persistToolTraces({ project, run, sessions: [{ sessionId: ROOT, capability: null, transcript: { messages: [user(2, "Current analysis"), completed("web_search", 0), completed("evimed_plan", 0), completed("bash", 1)] } }] });
   // A peer with its own transcript and no trace of its own: the transcript's calls, as before.
-  await writeFile(transcriptPath(project, "run_0"), await (await import("node:fs/promises")).readFile(transcriptPath(project, run.id)));
+  const originalLines = (await (await import("node:fs/promises")).readFile(transcriptPath(project, run.id), 'utf8')).trim().split('\n').map(line => JSON.parse(line));
+  originalLines[0].runId = 'run_0';
+  for (const session of originalLines[0].sessions) if (session.runTurnOwnership) session.runTurnOwnership.runId = 'run_0';
+  await writeFile(transcriptPath(project, "run_0"), originalLines.map(row => JSON.stringify(row)).join('\n') + '\n');
   /** @type {any[]} */ const dispatched = [];
   const distillation = new MethodDistillationRuns({
     learning: { async listMethods() { return { items: [] }; } },
@@ -394,7 +400,7 @@ test("the tool order the distillation is shown is the run's executed trace when 
 test("a script lesson is shown the program that recurred, with how often and the sources of its occurrences; no other lesson carries one", async (t) => {
   const { transcript, run } = delegatedRun();
   const scripts = { hash: "a".repeat(32), runs: 3, conversations: 2, exemplars: [{ runId: "run_1", at: "2026-10-25T00:00:00.000Z", source: "print(1)" }, { runId: "run_2", source: "x".repeat(20_000) }] };
-  const plain = { header: { completeness: "complete", sessions: [{ sessionId: ROOT, parentSessionId: null }] }, messages: [user(2, "把本周的导出清理一下")] };
+  const plain = { header: { completeness: "complete", sessions: [{ sessionId: ROOT, parentSessionId: null, seedEndSeq: -1 }] }, messages: [user(2, "把本周的导出清理一下")] };
   const input = buildDistillationInput({ run, trigger: "script", transcript: plain, scripts });
   assert.equal(input.trigger, "script");
   assert.equal(input.signal, "run", "nobody corrected a program that recurred");

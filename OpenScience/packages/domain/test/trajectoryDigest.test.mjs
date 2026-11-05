@@ -58,21 +58,23 @@ test("the platform's choreography is removed from the tool order in code, the wo
 
 test("the tool order is read from the run's executed trace when there is one: the calls that completed, choreography out, repeats folded", () => {
   // The transcript holds a call that failed (`flaky`) and the root's own search; the trace is what completed, per session.
-  const transcript = { messages: [user(1, "run it"), call(2, "web_search"), call(3, "flaky"), call(4, "evimed_plan"), call(5, "read")] };
+  const transcript = { header: { runChildSessionIds: [CHILD], sessions: [{ sessionId: ROOT, parentSessionId: null, seedEndSeq: -1 },
+    { sessionId: CHILD, parentSessionId: ROOT, seedEndSeq: -1, runTurnOwnership: { schema: 'child-run-turns/1', runId: run.id, turnStartSeqs: [1] } }] }, messages: [user(1, "run it"), call(2, "web_search"), call(3, "flaky"), call(4, "evimed_plan"), call(5, "read"), call(2, "literature_search", CHILD)] };
   const toolTraces = [
-    { capability: null, sessionId: ROOT, steps: [{ turn: 1, tool: "web_search" }, { turn: 1, tool: "evimed_plan" }, { turn: 1, tool: "read" }] },
-    { capability: "meta-analysis", sessionId: CHILD, steps: [{ turn: 1, tool: "mcp__evimed__literature_search" }, { turn: 1, tool: "literature_search" }, { turn: 2, tool: "bash" }] },
+    { runId: run.id, capability: null, sessionId: ROOT, steps: [{ turn: 1, turnStartSeq: 1, tool: "web_search" }, { turn: 1, turnStartSeq: 1, tool: "evimed_plan" }, { turn: 1, turnStartSeq: 1, tool: "read" }] },
+    { runId: run.id, capability: "meta-analysis", sessionId: CHILD, steps: [{ turn: 1, turnStartSeq: 1, tool: "mcp__evimed__literature_search" }, { turn: 1, turnStartSeq: 1, tool: "literature_search" }, { turn: 2, turnStartSeq: 1, tool: "bash" }] },
   ];
   assert.deepEqual(trajectoryDigest(transcript, run, { toolTraces }).tools, ["web_search", "read", "literature_search", "bash"]);
-  assert.deepEqual(trajectoryDigest(transcript, run).tools, ["web_search", "flaky", "read"], "without a trace it is every call the transcript holds, as it was");
-  assert.deepEqual(trajectoryDigest(transcript, run, { toolTraces: [] }).tools, ["web_search", "flaky", "read"], "an empty trace is no trace");
-  assert.deepEqual(trajectoryDigest(transcript, run, { toolTraces: [{ steps: [] }] }).tools, ["web_search", "flaky", "read"]);
+  assert.deepEqual(trajectoryDigest(transcript, run).tools, ["web_search", "flaky", "read", "literature_search"], "without a trace it is every call the transcript holds, as it was");
+  assert.deepEqual(trajectoryDigest(transcript, run, { toolTraces: [] }).tools, ["web_search", "flaky", "read", "literature_search"], "an empty trace is no trace");
+  assert.deepEqual(trajectoryDigest(transcript, run, { toolTraces: [{ runId: run.id, sessionId: ROOT, steps: [] }] }).tools, ["web_search", "flaky", "read", "literature_search"]);
   // A trace whose only steps are the platform's own is a run that did no work of its own: the sequence is empty, not the transcript's.
-  assert.deepEqual(trajectoryDigest(transcript, run, { toolTraces: [{ steps: [{ turn: 1, tool: "evimed_plan" }] }] }).tools, []);
+  assert.deepEqual(trajectoryDigest(transcript, run, { toolTraces: [{ runId: run.id, sessionId: ROOT, steps: [{ turn: 1, turnStartSeq: 1, tool: "evimed_plan" }] }] }).tools, []);
   // Bounded like the transcript's.
-  const long = [{ steps: Array.from({ length: 200 }, (_, index) => ({ turn: 1, tool: `tool_${index}` })) }];
+  const long = [{ runId: run.id, sessionId: ROOT, steps: Array.from({ length: 200 }, (_, index) => ({ turn: 1, turnStartSeq: 1, tool: `tool_${index}` })) }];
   assert.equal(trajectoryDigest(transcript, run, { toolTraces: long }).tools.length, TRAJECTORY_DIGEST_LIMITS.tools);
 });
+
 
 test("a legacy run with no input identity does not learn from every turn; other runs stay separate", () => {
   const messages = [
@@ -195,4 +197,15 @@ test("REVIEWFIX 9 a research goal's request is the person's sentence: the gestur
   // another route keeps what was typed: a person who types /loopx into their own conversation said it
   assert.deepEqual(trajectoryDigest(transcript, run).requests.map((entry) => entry.text), [`/loopx ${goal}`]);
   assert.deepEqual(trajectoryDigest(transcript, { ...run, effectiveRouteReason: "loopx-continuation" }).requests.map((entry) => entry.text), [`/loopx ${goal}`]);
+});
+
+test('a stored tool trace cannot reintroduce another run or an earlier turn', () => {
+  const transcript = { messages: [user(11, 'Current task', { turnStartSeq: 10 }), { ...call(12, 'current_tool'), turnStartSeq: 10 }] };
+  const toolTraces = [
+    { runId: run.id, sessionId: ROOT, steps: [{ turnStartSeq: 0, tool: 'old_tool' }] },
+    { runId: 'other', sessionId: ROOT, steps: [{ turnStartSeq: 10, tool: 'foreign_tool' }] },
+    { runId: run.id, sessionId: CHILD, steps: [{ turnStartSeq: 10, tool: 'unowned_child_tool' }] },
+    { steps: [{ tool: 'legacy_tool' }] },
+  ];
+  assert.deepEqual(trajectoryDigest(transcript, run, { toolTraces }).tools, ['current_tool']);
 });

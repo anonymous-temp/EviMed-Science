@@ -17,7 +17,7 @@ export function collectedRunScope(run, sessions, { ownedChildSessionIds = [], ch
       || sourceMessages.some(message => typeof message?.sessionId === 'string' && message.sessionId !== session.sessionId);
     if (wrongScope) malformed.add(session.sessionId);
     const knownSeed = !wrongScope && Number.isSafeInteger(transcript?.seedEndSeq) && transcript.seedEndSeq >= -1
-      ? transcript.seedEndSeq : !wrongScope && transcript && !transcript.truncated && !session.error ? -1 : undefined;
+      ? transcript.seedEndSeq : !wrongScope && transcript && !Object.hasOwn(transcript, 'seedEndSeq') && !transcript.truncated && !session.error ? -1 : undefined;
     /** @type {{seedEndSeq?:number,runTurnOwnership?:{schema:string,runId:string,turnStartSeqs:number[]}}} */
     const extra = { ...(knownSeed === undefined ? {} : { seedEndSeq: knownSeed }) };
     const receipts = session.sessionId === run.sessionId ? [] : accepted.filter(row => row.sessionId === session.sessionId);

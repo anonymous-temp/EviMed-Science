@@ -42,7 +42,7 @@ import { createHash } from "node:crypto";
 
 import {
   METHOD_EVIDENCE_QUOTE_LENGTH, METHOD_OPERATIONS, TRAJECTORY_ANCHOR_RADIUS, isMcpToolName, isPlatformChoreographyTool, mcpToolBaseName, methodScientific,
-  parseSkillFrontmatter, projectMethodResultLinks, rootSessionOf, SKILL_AUTHORING_LIMITS, steeredMessages, trajectoryDigest, transcriptMessageText, unwrapUserWrappers,
+  parseSkillFrontmatter, projectMethodResultLinks, rootSessionOf, scopeRunTranscript, SKILL_AUTHORING_LIMITS, steeredMessages, trajectoryDigest, transcriptMessageText, unwrapUserWrappers,
 } from "@evimed/domain";
 import { readArtifactShapes } from "./artifactShapes.mjs";
 import { LEARNING_PROJECT_ID, isInternalProject } from "./internalProjects.mjs";
@@ -361,7 +361,7 @@ export function buildDistillationInput(input) {
   );
   const reactions = reactionsOf(input.feedback);
   const trajectory = digestOf(input.run, input.transcript, input.shapes, reactions, input.toolTraces);
-  const spoken = withoutGoalGesture(input.transcript, input.run);
+  const spoken = withoutGoalGesture(scopeRunTranscript(input.transcript, input.run), input.run);
   const steered = steeredCorrections(spoken, input.run);
   const { sessionId: rootSessionId } = rootSessionOf(spoken, input.run);
   const anchored = spoken
