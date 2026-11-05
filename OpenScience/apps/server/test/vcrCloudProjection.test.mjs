@@ -97,11 +97,11 @@ test('an accepted suggestion is replaced as the kind it was suggested as; a date
 });
 
 test('DashScope is a destination where the candidate reranker is on, and the page says what it is sent', () => {
-  const base = { deepseekBaseUrl: 'https://api.example.com', memoryRerankApiBase: 'https://dashscope.example.org/compatible-api/v1/reranks', dashscopeApiKey: 'k' };
+  const base = { deepseekBaseUrl: 'https://api.example.com', vcrMatchRerankApiBase: 'https://dashscope.example.org/compatible-api/v1/reranks', dashscopeApiKey: 'k' };
   assert.deepEqual(vcrCloudDestinations(base), ['https://api.example.com', 'https://dashscope.example.org']);
   assert.match(vcrCloudDestinationNotes(base)['https://dashscope.example.org'], /摘要.*遮盖.*试验文本.*不含病历原文/);
   // Off, or with no key, nothing goes there and nothing is said.
-  for (const off of [{ vcrMatchRerankEnabled: false }, { dashscopeApiKey: '' }, { memoryRerankApiBase: '' }]) {
+  for (const off of [{ vcrMatchRerankEnabled: false }, { dashscopeApiKey: '' }, { vcrMatchRerankApiBase: '' }]) {
     assert.deepEqual(vcrCloudDestinations({ ...base, ...off }), ['https://api.example.com'], JSON.stringify(off));
     assert.deepEqual(vcrCloudDestinationNotes({ ...base, ...off }), {}, JSON.stringify(off));
   }

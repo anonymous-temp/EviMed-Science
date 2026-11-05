@@ -1,0 +1,8 @@
+export { MatchingContractError } from './src/validation.mjs'
+export { canonicalJson, contentDigest, profileIdentity, validateScope, sameScope, assertScope, validateSourceRef, validateSourceRefs, sourceIdentity, compareSourceRefs, cacheIdentity, createSourceProfileCache } from './src/identity.mjs'
+export { HOST_ABI, HOST_PORT_METHODS, validateHostPorts, validateToolResponse, createHostClient, bindHostInvocation } from './src/ports.mjs'
+export { SCHEMA_VERSIONS, validateReleaseManifest, assertReleaseCompatibility } from './src/release.mjs'
+export { CLINICAL_ELIGIBILITY, WORK_STATES, pairIdentity, validateMatchingTask, validateClinicalContext, validateTrialProfile, validateEvidenceBundle, verifyEvidencePassage, validateEvidenceNeed, validateDefinitionCard, validateComputationReceipt, validateClinicalAssessment, validateCriterionMapping, validatePairDecision } from './src/contracts.mjs'
+export { PROJECTION_VERSION, rankMatchingResults, projectMatchingResult, validateMatchingResult, reportInputFromResult } from './src/projection.mjs'
+export { planReassessment } from './src/dependencies.mjs'
+export { METRIC_PROFILES, validateMetricProfile, metricInputFromResults } from './src/metrics.mjs'

@@ -471,5 +471,16 @@
         "usedBy": "runtime/mcp/evimed-research/data/clinical-scales.json (read once to write the scale wording; the build does not fetch it)"
       }
     }
+  },
+  "patientMatching": {
+    "modelProfile": {
+      "revision": "flash-only-1",
+      "reasoningModel": "deepseek-flash",
+      "embeddingModel": "qwen3.7-text-embedding",
+      "rerankModel": "qwen3.7-text-rerank",
+      "rerankApiBase": "https://dashscope.aliyuncs.com/compatible-api/v1/reranks",
+      "triageModel": "jev-1.14.0",
+      "proEscalation": false
+    }
   }
 }

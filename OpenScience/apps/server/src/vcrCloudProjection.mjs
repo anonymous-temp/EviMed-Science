@@ -9,6 +9,7 @@
  */
 import { createHash, createHmac } from 'node:crypto';
 import { HttpError } from './security.mjs';
+import { patientMatchingConfiguration } from './patientMatchingConfiguration.mjs';
 
 /** @param {string} text */
 export const projectionHash = text => createHash('sha256').update(text, 'utf8').digest('hex');
@@ -168,7 +169,11 @@ export function originalProjectionSpan(projection, original, span) {
 }
 
 /** The reranker's origin where the deployment asks DashScope to reorder candidate trials, else null. @param {any} config */
-const rerankOrigin = (config) => (config.vcrMatchRerankEnabled === false || !config.dashscopeApiKey || !config.memoryRerankApiBase ? null : cloudOrigin(config.memoryRerankApiBase));
+const rerankOrigin = (config) => {
+  if (config.vcrMatchRerankEnabled === false || !config.dashscopeApiKey) return null;
+  const endpoint = (config.patientMatchingProfile ?? patientMatchingConfiguration(config)).rerankApiBase;
+  return endpoint ? cloudOrigin(endpoint) : null;
+};
 
 /**
  * Where a study's data may be sent once its source permits the cloud. DashScope (the reranker of the patient-matching search) is one of them: what it is

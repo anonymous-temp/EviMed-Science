@@ -1,5 +1,6 @@
 import { CLINICAL_FACT_CONTRACT, FACT_EVIDENCE_RULE, VCR_REQUIREMENT_CONTRACT, VCR_CRITERION_TYPES, clinicalTerminologyContext } from '@evimed/domain';
 import { clinicalSemanticFields } from '@evimed/domain';
+import { patientMatchingConfiguration } from './patientMatchingConfiguration.mjs';
 import { clinicalDocumentWindow } from './vcrDocumentWindow.mjs';
 import { locatePassages, passageWindow } from './vcrPassages.mjs';
 /**
@@ -1225,8 +1226,9 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   // has none, the reranker is left off (the registries' order stands) rather than spending where nobody records it.
   const rerankMeter = createRerankMeter(usageLedger);
   const rerankAllowed = rerankMeter !== null || config.requireDurableUsageLedger !== true;
+  const matchingProfile = config.patientMatchingProfile ?? patientMatchingConfiguration(config);
   const candidateReranker = new VcrCandidateRerank({
-    apiKey: config.dashscopeApiKey, model: config.memoryRerankModel, apiBase: config.memoryRerankApiBase, enabled: rerankAllowed && (config.vcrMatchRerankEnabled ?? Boolean(config.dashscopeApiKey)),
+    apiKey: config.dashscopeApiKey, model: matchingProfile.rerankModel, apiBase: matchingProfile.rerankApiBase, enabled: rerankAllowed && (config.vcrMatchRerankEnabled ?? Boolean(config.dashscopeApiKey)),
     timeoutMs: config.vcrMatchRerankTimeoutMs, budgetMs: config.vcrMatchRerankBudgetMs, batchSize: config.vcrMatchRerankBatchSize,
   }, { fetchImpl: call, report });
   const evidence = createVcrEvidencePipeline({

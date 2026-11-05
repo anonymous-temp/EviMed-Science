@@ -36,12 +36,13 @@
 
 import { createHash } from 'node:crypto';
 import {
-  vcrMatchFailureReason, VCR_DEFINITION_PROMPT_VERSION, VCR_ENGINE_PROTOCOL_VERSION, VCR_JUDGMENT_PROMPT_VERSIONS, VCR_MATCH_BATCH_DEFAULT_MODEL, VCR_MATCH_BATCH_METHODS, VCR_MATCH_JUDGE_LIMITS, VCR_MIN_CELL_SIZE, VCR_TRIAL_VERDICT_LABELS_ZH,
+  vcrMatchFailureReason, VCR_DEFINITION_PROMPT_VERSION, VCR_ENGINE_PROTOCOL_VERSION, VCR_JUDGMENT_PROMPT_VERSIONS, VCR_MATCH_BATCH_METHODS, VCR_MATCH_JUDGE_LIMITS, VCR_MIN_CELL_SIZE, VCR_TRIAL_VERDICT_LABELS_ZH,
   canonicalScenarioJson, criteriaMessages, criterionDisplay, fitMessages, isPeak, mergeCriteriaAnswers, mergeFitAnswers, parseCriteriaAnswer, parseFitAnswer, priceUsage, rankJudgments,
   segmentCriteria, segmentSentences, splitNoteParts, trialVerdict, vcrResultOutputPayload, vcrSubjectLabel, vcrSubjectLabels,
 } from '@evimed/domain';
 import { HttpError } from './security.mjs';
 import { callModelForControlPlane } from './modelGateway.mjs';
+import { patientMatchingConfiguration } from './patientMatchingConfiguration.mjs';
 import { matchBatchMinCell, resultOutcome } from './vcrMatchBatch.mjs';
 import { LONG_LIMITS, acceptLongShapes, acceptRelevance, longRelevanceMessages, longShapeMessages } from './vcrLongTables.mjs';
 import { REGISTRY_RECORD_BASIS, WITHDRAWN_SUBJECT_MARK, judgingProgress, judgmentKey, newerFailureOf, REJUDGE_FAILED_NOTE_ZH, recordGapOf, standingRows } from './vcrMatchJudgmentStore.mjs';
@@ -110,7 +111,7 @@ const effectiveThinking = (config) => (config?.vcrMatchJudgeThinking === 'high' 
 /** @param {Record<string, any> | undefined} config */
 const effectiveCriteriaThinking = (config) => (config?.vcrMatchJudgeCriteriaThinking === 'off' ? 'off' : 'high');
 /** @param {Record<string, any>} config */
-const effectiveModel = (config) => String(config?.deepseekModel || VCR_MATCH_BATCH_DEFAULT_MODEL);
+const effectiveModel = (config) => (config.patientMatchingProfile ?? patientMatchingConfiguration(config)).reasoningModel;
 /** @param {Record<string, any>} config */
 const effectiveTopK = (config) => (config?.vcrMatchJudgeTopK === 'all' ? 'all' : Number.isInteger(config?.vcrMatchJudgeTopK) ? config.vcrMatchJudgeTopK : 20);
 /** @param {Record<string, any>} config */
@@ -677,6 +678,9 @@ export function createMatchJudgeExecutor({ store, matchStore, judgments, documen
     const found = await store.studyById(studyId);
     if (!found) throw Object.assign(new Error('The study of this job is gone.'), { code: 'vcr_study_not_found' });
     const scenario = object(job.scenario);
+    if (String(scenario.model) !== effectiveModel(config)) {
+      throw Object.assign(new Error('The frozen matching job requires a different model; start a new Flash matching job.'), { code: 'patient_matching_frozen_model_unsupported' });
+    }
     const checkpoint = object((await store.one('SELECT checkpoint FROM evimed_vcr.jobs WHERE id=$1', [jobId]))?.checkpoint);
     const origin = object(checkpoint.cloudContext);
     const carried = object(checkpoint.judge);

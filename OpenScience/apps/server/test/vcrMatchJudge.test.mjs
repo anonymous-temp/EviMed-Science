@@ -100,6 +100,13 @@ function fixture({ script, config = {}, roster = ROSTER, registry = null, withdr
 
 const toB = { direction: "trial_to_patient", protocolVersionId: "pv_1", subjects: ["P-1", "P-2", "P-3"], fit: true, topK: 20, thinking: "high", thinkingCriteria: "high", model: "deepseek-flash", promptVersions: { fit: "fit-3", criteria: "criteria-5" }, estimate: { pairs: 3 }, chain: "c2" };
 
+test('a frozen job from another model is not executed or relabelled as Flash', async () => {
+  const f = fixture();
+  await assert.rejects(f.run(f.job({ model: 'deepseek-v4-pro' })), { code: 'patient_matching_frozen_model_unsupported' });
+  assert.equal(f.provider.calls.length, 0);
+  assert.equal(f.reads.length, 0);
+});
+
 test("a selection names one direction, and nothing else is accepted", () => {
   assert.equal(judgeSelection({ subjectKey: "P-1", registryIds: ["NCT00000001"] }).direction, "patient_to_trial");
   assert.equal(judgeSelection({ protocolVersionId: "pv_1" }).direction, "trial_to_patient");

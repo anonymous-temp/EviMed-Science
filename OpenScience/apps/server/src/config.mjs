@@ -11,6 +11,7 @@ import { researchDbSettings } from "./researchDbConfig.mjs";
 import { validateEvolutionConfiguration } from "./evolutionConfiguration.mjs";
 import { REGISTER_JUDGE_MAX_LINES } from "./reportRegisterJudge.mjs";
 import { PINNED } from "./pinnedVersions.mjs";
+import { patientMatchingConfiguration } from './patientMatchingConfiguration.mjs';
 
 /**
  * How much of the caller's window a gateway leaves itself to answer in.
@@ -1158,6 +1159,7 @@ function vcrSettings(overrides) {
     // interventions and the head of its eligibility text and puts the list in that order; it falls open to the registries' order. On by default where a DashScope key exists
     // (unset follows the key; `=false` turns it off). One request's limit, all requests' limit, and the documents of a batch (the model takes 500 in one request; a
     // smaller batch keeps one call's tokens and time small). Counters: `open_science_vcr_candidate_rerank_total`.
+    patientMatchingProfile: patientMatchingConfiguration(overrides),
     vcrMatchRerankEnabled: process.env.OPEN_SCIENCE_VCR_MATCH_RERANK_ENABLED == null || process.env.OPEN_SCIENCE_VCR_MATCH_RERANK_ENABLED === ""
       ? (overrides.vcrMatchRerankEnabled ?? null) : (overrides.vcrMatchRerankEnabled ?? boolEnv("OPEN_SCIENCE_VCR_MATCH_RERANK_ENABLED", true)),
     vcrMatchRerankTimeoutMs: integer("vcrMatchRerankTimeoutMs", "OPEN_SCIENCE_VCR_MATCH_RERANK_TIMEOUT_MS", 8_000, 1_000, 60_000),
