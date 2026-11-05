@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { GEO_MEASUREMENT_METHOD_VERSION, geoCoverageDifference } from "@evimed/domain";
 import { computeRoundCells } from "../src/geoMetricsJob.mjs";
 import { geoMetricInputCoverage } from "../src/geoComparison.mjs";
-import { storedMetricCoverage } from "../src/geoMetricProvenance.mjs";
+import { resetDerivedMetricCoverage, storedMetricCoverage } from "../src/geoMetricProvenance.mjs";
 
 const fixture = () => {
   const rows = Array.from({ length: 35 }, (_, index) => ({ roundId: "round-a", snapshotId: `s-${index}`, questionId: `q-${index}`,
@@ -112,4 +112,15 @@ test("coverage retains stable per-engine heterogeneous sampling surfaces", async
   const conflict = structuredClone(later); const duplicate = structuredClone(conflict[0]);
   duplicate.snapshotId = "conflicting-duplicate"; duplicate.surface.deep = !duplicate.surface.deep; conflict.push(duplicate);
   assert.equal(geoSelectionCoverage(conflict, 1), null, "a contradictory duplicate cannot assert a unique sampling configuration");
+});
+
+test("a stored cell's coverage is derived once; the list and the page's poll read it again without the calculation input", async () => {
+  resetDerivedMetricCoverage();
+  const f = fixture(); let queries = 0;
+  const db = { query: async () => { queries += 1; return { rows: [f.snapshot] }; } };
+  const first = (await storedMetricCoverage(db, [f.row])).get(f.row.id);
+  assert.equal(typeof first, "string"); assert.equal(queries, 1);
+  assert.equal((await storedMetricCoverage(db, [f.row])).get(f.row.id), first); assert.equal(queries, 1, "no second read of the snapshot");
+  assert.equal((await storedMetricCoverage(db, [{ ...f.row, value: f.row.value + 1 }])).size, 0, "a changed reading is never served from what was derived for another");
+  assert.equal(queries, 2);
 });

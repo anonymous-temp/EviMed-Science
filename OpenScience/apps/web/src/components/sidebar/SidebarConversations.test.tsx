@@ -1,6 +1,6 @@
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { Link, MemoryRouter, useLocation } from "react-router";
+import { Link, MemoryRouter, useLocation, useNavigate } from "react-router";
 import { beforeEach, expect, it, vi } from "vitest";
 import { WEB_SESSION_STARTED_EVENT, sessionGeneration } from "@/lib/sessionLifecycle";
 import { SidebarConversations } from "./SidebarConversations";
@@ -137,9 +137,28 @@ it("does not schedule later project reads after leaving the page", async () => {
   const gate = deferred<{ items: []; nextCursor: null }>();
   mocks.listProjects.mockResolvedValue(Array.from({ length: 6 }, (_, i) => ({ ...project, id: `g${i}`, name: `G${i}` })));
   mocks.list.mockReturnValue(gate.promise);
-  setup("/app/files", null); await waitFor(() => expect(mocks.list).toHaveBeenCalledTimes(3));
-  mocks.listProjects.mockReturnValue(new Promise(() => {}));
-  await userEvent.click(screen.getByRole("link", { name: "换页面" }));
+  const view = setup("/app/files", null); await waitFor(() => expect(mocks.list).toHaveBeenCalledTimes(3));
+  view.unmount();
   await act(async () => gate.resolve({ items: [], nextCursor: null }));
   expect(mocks.list).toHaveBeenCalledTimes(3);
+});
+it("keeps the list and does not read again when only the tab or a filter in the URL changes", async () => {
+  function Tabs() { const navigate = useNavigate(); return <button type="button" onClick={() => navigate("/app/geo/g1/diagnosis?engine=kimi")}>换标签</button>; }
+  render(<MemoryRouter initialEntries={["/app/geo/g1/visibility"]}><SidebarConversations geoId="g1" geo vcr={false} onCurrentModule={() => {}} /><Tabs /></MemoryRouter>);
+  await screen.findByText("First"); const user = userEvent.setup();
+  await user.click(screen.getByRole("button", { name: "管理项目与对话" })); expect(screen.getByText("项目管理")).toBeInTheDocument();
+  const reads = [mocks.listProjects.mock.calls.length, mocks.list.mock.calls.length, mocks.me.mock.calls.length];
+  await user.click(screen.getByRole("button", { name: "换标签" }));
+  expect(screen.getByText("First")).toBeInTheDocument(); expect(screen.queryByText("正在读取对话")).not.toBeInTheDocument();
+  expect(screen.getByText("项目管理")).toBeInTheDocument();
+  expect([mocks.listProjects.mock.calls.length, mocks.list.mock.calls.length, mocks.me.mock.calls.length]).toEqual(reads);
+});
+it("keeps the old list on screen while a refresh the page announced is read", async () => {
+  const user = userEvent.setup(); setup(); await screen.findByText("First");
+  const gate = deferred<{ items: any[]; nextCursor: null }>(); mocks.list.mockReturnValue(gate.promise);
+  act(() => { window.dispatchEvent(new Event("evimed:runs-changed")); });
+  await waitFor(() => expect(mocks.list).toHaveBeenCalledTimes(2));
+  expect(screen.getByText("First")).toBeInTheDocument(); expect(screen.queryByText("正在读取对话")).not.toBeInTheDocument();
+  await act(async () => gate.resolve({ items: [{ sessionId: "s9", title: "Fresh", createdAt: null }], nextCursor: null }));
+  expect(await screen.findByText("Fresh")).toBeInTheDocument(); expect(screen.queryByText("First")).not.toBeInTheDocument(); void user;
 });
