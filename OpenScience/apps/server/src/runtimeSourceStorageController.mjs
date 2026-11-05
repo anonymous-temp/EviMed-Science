@@ -27,6 +27,19 @@ async function directory(config, full) {
   if (stat && !stat.isDirectory()) throw fail();
   return stat ? full : null;
 }
+async function ensureReceiptStorage(config, row) {
+  if (row.paths.storages || !row.paths.sessions) return;
+  const target = path.join(row.home, 'storages');
+  await assertNoSymlinkPath(config.dataDir, target, { allowMissingTail: true });
+  const owner = await fs.lstat(row.paths.sessions);
+  let created = false;
+  try { await fs.mkdir(target, { mode: 0o700 }); created = true; }
+  catch (error) { if (error.code !== 'EEXIST') throw error; }
+  if (created) await fs.chown(target, owner.uid, owner.gid);
+  row.paths.storages = await directory(config, target);
+  if (!row.paths.storages) throw fail('runtime_source_helper_unavailable', 503);
+  const parent = await fs.open(row.home, 'r'); try { await parent.sync(); } finally { await parent.close(); }
+}
 async function storageRoots(config, project, incarnation, contextReference) {
   if (!incarnation || Object.keys(incarnation).sort().join(',') !== 'ownerCreatedAt,projectCreatedAt') throw fail();
   const owner = instant(incarnation.ownerCreatedAt), created = instant(incarnation.projectCreatedAt);
@@ -148,6 +161,9 @@ export function createSourceStorageController(config, hooks) {
         if (current.root.absent !== true && headerIdentity(current.root) !== headerIdentity(body.root)) throw fail();
         const snapshot = old && old.root.absent !== true ? old : current.root.absent !== true ? current
           : body.root.absent === true ? current : { root: body.root, sessions: [body.root] };
+        // A raw-only legacy session still needs a durable late-child receipt.
+        // A tmpfs cache mount would forget that obligation if the helper died.
+        await ensureReceiptStorage(config, row);
         const result = await execute({ operation: 'purge', project, image: inspected, paths: row.paths, frozen: snapshot });
         if (result.sourceRemoved !== true) throw fail('runtime_source_helper_unavailable', 503);
         for (const id of result.removedSessionIds ?? []) ids.add(id);
