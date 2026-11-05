@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { MemoryHistory, MemoryHistoryLedger } from '../src/memoryHistory.mjs';
 import { projectNativeMemoryNamespace } from '../src/openVikingLayout.mjs';
+import { createServer } from 'node:http';
+import { once } from 'node:events';
+import { createMemoryGatewayHandler, parseEventStream } from '../src/memoryGateway.mjs';
 import { nativeIntegration } from './helpers/nativeFixture.mjs';
 const { options, fixture } = nativeIntegration();
 
@@ -246,4 +249,74 @@ test('coverage includes undiscovered completed archives beyond the bounded disco
   [f.userId,f.commit.archiveUri,f.commit.engineSession]);
   assert.equal(await f.ledger.discoverArchives(100), 100);
   const coverage = await f.service.coverage(f.userId); assert.equal(coverage.queued, 100); assert.equal(coverage.undiscovered, 6);
+});
+
+
+async function gateway(t, f) {
+  const handler = createMemoryGatewayHandler({ config: { memoryEngineEnabled: true, memoryEnabled: true, memoryHistorySearchEnabled: true },
+    sessions: f.sessions, overlay: f.overlay, historySearch: input => f.service.search(input),
+    runtimeManager: { assertActiveEviMedWorkloadToken: async () => ({ userId: f.userId, projectId: 'default' }) },
+    store: { userById: async () => ({ id: f.userId }), requireProject: async () => ({ id: 'default', userId: f.userId }) },
+    admission: { admit: async () => ({ learn: true, recall: true }) } });
+  const server = createServer((req,res) => { void handler(req,res); }); server.listen(0,'127.0.0.1'); await once(server,'listening');
+  t.after(() => new Promise(resolve => { server.closeAllConnections(); server.close(resolve); }));
+  return async (mcp = false) => {
+    const response = await fetch(`http://127.0.0.1:${server.address().port}/internal/memory/v1/${mcp ? 'mcp' : 'api/v1/search/search'}`, {
+      method: 'POST', headers: { authorization: 'Bearer history-test', 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
+      body: JSON.stringify(mcp ? { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'search', arguments: { query: 'trial' } } } : { query: 'trial' }),
+    });
+    const text = await response.text(); assert.equal(response.status,200); return { text, json: response.headers.get('content-type').includes('event-stream') ? parseEventStream(text) : JSON.parse(text) };
+  };
+}
+
+test('REST and MCP sanitize current/legacy title metadata and forget title-only words without losing unrelated body', options, async t => {
+  const f = await setup(t); const resolve = f.service.resolveSource;
+  f.service.resolveSource = async (...args) => ({ ...await resolve(...args), conversationTitle: 'Password: ordinary-fake-P4ssword! trial discussion' });
+  await f.service.ingestArchive(f.commit,f.context); const call = await gateway(t,f);
+  for (const mcp of [false,true]) assert.doesNotMatch((await call(mcp)).text,/ordinary-fake-P4ssword/);
+  f.service.resolveSource = async (...args) => ({ ...await resolve(...args), conversationTitle: 'Legacy title says 青霉素过敏 only' });
+  await f.overlay.reject(f.userId,'notes',`${f.root}/notes/title.md`,['青霉素过敏']);
+  for (const mcp of [false,true]) { const text = (await call(mcp)).text; assert.doesNotMatch(text,/青霉素过敏/); assert.match(text,/trial tables/); }
+});
+
+test('fragment-boundary removals suppress the entire original message at ingest and on legacy reads', options, async t => {
+  for (const legacy of [false,true]) {
+    const f = await setup(t); const record = await f.commitConversation('boundary',[{ role: 'user', text: `${'普通'.repeat(899)}青霉素过敏，请记住。` }], { projectId: 'default' });
+    const c = { ...f.commit,engineSession: record.session,archiveUri:record.archive_uri };
+    if (legacy) await f.service.ingestArchive(c,f.context);
+    await f.overlay.reject(f.userId,'notes',`${f.root}/notes/a.md`,['青霉素过敏']);
+    if (!legacy) await f.service.ingestArchive(c,f.context);
+    const hits = await search(f); assert.ok(!hits.some(hit => hit.sessionId === record.session.slice(4)));
+  }
+});
+
+test('shared JS normalization covers legacy Cf-containing removals without suppressing unrelated facts', options, async t => {
+  const f = await setup(t);
+  const record = await f.commitConversation('unicode',[{ role: 'user', text: '平时我\u200b吃素，需要准备蔬菜。' }], { projectId: 'default' });
+  await f.service.ingestArchive({ ...f.commit,engineSession:record.session,archiveUri:record.archive_uri },f.context);
+  await f.service.ingestArchive(f.commit,f.context);
+  await f.overlay.reject(f.userId,'notes',`${f.root}/notes/a.md`,['我\u200b吃素']);
+  const hits = await search(f); assert.equal(hits.length,1); assert.equal(hits[0].sessionId,'session_a');
+});
+
+test('hydration preserves stored order/length without repeating overlapping assistant context', options, async t => {
+  const f = await setup(t); const record = await f.commitConversation('long',[
+    { role:'user',text:'甲'.repeat(1700) },{ role:'assistant',text:'乙'.repeat(1678) },{ role:'user',text:'丙'.repeat(1700) },
+  ],{ projectId:'default' });
+  await f.service.ingestArchive({ ...f.commit,engineSession:record.session,archiveUri:record.archive_uri },f.context);
+  const hits = await search(f);
+  for (const hit of hits) { assert.ok(hit.messages.reduce((n,m)=>n+m.text.length+80,0)<=6000); }
+  const carried = hits.find(hit=>hit.messages.some(m=>m.text.startsWith('丙')));
+  assert.deepEqual(carried.messages.map(m=>m.text[0]),['乙','丙']);
+});
+
+test('default searches owned ordinary project history while named projects keep exact scope and provenance', options, async t => {
+  const f = await setup(t); const base = f.service.resolveSource; const stamps = { default:'2026-01-01T00:00:00Z',a:'2026-01-01T00:00:00Z',b:'2026-01-01T00:00:00Z' };
+  f.service.resolveSource = async (c,ctx) => stamps[c.projectId] ? { ...await base(c,ctx),projectCreatedAt:stamps[c.projectId],projectTitle:`Project ${c.projectId}` } : null;
+  for (const id of ['a','b']) { const record = await f.commitConversation(id,[{ role:'user',text:`${id} project trial facts` }],{projectId:id}); await f.service.ingestArchive({...f.commit,projectId:id,engineSession:record.session,archiveUri:record.archive_uri},f.context); }
+  const global = await search(f); assert.deepEqual(new Set(global.map(h=>h.projectId)),new Set(['a','b'])); assert.ok(global.every(h=>h.scope==='project'&&h.projectTitle));
+  const named = await f.service.search({user:{id:f.userId},project:{id:'a',userId:f.userId},query:'trial',scope:'account',owner:'someone-else'});
+  assert.deepEqual(named.map(h=>h.projectId),['a']);
+  stamps.b = '2027-01-01T00:00:00Z'; assert.deepEqual((await search(f)).map(h=>h.projectId),['a']);
+  delete stamps.a; assert.deepEqual(await search(f),[]);
 });
