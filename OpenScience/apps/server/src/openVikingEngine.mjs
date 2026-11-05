@@ -101,6 +101,8 @@ export class OpenVikingEngine {
     this.last = null;
     /** Observable counters (principle 15). */
     this.counters = { checks: 0, failedChecks: 0, skillInstalls: 0, compileProbes: 0 };
+    /** The compile identity fact, once proven for an engine version. @type {{ version: unknown, fact: any } | null} */
+    this.identityProven = null;
     /** @type {ReturnType<typeof setInterval> | null} */
     this.timer = null;
     /** @type {Promise<unknown> | null} */
@@ -138,8 +140,14 @@ export class OpenVikingEngine {
       await read("memoryTemplates", () => this.#memoryTemplates());
       await read("skills", () => this.#skills());
       // The probe names an installed skill as its source, so it is only meaningful once the skills are there.
-      if (facts.skills.ok) await read("compileIdentity", () => this.#compileIdentity());
-      else facts.compileIdentity = { ok: false, code: "openviking_compile_unprobed" };
+      // Proven once per engine version in this process: on v0.5.3 a full run of the empty source costs one planning call of about
+      // 34k input tokens, and this check repeats every half hour. A pinned engine's identity handling does not change between reads.
+      if (!facts.skills.ok) facts.compileIdentity = { ok: false, code: "openviking_compile_unprobed" };
+      else if (this.identityProven?.version === facts.version.version) facts.compileIdentity = this.identityProven.fact;
+      else {
+        await read("compileIdentity", () => this.#compileIdentity());
+        if (facts.compileIdentity?.ok) this.identityProven = { version: facts.version.version, fact: facts.compileIdentity };
+      }
     }
     this.last = { checkedAt: this.now().toISOString(), facts };
     this.counters.checks += 1;

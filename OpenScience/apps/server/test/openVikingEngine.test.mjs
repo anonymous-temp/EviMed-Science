@@ -290,6 +290,20 @@ test("a new volume's first minutes read as registration pending, never as missin
   assert.equal(engine.ready("nativeMemory").code, "openviking_registration_pending");
 });
 
+test("the compile identity is proven once per engine version: a full run of the empty source is a paid planning call", async () => {
+  const first = await replay("engine-check-ready");
+  const { engine } = engineFor(first.fetchImpl);
+  assert.equal((await engine.check()).facts.compileIdentity.ok, true);
+  assert.equal(engine.counters.compileProbes, 1);
+  assert.equal(engine.identityProven.version, `v${pin.version}`);
+  const second = await replay("engine-check-ready");
+  const { engine: again } = engineFor(second.fetchImpl);
+  again.identityProven = engine.identityProven;
+  assert.equal((await again.check()).facts.compileIdentity.ok, true);
+  assert.equal(again.counters.compileProbes, 0);
+  assert.ok(!second.seen.some((request) => String(request.path ?? request.url ?? request).includes("/api/v1/compile")));
+});
+
 test("a skill whose stored bytes are not the pinned ones is reported and left alone", async () => {
   // Somebody put it there. Replacing it is an operator's decision; compiling with it is nobody's.
   let served = 0;
