@@ -1327,8 +1327,8 @@ export function createVcrRoutes(dependencies) {
         throw new HttpError(400, "vcr_payload_invalid", "subjectKey is the study's own key for the patient.");
       }
       if (body.registryIds != null && (!Array.isArray(body.registryIds) || body.registryIds.length > 200
-        || body.registryIds.some((/** @type {unknown} */ entry) => typeof entry !== "string" || !/^[A-Za-z0-9][A-Za-z0-9-]{2,63}$/.test(entry)))) {
-        throw new HttpError(400, "vcr_payload_invalid", "registryIds are registration numbers, at most 200.");
+        || body.registryIds.some((/** @type {unknown} */ entry) => typeof entry !== "string" || !/^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$/.test(entry)))) {
+        throw new HttpError(400, "vcr_payload_invalid", "registryIds are the ids of the person's judged targets (a registration number, or a protocol version), at most 200.");
       }
       const subjectKey = body.subjectKey;
       const { study } = await authorize(id, "run");

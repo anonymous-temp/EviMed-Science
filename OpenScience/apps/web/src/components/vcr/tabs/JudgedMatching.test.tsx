@@ -553,6 +553,23 @@ describe("a short name for a person, and a record that has moved since the judgm
     expect(sent?.body).toEqual({ subjectKey: "P-0192", registryIds: stale });
   });
 
+  it("offers 重新判定 for the trials judged on an older note, and asks for exactly those", async () => {
+    const older = ["NCT05000002", "NCT05000003"];
+    await patientPage({
+      [JUDGED]: judged((page, query) => (query.get("direction") === "patient_to_trial"
+        ? { ...page, progress: { ...page.progress, state: "done", jobId: null, waiting: 0 },
+          trials: page.trials.map((trial: any) => (older.includes(trial.id) ? { ...trial, basisChanged: { kind: "record", label: "病历在判定之后有更新" } } : trial)) }
+        : page)),
+      [`POST ${MATCHING.replace("/matching", "")}/rejudge`]: { started: true, jobId: "job_again", jobs: [{ jobId: "job_again" }] },
+    });
+    const offer = document.querySelector("[data-vcr-older-note]") as HTMLElement;
+    expect(offer).toHaveTextContent("2 个试验的判定依据的是更新前的病历");
+    await userEvent.click(within(offer).getByRole("button", { name: "重新判定" }));
+    await waitFor(() => expect(server.calls.some((call) => call.method === "POST" && call.path === `/vcr/studies/${STUDY_ID}/rejudge`)).toBe(true));
+    expect(server.calls.find((call) => call.method === "POST" && call.path === `/vcr/studies/${STUDY_ID}/rejudge`)?.body).toEqual({ subjectKey: "P-0192", registryIds: expect.arrayContaining(older) });
+    expect((server.calls.find((call) => call.method === "POST" && call.path === `/vcr/studies/${STUDY_ID}/rejudge`)?.body as any).registryIds).toHaveLength(2);
+  });
+
   it("offers no 重新判定 while the job is out, and words a chart that changed as one", async () => {
     const page = (change: any) => judged((raw, query) => (query.get("direction") === "patient_to_trial"
       ? { ...raw, ...change(raw), stale: { label: "登记记录已更新，可重新判定", count: 1, registryIds: ["NCT05000001"] },
