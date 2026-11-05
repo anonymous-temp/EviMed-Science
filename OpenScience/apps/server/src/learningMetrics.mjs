@@ -55,7 +55,7 @@ const RETIREMENT_CODES = Object.freeze(["incident", "harm", "scientific_regressi
  * waits for a merge nobody has proven; `decide_failed` a DECIDE that produced no answer; `decided_nothing` one that found nothing related;
  * `merge_refused` a build that dropped something a source stored; `build_limit` a build left for the next pass; the rest are the library's size.
  */
-const CONSOLIDATE_NOOP_REASONS = Object.freeze(["no_methods", "too_few_methods", "no_groups", "skipped_unchanged", "blocked_unproven", "decide_failed", "decided_nothing", "merge_refused", "build_limit"]);
+const CONSOLIDATE_NOOP_REASONS = Object.freeze(["no_methods", "too_few_methods", "no_groups", "skipped_unchanged", "blocked_unproven", "decide_failed", "decided_nothing", "merge_refused", "build_limit", "build_deferred"]);
 
 /** @param {unknown} value @param {readonly string[]} allowed @returns {string} */
 const closed = (value, allowed) => (allowed.includes(String(value ?? "")) ? String(value) : "other");

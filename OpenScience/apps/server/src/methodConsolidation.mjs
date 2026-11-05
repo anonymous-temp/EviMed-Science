@@ -145,9 +145,10 @@ const shortDigest = (value) => createHash("sha256").update(value, "utf8").digest
 /**
  * The version of what DECIDE answers. 2 added the direction of the two directed relations (`WIDER` for `subset`, `REPLACES`
  * for `supersedes`); a group decided under 1 has no direction to record, so it is read again once, and its dispatch id
- * names the version so that an answer stored before it is not adopted in place of a new one.
+ * names the version so that an answer stored before it is not adopted in place of a new one. Version 3 invalidates old
+ * whole-group stamps that an incremental pass wrote while merge/abstraction work remained deferred.
  */
-export const DECIDE_VERSION = 2;
+export const DECIDE_VERSION = 3;
 
 /**
  * The identity of a group of methods as the pass reads it: the sha256 of its sorted `id@digest`. The same members at the
@@ -700,11 +701,11 @@ export class MethodConsolidation {
    * @param {any} job @param {readonly any[]} members
    * @param {{buildAllowed?: boolean, buildTypes?: readonly string[] | null}} [options]
    * @returns {Promise<{status: "skipped_unchanged" | "decide_failed" | "decided", relations: number, relationTypes: Record<string, number>, builds: number,
-   *   blockedUnproven: boolean, decidedNothing: boolean, refusals: any[]}>}
+   *   blockedUnproven: boolean, decidedNothing: boolean, deferredBuilds: number, refusals: any[]}>}
    */
   async #processGroup(job, members, { buildAllowed = true, buildTypes = null } = {}) {
     if (this.contextProvenance) for (const member of members) if (!await this.#get(job,member.id)) throw new HttpError(409,'geo_learning_target_unverified','A method left this learning scope.');
-    const empty = { relations: 0, relationTypes: {}, builds: 0, blockedUnproven: false, decidedNothing: false, refusals: [] };
+    const empty = { relations: 0, relationTypes: {}, builds: 0, blockedUnproven: false, decidedNothing: false, deferredBuilds: 0, refusals: [] };
     const key = groupKey(members);
     const policy=await this.contextProvenance?.policyForJob(job);
     // Before DECIDE, only this job's original group is eligible. Cross-job
@@ -713,7 +714,9 @@ export class MethodConsolidation {
     if(replay) {
       // A resumed worker may see the result's exact successor heads. Adopt its
       // committed group before asking DECIDE or BUILD to read it again.
-      await this.#stamp(job,members,key);
+      // A compound receipt proves the assignments that reached BUILD, not the
+      // assignments an incremental pass left for the full-library pass.
+      if (!buildTypes) await this.#stamp(job,members,key);
       return {status:'decided',...empty,builds:replay.applied?1:0,refusals:replay.refusals??[]};
     }
     if (groupDecided(members, key)) return { status: "skipped_unchanged", ...empty };
@@ -726,8 +729,10 @@ export class MethodConsolidation {
     // `supersedes` builds nothing (the replaced method is stopped by the library's own rules once it is unused), so a group that
     // holds only that is recorded and not sent to the builder.
     // An assignment that names a method the group does not hold, or a `subset` that names no wider one, has nothing the builder could act on.
-    const buildable = assignments.filter(({ entry, skills, wider }) => skills && entry.RELATION_TYPE !== "supersedes"
-      && (entry.RELATION_TYPE !== "subset" || wider) && (!buildTypes || buildTypes.includes(entry.RELATION_TYPE)));
+    const allBuildable = assignments.filter(({ entry, skills, wider }) => skills && entry.RELATION_TYPE !== "supersedes"
+      && (entry.RELATION_TYPE !== "subset" || wider));
+    const buildable = allBuildable.filter(({ entry }) => !buildTypes || buildTypes.includes(entry.RELATION_TYPE));
+    const deferredBuilds = allBuildable.length - buildable.length;
     const decidedNothing = assignments.length === 0;
     // A merge nobody has proven blocks the build of this group, and nothing else: DECIDE and the relations above have run.
     const blockedUnproven = buildable.length > 0 && members.some(unprovenMerge);
@@ -749,8 +754,9 @@ export class MethodConsolidation {
     }
     if (limited) this.#noop("build_limit");
     if (buildFailed) this.#noop("build_failed");
-    if (!blockedUnproven && !limited && !buildFailed) await this.#stamp(job, members, key);
-    return { status: "decided", relations, relationTypes, builds, blockedUnproven, decidedNothing, refusals };
+    if (deferredBuilds) this.#noop('build_deferred', deferredBuilds);
+    if (!blockedUnproven && !limited && !buildFailed && !deferredBuilds) await this.#stamp(job, members, key);
+    return { status: "decided", relations, relationTypes, builds, blockedUnproven, decidedNothing, deferredBuilds, refusals };
   }
 
   /** Mark every member of a group as read at its current bodies. A stamp is a convenience: one that cannot be written means the
@@ -822,10 +828,11 @@ export class MethodConsolidation {
     if (done.status === "decide_failed") noop.push("decide_failed");
     if (done.blockedUnproven) noop.push("blocked_unproven");
     if (done.decidedNothing) noop.push("decided_nothing");
+    if (done.deferredBuilds) noop.push('build_deferred');
     if (done.refusals.length) noop.push("merge_refused");
     for (const reason of noop) this.#noop(reason);
     return { action: "integrate", methodId, neighbours: group.length - 1, relations: done.relations, relationTypes: done.relationTypes, builds: done.builds,
-      refusals: done.refusals, noop };
+      deferredBuilds: done.deferredBuilds, refusals: done.refusals, noop };
   }
 
   /** The methods most like this one, at most `METHOD_SIMILARITY_TOP_K` of them (the hourly shortlist's own bound, so a changed method is
