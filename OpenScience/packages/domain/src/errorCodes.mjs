@@ -1183,6 +1183,11 @@ export const RUNTIME_ROOM_REFUSAL_CODES = Object.freeze([...RUNTIME_ROOM_WAIT_CO
 export const RUNTIME_START_RECOVERY = Object.freeze({
   runtime_cleanup_required: 'wait',
   runtime_busy: 'wait',
+  runtime_source_kernel_mismatch: 'retry',
+  runtime_source_helper_unavailable: 'retry',
+  runtime_source_inventory_limit: 'retry',
+  runtime_source_busy: 'wait',
+  runtime_source_identity_changed: 'retry',
   runtime_ui_response_invalid: 'retry',
   runtime_reserved_for_autopilot: 'autopilot',
   runtime_limit_exceeded: 'slots',
@@ -1227,7 +1232,14 @@ export const CONTROL_PLANE_ERROR_CODES = Object.freeze([
   // 2026-10-13: memory on OpenViking's native engine. The first four are what a person on the memory page can be answered
   // with; the `memory_gateway_*` ones are what the memory gateway answers a runtime's memory plugin (`memoryGateway.mjs`).
   // Source deletion keeps original bytes, native cleanup and uncertain lineage as separate states.
+  'official_promotion_authority_changed',
+  'runtime_source_identity_changed',
+  'runtime_source_busy',
+  'runtime_source_inventory_limit',
+  'runtime_source_helper_unavailable',
+  'runtime_source_kernel_mismatch',
   'source_deletion_unavailable',
+  'source_deletion_pending',
   'source_deletion_identity_changed',
   'source_deletion_limit',
   'memory_source_cleanup_busy',
@@ -2998,7 +3010,14 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   method_revision_unavailable: '要回到的版本已不存在，刷新后再试。',
 
   // ——— 记忆：原生引擎 (nativeMemoryStore.mjs, memoryGateway.mjs) ———
+  official_promotion_authority_changed: '这一做法的确认依据已变化，暂未启用。',
+  runtime_source_identity_changed: '来源对话已变化，暂未清除，请刷新后重试。',
+  runtime_source_busy: '研究环境仍在使用或清理中，请稍后重试。',
+  runtime_source_inventory_limit: '内容较多，暂时无法确认清除范围。',
+  runtime_source_helper_unavailable: '暂时无法清除来源对话，请稍后重试。',
+  runtime_source_kernel_mismatch: '当前研究环境版本暂不支持这项清除操作。',
   source_deletion_unavailable: '当前研究环境尚不支持清除来源对话。',
+  source_deletion_pending: '来源对话仍在清除，稍后再导出。',
   source_deletion_identity_changed: '来源对话已变化，清除尚未完成。',
   source_deletion_limit: '这段对话的关联内容较多，清除尚未完成。',
   memory_source_cleanup_busy: '记忆正在更新，请稍后重试。',
@@ -3256,7 +3275,14 @@ const ERROR_CODE_OUTCOMES = Object.freeze({
   analysis_limit_reached: 'capped',
   default_project_protected: 'capped',
   // Memory on the native engine (2026-10-13): what the page or the gateway refused before asking the engine, and the engine not answering.
+  official_promotion_authority_changed: 'capped',
+  runtime_source_identity_changed: 'capped',
+  runtime_source_busy: 'capped',
+  runtime_source_inventory_limit: 'capped',
+  runtime_source_helper_unavailable: 'upstream',
+  runtime_source_kernel_mismatch: 'upstream',
   source_deletion_unavailable: 'upstream',
+  source_deletion_pending: 'capped',
   source_deletion_identity_changed: 'capped',
   source_deletion_limit: 'capped',
   memory_source_cleanup_busy: 'capped',
