@@ -23,9 +23,10 @@ import { HttpError } from "./security.mjs";
  *    carries the service key itself and is booked `memory-extraction`; its Compile agent carries the key derived
  *    from it (`openVikingKnowledgeModelKey`) and is booked `knowledge`.
  *  - **Whose money.** The platform's: booked to the publisher account's internal project `evimed-openviking`, so
- *    no researcher's caps or bill ever see it, and held by one budget of its own per rolling day
- *    (`OPEN_SCIENCE_OPENVIKING_MODEL_DAILY_BUDGET_CNY`, counted from the ledger, never from a counter here: a
- *    restart loses nothing).
+ *    no researcher's caps or bill ever see it, and each of the two purposes is held by that budget on its own per
+ *    rolling day (`OPEN_SCIENCE_OPENVIKING_MODEL_DAILY_BUDGET_CNY`, counted from the ledger, never from a counter
+ *    here: a restart loses nothing). One budget shared by both let one compile stop everybody's memory: on 2026-11-05
+ *    a round of 4,065 calls spent 47.43 of the 50 in 23 minutes, and every extraction was refused for a day.
  *  - **A spent budget answers 402 with the body code `insufficient_quota`, and both are a choice.** What ends the
  *    attempt is the engine's own error classifier (`openviking/models/model_error.py`), and it changed between the
  *    two pins. v0.5.0 retried only what `classify_api_error` called transient, so any 4xx ended the commit or the
@@ -106,12 +107,14 @@ export function createOpenVikingModelCaller({ config, usageLedger = null, ensure
     return owner;
   }
 
-  /** What the two purposes have committed in the rolling day: settled cost plus what is still reserved or uncertain. */
-  async function spent(at = now()) {
+  /**
+   * What one purpose has committed in the rolling day: settled cost plus what is still reserved or uncertain.
+   * @param {string} purpose
+   */
+  async function spent(purpose, at = now()) {
     if (!usageLedger || !owner) return null;
     const since = new Date(at.getTime() - DAY_MS);
-    const sums = await Promise.all(OPENVIKING_MODEL_PURPOSES.map((purpose) => usageLedger.purposeSpend({ ...owner, purpose, since })));
-    return Math.round(sums.reduce((total, value) => total + Number(value || 0), 0) * 10_000) / 10_000;
+    return Math.round(Number((await usageLedger.purposeSpend({ ...owner, purpose, since })) || 0) * 10_000) / 10_000;
   }
 
   return {
@@ -134,7 +137,7 @@ export function createOpenVikingModelCaller({ config, usageLedger = null, ensure
     },
 
     /**
-     * Admit one call: the account it is booked to, after the day's budget was asked whether it can still afford it.
+     * Admit one call: the account it is booked to, after its purpose's day budget was asked whether it can still afford it.
      * A question, not a hold — the reservation itself is the ledger's, made by the gateway right after — so two calls
      * admitted in the same instant can together pass the line by one reservation.
      * @param {{ purpose: string }} caller @param {number} estimatedCost what the gateway is about to reserve, in CNY
@@ -143,7 +146,7 @@ export function createOpenVikingModelCaller({ config, usageLedger = null, ensure
     async admit(caller, estimatedCost) {
       const account = await resolveOwner();
       if (budgetCny > 0 && usageLedger) {
-        const committed = await spent();
+        const committed = await spent(caller.purpose);
         if (committed != null && committed + Math.max(0, Number(estimatedCost) || 0) > budgetCny) {
           counters.refused[caller.purpose] += 1;
           lastRefusalAt = now().toISOString();
@@ -157,22 +160,23 @@ export function createOpenVikingModelCaller({ config, usageLedger = null, ensure
 
     /** For readiness and the metrics: the budget, what is committed against it, and what was refused. */
     async status() {
-      let spentCny = null;
+      /** @type {Record<string, number | null>} */
+      const spentByPurpose = Object.fromEntries(OPENVIKING_MODEL_PURPOSES.map((purpose) => [purpose, null]));
       try {
         if (usable && usageLedger) {
           if (!owner && ensureOwner) await resolveOwner();
-          spentCny = await spent();
+          for (const purpose of OPENVIKING_MODEL_PURPOSES) spentByPurpose[purpose] = await spent(purpose);
         }
       } catch {
-        spentCny = null;
+        for (const purpose of OPENVIKING_MODEL_PURPOSES) spentByPurpose[purpose] = null;
       }
-      const exhausted = budgetCny > 0 && spentCny != null && spentCny >= budgetCny;
+      const exhausted = OPENVIKING_MODEL_PURPOSES.filter((purpose) => budgetCny > 0 && spentByPurpose[purpose] != null && Number(spentByPurpose[purpose]) >= budgetCny);
       return {
         configured: usable,
         ...(usable ? {} : { code: String(config.openVikingModelKeyError || "openviking_model_key_missing") }),
         budgetCny,
-        spentCny,
-        ...(exhausted ? { warning: "openviking_model_budget_exhausted" } : {}),
+        spentCny: spentByPurpose,
+        ...(exhausted.length ? { warning: "openviking_model_budget_exhausted", exhausted } : {}),
         admitted: { ...counters.admitted },
         refused: { ...counters.refused },
         ...(lastRefusalAt ? { lastRefusalAt } : {}),
