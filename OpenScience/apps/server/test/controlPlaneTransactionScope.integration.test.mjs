@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { AsyncLocalStorage } from 'node:async_hooks'
 import test from 'node:test'
 import { before, after } from 'node:test'
 import { ControlPlaneDatabase } from '../src/controlPlaneDatabase.mjs'
@@ -101,4 +102,22 @@ test('rollback and rollback-only savepoints discard their own commit observers',
   assert.deepEqual(seen, ['outer', 'committed child']);
   await assert.rejects(database.transaction(client => database.withTransactionClient(client, async () => { database.afterCommit(() => seen.push('failed outer')); throw new Error('rollback outer'); })));
   assert.deepEqual(seen, ['outer', 'committed child']);
+});
+
+test('a rolled-back child cannot discard a concurrently registered parent observer or register one after it closed', options, async () => {
+  const seen = []; let enter, release, late;
+  const entered = new Promise(resolve => { enter = resolve; }), held = new Promise(resolve => { release = resolve; });
+  await database.transaction(client => database.withTransactionClient(client, async () => {
+    const child = database.transaction(async () => {
+      enter(); await held;
+      database.afterCommit(() => seen.push('child'));
+      late = AsyncLocalStorage.bind(() => database.afterCommit(() => seen.push('closed child')));
+      throw new Error('rollback child');
+    });
+    await entered;
+    database.afterCommit(() => seen.push('parent'));
+    release(); await assert.rejects(child);
+    assert.equal(late(), false, 'an ended savepoint cannot add future publication work');
+  }));
+  assert.deepEqual(seen, ['parent']);
 });
