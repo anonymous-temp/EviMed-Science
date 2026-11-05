@@ -48,12 +48,22 @@ test('LongMemEval runtime input preserves original roles, dates and literal clin
   assert.equal(api.longMemGold(longCase()).answer, '2.5 mg');
 });
 
-test('a malformed source alignment or duplicate session fails instead of silently shifting dates', async () => {
+test('a malformed source alignment fails instead of silently shifting dates', async () => {
   const api = await subject();
   const short = longCase(); short.haystack_dates.pop();
   assert.throws(() => api.longMemRuntimeInput(short), /alignment/);
-  const duplicate = longCase(); duplicate.haystack_session_ids[1] = 's-1';
-  assert.throws(() => api.longMemRuntimeInput(duplicate), /duplicate/);
+});
+
+test('LongMemEval source-ID collisions preserve both original parts without inventing independent conversations', async () => {
+  const api = await subject();
+  const source = longCase(); source.haystack_session_ids[1] = 's-1';
+  const input = api.longMemRuntimeInput(source);
+  assert.deepEqual(input.histories.map(item => ({ id: item.sourceSessionId, part: item.sourcePart, at: item.at })), [
+    { id: 's-1', part: 0, at: '2026-06-01' }, { id: 's-1', part: 1, at: '2026-06-02' },
+  ]);
+  assert.equal(input.histories[0].messages[0].text, 'My dose was 5 mg.');
+  assert.equal(input.histories[1].messages[0].text, 'My dose is now 2.5 mg; I am allergic to penicillin.');
+  assert.deepEqual(source.haystack_session_ids, ['s-1', 's-1']);
 });
 
 test('tool/system records are not silently converted into the person speaking', async () => {
