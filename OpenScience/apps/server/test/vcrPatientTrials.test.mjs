@@ -172,7 +172,7 @@ test("persisted criterion scores order equal eligibility tiers without changing 
   assert.equal(rows[1].ranking.unknown, 1);
 });
 
-test("patient runtime ranking pages retain global rank and language requests on later pages", async () => {
+test("patient runtime ranking pages retain global rank on later pages", async () => {
   const rows = Array.from({ length: 51 }, (_, i) => ({ id: `t${i}`, kind: "registry", rank: i + 1, registryId: `NCT${i}`, summary: "insufficient_evidence", counts: { unknown: 1 }, evidenceGaps: [] }));
   const { matchingInputDigest } = await import("../src/vcrMatching.mjs");
   const criteria = rows.map(row => ({ candidateTrialId: row.id, id: `c${row.id}`, ordinal: 1, kind: "inclusion", sourceText: "consent", requirement: { op: "language", key: `key-${row.id}` },
@@ -189,10 +189,10 @@ test("patient runtime ranking pages retain global rank and language requests on 
   const last = await service.runtimeRead({ id: "study" }, { subjectKey: "P", offset: 50 });
   assert.equal(first.ranking.length, 50); assert.equal(first.more, true); assert.equal(first.total, 51);
   assert.equal(last.ranking[0].rank, 51); assert.equal(last.more, false);
-  assert.deepEqual(last.requests.map(request => [request.trialId, request.criterionKey]).sort(), [["t50", "applicable-t50"], ["t50", "key-t50"]]);
+  assert.equal("requests" in last, false, "no write can answer a language request any more, so none is offered");
 });
 
-test("runtime requests omit criteria proven inapplicable only in the selected assessment", async () => {
+test("a ranking read whose assessments changed while it was read is refused as changed", async () => {
   const { matchingInputDigest } = await import("../src/vcrMatching.mjs");
   const criteria = [
     { id: "not-applicable", candidateTrialId: "trial", kind: "inclusion",
@@ -227,33 +227,10 @@ test("runtime requests omit criteria proven inapplicable only in the selected as
   service.ranked = async () => [row];
   service.unjudged = async () => [];
   const result = await service.runtimeRead({ id: "study" }, { subjectKey: "patient" });
-  assert.deepEqual(result.requests.map(request => request.criterionKey).sort(),
-    ["old-assessment-only", "premise-unknown", "requirement-unknown", "shared"]);
-  assert.equal(result.requests.find(request => request.criterionKey === "shared").criterionId, "shared-yes");
-  // A changed judgment after ranking cannot suppress requests through a stale read.
+  assert.equal(result.ranking.length, 1);
+  // A changed judgment after ranking is not read through a stale snapshot.
   judgments[1].applicable = false;
   await assert.rejects(service.runtimeRead({ id: "study" }, { subjectKey: "patient" }), error => error.code === "vcr_read_changed");
-});
-
-test("legacy candidate criteria with a conflicting key are not offered as answerable requests", async () => {
-  const criteria = [
-    { id: "c1", candidateTrialId: "trial", kind: "inclusion", requirement: { op: "language", key: "shared", text: "Can consent" } },
-    { id: "c2", candidateTrialId: "trial", kind: "inclusion", requirement: { op: "present", variable: "age" },
-      applicability: { op: "language", key: "shared", text: "Has renal disease" } },
-  ];
-  const { matchingInputDigest } = await import("../src/vcrMatching.mjs");
-  const row = { id: "trial", kind: "registry", rank: 1, registryId: "NCT00000001", summary: "insufficient_evidence",
-    counts: { unknown: 2 }, evidenceGaps: [], snapshotHash: matchingInputDigest({ criteria, judgments: [] }) };
-  const store = {
-    async getCandidateTrial() { return row; },
-    async listCriteria() { return criteria; },
-    async rankingSnapshot() { return { assessments: [{ candidateTrialId: row.id, id: row.assessmentId }], criteria, judgments: [] }; },
-    async languageAnswersForTrials() { return new Map([[row.id, new Set()]]); },
-  };
-  const service = createPatientTrials({ candidateStore: store });
-  service.ranked = async () => [row];
-  service.unjudged = async () => [];
-  assert.deepEqual((await service.runtimeRead({ id: "study" }, { subjectKey: "P" })).requests, []);
 });
 
 test("candidate language bindings come from one coherent record and criterion snapshot", async () => {

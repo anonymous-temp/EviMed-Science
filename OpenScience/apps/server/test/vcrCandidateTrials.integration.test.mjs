@@ -92,7 +92,6 @@ test("both matching stores round-trip applicability language answers and indepen
   const candidateAnswers = await trials.latestLanguageJudgments({ studyId, candidateTrialId, subjectKey, visibleBy: asOf });
   assert.equal(protocolAnswers.subgroup.id, protocolAnswer.id);
   assert.equal(candidateAnswers.subgroup.id, candidateAnswer.id);
-  assert.deepEqual((await trials.languageAnswersForTrials(studyId, subjectKey, [candidateTrialId], new Map([[candidateTrialId, registry.criteria]]))).get(candidateTrialId), new Set(["subgroup"]));
 
   const facts = [{ id: "age", variable: "age", value: 17, unit: "year", extractedBy: "structured" }];
   const protocolAssessment = assessSubject({ studyId, protocolVersionId: protocol.id, subjectKey, asOf, criteria: protocol.criteria,
@@ -112,7 +111,6 @@ test("both matching stores round-trip applicability language answers and indepen
   }
   await q("UPDATE evimed_vcr.language_judgments SET withdrawn = '{}'::jsonb WHERE id = $1", [candidateAnswer.id]);
   assert.deepEqual(await trials.latestLanguageJudgments({ studyId, candidateTrialId, subjectKey, visibleBy: asOf }), {});
-  assert.deepEqual((await trials.languageAnswersForTrials(studyId, subjectKey, [candidateTrialId], new Map([[candidateTrialId, registry.criteria]]))).get(candidateTrialId), new Set());
 });
 
 test("a protocol refuses to reuse a persisted answer across conflicting criteria, and an old candidate trial reads such an answer as none", options, async () => {
@@ -135,7 +133,6 @@ test("a protocol refuses to reuse a persisted answer across conflicting criteria
   await assert.rejects(matching.saveLanguageJudgment({ ...input, protocolVersionId: protocol.id }), { code: "vcr_criterion_malformed" });
   assert.equal((await matching.latestLanguageJudgments({ studyId, protocolVersionId: protocol.id })).get(subjectKey), undefined);
   assert.deepEqual(await trials.latestLanguageJudgments({ studyId, candidateTrialId, subjectKey }), {});
-  assert.deepEqual((await trials.languageAnswersForTrials(studyId, subjectKey, [candidateTrialId], new Map([[candidateTrialId, registry.criteria]]))).get(candidateTrialId), new Set());
 });
 
 test("persisted scheduler honors each axis date while respecting inapplicability", options, async () => {

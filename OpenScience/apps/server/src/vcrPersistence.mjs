@@ -85,8 +85,8 @@ export const VCR_TABLES = Object.freeze([
   "knowledge_packs", "study_packs", "definitions", "definition_versions", "definition_uses",
   "models", "methods",
   "jobs", "conversation_completions", "executions", "results", "forecasts", "longitudinal_artifacts",
-  "matching_assessments", "criterion_judgments", "matching_facts", "language_judgments", "matching_inputs", "document_projections", "cloud_reads", "subject_withdrawals", "retired_recruitment_subjects", "retirement_erased_accounts", "derived_marks", "matching_candidates", "matching_producers", "matching_extractions", "match_judgments", "match_target_checks", "registry_pages", "candidate_searches", "clause_definitions",
-  "candidate_trials", "candidate_trial_criteria", "candidate_trial_assessments", "candidate_trial_judgments", "parsed_trial_criteria", "parsed_trial_criteria_versions",
+  "matching_assessments", "criterion_judgments", "matching_facts", "language_judgments", "matching_inputs", "document_projections", "cloud_reads", "subject_withdrawals", "retired_recruitment_subjects", "retirement_erased_accounts", "derived_marks", "matching_candidates", "matching_producers", "match_judgments", "match_target_checks", "registry_pages", "candidate_searches", "clause_definitions",
+  "candidate_trials", "candidate_trial_criteria", "candidate_trial_assessments", "candidate_trial_judgments",
   "followup_episodes",
   "dependencies", "stale_marks", "reviews", "decisions", "regulatory_contacts", "exports", "audit", "schedule_marks",
   "model_assessments", "model_plan_versions", "published_simulations",
@@ -1131,24 +1131,10 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.matching_producers (
   created_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY(study_id,target_id,producer_hash)
 );
--- The ledger of the batch reading of patient records (remediation plan D4): one row per record read for one set of questions. It holds
--- no patient text and no fact -- the facts are matching_facts' -- only that this record was read, so a resumed, restarted or repeated
--- batch does not read, or pay for, the same record twice. A record that failed is not a row: it is read again by the next start.
-CREATE TABLE IF NOT EXISTS evimed_vcr.matching_extractions (
-  study_id text NOT NULL REFERENCES evimed_vcr.studies(id) ON DELETE CASCADE,
-  subject_key text NOT NULL,
-  document_id text NOT NULL,
-  variables_digest text NOT NULL,
-  document_hash text,
-  facts integer NOT NULL DEFAULT 0,
-  rejected integer NOT NULL DEFAULT 0,
-  input_tokens integer,
-  output_tokens integer,
-  model text,
-  job_id text,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  PRIMARY KEY(study_id,subject_key,document_id,variables_digest)
-);
+-- Retired 2026-11-05: the batch reading's ledger of records read (one row per record and set of questions) and the per-account cache of a registry trial's
+-- structuring. Nothing reads or writes them any more; a ledger row holds a pseudonym, a document id and counts and a cache row a public record's parse, so
+-- dropping them loses nothing a person put in.
+DROP TABLE IF EXISTS evimed_vcr.matching_extractions;
 -- One record of a model's judgment of a patient against a trial or a protocol version (owner decisions 2026-11-04). A job and a conversation
 -- write the same shape and the same readers read it. The key is a pair for given inputs: the words of the record and of the trial by hash, the
 -- prompt and the settings; a pair judged once under those is not paid for again, and a failed row is replaced when it is tried again. The
@@ -1384,34 +1370,8 @@ ALTER TABLE evimed_vcr.candidate_trial_assessments ADD COLUMN IF NOT EXISTS supe
 
 -- The answer to a language criterion of a candidate trial is bound to the trial, not to a protocol version.
 
--- The structuring of a registry trial's eligibility text, kept per account by the registry id and the hash of the record it was made
--- from (M2): a second study of the same account that meets the same record reads it instead of asking for the parse again, and a
--- record whose hash changed is parsed again. It belongs to the account and to no study — the criteria come from a public record, the
--- row is deleted with the account, and nobody else's lookup reaches it (every read names the user).
--- The original cache and its upsert key remain available to older binaries.
-CREATE TABLE IF NOT EXISTS evimed_vcr.parsed_trial_criteria (
-  user_id       text NOT NULL,
-  registry      text NOT NULL,
-  registry_id   text NOT NULL,
-  record_hash   text NOT NULL,
-  criteria      jsonb NOT NULL DEFAULT '[]'::jsonb,
-  criteria_hash text NOT NULL DEFAULT '',
-  created_at    timestamptz NOT NULL DEFAULT now(),
-  updated_at    timestamptz NOT NULL DEFAULT now(),
-  PRIMARY KEY (user_id, registry, registry_id)
-);
-CREATE TABLE IF NOT EXISTS evimed_vcr.parsed_trial_criteria_versions (
-  user_id         text NOT NULL,
-  registry        text NOT NULL,
-  registry_id     text NOT NULL,
-  compiler_policy text NOT NULL,
-  record_hash     text NOT NULL,
-  criteria        jsonb NOT NULL DEFAULT '[]'::jsonb,
-  criteria_hash   text NOT NULL DEFAULT '',
-  created_at      timestamptz NOT NULL DEFAULT now(),
-  updated_at      timestamptz NOT NULL DEFAULT now(),
-  PRIMARY KEY (user_id, registry, registry_id, compiler_policy)
-);
+DROP TABLE IF EXISTS evimed_vcr.parsed_trial_criteria;
+DROP TABLE IF EXISTS evimed_vcr.parsed_trial_criteria_versions;
 ALTER TABLE evimed_vcr.language_judgments ADD COLUMN IF NOT EXISTS candidate_trial_id text;
 CREATE INDEX IF NOT EXISTS vcr_language_candidate_idx ON evimed_vcr.language_judgments
   (study_id, candidate_trial_id, subject_key, criterion_key, created_at DESC) WHERE candidate_trial_id IS NOT NULL;

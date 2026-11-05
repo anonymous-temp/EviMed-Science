@@ -1573,7 +1573,7 @@ export function createVcrEvidencePipeline({ store, registry = null, trialCorpus 
           query: row.query, status: row.status, reason: row.status === "ok" ? null : String(row.reason ?? row.status),
           total: row.total, found: row.items.length, pages: row.pages, ...(row.truncated ? { truncated: row.truncated } : {}) })));
         return { registry: entry.id, name: entry.name, ...outcome, retrieved: own.length,
-          ...(entry.id === "chictr" ? { limits: "只有清单：没有入排条件原文，也没有年龄、性别、中心；写入候选试验时条件按未知算（缺登记原文）。" } : {}) };
+          ...(entry.id === "chictr" ? { limits: "只有清单：这里没有入排条件原文，也没有年龄、性别、中心；判定时会去读它的登记页，读不到的这个试验按没有入排条件原文处理。" } : {}) };
       });
       const merged = mergeCandidates(found);
       const { kept, dropped } = filterCandidates(merged, request);

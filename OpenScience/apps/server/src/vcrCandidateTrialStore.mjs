@@ -256,21 +256,6 @@ export class VcrCandidateTrialStore extends VcrStoreBase {
 
   // --------------------------------------------- language criteria
 
-  /** @param {string} studyId @param {string} subjectKey @param {readonly string[]} ids @param {Map<string, any[]>} criteriaByTrial */
-  async languageAnswersForTrials(studyId, subjectKey, ids, criteriaByTrial) {
-    const result = new Map(ids.map(id => [id, new Set()]));
-    if (!ids.length) return result;
-    const rows = await this.rows(`SELECT DISTINCT ON (candidate_trial_id, criterion_key) candidate_trial_id, criterion_key, criterion_hash
-      FROM ${VCR_SCHEMA}.language_judgments WHERE study_id=$1 AND subject_key=$2 AND candidate_trial_id=ANY($3::text[]) AND withdrawn IS NULL
-      ORDER BY candidate_trial_id, criterion_key, created_at DESC, id DESC`, [studyId, subjectKey, [...ids]]);
-    const bindingsByTrial = new Map(ids.map(id => [id, languageCriteriaByKey(criteriaByTrial.get(id) ?? [])]));
-    for (const row of rows) {
-      const bound = bindingsByTrial.get(String(row.candidate_trial_id))?.get(row.criterion_key);
-      if (bound && row.criterion_hash === languageCriterionHash(bound, row.criterion_key)) result.get(String(row.candidate_trial_id))?.add(String(row.criterion_key));
-    }
-    return result;
-  }
-
   /**
    * The newest answer per criterion key about one patient and one candidate trial, visible by `visibleBy`: `{ criterionKey → { id, state,
    * evidence, … } }`, only those whose key and wording still match the trial's criteria.

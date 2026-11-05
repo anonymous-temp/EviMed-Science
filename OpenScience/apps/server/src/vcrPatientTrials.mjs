@@ -2,18 +2,19 @@
  * 「给患者找试验」 — the patient → trials direction of 虚拟临床研究's matching.
  *
  * The study's own matching asks which patients fit one trial (its protocol). This is the other end of
- * the same evaluation: one patient, and the trials a registry lists that might take them. The run
- * (the vcr-matching capability) finds the trials and structures each one's eligibility text; the
- * platform stores them, evaluates the patient against each with the evaluator the other direction
- * uses, and ranks them. This file holds the parts of that which are exact operations.
+ * the same question: one patient, and the trials a registry lists that might take them. Since the judging
+ * job (`vcrMatchJudge.mjs`) the verdict about a pair is the model's, saved as a judgment and read by the
+ * judged reader (`vcrMatchResults.mjs`); this file keeps what is exact and still stands: the candidate
+ * trials a search stored, their identity from the registry's own record, the rules-based assessments
+ * written before the job existed (read as they were saved, and ranked beside the study's protocol
+ * versions), and the read behind `vcr_read what: "candidate_trials"` for a study that has no judgments.
  *
  * Hidden knowledge:
  *
  * - **What identifies a candidate trial is read from the registry's record, in code.** The run names a
  *   registry and an id; the title, phase, status, conditions, sites, link and the hash of the preserved
  *   record come from the record the registry client fetched, so a trial cannot be given a status or a
- *   site it does not have. The run's own work is the language: the criteria it makes of the eligibility
- *   text.
+ *   site it does not have.
  * - **A site's people are not read.** A registry lists the staff to call at each site; a candidate keeps
  *   where a site is and whether it is recruiting, never who answers.
  * - **A candidate trial is not a version of the study's protocol.** It lives in its own tables, so the
@@ -601,14 +602,14 @@ export function createPatientTrials({ candidateStore, matchStore = null, documen
 
     /**
      * `vcr_read what: "candidate_trials"`: the study's candidate trials (a page), or one — by `filter.id`, or `filter.registryId` — with its
-     * criteria and the language keys a run may still owe an answer for; with `filter.subjectKey`, this patient's trials in order with the
-     * verdict about each (counts and states, never a quotation of the chart) and the language answers still owed.
+     * criteria; with `filter.subjectKey`, this patient's trials in order with the verdict about each (counts and states, never a quotation
+     * of the chart). Rows judged before the judging job existed are read here as they were saved; no write answers a candidate trial's language criteria any more.
      * @param {any} study @param {Record<string, any>} [filter]
      */
     async runtimeRead(study, filter = {}) {
       const subjectKey = filter.subjectKey ? String(filter.subjectKey) : null;
       if (subjectKey && (await matchStore?.withdrawnSubjects?.(study.id) ?? new Set()).has(subjectKey)) {
-        return { subjectKey, withdrawn: true, trials: [], ranking: [], assessment: null, requests: [], more: false };
+        return { subjectKey, withdrawn: true, trials: [], ranking: [], assessment: null, more: false };
       }
       const wanted = filter.id || filter.registryId;
       if (wanted) {
@@ -639,26 +640,7 @@ export function createPatientTrials({ candidateStore, matchStore = null, documen
           throw new HttpError(409, "vcr_read_changed", "Trial assessments changed while reading; retry the list.");
         }
         const criteriaOf = new Map(candidateIds.map(id => [id, current.criteria.filter(c => c.candidateTrialId === id)]));
-        const answeredByTrial = await candidateStore.languageAnswersForTrials(study.id, subjectKey, candidateIds, criteriaOf);
         const protocolCriteria = matchStore ? await matchStore.criteriaOfProtocols(study.id, page.filter(entry => entry.kind === "protocol").map(entry => entry.id)) : [];
-        /** @type {Array<{ trialId: string, criterionKey: string, criterionId: string, expectedRecordHash?: string|null, expectedCriterionHash?: string }>} */
-        const requests = [];
-        for (const row of page.filter(entry => entry.kind === "registry")) {
-          const answered = answeredByTrial.get(row.id) ?? new Set();
-          const criteria = criteriaOf.get(row.id) ?? [];
-          const validLanguageKeys = languageCriteriaByKey(criteria);
-          const trial = current.trials?.find(entry => entry.id === row.id);
-          // The current assessment has already decided these criteria do not
-          // apply. Do not ask the run to answer their language predicates;
-          // unrelated or older assessments must not suppress a request.
-          const inapplicable = new Set(current.judgments.filter(judgment => row.assessmentId && judgment.assessmentId === row.assessmentId
-            && judgment.applicable === false).map(judgment => judgment.criterionId));
-          for (const criterion of criteria.filter(item => !inapplicable.has(item.id))) for (const key of criterionLanguageKeys(criterion).filter(languageKey => validLanguageKeys.has(languageKey))) {
-            if (!answered.has(key)) requests.push({ trialId: row.id, criterionKey: key, criterionId: criterion.id,
-              ...(trial ? { expectedRecordHash: trial.recordHash ?? null,
-                expectedCriterionHash: languageCriterionHash(validLanguageKeys.get(key) ?? [], key) } : {}) });
-          }
-        }
         return {
           subjectKey,
           unjudged: await self.unjudged(study, { subjectKey }),
@@ -674,7 +656,6 @@ export function createPatientTrials({ candidateStore, matchStore = null, documen
             undecided: undecidedCriteria(row.evidenceGaps, row.kind === "registry" ? criteriaOf.get(row.id) ?? [] : protocolCriteria.filter(c => c?.protocolVersionId === row.id)),
             asOf: row.asOf, retrievedAt: row.retrievedAt,
           }))),
-          requests,
         };
       }
       const limit = Math.min(READ_PAGE, Math.max(1, Number(filter.limit ?? 20)));

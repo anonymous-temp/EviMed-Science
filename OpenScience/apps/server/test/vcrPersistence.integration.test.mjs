@@ -60,6 +60,19 @@ test("the migration creates every declared table and runs twice without complain
   assert.equal(after[0].n, VCR_TABLES.length);
 });
 
+test("the three tables nothing reads any more are dropped by the migration, rows and all", options, async () => {
+  await q("CREATE TABLE IF NOT EXISTS evimed_vcr.matching_extractions (study_id text, subject_key text)");
+  await q("CREATE TABLE IF NOT EXISTS evimed_vcr.parsed_trial_criteria (user_id text)");
+  await q("CREATE TABLE IF NOT EXISTS evimed_vcr.parsed_trial_criteria_versions (user_id text)");
+  await q("INSERT INTO evimed_vcr.matching_extractions VALUES ('s', 'P-1')");
+  await database.transaction(async (client) => {
+    const { vcrSchemaSql } = await import("../src/vcrPersistence.mjs");
+    await client.query(vcrSchemaSql());
+  });
+  const left = await q("SELECT table_name FROM information_schema.tables WHERE table_schema = 'evimed_vcr' AND table_name = ANY($1::text[])", [["matching_extractions", "parsed_trial_criteria", "parsed_trial_criteria_versions"]]);
+  assert.deepEqual(left, []);
+});
+
 test("D-personNames the names of the accounts on a study are display names, from the real users table", options, async () => {
   const insert = (/** @type {string} */ id, /** @type {string} */ name) => q(
     "INSERT INTO evimed_control.users (id, name, auth_type) VALUES ($1, $2, 'development') ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name", [id, name]);

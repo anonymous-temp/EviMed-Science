@@ -215,10 +215,9 @@ def _detailed_tool_definitions():
                 "(filter.query searches it); what: library lists the account's reusable population definitions. "
                 "what: matching answers criterion by criterion (how many subjects stand where, and the gaps) "
                 "and lists the study's own subject pseudonyms; with filter.subjectKey it returns that one subject's "
-                "judgments with approved projected quotes and sourced facts; factContract gives the exact clinical metadata schema, and the language criteria still "
-                "waiting for the run's answer. what: candidate_trials lists the registry trials found for patients "
+                "judgments with approved projected quotes and sourced facts; factContract gives the exact clinical metadata schema. what: candidate_trials lists the registry trials found for patients "
                 "(filter.id or filter.registryId reads one with its criteria; filter.subjectKey returns that patient's trials in order "
-                "with the verdict about each and the language answers still owed; once the model has judged them, ranking gives each trial's verdict, fit, reasons and "
+                "with the verdict about each; once the model has judged them, ranking gives each trial's verdict, fit, reasons and "
                 "per-clause labels with their evidence; matching with filter.protocolVersionId gives the same for a protocol's people, and its numbered clauses). "
                 "what: subject_document with filter.subjectKey and filter.kind sentences reads a patient's record as numbered sentences, with the documentHash a trial_judgment write names; "
                 "trial_registry_record gives numbered clauses. what: candidates searches the three registries for "
@@ -729,7 +728,7 @@ def read(arguments: dict) -> dict:
         if data.get("nextBeforeSeq") is not None:
             next_actions.append("To see earlier human messages, repeat patient_context with filter.beforeSeq set to data.nextBeforeSeq.")
     if what == "matching" and (arguments.get("filter") or {}).get("kind") not in ("contract", "terminology", "table_meaning"):
-        next_actions.append("Read matching filter.kind=contract for exact protocol/fact write envelopes; vcr_read what=patient_context lists original uploads and authenticated human cases.")
+        next_actions.append("Read matching filter.kind=contract for the criteria grammar and the fact contract used to screen a table by rules; vcr_read what=patient_context lists original uploads and authenticated human cases.")
         if data.get("subjectKey"):
             if data.get("ranking"):
                 pass
@@ -763,8 +762,8 @@ def read(arguments: dict) -> dict:
     elif what == "candidates" and data.get("available") is not False:
         next_actions.append("Say in the reply what data.coverage says: the registries searched and the day (asOf), any that failed or were not reached and why, and that CDE and ICTRP are not covered. "
                             "These are listings found by the search you wrote, merged and de-duplicated; their order is not a ranking of who fits (data.order says how they are ordered) and none is a judgement about the patient.")
-        next_actions.append("A field listed in a candidate's unknown is one the registry did not state, so the candidate was kept, not cleared: ChiCTR gives no sex, age or "
-                            "country and no eligibility text. leftOut counts what a record's own stated status, age, sex or country ruled out.")
+        next_actions.append("A field listed in a candidate's unknown is one the registry did not state, so the candidate was kept, not cleared: ChiCTR's list gives no sex, age or "
+                            "country and no eligibility text; the judging job reads its registry page for the conditions, and a trial whose page cannot be read is judged without them and says so. leftOut counts what a record's own stated status, age, sex or country ruled out.")
         retrieval = data.get("retrieval") if isinstance(data.get("retrieval"), dict) else {}
         if retrieval.get("reachedAllPhrases") is False:
             next_actions.append("The search deadline passed before every phrase was asked: registries[].failed lists the phrases with reason search_deadline. Search again with the unreached phrases first, or fewer phrases.")

@@ -1299,10 +1299,9 @@ export function createVcrRoutes(dependencies) {
     }
 
     // --- 「为该患者找试验」 ---------------------------------------------------------
-    // The page's one action of the patient → trials direction: a run of the matching capability that searches the registries for this
-    // patient, dispatched like any other step. What the study already holds is judged for the patient by code at once (when the caller
-    // may read patient-level data, as a matching job asks), so the list does not wait for the run; a judgment that cannot be made
-    // leaves the run's request standing.
+    // A run of the matching capability that searches the registries for this patient, dispatched like any other step; judging the trials it finds is the judging job's
+    // (`/matching/judge`). What the study already holds from before the job existed (rules-based assessments of candidate trials) is evaluated for the patient at once, when the
+    // caller may read patient-level data, so the list does not wait for the run. The patient is whoever the study holds: a document, a table row or a judgment says so.
     if (parts.length === 3 && method === "POST" && section === "trial-search") {
       const body = await bodyOf(req, maxJsonBytes, ["subjectKey"]);
       if (typeof body.subjectKey !== "string" || !SUBJECT_KEY.test(body.subjectKey)) {
@@ -1311,8 +1310,10 @@ export function createVcrRoutes(dependencies) {
       const subjectKey = body.subjectKey;
       const { study, roles } = await authorize(id, "run");
       if (!hooks.orchestrator?.requestTrialSearch) throw UNAVAILABLE();
-      const roster = service.packages?.matchStore?.candidateSubjects ? await service.packages.matchStore.candidateSubjects({ studyId: study.id }) : [];
-      if (!roster.includes(subjectKey)) throw new HttpError(404, "vcr_subject_not_found", "所选受试者不在本研究已登记的名单中。");
+      // A person is known by a document, a table row or a judgment, or by the facts the study's rules-based matching holds.
+      const known = await service.packages?.subjectKnown?.(study, subjectKey)
+        || (service.packages?.matchStore?.candidateSubjects ? (await service.packages.matchStore.candidateSubjects({ studyId: study.id })).includes(subjectKey) : false);
+      if (!known) throw new HttpError(404, "vcr_subject_not_found", "所选受试者不在本研究已登记的名单中。");
       const answer = await audited("vcr.trial_search.request", () => ({ code: id, detail: subjectKey }), { code: id, detail: subjectKey },
         () => hooks.orchestrator.requestTrialSearch(user, study, { subjectKey }));
       const trials = service.packages?.patientTrials ?? null;
@@ -1339,7 +1340,10 @@ export function createVcrRoutes(dependencies) {
       const { study } = await authorize(id, "run");
       await requireAbility(study, "read_patient_level");
       // Whoever the study holds: a document, a table row or a judgment says so, and someone only in a table is on no registered list.
-      if (!(await service.packages?.subjectKnown?.(study, subjectKey))) throw new HttpError(404, "vcr_subject_not_found", "所选受试者不在本研究已登记的名单中。");
+      // A person is known by a document, a table row or a judgment, or by the facts the study's rules-based matching holds.
+      const known = await service.packages?.subjectKnown?.(study, subjectKey)
+        || (service.packages?.matchStore?.candidateSubjects ? (await service.packages.matchStore.candidateSubjects({ studyId: study.id })).includes(subjectKey) : false);
+      if (!known) throw new HttpError(404, "vcr_subject_not_found", "所选受试者不在本研究已登记的名单中。");
       const judge = service.packages?.matchJudge ?? /** @type {any} */ (dependencies).matchJudge ?? null;
       const reads = service.packages?.matchJudgments ?? null;
       if (!judge?.rejudge || !reads?.staleTargets) throw UNAVAILABLE();
