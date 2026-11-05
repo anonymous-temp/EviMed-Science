@@ -565,6 +565,7 @@ test('incremental deferred merge and abstraction assignments remain owed to the 
     const h = harness({ decide: input => ({ assignments: [{ ASSIGNMENT: 'A1', SKILLS: idsOf(input), RELATION_TYPE: type, REASON: 'A concrete relationship.' }] }) });
     const subject = await h.make('span-a-one', 'axis-a'); await h.make('span-a-two', 'axis-a');
     await h.integrate(subject.id);
+    assert.deepEqual(h.noops.filter(([reason]) => reason === 'build_deferred'), [['build_deferred', 1]], 'one deferred assignment is counted once');
     assert.equal((await h.learning.getMethod('u1', subject.id)).payload.learning.decided, undefined, `${type} is recorded but has not been built`);
     await h.sleep('job_full');
     assert.equal(h.builds().length, 1, `${type} reaches the full builder`);
