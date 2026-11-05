@@ -18,10 +18,13 @@ CREATE TABLE IF NOT EXISTS evimed_memory.history_chunks (
 CREATE INDEX IF NOT EXISTS history_chunks_scope ON evimed_memory.history_chunks(owner_id,owner_created_at,namespace_id,project_id,project_created_at);
 CREATE INDEX IF NOT EXISTS history_chunks_cleanup ON evimed_memory.history_chunks(updated_at) WHERE state='withdrawn';
 CREATE TABLE IF NOT EXISTS evimed_memory.history_fences (
-  owner_id text NOT NULL, owner_created_at text NOT NULL, project_id text NOT NULL DEFAULT '', session_id text NOT NULL DEFAULT '',
+  owner_id text NOT NULL, owner_created_at text NOT NULL, project_id text NOT NULL DEFAULT '', project_created_at text NOT NULL DEFAULT '', session_id text NOT NULL DEFAULT '',
   permanent boolean NOT NULL, cutoff timestamptz NOT NULL DEFAULT clock_timestamp(),
-  PRIMARY KEY(owner_id,owner_created_at,project_id,session_id)
+  PRIMARY KEY(owner_id,owner_created_at,project_id,project_created_at,session_id)
 );
+ALTER TABLE evimed_memory.history_fences ADD COLUMN IF NOT EXISTS project_created_at text NOT NULL DEFAULT '';
+ALTER TABLE evimed_memory.history_fences DROP CONSTRAINT IF EXISTS history_fences_pkey;
+ALTER TABLE evimed_memory.history_fences ADD PRIMARY KEY(owner_id,owner_created_at,project_id,project_created_at,session_id);
 `;
 
 /** Exact URI authority and durable cleanup obligations, never raw messages. */
@@ -43,9 +46,9 @@ export class MemoryHistoryLedger {
   }
   async blocked(c, meta) {
     const result = await c.query(`SELECT 1 FROM evimed_memory.history_fences WHERE owner_id=$1 AND owner_created_at=$2
-      AND (project_id='' OR project_id=$3) AND (session_id='' OR session_id=$4)
+      AND (project_id='' OR project_id=$3) AND (project_created_at='' OR project_created_at=$6) AND (session_id='' OR session_id=$4)
       AND (permanent OR $5::timestamptz IS NULL OR cutoff>$5::timestamptz) LIMIT 1`,
-    [meta.ownerId, meta.ownerCreatedAt, meta.projectId, meta.sessionId, meta.minimumDate]);
+    [meta.ownerId, meta.ownerCreatedAt, meta.projectId, meta.sessionId, meta.minimumDate, meta.projectCreatedAt]);
     return result.rows.length > 0;
   }
   async reserve(meta, digest) {
@@ -74,7 +77,7 @@ export class MemoryHistoryLedger {
       AND namespace_id=$4 AND project_id=$5 AND project_created_at=$6 AND state='ready'
       AND EXISTS (SELECT 1 FROM evimed_control.users u WHERE u.id=h.owner_id AND u.created_at::text=h.owner_created_at)
       AND NOT EXISTS (SELECT 1 FROM evimed_memory.history_fences f WHERE f.owner_id=h.owner_id AND f.owner_created_at=h.owner_created_at
-        AND (f.project_id='' OR f.project_id=h.project_id) AND (f.session_id='' OR f.session_id=h.session_id)
+        AND (f.project_id='' OR f.project_id=h.project_id) AND (f.project_created_at='' OR f.project_created_at=h.project_created_at) AND (f.session_id='' OR f.session_id=h.session_id)
         AND (f.permanent OR h.minimum_date IS NULL OR f.cutoff>h.minimum_date))`,
     [uri, ownerId, ownerCreatedAt, namespaceId, projectId, projectCreatedAt]);
     return result.rows[0] ?? null;
@@ -94,16 +97,23 @@ export class MemoryHistoryLedger {
     [context.ownerId, types, lines.map(lineFingerprint), texts.map(compact)]);
     return result.rows.length > 0;
   }
-  async fence(ownerId, { ownerCreatedAt = null, projectId = '', sessionId = '', permanent }) {
+  async fence(ownerId, { ownerCreatedAt = null, projectId = '', projectCreatedAt = null, sessionId = '', permanent }) {
     await this.locked(ownerId, async c => {
       const owners = ownerCreatedAt ? [ownerCreatedAt] : (await c.query(`SELECT created_at::text AS stamp FROM evimed_control.users WHERE id=$1
         UNION SELECT owner_created_at AS stamp FROM evimed_memory.history_chunks WHERE owner_id=$1`, [ownerId])).rows.map(row => row.stamp);
       for (const stamp of owners) {
-        await c.query(`INSERT INTO evimed_memory.history_fences(owner_id,owner_created_at,project_id,session_id,permanent)
-          VALUES($1,$2,$3,$4,$5) ON CONFLICT(owner_id,owner_created_at,project_id,session_id) DO UPDATE SET
-          permanent=history_fences.permanent OR EXCLUDED.permanent,cutoff=clock_timestamp()`, [ownerId, stamp, projectId, sessionId, permanent]);
-        await c.query(`UPDATE evimed_memory.history_chunks SET state='withdrawn',cleaned_at=NULL,lease_until=NULL,updated_at=clock_timestamp()
-          WHERE owner_id=$1 AND owner_created_at=$2 AND ($3='' OR project_id=$3) AND ($4='' OR session_id=$4)`, [ownerId, stamp, projectId, sessionId]);
+        const projects = !projectId ? [''] : projectCreatedAt ? [projectCreatedAt] : (await c.query(`
+          SELECT created_at::text AS stamp FROM evimed_control.projects WHERE user_id=$1 AND id=$2
+          UNION SELECT project_created_at AS stamp FROM evimed_memory.history_chunks WHERE owner_id=$1 AND owner_created_at=$3 AND project_id=$2`,
+        [ownerId, projectId, stamp])).rows.map(row => row.stamp);
+        for (const projectStamp of projects) {
+          await c.query(`INSERT INTO evimed_memory.history_fences(owner_id,owner_created_at,project_id,project_created_at,session_id,permanent)
+            VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(owner_id,owner_created_at,project_id,project_created_at,session_id) DO UPDATE SET
+            permanent=history_fences.permanent OR EXCLUDED.permanent,cutoff=clock_timestamp()`, [ownerId, stamp, projectId, projectStamp, sessionId, permanent]);
+          await c.query(`UPDATE evimed_memory.history_chunks SET state='withdrawn',cleaned_at=NULL,lease_until=NULL,updated_at=clock_timestamp()
+            WHERE owner_id=$1 AND owner_created_at=$2 AND ($3='' OR project_id=$3) AND ($4='' OR session_id=$4)
+              AND ($5='' OR project_created_at=$5)`, [ownerId, stamp, projectId, sessionId, projectStamp]);
+        }
       }
     });
   }

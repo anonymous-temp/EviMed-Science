@@ -215,8 +215,8 @@ export class NativeMemoryWorker {
   async #pass() {
     let commits = 0;
     let accounts = 0;
-    if (this.history) await this.history.drainDeletes();
     try {
+      if (this.history) await this.history.drainDeletes();
       // The offers of the page's import that nobody saved are not kept past their hour (a saved one a day: what was saved is the engine's).
       await this.overlay.deleteExpiredImports().catch(() => 0);
       for (const userId of await this.overlay.accounts()) {
