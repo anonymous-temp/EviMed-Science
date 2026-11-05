@@ -115,3 +115,7 @@ describe("the name of a kind of mark", () => {
     expect(markKindWord({ id: "reference:evidence_card:c", type: "reference", subtype: "evidence_card", label: "证据卡" })).toBe("证据卡");
   });
 });
+
+it("a person mark never becomes the owner's identity", () => {
+ expect(isAboutYou({type:"memory",subtype:"person"})).toBe(false);
+});

@@ -38,3 +38,8 @@ describe("where a fact belongs", () => {
     expect(kindTitle("something_new")).toBe("记忆");
   });
 });
+
+it("labels people and ordinary notes separately from identity", () => {
+ expect(selfSection("person")).toBe("people"); expect(selfSection("note")).toBe("other");
+ expect(kindTitle("person")).toBe("人物"); expect(kindTitle("note")).toBe("其他记忆");
+});

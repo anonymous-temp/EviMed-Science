@@ -218,3 +218,33 @@ test('note mutations respect project-bound key before admission',async()=>{
   assert.equal(same.calls.filter(c=>['native.admit','candidate.update'].includes(c[0])).length,1);
  }
 });
+
+
+test("people remain first-party memories but never cross an external memory key, including subject keys", async () => {
+  const person = nativeRecord({ id: "nm_aaaaaaaaaaaaaaaaaaaaaaaa", kind: "person", nativeType: "people", value: "Patient A has an allergy" });
+  const note = nativeRecord({ id: "nm_bbbbbbbbbbbbbbbbbbbbbbbb", kind: "note", nativeType: "notes", value: "Ordinary note" });
+  for (const subjects of [false, true]) {
+    const { run } = fixture({ subjects, knownSubjects: ["doctor"], native: {
+      async search() { return { items: [person, note] }; },
+      async listRecords() { return [person, note]; },
+      async changes() { return [{ ...person, summary: person.value, change: "created", changedAt: "2026-11-05T00:00:00Z" }]; },
+    } });
+    const headers = subjects ? { "x-subject": "doctor" } : {};
+    const recalled = await run(`${AGENT_MEMORY_PATH}/recall`, { query: "allergy", methods: "none" }, "POST", headers);
+    assert.deepEqual(recalled.body.data.items.map(item => item.id), [note.id]);
+    const listed = await run(`${AGENT_MEMORY_PATH}/records?pageSize=1`, undefined, "GET", headers);
+    assert.deepEqual(listed.body.data.map(item => item.id), [note.id], "exclude before the requested page size");
+    const board = await run(`${AGENT_MEMORY_PATH}/dashboard`, undefined, "GET", headers);
+    assert.ok(!JSON.stringify(board.body).includes(person.value));
+  }
+});
+
+test("guessed people IDs cannot edit, forget or undo even after the file was forgotten", async () => {
+  const person = nativeRecord({ id: "nm_aaaaaaaaaaaaaaaaaaaaaaaa", kind: "person", nativeType: "people", status: "archived" });
+  for (const act of ["edit", "forget", "undo"]) {
+    const { run, calls } = fixture({ native: { async listRecords() { return [person]; }, async getRecord() { throw new HttpError(404,"memory_not_found","Missing"); } } });
+    const error = await rejected(run(`${AGENT_MEMORY_PATH}/records/${person.id}${act === "edit" ? "" : `/${act}`}`, { expectedVersion: 77, ...(act === "edit" ? { value: "Replacement" } : {}) }, act === "edit" ? "PATCH" : "POST"));
+    assert.equal(error?.status, 404);
+    assert.equal(called(calls, "native.update").length + called(calls,"native.undo").length, 0);
+  }
+});
