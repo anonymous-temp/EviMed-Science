@@ -21,6 +21,15 @@ control plane compares). `llm-wiki` is a system asset of the engine from v0.5.3 
 `knowledge-graph` is still under `examples/compile/ov-compile-skills/`. The server is AGPL-3.0 and runs unmodified as its own service;
 the plugin, the skills and the examples are Apache-2.0.
 
+Measured on the v0.5.3 rehearsal engine (a copy of the production volume, 2026-11-05): production-copy memories read 28/28 and 16/16 and
+`find` scored them 0.73-0.79; three commits of one session each extracted (`memory_write` 1, 1, 2; nothing skipped) and each later `find`
+returned that commit's file first at 0.89-0.92, so the v0.5.1 loss of later commits is not back. The empty-source compile probe is settled by
+the server itself in incremental mode, so it asks for a full run. `compile --skill memory` over the memories root fails
+(`MEMORY_CONSOLIDATION_FAILED: memory write target must be inside a memory type directory`, an upstream defect at the tag: the runner accepts
+the root and its own write check refuses it) and completes over a type directory, so the native consolidation walks the type directories
+that hold files (`nativeMemoryConsolidation.mjs`); `observations/` is left out because the control plane counts its notes one conversation to
+a line, and `evimed/` because it holds the capsule's index copies. A root consolidation can return when upstream fixes it.
+
 The fixtures below were recorded on v0.5.1.1 and are history until `record.mjs` replaces them on a v0.5.3 engine. Known to differ at
 v0.5.3 and not yet re-recorded: `content-batch-write-checked*` (renamed: the operation model forbids `expected_sha256`; see `content-batch-write-key-refused` and `-page*`), `health` (the `version` string), the compile task fixtures (a compile is incremental by
 default and the renderer no longer rebuilds index navigation) and the skill listings.

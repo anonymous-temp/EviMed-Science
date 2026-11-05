@@ -565,6 +565,8 @@ export function memoryConsolidationTask(task) {
   const uris = (/** @type {unknown} */ list) => (Array.isArray(list) ? list.map(String).filter((uri) => uri.startsWith("viking://")).slice(0, 2_000) : []);
   return {
     taskId: task.task_id,
+    /** The directory it consolidates (`resource_id`): which memory type, for a pass that walks them. */
+    target: typeof task.resource_id === "string" ? task.resource_id.slice(0, 600) : null,
     status: String(task.status ?? ""),
     terminal: COMPILE_TERMINAL_STATES.includes(String(task.status ?? "")),
     error: typeof task.error === "string" && task.error ? task.error.slice(0, 500) : null,

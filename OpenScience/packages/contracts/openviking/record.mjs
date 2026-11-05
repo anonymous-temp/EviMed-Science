@@ -395,7 +395,7 @@ async function recordMemory() {
 }
 
 // ----------------------------------------------------------------------------------------------------------------------
-// The memory consolidation (`compile --skill memory` over an account's memories root), asked by itself: it is not part of the
+// The memory consolidation (`compile --skill memory` over one memory type directory of an account; the root fails at v0.5.3), asked by itself: it is not part of the
 // memory set, which needs no model call of its own beyond extraction. `node record.mjs <out> consolidation`.
 
 async function recordConsolidation() {
@@ -405,13 +405,13 @@ async function recordConsolidation() {
   for (const [name, text] of [["answer-structure", "- 回答一律先给结论，再给依据。"], ["units", "- 图纸里的尺寸单位一律用毫米。"], ["format", "- 计算书用 Word 格式。"]]) {
     await raw(USER, "POST", "/api/v1/content/write", { uri: `${root}/preferences/self/${name}.md`, content: text, mode: "create", wait: true });
   }
-  const submitted = await raw(USER, "POST", "/api/v1/compile", { to: root, skill: "memory", instruction: "Consolidate these memories; keep every distinct fact." }, { headers: { "Idempotency-Key": `rec-consolidation-${randomBytes(8).toString("hex")}` } });
+  const submitted = await raw(USER, "POST", "/api/v1/compile", { to: `${root}/preferences`, skill: "memory", instruction: "Consolidate these memories; keep every distinct fact." }, { headers: { "Idempotency-Key": `rec-consolidation-${randomBytes(8).toString("hex")}` } });
   const taskId = submitted.json?.result?.task_id;
   if (!taskId) throw new Error(`the consolidation was not accepted: ${submitted.status} ${submitted.text.slice(0, 300)}`);
   await pollTask(USER, taskId, { limitMs: 600_000 });
   const task = await raw(USER, "GET", `/api/v1/tasks/${taskId}`);
   write("memory/consolidation-task.json", {
-    note: "The task of a memory consolidation (POST /api/v1/compile {to: <memories root>, skill: memory, instruction}) read back after it ended; three preference files written for it, recorded by record.mjs.",
+    note: "The task of a memory consolidation (POST /api/v1/compile {to: <memories root>/preferences, skill: memory, instruction}) read back after it ended; three preference files written for it, recorded by record.mjs. The memories root itself fails at v0.5.3 (MEMORY_CONSOLIDATION_FAILED: memory write target must be inside a memory type directory), so a type directory is what is asked.",
     recordedFrom: IMAGE,
     request: { method: "GET", path: `/api/v1/tasks/${taskId}`, headers: { ...task.sent, "X-API-Key": KEY_PLACEHOLDER } },
     status: task.status, contentType: task.contentType, response: task.json ?? task.text,

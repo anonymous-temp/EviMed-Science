@@ -361,5 +361,6 @@ test("a recorded memory consolidation is read into the task the native worker se
   const task = memoryConsolidationTask(fixture.response.result);
   assert.equal(task.status, "completed");
   assert.equal(task.terminal, true);
+  assert.match(String(task.target), /\/memories\/preferences$/, "v0.5.3 consolidates a memory type's directory; the memories root fails");
   assert.deepEqual([task.result.adds, task.result.updates, task.result.deletes, task.result.errors], [[], [], [], []]);
 });
