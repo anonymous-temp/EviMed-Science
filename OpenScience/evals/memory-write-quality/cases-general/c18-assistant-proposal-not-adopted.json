@@ -3,7 +3,7 @@
   "class": "refuse-assistant-proposal",
   "observedIn": "written for the memory-capsule rectification on 2026-10-23 (research G §6, C18); every name, number and identifier is invented",
   "expected": "A worthwhile assistant offer may be retained as an unconfirmed suggestion in NOTES; never as the user's task or adopted preference.",
-  "decidable": true,
+  "decidable": false,
   "replay": {
     "synthetic": true,
     "projectId": "default",
@@ -37,5 +37,6 @@
     ]
   },
   "evaluationSplit": "development",
-  "policyRevision": "2026-11-04"
+  "policyRevision": "2026-11-04",
+  "judge": "Is any retained offer explicitly an unconfirmed assistant suggestion, rather than the user deciding to receive automatic literature summaries or maintain a citation library? The kind-only mechanical checks cannot establish attribution or adoption."
 }
