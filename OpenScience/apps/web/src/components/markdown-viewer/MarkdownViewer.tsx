@@ -174,7 +174,7 @@ export const MarkdownViewer = memo(function MarkdownViewer({
     img: ({ src, alt }) => (assetBase && typeof src === "string" && isRelativeReference(src)
       ? <WorkspaceImage src={src} alt={alt ?? ""} base={assetBase} className={s.img} />
       : <img src={typeof src === "string" ? src : undefined} alt={alt ?? ""} loading="lazy" className={s.img} />),
-  }), [s, claims, claimStatuses, reading, renderLink, assetBase?.path, assetBase?.root, assetBase?.projectId]);
+  }), [s, claims, claimStatuses, reading, renderLink, assetBase]);
   return (
     <div data-prose="" className={cn(s.root, className)}>
       <ReactMarkdown

@@ -601,12 +601,13 @@ function HtmlPreviewFrame({ url, text, path, root, projectId }: { url: string | 
       .finally(() => { if (!cancelled) setSettled(true); });
     return () => { cancelled = true; };
   }, [text, path, root, projectId]);
-  const common = { title: "HTML 预览", sandbox: HTML_PREVIEW_SANDBOX, referrerPolicy: "no-referrer" as const, className: "h-full min-h-[480px] w-full bg-white" };
+  const title = "HTML 预览";
+  const common = { sandbox: HTML_PREVIEW_SANDBOX, referrerPolicy: "no-referrer" as const, className: "h-full min-h-[480px] w-full bg-white" };
   if (!settled) return <ViewerFallback />;
   // No script in generated HTML in hosted Web mode.
-  if (inlined !== null) return <iframe {...common} srcDoc={inlined} />;
-  if (url) return <iframe {...common} src={url} />;
-  if (text !== null) return <iframe {...common} srcDoc={text} />;
+  if (inlined !== null) return <iframe title={title} {...common} srcDoc={inlined} />;
+  if (url) return <iframe title={title} {...common} src={url} />;
+  if (text !== null) return <iframe title={title} {...common} srcDoc={text} />;
   return <Note text="当前文件暂不支持在线预览。" />;
 }
 
