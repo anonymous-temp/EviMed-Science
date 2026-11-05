@@ -3,6 +3,7 @@
 // same scope and class), the independent re-check, and what a method in the pack carries of where it came from, which is nothing.
 import assert from "node:assert/strict";
 import test from "node:test";
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { PLATFORM_PUBLISHER_USER_ID } from "@evimed/domain";
 import {
   AWAITING_CORROBORATION_DAYS, PROMOTION_CLASSES, PROMOTION_TEXT_LIMITS, SHARED_PRACTICES_LIMIT, createOfficialPromotion, methodFieldChecks, officialPromotionMetricFamilies,
@@ -21,11 +22,13 @@ const METHOD = {
 
 /** An in-memory stand-in for the product ledger, with the revision rule, the history every write adds to and the filter the promotion reads by. */
 function ledger() {
+  const activation = new AsyncLocalStorage();
   /** @type {Map<string, any>} */ const rows = new Map();
   /** @type {Map<string, { revision: number, payload: any }[]>} */ const revisions = new Map();
   let tick = 0;
   return {
     rows,
+    withActivationAuthority: (proof, operation) => activation.run(proof, operation),
     /** Every revision still held of one record, oldest first. */
     history(owner, kind, id) { return structuredClone(revisions.get(`${owner}:${kind}:${id}`) ?? []); },
     async get(owner, kind, id) { return structuredClone(rows.get(`${owner}:${kind}:${id}`) ?? null); },
@@ -33,6 +36,13 @@ function ledger() {
       return { items: [...rows.entries()].filter(([key, row]) => key.startsWith(`${owner}:${kind}:`) && Object.entries(filter).every(([name, value]) => row.payload[name] === value)).map(([, row]) => structuredClone(row)), nextCursor: null };
     },
     async put(owner, kind, id, payload, { expectedRevision, dropEarlierRevisions = false }) {
+      const proof = activation.getStore();
+      if (payload.status === 'active' && proof) {
+        for (const pin of [proof.candidate, ...proof.witnesses]) {
+          const current = rows.get(`${owner}:preferences:${pin.id}`);
+          if (!current || current.revision !== pin.revision) throw Object.assign(new Error('atomic promotion witness changed'), { code: 'official_promotion_authority_changed' });
+        }
+      }
       const key = `${owner}:${kind}:${id}`;
       const old = rows.get(key);
       if ((old?.revision ?? 0) !== expectedRevision) throw Object.assign(new Error("conflict"), { code: "product_revision_conflict" });
@@ -169,6 +179,23 @@ test('a peer changed while independent review was running cannot authorize publi
   } });
   await f.promotion.consider(method('new-one')); await f.promotion.consider(method('new-two'));
   await f.promotion.tick();
+  assert.equal(records(f).some(row => row.payload.status === 'active'), false);
+  assert.equal(f.published.count, 0);
+});
+
+test('a witness withdrawn immediately at activation cannot survive as an unguarded boolean vote', async () => {
+  const f = build(); await f.promotion.consider(method('new-one')); await f.promotion.consider(method('new-two'));
+  const put = f.documents.put.bind(f.documents); let withdrawn = false;
+  f.documents.put = async (owner, kind, id, payload, options) => {
+    if (payload.status === 'active' && !withdrawn) {
+      withdrawn = true;
+      const peer = records(f).find(row => row.id !== id);
+      await put(owner, kind, peer.id, { ...peer.payload, status: 'rejected', text: null, derivedFrom: null }, { expectedRevision: peer.revision });
+    }
+    return put(owner, kind, id, payload, options);
+  };
+  await f.promotion.tick();
+  assert.equal(withdrawn, true);
   assert.equal(records(f).some(row => row.payload.status === 'active'), false);
   assert.equal(f.published.count, 0);
 });
