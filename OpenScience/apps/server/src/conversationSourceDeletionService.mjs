@@ -42,6 +42,7 @@ export class ConversationSourceDeletionService {
     this.removeHistory = removeHistory; this.removeDerived = removeDerived;
     this.running = null; this.timer = null; this.refreshing = new Map();
   }
+  async assertNativeExportSafe(userId) { if((await this.ledger.recordsForOwner(userId,{pendingOnly:true})).length)throw new HttpError(409,'memory_source_cleanup_busy','A source deletion is still being cleaned up.'); }
   version(userId) { return this.ledger.version(userId); }
   hiddenMemoryUris(userId) { return this.ledger.hiddenMemoryUris(userId); }
   async refreshClosure(project) {
@@ -127,7 +128,7 @@ export class ConversationSourceDeletionService {
           await this.removeDerived(project, row);
           await this.ledger.update(row, { sourceRemoved: true, cleanup: 'complete', reason: null });
         });
-      } catch { await this.ledger.update(row, { cleanup: 'pending', reason: 'cleanup_unavailable' }); }
+      } catch(error) { await this.ledger.update(row, { cleanup: 'pending', reason: ['memory_source_cleanup_busy','memory_source_body_changed'].includes(error?.code)?'account_memory_busy':'cleanup_unavailable' }); }
     }
   }
   start() { if (this.timer) return; this.timer = setInterval(() => { void this.drain().catch(() => {}); }, 5000); this.timer.unref(); }

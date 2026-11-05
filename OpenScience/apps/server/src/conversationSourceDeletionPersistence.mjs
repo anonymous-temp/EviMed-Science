@@ -38,6 +38,13 @@ export class ConversationSourceDeletionLedger {
       AND project_id=$3 AND project_created_at=$4 AND session_ids ? $5`, [project.userId, scope.accountCreatedAt, project.id, scope.projectCreatedAt, sessionId]);
     return rowOf(rows.rows[0]);
   }
+  async recordsForOwner(userId,{pendingOnly=false}={}) {
+    await this.migrate();
+    const result=await this.database.query(`SELECT d.*,d.account_created_at::text AS account_created_at,d.project_created_at::text AS project_created_at
+      FROM evimed_source_deletion.conversations d JOIN evimed_control.users u ON u.id=d.user_id AND u.created_at=d.account_created_at
+      WHERE d.user_id=$1 AND ($2=false OR d.cleanup='pending')`,[userId,pendingOnly]);
+    return result.rows.map(rowOf);
+  }
   async pendingForProject(project) {
     await this.migrate(); const scope=await this.scope(project);
     const rows=await this.database.query(`SELECT ${identityColumns} FROM evimed_source_deletion.conversations WHERE user_id=$1 AND account_created_at=$2

@@ -1,3 +1,4 @@
+import { withNativeMemoryWrite } from './nativeMemoryWriteFence.mjs';
 import { createHash, randomUUID } from "node:crypto";
 import { zipSync } from 'fflate';
 import { carriesPlatformContext, identifierShapesIn, maskIdentifiers, platformIdentifiersIn, projectContextLine } from "@evimed/domain";
@@ -1105,7 +1106,16 @@ export class NativeMemoryStore {
    * `origin` is how the lines taken out are rejected (`overlay.reject`): `edit` for the person's own edit of the file, `forget` for the rest.
    * @param {string} userId @param {any} file @param {string} next @param {{ actor: string, reason: string, change?: string, origin?: "edit" | "forget" }} how
    */
-  async #write(userId, file, next, { actor, reason, change = "updated", origin = "forget" }) {
+  async #write(userId, file, next, how) {
+    return withNativeMemoryWrite(this.overlay.database,userId,async()=>{
+      const context=await this.#fileContext(userId,file.uri);
+      const current=await context.sessions.read(userId,file.uri);
+      if(current===null || contentHash(current)!==file.hash)throw new HttpError(409,'memory_source_body_changed','The memory changed before it was updated.');
+      return this.#writeOwned(userId,file,next,how);
+    });
+  }
+  /** @param {string} userId @param {any} file @param {string} next @param {{actor:string,reason:string,change?:string,origin?:"edit"|"forget"}} how */
+  async #writeOwned(userId, file, next, { actor, reason, change = "updated", origin = "forget" }) {
     const context = await this.#fileContext(userId, file.uri);
     const rejectionType = this.#rejectionType(context, file.type);
     this.#touch(userId);
@@ -1160,6 +1170,8 @@ export class NativeMemoryStore {
       }
       if (!removed.length) continue;
       const next = kept.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+      const currentBody = await context.sessions.read(userId,file.uri);
+      if (currentBody === null || contentHash(currentBody) !== file.hash) throw new HttpError(409,'memory_source_body_changed','The memory changed while source cleanup was prepared.');
       // Engine reads and overlay undo/export reads must lose the same source text.
       if (memoryLines(next).some(line => !/^#/.test(line))) await this.#write(userId, file, next, { actor: 'platform', reason: 'source conversation deleted' });
       else await this.forgetFile(userId, file, { keepText: false, actor: 'platform', reason: 'source conversation deleted' });
@@ -1294,7 +1306,15 @@ export class NativeMemoryStore {
   }
 
   /** @param {string} userId @param {any} file @param {{ keepText?: boolean, actor?: string, reason?: string }} [options] */
-  async forgetFile(userId, file, { keepText = false, actor = "user", reason = "" } = {}) {
+  async forgetFile(userId,file,options={}) {
+    return withNativeMemoryWrite(this.overlay.database,userId,async()=>{
+      const context=await this.#fileContext(userId,file.uri);
+      const current=await context.sessions.read(userId,file.uri);
+      if(current!==null && contentHash(current)!==file.hash)throw new HttpError(409,'memory_source_body_changed','The memory changed before it was removed.');
+      return this.#forgetFileOwned(userId,file,options);
+    });
+  }
+  async #forgetFileOwned(userId, file, { keepText = false, actor = "user", reason = "" } = {}) {
     const context = await this.#fileContext(userId, file.uri);
     this.#touch(userId);
     const removed = await this.#engine(() => context.sessions.remove(userId, file.uri));
@@ -1341,7 +1361,8 @@ export class NativeMemoryStore {
    * and the engine's later extraction writes beside it rather than into it — what a restore can give back is the text.
    * @param {string} userId @param {string} id @param {{ expectedVersion?: number }} options
    */
-  async undo(userId, id, { expectedVersion = 0 } = {}) {
+  async undo(userId,id,options={}) { return withNativeMemoryWrite(this.overlay.database,userId,()=>this.#undoOwned(userId,id,options)); }
+  async #undoOwned(userId, id, { expectedVersion = 0 } = {}) {
     this.#touch(userId);
     if (!NATIVE_RECORD_ID.test(String(id))) throw new HttpError(404, "memory_not_found", "Memory not found.");
     const fileId = String(id).slice(0, 27);
@@ -1897,6 +1918,8 @@ export class NativeMemoryStore {
   /** The account's memories as the engine's own pack, for the account export. @param {string} userId */
   async exportPack(userId) {
     this.#assertConfigured();
+    await this.sourceDeletion?.assertNativeExportSafe(userId);
+    const sourceVersion=this.sourceDeletion ? await this.sourceDeletion.version(userId) : null;
     const views = await this.#contexts(userId);
     /** @type {import('fflate').Zippable} */
     const entries = {};
@@ -1907,13 +1930,19 @@ export class NativeMemoryStore {
       const pack = await this.#engine(() => context.sessions.exportPack(userId));
       bytes += pack.byteLength;
       if (bytes > MAX_NATIVE_PACK_BYTES) throw new HttpError(413, 'memory_export_too_large', 'The native memory export exceeds the account archive limit.');
-      if (views.length === 1) return pack;
+      if (views.length === 1) {
+        await this.sourceDeletion?.assertNativeExportSafe(userId);
+        if(this.sourceDeletion && await this.sourceDeletion.version(userId)!==sourceVersion)throw new HttpError(409,'memory_source_cleanup_busy','The memory sources changed during export.');
+        return pack;
+      }
       const name = context.kind === 'owned' ? 'personal.zip' : `projects/${context.namespaceId}.zip`;
       entries[name] = [pack, { level: 0 }];
       manifest.push({ path: name, namespaceId: context.namespaceId, projectId: context.projectId, policyRef: context.policyRef ?? null,
         bytes: pack.byteLength, sha256: createHash('sha256').update(pack).digest('hex') });
     }
     entries['manifest.json'] = Buffer.from(JSON.stringify({ schemaVersion: 1, packs: manifest }, null, 2));
+    await this.sourceDeletion?.assertNativeExportSafe(userId);
+    if(this.sourceDeletion && await this.sourceDeletion.version(userId)!==sourceVersion)throw new HttpError(409,'memory_source_cleanup_busy','The memory sources changed during export.');
     return Buffer.from(zipSync(entries));
   }
 }

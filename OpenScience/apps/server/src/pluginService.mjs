@@ -599,6 +599,8 @@ export class PluginService {
         const lock = await client.query("SELECT pg_try_advisory_xact_lock_shared(hashtextextended($1,0)) AS acquired", [`plugin-project:${projectKey}`]);
         // Not an error yet: an apply holds the project, and it ends.
         if (!lock.rows[0].acquired) return { applying: true };
+        const nativeWriter = await client.query('SELECT pg_try_advisory_xact_lock_shared(hashtextextended($1,0)) AS acquired',[`native-memory-writer:${project.userId}`]);
+        if(!nativeWriter.rows[0]?.acquired)return { applying: true };
         await this.scope(project.userId, project, client);
         const store = { projectKey, client, open: true, borrowers: new Set() };
         const admitted = () => this.admission.run(store, async () => {

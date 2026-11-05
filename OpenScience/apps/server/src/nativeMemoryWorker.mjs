@@ -1,3 +1,4 @@
+import { withNativeMemoryWrite } from './nativeMemoryWriteFence.mjs';
 import { createHash } from "node:crypto";
 import { carriesPlatformContext, identifierShapesIn, linkStatesLeftFor, platformIdentifiersIn } from "@evimed/domain";
 import { filterCapturedMessage } from "./memoryGateway.mjs";
@@ -481,8 +482,8 @@ export class NativeMemoryWorker {
     let settled = 0;
     for (const commit of await this.overlay.openCommits({ userId, limit, now: this.commitClock ? this.commitClock() : null })) {
       try {
-        if (commit.state === "pending") settled += await this.#settle(commit) ? 1 : 0;
-        else if (commit.state === "failed") settled += await this.#replay(commit) ? 1 : 0;
+        if (commit.state === "pending") settled += await withNativeMemoryWrite(this.overlay.database,commit.userId,()=>this.#settle(commit)) ? 1 : 0;
+        else if (commit.state === "failed") settled += await withNativeMemoryWrite(this.overlay.database,commit.userId,()=>this.#replay(commit)) ? 1 : 0;
       } catch (error) {
         this.report(`native memory commit: ${String(/** @type {any} */ (error)?.code ?? /** @type {any} */ (error)?.message ?? error).slice(0, 120)}`);
       }
@@ -993,7 +994,8 @@ export class NativeMemoryWorker {
    * @param {string} userId @param {{ type: string, id: string }} source @param {string} state
    * @returns {Promise<number>} files labelled or unlabelled
    */
-  async labelSource(userId, source, state) {
+  async labelSource(userId,source,state) { return withNativeMemoryWrite(this.overlay.database,userId,()=>this.#labelSourceOwned(userId,source,state)); }
+  async #labelSourceOwned(userId, source, state) {
     if (!this.applicable) return 0;
     let touched = 0;
     for (const link of await this.overlay.filesNaming(source, { userId })) {

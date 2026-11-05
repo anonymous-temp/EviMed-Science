@@ -481,6 +481,7 @@ import { OpenVikingSessions } from "./openVikingSessions.mjs";
 import { NativeMemoryOverlay } from "./nativeMemoryOverlay.mjs";
 import { NativeMemoryStore, nativeConversationTitleKey } from "./nativeMemoryStore.mjs";
 import { NativeMemoryImport } from "./nativeMemoryImport.mjs";
+import { withNativeMemoryWrite } from './nativeMemoryWriteFence.mjs';
 import { ConversationSourceDeletionLedger } from './conversationSourceDeletionPersistence.mjs';
 import { ConversationSourceDeletionService } from './conversationSourceDeletionService.mjs';
 import { createConversationSourceDeletionRoutes } from './conversationSourceDeletionRoutes.mjs';
@@ -1490,6 +1491,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const openVikingSessions = overrides.openVikingSessions ?? new OpenVikingSessions(openVikingClient, {
     timeoutMs: config.memoryGatewayTimeoutMs, fastTimeoutMs: Math.round(Number(config.memoryGatewayTimeoutMs ?? 4_000) / 3),
   });
+  if (productDatabase) {
+    openVikingClient.writeAdmission=(userId,operation)=>withNativeMemoryWrite(productDatabase,userId,operation);
+    openVikingSessions.client.writeAdmission=(userId,operation)=>withNativeMemoryWrite(productDatabase,userId,operation);
+  }
   const nativeMemoryOverlay = overrides.nativeMemoryOverlay ?? new NativeMemoryOverlay({ database: productDatabase });
   // The registered memory namespaces of an account: its own, and each shared GEO project's (`geoNativeMemoryContext.mjs`).
   const nativeMemoryContexts = productDatabase && sharedContextPolicies ? new GeoNativeMemoryContext({ database: productDatabase,
@@ -5853,7 +5858,33 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       }
     },
     removeDerived: async (project, row) => {
-      if (nativeMemory.configured) await nativeMemory.removeConversationSource(project.userId, project.id, row.sessionIds, { userRoot: row.memoryUserRoot });
+      if (nativeMemory.configured) await withNativeMemoryWrite(productDatabase,project.userId,async()=>{
+        const owner=await store.userById(project.userId);
+        if(!owner)throw new HttpError(409,'memory_source_cleanup_busy','The source owner cannot be verified.');
+        for(const candidate of await store.listProjects(owner)) {
+          const owned=await store.requireProject(owner,candidate.id);
+          if(await runtimeManager.idleVerdict(owned)!=='idle' || await runtimeManager.hasRunningRuns(owned)!==false
+            || await runtimeManager.pluginRuntimeBusy(owned)!==false || await runtimeManager.pluginService?.hasPendingPrompts(owned)!==false)throw new HttpError(409,'memory_source_cleanup_busy','Other account work is still using memory.');
+        }
+        const views=await nativeMemoryContexts.all(project.userId);
+        for(const view of views)await nativeMemoryWorker.scanArchives(project.userId,{context:view});
+        if((await nativeMemoryOverlay.consolidationState(project.userId)).task)throw new HttpError(409,'memory_source_cleanup_busy','A native consolidation is still active or unknown.');
+        if((await nativeMemoryOverlay.openCommits({userId:project.userId,limit:1})).length)throw new HttpError(409,'memory_source_cleanup_busy','A native extraction is still active or unknown.');
+        const sourceView=views.find(view=>view.userRoot===row.memoryUserRoot);
+        if(!sourceView)throw new HttpError(409,'memory_source_cleanup_busy','The frozen native namespace cannot be verified.');
+        const commits=[];
+        for(const sessionId of row.sessionIds)commits.push(...await nativeMemoryOverlay.commitsOfSession(project.userId,`dsh-${sessionId}`,{userRoot:row.memoryUserRoot}));
+        const visited=new Set();
+        for(let index=0;index<commits.length;index++) {
+          const commit=commits[index];if(visited.has(commit.archiveUri))continue;visited.add(commit.archiveUri);
+          if(commit.state!=='completed') {
+            const task=commit.taskId?await sourceView.sessions.task(project.userId,commit.taskId):null;
+            if(!task || !['completed','failed','cancelled','canceled'].includes(String(task.status).toLowerCase()))throw new HttpError(409,'memory_source_cleanup_busy','The source extraction has no terminal native proof.');
+          }
+          if(commit.replayedAs){const replay=await nativeMemoryOverlay.commit(project.userId,commit.replayedAs);if(replay)commits.push(replay);}
+        }
+        await nativeMemory.removeConversationSource(project.userId, project.id, row.sessionIds, { userRoot: row.memoryUserRoot });
+      },{exclusive:true});
       const removedRuns = await agentRuns.removeConversationSource(project, row.sessionIds);
       for (const runId of removedRuns) preStopTranscripts.take(runId);
     },
