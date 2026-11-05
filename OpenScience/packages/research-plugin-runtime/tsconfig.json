@@ -1,0 +1,52 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": [
+      "ES2023",
+      "DOM",
+      "DOM.Iterable",
+      "DOM.AsyncIterable"
+    ],
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "resolveJsonModule": true,
+    "types": [
+      "node"
+    ],
+    "typeRoots": [
+      "../../apps/web/node_modules/@types",
+      "../../apps/server/node_modules/@types"
+    ],
+    "baseUrl": ".",
+    "paths": {
+      "@evimed/research-plugin-runtime": [
+        "./index.mjs"
+      ],
+      "@evimed/research-plugin-runtime/*": [
+        "./*.mjs"
+      ],
+      "@evimed/harness-port": [
+        "../harness-port/index.mjs"
+      ]
+    }
+  },
+  "include": [
+    "*.mjs",
+    "scripts/*.mjs",
+    "../virtual-trial/index.mjs",
+    "../virtual-trial/plugin.mjs",
+    "../virtual-cohort/index.mjs",
+    "../virtual-cohort/plugin.mjs",
+    "../virtual-patient/index.mjs",
+    "../virtual-patient/plugin.mjs",
+    "../synthetic-control/index.mjs",
+    "../synthetic-control/plugin.mjs",
+    "../virtual-research-suite/index.mjs",
+    "../virtual-research-suite/plugin.mjs"
+  ]
+}

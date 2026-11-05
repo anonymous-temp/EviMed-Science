@@ -123,3 +123,28 @@ test("the composite's number comes first, with the single-endpoint sizes as the 
   const composite = presentTrialTab({ ...bundle, results: [], allResults: [{ ...winRatio, createdAt: "2026-11-01T00:00:00.000Z" }, ...bundleOf(five().slice(0, 2)).allResults], askedObject: "wr:0123456789" });
   assert.ok(composite.headline.startsWith(`${title}：`));
 });
+
+test('a result uses its producing job and exact assumption version after later edits and sensitivity jobs', () => {
+  const original = design(1,{configuration:{truth:{hazardRatio:0.75,controlMedian:12}}});
+  original.result.diagnostics = {personStated:{schema:2,readable:true,paths:[],bindings:[]}};
+  const oldCard = {key:'control_median_tte',version:1,pointValue:12,valueSource:'extracted',pooling:{citation:'PMID 123'}};
+  const edited = {...oldCard,version:2,valueSource:'observed',pooling:{}};
+  const alternative = {key:'alternative',version:1,pointValue:12,valueSource:'observed'};
+  const bundle = bundleOf([original],{
+    assumptions:[edited,alternative],assumptionVersions:new Map([[oldCard.key,[oldCard,edited]]]),
+    jobs:[
+      {id:'job_ex_1',checkpoint:{subjectId:'scn_1',bound:[{key:oldCard.key,version:1,path:'truth.controlMedian',value:12}]}},
+      {id:'later_sensitivity_job',checkpoint:{subjectId:'scn_1',bound:[{key:alternative.key,version:1,path:'truth.controlMedian',value:12}]}},
+    ],
+  });
+  const tab = presentTrialTab(bundle);
+  const premise = tab.premises.find(row => row.key === 'control');
+  assert.equal(premise.source,'literature');
+  assert.match(premise.reason,/PMID 123/);
+  const before = structuredClone(tab);
+  edited.valueSource = 'predicted';
+  alternative.pointValue = 30;
+  const after = presentTrialTab(bundle);
+  assert.deepEqual(after.premises,before.premises);
+  assert.equal(after.headline,before.headline);
+});

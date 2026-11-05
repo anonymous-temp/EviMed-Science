@@ -1,0 +1,16 @@
+{
+  "method": "patients.binary",
+  "scenario": {
+    "design": {
+      "nTreat": 40,
+      "nControl": 40
+    },
+    "endpoint": {
+      "type": "binary"
+    },
+    "truth": {
+      "controlRate": 0.3,
+      "treatmentRate": 0.45
+    }
+  }
+}

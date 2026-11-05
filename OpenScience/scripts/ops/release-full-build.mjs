@@ -175,7 +175,7 @@ export const WEB_DOCKERFILE = "deploy/web/Dockerfile";
 // 2026-10-31 (merge of the Gitee main e9c9f96f6): two added COPY lines in the build stage's manifest layer — packages/design-tokens/package.json
 // and packages/search-topics/package.json, so the frozen-lockfile install sees every workspace package the lockfile names (the server and the web app
 // link the first, only the server the second). Stages, commands, secrets and build arguments are unchanged.
-export const WEB_DOCKERFILE_SHA256 = "sha256:5eab4a2b33860a0dd8cc9248a3d026f6d555200afa85babd07c3e20b31c81a20";
+export const WEB_DOCKERFILE_SHA256 = "sha256:f648ea314366120062e36245824b7e85fd3296238f7deef866ed8a7e88774558";
 export const WEB_INPUTS = Object.freeze([
   "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "deps-version.json",
   "apps/web/package.json", "apps/server/package.json", "packages/shared/package.json",

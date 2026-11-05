@@ -1,9 +1,5 @@
-// 「你给的数据」 means a number in the person's own message or a table they supplied, and nothing a model chose (live check 2026-11-04).
-//
-// The win-ratio, Bayesian and dose-finding cards gave the word to a follow-up of 24 months, a dropout of 5%, a correlation of 0.3 and 'at most 30
-// patients' that the model had written into the scenario. Code now lays the scenario's numbers against the person's messages when the job starts
-// (`vcrPersonStated`), the record is frozen with the job and filed on the result, and each premise reads it (`personWord`). A result with no record
-// reads as it read: the fixtures of the earlier releases are those.
+// Source membership is checked independently from model-declared parameter meaning.
+// Historical schema-1 records retain their original presentation.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
@@ -24,35 +20,48 @@ const cardOf = (present, kind, directory, name, personStated) => {
 };
 const sourceOf = (card, key) => card.premises.find((row) => row.key === key)?.source;
 
-test("a scenario's numbers are laid against the person's messages: a number is theirs when it is written there, a fraction also as a percentage, and a digit of another number is nothing", () => {
-  const scenario = { design: { nTreat: 250, followup: 24, dropoutAnnual: 0.05, maxPatients: 30 }, truth: { death: { controlRisk: 0.15, hazardRatio: 0.75 }, correlation: 0.3, effects: [0.8, 0.9] } };
-  const stated = vcrPersonStated(scenario, ["随访 24 个月，年脱落 5%，每组 250 人，风险比 0.75，对照组死亡率 15%，共 30 例以内，2024 年入组，效应 0.8"]);
-  assert.deepEqual(stated, { schema: 1, readable: true, paths: ["design.nTreat", "design.followup", "design.dropoutAnnual", "design.maxPatients", "truth.death.controlRisk", "truth.death.hazardRatio", "truth.effects[0]"] },
-    "0.3 is not the 30, 0.9 is nowhere, and 24 is not 2024");
-  assert.deepEqual(vcrPersonStated({ design: { dropoutAnnual: 0.05 } }, ["脱落 5"]).paths, [], "a bare 5 is not 5%");
-  assert.deepEqual(vcrPersonStated({ design: { dropoutAnnual: 0.05 } }, ["脱落 0.05"]).paths, ["design.dropoutAnnual"], "and 0.05 is");
-  assert.deepEqual(vcrPersonStated({ design: { a: 0.125 } }, ["12.5 %"]).paths, ["design.a"], "a percentage with a space");
-  // 0 and 1 are what a design needs to exist, whatever digit the message has
-  assert.deepEqual(vcrPersonStated({ truth: { hazardRatio: 1, effect: 0 }, design: { allocation: 1 } }, ["1:1 随机，效应 0，HR 1"]).paths, []);
-  // several messages are one text; a message that is not text is nothing
-  assert.deepEqual(vcrPersonStated({ design: { followup: 24, nTreat: 80 } }, ["随访 24 个月", 5, null, "每组 80 人"]).paths, ["design.followup", "design.nTreat"]);
-  assert.deepEqual(vcrNumericLeaves({ a: [1, { b: 2 }], c: "x", d: Number.NaN }), [{ path: "a[0]", value: 1 }, { path: "a[1].b", value: 2 }]);
+const human = (text, messageSeq = 10, sessionId = 'sess_1') => ({text,messageSeq,sessionId});
+const binding = (field, value, quote, unit = 'patients', context = 'planned treatment arm sample size') => ({origin:'user',field,value,quote,unit,context});
+
+test('equal numbers with different meanings require distinct explicit parameter bindings', () => {
+  const scenario = {design:{nTreat:30,nControl:30},followupMonths:30};
+  const text = '随访30个月';
+  assert.deepEqual(vcrPersonStated(scenario,[text]).paths,[],'unscoped strings are not authenticated sources');
+  const record = vcrPersonStated(scenario,[human(text)],[binding('followupMonths',30,text,'month','follow-up duration')]);
+  assert.deepEqual(record.paths,['followupMonths']);
+  assert.equal(personWord(record,'design.nTreat','given'),'assumed');
+  assert.equal(record.bindings[0].unit,'month');
+  assert.equal(record.bindings[0].source.messageSeq,10);
+  assert.equal(record.bindings[0].source.sha256.length,64);
+  assert.deepEqual(vcrNumericLeaves({a:[1,{b:2}],c:'x',d:NaN}),[{path:'a[0]',value:1},{path:'a[1].b',value:2}]);
 });
 
-test("a percentage and a name made of numbers are not a bare number: 'at most 45 patients' is not the 45% of a toxicity, a cohort of 3 is not the 3 of '3+3' (live check 2026-11-04)", () => {
-  const message = ["五个剂量，毒性大概 5%、10%、20%、30%、45%，目标 25%，3+3 和 BOIN 哪个更容易选对？"];
-  const scenario = { design: { kind: "boin", cohortSize: 3, maxPatients: 45, startDose: 1, targetToxicity: 0.25 }, truth: { toxicity: [0.05, 0.1, 0.2, 0.3, 0.45] } };
-  assert.deepEqual(vcrPersonStated(scenario, message).paths, ["design.targetToxicity", "truth.toxicity[0]", "truth.toxicity[1]", "truth.toxicity[2]", "truth.toxicity[3]", "truth.toxicity[4]"],
-    "the curve and the target are what the person said; the cohort and the cap are the model's");
-  assert.deepEqual(vcrPersonStated({ design: { allocation: 2, followup: 24 } }, ["随机比例 2:1，随访 24 个月"]).paths, ["design.followup"], "2:1 is a ratio, 24 a number");
-  assert.deepEqual(vcrPersonStated({ design: { nTreat: 300 } }, ["每组 300 人"]).paths, ["design.nTreat"], "a plain number beside none of them");
-  assert.deepEqual(vcrPersonStated({ truth: { rate: 0.4 } }, ["有效率 40 %，对照 20%"]).paths, ["truth.rate"], "a percentage is the fraction; a space before the sign is allowed");
+test('repeated percentages, arms and table columns are never inferred from matching digits', () => {
+  const scenario = {truth:{controlRate:0.3,treatmentRate:0.3},design:{dropout:0.3,nTreat:30,nControl:30}};
+  const text = '对照组有效率30%，试验组有效率30%，对照30人';
+  const record = vcrPersonStated(scenario,[human(text)],[
+    binding('truth.controlRate',0.3,'对照组有效率30%','fraction','control arm response'),
+    binding('design.nControl',30,'对照30人','patients','control arm planned size'),
+  ]);
+  assert.deepEqual(record.paths,['truth.controlRate','design.nControl']);
+  assert.equal(personWord(record,'truth.treatmentRate','given'),'assumed');
+  assert.equal(personWord(record,'design.dropout','given'),'assumed');
+  assert.equal(personWord(record,'design.nTreat','given'),'assumed');
 });
 
-test("no message, no strong word: a conversation that could not be read records that, and every stated number reads 假设", () => {
-  const scenario = { design: { followup: 24 } };
-  for (const messages of [null, undefined, [], ["", "  "]]) assert.deepEqual(vcrPersonStated(scenario, messages), { schema: 1, readable: false, paths: [] });
-  assert.equal(personWord({ schema: 1, readable: false, paths: [] }, "design.followup", "given"), "assumed");
+test('new human instructions supersede old provenance; ambiguous, cross-session or rewritten sources stay assumptions', () => {
+  const scenario = {followup:30};
+  const source = binding('followup',30,'随访30个月','month','follow-up');
+  assert.deepEqual(vcrPersonStated(scenario,[human('随访30个月'),human('改为随访12个月',20)],[source]).paths,[]);
+  const text = '随访30个月';
+  for (const bad of [{...source,sessionId:'other'}, {...source,messageSeq:9}, {...source,unit:''}, {...source,context:''}, {...source,value:12}, {...source,quote:'rewritten 30 months'}, {...source,quote:'随访'}]) {
+    assert.deepEqual(vcrPersonStated(scenario,[human(text)],[bad]).paths,[]);
+  }
+  assert.deepEqual(vcrPersonStated(scenario,[human(text)],[source,source]).paths,[],'duplicate field is ambiguous');
+  assert.deepEqual(vcrPersonStated(scenario,[human(text)],[{...source,origin:'model_predicted'}]).paths,[]);
+  for (const messages of [null,undefined,[],['preview']]) {
+    assert.deepEqual(vcrPersonStated(scenario,messages),{schema:2,readable:false,paths:[],bindings:[]});
+  }
 });
 
 test("the word of a premise: a result with no record reads as it read, a record decides, and a row of several numbers is the person's only when every one is", () => {
@@ -147,4 +156,30 @@ test("a fixed design's premises: the hazard ratio and the margin the person wrot
   assert.equal(record.margin, "given");
   assert.equal(record.control, "assumed", "12 months is the model's");
   assert.equal(sources({ schema: 1, readable: false, paths: [] }).effect, "assumed");
+});
+
+test('a fraction requires its decimal literal or an actual percentage token, never a bare count', () => {
+  const scenario = {controlRate:0.3};
+  const source = quote => binding('controlRate',0.3,quote,'fraction','control event rate');
+  for (const quote of ['对照组招募30人','control recruited 30 patients']) {
+    assert.deepEqual(vcrPersonStated(scenario,[human(quote)],[source(quote)]).paths,[]);
+  }
+  for (const quote of ['对照有效率30%','有效率30％','risk 30 percent','有效率百分之30','risk 0.3']) {
+    assert.deepEqual(vcrPersonStated(scenario,[human(quote)],[source(quote)]).paths,['controlRate']);
+  }
+});
+
+test('source-checked model interpretation stays assumed and inspectable on result premises', () => {
+  const quote = '对照组招募24人';
+  const record = vcrPersonStated({design:{followup:24}},[human(quote)],[binding('design.followup',24,quote,'month','follow-up duration')]);
+  assert.equal(record.bindings.length,1,'source membership does not prove the asserted unit or meaning');
+  assert.equal(personWord(record,'design.followup','given'),'assumed');
+  const card = cardOf(presentWinRatioDesigns,'design_win_ratio','vcr-win-ratio','power',record);
+  assert.equal(sourceOf(card,'followup'),'assumed');
+  const detail = card.premises.find(row => row.key === 'person-mapping:design.followup');
+  assert.equal(detail.decisive,false);
+  assert.match(detail.reason,/原文来源已核对，参数含义由模型对应/);
+  assert.match(detail.reason,/对照组招募24人/);
+  assert.match(detail.reason,/month/);
+  assert.equal(detail.value,'follow-up duration');
 });

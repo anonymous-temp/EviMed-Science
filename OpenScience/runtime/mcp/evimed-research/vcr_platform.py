@@ -371,9 +371,17 @@ def _detailed_tool_definitions():
                     "jobId": ID,
                     "sources": {"type": "array", "maxItems": 8, "description": (
                         "A number you read in a paper and wrote into the scenario: [{field: its path in the scenario, e.g. truth.controlMedian, "
-                        "publication: PMID or DOI, quote: the sentence that prints it}]. The platform records the paper, and the result page names it."),
-                        "items": {"type": "object", "properties": {"field": {"type": "string"}, "publication": {"type": "string"}, "quote": {"type": "string"}},
-                                  "required": ["field", "publication", "quote"], "additionalProperties": False}},
+                        "publication: PMID or DOI, quote: the sentence that prints it}]. For a user-stated parameter, optionally use "
+                        "{origin:user, field:design.nTreat, value:30, quote:<original human sentence>, unit:patients, context:<its meaning>}. "
+                        "Bind only the stated meaning, arm and unit; equal digits elsewhere do not establish a parameter. Missing bindings stay assumptions."),
+                        "items": {"oneOf": [
+                            {"type": "object", "properties": {"field": {"type": "string"}, "publication": {"type": "string"}, "quote": {"type": "string"}},
+                             "required": ["field", "publication", "quote"], "additionalProperties": False},
+                            {"type": "object", "properties": {"origin": {"const": "user"}, "field": {"type": "string"},
+                                "value": {"type": "number"}, "quote": {"type": "string"}, "unit": {"type": "string"}, "context": {"type": "string"},
+                                "sessionId": {"type": "string"}, "messageSeq": {"type": "integer", "minimum": 0}},
+                             "required": ["origin", "field", "value", "quote", "unit", "context"], "additionalProperties": False}
+                        ]}},
                 },
                 "required": ["action"],
                 "additionalProperties": False,
@@ -1394,7 +1402,7 @@ def _with_applied(answer: dict, data: dict) -> dict:
 
 
 def _source_lines(data: dict) -> list:
-    """What became of the papers the call named: a premise the platform tied to its paper, and one that stays the researcher's assumption."""
+    """Report source binding without treating model interpretation as observed data."""
     sources = data.get("sources") if isinstance(data, dict) else None
     if not isinstance(sources, list) or not sources:
         return []

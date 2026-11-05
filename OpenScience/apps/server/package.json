@@ -38,7 +38,8 @@
     "unzipper": "0.10.14",
     "ws": "8.21.3",
     "wuying-agentbay-sdk": "0.22.0",
-    "yaml": "2.8.3"
+    "yaml": "2.8.3",
+    "@evimed/research-plugin-runtime": "workspace:^0.1.0"
   },
   "devDependencies": {
     "@types/ws": "8.18.1",

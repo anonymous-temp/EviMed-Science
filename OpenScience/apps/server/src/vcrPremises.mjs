@@ -25,7 +25,7 @@
  */
 
 import { VCR_EFFECT_DISCOUNT_LABEL_ZH, VCR_EFFECT_DISCOUNT_LIMITS_ZH, VCR_ESTIMAND_LABELS_ZH, VCR_MIN_CELL_SIZE, VCR_PREMISES_DECISIVE_MAX, VCR_PREMISE_SOURCES } from "@evimed/domain";
-import { personWord } from "./vcrPersonStated.mjs";
+import { personWord, personMappingPremises } from "./vcrPersonStated.mjs";
 import { imputationPremise } from "./vcrImputationView.mjs";
 import { targetTrialPremises } from "./vcrTargetTrialView.mjs";
 import { TIME_UNIT_WORDS, hazardLawWords, list, numeric, object, text } from "./vcrViewsKit.mjs";
@@ -62,12 +62,13 @@ const PRIORITY = Object.freeze([
  * A list of premises as the page reads it: well-formed rows only, one per key (the first wins), the decisive ones first in the
  * order of `PRIORITY` and no more than `VCR_PREMISES_DECISIVE_MAX` of them; a decisive row over the limit is a plain one.
  * @param {ReadonlyArray<Partial<VcrPremise> & { rank?: number }>} rows
+ * @param {Record<string,any> | null} [personStated]
  * @returns {VcrPremise[]}
  */
-export function finishPremises(rows) {
+export function finishPremises(rows, personStated = null) {
   /** @type {Map<string, VcrPremise & { rank: number }>} */
   const byKey = new Map();
-  for (const row of rows) {
+  for (const row of [...rows, ...personMappingPremises(personStated)]) {
     const key = text(row.key);
     const label = text(row.label);
     const value = text(row.value);
@@ -93,7 +94,7 @@ export function finishPremises(rows) {
  */
 export function vcrPremises(view, input) {
   const rows = view === "trial" ? trialPremises(input) : view === "population" ? populationPremises(input) : comparatorPremises(input);
-  return finishPremises(rows);
+  return finishPremises(rows, input.personStated);
 }
 
 // --- values ---------------------------------------------------------------------------------------------------------------------
@@ -165,7 +166,7 @@ function trialPremises(input) {
   // A job that recorded the number it took from a card (a conversation's own start) is read through that card only while the card still states
   // it: a later version with another number is not this job's premise.
   const cardByPath = new Map(list(input.bound).map(object).map((entry) => {
-    const card = list(input.cards).map(object).find((candidate) => candidate.key === entry.key) ?? null;
+    const card = list(input.cards).map(object).find((candidate) => candidate.key === entry.key && (entry.version == null || Number(candidate.version) === Number(entry.version))) ?? null;
     return [String(entry.path), card && (numeric(entry.value) === null || numeric(card.pointValue) === numeric(entry.value)) ? card : null];
   }));
   /**

@@ -1334,6 +1334,42 @@
     skillCatalog: false
     skipSubagentSessions: true
     commitTokenThreshold: 20000
+# == @evimed/virtual-trial, patched by @evimed/dsh-socket
+- id: evimed-virtual-trial
+  name: '@evimed/virtual-trial/plugin'
+  config:
+    mode: !!js process.env.VCR_PLUGIN_MODE || 'hosted'
+    workspace: !!js process.env.VCR_PLUGIN_WORKSPACE || ''
+    engineRoot: !!js process.env.VCR_ENGINE_ROOT || ''
+  disabled: true
+# == @evimed/virtual-cohort, patched by @evimed/dsh-socket
+- id: evimed-virtual-cohort
+  name: '@evimed/virtual-cohort/plugin'
+  config:
+    mode: !!js process.env.VCR_PLUGIN_MODE || 'hosted'
+    workspace: !!js process.env.VCR_PLUGIN_WORKSPACE || ''
+    engineRoot: !!js process.env.VCR_ENGINE_ROOT || ''
+  disabled: true
+# == @evimed/virtual-patient, patched by @evimed/dsh-socket
+- id: evimed-virtual-patient
+  name: '@evimed/virtual-patient/plugin'
+  config:
+    mode: !!js process.env.VCR_PLUGIN_MODE || 'hosted'
+    workspace: !!js process.env.VCR_PLUGIN_WORKSPACE || ''
+    engineRoot: !!js process.env.VCR_ENGINE_ROOT || ''
+  disabled: true
+# == @evimed/synthetic-control, patched by @evimed/dsh-socket
+- id: evimed-synthetic-control
+  name: '@evimed/synthetic-control/plugin'
+  config:
+    mode: !!js process.env.VCR_PLUGIN_MODE || 'hosted'
+    workspace: !!js process.env.VCR_PLUGIN_WORKSPACE || ''
+    engineRoot: !!js process.env.VCR_ENGINE_ROOT || ''
+  disabled: true
+# == @evimed/virtual-research-suite, patched by @evimed/dsh-socket
+- id: evimed-virtual-research-suite
+  name: '@evimed/virtual-research-suite/plugin'
+  disabled: true
 # == @evimed/dsh-socket
 - id: evimed-runtime-ui
   name: '@evimed/dsh-socket'
@@ -1349,6 +1385,12 @@
   name: '@evimed/dsh-socket/plugins/evidence-store'
 - id: evimed-engine-context
   name: '@evimed/dsh-socket/plugins/engine-context'
+- id: evimed-research-adapter
+  name: '@evimed/dsh-socket/plugins/research-adapter'
+  disabled: !!js (process.env.EVIMED_VCR_GATEWAY_URL || '') === ''
+  config:
+    gatewayUrl: !!js process.env.EVIMED_VCR_GATEWAY_URL + '/simulate'
+    tokenFile: !!js process.env.EVIMED_MODEL_GATEWAY_TOKEN_FILE
 - id: evimed-web
   name: '@evimed/dsh-socket/plugins/web'
   config:

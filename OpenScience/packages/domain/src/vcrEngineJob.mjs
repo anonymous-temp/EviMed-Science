@@ -107,15 +107,15 @@ export const VCR_ENGINE_METHODS = Object.freeze({
   'model.prognostic_train': { version: '1.0.0', endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['coxph, glm and lm refits on the held-out folds by hand', 'design.procova for the sample-size ratios', 'a known-truth simulation of the out-of-fold discrimination, calibration and correlation']), modelTier: 'data' },
   // A population-level disease-progression simulator from a published model family (algorithm round P4): linear, exponential, logistic or Emax progression, treatment as the clock slowed, power by simulation with its error. No disease is built in.
   'patients.progression': { version: '1.0.0', endpoints: frozen(['continuous']), crossChecks: frozen(['the moments of the outcome at every visit in closed form', 'the closed-form power of the same test (noncentral t with Welch degrees of freedom)']), modelTier: 'scenario' },
-  'model.prognostic_apply': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['closed-form published equation evaluation']), modelTier: 'literature' },
+  'model.prognostic_apply': { version: '1.2.0', compatibleVersions: frozen(['1.0.0', '1.1.0']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['closed-form published equation evaluation']), modelTier: null },
   'profile.snapshot': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen([]), crossChecks: frozen(['every printed figure recomputed from its definition (means, spreads, type-7 quantiles, counts)']), modelTier: null },
   'cohort.build': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen([]), crossChecks: frozen([]), modelTier: null },
   'population.scenario': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen([]), crossChecks: frozen(['truncated-normal moments and a Gauss-Hermite integral of the copula correlation']), modelTier: 'scenario' },
   'population.literature': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen([]), crossChecks: frozen([]), modelTier: 'literature' },
   // 1.1.0 (algorithm round P1, P2): the m copies combined by the rules for synthetic data, Cox / log-rank / restricted-mean analyses, the false-positive rate of an
   // analysis on the generator's copies when the arm labels are permuted, and per-record privacy (distance, membership risk, attribute inference).
-  'population.synthpop': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen([]), crossChecks: frozen(['the training table it was fitted to: marginals, correlations and logistic coefficients', 'synthpop summary of a fit to m copies (the combining rules of Raab, Nowok and Dibben)']), modelTier: 'data' },
-  'population.quality': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen([]), crossChecks: frozen(['synthpop summary of a fit to m copies (the combining rules)', 'survRM2 restricted mean difference', 'closed-form false-positive rate of an uncorrected analysis']), modelTier: 'data' },
+  'population.synthpop': { version: '1.4.0', compatibleVersions: frozen(['1.0.0', '1.1.0', '1.2.0', '1.3.0']), endpoints: frozen([]), crossChecks: frozen(['the training table it was fitted to: marginals, correlations and logistic coefficients', 'synthpop summary of a fit to m copies (the combining rules of Raab, Nowok and Dibben)']), modelTier: 'data' },
+  'population.quality': { version: '1.2.0', compatibleVersions: frozen(['1.0.0', '1.1.0']), endpoints: frozen([]), crossChecks: frozen(['synthpop summary of a fit to m copies (the combining rules)', 'survRM2 restricted mean difference', 'closed-form false-positive rate of an uncorrected analysis']), modelTier: 'data' },
   // A generated population held against a second baseline table (remediation plan D2): margins only, no model, so no tier.
   'population.check': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['base-R recomputation of the standardized differences']), modelTier: null },
   'patients.continuous': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['continuous']), crossChecks: frozen([]), modelTier: 'scenario' },
@@ -914,10 +914,11 @@ function legacyDesignVersionMatches(job) {
     // and model.survival_fit 1.1.0 the spline family
     if (job.method === 'model.survival_fit' && (job.scenario?.distribution === 'spline' || job.scenario?.knots !== undefined)) return false
     // and model.prognostic_apply 1.1.0 added the local calibration against the outcome the table holds
-    if (job.method === 'model.prognostic_apply' && job.scenario?.calibration !== undefined) return false
+    if (job.method === 'model.prognostic_apply' && job.scenario?.calibration !== undefined && !versionAtLeast(job.methodVersion, '1.1.0')) return false
     // and design.confirmatory 1.1.0 the promising zone and the event-time selection and enrichment designs, and 1.2.0 the accrual of those two
     if (job.method === 'design.confirmatory' && usesConfirmatoryBeyond1_0_0(job.scenario) && !versionAtLeast(job.methodVersion, '1.1.0')) return false
     if (job.method === 'design.confirmatory' && usesConfirmatoryBeyond1_1_0(job.scenario) && !versionAtLeast(job.methodVersion, '1.2.0')) return false
+    if (job.method === 'population.synthpop' && job.scenario?.imputationRules !== undefined && !versionAtLeast(job.methodVersion, '1.3.0')) return false
     // and population.synthpop / population.quality 1.1.0 the survival analyses, the permuted-arm calibration and the privacy measures
     if ((job.method === 'population.synthpop' || job.method === 'population.quality') && usesQualityBeyond1_0_0(job.scenario) && !versionAtLeast(job.methodVersion, '1.1.0')) return false
     // and evidence.pool 1.1.0 the informative prior for the heterogeneity

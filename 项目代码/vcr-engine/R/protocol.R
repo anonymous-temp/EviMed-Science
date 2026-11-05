@@ -1310,10 +1310,11 @@ vcr_job_at_least <- function(job, from) {
     # and model.survival_fit 1.1.0 the spline family
     if (identical(job[["method"]], "model.survival_fit") && (identical(.vcrp_get(job$scenario, "distribution"), "spline") || !is.null(.vcrp_get(job$scenario, "knots")))) return(FALSE)
     # and model.prognostic_apply 1.1.0 added the local calibration against the outcome the table holds
-    if (identical(job[["method"]],"model.prognostic_apply") && !is.null(.vcrp_get(job$scenario,"calibration"))) return(FALSE)
+    if (identical(job[["method"]],"model.prognostic_apply") && !is.null(.vcrp_get(job$scenario,"calibration")) && utils::compareVersion(job$methodVersion,"1.1.0")<0) return(FALSE)
     # and design.confirmatory 1.1.0 the promising zone and the event-time selection and enrichment designs, and 1.2.0 the accrual of those two
     if (identical(job[["method"]],"design.confirmatory") && .vcrp_uses_confirmatory_beyond_1_0_0(job$scenario) && utils::compareVersion(job$methodVersion,"1.1.0")<0) return(FALSE)
     if (identical(job[["method"]],"design.confirmatory") && .vcrp_uses_confirmatory_beyond_1_1_0(job$scenario) && utils::compareVersion(job$methodVersion,"1.2.0")<0) return(FALSE)
+    if (identical(job[["method"]],"population.synthpop") && !is.null(.vcrp_get(job$scenario,"imputationRules")) && utils::compareVersion(job$methodVersion,"1.3.0")<0) return(FALSE)
     # and population.synthpop / population.quality 1.1.0 the survival analyses, the permuted-arm calibration and the privacy measures
     if (job[["method"]] %in% c("population.synthpop","population.quality") && .vcrp_uses_quality_beyond_1_0_0(job$scenario) && utils::compareVersion(job$methodVersion,"1.1.0")<0) return(FALSE)
     # and evidence.pool 1.1.0 the informative prior for the heterogeneity

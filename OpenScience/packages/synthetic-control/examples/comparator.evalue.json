@@ -1,0 +1,7 @@
+{
+  "method": "comparator.evalue",
+  "scenario": {
+    "riskRatio": 3.9,
+    "confidenceLimit": 1.8
+  }
+}

@@ -3,13 +3,18 @@
   "schemaVersion": 1,
   "composition": {
     "source": "deploy/runtime-dsh/dump-config.baseline.json",
-    "sha256": "d1eefe6d8e92117297c6329cef717ef41d66db2888a0614538e0d4cb518e70e5",
+    "sha256": "db4be956364d81b41cb23840399ab488edf0088b104dae6522024802faa7a4a1",
     "bundles": [
       "@deepseek-ai/dsh-base",
       "@changfenhuang/dsh-annotation",
       "@deepseek-ai/dsh-web-app",
       "dsh-loopx-plugin",
       "@openviking/dsh-memory-plugin",
+      "@evimed/virtual-trial",
+      "@evimed/virtual-cohort",
+      "@evimed/virtual-patient",
+      "@evimed/synthetic-control",
+      "@evimed/virtual-research-suite",
       "@evimed/dsh-socket",
       "dsh-cite",
       "dsh-mermaid",
@@ -1525,6 +1530,51 @@
         "state": "conditional"
       },
       {
+        "id": "evimed-virtual-trial",
+        "name": "@evimed/virtual-trial/plugin",
+        "bundle": "@evimed/virtual-trial",
+        "patchedBy": [
+          "@evimed/dsh-socket"
+        ],
+        "state": "disabled"
+      },
+      {
+        "id": "evimed-virtual-cohort",
+        "name": "@evimed/virtual-cohort/plugin",
+        "bundle": "@evimed/virtual-cohort",
+        "patchedBy": [
+          "@evimed/dsh-socket"
+        ],
+        "state": "disabled"
+      },
+      {
+        "id": "evimed-virtual-patient",
+        "name": "@evimed/virtual-patient/plugin",
+        "bundle": "@evimed/virtual-patient",
+        "patchedBy": [
+          "@evimed/dsh-socket"
+        ],
+        "state": "disabled"
+      },
+      {
+        "id": "evimed-synthetic-control",
+        "name": "@evimed/synthetic-control/plugin",
+        "bundle": "@evimed/synthetic-control",
+        "patchedBy": [
+          "@evimed/dsh-socket"
+        ],
+        "state": "disabled"
+      },
+      {
+        "id": "evimed-virtual-research-suite",
+        "name": "@evimed/virtual-research-suite/plugin",
+        "bundle": "@evimed/virtual-research-suite",
+        "patchedBy": [
+          "@evimed/dsh-socket"
+        ],
+        "state": "disabled"
+      },
+      {
         "id": "evimed-runtime-ui",
         "name": "@evimed/dsh-socket",
         "bundle": "@evimed/dsh-socket",
@@ -1565,6 +1615,13 @@
         "bundle": "@evimed/dsh-socket",
         "patchedBy": [],
         "state": "enabled"
+      },
+      {
+        "id": "evimed-research-adapter",
+        "name": "@evimed/dsh-socket/plugins/research-adapter",
+        "bundle": "@evimed/dsh-socket",
+        "patchedBy": [],
+        "state": "conditional"
       },
       {
         "id": "evimed-web",

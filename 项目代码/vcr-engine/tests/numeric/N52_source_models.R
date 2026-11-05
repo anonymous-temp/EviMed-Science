@@ -195,3 +195,19 @@ vcr_case("N52m", c("AC-04"), function() {
   },numeric(1))
   list(pass=all(error<1e-12),detail="Typed transforms precede centering/scaling; identity/log/log1p/square/indicator agree with independent closed forms")
 })
+vcr_case("N52_model_origin", c("AC-04", "AC-27"), function() {
+  root <- tempfile("model-origin-"); dir.create(root); on.exit(unlink(root, recursive = TRUE), add = TRUE)
+  job <- .n52_equation_job("logistic")
+  run <- function(version) {
+    dir <- file.path(root, gsub("\\.", "-", version)); dir.create(dir)
+    candidate <- job; candidate$methodVersion <- version
+    result <- vcr_test_run(candidate, output_dir = dir)
+    list(result = result, rows = vcr_test_table(result, "prognostic-predictions", dir))
+  }
+  current <- run("1.2.0"); legacy <- run("1.1.0")
+  list(pass = identical(current$result$status, "succeeded") && all(is.na(current$rows$modelTier)) &&
+    identical(current$result$diagnostics$modelScope, "prognostic_equation_source_unknown") &&
+    all(legacy$rows$modelTier == "literature") && identical(legacy$result$diagnostics$modelScope, "published_prognostic_equation") &&
+    identical(current$rows$prediction, legacy$rows$prediction),
+    detail = "Unverified model origin is unknown in 1.2.0; 1.1.0 replay retains its old label and identical predictions")
+})

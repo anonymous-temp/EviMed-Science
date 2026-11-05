@@ -1103,6 +1103,8 @@ These presentation decisions supersede conflicting September 23, October 7/8 and
 
 ## VCR conversation/result variant (2026-10-25/26)
 
+Synthetic-population results keep calculation status separate from quality: `ConclusionChip` uses neutral estimability; the result chart and population quality projection show red-band notices and unavailable propensity measures with their recorded design scope. Unknown quality is never a green pass. DS16 is the specification.
+
 Last updated: 2026-10-26. This replaces the VCR seven-step, method-catalogue and manual-configuration portions of the older templates and workflow rulings. GEO keeps its eight-step workflow. See the [approved product reset](../docs/superpowers/specs/2026-10-25-vcr-ai-native-product-reset.md) and [review](../docs/superpowers/specs/2026-10-25-vcr-ai-native-reset-review.md).
 
 - The home presents four aligned task rows: matching, populations and virtual patients, comparators, trial-design simulation. A row fills an unsent draft in the existing native composer; it does not create a study, select a specialist or run a job. Each row visibly separates the task/action, expected result and minimum input requirement. Data labels are outside buttons, not hidden behind hover or mixed into button text. Existing research is resumable; calculation history is a quiet disclosure.

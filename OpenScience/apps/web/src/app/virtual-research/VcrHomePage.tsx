@@ -13,7 +13,7 @@ import {
   type VcrStudySummary,
 } from "@/lib/vcrClient";
 import { useGeneralResearchDraft } from "@/components/vcr/useGeneralResearchDraft";
-import { VCR_TASKS } from "@/components/vcr/frameVcrOptions";
+import { PROFESSIONAL_RESEARCH_TASKS } from "@/components/vcr/professionalResearchTasks";
 import { vcrCalculationPath } from "@/lib/vcrMethodLocation";
 import { vcrTabPath } from "@/components/vcr/vcrTabs";
 import { VCR_LIBRARIES, isVcrLibraryTab, type VcrLibraryTab } from "@/components/vcr/vcrLibraries";
@@ -22,6 +22,7 @@ import { LoadError } from "@/components/cards/LoadError";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/Button";
+import { Tag } from "@/components/ui/Tag";
 import { IconButton } from "@/components/ui/IconButton";
 import { List, ListRow } from "@/components/ui/ListRow";
 import { MasterDetail, type MasterDetailState } from "@/components/ui/MasterDetail";
@@ -238,7 +239,7 @@ export function VcrHomePage() {
           <EmptyState
             icon={UsersRound}
             title="暂无研究"
-            reason="在对话里说明要研究什么，AI 保存第一项结果后，研究会列在这里。"
+            reason="研究结果和正在进行的工作会显示在这里。"
           />
         )
         : studies.length === 0 ? null
@@ -335,14 +336,19 @@ function TaskEntry({ ask }: { ask: ReturnType<typeof useGeneralResearchDraft> })
     <section aria-label="新研究" className="flex flex-col items-start gap-5">
       <h2 className="text-section font-semibold text-text">新研究</h2>
       <ul aria-label="研究示例" className="flex w-full flex-col gap-4">
-        {VCR_TASKS.map((task) => (
+        {PROFESSIONAL_RESEARCH_TASKS.map((task) => (
           <li key={task.id} data-vcr-task={task.id} className="flex flex-col items-start gap-1.5">
             {/* Nothing starts here: the sentence waits in the composer and the study exists once its first result is saved (the VCR reset ruling). */}
-            <Button variant="secondary" actionKind="draft" onClick={() => ask(task.draft)}><PenLine size={16} aria-hidden="true" />{task.example}</Button>
+            <Button variant="secondary" actionKind="draft" onClick={() => ask(task.draft)}><PenLine size={16} aria-hidden="true" />{task.label}</Button>
+            <Tag>{task.badge}</Tag>
             <p data-vcr-data-requirement={task.id} className="max-w-measure text-ui text-text-2">{task.requirement}</p>
           </li>
         ))}
       </ul>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border pt-4 text-ui">
+        <Button variant="text" actionKind="draft" onClick={() => ask("匹配患者和临床试验。资料是：")}>患者匹配</Button>
+        <Link className="rounded text-link hover:underline" to="/app/extensions">管理专业插件</Link>
+      </div>
     </section>
   );
 }

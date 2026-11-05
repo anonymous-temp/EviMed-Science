@@ -7,6 +7,7 @@
     "evimed-skill-catalogue",
     "evimed-plugin-probe",
     "evimed-engine-context",
+    "evimed-research-adapter",
     "evimed-loopx-bootstrap",
     "evimed-memory-bridge",
     "evimed-seam-probe",

@@ -33,10 +33,11 @@ function drawHome(path = "/app/virtual-research") { return render(<MemoryRouter 
 const where = () => screen.getByTestId("where").textContent;
 // The four examples, by what each button says; pressing one fills the composer of a new conversation and sends nothing.
 const EXAMPLES: Array<[string, string, string]> = [
-  ["匹配", "让 AI 匹配患者和试验", "用虚拟临床研究匹配患者和临床试验。资料是："],
-  ["人群与患者", "让 AI 研究人群或个体患者", "用虚拟临床研究建立人群或个体患者。需求是："],
-  ["对照研究", "让 AI 做对照研究", "用虚拟临床研究做对照研究。研究是："],
-  ["试验", "让 AI 比较试验设计", "用虚拟临床研究比较临床试验设计。研究是："],
+  ["匹配", "患者匹配", "匹配患者和临床试验。资料是："],
+  ["队列", "虚拟队列", "建立研究队列或合成人群。目标和已有资料是："],
+  ["患者", "虚拟患者", "查看患者历程或研究模型支持的个体轨迹。资料和问题是："],
+  ["对照", "合成对照臂", "研究外部对照或合成对照的可行性与比较方法。问题和资料是："],
+  ["试验", "虚拟试验", "比较试验设计的样本量、把握度或运行特征。目标和已有参数是："],
 ];
 it.each(EXAMPLES)("opens %s as an unsent native conversation draft without creating a study", async (_label, example, draft) => {
   draw("/app/virtual-research?new=1");
@@ -55,10 +56,10 @@ it.each(EXAMPLES)("opens %s as an unsent native conversation draft without creat
 });
 // What is enough to begin, in the brief's four sentences (section 7); a field name or a statistic is never on the home.
 const REQUIREMENTS = [
-  "给一份病例就能开始。批量匹配需要患者数据表。",
-  "说清目标人群就能开始，AI 从文献取基线。用真实队列需要患者数据表。",
-  "说清研究就能先做可行性判断。估计治疗效果需要两组的结局数据。",
-  "说清研究问题和终点就能开始，参数 AI 先从文献找，你可以随时改。",
+  "个体预测需要患者资料及适用模型；场景模拟可先用明确设定。",
+  "可从文献或设定开始。真实队列和数据驱动合成需要患者数据。",
+  "可先讨论可行性。效果分析需要适用的治疗、结局、时间和混杂变量。",
+  "可从文献参数与明确假设开始；已有数据可用于校准。",
 ];
 const expectFourExamples = (scope: HTMLElement | Document = document) => {
   for (const [, example] of EXAMPLES) expect(within(scope as HTMLElement).getByRole("button", { name: example })).toBeInTheDocument();
@@ -79,7 +80,7 @@ it("keeps the empty list concise and says in four sentences what is enough to be
   expect(screen.queryByRole("textbox", { name: "研究问题" })).toBeNull();
 });
 it("opens ?new=1 without creating a form or a study", async () => {
-  draw("/app/virtual-research?new=1"); await screen.findByRole("button", { name: "让 AI 匹配患者和试验" });
+  draw("/app/virtual-research?new=1"); await screen.findByRole("button", { name: "患者匹配" });
   expect(screen.queryByText("方法库")).toBeNull(); expect(screen.queryByRole("textbox", { name: "研究问题" })).toBeNull();
   expect(server.calls.filter(call => call.method === "POST")).toEqual([]);
 });
@@ -150,12 +151,12 @@ it("says nothing starts at the home and promises a study only once its first res
   await screen.findByText("暂无研究");
   // The empty list says what is true: a study is listed once the assistant has saved its first result, not once a sentence is sent.
   const empty = screen.getByText("暂无研究").closest("[data-empty]")!;
-  expect(empty.textContent).toContain("在对话里说明要研究什么，AI 保存第一项结果后，研究会列在这里。");
+  expect(empty.textContent).toContain("研究结果和正在进行的工作会显示在这里。");
   expect(empty.textContent).not.toMatch(/选一项任务开始|发送后研究会列在这里/);
   await userEvent.click(screen.getByRole("button", { name: "新研究" }));
   // What an example does is declared: it fills the composer, and the walk holds it to that.
-  expect(screen.getByRole("button", { name: "让 AI 匹配患者和试验" })).toHaveAttribute("data-action-kind", "draft");
-  await userEvent.click(screen.getByRole("button", { name: "让 AI 匹配患者和试验" }));
+  expect(screen.getByRole("button", { name: "患者匹配" })).toHaveAttribute("data-action-kind", "draft");
+  await userEvent.click(screen.getByRole("button", { name: "患者匹配" }));
   expect(server.calls.filter(call => call.method === "POST")).toEqual([]);
 });
 
@@ -253,7 +254,7 @@ describe("the 研究 view beside its preview", () => {
   it("starts a task from the pane: an unsent draft in the native conversation", async () => {
     drawHome();
     await screen.findByRole("list", { name: "研究" });
-    await userEvent.click(within(screen.getByRole("region", { name: "研究预览" })).getByRole("button", { name: "让 AI 做对照研究" }));
+    await userEvent.click(within(screen.getByRole("region", { name: "研究预览" })).getByRole("button", { name: "合成对照臂" }));
     expect(where()).toBe("/app/chat?project=default");
     expect(server.calls.filter(call => call.method === "POST")).toEqual([]);
   });
@@ -293,11 +294,11 @@ describe("the 研究 view beside its preview", () => {
     drawHome("/app/virtual-research?study=std_1");
     const pane = await screen.findByRole("region", { name: "研究预览" });
     expect(await within(pane).findByRole("heading", { level: 2, name: EV })).toBeInTheDocument();
-    expect(within(pane).queryByRole("button", { name: "让 AI 匹配患者和试验" })).toBeNull();
+    expect(within(pane).queryByRole("button", { name: "患者匹配" })).toBeNull();
     await userEvent.click(within(pane).getByRole("button", { name: "关闭预览" }));
     expect(where()).toBe("/app/virtual-research");
     expect(within(pane).getByRole("heading", { level: 2, name: "新研究" })).toBeInTheDocument();
-    expect(within(pane).getByRole("button", { name: "让 AI 匹配患者和试验" })).toBeInTheDocument();
+    expect(within(pane).getByRole("button", { name: "患者匹配" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: EV })).not.toHaveAttribute("aria-current");
     expect(within(pane).queryByRole("button", { name: "关闭预览" })).toBeNull();
     // A study can be chosen again, and Escape does what the button does.
@@ -430,7 +431,7 @@ describe("the 研究 view beside its preview", () => {
     drawHome();
     const empty = await screen.findByText("暂无研究");
     expect(screen.getByRole("region", { name: "研究列表" })).toContainElement(empty);
-    expect(within(screen.getByRole("region", { name: "研究预览" })).getByRole("button", { name: "让 AI 匹配患者和试验" })).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "研究预览" })).getByRole("button", { name: "患者匹配" })).toBeInTheDocument();
     // Nothing to search or filter.
     expect(screen.queryByRole("searchbox", { name: "搜索研究" })).toBeNull();
   });
@@ -481,10 +482,10 @@ describe("the 研究 view below the room for both", () => {
     render(<MemoryRouter initialEntries={["/app/virtual-research"]}><VcrHomePage /><Where /><Back /></MemoryRouter>);
     await screen.findByRole("list", { name: "研究" });
     await userEvent.click(screen.getByRole("button", { name: "新研究" }));
-    const first = screen.getByRole("button", { name: "让 AI 匹配患者和试验" }); first.focus();
+    const first = screen.getByRole("button", { name: "虚拟队列" }); first.focus();
     await userEvent.tab();
-    expect(screen.getByRole("button", { name: "让 AI 研究人群或个体患者" })).toHaveFocus();
-    expect(screen.getByText("说清目标人群就能开始，AI 从文献取基线。用真实队列需要患者数据表。")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "虚拟患者" })).toHaveFocus();
+    expect(screen.getByText("可从文献或设定开始。真实队列和数据驱动合成需要患者数据。")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "浏览器返回" }));
     expect(where()).toBe("/app/virtual-research");
     await waitFor(() => expect(screen.getByRole("region", { name: "研究列表" }).contains(document.activeElement)).toBe(true));
@@ -561,7 +562,7 @@ describe("the studies a conversation made (VCR remediation F1)", () => {
     expect(within(rows).getByRole("link", { name: "帮我匹配患者和临床试验" })).toBeInTheDocument();
     expect(screen.queryByText("暂无研究")).toBeNull();
     expect(screen.queryByRole("list", { name: "研究" })).toBeNull();
-    expect(within(screen.getByRole("region", { name: "研究预览" })).getByRole("button", { name: "让 AI 匹配患者和试验" })).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "研究预览" })).getByRole("button", { name: "患者匹配" })).toBeInTheDocument();
     expect(screen.getByRole("searchbox", { name: "搜索研究" })).toBeInTheDocument();
   });
 

@@ -226,7 +226,7 @@ In source history, citation counts may be compared when their sampling coverage 
 
 ## DS16 VCR product-policy boundary
 
-Owner **B**. DS23 governs how the module's work is presented; the reset's six result destinations take the place of a step rail. The [October 25 AI-native reset](../../docs/superpowers/specs/2026-10-25-vcr-ai-native-product-reset.md) owns task scope, retained scientific objects, recruitment removals and conversation-first entry. Its dated UI handoff preserves the original v3 requirements. Apply shared numeric, provenance, keyboard and result-version rules here. AT08/15/25 and the reset's scientific journeys must pass; a design-document revision does not implement the reset.
+Owner **B**. DS23 governs how the module's work is presented; the reset's six result destinations take the place of a step rail. The [October 25 AI-native reset](../../docs/superpowers/specs/2026-10-25-vcr-ai-native-product-reset.md) owns task scope, retained scientific objects, recruitment removals and conversation-first entry. Its dated UI handoff preserves the original v3 requirements. Apply shared numeric, provenance, keyboard and result-version rules here. AT08/15/25 and the reset's scientific journeys must pass; a design-document revision does not implement the reset. In synthetic-population results, a completed calculation and an estimable method are not quality verdicts: use neutral estimability, show a red-band finding as an explicit quality notice, and show an unavailable or unknown quality metric with its recorded reason and scope rather than a green mark or an omitted value.
 
 ## DS17 Other module policies
 

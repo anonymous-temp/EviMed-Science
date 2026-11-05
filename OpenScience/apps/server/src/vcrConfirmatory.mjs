@@ -196,7 +196,7 @@ function premisesOf(confirmatory, stated) {
     const row = assumptionRow(String(entry.key), entry.value);
     if (row) rows.push(row);
   }
-  return finishPremises(rows);
+  return finishPremises(rows, stated);
 }
 
 /**

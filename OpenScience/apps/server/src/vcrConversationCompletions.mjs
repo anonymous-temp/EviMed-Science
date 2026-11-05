@@ -257,7 +257,7 @@ export class VcrConversationCompletions {
     this.lastTickAt=now;
     const reconciled=await this.reconcile();this.counters.reconciled+=reconciled;
     const retention=Math.max(this.ageSeconds()*1000,Number(this.config.vcrCompletionRetentionMs ?? 604800000));
-    const pruned=await this.store.query(`DELETE FROM evimed_vcr.conversation_completions WHERE id IN (SELECT id FROM evimed_vcr.conversation_completions WHERE state<>'pending' AND updated_at<now()-make_interval(secs=>$1) ORDER BY updated_at LIMIT $2)`,[retention/1000,this.config.vcrCompletionReconcileBatch ?? 50]);
+    const pruned=await this.store.query(`DELETE FROM evimed_vcr.conversation_completions WHERE id IN (SELECT id FROM evimed_vcr.conversation_completions WHERE state<>'pending' AND COALESCE(last_error,'') NOT LIKE 'vcr_completion_notice_failed:%' AND updated_at<now()-make_interval(secs=>$1) ORDER BY updated_at LIMIT $2)`,[retention/1000,this.config.vcrCompletionReconcileBatch ?? 50]);
     this.counters.pruned+=Number(pruned?.rowCount ?? 0);
     return {reconciled,...await this.deliver()};
   }

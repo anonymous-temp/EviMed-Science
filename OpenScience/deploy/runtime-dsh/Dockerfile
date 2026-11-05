@@ -224,6 +224,7 @@ COPY capability-skills /opt/evimed/capability-skills
 # on `domain` in turn and resolves it by walking up to this same directory.
 COPY packages/domain /opt/evimed/socket/node_modules/@evimed/domain
 COPY packages/harness-port /opt/evimed/socket/node_modules/@evimed/harness-port
+COPY packages/research-plugin-runtime /opt/evimed/socket/node_modules/@evimed/research-plugin-runtime
 COPY scripts/runtime/validate-personal-skill.mjs /opt/evimed/socket/scripts/validate-personal-skill.mjs
 # `design-tokens` joined them on 2026-09-26: the frame bundle draws the study-
 # type badges and hands the kernel its theme, and both come from that table now
@@ -319,6 +320,12 @@ RUN bash /usr/local/lib/evimed/install-runtime.sh openviking-plugin
 # This dependency-free host bundle is optional until the control plane supplies
 # its readonly topic snapshot and service token for a project.
 COPY packages/search-topics /opt/evimed/search-topics
+COPY packages/virtual-trial /opt/evimed/research-source/virtual-trial
+COPY packages/virtual-cohort /opt/evimed/research-source/virtual-cohort
+COPY packages/virtual-patient /opt/evimed/research-source/virtual-patient
+COPY packages/synthetic-control /opt/evimed/research-source/synthetic-control
+COPY packages/virtual-research-suite /opt/evimed/research-source/virtual-research-suite
+COPY deploy/runtime-dsh/research-bundles.mjs /usr/local/bin/evimed-research-bundles.mjs
 ARG SEARCH_TOPICS_VERSION=0.2.0
 RUN test "${SEARCH_TOPICS_VERSION}" = "$(node -p 'require("/opt/evimed/search-topics/package.json").version')" && \
   install -d -m 0755 /opt/evimed/search-topics-data && chmod -R a+rX,a-w /opt/evimed/search-topics

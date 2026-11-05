@@ -1,86 +1,90 @@
-/**
- * Which numbers of a computed design are the person's own words (live check 2026-11-04).
- *
- * The premise word 「你给的数据」 (`given`) had grown to cover every number a scenario stated: a follow-up of 24 months, a dropout of 5%, a correlation
- * of 0.3 and 'at most 30 patients', all chosen by the model, were shown as the person's data. The word now means one of two things and nothing else:
- * the value comes from a table or a record the person supplied, or the number is literally in a message the person typed in this conversation.
- * Everything else a model wrote into a scenario is 「假设」.
- *
- * Hidden knowledge:
- *
- * - **Code decides it, not language.** When a design job starts, the scenario's numbers are laid against the numeric literals of the person's own
- *   messages (`numberIsInQuote`, the helper that binds a number to a quotation: a fraction is matched against its percentage too), and the paths
- *   that were found are frozen with the job (`detail.personStated`, then `diagnostics.personStated` on the result). The page reads that record and
- *   guesses nothing.
- * - **No evidence, no strong word.** A conversation whose messages could not be read records `readable: false` and every number reads 「假设」.
- * - **An old result has no record and reads as it read.** `personWord` returns the word the page used before for a result with none, so a replay or
- *   a fixture of an earlier release shows what it showed.
- * - **0 and 1 are structure, not statements.** A hazard ratio of 1, an allocation of 1 and a count of 0 are what a design needs to exist, and a digit
- *   of the person's message that happens to be one is no evidence that they said it.
- *
- * @module vcrPersonStated
- */
+/** Parameter-specific human provenance. Language interpretation belongs to the
+ * model's explicit source binding; numeric coincidence is never evidence.
+ * The control plane checks original-message scope and freezes the binding with
+ * the computation. Schema 1 remains readable for historical results only. */
+import { createHash } from 'node:crypto';
+import { numberIsInQuote } from './vcrEvidence.mjs';
 
-import { numberIsInQuote } from "./vcrEvidence.mjs";
-
-/** The most paths a record keeps: a scenario with more numbers than this is a table, and a table is not a message. */
+export const VCR_PERSON_STATED_SCHEMA = 2;
 const MAX_PATHS = 200;
-/** The schema of the record. */
-export const VCR_PERSON_STATED_SCHEMA = 1;
 
-/**
- * The numbers of a scenario with the path each sits at (`truth.effects[0]`, `design.cohortSize`).
- * @param {unknown} value @param {string} [path]
- * @returns {Array<{ path: string, value: number }>}
- */
-export function vcrNumericLeaves(value, path = "") {
-  if (typeof value === "number") return Number.isFinite(value) ? [{ path, value }] : [];
+/** @param {unknown} value @param {string} [path]
+ * @returns {Array<{ path: string, value: number }>} */
+export function vcrNumericLeaves(value, path = '') {
+  if (typeof value === 'number') return Number.isFinite(value) ? [{ path, value }] : [];
   if (Array.isArray(value)) return value.flatMap((entry, index) => vcrNumericLeaves(entry, `${path}[${index}]`));
-  if (value && typeof value === "object") return Object.entries(value).flatMap(([key, entry]) => vcrNumericLeaves(entry, path ? `${path}.${key}` : key));
+  if (value && typeof value === 'object') return Object.entries(value).flatMap(([key, entry]) => vcrNumericLeaves(entry, path ? `${path}.${key}` : key));
   return [];
 }
 
-/**
- * Is `fraction` written in the text as a percentage (5% for 0.05, 12.5% for 0.125)? The sign or the word decides: a bare 5 is not.
- * @param {string} text @param {number} fraction
+/** @typedef {{sessionId:string, messageSeq:number, text:string}} HumanParameterMessage */
+/** Explicit semantic assertions from the calculating agent. Quote membership
+ * authenticates the original, not the interpretation: retain unit and context
+ * (including endpoint, arm, time or table column) for later scientific review.
+ * No binding, ambiguity, a changed value or an unavailable original means assumed.
+ * Only the latest human message is eligible: old instructions cannot silently
+ * overrule a follow-up. Earlier evidence can be restated or explicitly sourced
+ * through the evidence workflow without blocking the calculation.
+ * @param {Record<string, any>} scenario
+ * @param {readonly (HumanParameterMessage|string)[] | null | undefined} messages
+ * @param {unknown} [sources]
  */
-function percentIsInText(text, fraction) {
-  const target = Number((fraction * 100).toPrecision(12));
-  for (const match of text.matchAll(/(\d+(?:\.\d+)?)\s*(?:%|％|个百分点|percent(?:age points?)?)/giu)) if (Number(match[1]) === target) return true;
-  return false;
+export function vcrPersonStated(scenario, messages, sources = []) {
+  const originals = (Array.isArray(messages) ? messages : []).filter(entry => entry && typeof entry === 'object'
+    && typeof entry.sessionId === 'string' && Number.isSafeInteger(entry.messageSeq) && typeof entry.text === 'string' && entry.text.trim());
+  const latest = originals.at(-1);
+  const leaves = new Map(vcrNumericLeaves(scenario).slice(0, MAX_PATHS).map(row => [row.path, row.value]));
+  const entries = (Array.isArray(sources) ? sources : []).slice(0, MAX_PATHS).filter(row => row?.origin === 'user');
+  /** @type {Array<Record<string, any>>} */
+  const bindings = [];
+  const paths = entries.map(row => row.field);
+  for (const row of entries) {
+    if (!latest || typeof row.field !== 'string' || paths.filter(path => path === row.field).length !== 1
+      || !leaves.has(row.field) || leaves.get(row.field) !== row.value
+      || typeof row.quote !== 'string' || !row.quote.trim() || row.quote.length > 16000 || !latest.text.includes(row.quote)
+      || typeof row.unit !== 'string' || !row.unit.trim() || row.unit.length > 120
+      || typeof row.context !== 'string' || !row.context.trim() || row.context.length > 1000
+      || !humanQuoteNumber(row.quote, row.value)
+      || row.sessionId != null && row.sessionId !== latest.sessionId
+      || row.messageSeq != null && row.messageSeq !== latest.messageSeq) continue;
+    bindings.push({ path: row.field, value: row.value, origin: 'user', unit: row.unit, context: row.context, quote: row.quote,
+      source: { sessionId: latest.sessionId, messageSeq: latest.messageSeq,
+        sha256: createHash('sha256').update(latest.text).digest('hex') }, verification: 'source_checked_interpretation_asserted' });
+  }
+  return { schema: VCR_PERSON_STATED_SCHEMA, readable: Boolean(latest), paths: bindings.map(row => row.path), bindings };
 }
 
-/**
- * The record of which numbers of a scenario are in the person's own messages.
- * @param {Record<string, any>} scenario @param {readonly string[] | null | undefined} messages the person's messages of this conversation, or null when they could not be read
- * @returns {{ schema: 1, readable: boolean, paths: string[] }}
- */
-export function vcrPersonStated(scenario, messages) {
-  const texts = Array.isArray(messages) ? messages.filter((entry) => typeof entry === "string" && entry.trim()) : [];
-  if (!texts.length) return { schema: VCR_PERSON_STATED_SCHEMA, readable: false, paths: [] };
-  const text = texts.join("\n");
-  // The plain numbers: a percentage (30% is the 0.3 of a rate, not a 30), a ratio or a name made of numbers (3+3, 1:1, 2/3) are not a bare number
-  // somebody said (live check 2026-11-04: 'at most 30 patients' matched the 30% of a toxicity and a cohort of 3 the 3 of '3+3').
-  const plain = text.replace(/\d+(?:\.\d+)?\s*(?:%|％|个百分点)/gu, " ").replace(/\d+(?:\.\d+)?(?:\s*[+:/：／＋]\s*\d+(?:\.\d+)?)+/gu, " ");
-  const paths = vcrNumericLeaves(scenario)
-    .filter(({ value }) => value !== 0 && value !== 1)
-    // a fraction is also the percentage the person wrote (0.05 for 「5%」, 「百分之五」 is not read); a bare 5 is not a 0.05
-    .filter(({ value }) => numberIsInQuote(plain, value) || (value > 0 && value < 1 && percentIsInText(text, value)))
-    .map(({ path }) => path);
-  return { schema: VCR_PERSON_STATED_SCHEMA, readable: true, paths: [...new Set(paths)].slice(0, MAX_PATHS) };
+/** Numeric notation only; never infer a parameter's meaning from words. A bare
+ * count cannot become a fraction merely because the caller labels it one.
+ * @param {string} quote @param {number} value */
+function humanQuoteNumber(quote, value) {
+  if (numberIsInQuote(quote, value)) return true;
+  if (!(value > 0 && value < 1)) return false;
+  const tokens = [...quote.matchAll(/(-?\d+(?:\.\d+)?)\s*(?:%|％|percent\b)/giu),
+    ...quote.matchAll(/百分之\s*(-?\d+(?:\.\d+)?)/gu)];
+  return tokens.some(token => Number(token[1]) / 100 === value);
 }
 
-/**
- * The word a premise of a stated number takes. `legacy` is the word the page used before there was a record.
- * @param {Record<string, any> | null | undefined} record `diagnostics.personStated` of the result
- * @param {string | readonly string[]} paths the scenario path(s) of the number(s) the premise shows. A premise of several numbers is the person's only
- *   when every one is: a row that shows a number the model chose beside one the person said is not 「你给的数据」
- * @param {"given" | "assumed"} legacy
- * @returns {"given" | "assumed"}
- */
+/** Non-blocking, inspectable model mappings: the original is authenticated,
+ * the asserted meaning has not been independently verified.
+ * @param {Record<string,any> | null | undefined} record
+ * @returns {Array<{key:string,label:string,value:string,source:'assumed',decisive:boolean,reason:string}>} */
+export function personMappingPremises(record) {
+  if (record?.schema !== 2 || !Array.isArray(record.bindings)) return [];
+  return record.bindings.filter(row => row.verification === 'source_checked_interpretation_asserted').map(row => ({
+    key: `person-mapping:${row.path}`, label: '原文参数对应', value: String(row.context), source: 'assumed', decisive: false,
+    reason: `原文来源已核对，参数含义由模型对应。原文：「${row.quote}」；单位：${row.unit}；对应值：${row.value}`,
+  }));
+}
+
+/** @param {Record<string, any> | null | undefined} record
+ * @param {string | readonly string[]} paths
+ * @param {'given' | 'assumed'} legacy
+ * @returns {'given' | 'assumed'} */
 export function personWord(record, paths, legacy) {
-  if (!record || typeof record !== "object" || record.schema !== VCR_PERSON_STATED_SCHEMA) return legacy;
-  if (record.readable !== true || !Array.isArray(record.paths)) return "assumed";
+  if (!record || typeof record !== 'object' || ![1, VCR_PERSON_STATED_SCHEMA].includes(record.schema)) return legacy;
+  if (record.readable !== true || !Array.isArray(record.paths)) return 'assumed';
+  if (record.schema === 2) return 'assumed';
   const wanted = Array.isArray(paths) ? paths : [paths];
-  return wanted.length > 0 && wanted.every((path) => record.paths.includes(path)) ? "given" : "assumed";
+  return wanted.length > 0 && wanted.every(path => record.paths.includes(path)) ? 'given' : 'assumed';
 }

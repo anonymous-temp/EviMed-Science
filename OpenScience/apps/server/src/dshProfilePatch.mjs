@@ -27,7 +27,7 @@ import path from "node:path";
  */
 
 import { validatePluginConfig } from "./pluginService.mjs";
-import { MCP_SERVER_NAME } from "@evimed/domain";
+import { MCP_SERVER_NAME, RESEARCH_NATIVE_BUNDLES, nativeResearchToolProfileHolds } from "@evimed/domain";
 
 /** The reference name the kernel resolves the workload token through. */
 export const WORKLOAD_TOKEN_REF = "EVIMED_WORKLOAD_TOKEN";
@@ -90,7 +90,9 @@ export const HOSTED_PERMISSION_PRESET_DESCRIPTION = "只能读写本项目的工
  * @property {string} [platformSkillsDir]
  * @property {string} [personalSkillsDir]
  * @property {string[]} [disabledPlatformSkills]
+ * @property {any[]} [nativeResearchPlugins] verified frozen generation rows
  * @property {string} [extensionProjectionFile]
+ * @property {string} [vcrGatewayUrl]
  * @property {string} [extensionGatewayUrl]
  * @property {string} capsuleGatewayUrl
  * @property {string} [revisionGatewayUrl]
@@ -341,6 +343,7 @@ export function renderProfilePatch(input) {
     ...presetRows(input),
     ...hostedBrowserPanelRows(input),
     ...clientBundleRows(input),
+    ...nativeResearchRows(input),
   ];
   return `${rows.join("\n")}\n`;
 }
@@ -363,6 +366,19 @@ function clientBundleRows(input) {
     "# (OPEN_SCIENCE_RUNTIME_<NAME>_ENABLED=false).",
     ...off.flatMap((id) => [`- id: ${COMMUNITY_CLIENT_BUNDLE_ROWS[/** @type {keyof typeof COMMUNITY_CLIENT_BUNDLE_ROWS} */ (id)]}`, "  disabled: true"]),
   ];
+}
+
+/** Only preinstalled fixed rows can be selected; hosted settings override package environment defaults.
+ * @param {ProfilePatchInput} input */
+function nativeResearchRows(input) {
+  const selected = input.nativeResearchPlugins ?? [];
+  if (selected.length > 5 || new Set(selected.map(row => row.extensionId)).size !== selected.length
+    || selected.some(row => !nativeResearchToolProfileHolds(row))) throw new Error('extension_contract_invalid');
+  return Object.entries(RESEARCH_NATIVE_BUNDLES).flatMap(([id, spec]) => [
+    `- id: ${spec.row}`,
+    `  disabled: ${!selected.some(row => row.extensionId === id && row.enabled)}`,
+    '  config:', '    mode: hosted', "    workspace: ''", "    engineRoot: ''", '    rscript: Rscript',
+  ]);
 }
 
 /**
@@ -711,7 +727,7 @@ export const SOCKET_PLUGIN_SWITCHES = Object.freeze({
  * asking for the full input would make building an environment depend on
  * something it never reads.
  *
- * @typedef {Pick<ProfilePatchInput, 'presetSkillsDir'|'capabilitiesDir'|'capabilitySkillsDir'|'capsuleMethodsDir'|'evolutionGatewayUrl'|'platformSkillsDir'|'personalSkillsDir'|'disabledPlatformSkills'|'disabledClientBundles'|'extensionProjectionFile'|'extensionGatewayUrl'|'capsuleGatewayUrl'|'revisionGatewayUrl'|'publicSourceGatewayUrl'|'webSearchGatewayUrl'|'pluginConfig'|'modelGatewayTokenFile'|'attendanceAuthority'|'workloadTokenFile'|'bundleVersion'|'flags'|'limits'> & { compaction?: Record<string, string>, disabledToolsFile?: string, disabledPlugins?: readonly string[], loopxEnabled?: boolean, geoSkills?: boolean }} RuntimeEnvironmentInput
+ * @typedef {Pick<ProfilePatchInput, 'presetSkillsDir'|'capabilitiesDir'|'capabilitySkillsDir'|'capsuleMethodsDir'|'evolutionGatewayUrl'|'platformSkillsDir'|'personalSkillsDir'|'disabledPlatformSkills'|'disabledClientBundles'|'extensionProjectionFile'|'extensionGatewayUrl'|'vcrGatewayUrl'|'capsuleGatewayUrl'|'revisionGatewayUrl'|'publicSourceGatewayUrl'|'webSearchGatewayUrl'|'pluginConfig'|'modelGatewayTokenFile'|'attendanceAuthority'|'workloadTokenFile'|'bundleVersion'|'flags'|'limits'> & { compaction?: Record<string, string>, disabledToolsFile?: string, disabledPlugins?: readonly string[], loopxEnabled?: boolean, geoSkills?: boolean }} RuntimeEnvironmentInput
  *
  * @param {RuntimeEnvironmentInput} input
  * @returns {Record<string, string>}
@@ -759,6 +775,7 @@ export function runtimeEnvironment(input) {
     EVIMED_DISABLED_CLIENT_BUNDLES: JSON.stringify(input.disabledClientBundles ?? []),
     EVIMED_EXTENSION_PROJECTION_FILE: input.extensionProjectionFile ?? '',
     EVIMED_EXTENSION_GATEWAY_URL: input.extensionGatewayUrl ?? '',
+    EVIMED_VCR_GATEWAY_URL: input.vcrGatewayUrl ?? '',
     EVIMED_CAPSULE_GATEWAY_URL: input.capsuleGatewayUrl,
     EVIMED_REVISION_AUTHORIZE_URL: input.revisionGatewayUrl ?? "",
     EVIMED_PUBLIC_SOURCE_GATEWAY_URL: input.publicSourceGatewayUrl ?? "",

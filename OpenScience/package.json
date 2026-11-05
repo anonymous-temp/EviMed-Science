@@ -97,7 +97,7 @@
     "test:port": "pnpm --filter @evimed/harness-port test",
     "test:socket": "pnpm --filter @evimed/dsh-socket test",
     "test:search-topics": "pnpm --filter @evimed/dsh-search-topics test",
-    "test:packages": "pnpm test:domain && pnpm test:port && pnpm test:socket && pnpm test:contracts",
+    "test:packages": "pnpm test:domain && pnpm test:port && pnpm test:socket && pnpm test:contracts && pnpm test:research-plugins",
     "check:skill-digests": "node scripts/build/repin-curated-skill-digests.mjs --check",
     "check:skill-packages": "node scripts/build/generate-skill-packages.mjs --check",
     "generate:skill-packages": "node scripts/build/generate-skill-packages.mjs",
@@ -141,7 +141,8 @@
     "test:knowledge-product": "node --test evals/knowledge-product/test/*.test.mjs",
     "test:statistical-analysis": "python3 -m pytest evals/statistical-analysis -q && node --test evals/statistical-analysis/live/driver.test.mjs",
     "test:rsi": "PYTHONPATH=../.evimed-local/toolchains/rsi-python python3 -m unittest discover -s evals/rsi-campaigns/tests -p 'test_*.py' && node --test --test-concurrency=1 evals/rsi-campaigns/tests/*.test.mjs",
-    "test:rsi-offline": "bash evals/harness-adaptation/setup.sh && (cd evals/harness-adaptation && python3 -m unittest discover -s tests && cd lab && python3 -m unittest discover -p 'test_*.py') && (cd evals/public-benchmarks && python3 -I -m unittest discover -s tools/test -p 'test_*.py' && node --test tools/test/lane.test.mjs && node tools/test/driver-flows.test.mjs)"
+    "test:rsi-offline": "bash evals/harness-adaptation/setup.sh && (cd evals/harness-adaptation && python3 -m unittest discover -s tests && cd lab && python3 -m unittest discover -p 'test_*.py') && (cd evals/public-benchmarks && python3 -I -m unittest discover -s tools/test -p 'test_*.py' && node --test tools/test/lane.test.mjs && node tools/test/driver-flows.test.mjs)",
+    "test:research-plugins": "pnpm --filter @evimed/research-plugin-runtime test && pnpm --filter @evimed/research-plugin-runtime typecheck && pnpm --filter @evimed/research-plugin-runtime lint && node --test deploy/runtime-dsh/research-bundles.test.mjs"
   },
   "engines": {
     "node": ">=22.22.0"

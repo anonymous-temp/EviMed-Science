@@ -183,3 +183,24 @@ test('extension proof and target facts inspect exact registered definitions and 
   await assert.rejects(verifyExtensionAgent({...ctx,tools:{get:()=>({})}},agent),/registrations_invalid/u);
   assert.deepEqual(extensionInvocationFacts({...ctx,tools:{get:()=>null}},agent.id).tools,[]);
 });
+
+test('extension proof joins actual fixed research definitions and refuses projection-only or disabled registrations',async()=>{
+  const {registerResearchConfiguration,registerExtensionConfiguration,verifyExtensionAgent}=await import('../src/pluginProbe.mjs');
+  const {RESEARCH_NATIVE_BUNDLES}=await import('@evimed/domain');
+  const {agent,mount}=kernelAgent(),definitions=new Map([['doc_read',{}],['doc_write',{}]]);
+  const plugins=Object.entries(RESEARCH_NATIVE_BUNDLES).map(([extensionId,spec])=>({extensionId,coordinate:{kind:'npm',name:spec.name,version:'0.1.0'},executionClass:'managed-native',enabled:true,integrity:'sha256:'+'a'.repeat(64),artifactDigest:'sha256:'+'b'.repeat(64),configRevision:1,configDigest:'config',settings:{},connectionRefs:[]}));
+  const ctx={tools:{get:(/** @type {string} */ name)=>definitions.get(name)}};
+  await registerCitationConfiguration(mount(),{enabled:false,revision:1,timeoutMs:4000,binaryVersion:CITE_VERSION});
+  plugins.push({extensionId:'office',coordinate:{kind:'npm',name:'fixture-office',version:'1.0.0'},executionClass:'isolated-tool',enabled:true,integrity:'sha256:'+'c'.repeat(64),artifactDigest:'sha256:'+'d'.repeat(64),configRevision:1,configDigest:'doc-config',settings:{},connectionRefs:[]});
+  await registerExtensionConfiguration(mount(),{plugins,definitions});
+  await assert.rejects(verifyExtensionAgent(ctx,agent),/registrations_invalid/);
+  for(const [id,spec]of Object.entries(RESEARCH_NATIVE_BUNDLES)){
+    const own=new Map(spec.tools.map((/** @type {string} */ name)=>[name,{}]));for(const [name,definition]of own)definitions.set(name,definition);
+    await registerResearchConfiguration(mount(),{extensionId:id,definitions:own});
+  }
+  const proof=await verifyExtensionAgent(ctx,agent);
+  assert.deepEqual(proof.inventory.map(row=>row.extensionId),plugins.map(row=>row.extensionId));
+  assert.equal(proof.tools.length,23);
+  definitions.set('virtual_trial_start',{});
+  await assert.rejects(verifyExtensionAgent(ctx,agent),/registrations_invalid/);
+});

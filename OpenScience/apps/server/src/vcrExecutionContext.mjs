@@ -2,10 +2,19 @@
  * until the pending tool and its immutable arguments are checked, as in resultGateway. */
 import { canonicalJson, mcpToolName } from '@evimed/domain';
 import { HttpError } from './security.mjs';
+import { VCR_JOB_METHODS, VCR_ENGINE_METHODS } from '@evimed/domain';
+import { isResearchPluginTool, projectResearchInvocation } from '@evimed/research-plugin-runtime/hosted-protocol';
 const unavailable = () => new HttpError(403, 'vcr_invocation_unavailable', 'A current native research call is required.');
 const object = value => value && typeof value === 'object' && !Array.isArray(value);
 
 function projected(tool, operation, actual, body) {
+  if (isResearchPluginTool(tool)) {
+    try {
+      const request = projectResearchInvocation(tool, actual, { jobMethods: VCR_JOB_METHODS, methods: VCR_ENGINE_METHODS });
+      if (request.operation !== operation) throw unavailable();
+      return request.body;
+    } catch { throw unavailable(); }
+  }
   if (tool === 'trial_registry_record' && operation === 'read') return { what: 'trial_registry_record', filter: {
     registryId: actual.registryId?.trim(), ...(actual.registry?.trim() ? { registry: actual.registry.trim() } : {}) } };
   if (tool === 'curve_digitize' && operation === 'digitize') return Object.fromEntries(Object.entries(actual).filter(([,value]) => value != null));
@@ -35,7 +44,7 @@ async function currentRun(runs, matches, adoptionWaitMs) {
   }
 }
 
-export async function verifyVcrInvocation({ header, project, runtimeManager, resolveSession, runs, operation, body, readBenchmark = null, authenticatedUserId = null, adoptionWaitMs = 0 }) {
+export async function verifyVcrInvocation({ header, project, runtimeManager, resolveSession, runs, operation, body, readBenchmark = null, authenticatedUserId = null, assertResearchPluginSelection = null, adoptionWaitMs = 0 }) {
   let context;
   try { context = JSON.parse(String(header ?? '')); } catch { throw unavailable(); }
   if (context?.v !== 1 || typeof context.sessionId !== 'string' || !/^[A-Za-z0-9_-]{1,160}$/.test(context.sessionId)
@@ -50,7 +59,7 @@ export async function verifyVcrInvocation({ header, project, runtimeManager, res
     || calls[0].part.status !== 'pending' || calls[0].message.turnStartSeq !== turn.startSeq) throw unavailable();
   const part = calls[0].part;
   const tool = ['vcr_read', 'vcr_write', 'vcr_simulate', 'trial_registry_record', 'curve_digitize', 'evidence_pool']
-    .find(name => [name, mcpToolName(name)].includes(part.tool));
+    .find(name => [name, mcpToolName(name)].includes(part.tool)) ?? (isResearchPluginTool(part.tool) ? part.tool : null);
   if (!tool || !object(part.input)) throw unavailable();
   let expected = projected(tool,operation,part.input,body);
   if (tool==='vcr_write' && part.input.what==='trial_benchmark' && part.input.data?.predictionsFile) {
@@ -60,7 +69,40 @@ export async function verifyVcrInvocation({ header, project, runtimeManager, res
   if (canonicalJson(expected)!==canonicalJson(body)) throw unavailable();
   const run = await currentRun(runs, row => row.id === owned?.runId || row.sessionId === context.sessionId, adoptionWaitMs);
   if (!run?.sessionId) throw unavailable();
+  // Installation and a pending call alone confer no authority. Recheck the
+  // effective generation and current desired selection on every native call,
+  // including reads/cancellation while an old runtime is still alive.
+  if (isResearchPluginTool(tool)) {
+    if (!assertResearchPluginSelection) throw unavailable();
+    await assertResearchPluginSelection(tool.replace(/_(describe|start|read|cancel|report)$/, '').replaceAll('_', '-'));
+  }
   return { userId: authenticatedUserId ?? project.userId, projectId: project.id, sessionId: context.sessionId, rootSessionId: run.sessionId,
     runId: run.id, callId: context.callId, dispatchId:run.dispatchId ?? null, routeReason:run.effectiveRouteReason ?? null,
     programme:typeof run.effectiveRouteReason === 'string' && run.effectiveRouteReason.startsWith('vcr:') };
+}
+
+/** Read original human parameter statements, never ledger question previews.
+ * Same authenticated root conversation and account/project as the current call;
+ * automated/continuation turns cannot supply human evidence. Reading is bounded
+ * to four transcript pages and one MiB; failure loses a label, not the work.
+ * @param {{sessionId:string, transcript:any, runs:ReadonlyArray<Record<string,any>>}} input
+ * @returns {Array<{sessionId:string,messageSeq:number,text:string}> | null} */
+export function vcrOriginalHumanMessages({ sessionId, transcript, runs }) {
+  if (transcript?.sessionId !== sessionId || !Array.isArray(transcript.messages)) return null;
+  const eligible = runs.filter(run => run.sessionId === sessionId && run.automated !== true);
+  const messages = transcript.messages.filter(message => message.role === 'user' && message.source === 'user'
+    && Number.isSafeInteger(message.seq) && eligible.some(run =>
+      Number.isSafeInteger(message.turnStartSeq) && run.nativeTurn?.startSeq === message.turnStartSeq
+      || message.sourceRequestId && run.kernelRequestIds?.includes(message.sourceRequestId)));
+  const result = [];
+  let bytes = 0;
+  for (const message of messages.sort((left,right) => left.seq-right.seq)) {
+    const parts = (message.parts ?? []).filter(part => part.type === 'text');
+    if (parts.some(part => typeof part.text !== 'string')) return null;
+    const text = parts.map(part => part.text).join('\n');
+    bytes += Buffer.byteLength(text);
+    if (Buffer.byteLength(text) > 400*1024 || bytes > 1024*1024) return null;
+    if (text.trim()) result.push({sessionId,messageSeq:message.seq,text});
+  }
+  return result;
 }

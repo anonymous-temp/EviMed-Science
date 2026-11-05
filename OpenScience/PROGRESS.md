@@ -1343,3 +1343,20 @@ Also fixed while using them: the acceptance driver let a thrown `fetch` end the 
 2026-07-24 · Next-iteration hardening. (10a) FAERS adr_signal now reports PRR 95% CI + Yates chi-square and an EVANS signal flag. (9) The clinical citation-ledger/references.bib/citation-audit checks are now real cross-checks (ledger↔matrix ids+refs, bib↔cited URLs, audit↔a real audited identifier), still degradable. (8) The numeric audit was narrowed from every-number-every-line to conclusory quantities (unit/statistic adjacent) and now resolves Chinese numerals and spelled-out English cardinals, so 15 / 十五 / "fifteen" agree. (7) Generalized the reusable "sources recorded" check (new citedSourcesRecorded) to comprehensive-drug-evaluation, drug-selection, and off-label-analysis: every report-cited URL must appear in evidence-snapshot.json. (10b) Added optional LLM classification routing (SpecialistClassifier), off by default, that only runs after the deterministic regex router returns no match and never overrides it — a fail-safe augmentation, not a replacement.
 2026-07-24 · Declared the hosted SaaS the production system: the five legacy Java services under `项目代码/` are archived (frozen 2026-07-24), untracked from the repo (`.gitignore`), kept on disk for reference only. Root `README.md`/`CLAUDE.md`/`AGENTS.md` updated to state the rewrite and drop the false "Git submodules" claim. This iteration's server/runtime changes accompany it (evidence-accessibility disclosure permitted in Limitations, phantom private-adapter hints removed, term-normalize misses now warn, clinical safety rules externalized to data, and quality-only gate failures now deliver an unverified package instead of discarding the whole run).
 # Progress
+# 2026-11-05 — Composable virtual-research plugin candidate
+
+Extracted four independently installable research bundles and an optional
+suite on the existing DSH/DeepSeek execution substrate. Hosted native bundles
+reuse extension catalogue admission, leased preparation, immutable generation
+proof, enable/disable and rollback. Matching remains independently owned.
+Original parameter statements and frozen source/result identities now survive
+report read-back; population quality is separate from computation success.
+
+Full PhysioNet and ACTG engine evaluations, versioned sparse-synthesis and
+precision fixes, artifact installation, focused tests and isolated hosted
+lifecycle evidence are recorded in
+`../docs/superpowers/plans/2026-11-05-vcr-professional-plugin-acceptance.md`.
+Synthetic-data fidelity remains limited. Live conversation acceptance and
+exact-candidate CI have separate terminal records; no deployment, main merge,
+production migration or public package-registry publication is implied.
+

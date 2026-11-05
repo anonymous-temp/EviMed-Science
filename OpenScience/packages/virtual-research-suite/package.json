@@ -1,0 +1,28 @@
+{
+  "name": "@evimed/virtual-research-suite",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": "./index.mjs",
+    "./plugin": "./plugin.mjs",
+    "./cordis.patch.yml": "./cordis.patch.yml"
+  },
+  "files": [
+    "index.mjs",
+    "README.md",
+    "plugin.mjs",
+    "cordis.patch.yml"
+  ],
+  "dependencies": {
+    "@evimed/harness-port": "workspace:^0.1.0",
+    "@evimed/research-plugin-runtime": "workspace:^0.1.0"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": [
+        "./cordis.patch.yml"
+      ]
+    }
+  }
+}

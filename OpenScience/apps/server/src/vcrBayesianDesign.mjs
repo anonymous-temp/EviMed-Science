@@ -137,7 +137,7 @@ function premisesOf(design, record) {
     if (row && !(kind === "threshold_calibration" && ["design.prior", "design.priorTreatment", "design.priorControl"].includes(String(entry.key)))
       && !(kind !== "threshold_calibration" && ["design.prior", "design.objective", "design.predictive.futility"].includes(String(entry.key)))) rows.push(row);
   }
-  return finishPremises(rows);
+  return finishPremises(rows, record);
 }
 
 /** @param {Record<string, any>} look @param {number} index @param {number} count */

@@ -220,6 +220,15 @@ export function qualityReportView(quality) {
   const missing = univariate.map((entry) => numeric(entry.missingRateDifference)).filter((value) => value !== null);
   const pairwise = list(object(report.fidelity).pairwise).map((entry) => numeric(object(entry).value)).filter((value) => value !== null);
   const global = object(object(report.fidelity).global);
+  const unavailable = (/** @type {string} */ key, /** @type {string} */ label, /** @type {string} */ message) =>
+    ({ key, label, value: { ...plainValue({}, { source: "synthetic", precision: null }), text: message } });
+  const qualityBands = object(report.bands);
+  const hasRedBand = Object.values(qualityBands).some((band) => band === "red");
+  const designColumns = numeric(global.designColumns), designRows = numeric(global.n);
+  const propensityUnavailable = global.available === false || qualityBands.sPMSE === "unknown" || qualityBands.propensityAuc === "unknown";
+  const unavailableText = global.available === false
+    ? `未计算：设计规模或数据条件不满足${designRows !== null && designColumns !== null ? `（${designRows} 行、${designColumns} 列）` : ""}`
+    : "未计算：原因未记录";
   const disclosure = object(report.disclosure);
   const feasibility = object(object(report.utility).feasibility);
   const specific = Object.values(object(object(report.utility).specific)).map(object);
@@ -255,8 +264,9 @@ export function qualityReportView(quality) {
       tvd.length ? row("tvd", "最大总变异距离", Math.max(...tvd)) : null,
       missing.length ? row("missing", "缺失率的最大差", Math.max(...missing)) : null,
       pairwise.length ? row("pairwise", "相关结构的最大差", Math.max(...pairwise)) : null,
-      row("spmse", "标准化 pMSE", global.sPMSE),
-      row("auc", "区分真假记录的 AUC", global.propensityAuc),
+      propensityUnavailable && numeric(global.sPMSE) === null ? unavailable("spmse", "标准化 pMSE", unavailableText) : row("spmse", "标准化 pMSE", global.sPMSE),
+      propensityUnavailable && numeric(global.propensityAuc) === null ? unavailable("auc", "区分真假记录的 AUC", unavailableText) : row("auc", "区分真假记录的 AUC", global.propensityAuc),
+      hasRedBand ? unavailable("quality_alert", "质量检查提示", "部分质量指标超出提示范围；计算完成不代表质量结论") : null,
     ].filter((entry) => entry !== null) },
     { key: "utility", label: "可用性", rows: [
       row("joint", "入排通过率的相对差", feasibility.jointPassRateRelativeDifference),
@@ -1343,7 +1353,12 @@ function trialPremiseInput(bundle, row) {
   const scenario = row._scenario;
   const stages = object(row._stages);
   const stage = stages.simulation ?? stages.analytic ?? null;
-  const bound = list(bundle.jobs).map(object).filter((job) => object(job.checkpoint).subjectId === scenario.id).flatMap((job) => list(object(job.checkpoint).bound).map(object));
+  const execution = bundle.executions?.get?.(stage?.result?.executionId ?? row._result?.executionId);
+  const selectedJobId = stage?.jobId ?? execution?.jobId;
+  // A later sensitivity run is not the evidence of this immutable result.
+  const bound = list(bundle.jobs).map(object).filter(job => selectedJobId
+    ? job.id === selectedJobId : object(job.checkpoint).subjectId === scenario.id)
+    .flatMap(job => list(object(job.checkpoint).bound).map(object));
   const kind = String(scenario.design ?? object(object(scenario.configuration).design).kind ?? "");
   const supportsAssurance = Boolean(/** @type {Record<string, Record<string, readonly string[]>>} */ (VCR_DESIGN_SUPPORT)["design.assurance"]?.[kind]?.includes(String(scenario.endpointType)));
   const ran = Boolean(stages.simulation || stages.analytic);
@@ -1353,7 +1368,7 @@ function trialPremiseInput(bundle, row) {
     configuration: scenario.configuration,
     diagnostics: stage?.diagnostics ?? {},
     bound,
-    cards: list(bundle.assumptions),
+    cards: [...list(bundle.assumptions), ...[...(bundle.assumptionVersions?.values?.() ?? [])].flat()],
     appliedDefaults: appliedDefaultsOf(scenario, stages),
     // which numbers are in the person's own messages (a conversation's design job froze it): the newest stage that has the record
     personStated: stages.simulation?.diagnostics?.personStated ?? stages.analytic?.diagnostics?.personStated ?? row._result?.diagnostics?.personStated ?? null,

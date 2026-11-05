@@ -148,7 +148,7 @@ function premisesOfFinding(dose, kinds, stated) {
     const row = assumptionRow(String(entry.key), entry.value);
     if (row && row.key !== "dose:design.crm.skeleton" && row.key !== "dose:design.targetToxicity") rows.push(row);
   }
-  return finishPremises(rows);
+  return finishPremises(rows, stated);
 }
 
 /** The most people the designs of a dose-finding result ran with: stated, else the default the engine took (both are in the result). @param {Record<string, any>} dose */
@@ -245,7 +245,7 @@ function selectionPayload(result, staleMark) {
     id: String(result.id), version: Number(result.version), form: "dose_selection", design: "randomized_selection",
     title: "随机分组的剂量选择", question: "每个剂量各多少人，才有把握选到更低而不差的剂量",
     trials: null, askedLabel: "", target: null, doses: [], headline, table: null, differences: null, perDose: [],
-    premises: finishPremises(premises),
+    premises: finishPremises(premises, object(result.diagnostics).personStated),
     limited: first === null && size !== null && numeric(selection.targetProbability) !== null && result.conclusion === "limited"
       ? `在搜索上限内没有哪个人数能让每个情形都达到 ${percent(Number(selection.targetProbability))}，下表是每个剂量 ${plain(size)} 人时的结果。` : null,
     selection: { perArm: size, totalPatients: size === null ? null : size * doses, doses, margin: margin === null ? null : margin * 100, targetProbability: target === null ? null : target * 100, requiredFirst: first, requiredStable: stable, note, scenarios: rows },

@@ -41,6 +41,14 @@
     # that registers nothing and boots.
     - id: evimed-engine-context
       name: '@evimed/dsh-socket/plugins/engine-context'
+    # Request-local authenticated transport for separately installed bundles;
+    # no tools, study or prompt are registered by the provider itself.
+    - id: evimed-research-adapter
+      name: '@evimed/dsh-socket/plugins/research-adapter'
+      disabled: !!js (process.env.EVIMED_VCR_GATEWAY_URL || '') === ''
+      config:
+        gatewayUrl: !!js process.env.EVIMED_VCR_GATEWAY_URL + '/simulate'
+        tokenFile: !!js process.env.EVIMED_MODEL_GATEWAY_TOKEN_FILE
     - id: evimed-web
       name: '@evimed/dsh-socket/plugins/web'
       config:
@@ -53,6 +61,19 @@
 # reload plugins mid-turn; on a laptop there is no source to reload. Neither
 # deployment wants it.
 - id: hmr
+  disabled: true
+
+# These operator-installed native bundles stay inactive unless the verified
+# immutable project generation overrides the exact row in its profile patch.
+- id: evimed-virtual-trial
+  disabled: true
+- id: evimed-virtual-cohort
+  disabled: true
+- id: evimed-virtual-patient
+  disabled: true
+- id: evimed-synthetic-control
+  disabled: true
+- id: evimed-virtual-research-suite
   disabled: true
 
 # The preset every session gets when it does not name one. Since 0.1.7 a

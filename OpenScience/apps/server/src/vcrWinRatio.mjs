@@ -98,7 +98,7 @@ function premisesOf(wr, record) {
   if (trials) rows.push({ key: "trials", label: "模拟的试验次数", value: plain(Number(trials.value)), source: "default", decisive: false });
   const cap = list(wr.assumed).map(object).find((entry) => entry.key === "design.maxPerArm");
   if (cap) rows.push({ key: "cap", label: "搜索样本量的上限", value: `每组 ${plain(Number(cap.value))} 人`, source: "default", decisive: false });
-  return finishPremises(rows);
+  return finishPremises(rows, record);
 }
 
 /**

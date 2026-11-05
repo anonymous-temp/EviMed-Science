@@ -136,7 +136,7 @@ vcr_fidelity_pairwise <- function(real, synth) {
 #' of fitted parameters, so S_pMSE = pMSE / E[pMSE] is comparable across
 #' datasets. `synthpop::utility.gen` computes the same quantity and is the
 #' cross-check.
-vcr_utility_propensity <- function(real, synth, formula = NULL, folds = 5L) {
+vcr_utility_propensity <- function(real, synth, formula = NULL, folds = 5L, size_guard = FALSE) {
   vars <- intersect(names(real), names(synth))
   combined <- rbind(
     cbind(real[, vars, drop = FALSE], ..syn.. = 0L),
@@ -145,6 +145,28 @@ vcr_utility_propensity <- function(real, synth, formula = NULL, folds = 5L) {
   combined <- combined[stats::complete.cases(combined), , drop = FALSE]
   N <- nrow(combined)
   cshare <- mean(combined$..syn..)
+  if (isTRUE(size_guard)) {
+    # Default treatment-contrast pairwise design: intercept, main-effect
+    # columns, then the product of their column counts for each pair. Count
+    # levels from all complete rows before any dense model matrix is built.
+    widths <- vapply(vars, function(nm) {
+      x <- combined[[nm]]; distinct <- length(unique(x))
+      if (is.factor(x) || is.character(x) || is.logical(x)) max(0L, distinct - 1L) else 1L
+    }, integer(1))
+    constant <- vars[vapply(vars, function(nm) length(unique(combined[[nm]])) < 2L, logical(1))]
+    invalid <- vars[vapply(vars, function(nm) is.numeric(combined[[nm]]) && any(!is.finite(combined[[nm]])), logical(1))]
+    w <- as.double(widths)
+    k <- 1 + sum(w) + (sum(w)^2 - sum(w^2)) / 2
+    cells <- as.double(N) * k
+    reasons <- c(if (!is.null(formula)) "custom_formula_not_guarded", if (N == 0L || length(unique(combined$..syn..)) < 2L) "outcome_not_estimable",
+                 if (length(constant)) "constant_predictor", if (length(invalid)) "nonfinite_predictor",
+                 if (k > 512) "design_columns_limit", if (cells > 2000000) "design_cells_limit",
+                 if (floor(N * (folds - 1) / folds) < 10 * k) "insufficient_training_rows_per_parameter")
+    if (length(reasons)) return(list(available=FALSE, reason=as.list(reasons), n=N, designColumns=k, designCells=cells,
+      limits=list(maxDesignColumns=512L,maxDesignCells=2000000L,minTrainingRowsPerParameter=10L,folds=folds),
+      constantPredictors=as.list(constant), nonfinitePredictors=as.list(invalid),
+      pMSE=NA_real_, expectedPMSE=NA_real_, sPMSE=NA_real_, propensityAuc=NA_real_, parameters=NA_integer_, syntheticShare=cshare))
+  }
   form <- formula %||% vcr_model_formula("..syn..", vars, pairwise = TRUE)
   fit <- suppressWarnings(stats::glm(form, data = combined, family = stats::binomial()))
   p <- as.vector(stats::fitted(fit))
@@ -470,12 +492,12 @@ vcr_analysis_from_spec <- function(spec) {
 #' `inferenceRisk` band is the worst attribute's lower confidence limit on the risk, and never green while its point estimate is past the yellow bound.
 vcr_quality_report <- function(train, synth, holdout = NULL, constraints = NULL,
                                analyses = list(), criteria = NULL,
-                               generator = list(), tstr_outcome = NULL, copies = NULL, inference = NULL) {
+                               generator = list(), tstr_outcome = NULL, copies = NULL, inference = NULL, propensity_size_guard = FALSE) {
   bands <- vcr_quality_bands()
   release <- if (length(copies) > 1L) do.call(rbind, copies) else synth
   uni <- vcr_fidelity_univariate(train, synth)
   pair <- vcr_fidelity_pairwise(train, synth)
-  prop <- tryCatch(vcr_utility_propensity(train, synth), error = function(e) list(sPMSE = NA_real_, propensityAuc = NA_real_, error = "propensity model could not be fitted"))
+  prop <- tryCatch(vcr_utility_propensity(train, synth, size_guard = propensity_size_guard), error = function(e) list(sPMSE = NA_real_, propensityAuc = NA_real_, error = "propensity model could not be fitted"))
   viol <- vcr_constraint_violations(release, constraints)
   rare <- vcr_rare_combinations(train, synth)
 

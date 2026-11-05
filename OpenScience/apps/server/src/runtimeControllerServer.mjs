@@ -8,7 +8,7 @@ import { createDocumentRenderController } from "./documentRenderController.mjs";
 import { createVcrIntakeController } from "./vcrIntakeController.mjs";
 import { createSkillValidationController } from "./skillValidationController.mjs";
 import { verifyExtensionGeneration, extensionGenerationRoot } from "./extensionGenerationService.mjs";
-import { canonicalJson, isolatedToolRowIsAdmitted } from "@evimed/domain";
+import { canonicalJson, isolatedToolRowIsAdmitted, nativeResearchRowIsAdmitted } from "@evimed/domain";
 import { verifyPersonalSkillGeneration } from "./personalSkillGenerationService.mjs";
 import { validatePluginConfig } from "./pluginService.mjs";
 import { spawn, spawnSync } from "node:child_process";
@@ -606,7 +606,11 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
       const legacy = extension.projection.plugins.find(plugin => plugin.compatibility === 'legacy-citation-v1');
       if (legacy && canonicalJson({ revision: legacy.configRevision, enabled: legacy.enabled, settings: legacy.settings }) !== canonicalJson(pluginConfig)) throw controllerFailure(400, 'extension_contract_invalid', 'Selected citation configuration does not match.');
       const external = extension.projection.plugins.filter(plugin => plugin.compatibility !== 'legacy-citation-v1');
-      if (!extensionTools || external.length > 1 || external.some(plugin => !isolatedToolRowIsAdmitted(plugin, extensionTools.descriptors.get(plugin.extensionId)))) {
+      const isolated = external.filter(plugin => plugin.executionClass !== 'managed-native');
+      const native = external.filter(plugin => plugin.executionClass === 'managed-native');
+      if (!extensionTools || isolated.length > 1 || native.length > 5 || new Set(external.map(plugin => plugin.extensionId)).size !== external.length
+        || isolated.some(plugin => !isolatedToolRowIsAdmitted(plugin, extensionTools.descriptors.get(plugin.extensionId)))
+        || native.some(plugin => !nativeResearchRowIsAdmitted(plugin, extensionTools.nativeBundles?.get(plugin.extensionId)))) {
         throw controllerFailure(400, 'extension_contract_invalid', 'Selected tool bridge is unavailable.');
       }
     }
@@ -620,6 +624,7 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
     const plan = buildRuntimeLaunchPlan(config, project, port, { modelGatewayProfile: payload.modelGatewayProfile ?? "", contextGeneration, capsuleGatewayUrl, revisionGatewayUrl, publicSourceGatewayUrl, memoryGatewayUrl, attendancePublicKey, geoSkills, pluginConfig, platformSkillGeneration: platform?.reference ?? null, disabledPlatformSkills: personal?.platformSkills?.disabled ?? [], disabledClientBundles: personal?.platformSkills?.disabledPlugins ?? [],
       personalSkillGeneration: personal?.reference ?? null, personalSkillImageId: personal?.identity.baseRuntimeImageDigest ?? null, extensionGeneration: extension?.reference ?? null, extensionImageId: extension?.identity.baseRuntimeImageDigest ?? null });
     plan.platformSkillGeneration = platform;
+    plan.extensionGeneration = extension;
     if (plan.releaseProvenance) logUnverifiedRelease(project, plan.releaseProvenance);
     await cleanupRuntime(project);
     reserveRuntimeCapacity(project);

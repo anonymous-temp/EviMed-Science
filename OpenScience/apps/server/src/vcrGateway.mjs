@@ -2608,7 +2608,7 @@ function poolingSummary(result, about) {
  * @param {{ vcr: { service: any, store: any, jobs?: any, orchestrator?: any, evidence?: any, evidenceStore?: any, matchStore?: any,
  *   matching?: any, patientTrials?: any, seal?: any, dataPlaneSeam?: any, documents?: any, knowledge?: any, patientContext?: any, dataIntake?: any } | null,
  *   report?: (code: string) => void, budgetMs?: number, resolveStudyConversation?: ((study:any,options:any)=>Promise<any>)|null, resolveInvocation?: ((identity:any,header:any,operation:string,body:any)=>Promise<any>)|null, readProducerRun?: ((study:any,runId:string)=>Promise<any>)|null,
- *   readPersonMessages?: ((study:any,sessionId:string)=>Promise<readonly string[] | null>)|null }} dependencies
+ *   readPersonMessages?: ((study:any,sessionId:string)=>Promise<readonly import("./vcrPersonStated.mjs").HumanParameterMessage[] | null>)|null }} dependencies
  */
 export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = () => {}, budgetMs = answerBudgetMs, readProducerRun = null, readPersonMessages = null, resolveInvocation = null, resolveStudyConversation = null }) {
   /** @type {Map<string, { until: number, count: number }>} */
@@ -2813,7 +2813,7 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
             }
             const checked = await vcr.jobs.validate({ kind: asked.kind, scenario, inputs: asked.inputs, replicates: asked.replicates, studyId: study.id });
             // The papers a call names are read for their shape here and written when the job starts.
-            const sources = asked.sources == null ? [] : sourcesAreForKind(asked.kind) ? checkSourceEntries(asked.sources, scenario) : [sourcesNotForKind()];
+            const sources = asked.sources == null ? [] : sourcesAreForKind(asked.kind) ? checkSourceEntries(Array.isArray(asked.sources) ? asked.sources.filter(entry => entry?.origin !== "user") : asked.sources, scenario) : [sourcesNotForKind()];
             return sources.length ? { ...checked, sources } : checked;
           }
           if (request.action === "start") {
@@ -2846,7 +2846,11 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
             ? poolingSummary(result, object(await vcr.store.one("SELECT checkpoint FROM evimed_vcr.jobs WHERE id = $1", [job.id]).then((/** @type {any} */ row) => row?.checkpoint))) : null;
           // What a run reads of a result is what a page shows a member, less
           // its small cells (contract §4): the answer passes the boundary once.
-          const answer = { action: "status", jobId: job.id, state: job.state, progress: job.progress, ...appliedOf(job),
+          const answer = { action: "status", jobId: job.id, state: job.state, progress: job.progress,
+            method: job.method, methodVersion: job.methodVersion, ...appliedOf(job),
+            request: { job: { method: job.method, methodVersion: job.methodVersion, scenario: job.scenario, inputs: job.inputs ?? [] },
+              sources: job.checkpoint?.sourceAssertions ?? [], sourceChecks: job.checkpoint?.sourceReport ?? [],
+              bound: job.checkpoint?.bound ?? [], parameterProvenance: job.checkpoint?.personStated ?? null },
             cpuSeconds: job.cpuSecondsUsed, error: job.error, result, ...(pooling ? { pooling } : {}),
             ...(job.state === "awaiting_budget" ? { awaitingBudget: true, message: AWAITING_BUDGET_MESSAGE } : {}) };
           const safe = withJobEntry(await vcr.service.forModel(answer, { projection: "job_result" }),
@@ -2926,7 +2930,7 @@ const sourcesNotForKind = () => ({ field: "", state: "assumption", because: "kin
  * @param {{ kind: string, scenario: Record<string, any>, inputs: unknown[], seed: number | null, replicates: number | null,
  *   cpuSecondsLimit: number | null, subjectId: string | null, reconstructionResultId?: string | null, selection?: any, modelId?:string|null, modelVersion?:string|null,
  *   sources?: unknown }} request
- * @param {{ personMessages?: (() => Promise<readonly string[] | null>) | null }} [context]
+ * @param {{ personMessages?: (() => Promise<readonly import("./vcrPersonStated.mjs").HumanParameterMessage[] | null>) | null }} [context]
  */
 async function startJob(vcr, study, request, { personMessages = null } = {}) {
   if (Object.hasOwn(VCR_LONGITUDINAL_JOBS,request.kind)) {
@@ -3100,25 +3104,19 @@ async function startJob(vcr, study, request, { personMessages = null } = {}) {
   if (["network_meta", "dose_response_meta", "effect_shrinkage"].includes(request.kind) && !detail.subjectId) detail = { ...detail, subjectId: vcrSynthesisSubjectId(request.kind, scenario) };
   if (subject) {
     detail = { ...detail, ...subject.detail };
-    // The stage in flight is the answer to the scenario it froze, and to no other: a start that states another number is another job.
-    const running = await vcr.orchestrator?.inFlightStage?.(study.id, subject.detail);
-    if (running && vcrJobFroze(running.scenario, scenario)) {
-      return { action: "start", jobId: running.id, state: running.state, progress: running.progress ?? {}, alreadyRunning: true,
-        subject: { kind: subject.objectKind, id: String(subject.row.id), version: Number(subject.row.version), ...(subjectName(subject.row) ? { name: subjectName(subject.row) } : {}) },
-        message: "这个对象的这一步平台已经在算了：读这个作业的进度和结果就行，不必再排一个。" };
-    }
   }
   // The papers the call names (`sources`): the platform writes the evidence item and the card of each and records which card each number of
   // this job came from, so the result page can say 文献 and name the paper. A failure here costs that premise and nothing else.
   /** @type {Array<Record<string, any>>} */
   let sourceReport = [];
-  if (request.sources != null) {
+  const literatureSources = Array.isArray(request.sources) ? request.sources.filter(entry => entry?.origin !== "user") : request.sources;
+  if (literatureSources != null && (!Array.isArray(literatureSources) || literatureSources.length)) {
     if (!sourcesAreForKind(request.kind)) sourceReport = [sourcesNotForKind()];
     else if (!vcr.evidence?.addEvidenceItem || !vcr.evidenceStore) {
       sourceReport = [{ field: "", state: "assumption", because: "evidence_unavailable", message: "证据参数化未接入本部署：来源没有记下，这些前提仍是假设，计算照常。" }];
     } else {
       const carried = await carrySourceEntries({
-        raw: request.sources, scenario, ...sourceWriters({ store: vcr.store, service: vcr.service, study, evidence: vcr.evidence, evidenceStore: vcr.evidenceStore }),
+        raw: literatureSources, scenario, ...sourceWriters({ store: vcr.store, service: vcr.service, study, evidence: vcr.evidence, evidenceStore: vcr.evidenceStore }),
       }).catch(() => ({ bound: [], report: [{ field: "", state: "assumption", because: "unavailable", message: "来源暂时没能记下；这些前提仍是假设，计算照常。" }] }));
       sourceReport = carried.report;
       if (carried.bound.length) detail = { ...detail, bound: [...(Array.isArray(detail.bound) ? detail.bound : []), ...carried.bound] };
@@ -3135,11 +3133,41 @@ async function startJob(vcr, study, request, { personMessages = null } = {}) {
       detail = { ...detail, bound: [...standing.filter((entry) => !named.has(entry.path)), ...(Array.isArray(detail.bound) ? detail.bound : [])] };
     }
   }
-  // Which numbers of a design are in the person's own messages (the premise word 「你给的数据」 means that and a table the person supplied, and
-  // nothing a model chose): decided here, in code, frozen with the job. A conversation whose messages cannot be read records that it could not.
-  if (personMessages && sourcesAreForKind(request.kind)) detail = { ...detail, personStated: vcrPersonStated(scenario, await personMessages()) };
-  const scenarioHash = createHash("sha256").update(canonicalScenarioJson({ scenario, reconstruction: request.reconstructionResultId ?? null,
-    ...(Array.isArray(detail.bound) && detail.bound.length ? { bound: detail.bound } : {}) })).digest("hex").slice(0, 16);
+  // Parameter meaning is explicitly bound by the agent; original human source membership is checked here.
+  // Freeze even an unavailable source, so new results cannot inherit historical given labels.
+  if (sourcesAreForKind(request.kind)) detail = { ...detail, personStated: vcrPersonStated(scenario, personMessages ? await personMessages() : null, request.sources) };
+  if (Array.isArray(request.sources)) {
+    const record = object(detail.personStated);
+    sourceReport.push(...request.sources.filter(entry => entry?.origin === "user").slice(0, 200).map(entry => ({
+      field: entry.field, state: Array.isArray(record.paths) && record.paths.includes(entry.field) ? "source_checked_interpretation_asserted" : "assumption",
+      message: Array.isArray(record.paths) && record.paths.includes(entry.field)
+        ? "原文来源已核对，参数含义由模型对应；对应仍是假设，可查看原文、单位与上下文。" : "原始提问或参数绑定未能核对，这个前提仍是假设，计算照常。",
+    })));
+  }
+  const sourceIdentity = createHash("sha256").update(canonicalScenarioJson({
+    sources: request.sources ?? null, bound: detail.bound ?? [], personStated: detail.personStated ?? null,
+  })).digest("hex");
+  detail = {...detail, sourceIdentity,
+    ...(Array.isArray(request.sources) && request.sources.length ? { sourceAssertions: request.sources } : {}),
+    ...(sourceReport.length ? { sourceReport } : {})};
+  if (subject) {
+    const running = await vcr.orchestrator?.inFlightStage?.(study.id, subject.detail);
+    const prior = object(running?.checkpoint);
+    // Older jobs without source identity are reusable only when neither side
+    // carries source evidence; never guess equality from matching numbers.
+    const noSources = request.sources == null && !detail.bound?.length && !detail.personStated?.readable;
+    const sameSources = prior.sourceIdentity === sourceIdentity || !prior.sourceIdentity && noSources
+      && !prior.bound?.length && !prior.personStated?.readable;
+    if (running && vcrJobFroze(running.scenario, scenario) && sameSources) {
+      return { action: "start", jobId: running.id, state: running.state, progress: running.progress ?? {}, alreadyRunning: true,
+        ...appliedOf(running), ...(sourceReport.length ? {sources:sourceReport} : {}),
+        subject: { kind: subject.objectKind, id: String(subject.row.id), version: Number(subject.row.version), ...(subjectName(subject.row) ? { name: subjectName(subject.row) } : {}) },
+        message: "这个对象的这一步平台已经在算了：读这个作业的进度和结果就行，不必再排一个。" };
+    }
+  }
+  const scenarioHash = createHash("sha256").update(canonicalScenarioJson({ scenario, sourceIdentity, reconstruction: request.reconstructionResultId ?? null,
+    ...(Array.isArray(detail.bound) && detail.bound.length ? { bound: detail.bound } : {}),
+    ...(detail.personStated ? { personStated: detail.personStated } : {}) })).digest("hex").slice(0, 16);
   const { job, notice } = await vcr.jobs.enqueue({
     studyId: study.id, userId: study.userId, kind: request.kind, scenario, inputs, ...(derived.length ? { derived } : {}),
     ...(population.derived.length ? { internal: true } : {}),
@@ -3180,7 +3208,7 @@ async function startJob(vcr, study, request, { personMessages = null } = {}) {
  * The fields the platform filled in because the scenario stated none, as the call's answer lists them (`applied`: the field and
  * the value it took — a dropout of 0, an alpha of 0.025). Frozen with the job when it was queued (`vcrAppliedDefaults`), so a run
  * that reads it says the values the computation really used; nothing is listed for a job that took no default.
- * @param {any} job @returns {{ applied?: Array<{ field: string, value: unknown }>, normalized?: Array<{ field: string, value: unknown, took: string }> }}
+ * @param {any} job @returns {{ applied?: Array<{ field: string, value: unknown }>, normalized?: Array<{ field: string, value: unknown, took: string }>, parameterProvenance?: Record<string, any> }}
  */
 function appliedOf(job) {
   const taken = Array.isArray(job?.checkpoint?.appliedDefaults) ? job.checkpoint.appliedDefaults : [];
@@ -3188,7 +3216,8 @@ function appliedOf(job) {
     .map((/** @type {any} */ entry) => ({ field: entry.path, value: entry.value }));
   // Keys the platform left out because they only described what the method does anyway (`vcrNormalizeScenarioKeys`): said, not hidden.
   const left = Array.isArray(job?.checkpoint?.normalizedKeys) ? job.checkpoint.normalizedKeys.filter((/** @type {any} */ entry) => entry && typeof entry.field === "string").slice(0, 12) : [];
-  return { ...(applied.length ? { applied } : {}), ...(left.length ? { normalized: left } : {}) };
+  return { ...(applied.length ? { applied } : {}), ...(left.length ? { normalized: left } : {}),
+    ...(job?.checkpoint?.personStated ? { parameterProvenance: job.checkpoint.personStated } : {}) };
 }
 
 /** What a run is told of a job only a person can release: it is not coming, so the run does not wait for it or ask again. */

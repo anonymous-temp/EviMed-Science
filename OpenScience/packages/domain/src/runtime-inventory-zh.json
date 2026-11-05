@@ -317,7 +317,12 @@
     "bundles": {
       "@deepseek-ai/dsh-base": "The kernel itself: sessions, storage, the model connection, sandbox, tools. Its rows are accounted for one by one under plumbing.rows, so a row a kernel update adds is a decision made here.",
       "@deepseek-ai/dsh-web-app": "The kernel's web application: its host process and the conversation page. Rows accounted for one by one under plumbing.rows.",
-      "@evimed/dsh-socket": "The platform's own composition for the kernel (the evimed-universal preset and its plugins). Its rows are listed under the items they serve, or under plumbing.rows."
+      "@evimed/dsh-socket": "The platform's own composition for the kernel (the evimed-universal preset and its plugins). Its rows are listed under the items they serve, or under plumbing.rows.",
+      "@evimed/virtual-trial": "The optional trial-design professional bundle is preinstalled but disabled. Project selection and the existing extension catalogue own its activation and version, rather than the fixed conversation inventory.",
+      "@evimed/virtual-cohort": "The optional cohort professional bundle is preinstalled but disabled. Project selection and the existing extension catalogue own its activation and version, rather than the fixed conversation inventory.",
+      "@evimed/virtual-patient": "The optional virtual-patient professional bundle is preinstalled but disabled. Project selection and the existing extension catalogue own its activation and version, rather than the fixed conversation inventory.",
+      "@evimed/synthetic-control": "The optional comparator professional bundle is preinstalled but disabled. Project selection and the existing extension catalogue own its activation and version, rather than the fixed conversation inventory.",
+      "@evimed/virtual-research-suite": "The optional suite discovers selected professional bundles without installing or activating siblings. The existing extension catalogue owns its project selection and version; it is disabled in the base composition."
     },
     "rows": [
       {
@@ -509,6 +514,7 @@
           "evimed-seam-probe",
           "evimed-evidence-store",
           "evimed-engine-context",
+          "evimed-research-adapter",
           "preset-evimed-universal"
         ]
       }

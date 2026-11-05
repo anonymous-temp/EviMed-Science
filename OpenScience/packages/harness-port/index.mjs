@@ -1596,7 +1596,7 @@ export async function probeSandbox(ctx, required) {
   }
 }
 
-export { registerPluginProbe, registerCitationConfiguration, installedCitationVersion, registerExtensionConfiguration, verifyExtensionAgent, extensionInvocationFacts } from './src/pluginProbe.mjs'
+export { registerPluginProbe, registerCitationConfiguration, installedCitationVersion, registerExtensionConfiguration, registerResearchConfiguration, verifyResearchAgent, verifyExtensionAgent, extensionInvocationFacts } from './src/pluginProbe.mjs'
 
 // The compaction settings both sides of the container boundary derive, and the
 // request-size guard's measurement and trigger. The compaction itself is the

@@ -934,6 +934,7 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
     criteria: { t: 'rules', allowEmpty: true },
     analyses: ANALYSES,
     tstrOutcome: COLUMN,
+    imputationRules: array(object({ valueColumn: req(COLUMN), indicatorColumn: req(COLUMN), imputedValue: req(number()), missingValue: req(integer({ min: 1, max: 1 })) }), { min: 1, max: 200 }),
     inference: SYNTHETIC_INFERENCE,
     privacy: SYNTHETIC_PRIVACY,
   }),

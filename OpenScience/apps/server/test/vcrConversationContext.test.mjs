@@ -13,6 +13,24 @@ function fixture({ child = false, input = { what: 'study' }, pending = true } = 
     ? { child: true, parentSessionId: 'root', runId: 'run' } : { runId: 'run' } };
 }
 const header = sessionId => JSON.stringify({ v: 1, sessionId, callId: 'call' });
+test('independent research plugin calls retain pending-call proof, domain and conversation scope', async () => {
+  const input = { method: 'design.analytic', scenario: { truth: { hazardRatio: 0.75 } } };
+  const f = { ...fixture({ input }), assertResearchPluginSelection: async id => assert.equal(id, 'virtual-trial') };
+  const transcript = async (_project, sessionId) => ({ sessionId, truncated: false, turns: [{ startSeq: 1, end: null }],
+    messages: [{ turnStartSeq: 1, role: 'assistant', parts: [{ type: 'tool', callId: 'call', status: 'pending', tool: 'virtual_trial_start', input }] }] });
+  f.runtimeManager.sessionTranscript = transcript;
+  const body = { action: 'start', kind: 'design_analytic', scenario: input.scenario };
+  assert.equal((await verifyVcrInvocation({ ...f, header: header('root'), operation: 'simulate', body })).rootSessionId, 'root');
+  await assert.rejects(verifyVcrInvocation({ ...f, assertResearchPluginSelection: null, header: header('root'), operation: 'simulate', body }), { code: 'vcr_invocation_unavailable' });
+  await assert.rejects(verifyVcrInvocation({ ...f, assertResearchPluginSelection: async () => { throw Object.assign(new Error('Disabled selection'), { code: 'extension_access_denied' }); }, header: header('root'), operation: 'simulate', body }), { code: 'extension_access_denied' });
+  await assert.rejects(verifyVcrInvocation({ ...f, header: header('root'), operation: 'simulate', body: { ...body, scenario: {} } }), { code: 'vcr_invocation_unavailable' });
+  f.runtimeManager.sessionTranscript = async (project, id) => {
+    const result = await transcript(project, id);
+    result.messages[0].parts[0].input = { ...input, method: 'comparator.evalue' };
+    return result;
+  };
+  await assert.rejects(verifyVcrInvocation({ ...f, header: header('root'), operation: 'simulate', body: { action: 'start', kind: 'evalue', scenario: input.scenario } }), { code: 'vcr_invocation_unavailable' });
+});
 test('native VCR invocation resolves a child to its actual root run', async () => {
   const result = await verifyVcrInvocation({ ...fixture({ child: true }), header: header('child'), operation: 'read', body: { what: 'study' } });
   assert.equal(result.rootSessionId, 'root'); assert.equal(result.runId, 'run'); assert.equal(result.sessionId, 'child');

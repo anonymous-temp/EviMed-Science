@@ -16,7 +16,7 @@ import http from "node:http";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { gzipSync } from "node:zlib";
-import { GENE_EXPRESSION_LIMITS, RUNTIME_LOCK_REASONS, RUN_CONTEXT_PROTOCOL, briefFileForSession, isolatedToolRowIsAdmitted, runTimeBudgetMinutes, workspaceLayout } from "@evimed/domain";
+import { GENE_EXPRESSION_LIMITS, RUNTIME_LOCK_REASONS, RUN_CONTEXT_PROTOCOL, briefFileForSession, isolatedToolRowIsAdmitted, nativeResearchRowIsAdmitted, runTimeBudgetMinutes, workspaceLayout } from "@evimed/domain";
 import { compactionConfigFromEnv, compactionRuntimeEnv, nativeInputText } from "@evimed/harness-port";
 import { appendAttendanceReceipt, attendanceInputDigest, attendanceReceiptsFileFor, runContextAuthorityPublicKey, signRunContextAuthority, verifyRunContextAuthority } from "@evimed/harness-port/run-context-authority";
 import {
@@ -2232,6 +2232,7 @@ export function dshProfileInput(config, project, plan, model, workloadTokenPath)
   // is the only thing about the model provider that differs.
   const gateways = plan.gateways ?? null;
   const capsuleGatewayUrl = gateways ? String(gateways.capsule ?? "") : capsuleGatewayProviderUrl(config);
+  const mcpEnvironment = evimedMcpEnvironment(config, project, plan, { workloadTokenPath });
   return {
     modelGatewayUrl: plan.modelGatewayUrl ?? (gateways ? String(gateways.model) : modelGatewayProviderUrl(config)),
     model,
@@ -2242,7 +2243,7 @@ export function dshProfileInput(config, project, plan, model, workloadTokenPath)
     maxOutputTokens: Number(config.runtimeMaxOutputTokens) || 65_536,
     sessionsDir: "/runtime/dsh-home/sessions",
     mcpServerPath: "/opt/evimed/mcp/evimed-research/server.py",
-    mcpEnvironment: evimedMcpEnvironment(config, project, plan, { workloadTokenPath: workloadTokenPath }),
+    mcpEnvironment,
     // Empty when no sidecar is deployed, and then no row is emitted -- a
     // deployment without one behaves exactly as it did before.
     toolUniverseUrl: String(config.toolUniverseMcpUrl ?? "").trim()
@@ -2254,6 +2255,8 @@ export function dshProfileInput(config, project, plan, model, workloadTokenPath)
     // plan: the methods the container mounts and the methods the profile names
     // are one directory or the feature is dark in whichever half is wrong.
     capsuleMethodsDir: capsuleMethodsRuntimePath(plan),
+    vcrGatewayUrl: mcpEnvironment.EVIMED_VCR_GATEWAY_URL ?? "",
+    nativeResearchPlugins: plan.extensionGeneration?.projection?.plugins?.filter(plugin => plugin.executionClass === "managed-native") ?? [],
     extensionProjectionFile: plan.extensionGeneration?.reference ? "/opt/evimed/extensions/projection.json" : "",
     extensionGatewayUrl: plan.extensionGeneration?.reference ? extensionGatewayEndpointUrl(config) : "",
     personalSkillsDir: plan.personalSkillsRuntimeDir ?? PERSONAL_SKILLS_RUNTIME_DIR,
@@ -2949,6 +2952,7 @@ export function buildRuntimeLaunchPlan(config, project, port, {
           capsuleMethodsDir: capsuleMethodsRuntimeDir,
           extensionProjectionFile: extensionReference ? "/opt/evimed/extensions/projection.json" : "",
           extensionGatewayUrl: extensionReference ? extensionGatewayEndpointUrl(config) : "",
+          vcrGatewayUrl: vcrAudienceAllows(config, { id: String(project.userId ?? "") }) ? vcrGatewayProviderUrl(config) : "",
           personalSkillsDir: PERSONAL_SKILLS_RUNTIME_DIR,
           disabledPlatformSkills,
           disabledClientBundles: [...new Set([...disabledClientBundles, ...(config.runtimeAnnotationEnabled === false ? ['annotation'] : []), ...(config.runtimeMermaidEnabled === false ? ['mermaid'] : [])])],
@@ -3671,6 +3675,7 @@ export class RuntimeManager {
     this.extensionGenerationOverrides = new Map();
     /** Deployment-owned descriptor tuples; no development artifact defaults. */
     this.extensionArtifacts = new Map();
+    this.extensionNativeBundles = new Map();
     /**
      * The account's memory capsules — the seam this manager reads a project's
      * approved work-style methods through.
@@ -7295,11 +7300,15 @@ export class RuntimeManager {
     } else if (personal.pins.length) throw new HttpError(400, 'extension_contract_invalid', 'Personal generation pins require selected bytes.');
     return { joined: true, manifestDigest: 'sha256:' + createHash('sha256').update(canonicalJson(candidate)).digest('hex') };
   }
-  /** One native bridge row carries the selected isolated tool, and it must be exactly what the deployment admitted: the
+  /** One isolated tool and the fixed native research rows must be exactly what the deployment admitted: the
    * descriptor's artifact digest, package integrity, coordinate and the class's permission profile. Which repository that
    * is, is the deployment's protected allow-list and not a name written here. @param {any[]} external projection rows that are not the citation baseline */
   assertSelectedBridge(external) {
-    if (external.length > 1 || external.some(plugin => !isolatedToolRowIsAdmitted(plugin, this.extensionArtifacts.get(plugin.extensionId)))) {
+    const isolated = external.filter(plugin => plugin.executionClass !== 'managed-native');
+    const native = external.filter(plugin => plugin.executionClass === 'managed-native');
+    if (isolated.length > 1 || native.length > 5 || new Set(external.map(plugin => plugin.extensionId)).size !== external.length
+      || isolated.some(plugin => !isolatedToolRowIsAdmitted(plugin, this.extensionArtifacts.get(plugin.extensionId)))
+      || native.some(plugin => !nativeResearchRowIsAdmitted(plugin, this.extensionNativeBundles.get(plugin.extensionId)))) {
       throw new HttpError(400, 'extension_contract_invalid', 'The selected bridge is unsupported.');
     }
   }

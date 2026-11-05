@@ -46,7 +46,7 @@ import { createResultReplayRoutes } from "./resultReplayRoutes.mjs";
 import { readVcrBenchmarkFile } from './vcrBenchmarkFile.mjs';
 import { createVcrPatientContext } from './vcrPatientContext.mjs';
 import { VcrConversationCompletions, createVcrCompletionResolver } from './vcrConversationCompletions.mjs';
-import { verifyVcrInvocation } from './vcrExecutionContext.mjs';
+import { verifyVcrInvocation, vcrOriginalHumanMessages } from './vcrExecutionContext.mjs';
 import { createResultGateway, RESULT_GATEWAY_PATH } from "./resultGateway.mjs";
 import { DataSemanticsService } from "./dataSemanticsService.mjs";
 import { createDataSemanticsGateway, DATA_SEMANTICS_GATEWAY_PATH } from "./dataSemanticsGateway.mjs";
@@ -6062,19 +6062,22 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     resolveInvocation: async (identity, header, operation, body) => {
       const project = await sourceProject(identity);
       return verifyVcrInvocation({ header, operation, body, project, runtimeManager,
+        assertResearchPluginSelection: async pluginId => {
+          if (!hostedExtensions) throw new HttpError(403, 'extension_access_denied', 'The research extension is unavailable.');
+          await hostedExtensions.generations.operationIdentity({ id: String(identity.userId) }, project.id, pluginId, identity.jti);
+        },
         resolveSession: (ownedProject, sessionId) => runtimeEventPump.sessionOwner(ownedProject, sessionId),
         runs: async () => (await agentRuns.list(project)).filter(run=>run.status==="running"),adoptionWaitMs:config.vcrRunAdoptionWaitMs,readBenchmark:readVcrBenchmarkFile,authenticatedUserId:String(identity.userId) });
     },
     report: (code) => process.stderr.write(`vcr gateway: ${code}\n`),
-    // What the person typed in this conversation: the question of each turn of theirs (the ledger keeps its first 160 characters) and what they steered
-    // into a running one. A turn the platform started (a schedule, the study's own programme, a continuation) is not theirs. null when it cannot be read.
+    // Full authenticated originals, bounded to the native root conversation.
     readPersonMessages: async (study, sessionId) => {
       const project = await sourceProject({ userId: study.userId, projectId: study.projectId });
-      const platformReason = /^(autopilot|vcr|geo|loopx)/;
-      return (await agentRuns.conversationRuns(project, sessionId))
-        .filter(run => run.automated !== true && !platformReason.test(String(run.effectiveRouteReason ?? "")))
-        .flatMap(run => [run.question, ...(Array.isArray(run.steers) ? run.steers.map((/** @type {any} */ steer) => steer?.text) : [])])
-        .filter((/** @type {unknown} */ text) => typeof text === "string" && text.trim());
+      const [transcript, runs] = await Promise.all([
+        runtimeManager.sessionTranscript(project, sessionId, { wake: false, maxPages: 4 }),
+        agentRuns.conversationRuns(project, sessionId),
+      ]);
+      return vcrOriginalHumanMessages({ sessionId, transcript, runs });
     },
     readProducerRun: async (study, runId) => {
       const project = await sourceProject({ userId: study.userId, projectId: study.projectId });

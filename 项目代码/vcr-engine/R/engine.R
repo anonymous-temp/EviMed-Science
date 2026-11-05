@@ -411,11 +411,18 @@ vcr_run_job <- function(job, output_dir = NULL, cancel_file = NULL, progress = N
 #' Write a table and return its manifest row. `location` is the file name
 #' inside the job's output directory, not an absolute path: the result travels
 #' to places that must not learn where the engine keeps its files.
-vcr_write_table <- function(df, name, output_dir) {
+vcr_write_table <- function(df, name, output_dir, roundtrip_numeric = FALSE) {
   if (is.null(output_dir)) return(NULL)
   dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
   file <- paste0(name, ".csv")
   path <- file.path(output_dir, file)
+  if (isTRUE(roundtrip_numeric)) {
+    # CSV's default 15 digits do not round-trip all IEEE doubles. Restrict the
+    # 17-digit representation to the method version that owns this contract.
+    for (nm in names(df)) if (is.double(df[[nm]]) && !is.factor(df[[nm]])) {
+      x <- df[[nm]]; df[[nm]] <- ifelse(is.na(x), NA_character_, sprintf("%.17g", x))
+    }
+  }
   utils::write.csv(df, path, row.names = FALSE, na = "")
   list(name = name, location = file, sha256 = vcr_file_sha256(path), rows = nrow(df))
 }
@@ -827,18 +834,24 @@ vcr_job_population_literature <- function(job, output_dir = NULL, ...) {
 }
 
 #' Every copy scored on its own (the table of `qualityByCopy`).
-.vcr_quality_by_copy <- function(train, copies, holdout, constraints) {
+.vcr_quality_by_copy <- function(train, copies, holdout, constraints, propensity_size_guard = FALSE) {
   do.call(rbind, lapply(seq_along(copies), function(k) {
     uni <- vcr_fidelity_univariate(train, copies[[k]])
-    pr <- tryCatch(vcr_utility_propensity(train, copies[[k]]), error = function(e) list(sPMSE = NA_real_, propensityAuc = NA_real_))
+    pr <- tryCatch(vcr_utility_propensity(train, copies[[k]], size_guard = propensity_size_guard), error = function(e) list(sPMSE = NA_real_, propensityAuc = NA_real_))
     viol <- vcr_constraint_violations(copies[[k]], constraints)
     dis <- tryCatch(vcr_disclosure_report(train, copies[[k]], holdout), error = function(e) list(available = FALSE))
     got <- function(key) if (isTRUE(dis$available) && !is.na(dis[[key]])) dis[[key]] else NA_real_
-    data.frame(copy = k, worstKsD = suppressWarnings(max(uni$value[uni$statistic == "ks_d"], -Inf)),
+    row <- data.frame(copy = k, worstKsD = suppressWarnings(max(uni$value[uni$statistic == "ks_d"], -Inf)),
                worstTvd = suppressWarnings(max(uni$value[uni$statistic == "tvd"], -Inf)),
                sPMSE = pr$sPMSE, propensityAuc = pr$propensityAuc,
                constraintViolations = if (nrow(viol)) sum(viol$violations) else 0,
                replicationRatio = got("replicationRatio"), nearestNeighbourInTrainShare = got("nearestNeighbourInTrainShare"), membershipAuc = got("membershipAuc"))
+    if (isTRUE(propensity_size_guard)) {
+      row$propensityUnavailableReason <- if (identical(pr$available,FALSE)) paste(unlist(pr$reason),collapse=",") else NA_character_
+      row$propensityDesignColumns <- if (identical(pr$available,FALSE)) pr$designColumns else NA_real_
+      row$propensityDesignCells <- if (identical(pr$available,FALSE)) pr$designCells else NA_real_
+    }
+    row
   }))
 }
 
@@ -853,6 +866,8 @@ vcr_job_synthesize_population <- function(job, output_dir = NULL, ...) {
   key <- intersect(VCR_SUBJECT_KEY_COLUMNS, names(df))
   learn <- setdiff(names(df), key)
   if (!length(learn)) vcr_abort("input_shape_invalid", "inputs", "The table holds only a person key; there is nothing to synthesise.")
+  if (!is.null(sc$imputationRules)) vcr_validate_imputation_rules(df, sc$imputationRules)
+  imputation_rules <- if (vcr_job_at_least(job, "1.4.0")) vcr_bind_imputation_rules(df, sc$imputationRules) else sc$imputationRules
   used_train <- vcr_used_sources(list(list(df = df, columns = learn)), "observed")   # synthesis reads every column but the key
   m <- vcr_scalar(sc$m, 5L)
   if (!(m >= 5 && m == round(m) && m <= 50)) {
@@ -868,7 +883,7 @@ vcr_job_synthesize_population <- function(job, output_dir = NULL, ...) {
   # of zero used to hand synthpop an empty training table (CE-31).
   holdout <- if (n_hold > 0L) df[idx[seq_len(n_hold)], learn, drop = FALSE] else NULL
   train <- if (n_hold > 0L) df[idx[-seq_len(n_hold)], learn, drop = FALSE] else df[, learn, drop = FALSE]
-  syn <- vcr_population_synthpop(train, m = as.integer(m), seed = job$seed)
+  syn <- vcr_population_synthpop(train, m = as.integer(m), seed = job$seed, sparse_aware = vcr_job_at_least(job, "1.2.0"), imputation_rules = imputation_rules, exact_imputation = vcr_job_at_least(job, "1.4.0"))
   if (!is.null(syn$interrupted)) return(.vcr_interrupted_result(syn$interrupted, sprintf("%d of %d synthetic copies were made", length(syn$data), as.integer(m))))
   copies <- do.call(rbind, lapply(seq_along(syn$data), function(k) cbind(copy = k, syn$data[[k]])))
   analyses <- .vcr_analyses_from_scenario(sc$analyses)
@@ -884,14 +899,15 @@ vcr_job_synthesize_population <- function(job, output_dir = NULL, ...) {
                                criteria = sc$criteria,
                                generator = list(family = "synthpop_cart", m = syn$m,
                                                 smoothing = syn$smoothing, seed = job$seed),
-                               tstr_outcome = sc$tstrOutcome, copies = syn$data, inference = infer)
-  by_copy <- .vcr_quality_by_copy(train, syn$data, holdout, sc$constraints)
+                               tstr_outcome = sc$tstrOutcome, copies = syn$data, inference = infer,
+                               propensity_size_guard = vcr_job_at_least(job, "1.2.0"))
+  by_copy <- .vcr_quality_by_copy(train, syn$data, holdout, sc$constraints, propensity_size_guard = vcr_job_at_least(job, "1.2.0"))
   worst <- which.max(ifelse(is.finite(by_copy$sPMSE), by_copy$sPMSE, -Inf))
   stopped <- NULL
   if (v11 && !is.null(sc[["inference"]][["nullCalibration"]])) {
     nc <- sc[["inference"]][["nullCalibration"]]
     k_per <- as.integer(vcr_scalar(nc[["copies"]], 1L))
-    regenerate <- function(tbl, seed) { r <- vcr_population_synthpop(tbl, m = k_per, seed = seed); if (!is.null(r$interrupted)) r["interrupted"] else r$data }
+    regenerate <- function(tbl, seed) { r <- vcr_population_synthpop(tbl, m = k_per, seed = seed, sparse_aware = vcr_job_at_least(job, "1.2.0"), imputation_rules = imputation_rules, exact_imputation = vcr_job_at_least(job, "1.4.0")); if (!is.null(r$interrupted)) r["interrupted"] else r$data }
     report$inference$nullCalibration <- .vcr_null_calibration_job(nc, sc$analyses, train, regenerate, job$seed)
     stopped <- report$inference$nullCalibration$stopped
   }
@@ -911,7 +927,9 @@ vcr_job_synthesize_population <- function(job, output_dir = NULL, ...) {
                           # the first copy described, with the small-cell rule: this table is made from real people's rows
                           profile = tryCatch(vcr_population_profile(syn$data[[1]], empirical = TRUE), error = function(e) NULL), profileCopy = 1L,
                           allowedUses = vcr_domain()$syntheticUses),
-       tables = .vcr_tables_of(list(vcr_write_table(copies, "synthetic-population", output_dir))))
+       tables = .vcr_tables_of(list(vcr_write_table(copies, "synthetic-population", output_dir, roundtrip_numeric = vcr_job_at_least(job, "1.4.0")))))
+  if (vcr_job_at_least(job, "1.2.0")) result$diagnostics$smoothingSkippedColumns <- syn$smoothingSkippedColumns
+  if (vcr_job_at_least(job, "1.3.0")) result$diagnostics$imputationCorrections <- syn$imputationCorrections
   .vcr_calibration_stopped(result, report, stopped)
 }
 
@@ -961,8 +979,8 @@ vcr_job_population_quality <- function(job, output_dir = NULL, ...) {
   infer <- if (v11) list(proper = redrawn, privacy = .vcr_privacy_from_scenario(sc[["privacy"]])) else NULL
   report <- vcr_quality_report(train, synth, holdout, constraints = sc$constraints, analyses = analyses,
                                criteria = sc$criteria, generator = sc$generator %||% list(), tstr_outcome = sc$tstrOutcome,
-                               copies = copies, inference = infer)
-  if (v11 && length(copies) > 1L && !is.null(holdout) && nrow(holdout)) by_copy <- .vcr_quality_by_copy(train, copies, holdout, sc$constraints)
+                               copies = copies, inference = infer, propensity_size_guard = vcr_job_at_least(job, "1.2.0"))
+  if (v11 && length(copies) > 1L && !is.null(holdout) && nrow(holdout)) by_copy <- .vcr_quality_by_copy(train, copies, holdout, sc$constraints, propensity_size_guard = vcr_job_at_least(job, "1.2.0"))
   if (v11 && !is.null(sc[["inference"]][["nullCalibration"]])) {
     nc <- sc[["inference"]][["nullCalibration"]]
     k_per <- as.integer(vcr_scalar(nc[["copies"]], 1L))

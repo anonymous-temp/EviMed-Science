@@ -1684,3 +1684,10 @@ test('an unsent saved question is restored byte-for-byte into its owned native d
  bundle.study={...bundle.study,status:'draft',question:draft};
  assert.equal(presentStudy(bundle).question,draft);
 });
+
+test("quality projection preserves unavailable propensity and red quality notices", () => {
+  const report = qualityReportView({ fidelity: { global: { available: false, n: 8000, designColumns: 3161, sPMSE: null, propensityAuc: null } }, bands: { sPMSE: "unknown", worstKsD: "red" } });
+  const rows = report.groups.flatMap((group) => group.rows);
+  assert.match(rows.find((row) => row.key === "spmse").value.text, /未计算.*8000 行、3161 列/);
+  assert.match(rows.find((row) => row.key === "quality_alert").value.text, /超出提示范围/);
+});

@@ -222,3 +222,38 @@
   disabled: true
 - id: session-log-download
   disabled: true
+- id: evimed-virtual-trial
+  disabled: true
+  config:
+    mode: hosted
+    workspace: ''
+    engineRoot: ''
+    rscript: Rscript
+- id: evimed-virtual-cohort
+  disabled: true
+  config:
+    mode: hosted
+    workspace: ''
+    engineRoot: ''
+    rscript: Rscript
+- id: evimed-virtual-patient
+  disabled: true
+  config:
+    mode: hosted
+    workspace: ''
+    engineRoot: ''
+    rscript: Rscript
+- id: evimed-synthetic-control
+  disabled: true
+  config:
+    mode: hosted
+    workspace: ''
+    engineRoot: ''
+    rscript: Rscript
+- id: evimed-virtual-research-suite
+  disabled: true
+  config:
+    mode: hosted
+    workspace: ''
+    engineRoot: ''
+    rscript: Rscript

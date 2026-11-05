@@ -97,7 +97,7 @@ export function ConclusionChip({ state, className }: { state: VcrConclusion | nu
   return (
     <Tag
       tone={state === "limited" ? "warn" : "neutral"}
-      className={cn(state === "estimable" && "bg-ok-soft text-ok", className)}
+      className={className}
     >
       {conclusionLabel(state)}
     </Tag>

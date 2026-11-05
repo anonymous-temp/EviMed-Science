@@ -4,7 +4,7 @@ import {Buffer} from 'node:buffer';
 import {constants} from 'node:fs';
 import {setTimeout as pause} from 'node:timers/promises';
 import {sendWithFreshWorkloadToken} from '../../src/workloadRequest.mjs';
-import {describeOperationParam,isolatedToolProfileHolds,normalizeSkillOperation,renderOperationSummary} from '@evimed/domain';
+import {describeOperationParam,isolatedToolProfileHolds,nativeResearchToolProfileHolds,normalizeSkillOperation,renderOperationSummary} from '@evimed/domain';
 import {COWORK_OPERATIONS,toolParameters} from './operations.mjs';
 
 const Schema=await configSchema();
@@ -97,8 +97,10 @@ export async function apply(ctx,config){
   if(config.projectionFile){if(config.projectionFile!=='/opt/evimed/extensions/projection.json')throw fail();projection=JSON.parse(await fixedFile(config.projectionFile,1024*1024));}
   const external=projection.plugins.filter(plugin=>plugin.compatibility!=='legacy-citation-v1');
   // The host's manager and controller compared each row with the deployment's admitted descriptor before this file existed in the container; here the class's permission profile is what is left to hold.
-  if(external.length>1||external.some(plugin=>!isolatedToolProfileHolds(plugin)))throw fail();
-  const definitions=new Map(),selected=external[0];
+  const isolated=external.filter(plugin=>plugin.executionClass!=='managed-native'),native=external.filter(plugin=>plugin.executionClass==='managed-native');
+  if(isolated.length>1||native.length>5||new Set(external.map(plugin=>plugin.extensionId)).size!==external.length
+    ||isolated.some(plugin=>!isolatedToolProfileHolds(plugin))||native.some(plugin=>!nativeResearchToolProfileHolds(plugin)))throw fail();
+  const definitions=new Map(),selected=isolated[0];
   if(selected?.enabled){for(const spec of coworkToolSpecs(async({request,call})=>{
     const raw=(await fixedFile(config.generationTokenFile,8192)).trim(),parts=raw.split('.');if(parts.length!==3)throw fail();
     const generation=JSON.parse(Buffer.from(parts[1],'base64url').toString()).jti;

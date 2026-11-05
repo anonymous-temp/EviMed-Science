@@ -667,3 +667,27 @@ test("only resolved table inputs may carry canonical event time units", () => {
   assert.ok(keys(validateEngineJob(job)).includes("input_shape_invalid@inputs[0].timeUnit"));
   assert.ok(validateCallerInputs([{ kind: "snapshot", id: "snp_1", timeUnit: "days" }]).some(issue => issue.code === "input_location_forbidden"));
 });
+
+test("local calibration is accepted from 1.1 onward and refused in 1.0", () => {
+  const item = fixture.valid.find((/** @type {any} */ entry) => entry.name === "prognostic equation held against the outcome the table holds (local calibration)");
+  assert.ok(item);
+  for (const version of ["1.1.0", "1.2.0"]) {
+    const job = clone(item.job); job.methodVersion = version;
+    assert.deepEqual(validateEngineJob(job), []);
+  }
+  const old = clone(item.job); old.methodVersion = "1.0.0";
+  assert.ok(validateEngineJob(old).some((issue) => issue.code === "method_version_mismatch"));
+});
+
+test("synthesis imputation encodings are declared only in 1.3", () => {
+  const item = fixture.valid.find((/** @type {any} */ entry) => entry.job.method === "population.synthpop");
+  assert.ok(item);
+  const job = clone(item.job);
+  job.scenario.imputationRules = [{ valueColumn: "x", indicatorColumn: "x_missing", imputedValue: 5, missingValue: 1 }];
+  job.methodVersion = "1.4.0";
+  assert.deepEqual(validateEngineJob(job), []);
+  job.methodVersion = "1.3.0";
+  assert.deepEqual(validateEngineJob(job), []);
+  job.methodVersion = "1.2.0";
+  assert.ok(validateEngineJob(job).some((issue) => issue.code === "method_version_mismatch"));
+});

@@ -717,40 +717,49 @@ test("a design started in a conversation freezes which of its numbers the person
   /** @type {any[]} */
   const queued = [];
   const jobs = {
-    async enqueue(/** @type {any} */ input) { queued.push(input); return { job: { id: "job_s", state: "queued", progress: {} }, created: true }; },
+    async enqueue(/** @type {any} */ input) { queued.push(input); return { job: { id: "job_s", state: "queued", progress: {}, checkpoint: input.detail }, created: true }; },
     async get() { return null; }, async cancel() { return { job: { id: "job_s", state: "canceled" }, canceled: true }; },
   };
   const made = fixture({ jobs });
   made.vcr.store.taskContext = async (/** @type {any} */ origin) => ({ id: "std_task", userId: "u1", projectId: "prj_1", scope: "conversation", purpose: "task", conversationSessionId: origin.rootSessionId });
   /** @type {string[]} */
   const asked = [];
-  const handlerWith = (/** @type {() => Promise<string[] | null>} */ read) => createVcrGatewayHandler(config, runtimeManager, { vcr: made.vcr,
+  const handlerWith = (/** @type {() => Promise<import("../src/vcrPersonStated.mjs").HumanParameterMessage[] | null>} */ read) => createVcrGatewayHandler(config, runtimeManager, { vcr: made.vcr,
     resolveInvocation: async () => ({ userId: "u1", projectId: "prj_1", runId: "run_1", rootSessionId: "sess_1", callId: "call_1" }),
     readPersonMessages: async (_study, sessionId) => { asked.push(sessionId); return read(); } });
   const start = async (/** @type {any} */ handler, /** @type {Record<string, any>} */ body) => {
     const res = response();
     await handler(request("/internal/vcr/v1/simulate", { action: "start", ...body }, { authorization: "Bearer token", "x-evimed-execution-context": "{}" }), res);
     assert.equal(res.status, 200, res.body);
+    assert.deepEqual(res.json().data.parameterProvenance, queued.at(-1).detail.personStated);
     return queued.at(-1).detail.personStated;
   };
   const winRatio = { design: { nTreat: 250, followup: 24, dropoutAnnual: 0.05 }, truth: { death: { controlRisk: 0.15, hazardRatio: 0.75 }, score: { shift: 4, sd: 20 }, correlation: 0.3 } };
   // the person said 24 months, 5% and a hazard ratio of 0.75; the model chose the rest
-  const said = await start(handlerWith(async () => ["心衰试验，随访 24 个月，年脱落率 5%，死亡风险比 0.75，三层比较要多少人？"]), { kind: "design_win_ratio", scenario: winRatio });
+  const said = await start(handlerWith(async () => [{sessionId:"sess_1",messageSeq:10,text:"心衰试验，随访 24 个月，年脱落率 5%，死亡风险比 0.75，三层比较要多少人？"}]), { kind: "design_win_ratio", scenario: winRatio, sources:[{origin:"user",field:"design.followup",value:24,quote:"随访 24 个月",unit:"month",context:"follow-up duration"}] });
   assert.deepEqual(asked.at(-1), "sess_1", "the conversation the call came from");
-  assert.deepEqual(said, { schema: 1, readable: true, paths: ["design.followup", "design.dropoutAnnual", "truth.death.hazardRatio"] }, "250, 0.15, 4, 20 and 0.3 are the model's");
+  assert.equal(said.schema,2);
+  assert.deepEqual(said.paths,["design.followup"],"only the explicitly bound parameter is human-provided");
+  const originalKey = queued.at(-1).idempotencyKey;
+  const originalRecord = structuredClone(said);
+  await start(handlerWith(async () => [{sessionId:"sess_1",messageSeq:20,text:"仍随访 24 个月，这是另一次参数确认"}]), {
+    kind:"design_win_ratio",scenario:winRatio,sources:[{origin:"user",field:"design.followup",value:24,quote:"仍随访 24 个月",unit:"month",context:"follow-up duration reaffirmed"}],
+  });
+  assert.notEqual(queued.at(-1).idempotencyKey,originalKey,"changed original source cannot reuse an older result's provenance");
+  assert.deepEqual(said,originalRecord,"earlier evidence remains immutable after follow-up");
   // a conversation that cannot be read, or has no message of the person's: the strong word is never given on no evidence
   for (const read of [async () => null, async () => [], async () => { throw new Error("ledger unreadable"); }]) {
-    assert.deepEqual(await start(handlerWith(/** @type {any} */ (read)), { kind: "design_win_ratio", scenario: winRatio }), { schema: 1, readable: false, paths: [] });
+    assert.deepEqual(await start(handlerWith(/** @type {any} */ (read)), { kind: "design_win_ratio", scenario: winRatio }), { schema: 2, readable: false, paths: [], bindings: [] });
   }
   // a kind that is not a design is not asked, and a job started outside a conversation has no record (it reads as it read)
   const network = { label: "response", measure: "log_ratio", direction: "lower_better", studies: [{ studyId: "H1", contrasts: [{ treatment: "B", comparator: "A", effect: -0.3, se: 0.12 }] }] };
   const res = response();
-  await handlerWith(async () => ["effect -0.3"])(request("/internal/vcr/v1/simulate", { action: "start", kind: "network_meta", scenario: network }, { authorization: "Bearer token", "x-evimed-execution-context": "{}" }), res);
+  await handlerWith(async () => [{sessionId:"sess_1",messageSeq:10,text:"effect -0.3"}])(request("/internal/vcr/v1/simulate", { action: "start", kind: "network_meta", scenario: network }, { authorization: "Bearer token", "x-evimed-execution-context": "{}" }), res);
   assert.equal(queued.at(-1).detail.personStated, undefined, "a network meta-analysis is not a design");
   const outside = fixture({ jobs });
   const plain = response();
   await outside.handler(request("/internal/vcr/v1/simulate", { action: "start", kind: "design_win_ratio", scenario: winRatio }), plain);
-  assert.equal(queued.at(-1).detail.personStated, undefined, "no conversation, no messages, no record");
+  assert.deepEqual(queued.at(-1).detail.personStated,{schema:2,readable:false,paths:[],bindings:[]}, "new designs without evidence remain assumed");
 });
 
 test("a dose-finding design and a Bayesian design start through the gateway, filed under what they are about", async () => {
@@ -954,6 +963,21 @@ test("a stage in flight is the answer only to the scenario the running job froze
   assert.ok(other.calls.some((call) => call[0] === "enqueue" && call[1] === "design_simulation"));
 });
 
+test("status returns the producing job's frozen inputs and source checks through the model boundary", async () => {
+  const frozen = { id: 'job_1', state: 'running', method: 'design.analytic', methodVersion: '1.4.0',
+    scenario: { truth: { hazardRatio: 0.7 } }, inputs: [{ kind: 'assumption', id: 'effect@2' }],
+    checkpoint: { bound: [{ key: 'effect', version: 2, path: 'truth.hazardRatio', value: 0.7 }],
+      sourceAssertions: [{ field: 'truth.hazardRatio', publication: 'PMID 123', quote: 'hazard ratio 0.7' }],
+      sourceReport: [{ field: 'truth.hazardRatio', state: 'carried', message: 'Quote checked.' }],
+      personStated: { schema: 2, readable: false, paths: [], bindings: [] } } };
+  const { handler } = fixture({ jobs: { async get() { return frozen; } } });
+  const status = response();
+  await handler(request('/internal/vcr/v1/simulate', { action: 'status', jobId: 'job_1' }), status);
+  assert.equal(status.status, 200);
+  assert.deepEqual(status.json().data.request, { job: { method: frozen.method, methodVersion: frozen.methodVersion, scenario: frozen.scenario, inputs: frozen.inputs },
+    sources: frozen.checkpoint.sourceAssertions, sourceChecks: frozen.checkpoint.sourceReport, bound: frozen.checkpoint.bound, parameterProvenance: frozen.checkpoint.personStated });
+});
+
 test("simulate is start / status / cancel, and a job over budget says so plainly", async () => {
   const { calls, handler, vcr } = fixture({ store: { ...fixture().vcr.store, async trialScenarios() { return [DESIGN_A]; } } });
   void vcr;
@@ -1021,8 +1045,9 @@ test("a design's computation names the trial scenario it is for: its result is f
   const analytic = await start({ kind: "design_analytic", subjectId: "scn_b", scenario: { design: { kind: "two_arm_fixed", allocation: 0.5 } } });
   assert.equal(analytic.status, 200, analytic.body);
   assert.deepEqual(analytic.json().data.subject, { kind: "trial_scenario", id: "scn_b", version: 2, name: "B 1:1 固定设计" });
-  assert.deepEqual(queued[0].detail, { subjectId: "scn_b", origin: "runtime", resultKind: "trial_scenario", node: "trial_scenario:scn_b@2", step: "trial",
-    stage: "analytic", supersedes: ["scn_b0"] }, "the subject, where the result lands, the stage it is, and the earlier version of the same design it replaces");
+  assert.match(queued[0].detail.sourceIdentity,/^[a-f0-9]{64}$/);
+  assert.deepEqual({...queued[0].detail, sourceIdentity:undefined}, { sourceIdentity:undefined, subjectId: "scn_b", origin: "runtime", resultKind: "trial_scenario", node: "trial_scenario:scn_b@2", step: "trial",
+    stage: "analytic", supersedes: ["scn_b0"], personStated:{schema:2,readable:false,paths:[],bindings:[]} }, "the subject, where the result lands, the stage it is, and the earlier version of the same design it replaces");
   assert.match(queued[0].idempotencyKey, /design_analytic:scn_b:/, "the same scenario asked for another design is another job");
   assert.deepEqual(noted[0].slice(0, 1), ["std_1"]);
   assert.equal(noted[0][1].node, "trial_scenario:scn_b@2");
@@ -1855,4 +1880,37 @@ test("a write of several cards waits once for the second readings, and answers i
   assert.equal(waits.length, 3);
   assert.ok(waits[0] > 0 && waits[0] <= budgetMs / 2, "the first card may wait up to half the budget");
   assert.ok(waits[1] < waits[0] && waits[2] <= waits[1], "and what it waited is gone from the next ones");
+});
+
+test('in-flight dedupe requires identical frozen human and publication sources, not just identical numbers', async () => {
+  const frozen = {design:{kind:'two_arm_fixed',nTreat:150,nControl:150},endpoint:{type:'time_to_event'},truth:{hazardRatio:0.7,controlMedian:12},
+    analysis:{method:'logrank',alpha:0.025,sided:1},accrual:{kind:'uniform',duration:12,followup:12}};
+  const held = {id:'scn_source',version:1,label:'设计',design:'two_arm_fixed',endpointType:'time_to_event',configuration:frozen};
+  let running = null;
+  let queued = 0;
+  let original = {sessionId:'sess_1',messageSeq:10,text:'随访12个月'};
+  const made = fixture({store:{...fixture().vcr.store,async trialScenarios(){return [held];}},
+    orchestrator:{async inFlightStage(){return running;},async noteRuntimeJob(){}},
+    jobs:{async enqueue(input){queued++; running={id:`job_${queued}`,state:'running',scenario:input.scenario,checkpoint:structuredClone(input.detail)};return {job:running};}},
+  });
+  made.vcr.store.taskContext = async () => ({id:'std_1',userId:'u1',projectId:'prj_1',purpose:'task',scope:'conversation',conversationSessionId:'sess_1'});
+  const handler = createVcrGatewayHandler(config,runtimeManager,{vcr:made.vcr,
+    resolveInvocation:async()=>({userId:'u1',projectId:'prj_1',runId:'run_1',rootSessionId:'sess_1',callId:'call_1'}),
+    readPersonMessages:async()=>[original]});
+  const ask = async sources => {
+    const res=response();
+    await handler(request('/internal/vcr/v1/simulate',{action:'start',kind:'design_simulation',subjectId:'scn_source',scenario:frozen,sources},
+      {authorization:'Bearer token','x-evimed-execution-context':'{}'}),res);
+    assert.equal(res.status,200,res.body);return res.json().data;
+  };
+  const humanSource=[{origin:'user',field:'accrual.followup',value:12,quote:'随访12个月',unit:'month',context:'follow-up duration'}];
+  assert.equal((await ask(humanSource)).jobId,'job_1');
+  assert.equal((await ask(humanSource)).alreadyRunning,true);
+  original={...original,messageSeq:20,text:'确认仍随访12个月'};
+  assert.equal((await ask(humanSource)).jobId,'job_2','new original source is not the earlier in-flight job');
+  const paper=id=>[{field:'truth.controlMedian',publication:`PMID ${id}`,quote:'Median survival 12 months'}];
+  assert.equal((await ask(paper('123'))).jobId,'job_3');
+  assert.equal((await ask(paper('123'))).alreadyRunning,true);
+  assert.equal((await ask(paper('456'))).jobId,'job_4','new publication cannot borrow a previous job even with identical values');
+  assert.equal(queued,4);
 });

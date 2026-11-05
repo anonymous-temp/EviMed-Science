@@ -237,9 +237,13 @@ class VcrToolDefinitionTests(unittest.TestCase):
         # 2026-11-02: a median read in a paper went straight into the scenario in 6 of 6 live designs and the result page called it an assumption.
         simulate = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}["vcr_simulate"]
         sources = simulate["inputSchema"]["properties"]["sources"]
-        self.assertEqual(sorted(sources["items"]["properties"]), ["field", "publication", "quote"])
-        self.assertFalse(sources["items"]["additionalProperties"])
-        self.assertLess(len(sources["description"]), 300, "a property description rides every request of the run too")
+        literature, user = sources["items"]["oneOf"]
+        self.assertEqual(sorted(literature["properties"]), ["field", "publication", "quote"])
+        self.assertEqual(user["properties"]["origin"], {"const": "user"})
+        self.assertEqual(set(user["required"]), {"origin", "field", "value", "quote", "unit", "context"})
+        self.assertFalse(user["additionalProperties"])
+        self.assertFalse(literature["additionalProperties"])
+        self.assertLess(len(sources["description"]), 700, "source guidance is bounded on the shared transport")
         for kind in vcr_platform.SOURCE_KINDS:
             self.assertIn(kind, vcr_platform.JOB_KINDS)
             self.assertIn("sources", " ".join(vcr_platform.shape({"kind": kind})["next_actions"]), kind)
