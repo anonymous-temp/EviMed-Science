@@ -144,7 +144,7 @@ export class OpenVikingResources {
   /** Private, non-compiled history resource roots. These are never source ids,
    * library entries, knowledge inputs or arbitrary filesystem addresses. */
   historyAddress(uri, { file = false } = {}) {
-    const root = /^viking:\/\/user\/(?:u|gp)-[a-f0-9]{24}\/resources\/history\/[a-f0-9]{24}\/[a-f0-9]{24}$/;
+    const root = /^viking:\/\/user\/(?:u|gp)-[a-f0-9]{24}\/resources\/history\/[a-f0-9]{24}(?:\/[a-f0-9]{24})?$/;
     const leaf = /^viking:\/\/user\/(?:u|gp)-[a-f0-9]{24}\/resources\/history\/[a-f0-9]{24}\/[a-f0-9]{24}\/[a-f0-9]{24}\/[a-f0-9]{24}-[0-9]{1,3}\.md$/;
     if (!(file ? leaf : root).test(uri)) throw new HttpError(403, 'memory_history_scope_denied', 'The history resource address is invalid.');
     return uri;

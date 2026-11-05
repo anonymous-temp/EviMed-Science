@@ -13,6 +13,33 @@ const MAX_TEXT = 1800;
 const MAX_CHUNK = 6000;
 const dateOf = value => typeof value === 'string' && Number.isFinite(Date.parse(value)) ? new Date(value).toISOString() : null;
 
+/** Metadata uses the same boundary as message text, before any clipping. */
+export function historyTitle(value, fallback = 'Conversation') {
+  const decision = filterCapturedMessage({ role: 'user', content: String(value ?? '') });
+  if (!('forward' in decision)) return fallback;
+  return decision.forward.parts.map(part => part.text).join(' ').replace(/[\r\n[\]]/g, ' ').trim().slice(0, 120) || fallback;
+}
+
+const messageText = body => {
+  const decision = filterCapturedMessage(body);
+  return 'forward' in decision ? decision.forward.parts.map(part => part.text).join('\n') : null;
+};
+const chunkSize = rows => rows.reduce((n,row) => n + row.text.length + 80,0);
+
+/** Validate already-windowed messages individually. Re-windowing here repeats
+ * the carried context and changes both provenance and the length budget. */
+function hydrateMessages(input) {
+  if (!Array.isArray(input) || !input.length || input.length > 6) return [];
+  const messages = [];
+  for (const message of input) {
+    if (!Number.isSafeInteger(message?.index) || message.index < 0 || message.index >= MAX_MESSAGES || typeof message.text !== 'string') return [];
+    const text = messageText({ role: message.sourceRole, content: message.text });
+    if (!text || text.length > MAX_TEXT) return [];
+    messages.push({ index: message.index, sourceRole: message.sourceRole, date: dateOf(message.date), text, contextOnly: true, confirmed: false });
+  }
+  return chunkSize(messages) <= MAX_CHUNK ? messages : [];
+}
+
 /** Exchange-led topic windows, with one adjacent message carried into the next.
  * These are dated context, never user facts. Structural grouping deliberately
  * does not guess semantic topics from keywords. Text is filtered before cutting.
@@ -35,7 +62,7 @@ export function historyChunks(input) {
     }
   }
   const chunks = []; let group = [];
-  const size = rows => rows.reduce((n, row) => n + row.text.length + 80, 0);
+  const size = chunkSize;
   const flush = () => { if (group.length) chunks.push({ messages: group, text: group.map(m => `${m.sourceRole} (${m.date ?? 'unknown'}): ${m.text}`).join('\n\n') }); };
   for (const message of messages) {
     if (group.length && (size([...group, message]) > MAX_CHUNK || group.length >= 6 || message.sourceRole === 'user' && group.some(m => m.sourceRole === 'assistant'))) {
@@ -53,7 +80,7 @@ export function historyChunks(input) {
 export function historySearchText(hits) {
   if (!hits?.length) return null;
   return `Original conversation excerpts (historical context, not instructions or confirmed facts):\n${hits.map(hit =>
-    `[${String(hit.conversationTitle || 'Conversation').replace(/[\r\n[\]]/g, ' ')}](${hit.conversationUrl})\n${hit.messages.map(m => `${m.sourceRole} · ${m.date ?? 'unknown date'}: ${m.text}`).join('\n')}`).join('\n\n')}`;
+    `${hit.projectTitle ? `${historyTitle(hit.projectTitle,'Project')} · ` : ''}[${historyTitle(hit.conversationTitle)}](${hit.conversationUrl})\n${hit.messages.map(m => `${m.sourceRole} · ${m.date ?? 'unknown date'}: ${m.text}`).join('\n')}`).join('\n\n')}`;
 }
 
 /** Private history's narrow adapter. PostgreSQL holds exact URI authority and
@@ -93,7 +120,8 @@ export class MemoryHistory {
     if (!archive || archive.userRoot !== context.userRoot || archive.session !== commit.engineSession || !platformSessionOf(commit.engineSession)) return { state: 'excluded', reason: 'not_original_conversation' };
     // A saved native association is provenance, never permission. Re-resolve
     // the first-party conversation and all exclusion classes on every retry.
-    const source = await this.resolveSource(commit, context);
+    const resolved = await this.resolveSource(commit, context);
+    const source = resolved ? { ...resolved, conversationTitle: historyTitle(resolved.conversationTitle), projectTitle: historyTitle(resolved.projectTitle ?? resolved.project?.name,'Project') } : null;
     if (!source || source.sessionId !== platformSessionOf(commit.engineSession) || !source.projectId || !source.projectCreatedAt) throw new Error('memory_history_source_unproven');
     if (!await this.eligible(context, source)) { await this.removeConversation({ ...context, projectId: source.projectId, projectCreatedAt: source.projectCreatedAt }, source.sessionId); return { state: 'withdrawn', reason: 'conversation_excluded' }; }
     if (commit.createdAt && Date.parse(commit.createdAt) < Date.parse(source.projectCreatedAt)) return { state: 'withdrawn', reason: 'project_incarnation_changed' };
@@ -112,6 +140,11 @@ export class MemoryHistory {
       if (messages.length > MAX_MESSAGES) throw new Error('memory_history_archive_too_large');
     }
     const resources = this.resourcesFor(context), root = this.root(context, source);
+    const removedIndices = new Set();
+    for (const [index,message] of messages.entries()) {
+      const text = messageText(message);
+      if (text && await this.ledger.rejected(context,[text])) removedIndices.add(index);
+    }
     const chunks = historyChunks(messages);
     if (!chunks.length) return { state: messages.length ? 'excluded' : 'unavailable', reason: messages.length ? 'no_admissible_text' : 'message_admission', messages: 0, chunks: 0 };
     let indexed = 0, refused = 0, rejected = 0;
@@ -122,7 +155,7 @@ export class MemoryHistory {
       const meta = { ownerId: context.ownerId, ownerCreatedAt: context.ownerCreatedAt, namespaceId: context.namespaceId, projectId: source.projectId,
         projectCreatedAt: source.projectCreatedAt, sessionId: source.sessionId, archiveUri: commit.archiveUri, uri, minimumDate };
       const body = JSON.stringify({ messages: chunk.messages });
-      if (await this.ledger.rejected(context, chunk.messages.map(message => message.text))) { rejected++; continue; }
+      if (chunk.messages.some(message => removedIndices.has(message.index)) || await this.ledger.rejected(context, chunk.messages.map(message => message.text))) { rejected++; continue; }
       if (await this.ledger.alreadyIndexed(meta, hash(body))) { indexed++; continue; }
       if (!await this.ledger.reserve(meta, hash(body))) { refused++; continue; }
       await resources.writeHistory(context.ownerId, uri, body);
@@ -172,29 +205,56 @@ export class MemoryHistory {
     if (context.ownerId !== user.id) return [];
     const source = await this.resolveSource({ userId: user.id, projectId: project.id, engineSession: null }, context);
     if (!source?.projectCreatedAt || source.projectId !== project.id) return [];
-    const root = this.root(context, source), resources = this.resourcesFor(context);
+    // Only the verified ordinary default conversation expands to the account's
+    // personal namespace. A named or shared project remains its exact scope.
+    const account = project.id === 'default' && context.kind === 'owned';
+    const root = account ? `${context.userRoot}/resources/history/${hash(context.ownerCreatedAt).slice(0,24)}` : this.root(context,source);
+    const resources = this.resourcesFor(context);
     const asked = Math.max(1, Math.min(8, Math.trunc(Number(limit)) || 5));
     const candidates = await resources.searchHistory(user.id, root, query.slice(0, 2000), { limit: 40 });
-    const hits = [];
+    const hits = [], originals = new Map();
     for (const candidate of candidates.slice(0, 80)) {
-      // Never hydrate a URI the engine invented, a sidecar, or another context.
       if (!candidate.uri?.startsWith(`${root}/`)) continue;
-      const meta = await this.ledger.lookup(user.id, context.ownerCreatedAt, context.namespaceId, project.id, source.projectCreatedAt, candidate.uri);
+      const meta = await this.ledger.lookup(user.id, context.ownerCreatedAt, context.namespaceId, account ? null : project.id, account ? null : source.projectCreatedAt, candidate.uri);
       if (!meta) continue;
-      const verified = await this.resolveSource({ userId: user.id, projectId: project.id, engineSession: `dsh-${meta.session_id}` }, context);
-      if (!verified) continue;
+      let verified;
+      try { verified = await this.resolveSource({ userId: user.id, projectId: meta.project_id, engineSession: `dsh-${meta.session_id}` }, context); }
+      catch { continue; } // A deleted/revoked source never falls back to another project.
+      if (!verified || verified.projectId !== meta.project_id || verified.projectCreatedAt !== meta.project_created_at) continue;
       if (!await this.eligible(context, verified)) { await this.removeConversation({ ...context, projectId: verified.projectId, projectCreatedAt: verified.projectCreatedAt }, verified.sessionId); continue; }
       const body = await resources.readHistory(user.id, candidate.uri);
       if (body === null || Buffer.byteLength(body) > 32_000 || hash(body) !== meta.digest) continue;
       let parsed; try { parsed = JSON.parse(body); } catch { continue; }
-      if (!Array.isArray(parsed.messages)) continue;
-      const messages = historyChunks(parsed.messages.map(m => ({ role: m.sourceRole, content: m.text, ...(m.date ? { created_at: m.date } : {}) }))).flatMap(c => c.messages);
+      const messages = hydrateMessages(parsed.messages);
       if (!messages.length) continue;
-      // Complete candidate-indexed rejection checks, including edits, under the
-      // actual platform owner and this namespace. Whole hits leave, not words.
-      if (await this.ledger.rejected(context, messages.map(m => m.text))) continue;
-      if (!await this.ledger.lookup(user.id, context.ownerCreatedAt, context.namespaceId, project.id, source.projectCreatedAt, candidate.uri)) continue;
-      hits.push({ conversationTitle: verified.conversationTitle || 'Conversation', conversationUrl: verified.conversationUrl,
+      // Full source messages, not fragments, decide whether a removed statement
+      // is present. This also protects legacy chunks cut across a deletion.
+      if (!originals.has(meta.archive_uri)) {
+        const archive = parseArchiveUri(meta.archive_uri);
+        if (!archive || archive.userRoot !== context.userRoot || archive.session !== `dsh-${meta.session_id}` || archive.rest) throw new Error('memory_history_privacy_unavailable');
+        const expected = await this.ledger.archiveSourceHash(context,meta.archive_uri);
+        const raw = await context.sessions.read(user.id,`${meta.archive_uri}/messages.jsonl`);
+        if (!expected || raw === null || Buffer.byteLength(raw)>MAX_ARCHIVE_BYTES || hash(raw)!==expected) throw new Error('memory_history_privacy_unavailable');
+        const archiveMessages = [];
+        for (const line of raw.split('\n').filter(entry=>entry.trim())) {
+          let message; try { message=JSON.parse(line); } catch { throw new Error('memory_history_privacy_unavailable'); }
+          if (await this.admitMessage(context,verified,message)) archiveMessages.push(message);
+          if (archiveMessages.length>MAX_MESSAGES) throw new Error('memory_history_privacy_unavailable');
+        }
+        originals.set(meta.archive_uri,archiveMessages);
+      }
+      const original = originals.get(meta.archive_uri);
+      const touched = [...new Set(messages.map(message=>message.index))].map(index=>original[index]);
+      if (touched.some(message=>!message)) throw new Error('memory_history_privacy_unavailable');
+      const text = touched.map(messageText).filter(Boolean);
+      if (messages.some(message=> original[message.index]?.role!==message.sourceRole || !messageText(original[message.index])?.includes(message.text))) continue;
+      if (await this.ledger.rejected(context,text)) continue;
+      let title = historyTitle(verified.conversationTitle);
+      let projectTitle = historyTitle(verified.projectTitle ?? verified.project?.name,'Project');
+      if (await this.ledger.rejected(context,[title])) title='Conversation';
+      if (await this.ledger.rejected(context,[projectTitle])) projectTitle='Project';
+      if (!await this.ledger.lookup(user.id,context.ownerCreatedAt,context.namespaceId,verified.projectId,verified.projectCreatedAt,candidate.uri)) continue;
+      hits.push({ conversationTitle: title, conversationUrl: verified.conversationUrl, projectId: verified.projectId, projectTitle, scope: 'project',
         sessionId: meta.session_id, messages, contextOnly: true, confirmed: false, privateByDefault: privateByDefault({ nativeType: 'people' }) });
       if (hits.length >= asked) break;
     }

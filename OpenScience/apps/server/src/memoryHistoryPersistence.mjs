@@ -89,7 +89,7 @@ export class MemoryHistoryLedger {
   async lookup(ownerId, ownerCreatedAt, namespaceId, projectId, projectCreatedAt, uri) {
     await this.migrate();
     const result = await this.database.query(`SELECT h.* FROM evimed_memory.history_chunks h WHERE uri=$1 AND owner_id=$2 AND owner_created_at=$3
-      AND namespace_id=$4 AND project_id=$5 AND project_created_at=$6 AND state='ready'
+      AND namespace_id=$4 AND ($5::text IS NULL OR project_id=$5) AND ($6::text IS NULL OR project_created_at=$6) AND state='ready'
       AND EXISTS (SELECT 1 FROM evimed_control.users u WHERE u.id=h.owner_id AND u.created_at::text=h.owner_created_at)
       AND NOT EXISTS (SELECT 1 FROM evimed_memory.history_fences f WHERE f.owner_id=h.owner_id AND f.owner_created_at=h.owner_created_at
         AND (f.project_id='' OR f.project_id=h.project_id) AND (f.project_created_at='' OR f.project_created_at=h.project_created_at) AND (f.session_id='' OR f.session_id=h.session_id)
@@ -97,20 +97,37 @@ export class MemoryHistoryLedger {
     [uri, ownerId, ownerCreatedAt, namespaceId, projectId, projectCreatedAt]);
     return result.rows[0] ?? null;
   }
-  /** This query has no recency window. It probes every rejection in the exact
-   * namespace against the finite candidate, including old edited text. A short
-   * removed statement is conservatively suppressed when contained as well.
+  /** Exact shared JS normalization on both sides, including legacy rejection
+   * rows. Keyset pages cover the complete namespace; overflow is unavailable,
+   * never a truncated privacy list. No PostgreSQL character-class substitute.
    */
   async rejected(context, texts) {
     await this.migrate();
     const types = (context.kind === 'geo-project' ? OPENVIKING_PROJECT_MEMORY_TYPES : OPENVIKING_MEMORY_TYPES)
       .map(type => nativeMemoryRejectionType(type, context.kind === 'geo-project' ? context.namespaceId : null));
-    const lines = texts.flatMap(text => text.split('\n')).map(normalisedStatement).filter(Boolean);
-    const result = await this.database.query(`SELECT 1 FROM evimed_memory.native_rejections r WHERE user_id=$1 AND memory_type=ANY($2::text[])
-      AND (fingerprint=ANY($3::text[]) OR (r.text IS NOT NULL AND r.text<>'' AND EXISTS
-        (SELECT 1 FROM unnest($4::text[]) candidate WHERE position(regexp_replace(lower(normalize(r.text,NFKC)), '[[:space:][:punct:]]', '', 'g') in candidate)>0))) LIMIT 1`,
-    [context.ownerId, types, lines.map(lineFingerprint), texts.map(compact)]);
-    return result.rows.length > 0;
+    const prints = new Set(texts.flatMap(text => text.split('\n')).map(normalisedStatement).filter(Boolean).map(lineFingerprint));
+    const candidates = texts.map(compact);
+    let type = '', fingerprint = '', count = 0;
+    for (;;) {
+      const result = await this.database.query(`SELECT memory_type,fingerprint,text FROM evimed_memory.native_rejections
+        WHERE user_id=$1 AND memory_type=ANY($2::text[]) AND (memory_type,fingerprint)>($3,$4)
+        ORDER BY memory_type,fingerprint LIMIT 500`, [context.ownerId,types,type,fingerprint]);
+      for (const row of result.rows) {
+        if (++count > 10000) throw new Error('memory_history_privacy_unavailable');
+        if (prints.has(row.fingerprint)) return true;
+        const removed = typeof row.text === 'string' ? compact(row.text) : '';
+        if (removed && candidates.some(candidate => candidate.includes(removed))) return true;
+      }
+      if (result.rows.length < 500) return false;
+      const last = result.rows.at(-1); type = last.memory_type; fingerprint = last.fingerprint;
+    }
+  }
+  async archiveSourceHash(context, archiveUri) {
+    await this.migrate();
+    const result = await this.database.query(`SELECT source_hash FROM evimed_memory.history_archives
+      WHERE owner_id=$1 AND owner_created_at=$2 AND archive_uri=$3 AND namespace_id=$4 AND state NOT IN ('withdrawn','excluded')`,
+    [context.ownerId,context.ownerCreatedAt,archiveUri,context.namespaceId]);
+    return result.rows[0]?.source_hash ?? null;
   }
   async fence(ownerId, { ownerCreatedAt = null, projectId = '', projectCreatedAt = null, sessionId = '', permanent }) {
     await this.locked(ownerId, async c => {

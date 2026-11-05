@@ -481,7 +481,7 @@ import { OpenVikingSessions } from "./openVikingSessions.mjs";
 import { NativeMemoryOverlay } from "./nativeMemoryOverlay.mjs";
 import { NativeMemoryStore, nativeConversationTitleKey } from "./nativeMemoryStore.mjs";
 import { NativeMemoryImport } from "./nativeMemoryImport.mjs";
-import { MemoryHistory, MemoryHistoryLedger } from './memoryHistory.mjs';
+import { MemoryHistory, MemoryHistoryLedger, historyTitle } from './memoryHistory.mjs';
 import { NativeMemoryWorker } from "./nativeMemoryWorker.mjs";
 import { NativeTurnCommit } from "./nativeTurnCommit.mjs";
 import { createRejectionJudge } from "./nativeMemoryRejections.mjs";
@@ -5789,7 +5789,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       const runs = await agentRuns.conversationRuns(project, sessionId);
       if (!runs.length || runs.every(run => run.deleted === true)) return null;
       const named = runs.find(run => typeof run.title === 'string' && run.title.trim());
-      return { ...base, sessionId, runs, conversationTitle: String(named?.title ?? runs.at(-1)?.question ?? 'Conversation').slice(0, 120),
+      return { ...base, sessionId, runs, conversationTitle: historyTitle(named?.title ?? runs.at(-1)?.question), projectTitle: historyTitle(project.name,'Project'),
         conversationUrl: `/app/chat/${encodeURIComponent(sessionId)}` };
     },
     eligible: async (memoryContext, source) => {
