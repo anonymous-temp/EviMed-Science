@@ -1,7 +1,7 @@
 /** The pure parts of the conversation scenarios: what is read off a reply and a transcript, the checks, the options and the invented inputs. No server, no model. */
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { SCENARIOS, ORDER, backOfficeWords, generalChecks, inventedIds, matchingToolNames, parseOptions, probeVerdict, registryIdsIn, sliceTurn, tallyAgreement, tallyFromReply, tallyOf } from './run_scenarios.mjs';
+import { SCENARIOS, ORDER, singleIdLines, backOfficeWords, generalChecks, inventedIds, matchingToolNames, parseOptions, probeVerdict, registryIdsIn, sliceTurn, tallyAgreement, tallyFromReply, tallyOf } from './run_scenarios.mjs';
 import { MARKER_A, NOTE_INJECTED, NOTE_ONE, PROTOCOL_TEXT, buildCohort } from './scenario_inputs.mjs';
 
 const ctxOf = (/** @type {Record<string, any>} */ over = {}) => ({ index: 1, status: 'settled', tools: [], reply: '这是一段足够长的回答，用来通过长度检查，没有任何内部字段。', toolText: '', state: { subjects: [], searches: 0, jobCount: 0, protocolRows: [], protocolSubjects: [] }, before: { subjects: [], jobCount: 0 }, turnStartedAt: 0, files: [], ...over });
@@ -15,6 +15,13 @@ describe('what a reply may not hold', () => {
   test('a registry id the tools never returned is invented', () => {
     assert.deepEqual(inventedIds('见 NCT01234567 和 nct07654321', '... "NCT01234567" ...'), ['NCT07654321']);
     assert.deepEqual(registryIdsIn('NCT01234567, NCT01234567'), ['NCT01234567']);
+  });
+});
+
+describe('what a line can be held to', () => {
+  test('only a line that names one trial is held against that trial\'s row', () => {
+    const reply = '| NCT01234567 | 可能符合 |\nNCT01234567、NCT07654321 不符合\n第一档：可能符合';
+    assert.equal(singleIdLines(reply), '| NCT01234567 | 可能符合 |\n第一档：可能符合');
   });
 });
 

@@ -494,10 +494,13 @@ const VERDICT_CELLS = Object.freeze({ 符合: 'eligible', 可能符合: 'possibl
  * @param {string} line @param {string | null} heading @returns {{ stated: Set<string>, from: 'cell' | 'line' | 'heading' | 'none' }}
  */
 function statedBy(line, heading) {
+  // A reply that says 「判定为“可能符合”」 names the verdict outright; the word is read before anything else in the line is.
+  const named = /判定?为?[“"「]?(可能符合|不符合|证据不足|符合)/u.exec(line.replace(/\*/gu, ''))?.[1];
+  if (named) return { stated: new Set([VERDICT_CELLS[/** @type {keyof typeof VERDICT_CELLS} */ (named)]]), from: 'line' };
   if (line.includes('|')) {
     // A verdict cell begins with the verdict word, alone or followed by a bracket, a colon or a reason: 「不符合（当前）」, 「可能符合：年龄满足」.
     const cells = line.split('|').map((cell) => cell.replace(/[*\s]/gu, '').replace(/^(?:当前|目前)/u, ''));
-    const verdicts = cells.map((cell) => /^(可能符合|不符合|证据不足|记载不足|符合)(?:$|[（(：:，,。；;])/u.exec(cell)?.[1] ?? null)
+    const verdicts = cells.map((cell) => /^(可能符合|不符合|证据不足|记载不足|符合)(?:$|[（(：:，,。；;\d])/u.exec(cell)?.[1] ?? null)
       .map((word) => (word ? VERDICT_CELLS[/** @type {keyof typeof VERDICT_CELLS} */ (word)] : null)).filter(Boolean);
     if (verdicts.length) return { stated: new Set(/** @type {string[]} */ (verdicts)), from: 'cell' };
     return heading ? { stated: new Set([heading]), from: 'heading' } : { stated: new Set(), from: 'none' };
