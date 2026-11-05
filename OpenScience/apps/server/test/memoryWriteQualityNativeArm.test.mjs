@@ -232,3 +232,14 @@ test("development policy cases preserve health and people while keeping hard ide
   assert.deepEqual(written.person, ["people/张某.md"]);
   assert.deepEqual(written.note, ["notes/hypothesis.md"]);
 });
+
+test("an unadopted assistant offer requires attribution review even when its kind checks pass", async () => {
+  const { by } = await nextRound();
+  const item = by("c18");
+  const falseCommitment = {
+    "notes/proposed-followup.md": "User decided to receive an automatic literature summary every week and maintain a citation library.",
+  };
+  assert.deepEqual(scoreNative(item, falseCommitment, 1), [], "mechanical kind checks cannot establish attribution");
+  assert.equal(item.decidable, false, "a mechanically passing false commitment must be reported as needs-reading");
+  assert.match(item.judge, /unconfirmed.*assistant|assistant.*unconfirmed/i);
+});

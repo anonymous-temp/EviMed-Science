@@ -252,3 +252,16 @@ test("verification codes and short passwords remain hard boundaries without mask
   }
   for (const text of ["空腹血糖 6.2", "2026-11-04 复查", "二甲双胍 500 mg", "电话 13800138000"]) assert.equal(maskIdentifiers(text), text);
 });
+
+for (const [source, expected] of [
+  ["密码是甲乙丙", "密码是[已省略]"],
+  ["password: !", "password: [已省略]"],
+  ["验证码是：123456", "验证码是：[已省略]"],
+  ["验证码: A1B2C3", "验证码: [已省略]"],
+]) {
+  test(`structured secret detection and masking agree for ${source.split(/[：:是]/)[0]}`, () => {
+    assert.deepEqual(identifierShapesIn(source), ["credential"]);
+    assert.equal(maskIdentifiers(source), expected);
+    assert.deepEqual(identifierShapesIn(expected), [], "the placeholder is not another secret");
+  });
+}
