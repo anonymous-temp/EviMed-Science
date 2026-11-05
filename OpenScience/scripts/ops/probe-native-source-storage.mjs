@@ -32,8 +32,9 @@ await fs.copyFile('/tmp/storages/workspace.json','/tmp/storages/workspace.json.b
 const bFile='/tmp/sessions/'+sourceSessionRelativePath(headers[2])+'/session.v4.jsonl.zstd', before=await fs.readFile(bFile);
 const frozen=await captureSourceStorage(paths,'source_a');assert.deepEqual(frozen.sessions.map(h=>h.id).sort(),['managed_child','source_a']);
 await seed([{version:4,id:'late_grandchild',createdAt:2,cwd:'/workspace',delegationDepth:2,isSeeded:true,origin:'subagent',parentSession:'managed_child'}]);
+await fs.writeFile('/tmp/storages/session_projcache.json.bak.synthetic.source-cleanup-1','{partial');
 const result=await purgeSourceStorage(paths,frozen);assert.deepEqual(result.removedSessionIds,['late_grandchild','managed_child','source_a']);
-assert.deepEqual((await purgeSourceStorage(paths,frozen)).removedSessionIds,['managed_child','source_a']);
+assert.deepEqual((await purgeSourceStorage(paths,frozen)).removedSessionIds,['late_grandchild','managed_child','source_a']);
 assert.deepEqual(await fs.readFile(bFile),before);
 assert.equal((await captureSourceStorage(paths,'source_a')).root.absent,true);
 assert.equal((await captureSourceStorage(paths,'source_b')).root.id,'source_b');
