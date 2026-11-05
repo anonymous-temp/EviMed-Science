@@ -33,6 +33,9 @@ export async function withLearnedLibrary(documents, userId, operation, { transac
     if (!inherited.open) throw conflict();
     return nested(inherited, operation);
   }
+  // Crossing to another owner/client while holding this library can invert
+  // lock order. Admit that work independently after the current operation.
+  if (inherited) throw conflict();
   const scope = { key, userId, open: true, serial: Promise.resolve(), observers: [] };
   if (database?.query) {
     if (!database.transaction || !database.withTransactionClient || !database.afterCommit) throw conflict();
