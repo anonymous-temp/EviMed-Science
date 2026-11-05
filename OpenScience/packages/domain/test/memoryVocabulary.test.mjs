@@ -265,3 +265,20 @@ for (const [source, expected] of [
     assert.deepEqual(identifierShapesIn(expected), [], "the placeholder is not another secret");
   });
 }
+
+for (const [source, expected] of [
+  ["password: ab;cD9!", "password: [已省略]"],
+  ["password: ab,cD9!", "password: [已省略]"],
+  ["password: 'ab;c D9!'", "password: [已省略]"],
+  ['password: "ab,c D9!"', "password: [已省略]"],
+  ["密码是“甲;乙 丙!”", "密码是[已省略]"],
+  ["password: ab;cD9!, then run it", "password: [已省略], then run it"],
+  ["password: ab,cD9!; then run it", "password: [已省略]; then run it"],
+  ["password: !, then run it", "password: [已省略], then run it"],
+]) {
+  test(`punctuation inside a secret token is fully masked: ${source}`, () => {
+    assert.deepEqual(identifierShapesIn(source), ["credential"]);
+    assert.equal(maskIdentifiers(source), expected);
+    assert.deepEqual(identifierShapesIn(expected), [], "redaction must be stable on the next read");
+  });
+}

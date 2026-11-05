@@ -873,3 +873,40 @@ for (const [content, safe] of [
     ]);
   });
 }
+
+for (const [content, safe] of [
+  ["password: ab;cD9!", "password: [已省略]"],
+  ["password: ab,cD9!", "password: [已省略]"],
+  ["password: 'ab;c D9!'", "password: [已省略]"],
+  ['password: "ab,c D9!"', "password: [已省略]"],
+  ["密码是“甲;乙 丙!”", "密码是[已省略]"],
+  ["password: ab;cD9!, then run it", "password: [已省略], then run it"],
+  ["password: ab,cD9!; then run it", "password: [已省略]; then run it"],
+  ["password: !, then run it", "password: [已省略], then run it"],
+]) {
+  test(`captured punctuation-bearing secret reaches the engine fully redacted: ${content}`, async (t) => {
+    for (const role of ["user", "assistant"]) {
+      assert.deepEqual(filterCapturedMessage({ role, content }), {
+        forward: { role, parts: [{ type: "text", text: safe }] }, masked: true,
+      });
+    }
+    const { stub, call } = await fixture(t);
+    await call("POST", "/api/v1/sessions", { session_id: SESSION });
+    const response = await call("POST", `/api/v1/sessions/${SESSION}/messages`, { role: "user", content });
+    assert.equal(response.status, 200);
+    assert.deepEqual(stub.sent("POST", `/api/v1/sessions/${SESSION}/messages`).map((request) => request.body), [
+      { role: "user", parts: [{ type: "text", text: safe }] },
+    ]);
+  });
+}
+
+test("secret grammar leaves useful medical values and contacts unchanged", () => {
+  for (const content of [
+    "HbA1c 8.2%, metformin 500 mg; review on 2026-12-01",
+    "eGFR 38 mL/min/1.73m²，电话 13800138000，邮箱 anna@example.com",
+  ]) {
+    assert.deepEqual(filterCapturedMessage({ role: "user", content }), {
+      forward: { role: "user", parts: [{ type: "text", text: content }] }, masked: false,
+    });
+  }
+});
