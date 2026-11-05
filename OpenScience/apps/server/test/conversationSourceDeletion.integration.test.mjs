@@ -196,6 +196,7 @@ test('the real memory gateway rejects a cross-project uncommitted native alias b
   assert.equal((await write('default')).status,200);
   assert.equal((await f.database.query('SELECT 1 FROM evimed_memory.native_sessions WHERE user_id=$1 AND engine_session=$2',[f.userId,'dsh-same'])).rows.length,1,'an unchanged project scope re-registers its source after reset');
   assert.equal((await write('other')).status,403);
+  assert.equal((await fetch(`${base}/api/v1/sessions/dsh-same`,{headers:{authorization:'Bearer other'}})).status,403,'a foreign project cannot inspect the other native session metadata');
   assert.equal((await fetch(`${base}/api/v1/sessions/dsh-same/commit`,{method:'POST',headers:{authorization:'Bearer other','content-type':'application/json'},body:'{}'})).status,403);
   assert.equal(f.stub.sessions.get(`${f.engineUser}/dsh-same`).messages.length,1);
   assert.equal(await f.overlay.projectOfSession(f.userId,'dsh-same'),'default');
