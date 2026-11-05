@@ -14,6 +14,7 @@ import { useVcrRun } from "../useVcrRun";
 import { VCR_TRIAL_SEARCH_FAILED } from "../vcrText";
 import { FIND_TRIALS_LABEL } from "../vcrActionWords";
 import { fitText, JudgedPairDetail, RegistryLink, statusLine, VerdictTag } from "./JudgedPair";
+import { Note } from "@/components/ui/Note";
 import { JudgedFailures, JudgedProgressNote, judgedCountLabel } from "./JudgedProgress";
 import { MatchingExport } from "./MatchingExport";
 
@@ -107,7 +108,11 @@ export function PatientTrials({ studyId, study, judged, picked, onPick, onChange
       )}
     >
       <div className="flex flex-col gap-4">
-        {judged.search && <p data-vcr-search-line="" className="text-caption text-text-3">{judged.search}</p>}
+        {judged.search && mayRun && (
+          <div data-vcr-search-line="">
+            <Note action={<Button variant="secondary" size="sm" actionKind="start" loading={searching} onClick={search}>再查一次</Button>}>{judged.search}</Note>
+          </div>
+        )}
         {judged.stale && (
           <div data-vcr-stale={judged.stale.count} className="flex flex-wrap items-center gap-3 rounded-card border border-border bg-surface-2 px-3 py-2">
             <p className="min-w-0 flex-1 text-ui text-text-2">{judged.stale.label}（{judged.stale.count} 个试验）；原来的判定保留为历史。</p>
@@ -116,7 +121,7 @@ export function PatientTrials({ studyId, study, judged, picked, onPick, onChange
         )}
         {olderNote.length > 0 && (
           <div data-vcr-older-note={olderNote.length} className="flex flex-wrap items-center gap-3 rounded-card border border-border bg-surface-2 px-3 py-2">
-            <p className="min-w-0 flex-1 text-ui text-text-2">病历在判定之后有更新：{olderNote.length} 个试验的判定依据的是更新前的病历；原来的判定保留为历史。</p>
+            <div className="min-w-0 flex-1"><Note result={["病历在判定之后有更新：", { n: olderNote.length }, " 个试验的判定依据的是更新前的病历；原来的判定保留为历史。"]} /></div>
             {mayRun && progress.state !== "running" && <Button variant="secondary" size="sm" actionKind="start" loading={working} onClick={rejudgeOlderNote}>重新判定</Button>}
           </div>
         )}

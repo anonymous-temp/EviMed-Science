@@ -168,6 +168,9 @@ test("the patient page carries one line from the newest search for this person: 
   assert.match(page.search, /ClinicalTrials\.gov 已查/u);
   assert.match(page.search, /CTIS 没查到（登记库暂时没有回答）/u);
   assert.ok(!/registry_|_/.test(page.search), "no code in the line");
+  await vcr.candidateSearches.save(study, { subjectKey, request: { condition: "prostate cancer", terms: [] }, found: 12, items: [], rerank: null,
+    registries: [{ registry: "clinicaltrials.gov", name: "ClinicalTrials.gov", state: "searched", failed: [] }] });
+  assert.equal((await vcr.matchResults.forPatient(study, subjectKey, { viewer })).search, undefined, "every registry answered, nothing for the reader to do");
 });
 
 test("a judging job reserves no engine seconds it never uses", options, async () => {

@@ -271,7 +271,7 @@ const SEARCH_FAILURE_WORDS_ZH = Object.freeze(/** @type {Record<string, string>}
 }));
 
 /**
- * What was searched for this person and which registries answered, from the newest saved search, in one line; a registry that failed is named with the reason.
+ * What the newest saved search for this person could not reach, in one line with the reason; nothing when every registry answered, since then there is nothing for the reader to do.
  * @param {{ createdAt: string | null, found: number, registries: any[] } | null} receipt
  */
 function searchLineOf(receipt) {
@@ -284,7 +284,7 @@ function searchLineOf(receipt) {
     const reasons = [...new Set(list(entry?.failed).map((failure) => SEARCH_FAILURE_WORDS_ZH[String(object(failure).reason)] ?? "登记库没有回答"))];
     return `${name} 没查到（${reasons.join("、") || "登记库没有回答"}）`;
   });
-  if (!parts.length) return null;
+  if (!parts.length || list(receipt.registries).every((entry) => entry?.state === "searched")) return null;
   return `上次检索${receipt.createdAt ? `（${receipt.createdAt.slice(0, 10)}）` : ""}：共找到 ${receipt.found} 个试验；${parts.join("，")}。`;
 }
 

@@ -373,7 +373,7 @@ export function useMatchingControls({ studyId, data, direction, protocolId, subj
     <Disclosure summary="比较多个方案">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <ProtocolChecklist protocols={protocols} chosen={panel} onChange={setPanel} />
-        {canRun && <p className="text-caption text-text-3 md:col-span-2">{panel.length > 1 ? '点上方的「开始评估所选方案」一起评估勾选的方案。' : '勾选两个以上方案，再点上方的「开始评估」。'}</p>}
+        {canRun && <p className="text-caption text-text-3 md:col-span-2">{panel.length > 1 ? '点上方的“开始评估”一起评估勾选的方案。' : '勾选两个以上方案，再点上方的“开始评估”。'}</p>}
         {(data.comparisons ?? []).length > 0 && (
           <List label="各方案的评估情况" divided className="md:col-span-2">
             {data.comparisons?.map(entry => (
