@@ -196,6 +196,15 @@ test("the candidates of one search: three registries, merged, the duplicate once
   assert.equal(JSON.stringify(answer).includes('"score"'), false, "no candidate carries a score");
 });
 
+test("a search written only in Chinese is told the English registries could not read it, and goes on; one word of English is enough to say nothing", async () => {
+  const pipeline = createVcrEvidencePipeline({ store: {}, registry: registryDouble(), now: () => NOW });
+  const chinese = await pipeline.patientCandidates({ userId: "u1", filter: { condition: "失眠", terms: ["入睡困难", "早醒"] } });
+  assert.equal(chinese.status, "ok", "the search still runs");
+  assert.match(chinese.wordsNote, /都是中文.*写成英文/u);
+  const both = await pipeline.patientCandidates({ userId: "u1", filter: { condition: "失眠", terms: ["insomnia", "早醒"] } });
+  assert.equal(both.wordsNote, undefined);
+});
+
 test("a registry that fails costs its own results and says so; the others stand (M1)", async () => {
   const registry = registryDouble({ ctis: () => ({ status: REGISTRY_UNAVAILABLE, reason: "timeout", items: [], total: null }) });
   const pipeline = createVcrEvidencePipeline({ store: {}, registry, now: () => NOW });

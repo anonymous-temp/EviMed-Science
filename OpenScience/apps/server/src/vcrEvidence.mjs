@@ -1595,6 +1595,8 @@ export function createVcrEvidencePipeline({ store, registry = null, trialCorpus 
         notCovered: CANDIDATES_NOT_COVERED.map((entry) => ({ registry: entry.id, name: entry.name, reason: entry.reason })),
         // What the run says in its reply about where it looked, as the platform words it.
         coverage: coverageSentence(registries, asOf, ranked.record),
+        // Two of the three registries are written in English, and only the model can write the words: measured on real Chinese records, about one in five searches was all in Chinese and found nothing there.
+        ...(queries.some((query) => /[A-Za-z]{2}/.test(query.text)) ? {} : { wordsNote: "这次的检索词都是中文，ClinicalTrials.gov 和 CTIS 的记录是英文的，没查到不等于没有试验。把疾病和关键检索词写成英文，一起再查一次。" }),
         retrieval: { phrases: queries.length, depthPerPhrase: read.depth, requests: read.requests, reachedAllPhrases: read.reachedAll, truncated },
         rerank: ranked.record,
         found: merged.length,
