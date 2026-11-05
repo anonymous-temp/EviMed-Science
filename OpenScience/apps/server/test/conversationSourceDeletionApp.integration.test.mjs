@@ -114,6 +114,7 @@ test('only controller-proven native namespace copies are cleaned and equal ids i
 
 test('unproven consolidation lineage keeps native cleanup pending and quarantines controlled recall/export without erasing B',options,async t=>{
   const {app,base,headers,user,stub,engineUser}=await fixture(t),root=app.nativeMemory.sessions.userRoot(user.id),overlay=app.nativeMemory.overlay;
+  await app.store.requireProject(await app.store.userById(user.id),'default');
   const uri=stub.seedMemory(engineUser,'preferences/source.md','Original private A fact.',{type:'preferences'}),archive=`${root}/sessions/dsh-a/history/archive_001`;
   await overlay.recordCommit({userId:user.id,archiveUri:archive,engineSession:'dsh-a',projectId:'default',origin:'gateway',state:'completed'});
   await overlay.addRevision({userId:user.id,uri,memoryType:'preferences',change:'added',actor:'engine',after:'Original private A fact.',engineSession:'dsh-a',archiveUri:archive,projectId:null});
@@ -164,6 +165,7 @@ test('new account and project archives refuse a pending source even without a na
 
 test('a previously restored source fact is hidden immediately while its source cleanup is still busy',options,async t=>{
   const {app,base,headers,user,stub,engineUser}=await fixture(t),overlay=app.nativeMemory.overlay,root=app.nativeMemory.sessions.userRoot(user.id);
+  await app.store.requireProject(await app.store.userById(user.id),'default');
   const uri=stub.seedMemory(engineUser,'profile.md','# Profile\n- Restored private A.',{type:'profile'}),archive=`${root}/sessions/dsh-a/history/archive_001`;
   await overlay.recordCommit({userId:user.id,archiveUri:archive,engineSession:'dsh-a',projectId:'default',origin:'gateway',state:'completed'});
   await overlay.addRevision({userId:user.id,uri,memoryType:'profile',change:'added',actor:'engine',after:'# Profile\n- Restored private A.',engineSession:'dsh-a',archiveUri:archive,projectId:null});

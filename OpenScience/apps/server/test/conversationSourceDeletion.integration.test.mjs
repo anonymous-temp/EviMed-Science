@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { nativeIntegration } from './helpers/nativeFixture.mjs';
 import { ConversationSourceDeletionLedger } from '../src/conversationSourceDeletionPersistence.mjs';
-const { options, fixture } = nativeIntegration();
+const native=nativeIntegration(),options=native.options;
+async function fixture(...args){const f=await native.fixture(...args);await f.database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'default','Source fixture',1048576)",[f.userId]);return {...f,projectCreatedAt:(await f.database.query("SELECT created_at::text AS stamp FROM evimed_control.projects WHERE user_id=$1 AND id='default'",[f.userId])).rows[0].stamp};}
 
 test('source cleanup removes only its attributed memory lines, scrubs undo history and preserves unrelated bytes', options, async t => {
   const f=await fixture(t), uri=`${f.root}/profile.md`, body='# Profile\n- Source A preference.\n- Independent B preference.';
@@ -36,7 +37,7 @@ test('a replay of the deleted source retains its source fence and cannot leave s
   await f.overlay.syncOrigins(f.userId,uri,{before:'',after:'# Profile\n- Private replay preference.',origin:{engineSession:replay.session,archiveUri:replay.archive_uri,projectId:'default'}});
   const ledger=new ConversationSourceDeletionLedger(f.database);
   const ownerStamp=(await f.database.query('SELECT created_at::text AS stamp FROM evimed_control.users WHERE id=$1',[f.userId])).rows[0].stamp;
-  await ledger.put({id:crypto.randomUUID(),userId:f.userId,projectId:'default',accountCreatedAt:ownerStamp,projectCreatedAt:ownerStamp,rootSessionId:'session_a',sessionIds:['session_a'],frozen:{root:{id:'session_a'}},memoryUserRoot:f.sessions.userRoot(f.userId)});
+  await ledger.put({id:crypto.randomUUID(),userId:f.userId,projectId:'default',accountCreatedAt:ownerStamp,projectCreatedAt:f.projectCreatedAt,rootSessionId:'session_a',sessionIds:['session_a'],frozen:{root:{id:'session_a'}},memoryUserRoot:f.sessions.userRoot(f.userId)});
   assert.ok((await ledger.hiddenMemoryUris(f.userId)).includes(uri));
   await f.store.removeConversationSource(f.userId,'default',['session_a']);
   assert.equal(await f.sessions.read(f.userId,uri),null);
@@ -60,7 +61,7 @@ test('worker-ingested ordinary profile and preferences retain source authority w
   const profile=`${f.root}/profile.md`, preference=`${f.root}/preferences/source.md`;
   assert.equal((await f.overlay.file(f.userId,profile)).projectId,null);
   const ledger=new ConversationSourceDeletionLedger(f.database), stamp=(await f.database.query('SELECT created_at::text AS stamp FROM evimed_control.users WHERE id=$1',[f.userId])).rows[0].stamp;
-  await ledger.put({id:crypto.randomUUID(),userId:f.userId,projectId:'default',accountCreatedAt:stamp,projectCreatedAt:stamp,rootSessionId:'session_a',sessionIds:['session_a'],frozen:{root:{id:'session_a'}},memoryUserRoot:f.sessions.userRoot(f.userId)});
+  await ledger.put({id:crypto.randomUUID(),userId:f.userId,projectId:'default',accountCreatedAt:stamp,projectCreatedAt:f.projectCreatedAt,rootSessionId:'session_a',sessionIds:['session_a'],frozen:{root:{id:'session_a'}},memoryUserRoot:f.sessions.userRoot(f.userId)});
   assert.deepEqual(new Set(await ledger.hiddenMemoryUris(f.userId)),new Set([profile,preference]));
   await f.store.removeConversationSource(f.userId,'default',['session_a']);
   assert.equal(await f.sessions.read(f.userId,profile),null);assert.equal(await f.sessions.read(f.userId,preference),null);
@@ -125,4 +126,33 @@ test('interleaved native extraction diffs attribute only their own additions bef
   await f.worker.processCommits({userId:f.userId});const uri=`${f.root}/profile.md`,origins=await f.overlay.originsOf(f.userId,[uri]);
   assert.equal(origins.get(uri).get((await import('../src/nativeMemoryOverlay.mjs')).lineFingerprint('Independent C.')).engineSession,'dsh-session_b');
   await f.store.removeConversationSource(f.userId,'default',['session_a']);assert.equal(await f.sessions.read(f.userId,uri),'# Profile\n- Independent C.');
+});
+
+test('native source cleanup refuses a cross-incarnation raw session alias before touching retained files',options,async t=>{
+  const f=await fixture(t),source=await f.commitConversation('a',[{role:'user',text:'Replacement source.'}],{projectId:'default'}),prior=f.projectCreatedAt;
+  await f.database.query("UPDATE evimed_control.projects SET created_at=created_at+interval '1 second' WHERE user_id=$1 AND id='default'",[f.userId]);
+  const replacement=(await f.database.query("SELECT created_at::text AS stamp FROM evimed_control.projects WHERE user_id=$1 AND id='default'",[f.userId])).rows[0].stamp;
+  await f.database.query('UPDATE evimed_memory.native_commits SET project_created_at=$2 WHERE user_id=$1',[f.userId,replacement]);
+  await assert.rejects(f.store.removeConversationSource(f.userId,'default',['session_a'],{projectCreatedAt:prior}),{code:'memory_source_lineage_unverified'});
+  assert.ok(f.stub.sessions.has(`${f.engineUser}/${source.session}`));
+  assert.equal((await f.overlay.commit(f.userId,source.archive_uri)).state,'pending');
+});
+
+test('a new source never deletes a retained legacy personal origin with an unproved project incarnation',options,async t=>{
+  const f=await fixture(t),uri=f.seed('profile.md','# Profile\n- Historical independent preference.',{type:'profile'});
+  await f.overlay.upsertFile({userId:f.userId,uri,memoryType:'profile',body:'# Profile\n- Historical independent preference.'});
+  await f.overlay.syncOrigins(f.userId,uri,{after:'# Profile\n- Historical independent preference.',origin:{engineSession:'dsh-same',projectId:'default',projectCreatedAt:null,at:'2020-01-01T00:00:00Z'}});
+  await assert.rejects(f.store.removeConversationSource(f.userId,'default',['same'],{projectCreatedAt:f.projectCreatedAt}),{code:'memory_source_lineage_unverified'});
+  assert.equal(await f.sessions.read(f.userId,uri),'# Profile\n- Historical independent preference.');
+});
+
+test('an old exact-epoch failed native archive remains source-deleted after its project is replaced',options,async t=>{
+  const f=await fixture(t),archive=await f.commitConversation('a',[{role:'user',text:'Old source.'}],{projectId:'default'}),ledger=new ConversationSourceDeletionLedger(f.database);
+  const owner=(await f.database.query('SELECT created_at::text AS stamp FROM evimed_control.users WHERE id=$1',[f.userId])).rows[0].stamp;
+  await ledger.put({id:crypto.randomUUID(),userId:f.userId,projectId:'default',accountCreatedAt:owner,projectCreatedAt:f.projectCreatedAt,rootSessionId:'session_a',sessionIds:['session_a'],frozen:{root:{id:'session_a'}},memoryUserRoot:f.sessions.userRoot(f.userId)});
+  await f.database.query("UPDATE evimed_control.projects SET created_at=created_at+interval '1 second' WHERE user_id=$1 AND id='default'",[f.userId]);
+  await f.overlay.failCommit(f.userId,archive.archive_uri,{error:'synthetic failure',nextAttemptAt:f.now()});f.overlay.sourceDeletion={ledger};
+  const before=f.stub.sessions.size;await f.worker.processCommits({userId:f.userId});
+  assert.equal((await f.overlay.commit(f.userId,archive.archive_uri)).state,'abandoned');assert.equal(f.stub.sessions.size,before);
+  assert.equal(await f.overlay.projectEpochOfSession(f.userId,archive.session),null,'a retained old binding is not a current archive authority');
 });
