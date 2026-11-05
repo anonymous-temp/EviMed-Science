@@ -11,7 +11,7 @@
  *
  * Environment (all required unless marked): OS, TREE_DIR, LIVE_DIR, LIVE_DATA, LIVE_PORT, LIVE_DATABASE_URL (a local evimed_test_*),
  * DSH_BIN, EVAL_DEEPSEEK_KEY_FILE, VCR_BENCHMARK_BUDGET_FILE (absolute), VCR_BENCHMARK_BUDGET_CNY, VCR_STARTUP_RECEIPT,
- * VCR_COLLECTION_MANIFEST (optional: the frozen trial collection of a ranking board), PRODUCT_MODEL_BASE_URL (optional), PRODUCT_ENGINE_STANDIN (optional, 1),
+ * VCR_COLLECTION_MANIFEST (optional: the frozen trial collection of a ranking board), PRODUCT_MODEL_BASE_URL (optional), PRODUCT_ENGINE_STANDIN (optional, 1), PRODUCT_ASK_USER (optional, 0: the kernel's ask-user tool is not offered; a conversation with a person typing, and no harness to answer, asks in its reply),
  * PRODUCT_JUDGE_CONCURRENCY (optional).
  */
 import { execFileSync } from 'node:child_process';
@@ -59,6 +59,7 @@ process.env.LIVE_ENV = JSON.stringify({
 process.env.LIVE_OVERRIDES = JSON.stringify({
   devAuth: false, authMode: 'local', selfRegistrationEnabled: true, databaseUrl: process.env.LIVE_DATABASE_URL, databaseUrlFile: '', deepseekBaseUrl: modelBase, ...(standIn ? { vcrEngineUrl: 'http://127.0.0.1:9', vcrEngineTokenFile: engineToken } : {}),
   publicUrl: `http://127.0.0.1:${port}`, localAutoConfig: false, deepseekModel: 'deepseek-flash', runtimeUiProxyEnabled: true, host: '127.0.0.1', runtimeUiPort: 0,
+  ...(process.env.PRODUCT_ASK_USER === '0' ? { runtimeAskUserEnabled: false } : {}),
   maxProjectsPerUser: 100, userDailySpendLimit: Number(process.env.PRODUCT_ACCOUNT_CAP_CNY ?? 5), userRunSpendLimit: Number(process.env.PRODUCT_RUN_CAP_CNY ?? 4),
   nativeMemoryTurnCommitEnabled: false, memoryEnabled: false, memoryRecallEnabled: false, learningEnabled: false, evolutionEnabled: false, autopilotEnabled: false, loopxEnabled: false,
   vcrEnabled: true, vcrAudience: 'all', vcrProviderAgreements: true, vcrProviderAgreementReference: 'Public synthetic patient vignettes and registry records; no clinical enrollment decisions',

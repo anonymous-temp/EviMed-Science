@@ -275,7 +275,7 @@ export const ORDER = Object.freeze(['A', 'E', 'R', 'N', 'F']);
 
 const OPTIONS = {
   out: { type: 'string' }, 'live-root': { type: 'string' }, os: { type: 'string' }, 'key-file': { type: 'string' }, 'db-name': { type: 'string', default: 'evimed_test_s14' }, 'db-url': { type: 'string' },
-  real: { type: 'boolean', default: false }, scenarios: { type: 'string' }, force: { type: 'boolean', default: false }, 'allow-peak': { type: 'boolean', default: false },
+  real: { type: 'boolean', default: false }, unattended: { type: 'boolean', default: false }, scenarios: { type: 'string' }, force: { type: 'boolean', default: false }, 'allow-peak': { type: 'boolean', default: false },
   'allowance-cny': { type: 'string', default: '40' }, 'floor-cny': { type: 'string', default: String(DEFAULT_FLOOR_CNY) }, 'run-cap-cny': { type: 'string', default: '4' }, 'account-cap-cny': { type: 'string', default: '8' },
   'turn-timeout-min': { type: 'string', default: '25' }, 'quiet-seconds': { type: 'string', default: '30' }, concurrency: { type: 'string', default: '8' }, 'min-free-mb': { type: 'string', default: '800' },
   'eval-python': { type: 'string' }, 'check-minutes': { type: 'string', default: '5' },
@@ -292,7 +292,7 @@ export function parseOptions(argv, env = process.env) {
     out: path.resolve(need(values.out, '--out')), liveRoot: path.resolve(need(values['live-root'] ?? env.VCR_BOARDS_LIVE, '--live-root')),
     dshBin: path.join(path.resolve(need(values['live-root'] ?? env.VCR_BOARDS_LIVE, '--live-root')), 'kernel/node_modules/.bin/dsh'), budgetCny: number(values['allowance-cny'], '--allowance-cny', 0), tree: path.resolve(need(values.os ?? env.OS, '--os')),
     keyFile: path.resolve(need(values['key-file'] ?? env.OPEN_SCIENCE_DEEPSEEK_API_KEY_FILE, '--key-file')), dbName: String(values['db-name']), dbUrl: values['db-url'] ?? env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? null,
-    real: Boolean(values.real), scenarios: ORDER.filter((id) => ids.includes(id)), force: Boolean(values.force), allowPeak: Boolean(values['allow-peak']),
+    real: Boolean(values.real), unattended: Boolean(values.unattended), scenarios: ORDER.filter((id) => ids.includes(id)), force: Boolean(values.force), allowPeak: Boolean(values['allow-peak']),
     allowanceCny: number(values['allowance-cny'], '--allowance-cny', 0), floorCny: number(values['floor-cny'], '--floor-cny', 0), runCapCny: number(values['run-cap-cny'], '--run-cap-cny', 0.1), accountCapCny: number(values['account-cap-cny'], '--account-cap-cny', 0.1),
     turnTimeoutMs: number(values['turn-timeout-min'], '--turn-timeout-min', 1) * 60_000, quietMs: number(values['quiet-seconds'], '--quiet-seconds', 0) * 1000, concurrency: Math.max(1, Math.min(64, Math.floor(Number(values.concurrency)) || 8)),
     minFreeMb: number(values['min-free-mb'], '--min-free-mb', 0), evalPython: values['eval-python'] ?? 'python3', checkMs: number(values['check-minutes'], '--check-minutes', 0.1) * 60_000,
@@ -305,17 +305,18 @@ export function parseOptions(argv, env = process.env) {
 
 /**
  * A signed-in throwaway account on the server, with its own project and session, and the calls a driver makes on its behalf. Every call is marked
- * `automated`, as every dispatching driver's is. `close()` stops what the account started and deletes it.
+ * `automated` when `attended` is false (a scenario is a person's conversation, so it is attended by default: the platform reads a pasted record as the
+ * person's own message only in a run that is not automated; the account is a throwaway one and memory and learning are off on this server). `close()` stops what the account started and deletes it.
  * @param {{ base: string, instance: string, prefix: string, log: (line: string) => void }} input
  */
-export async function connect({ base, instance, prefix, log }) {
+export async function connect({ base, instance, prefix, log, attended = true }) {
   /** @type {Record<string, any> | null} */ let account = null;
   let projectId = '', started = false;
   /** @param {string} method @param {string} route @param {unknown} [body] @param {{ allowed?: number[], cleanup?: boolean, raw?: boolean, project?: boolean }} [options] */
   const call = async (method, route, body, { allowed = [200, 201, 202], cleanup = false, raw = false, project = true } = {}) => {
     const response = await fetch(base + route, {
       method, redirect: 'error', signal: AbortSignal.timeout(cleanup ? 15_000 : 60_000),
-      headers: { 'content-type': 'application/json', origin: base, ...account?.headers, 'x-evimed-automated': '1', ...(projectId && project ? { 'x-open-science-project': projectId } : {}) },
+      headers: { 'content-type': 'application/json', origin: base, ...account?.headers, ...(attended ? {} : { 'x-evimed-automated': '1' }), ...(projectId && project ? { 'x-open-science-project': projectId } : {}) },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
     if (response.headers.get('x-evimed-benchmark-instance') !== instance) throw new Error('Benchmark server instance changed');
@@ -348,7 +349,7 @@ export async function connect({ base, instance, prefix, log }) {
   };
   account = await openThrowawayAccount({ base, send: fetchTransport(base), prefix, signals: false, say: (message) => log(`  ${message}`), stop: async () => { await quiesce(); if (started) await call('POST', '/api/commands/stop_runtime', {}, { cleanup: true }); } });
   return {
-    account, call, studies,
+    account, call, studies, attended,
     get projectId() { return projectId; },
     /** A fresh project and an open-domain conversation in it, as a person starts one. @param {string} name */
     async startConversation(name) {
@@ -401,7 +402,7 @@ export async function runTurn({ conn, sessionId, spec, index, env, previous, rea
     const answer = await conn.call('POST', '/api/files/upload', { root: 'workspace', path: `inputs/${file.name}`, data: bytes.toString('base64'), encoding: 'base64' });
     uploads.push({ name: file.name, sha256: hash(bytes), sourceId: answer?.source?.id ?? null, vcrInput: answer?.vcrInput ?? null, vcrInputWarning: answer?.vcrInputWarning ?? null });
   }
-  const run = await conn.call('POST', '/api/agent-runs/dispatch', { sessionId, dispatchId: `scn-${randomUUID()}`, text, automated: true, line: 'answer' });
+  const run = await conn.call('POST', '/api/agent-runs/dispatch', { sessionId, dispatchId: `scn-${randomUUID()}`, text, automated: conn.attended === false, line: 'answer' });
   let memory = { lastChangeAt: Date.now(), signature: '' };
   let status = 'timed_out', jobs = /** @type {any[]} */ ([]), runs = /** @type {any[]} */ ([]);
   while (Date.now() - started < timeoutMs) {
@@ -441,8 +442,8 @@ export async function runTurn({ conn, sessionId, spec, index, env, previous, rea
  * Cross-account: a second account tries the first account's study through the web routes and through its own conversation.
  * @param {{ base: string, instance: string, studyId: string, secrets: string[], log: (line: string) => void }} input
  */
-export async function probeFromAnotherAccount({ base, instance, studyId, secrets, log }) {
-  const conn = await connect({ base, instance, prefix: 'scnb', log });
+export async function probeFromAnotherAccount({ base, instance, studyId, secrets, log, attended = true }) {
+  const conn = await connect({ base, instance, prefix: 'scnb', log, attended });
   try {
     await conn.startConversation('Cross-account probe');
     const routes = ['', '/jobs', '/members', '/patients/rows', '/population/rows', '/matching/judged', '/matching/export', '/followup-history'];
@@ -515,7 +516,7 @@ export async function runScenarios(o, deps = {}) {
       fs.mkdirSync(dataDir, { recursive: true, mode: 0o700 });
       const blockLog = path.join(dataDir, 'registry-blocked.log');
       fs.rmSync(blockLog, { force: true });
-      const extraEnv = group === 'blocked' ? { NODE_OPTIONS: `--require ${path.join(HERE, 'block_registries.cjs')}`, SCENARIO_BLOCK_LOG: blockLog } : {};
+      const extraEnv = { PRODUCT_ASK_USER: '0', ...(group === 'blocked' ? { NODE_OPTIONS: `--require ${path.join(HERE, 'block_registries.cjs')}`, SCENARIO_BLOCK_LOG: blockLog } : {}) };
       const server = await startServer({ ...o, baseUrl: o.real ? REAL_PROVIDER : stand.url }, { dataDir, databaseUrl: dbUrl, log, extraEnv });
       try {
         const pinned = JSON.parse(fs.readFileSync(path.join(o.tree, 'deps-version.json'), 'utf8')).dsh?.version ?? null;
@@ -553,7 +554,7 @@ async function runScenario({ o, id, server, stack, reader, env, spend, spentSoFa
   const dir = path.join(o.out, id);
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   log(`[run_scenarios] scenario ${id}: ${scenario.title}`);
-  const conn = await connect({ base: server.base, instance: server.instance, prefix: `scn${id.toLowerCase()}`, log });
+  const conn = await connect({ base: server.base, instance: server.instance, prefix: `scn${id.toLowerCase()}`, log, attended: !o.unattended });
   /** @type {any[]} */ const turns = [];
   /** @type {any} */ let probes = null, second = null, stopped = null, result = null;
   let previous = { messages: 0, state: await readState(reader.database, conn.account.id, '', 0), usage: null };
@@ -577,7 +578,7 @@ async function runScenario({ o, id, server, stack, reader, env, spend, spentSoFa
       const secrets = [MARKER_A, studyId, ...subjectKeys, '陈某'];
       // The control: the owner reads the same study with a 200, so that the other account's 404 is a refusal and not a wrong id.
       const control = await conn.call('GET', `/api/vcr/studies/${encodeURIComponent(studyId)}`, undefined, { raw: true });
-      const other = await probeFromAnotherAccount({ base: server.base, instance: server.instance, studyId, secrets, log });
+      const other = await probeFromAnotherAccount({ base: server.base, instance: server.instance, studyId, secrets, log, attended: !o.unattended });
       probes = { ownerControlStatus: control.status, otherAccount: other.probes };
       try {
         const sessionId = await other.conn.startConversation('Cross-account conversation');
