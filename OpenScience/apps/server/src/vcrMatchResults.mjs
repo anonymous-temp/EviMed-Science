@@ -40,7 +40,7 @@ import {
 
 import { presentJudgment } from "./vcrMatchJudge.mjs";
 import { phaseLabel, registryStatusLabel } from "./vcrPatientTrials.mjs";
-import { REGISTRY_RECORD_BASIS, WITHDRAWN_SUBJECT_MARK, basisChangedOf, judgingProgress, recordGapOf, standingRows } from "./vcrMatchJudgmentStore.mjs";
+import { REGISTRY_RECORD_BASIS, REJUDGE_FAILED_NOTE_ZH, WITHDRAWN_SUBJECT_MARK, basisChangedOf, judgingProgress, recordGapOf, standingRows } from "./vcrMatchJudgmentStore.mjs";
 import { VCR_SCHEMA } from "./vcrPersistence.mjs";
 import { VcrStoreBase } from "./vcrStoreBase.mjs";
 
@@ -258,6 +258,7 @@ const gapOfRow = (row) => recordGapOf({ unreadableDocuments: row?.unreadable_doc
 
 /** What a pair's list row says of its second stage when it is not behind the verdict. @param {any} pair */
 function clausesNoteOf(pair) {
+  if (pair.rejudgeFailure) return `${REJUDGE_FAILED_NOTE_ZH}（${vcrMatchFailureReason(pair.rejudgeFailure.code)}）`;
   if (pair.clauseFailure && !pair.judgedByClauses) return `逐条判定没有完成：${vcrMatchFailureReason(pair.clauseFailure)}`;
   if (pair.older === "criteria") return "逐条判定读的是更早的内容，没有算进这个结论。";
   if (pair.older === "fit") return "匹配度读的是更早的内容，没有算进这个结论。";
@@ -334,8 +335,12 @@ export class VcrMatchResults extends VcrStoreBase {
         WHERE j.study_id = $1 AND ($2::text IS NULL OR j.subject_key = $2) AND ($3::text IS NULL OR j.target_kind = $3) AND ($4::text IS NULL OR j.target_id = $4) AND ${NOT_WITHDRAWN}
         ORDER BY j.subject_key, j.target_kind, j.target_id, j.mode, (j.status = 'done') DESC, j.updated_at DESC, j.id
         LIMIT ${Math.floor(this.mostPairs) * 2})
-      SELECT ${COLUMNS}, k.answered, k.support, k.against, k.not_applicable, k.silent, k.nei, k.silent_against, k.against_reason, k.support_reason, k.open_reason, u.unanswered
-      FROM newest nw JOIN ${S}.match_judgments j ON j.id = nw.id ${COUNTS}`, [studyId, subjectKey, targetKind, targetId]);
+      SELECT ${COLUMNS}, k.answered, k.support, k.against, k.not_applicable, k.silent, k.nei, k.silent_against, k.against_reason, k.support_reason, k.open_reason, u.unanswered, nf.newer_error, nf.newer_at
+      FROM newest nw JOIN ${S}.match_judgments j ON j.id = nw.id ${COUNTS}
+      LEFT JOIN LATERAL (
+        SELECT f.error_code AS newer_error, f.updated_at AS newer_at FROM ${S}.match_judgments f
+        WHERE j.status = 'done' AND f.study_id = j.study_id AND f.subject_key = j.subject_key AND f.target_kind = j.target_kind AND f.target_id = j.target_id AND f.mode = j.mode
+          AND f.status = 'failed' AND f.updated_at > j.updated_at ORDER BY f.updated_at DESC LIMIT 1) nf ON true`, [studyId, subjectKey, targetKind, targetId]);
   }
 
   /**
@@ -381,6 +386,8 @@ export class VcrMatchResults extends VcrStoreBase {
         continue;
       }
       const anchor = clauses && scored ? (clauses.updated_at >= scored.updated_at ? clauses : scored) : clauses ?? scored;
+      // A later reading of either mode that did not finish: the last verdict stays, and the pair is owed its re-judgment.
+      const later = [fit, criteria].filter((row) => row?.newer_at).sort((a, b) => String(iso(b.newer_at)).localeCompare(String(iso(a.newer_at))))[0] ?? null;
       const counts = clauses ? countsOf(clauses) : null;
       const score = scored?.fit ?? clauses?.fit ?? null;
       const verdict = verdictOfCounts({ fit: score, counts, missingReasons: Number(scored?.missing_reasons ?? 0), ineligibleReasons: Number(scored?.ineligible_reasons ?? 0) });
@@ -392,6 +399,7 @@ export class VcrMatchResults extends VcrStoreBase {
         confidence: (scored?.confidence ?? clauses?.confidence) === null || (scored?.confidence ?? clauses?.confidence) === undefined ? null : Number(scored?.confidence ?? clauses?.confidence),
         verdict: verdict.verdict, counts, producer: String(anchor.producer), judgedAt: iso(anchor.updated_at), basisChanged: basisMarkOf(scored?.basis_changed ?? clauses?.basis_changed ?? null),
         eligibilitySource: anchor.eligibility_source ?? scored?.eligibility_source ?? null, judgedByClauses: Boolean(clauses), older: standing.older, recordGap: gapOfRow(anchor),
+        ...(later ? { rejudgeFailure: { code: later.newer_error ?? "vcr_match_judge_failed", at: iso(later.newer_at) } } : {}),
         ...(criteria?.status === "failed" ? { clauseFailure: criteria.error_code ?? "vcr_match_judge_failed", clauseFailedAt: iso(criteria.updated_at) } : {}),
         why: whyOf(verdict.verdict, { first_eligible: scored?.first_eligible, first_ineligible: scored?.first_ineligible, first_missing: scored?.first_missing, rationale: scored?.rationale,
           against_reason: clauses?.against_reason, support_reason: clauses?.support_reason, open_reason: clauses?.open_reason }, counts),
@@ -442,7 +450,8 @@ export class VcrMatchResults extends VcrStoreBase {
    */
   #failures({ done, failed }) {
     const owed = done.filter((pair) => pair.clauseFailure && !pair.judgedByClauses).map((pair) => ({ ...this.#failure({ ...pair, code: pair.clauseFailure, at: pair.clauseFailedAt }), reason: `逐条判定没有完成：${vcrMatchFailureReason(pair.clauseFailure)}`, clausesOnly: true }));
-    return [...failed.map((entry) => this.#failure(entry)), ...owed];
+    const refailed = done.filter((pair) => pair.rejudgeFailure).map((pair) => ({ ...this.#failure({ ...pair, code: pair.rejudgeFailure.code, at: pair.rejudgeFailure.at }), reason: `重新判定没有完成：${vcrMatchFailureReason(pair.rejudgeFailure.code)}；仍显示上一次的结论`, verdictKept: true }));
+    return [...failed.map((entry) => this.#failure(entry)), ...owed, ...refailed];
   }
 
   /**
@@ -510,7 +519,7 @@ export class VcrMatchResults extends VcrStoreBase {
    */
   async forPatient(study, subjectKey, { target = null, viewer = null } = {}) {
     const pairs = await this.#pairs(study.id, { subjectKey });
-    const { left: _left, settings: _settings, ...progress } = await this.#progress(study.id, { direction: "patient_to_trial", subjectKey }, pairs);
+    const { left: _left, settings: _settings, waitingIds: _waitingIds, ...progress } = await this.#progress(study.id, { direction: "patient_to_trial", subjectKey }, pairs);
     const ranked = rankJudgments(pairs.done.map((pair) => ({ ...pair, id: pair.targetId, criteria: pair.counts && pair.counts.against > 0 ? [{ label: "excluded", basis: "stated" }] : [] })));
     await this.#judgeReaders(study, viewer, ranked);
     const trials = ranked.map((pair, index) => ({ rank: index + 1, ...this.#listed(pair) }));
@@ -534,7 +543,7 @@ export class VcrMatchResults extends VcrStoreBase {
   async forProtocol(study, protocolVersionId, { verdict = null, offset = 0, limit = MATCH_PAGE.default, subjectKey = null, viewer = null } = {}) {
     const scope = { targetKind: "protocol_version", targetId: protocolVersionId };
     const pairs = await this.#pairs(study.id, scope);
-    const { left: _left, settings: _settings, ...progress } = await this.#progress(study.id, { direction: "trial_to_patient", protocolVersionId }, pairs);
+    const { left: _left, settings: _settings, waitingIds: _waitingIds, ...progress } = await this.#progress(study.id, { direction: "trial_to_patient", protocolVersionId }, pairs);
     /** @type {Record<string, number>} */
     const tallies = Object.fromEntries(VERDICTS.map((name) => [name, 0]));
     for (const pair of pairs.done) tallies[pair.verdict] += 1;
@@ -661,23 +670,34 @@ export class VcrMatchResults extends VcrStoreBase {
   async exporter(study, { format, kind, direction, subjectKey = null, protocolVersionId = null, viewer = null }, now = () => new Date()) {
     const scope = direction === "patient_to_trial" ? { subjectKey } : { targetKind: "protocol_version", targetId: protocolVersionId };
     const pairs = await this.#pairs(study.id, scope);
+    const { left: _left, settings: _settings, waitingIds, ...progress } = await this.#progress(study.id, { direction, subjectKey, protocolVersionId }, pairs);
     const ordered = [...pairs.done].sort((a, b) => (a.subjectKey < b.subjectKey ? -1 : a.subjectKey > b.subjectKey ? 1 : a.targetId < b.targetId ? -1 : a.targetId > b.targetId ? 1 : 0));
     const exportedAt = now().toISOString();
     const stamp = exportedAt.slice(0, 10);
     const filename = `matching-${direction === "patient_to_trial" ? "patient" : "protocol"}-${kind}-${stamp}.${format}`;
-    const header = ["患者", "对象", "登记号", "标题", "结论", "匹配度（0-100）", "匹配等级", "把握度", "满足", "不满足", "未见记载", "待查", "不适用", "理由", "判定方式", "判定时间", "依据已更新"];
+    const header = ["患者", "对象", "登记号", "标题", "结论", "匹配度（0-100）", "匹配等级", "把握度", "满足", "不满足", "未见记载", "待查", "不适用", "理由", "判定方式", "判定时间", "依据已更新", "备注"];
     const clauseHeader = ["患者", "对象", "登记号", "标题", "结论", "条款编号", "类型", "条款原文", "判定", "有无原文依据", "理由", "依据句号", "依据原文"];
+    const unfinished = progress.state !== "done" && progress.state !== "idle";
+    const unfinishedNote = `判定没有做完：已判 ${progress.finished} / ${progress.total}${progress.failed ? `，${progress.failed} 个没判成` : ""}${progress.waiting ? `，${progress.waiting} 个还没判` : ""}。这个文件只含已判出的部分，没判的列在文件末尾。`;
+    const noteOf = (/** @type {any} */ listed) => [listed.recordGap, listed.clausesNote, listed.eligibilityNote].filter(Boolean).join("；");
+    // Pairs with no verdict, named as the page names them: the ones that failed with their reason, and the ones the job never reached.
+    const missing = [
+      ...pairs.failed.map((entry) => this.#failure(entry)),
+      ...waitingIds.map((id) => (direction === "patient_to_trial" ? { label: null, kind: "registry", id, registryId: id, title: null, subjectKey: subjectKey ?? "", reason: "还没有判定", at: null } : { label: null, kind: "protocol", id: protocolVersionId, registryId: null, title: null, subjectKey: id, reason: "还没有判定", at: null })),
+    ];
+    const names = missing.length ? await this.#labels(study.id, missing.map((entry) => entry.subjectKey)) : new Map();
+    for (const entry of missing) if (!entry.label) entry.label = names.get(entry.subjectKey) ?? vcrSubjectLabel(entry.subjectKey);
     const chunks = (/** @type {any[]} */ items) => { const out = []; for (let at = 0; at < items.length; at += EXPORT_CHUNK) out.push(items.slice(at, at + EXPORT_CHUNK)); return out; };
     const pairLine = (/** @type {any} */ pair) => {
       const listed = this.#listed(pair);
       return { listed, cells: [listed.label, listed.kind === "protocol" ? "本研究方案" : "登记试验", listed.registryId, listed.title, listed.verdictLabel, listed.fit, listed.fitLabel, listed.confidenceLabel,
         listed.counts?.support ?? null, listed.counts?.against ?? null, listed.counts?.silent ?? null, listed.counts?.open ?? null, listed.counts?.notApplicable ?? null, listed.why,
-        listed.producer === "conversation" ? "对话" : "判定作业", listed.judgedAt, listed.basisChanged ? "是" : "否"] };
+        listed.producer === "conversation" ? "对话中判定" : "批量判定", listed.judgedAt, listed.basisChanged ? "是" : "否", noteOf(listed)] };
     };
     /** @param {{ write: (chunk: string) => Promise<void> }} sink */
     const run = async (sink) => {
       if (format === "csv") await sink.write(`\uFEFF${csvLine(kind === "pairs" ? header : clauseHeader)}`);
-      else await sink.write(`{"schema":"evimed-matching-export/1","direction":${JSON.stringify(direction)},"kind":${JSON.stringify(kind)},"exportedAt":${JSON.stringify(exportedAt)},"rows":[`);
+      else await sink.write(`{"schema":"evimed-matching-export/1","direction":${JSON.stringify(direction)},"kind":${JSON.stringify(kind)},"exportedAt":${JSON.stringify(exportedAt)},"progress":${JSON.stringify({ state: progress.state, total: progress.total, finished: progress.finished, failed: progress.failed, waiting: progress.waiting, clausesLeft: progress.clauses.left })},"rows":[`);
       let first = true;
       for (const group of chunks(ordered)) {
         await this.#judgeReaders(study, viewer, group);
@@ -688,8 +708,8 @@ export class VcrMatchResults extends VcrStoreBase {
           if (!fitRow && !criteriaRow) continue;
           if (kind === "pairs") {
             if (format === "csv") await sink.write(csvLine(cells));
-            else { await sink.write(`${first ? "" : ","}${JSON.stringify({ subjectKey: listed.subjectKey, target: { kind: listed.kind, id: listed.id, registryId: listed.registryId, title: listed.title }, verdict: listed.verdict, fit: listed.fit, fitLevel: listed.fitLevel,
-              confidence: listed.confidence, counts: listed.counts, reason: listed.why, ...(listed.reasonsWithheld ? { reasonsWithheld: listed.reasonsWithheld } : {}), producer: listed.producer, judgedAt: listed.judgedAt, basisChanged: Boolean(listed.basisChanged) })}`); first = false; }
+            else { await sink.write(`${first ? "" : ","}${JSON.stringify({ subjectKey: listed.subjectKey, label: listed.label, target: { kind: listed.kind, id: listed.id, registryId: listed.registryId, title: listed.title }, verdict: listed.verdict, fit: listed.fit, fitLevel: listed.fitLevel,
+              confidence: listed.confidence, counts: listed.counts, reason: listed.why, ...(noteOf(listed) ? { note: noteOf(listed), recordGap: listed.recordGap ?? null, clausesNote: listed.clausesNote ?? null, eligibilityNote: listed.eligibilityNote ?? null } : {}), ...(listed.reasonsWithheld ? { reasonsWithheld: listed.reasonsWithheld } : {}), producer: listed.producer, judgedAt: listed.judgedAt, basisChanged: Boolean(listed.basisChanged) })}`); first = false; }
             continue;
           }
           // The same judgment as the page: a sentence is read back under this reader, and a reader who may not read the record gets the row without its words and a note saying so.
@@ -702,18 +722,28 @@ export class VcrMatchResults extends VcrStoreBase {
               await sink.write(csvLine([cells[0], cells[1], cells[2], cells[3], cells[4], clause.number, clause.kind === "exclusion" ? "排除" : clause.kind === "unsectioned" ? "未分节" : "入选", clause.clause, clause.display, sentences.length ? "有" : "无", pair.readable === false ? note : clause.reason,
                 sentences.map((item) => item.sentenceId).join("、"), sentences.length ? sentences.map((item) => item.text).join(" | ") : note ?? ""]));
             } else {
-              await sink.write(`${first ? "" : ","}${JSON.stringify({ subjectKey: listed.subjectKey, target: { kind: listed.kind, id: listed.id, registryId: listed.registryId, title: listed.title }, verdict: listed.verdict,
+              await sink.write(`${first ? "" : ","}${JSON.stringify({ subjectKey: listed.subjectKey, label: listed.label, target: { kind: listed.kind, id: listed.id, registryId: listed.registryId, title: listed.title }, verdict: listed.verdict,
                 clause: { number: clause.number, kind: clause.kind, text: clause.clause, label: clause.label, basis: clause.basis, stance: clause.stance, display: clause.display, reason: clause.reason,
                   sentences: sentences.map((item) => ({ id: item.sentenceId, text: item.text })), ...(note ? { note } : {}) } })}`); first = false;
             }
           }
         }
       }
-      // A file past what one read holds ends by saying so.
-      if (pairs.cut && format === "csv") await sink.write(csvLine([CUT_NOTE_ZH(this.mostPairs)]));
-      if (format === "json") await sink.write(`]${pairs.cut ? `,"cutNote":${JSON.stringify(CUT_NOTE_ZH(this.mostPairs))}` : ""}}`);
+      // The pairs with no verdict are rows of the pair file too, so a file of a stopped job does not read as the whole set; the clause file says it in one line.
+      if (kind === "pairs") {
+        for (const entry of missing) {
+          if (format === "csv") await sink.write(csvLine([entry.label, entry.kind === "protocol" ? "本研究方案" : "登记试验", entry.registryId, entry.title, "未判定", null, null, null, null, null, null, null, null, entry.reason, "", entry.at, "", ""]));
+          else { await sink.write(`${first ? "" : ","}${JSON.stringify({ subjectKey: entry.subjectKey, label: entry.label, target: { kind: entry.kind, id: entry.id, registryId: entry.registryId, title: entry.title }, verdict: null, verdictLabel: "未判定", reason: entry.reason })}`); first = false; }
+        }
+      }
+      // A file past what one read holds, or a job that stopped, ends by saying so.
+      if (format === "csv") {
+        if (pairs.cut) await sink.write(csvLine([CUT_NOTE_ZH(this.mostPairs)]));
+        if (unfinished) await sink.write(csvLine([unfinishedNote]));
+      }
+      if (format === "json") await sink.write(`]${pairs.cut ? `,"cutNote":${JSON.stringify(CUT_NOTE_ZH(this.mostPairs))}` : ""}${unfinished ? `,"unfinishedNote":${JSON.stringify(unfinishedNote)}` : ""}}`);
     };
-    return { filename, contentType: format === "csv" ? "text/csv; charset=utf-8" : "application/json; charset=utf-8", rows: ordered.length, run };
+    return { filename, contentType: format === "csv" ? "text/csv; charset=utf-8" : "application/json; charset=utf-8", rows: ordered.length + (kind === "pairs" ? missing.length : 0), run };
   }
 }
 

@@ -44,7 +44,7 @@ import { HttpError } from './security.mjs';
 import { callModelForControlPlane } from './modelGateway.mjs';
 import { matchBatchMinCell, resultOutcome } from './vcrMatchBatch.mjs';
 import { LONG_LIMITS, acceptLongShapes, acceptRelevance, longRelevanceMessages, longShapeMessages } from './vcrLongTables.mjs';
-import { REGISTRY_RECORD_BASIS, WITHDRAWN_SUBJECT_MARK, judgingProgress, judgmentKey, recordGapOf, standingRows } from './vcrMatchJudgmentStore.mjs';
+import { REGISTRY_RECORD_BASIS, WITHDRAWN_SUBJECT_MARK, judgingProgress, judgmentKey, newerFailureOf, REJUDGE_FAILED_NOTE_ZH, recordGapOf, standingRows } from './vcrMatchJudgmentStore.mjs';
 
 const LOCK_HASH = createHash('sha256').update(`evimed-control-plane:matching.judge:${VCR_MATCH_BATCH_METHODS['matching.judge'].version}`).digest('hex');
 
@@ -1357,8 +1357,10 @@ export function createMatchJudgmentReads({ judgments, documents, subjectTable = 
         const usableFit = standing.fit, usableCriteria = standing.criteria;
         // A pair with a score whose clauses failed has a verdict from its score, and the clauses are still owed.
         const clauseFailure = clauses?.status === 'failed' ? clauses.errorCode ?? 'vcr_match_judge_failed' : null;
+        // A later reading that did not finish does not take the last verdict away; it is owed, and the row says its verdict rests on the older record.
+        const rejudgeFailure = [newerFailureOf(fit), newerFailureOf(criteria)].filter(Boolean).sort((a, b) => String(b?.at).localeCompare(String(a?.at)))[0] ?? null;
         pairs.push({ fitRow: usableFit, criteriaRow: usableCriteria, subjectKey: (usableFit ?? usableCriteria).subjectKey, targetId: (usableFit ?? usableCriteria).targetId,
-          fit: usableFit?.fit ?? usableCriteria?.fit ?? null, confidence: usableFit?.confidence ?? usableCriteria?.confidence ?? null, eligibilitySource: (usableFit ?? usableCriteria).eligibilitySource ?? null, judgedByClauses: Boolean(usableCriteria), ...(clauseFailure ? { clauseFailure, at: clauses.updatedAt } : {}),
+          fit: usableFit?.fit ?? usableCriteria?.fit ?? null, confidence: usableFit?.confidence ?? usableCriteria?.confidence ?? null, eligibilitySource: (usableFit ?? usableCriteria).eligibilitySource ?? null, judgedByClauses: Boolean(usableCriteria), ...(clauseFailure ? { clauseFailure, at: clauses.updatedAt } : {}), ...(rejudgeFailure ? { rejudgeFailure } : {}),
           // What an order needs of a clause row is whether it states a disqualifier, and the store says so without reading the answer out.
           criteria: usableCriteria?.disqualified ? [{ label: 'excluded', basis: 'stated' }] : [] });
       } else {
@@ -1386,12 +1388,16 @@ export function createMatchJudgmentReads({ judgments, documents, subjectTable = 
       if (!fit && !criteria) return [];
       const rows = [fit, criteria].filter(Boolean);
       const owed = pair.clauseFailure && !pair.criteriaRow ? { clausesFailed: { code: pair.clauseFailure, reason: vcrMatchFailureReason(pair.clauseFailure) } } : {};
-      return [{ row: { ...presentJudgment(fit, criteria), ...owed }, record: { subjectKey: String(rows[0].subjectKey), documentIds: [...new Set(rows.flatMap((row) => list(row.documentIds).map(String)))], snapshotIds: [...new Set(rows.flatMap((row) => list(object(row.answer?.readFrom).snapshots).map((snapshot) => String(object(snapshot).id))))] } }];
+      const refailed = pair.rejudgeFailure ? { rejudgeFailed: { code: pair.rejudgeFailure.code, reason: vcrMatchFailureReason(pair.rejudgeFailure.code), at: pair.rejudgeFailure.at, note: REJUDGE_FAILED_NOTE_ZH } } : {};
+      return [{ row: { ...presentJudgment(fit, criteria), ...owed, ...refailed }, record: { subjectKey: String(rows[0].subjectKey), documentIds: [...new Set(rows.flatMap((row) => list(row.documentIds).map(String)))], snapshotIds: [...new Set(rows.flatMap((row) => list(object(row.answer?.readFrom).snapshots).map((snapshot) => String(object(snapshot).id))))] } }];
     });
     // The trials of this person whose verdict rests on a record that has since changed, whatever page they are on: one action judges them again.
     const stale = order === 'target' && subjectKey
       ? ranked.filter((pair) => isRegistryMark(pair.fitRow?.basisChanged) || isRegistryMark(pair.criteriaRow?.basisChanged)).map((pair) => String(pair.targetId)).slice(0, VCR_MATCH_JUDGE_LIMITS.trials) : [];
-    const clausesFailed = pairs.filter((pair) => pair.clauseFailure && !pair.criteriaRow).map((pair) => ({ subjectKey: pair.subjectKey, targetId: pair.targetId, code: pair.clauseFailure, reason: vcrMatchFailureReason(pair.clauseFailure), at: pair.at ?? null }));
+    const clausesFailed = [
+      ...pairs.filter((pair) => pair.clauseFailure && !pair.criteriaRow).map((pair) => ({ subjectKey: pair.subjectKey, targetId: pair.targetId, code: pair.clauseFailure, reason: vcrMatchFailureReason(pair.clauseFailure), at: pair.at ?? null })),
+      ...pairs.filter((pair) => pair.rejudgeFailure).map((pair) => ({ subjectKey: pair.subjectKey, targetId: pair.targetId, code: pair.rejudgeFailure.code, reason: vcrMatchFailureReason(pair.rejudgeFailure.code), at: pair.rejudgeFailure.at, verdictKept: true })),
+    ];
     return { ranking: await Promise.all(presented.map(({ row, record }) => projected(study, row, record))), note: SAVED_WORDS_NOTE, finished: ranked.length, failedPairs: failed.length, ...(failed.length ? { failed: failed.slice(0, 50) } : {}), more: ranked.length > offset + limit,
       total: progress.total, state: progress.state, left: progress.left.length, clauses: progress.clauses, ...(held.length >= 20_000 ? { cut: true } : {}), ...(clausesFailed.length ? { clausesFailed: clausesFailed.slice(0, 50) } : {}),
       ...(progress.latest ? { job: { id: String(progress.latest.id), state: String(progress.latest.state) } } : {}),

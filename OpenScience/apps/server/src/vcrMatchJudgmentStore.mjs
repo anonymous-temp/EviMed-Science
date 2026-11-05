@@ -110,7 +110,9 @@ export function judgingProgress({ direction, jobs, done, failed, withdrawn = new
   const finished = new Set(done.map(idOf));
   const lost = new Set(failed.map(idOf));
   for (const id of [...finished, ...lost]) asked.add(id);
-  const failedOnly = [...lost].filter((id) => !finished.has(id));
+  // A pair whose newest reading failed after an older one finished still has its last verdict, and is still owed its re-judgment: it is failed here as much as one with nothing.
+  const refailed = done.filter((pair) => pair.rejudgeFailure).map(idOf);
+  const failedOnly = [...new Set([...[...lost].filter((id) => !finished.has(id)), ...refailed])];
   const waiting = [...asked].filter((id) => !finished.has(id) && !lost.has(id));
   const latest = jobs[0] ?? null;
   const running = latest ? OPEN_STATES.includes(String(latest.state)) : false;
@@ -119,12 +121,26 @@ export function judgingProgress({ direction, jobs, done, failed, withdrawn = new
   const clauseLeft = [...new Set(clauses.left.map(idOf))];
   const total = asked.size;
   return {
-    total, finished: finished.size, failed: failedOnly.length, waiting: waiting.length, latest, running,
+    total, finished: finished.size, failed: failedOnly.length, waiting: waiting.length, waitingIds: waiting, latest, running,
     state: running ? (String(latest.state) === 'awaiting_budget' ? 'waiting_budget' : 'running') : total === 0 ? 'idle' : waiting.length || failedOnly.length || clauseLeft.length ? 'stopped' : 'done',
     clauses: { wanted: clauses.wanted, done: clauses.done, left: clauses.left.length },
     // What is still to do: the pairs that never ran, the ones that failed, and the ones whose clauses are owed. A continuation starts exactly these, and the ledger has the rest.
     left: [...new Set([...waiting, ...failedOnly, ...clauseLeft])],
   };
+}
+
+/** What a pair says when its newest reading did not finish and the verdict shown is the one before. */
+export const REJUDGE_FAILED_NOTE_ZH = '重新判定没有完成，这里仍是上一次的结论，读的是更早的病历或登记内容。';
+
+/**
+ * The newest failure of a mode's rows (newest first) that is newer than the finished row in use: a later reading that did not finish. Null when the newest row is the one in use, or none finished.
+ * @param {ReadonlyArray<{ status: string, updatedAt?: string | null, errorCode?: string | null }>} rows
+ */
+export function newerFailureOf(rows) {
+  const used = rows.find((row) => row.status === 'done');
+  if (!used) return null;
+  const failure = rows.find((row) => row.status === 'failed' && String(row.updatedAt ?? '') > String(used.updatedAt ?? ''));
+  return failure ? { code: failure.errorCode ?? 'vcr_match_judge_failed', at: failure.updatedAt ?? null } : null;
 }
 
 /** The columns of a row without its answer and usage, which are what is large. */

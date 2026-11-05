@@ -357,7 +357,8 @@ test("the clause file of five thousand people is all of them, Excel-safe, and wa
     assert.equal(lines.at(-1), "");
     assert.equal(lines[0], "患者,对象,登记号,标题,结论,条款编号,类型,条款原文,判定,有无原文依据,理由,依据句号,依据原文");
     // 4,999 people (one withdrew) by twelve clauses, plus the header; quoted cells hold no line breaks of ours.
-    assert.equal(lines.length - 2, (PEOPLE - 1) * 12);
+    // A closing line says the job is not whole when it is not (the seed holds failures).
+    assert.equal(lines.filter((line) => !line.startsWith("判定没有做完")).length - 2, (PEOPLE - 1) * 12);
     assert.ok(file.text.includes("'=cmd|calc"), "a reason that starts with = is text");
     assert.ok(!/(^|,)=cmd/u.test(file.text), "and is not left as a formula");
     t.diagnostic(`${file.text.length} characters, ${sizes.length} chunks of at most ${Math.max(...sizes)}`);
@@ -369,20 +370,23 @@ test("the clause file of five thousand people is all of them, Excel-safe, and wa
 test("the pair file in both formats, and a patient's file, carry every row and the verdict in words", options, async () => {
   const csv = await call("owner", "GET", `${S()}/matching/export?direction=trial_to_patient&protocolVersionId=${PROTOCOL}&kind=pairs&format=csv`);
   const lines = csv.text.slice(1).split("\r\n");
-  assert.equal(lines.length - 2, PEOPLE - 1);
-  assert.equal(lines[0], "患者,对象,登记号,标题,结论,匹配度（0-100）,匹配等级,把握度,满足,不满足,未见记载,待查,不适用,理由,判定方式,判定时间,依据已更新");
+  const withVerdict = lines.filter((line) => line && !line.startsWith("判定没有做完") && !line.includes(",未判定,"));
+  assert.equal(withVerdict.length - 1, PEOPLE - 1);
+  assert.equal(lines[0], "患者,对象,登记号,标题,结论,匹配度（0-100）,匹配等级,把握度,满足,不满足,未见记载,待查,不适用,理由,判定方式,判定时间,依据已更新,备注");
   assert.match(lines[1], /^P-0000\d,本研究方案,,规模测试方案,/u);
   const json = await call("owner", "GET", `${S()}/matching/export?direction=trial_to_patient&protocolVersionId=${PROTOCOL}&kind=pairs&format=json`);
   assert.match(json.headers.get("content-type") ?? "", /^application\/json/u);
   const parsed = JSON.parse(json.text);
   assert.equal(parsed.schema, "evimed-matching-export/1");
-  assert.equal(parsed.rows.length, PEOPLE - 1);
-  assert.deepEqual(Object.keys(parsed.rows[0]).sort(), ["basisChanged", "confidence", "counts", "fit", "fitLevel", "judgedAt", "producer", "reason", "subjectKey", "target", "verdict"]);
+  assert.equal(parsed.rows.filter((row) => row.verdictLabel !== "未判定").length, PEOPLE - 1);
+  assert.ok(parsed.progress && typeof parsed.progress.finished === "number");
+  assert.deepEqual(Object.keys(parsed.rows[0]).filter((key) => !["note", "recordGap", "clausesNote", "eligibilityNote"].includes(key)).sort(), ["basisChanged", "confidence", "counts", "fit", "fitLevel", "judgedAt", "label", "producer", "reason", "subjectKey", "target", "verdict"]);
   const clauses = JSON.parse((await call("owner", "GET", `${S()}/matching/export?direction=patient_to_trial&subjectKey=P-0192&kind=clauses&format=json`)).text);
   assert.ok(clauses.rows.length >= 5);
+  assert.ok(/^P-/.test(clauses.rows[0].label));
   assert.deepEqual(Object.keys(clauses.rows[0].clause).filter((key) => key !== "note").sort(), ["basis", "display", "label", "number", "reason", "sentences", "stance", "text", "kind"].sort());
   const patient = await call("owner", "GET", `${S()}/matching/export?direction=patient_to_trial&subjectKey=P-0192&kind=pairs&format=csv`);
-  const trials = patient.text.slice(1).split("\r\n").filter(Boolean).slice(1);
+  const trials = patient.text.slice(1).split("\r\n").filter(Boolean).slice(1).filter((line) => !line.startsWith("判定没有做完") && !line.includes(",未判定,"));
   assert.deepEqual(trials.map((line) => line.split(",")[2]).sort(), [TRIAL(1), TRIAL(2), TRIAL(3), TRIAL(4), TRIAL(5)], "every judged trial of the patient, and not the one nobody judged");
 });
 
