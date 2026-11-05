@@ -106,9 +106,6 @@ export function toolPolicy(call, state) {
   if (state.unattended === true) {
     if (name === 'ask_user_question') return { allow: false, code: 'unattended_question_unavailable',
       reason: 'Nobody is attending this execution. Continue with the supplied information and state any missing input; do not wait for an answer.' }
-    if (['schedule_task', 'update_task', `${MCP_TOOL_PREFIX}schedule_task`, `${MCP_TOOL_PREFIX}update_task`].includes(name)) {
-      return { allow: false, code: 'task_tools_not_in_conversation', reason: 'An unattended execution cannot create or change scheduled tasks.' }
-    }
     // A task that makes tasks is a loop nobody asked for. An execution may still end or pause a task ("stop once the PR is merged"), which is
     // the one change upstream's own guidance keeps authorised for a running task; anything that would widen one waits for the person.
     if (name === 'schedule_create') return { allow: false, code: 'task_tools_not_in_conversation', reason: 'An unattended execution cannot create scheduled tasks.' }

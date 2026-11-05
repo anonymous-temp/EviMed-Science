@@ -2456,17 +2456,6 @@ export {
   monthlyDateOf,
 } from './src/creditLots.mjs';
 
-// taskTools — the two runtime tools that create and change a scheduled task from a conversation (N-13): the limits and
-// the codes their gateway answers with.
-export {
-  TASK_INSTRUCTION_MAX_CHARS,
-  TASK_TITLE_MAX_CHARS,
-  TASK_TOOLS_DEFAULT_MAX_TASKS,
-  TASK_TOOL_ERROR_CODES,
-  TASK_TOOL_RUN_FIXES,
-  TASK_TOOL_ERROR_MESSAGE_ZH,
-} from './src/taskTools.mjs'
-
 // dataSemantics — the reusable meaning of a researcher's tables (plan 2026-10-02 §11.3 N03): facts with a basis,
 // exact source versions, versioned transformations and the named outcomes of the deterministic data checks.
 export {

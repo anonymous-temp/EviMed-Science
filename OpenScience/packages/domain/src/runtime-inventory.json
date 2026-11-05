@@ -1835,9 +1835,7 @@
       "curve_digitize",
       "evidence_pool",
       "research_calculate",
-      "dataset_semantics",
-      "schedule_task",
-      "update_task"
+      "dataset_semantics"
     ],
     "memory": [
       "search",

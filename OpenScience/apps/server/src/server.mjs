@@ -50,7 +50,6 @@ import { verifyVcrInvocation } from './vcrExecutionContext.mjs';
 import { createResultGateway, RESULT_GATEWAY_PATH } from "./resultGateway.mjs";
 import { DataSemanticsService } from "./dataSemanticsService.mjs";
 import { createDataSemanticsGateway, DATA_SEMANTICS_GATEWAY_PATH } from "./dataSemanticsGateway.mjs";
-import { createTaskToolsGateway, TASK_TOOLS_GATEWAY_PATH } from "./taskToolsGateway.mjs";
 import { createDataSemanticsRoutes } from "./dataSemanticsRoutes.mjs";
 import { ResultExportService } from "./resultExport.mjs";
 import { bindVcrConversationReference, validateVcrConversationReference } from "./vcrConversationReference.mjs";
@@ -894,8 +893,6 @@ function routePattern(pathname) {
   for (const prefix of [DATA_SEMANTICS_GATEWAY_PATH, EVOLUTION_GATEWAY_PATH, EXTENSION_GATEWAY_PATH, RESULT_GATEWAY_PATH]) {
     if (pathname === prefix || pathname.startsWith(`${prefix}/`)) return `${prefix}/:action`;
   }
-  // The two scheduled-task operations are a closed pair: a metric label for each, never one per path a caller invents.
-  if (pathname === `${TASK_TOOLS_GATEWAY_PATH}/schedule` || pathname === `${TASK_TOOLS_GATEWAY_PATH}/update`) return pathname;
   if (pathname.startsWith(REVIEW_GATEWAY_PREFIX)) return pathname.startsWith(`${REVIEW_GATEWAY_PREFIX}deliverables/`) ? `${REVIEW_GATEWAY_PREFIX}deliverables/:id` : pathname;
   if (pathname.startsWith(`${GEO_GATEWAY_PATH}/`)) return geoGatewayRoutePattern(pathname);
   if (pathname.startsWith(`${VCR_GATEWAY_PATH}/`)) return vcrGatewayRoutePattern(pathname);
@@ -5862,7 +5859,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const resultGatewayHandler = createResultGateway({ runtimeManager, store, service: resultReplays, agentRuns, lineage: resultLineage,
     resolveSession: (project, sessionId) => runtimeEventPump.sessionOwner(project, sessionId) });
   const dataSemanticsGatewayHandler = createDataSemanticsGateway({ config, runtimeManager, store, service: dataSemantics });
-  const taskToolsGatewayHandler = createTaskToolsGateway({ config, runtimeManager, store, service: autopilotService });
   const toolUniverseGatewayHandler = createToolUniverseGateway({ config, runtimeManager, store, evaluationIsolation });
   // The cap of a scheduled execution that runs in the researcher's own runtime (autopilotEpisodeScope.mjs), asked by every gateway
   // that books a runtime's spend: the model gateway, the metered web search, and the engines' model credentials.
@@ -7158,8 +7154,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       ? resultGatewayHandler
       : pathname.startsWith(`${DATA_SEMANTICS_GATEWAY_PATH}/`)
       ? dataSemanticsGatewayHandler
-      : pathname.startsWith(`${TASK_TOOLS_GATEWAY_PATH}/`)
-      ? taskToolsGatewayHandler
       : pathname === TOOL_UNIVERSE_GATEWAY_PATH
       ? toolUniverseGatewayHandler
       : pathname === KB_BROWSE_GATEWAY_PATH

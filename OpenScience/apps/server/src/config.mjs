@@ -3639,14 +3639,6 @@ export function loadConfig(overrides = {}) {
     // see and edit — the compiled pages — and a hidden second channel that is recalled but cannot be read has no reason to be
     // written. Off stops new writes only: what was written stays where it is until its document goes.
     documentMemoryEnabled: overrides.documentMemoryEnabled ?? boolEnv("OPEN_SCIENCE_DOCUMENT_MEMORY_ENABLED", false),
-    // Scheduled tasks made and changed from a conversation (`schedule_task` / `update_task`, taskToolsGateway.mjs, N-13): the
-    // form's twin, with the platform's default budget and no step to approve. Off, the runtime is given no route and the tools
-    // are not offered; the 定时任务 page is unchanged. `taskToolsMaxTasks` is the most tasks one project may hold before the
-    // conversation is told to delete or pause one: a limit that keeps a loop from filling an account with scheduled spend.
-    taskToolsEnabled: overrides.taskToolsEnabled ?? boolEnv("OPEN_SCIENCE_TASK_TOOLS_ENABLED", true),
-    taskToolsMaxTasks: Math.max(1, Math.min(500, Math.trunc(Number(
-      overrides.taskToolsMaxTasks ?? process.env.OPEN_SCIENCE_TASK_TOOLS_MAX_TASKS ?? 30,
-    )) || 30)),
     // Truthful capability availability (availabilityModule.mjs): the collector that joins finished runs to what they
     // used and produced. A label and never a gate, so the switch only decides whether operations are collected; with
     // it off the projection is still served from the deployment's composition and every label that needs a record

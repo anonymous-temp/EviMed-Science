@@ -758,28 +758,17 @@ test('the frame can send the reader to 循证 GEO, at a tab named from a closed 
   f.ctx.dispose();
 });
 
-test('the frame can send the reader to a scheduled task by its id, and the destination list is the shell\'s', async () => {
+test('the frame can send the reader to the scheduled tasks, and the destination list is the shell\'s', async () => {
   const f = fixture(); apply(f.ctx, {}, f.target); await settle();
   const shell = /** @type {any} */ (f.target).__EVIMED_SHELL__;
-  shell.navigate('autopilot', undefined, { taskId: 'agenda-0123abcd-0000-4000-8000-000000000001' });
-  shell.navigate('autopilot', undefined, { taskId: '../../admin' });
-  shell.navigate('autopilot', undefined, { taskId: 'x'.repeat(161) });
   shell.navigate('autopilot');
-  // An id belongs to a task; no other destination carries one, and the tab is still GEO's alone.
-  shell.navigate('knowledge', undefined, { taskId: 'agenda-1' });
-  shell.navigate('geo', undefined, { taskId: 'agenda-1', tab: 'sources' });
+  // The tab is GEO's alone.
+  shell.navigate('knowledge', undefined, { tab: 'sources' });
   // `runs` was a destination nothing sent and the shell ignored; the ledger page it named was deleted on 2026-09-20.
   shell.navigate('runs');
   const moves = f.sent.filter(row => row.message.type === 'evimed.runtime-ui.shell-navigate')
-    .map(row => ({ destination: row.message.destination, taskId: row.message.taskId, tab: row.message.tab }));
-  assert.deepEqual(moves, [
-    { destination: 'autopilot', taskId: 'agenda-0123abcd-0000-4000-8000-000000000001', tab: undefined },
-    { destination: 'autopilot', taskId: undefined, tab: undefined },
-    { destination: 'autopilot', taskId: undefined, tab: undefined },
-    { destination: 'autopilot', taskId: undefined, tab: undefined },
-    { destination: 'knowledge', taskId: undefined, tab: undefined },
-    { destination: 'geo', taskId: undefined, tab: 'sources' },
-  ]);
+    .map(row => ({ destination: row.message.destination, tab: row.message.tab }));
+  assert.deepEqual(moves, [{ destination: 'autopilot', tab: undefined }, { destination: 'knowledge', tab: undefined }]);
   f.ctx.dispose();
 });
 
