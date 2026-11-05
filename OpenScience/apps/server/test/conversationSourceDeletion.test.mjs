@@ -136,3 +136,14 @@ test('pending deletion refreshes the trusted transitive managed closure before l
   const kept=await service.projectValue({},'session/list',{args:{}},{items:[{sessionId:'late',origin:'subagent',parentSessionId:'a'},{sessionId:'fork',isSeeded:true,parentSessionId:'a'}]});
   assert.deepEqual(kept.value.items,[{sessionId:'fork',isSeeded:true,parentSessionId:'a'}]);
 });
+
+import { RunEventHub } from '../src/runEventStream.mjs';
+test('source stream revocation clears replay, closes current readers and suppresses late source events only',()=>{
+  const hub=new RunEventHub();let closed=0;const received=[];
+  hub.publish('a','run/event',{text:'private A'});hub.channel('a').subscribe({write:value=>received.push(value),close:()=>closed++});
+  hub.publish('b','run/event',{text:'independent B'});
+  hub.revoke('a');assert.equal(closed,1);assert.equal(hub.channel('a').buffer.length,0);
+  hub.publish('a','run/event',{text:'late private A'});
+  const late=[];hub.channel('a').subscribe({write:value=>late.push(value),close:()=>closed++});
+  assert.deepEqual(late,[]);assert.equal(closed,2);assert.equal(hub.channel('b').buffer.length,1);
+});
