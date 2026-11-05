@@ -37,7 +37,7 @@ test("frozen coverage verifies the exact cell, generation and tenant rather than
   assert.equal((await read({ ...f.row, computation_generation: null })).size, 0);
 });
 
-test("the per-cell basis retains cohort, parser, rubric and surface changes and refuses missing judgments", () => {
+test("the per-cell basis retains parser, rubric and surface changes and refuses missing judgments", () => {
   const f = fixture();
   const coverage = rows => { const computed = computeRoundCells(rows, f.options); return geoMetricInputCoverage({ computed, metricOptions: f.options },
     computed.cells.find(cell => cell.scope === "project" && cell.metricId === "M-01"), 1); };
@@ -53,7 +53,12 @@ test("the per-cell basis retains cohort, parser, rubric and surface changes and 
     row => { row.facts.judgeExtract.rubricVersion = "mixed-rubric"; }]) {
     const changed = structuredClone(f.rows); mutate(changed[0]); assert.equal(coverage(changed), null);
   }
-  for (const change of [rows => rows.slice(1), rows => rows.map(row => ({ ...row, facts: { ...row.facts, parserVersion: "next-parser" } })),
+  // Members are data: an answer fewer (a failed sample) or a mention more moves the number, not the way it was measured.
+  assert.equal(coverage(f.rows.slice(1)), original, "a sample that did not answer leaves the measuring method as it was");
+  assert.equal(coverage(f.rows.map((row, index) => (index < 3 ? { ...row, mentionsOurs: true } : row))), original, "more mentions are a change of value, not of method");
+  assert.equal(coverage(f.rows.map((row, index) => ({ ...row, surface: { mode: "web", newChat: true, transport: "https", signed: true, responseDigest: `d-${index}` } }))), original,
+    "a per-response digest is not a sampling surface");
+  for (const change of [rows => rows.map(row => ({ ...row, facts: { ...row.facts, parserVersion: "next-parser" } })),
     rows => rows.map(row => ({ ...row, surface: { mode: "web", newChat: false } }))]) {
     const changed = coverage(change(f.rows));
     assert.equal(geoCoverageDifference(original, changed).comparable, false);
@@ -90,7 +95,7 @@ test("coverage retains stable per-engine heterogeneous sampling surfaces", async
   assert.equal(metric(later), original); assert.equal(geoSelectionCoverage(later, 1), selected);
   const variants = [
     row => { row.surface.deep = !row.surface.deep; }, row => { row.surface.newChat = !row.surface.newChat; },
-    row => { row.surface.city = "Elsewhere"; }, row => { row.repeatIndex = 1; },
+    row => { row.surface.city = "Elsewhere"; },
     row => { row.surface.measurementContract.repeats = 2; }, row => { row.surface.measurementContract.metricIds = ["M-03"]; },
     row => { row.surface.measurementContract.samplingMode = "one_shot"; }, row => { row.surface.measurementContract.sourceBasis = "changed"; },
   ];
