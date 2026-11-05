@@ -756,7 +756,7 @@ export class VcrMatchResults extends VcrStoreBase {
     const header = ["患者", "对象", "登记号", "标题", "结论", "匹配度（0-100）", "匹配等级", "把握度", "满足", "不满足", "未见记载", "待查", "不适用", "理由", "判定方式", "判定时间", "依据已更新", "备注"];
     const clauseHeader = ["患者", "对象", "登记号", "标题", "结论", "条款编号", "类型", "条款原文", "判定", "有无原文依据", "理由", "依据句号", "依据原文"];
     const unfinished = progress.state !== "done" && progress.state !== "idle";
-    const unfinishedNote = `判定没有做完：已判 ${progress.finished} / ${progress.total}${progress.failed ? `，${progress.failed} 个没判成` : ""}${progress.waiting ? `，${progress.waiting} 个还没判` : ""}。这个文件只含已判出的部分，没判的列在文件末尾。`;
+    const unfinishedNote = `判定没有做完：已判 ${progress.finished} / ${progress.total}${progress.failed ? `，${progress.failed} 个没判成` : ""}${progress.waiting ? `，${progress.waiting} 个还没判` : ""}${progress.clauses?.left ? `，${progress.clauses.left} 个的逐条判定没做完` : ""}。这个文件只含已判出的部分，没判的列在文件末尾。`;
     const noteOf = (/** @type {any} */ listed) => [listed.recordGap, listed.clausesNote, listed.eligibilityNote].filter(Boolean).join("；");
     // Pairs with no verdict, named as the page names them: the ones that failed with their reason, and the ones the job never reached.
     const missing = [

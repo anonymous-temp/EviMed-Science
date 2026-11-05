@@ -149,6 +149,17 @@ test("an export of work that was not whole says so: notes beside the verdict, th
   assert.ok(file.unfinishedNote);
 });
 
+test("the closing line of an export names the pairs that still owe their clause by clause, not only the ones without a verdict", options, async () => {
+  const { subjectKey } = await intake(conv(), { messageSeq: say("男性，61 岁。肺癌。") }, origin);
+  model.failCriteria = true;
+  await vcr.matchJudge.start(conv(), { subjectKey, registryIds: ["NCT00000011", "NCT00000012"] });
+  await runJobs();
+  model.failCriteria = false;
+  const closing = (await csv(subjectKey)).split("\r\n").filter(Boolean).find((line) => line.startsWith("判定没有做完"));
+  assert.ok(closing?.includes("2 个的逐条判定没做完"), closing);
+  assert.equal((await jsonExport(subjectKey)).unfinishedNote, closing);
+});
+
 test("every failure code a pair can carry has words that say what the person can do", async () => {
   const { vcrMatchFailureReason, VCR_MATCH_FAILURE_FALLBACK_ZH } = await import("@evimed/domain");
   for (const code of ["vcr_cloud_processing_not_authorized", "vcr_projection_permission_changed", "vcr_source_withdrawn", "vcr_match_record_changed", "vcr_match_judge_failed"]) {
