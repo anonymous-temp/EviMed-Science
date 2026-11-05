@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { GEO_MEASUREMENT_METHOD_VERSION, geoCoverageDifference } from "@evimed/domain";
 import { computeRoundCells } from "../src/geoMetricsJob.mjs";
 import { geoMetricInputCoverage } from "../src/geoComparison.mjs";
-import { storedMetricCoverage } from "../src/geoMetricProvenance.mjs";
+import { resetDerivedMetricCoverage, storedMetricCoverage } from "../src/geoMetricProvenance.mjs";
 
 const fixture = () => {
   const rows = Array.from({ length: 35 }, (_, index) => ({ roundId: "round-a", snapshotId: `s-${index}`, questionId: `q-${index}`,
@@ -37,7 +37,7 @@ test("frozen coverage verifies the exact cell, generation and tenant rather than
   assert.equal((await read({ ...f.row, computation_generation: null })).size, 0);
 });
 
-test("the per-cell basis retains cohort, parser, rubric and surface changes and refuses missing judgments", () => {
+test("the per-cell basis retains parser, rubric and surface changes and refuses missing judgments", () => {
   const f = fixture();
   const coverage = rows => { const computed = computeRoundCells(rows, f.options); return geoMetricInputCoverage({ computed, metricOptions: f.options },
     computed.cells.find(cell => cell.scope === "project" && cell.metricId === "M-01"), 1); };
@@ -53,7 +53,12 @@ test("the per-cell basis retains cohort, parser, rubric and surface changes and 
     row => { row.facts.judgeExtract.rubricVersion = "mixed-rubric"; }]) {
     const changed = structuredClone(f.rows); mutate(changed[0]); assert.equal(coverage(changed), null);
   }
-  for (const change of [rows => rows.slice(1), rows => rows.map(row => ({ ...row, facts: { ...row.facts, parserVersion: "next-parser" } })),
+  // Members are data: an answer fewer (a failed sample) or a mention more moves the number, not the way it was measured.
+  assert.equal(coverage(f.rows.slice(1)), original, "a sample that did not answer leaves the measuring method as it was");
+  assert.equal(coverage(f.rows.map((row, index) => (index < 3 ? { ...row, mentionsOurs: true } : row))), original, "more mentions are a change of value, not of method");
+  assert.equal(coverage(f.rows.map((row, index) => ({ ...row, surface: { mode: "web", newChat: true, transport: "https", signed: true, responseDigest: `d-${index}` } }))), original,
+    "a per-response digest is not a sampling surface");
+  for (const change of [rows => rows.map(row => ({ ...row, facts: { ...row.facts, parserVersion: "next-parser" } })),
     rows => rows.map(row => ({ ...row, surface: { mode: "web", newChat: false } }))]) {
     const changed = coverage(change(f.rows));
     assert.equal(geoCoverageDifference(original, changed).comparable, false);
@@ -90,7 +95,7 @@ test("coverage retains stable per-engine heterogeneous sampling surfaces", async
   assert.equal(metric(later), original); assert.equal(geoSelectionCoverage(later, 1), selected);
   const variants = [
     row => { row.surface.deep = !row.surface.deep; }, row => { row.surface.newChat = !row.surface.newChat; },
-    row => { row.surface.city = "Elsewhere"; }, row => { row.repeatIndex = 1; },
+    row => { row.surface.city = "Elsewhere"; },
     row => { row.surface.measurementContract.repeats = 2; }, row => { row.surface.measurementContract.metricIds = ["M-03"]; },
     row => { row.surface.measurementContract.samplingMode = "one_shot"; }, row => { row.surface.measurementContract.sourceBasis = "changed"; },
   ];
@@ -107,4 +112,15 @@ test("coverage retains stable per-engine heterogeneous sampling surfaces", async
   const conflict = structuredClone(later); const duplicate = structuredClone(conflict[0]);
   duplicate.snapshotId = "conflicting-duplicate"; duplicate.surface.deep = !duplicate.surface.deep; conflict.push(duplicate);
   assert.equal(geoSelectionCoverage(conflict, 1), null, "a contradictory duplicate cannot assert a unique sampling configuration");
+});
+
+test("a stored cell's coverage is derived once; the list and the page's poll read it again without the calculation input", async () => {
+  resetDerivedMetricCoverage();
+  const f = fixture(); let queries = 0;
+  const db = { query: async () => { queries += 1; return { rows: [f.snapshot] }; } };
+  const first = (await storedMetricCoverage(db, [f.row])).get(f.row.id);
+  assert.equal(typeof first, "string"); assert.equal(queries, 1);
+  assert.equal((await storedMetricCoverage(db, [f.row])).get(f.row.id), first); assert.equal(queries, 1, "no second read of the snapshot");
+  assert.equal((await storedMetricCoverage(db, [{ ...f.row, value: f.row.value + 1 }])).size, 0, "a changed reading is never served from what was derived for another");
+  assert.equal(queries, 2);
 });

@@ -459,7 +459,7 @@ async function comparedArms(store, { project, round, engines, arms }) {
 }
 
 /** Validate the frozen population, never current mutable facts. */
-function frozenBasisComplete(entries, frozen, common) {
+export function frozenBasisComplete(entries, frozen, common) {
   const versions = new Set(), cohorts = new Set(), settings = new Set();
   let complete = entries.length >= 2 && entries.every(entry => Array.isArray(frozen.get(entry.roundId)?.rows));
   for (const entry of entries) {
@@ -470,7 +470,9 @@ function frozenBasisComplete(entries, frozen, common) {
     const cohort = [];
     for (const row of members) {
       if (!row.questionId || !row.pool || !row.groupId || !row.engine || !row.surface?.mode) { complete = false; continue; }
-      cohort.push(JSON.stringify([row.questionId, row.groupId, row.pool, row.engine, row.repeatIndex ?? 0, row.status, row.surface]));
+      // The cohort is the planned cells and the way each was asked. A response digest or transport is per answer, and whether a cell
+      // answered, refused or failed is data (the valid rows are what the arms are computed from), so neither makes a round another cohort.
+      cohort.push(JSON.stringify([row.questionId, row.groupId, row.pool, row.engine, row.repeatIndex ?? 0, noiseSamplingSurface(row.surface)]));
       if (row.status !== "valid") continue;
       const facts = row.facts;
       if (!facts?.judgedAt || facts.checks?.judgementCoverage?.status !== "complete" || !facts.judgeExtract?.rubricVersion || !facts.parserVersion) { complete = false; continue; }

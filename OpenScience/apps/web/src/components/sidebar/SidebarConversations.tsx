@@ -23,8 +23,8 @@ import { FilterSelect } from "@/components/ui/FilterChips";
 import { ProjectBrowser } from "./ProjectBrowser";
 
 type Entry = { key: string; projectId: string; projectName: string; sessionId: string; title: string; at: number; geoId?: string; studyId?: string; geoOwnerId?: string };
-type Data = { key: string; entries: Entry[]; projects: GeoProjectSummary[]; cursors: Record<string, string>; loadedGeo: string[]; loading: boolean; failed: string[]; actor: VerifiedWebActor | null };
-const empty = (key: string): Data => ({ key, entries: [], projects: [], cursors: {}, loadedGeo: [], loading: true, failed: [], actor: null });
+type Data = { base: string; entries: Entry[]; projects: GeoProjectSummary[]; cursors: Record<string, string>; loadedGeo: string[]; loading: boolean; failed: string[]; actor: VerifiedWebActor | null };
+const empty = (base: string): Data => ({ base, entries: [], projects: [], cursors: {}, loadedGeo: [], loading: true, failed: [], actor: null });
 const moment = (at: string | null) => { const n = Date.parse(at ?? ""); return Number.isFinite(n) ? n : 0; };
 const geoEntries = (project: GeoProjectSummary, rows: GeoConversationSummary[]): Entry[] => rows.map(row => ({ key: `geo:${project.id}:${row.sessionId}`, projectId: project.projectId, projectName: project.name, sessionId: row.sessionId, title: row.title, at: moment(row.createdAt), geoId: project.id }));
 async function limited<T>(values: T[], action: (value: T) => Promise<void>, current: () => boolean) {
@@ -51,12 +51,21 @@ export function SidebarConversations({ geoId, geo, vcr, onCurrentModule }: { geo
   const [choice, setChoice] = useState<{ context: string | null; scope: "project" | "all" }>({ context, scope: context ? "project" : "all" });
   const scope = choice.context === context ? choice.scope : context ? "project" : "all";
   const [revision, setRevision] = useState(0);
+  // What the list depends on: the account, the project or study, the scope and which conversation is open. A tab, filter or other URL
+  // change inside a page is none of these and must not blank or refetch it; the events below say when the ledger moved.
+  const openConversation = /\/chat\/([^/]+)/.exec(location.pathname)?.[1] ?? new URLSearchParams(location.search).get("session") ?? null;
+  const base = JSON.stringify([generation, geoId, studyId, scope, openConversation]);
+  // An in-flight creation or project selection is bound to the exact location, as before.
   const actionKey = JSON.stringify([generation, geoId, studyId, scope, location.key]);
-  const key = JSON.stringify([actionKey, revision]);
+  const key = JSON.stringify([base, revision]);
   const liveAction = useRef(actionKey); liveAction.current = actionKey;
   const liveKey = useRef(key); liveKey.current = key;
-  const [data, setData] = useState<Data>(() => empty(key));
-  const view = data.key === key ? data : empty(key);
+  const [data, setData] = useState<Data>(() => empty(base));
+  const view = data.base === base ? data : empty(base);
+  const dataRef = useRef(data); dataRef.current = data;
+  const lastBase = useRef(base);
+  const liveBase = useRef(base); liveBase.current = base;
+  const onModule = useRef(onCurrentModule); onModule.current = onCurrentModule;
   const [search, setSearch] = useState({ generation, value: "" });
   const query = search.generation === generation ? search.value : "";
   const [management, setManagement] = useState(false);
@@ -72,7 +81,7 @@ export function SidebarConversations({ geoId, geo, vcr, onCurrentModule }: { geo
   useEffect(() => { setBusy(false); return () => { selection.current?.abort(); }; }, [actionKey]);
   const alive = (expected: string, gen: number) => liveKey.current === expected && sessionGeneration() === gen;
   const actionAlive = () => liveAction.current === actionKey && sessionGeneration() === generation;
-  const update = (expected: string, fn: (old: Data) => Data) => setData(old => old.key === expected ? fn(old) : old);
+  const update = (expected: string, fn: (old: Data) => Data) => setData(old => old.base === expected ? fn(old) : old);
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -85,7 +94,12 @@ export function SidebarConversations({ geoId, geo, vcr, onCurrentModule }: { geo
   useEffect(() => {
     let cancelled = false;
     const current = () => !cancelled && alive(key, generation);
-    setData(empty(key)); setNotice(""); setManagement(false);
+    // A list already read for this base stays on screen while the new read runs and is replaced in one step; only a changed base starts blank.
+    const had = dataRef.current.base === base && !dataRef.current.loading;
+    let acc = empty(base);
+    const patch = (fn: (old: Data) => Data) => { acc = fn(acc); if (!had && current()) setData(acc); };
+    if (!had) setData(acc);
+    if (lastBase.current !== base) { lastBase.current = base; setNotice(""); setManagement(false); }
     void (async () => {
       const failures: string[] = [];
       const me = await fetchWebMe().catch(() => null);
@@ -100,12 +114,12 @@ export function SidebarConversations({ geoId, geo, vcr, onCurrentModule }: { geo
       }
       if (!current()) return;
       const selected = scope === "project" ? geoProjects.filter(project => project.id === geoId) : geoProjects;
-      update(key, old => ({ ...old, actor, projects: selected, failed: [...failures] }));
+      patch(old => ({ ...old, actor, projects: selected, failed: [...failures] }));
       await limited(selected, async project => {
         try {
           const page = await listGeoConversations(project.id);
-          if (current()) update(key, old => ({ ...old, entries: [...old.entries, ...geoEntries(project, page.items)], loadedGeo: [...old.loadedGeo, project.id], cursors: page.nextCursor ? { ...old.cursors, [project.id]: page.nextCursor } : old.cursors }));
-        } catch { if (current()) update(key, old => ({ ...old, failed: [...old.failed, `“${project.name}”的 GEO 和个人会话暂未完整显示，请重试`] })); }
+          if (current()) patch(old => ({ ...old, entries: [...old.entries, ...geoEntries(project, page.items)], loadedGeo: [...old.loadedGeo, project.id], cursors: page.nextCursor ? { ...old.cursors, [project.id]: page.nextCursor } : old.cursors }));
+        } catch { if (current()) patch(old => ({ ...old, failed: [...old.failed, `“${project.name}”的 GEO 和个人会话暂未完整显示，请重试`] })); }
       }, current);
       if (!current()) return;
       if (scope === "all" && geoKnown) {
@@ -117,7 +131,7 @@ export function SidebarConversations({ geoId, geo, vcr, onCurrentModule }: { geo
         if (!current()) return;
         const geoOwned = new Set(geoProjects.filter(project => project.access?.owner === true).map(project => project.projectId));
         const currentId = useProjectStore.getState().currentId;
-        onCurrentModule(geoOwned.has(currentId) ? "geo" : studyKnown && studies.some(study => study.projectId === currentId && study.purpose !== "task") ? "vcr" : null);
+        onModule.current(geoOwned.has(currentId) ? "geo" : studyKnown && studies.some(study => study.projectId === currentId && study.purpose !== "task") ? "vcr" : null);
         await limited(studyKnown ? projects : [], async project => {
           try {
             const runs = await listWebAgentRuns({ projectId: project.id });
@@ -126,20 +140,20 @@ export function SidebarConversations({ geoId, geo, vcr, onCurrentModule }: { geo
             const primary = study ? study.originatingSessionId !== undefined ? study.originatingSessionId : [...conversations].sort((a, b) => conversationBegan(a) - conversationBegan(b))[0]?.sessionId : null;
             const ownedGeo = geoProjects.find(candidate => candidate.projectId === project.id && candidate.access?.owner === true);
             const rows: Entry[] = conversations.map(row => ({ ...(ownedGeo ? { geoOwnerId: ownedGeo.id } : {}), key: `project:${project.id}:${row.sessionId}`, projectId: project.id, projectName: project.name, sessionId: row.sessionId, title: row.titleRun.title || row.titleRun.question || "对话", at: runMoment(row.lead), ...(study && row.sessionId === primary ? { studyId: study.id } : {}) }));
-            if (current()) update(key, old => ({ ...old, entries: [...old.entries, ...rows] }));
-          } catch { if (current()) update(key, old => ({ ...old, failed: [...old.failed, `“${project.name}”的 GEO 和个人会话暂未完整显示，请重试`] })); }
+            if (current()) patch(old => ({ ...old, entries: [...old.entries, ...rows] }));
+          } catch { if (current()) patch(old => ({ ...old, failed: [...old.failed, `“${project.name}”的 GEO 和个人会话暂未完整显示，请重试`] })); }
         }, current);
       } else if (scope === "all" && !geoKnown) failures.push("为避免重复，普通项目暂未加载");
-      if (current()) update(key, old => ({ ...old, failed: [...new Set([...old.failed, ...failures])], loading: false }));
+      if (current()) setData({ ...acc, failed: [...new Set([...acc.failed, ...failures])], loading: false });
     })();
     return () => { cancelled = true; };
-  }, [key, generation, geo, vcr, geoId, scope, onCurrentModule]);
+  }, [key, base, generation, geo, vcr, geoId, scope]);
 
   async function loadMore(id: string) {
     const cursor = view.cursors[id], project = view.projects.find(row => row.id === id); if (!cursor || !project) return;
     try {
       const page = await listGeoConversations(id, cursor); if (!alive(key, generation)) return;
-      update(key, old => { if (old.cursors[id] !== cursor) return old; const cursors = { ...old.cursors }; if (page.nextCursor) cursors[id] = page.nextCursor; else delete cursors[id]; const rows = new Map(old.entries.map(item => [item.key, item])); geoEntries(project, page.items).forEach(item => rows.set(item.key, item)); return { ...old, entries: [...rows.values()], cursors }; });
+      update(base, old => { if (old.cursors[id] !== cursor) return old; const cursors = { ...old.cursors }; if (page.nextCursor) cursors[id] = page.nextCursor; else delete cursors[id]; const rows = new Map(old.entries.map(item => [item.key, item])); geoEntries(project, page.items).forEach(item => rows.set(item.key, item)); return { ...old, entries: [...rows.values()], cursors }; });
     } catch { if (alive(key, generation)) setNotice("更多对话暂时无法读取，请重试。"); }
   }
   const currentProject = view.projects.find(project => project.id === geoId);
@@ -155,7 +169,7 @@ export function SidebarConversations({ geoId, geo, vcr, onCurrentModule }: { geo
       if (descriptor.projectId !== currentProject.projectId || descriptor.scope.kind !== "geo" || descriptor.scope.geoProjectId !== geoId || descriptor.sessionId !== descriptor.scope.sessionId || !/^[A-Za-z0-9_-]{1,128}$/.test(descriptor.sessionId)) throw new Error("Conversation mismatch");
       if (!actionAlive()) return;
       requests.current.delete(storageKey); storageRemove(storageKey);
-      update(liveKey.current, old => ({ ...old, entries: [...old.entries.filter(row => row.key !== `geo:${geoId}:${descriptor.sessionId}`), ...geoEntries(currentProject, [{ sessionId: descriptor.sessionId, title: "新对话", createdAt: new Date().toISOString() }])] }));
+      update(liveBase.current, old => ({ ...old, entries: [...old.entries.filter(row => row.key !== `geo:${geoId}:${descriptor.sessionId}`), ...geoEntries(currentProject, [{ sessionId: descriptor.sessionId, title: "新对话", createdAt: new Date().toISOString() }])] }));
       const intent = newRuntimeUiIntent(undefined, descriptor.sessionId, { projectId: descriptor.projectId, scope: descriptor.scope }); intent.kind = "open";
       navigate(geoChatPath(geoId, descriptor.sessionId), { state: { runtimeUiIntent: prepareRuntimeUiIntent(intent) } });
     } catch { if (actionAlive()) setNotice("新建结果暂不可确认，系统不会再次创建。请稍后重试；若仍无法确认，请联系管理员。"); }

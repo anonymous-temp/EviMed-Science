@@ -801,6 +801,9 @@ CREATE TABLE IF NOT EXISTS evimed_geo.owned_links (
 );
 ALTER TABLE evimed_geo.orders ADD COLUMN IF NOT EXISTS article_result_version_id text;
 ALTER TABLE evimed_geo.orders ADD COLUMN IF NOT EXISTS article_digest text;
+-- A plan made from a supplemental catalogue row (an outlet a person named, outside the ranked sample) was admitted on a current domain check;
+-- the requirement travels with the order so a send long after the plan still needs a current one.
+ALTER TABLE evimed_geo.orders ADD COLUMN IF NOT EXISTS domain_fresh_required boolean NOT NULL DEFAULT false;
 ALTER TABLE evimed_geo.owned_links ADD COLUMN IF NOT EXISTS article_result_version_id text;
 ALTER TABLE evimed_geo.owned_links ADD COLUMN IF NOT EXISTS article_digest text;
 CREATE INDEX IF NOT EXISTS geo_owned_links_project_idx ON evimed_geo.owned_links (geo_project_id, status, published_at DESC);

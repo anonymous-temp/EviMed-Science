@@ -119,6 +119,22 @@ ALTER TABLE evimed_geo.snapshots ADD COLUMN IF NOT EXISTS probe_job_id text;
 ALTER TABLE evimed_geo.probe_jobs ADD COLUMN IF NOT EXISTS external_ref text;
 ALTER TABLE evimed_geo.probe_jobs ADD COLUMN IF NOT EXISTS sample_started_at timestamptz;
 ALTER TABLE evimed_geo.probe_jobs ADD COLUMN IF NOT EXISTS dispatch_started_at timestamptz;
+-- The version fence (docs/GEO_CONFIRMATION_ROLLOUT.md). A worker of this version writes the attempt number it just took into
+-- lease_fence when it leases a job; one that predates the confirmation authorization and the three-attempt limit does not, and the
+-- database refuses its lease of a confirmation job. Only the queued -> leased step is fenced: recovery of a late receipt is not a lease.
+ALTER TABLE evimed_geo.probe_jobs ADD COLUMN IF NOT EXISTS lease_fence integer;
+CREATE OR REPLACE FUNCTION evimed_geo.probe_jobs_confirm_fence() RETURNS trigger AS $fence$
+BEGIN
+  IF OLD.status = 'queued' AND NEW.status = 'leased' AND NEW.lease_fence IS DISTINCT FROM NEW.attempts
+     AND EXISTS (SELECT 1 FROM evimed_geo.rounds r WHERE r.id = NEW.round_id AND r.kind = 'confirm') THEN
+    RAISE EXCEPTION 'geo_confirmation_worker_outdated: stop this worker and start the current version' USING ERRCODE = 'P0001';
+  END IF;
+  RETURN NEW;
+END
+$fence$ LANGUAGE plpgsql;
+DROP TRIGGER IF EXISTS probe_jobs_confirm_fence ON evimed_geo.probe_jobs;
+CREATE TRIGGER probe_jobs_confirm_fence BEFORE UPDATE OF status ON evimed_geo.probe_jobs
+  FOR EACH ROW EXECUTE FUNCTION evimed_geo.probe_jobs_confirm_fence();
 ALTER TABLE evimed_geo.errors ADD COLUMN IF NOT EXISTS notified_at timestamptz;
 ALTER TABLE evimed_geo.facts ADD COLUMN IF NOT EXISTS registry_key text;
 ALTER TABLE evimed_geo.facts ADD COLUMN IF NOT EXISTS reparsed_at timestamptz;
@@ -645,7 +661,7 @@ export class GeoMeasureStore {
         LIMIT 1
         FOR UPDATE OF j SKIP LOCKED
       )
-      UPDATE evimed_geo.probe_jobs j SET status = 'leased', lease_owner = $9, lease_until = $10, attempts = j.attempts + 1, updated_at = $1,
+      UPDATE evimed_geo.probe_jobs j SET status = 'leased', lease_owner = $9, lease_until = $10, attempts = j.attempts + 1, lease_fence = j.attempts + 1, updated_at = $1,
         sample_started_at = coalesce($12::timestamptz, clock_timestamp()), dispatch_started_at=NULL
       FROM candidate WHERE j.id = candidate.id RETURNING j.*, (SELECT surface->'measurementContract' FROM evimed_geo.rounds WHERE id=j.round_id) AS measurement_contract,
         (SELECT kind FROM evimed_geo.rounds WHERE id=j.round_id) AS round_kind`,

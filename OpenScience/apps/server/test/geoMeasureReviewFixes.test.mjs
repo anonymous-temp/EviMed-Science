@@ -257,3 +257,23 @@ test("the valid share (M-20) counts every ask at every scope; a question dropped
   assert.equal(computeRoundCells(unjudged, { engines: ["deepseek", "doubao"], competitors: [], owned: {}, arms: { pilot: [], control: [] } }).denominators.unparsed, 2,
     "a valid answer the judge gave up on is counted as left out, not as an answer that said nothing");
 });
+
+test("rounds shaped like the probe queue's real rows still share a cohort: a per-answer digest, a failed or refused sample do not change it", async () => {
+  const { frozenBasisComplete } = await import("../src/geoMetricsJob.mjs");
+  const facts = { judgedAt: "2026-11-01T00:00:00Z", checks: { judgementCoverage: { status: "complete" } }, judgeExtract: { rubricVersion: "r1" }, parserVersion: "p1" };
+  // What geoProbeQueue writes: DEFAULT_SURFACE plus the transport, the signature and a digest that is different for every answer.
+  const surface = (/** @type {string} */ digest) => ({ mode: "web", deep: false, newChat: true, city: null, transport: "https", signed: true, responseDigest: digest,
+    measurementContract: { samplingMode: "recurring", repeats: 1, sourceBasis: "answers" } });
+  const roundRows = (/** @type {string} */ id, /** @type {(q: number) => string} */ status) => Array.from({ length: 8 }, (_, q) => ({
+    roundId: id, snapshotId: `${id}-${q}`, questionId: `q${q}`, groupId: q < 4 ? "p1" : "c1", pool: "P2", engine: "kimi", repeatIndex: 0,
+    status: status(q), facts: status(q) === "valid" ? facts : null, surface: surface(`${id}-digest-${q}`) }));
+  const snapshot = (/** @type {any[]} */ rows) => ({ rows, options: { samplingMode: "recurring", engines: ["kimi"], competitors: [], owned: {}, arms: { pilot: ["p1"], control: ["c1"] } } });
+  const common = { pilot: ["p1"], control: ["c1"] };
+  const entries = [{ roundId: "a" }, { roundId: "b" }];
+  const clean = new Map([["a", snapshot(roundRows("a", () => "valid"))], ["b", snapshot(roundRows("b", () => "valid"))]]);
+  assert.equal(frozenBasisComplete(entries, clean, common), true, "distinct response digests are not a different cohort");
+  const mixed = new Map([["a", clean.get("a")], ["b", snapshot(roundRows("b", (q) => (q === 2 ? "failed" : q === 5 ? "refusal" : "valid")))]]);
+  assert.equal(frozenBasisComplete(entries, mixed, common), true, "a failed or refused sample is a denominator change, not a cohort change");
+  const other = snapshot(roundRows("b", () => "valid")); other.rows.forEach((row) => { row.surface.mode = "app"; });
+  assert.equal(frozenBasisComplete(entries, new Map([["a", clean.get("a")], ["b", other]]), common), false, "another sampling surface is still another cohort");
+});
