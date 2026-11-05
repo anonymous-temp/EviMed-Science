@@ -317,3 +317,22 @@ test('an empty trace distinguishes missing run identity from an observed run wit
     }
   } finally { await fs.rm(rootDir, { recursive: true, force: true }); }
 });
+
+test('readback refuses a foreign session or out-of-scope turn before exposing trace steps', async () => {
+  const { persistToolTraces, tracePath, readToolTraces } = await import('../src/toolExecutionEdges.mjs');
+  const fs = await import('node:fs/promises'), nodePath = await import('node:path'), os = await import('node:os');
+  const rootDir = await fs.mkdtemp(nodePath.join(os.tmpdir(), 'tool-trace-read-scope-'));
+  try {
+    const project = { id: 'p', rootDir, metaDir: nodePath.join(rootDir, '.openscience') };
+    const run = { id: 'current', sessionId: 'root', kernelRequestIds: ['now'] };
+    await persistToolTraces({ project, run, sessions: [{ sessionId: 'root', parentSessionId: null, transcript: { sessionId: 'root', messages: [
+      { role: 'user', source: 'user', sourceRequestId: 'now', seq: 11, turnStartSeq: 10, parts: [] },
+      { role: 'assistant', seq: 12, turnStartSeq: 10, parts: [call('read', {}, 'done')] },
+    ] } }] });
+    const file = tracePath(project, run.id), saved = JSON.parse(await fs.readFile(file, 'utf8'));
+    saved.traces[0].steps.push({ turn: 0, turnStartSeq: 0, tool: 'old_tool' });
+    saved.traces.push({ runId: run.id, sessionId: 'foreign', steps: [{ turn: 0, turnStartSeq: 10, tool: 'foreign_tool' }] });
+    await fs.writeFile(file, JSON.stringify(saved));
+    assert.deepEqual((await readToolTraces(project, run.id)).flatMap(row => row.steps.map(step => step.tool)), ['read']);
+  } finally { await fs.rm(rootDir, { recursive: true, force: true }); }
+});

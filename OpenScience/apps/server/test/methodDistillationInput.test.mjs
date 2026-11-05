@@ -433,3 +433,18 @@ test("a script lesson is shown the program that recurred, with how often and the
   await make(scripts.exemplars).execute({ project, run: stored, job: { userId: "u1", projectId: "p", payload: second } });
   assert.notEqual(dispatched[0].dispatchId, dispatched.at(-1).dispatchId);
 });
+
+test('distillation exposes excluded child work and unavailable turn identity as incomplete learning evidence', () => {
+  const run = { id: 'current', sessionId: ROOT, kernelRequestIds: ['now'] };
+  const transcript = { header: { runId: run.id, completeness: 'complete', runChildSessionIds: [CHILD], sessions: [
+    { sessionId: ROOT, parentSessionId: null, seedEndSeq: -1 }, { sessionId: CHILD, parentSessionId: ROOT, seedEndSeq: -1 },
+  ] }, messages: [{ ...user(11, 'Current task'), sourceRequestId: 'now', turnStartSeq: 10 }, { ...call(2, 'child_tool', CHILD), turnStartSeq: 0 }] };
+  const input = buildDistillationInput({ run, trigger: 'routine', transcript, peerRuns: [{ runId: run.id, run, transcript }] });
+  assert.equal(input.transcriptCompleteness, 'partial');
+  assert.equal(input.trajectory.runScope.partial, true);
+  assert.deepEqual(input.trajectory.runScope.unverifiedChildSessionIds, [CHILD]);
+  assert.equal(input.peerRuns[0].transcriptCompleteness, 'partial');
+  const unknown = buildDistillationInput({ run: { ...run, kernelRequestIds: [] }, trigger: 'routine', transcript });
+  assert.equal(unknown.transcriptCompleteness, 'unavailable');
+  assert.equal(unknown.trajectory.runScope.available, false);
+});
