@@ -30,8 +30,20 @@ function sourceDate(value) {
 function messagesOf(messages) {
   return list(messages, 'messages').map(message => {
     if (!['user', 'assistant'].includes(message?.role)) throw new TypeError('unsupported source role');
-    return { role: message.role, text: text(message.content, 'message content') };
+    // Some official historical turns contain no text. Keep their role and
+    // absence; the product capture boundary decides no_text. Never stringify
+    // null or an object into a statement or remove the question from scoring.
+    if (message.content != null && typeof message.content !== 'string') throw new TypeError('message content must be text or null');
+    return { role: message.role, text: message.content ?? '' };
   });
+}
+
+function medicalSourceId(value) {
+  if (typeof value === 'number') {
+    if (!Number.isSafeInteger(value) || value < 0) throw new TypeError('medical source identifier must be a nonnegative safe integer');
+    return String(value);
+  }
+  return text(value, 'medical source identifier');
 }
 
 function uniqueIds(values, field) {
@@ -63,7 +75,7 @@ export function longMemRuntimeInput(row) {
 /** Gold stays in the operator/scorer process, outside every answering runtime workspace. */
 export function longMemGold(row) {
   if (!Object.hasOwn(row, 'answer')) throw new TypeError('official answer is missing');
-  return structuredClone({ question_id: text(row.question_id, 'question id'), question_type: row.question_type,
+  return structuredClone({ question_id: text(row.question_id, 'question id'), question: text(row.question, 'question'), question_type: row.question_type,
     question_date: row.question_date, answer: row.answer, answer_session_ids: row.answer_session_ids });
 }
 
@@ -72,11 +84,11 @@ export function medMemoryRuntimeInput(dialogues, query, { language, persona }) {
   if (!['zh', 'en'].includes(language)) throw new TypeError('medical source language must be zh or en');
   text(persona, 'persona');
   const sessions = list(dialogues.sessions, 'medical sessions');
-  const ids = uniqueIds(sessions.map(session => session.session_id), 'medical session id');
-  const anchor = ids.indexOf(text(query.session_id, 'question source session'));
+  const ids = uniqueIds(sessions.map(session => medicalSourceId(session.session_id)), 'medical session id');
+  const anchor = ids.indexOf(medicalSourceId(query.session_id));
   if (anchor === -1) throw new TypeError('question anchor is missing from the source dialogue');
-  const histories = sessions.slice(0, anchor + 1).map(session => ({
-    sourceSessionId: session.session_id, at: sourceDate(session.event_info?.date), messages: messagesOf(session.messages),
+  const histories = sessions.slice(0, anchor + 1).map((session, index) => ({
+    sourceSessionId: ids[index], at: sourceDate(session.event_info?.date), messages: messagesOf(session.messages),
   }));
   return { schema: INPUT_SCHEMA, benchmark: 'medmemorybench', id: `${language}:${persona}:${text(query.query_id, 'query id')}`,
     question: { text: text(query.question, 'question'), asOf: histories.at(-1).at }, histories };
@@ -84,7 +96,8 @@ export function medMemoryRuntimeInput(dialogues, query, { language, persona }) {
 
 /** Preserve official scoring inputs separately, including correctness flags and deduction metadata. */
 export function medMemoryGold(query) {
-  return structuredClone({ query_id: text(query.query_id, 'query id'), query_type: query.query_type,
+  return structuredClone({ query_id: text(query.query_id, 'query id'), session_id: query.session_id,
+    question: text(query.question, 'question'), query_type: query.query_type,
     answers: list(query.answers, 'official answers'), source_key_points: query.source_key_points, metadata: query.metadata });
 }
 
