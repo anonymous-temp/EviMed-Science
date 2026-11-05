@@ -117,3 +117,9 @@ test('source cleanup erases target ledger words and preserved transcripts while 
   const list=await store.list(project);assert.equal(list.find(run=>run.id===b.id).question,'Independent B question');
   assert.deepEqual(list.find(run=>run.id===a.id).outputFiles,['report.txt']);
 });
+
+test('reading an independent transcript preserves literal objects that happen to name the deleted id', async () => {
+  const service=new ConversationSourceDeletionService({ledger:{get:async(_p,id)=>id==='a'?{}:null,deletedIds:async()=>['a']},runtime:{},resolveProject:async()=>{},removeHistory:async()=>{},removeDerived:async()=>{}});
+  const transcript={sessionId:'b',messages:[{role:'user',parts:[{type:'text',data:{id:'a',content:'An independent literal example'}}]}]};
+  assert.deepEqual(await service.projectValue({},'session/page',{args:{request:{sessionId:'b'}}},transcript),{forward:true,value:transcript});
+});
