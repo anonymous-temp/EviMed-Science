@@ -38,6 +38,12 @@ export class ConversationSourceDeletionLedger {
       AND project_id=$3 AND project_created_at=$4 AND session_ids ? $5`, [project.userId, scope.accountCreatedAt, project.id, scope.projectCreatedAt, sessionId]);
     return rowOf(rows.rows[0]);
   }
+  async pendingForProject(project) {
+    await this.migrate(); const scope=await this.scope(project);
+    const rows=await this.database.query(`SELECT ${identityColumns} FROM evimed_source_deletion.conversations WHERE user_id=$1 AND account_created_at=$2
+      AND project_id=$3 AND project_created_at=$4 AND source_removed=false AND cleanup='pending'`,[project.userId,scope.accountCreatedAt,project.id,scope.projectCreatedAt]);
+    return rows.rows.map(rowOf);
+  }
   async deletedIds(project) {
     await this.migrate(); const scope = await this.scope(project);
     const rows = await this.database.query(`SELECT session_ids FROM evimed_source_deletion.conversations WHERE user_id=$1 AND account_created_at=$2

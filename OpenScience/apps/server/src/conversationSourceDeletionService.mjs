@@ -40,18 +40,34 @@ export class ConversationSourceDeletionService {
     this.memoryRootFor = memoryRootFor;
     this.ledger = ledger; this.runtime = runtime; this.resolveProject = resolveProject;
     this.removeHistory = removeHistory; this.removeDerived = removeDerived;
-    this.running = null; this.timer = null;
+    this.running = null; this.timer = null; this.refreshing = new Map();
   }
   version(userId) { return this.ledger.version(userId); }
   hiddenMemoryUris(userId) { return this.ledger.hiddenMemoryUris(userId); }
-  async assertAvailable(project, sessionId) { if (await this.ledger.get(project, sessionId)) throw unavailable(); }
+  async refreshClosure(project) {
+    if (!this.ledger.pendingForProject) return;
+    const key=JSON.stringify([project.userId,project.id]);
+    if (this.refreshing.has(key)) return this.refreshing.get(key);
+    const task=(async()=>{
+      for (const row of await this.ledger.pendingForProject(project)) {
+        const current=await this.runtime.captureConversationSource({...project,sourceOwnerCreatedAt:row.accountCreatedAt,sourceProjectCreatedAt:row.projectCreatedAt},row.rootSessionId);
+        const identity=value=>JSON.stringify([value?.id,value?.createdAt,value?.cwd,value?.isSeeded,value?.absent===true]);
+        if (identity(current.root)!==identity(row.frozen.root)) throw new HttpError(503,'source_deletion_identity_changed','The deleted source identity cannot be verified.');
+        await this.ledger.extendSessions(row,current.sessions.map(session=>session.id));
+      }
+    })();
+    this.refreshing.set(key,task);
+    try { await task; } finally { if(this.refreshing.get(key)===task)this.refreshing.delete(key); }
+  }
+  async assertAvailable(project, sessionId) { await this.refreshClosure(project); if (await this.ledger.get(project, sessionId)) throw unavailable(); }
   async authorize(project, method, payload) {
-    for (const id of conversationIdsInRequest(method, payload)) await this.assertAvailable(project, id);
+    await this.refreshClosure(project);
+    for (const id of conversationIdsInRequest(method, payload)) if(await this.ledger.get(project,id)) throw unavailable();
   }
   async projectValue(project, method, payload, value) {
     await this.authorize(project, method, payload);
     const deleted = new Set(await this.ledger.deletedIds(project));
-    const hidden = item => deleted.has(item?.sessionId ?? item?.id) || item?.origin === 'subagent' && deleted.has(item.parentSession);
+    const hidden = item => deleted.has(item?.sessionId ?? item?.id) || item?.origin === 'subagent' && deleted.has(item.parentSession ?? item.parentSessionId);
     if (method === 'session/list') {
       if (Array.isArray(value)) return { forward: true, value: value.filter(item => !hidden(item)) };
       if (Array.isArray(value?.items)) return { forward: true, value: { ...value, items: value.items.filter(item => !hidden(item)) } };
@@ -106,7 +122,9 @@ export class ConversationSourceDeletionService {
           if (Array.isArray(result.removedSessionIds) && this.ledger.extendSessions) {
             row.sessionIds = await this.ledger.extendSessions(row, result.removedSessionIds);
           }
-          await guard(); await this.removeDerived(project, row);
+          await guard();
+          if (!row.sourceRemoved) { await this.ledger.update(row,{sourceRemoved:true,cleanup:'pending',reason:'derived_cleanup_pending'}); row.sourceRemoved=true; }
+          await this.removeDerived(project, row);
           await this.ledger.update(row, { sourceRemoved: true, cleanup: 'complete', reason: null });
         });
       } catch { await this.ledger.update(row, { cleanup: 'pending', reason: 'cleanup_unavailable' }); }
