@@ -68,6 +68,14 @@ export const EVIMED_DOCUMENT_LANG = 'zh-CN';
 export function evimedDictionaries() {
   return {
     conversation: {
+      'detail.schedule.count': '{count} 个定时任务',
+      'detail.schedule.empty': '没有定时任务',
+      'tool.title.createSchedule': '创建定时任务',
+      'tool.title.deleteSchedule': '删除定时任务',
+      'tool.title.editSchedule': '编辑定时任务',
+      'tool.title.listSchedules': '查看定时任务',
+      'tool.title.updateSchedule': '修改定时任务',
+      'tool.title.viewSchedule': '查看定时任务详情',
       'hero.headline': '今天想做点什么？',
       'hero.preview': '',
       'placeholder.hero': '描述你的问题或任务…',
@@ -91,6 +99,8 @@ export function evimedDictionaries() {
       'detail.wait.noProgress': '没有正在运行的子任务',
     },
     chat: {
+      // The line above a turn a scheduled task delivered: the product has one word for them.
+      'message.trigger.schedule': '定时任务',
       // The working indicator under the last message. The kernel's copy is its
       // vendor's Chinese name plus 中; the product's own name goes there, as
       // 正在 + a verb with no ellipsis (design reference §7.3, E-13).
