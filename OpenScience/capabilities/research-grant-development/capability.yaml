@@ -19,7 +19,6 @@ persona: |
 safetyClass: general
 skills:
 - research-grant-development
-- autopilot-episode
 - citation-integrity
 - deep-research
 - biomedical-database-search
@@ -77,9 +76,6 @@ produces:
   - path: revision-notes.md
     role: work
     required: false
-  - path: agenda-delta.json
-    role: work
-    required: false
   checks:
   - requiredOutputsExist
   - citationsResolvable
@@ -93,13 +89,6 @@ inputs:
   - budgetCeiling
   - deadline
   - outputLanguage
-autopilot:
-  taskTypes:
-  - writing-pipeline
-  costClass: medium
-  unattendedInputs:
-  - callDocument
-  - researchDirection
 estimatedMinutes:
 - 25
 - 90

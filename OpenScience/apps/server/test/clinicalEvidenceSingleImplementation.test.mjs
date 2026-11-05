@@ -48,12 +48,10 @@ const runSide = (input, workspaceFiles) => runGate({
 });
 
 /** The files of a clinical evidence package, as the capability manifest lists
- *  them: the report and the matrix are required, and agenda-delta.json is
- *  delivered when written and never demanded. */
+ *  them: the report and the matrix, both required. */
 const CLINICAL_EVIDENCE_OUTPUTS = Object.freeze([
   { path: "clinical-evidence-report.md", required: true },
   { path: "clinical-evidence-matrix.json", required: true },
-  { path: "agenda-delta.json", required: false },
 ]);
 
 /** The package as a run writes it. The source texts are not written: the run

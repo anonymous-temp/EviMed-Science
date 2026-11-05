@@ -47,7 +47,7 @@
  * @module @evimed/domain/src/capabilityAvailability
  */
 
-import { DISPLAY_TIME_ZONE, agendaLocalDate } from './agendaSchedule.mjs'
+import { DISPLAY_TIME_ZONE, agendaLocalDate } from './displayDate.mjs'
 import { connectorCredentialSpec } from './connectorCredentials.mjs'
 import { errorCodeMessage, errorCodeOutcome } from './errorCodes.mjs'
 import { mcpToolName } from './toolNames.mjs'

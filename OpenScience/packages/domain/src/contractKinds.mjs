@@ -59,7 +59,6 @@ export const CONTRACT_KINDS = Object.freeze([
   'clinical-decision-brief',
   // Autopilot contract kinds (§24.7)
   'episode-plan',
-  'agenda-delta',
   'analysis-plan',
   'reproducibility-pack',
   'surveillance-diff',
@@ -172,7 +171,6 @@ export const CONTRACT_KIND_LABELS = Object.freeze({
   'vcr-matching-assessment': '虚拟临床研究匹配评估',
   'clinical-decision-brief': '临床决策辅助简报',
   'episode-plan': '回合计划',
-  'agenda-delta': '议程增量',
   'analysis-plan': '分析计划',
   'reproducibility-pack': '可复现包',
   'surveillance-diff': '监测差异',

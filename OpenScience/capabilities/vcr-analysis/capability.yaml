@@ -84,11 +84,6 @@ inputs:
   - endpointType
   - targetMcse
   - dataTier
-autopilot:
-  taskTypes: []
-  costClass: high
-  unattendedInputs:
-  - step
 estimatedMinutes:
 - 15
 - 120

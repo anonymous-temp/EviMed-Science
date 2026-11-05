@@ -30,7 +30,6 @@ const JSON_SHAPED = new Set([
   // it does not certify a literature report or infer an omission percentage.
   'source-understanding',
   "episode-plan",
-  "agenda-delta",
   "analysis-plan",
   "reproducibility-pack",
   "surveillance-diff",

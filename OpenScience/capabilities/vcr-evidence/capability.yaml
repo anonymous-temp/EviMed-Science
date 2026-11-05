@@ -68,13 +68,6 @@ inputs:
   - region
   - line
   - biomarker
-autopilot:
-  # Scheduling belongs to the 「虚拟临床研究」 orchestrator, which dispatches this
-  # capability inside the study. The autopilot allocator has no VCR task type.
-  taskTypes: []
-  costClass: medium
-  unattendedInputs:
-  - studyId
 estimatedMinutes:
 - 20
 - 90

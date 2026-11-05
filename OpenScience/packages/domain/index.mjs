@@ -60,7 +60,6 @@ export { knowledgeGraphToGraph, wikiPagesToGraph } from './src/knowledgeGraphs.m
 // knowledgeQuotations — the after-the-fact ✓ / ⚠ of a compiled page's quotations: a label, never a condition
 export { KNOWLEDGE_QUOTATION_STATUSES, checkPageQuotations, knowledgeSourceIdOfUri } from './src/knowledgeQuotations.mjs'
 
-/** @typedef {import('./src/agenda.mjs').AgendaResultKind} AgendaResultKind */
 
 export {
   GEO_VALUE_DOMAINS,
@@ -238,7 +237,6 @@ export {
 export {
   ALL_ERROR_CODES,
   ANALYSIS_ERROR_CODES,
-  AUTOPILOT_BUDGET_ERROR_CODES,
   BALANCE_REFUSAL_CODES,
   CAPSULE_SHARE_ERROR_CODES,
   CONTROL_PLANE_ERROR_CODES,
@@ -296,14 +294,9 @@ export { READINESS_ERROR_CODES, READINESS_ERROR_MESSAGES_ZH } from './src/readin
 
 // constants — 24 exports
 export {
-  AGENDA_PROJECTION_TOKEN_BUDGET,
-  AUTOPILOT_DIMINISHING_RETURN_EPISODES,
-  AUTOPILOT_PRIORITY_WEIGHTS,
-  AUTOPILOT_USER_SIGNALS,
   CAPSULE_PROFILE_TOKEN_BUDGET,
   CAPSULE_RECALL_TOP_K,
   CAPSULE_SOURCE_WEIGHTS,
-  DATASET_EXPLORATORY_FRACTION,
   DEDUP_MINHASH_JACCARD,
   DEDUP_SEMANTIC_COSINE,
   MAX_DELEGATION_DEPTH,
@@ -325,7 +318,6 @@ export {
   OMISSION_AUDIT_SAMPLE_RATES,
   OMISSION_RATE_TARGETS,
   PERSONA_SCORECARD_FLOORS,
-  REPRODUCTION_RELATIVE_TOLERANCE,
   SKILL_AUTHORING_LIMITS,
   TOOL_RESULT_PRUNER,
 } from './src/constants.mjs'
@@ -359,15 +351,10 @@ export {
 
 // capabilityManifest — 13 exports
 export {
-  AUTOPILOT_EPISODE_CAPABILITIES,
-  AUTOPILOT_TASK_TYPES,
-  ROUTINE_TASK_TYPE,
   CLAIM_TOOLS,
-  COST_CLASSES,
   DELEGATION_BASE_TOOLS,
   EVIDENCE_MATRIX_OUTPUT,
   KERNEL_GLOBAL_TOOL_NAMES,
-  autopilotEpisodeCapability,
   capabilityCatalogueLine,
   delegationToolFilter,
   resolveContractKind,
@@ -739,36 +726,6 @@ export {
   indexCompleteness,
   outputBelowFloor,
 } from './src/analysis.mjs'
-
-// agenda — 25 exports
-export {
-  AGENDA_ITEM_TYPES,
-  ALLOWED_EFFECT_MEASURES,
-  AUTOPILOT_PROHIBITIONS,
-  DATASET_CLASSIFICATIONS,
-  DATASET_PARTITIONS,
-  DEFAULT_ENABLED_TASK_TYPES,
-  EPISODE_STATES,
-  SCHEDULED_TASK_DEFAULT_TYPES,
-  REFUTATION_VERDICTS,
-  AGENDA_DEFAULT_BUDGETS,
-  AGENDA_MIN_EPISODE_BUDGET_CNY,
-  MIN_RUN_BUDGET_CNY,
-  STOPPING_RULES,
-  USER_SIGNALS,
-  VERIFICATION_BUDGET_SHARE,
-  VERIFICATION_CANCELED_BY_STOP,
-  VERIFICATION_UNSCHEDULED_REASONS,
-  agendaResultKind,
-  datasetPartitionOf,
-  digestPlacement,
-  directionVerdict,
-  splitEpisodeBudget,
-  standingVerdict,
-  tierRaiseAllowed,
-  userSignalScore,
-  validateAgendaClaim,
-} from './src/agenda.mjs'
 
 // runtimeUiSurface — 16 exports
 export {
@@ -1810,7 +1767,7 @@ export {
 export { frontierNoticeTarget, frontierNoticeHref, FRONTIER_ARRIVAL } from './src/frontierPresentation.mjs';
 export { shareNoticeHref } from './src/shareNotice.mjs';
 
-export { validAgendaDate, validateAgendaSchedule, normalizeAgendaSchedule, agendaLocalDate, DISPLAY_TIME_ZONE, agendaDueOccurrence, agendaNextOccurrence, AGENDA_WEEKDAY_WORDS, describeAgendaSchedule, agendaZoneName, agendaInstantText } from "./src/agendaSchedule.mjs";
+export { agendaLocalDate, DISPLAY_TIME_ZONE } from './src/displayDate.mjs'
 
 // vcrVocabulary — 138 exports: 「虚拟临床研究」's closed vocabularies (nine value sources, three scientific
 // conclusions, review states, missing reasons, intended uses, model risk and

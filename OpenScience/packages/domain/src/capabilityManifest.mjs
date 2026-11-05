@@ -82,70 +82,6 @@ export const KERNEL_GLOBAL_TOOL_NAMES = Object.freeze(new Set([
   'ask_user',
 ]))
 
-/**
- * The general task type: do what the instruction says, on the schedule, and hand the result over as a reply and files in the
- * task's own conversation. It has no agenda delta, no claim layering and no clinical contract — those belong to the research
- * types — and it is the default type of a task made from a conversation (`schedule_task`).
- */
-export const ROUTINE_TASK_TYPE = 'routine'
-
-/** Autopilot task types a capability may declare (§24.3), and the one general type that no capability declares (`routine`). */
-export const AUTOPILOT_TASK_TYPES = Object.freeze([
-  'routine',
-  'literature-sentinel',
-  'evidence-update',
-  'data-prospecting',
-  'hypothesis-suggestion',
-  'writing-pipeline',
-  'signal-monitoring',
-])
-
-/**
- * Which capability an autopilot episode of each task type runs.
- *
- * An agenda names task types, never a capability, so this table is the whole
- * of the choice — and a capability that declares a task type the table sends
- * elsewhere has declared something that never happens. `geo-content` declared
- * `signal-monitoring` for GEO citation monitoring while the table sent that
- * type to adverse-event analysis, so a GEO agenda item ran `adr-analysis` and
- * GEO monitoring never ran at all (build spec 2026-09-25 §1). GEO monitoring
- * is now the 「循证 GEO」 module's own scheduler, `geo-content` declares no
- * task type, and `apps/server/test/autopilotEpisodeCapabilities.test.mjs`
- * holds every declaration against this table.
- *
- * Kept as a table rather than derived from the declarations because several
- * capabilities declare the same type (`evidence-update`: evidence synthesis and
- * meta-analysis) and which one an unattended episode runs is a product
- * decision, not a tie to break by sort order.
- * @type {Readonly<Record<typeof AUTOPILOT_TASK_TYPES[number], string>>}
- */
-export const AUTOPILOT_EPISODE_CAPABILITIES = Object.freeze({
-  // The ordinary conversation line (`open-domain-answer`), not a capability package: a routine task is a conversation turn that
-  // happens on a schedule.
-  'routine': 'open-domain-answer',
-  'literature-sentinel': 'clinical-evidence-synthesis',
-  'evidence-update': 'clinical-evidence-synthesis',
-  'data-prospecting': 'dataset-research-scoping',
-  'hypothesis-suggestion': 'research-topic-selection',
-  'writing-pipeline': 'manuscript-support',
-  'signal-monitoring': 'adr-analysis',
-})
-
-/**
- * The capability an episode of this task type runs, or null for a type the
- * allocator does not know.
- * @param {string} taskType @returns {string | null}
- */
-export function autopilotEpisodeCapability(taskType) {
-  const key = String(taskType ?? '')
-  return Object.hasOwn(AUTOPILOT_EPISODE_CAPABILITIES, key)
-    ? AUTOPILOT_EPISODE_CAPABILITIES[/** @type {keyof typeof AUTOPILOT_EPISODE_CAPABILITIES} */ (key)]
-    : null
-}
-
-/** Cost classes used by the daily allocator. */
-export const COST_CLASSES = Object.freeze(['low', 'medium', 'high'])
-
 /** @typedef {{ code: string, message: string, field?: string }} ManifestIssue */
 
 const ID_PATTERN = /^[a-z][a-z0-9-]{1,63}$/
@@ -245,8 +181,6 @@ export function validateCapabilityManifest(value) {
 
   const inputs = normalizeInputs(raw.inputs, issues)
 
-  const autopilot = normalizeAutopilot(raw.autopilot, issues)
-
   const estimatedMinutes = Array.isArray(raw.estimatedMinutes)
     ? raw.estimatedMinutes.map((n) => Number(n)).filter((n) => Number.isFinite(n))
     : []
@@ -271,7 +205,6 @@ export function validateCapabilityManifest(value) {
     produces: normalizedProduces,
     inputs,
     safetyClass,
-    autopilot,
     budget,
     estimatedMinutes,
     category: String(raw.category ?? '').trim(),
@@ -392,33 +325,6 @@ function normalizeInputs(value, issues) {
   }
   const raw = /** @type {Record<string, unknown>} */ (value)
   return { required: toStringArray(raw.required), optional: toStringArray(raw.optional) }
-}
-
-/**
- * `taskTypes` empty means "not eligible for autopilot" — the field replaced a
- * boolean, which §14 rule 16 bans.
- * @param {unknown} value
- * @param {ManifestIssue[]} issues
- * @returns {{ taskTypes: string[], costClass: string, unattendedInputs: string[] }}
- */
-function normalizeAutopilot(value, issues) {
-  if (value == null) return { taskTypes: [], costClass: 'medium', unattendedInputs: [] }
-  if (typeof value !== 'object' || Array.isArray(value)) {
-    issues.push({ code: 'capability_invalid', message: 'autopilot must be a mapping.', field: 'autopilot' })
-    return { taskTypes: [], costClass: 'medium', unattendedInputs: [] }
-  }
-  const raw = /** @type {Record<string, unknown>} */ (value)
-  const taskTypes = toStringArray(raw.taskTypes)
-  for (const type of taskTypes) {
-    if (!AUTOPILOT_TASK_TYPES.includes(/** @type {any} */ (type))) {
-      issues.push({ code: 'capability_invalid', message: `unknown autopilot task type "${type}".`, field: 'autopilot' })
-    }
-  }
-  const costClass = String(raw.costClass ?? 'medium')
-  if (!COST_CLASSES.includes(/** @type {any} */ (costClass))) {
-    issues.push({ code: 'capability_invalid', message: `unknown costClass "${costClass}".`, field: 'autopilot' })
-  }
-  return { taskTypes, costClass, unattendedInputs: toStringArray(raw.unattendedInputs) }
 }
 
 /**

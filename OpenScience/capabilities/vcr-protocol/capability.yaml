@@ -52,13 +52,6 @@ inputs:
   - intendedUse
   - endpointType
   - registryId
-autopilot:
-  # Scheduling is the 虚拟临床研究 module's own (its orchestrator dispatches this
-  # run); the autopilot allocator has no VCR task type.
-  taskTypes: []
-  costClass: medium
-  unattendedInputs:
-  - question
 estimatedMinutes:
 - 5
 - 30
