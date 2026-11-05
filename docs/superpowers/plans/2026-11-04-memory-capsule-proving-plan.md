@@ -494,3 +494,27 @@
 **账号小循环：** [EvoDS](https://arxiv.org/html/2606.03841)、[ToolVerse](https://arxiv.org/abs/2607.15660)、[SkillPyramid](https://arxiv.org/html/2606.03692v1)、[SkillsBench](https://www.skillsbench.ai)、[SkillsBench 论文](https://arxiv.org/abs/2602.12670)、[Vals 榜](https://vals.ai/benchmarks/skillsbench)、[SkillLearnBench](https://github.com/cxcscmu/SkillLearnBench)、[EvoClawBench](https://www.alphaxiv.org/abs/2607.09711.md)、[SkillEvolBench](https://arxiv.org/abs/2605.24117)、[MemoryBench](https://arxiv.org/html/2510.17281v1)、[MultiSessionCollab](https://arxiv.org/html/2601.02702)、[TellOnce](https://arxiv.org/abs/2606.13174)、[技能生命周期综述](https://arxiv.org/abs/2607.10113)、[OpenViking Agent Evolution](https://github.com/volcengine/OpenViking/blob/v0.5.3/docs/en/api/19-agent-evolution.md)、[Graph-of-Skills](https://arxiv.org/abs/2604.05333)、[Toucan](https://arxiv.org/html/2510.01179v1)
 
 **三篇论文带来的榜：** [τ²-Bench](https://taubench.com/)、[τ² 提交说明](https://github.com/sierra-research/tau2-bench/blob/main/docs/leaderboard-submission.md)、[GAIA 官方榜](https://gaia-benchmark-leaderboard.hf.space/)、[HAL GAIA](https://hal.cs.princeton.edu/gaia)、[HAL ScienceAgentBench](https://hal.cs.princeton.edu/scienceagentbench)、[BFCL](https://gorilla.cs.berkeley.edu/leaderboard.html)
+
+## Execution record (2026-11-05)
+
+The owner authorized this plan's implementation, validation, commits and branch push. Production deployment is excluded. The baseline is `0765c63c1`; the plan is preserved from `cdcb4ec51`. Earlier retention and paid-ablation prohibitions are superseded only as stated in sections 1 and 3 above. Implementation, simulated checks, real-engine checks, benchmark results and public submissions are separate evidence.
+
+| Work | State | Evidence or next check |
+|---|---|---|
+| Latest source and plan | Read; plan adopted on the implementation branch | `codex/memory-capsule-iteration-20261105` |
+| Broad retention, open `people`/`notes`, identifier policy | Implemented and independently reviewed at `0a7ca6f06`; live acceptance pending | 727 scoped memory tests, no skips; 20 PostgreSQL/stub tests; 12 unchanged backup tests passed in Linux. Vocabulary coverage: 97.49% lines, 87.34% branches. Development corpus: 82 cases, 64 mechanically decidable. |
+| Personal retention preferences and medical context | Privacy/type wiring in progress; per-person write preferences pending | Preserve own recall while separating default-private egress from user-suppressed `sensitive` memory. |
+| Raw-history search and deletion synchronization | Pending | Upstream search probe, scoped resources adapter if needed; G4/G5/G6/G9 |
+| Sixteen learning defects | Audit in progress | Reproducers, deterministic repairs; experimental changes require their stated comparisons |
+| Official pyramid, code skills and tool chains | Pending | C1 before training-camp publication; C2/C3 and L1-L10 |
+| Test-world and public benchmark adapters | Inventory in progress | Freeze pools, preserve answers, denominators and exact configuration |
+| Real-engine baseline and v0.5.3 rehearsal | Frozen baseline engine started locally; v0.5.3 pending | Existing `colima-evimed-extension-acceptance` environment, isolated volumes and loopback port 19330. SSH lab authentication remains unresolved. |
+| General G1-G14 and medical M1-M11 | Pending | Full plan counts and red lines remain required; no surrogate pass claims |
+| Frozen confirmation and leaderboard submissions | Pending | Confirmation once; external identity forms retain their stated owner check |
+| Final review, commit and push | Pending | Exact commit, remote verification and unresolved acceptance recorded |
+
+Pre-change local checks: 262 server tests passed, one real-plugin check skipped because its pinned archive was unavailable; 213 web tests passed. These are local regression baselines, not real-engine or benchmark acceptance.
+
+Task 1 review repaired credential-value masking through the actual message-capture path, including punctuation, escaped or unfinished quotes, and Unicode values. The detector and masker now use one lexical scanner. An attribution-dependent case (C18) is explicitly non-mechanical; its historical score is not reused. Independent code-quality and JavaScript reviews accepted the final bytes.
+
+Environment refresh: the default Docker data filesystem has about 1 GiB free, while the already-running extension-acceptance environment has about 30 GiB free. No images, customer volumes or serving containers were removed. Two unused-cache-only prune attempts reclaimed zero bytes. A new local throwaway PostgreSQL and a separate OpenViking baseline use task-specific containers/volumes. The baseline image is the pinned v0.5.1.1 digest; its ten templates were copied from `0765c63c1`, not from the changed worktree. Provider credentials remain outside the DSH runtime, and model calls pass the production gateway and durable usage ledger in the isolated test database.
