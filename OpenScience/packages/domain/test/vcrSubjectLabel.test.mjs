@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { vcrSubjectLabel, vcrSubjectLabels } from '../index.mjs'
+import { vcrSubjectLabel, vcrSubjectLabels, vcrVisibleQuestion } from '../index.mjs'
 
 test('a pseudonymous key reads as P- and six digits, and any other key is its own label', () => {
   assert.equal(vcrSubjectLabel('Pee008d6ee9ef7847'), 'P-EE008D')
@@ -24,4 +24,9 @@ test('the labels of a roster are unique, the same for the same key whatever else
   // A roster in another order gives the same labels.
   assert.deepEqual([...vcrSubjectLabels([third, second, first])].sort(), [...labels].sort())
   assert.equal(vcrSubjectLabels(['P-0302', 'x']).get('P-0302'), 'P-0302')
+})
+
+test('the sentence of a patient\'s trial search names the person by the label, never by the key', () => {
+  assert.equal(vcrVisibleQuestion({ purpose: 'trial_search', subjectKey: 'Pee008d6ee9ef7847' }), '为 P-EE008D 找试验')
+  assert.equal(vcrVisibleQuestion({ purpose: 'trial_search' }), '为患者找试验')
 })

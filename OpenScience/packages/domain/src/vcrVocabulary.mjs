@@ -35,6 +35,7 @@
 
 import { WORK_STATE_LABEL, workStateLabel } from './workState.mjs'
 import { VCR_FIT_BANDS } from './vcrTrialJudgment.mjs'
+import { vcrSubjectLabel } from './vcrSubjectLabel.mjs'
 
 /** @param {readonly string[]} list */
 const frozen = (list) => Object.freeze([...list])
@@ -571,7 +572,7 @@ export function vcrVisibleQuestion({ purpose = null, steps = [], exportKind = nu
     const label = (exportKind && kinds[exportKind]) || '研究包'
     return revision ? `${VCR_RUN_PURPOSE_PHRASES_ZH.review_repair}${label}` : `生成${label}`
   }
-  if (purpose === 'trial_search') return subjectKey ? `为 ${subjectKey} ${VCR_RUN_PURPOSE_PHRASES_ZH.trial_search}` : '为患者找试验'
+  if (purpose === 'trial_search') return subjectKey ? `为 ${vcrSubjectLabel(subjectKey)} ${VCR_RUN_PURPOSE_PHRASES_ZH.trial_search}` : '为患者找试验'
   if (purpose === 'evidence_refresh') return VCR_RUN_PURPOSE_PHRASES_ZH.evidence_refresh
   const named = VCR_STEPS.filter((step) => steps.includes(step)).map((step) => actions[step])
   if (named.length) return named.join('、')
