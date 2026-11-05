@@ -160,3 +160,46 @@ describe('switching the analysis view builds a descriptor the server admits', ()
     expect(geoAnalysisChangeReplaces('?step=sources', { viewId: 'V17' })).toBe(false);
   });
 });
+
+describe('every analysis view keeps its filter, selection and return through the address', () => {
+  const SCOPE = '?view=journey&session=s&round=r1&from=2026-01-01&to=2026-02-01&questionVersion=3&engines=kimi&groupIds=g1&pools=P2&selectionRef=gsel_exact';
+  const scopeOf = (search: string) => Object.fromEntries([...new URLSearchParams(search)].filter(([key]) => !(GEO_ANALYSIS_VIEW_FIELDS.V17 as readonly string[]).includes(key)
+    && !['analysis', 'dimension', 'analysisReturn', 'analysisScopeReturn'].includes(key) && !Object.values(GEO_ANALYSIS_VIEW_FIELDS).flat().includes(key as never)));
+
+  it('opens each view with its filters in the address and reads the same descriptor back', () => {
+    for (const viewId of VIEWS) {
+      const opened = geoAnalysisSearch(SCOPE, filled(viewId));
+      expect(geoAnalysisDescriptor(opened), viewId).toEqual(filled(viewId));
+      expect(scopeOf(opened), `${viewId} keeps the business scope`).toEqual(scopeOf(SCOPE));
+    }
+  });
+
+  it('keeps the scope when a filter of the open view changes, and drops nothing of another view into it', () => {
+    for (const viewId of VIEWS) for (const key of GEO_ANALYSIS_VIEW_FIELDS[viewId]) {
+      const opened = geoAnalysisSearch(SCOPE, filled(viewId));
+      const changed = geoAnalysisSearch(opened, { ...filled(viewId), [key]: key === 'topN' || key.endsWith('Version') ? 5 : 'M-01' } as GeoAnalysisDescriptor);
+      expect(scopeOf(changed), `${viewId}.${key}`).toEqual(scopeOf(SCOPE));
+      expect(geoAnalysisChangeReplaces(opened, filled(viewId)), viewId).toBe(true);
+    }
+  });
+
+  it('returns from each view, direct or frozen, to the exact business scope and leaves no analysis field behind', () => {
+    for (const viewId of VIEWS) {
+      const back = new URLSearchParams(geoAnalysisSearch(geoAnalysisSearch(SCOPE, filled(viewId)), null));
+      expect(Object.fromEntries(back), `${viewId} direct`).toEqual(Object.fromEntries(new URLSearchParams(SCOPE)));
+      const frozen = geoFrozenAnalysisSearch(SCOPE, filled(viewId), 'gsel_other');
+      expect(new URLSearchParams(frozen).get('selectionRef'), `${viewId} frozen selection`).toBe('gsel_other');
+      const restored = new URLSearchParams(geoAnalysisSearch(frozen, null));
+      expect(Object.fromEntries(restored), `${viewId} frozen return`).toEqual(Object.fromEntries(new URLSearchParams(SCOPE)));
+    }
+  });
+
+  it('is listed in the work area it is presented under, and its address holds only fields it declares', () => {
+    for (const viewId of VIEWS) {
+      expect(geoAnalysisOptionsForTab(geoAnalysisTabForView(viewId)).map(item => item.value), viewId).toContain(viewId);
+      const address = new URLSearchParams(geoAnalysisSearch('', filled(viewId)));
+      const held = [...address.keys()].filter(key => !['analysis', 'dimension', 'analysisReturn'].includes(key)).sort();
+      expect(held.every(key => (GEO_ANALYSIS_VIEW_FIELDS[viewId] as readonly string[]).includes(key)), `${viewId} holds ${held}`).toBe(true);
+    }
+  });
+});
