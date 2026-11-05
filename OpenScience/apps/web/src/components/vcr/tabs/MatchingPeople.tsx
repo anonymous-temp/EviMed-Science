@@ -205,7 +205,7 @@ export function MatchingPeople({ studyId, study, judged, verdict, onVerdict, onP
                   </div>
                 </>
               )
-              : <EmptyState title={verdict ? "没有这个结论的患者" : "还没有判完的患者"} action={verdict ? <Button variant="secondary" onClick={() => onVerdict(null)}>看全部</Button> : undefined} />}
+              : <EmptyState title={verdict ? "没有这个结论的患者" : all === null && progress.finished === null ? `少于 ${VCR_MIN_CELL_SIZE} 人的结论不逐个列出` : "还没有判完的患者"} action={verdict ? <Button variant="secondary" onClick={() => onVerdict(null)}>看全部</Button> : undefined} />}
           </div>
           {wide && detail && <Card>{detail}</Card>}
         </div>

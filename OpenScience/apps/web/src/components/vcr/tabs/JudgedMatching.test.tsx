@@ -455,6 +455,18 @@ describe("给试验找患者 — a protocol's people", () => {
     await waitFor(() => expect(document.querySelector("[data-vcr-person]")).not.toBeNull());
   });
 
+  it("a protocol whose judged people are all too few for this reader says so, and not that nobody was judged", async () => {
+    server = installVcrServer(network.productRequest, { [JUDGED]: judged((page) => {
+      page.tallies = { eligible: null, possible: null, insufficient: null, ineligible: null };
+      page.total = null; page.people = []; page.selected = null;
+      page.progress = { ...page.progress, state: "done", total: null, finished: null, failed: null, waiting: null };
+      return page;
+    }) });
+    draw(<MatchingTab studyId={STUDY_ID} study={study()} />);
+    expect(await screen.findByText("少于 10 人的结论不逐个列出")).toBeInTheDocument();
+    expect(screen.queryByText("还没有判完的患者")).toBeNull();
+  });
+
   it("draws a count too small to show this reader as a dash, never as a zero, and makes no total of what is hidden", async () => {
     await protocolPage({ [JUDGED]: judged((page) => {
       page.tallies = { eligible: null, possible: null, insufficient: null, ineligible: null };
