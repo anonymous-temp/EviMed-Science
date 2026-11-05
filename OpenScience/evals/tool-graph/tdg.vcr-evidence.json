@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-evidence",
-  "version": "sha256:c3211255cb633af1cb430859d9fff901cb21c87196c134b8ebc303f8aac1aae0",
+  "version": "sha256:4c39c9949bb71792742d8a795c3015b06e7005628ccd5fe18963a7b9f11ee563",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 37,
@@ -1735,7 +1735,7 @@
     {
       "name": "mcp__evimed__vcr_simulate",
       "source": "mcp",
-      "description": "A human trial's sample size, power or events, comparing designs, a synthetic population from a paper's baseline, an external control: calculate here, not in a script of your own. No study needed; the first start opens a result page. action=shape with kind gives exact fields; do not guess keys. Patients to trials: kind match_judge. Long jobs resume here if they outlive this turn. modelId requires modelVersion.",
+      "description": "A human trial's sample size, power or events, comparing designs, a synthetic population from a paper's baseline, an external control: calculate here, not in a script of your own. No study needed; the first start opens a result page. action=shape with kind gives exact fields; do not guess keys. One patient against trials, or a list of patients against a protocol: kind match_judge, not a script of your own, so the verdicts are saved for the page, the export and follow-ups. Long jobs resume here if they outlive this turn. modelId requires modelVersion.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1900,7 +1900,7 @@
     {
       "name": "mcp__evimed__vcr_write",
       "source": "mcp",
-      "description": "Save research objects, never calculated results. data_intake imports/maps/freezes uploads (read contracts). patient_context takes data={sourceId,generation,sha256} from uploads, {sourceId} for a knowledge-base original, or {messageSeq} for a human case; add subjectKey for a patient already here; their trials are re-judged. task_context opens a task. A fact for structured screening states only what its quote says: what the text does not mention is unknown, never negated. trial_judgment saves your judgment of a patient against a trial or protocol, with sentence ids as evidence. For object contracts use the workflow skill (read /opt/evimed/capability-skills/vcr-matching/SKILL.md before matching trials; vcr-protocol, vcr-evidence, vcr-analysis and vcr-package sit beside it; none is in the catalogue) and vcr_simulate action=shape for numerical inputs.",
+      "description": "Save research objects, never calculated results. data_intake imports an uploaded table of patients or a folder of records in one call, nothing to confirm (contracts has its fields). protocol saves a protocol's eligibility: data={title, protocolText}. patient_context takes data={sourceId,generation,sha256} from uploads, {sourceId} for a knowledge-base original, or {messageSeq} for a human case; add subjectKey for a patient already here; their trials are re-judged. task_context opens a task. A fact for structured screening states only what its quote says: what the text does not mention is unknown, never negated. trial_judgment saves your judgment of a patient against a trial or protocol, with sentence ids as evidence. For object contracts use the workflow skill (read /opt/evimed/capability-skills/vcr-matching/SKILL.md before matching trials; vcr-protocol, vcr-evidence, vcr-analysis and vcr-package sit beside it; none is in the catalogue) and vcr_simulate action=shape for numerical inputs.",
       "inputSchema": {
         "type": "object",
         "properties": {

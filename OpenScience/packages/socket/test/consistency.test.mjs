@@ -225,6 +225,15 @@ test("a capability its module opens is not in a plain conversation's index", () 
   assert.ok(!text.includes("geo-content") && !text.includes("vcr-protocol"));
 });
 
+test("judging patients against criteria is named when its tools are offered, and only then", () => {
+  const listed = { id: "meta-analysis", description: "d", whenToUse: "w", produces: [{ contractKind: "meta-analysis-report" }] };
+  const options = { askUserEnabled: false, capsuleActive: false, reviewEnabled: false };
+  const offered = buildGuidanceText([listed, { id: "vcr-matching", description: "d", whenToUse: "w", produces: [{ contractKind: "vcr-matching-assessment" }] }], options);
+  assert.match(offered, /一份方案筛一批患者/);
+  assert.ok(!offered.includes("`vcr-matching`"), "it stays out of the index of deliverables");
+  assert.doesNotMatch(buildGuidanceText([listed], options), /一份方案筛一批患者/);
+});
+
 test("the kernel's produced-files paragraph is left in place, and the guidance registers one section and no persona", async () => {
   // It was withdrawn while `present` was not mounted and the preview pane was
   // disabled: the paragraph asked for cards and links that could not render.
