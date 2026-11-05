@@ -342,3 +342,31 @@ test('unavailable rejection metadata never returns an unfiltered raw hit', optio
   f.ledger.rejected=async()=>{throw new Error('privacy metadata unavailable');};
   await assert.rejects(search(f),/privacy metadata unavailable/);
 });
+
+test('deterministic history capacity settles native extraction and cannot starve the next commit over two bounded passes', options, async t => {
+  const f=await setup(t); f.worker.history=f.service;
+  f.worker.memoryContexts={forUri:async()=>f.context,assertKnown:async()=>{}};
+  const next=await f.commitConversation('after-capacity',[{role:'user',text:'A later ordinary trial update.'}],{projectId:'default'});
+  await f.database.query("UPDATE evimed_memory.native_commits SET created_at=created_at-interval '1 minute' WHERE user_id=$1 AND archive_uri=$2",[f.userId,f.commit.archiveUri]);
+  const read=f.context.sessions.read.bind(f.context.sessions); let oversizedReads=0;
+  const oversized=JSON.stringify({role:'user',content:'界'.repeat(666668)});
+  f.context.sessions.read=async(owner,uri,options)=>{
+    if(uri===`${f.commit.archiveUri}/messages.jsonl`){oversizedReads++;return oversized;}
+    return read(owner,uri,options);
+  };
+  const passes=[await f.worker.processCommits({userId:f.userId,limit:1}),await f.worker.processCommits({userId:f.userId,limit:1})];
+  assert.deepEqual(passes,[1,1]); assert.equal(oversizedReads,1);
+  assert.equal((await f.overlay.commit(f.userId,f.commit.archiveUri)).state,'completed');
+  assert.equal((await f.overlay.commit(f.userId,next.archive_uri)).state,'completed');
+  const coverage=await f.service.coverage(f.userId); assert.equal(coverage.partial,1);assert.equal(coverage.complete,1);
+  assert.equal((await f.overlay.openCommits({userId:f.userId})).length,0);
+});
+
+test('an untyped resource error resembling a capacity reason remains a retryable unavailable history failure', options, async t => {
+  const f=await setup(t); f.worker.history=f.service;
+  f.worker.memoryContexts={forUri:async()=>f.context,assertKnown:async()=>{}};
+  f.resources.writeHistory=async()=>{throw Object.assign(new Error('provider unavailable'),{code:'memory_history_archive_too_large'});};
+  await f.worker.processCommits({userId:f.userId});
+  assert.equal((await f.overlay.commit(f.userId,f.commit.archiveUri)).state,'pending');
+  const coverage=await f.service.coverage(f.userId);assert.equal(coverage.unavailable,1);assert.equal(coverage.partial,0);
+});
