@@ -32,7 +32,7 @@ function fixedAdmission(answer = {}) {
   return { asked, admit: async (caller) => { asked.push(caller.engineSessionId ?? null); return { ...base, ...(typeof answer === "function" ? answer(caller) : answer) }; } };
 }
 
-async function fixture(t, { admission = fixedAdmission(), config = {}, overlay = null, stubOptions = {}, memoryTool = null, capsuleSearch = null, historySearch = null, sourceDeletion = null, timeoutMs = 4_000, project = {} } = {}) {
+async function fixture(t, { admission = fixedAdmission(), config = {}, overlay = null, stubOptions = {}, memoryTool = null, capsuleSearch = null, historySearch = null, sourceDeletion = null, sourceReceipt = null, timeoutMs = 4_000, project = {} } = {}) {
   resetNativeMemoryMetrics();
   const stub = await startOpenVikingStub(t, stubOptions);
   const client = new OpenVikingClient({ openVikingUrl: stub.url, openVikingApiKey: stub.apiKey, openVikingAccount: "evimed" });
@@ -42,7 +42,7 @@ async function fixture(t, { admission = fixedAdmission(), config = {}, overlay =
     config: { memoryEngineEnabled: true, memoryEnabled: true, ...config },
     runtimeManager: { assertActiveEviMedWorkloadToken: async (token) => { if (token === TOKEN) return { userId: USER, projectId: "p1" }; throw new Error("no"); } },
     store: { userById: async (id) => (id === USER ? { id } : null), requireProject: async (_user, id) => ({ id, userId: USER, ...project }) },
-    sessions, admission, overlay, memoryTool, capsuleSearch, historySearch, sourceDeletion,
+    sessions, admission, overlay, memoryTool, capsuleSearch, historySearch, sourceDeletion, sourceReceipt,
   });
   const server = createServer((req, res) => { void handler(req, res, (failure) => failures.push(failure)); });
   server.listen(0, "127.0.0.1");
@@ -975,4 +975,21 @@ test('native admission rejects deleted originals and source-bound replay session
     assert.deepEqual([result.learn,result.recall,result.learnReason],[false,false,'source_deleted']);
   }
   assert.deepEqual(asked,[['source','dsh-source'],[null,'evimed-replay-source']]);
+});
+
+test('native content is not disclosed until its trusted source receipt is stored',async t=>{
+  let entered,release,settled=false;const ready=new Promise(resolve=>entered=resolve),gate=new Promise(resolve=>release=resolve);
+  const overlay={configured:true,sensitiveUris:async()=>[],noteRecalled:async()=>{}};
+  const {call,stub}=await fixture(t,{overlay,sourceReceipt:async()=>{entered();await gate;}});
+  const uri=stub.seedMemory(OV_USER,'notes/source.md','Private source context.',{type:'notes'});
+  const reading=call('GET',`/api/v1/content/read?uri=${encodeURIComponent(uri)}`).then(result=>{settled=true;return result;});
+  await ready;assert.equal(settled,false);release();const result=await reading;assert.equal(result.status,200);assert.match(result.text,/Private source context/);
+});
+
+test('required source receipt failures block both REST and MCP source text',async t=>{
+  const {call,mcp,stub}=await fixture(t,{overlay:{configured:true,sensitiveUris:async()=>[],noteRecalled:async()=>{}},sourceReceipt:async()=>{throw Error('receipt unavailable');}});
+  const uri=stub.seedMemory(OV_USER,'notes/receipt.md','PRIVATE_RECEIPT_CANARY',{type:'notes'});
+  const rest=await call('GET',`/api/v1/content/read?uri=${encodeURIComponent(uri)}`),rpc=await mcp({jsonrpc:'2.0',id:1,method:'tools/call',params:{name:'read',arguments:{uris:[uri]}}});
+  for(const result of [rest,rpc]){expectFailure(result);}
+  function expectFailure(result){assert.ok(result.status>=400);assert.doesNotMatch(result.text,/PRIVATE_RECEIPT_CANARY/);}
 });
