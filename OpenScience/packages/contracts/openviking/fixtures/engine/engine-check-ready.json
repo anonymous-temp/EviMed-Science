@@ -1,9 +1,9 @@
 {
   "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.3",
-  "recordedAt": "2026-11-05T08:11:39.388Z",
+  "recordedAt": "2026-11-05T08:42:00.879Z",
   "note": "The check against an account the server has registered, the skills installed and Compile running as the server starts it: every fact holds.",
   "verdict": {
-    "ok": false,
+    "ok": true,
     "facts": {
       "version": {
         "ok": true,
@@ -41,14 +41,10 @@
         }
       },
       "compileIdentity": {
-        "ok": false,
-        "code": "openviking_compile_probe_unexpected",
-        "reason": "the probe completed on an empty source"
+        "ok": true
       }
     },
-    "degraded": [
-      "knowledge"
-    ]
+    "degraded": []
   },
   "exchanges": [
     {
@@ -639,18 +635,21 @@
           "viking://user/evimed-engine/resources/evimed-compile-probe/sources"
         ],
         "to": "viking://user/evimed-engine/resources/evimed-compile-probe/wiki",
-        "skill": "viking://agent/skills/llm-wiki"
+        "skill": "viking://agent/skills/llm-wiki",
+        "args": {
+          "mode": "full"
+        }
       },
       "status": 202,
       "contentType": "application/json",
       "response": {
         "status": "ok",
         "result": {
-          "task_id": "cmp_39a8c61dcdcd1c0c6e93334e46b5c5e578ed06ae329f65d79680572826a75d15",
+          "task_id": "cmp_7c606004814b73656120fac4fdf6fffd578385133ab0ee4fcc6bc50d36b494aa",
           "task_type": "compile",
           "status": "pending",
-          "created_at": 1793866298.3578906,
-          "updated_at": 1793866298.3602092,
+          "created_at": 1793868089.6891718,
+          "updated_at": 1793868089.6905432,
           "processing_seconds": null,
           "resource_id": "viking://user/evimed-engine/resources/evimed-compile-probe/sources",
           "meta": {
@@ -661,7 +660,7 @@
               "to": "viking://user/evimed-engine/resources/evimed-compile-probe/wiki",
               "skill": "viking://agent/skills/llm-wiki",
               "compile": {
-                "mode": "incremental",
+                "mode": "full",
                 "trigger": "manual"
               }
             }
@@ -669,8 +668,8 @@
           "stage": "queued",
           "result": null,
           "error": null,
-          "created_at_iso": "2026-11-05T08:11:38.357891+00:00",
-          "updated_at_iso": "2026-11-05T08:11:38.360209+00:00"
+          "created_at_iso": "2026-11-05T08:41:29.689172+00:00",
+          "updated_at_iso": "2026-11-05T08:41:29.690543+00:00"
         },
         "error": null,
         "telemetry": null,
@@ -679,7 +678,7 @@
     },
     {
       "method": "GET",
-      "path": "/api/v1/tasks/cmp_39a8c61dcdcd1c0c6e93334e46b5c5e578ed06ae329f65d79680572826a75d15",
+      "path": "/api/v1/tasks/cmp_7c606004814b73656120fac4fdf6fffd578385133ab0ee4fcc6bc50d36b494aa",
       "query": {},
       "actingUser": "evimed-engine",
       "idempotencyKey": null,
@@ -689,11 +688,11 @@
       "response": {
         "status": "ok",
         "result": {
-          "task_id": "cmp_39a8c61dcdcd1c0c6e93334e46b5c5e578ed06ae329f65d79680572826a75d15",
+          "task_id": "cmp_7c606004814b73656120fac4fdf6fffd578385133ab0ee4fcc6bc50d36b494aa",
           "task_type": "compile",
           "status": "pending",
-          "created_at": 1793866298.3578906,
-          "updated_at": 1793866298.3602092,
+          "created_at": 1793868089.6891718,
+          "updated_at": 1793868089.6905432,
           "processing_seconds": null,
           "resource_id": "viking://user/evimed-engine/resources/evimed-compile-probe/sources",
           "meta": {
@@ -704,7 +703,7 @@
               "to": "viking://user/evimed-engine/resources/evimed-compile-probe/wiki",
               "skill": "viking://agent/skills/llm-wiki",
               "compile": {
-                "mode": "incremental",
+                "mode": "full",
                 "trigger": "manual"
               }
             }
@@ -712,8 +711,8 @@
           "stage": "queued",
           "result": null,
           "error": null,
-          "created_at_iso": "2026-11-05T08:11:38.357891+00:00",
-          "updated_at_iso": "2026-11-05T08:11:38.360209+00:00"
+          "created_at_iso": "2026-11-05T08:41:29.689172+00:00",
+          "updated_at_iso": "2026-11-05T08:41:29.690543+00:00"
         },
         "error": null,
         "telemetry": null,
@@ -722,7 +721,7 @@
     },
     {
       "method": "GET",
-      "path": "/api/v1/tasks/cmp_39a8c61dcdcd1c0c6e93334e46b5c5e578ed06ae329f65d79680572826a75d15",
+      "path": "/api/v1/tasks/cmp_7c606004814b73656120fac4fdf6fffd578385133ab0ee4fcc6bc50d36b494aa",
       "query": {},
       "actingUser": "evimed-engine",
       "idempotencyKey": null,
@@ -732,12 +731,55 @@
       "response": {
         "status": "ok",
         "result": {
-          "task_id": "cmp_39a8c61dcdcd1c0c6e93334e46b5c5e578ed06ae329f65d79680572826a75d15",
+          "task_id": "cmp_7c606004814b73656120fac4fdf6fffd578385133ab0ee4fcc6bc50d36b494aa",
+          "task_type": "compile",
+          "status": "running",
+          "created_at": 1793868089.6891718,
+          "updated_at": 1793868090.6348813,
+          "processing_seconds": 0.22291874885559082,
+          "resource_id": "viking://user/evimed-engine/resources/evimed-compile-probe/sources",
+          "meta": {
+            "request": {
+              "from": [
+                "viking://user/evimed-engine/resources/evimed-compile-probe/sources"
+              ],
+              "to": "viking://user/evimed-engine/resources/evimed-compile-probe/wiki",
+              "skill": "viking://agent/skills/llm-wiki",
+              "compile": {
+                "mode": "full",
+                "trigger": "manual"
+              }
+            }
+          },
+          "stage": "compile: collecting_context",
+          "result": null,
+          "error": null,
+          "created_at_iso": "2026-11-05T08:41:29.689172+00:00",
+          "updated_at_iso": "2026-11-05T08:41:30.634881+00:00"
+        },
+        "error": null,
+        "telemetry": null,
+        "profile": null
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks/cmp_7c606004814b73656120fac4fdf6fffd578385133ab0ee4fcc6bc50d36b494aa",
+      "query": {},
+      "actingUser": "evimed-engine",
+      "idempotencyKey": null,
+      "requestBody": null,
+      "status": 200,
+      "contentType": "application/json",
+      "response": {
+        "status": "ok",
+        "result": {
+          "task_id": "cmp_7c606004814b73656120fac4fdf6fffd578385133ab0ee4fcc6bc50d36b494aa",
           "task_type": "compile",
           "status": "completed",
-          "created_at": 1793866298.3578906,
-          "updated_at": 1793866298.435682,
-          "processing_seconds": 0.041997432708740234,
+          "created_at": 1793868089.6891718,
+          "updated_at": 1793868120.6951437,
+          "processing_seconds": 30.212546348571777,
           "resource_id": "viking://user/evimed-engine/resources/evimed-compile-probe/sources",
           "meta": {
             "request": {
@@ -747,16 +789,38 @@
               "to": "viking://user/evimed-engine/resources/evimed-compile-probe/wiki",
               "skill": "viking://agent/skills/llm-wiki",
               "compile": {
-                "mode": "incremental",
+                "mode": "full",
                 "trigger": "manual"
+              }
+            },
+            "pipeline": {
+              "errors": [],
+              "tokens": {
+                "cached": 29312,
+                "input": 34284,
+                "output": 1363
               }
             }
           },
           "stage": "completed",
-          "result": {},
+          "result": {
+            "from": [
+              "viking://user/evimed-engine/resources/evimed-compile-probe/sources"
+            ],
+            "to": "viking://user/evimed-engine/resources/evimed-compile-probe/wiki",
+            "skill": "viking://agent/skills/llm-wiki",
+            "okf_version": "0.1",
+            "created": [],
+            "updated": [],
+            "unchanged": [],
+            "conflicts": [],
+            "page_count": 0,
+            "link_count": 0,
+            "warnings": []
+          },
           "error": null,
-          "created_at_iso": "2026-11-05T08:11:38.357891+00:00",
-          "updated_at_iso": "2026-11-05T08:11:38.435682+00:00"
+          "created_at_iso": "2026-11-05T08:41:29.689172+00:00",
+          "updated_at_iso": "2026-11-05T08:42:00.695144+00:00"
         },
         "error": null,
         "telemetry": null,
@@ -765,7 +829,7 @@
     },
     {
       "method": "POST",
-      "path": "/api/v1/tasks/cmp_39a8c61dcdcd1c0c6e93334e46b5c5e578ed06ae329f65d79680572826a75d15/cancel",
+      "path": "/api/v1/tasks/cmp_7c606004814b73656120fac4fdf6fffd578385133ab0ee4fcc6bc50d36b494aa/cancel",
       "query": {},
       "actingUser": "evimed-engine",
       "idempotencyKey": null,
@@ -785,5 +849,6 @@
       }
     }
   ],
+  "trimmed": "29 polls of the probe task that kept the status and stage of the one before were removed",
   "shape": "exchanges are in the order the check made them: method, path, query, the acting engine user, the request body, the status and the response as sent. An installed SKILL.md is the file named in bodyFile, whose sha256 is bodySha256."
 }

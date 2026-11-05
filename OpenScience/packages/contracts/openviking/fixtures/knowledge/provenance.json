@@ -1,6 +1,6 @@
 {
   "recorded_from": "ghcr.io/volcengine/openviking:v0.5.3",
-  "recorded_at": "2026-11-05T08:18:13Z",
+  "recorded_at": "2026-11-05T08:48:00Z",
   "auth_mode": "trusted (X-API-Key root + X-OpenViking-Account: evimed + X-OpenViking-User)",
   "account": "evimed",
   "user": "u-0f1e2d3c4b5a69788796a5b4",
@@ -217,11 +217,92 @@
       "request_headers": {},
       "request_body": null,
       "status": 200,
-      "note": "the stored bytes: their sha256 is the hash a write-back names",
+      "note": "the stored bytes: their sha256 is the hash the control plane compares before a write-back",
       "binary": {
         "bytes": 72,
         "sha256": "95f7ddd1c4ec873073eb9ade92d11a592baf1535c79f96b3b9a99accec6422d1"
       }
+    },
+    "content-batch-write-key-refused": {
+      "file": "content-batch-write-key-refused.json",
+      "method": "POST",
+      "path": "/api/v1/content/batch-write",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": {
+        "root_uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki-write-back",
+        "wait": true,
+        "operations": [
+          {
+            "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki-write-back/page.md",
+            "content": "---\ntype: concept\ntitle: 写回检验\n---\n\n# 写回检验\n\n第二版。\n",
+            "mode": "replace",
+            "expected_sha256": "95f7ddd1c4ec873073eb9ade92d11a592baf1535c79f96b3b9a99accec6422d1"
+          }
+        ]
+      },
+      "status": 400,
+      "note": "the v0.5.2 checked write: v0.5.3 refuses the key (400 INVALID_ARGUMENT, extra_forbidden) and writes nothing"
+    },
+    "content-batch-write-page": {
+      "file": "content-batch-write-page.json",
+      "method": "POST",
+      "path": "/api/v1/content/batch-write",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": {
+        "root_uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki-write-back",
+        "wait": true,
+        "operations": [
+          {
+            "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki-write-back/page.md",
+            "content": "---\ntype: concept\ntitle: 写回检验\n---\n\n# 写回检验\n\n第二版。\n",
+            "mode": "replace"
+          }
+        ]
+      },
+      "status": 200,
+      "note": "the write-back as the control plane makes it: one unconditional replace, answered when the summary and the vector are done"
+    },
+    "content-batch-write-page-busy-first": {
+      "file": "content-batch-write-page-busy-first.json",
+      "method": "POST",
+      "path": "/api/v1/content/batch-write",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": {
+        "root_uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki-write-back",
+        "wait": false,
+        "operations": [
+          {
+            "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki-write-back/page.md",
+            "content": "---\ntype: concept\ntitle: 写回检验\n---\n\n# 写回检验\n\n第四版。\n",
+            "mode": "replace"
+          }
+        ]
+      },
+      "status": 200,
+      "note": "wait false: answers at once with a task id while the summary and vector are processed"
+    },
+    "content-batch-write-page-busy": {
+      "file": "content-batch-write-page-busy.json",
+      "method": "POST",
+      "path": "/api/v1/content/batch-write",
+      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
+      "request_headers": {},
+      "request_body": {
+        "root_uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki-write-back",
+        "wait": false,
+        "operations": [
+          {
+            "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki-write-back/page.md",
+            "content": "---\ntype: concept\ntitle: 写回检验\n---\n\n# 写回检验\n\n第五版。\n",
+            "mode": "replace"
+          }
+        ]
+      },
+      "status": 409,
+      "note": "a second write to the same directory while the first is processed"
     },
     "resources-temp-upload": {
       "file": "resources-temp-upload.json",
@@ -239,7 +320,7 @@
       "as_user": "u-0f1e2d3c4b5a69788796a5b4",
       "request_headers": {},
       "request_body": {
-        "temp_file_id": "upload_e26825f4c94f4008921ce35bf7163016.md",
+        "temp_file_id": "upload_5f30f413036a4d92a330b6631ff45b20.md",
         "to": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/uploaded",
         "wait": true,
         "args": {
@@ -572,7 +653,7 @@
     "tasks-get-without-events": {
       "file": "tasks-get-without-events.json",
       "method": "GET",
-      "path": "/api/v1/tasks/cmp_68843718a4f3ee26fb03a0c8bcf9d4ce29f5d0a18646249c8569fc2a17febaed",
+      "path": "/api/v1/tasks/cmp_722f9bc21a6b739db36ae2ebaba84ab41dd9e1939902091ab7ad5260b886a8bf",
       "as_user": "u-0f1e2d3c4b5a69788796a5b4",
       "request_headers": {},
       "request_body": null,
@@ -600,7 +681,7 @@
     "tasks-get-other-user": {
       "file": "tasks-get-other-user.json",
       "method": "GET",
-      "path": "/api/v1/tasks/cmp_68843718a4f3ee26fb03a0c8bcf9d4ce29f5d0a18646249c8569fc2a17febaed",
+      "path": "/api/v1/tasks/cmp_722f9bc21a6b739db36ae2ebaba84ab41dd9e1939902091ab7ad5260b886a8bf",
       "as_user": "u-aa11bb22cc33dd44ee55ff66",
       "request_headers": {},
       "request_body": null,
@@ -686,7 +767,7 @@
     "tasks-cancel": {
       "file": "tasks-cancel.json",
       "method": "POST",
-      "path": "/api/v1/tasks/cmp_d5b0483edd326222a8ed30ec04a21f0ddb8b2aaec1f8a1649f802825f5d6558a/cancel",
+      "path": "/api/v1/tasks/cmp_dd41d93a0f434f7eecdf6bd7c21048e5ae99f320eb9f44555a72c6faecf474fb/cancel",
       "as_user": "u-0f1e2d3c4b5a69788796a5b4",
       "request_headers": {},
       "request_body": null,
@@ -702,7 +783,7 @@
     "tasks-cancel-terminal": {
       "file": "tasks-cancel-terminal.json",
       "method": "POST",
-      "path": "/api/v1/tasks/cmp_d5b0483edd326222a8ed30ec04a21f0ddb8b2aaec1f8a1649f802825f5d6558a/cancel",
+      "path": "/api/v1/tasks/cmp_dd41d93a0f434f7eecdf6bd7c21048e5ae99f320eb9f44555a72c6faecf474fb/cancel",
       "as_user": "u-0f1e2d3c4b5a69788796a5b4",
       "request_headers": {},
       "request_body": null,
@@ -727,27 +808,6 @@
       "request_body": null,
       "status": 200,
       "note": "deleting again"
-    },
-    "content-batch-write-key-refused": {
-      "file": "content-batch-write-key-refused.json",
-      "method": "POST",
-      "path": "/api/v1/content/batch-write",
-      "as_user": "u-0f1e2d3c4b5a69788796a5b4",
-      "request_headers": {},
-      "request_body": {
-        "root_uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki-write-back",
-        "wait": true,
-        "operations": [
-          {
-            "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki-write-back/page.md",
-            "content": "---\ntype: concept\ntitle: 写回检验\n---\n\n# 写回检验\n\n第二版。\n",
-            "mode": "replace",
-            "expected_sha256": "95f7ddd1c4ec873073eb9ade92d11a592baf1535c79f96b3b9a99accec6422d1"
-          }
-        ]
-      },
-      "status": 400,
-      "note": "the v0.5.2 checked write: v0.5.3 refuses the key (400 INVALID_ARGUMENT, extra_forbidden) and writes nothing"
     }
   }
 }

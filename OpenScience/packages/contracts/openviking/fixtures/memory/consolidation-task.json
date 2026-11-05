@@ -1,9 +1,9 @@
 {
-  "note": "The task of a memory consolidation (POST /api/v1/compile {to: <memories root>, skill: memory, instruction}) read back: three conversations' files, nothing duplicated, so adds/updates/deletes are empty and the files were byte-identical afterwards (lab, 2026-10-24).",
-  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.1.1",
+  "note": "The task of a memory consolidation (POST /api/v1/compile {to: <memories root>/preferences, skill: memory, instruction}) read back after it ended; three preference files written for it, recorded by record.mjs. The memories root itself fails at v0.5.3 (MEMORY_CONSOLIDATION_FAILED: memory write target must be inside a memory type directory), so a type directory is what is asked.",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.3",
   "request": {
     "method": "GET",
-    "path": "/api/v1/tasks/0f1e10fa-39c5-42b2-b79b-8c86f3219dd8",
+    "path": "/api/v1/tasks/3a10fa53-898c-4068-95f0-0f2025e5e39f",
     "headers": {
       "X-API-Key": "recorded-against-a-real-server",
       "X-OpenViking-Account": "evimed",
@@ -15,31 +15,30 @@
   "response": {
     "status": "ok",
     "result": {
-      "task_id": "0f1e10fa-39c5-42b2-b79b-8c86f3219dd8",
+      "task_id": "3a10fa53-898c-4068-95f0-0f2025e5e39f",
       "task_type": "compile",
       "status": "completed",
-      "created_at": 1792825673.2819743,
-      "updated_at": 1792825681.5259871,
-      "processing_seconds": 8.240258693695068,
-      "resource_id": "viking://user/u-6df855e1454c25b2f592221b/memories",
+      "created_at": 1793868483.242317,
+      "updated_at": 1793868486.1957839,
+      "processing_seconds": 2.9501447677612305,
+      "resource_id": "viking://user/fx-consolidation/memories/preferences",
       "meta": {
         "request": {
-          "to": "viking://user/u-6df855e1454c25b2f592221b/memories",
+          "to": "viking://user/fx-consolidation/memories/preferences",
           "skill": "memory",
-          "memory_type": null,
+          "memory_type": "preferences",
           "peer_id": null,
-          "instruction": "Merge only clear duplicates; keep every fact."
+          "instruction": "Consolidate these memories; keep every distinct fact."
         }
       },
       "stage": "completed",
       "result": {
-        "to": "viking://user/u-6df855e1454c25b2f592221b/memories",
+        "to": "viking://user/fx-consolidation/memories/preferences",
         "skill": "memory",
         "trace_id": "",
-        "memory_type": null,
+        "memory_type": "preferences",
         "memory_types": [
-          "preferences",
-          "profile"
+          "preferences"
         ],
         "adds": [],
         "updates": [],
@@ -50,8 +49,8 @@
         "errors": []
       },
       "error": null,
-      "created_at_iso": "2026-10-24T07:07:53.281974+00:00",
-      "updated_at_iso": "2026-10-24T07:08:01.525987+00:00"
+      "created_at_iso": "2026-11-05T08:48:03.242317+00:00",
+      "updated_at_iso": "2026-11-05T08:48:06.195784+00:00"
     },
     "error": null,
     "telemetry": null,

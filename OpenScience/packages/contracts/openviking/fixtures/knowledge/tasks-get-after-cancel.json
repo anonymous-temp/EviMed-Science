@@ -5,7 +5,7 @@
       "items": [
         {
           "seq": 1,
-          "recorded_at": "2026-11-05T08:17:28.031507+00:00",
+          "recorded_at": "2026-11-05T08:47:14.857035+00:00",
           "kind": "created",
           "status": "pending",
           "stage": null,
@@ -14,7 +14,7 @@
         },
         {
           "seq": 2,
-          "recorded_at": "2026-11-05T08:17:28.032743+00:00",
+          "recorded_at": "2026-11-05T08:47:14.858092+00:00",
           "kind": "stage_changed",
           "status": "pending",
           "stage": "queued",
@@ -23,7 +23,7 @@
         },
         {
           "seq": 3,
-          "recorded_at": "2026-11-05T08:17:29.044363+00:00",
+          "recorded_at": "2026-11-05T08:47:15.027004+00:00",
           "kind": "status_changed",
           "status": "running",
           "stage": "submitting",
@@ -32,7 +32,7 @@
         },
         {
           "seq": 4,
-          "recorded_at": "2026-11-05T08:17:29.044363+00:00",
+          "recorded_at": "2026-11-05T08:47:15.027004+00:00",
           "kind": "stage_changed",
           "status": "running",
           "stage": "submitting",
@@ -41,7 +41,7 @@
         },
         {
           "seq": 5,
-          "recorded_at": "2026-11-05T08:17:29.238145+00:00",
+          "recorded_at": "2026-11-05T08:47:15.173187+00:00",
           "kind": "stage_changed",
           "status": "running",
           "stage": "compile: collecting_context",
@@ -50,7 +50,7 @@
         },
         {
           "seq": 6,
-          "recorded_at": "2026-11-05T08:17:40.045162+00:00",
+          "recorded_at": "2026-11-05T08:47:26.877060+00:00",
           "kind": "status_changed",
           "status": "cancelling",
           "stage": "compile: collecting_context",
@@ -59,7 +59,7 @@
         },
         {
           "seq": 7,
-          "recorded_at": "2026-11-05T08:17:40.103451+00:00",
+          "recorded_at": "2026-11-05T08:47:26.925444+00:00",
           "kind": "stage_changed",
           "status": "cancelling",
           "stage": "compile: pipeline",
@@ -68,7 +68,7 @@
         },
         {
           "seq": 8,
-          "recorded_at": "2026-11-05T08:18:10.200084+00:00",
+          "recorded_at": "2026-11-05T08:47:57.040353+00:00",
           "kind": "status_changed",
           "status": "cancelled",
           "stage": "compile: pipeline",
@@ -79,12 +79,12 @@
       "dropped_count": 0,
       "started_mid_task": false
     },
-    "task_id": "cmp_d5b0483edd326222a8ed30ec04a21f0ddb8b2aaec1f8a1649f802825f5d6558a",
+    "task_id": "cmp_dd41d93a0f434f7eecdf6bd7c21048e5ae99f320eb9f44555a72c6faecf474fb",
     "task_type": "compile",
     "status": "cancelled",
-    "created_at": 1793866648.0309017,
-    "updated_at": 1793866690.2000806,
-    "processing_seconds": 41.17789173126221,
+    "created_at": 1793868434.8565388,
+    "updated_at": 1793868477.04035,
+    "processing_seconds": 42.0354106426239,
     "resource_id": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources",
     "meta": {
       "request": {
@@ -103,17 +103,17 @@
           "CancelledError"
         ],
         "tokens": {
-          "cached": 8704,
-          "input": 13251,
-          "output": 723
+          "cached": 8320,
+          "input": 13143,
+          "output": 592
         }
       }
     },
     "stage": "cancelled",
     "result": null,
     "error": null,
-    "created_at_iso": "2026-11-05T08:17:28.030902+00:00",
-    "updated_at_iso": "2026-11-05T08:18:10.200081+00:00"
+    "created_at_iso": "2026-11-05T08:47:14.856539+00:00",
+    "updated_at_iso": "2026-11-05T08:47:57.040350+00:00"
   },
   "error": null,
   "telemetry": null,

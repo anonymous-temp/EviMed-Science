@@ -1,0 +1,16 @@
+{
+  "status": "error",
+  "result": null,
+  "error": {
+    "code": "CONFLICT",
+    "message": "resource is busy and cannot be written now: viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki-write-back",
+    "details": {
+      "resource": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki-write-back",
+      "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki-write-back",
+      "conflict_type": "path_busy",
+      "retryable": true
+    }
+  },
+  "telemetry": null,
+  "profile": null
+}

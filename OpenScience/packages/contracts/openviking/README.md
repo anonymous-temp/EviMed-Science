@@ -24,7 +24,8 @@ the plugin, the skills and the examples are Apache-2.0.
 Measured on the v0.5.3 rehearsal engine (a copy of the production volume, 2026-11-05): production-copy memories read 28/28 and 16/16 and
 `find` scored them 0.73-0.79; three commits of one session each extracted (`memory_write` 1, 1, 2; nothing skipped) and each later `find`
 returned that commit's file first at 0.89-0.92, so the v0.5.1 loss of later commits is not back. The empty-source compile probe is settled by
-the server itself in incremental mode, so it asks for a full run. `compile --skill memory` over the memories root fails
+the server itself in incremental mode (0.04 s, `result: {}`), so it asks for a full run; that ends `completed` after about 30 s with the runtime's own
+result (`okf_version`, nothing created) and one planning call of the model (34 k input tokens, 1.4 k output), which is what the fact now accepts. `compile --skill memory` over the memories root fails
 (`MEMORY_CONSOLIDATION_FAILED: memory write target must be inside a memory type directory`, an upstream defect at the tag: the runner accepts
 the root and its own write check refuses it) and completes over a type directory, so the native consolidation walks the type directories
 that hold files (`nativeMemoryConsolidation.mjs`); `observations/` is left out because the control plane counts its notes one conversation to

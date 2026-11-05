@@ -56,7 +56,7 @@ export const OPENVIKING_ENGINE_USER = "evimed-engine";
 
 /**
  * The Compile probe's whole footprint: an empty directory to read from and a directory it would write to, both under
- * the engine identity's own root. The compile fails on "no files" before any model is called, so nothing is written
+ * the engine identity's own root. On v0.5.1.1 the compile failed on "no files" before any model was called; on v0.5.3 a full run of an empty source ends with the runtime's own result after one planning call of the model (about 30 s, 34 k input tokens, recorded 2026-11-05), so nothing is written
  * to the second and no money is spent.
  */
 const COMPILE_PROBE_ROOT = `viking://user/${OPENVIKING_ENGINE_USER}/resources/evimed-compile-probe`;
@@ -274,7 +274,7 @@ export class OpenVikingEngine {
    * at all (`configured`, `can_create`). It says so from configuration alone, so it proves nothing about what the
    * runtime does with a request: the second reading is one real submission whose source is an empty directory. The
    * server forwards the caller's account and user to the bot, which lists the directory as that user and ends the
-   * task with "Compile sources contain no files" before any model is called — measured on v0.5.1.1, in about 31 s
+   * task with "Compile sources contain no files" before any model is called — measured on v0.5.1.1, in about 31 s (v0.5.3: `args.mode: "full"`, and it ends completed with the runtime's `okf_version` result; an incremental one is settled by the server itself and proves nothing)
    * because the server looks at the bot every 30 s. A runtime that did not receive the identity ends it with a
    * refusal of its own instead (what v0.5.0 did without the shim). Each probe leaves one failed task record, which the
    * engine keeps for seven days — the reason this is read on a slow cadence and not on every readiness request.
@@ -317,10 +317,18 @@ export class OpenVikingEngine {
           ? { ok: true }
           : { ok: false, code: "openviking_compile_probe_unexpected", reason: String(task.error ?? "").slice(0, 200) };
       }
-      // An empty source that is accepted and runs on means the runtime no longer ends it at once: stop it, and say so.
-      if (task.status === "completed" || /^compile: (?:agent|writing)/.test(String(task.stage ?? ""))) {
+      // A full compile of an empty source ends, since v0.5.3, with the runtime's own result (`okf_version`, nothing created, about 30 s
+      // and one planning call of the model, recorded 2026-11-05): the runtime listed the directory as the caller, which is the
+      // question. The server's own settlement of an incremental one is `result: {}`, and says nothing about the runtime.
+      if (task.status === "completed") {
+        return task.result && typeof task.result === "object" && typeof task.result.okf_version === "string"
+          ? { ok: true }
+          : { ok: false, code: "openviking_compile_probe_unexpected", reason: "the probe was completed without the Compile runtime reading the source" };
+      }
+      // A probe that runs on into writing pages is stopped, and said.
+      if (/^compile: (?:agent|writing)/.test(String(task.stage ?? ""))) {
         await this.client.request({ method: "POST", path: `/api/v1/tasks/${taskId}/cancel`, openVikingUser: OPENVIKING_ENGINE_USER }).catch(() => {});
-        return { ok: false, code: "openviking_compile_probe_unexpected", reason: `the probe ${task.status === "completed" ? "completed" : "ran"} on an empty source` };
+        return { ok: false, code: "openviking_compile_probe_unexpected", reason: "the probe ran on an empty source" };
       }
       await this.wait(COMPILE_PROBE_POLL_MS);
     }

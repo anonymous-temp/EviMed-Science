@@ -1,12 +1,12 @@
 {
   "status": "ok",
   "result": {
-    "task_id": "cmp_68843718a4f3ee26fb03a0c8bcf9d4ce29f5d0a18646249c8569fc2a17febaed",
+    "task_id": "cmp_722f9bc21a6b739db36ae2ebaba84ab41dd9e1939902091ab7ad5260b886a8bf",
     "task_type": "compile",
     "status": "completed",
-    "created_at": 1793866445.051372,
-    "updated_at": 1793866536.3118343,
-    "processing_seconds": 90.64338374137878,
+    "created_at": 1793868254.1551142,
+    "updated_at": 1793868315.0586774,
+    "processing_seconds": 60.32365798950195,
     "resource_id": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources",
     "meta": {
       "request": {
@@ -23,9 +23,9 @@
       "pipeline": {
         "errors": [],
         "tokens": {
-          "cached": 114560,
-          "input": 139044,
-          "output": 14504
+          "cached": 67328,
+          "input": 84444,
+          "output": 8841
         }
       }
     },
@@ -53,8 +53,8 @@
       "warnings": []
     },
     "error": null,
-    "created_at_iso": "2026-11-05T08:14:05.051372+00:00",
-    "updated_at_iso": "2026-11-05T08:15:36.311834+00:00"
+    "created_at_iso": "2026-11-05T08:44:14.155114+00:00",
+    "updated_at_iso": "2026-11-05T08:45:15.058677+00:00"
   },
   "error": null,
   "telemetry": null,

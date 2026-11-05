@@ -1,12 +1,12 @@
 {
   "status": "ok",
   "result": {
-    "task_id": "cmp_d5b0483edd326222a8ed30ec04a21f0ddb8b2aaec1f8a1649f802825f5d6558a",
+    "task_id": "cmp_dd41d93a0f434f7eecdf6bd7c21048e5ae99f320eb9f44555a72c6faecf474fb",
     "task_type": "compile",
     "status": "cancelling",
-    "created_at": 1793866648.0309017,
-    "updated_at": 1793866660.0451567,
-    "processing_seconds": 11.02498459815979,
+    "created_at": 1793868434.8565388,
+    "updated_at": 1793868446.8770566,
+    "processing_seconds": 11.877071857452393,
     "resource_id": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources",
     "meta": {
       "request": {
@@ -24,8 +24,8 @@
     "stage": "compile: collecting_context",
     "result": null,
     "error": null,
-    "created_at_iso": "2026-11-05T08:17:28.030902+00:00",
-    "updated_at_iso": "2026-11-05T08:17:40.045157+00:00"
+    "created_at_iso": "2026-11-05T08:47:14.856539+00:00",
+    "updated_at_iso": "2026-11-05T08:47:26.877057+00:00"
   },
   "error": null,
   "telemetry": null,

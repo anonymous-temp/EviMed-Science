@@ -3,73 +3,43 @@
   "result": {
     "matches": [
       {
-        "line": 10,
+        "line": 15,
         "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/concept/Alpha 协议.md",
-        "content": "Alpha 协议是 Lumen 工作组于 2021 年发布的轻量协议，用于设备之间的时间同步。它在本知识库中是时间同步链路的协议层基础：Beta 网关通过内置的参考实现 alphad 使用它协调下游设备时间。[Alpha 协议原始文档](viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000001.md)"
+        "content": "- **目标**：在设备之间同步时间（[Alpha 协议文档](viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000001.md)）。"
+      },
+      {
+        "line": 22,
+        "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/concept/Alpha 协议.md",
+        "content": "| 发布者 | Lumen 工作组 | [Alpha 协议文档](viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000001.md) |"
+      },
+      {
+        "line": 40,
+        "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/concept/Alpha 协议.md",
+        "content": "- [Alpha 协议文档](viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000001.md)"
       },
       {
         "line": 23,
-        "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/concept/Alpha 协议.md",
-        "content": "上表所有取值均来自同一源文档的第 1、2 页内容。[Alpha 协议原始文档](viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000001.md)"
-      },
-      {
-        "line": 27,
-        "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/concept/Alpha 协议.md",
-        "content": "- **传输与端口**：协议使用 UDP 端口 4123，即通信基于无连接的 UDP 而非面向连接的传输层协议。[Alpha 协议原始文档](viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000001.md)"
-      },
-      {
-        "line": 28,
-        "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/concept/Alpha 协议.md",
-        "content": "- **同步节奏**：默认同步周期为 64 秒，即协议按固定周期重复对齐时间，而非仅在启动时执行一次。[Alpha 协议原始文档](viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000001.md)"
-      },
-      {
-        "line": 29,
-        "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/concept/Alpha 协议.md",
-        "content": "- **实现**：参考实现为 alphad，使用 Rust 编写；源文档未说明其内部算法、报文格式或精度指标。[Alpha 协议原始文档](viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000001.md)"
-      },
-      {
-        "line": 43,
-        "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/concept/Alpha 协议.md",
-        "content": "- [Alpha 协议原始文档](viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000001.md)"
-      },
-      {
-        "line": 10,
         "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/entity/Lumen 工作组.md",
-        "content": "Lumen 工作组是 Alpha 协议的发布方，也是边缘网关产品 Beta 网关的维护方。它在本知识库中是协议与产品的共同归属组织，因此成为连接 [Alpha 协议](../concept/Alpha%20协议.md) 与 [Beta 网关](Beta%20网关.md) 的枢纽。[Alpha 协议原始文档](viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000001.md) [Beta 网关原始文档](viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000002.md)"
-      },
-      {
-        "line": 16,
-        "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/entity/Lumen 工作组.md",
-        "content": "| 发布 Alpha 协议 | 2021 年发布，协议用于设备间时间同步，UDP 4123，默认周期 64 秒 | [Alpha 协议原始文档](viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000001.md) |"
+        "content": "- 发布 [Alpha 协议](../concept/Alpha%20协议.md)，一个用于设备间时间同步的轻量协议（[Alpha 协议文档](viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000001.md)）。"
       },
       {
         "line": 32,
         "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/entity/Lumen 工作组.md",
-        "content": "- [Alpha 协议原始文档](viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000001.md)"
-      },
-      {
-        "line": 10,
-        "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/entity/alphad.md",
-        "content": "alphad 是 Alpha 协议的参考实现，使用 Rust 编写。它在本知识库中承担协议规范与产品之间的桥梁角色：Beta 网关正是通过内置 alphad 来使用 Alpha 协议同步时间。[Alpha 协议原始文档](viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000001.md)"
-      },
-      {
-        "line": 21,
-        "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/entity/alphad.md",
-        "content": "“守护进程形态”仅为依据命名惯例的推断，源文档未说明其进程模型或运行方式；已确认的事实是它是用 Rust 编写的 Alpha 协议参考实现，并被 Beta 网关内置。[Alpha 协议原始文档](viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000001.md) [Beta 网关原始文档](viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000002.md)"
+        "content": "- [Alpha 协议文档](viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000001.md)"
       },
       {
         "line": 35,
         "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/entity/alphad.md",
-        "content": "- [Alpha 协议原始文档](viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000001.md)"
+        "content": "- [Alpha 协议文档](viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000001.md)"
       },
       {
-        "line": 37,
+        "line": 29,
         "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/index.md",
-        "content": "- [Alpha 协议原始文档](viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000001.md)"
+        "content": "- [Alpha 协议文档](viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000001.md)"
       }
     ],
-    "count": 13,
-    "match_count": 13,
+    "count": 7,
+    "match_count": 7,
     "files_scanned": 4
   },
   "error": null,
