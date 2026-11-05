@@ -1,3 +1,4 @@
+import { inlineHtmlWorkspaceAssets } from "@/lib/relativeAssets";
 import { MarkdownViewer } from "@/components/markdown-viewer/MarkdownViewer";
 import { DocumentExportActions } from "@/components/document/DocumentExportActions";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
@@ -297,6 +298,7 @@ export function FilePreviewInspector({
               language={data.language}
               root={data.root}
               matrixFile={matrixFile}
+              projectId={data.projectId}
               page={page}
               fitWidth={embedded}
               externalExportActions={!embedded && !sourceFileId && hostedWeb && data.content === undefined}
@@ -333,8 +335,10 @@ function Body({
   page,
   fitWidth,
   externalExportActions,
+  projectId,
 }: {
   sourceFileId?: string;
+  projectId?: string;
   kind: PreviewKind;
   url: string | null;
   text: string | null;
@@ -474,31 +478,7 @@ function Body({
     );
   }
   if (kind === "html") {
-    // Served URL preferred (relative assets resolve); srcdoc as browser fallback.
-    // Do not grant allow-scripts to uploaded/generated HTML in hosted Web mode.
-    if (url) {
-      return (
-        <iframe
-          title="HTML 预览"
-          src={url}
-          sandbox={HTML_PREVIEW_SANDBOX}
-          referrerPolicy="no-referrer"
-          className="h-full min-h-[480px] w-full bg-white"
-        />
-      );
-    }
-    if (text !== null) {
-      return (
-        <iframe
-          title="HTML 预览"
-          srcDoc={text}
-          sandbox={HTML_PREVIEW_SANDBOX}
-          referrerPolicy="no-referrer"
-          className="h-full min-h-[480px] w-full bg-white"
-        />
-      );
-    }
-    return <Note text="当前文件暂不支持在线预览。" />;
+    return <HtmlPreviewFrame url={url} text={text} path={path} root={root} projectId={projectId} />;
   }
   if (kind === "pdf") {
     // The webview's native PDF viewer (WKWebView / WebView2) renders the served URL.
@@ -601,6 +581,35 @@ function TableView({ table }: { table: import("@/lib/csv").ParsedTable }) {
  *  app, or **inspect it without loading**: the large-file probe returns a
  *  compact memory pointer (schema / shape / sample / key numbers) by streaming
  *  and sampling, so even a 90 GB file is introspected, never loaded. */
+export /**
+ * An HTML document in the sandboxed frame. The served address is the frame's source, but its policy lets no picture or style
+ * sheet load from the network (`img-src data:`), so a report that names `figures/trend.png` showed broken images. When the
+ * document names files of its own folder, they are read from the workspace and put into it, and the frame shows that copy.
+ * A file that cannot be read is left as written and reads as a missing picture.
+ */
+function HtmlPreviewFrame({ url, text, path, root, projectId }: { url: string | null; text: string | null; path: string; root?: FileRoot; projectId?: string }) {
+  const [inlined, setInlined] = useState<string | null>(null);
+  const [settled, setSettled] = useState(text === null);
+  useEffect(() => {
+    let cancelled = false;
+    setInlined(null);
+    setSettled(text === null);
+    if (text === null) return;
+    void inlineHtmlWorkspaceAssets(text, path, root, projectId)
+      .then((html) => { if (!cancelled && html !== text) setInlined(html); })
+      .catch(() => undefined)
+      .finally(() => { if (!cancelled) setSettled(true); });
+    return () => { cancelled = true; };
+  }, [text, path, root, projectId]);
+  const common = { title: "HTML 预览", sandbox: HTML_PREVIEW_SANDBOX, referrerPolicy: "no-referrer" as const, className: "h-full min-h-[480px] w-full bg-white" };
+  if (!settled) return <ViewerFallback />;
+  // No script in generated HTML in hosted Web mode.
+  if (inlined !== null) return <iframe {...common} srcDoc={inlined} />;
+  if (url) return <iframe {...common} src={url} />;
+  if (text !== null) return <iframe {...common} srcDoc={text} />;
+  return <Note text="当前文件暂不支持在线预览。" />;
+}
+
 export function PreviewError({
   error,
   path,

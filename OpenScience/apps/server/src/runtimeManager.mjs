@@ -511,6 +511,12 @@ export function isImmutableRuntimeUiAsset(suffix) {
  */
 export const ROOT_PLUGIN_RUNTIME_ASSET = /^\/dsh-mermaid\/mermaid-runtime\.js\?rev=[A-Za-z0-9._-]{6,64}$/;
 
+/**
+ * A plugin's lazy chunk, imported by its own client bundle from beside it: `client.pdf.js` and `client.excel.js` of the document
+ * preview. One file of one scoped package at a revision, the same shape as a combo bundle's with a single member. Exact shape only.
+ */
+export const PLUGIN_CHUNK_ASSET = /^\/plugins\/@[A-Za-z0-9._-]{1,64}\/[A-Za-z0-9._-]{1,128}\/client\.[A-Za-z0-9._-]{1,64}\.js\?rev=[A-Za-z0-9._-]{6,64}$/;
+
 /** What a browser may keep of an immutable kernel file: this account's copy, for a year. */
 export const IMMUTABLE_UI_CACHE = "private, max-age=31536000, immutable";
 

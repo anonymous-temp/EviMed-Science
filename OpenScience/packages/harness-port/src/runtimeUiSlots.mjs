@@ -151,6 +151,10 @@ export const RUNTIME_UI_SLOTS = Object.freeze({
   'conversation.chat.node': Object.freeze({ kind: 'keyed', scope: 'session', declaredBy: 'ui-chat', shippedKeys: CHAT_NODE_KINDS }),
   // One tool call's row: ui-tool's `tool-call` chat node declares it.
   'tool.call.toolview': Object.freeze({ kind: 'keyed', scope: 'session', declaredBy: 'ui-tool', shippedKeys: SHIPPED_TOOL_VIEW_KEYS }),
+  // The document preview's header actions, one entry per action, beside the reload button: the kernel's `open-in-app` row held
+  // the only occupant (a launcher on the serving machine, off here). The kernel hands each entry the file owner,
+  // `{ sessionId, path, paneId, line? }`. Declared by the document preview's own `sidebar.right.pane.tab` entry.
+  'sidebar.right.tab.document.actions': Object.freeze({ kind: 'list', scope: 'session', declaredBy: 'ui-sidebar-documentpreview' }),
   // The right sidebar's tab bodies and live titles.
   'sidebar.right.pane.tab': Object.freeze({ kind: 'keyed', scope: 'session', declaredBy: 'ui-sidebar-right' }),
   'sidebar.right.pane.tab.title': Object.freeze({ kind: 'keyed', scope: 'session', declaredBy: 'ui-sidebar-right' }),
@@ -173,6 +177,11 @@ export const RUNTIME_UI_OPTIONAL_SERVICES = Object.freeze({
   sidebarRightTabs: Object.freeze({ row: 'ui-sidebar-right', package: '@deepseek-ai/dsh-client-ui-sidebar-right' }),
   commandUi: Object.freeze({ row: 'ui-commands', package: '@deepseek-ai/dsh-client-ui-commands' }),
   inputTriggers: Object.freeze({ row: 'ui-input-trigger', package: '@deepseek-ai/dsh-client-ui-input-trigger' }),
+  // The original-bytes save of the context menu's 「下载」 (`save(source, 'download')`: a browser download), and the Remote
+  // namespaces its read goes through. The visible download of the document preview calls both.
+  fileActions: Object.freeze({ row: 'ui-file-actions', package: '@deepseek-ai/dsh-client-ui-file-actions' }),
+  remote: Object.freeze({ row: 'api-remotes', package: '@deepseek-ai/dsh-api-remotes' }),
+  'remote.workspaceFiles': Object.freeze({ row: 'api-remotes', package: '@deepseek-ai/dsh-api-remotes' }),
 });
 
 /**

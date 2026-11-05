@@ -14,7 +14,7 @@ import { assertSpendWithinLimits } from "./usageMetering.mjs";
 import { assertNoSymlinkPath, HttpError, mimeFor, openScopedFileNoFollow, readBody, readStableFileHandle } from "./security.mjs";
 import { RUNTIME_UI_FRAME_COOKIE, parseRuntimeUiFramePath, runtimeUiCookie, runtimeUiOrigins, validateRuntimeUiFrame } from "./runtimeUiFrames.mjs";
 import { runtimeUiBootstrapSource } from "./runtimeUiDocument.mjs";
-import { IMMUTABLE_UI_CACHE, ROOT_PLUGIN_RUNTIME_ASSET, SHARED_UI_ASSET_PREFIX, isImmutableRuntimeUiAsset } from "./runtimeManager.mjs";
+import { IMMUTABLE_UI_CACHE, PLUGIN_CHUNK_ASSET, ROOT_PLUGIN_RUNTIME_ASSET, SHARED_UI_ASSET_PREFIX, isImmutableRuntimeUiAsset } from "./runtimeManager.mjs";
 
 /**
  * The methods that make the deployment spend money.
@@ -649,6 +649,10 @@ export function createRuntimeUiServer({ config, store, runtimeManager, onGoalBar
   async function serveSharedAsset(req, res, suffix) {
     const asset = /^\/assets\/[A-Za-z0-9._-]+$/.test(suffix)
       || /^\/plugins\/\?\?[A-Za-z0-9@/._,-]{1,8192}&rev=[A-Za-z0-9._-]{6,64}$/.test(suffix)
+      // A plugin's lazy chunk, imported by its own client (`client.pdf.js` and `client.excel.js` of the document preview): one
+      // file of one package at a revision. Without it the PDF and Office viewers crashed their tab with 「Runtime bundle
+      // unavailable」 and a document opened to a blank pane (2026-11-05).
+      || PLUGIN_CHUNK_ASSET.test(suffix)
       || ROOT_PLUGIN_RUNTIME_ASSET.test(suffix);
     if (!asset || suffix.includes("..") || !["GET", "HEAD"].includes(String(req.method).toUpperCase())) {
       throw new HttpError(404, "runtime_ui_asset_not_found", "No such application file.");
@@ -892,7 +896,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, onGoalBar
       }
     };
     if (pathname === "/__evimed_bootstrap.js" && ["GET", "HEAD"].includes(req.method)) {
-      const { installRuntimeUiTransport } = await import("@evimed/harness-port/runtime-ui-transport");
+      const { installRuntimeUiTransport, installRuntimeUiPolyfills } = await import("@evimed/harness-port/runtime-ui-transport");
       await revalidate();
       // `operator` releases the rows a researcher's page hides (the assembled
       // system prompt, injected context) to an operator diagnosing a run — the
@@ -906,7 +910,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, onGoalBar
         managedBrowser: !scoped && config.managedBrowserEnabled ? { provider: "managed", available: managedBrowser?.enabled === true } : null,
         operator: !scoped && Array.isArray(config.operatorUsers) && config.operatorUsers.includes(String(user?.id ?? "")),
         off: Array.isArray(config.runtimeUiFrameOff) ? config.runtimeUiFrameOff : [],
-      }, installRuntimeUiTransport);
+      }, installRuntimeUiTransport, installRuntimeUiPolyfills);
       res.writeHead(200, { "Content-Type": "text/javascript; charset=utf-8", "Content-Length": String(Buffer.byteLength(source)), "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" });
       res.end(req.method === "HEAD" ? undefined : source);
       return;

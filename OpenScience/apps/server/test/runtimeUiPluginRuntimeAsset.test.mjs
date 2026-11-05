@@ -10,7 +10,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { ROOT_PLUGIN_RUNTIME_ASSET, isImmutableRuntimeUiAsset } from "../src/runtimeManager.mjs";
+import { PLUGIN_CHUNK_ASSET, ROOT_PLUGIN_RUNTIME_ASSET, isImmutableRuntimeUiAsset } from "../src/runtimeManager.mjs";
 import { createWebApiApp } from "../src/server.mjs";
 
 const ASSET = "/dsh-mermaid/mermaid-runtime.js?rev=d7c361216dce";
@@ -90,4 +90,22 @@ test("the renderer is served at the origin's root to a logged-in account, once f
   manager.runtimes.delete(key);
   const kept = await fetch(`${origin}${ASSET}`, { headers: { cookie: loginCookie } });
   assert.equal(kept.status, 200);
+});
+
+test("a plugin's lazy chunk is served by exact shape: one scoped package, one client chunk, a revision", () => {
+  // The document preview imports `client.pdf.js` and `client.excel.js` from beside its client; refused, the PDF viewer crashed
+  // its tab with 「Runtime bundle unavailable」 and a PDF, Word or Excel file opened to a blank pane.
+  const chunk = "/plugins/@deepseek-ai/dsh-client-ui-sidebar-documentpreview/client.pdf.js?rev=3f6d9445651f";
+  assert.equal(PLUGIN_CHUNK_ASSET.test(chunk), true);
+  assert.equal(PLUGIN_CHUNK_ASSET.test("/plugins/@deepseek-ai/dsh-client-ui-sidebar-documentpreview/client.excel.js?rev=3f6d9445651f"), true);
+  assert.equal(isImmutableRuntimeUiAsset(chunk), true);
+  for (const other of [
+    "/plugins/@deepseek-ai/dsh-client-ui-sidebar-documentpreview/client.pdf.js",
+    "/plugins/@deepseek-ai/dsh-client-ui-sidebar-documentpreview/client.pdf.js?rev=abc",
+    "/plugins/@deepseek-ai/x/../../etc/client.pdf.js?rev=3f6d9445651f",
+    "/plugins/@deepseek-ai/x/server.js?rev=3f6d9445651f",
+    "/plugins/@deepseek-ai/x/client.pdf.js?rev=3f6d9445651f&x=1",
+    "/plugins/x/client.pdf.js?rev=3f6d9445651f",
+    "/plugins/@a/b/c/client.pdf.js?rev=3f6d9445651f",
+  ]) assert.equal(PLUGIN_CHUNK_ASSET.test(other), false, other);
 });
