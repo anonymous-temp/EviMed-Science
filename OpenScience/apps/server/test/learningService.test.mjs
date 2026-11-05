@@ -210,6 +210,24 @@ test("amending the body resets everything measured about the old one", async () 
   );
 });
 
+test('an eligible amended body remains immediately available without waiting for an hourly approval', async () => {
+  const { learning } = service(), original = await create(learning);
+  const amended = await learning.amendMethod('u1', original.id, { expectedRevision: original.revision, frontmatter: frontmatter(), body: `${BODY}\n\nA supported refinement.` });
+  assert.equal(amended.payload.status, 'approved');
+  assert.equal(amended.payload.statusReason, effectiveStatusReason(amended.payload));
+  assert.ok((await learning.approvedMethods('u1')).some(row => row.id === amended.id && row.payload.contentDigest === amended.payload.contentDigest));
+});
+
+test('a body amendment never reverses a recorded stop', async () => {
+  const { learning } = service(), original = await create(learning);
+  const retired = await learning.retire('u1', original.id, { expectedRevision: original.revision, reason: 'Stopped by the owner.' });
+  const amended = await learning.amendMethod('u1', original.id, { expectedRevision: retired.revision, frontmatter: frontmatter(), body: `${BODY}\n\nA later refinement.` });
+  assert.equal(amended.payload.status, 'retired');
+  assert.equal(amended.payload.statusReason, retired.payload.statusReason);
+  assert.equal(amended.payload.statusChangedAt, retired.payload.statusChangedAt);
+  assert.equal((await learning.approvedMethods('u1')).some(row => row.id === amended.id), false);
+});
+
 test("rollback saves an earlier revision forward and never deletes the one it replaces", async () => {
   const { learning } = service();
   const created = await create(learning);
