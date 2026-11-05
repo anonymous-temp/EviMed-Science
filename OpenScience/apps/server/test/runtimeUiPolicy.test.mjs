@@ -1207,8 +1207,10 @@ test("the chat's presentation reaches the page through the one settings read, an
   const answer = JSON.parse(text);
   assert.deepEqual(answer, {
     type: "server-response", rpcId: "r1",
-    result: { ok: true, value: { writable: false, hasDocument: false, namespaces: [views.find((view) => view.ns === "ui-chat")] } },
+    result: { ok: true, value: { writable: false, hasDocument: false, namespaces: ["ui-chat", "ui-settings"].map((ns) => views.find((view) => view.ns === ns)) } },
   });
+  // `ui-settings` is the developer-tools boolean the page reads for the trajectory tab: absent, the page reads false.
+  assert.deepEqual(answer.result.value.namespaces[1].value, { enabled: true });
   // What the chat adopts is `value`, and it is the profile's.
   assert.deepEqual(
     { transcriptView: answer.result.value.namespaces[0].value.transcriptView, linkOpening: answer.result.value.namespaces[0].value.linkOpening },
@@ -1219,7 +1221,7 @@ test("the chat's presentation reaches the page through the one settings read, an
   }
   assert.deepEqual(seen, [{ path: "/api/settings/describe", call: settingsRead("r1") }], "the kernel got the page's call as it was sent");
   assert.ok(isDeniedRuntimeUiMethod(RUNTIME_UI_SETTINGS_READ), "the namespace stays denied: this is an exception on one transport, not an opening");
-  assert.deepEqual(RUNTIME_UI_READABLE_SETTINGS, ["ui-chat"]);
+  assert.deepEqual(RUNTIME_UI_READABLE_SETTINGS, ["ui-chat", "ui-settings"]);
 });
 
 test("anything but the exact settings read is refused before the kernel, and every settings write stays refused", { timeout: 5000 }, async (t) => {

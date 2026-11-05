@@ -419,8 +419,16 @@ export const RUNTIME_UI_ANSWERED_METHODS = Object.freeze({
  */
 export const RUNTIME_UI_SETTINGS_READ = "settings/describe";
 
-/** The settings namespaces a hosted page may read: the chat's presentation, nothing else. */
-export const RUNTIME_UI_READABLE_SETTINGS = Object.freeze(["ui-chat"]);
+/**
+ * The settings namespaces a hosted page may read: the chat's presentation and the shared developer-tools preference.
+ *
+ * `ui-settings` carries one boolean, `enabled`, which the kernel's page reads for three things: the conversation's
+ * 「运行」 (trajectory) tab, the deliverables' code diff and the interactive HTML preview. The page reads it as `false`
+ * when the namespace is missing from the answer, which is how a hosted conversation lost its trajectory tab from
+ * 2026-10-28 until 2026-11-05 although the row was mounted. The profile sets it true (`dshProfilePatch.mjs`) and a
+ * write stays refused.
+ */
+export const RUNTIME_UI_READABLE_SETTINGS = Object.freeze(["ui-chat", "ui-settings"]);
 
 const readableSettings = new Set(RUNTIME_UI_READABLE_SETTINGS);
 
