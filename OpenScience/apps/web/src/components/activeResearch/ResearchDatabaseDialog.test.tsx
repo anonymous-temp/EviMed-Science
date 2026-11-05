@@ -89,7 +89,7 @@ describe("research database dialog", () => {
     expect(alert).toHaveTextContent("暂不支持导入");
     expect(alert).not.toHaveTextContent("如果不确定");
     expect(screen.queryByText(/上次导入还没有确认结果/)).not.toBeInTheDocument();
-    expect(sessionStorage.getItem("evimed.research-db.snapshot.p1.a1")).toBeNull();
+    expect(sessionStorage.getItem("evimed.research-db.snapshot.p1.knowledge-base")).toBeNull();
     // Nothing is left to carry over a reload, and the next attempt is a new request.
     first.view.unmount(); show(); await pickCohort(user);
     expect(screen.queryByText(/上次导入还没有确认结果/)).not.toBeInTheDocument();
@@ -129,7 +129,7 @@ describe("research database dialog", () => {
     const first = show(); await pickCohort(user);
     await user.click(screen.getByRole("button", { name: "导入到知识库" })); await screen.findByRole("alert");
     const requestId = mocks.snapshotResearchDatabase.mock.calls[0][1].requestId;
-    expect(sessionStorage.getItem("evimed.research-db.snapshot.p1.a1")).toBe(requestId);
+    expect(sessionStorage.getItem("evimed.research-db.snapshot.p1.knowledge-base")).toBe(requestId);
     first.view.unmount(); show();
     expect(await screen.findByText(/上次导入还没有确认结果/)).toBeInTheDocument();
     await pickCohort(user);
@@ -217,7 +217,7 @@ describe("research database dialog", () => {
     expect(alert).toHaveTextContent(errorCodeMessage(code));
     expect(alert).not.toHaveTextContent("如果不确定"); expect(alert).not.toHaveTextContent(code);
     expect(screen.queryByText(/上次导入还没有确认结果/)).not.toBeInTheDocument();
-    expect(sessionStorage.getItem("evimed.research-db.snapshot.p1.a1")).toBeNull();
+    expect(sessionStorage.getItem("evimed.research-db.snapshot.p1.knowledge-base")).toBeNull();
   });
 
   it("reads the table listing's refusals the same way, so a certificate, a login and a network are not one sentence", async () => {
@@ -239,7 +239,7 @@ describe("research database dialog", () => {
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent(errorCodeMessage("research_db_unavailable")); expect(alert).toHaveTextContent("如果不确定是否已导入");
     expect(screen.getByText(/上次导入还没有确认结果/)).toBeInTheDocument();
-    expect(sessionStorage.getItem("evimed.research-db.snapshot.p1.a1")).toBe(mocks.snapshotResearchDatabase.mock.calls[0][1].requestId);
+    expect(sessionStorage.getItem("evimed.research-db.snapshot.p1.knowledge-base")).toBe(mocks.snapshotResearchDatabase.mock.calls[0][1].requestId);
   });
 
   it("keeps the confirmation of a partial import in the dialog's footer through the next things the person does, until another import replaces it", async () => {
