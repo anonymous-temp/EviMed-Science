@@ -118,3 +118,11 @@ test('a consolidation that rewrites source text without lineage defers native cl
   await assert.rejects(f.store.removeConversationSource(f.userId,'default',['session_a']),{code:'memory_source_lineage_unverified'});
   assert.equal(await f.sessions.read(f.userId,uri),'A reworded private fact with independent B.');
 });
+
+test('interleaved native extraction diffs attribute only their own additions before source cleanup',options,async t=>{
+  const f=await fixture(t,{extract:({user,session})=>session.endsWith('_a')?{adds:[{uri:`viking://user/${user}/memories/profile.md`,memory_type:'profile',after:'# Profile\n- Source A.'}]}:{updates:[{uri:`viking://user/${user}/memories/profile.md`,memory_type:'profile',before:'# Profile\n- Source A.',after:'# Profile\n- Source A.\n- Independent C.'}]}});
+  await f.commitConversation('a',[{role:'user',text:'Source A.'}],{projectId:'default'});await f.commitConversation('b',[{role:'user',text:'Independent C.'}],{projectId:'default'});
+  await f.worker.processCommits({userId:f.userId});const uri=`${f.root}/profile.md`,origins=await f.overlay.originsOf(f.userId,[uri]);
+  assert.equal(origins.get(uri).get((await import('../src/nativeMemoryOverlay.mjs')).lineFingerprint('Independent C.')).engineSession,'dsh-session_b');
+  await f.store.removeConversationSource(f.userId,'default',['session_a']);assert.equal(await f.sessions.read(f.userId,uri),'# Profile\n- Independent C.');
+});
