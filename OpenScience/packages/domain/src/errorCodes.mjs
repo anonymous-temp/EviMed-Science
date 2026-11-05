@@ -2801,12 +2801,6 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   project_limit_reached: '这个账户的项目数已达上限。每个项目都有独立的存储空间和研究运行时，上限用来保证服务器资源够用。可以先导出并删除不再需要的项目，再新建。',
   default_project_protected: '默认项目不能归档或删除。可以改名，或把不再需要的内容移到别的项目。',
 
-  // ——— The autopilot's independent-check episode ———
-  //
-  // "The check could not be completed" is not "the claim was refuted", and the
-  // two must never read alike: one is our infrastructure, the other is a
-  // finding about the user's own adopted conclusion.
-
   // ——— Knowledge-base intake: what a source card and an upload refusal say ———
   // The in-house parser's refusals reach a researcher on the source card, and
   // three of them (413, 415, 422) are final on the first answer, so each says
@@ -3191,9 +3185,6 @@ const ERROR_CODE_OUTCOMES = Object.freeze({
   capsule_unavailable: 'upstream',
   review_unavailable: 'upstream',
   subagent_failed: 'upstream',
-  // The autopilot's independent check could not be completed. Ours, not the
-  // user's, and emphatically not a verdict about their adopted claim.
-  // A floor on a setting, raised by editing the task: a ceiling's sibling, not a verdict on any run.
   illegal_state_transition: 'stopped',
   // Prefixed like a ceiling, but nothing was refused: the run went ahead and
   // the usage is recorded late. Calling it `capped` would tell a reader to wait

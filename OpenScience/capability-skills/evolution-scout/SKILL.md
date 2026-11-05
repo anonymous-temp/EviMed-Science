@@ -20,7 +20,7 @@ Do not nominate an existing engine as the new tool; those calibrate the evaluato
 Write research-card.json with id, track (E/P/M/U/X/T), goal, capabilityIds,
 toolKind (calculation/workflow), publicationKind (skill/isolated-tool/engine-pr),
 methodTuple, source papers, developmentCases, dataRequirements, feasibility,
-rankingFeatures, estimatedBudget and waitingAgendaIds. Record source provenance
+rankingFeatures and estimatedBudget. Record source provenance
 and unknowns explicitly. Never fetch evaluator assets or include hidden answers.
 VCR integration remains reserved. A missing resource is a waiting condition.
 
