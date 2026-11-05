@@ -68,3 +68,22 @@ test('changed root identities, duplicate physical copies and symlinked source tr
     assert.equal(await fs.readFile(path.join(dir, 'session.v4.jsonl.zstd'), 'utf8'), 'original');
   } finally { await fs.rm(root, { recursive: true, force: true }); }
 });
+
+test('a late managed child remains in the durable removal closure after a half-cache failure', async () => {
+  const { captureSourceStorage, purgeSourceStorage, sourceSessionRelativePath } = await load();
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'source-storage-crash-'));
+  try {
+    const paths = { sessions: path.join(root, 'sessions'), storages: path.join(root, 'storages') };
+    const rows = [header('a'), header('child', { origin: 'subagent', parentSession: 'a' })];
+    const add = async row => { const dir = path.join(paths.sessions, sourceSessionRelativePath(row)); await fs.mkdir(dir, { recursive: true }); await fs.writeFile(path.join(dir, 'session.v4.jsonl.zstd'), 'synthetic'); };
+    for (const row of rows) await add(row);
+    const cache = new Map(rows.map(row => [row.id, row.id])); let failOnce = true;
+    const native = { headers: async () => { const found = []; for (const row of rows) if (await fs.stat(path.join(paths.sessions, sourceSessionRelativePath(row))).catch(() => null)) found.push(row); return found; },
+      scrubReferences: async (/** @type {Set<string>} */ ids) => { for (const id of ids) { cache.delete(id); if (failOnce) { failOnce = false; throw new Error('injected half-cache failure'); } } } };
+    const frozen = await captureSourceStorage(paths, 'a', native);
+    const late = header('late', { origin: 'subagent', parentSession: 'child' }); rows.push(late); cache.set(late.id, 'synthetic late private'); await add(late);
+    await assert.rejects(purgeSourceStorage(paths, frozen, native), /injected/);
+    assert.deepEqual((await purgeSourceStorage(paths, frozen, native)).removedSessionIds, ['a', 'child', 'late']);
+    assert.equal(cache.size, 0);
+  } finally { await fs.rm(root, { recursive: true, force: true }); }
+});
