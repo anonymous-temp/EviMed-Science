@@ -10418,7 +10418,8 @@
                     "lt": 1
                   },
                   "min": 2,
-                  "max": 10
+                  "max": 10,
+                  "increasing": true
                 },
                 "halfwidth": {
                   "t": "number",
@@ -10509,6 +10510,7 @@
               },
               "min": 2,
               "max": 10,
+              "nondecreasing": true,
               "when": {
                 "path": "design.kind",
                 "notIn": [

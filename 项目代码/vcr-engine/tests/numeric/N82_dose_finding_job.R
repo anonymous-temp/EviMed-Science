@@ -146,3 +146,16 @@ vcr_case("N82h", c("AC-28", "AC-29"), function() {
   }
   list(pass = z_max < 4, detail = sprintf("start dose 3, %d trials: %s; largest difference %.2f combined standard errors (limit 4)", M, paste(text, collapse = "; "), z_max))
 })
+
+vcr_case("N82i", c("AC-07", "AC-28"), function() {
+  # A toxicity curve that falls with dose, or a CRM skeleton that does not strictly rise, is refused with a reason: a dose-finding design on such a curve
+  # selects a "correct" dose of 0.15% and still reports `estimable`. A plateau (equal neighbours) is a legitimate curve.
+  code <- function(r) if (identical(r$status, "failed")) paste(vapply(r$diagnostics$issues %||% r$issues, function(x) paste0(x$code, "@", x$field), character(1)), collapse = ",") else r$status
+  falling <- .n82_job(list(kind = "boin", compare = list("three_plus_three"), maxPatients = 30), truth = list(toxicity = list(0.3, 0.2, 0.1, 0.05, 0.02)), trials = 1000L)
+  skel <- .n82_job(list(kind = "crm", maxPatients = 30, crm = list(skeleton = list(0.3, 0.2, 0.1, 0.05, 0.02))), truth = list(toxicity = list(0.02, 0.05, 0.1, 0.2, 0.3)), trials = 1000L)
+  flat_skel <- .n82_job(list(kind = "crm", maxPatients = 30, crm = list(skeleton = list(0.05, 0.1, 0.1, 0.2, 0.3))), truth = list(toxicity = list(0.02, 0.05, 0.1, 0.2, 0.3)), trials = 1000L)
+  plateau <- .n82_job(list(kind = "boin", maxPatients = 30), truth = list(toxicity = list(0.05, 0.1, 0.1, 0.3, 0.45)), trials = 1000L)
+  refused <- function(r, field) identical(r$status, "failed") && grepl(paste0("scenario_value_invalid@", field), code(r), fixed = TRUE)
+  list(pass = refused(falling, "scenario.truth.toxicity") && refused(skel, "scenario.design.crm.skeleton") && refused(flat_skel, "scenario.design.crm.skeleton") && identical(plateau$status, "succeeded"),
+       detail = sprintf("falling curve: %s; falling skeleton: %s; skeleton with a tie: %s; a plateau in the curve: %s", code(falling), code(skel), code(flat_skel), code(plateau)))
+})
