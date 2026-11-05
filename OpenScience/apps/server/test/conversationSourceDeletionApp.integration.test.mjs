@@ -161,3 +161,16 @@ test('new account and project archives refuse a pending source even without a na
     const response=await fetch(base+path,{headers});assert.equal(response.status,409);const body=await response.json();assert.equal(body.code,'source_deletion_pending');
   }
 });
+
+test('a previously restored source fact is hidden immediately while its source cleanup is still busy',options,async t=>{
+  const {app,base,headers,user,stub,engineUser}=await fixture(t),overlay=app.nativeMemory.overlay,root=app.nativeMemory.sessions.userRoot(user.id);
+  const uri=stub.seedMemory(engineUser,'profile.md','# Profile\n- Restored private A.',{type:'profile'}),archive=`${root}/sessions/dsh-a/history/archive_001`;
+  await overlay.recordCommit({userId:user.id,archiveUri:archive,engineSession:'dsh-a',projectId:'default',origin:'gateway',state:'completed'});
+  await overlay.addRevision({userId:user.id,uri,memoryType:'profile',change:'added',actor:'engine',after:'# Profile\n- Restored private A.',engineSession:'dsh-a',archiveUri:archive,projectId:null});
+  await overlay.addRevision({userId:user.id,uri,memoryType:'profile',change:'restored',actor:'user',after:'# Profile\n- Restored private A.',reason:'undo',projectId:null});
+  await overlay.upsertFile({userId:user.id,uri,memoryType:'profile',body:'# Profile\n- Restored private A.'});
+  app.runtimeManager.captureConversationSource=async()=>({root:{id:'a',createdAt:1,cwd:'/workspace',isSeeded:false},sessions:[{id:'a'}]});
+  app.runtimeManager.purgeConversationSource=async()=>({sourceRemoved:false,reason:'runtime_busy'});
+  assert.equal((await fetch(`${base}/api/projects/default/conversations/a/source`,{method:'DELETE',headers})).status,202);
+  assert.deepEqual(await app.nativeMemory.files(user.id),[]);assert.ok((await overlay.sensitiveUris(user.id)).includes(uri));
+});
