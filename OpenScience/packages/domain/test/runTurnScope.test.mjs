@@ -1,14 +1,16 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 const load = () => import('../src/runTurnScope.mjs');
+/** @param {number} seq @param {number} turnStartSeq @param {string} sourceRequestId @param {string} [sessionId] */
 const user = (seq, turnStartSeq, sourceRequestId, sessionId = 'root') => ({ role: 'user', source: 'user', seq, turnStartSeq, sourceRequestId, sessionId, parts: [{ type: 'text', text: sourceRequestId }] });
+/** @param {number} seq @param {number} turnStartSeq @param {string} tool @param {string} [sessionId] */
 const call = (seq, turnStartSeq, tool, sessionId = 'root') => ({ role: 'assistant', seq, turnStartSeq, sessionId, parts: [{ type: 'tool', tool, status: 'completed', input: {}, output: {} }] });
 
 test('the current request scopes messages without editing preserved history or guessing by time', async () => {
   const { scopeRunTranscript } = await load();
   const original = { header: { sessions: [{ sessionId: 'root', parentSessionId: null, seedEndSeq: -1 }] },
     messages: [user(1, 0, 'old'), call(2, 0, 'old_tool'), user(11, 10, 'current'), call(12, 10, 'current_tool')] };
-  const before = structuredClone(original);
+  const before = globalThis.structuredClone(original);
   const view = scopeRunTranscript(original, { id: 'run', sessionId: 'root', kernelRequestIds: ['current'], startedAt: '1900-01-01' });
   assert.deepEqual(view.messages.map(row => row.seq), [11, 12]);
   assert.equal(view.runScope.available, true); assert.deepEqual(original, before);
@@ -27,7 +29,8 @@ test('only receipt-owned descendants are selected and copied seed history never 
   const { scopeRunTranscript } = await load();
   const original = { header: { runChildSessionIds: ['child', 'old-child', 'foreign'], sessions: [
     { sessionId: 'root', parentSessionId: null, seedEndSeq: -1 },
-    { sessionId: 'child', parentSessionId: 'root', seedEndSeq: 3 },
+    { sessionId: 'child', parentSessionId: 'root', seedEndSeq: 3,
+      runTurnOwnership: { schema: 'child-run-turns/1', runId: 'run', turnStartSeqs: [4] } },
     { sessionId: 'old-child', parentSessionId: 'root' },
     { sessionId: 'foreign', parentSessionId: 'different-root', seedEndSeq: -1 },
     { sessionId: 'unowned', parentSessionId: 'root', seedEndSeq: -1 },
@@ -45,4 +48,27 @@ test('a mismatched captured root is refused and seed copies cannot satisfy a cur
   assert.equal(scopeRunTranscript(original, { id: 'run', sessionId: 'root', kernelRequestIds: ['current'] }).runScope.available, false);
   original.header.sessions[0] = { sessionId: 'root', parentSessionId: null, seedEndSeq: 3 };
   assert.deepEqual(scopeRunTranscript(original, { id: 'run', sessionId: 'root', kernelRequestIds: ['current'] }).messages, []);
+});
+
+test('a live fork seed and a legacy saved root with no seed proof remain unavailable to learning', async () => {
+  const { scopeRunTranscript } = await load();
+  const run = { id: 'run', sessionId: 'root', kernelRequestIds: ['copied'] };
+  const messages = [user(1, 0, 'copied'), call(2, 0, 'copied_tool')];
+  assert.equal(scopeRunTranscript({ seedEndSeq: 3, messages }, run).runScope.available, false);
+  const oldCapture = { header: { sessions: [{ sessionId: 'root', parentSessionId: null }] }, messages };
+  assert.equal(scopeRunTranscript(oldCapture, run).runScope.reason, 'root_seed_scope_unavailable');
+});
+
+test('a continued child needs exact owned turns and a live transcript cannot be relabelled as another root', async () => {
+  const { scopeRunTranscript } = await load();
+  const run = { id: 'run', sessionId: 'root', kernelRequestIds: ['current'] };
+  const saved = { header: { runChildSessionIds: ['child'], sessions: [
+    { sessionId: 'root', parentSessionId: null, seedEndSeq: -1 },
+    { sessionId: 'child', parentSessionId: 'root', seedEndSeq: -1 },
+  ] }, messages: [user(11, 10, 'current'), call(2, 0, 'earlier_child_tool', 'child'), call(12, 10, 'current_child_tool', 'child')] };
+  assert.deepEqual(scopeRunTranscript(saved, run).messages.map(row => row.sessionId), ['root']);
+  const bounded = { ...saved, header: { ...saved.header, sessions: [saved.header.sessions[0],
+    { ...saved.header.sessions[1], runTurnOwnership: { schema: 'child-run-turns/1', runId: 'run', turnStartSeqs: [10] } }] } };
+  assert.deepEqual(scopeRunTranscript(bounded, run).messages.map(row => row.parts[0].tool ?? row.sourceRequestId), ['current', 'current_child_tool']);
+  assert.equal(scopeRunTranscript({ sessionId: 'foreign', messages: [user(1, 0, 'current', 'foreign')] }, run).runScope.available, false);
 });
