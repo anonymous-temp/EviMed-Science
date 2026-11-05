@@ -28,7 +28,7 @@ import {
   OPERATOR_SENTENCES, addressAct, ADDRESS_CASES, addressOpenFindings, addressProbe, addressStateFindings, addressStateHolds, AXE_RULES_PER_NOTICE, AXE_TAGS, axeLoaded, axeNotices,
   axeRun, axeVersionOf, composerFindings, composerProbe, COMPOSER_BOTTOM_PX, loadAxeSource, scanWithAxe,
   asFinding, CAPTURE_MAX_SLICES, CAPTURE_QUALITY, findingText, STEP_TARGETS,
-  discoverCalculationHistory, PAGE_TEMPLATES, handoffFindings, handoffProbe, HANDOFF_FIELDS, knowledgeGraphFindings, KNOWLEDGE_VIEWS, memoryDrawerFindings, memoryOverviewFindings, MEMORY_OVERVIEW_TILES, navigateForWalk, replaceWalkPage, walkFailureDiagnostics, assertWalkAuthenticated, recoverWalkLoad, routeLoadProbe, memoryRowCoverage, dailyRowCoverage, TYPE_PAIR_NOTICE, unexpectedRefusals, TOPICS_READ, VCR_TABS_WALK,
+  discoverCalculationHistory, handoffFindings, handoffProbe, HANDOFF_FIELDS, knowledgeGraphFindings, KNOWLEDGE_VIEWS, memoryDrawerFindings, memoryOverviewFindings, MEMORY_OVERVIEW_TILES, navigateForWalk, replaceWalkPage, walkFailureDiagnostics, assertWalkAuthenticated, recoverWalkLoad, routeLoadProbe, memoryRowCoverage, dailyRowCoverage, TYPE_PAIR_NOTICE, unexpectedRefusals, TOPICS_READ, VCR_TABS_WALK,
 } from "../../../scripts/ops/ui-walk.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");

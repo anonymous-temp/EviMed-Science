@@ -339,7 +339,7 @@ async function resultFixture(t) {
     producer: { kind: "tool", sessionId: run.sessionId, runId: run.id, callId: "call-write", eventId: "17" },
   });
 
-  await documents.put(OWNER, "agenda", "agenda-one", { title: "Follow the evidence", enabled: true, status: "active" }, { expectedRevision: 0, projectId: project.id });
+  await documents.put(OWNER, "preferences", "pref-one", { items: [] }, { expectedRevision: 0 });
   // A correction to the source.
   const impacts = new ResultImpactService({
     documents,
@@ -765,7 +765,7 @@ test("a stored kind with no export decision is left out and named, and the rest 
   assert.ok(!state.revisions.some((row) => row.kind.includes("future")));
   // Everything with a contract is still there.
   assert.equal(state.documents.find((row) => row.id === f.report.versionId).payload.digest, sha(REPORT));
-  assert.ok(state.documents.some((row) => row.kind === "agenda"));
+  assert.ok(state.documents.some((row) => row.kind === "preferences"));
   // And whoever runs the deployment is told, by kind and count.
   assert.deepEqual(reported, [
     "account export left out another-future-kind: no_export_contract, 1 documents\n",

@@ -4,7 +4,7 @@ import { EXTENSION_PRODUCT_KINDS, EXTENSION_JOB_KINDS, EVOLUTION_JOB_KINDS } fro
 
 export const PRODUCT_KINDS = Object.freeze([
   "capsule", "fact", "method", "source", "source-unit", "knowledge", "profile",
-  "agenda", "episode", "digest", "notification", "preferences", "plugin", "price-list",
+  "notification", "preferences", "plugin", "price-list",
   // One long research goal: what the control plane keeps about it between its rounds (`researchGoalService.mjs`).
   "research-goal",
   // The candidates one project is mounting under trial. One row per project,
@@ -26,7 +26,7 @@ export const PRODUCT_KINDS = Object.freeze([
 // `memory-record-index` is a retired kind: the legacy memory engine it indexed is deleted (2026-10-25) and nothing enqueues or claims
 // it. It stays in the vocabulary only because the migrations below rebuild the kind CHECK from this list, and a database that still
 // holds a row of it would refuse the narrowed one; `legacyMemoryRetirement.mjs` deletes those rows, and the word can go once none exists.
-export const PRODUCT_JOB_KINDS = Object.freeze(["ingest", "distill", "consolidate", "episode", "verify", "digest", "notify", "memory-index", "memory-record-index", "plugin-apply",
+export const PRODUCT_JOB_KINDS = Object.freeze(["ingest", "distill", "consolidate", "notify", "memory-index", "memory-record-index", "plugin-apply",
   "frontier-daily", "frontier-rebuild", "frontier-weekly", "frontier-monthly", "frontier-notify", "document-export", "study-review", "result-replay",
   // One finished run joined to the capability, skill and tool versions it used and to the result versions it
   // produced (`availabilityCollector.mjs`), and the sweep that finds runs the finish hook missed.
@@ -110,6 +110,9 @@ BEGIN
   -- no longer name the two kinds: a row of a kind the narrowed CHECK refuses stops the rebuild and, with it, the migration and the start.
   IF NOT EXISTS (SELECT 1 FROM evimed_product.schema_migrations WHERE name='2026-10-29-evidence-programme-retired-v1') THEN
     DELETE FROM evimed_product.documents WHERE kind='programme-decision';
+    -- The scheduler's own kinds (agenda, episode, digest) left the vocabulary on 2026-11-05, and a database this old still holds the
+    -- programme's agendas and episodes: they go here, before the first CHECK rebuild, which no longer names them.
+    DELETE FROM evimed_product.documents WHERE kind IN ('agenda','episode','digest');
   END IF;
 END $programme_retired_documents$;
 DO $document_kinds$
@@ -125,7 +128,7 @@ BEGIN
   END LOOP;
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint c WHERE c.conrelid='evimed_product.documents'::regclass
-      AND c.conname='product_documents_kind_check' AND pg_get_constraintdef(c.oid) LIKE '%digest%'
+      AND c.conname='product_documents_kind_check' AND pg_get_constraintdef(c.oid) LIKE '%notification%'
   ) THEN
     ALTER TABLE evimed_product.documents DROP CONSTRAINT IF EXISTS product_documents_kind_check;
     ALTER TABLE evimed_product.documents ADD CONSTRAINT product_documents_kind_check
@@ -206,6 +209,13 @@ CREATE INDEX IF NOT EXISTS product_jobs_owner_idx ON evimed_product.jobs(user_id
 CREATE INDEX IF NOT EXISTS product_jobs_project_fk_idx ON evimed_product.jobs(user_id,project_id);
 CREATE INDEX IF NOT EXISTS product_jobs_queued_time_idx ON evimed_product.jobs(kind,run_after,id) WHERE status='queued';
 CREATE INDEX IF NOT EXISTS product_jobs_running_lease_idx ON evimed_product.jobs(kind,lease_expires_at,id) WHERE status='running';
+DO $scheduler_jobs_retired$
+BEGIN
+  -- The same, for the scheduler's job kinds (episode, verify, digest), on a database that has not yet had the programme's retirement.
+  IF NOT EXISTS (SELECT 1 FROM evimed_product.schema_migrations WHERE name='2026-10-29-evidence-programme-retired-v1') THEN
+    DELETE FROM evimed_product.jobs WHERE kind IN ('episode','verify','digest');
+  END IF;
+END $scheduler_jobs_retired$;
 DO $programme_retired$
 BEGIN
   -- The rest of the retirement, once: the jobs; the agendas the programme kept under the publisher in the project evimed-evidence (one per

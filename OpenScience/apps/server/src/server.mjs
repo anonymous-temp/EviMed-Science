@@ -253,6 +253,8 @@ import { createOpenVikingModelCaller } from "./openVikingModelCaller.mjs";
 import { MemoryIndexWorker } from "./memoryIndexWorker.mjs";
 import { MemoryIndexWithdrawals } from "./memoryIndexWithdrawals.mjs";
 import { retireLegacyMemory } from "./legacyMemoryRetirement.mjs";
+import { retireLegacyScheduler } from "./legacySchedulerRetirement.mjs";
+import { schedulerRetirementMetricFamilies } from "./schedulerRetirementMetrics.mjs";
 import { MaintenanceService } from "./maintenanceService.mjs";
 import { CapsuleService } from "./capsuleService.mjs";
 import { foldAllIntoOneCapsule, indexWithdrawalOfCapsules } from "./capsuleOneCapsule.mjs";
@@ -8738,6 +8740,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   let capsuleFoldRun = false;
   let officialPublishRun = false;
   let legacyMemoryRetired = false;
+  let legacySchedulerRetired = false;
   let handbookArmRetired = false;
   // A turn the control plane starts on a research goal: to take it up again, or to set it again. Automated (it teaches nothing and nobody is
   // waiting on it), on the answer line the goal was set on, kept under the goal's first question like LoopX's own rounds. It is charged to the
@@ -8868,6 +8871,12 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         void retireLegacyMemory({ database: productDatabase, withdrawals: memoryWithdrawals, report: (line) => process.stderr.write(`${line}\n`) })
           .then((retired) => { if (retired.withdrawn === "queued") void memoryIndexWorker?.drainWithdrawals(); })
           .catch(() => {});
+      }
+      // What is left of the platform's own scheduler in the product ledger — agendas, episodes, digests and their jobs — is taken away once at
+      // start, and the kind CHECKs are narrowed after (idempotent; `legacySchedulerRetirement.mjs`): said on stderr, and a failure costs the start nothing.
+      if (productDatabase && !legacySchedulerRetired) {
+        legacySchedulerRetired = true;
+        void retireLegacyScheduler({ database: productDatabase, report: (line) => process.stderr.write(`${line}\n`) }).catch(() => {});
       }
       // What is left of the capability-handbook arm — an account's handbooks and candidates, the jobs that applied them, the evolution module's records of the platform
       // handbook path — is taken away once at start (idempotent; `handbookArmRetirement.mjs`): said on stderr, and a failure costs the start nothing.
@@ -10598,6 +10607,7 @@ async function operatorMetricsText({ webVitals = null, judgeService = null, open
   // What the control plane did about long research goals, by event (researchGoalMetrics.mjs).
   for (const family of researchGoalMetricFamilies()) addMetric(lines, family.name, family.help, family.type, family.series);
   for (const family of scheduleWakeMetricFamilies()) addMetric(lines, family.name, family.help, family.type, family.series);
+  for (const family of schedulerRetirementMetricFamilies()) addMetric(lines, family.name, family.help, family.type, family.series);
   // Model requests booked uncertain, by why (usageLedger.mjs): a burst is a
   // provider or a caller losing calls, and shows here while it happens.
   const uncertain = usageUncertainMetricFamily();
