@@ -211,3 +211,39 @@ test('backfill source digest rejects changed archive bytes on retry and does not
   const row = (await f.database.query('SELECT state,reason FROM evimed_memory.history_archives WHERE owner_id=$1', [f.userId])).rows[0];
   assert.equal(row.state, 'unavailable'); assert.equal(row.reason, 'memory_history_source_changed');
 });
+
+test('backfill leases expire after a crashed process and later archives progress past unavailable ones', options, async t => {
+  const f = await setup(t); await f.worker.processCommits({ userId: f.userId }); f.service.contexts.forUri = async () => f.context;
+  for (let i = 0; i < 5; i++) await f.commitConversation(`later${i}`, [{ role: 'user', text: `Retained distinct topic ${i}` }], { projectId: 'default' });
+  await f.worker.processCommits({ userId: f.userId });
+  await f.ledger.discoverArchives(); const claimed = await f.ledger.claimArchives(1); assert.equal(claimed.length, 1);
+  await f.database.query("UPDATE evimed_memory.history_archives SET lease_until=clock_timestamp()-interval '1 second' WHERE owner_id=$1", [f.userId]);
+  await f.service.backfill(); assert.equal((await f.service.coverage(f.userId)).complete, 4);
+  await f.service.backfill(); assert.equal((await f.service.coverage(f.userId)).complete, 6);
+  assert.equal(f.files.size, 6);
+});
+
+test('a partially indexed archive resumes remaining chunks without rewriting ready resources', options, async t => {
+  const f = await setup(t); f.service.contexts.forUri = async () => f.context;
+  const archive = await f.commitConversation('many', Array.from({ length: 12 }, (_, i) => ({ role: i % 2 ? 'assistant' : 'user', text: `Exchange ${i}: ${'context '.repeat(80)}` })), { projectId: 'default' });
+  await f.worker.processCommits({ userId: f.userId });
+  const write = f.resources.writeHistory; let n = 0;
+  f.resources.writeHistory = async (...args) => { n++; if (n === 3) throw new Error('interrupted after ready chunks'); return write(...args); };
+  await f.service.backfill(); assert.equal((await f.service.coverage(f.userId)).unavailable, 1);
+  const existing = [...f.files.keys()];
+  const calls = f.calls.length; f.resources.writeHistory = write;
+  await f.database.query("UPDATE evimed_memory.history_archives SET next_attempt_at=clock_timestamp()-interval '1 second',lease_until=NULL WHERE owner_id=$1", [f.userId]);
+  await f.service.backfill();
+  assert.equal((await f.service.coverage(f.userId)).complete, 2);
+  assert.ok(!f.calls.slice(calls).some(c => c[0] === 'write' && existing.includes(c[1])));
+  assert.ok([...f.files.keys()].some(uri => uri.includes('history'))); assert.ok(archive.archive_uri);
+});
+
+test('coverage includes undiscovered completed archives beyond the bounded discovery page', options, async t => {
+  const f = await setup(t); await f.worker.processCommits({ userId: f.userId });
+  await f.database.query(`INSERT INTO evimed_memory.native_commits(user_id,archive_uri,engine_session,project_id,origin,state)
+    SELECT $1,regexp_replace($2,'archive_[0-9]+$','archive_' || i::text),$3,'default','scan','completed' FROM generate_series(2,106) i`,
+  [f.userId,f.commit.archiveUri,f.commit.engineSession]);
+  assert.equal(await f.ledger.discoverArchives(100), 100);
+  const coverage = await f.service.coverage(f.userId); assert.equal(coverage.queued, 100); assert.equal(coverage.undiscovered, 6);
+});
