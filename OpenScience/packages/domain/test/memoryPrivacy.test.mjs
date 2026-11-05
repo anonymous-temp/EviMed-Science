@@ -21,4 +21,5 @@ test('original private or unknown evidence cannot be made public by generic body
   assert.equal(api.sourceAllowsEgress(generic,{purpose:'global-method',contentDigest:'a'.repeat(64),consentDigest:'a'.repeat(64)}),false);
   assert.equal(api.sourceAllowsEgress({nativeType:'notes'},{purpose:'external-api'}),false);
   assert.equal(api.sourceAllowsEgress({sourcePrivacy:{schemaVersion:1,classification:'ordinary'}},{purpose:'method'}),true);
+  assert.equal(api.sourceAllowsEgress({originalSources:[{sourcePrivacy:{schemaVersion:1,classification:'ordinary'}}]},{purpose:'method'}),true,'a derived envelope preserves its proven ordinary originals');
 });
