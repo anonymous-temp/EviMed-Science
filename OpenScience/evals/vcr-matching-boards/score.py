@@ -513,8 +513,10 @@ def markdown_a(result):
 def markdown_b(result):
     o, boot = result["official"], result["intervals"]
     c = result["completion"]
+    narrowed = (result.get("provenance") or {}).get("narrowed")
     return "\n".join([
         "# Board B: NIH-TrialBench target recall@10", "",
+        *([f"Narrowed: each case's first {narrowed['top']} after {narrowed['by']}, not all pairs as in the paper; a target left out is a miss.", ""] if narrowed else []),
         f"Recall@10: {o['hit_count_at_10']}/{o['n_cases']} = {fmt(boot['recall@10']['point'], boot['recall@10']['ci'])} (case bootstrap, 95%).",
         f"MRR: {fmt(boot['mrr']['point'], boot['mrr']['ci'])}.  Missing output: {o['n_missing_output']}.  Target not ranked: {o['n_target_not_ranked']}.", "",
         f"Completion: {c['patientsWithRecord']} of {c['patients']} cases have a record, {c['patientsFinished']} finished; "
@@ -555,7 +557,8 @@ def write_results(out, name, result, renderer):
 def provenance(boards):
     manifest = read_json(Path(boards) / "manifest.json")
     return {"trialgpt2Commit": TG2_COMMIT, "trialgpt1Commit": TG1_COMMIT, "boardsInputsDigest": manifest["inputsDigest"],
-            "evaluatorSha256": {name: digest for name, (_, digest) in EVALUATORS.items()}}
+            "evaluatorSha256": {name: digest for name, (_, digest) in EVALUATORS.items()},
+            **({"narrowed": manifest["narrowed"]} if manifest.get("narrowed") else {})}
 
 
 def main():

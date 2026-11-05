@@ -153,11 +153,13 @@ fixed salted hash of `evals/vcr-matching/n2c2/data.mjs`, the other 162 held out 
 `dev_job.mjs --board n2c2 --split train-dev|train-heldout --n2c2-boards <inputs> --n2c2-labels <labels> --n2c2-root <dir>` uploads each record as
 a document dated by its record date and judges one protocol, the thirteen criteria in the annotation guide's wording (`n2c2/criteria.mjs`), against
 the whole roster in one job, clause k being tag k. The **sealed test split is refused** by the loader and by the options unless `--unseal` is passed,
-which only the owner does; `prepare_f.mjs` does not write the test notes without `--with-test`; the sealed gold archive is never opened here.
+run once, after the prompts are frozen; `prepare_f.mjs` does not write the test notes without `--with-test`; only `unseal_f.mjs` opens the sealed gold, to write the labels `score.py f --split test --unseal` reads.
 
 `score.py f` reads each label as met, not met or neither (`not enough information`, `not applicable`, no answer), keeps `included` and `not included`
 as the model gave them, silent or stated, and reads the rest in four ways: (a) wrong, in the denominator (accuracy only); (b) not met, the unfavourable
-reading and the annotators' convention; (c) as (b) except ENGLISH and MAKES-DECISIONS, met (guide section 4); (d) met, the favourable reading. The
+reading and the annotators' convention; (c) as (b) except ENGLISH and MAKES-DECISIONS, met (guide section 4); (d) met, the favourable reading. **(c) is
+the primary reading**, named on 2026-11-05 before the official test split was scored, because the plan's line of 0.8293 is that reading of the earlier
+pipeline; (b) and the unknown share are printed beside it, since the reading alone can move a score across the majority baseline. The
 unchanged `track1_eval.py` (digest pinned) scores (b), (c) and (d) and must equal the module's own micro and macro F1 or nothing is written. Reported:
 accuracy and micro F1 with a patient bootstrap, macro F1, per criterion, the unknown share and its kinds, the model's yes and no by basis, a
 majority baseline learnt from the patients outside the split, completion and cost. Aggregates only; no note is read by the scorer.

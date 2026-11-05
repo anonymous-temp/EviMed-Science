@@ -23,6 +23,7 @@ function fixture() {
   fs.writeFileSync(path.join(collection, 'collection.json'), JSON.stringify({ databasePath: 'c1.sqlite' }));
   fs.mkdirSync(path.join(root, 'boards', 'B-nih'));
   fs.writeFileSync(path.join(root, 'boards', 'B-nih', 'cases.jsonl'), `${JSON.stringify({ patientId: 'p1', caseId: 'p1', split: 'test', note: 'A note.', collection: 'c1', candidateIds: ['NCT1', 'NCT2', 'NCT3'], candidateCount: 3 })}\n`);
+  fs.writeFileSync(path.join(root, 'boards', 'manifest.json'), JSON.stringify({ inputsDigest: 'd' }));
   for (const name of ['key', 'dash']) fs.writeFileSync(path.join(root, name), 'k');
   return root;
 }
@@ -45,6 +46,9 @@ test('a board comes out narrowed, and a second run asks nothing again', async ()
   assert.deepEqual(row.candidateIds, ['NCT1', 'NCT3']);
   assert.equal(row.candidateCount, 2);
   assert.ok(fs.existsSync(path.join(root, 'out', 'collections', 'c1', 'collection.json')));
+  const manifest = JSON.parse(fs.readFileSync(path.join(root, 'out', 'manifest.json'), 'utf8'));
+  assert.equal(manifest.inputsDigest, 'd');
+  assert.deepEqual(manifest.narrowed, { from: 'd', board: 'B-nih', top: 2, by: 'qwen3-rerank' });
   await narrowBoard(options, deps);
   assert.equal(chats, 1);
   assert.equal(reranks, 1);

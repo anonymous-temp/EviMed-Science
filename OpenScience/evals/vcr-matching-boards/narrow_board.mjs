@@ -5,7 +5,7 @@
  *
  *   node narrow_board.mjs --boards <prepared inputs> --board nih --out <dir> --top 100 --key-file <deepseek> --dashscope-key-file <dashscope>
  *
- * Writes `<out>/<board dir>/cases.jsonl` in the shape `prepare.py` writes, `<out>/collections` as a link to the original collections, and one file per
+ * Writes `<out>/<board dir>/cases.jsonl` in the shape `prepare.py` writes, `<out>/manifest.json` saying what was narrowed, `<out>/collections` as a link to the original collections, and one file per
  * patient under `<out>/patients` so that an interrupted run continues. The kept ids stay in the prepared order, so what a runner names first says nothing
  * about the reranker's opinion. No label file is read.
  */
@@ -109,6 +109,8 @@ export async function narrowBoard(o, deps = {}) {
     return { ...row, candidateIds, candidateCount: candidateIds.length };
   });
   fs.writeFileSync(path.join(dir, 'cases.jsonl'), `${rows.map((row) => JSON.stringify(row)).join('\n')}\n`);
+  const original = JSON.parse(fs.readFileSync(path.join(o.boards, 'manifest.json'), 'utf8'));
+  fs.writeFileSync(path.join(o.out, 'manifest.json'), `${JSON.stringify({ ...original, narrowed: { from: original.inputsDigest ?? null, board: spec.dir, top: o.top, by: o.rerankModel } }, null, 2)}\n`);
   const link = path.join(o.out, 'collections');
   if (!fs.existsSync(link)) fs.symlinkSync(path.resolve(o.boards, 'collections'), link);
   const pairs = rows.reduce((sum, row) => sum + row.candidateCount, 0);

@@ -274,7 +274,10 @@ def markdown(report, keys):
     out = []
     for name, part in blocks:
         summary = part["summary"]
-        out += [f"### {name}", "", "| cohort | topics | " + " | ".join(keys) + " |", "|---|---|" + "---|" * len(keys)]
+        out += [f"### {name}", ""]
+        if "ndcg10Judged" in keys:
+            out += ["ndcg10 and p10 are the official measures. The judged columns drop trials nobody assessed first: a fairer read of a run made after the track was pooled, not a figure to set against the track's runs.", ""]
+        out += ["| cohort | topics | " + " | ".join(keys) + " |", "|---|---|" + "---|" * len(keys)]
         for year, block in summary["byYear"].items():
             out.append(f"| {year} | {block['topics']} | " + " | ".join(fmt(block[key]) for key in keys) + " |")
         out.append(f"| pooled | {summary['topics']} | " + " | ".join(fmt(summary["pooled"][key]) for key in keys) + " |")

@@ -27,7 +27,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { isPeak, priceUsage } from '@evimed/domain';
+import { VCR_JUDGMENT_PROMPT_VERSIONS, isPeak, priceUsage } from '@evimed/domain';
 import { loadConfig } from '../../apps/server/src/config.mjs';
 import { ControlPlaneDatabase } from '../../apps/server/src/controlPlaneDatabase.mjs';
 import { UsageLedger } from '../../apps/server/src/usageLedger.mjs';
@@ -130,7 +130,7 @@ const yuan = (value) => (Number.isFinite(value) ? value.toFixed(2) : '?');
 const short = (value) => (value >= 1e6 ? `${(value / 1e6).toFixed(1)}M` : value >= 1e3 ? `${(value / 1e3).toFixed(0)}k` : String(Math.round(value)));
 
 /** What an arm was started with; a later run of the same arm has to agree, or its rows would be read as one experiment. @param {Record<string, any>} o */
-const armSettings = (o) => ({ board: o.board, mode: o.mode, thinking: o.thinking, thinkingCriteria: o.thinkingCriteria, ...(o.definitions ? { definitions: true } : {}), topK: o.topK, model: o.model });
+const armSettings = (o) => ({ board: o.board, mode: o.mode, thinking: o.thinking, thinkingCriteria: o.thinkingCriteria, ...(o.definitions ? { definitions: true } : {}), topK: o.topK, model: o.model, prompts: VCR_JUDGMENT_PROMPT_VERSIONS });
 
 /**
  * Run the loop. `deps` replaces the clock, the log and the balance check in tests; nothing else is replaced.

@@ -9,6 +9,9 @@ reading. The model's own `included` and `not included` are kept as it gave them,
   (c) as (b), except ENGLISH and MAKES-DECISIONS, where the annotation guide (section 4) says an unmentioned criterion is probably met.
   (d) it is read as met, for every criterion. This is the favourable reading.
 
+The primary reading is (c), named on 2026-11-05 before the official test split was scored and with its judgments already fixed: the plan's line of 0.8293 is that reading of
+the earlier pipeline. The reading alone moves a score across the majority baseline, so (b) and the unknown share are always printed beside it.
+
 (b), (c) and (d) are written as the official scorer's input and the unchanged `track1_eval.py` is run on each; the scorer's micro and macro
 overall F1 must equal this module's own computation, or no table is written. Intervals are from a patient-level bootstrap, 2,000 resamples.
 Also reported: the share of pairs with no yes or no (the unknown share), how the model's yes and no split by whether a sentence stands behind
@@ -35,6 +38,7 @@ ABSENT_MEANS_MET = ("ENGLISH", "MAKES-DECISIONS")
 READINGS = ("b", "c", "d")
 SCORER_SHA256 = "f453505c44af2eb0fd807c5f031e72f2041299a5244c05b8d4c598de84fe3a2a"
 SPLITS = ("train-dev", "train-heldout")
+PRIMARY_READING = "c"
 RESAMPLES = 2000
 SEED = 20261104
 
@@ -261,7 +265,7 @@ def markdown(result):
              f"Accuracy (a): {pct(s['accuracyA']['point'], s['accuracyA']['interval'])}. Unknown share: {pct(s['unknownShare']['point'], s['unknownShare']['interval'])} {s['unknownShare']['byKind']}.", "",
              "| reading | accuracy | micro F1 (official) | macro F1 (official) |", "|---|---|---|---|"]
     for reading, row in s["readings"].items():
-        lines.append(f"| ({reading}) | {pct(row['accuracy'], row['accuracyInterval'])} | {pct(row['microF1'], row['microF1Interval'])} ({pct(row.get('official', {}).get('microF1'))}) | {pct(row['macroF1'])} ({pct(row.get('official', {}).get('macroF1'))}) |")
+        lines.append(f"| ({reading}){' primary' if reading == PRIMARY_READING else ''} | {pct(row['accuracy'], row['accuracyInterval'])} | {pct(row['microF1'], row['microF1Interval'])} ({pct(row.get('official', {}).get('microF1'))}) | {pct(row['macroF1'])} ({pct(row.get('official', {}).get('macroF1'))}) |")
     if s["baseline"]:
         lines.append(f"| majority baseline | {pct(s['baseline']['accuracy'])} | {pct(s['baseline']['microF1'])} | {pct(s['baseline']['macroF1'])} |")
     lines += ["", "| criterion | gold met | unknown | acc (a) | acc (b) | acc (c) | acc (d) | F1 (b) | F1 (c) | F1 (d) |", "|---|---|---|---|---|---|---|---|---|---|"]
