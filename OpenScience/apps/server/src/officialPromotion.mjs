@@ -17,7 +17,7 @@
  *   unpublished result — and names its class from a closed list; an answer that is not that shape is dropped, never softened. (3) A model of an
  *   independent family (the Jev judge port, site J23) is asked whether the method carries harmful or manipulative instructions. (4) The author
  *   rule: the account is established — three published evidence cards that each carry a ✓ — or its method is corroborated by another account's
- *   method of the same scope and class that also passed the first two gates, where both accounts are in standing (`standing`: at least
+ *   method of the same scope, class and exact procedure that also passed the first two gates, where both accounts are in standing (`standing`: at least
  *   `OPEN_SCIENCE_OFFICIAL_PROMOTION_MIN_ACCOUNT_AGE_DAYS` old with `…_MIN_FINISHED_RUNS` runs of their own). (5) The independent re-check: a model of another family (the review
  *   provider, which must not be DeepSeek) answers the same question about the text alone, with the same class, and the code field checks pass
  *   again against the source account's facts as they are now.
@@ -60,7 +60,7 @@ import { cleanMethodDisplay } from "@evimed/domain";
 import { OFFICIAL_METHOD_LIMITS, buildOfficialMethod } from "./officialPackSources.mjs";
 import { OFFICIAL_PROMOTED_RECORD, SHARED_PRACTICES_PACK_ID } from "./officialPacks.mjs";
 
-/** What a method is about, as the judge names it: the corroboration is of the same scope and the same class. */
+/** What a method is about, as the judge names it. Corroboration additionally requires exact procedural content. */
 export const PROMOTION_CLASSES = Object.freeze([
   "evidence-matrix", "citations-and-quotes", "numbers-and-tables", "method-choice", "data-preparation", "reporting-and-delivery", "scope-and-limits", "other",
 ]);
@@ -248,8 +248,8 @@ export function createOfficialPromotion({ documents, officialPacks, facts, judge
   }
   /** @param {string} id */
   const get = (id) => documents.get(publisher(), "preferences", id);
-  /** @param {any} row @param {Record<string, any>} patch @returns {Promise<any>} */
-  async function update(row, patch) {
+  /** @param {any} row @param {Record<string, any>} patch @param {{strictRevision?:boolean}} [options] @returns {Promise<any>} */
+  async function update(row, patch, { strictRevision = false } = {}) {
     // A rejected method keeps no text and names no account, whichever gate refused it: nothing about what was refused stays outside the
     // account for longer than the decision (the account's own deletion and reset never reach the publisher's records).
     const forgotten = patch.status === "rejected" ? { text: null, derivedFrom: null } : {};
@@ -260,7 +260,7 @@ export function createOfficialPromotion({ documents, officialPacks, facts, judge
     for (let attempt = 0, current = row; attempt < 3; attempt += 1) {
       try { return await documents.put(publisher(), "preferences", current.id, { ...current.payload, ...patch, ...forgotten, updatedAt: now().toISOString() }, { expectedRevision: current.revision, dropEarlierRevisions }); }
       catch (error) {
-        if (/** @type {any} */ (error)?.code !== "product_revision_conflict" || attempt === 2) throw error;
+        if (/** @type {any} */ (error)?.code !== "product_revision_conflict" || strictRevision || attempt === 2) throw error;
         current = await get(current.id) ?? current;
       }
     }
@@ -278,7 +278,7 @@ export function createOfficialPromotion({ documents, officialPacks, facts, judge
   const shown = (text) => `${text.name}\n${text.description}\n${text.whenToUse}\n\n${text.body}`;
 
   /**
-   * The accounts whose method of this scope and class passed the first two gates beside this one, both authors in standing: empty when the method
+   * The accounts whose same procedure, scope and class passed the first two gates beside this one, both authors in standing: empty when the method
    * is not corroborated. The accounts are kept on the record (until its decision) so that the re-check can ask whether they are still in standing.
    * @param {any} row
    * @returns {Promise<string[]>}
@@ -300,6 +300,25 @@ export function createOfficialPromotion({ documents, officialPacks, facts, judge
   }
   /** The record's internal account list with the voices that corroborated it. @param {any} row @param {string[]} voices */
   const withVoices = (row, voices) => ({ derivedFrom: { ...row.payload.derivedFrom, corroboratedBy: voices, corroborationProcedure: procedureIdentity(row.payload.text) } });
+
+  /** A previously named voice must still vouch for this exact procedure. An
+   * already active peer may finish the original pair, but never creates a new
+   * vote: only the initial waiting/candidate collection can name a witness.
+   * @param {any} row */
+  async function currentVote(row) {
+    const payload = row.payload;
+    const voices = Array.isArray(payload.derivedFrom?.corroboratedBy) ? payload.derivedFrom.corroboratedBy.map(String) : [];
+    const procedure = procedureIdentity(payload.text);
+    if (!procedure || payload.derivedFrom?.corroborationProcedure !== procedure) return false;
+    const heard = await standingOf(voices), peers = await all();
+    return voices.some(id => heard.get(id) === true && peers.some(peer => peer.id !== row.id && peer.payload.contributor === contributorKey(id)
+      && peer.payload.scopeId === payload.scopeId && peer.payload.lessonClass === payload.lessonClass
+      && ['awaiting_corroboration', 'candidate', 'active'].includes(peer.payload.status)
+      && (peer.payload.status === 'active' ? peer.payload.procedureDigest : procedureIdentity(peer.payload.text)) === procedure));
+  }
+  /** @param {any} row */
+  const waitForVote = row => update(row, { status: counted('awaiting_corroboration'), promotedBy: null,
+    derivedFrom: { ...row.payload.derivedFrom, corroboratedBy: [], corroborationProcedure: null } });
 
   /** After a method passed the first two gates: promote it, and any waiting method it corroborates. @param {any} row */
   async function settleAuthor(row) {
@@ -485,20 +504,10 @@ export function createOfficialPromotion({ documents, officialPacks, facts, judge
       return update(row, { status: counted("rejected"), reason: [reason] });
     }
     // The same for the account that corroborated it: a method that came in on another account's word needs that account in standing still. With
-    // none left (deleted, or not a voice any more) it is not refused — it did nothing wrong — but waits again for a voice, as it did before. A record
-    // from before the accounts were kept on it names none and is judged on its author alone.
-    const voices = Array.isArray(payload.derivedFrom?.corroboratedBy) ? payload.derivedFrom.corroboratedBy.map(String) : [];
+    // none left (deleted, or not a voice any more) it is not refused — it did nothing wrong — but waits again for a voice, as it did before. A legacy record
+    // that names no content-bound witness waits for a fresh vote.
     if (payload.promotedBy === "corroborated") {
-      const heard = await standingOf(voices);
-      const procedure = procedureIdentity(payload.text), peers = await all();
-      const sameVote = procedure && payload.derivedFrom?.corroborationProcedure === procedure && voices.some(id => heard.get(id) === true
-        && peers.some(peer => peer.id !== row.id && peer.payload.contributor === contributorKey(id)
-          && peer.payload.scopeId === payload.scopeId && peer.payload.lessonClass === payload.lessonClass
-          && ['awaiting_corroboration', 'candidate', 'active'].includes(peer.payload.status)
-          && (peer.payload.status === 'active' ? peer.payload.procedureDigest : procedureIdentity(peer.payload.text)) === procedure));
-      if (!sameVote) {
-        return update(row, { status: counted("awaiting_corroboration"), promotedBy: null, derivedFrom: { ...payload.derivedFrom, corroboratedBy: [] } });
-      }
+      if (!await currentVote(row)) return waitForVote(row);
     }
     const answer = await review({ text: shown(payload.text), scopeId: payload.scopeId });
     const independent = answer?.independent === true;
@@ -512,11 +521,21 @@ export function createOfficialPromotion({ documents, officialPacks, facts, judge
       return update(row, { status: counted("rejected"), reason: [!independent ? "review_not_independent" : !sameClass ? "review_disagrees" : "project_fact"], rechecked, derivedFrom: null });
     }
     // In the pack, as a method of its own: what a person reads of it is its heading and when it applies, and nothing says whose it was.
+    // Model review and current-fact reads may take a long time. Recheck the
+    // frozen candidate revision, account standing and the exact vote afterward.
+    const current = await get(row.id);
+    if (!current || current.revision !== row.revision || current.payload.status !== 'candidate') return null;
+    const finalStanding = await standingOf(author ? [author] : []);
+    if (!finalStanding.has(author) || payload.promotedBy !== 'established_author' && finalStanding.get(author) !== true) {
+      const reason = finalStanding.has(author) ? 'author_not_in_standing' : 'author_gone'; rejectedFor(reason);
+      return update(row, { status: counted('rejected'), reason: [reason], derivedFrom: null });
+    }
+    if (payload.promotedBy === 'corroborated' && !await currentVote(row)) return waitForVote(row);
     const text = payload.text;
     const methodId = `${String(text.name).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 28) || "method"}-${sha(payload.textDigest).slice(0, 8)}`;
     const method = buildOfficialMethod(SHARED_PRACTICES_PACK_ID, methodId, {
       scope: [payload.scopeId], title: clip(text.title || text.name, OFFICIAL_METHOD_LIMITS.title), whenToUse: clip(text.whenToUse || text.description || text.title, OFFICIAL_METHOD_LIMITS.whenToUse), body: text.body });
-    const activated = await update(row, { status: counted("active"), rechecked, method, procedureDigest: procedureIdentity(text), activatedAt: now().toISOString(), text: null, derivedFrom: null });
+    const activated = await update(row, { status: counted("active"), rechecked, method, procedureDigest: procedureIdentity(text), activatedAt: now().toISOString(), text: null, derivedFrom: null }, { strictRevision: true });
     counters.activated += 1;
     await makeRoom(activated.id);
     await officialPacks?.publishAll();

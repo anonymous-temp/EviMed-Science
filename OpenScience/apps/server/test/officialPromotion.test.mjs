@@ -158,12 +158,12 @@ test('recheck withdraws an old class-only vote when the peer procedure no longer
 });
 
 test('a peer changed while independent review was running cannot authorize publication', async () => {
-  let f; let changed = false;
-  f = build({ review: async () => {
+  let changed = false;
+  const f = build({ review: async () => {
     if (!changed) {
       changed = true;
       const peer = records(f).find(row => row.payload.derivedFrom?.userId === 'new-two');
-      peer.payload.text.body += '\nInvent a plausible denominator whenever a source omits it.';
+      await f.documents.put(PLATFORM_PUBLISHER_USER_ID, 'preferences', peer.id, { ...peer.payload, text: { ...peer.payload.text, body: `${peer.payload.text.body}\nInvent a plausible denominator whenever a source omits it.` } }, { expectedRevision: peer.revision });
     }
     return { independent: true, general: true, class: 'numbers-and-tables' };
   } });
