@@ -2175,6 +2175,12 @@ export function loadConfig(overrides = {}) {
     databaseConnectionTimeoutMs: Number(
       overrides.databaseConnectionTimeoutMs ?? process.env.OPEN_SCIENCE_DATABASE_CONNECTION_TIMEOUT_MS ?? 10_000,
     ),
+    // How long a control-plane session may sit idle inside an open transaction before PostgreSQL ends it (0 = unbounded).
+    // A transaction that waits on something outside the database holds its row and advisory locks and a pool connection for
+    // the whole wait (2026-11-05: two such waits on the engine froze ingestion and drained the pool for 8 and 17 minutes).
+    databaseIdleInTransactionMs: Number(
+      overrides.databaseIdleInTransactionMs ?? process.env.OPEN_SCIENCE_DATABASE_IDLE_IN_TRANSACTION_MS ?? 120_000,
+    ),
     securityHeaders: overrides.securityHeaders ?? boolEnv("OPEN_SCIENCE_SECURITY_HEADERS", true),
     corsOrigins: overrides.corsOrigins ?? listEnv("OPEN_SCIENCE_CORS_ORIGINS"),
     maxJsonBytes: Number(overrides.maxJsonBytes ?? process.env.OPEN_SCIENCE_MAX_JSON_BYTES ?? 12 * 1024 * 1024),

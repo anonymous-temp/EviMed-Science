@@ -4,6 +4,8 @@
 // engine call is in flight: nothing may be open.
 import assert from "node:assert/strict";
 import test from "node:test";
+import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
+import { loadConfig } from "../src/config.mjs";
 import { OpenVikingClient } from "../src/openVikingClient.mjs";
 import { OpenVikingResources } from "../src/openVikingResources.mjs";
 import { OpenVikingSourceSync } from "../src/openVikingSourceSync.mjs";
@@ -69,4 +71,22 @@ test("convergeSource and the library pass hold nothing across the engine call, a
     assert.deepEqual(stale, { skipped: "obsolete-account" });
     assert.equal(engine.requests.length, before, "no engine request is made for an obsolete account");
   } finally { await context.close(); }
+});
+
+test("a control-plane session left idle inside a transaction is ended by PostgreSQL and frees its connection", { skip, timeout: 30000 }, async () => {
+  assert.equal(loadConfig({}).databaseIdleInTransactionMs, 120_000, "the default bound");
+  const database = new ControlPlaneDatabase({ databaseUrl, databasePoolMax: 1, databaseConnectionTimeoutMs: 3000, databaseIdleInTransactionMs: 1000 });
+  try {
+    const client = await database.pool.connect();
+    client.on("error", () => {});
+    assert.equal((await client.query("SHOW idle_in_transaction_session_timeout")).rows[0].idle_in_transaction_session_timeout, "1s");
+    await client.query("BEGIN");
+    await client.query("SELECT pg_advisory_xact_lock(hashtext('osdl-guard'))");
+    await sleep(2500);
+    await assert.rejects(client.query("SELECT 1"), /connection error|terminat|not queryable/i);
+    client.release(true);
+    // The only connection of the pool is available again, and the advisory lock is gone.
+    const free = await database.pool.query("SELECT pg_try_advisory_lock(hashtext('osdl-guard')) AS got");
+    assert.equal(free.rows[0].got, true);
+  } finally { await database.close(); }
 });
