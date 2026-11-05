@@ -112,6 +112,16 @@ export function promotionText(payload) {
   return { name, description, whenToUse, body, title };
 }
 
+/** Conservative content identity until a measured semantic comparison exists.
+ * Preserve wording, case, punctuation and interior code indentation. Neither a
+ * broad topic/class nor a model's generality verdict proves the same procedure.
+ * @param {any} text @returns {string|null} */
+function procedureIdentity(text) {
+  const keys = ['name', 'description', 'whenToUse', 'body'];
+  if (!text || !keys.every(key => typeof text[key] === 'string' && text[key].trim())) return null;
+  return sha(keys.map(key => text[key].replaceAll('\r\n', '\n').trim()));
+}
+
 /**
  * The field checks that decide whether a method may leave its account, in code and over closed lists.
  * @param {any} payload a learned method's payload
@@ -275,7 +285,10 @@ export function createOfficialPromotion({ documents, officialPacks, facts, judge
    */
   async function corroborators(row) {
     const own = row.payload.contributor;
+    const procedure = procedureIdentity(row.payload.text);
+    if (!procedure) return [];
     const peers = (await all()).filter((other) => other.id !== row.id && other.payload.scopeId === row.payload.scopeId && other.payload.lessonClass === row.payload.lessonClass
+      && procedureIdentity(other.payload.text) === procedure
       && other.payload.contributor !== own && ["awaiting_corroboration", "candidate"].includes(other.payload.status));
     // Two accounts arriving at a method of one kind independently. A method already in the pack is not a voice for the next one: if it
     // were, the first promotion of a scope and class would let every later method of that pair through on the model's word alone.
@@ -286,7 +299,7 @@ export function createOfficialPromotion({ documents, officialPacks, facts, judge
     return [...new Set(peers.map(authorOf).filter((id) => id && known.get(id) === true))];
   }
   /** The record's internal account list with the voices that corroborated it. @param {any} row @param {string[]} voices */
-  const withVoices = (row, voices) => ({ derivedFrom: { ...row.payload.derivedFrom, corroboratedBy: voices } });
+  const withVoices = (row, voices) => ({ derivedFrom: { ...row.payload.derivedFrom, corroboratedBy: voices, corroborationProcedure: procedureIdentity(row.payload.text) } });
 
   /** After a method passed the first two gates: promote it, and any waiting method it corroborates. @param {any} row */
   async function settleAuthor(row) {
@@ -475,9 +488,15 @@ export function createOfficialPromotion({ documents, officialPacks, facts, judge
     // none left (deleted, or not a voice any more) it is not refused — it did nothing wrong — but waits again for a voice, as it did before. A record
     // from before the accounts were kept on it names none and is judged on its author alone.
     const voices = Array.isArray(payload.derivedFrom?.corroboratedBy) ? payload.derivedFrom.corroboratedBy.map(String) : [];
-    if (payload.promotedBy === "corroborated" && voices.length) {
+    if (payload.promotedBy === "corroborated") {
       const heard = await standingOf(voices);
-      if (!voices.some((id) => heard.get(id) === true)) {
+      const procedure = procedureIdentity(payload.text), peers = await all();
+      const sameVote = procedure && payload.derivedFrom?.corroborationProcedure === procedure && voices.some(id => heard.get(id) === true
+        && peers.some(peer => peer.id !== row.id && peer.payload.contributor === contributorKey(id)
+          && peer.payload.scopeId === payload.scopeId && peer.payload.lessonClass === payload.lessonClass
+          && ['awaiting_corroboration', 'candidate', 'active'].includes(peer.payload.status)
+          && (peer.payload.status === 'active' ? peer.payload.procedureDigest : procedureIdentity(peer.payload.text)) === procedure));
+      if (!sameVote) {
         return update(row, { status: counted("awaiting_corroboration"), promotedBy: null, derivedFrom: { ...payload.derivedFrom, corroboratedBy: [] } });
       }
     }
@@ -497,7 +516,7 @@ export function createOfficialPromotion({ documents, officialPacks, facts, judge
     const methodId = `${String(text.name).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 28) || "method"}-${sha(payload.textDigest).slice(0, 8)}`;
     const method = buildOfficialMethod(SHARED_PRACTICES_PACK_ID, methodId, {
       scope: [payload.scopeId], title: clip(text.title || text.name, OFFICIAL_METHOD_LIMITS.title), whenToUse: clip(text.whenToUse || text.description || text.title, OFFICIAL_METHOD_LIMITS.whenToUse), body: text.body });
-    const activated = await update(row, { status: counted("active"), rechecked, method, activatedAt: now().toISOString(), text: null, derivedFrom: null });
+    const activated = await update(row, { status: counted("active"), rechecked, method, procedureDigest: procedureIdentity(text), activatedAt: now().toISOString(), text: null, derivedFrom: null });
     counters.activated += 1;
     await makeRoom(activated.id);
     await officialPacks?.publishAll();

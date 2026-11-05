@@ -515,7 +515,7 @@ test("a method that came in on another account's word needs that account in stan
     assert.equal(records(g).find((row) => row.id === mine?.id)?.payload.status, "active", label);
     delete table["x-1"]; delete table["x-2"]; delete table["x-3"];
   }
-  // A record from before the accounts were kept on it is judged on its author alone, as it was.
+  // A legacy class-only vote without its original witnesses must be collected again against the actual procedure.
   const legacy = build({ standing: standingOver({ "l-1": true, "l-2": true }), perDay: 100 });
   await legacy.promotion.consider(method("l-1"));
   await legacy.promotion.consider(method("l-2"));
@@ -524,7 +524,9 @@ test("a method that came in on another account's word needs that account in stan
     await legacy.documents.put(PLATFORM_PUBLISHER_USER_ID, "preferences", row.id, { ...row.payload, derivedFrom }, { expectedRevision: row.revision });
   }
   await legacy.promotion.tick();
-  assert.deepEqual(records(legacy).map((row) => row.payload.status), ["active", "active"]);
+  assert.deepEqual(records(legacy).map((row) => row.payload.status), ["awaiting_corroboration", "awaiting_corroboration"]);
+  await legacy.promotion.tick();
+  assert.deepEqual(records(legacy).map((row) => row.payload.status), ["active", "active"], "the matching procedures can establish new, explicit votes");
 });
 
 test("a harm judge that is unsure keeps the method waiting and is asked again later, only about harm; a clear answer on the way lets it go on, and a judge that stays unsure ends in a refusal that keeps nothing", async () => {
