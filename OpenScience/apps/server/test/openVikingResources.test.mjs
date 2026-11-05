@@ -354,3 +354,25 @@ test("a file the platform's own readers do not take is parsed by the engine in a
     assert.equal(seen.at(-1).method, "DELETE");
   });
 });
+
+test('private history adapter writes vectors only and merges bounded vector/keyword candidates inside one exact root', async () => {
+  const root = `viking://user/${openVikingUserId(USER)}/resources/history/${'a'.repeat(24)}/${'b'.repeat(24)}`;
+  const vector = `${root}/${'c'.repeat(24)}/${'d'.repeat(24)}-0.md`;
+  const keyword = `${root}/${'c'.repeat(24)}/${'d'.repeat(24)}-1.md`;
+  const seen = [];
+  const resources = new OpenVikingResources({ client: { configured: true, async request(input) {
+    seen.push(input);
+    if (input.path === '/api/v1/search/find') return { result: { resources: [{ uri: vector }, { uri: 'viking://resources/public/forged.md' }] } };
+    if (input.path === '/api/v1/search/grep') return { result: { matches: [{ uri: keyword, content: 'keyword hit', line: 1 }] } };
+    return { result: { written_bytes: 100 } };
+  } } });
+  await resources.writeHistory(USER, vector, '{"messages":[]}');
+  const hits = await resources.searchHistory(USER, root, 'trial+design [a-z]');
+  assert.deepEqual(new Set(hits.map(hit => hit.uri)), new Set([vector, keyword]));
+  assert.equal(seen[0].body.processing_mode, 'vectors_only'); assert.equal(seen[0].body.wait, true);
+  assert.equal(seen[1].body.target_uri, root); assert.equal(seen[2].body.uri, root);
+  assert.equal(seen[2].body.pattern, 'trial\\+design|\\[a-z\\]');
+  assert.equal(resources.inScope(USER, PROJECT, vector), false, 'history is outside the KB reader scope');
+  await assert.rejects(resources.searchHistory(USER, `viking://user/${openVikingUserId(USER)}/resources`, 'query'), /history resource address/);
+  assert.throws(() => resources.historyAddress(`${root}/../private.md`, { file: true }), /history resource address/);
+});

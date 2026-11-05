@@ -105,3 +105,25 @@ test('hard boundary changes withdraw existing history before any later recall', 
   assert.deepEqual(await search(f), []);
   await f.service.drainDeletes(); assert.equal(f.files.size, 0);
 });
+
+test('recreated owner and project incarnations cannot read old resources and cleanup names only old exact URIs', options, async t => {
+  const f = await setup(t); await f.service.ingestArchive(f.commit, f.context);
+  const oldUris = [...f.files.keys()];
+  await f.service.eraseAccount(f.userId);
+  await f.database.query('DELETE FROM evimed_control.users WHERE id=$1', [f.userId]);
+  await f.database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Recreated owner','development')", [f.userId]);
+  f.context.ownerCreatedAt = (await f.database.query('SELECT created_at::text AS stamp FROM evimed_control.users WHERE id=$1', [f.userId])).rows[0].stamp;
+  assert.deepEqual(await search(f), []);
+  await f.service.ingestArchive(f.commit, f.context);
+  const newUris = [...f.files.keys()].filter(uri => !oldUris.includes(uri)); assert.equal(newUris.length, 1);
+  await f.service.drainDeletes(); assert.deepEqual([...f.files.keys()], newUris);
+  assert.equal((await search(f)).length, 1);
+});
+
+test('changed project incarnation gets a distinct root and an old project fence cannot block its history', options, async t => {
+  const f = await setup(t); await f.service.ingestArchive(f.commit, f.context);
+  await f.service.deleteProject(f.userId, 'default');
+  f.service.resolveSource = async c => ({ projectId: c.projectId, projectCreatedAt: '2026-02-01T00:00:00Z', sessionId: c.engineSession?.slice(4), conversationTitle: 'New project', conversationUrl: '/app/chat/session_a' });
+  await f.service.ingestArchive(f.commit, f.context); await f.service.drainDeletes();
+  assert.equal((await search(f)).length, 1);
+});
