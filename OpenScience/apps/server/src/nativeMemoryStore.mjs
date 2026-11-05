@@ -398,6 +398,7 @@ export class NativeMemoryStore {
     this.memoryContexts = memoryContexts;
     /** Durable raw-history lifecycle fences, set by the composition root. */
     this.history = null;
+    /** @type {any} */ this.sourceDeletion = null;
     this.now = now;
     this.conversationTitles = conversationTitles;
     this.rejectionJudge = rejectionJudge;
@@ -456,7 +457,16 @@ export class NativeMemoryStore {
    * Every memory file of the account, with its body, type, project and what the overlay knows of it.
    * @param {string} userId @param {{ context?: any }} [options]
    */
-  async files(userId, { context = null } = {}) {
+  async files(userId, options = {}) {
+    const files = await this.rawFiles(userId, options);
+    if (!this.sourceDeletion) return files;
+    const hidden = new Set(await this.sourceDeletion.hiddenMemoryUris(userId));
+    return files.filter(file => !hidden.has(file.uri));
+  }
+
+  /** Trusted cleanup reads the source-bearing body before removing its attributed lines.
+   * @param {string} userId @param {{context?:any}} [options] */
+  async rawFiles(userId, { context = null } = {}) {
     this.#assertConfigured();
     if (context) {
       if (!this.memoryContexts || context.ownerId !== userId) throw new HttpError(403, 'memory_scope_denied', 'The memory context is unavailable.');
@@ -1118,7 +1128,7 @@ export class NativeMemoryStore {
    * @param {string} userId @param {string} projectId @param {string[]} sessionIds */
   async removeConversationSource(userId, projectId, sessionIds) {
     const context = await this.#projectContext(userId, projectId);
-    const files = await this.files(userId, { context: this.memoryContexts ? context : null });
+    const files = await this.rawFiles(userId, { context: this.memoryContexts ? context : null });
     const origins = await this.overlay.originsOf(userId, files.map(file => file.uri));
     const deleted = new Set(sessionIds), affected = [];
     for (const file of files) {
@@ -1145,10 +1155,10 @@ export class NativeMemoryStore {
     // The engine's raw archives are a second source copy. Delete only sessions whose overlay provenance matches this project.
     for (const sessionId of sessionIds) {
       const engineSession = `dsh-${sessionId}`;
-      const knownProject = await this.overlay.projectOfSession(userId, engineSession);
+      const knownProject = await this.overlay.projectOfSession(userId, engineSession, { userRoot: context.userRoot ?? context.sessions.userRoot(userId) });
       if (knownProject === projectId) await context.sessions.deleteSession(userId, engineSession);
     }
-    await this.overlay.withdrawConversationSource(userId, projectId, sessionIds);
+    await this.overlay.withdrawConversationSource(userId, projectId, sessionIds, context.userRoot ?? context.sessions.userRoot(userId));
     this.#touch(userId);
     return affected;
   }

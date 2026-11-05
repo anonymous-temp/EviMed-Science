@@ -481,6 +481,10 @@ import { OpenVikingSessions } from "./openVikingSessions.mjs";
 import { NativeMemoryOverlay } from "./nativeMemoryOverlay.mjs";
 import { NativeMemoryStore, nativeConversationTitleKey } from "./nativeMemoryStore.mjs";
 import { NativeMemoryImport } from "./nativeMemoryImport.mjs";
+import { ConversationSourceDeletionLedger } from './conversationSourceDeletionPersistence.mjs';
+import { ConversationSourceDeletionService } from './conversationSourceDeletionService.mjs';
+import { createConversationSourceDeletionRoutes } from './conversationSourceDeletionRoutes.mjs';
+import { nativeFileId } from './nativeMemoryStore.mjs';
 import { MemoryHistory, MemoryHistoryLedger, historyTitle } from './memoryHistory.mjs';
 import { NativeMemoryWorker } from "./nativeMemoryWorker.mjs";
 import { NativeTurnCommit } from "./nativeTurnCommit.mjs";
@@ -5754,6 +5758,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // through here. Who is learned from and read for is one decision (`memoryAdmission.mjs`), asked per request.
   const memoryAdmission = createMemoryAdmission({
     config, memorySettings,
+    sourceDeleted: (project, sessionId) => sourceDeletion ? sourceDeletion.ledger.get(project, sessionId).then(Boolean) : Promise.resolve(false),
     engineReady: openVikingEngine ? () => openVikingEngine.ready("nativeMemory") : null,
     conversations: {
       running: (project) => agentRuns.activeRuns(project),
@@ -5811,6 +5816,34 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // Keep lifecycle fences active even when new history search is switched off.
   nativeMemory.history = memoryHistory;
   nativeMemoryWorker.history = memoryHistory;
+  const sourceDeletionLedger = productDatabase ? new ConversationSourceDeletionLedger(productDatabase) : null;
+  const sourceDeletion = sourceDeletionLedger ? new ConversationSourceDeletionService({ ledger: sourceDeletionLedger, runtime: runtimeManager,
+    memoryRootFor: async project => nativeMemoryContexts ? (await nativeMemoryContexts.forProject(project)).userRoot : openVikingSessions.userRoot(project.userId),
+    resolveProject: async row => store.requireProject(await store.userById(row.userId), row.projectId),
+    removeHistory: async (project, row) => {
+      if (nativeMemoryContexts && memoryHistory) {
+        const deletionContext = await nativeMemoryContexts.forProject(project);
+        for (const sessionId of row.sessionIds) await memoryHistory.removeConversation({ ...deletionContext, projectId: project.id, projectCreatedAt: row.projectCreatedAt }, sessionId);
+      }
+      // Revoke private export bindings immediately, before the background cleanup can wait for an active project.
+      if (capsuleTransferService) {
+        const uris = await sourceDeletionLedger.hiddenMemoryUris(project.userId);
+        const origins = await nativeMemoryOverlay.originsOf(project.userId, uris);
+        const ids = uris.flatMap(uri => [nativeFileId(uri), ...[...(origins.get(uri)?.keys() ?? [])].map(print => `${nativeFileId(uri)}_${print.slice(0, 12)}`)]);
+        await capsuleTransferService.revokeSourceRecords(project.userId, ids);
+      }
+    },
+    removeDerived: async (project, row) => {
+      if (nativeMemory.configured) await nativeMemory.removeConversationSource(project.userId, project.id, row.sessionIds);
+      for (const run of await agentRuns.list(project)) if (row.sessionIds.includes(run.sessionId) && !run.deleted) await agentRuns.recordRunLabels(project, run.id, { deleted: true });
+    },
+  }) : null;
+  runtimeManager.sourceDeletion = sourceDeletion;
+  researchSessions.sourceDeletion = sourceDeletion;
+  nativeMemory.sourceDeletion = sourceDeletion;
+  nativeMemoryOverlay.sourceDeletion = sourceDeletion;
+  const sourceDeletionRoutes = createConversationSourceDeletionRoutes({ store, service: sourceDeletion });
+
   // A runtime's recall of a subscribed zone is the frontier's too: an account outside its audience is offered nothing, as every zone route answers it.
   const recallSubscriptions = zoneSubscriptions?.enabled && frontier
     ? subscriptionsForAudience({ subscriptions: zoneSubscriptions, userById: userId => store.userById(userId), allows: user => frontier.service.allows(user) }) : null;
@@ -7813,6 +7846,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       }
 
       if (await memoryMapRoutes(req, res)) return;
+      if (await sourceDeletionRoutes(req, res)) return;
       if (await memoryRoutes(req, res)) return;
       if (await agentKeyRoutes(req, res)) return;
 
@@ -9175,6 +9209,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     agentRegistry,
     usageLedger,
     managedBrowser,
+    sourceDeletion,
     authorizeOpenSession: authorizeOwnedNativeSession,
     recordUploadSuccess: vcrUploadReceipts ? (project, upload) => vcrUploadReceipts.record(project, upload) : null,
     recordUploadAttempt: productDocuments ? (project) => recordNativeUploadAttempt(productDocuments, project) : null,
@@ -9557,6 +9592,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       hostedExtensions?.worker.start();
       memoryIndexWorker?.start();
       nativeMemoryWorker.start();
+      sourceDeletion?.start();
       researchGoals?.start();
       openVikingEngine?.start();
       sourceWorker?.start();
@@ -9694,6 +9730,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     nativeMemory,
     nativeMemoryWorker,
     memoryHistory,
+    sourceDeletion,
     nativeTurnCommit,
     sharedContextPolicies, nativeMemoryContexts, nativeRememberJournal, geoNativeAuthority, geoNativeInputs, geoNativeSelections, contextItems, contextProvenance,
     sourceService,
@@ -9855,6 +9892,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       await hostedExtensions?.preparation.close();
       await hostedExtensions?.worker.close();
       await memoryIndexWorker?.close();
+      await sourceDeletion?.stop();
       nativeMemoryWorker.close();
       nativeTurnCommit.close();
       openVikingEngine?.close();

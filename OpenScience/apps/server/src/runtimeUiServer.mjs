@@ -815,6 +815,10 @@ export function createRuntimeUiServer({ config, store, runtimeManager, onGoalBar
       }
       await sourceDeletion.authorize(project, method, sourceCall.payload);
     }
+    if (sourceDeletion && method === RUNTIME_UI_UPLOAD_METHOD) {
+      const uploadSession = runtimeUrl.searchParams.get('sessionId');
+      if (uploadSession) await sourceDeletion.assertAvailable(project, uploadSession);
+    }
     if (scoped && !method && (!['GET', 'HEAD'].includes(req.method)
       || !['/', '/__evimed_bootstrap.js'].includes(pathname) && !isImmutableRuntimeUiAsset(frame.suffix))) { sendDenied(res, pathname); return; }
     const nativeBody = limit => {

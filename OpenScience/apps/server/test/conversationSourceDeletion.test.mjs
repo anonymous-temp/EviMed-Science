@@ -4,7 +4,7 @@ import { ConversationSourceDeletionService, filterDeletedConversationValue, conv
 
 function fixture() {
   const rows = new Map(), calls = [], project = { userId: 'owner', id: 'p', createdAt: 'project-incarnation' };
-  let busy = false, stopFails = false, generation = 'g1';
+  let busy = false, stopFails = false; const generation = 'g1';
   const ledger = {
     async scope() { return { accountCreatedAt: 'account-incarnation', projectCreatedAt: 'project-incarnation' }; },
     async get(_project, sessionId) { return [...rows.values()].find(r => r.sessionIds.includes(sessionId)) ?? null; },

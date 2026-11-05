@@ -127,6 +127,7 @@ export class NativeMemoryOverlay {
   /** @param {{ database?: any }} dependencies */
   constructor({ database = null } = {}) {
     this.database = database ?? null;
+    /** @type {any} */ this.sourceDeletion = null;
   }
 
   get configured() { return Boolean(this.database); }
@@ -655,11 +656,13 @@ export class NativeMemoryOverlay {
 
   /** Pending extractions and their replay text cannot re-enrol a deliberately deleted source.
    * @param {string} userId @param {string} projectId @param {string[]} sessionIds */
-  async withdrawConversationSource(userId, projectId, sessionIds) {
+  async withdrawConversationSource(userId, projectId, sessionIds, userRoot) {
+    scopedRoot(userRoot);
     const sessions = sessionIds.map(id => `dsh-${id}`);
     await this.#query(`UPDATE evimed_memory.native_commits SET state='abandoned',pending_text=NULL,error='source_conversation_deleted',
-      updated_at=clock_timestamp() WHERE user_id=$1 AND project_id=$2 AND engine_session=ANY($3::text[])`, [owner(userId), projectId, sessions]);
-    await this.#query(`UPDATE evimed_memory.native_admissions SET state='cancelled',pending_text=NULL,error='source_conversation_deleted',
+      updated_at=clock_timestamp() WHERE user_id=$1 AND project_id=$2 AND engine_session=ANY($3::text[])
+      AND left(archive_uri,length($4)+10)=$4||'/sessions/'`, [owner(userId), projectId, sessions, userRoot]);
+    if (userRoot === userRootUri(userId)) await this.#query(`UPDATE evimed_memory.native_admissions SET state='cancelled',pending_text=NULL,error='source_conversation_deleted',
       updated_at=clock_timestamp() WHERE user_id=$1 AND project_id=$2 AND engine_session=ANY($3::text[])`, [owner(userId), projectId, sessions]);
   }
 
@@ -824,7 +827,10 @@ export class NativeMemoryOverlay {
     const result = await this.#query("SELECT uri FROM evimed_memory.native_files WHERE user_id=$1 AND sensitive ORDER BY uri LIMIT $2",
       [owner(userId), bound + 1]);
     if (result.rows.length > bound) throw new HttpError(503, "memory_index_listing_too_large", "The complete sensitive-file set exceeds its safe recall bound.");
-    return result.rows.map((/** @type {any} */ row) => String(row.uri));
+    const withdrawn = this.sourceDeletion ? await this.sourceDeletion.hiddenMemoryUris(userId) : [];
+    const uris = [...new Set([...result.rows.map(row => String(row.uri)), ...withdrawn])];
+    if (uris.length > bound) throw new HttpError(503, "memory_index_listing_too_large", "The complete privacy set exceeds its safe recall bound.");
+    return uris;
   }
 
   /**

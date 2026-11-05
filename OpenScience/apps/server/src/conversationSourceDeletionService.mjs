@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { HttpError, safeId } from './security.mjs';
 
 const unavailable = () => new HttpError(404, 'runtime_session_not_found', 'Conversation not found.');
-const sessionFields = new Set(['sessionId', 'rootSessionId', 'sourceSessionId', 'targetSessionId', 'agentId']);
+const sessionFields = new Set(['sessionId', 'rootSessionId', 'sourceSessionId', 'targetSessionId', 'parentSessionId', 'childSessionId', 'agentId']);
 
 /** Native RPC identity fields, including a caller-selected id on create/fork. */
 export function conversationIdsInRequest(method, payload) {
@@ -23,10 +23,11 @@ export function filterDeletedConversationValue(value, deleted) {
   if (!value || typeof value !== 'object') return value;
   if (Array.isArray(value)) return value.map(item => filterDeletedConversationValue(item, deleted)).filter(item => item !== null);
   if ([value.sessionId, value.rootSessionId, value.agentId, value.id].some(id => typeof id === 'string' && deleted.has(id))) return null;
-  if (typeof value.event === 'string' && value.event.startsWith('api-session/') && Array.isArray(value.args) && deleted.has(value.args[0])) return null;
+  if (typeof value.event === 'string' && value.event.startsWith('api-session/') && Array.isArray(value.args) && (deleted.has(value.args[0]) || deleted.has(value.args[0]?.sessionId))) return null;
   const next = {};
   for (const [key, item] of Object.entries(value)) {
     if (['sessionIds', 'pinned', 'archived', 'pinnedSessionIds', 'archivedSessionIds'].includes(key) && Array.isArray(item)) next[key] = item.filter(id => !deleted.has(id));
+    else if (['projections', 'sessions'].includes(key) && item && typeof item === 'object' && !Array.isArray(item)) next[key] = Object.fromEntries(Object.entries(item).filter(([id]) => !deleted.has(id)).map(([id, data]) => [id, filterDeletedConversationValue(data, deleted)]));
     else next[key] = filterDeletedConversationValue(item, deleted);
   }
   return next;
@@ -34,11 +35,13 @@ export function filterDeletedConversationValue(value, deleted) {
 
 /** Durable intent precedes source cleanup. Physical removal is an idle-only maintenance operation, never a kernel RPC. */
 export class ConversationSourceDeletionService {
-  constructor({ ledger, runtime, resolveProject, removeHistory, removeDerived }) {
+  constructor({ ledger, runtime, resolveProject, removeHistory, removeDerived, memoryRootFor = async () => null }) {
+    this.memoryRootFor = memoryRootFor;
     this.ledger = ledger; this.runtime = runtime; this.resolveProject = resolveProject;
     this.removeHistory = removeHistory; this.removeDerived = removeDerived;
     this.running = null; this.timer = null;
   }
+  hiddenMemoryUris(userId) { return this.ledger.hiddenMemoryUris(userId); }
   async assertAvailable(project, sessionId) { if (await this.ledger.get(project, sessionId)) throw unavailable(); }
   async authorize(project, method, payload) {
     for (const id of conversationIdsInRequest(method, payload)) await this.assertAvailable(project, id);
@@ -57,8 +60,8 @@ export class ConversationSourceDeletionService {
     const frozen = await this.runtime.captureConversationSource(project, sessionId);
     if (!frozen?.root || frozen.root.id !== sessionId || !Array.isArray(frozen.sessions) || !frozen.sessions.some(row => row.id === sessionId)) throw unavailable();
     const row = await this.ledger.put({ id: randomUUID(), userId: project.userId, projectId: project.id, ...identity,
-      rootSessionId: sessionId, sessionIds: [...new Set(frozen.sessions.map(row => row.id))], frozen,
-      cleanup: 'pending', sourceRemoved: false, createdAt: new Date().toISOString(), reason: null });
+      rootSessionId: sessionId, sessionIds: [...new Set(frozen.sessions.map(session => session.id))], frozen,
+      memoryUserRoot: await this.memoryRootFor(project), cleanup: 'pending', sourceRemoved: false, createdAt: new Date().toISOString(), reason: null });
     // An index failure cannot erase the already durable source fence. The worker repeats it.
     try { await this.removeHistory(project, row); } catch { /* Cleanup remains owed. */ }
     return this.publicStatus(row);

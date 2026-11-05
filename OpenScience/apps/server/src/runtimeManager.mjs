@@ -7206,7 +7206,7 @@ export class RuntimeManager {
         if (this.runtimes.get(key) !== runtime || this.runtimeGeneration(project) !== generation
           || this.starts.has(key) || this.failedRuntimeStops.has(key)
           || await this.idleVerdict(project) !== 'idle' || await this.hasRunningRuns(project) !== false
-          || (!stopping && await this.pluginRuntimeBusy(project) !== false)
+          || await this.pluginRuntimeBusy(project, { ignoreStopping: stopping }) !== false
           || !this.pluginService || await this.pluginService.hasPendingPrompts(project) !== false) return false;
         return true;
       };
@@ -7219,8 +7219,8 @@ export class RuntimeManager {
     } finally { this.sourceMaintenance.delete(key); }
   }
 
-  async pluginRuntimeBusy(project) {
-    if (this.starts.has(this.key(project)) || this.runtimeStops.has(this.key(project)) || this.failedRuntimeStops.has(this.key(project)) || this.boundedRuntimeScope(project)) return true;
+  async pluginRuntimeBusy(project, { ignoreStopping = false } = {}) {
+    if (this.starts.has(this.key(project)) || !ignoreStopping && this.runtimeStops.has(this.key(project)) || this.failedRuntimeStops.has(this.key(project)) || this.boundedRuntimeScope(project)) return true;
     const runtime = this.runtimes.get(this.key(project));
     if (!runtime) return false;
     const value = await this.callKernel(runtime, project, "evimedPlugins/status", {}, AbortSignal.timeout(10000));

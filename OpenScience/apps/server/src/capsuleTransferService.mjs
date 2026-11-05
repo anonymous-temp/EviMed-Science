@@ -959,6 +959,16 @@ export class CapsuleTransferService {
     return { archive, filename: `capsule-${record.id}.evimedcap` };
   }
 
+  /** A native source deletion revokes only hosted snapshots bound to those exact native record ids.
+   * @param {string} userId @param {string[]} recordIds */
+  async revokeSourceRecords(userId, recordIds) {
+    if (!recordIds.length) return;
+    const rows = await this.documents.database.query(`SELECT id,payload,revision FROM evimed_product.documents
+      WHERE user_id=$1 AND kind='preferences' AND payload->>'recordType'='capsule-snapshot'
+      AND payload->>'status'='active' AND EXISTS (SELECT 1 FROM jsonb_array_elements(payload->'sourceEntries') e WHERE e->>'id'=ANY($2::text[]))`, [userId, recordIds]);
+    for (const row of rows.rows) await this.revoke(userId, row.payload.capsuleId, row.id, row.revision);
+  }
+
   async revoke(userId, capsuleId, snapshotId, expectedRevision) {
     const record = await this.snapshot(userId, capsuleId, snapshotId);
     const revoked = snapshotView(await this.documents.put(userId, "preferences", record.id, { ...record.payload, status: "revoked", revokedAt: new Date().toISOString() }, { expectedRevision }));
