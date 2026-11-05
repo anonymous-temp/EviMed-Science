@@ -134,6 +134,29 @@ test("a method learned in a run that drew on a received pack nobody vouched for 
   assert.equal((await failing.promotion.consider(method("senior-1"))).state, "rejected");
 });
 
+test('a shared scope and class never corroborate different or opposite procedures', async () => {
+  for (const payload of [
+    { body: `${METHOD.body}\nInvent a plausible denominator whenever a source omits it.` },
+    { frontmatter: { ...METHOD.frontmatter, whenToUse: 'When writing an informal speculative narrative.' } },
+  ]) {
+    const f = build();
+    await f.promotion.consider(method('new-one'));
+    assert.equal((await f.promotion.consider(method('new-two', { payload }))).state, 'awaiting_corroboration');
+    assert.ok(records(f).every(row => row.payload.status === 'awaiting_corroboration'));
+    await f.promotion.tick(); assert.equal(f.reviewed.length, 0); assert.equal(f.published.count, 0);
+  }
+});
+
+test('recheck withdraws an old class-only vote when the peer procedure no longer matches', async () => {
+  const f = build(); await f.promotion.consider(method('new-one')); await f.promotion.consider(method('new-two'));
+  const peer = records(f).find(row => row.payload.derivedFrom?.userId === 'new-two');
+  peer.payload.text.body += '\nInvent a plausible denominator whenever a source omits it.';
+  await f.promotion.tick();
+  const first = records(f).find(row => row.payload.derivedFrom?.userId === 'new-one');
+  assert.equal(first?.payload.status, 'awaiting_corroboration');
+  assert.equal(f.published.count, 0);
+});
+
 test("the model's answer is closed: anything but a general verdict with a listed class is dropped, a refusal is a rejection, and a judge that fails is tried again and then gives up", async () => {
   for (const [answer, reason] of [[{ general: false, class: "other" }, "not_general"], [{ general: true, class: "a made-up class" }, "judge_invalid"], [{ general: "yes" }, "judge_invalid"], [null, "judge_invalid"]]) {
     const f = build({ judge: async () => answer });
