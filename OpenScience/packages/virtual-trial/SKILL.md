@@ -19,6 +19,8 @@ When the question needs evidence synthesis, the same plugin can discover and inv
 
 A design, endpoint, effect, analysis assumptions and where relevant accrual and follow-up; use observed evidence only when available and authorized. Ask for essential missing inputs; do not fabricate them. Use existing web search, knowledge-base and file tools when sources or records are needed. Preserve the input's source, version, permission and explicit assumptions. A local source binding is an unverified model assertion, not proof of a quotation or clinical claim.
 
+For an explanation-only request, answer in the conversation; no computation, file or full research sequence is required. If essential inputs are absent, finish the reply by naming the missing inputs and why they matter. In an automated turn no person is waiting to answer: do not keep probing schemas, create substitute patient data, or invent numerical assumptions to avoid that final reply. Use assumed inputs only when the request authorizes them, and label them explicitly.
+
 ## Results and limits
 
 Read the job result and use the report tool if a report is wanted. State the method, version, relevant inputs, measures, uncertainty, diagnostics and limitations. Operating characteristics are conditional on the specified model and assumptions. Simulations do not establish clinical efficacy or guarantee a real trial outcome.

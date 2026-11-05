@@ -167,17 +167,27 @@ export async function registerResearchTools(ctx, config) {
 /** @param {any} ctx
  * @param {{ name: string, methods: readonly string[], mode: string, workspace: string, engineRoot: string, rscript?: string, skillUrl?: URL }} config */
 async function registerConfiguredResearchTools(ctx, { name, methods, mode, workspace, engineRoot, rscript, skillUrl }) {
-  const { defineTool, registerTool, registerResearchConfiguration } = await import('@evimed/harness-port')
+  const { defineTool, registerTool, registerResearchConfiguration, registerSkill } = await import('@evimed/harness-port')
   const adapter = ctx.get?.('evimedResearchAdapter') ?? (mode === 'standalone' && workspace && engineRoot ? createLocalAdapter({ workspace, engineRoot, rscript }) : null)
   if (!adapter) throw new Error('research_adapter_not_configured')
   const overview = catalogue.find(item => item.id === name.replaceAll('_', '-'))
+  // A bundle's skill belongs in the upstream on-demand skill catalogue, not
+  // only in a describe response that a model may never request.
+  if (skillUrl) {
+    const content = await readFile(skillUrl, 'utf8')
+    ctx.inject(['skills'], (/** @type {any} */ scoped) => {
+      scoped.effect(() => registerSkill(scoped, { name: name.replaceAll('_', '-'),
+        description: overview?.task ?? 'Virtual research', content,
+        whenToUse: `For this research domain, use the installed ${name}_describe/start/read/report/cancel tools when applicable. Answer only the requested parts; for missing essential inputs, explain what is needed instead of inventing data.` }))
+    })
+  }
   /** @param {any} call */
   const forCall = (call) => adapter.forCall?.(call) ?? adapter
   /** @param {any} call */
   const pluginFor = (call) => createPlugin({ adapter: forCall(call), methods })
   /** @type {Parameters<typeof import('@evimed/harness-port').defineTool>[0][]} */
   const definitions = [
-    { name: `${name}_describe`, description: `${overview?.task ?? 'Virtual research'}. Discover the methods, prerequisites, limits and guidance for this work, or inspect one method schema.`, parameters: { method: { type: 'string' } }, execute: async ({ method }, call) => {
+    { name: `${name}_describe`, description: `${overview?.task ?? 'Virtual research'}. Discover methods, prerequisites and one method schema. Answer conceptual questions directly. If essential inputs are missing, finish with a concise list of what is needed; do not repeatedly inspect schemas or manufacture data. Prefer an applicable registered method over an ad hoc calculation.`, parameters: { method: { type: 'string' } }, execute: async ({ method }, call) => {
       if (!method) return { ok: true, data: { ...overview, methods, guidance: skillUrl ? await readFile(skillUrl, 'utf8') : null } }
       if (!methods.includes(method)) throw new Error('unsupported_method')
       if (!forCall(call).describe) return { ok: true, data: { method, schemaAvailable: false } }

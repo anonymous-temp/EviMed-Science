@@ -195,7 +195,7 @@ vcr_case("N52m", c("AC-04"), function() {
   },numeric(1))
   list(pass=all(error<1e-12),detail="Typed transforms precede centering/scaling; identity/log/log1p/square/indicator agree with independent closed forms")
 })
-vcr_case("N52_model_origin", c("AC-04", "AC-27"), function() {
+vcr_case("N52-model-origin", c("AC-04", "AC-27"), function() {
   root <- tempfile("model-origin-"); dir.create(root); on.exit(unlink(root, recursive = TRUE), add = TRUE)
   job <- .n52_equation_job("logistic")
   run <- function(version) {

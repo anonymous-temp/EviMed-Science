@@ -19,6 +19,8 @@ When the question needs evidence synthesis, the same plugin can discover and inv
 
 Weighting and comparator estimation require authorized data, a target estimand, treatment and covariate definitions; the example E-value requires only a stated estimate and confidence limit. Ask for essential missing inputs; do not fabricate them. Use existing web search, knowledge-base and file tools when sources or records are needed. Preserve the input's source, version, permission and explicit assumptions. A local source binding is an unverified model assertion, not proof of a quotation or clinical claim.
 
+For an explanation-only request, answer in the conversation; no computation, file or full research sequence is required. If essential inputs are absent, finish the reply by naming the missing inputs and why they matter. In an automated turn no person is waiting to answer: do not keep probing schemas, create substitute patient data, or invent numerical assumptions to avoid that final reply. Use assumed inputs only when the request authorizes them, and label them explicitly.
+
 ## Results and limits
 
 Read the job result and use the report tool if a report is wanted. State the method, version, relevant inputs, measures, uncertainty, diagnostics and limitations. Balance or an E-value alone cannot establish exchangeability or eliminate bias. Inspect overlap, time zero, data quality, causal assumptions and method diagnostics.

@@ -23,5 +23,16 @@ const installer = 'install.mjs'
 await copyFile(join(dirname(fileURLToPath(import.meta.url)), installer), join(output, installer))
 const installerHash = createHash('sha256').update(await readFile(join(output, installer))).digest('hex')
 const engineLock = await readFile(join(sourceRoot, '..', '项目代码', 'vcr-engine', 'R', 'package-lock.json'))
-await writeFile(join(output, 'manifest.json'), JSON.stringify({ format: 1, artifacts, installer: { file: installer, sha256: installerHash }, engine: { requiredSeparately: true, packageLockSha256: createHash('sha256').update(engineLock).digest('hex') } }, null, 2) + '\n', { flag: 'wx' })
+const snapshot = JSON.parse(await readFile(join(sourceRoot, '..', '项目代码', 'vcr-engine', 'R', 'domain-snapshot.json'), 'utf8'))
+const pins = JSON.parse(await readFile(join(sourceRoot, 'deps-version.json'), 'utf8'))
+const revision = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: sourceRoot, encoding: 'utf8' })
+const state = spawnSync('git', ['status', '--porcelain', '--', ...names.map(name => `packages/${name}`), 'deps-version.json', '../项目代码/vcr-engine/R/package-lock.json', '../项目代码/vcr-engine/R/domain-snapshot.json'], { cwd: sourceRoot, encoding: 'utf8' })
+if (revision.status !== 0 || state.status !== 0) throw new Error('release_source_identity_unavailable')
+await writeFile(join(output, 'manifest.json'), JSON.stringify({ format: 1, artifacts,
+  source: { revision: revision.stdout.trim(), dirty: Boolean(state.stdout.trim()) },
+  compatibility: { dsh: pins.dsh.version },
+  installer: { file: installer, sha256: installerHash },
+  engine: { requiredSeparately: true, packageLockSha256: createHash('sha256').update(engineLock).digest('hex'),
+    methods: Object.fromEntries(Object.entries(snapshot.methods).map(([id, entry]) => [id, /** @type {any} */ (entry).version])) },
+}, null, 2) + '\n', { flag: 'wx' })
 console.log(`Release created: ${output}`)

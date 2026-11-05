@@ -15,7 +15,7 @@ test('method admission never passes unsupported calls to the host', async () => 
   assert.equal((await plugin.start({ method: 'design.analytic' })).jobId, 'job')
 })
 
-test('local adapter executes and persists a real analytic design', async () => {
+test('local adapter executes and persists a real analytic design', { skip: process.env.VCR_PLUGIN_R_TESTS === 'omit' && 'Executed by the pinned R engine CI job instead of the JavaScript-only job' }, async () => {
   const workspace = await mkdtemp(join(tmpdir(), 'vcr-plugin-'))
   try {
     const adapter = createLocalAdapter({ workspace, engineRoot, rscript: process.env.RSCRIPT || 'Rscript' })

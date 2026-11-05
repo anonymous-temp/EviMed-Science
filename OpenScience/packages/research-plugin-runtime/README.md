@@ -14,7 +14,7 @@ From the repository root, with the workspace's pnpm and Node toolchain installed
 node OpenScience/packages/research-plugin-runtime/scripts/pack-release.mjs /path/to/a/new-release-directory
 ```
 
-The directory must not exist. It receives the four bundles, optional suite, shared runtime, harness port, domain, design tokens, an installer and a SHA-256 manifest. The manifest also records the source engine package-lock digest; it does not include the R engine or claim that the recipient's R library matches it. Install the separately distributed engine and its pinned R library as documented by that engine.
+The directory must not exist. It receives the four bundles, optional suite, shared runtime, harness port, domain, design tokens, an installer and a SHA-256 manifest. The manifest records the source revision and dirty state, pinned DSH version, engine method versions and package-lock digest; it does not include the R engine or claim that the recipient's R library matches it. Install the separately distributed engine and its pinned R library as documented by that engine.
 
 Use the supplied installer with DSH installed and an operator-owned DSH home:
 

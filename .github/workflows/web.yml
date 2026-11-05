@@ -115,6 +115,9 @@ jobs:
         run: bash scripts/dev/fetch-skills.sh
 
       - name: Test domain, port, socket and upstream contracts
+        env:
+          # The real R subprocess test runs in vcr-engine on its pinned library.
+          VCR_PLUGIN_R_TESTS: omit
         run: CI=true pnpm test:packages
 
       - name: Test the search-topics bundle
@@ -574,6 +577,9 @@ jobs:
       # Every method the engine dispatches needs a reference case that the validation evidence can record. The deployed evidence once
       # covered 12 of 24 methods because a hand-written table named 15 cases and nothing noticed the rest; the methods are read from
       # the engine's own registry, so a method added later fails here, in seconds, and not after the numeric run.
+      - name: Exercise the standalone plugin adapter with the pinned R library
+        run: node --test packages/research-plugin-runtime/test/runtime.test.mjs
+
       - name: Check every dispatched method has a reference case
         run: node scripts/vcr/check-method-references.mjs
 
