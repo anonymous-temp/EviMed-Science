@@ -42,14 +42,21 @@ function uniqueIds(values, field) {
 
 /** Original role/date history and the question only; never spread a corpus row into a model request. */
 export function longMemRuntimeInput(row) {
-  const ids = uniqueIds(list(row.haystack_session_ids, 'history ids'), 'history session id');
+  const ids = list(row.haystack_session_ids, 'history ids').map(id => text(id, 'history session id'));
   const dates = list(row.haystack_dates, 'history dates');
   const sessions = list(row.haystack_sessions, 'history sessions');
   if (ids.length !== dates.length || ids.length !== sessions.length) throw new TypeError('history alignment mismatch');
+  const counts = new Map();
+  for (const id of ids) counts.set(id, (counts.get(id) ?? 0) + 1);
   return {
     schema: INPUT_SCHEMA, benchmark: 'longmemeval-s', id: text(row.question_id, 'question id'),
     question: { text: text(row.question, 'question'), asOf: sourceDate(row.question_date) },
-    histories: ids.map((sourceSessionId, index) => ({ sourceSessionId, at: sourceDate(dates[index]), messages: messagesOf(sessions[index]) })),
+    // The official source has thirteen repeated IDs with different visible
+    // payloads. Preserve every original position, date and role; parts with
+    // one sourceSessionId remain one logical conversation for learning counts.
+    histories: ids.map((sourceSessionId, index) => ({ sourceSessionId,
+      ...(counts.get(sourceSessionId) > 1 ? { sourcePart: index } : {}),
+      at: sourceDate(dates[index]), messages: messagesOf(sessions[index]) })),
   };
 }
 

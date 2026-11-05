@@ -64,6 +64,10 @@ test('LongMemEval source-ID collisions preserve both original parts without inve
   assert.equal(input.histories[0].messages[0].text, 'My dose was 5 mg.');
   assert.equal(input.histories[1].messages[0].text, 'My dose is now 2.5 mg; I am allergic to penicillin.');
   assert.deepEqual(source.haystack_session_ids, ['s-1', 's-1']);
+  const nonadjacent = longCase();
+  nonadjacent.haystack_session_ids.push('s-1'); nonadjacent.haystack_dates.push('2026-06-03');
+  nonadjacent.haystack_sessions.push([{ role: 'user', content: 'Later source part.' }]);
+  assert.deepEqual(api.longMemRuntimeInput(nonadjacent).histories.map(item => item.sourcePart), [0, undefined, 2]);
 });
 
 test('tool/system records are not silently converted into the person speaking', async () => {
