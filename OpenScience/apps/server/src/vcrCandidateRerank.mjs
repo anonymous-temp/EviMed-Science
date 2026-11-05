@@ -289,7 +289,7 @@ export async function rerankCandidates({ summary, candidates }, { reranker, sign
  * provider's own token count. The money is already spent when this is called, so nothing is reserved and no cap refuses it (`recordSettled`; `vcr` is an
  * uncapped purpose); a model with no price row is booked unpriced, with its tokens, rather than at a guess. Null without a ledger.
  * @param {{ recordSettled: (input: any) => Promise<unknown> } | null} usageLedger
- * @returns {((study: any, spend: { tokens: number, requestId: string | null, model: string }) => Promise<void>) | null}
+ * @returns {((study: any, spend: { tokens: number, requestId: string | null, model: string }) => Promise<unknown>) | null}
  */
 export function createRerankMeter(usageLedger) {
   if (!usageLedger) return null;

@@ -55,7 +55,6 @@ after(async () => {
 const conv = () => ({ ...study, cloudContext: { runId: "run", sessionId: "root" } });
 let seq = 0; const say = (text) => { seq += 2; messages.push({ seq, text }); return seq; };
 const runJobs = async () => { for (let t = 0; t < 60; t += 1) { const c = await vcr.jobs.claim({ lane: "slow" }); if (!c.length) return; for (const j of c) await vcr.jobs.advance(j, { mayYield: true }); } assert.fail("no finish"); };
-const brief = (p) => p && ({ verdict: p.verdict, fit: p.fit, why: p.why, mark: p.basisChanged?.label, gap: p.recordGap, clausesNote: p.clausesNote });
 const viewer = { id: "owner" };
 const csv = async (subjectKey, kind = "pairs") => { let out = ""; const f = await vcr.matchResults.exporter(study, { format: "csv", kind, direction: "patient_to_trial", subjectKey, viewer }); await f.run({ write: async (c) => { out += c; } }); return out; };
 

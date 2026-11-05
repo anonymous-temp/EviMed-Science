@@ -708,9 +708,9 @@ export class VcrMatchResults extends VcrStoreBase {
       const same = rows.filter((/** @type {any} */ row) => row.documentHash === newest.documentHash && row.targetHash === newest.targetHash);
       const fit = same.find((/** @type {any} */ row) => row.mode === "fit") ?? null, criteria = same.find((/** @type {any} */ row) => row.mode === "criteria") ?? null;
       const shown = presentJudgment(fit, criteria);
-      const day = shown.judgedAt ? String(shown.judgedAt).slice(0, 10) : null;
+      const sheetDay = shown.judgedAt ? String(shown.judgedAt).slice(0, 10) : null;
       const changedPart = newest.documentHash !== pair.documentHash ? "读的是更早的病历" : newest.targetHash !== pair.targetHash ? "读的是试验更早的登记内容" : "读的是更早的内容";
-      return { verdict: shown.verdict, verdictLabel: shown.verdictLabel, judgedAt: shown.judgedAt, line: `上一次判定${day ? `（${day}）` : ""}：${shown.verdictLabel}，${changedPart}。` };
+      return { verdict: shown.verdict, verdictLabel: shown.verdictLabel, judgedAt: shown.judgedAt, line: `上一次判定${sheetDay ? `（${sheetDay}）` : ""}：${shown.verdictLabel}，${changedPart}。` };
     } catch {
       return null;
     }
