@@ -1,4 +1,4 @@
-import { StrictMode } from "react";
+import { StrictMode, useState } from "react";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -6,6 +6,7 @@ import { WebApiError } from "@/lib/apiClient";
 import { readVcrStudy, type VcrStudy } from "@/lib/vcrClient";
 import { fixture, installVcrServer, STUDY_ID } from "../__fixtures__/serverFixtures";
 import { fakeRoom, renderTab } from "../__fixtures__/tabFrame";
+import { VcrRefreshContext, VcrRefreshNote } from "../vcrTabKit";
 import { MatchingTab } from "./MatchingTab";
 
 // What the model judged, drawn from the pages the server sends (`vcrMatchResults.integration.test.mjs` writes the fixtures under
@@ -313,6 +314,37 @@ describe("给患者找试验 — every state", () => {
     await userEvent.click(others[0]);
     expect(await screen.findByRole("button", { name: "重试" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "P-0192 的试验" })).toBeNull();
+  });
+
+  it("with the whole API down for the new patient, the page says the read failed once, not that the last result is still shown", async () => {
+    let failFor: string | null = null;
+    server = installVcrServer(network.productRequest, { [JUDGED]: judged() });
+    const served = network.productRequest.getMockImplementation() as (...args: unknown[]) => Promise<unknown>;
+    network.productRequest.mockImplementation(async (rawPath: string, ...rest: unknown[]) => {
+      if (failFor && rawPath.includes(failFor)) throw new WebApiError("x", { status: 500, code: "internal_error" });
+      return served(rawPath, ...rest);
+    });
+    // The study page's own reporter: a failed re-read of the page on screen is a sentence above it.
+    const Page = () => {
+      const [failure, setFailure] = useState<{ retry: () => void } | null>(null);
+      return (
+        <VcrRefreshContext.Provider value={(_id, next) => setFailure(next)}>
+          {failure && <VcrRefreshNote onRetry={failure.retry} />}
+          <MatchingTab studyId={STUDY_ID} study={study()} />
+        </VcrRefreshContext.Provider>
+      );
+    };
+    draw(<Page />);
+    await userEvent.click(await screen.findByRole("button", { name: "给患者找试验" }));
+    await userEvent.click(await screen.findByRole("button", { name: /^患者/ }));
+    await userEvent.click(await screen.findByRole("menuitemradio", { name: "P-0192" }));
+    await screen.findByRole("heading", { name: "P-0192 的试验" });
+    await userEvent.click(await screen.findByRole("button", { name: /^患者/ }));
+    const others = (await screen.findAllByRole("menuitemradio")).filter((item) => item.textContent?.trim() !== "P-0192" && !/请选择/.test(item.textContent ?? ""));
+    failFor = others[0].textContent!.trim();
+    await userEvent.click(others[0]);
+    expect(await screen.findAllByRole("button", { name: "重试" })).toHaveLength(1);
+    expect(screen.queryByText(/仍显示上次结果/)).toBeNull();
   });
 
   it("switching to the protocols' side lands on the newest protocol that was judged, not the first in the list", async () => {

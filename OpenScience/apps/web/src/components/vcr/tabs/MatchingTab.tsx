@@ -97,7 +97,7 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
   const frame = useStudyFrame();
   // The reader has chosen something themselves (a direction, a protocol, a patient): where the newest work is no longer decides what opens.
   const touched = useRef(false);
-  const { state, reload, last } = useVcrLoad(`${studyId}:matching:${view}:${direction}:${protocolVersionId ?? "latest"}`, () => {
+  const { state, reload, last } = useVcrLoad(`${studyId}:matching:${view}:${direction}:${protocolVersionId ?? "latest"}${direction === "patient_to_trial" ? `:${candidate ?? ""}` : ""}`, () => {
     const askedFor = view === "matching" && candidate ? candidate : null;
     const askedTrial = view === "matching" && direction === "patient_to_trial" && askedFor && trial ? trial : null;
     return getVcrMatching(studyId, {
