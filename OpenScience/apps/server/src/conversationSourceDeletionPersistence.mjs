@@ -105,7 +105,13 @@ export class ConversationSourceDeletionLedger {
       WHERE (left(o.engine_session,4)='dsh-' AND d.session_ids ? substring(o.engine_session from 5)) OR EXISTS (
         SELECT 1 FROM sources s WHERE s.deletion_id=d.id AND s.archive_uri=o.archive_uri AND s.engine_session=o.engine_session)
       UNION SELECT d.native_root AS uri FROM sources s JOIN deleted d ON s.deletion_id=d.id
-      WHERE s.native_ingested_at IS NULL AND s.ingested_at IS NULL AND s.state<>'completed'`, [userId]);
+      WHERE s.native_ingested_at IS NULL AND s.ingested_at IS NULL AND s.state<>'completed'
+      UNION SELECT f.uri FROM deleted d JOIN evimed_memory.native_files f ON f.user_id=d.user_id AND left(f.uri,length(d.native_root)+1)=d.native_root||'/'
+      JOIN LATERAL(SELECT r.id,r.actor,r.reason FROM evimed_memory.native_revisions r WHERE r.user_id=f.user_id AND r.uri=f.uri ORDER BY r.id DESC LIMIT 1) latest ON latest.actor='user' AND latest.reason LIKE 'undo%'
+      WHERE (d.cleaned_revision_id IS NULL OR latest.id<=d.cleaned_revision_id)
+      AND (latest.reason LIKE '%[source-deleted]%' OR d.cleanup='pending')
+      AND (d.history_prints ? f.uri OR EXISTS(SELECT 1 FROM evimed_memory.native_revisions r JOIN sources s ON s.archive_uri=r.archive_uri AND s.engine_session=r.engine_session
+        WHERE s.deletion_id=d.id AND r.user_id=d.user_id AND r.uri=f.uri))`, [userId]);
     const roots=(await this.recordsForOwner(userId)).flatMap(row=>row.lineageRoots??[]);
     return [...new Set([...result.rows.map(row=>row.uri),...roots])];
   }
