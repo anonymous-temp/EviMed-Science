@@ -979,9 +979,9 @@
     },
     {
       "id": "mth_35",
-      "name": "应用已发表的预后模型",
+      "name": "应用预后模型",
       "method": "model.prognostic_apply",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "endpoints": "连续 · 二分类 · 事件时间",
       "numeric": null,
       "validation": {
@@ -1121,7 +1121,7 @@
       "id": "mth_45",
       "name": "人群质量报告",
       "method": "population.quality",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "endpoints": null,
       "numeric": null,
       "validation": {
@@ -1149,7 +1149,7 @@
       "id": "mth_47",
       "name": "经验合成人群",
       "method": "population.synthpop",
-      "version": "1.1.0",
+      "version": "1.4.0",
       "endpoints": null,
       "numeric": null,
       "validation": {

@@ -297,10 +297,14 @@ test("the workflow that gates every PR runs the gates ci:web runs", async () => 
     "test:mcp:memory": /pnpm test:mcp\b/,
   };
 
+  const workflowScripts = [...workflow.matchAll(/pnpm (?:run )?([\w:-]+)/g)]
+    .map((match) => match[1]).filter((name) => Object.hasOwn(pkg.scripts ?? {}, name));
+  const invokedLeaves = new Set(workflowScripts.flatMap((name) => leaves(name)));
   const required = [...new Set(leaves("ci:web"))];
   assert.ok(required.length >= 8, `ci:web should expand to several gates, got ${JSON.stringify(required)}`);
 
   const missing = required.filter((name) => {
+    if (invokedLeaves.has(name)) return false;
     if (new RegExp(`pnpm (?:run )?${name.replace(/[:]/g, "[:]")}(?![\\w:-])`).test(workflow)) return false;
     const alt = equivalents[name];
     return !(alt && alt.test(workflow));
@@ -2331,6 +2335,13 @@ test("a package that can be typechecked is typechecked by the pipeline", async (
     .map((entry) => entry.name);
   assert.ok(names.length >= 4, `only ${names.length} packages found — the scan did not read the workspace`);
 
+  const reachable = new Set();
+  const visit = (name) => {
+    if (reachable.has(name) || !Object.hasOwn(rootPackage.scripts ?? {}, name)) return;
+    reachable.add(name);
+    for (const match of String(rootPackage.scripts[name]).matchAll(/pnpm (?:run )?([\w:-]+)/g)) visit(match[1]);
+  };
+  visit("test:web");
   let checked = 0;
   for (const name of names) {
     let manifest;
@@ -2348,9 +2359,8 @@ test("a package that can be typechecked is typechecked by the pipeline", async (
     // which is the exact failure it was written to prevent.
     const invoked = Object.entries(rootPackage.scripts ?? {})
       .filter(([alias, body]) => (
-        pipeline.includes(`pnpm ${alias}`)
-        && String(body).includes(manifest.name)
-        && /(^|\s)typecheck(\s|$)/.test(String(body))
+        reachable.has(alias)
+        && new RegExp(`pnpm --filter ${manifest.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} typecheck(?:\\s|$)`).test(String(body))
       ))
       .map(([alias]) => alias);
     assert.ok(
@@ -2752,6 +2762,24 @@ test("every workspace package the runtime's frame bundle imports is packed into 
     const missing = [...imported].filter((name) => !packed.has(name)).sort();
     assert.deepEqual(missing, [], `${dockerfile} does not pack: ${missing.join(", ")}`);
   }
+});
+
+test("all copied runtime packages are checked for staleness and retained by the delta", async () => {
+  const full = await readFile(path.join(repoRoot, "deploy/runtime-dsh/Dockerfile"), "utf8");
+  const delta = await readFile(path.join(repoRoot, "deploy/runtime-dsh/Dockerfile.delta"), "utf8");
+  const checker = await readFile(path.join(repoRoot, "scripts/ops/check-runtime-image-current.mjs"), "utf8");
+  const copied = (text) => [...text.matchAll(/^COPY (packages\/[\w.-]+) (\/opt\/evimed\/\S+)$/gm)].map((m) => [m[1], m[2]]);
+  const expected = copied(full);
+  assert.ok(expected.length >= 9, "the complete native and shared package inventory must be read");
+  const retained = new Set(copied(delta).map((row) => row.join(" ")));
+  const checked = new Map([...checker.matchAll(/source: "([^"]+)", inside: "([^"]+)"/g)].map((m) => [m[1], m[2]]));
+  for (const [source, inside] of expected) {
+    assert.ok(retained.has(`${source} ${inside}`), `delta omits ${source}`);
+    assert.equal(checked.get(source), inside, `source verification omits or misaddresses ${source}`);
+  }
+  const refreshed = delta.indexOf("node /usr/local/bin/evimed-research-bundles.mjs install --offline");
+  assert.ok(refreshed > delta.indexOf("COPY packages/virtual-research-suite "));
+  assert.ok(refreshed < delta.indexOf("node /usr/local/bin/evimed-profile-seed.mjs seal"), "native receipt refresh must precede sealing");
 });
 
 test("the delta puts back everything the full build copies into the socket tree it wipes", async () => {

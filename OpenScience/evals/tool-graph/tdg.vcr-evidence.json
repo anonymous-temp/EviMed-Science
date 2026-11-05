@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-evidence",
-  "version": "sha256:ebf07d944037a2b975ca174035c5689e71de0cefa397ac46f16e3d35abd104b9",
+  "version": "sha256:59918fb291576f3d4574aa2a0324554239c9316396d4451607fb66b418a9d5bd",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 37,
@@ -1853,26 +1853,69 @@
           "sources": {
             "type": "array",
             "maxItems": 8,
-            "description": "A number you read in a paper and wrote into the scenario: [{field: its path in the scenario, e.g. truth.controlMedian, publication: PMID or DOI, quote: the sentence that prints it}]. The platform records the paper, and the result page names it.",
+            "description": "A number you read in a paper and wrote into the scenario: [{field: its path in the scenario, e.g. truth.controlMedian, publication: PMID or DOI, quote: the sentence that prints it}]. For a user-stated parameter, optionally use {origin:user, field:design.nTreat, value:30, quote:<original human sentence>, unit:patients, context:<its meaning>}. Bind only the stated meaning, arm and unit; equal digits elsewhere do not establish a parameter. Missing bindings stay assumptions.",
             "items": {
-              "type": "object",
-              "properties": {
-                "field": {
-                  "type": "string"
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "field": {
+                      "type": "string"
+                    },
+                    "publication": {
+                      "type": "string"
+                    },
+                    "quote": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "field",
+                    "publication",
+                    "quote"
+                  ],
+                  "additionalProperties": false
                 },
-                "publication": {
-                  "type": "string"
-                },
-                "quote": {
-                  "type": "string"
+                {
+                  "type": "object",
+                  "properties": {
+                    "origin": {
+                      "const": "user"
+                    },
+                    "field": {
+                      "type": "string"
+                    },
+                    "value": {
+                      "type": "number"
+                    },
+                    "quote": {
+                      "type": "string"
+                    },
+                    "unit": {
+                      "type": "string"
+                    },
+                    "context": {
+                      "type": "string"
+                    },
+                    "sessionId": {
+                      "type": "string"
+                    },
+                    "messageSeq": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  },
+                  "required": [
+                    "origin",
+                    "field",
+                    "value",
+                    "quote",
+                    "unit",
+                    "context"
+                  ],
+                  "additionalProperties": false
                 }
-              },
-              "required": [
-                "field",
-                "publication",
-                "quote"
-              ],
-              "additionalProperties": false
+              ]
             }
           }
         },

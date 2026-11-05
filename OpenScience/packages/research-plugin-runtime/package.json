@@ -23,7 +23,7 @@
     "@evimed/domain": "workspace:^0.1.0"
   },
   "scripts": {
-    "test": "node --test test/*.test.mjs",
+    "test": "node --import ../../scripts/test/localhostProbeGuard.mjs --test test/*.test.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "cd ../.. && eslint --config packages/research-plugin-runtime/eslint.config.mjs packages/research-plugin-runtime/*.mjs packages/research-plugin-runtime/scripts/*.mjs packages/virtual-*/index.mjs packages/virtual-*/plugin.mjs packages/synthetic-control/index.mjs packages/synthetic-control/plugin.mjs --max-warnings 0"
   },

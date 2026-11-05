@@ -36,7 +36,7 @@ const EXAMPLES: Array<[string, string, string]> = [
   ["匹配", "患者匹配", "匹配患者和临床试验。资料是："],
   ["队列", "虚拟队列", "建立研究队列或合成人群。目标和已有资料是："],
   ["患者", "虚拟患者", "查看患者历程或研究模型支持的个体轨迹。资料和问题是："],
-  ["对照", "合成对照臂", "研究外部对照或合成对照的可行性与比较方法。问题和资料是："],
+  ["对照", "合成对照臂", "研究外部对照或合成对照臂的可行性与比较方法。问题和资料是："],
   ["试验", "虚拟试验", "比较试验设计的样本量、把握度或运行特征。目标和已有参数是："],
 ];
 it.each(EXAMPLES)("opens %s as an unsent native conversation draft without creating a study", async (_label, example, draft) => {

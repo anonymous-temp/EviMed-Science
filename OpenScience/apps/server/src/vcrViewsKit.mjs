@@ -948,7 +948,7 @@ export const allResultsOf = (bundle) => bundle.allResults ?? bundle.results ?? [
 
 /** How an engine method is named on the model library's method rows. */
 export const METHOD_LABELS = Object.freeze(/** @type {Record<string, string>} */ ({
-  "model.survival_fit": "拟合人群生存模型", "model.prognostic_apply": "应用已发表的预后模型", "model.prognostic_train": "用自己的历史数据训练预后模型", "patients.progression": "人群层面的疾病进展模拟",
+  "model.survival_fit": "拟合人群生存模型", "model.prognostic_apply": "应用预后模型", "model.prognostic_train": "用自己的历史数据训练预后模型", "patients.progression": "人群层面的疾病进展模拟",
   "profile.snapshot": "数据快照画像", "cohort.build": "构建队列", "population.scenario": "情景人群生成", "population.literature": "文献人群",
   "population.synthpop": "经验合成人群", "population.quality": "人群质量报告", "population.check": "与第二份基线表对照", "design.confirmatory": "确认性设计", "design.dose": "剂量探索设计", "design.bayesian": "贝叶斯设计（无需 MCMC）", "design.win_ratio": "分层复合终点的胜率比设计", "patients.continuous": "虚拟患者（连续终点）",
   "patients.binary": "虚拟患者（二分类终点）", "patients.time_to_event": "虚拟患者（事件时间终点）", "patients.longitudinal": "虚拟患者（纵向轨迹）", "evidence.pool": "证据合并", "evidence.network": "网络荟萃分析", "evidence.dose_response": "剂量反应荟萃分析", "evidence.shrinkage": "已发表效应的经验收缩",

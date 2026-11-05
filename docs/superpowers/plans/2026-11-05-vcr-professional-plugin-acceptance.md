@@ -235,6 +235,27 @@ bundle overrides. No setting, upstream pin or invariant was relaxed. All
 17 composition/security mutation tests then passed. Full lint/types and the
 78-check hosted compliance audit passed locally.
 
+## Integrated regression closeout
+
+The [local regression ledger](../../../OpenScience/evals/vcr-hosted-native/LOCAL-REGRESSION-20261106.md)
+records the full ordinary server/frontend diagnostics, every failure class,
+official-pgvector campaign and environmental limits without combining their
+denominators. Linux CI at `893e38b3b` confirmed exactly nine ordinary-server
+failures; they were release wiring, smoke environment, coverage/inventory,
+localhost guard and generated-graph omissions. Those classes were corrected
+and independently reviewed. The later VCR views snapshot needed only the three
+current method versions plus a generic model-application label; its full seven
+PostgreSQL tests passed, and the other 25 generated view fixtures were unchanged.
+
+A network-disabled focused native-refresh image then reinstalled the five
+bundles using the SDK and the image's recorded pnpm store, remeasured receipts
+and resealed the profile. It downloaded zero packages, matched the current
+composition baseline, passed all five receipt inspections as UID 10001 with
+read-only root/no network, and matched current source for all 11 copied package
+trees. Its installed shared report bytes were read back and matched. This is
+not acceptance of every unrelated phase of the complete delta Dockerfile and
+it did not publish or deploy an image.
+
 ## Remaining scientific and release boundaries
 
 - Synthetic fidelity and utility have the red/unavailable results stated above;

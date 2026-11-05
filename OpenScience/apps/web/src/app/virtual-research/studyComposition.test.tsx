@@ -115,15 +115,19 @@ describe("T2 — the list of studies, with a preview beside it", () => {
     expect(facts.toolbars[0]).toContainElement(screen.getByRole("searchbox", { name: "搜索研究" }));
     expect(column).toContainElement(facts.toolbars[0]);
     expect(precedes(facts.toolbars[0], rows)).toBe(true);
-    // The new-study pane is four equal examples, none of them the page's primary (F5, 2026-11-01); after choosing a study, the list header owns it.
+    // The new-study pane offers four equal research entries; selecting a study restores its one primary action.
     expect(column).toContainElement(facts.header);
     expect(precedes(facts.header!, facts.toolbars[0])).toBe(true);
     expect(facts.headerPrimaryActions).toHaveLength(0);
-    expect(screen.getByRole("button", { name: "让 AI 匹配患者和试验" })).not.toHaveClass("bg-accent");
+    for (const name of ["虚拟队列", "虚拟患者", "合成对照臂", "虚拟试验"]) {
+      expect(screen.getByRole("button", { name })).not.toHaveClass("bg-accent");
+    }
     expect(container.querySelectorAll(".bg-accent")).toHaveLength(0);
     await userEvent.click(screen.getByRole("link", { name: /EV-201 二线/ }));
     expect(screen.getByRole("button", { name: "新研究" })).toHaveClass("bg-accent");
-    expect(screen.queryByRole("button", { name: "让 AI 匹配患者和试验" })).toBeNull();
+    for (const name of ["虚拟队列", "虚拟患者", "合成对照臂", "虚拟试验"]) {
+      expect(screen.queryByRole("button", { name })).toBeNull();
+    }
     expect(container.querySelectorAll(".bg-accent")).toHaveLength(1);
   });
 

@@ -34,11 +34,21 @@ const imageAt = args.indexOf("--image");
 const image = imageAt >= 0 ? args[imageAt + 1] : process.env.OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE;
 const dockerBin = process.env.OPEN_SCIENCE_RUNTIME_CONTAINER_BIN ?? "docker";
 
-/** The three trees the Dockerfile copies, and where they land inside. */
+/** Source trees the runtime copies, including native bundle build inputs.
+ * Native installed bytes and tool definitions are additionally checked by the
+ * receipt inspector and authenticated runtime-generation proof. */
 const TREES = [
   { source: "packages/socket", inside: "/opt/evimed/socket" },
   { source: "packages/domain", inside: "/opt/evimed/socket/node_modules/@evimed/domain" },
   { source: "packages/harness-port", inside: "/opt/evimed/socket/node_modules/@evimed/harness-port" },
+  { source: "packages/design-tokens", inside: "/opt/evimed/socket/node_modules/@evimed/design-tokens" },
+  { source: "packages/search-topics", inside: "/opt/evimed/search-topics" },
+  { source: "packages/research-plugin-runtime", inside: "/opt/evimed/socket/node_modules/@evimed/research-plugin-runtime" },
+  { source: "packages/virtual-trial", inside: "/opt/evimed/research-source/virtual-trial" },
+  { source: "packages/virtual-cohort", inside: "/opt/evimed/research-source/virtual-cohort" },
+  { source: "packages/virtual-patient", inside: "/opt/evimed/research-source/virtual-patient" },
+  { source: "packages/synthetic-control", inside: "/opt/evimed/research-source/synthetic-control" },
+  { source: "packages/virtual-research-suite", inside: "/opt/evimed/research-source/virtual-research-suite" },
 ];
 
 /** Only what the kernel actually loads. `node_modules` inside a copied tree is

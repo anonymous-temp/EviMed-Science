@@ -97,12 +97,18 @@ export function inspect(id, profile = DEFAULT_PROFILE, root = DEFAULT_ROOT) {
   return receipt;
 }
 
-async function install() {
+async function install({ offline = false } = {}) {
   const profile = DEFAULT_PROFILE, root = DEFAULT_ROOT;
   fs.mkdirSync(path.join(root, 'tarballs'), { recursive: true });
   for (const id of IDS) run('pnpm', ['--dir', `/opt/evimed/research-source/${id}`, 'pack', '--pack-destination', path.join(root, 'tarballs')]);
   const cliRequire = createRequire('/usr/local/lib/node_modules/@deepseek-ai/dsh/package.json');
   const yaml = cliRequire('yaml');
+  const managerArgs = [];
+  if (offline) {
+    const modules = yaml.parse(fs.readFileSync(path.join(profile, 'node_modules', '.modules.yaml'), 'utf8'));
+    if (typeof modules.storeDir !== 'string' || !path.isAbsolute(modules.storeDir)) throw new Error('research_offline_store_invalid');
+    managerArgs.push('--offline', '--store-dir', modules.storeDir);
+  }
   const workspaceFile = path.join(profile, 'pnpm-workspace.yaml');
   const workspace = yaml.parse(fs.readFileSync(workspaceFile, 'utf8'));
   workspace.overrides ??= {};
@@ -112,7 +118,7 @@ async function install() {
     const pkg = JSON.parse(fs.readFileSync(`/opt/evimed/research-source/${id}/package.json`, 'utf8'));
     return path.join(root, 'tarballs', `evimed-${id}-${pkg.version}.tgz`);
   });
-  run('dsh', ['plugin', '--profile', 'evimed-runtime', 'add', '--save-prod', '--save-exact', '--ignore-scripts', ...tarballs],
+  run('dsh', ['plugin', '--profile', 'evimed-runtime', 'add', '--save-prod', '--save-exact', '--ignore-scripts', ...managerArgs, ...tarballs],
     { env: { ...process.env, DSH_HOME: path.dirname(path.dirname(profile)) } });
   const packageFile = path.join(profile, 'package.json'), pkg = JSON.parse(fs.readFileSync(packageFile,'utf8'));
   const nativeNames = IDS.map(id => `@evimed/${id}`);
@@ -131,7 +137,7 @@ async function install() {
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const [action,id,...extra] = process.argv.slice(2);
   if (extra.length) throw new Error('research_command_invalid');
-  if (action === 'install' && !id) await install();
+  if (action === 'install' && (!id || id === '--offline')) await install({ offline: id === '--offline' });
   else if (action === 'inspect' && id) console.log(JSON.stringify(inspect(id)));
   else if (action === 'record' && !id) record();
   else throw new Error('research_command_invalid');
