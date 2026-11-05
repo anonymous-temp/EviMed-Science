@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { ProductDocuments } from '../src/productStore.mjs';
+import { lineFingerprint } from '../src/nativeMemoryOverlay.mjs';
+import { nativeFileId } from '../src/nativeMemoryStore.mjs';
 import { nativeAppIntegration } from './helpers/nativeAppFixture.mjs';
 const { options, fixture } = nativeAppIntegration();
 
@@ -12,6 +15,10 @@ test('owned source DELETE is wired through durable state, source privacy, metada
   const overlay=app.nativeMemory.overlay;
   await overlay.upsertFile({userId:user.id,uri,memoryType:'profile',body:'# Profile\n- Private source A.\n- Independent B.'});
   await overlay.syncOrigins(user.id,uri,{before:'',after:'# Profile\n- Private source A.',origin:{engineSession:'dsh-source_a',projectId:'default'}});
+  await overlay.syncOrigins(user.id,uri,{before:'# Profile\n- Private source A.',after:'# Profile\n- Private source A.\n- Independent B.',origin:{engineSession:'dsh-independent_b',projectId:'default'}});
+  const documents=new ProductDocuments(app.store.database), capsule=await app.capsuleService.ownCapsule(user.id,{create:true});
+  const snapshots=[];
+  for(const text of ['Private source A.','Independent B.']) snapshots.push((await documents.createBatch(user.id,[{kind:'preferences',id:crypto.randomUUID(),payload:{recordType:'capsule-snapshot',capsuleId:capsule.id,status:'active',sourceEntries:[{id:`${nativeFileId(uri)}_${lineFingerprint(text).slice(0,12)}`,revision:1,sha256:'a'.repeat(64)}]}}]))[0]);
   app.runtimeManager.captureConversationSource=async()=>({root:{id:'source_a',createdAt:1,cwd:'/workspace',isSeeded:false},sessions:[{id:'source_a'}],generation:'synthetic-fixture'});
   let physical=false;
   app.runtimeManager.purgeConversationSource=async()=>({sourceRemoved:physical,reason:physical?null:'runtime_busy'});
@@ -19,6 +26,8 @@ test('owned source DELETE is wired through durable state, source privacy, metada
   const removed=await fetch(target,{method:'DELETE',headers});
   assert.equal(removed.status,202); const result=(await removed.json()).data;
   assert.equal(result.sourceRemoved,false); assert.equal(result.cleanup,'pending');
+  assert.equal((await documents.get(user.id,'preferences',snapshots[0].id)).payload.status,'revoked');
+  assert.equal((await documents.get(user.id,'preferences',snapshots[1].id)).payload.status,'active','an independent B-only profile snapshot stays in force');
   assert.deepEqual((await app.researchSessions.list(project)).map(row=>row.sessionId),['independent_b']);
   await assert.rejects(app.researchSessions.put(project,'source_a',{mode:'open-domain'}),{status:404});
   assert.deepEqual(await app.nativeMemory.files(user.id),[],'source-bearing native file is hidden while cleanup waits');
