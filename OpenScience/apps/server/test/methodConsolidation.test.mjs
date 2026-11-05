@@ -447,7 +447,7 @@ test("a step that cannot start defers the pass instead of finishing it without t
 
 test("approvals do not wait for the model steps: a pass that cannot finish has already approved what the record allows (review L-14)", async () => {
   // The only caller of `approve` was the loop at the end of the pass, after every model step. A deferral (a busy runtime, a spent budget), a step that
-  // timed out or any step that threw ended the pass before it, and each amended method, which goes back to `candidate`, stayed out of the library.
+  // timed out or any step that threw ended the pass before it, and each amended method, which used to go back to `candidate`, stayed out of the library.
   // A deferral ends the pass (the worker asks again later); any other step failure is that group's own and the pass goes on to its end.
   const stops = [["runtime_busy", 503, true], ["usage_budget_exceeded", 402, true], ["learning_step_timeout", 504, false]];
   for (const [code, status, ends] of stops) {

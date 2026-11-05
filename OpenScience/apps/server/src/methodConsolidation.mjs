@@ -507,7 +507,7 @@ export class MethodConsolidation {
     if (!comparable) said("too_few_methods");
 
     // First, and again at the end: approval asks no model, and it used to come only after every model step, so a pass that was deferred (a busy
-    // runtime, the learning budget), timed out or threw ended before it, and each amended method, which goes back to `candidate`, stayed out of
+    // runtime, the learning budget), timed out or threw ended before it, and each amended method, which used to go back to `candidate`, stayed out of
     // the library until some later pass got that far (review L-14). The steps below can change what is approvable (a conflict recorded, a
     // counterpart retired), which is what the second look is for; this one is best effort, and the second is where a real failure surfaces.
     const early = await this.approveCandidates(job, methods, { strict: false });
