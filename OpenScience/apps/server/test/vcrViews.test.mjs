@@ -1421,6 +1421,21 @@ test("TU-2 the trial page says which unit a design's times are in when the platf
   assert.equal(line({ unit: "fortnights", basis: "stated" }), undefined, "a unit the table does not hold is not named");
 });
 
+test("the data-generation line of the trial page names every number of a design's truth in Chinese, whichever endpoint states it (live 2026-11-04: `riskDifference 0`, `nullRate 0.2`)", () => {
+  const bundle = conversationTrialBundle();
+  const line = (/** @type {string} */ endpointType, /** @type {Record<string, number>} */ truth) => {
+    const scenarios = bundle.scenarios.map((row) => ({ ...row, endpointType, configuration: { ...row.configuration, truth } }));
+    return presentTrialTab({ ...bundle, scenarios }).ademp.find((entry) => entry.key === "data")?.text ?? "";
+  };
+  const binary = line("binary", { controlRate: 0.7, riskDifference: 0 });
+  assert.match(binary, /对照事件率 0\.7/);
+  assert.match(binary, /真实率差 0/);
+  const single = line("binary", { nullRate: 0.2, alternativeRate: 0.4 });
+  assert.match(single, /零假设应答率 0\.2/);
+  assert.match(single, /备择应答率 0\.4/);
+  for (const text of [binary, single, line("binary", { controlRate: 0.3, oddsRatio: 1.5 }), line("binary", { responseRate: 0.3 })]) assert.doesNotMatch(text, /[a-z]+[A-Z][a-z]+/, text);
+});
+
 test("C3-05 a countersignature moves the node it names to reviewed — who, when, which version — and one on an earlier version says the card changed after it", () => {
   const reviews = [
     { id: "rev_2", kind: "statistical", nodes: ["assumption:dropout_rate@3"], reviewer: "u_stat", reviewerName: "Statistician", createdAt: "2026-09-28T02:00:00.000Z" },

@@ -6,6 +6,7 @@ import { TrialTab, VCR_ADD_DESIGN_DRAFT, VCR_CHANGE_ASSUMPTION_DRAFT } from "./T
 import { renderTab } from "../__fixtures__/tabFrame";
 import { EMPTY_STUDY_ID, fixture, installVcrServer, STUDY_ID } from "../__fixtures__/serverFixtures";
 import { VCR_NO_DEFINITION } from "../vcrText";
+import synthesis from "../__fixtures__/evidenceSynthesisPayloads.json";
 
 /**
  * 试验 (R19; audit B §4.4): the designs as one table with power as a bar, a row that opens the run behind it, the charts side by
@@ -53,6 +54,19 @@ beforeEach(() => {
   toasts.success.mockReset();
   toasts.error.mockReset();
   installVcrServer(network.productRequest);
+});
+
+describe("试验 · which design the page is about", () => {
+  it("opens on the design a reply's link named (`?object=`), and on the most recent without one", async () => {
+    draw();
+    await trialDrawn();
+    expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/trial`);
+    expect(network.productRequest.mock.calls.every(([path]) => !String(path).includes("object="))).toBe(true);
+    const calls = network.productRequest.mock.calls.length;
+    renderTab(<TrialTab studyId={STUDY_ID} study={ev201()} />, { route: "/?object=scn_2" });
+    await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/trial?object=scn_2`));
+    expect(network.productRequest.mock.calls.length).toBeGreaterThan(calls);
+  });
 });
 
 describe("试验 · the designs", () => {
@@ -836,5 +850,200 @@ describe("试验 · what the sample size rests on, the baseline and the objectiv
     await trialDrawn();
     expect(await screen.findByText("周期、成本与成功把握的取舍")).toBeInTheDocument();
     expect(container.querySelector("[data-vcr-scatter-reference]")).toBeNull();
+  });
+});
+
+describe("试验 · a confirmatory design the conversation wrote", () => {
+  const value = (n: number, unit: string, source: string, extra: Record<string, unknown> = {}) => ({ value: n, text: null, unit, source, interval: null, mcse: null, review: "ai_set", precision: 1, reason: null, stale: false, detail: null, ...extra });
+  const card = () => ({
+    id: "res_ssr", version: 1, design: "sample_size_reestimation", title: "样本量再估计", question: "效应没把握，中期加样，功效和平均要多少人", endpoint: "事件时间终点",
+    headline: [{ key: "power", label: "功效（拒绝零假设的概率）", value: value(94.98, "%", "synthetic", { mcse: 0.31 }) }],
+    premises: [{ key: "effect", label: "计划的效应（风险比）", value: "0.7", source: "assumed", decisive: true, reason: null }],
+    looks: [],
+    baselines: [{ key: "fixed", label: "固定设计所需事件数", text: "331 个事件" }],
+    limited: null,
+    table: {
+      columns: [{ key: "power", label: "功效 / I 类错误", group: "本设计" }, { key: "fixed_power", label: "功效 / I 类错误", group: "固定设计" }],
+      rows: [{ role: "planned", label: "计划的效应", effect: "风险比 0.7", iterations: 5000, cells: { power: value(94.98, "%", "synthetic", { mcse: 0.31 }), fixed_power: value(90.05, "%", "calculated") } }],
+    },
+  });
+
+  it("shows as a card of its own when it is the only result of the step: no lettered designs, no 「还没算」, no pending step", async () => {
+    const raw = fixture("empty/trial.json");
+    raw.confirmatoryDesigns = [card()];
+    installVcrServer(network.productRequest, { [tab("trial")]: raw });
+    const { container } = draw(withStep("trial", { status: "none", requested: false }));
+    const shown = await found(container, '[data-vcr-confirmatory="sample_size_reestimation"]');
+    expect(within(shown).getByRole("heading", { name: "样本量再估计" })).toBeInTheDocument();
+    expect(shown).toHaveTextContent("效应没把握，中期加样，功效和平均要多少人");
+    expect(within(shown).getByRole("columnheader", { name: "固定设计 · 功效 / I 类错误" })).toBeInTheDocument();
+    expect(shown).toHaveTextContent("模拟 5,000 次");
+    expect(screen.queryByText("还没算")).toBeNull();
+    expect(screen.queryByRole("table", { name: "方案的对比" })).toBeNull();
+    expect(container.querySelector("[data-vcr-not-computed]")).toBeNull();
+    expect(container.querySelector("[data-vcr-step-waiting], [data-vcr-step-running]")).toBeNull();
+    expect(screen.queryByRole("button", { name: /选定方案|改选方案/ })).toBeNull();
+  });
+
+  it("stands under the lettered designs and the accrual forecasts when the step has them", async () => {
+    const raw = fixture("ev201/trial.json");
+    raw.confirmatoryDesigns = [card()];
+    installVcrServer(network.productRequest, { [tab("trial")]: raw });
+    const { container } = draw();
+    const table = await trialDrawn();
+    const shown = await found(container, '[data-vcr-confirmatory="sample_size_reestimation"]');
+    expect(table.compareDocumentPosition(shown) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
+
+describe("试验 · a dose-finding or a Bayesian design the conversation computed", () => {
+  const value = (n: number, unit: string, source: string, extra: Record<string, unknown> = {}) => ({ value: n, text: null, unit, source, interval: null, mcse: null, review: "ai_set", precision: 1, reason: null, stale: false, detail: null, ...extra });
+  const dose = () => ({
+    id: "res_dose", version: 1, form: "dose_finding", design: "boin", title: "BOIN 与 3+3 的对比", question: "几种设计选对最大耐受剂量的概率差多少",
+    trials: 4000, askedLabel: "BOIN", target: 30, doses: [{ dose: 1, toxicity: 10, mtd: false }, { dose: 2, toxicity: 30, mtd: true }],
+    headline: [{ key: "correct_dose_probability", label: "选对最大耐受剂量的概率", value: value(44.8, "%", "synthetic", { mcse: 0.8 }) }],
+    table: { columns: [{ key: "correct_dose_probability", label: "选对最大耐受剂量的概率" }], rows: [{ kind: "boin", label: "BOIN", role: "asked", cells: { correct_dose_probability: value(44.8, "%", "synthetic", { mcse: 0.8 }) } }] },
+    differences: null, perDose: [], premises: [], limited: null, selection: null,
+  });
+  const bayes = () => ({
+    id: "res_bayes", version: 1, form: "calibration", design: "threshold_calibration", title: "成功阈值的校准", question: "阈值应取多少",
+    headline: [{ key: "calibrated_threshold", label: "校准后的成功阈值", value: value(97.4, "%", "calculated") }],
+    looks: [], operating: null, found: null, reachedPower: false, simon: null,
+    calibration: { endpoint: "二分类终点（率差）", discrete: false, note: "阈值是后验概率的界限。", rows: [{ kind: "calibrated", label: "校准后的阈值", threshold: value(97.4, "%", "calculated"), typeOneError: value(2.4, "%", "calculated"), power: value(66, "%", "calculated") }] },
+    premises: [], limited: null,
+  });
+
+  it("each shows as a card of its own when it is the only result of the step: not 「还没算」, not a pending step, no pick", async () => {
+    for (const [key, selector, name] of [["doseDesigns", '[data-vcr-dose="dose_finding"]', "BOIN 与 3+3 的对比"], ["bayesianDesigns", '[data-vcr-bayes="calibration"]', "成功阈值的校准"]] as const) {
+      const raw = fixture("empty/trial.json");
+      raw[key] = [key === "doseDesigns" ? dose() : bayes()];
+      installVcrServer(network.productRequest, { [tab("trial")]: raw });
+      const { container, unmount } = draw(withStep("trial", { status: "none", requested: false }));
+      const shown = await found(container, selector);
+      expect(within(shown).getByRole("heading", { name })).toBeInTheDocument();
+      expect(screen.queryByText("还没算")).toBeNull();
+      expect(screen.queryByRole("table", { name: "方案的对比" })).toBeNull();
+      expect(container.querySelector("[data-vcr-not-computed]")).toBeNull();
+      expect(container.querySelector("[data-vcr-step-waiting], [data-vcr-step-running]")).toBeNull();
+      expect(screen.queryByRole("button", { name: /选定方案|改选方案/ })).toBeNull();
+      unmount();
+    }
+  });
+
+  it("stand under the confirmatory designs, the dose-finding first and the Bayesian after it", async () => {
+    const raw = fixture("ev201/trial.json");
+    raw.doseDesigns = [dose()];
+    raw.bayesianDesigns = [bayes()];
+    installVcrServer(network.productRequest, { [tab("trial")]: raw });
+    const { container } = draw();
+    const table = await trialDrawn();
+    const doseCard = await found(container, '[data-vcr-dose="dose_finding"]');
+    const bayesCard = await found(container, '[data-vcr-bayes="calibration"]');
+    expect(table.compareDocumentPosition(doseCard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(doseCard.compareDocumentPosition(bayesCard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  describe("and a win-ratio design after them", () => {
+    const winValue = (n: number, unit: string | null, extra: Record<string, unknown> = {}) => ({ value: n, text: null, unit, source: "synthetic", interval: null, mcse: 0.2, review: "ai_set", precision: 1, reason: null, stale: false, detail: null, ...extra });
+    const winRatio = () => ({
+      id: "res_wr", version: 1, form: "win_ratio", title: "死亡、评分的分层比较（胜率比）", question: "这么多人的试验，判出有效的把握有多大；比较的对子里平局占多少",
+      levels: [{ key: "death", label: "死亡" }, { key: "score", label: "评分" }],
+      headline: [{ key: "power", label: "判出有效的把握（检验功效）", value: winValue(72.5, "%") }],
+      size: null, arms: { treat: 120, control: 120 },
+      table: {
+        columns: [{ key: "win_proportion", label: "试验组赢的对数占比" }],
+        rows: [{ key: "death", label: "第 1 层：死亡", cells: { win_proportion: winValue(14.2, "%") } }, { key: "total", label: "合计", cells: { win_proportion: winValue(41.3, "%") } }],
+      },
+      trials: 600, premises: [], limited: null,
+    });
+
+    it("shows as a card of its own when it is the only result of the step: not 「还没算」, not a pending step, no pick", async () => {
+      const raw = fixture("empty/trial.json");
+      raw.winRatioDesigns = [winRatio()];
+      installVcrServer(network.productRequest, { [tab("trial")]: raw });
+      const { container } = draw(withStep("trial", { status: "none", requested: false }));
+      const shown = await found(container, '[data-vcr-winratio="win_ratio"]');
+      expect(within(shown).getByRole("heading", { name: "死亡、评分的分层比较（胜率比）" })).toBeInTheDocument();
+      expect(shown).toHaveTextContent("72.5%");
+      expect(within(shown).getByRole("table", { name: "死亡、评分的分层比较（胜率比）：各层分出胜负的情况" })).toBeInTheDocument();
+      expect(screen.queryByText("还没算")).toBeNull();
+      expect(screen.queryByRole("table", { name: "方案的对比" })).toBeNull();
+      expect(container.querySelector("[data-vcr-not-computed]")).toBeNull();
+      expect(container.querySelector("[data-vcr-step-waiting], [data-vcr-step-running]")).toBeNull();
+      expect(screen.queryByRole("button", { name: /选定方案|改选方案/ })).toBeNull();
+    });
+
+    it("stands under the dose-finding and the Bayesian cards, last of the computed designs", async () => {
+      const raw = fixture("ev201/trial.json");
+      raw.doseDesigns = [dose()];
+      raw.bayesianDesigns = [bayes()];
+      raw.winRatioDesigns = [winRatio()];
+      installVcrServer(network.productRequest, { [tab("trial")]: raw });
+      const { container } = draw();
+      await trialDrawn();
+      const bayesCard = await found(container, '[data-vcr-bayes="calibration"]');
+      const winCard = await found(container, '[data-vcr-winratio="win_ratio"]');
+      expect(bayesCard.compareDocumentPosition(winCard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+  });
+});
+
+describe("试验 · the historical success rates beside the assurance", () => {
+  const withRates = (rates: unknown) => {
+    const raw = fixture("ev201/trial.json");
+    raw.successRates = rates;
+    installVcrServer(network.productRequest, { [tab("trial")]: raw });
+  };
+  const follows = (earlier: Element, later: Element) => Boolean(earlier.compareDocumentPosition(later) & Node.DOCUMENT_POSITION_FOLLOWING);
+
+  it("stands under the comparison of the designs, in two columns, with the third phase of all indications chosen", async () => {
+    withRates(synthesis.successRates);
+    const { container } = draw();
+    const table = await trialDrawn();
+    const block = await found(container, "[data-vcr-success-rates]");
+    expect(follows(table, block)).toBe(true);
+    expect(within(block).getByRole("heading", { name: "历史上这一阶段的通过率" })).toBeInTheDocument();
+    expect(block).toHaveTextContent("不是这个试验成功的概率");
+    expect(within(block).getByLabelText("阶段")).toHaveValue("phase3");
+    expect(block.querySelectorAll("[data-vcr-success-source]")).toHaveLength(2);
+    expect(block.querySelector("[data-vcr-success-source='bio']")).toHaveTextContent("57.8%");
+    expect(block.querySelector("[data-vcr-success-source='wong']")).toHaveTextContent("59%");
+    // before the setup that explains the table, with the charts after
+    expect(follows(block, container.querySelector("[data-vcr-setup]") as Element)).toBe(true);
+    // the designs table is the one it was
+    expect(container.querySelectorAll("tr[data-vcr-design]")).toHaveLength(4);
+  });
+
+  it("changes with the reader's choice and leaves the designs as they were", async () => {
+    withRates(synthesis.successRates);
+    const { container } = draw();
+    await trialDrawn();
+    const block = await found(container, "[data-vcr-success-rates]");
+    await userEvent.selectOptions(within(block).getByLabelText("阶段"), "phase2");
+    expect(block.querySelector("[data-vcr-success-source='bio']")).toHaveTextContent("28.9%");
+    expect(block.querySelector("[data-vcr-success-source='wong']")).toHaveTextContent("这个来源没有这一栏");
+    expect(container.querySelectorAll("tr[data-vcr-design]")).toHaveLength(4);
+  });
+
+  it("is not drawn when no design has an assurance, which is when the server sends none", async () => {
+    withRates(null);
+    const { container } = draw();
+    await trialDrawn();
+    expect(container.querySelector("[data-vcr-success-rates]")).toBeNull();
+    expect(screen.queryByRole("heading", { name: "历史上这一阶段的通过率" })).toBeNull();
+  });
+
+  it("is not drawn for an answer of an unknown shape, nor for a step that has no design", async () => {
+    withRates({ title: "x" });
+    const first = draw();
+    await trialDrawn();
+    expect(first.container.querySelector("[data-vcr-success-rates]")).toBeNull();
+    first.unmount();
+    const raw = fixture("empty/trial.json");
+    raw.successRates = synthesis.successRates;
+    installVcrServer(network.productRequest, { [tab("trial")]: raw });
+    const second = draw(withStep("trial", { status: "none", requested: false }));
+    await waitFor(() => expect(second.container.querySelector("[data-vcr-loading]")).toBeNull());
+    expect(second.container.querySelector("[data-vcr-success-rates]")).toBeNull();
   });
 });

@@ -44,7 +44,7 @@ import {
   normalizeVcrAssessment, roleAllows, useWithin,
 } from "@evimed/domain";
 
-import { VCR_BENCHMARK_ONLY_USE_CEILING, vcrBenchmarkBasis } from "@evimed/domain";
+import { VCR_BENCHMARK_ONLY_USE_CEILING, VCR_RESULT_KIND_TABS, vcrBenchmarkBasis } from "@evimed/domain";
 import { DISPLAY_TIME_ZONE, VCR_CONVERSATION_STUDY_NAME, VCR_CONVERSATION_TASK_NAMES_ZH, VCR_DRAFT_STUDY_NAME, VCR_LEGACY_DEFAULT_STUDY_NAME, VCR_STUDY_NAME_FROM_QUESTION_MAX, maskIdentifierSpans } from "@evimed/domain";
 
 import { HttpError } from "./security.mjs";
@@ -73,7 +73,8 @@ const list = (value) => (Array.isArray(value) ? value : []);
  */
 export const VCR_RESULT_KINDS = Object.freeze([
   "population", "patient_set", "comparator", "trial_scenario", "design_grid", "model_fit", "model_prediction",
-  "matching", "accrual_forecast", "evidence_pool", "snapshot_profile", "longitudinal", "population_quality", "population_check", "match_extract",
+  "matching", "accrual_forecast", "evidence_pool", "snapshot_profile", "longitudinal", "population_quality", "population_check", "match_extract", "design_confirmatory", "design_dose", "design_bayesian", "design_win_ratio",
+  "network_meta", "dose_response_meta", "effect_shrinkage", "prognostic_training", "progression_simulation",
 ]);
 
 /** Which lineage node kind each research object is. */
@@ -163,9 +164,23 @@ const VCR_CONVERSATION_STUDY_CONTENT = Object.freeze([
     "source_files", "snapshots", "analysis_tables", "study_packs"]],
 ]);
 
+/**
+ * The result kinds a tab shows whose result is filed under no object of the study: a dose-finding, Bayesian, win-ratio or confirmatory design,
+ * a network or dose-response meta-analysis, a shrunk effect. A study that holds only one of these holds a result and no row of the tables above
+ * (found live 2026-11-04: a 3+3 against BOIN comparison was answered with a link to its page and was not on the module's home). The matching
+ * tab keeps its own tables: its results are written with them. The kinds are the domain's one table, quoted here as closed words.
+ * @param {string} tab @returns {string[]}
+ */
+const resultOnlyKinds = (tab) => tab === "matching" ? [] : Object.entries(/** @type {Record<string, string>} */ (VCR_RESULT_KIND_TABS))
+  .filter(([kind, held]) => held === tab && /^[a-z_]+$/.test(kind)).map(([kind]) => kind);
+
 /** The tabs of the study `s` that hold something: one `EXISTS` per table, an array of the tab names in order. */
-const VCR_HELD_TABS_SQL = `ARRAY_REMOVE(ARRAY[${VCR_CONVERSATION_STUDY_CONTENT.map(([tab, tables]) =>
-  `CASE WHEN ${tables.map((table) => `EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.${table} x WHERE x.study_id = s.id)`).join(" OR ")} THEN '${tab}' END`).join(", ")}], NULL)`;
+const VCR_HELD_TABS_SQL = `ARRAY_REMOVE(ARRAY[${VCR_CONVERSATION_STUDY_CONTENT.map(([tab, tables]) => {
+  const kinds = resultOnlyKinds(tab);
+  const tests = [...tables.map((table) => `EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.${table} x WHERE x.study_id = s.id)`),
+    ...(kinds.length ? [`EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.results x WHERE x.study_id = s.id AND x.kind IN (${kinds.map((kind) => `'${kind}'`).join(", ")}))`] : [])];
+  return `CASE WHEN ${tests.join(" OR ")} THEN '${tab}' END`;
+}).join(", ")}], NULL)`;
 
 /** The longest a study's name is, in characters: the project's own limit (`projectDisplayName`), because the project carries the same name. */
 const VCR_STUDY_NAME_MAX = 40;

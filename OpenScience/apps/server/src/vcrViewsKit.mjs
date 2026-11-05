@@ -354,6 +354,60 @@ export const MEASURE_META = Object.freeze({
   mse: { label: "均方误差" },
   expected_sample_size: { label: VCR_PERFORMANCE_MEASURE_LABELS_ZH.expected_sample_size, unit: "例" },
   expected_events: { label: "期望事件数", unit: "个" },
+  // the confirmatory designs (design_confirmatory): the cells of the per-effect table and the headline numbers
+  expected_sample_size_h0: { label: "无效应时的期望样本量", unit: "例" },
+  expected_events_h0: { label: "无效应时的期望事件数", unit: "个" },
+  expected_patients: { label: "期望入组人数", unit: "例" },
+  expected_patients_h0: { label: "无效应时的期望入组人数", unit: "例" },
+  // an event-time selection or enrichment is sized in events: its people are the events over the chance of an event of one person
+  expected_patients_from_events: { label: "事件数折成的期望人数", unit: "例" },
+  max_patients_from_events: { label: "最多事件数折成的人数", unit: "例" },
+  power_logrank: { label: "同一批模拟里 log-rank 检验的功效", unit: "%", percent: true },
+  type_one_error_logrank: { label: "同一批模拟里 log-rank 检验的 I 类错误", unit: "%", percent: true },
+  type_one_error_strong_null: { label: "强零假设下 MaxCombo 判为更优的概率", unit: "%", percent: true },
+  type_one_error_strong_null_logrank: { label: "强零假设下 log-rank 判为更优的概率", unit: "%", percent: true },
+  futility_stop_probability: { label: "中途因无效停止的概率", unit: "%", percent: true },
+  futility_stop_probability_h0: { label: "无效应时中途停止的概率", unit: "%", percent: true },
+  early_stop_probability: { label: "中期就达标而停止的概率", unit: "%", percent: true },
+  increase_probability: { label: "中期加样的概率", unit: "%", percent: true },
+  correct_selection_probability: { label: "选中真正最好的臂的概率", unit: "%", percent: true },
+  selected_subset: { label: "保留标志物阳性亚组的概率", unit: "%", percent: true },
+  selected_full: { label: "保留全人群的概率", unit: "%", percent: true },
+  reject_subset: { label: "亚组结论成立的概率", unit: "%", percent: true },
+  reject_full: { label: "全人群结论成立的概率", unit: "%", percent: true },
+  // the dose-finding designs (design_dose) and the Bayesian designs (design_bayesian)
+  correct_dose_probability: { label: "选对最大耐受剂量的概率", unit: "%", percent: true },
+  select_above_mtd_probability: { label: "选到比最大耐受剂量更高的剂量的概率", unit: "%", percent: true },
+  select_below_mtd_probability: { label: "选到比最大耐受剂量更低的剂量的概率", unit: "%", percent: true },
+  select_none_probability: { label: "没有选出任何剂量的概率", unit: "%", percent: true },
+  expected_dlt: { label: "出现毒性反应的患者数（平均）", unit: "例" },
+  patients_above_mtd: { label: "超过最大耐受剂量的患者数（平均）", unit: "例" },
+  patients_at_mtd: { label: "在最大耐受剂量上的患者数（平均）", unit: "例" },
+  patients_below_mtd: { label: "低于最大耐受剂量的患者数（平均）", unit: "例" },
+  per_arm: { label: "每个剂量的患者数", unit: "例" },
+  total_patients: { label: "患者总数", unit: "例" },
+  worst_correct_dose_probability: { label: "各情形里选对的概率的最小值", unit: "%", percent: true },
+  // the win-ratio design (design_win_ratio)
+  win_ratio: { label: "胜率比（赢的对数 ÷ 输的对数）" },
+  win_difference: { label: "净胜率（赢的对数占比 − 输的对数占比）", unit: "%", percent: true },
+  win_odds: { label: "胜算比（平局各算一半）" },
+  win_proportion: { label: "赢的对数占比", unit: "%", percent: true },
+  loss_proportion: { label: "输的对数占比", unit: "%", percent: true },
+  tie_proportion: { label: "平局的对数占比", unit: "%", percent: true },
+  early_stop_efficacy_probability: { label: "中途提前宣布成功的概率", unit: "%", percent: true },
+  stop_futility_probability: { label: "在这次分析因无效停止的概率", unit: "%", percent: true },
+  stop_efficacy_probability: { label: "在这次分析提前宣布成功的概率", unit: "%", percent: true },
+  expected_sample_size_null: { label: "无效应时的期望样本量", unit: "例" },
+  first_stage_stop_probability_null: { label: "无效应时在第一阶段就停止的概率", unit: "%", percent: true },
+  simon_expected_sample_size_null: { label: "Simon 最优设计无效应时的期望样本量", unit: "例" },
+  expected_sample_size_saving_null: { label: "无效应时比 Simon 最优设计少的期望样本量", unit: "例" },
+  success_threshold: { label: "成功阈值（后验概率）", unit: "%", percent: true },
+  calibrated_threshold: { label: "校准后的成功阈值", unit: "%", percent: true },
+  type_one_error_stated: { label: "你给的阈值下的 I 类错误", unit: "%", percent: true },
+  power_stated: { label: "你给的阈值下的功效", unit: "%", percent: true },
+  planned_total: { label: "计划样本量", unit: "例" },
+  planned_events: { label: "计划事件数", unit: "个" },
+  separate_trials_size: { label: "每臂各做一个试验的总例数", unit: "例" },
   expected_analyses: { label: "期望分析次数" },
   required_total: { label: "所需样本量", unit: "例" },
   required_per_arm: { label: "每组所需样本量", unit: "例" },
@@ -373,6 +427,21 @@ export const MEASURE_META = Object.freeze({
   rmst_control: { label: "对照组 RMST" },
   survival_difference_at_tau: { label: "τ 时的生存率差", unit: "%", percent: true },
   weighted_difference: { label: "加权后的效应差" },
+  risk_difference_itt: { label: "意向治疗风险差", unit: "%", percent: true },
+  risk_treated_itt: { label: "试验组累积风险（意向治疗）", unit: "%", percent: true },
+  risk_control_itt: { label: "对照组累积风险（意向治疗）", unit: "%", percent: true },
+  risk_ratio_itt: { label: "累积风险比（意向治疗）" },
+  risk_difference_pp: { label: "按方案风险差", unit: "%", percent: true },
+  risk_treated_pp: { label: "试验组累积风险（按方案）", unit: "%", percent: true },
+  risk_control_pp: { label: "对照组累积风险（按方案）", unit: "%", percent: true },
+  risk_ratio_pp: { label: "累积风险比（按方案）" },
+  // the strategy of a clone-censor-weight design: start within the grace period against never start (it reads the start and nothing after it, so it is not "per protocol")
+  risk_difference_start: { label: "宽限期内开始治疗的风险差", unit: "%", percent: true },
+  risk_treated_start: { label: "试验组累积风险（宽限期内开始治疗）", unit: "%", percent: true },
+  risk_control_start: { label: "对照组累积风险（始终不开始）", unit: "%", percent: true },
+  risk_ratio_start: { label: "累积风险比（宽限期内开始治疗）" },
+  weighted_risk_ratio: { label: "加权后的相对危险度（RR）" },
+  weighted_odds_ratio: { label: "加权后的比值比（OR）" },
   effective_sample_size: { label: "有效样本量", unit: "例" },
   worst_standardized_difference: { label: "加权后最大标准化差异" },
   indirect_estimate: { label: "间接比较估计" },
@@ -401,7 +470,96 @@ export const MEASURE_META = Object.freeze({
   covariate_sets_estimable: { label: "能估计的协变量集个数", unit: "组" },
   e_value: { label: "E 值" },
   e_value_confidence_limit: { label: "E 值（置信限）" },
+  // quantitative bias analysis (comparator.bias_analysis): the headline numbers, and the cells of the card's tables
+  bias_tipping_limit: { label: "使区间碰到无效线的偏倚" },
+  bias_tipping_estimate: { label: "使估计值碰到无效线的偏倚" },
+  bias_adjusted_estimate: { label: "校正偏倚后的估计" },
+  bias_adjusted_effect_persists: { label: "校正后效应仍在原方向的概率", percent: true },
+  bias_shifted_estimate: { label: "去掉偏倚后的估计" },
+  bias_shifted_p: { label: "偏移零假设的单侧 P 值" },
+  bias_confounder_prevalence: { label: "混杂因素的比例", percent: true },
+  bias_confounder_association: { label: "混杂因素与结局的关联" },
+  bias_confounder_standardized: { label: "标准化均值差" },
+  // the spline family of the survival fit (model.survival_fit): the median, the restricted mean and the survival at a time
+  fitted_median: { label: "拟合的生存中位时间" },
+  restricted_mean_survival_time: { label: "限制性平均生存时间（RMST）" },
+  survival_probability: { label: "生存率", percent: true },
+  survival_at_last_horizon: { label: "最后一个时间点的生存率", percent: true },
+  // inference on synthetic data and per-record privacy (population.synthpop / population.quality 1.1.0)
+  false_positive_rate_real_permuted: { label: "打乱臂标签后，真实表上误判有效的概率", percent: true },
+  false_positive_rate_synthetic_naive: { label: "把合成表第 1 份当真实数据分析时误判有效的概率", percent: true },
+  false_positive_rate_synthetic_combined: { label: "合成表各份按规则合并后误判有效的概率", percent: true },
+  records_above_risk_bound: { label: "被认出来的风险高于界限的真实记录占比", percent: true },
+  attribute_inference_risk: { label: "属性推断的风险（比从没进过数据的人多猜对的部分）", percent: true },
+  // a prognostic model trained on the person's own table (model.prognostic_train): out of fold, and the equation's terms
+  out_of_fold_c_index: { label: "留出折上的 C 指数" },
+  out_of_fold_auc: { label: "留出折上的 AUC" },
+  out_of_fold_r_squared: { label: "留出折上的 R²" },
+  calibration_slope: { label: "校准斜率（理想是 1）" },
+  calibration_intercept: { label: "校准截距（理想是 0）" },
+  calibration_in_the_large: { label: "整体校准（预测减观察）" },
+  prognostic_correlation: { label: "预后分与结局的相关" },
+  comparison_forest_difference: { label: "随机森林比回归多出的区分度" },
+  model_coefficient: { label: "变化量" },
+  model_ratio: { label: "比值" },
+  sample_size_ratio: { label: "所需样本量是不调整时的几倍" },
+  sample_size_saving: { label: "可节省的样本量", percent: true },
+  // a population-level progression simulation (patients.progression)
+  expected_difference: { label: "治疗组减对照组的平均差" },
+  expected_control_change: { label: "对照组到所选随访的平均变化" },
+  expected_treated_change: { label: "治疗组到所选随访的平均变化" },
+  curve_mean: { label: "均值" },
+  curve_sd: { label: "标准差" },
+  curve_change: { label: "相对基线的变化" },
+  curve_gap: { label: "治疗减对照" },
+  // dynamic borrowing of an external control arm (comparator.borrowing): the headline numbers, and the cells of the card's tables
+  borrowing_weight: { label: "借用程度", percent: true },
+  borrowed_sample_size: { label: "相当于借用的患者数", unit: "例" },
+  control_posterior_mean: { label: "对照组后验均值" },
+  control_posterior_lower: { label: "对照组后验区间下限" },
+  control_posterior_upper: { label: "对照组后验区间上限" },
+  probability_treatment_better: { label: "试验组优于对照组的概率", percent: true },
+  control_bias: { label: "对照组估计的偏差" },
+  control_rate_mean: { label: "对照组应答率后验均值", percent: true },
+  control_rate_lower: { label: "对照组应答率后验区间下限", percent: true },
+  control_rate_upper: { label: "对照组应答率后验区间上限", percent: true },
+  control_rate_bias: { label: "对照组应答率估计的偏差", percent: true },
+  type_one_error_worst: { label: "各偏离情形下最高的 I 类错误", percent: true },
+  // propensity trimming, and the G-computation simulated treatment comparison
+  trimmed_treated: { label: "修剪去掉的试验组人数", unit: "例" },
+  trimmed_control: { label: "修剪去掉的对照组人数", unit: "例" },
+  marginal_contrast_ipd: { label: "试验数据放到对方人群后的边际效应" },
+  marginal_level_ipd: { label: "试验数据放到对方人群后的预期结局" },
+  conditional_contrast_ipd: { label: "常规 STC 的条件效应" },
+  // the simulated treatment comparison's card (`vcrStcComparison`): the ratio form of the indirect estimate, and the figures set beside it
+  indirect_estimate_ratio: { label: "间接比较估计（比值）" },
+  stc_aggregate_effect: { label: "对方的治疗相对共同对照的效应" },
+  stc_expected_probability: { label: "放到对方人群上的预期结局", percent: true },
+  stc_expected_mean: { label: "放到对方人群上的预期结局" },
+  stc_aggregate_probability: { label: "对方试验那一组的结局", percent: true },
+  stc_aggregate_mean: { label: "对方试验那一组的结局" },
   pooled: { label: "合并估计" },
+  // evidence synthesis beyond a pairwise pool (network meta-analysis, dose-response, empirical shrinkage)
+  treatments: { label: "比较的治疗数", unit: "种" },
+  p_heterogeneity: { label: "研究之间一致性检验的 P 值" },
+  p_inconsistency: { label: "不同比较组合之间一致性检验的 P 值" },
+  network_effect: { label: "两种治疗的比较" },
+  network_p_score: { label: "排序得分", unit: "%", percent: true },
+  log_ratio_per_dose: { label: "每增加 1 个剂量单位的对数比值" },
+  ratio_per_dose_step: { label: "剂量每增加一步的比值" },
+  p_dose_response: { label: "剂量与效应无关的检验 P 值" },
+  p_nonlinearity: { label: "效应随剂量呈直线的检验 P 值" },
+  dose_response_ratio: { label: "相对参照剂量的比值" },
+  z_statistic: { label: "z 统计量" },
+  p_value: { label: "双侧 P 值" },
+  shrunken_estimate: { label: "按 Cochrane 总体收缩后的估计" },
+  shrinkage_factor: { label: "估计保留的比例", unit: "%", percent: true },
+  exaggeration_median: { label: "估计比真实效应大的倍数（中位）" },
+  correct_sign_probability: { label: "方向正确的概率", unit: "%", percent: true },
+  estimate_larger_probability: { label: "估计比真实效应大的概率", unit: "%", percent: true },
+  shrinkage_stated: { label: "你写的值" },
+  replication_probability: { label: "同样精度的试验再做一次仍达显著的概率", unit: "%", percent: true },
+  future_trial_success_probability: { label: "按新试验的精度仍达显著的概率", unit: "%", percent: true },
   i_squared: { label: "I²", unit: "%", percent: true },
   tau_squared: { label: "τ²" },
   tau: { label: "τ" },
@@ -454,7 +612,10 @@ const UNIT_WORDS = Object.freeze(/** @type {Record<string, string>} */ ({
 export const zhUnit = (unit) => (unit === null ? null : UNIT_WORDS[unit] ?? unit);
 
 /** @param {string} name */
-const isProportionName = (name) => MEASURE_META[name]?.percent === true || name.startsWith("probability_by_");
+const isProportionName = (name) => MEASURE_META[name]?.percent === true || name.startsWith("probability_by_") || INDEXED_PROBABILITY.test(name);
+
+/** The probabilities a confirmatory design reports per look or per arm: `stop_efficacy_2`, `selected_arm_1` ... */
+const INDEXED_PROBABILITY = /^(stop_efficacy|stop_futility|selected_arm|reject_arm|select_dose)_(\d+)$/;
 
 /** @param {string} name */
 export function measureLabel(name) {
@@ -464,6 +625,13 @@ export function measureLabel(name) {
   if (by) return `${by[1].replace(/_/g, "-")} 前完成的概率`;
   const set = /^covariate_set_estimate_(\d+)$/.exec(name);
   if (set) return `第 ${set[1]} 个协变量集的估计`;
+  const indexed = INDEXED_PROBABILITY.exec(name);
+  if (indexed) {
+    const words = /** @type {Record<string, string>} */ ({ stop_efficacy: "次分析达标而停止的概率", stop_futility: "次分析因无效而停止的概率", selected_arm: "臂被保留的概率", reject_arm: "臂的结论成立的概率", select_dose: "剂量被选中的概率" });
+    return `第 ${indexed[2]} ${words[indexed[1]]}`;
+  }
+  const doseCount = /^patients_dose_(\d+)$/.exec(name);
+  if (doseCount) return `第 ${doseCount[1]} 剂量的患者数（平均）`;
   return name;
 }
 
@@ -780,12 +948,12 @@ export const allResultsOf = (bundle) => bundle.allResults ?? bundle.results ?? [
 
 /** How an engine method is named on the model library's method rows. */
 export const METHOD_LABELS = Object.freeze(/** @type {Record<string, string>} */ ({
-  "model.survival_fit": "拟合人群生存模型", "model.prognostic_apply": "应用已发表的预后模型",
+  "model.survival_fit": "拟合人群生存模型", "model.prognostic_apply": "应用已发表的预后模型", "model.prognostic_train": "用自己的历史数据训练预后模型", "patients.progression": "人群层面的疾病进展模拟",
   "profile.snapshot": "数据快照画像", "cohort.build": "构建队列", "population.scenario": "情景人群生成", "population.literature": "文献人群",
-  "population.synthpop": "经验合成人群", "population.quality": "人群质量报告", "population.check": "与第二份基线表对照", "patients.continuous": "虚拟患者（连续终点）",
-  "patients.binary": "虚拟患者（二分类终点）", "patients.time_to_event": "虚拟患者（事件时间终点）", "patients.longitudinal": "虚拟患者（纵向轨迹）", "evidence.pool": "证据合并",
+  "population.synthpop": "经验合成人群", "population.quality": "人群质量报告", "population.check": "与第二份基线表对照", "design.confirmatory": "确认性设计", "design.dose": "剂量探索设计", "design.bayesian": "贝叶斯设计（无需 MCMC）", "design.win_ratio": "分层复合终点的胜率比设计", "patients.continuous": "虚拟患者（连续终点）",
+  "patients.binary": "虚拟患者（二分类终点）", "patients.time_to_event": "虚拟患者（事件时间终点）", "patients.longitudinal": "虚拟患者（纵向轨迹）", "evidence.pool": "证据合并", "evidence.network": "网络荟萃分析", "evidence.dose_response": "剂量反应荟萃分析", "evidence.shrinkage": "已发表效应的经验收缩",
   "evidence.reconstruct_km": "生存曲线重建（Guyot）", "comparator.entropy_balance": "熵平衡加权", "comparator.propensity_weight": "倾向评分加权",
-  "comparator.rmst": "RMST 比较", "comparator.maic": "匹配调整间接比较", "comparator.evalue": "E 值", "comparator.map_prior": "MAP 先验",
+  "comparator.rmst": "RMST 比较", "comparator.maic": "匹配调整间接比较", "comparator.evalue": "E 值", "comparator.bias_analysis": "未测混杂的偏倚分析", "comparator.borrowing": "外部对照的动态借用", "comparator.stc": "模拟治疗比较（G 计算）", "comparator.target_trial": "目标试验模拟", "comparator.map_prior": "MAP 先验",
   "comparator.weighted_cox": "加权 Cox 风险比", "comparator.maic_time_to_event": "事件时间终点的匹配调整间接比较",
   "comparator.aipw": "双重稳健估计（AIPW）", "comparator.covariate_sets": "协变量集敏感性分析",
   "design.analytic": "方案的解析计算", "design.simulate": "方案的模拟运行", "design.grid": "设计网格", "design.assurance": "成功把握",
@@ -864,7 +1032,7 @@ export const VALIDATION_LABELS = Object.freeze(/** @type {Record<string, string>
 }));
 /** What kind of model a card says it is, in Chinese. */
 export const MODEL_TYPE_LABELS = Object.freeze(/** @type {Record<string, string>} */ ({
-  literature_parameterized_reference: "文献参数参考仿真", published_prognostic_equation: "已发表预后方程", fitted_population_baseline: "已拟合人群基线",
+  literature_parameterized_reference: "文献参数参考仿真", published_prognostic_equation: "已发表预后方程", trained_prognostic_equation: "用自己的数据训练的预后方程", fitted_population_baseline: "已拟合人群基线",
   mathematical_simulation: "数学仿真", fitted_prediction_model: "拟合预测", registered_prediction_model: "已登记预测模型", generative: "生成模型", mechanistic: "机制模型",
 }));
 

@@ -753,6 +753,10 @@ export interface VcrQualityReport {
   groups: Array<{ key: string; label: string; rows: Array<{ key: string; label: string; value: VcrValue }> }>;
   trainingRecords: number | null;
   copies: number | null;
+  /** How the copies were combined, in a sentence (1.1.0): null for a report that did not combine them. */
+  rule?: string | null;
+  /** 「哪些人最容易被认出来」: the kind of person the at-risk group is, by level; counts of 1 to 9 people are never in it and no row ever is. Null with no holdout. */
+  atRisk?: { bound: number | null; size: number | null; described: boolean; rows: Array<{ variable: string; level: string; atRisk: number | null; all: number | null; atRiskShare: number | null; allShare: number | null }> } | null;
 }
 
 /** The generated population against a second baseline table (remediation plan D2): the server's rows and sentences, nothing to work out. */
@@ -980,6 +984,10 @@ export interface VcrPatientsTab {
   /** The label the model's output has earned: never 「数字孪生」 by default. */
   twin: { label: string; reason: string | null } | null;
   headline?: string | null;
+  /** Population-level progression simulations (P4): a card each. */
+  progressions?: VcrProgressionCard[];
+  /** The survival fits with a spline the study holds now (C13), newest first: the curve beyond the data with how far beyond, and the premises. */
+  splineFits?: VcrSplineFitBlock[];
   /** The people the set holds, as a list (`GET …/patients/rows?result=`): which result, how many, and the arms with their events. */
   records: { result: string; rows: number | null; arms: Array<{ value: string; label: string; n: number; events: number | null }> } | null;
   /** How each variable of the table is distributed (and what the study declared for it), read from the table itself. */
@@ -1070,6 +1078,176 @@ export interface VcrOperatingCharacteristics {
   rows: Array<{ drift: number; prior: string; priorLabel: string; scenario: "null" | "alternative"; rejection: number; mcse: number | null; replicates: number | null }>;
 }
 
+/** One side of a confounder that would flip the result: who carries more of it, and whether such a confounder can exist at all. */
+export interface VcrBiasConfounderCell {
+  /** What flips: the estimate or its interval. */
+  what: string;
+  /** The arm that carries more of the confounder. */
+  carrier: string;
+  /** False when the share needed is past 100%: the sentence then says no such confounder exists. */
+  feasible: boolean;
+  carrierPrevalence: VcrValue | null;
+  difference: VcrValue | null;
+  standardized: VcrValue | null;
+  sentence: string;
+}
+
+/**
+ * A dynamic borrowing of an external control arm (C10-C12): the control arm's posterior beside no borrowing and full borrowing, the table of
+ * conflict against borrowing, and the type I error and power over drifts of the true control value. A part the job did not ask for is null.
+ */
+export interface VcrBorrowingCard {
+  question: string;
+  kind: "power" | "sam" | "elastic";
+  kindWord: string;
+  endpoint: "binary" | "continuous";
+  weight: VcrValue | null;
+  borrowedSampleSize: VcrValue | null;
+  posterior: Array<{ which: "none" | "chosen" | "full"; label: string; mean: VcrValue | null; lower: VcrValue | null; upper: VcrValue | null; probabilityBetter: VcrValue | null; weight: VcrValue | null }>;
+  conflict: { patients: number | null; delta: string; note: string; rows: Array<{ differenceWords: string; weight: VcrValue | null }> } | null;
+  operatingCharacteristics: {
+    nControl: number | null; nTreatment: number | null; note: string;
+    rows: Array<{ driftWords: string; none: { typeOneError: VcrValue | null; power: VcrValue | null }; chosen: { typeOneError: VcrValue | null; power: VcrValue | null; weight: VcrValue | null } }>;
+  } | null;
+  note: string;
+}
+
+/** The result page's block of a spline survival fit (C13): the median, the restricted mean, the survival with how far beyond the data each lies, and its premises. */
+export interface VcrSplineFitBlock {
+  question: string;
+  median: VcrValue | null;
+  rmst: { tauWords: string; value: VcrValue | null } | null;
+  curve: Array<{ timeWords: string; survival: VcrValue | null; beyondData: boolean; timesLongestFollowUp: number | null }>;
+  longestFollowUp: string | null;
+  specifications: Array<{ knots: number; selected: boolean; estimable: boolean; survival: VcrValue | null; median: VcrValue | null }>;
+  note: string;
+  premises: VcrPremise[];
+}
+
+/**
+ * A quantitative bias analysis of the comparison: how much bias flips the conclusion, and the optional parts the call asked for. A
+ * part the call did not ask for is null, and so is the whole card on a result that holds no bias analysis.
+ */
+export interface VcrBiasAnalysisCard {
+  question: string;
+  /** The estimate that was analysed, in one phrase. */
+  estimate: string | null;
+  /** Which way the bias is taken to push the effect. */
+  direction: string;
+  tipping: { question: string; sentence: string; limit: VcrValue | null; estimate: VcrValue | null; alreadyIncludesNull: boolean };
+  shiftedNull: {
+    question: string;
+    note: string;
+    rows: Array<{ bias: string; adjusted: VcrValue | null; lower: VcrValue | null; upper: VcrValue | null; p: VcrValue | null; holds: boolean; sentence: string }>;
+  } | null;
+  confounder: {
+    question: string;
+    note: string;
+    baseline: VcrValue | null;
+    rows: Array<{ association: VcrValue | null; estimate: VcrBiasConfounderCell | null; limit: VcrBiasConfounderCell | null }>;
+  } | null;
+  probabilistic: {
+    question: string;
+    stated: string | null;
+    adjusted: VcrValue;
+    persists: VcrValue;
+    systematic: { median: VcrValue | null; lower: VcrValue | null; upper: VcrValue | null };
+    draws: number | null;
+    interrupted: string | null;
+    note: string;
+  } | null;
+}
+
+/** Who a propensity trimming removed and who the estimate is therefore about. */
+export interface VcrTrimCard {
+  rule: "fixed" | "crump";
+  lower: number | null;
+  upper: number | null;
+  /** Whether anyone was removed: the counts below are the engine's to state and a group of one to nine people has none. */
+  trimmed: boolean;
+  removed: number | null;
+  kept: number | null;
+  sentence: string;
+  arms: Array<{ arm: string; n: number | null; kept: number | null; removed: number | null; share: string }>;
+  /** The removed beside the kept, per covariate; empty when nobody was removed. Values are the server's own text. */
+  covariates: Array<{ covariate: string; treated: { kept: string; removed: string }; control: { kept: string; removed: string } }>;
+}
+
+/** What filling in the missing covariate values did to the answer, beside the answer from the complete cases alone. Every string is the server's. */
+export interface VcrImputationCard {
+  question: string;
+  sentence: string;
+  /** The premise the filled-in answer rests on (missing at random), as the server words it. */
+  assumption: string | null;
+  covariates: Array<{ name: string; missing: number; share: string; method: string }>;
+  rows: Array<{
+    key: string;
+    label: string;
+    imputed: VcrValue;
+    completeCase: VcrValue | null;
+    /** Whether the two answers reach the same conclusion; null where the server did not say. */
+    agreement: "same" | "different" | null;
+    loss: string | null;
+  }>;
+  completeCase: { rows: number; dropped: number; sentence: string } | null;
+  budget: string | null;
+  /** Said when the computation budget ended the imputation early. */
+  stopped: string | null;
+  /** Said when the number of filled-in copies is small beside the share of people with a gap. */
+  few: string | null;
+  note: string | null;
+}
+
+/**
+ * The target-trial emulation of a comparison (the question, how the emulated trial was made, and the effects of the two estimands
+ * beside what a naive grouping would have said). Every string is the server's; every number is a value with its unit and interval.
+ */
+export interface VcrTargetTrialCard {
+  question: string;
+  sentence: string;
+  strategy: "sequential" | "clone_censor_weight" | null;
+  /** The follow-up time the risks are read at, as the server counted it; null where it did not say. */
+  horizon: number | null;
+  estimands: Array<{
+    /** `start` is a clone-censor-weight design's strategy (start within the grace period against never start); it is not a per-protocol estimand. */
+    kind: "itt" | "pp" | "start";
+    label: string;
+    /** What the estimand holds fixed and what it ignores, in the server's words. */
+    meaning: string | null;
+    /** The estimand and the horizon said as one sentence. */
+    answers: string | null;
+    riskTreated: VcrValue | null;
+    riskControl: VcrValue | null;
+    riskDifference: VcrValue;
+    riskRatio: VcrValue | null;
+  }>;
+  checks: string[];
+  /** The naive risk difference (grouping by "ever treated") and the sentence that says what it is for; both or neither. */
+  naive: VcrValue | null;
+  naiveSentence: string | null;
+  weights: string | null;
+  bootstrap: string | null;
+}
+
+/**
+ * The simulated treatment comparison of a comparison (what the indirect estimate is a difference of, its ratio form, the marginal and the conditional
+ * effect of the person's own trial, and the part of the other trial's population outside the data). Every string is the server's; every number is a value.
+ */
+export interface VcrStcCard {
+  question: string;
+  sentence: string;
+  anchored: boolean;
+  /** The scale the estimate is on, in words (a log odds ratio, a difference...). */
+  scale: string;
+  estimate: VcrValue;
+  /** The ratio form of a logit- or log-link estimate, with the name of the ratio; both or neither. */
+  ratio: VcrValue | null;
+  ratioLabel: string | null;
+  rows: Array<{ key: string; label: string; value: VcrValue; note: string | null }>;
+  /** The share of the other trial's population outside the range of the person's data, as one sentence. */
+  outside: string | null;
+}
+
 export interface VcrComparatorTab {
   /** 「这个结论的前提」: at most five decisive, the rest folded by the page. */
   premises?: VcrPremise[];
@@ -1118,6 +1296,19 @@ export interface VcrComparatorTab {
    * could not be computed, and the sentence that no regulator has qualified prognostic adjustment for the endpoint. Null when none.
    */
   robustness?: { rows: Array<{ key: string; label: string; value: VcrValue }>; notes: string[]; qualification: string | null } | null;
+  /** The bias analysis of this result (tipping bias, shifted null, confounder tipping, probabilistic): null when it holds none. */
+  biasAnalysis?: VcrBiasAnalysisCard | null;
+  borrowing?: VcrBorrowingCard | null;
+  /** Prognostic models trained on the person's own table (P3): a card each. */
+  prognosticModels?: VcrPrognosticModelCard[];
+  /** Who the propensity trimming removed and who the estimate is about: null when the result did not trim. */
+  trim?: VcrTrimCard | null;
+  /** What filling in missing covariate values did to the answer: null when the result did not impute. */
+  imputation?: VcrImputationCard | null;
+  /** The target-trial emulation of this comparison: null when the result is not one. */
+  targetTrialEmulation?: VcrTargetTrialCard | null;
+  /** The simulated treatment comparison of this comparison: null when the result is not one. */
+  stcComparison?: VcrStcCard | null;
   /** 「不可估计」 — the gaps, and what each one would answer. */
   gaps: { title?: string | null; needs?: string | null; items: Array<{ title: string; detail?: string | null; answers?: string | null }>; conclusion?: string | null; rule?: string | null } | null;
   counts: VcrCounts | null;
@@ -1169,9 +1360,317 @@ export interface VcrRegulatoryContact {
   recordedAt: string | null;
 }
 
+/**
+ * A confirmatory design a conversation wrote (a futility boundary, a sample-size re-estimation, a multi-arm selection, an enrichment, a
+ * count endpoint): the server presents it as a card of its own, never as one of the page's lettered designs.
+ */
+export interface VcrConfirmatoryLook {
+  look: number;
+  informationRate: number | null;
+  size: number | null;
+  efficacyBound: number | null;
+  futilityBound: number | null;
+  efficacyStop: VcrValue | null;
+  futilityStop: VcrValue | null;
+  nullFutilityStop: VcrValue | null;
+}
+
+export interface VcrConfirmatoryCard {
+  id: string;
+  version: number;
+  /** The design's kind: `futility_group_sequential`, `sample_size_reestimation`, `multi_arm_selection`, `enrichment` or `count_endpoint`. */
+  design: string;
+  title: string;
+  /** What the card counts: `events` for an event-time design, else `patients`. */
+  unit?: string;
+  /** The question the card answers, in the reader's words. */
+  question: string;
+  endpoint: string;
+  headline: Array<{ key: string; label: string; value: VcrValue }>;
+  premises: VcrPremise[];
+  looks: VcrConfirmatoryLook[];
+  baselines: Array<{ key: string; label: string; text: string }>;
+  /** A sentence when the simulation was stopped early. */
+  limited: string | null;
+  table: {
+    /** `group` names who the column belongs to (「本设计」「固定设计」); null when the card has one kind of column. */
+    columns: Array<{ key: string; label: string; group: string | null }>;
+    /** One row per assumed true effect; a null cell is 「not applicable」. */
+    rows: Array<{ role: string; label: string; effect: string; iterations: number | null; cells: Record<string, VcrValue | null> }>;
+  } | null;
+}
+
+/** One column of a dose-finding table: the engine's measure and the words for it. */
+export interface VcrDoseColumn {
+  key: string;
+  label: string;
+}
+
+/**
+ * A dose-finding result a conversation computed: 3+3, BOIN, Keyboard and CRM compared on one toxicity curve (`dose_finding`), or the
+ * exact choice among randomised doses (`dose_selection`). A card of its own, never one of the page's lettered designs. Percentages
+ * arrive scaled (44.8, not 0.448), and a cell the engine did not compute is null, never a zero.
+ */
+export interface VcrDoseCard {
+  id: string;
+  version: number;
+  form: "dose_finding" | "dose_selection";
+  /** The design the question was about (`boin`), or `randomized_selection`. */
+  design: string;
+  title: string;
+  question: string;
+  /** Trials simulated per design; a randomised selection is exact and has none. */
+  trials: number | null;
+  /** The asked design's own name (「BOIN」); empty for a randomised selection. */
+  askedLabel: string;
+  /** The target toxicity rate, in percent. */
+  target: number | null;
+  /** The doses, lowest first, with the true toxicity (percent) each carries and which one is the maximum tolerated dose. */
+  doses: Array<{ dose: number; toxicity: number; mtd: boolean }>;
+  /** The asked design's own numbers. */
+  headline: Array<{ key: string; label: string; value: VcrValue }>;
+  /** One row per design; the asked one has the role `asked`. */
+  table: { columns: VcrDoseColumn[]; rows: Array<{ kind: string; label: string; role: string; cells: Record<string, VcrValue | null> }> } | null;
+  /** The asked design minus each of the others, on the same simulated patients. */
+  differences: { columns: VcrDoseColumn[]; rows: Array<{ kind: string; label: string; cells: Record<string, VcrValue | null> }>; note: string | null } | null;
+  /** Per design and dose: the probability the dose is chosen and the patients given it, in the order of `doses`. */
+  perDose: Array<{ kind: string; label: string; select: Array<VcrValue | null>; patients: Array<VcrValue | null> }>;
+  premises: VcrPremise[];
+  /** A sentence when the simulation was stopped early. */
+  limited: string | null;
+  selection: {
+    perArm: number | null;
+    totalPatients: number | null;
+    doses: number;
+    /** Percent. */
+    margin: number | null;
+    targetProbability: number | null;
+    requiredFirst: number | null;
+    requiredStable: number | null;
+    note: string | null;
+    scenarios: Array<{ label: string; /** Percent, one per dose. */ rates: number[]; rightDose: number | null; correct: VcrValue | null; select: Array<VcrValue | null> }>;
+  } | null;
+}
+
+/** Simon's two-stage design read beside a Bayesian one: the rule in words and its four exact numbers. */
+export interface VcrSimonDesign {
+  rule: string;
+  typeOneError: VcrValue | null;
+  power: VcrValue | null;
+  expectedNull: VcrValue | null;
+  expectedAlt: VcrValue | null;
+}
+
+/**
+ * A Bayesian design without MCMC: the optimal phase II design (`bop2`), predictive-probability monitoring (`predictive`), or the
+ * calibration of a posterior-probability success threshold (`calibration`). Every number is exact; none carries a Monte-Carlo error.
+ */
+export interface VcrBayesianCard {
+  id: string;
+  version: number;
+  form: "bop2" | "predictive" | "calibration";
+  design: string;
+  title: string;
+  question: string;
+  headline: Array<{ key: string; label: string; value: VcrValue }>;
+  /** What each analysis does, in words (phase II forms). */
+  looks: Array<{ look: number; size: number | null; rule: string }>;
+  operating: {
+    rows: Array<{ role: string; label: string; cells: { success: VcrValue | null; expected: VcrValue | null; futility: VcrValue | null; efficacy: VcrValue | null } }>;
+    stops: Array<{ look: number; size: number | null; nullFutility: VcrValue | null; alternativeFutility: VcrValue | null }>;
+  } | null;
+  /** The parameters or the final rule the search ended with, as a phrase. */
+  found: string | null;
+  /** False when no design that keeps the type I error reached the power asked. */
+  reachedPower: boolean;
+  simon: { optimal: VcrSimonDesign | null; minimax: VcrSimonDesign | null; saving: VcrValue | null } | null;
+  calibration: {
+    endpoint: string;
+    rows: Array<{ kind: string; label: string; threshold: VcrValue | null; typeOneError: VcrValue | null; power: VcrValue | null }>;
+    discrete: boolean;
+    note: string;
+  } | null;
+  premises: VcrPremise[];
+  limited: string | null;
+}
+
+/**
+ * A hierarchical composite endpoint compared by win ratio (death, then the number of events, then a score; pair by pair): one card
+ * for the result of a conversation's simulation. Percentages arrive scaled (12.7, not 0.127) and a cell the engine did not compute is
+ * null, never a zero. The win ratio carries the range one trial of this size shows (a prediction interval), which is not its error.
+ */
+export interface VcrWinRatioCard {
+  id: string;
+  version: number;
+  form: "win_ratio";
+  title: string;
+  question: string;
+  /** The levels in the order they are compared. */
+  levels: Array<{ key: string; label: string }>;
+  headline: Array<{ key: string; label: string; value: VcrValue }>;
+  /** Present when the question was how many people per arm; the power at that size was simulated. `powerWanted` is a percent. */
+  size: { perArm: number; total: number; powerWanted: number | null; verified: boolean } | null;
+  /** The people per arm the simulation used; null where the engine did not say. */
+  arms: { treat: number | null; control: number | null };
+  /** One row per level, then the total; a cell can be null. */
+  table: { columns: VcrDoseColumn[]; rows: Array<{ key: string; label: string; cells: Record<string, VcrValue | null> }> } | null;
+  /** Simulated trials the numbers rest on. */
+  trials: number | null;
+  premises: VcrPremise[];
+  /** A sentence when the simulation stopped early or the size was not checked. */
+  limited: string | null;
+}
+
+/**
+ * What the comparison tab says of a prognostic model trained on the person's own table (algorithm round P3): the out-of-fold figures, the table of
+ * sample-size savings under the discounts, and the equation's effects. `form: "refused"` carries the sentence that says why no model was trained.
+ */
+export interface VcrPrognosticModelCard {
+  id: string;
+  version: number;
+  form: "trained" | "refused";
+  title: string;
+  question: string;
+  /** 「用你自己的数据训练，没有在别的人群验证过」 */
+  label: string | null;
+  refusal: string | null;
+  headline: Array<{ key: string; label: string; value: VcrValue }>;
+  savings: { rows: Array<{ key: string; lambda: number; gamma: number; estimate: VcrPrognosticSaving | null; lower: VcrPrognosticSaving | null }> } | null;
+  terms: Array<{ label: string; unit: string | null; effect: VcrValue }>;
+  effectWords: string | null;
+  comparison: { label: string; value: VcrValue; difference: VcrValue } | null;
+  correlationNote: string | null;
+  trainedOn: { rows: number | null; events: number | null; folds: number | null; excluded: number | null } | null;
+  premises: VcrPremise[];
+  limited: string | null;
+}
+export interface VcrPrognosticSaving { rho: number | null; saving: VcrValue; ratio: VcrValue }
+
+/** What the virtual-patients tab says of a population-level progression simulation (algorithm round P4): the curves, the power, where each number came from. */
+export interface VcrProgressionCard {
+  id: string;
+  version: number;
+  title: string;
+  question: string;
+  /** 「人群层面，不是对个人的预测」 */
+  label: string;
+  reason: string | null;
+  power: VcrValue | null;
+  powerName: string;
+  /** The closed-form power of the same test, beside the simulated one. */
+  approximation: VcrValue | null;
+  expected: { value: VcrValue; words: string } | null;
+  timeUnit: string;
+  visits: number[];
+  series: VcrSeries[];
+  table: { rows: Array<{ key: string; visit: number; control: { mean: VcrValue; sd: VcrValue }; treated: { mean: VcrValue; sd: VcrValue }; gap: VcrValue }> };
+  trials: number | null;
+  premises: VcrPremise[];
+  limited: string | null;
+}
+
+/**
+ * What the evidence tab says of a network meta-analysis the conversation computed: who ranks where, every pair of treatments in a league
+ * table, and whether the direct and the indirect evidence agree. The sentences are the server's; the page places them.
+ */
+export interface VcrNetworkMetaCard {
+  id: string;
+  version: number;
+  title: string;
+  /** The question the card answers, in the reader's words. */
+  question: string;
+  /** Best first, by the P-score. */
+  ranking: Array<{ rank: number; treatment: string; studies: number | null; score: VcrValue | null; isReference: boolean }>;
+  league: {
+    /** Rows and columns, in the same order. */
+    treatments: string[];
+    /** One line on how a cell reads. */
+    meaning: string;
+    /** `cells` has one entry per treatment; the diagonal, and a pair with no estimate, are null. */
+    rows: Array<{ treatment: string; cells: Array<{ value: VcrValue; directStudies: number | null; excludesNull: boolean } | null> }>;
+  } | null;
+  consistency: string | null;
+  heterogeneity: string | null;
+  scoreNote: string | null;
+  premises: VcrPremise[];
+}
+
+/** A dose-response meta-analysis: what a step of dose does, the fitted curve with its band, and where the band first leaves 1. */
+export interface VcrDoseResponseCard {
+  id: string;
+  version: number;
+  title: string;
+  question: string;
+  /** The ratio's name: 「相对危险度」. */
+  ratioWord: string;
+  doseUnit: string | null;
+  referenceDose: number;
+  headline: string | null;
+  /** The sentence for where the band first leaves 1. */
+  firstDose: string | null;
+  predictions: Array<{ dose: number; isReference: boolean; value: VcrValue }>;
+  /** The fitted curve: the ratio and its interval at each dose. */
+  curve: Array<{ dose: number; ratio: number; lower: number; upper: number }>;
+  tests: { overall: string | null; nonlinearity: VcrValue | null };
+  heterogeneity: string | null;
+  /** The studies the model could not take in. */
+  excluded: string[];
+  note: string | null;
+  premises: VcrPremise[];
+}
+
+/**
+ * The value a researcher stated beside how the same estimate reads against the Cochrane trials of its kind. A comparison line only: the
+ * stated value is never replaced, and a degenerate row (an estimate of exactly 0) has no shrunken side.
+ */
+export interface VcrEffectShrinkageCard {
+  id: string;
+  version: number;
+  title: string;
+  question: string;
+  rows: Array<{
+    id: string;
+    stated: VcrValue | null;
+    shrunken: VcrValue | null;
+    degenerate: boolean;
+    sentence: string;
+  }>;
+  note: string | null;
+  premises: VcrPremise[];
+}
+
+/** One historical rate as the source prints it, and the number of transitions or paths it stands on. */
+export interface VcrSuccessRate {
+  text: string;
+  n: number | null;
+}
+
+export type VcrSuccessRateFigure = "toNext" | "toFiling" | "toApproval";
+
+/**
+ * The historical success rates read beside an assurance: two sources, side by side, each counting to its own endpoint. A reference, never
+ * this trial's probability. A source with no figure for an area has none: nothing is filled from the other.
+ */
+export interface VcrSuccessRates {
+  title: string;
+  note: string;
+  sources: Array<{ key: "bio" | "wong"; id: string; label: string; endpoint: string | null; method: string | null }>;
+  phases: Array<{ id: string; label: string }>;
+  areas: Array<{
+    id: string;
+    label: string;
+    /** The group of the area in the Wong table, when it differs from the area's own name. */
+    wongGroup: string | null;
+    /** By phase id; a source's block is null where it has no rows for the area. */
+    phases: Record<string, { bio: Partial<Record<VcrSuccessRateFigure, VcrSuccessRate | null>> | null; wong: Partial<Record<VcrSuccessRateFigure, VcrSuccessRate | null>> | null }>;
+  }>;
+}
+
 export interface VcrTrialTab {
   /** 「这个结论的前提」 of the headline design: at most five decisive, the rest folded by the page. */
   premises?: VcrPremise[];
+  /** The historical success rates beside the assurance; null when no design has one. */
+  successRates?: VcrSuccessRates | null;
   /** What the sample size rests on, one input at a time, largest first, and the power the effect's published shrinkage leaves (C6). */
   sensitivity?: {
     design: string;
@@ -1183,6 +1682,14 @@ export interface VcrTrialTab {
   /** The yardstick the trade-off is drawn against: the researcher's own goal, else alpha and the target power (C7). Percentages. */
   objective?: { source: "default" | "stated"; alpha: number | null; power: number | null; sided: number | null; text: string } | null;
   accrualForecasts?: Array<{ id: string; version: number; scenarioId: string | null; scenarioVersion: number | null; design: string | null; name: string; lastPatientIn: VcrValue | null; targetEvents: VcrValue | null; probabilityByMonth: Array<{ month: number; probability: number }> }>;
+  /** The confirmatory designs the conversation wrote, each a card of its own on the page. */
+  confirmatoryDesigns?: VcrConfirmatoryCard[];
+  /** The dose-finding designs (and randomised dose selections) the conversation computed, each a card of its own. */
+  doseDesigns?: VcrDoseCard[];
+  /** The Bayesian designs without MCMC the conversation computed, each a card of its own. */
+  bayesianDesigns?: VcrBayesianCard[];
+  /** The win-ratio (hierarchical composite endpoint) designs the conversation computed, each a card of its own. */
+  winRatioDesigns?: VcrWinRatioCard[];
   headline?: string | null;
   /** ADEMP, one line each. */
   ademp: Array<{ key: string; label: string; text: string }>;
@@ -1437,6 +1944,12 @@ export interface VcrAssumption {
     /** `afterFreeze`: written after the study's analysis plan froze — beside the frozen version, never the one the study works from (F24). */
     versions?: Array<{ version: number; at?: string | null; text: string; note?: string | null; afterFreeze?: boolean }>;
   } | null;
+  /**
+   * ⚠ The numbers the card is made of that do not agree with each other (an interval that is not symmetric about its estimate, a p-value
+   * against its interval, events against a rate, arms against a total), or that a second, independent reading of the same passage read
+   * differently. Advice naming the numbers: the card's value stands as it was read.
+   */
+  valueChecks?: Array<{ kind: "consistency" | "second_read"; message: string }>;
   /** 「有新证据」: the frontier feed or a source change bears on the card's sources (flywheel F24). */
   newEvidence?: {
     label: string;
@@ -1488,6 +2001,10 @@ export interface VcrPrecedent {
 
 export interface VcrDataTab {
   registryCoverage?: VcrRegistrySource[];
+  /** The network, dose-response and published-effect cards the conversation computed, newest first. */
+  networkMeta?: VcrNetworkMetaCard[];
+  doseResponses?: VcrDoseResponseCard[];
+  effectShrinkages?: VcrEffectShrinkageCard[];
   reviews?: VcrReviewSummary[];
   headline?: string | null;
   /** 「证据截至 9月27日 · 试验先例 23 项 · 假设卡 12 张 · 患者级数据 未接入」. */
@@ -1843,6 +2360,561 @@ export function readPremises(raw: unknown): VcrPremise[] {
   });
 }
 
+/** A value, or nothing: an absent or malformed cell is 「not applicable」, never a zero. */
+function readOptionalValue(raw: unknown): VcrValue | null {
+  return raw && typeof raw === "object" ? readVcrValue(raw) : null;
+}
+
+/** The confirmatory design cards; a card without a name or a kind, and anything of an unknown shape, is left out. */
+function readConfirmatoryDesigns(raw: unknown): VcrConfirmatoryCard[] {
+  return arr(raw).flatMap((card) => {
+    const id = text(card.id), design = text(card.design), title = text(card.title);
+    if (!id || !design || !title) return [];
+    const table = obj(card.table);
+    const columns = arr(table.columns).flatMap((column) => {
+      const key = text(column.key), label = text(column.label);
+      return key && label ? [{ key, label, group: text(column.group) }] : [];
+    });
+    const rows = arr(table.rows).flatMap((row) => {
+      const label = text(row.label);
+      if (!label) return [];
+      const cells = obj(row.cells);
+      return [{
+        role: text(row.role) ?? "", label, effect: text(row.effect) ?? "", iterations: finite(row.iterations),
+        cells: Object.fromEntries(Object.keys(cells).map((key) => [key, readOptionalValue(cells[key])])),
+      }];
+    });
+    return [{
+      id, version: finite(card.version) ?? 1, design, title,
+      unit: text(card.unit) ?? undefined, question: text(card.question) ?? "", endpoint: text(card.endpoint) ?? "",
+      headline: arr(card.headline).flatMap((item) => {
+        const key = text(item.key), label = text(item.label);
+        return key && label ? [{ key, label, value: readVcrValue(item.value) }] : [];
+      }),
+      premises: readPremises(card.premises),
+      looks: arr(card.looks).flatMap((look) => {
+        const number = finite(look.look);
+        return number === null ? [] : [{
+          look: number, informationRate: finite(look.informationRate), size: finite(look.size),
+          efficacyBound: finite(look.efficacyBound), futilityBound: finite(look.futilityBound),
+          efficacyStop: readOptionalValue(look.efficacyStop), futilityStop: readOptionalValue(look.futilityStop), nullFutilityStop: readOptionalValue(look.nullFutilityStop),
+        }];
+      }),
+      baselines: arr(card.baselines).flatMap((line) => {
+        const key = text(line.key), label = text(line.label), lineText = text(line.text);
+        return key && label && lineText ? [{ key, label, text: lineText }] : [];
+      }),
+      limited: text(card.limited),
+      table: columns.length > 0 && rows.length > 0 ? { columns, rows } : null,
+    }];
+  });
+}
+
+/** A value that is there, or nothing: a cell with no value object is not a cell. */
+function readPresentValue(raw: unknown): VcrValue | null {
+  return raw && typeof raw === "object" && !Array.isArray(raw) ? readVcrValue(raw) : null;
+}
+
+/** The numbers a card leads with: only lines that have a name; a value that is missing reads as 「no number」, never a zero. */
+function readHeadlineLines(raw: unknown): Array<{ key: string; label: string; value: VcrValue }> {
+  return arr(raw).flatMap((item) => {
+    const key = text(item.key), label = text(item.label);
+    return key && label ? [{ key, label, value: readVcrValue(item.value) }] : [];
+  });
+}
+
+/** A row's cells by measure; a cell with no value object is null. */
+function readValueCells(raw: unknown): Record<string, VcrValue | null> {
+  const cells = obj(raw);
+  return Object.fromEntries(Object.keys(cells).map((key) => [key, readPresentValue(cells[key])]));
+}
+
+/** Values that keep their place: position is the dose, so a missing one is a null, not a gap. */
+function readValueList(raw: unknown): Array<VcrValue | null> {
+  return Array.isArray(raw) ? raw.map(readPresentValue) : [];
+}
+
+function readColumnList(raw: unknown): VcrDoseColumn[] {
+  return arr(raw).flatMap((column) => {
+    const key = text(column.key), label = text(column.label);
+    return key && label ? [{ key, label }] : [];
+  });
+}
+
+/** The dose-finding cards; a card without a name or a known form, and anything of an unknown shape, is left out. */
+function readDoseDesigns(raw: unknown): VcrDoseCard[] {
+  return arr(raw).flatMap((card) => {
+    const id = text(card.id), title = text(card.title);
+    const form = (["dose_finding", "dose_selection"] as const).find((entry) => entry === card.form);
+    if (!id || !title || !form) return [];
+    const table = obj(card.table), differences = obj(card.differences), selection = obj(card.selection);
+    const tableColumns = readColumnList(table.columns);
+    const tableRows = arr(table.rows).flatMap((row) => {
+      const label = text(row.label);
+      return label ? [{ kind: text(row.kind) ?? "", label, role: text(row.role) ?? "", cells: readValueCells(row.cells) }] : [];
+    });
+    const differenceColumns = readColumnList(differences.columns);
+    const differenceRows = arr(differences.rows).flatMap((row) => {
+      const label = text(row.label);
+      return label ? [{ kind: text(row.kind) ?? "", label, cells: readValueCells(row.cells) }] : [];
+    });
+    return [{
+      id, version: finite(card.version) ?? 1, form, design: text(card.design) ?? "", title, question: text(card.question) ?? "",
+      trials: finite(card.trials), askedLabel: text(card.askedLabel) ?? "", target: finite(card.target),
+      doses: arr(card.doses).flatMap((entry) => {
+        const dose = finite(entry.dose), toxicity = finite(entry.toxicity);
+        return dose === null || toxicity === null ? [] : [{ dose, toxicity, mtd: entry.mtd === true }];
+      }),
+      headline: readHeadlineLines(card.headline),
+      table: tableColumns.length > 0 && tableRows.length > 0 ? { columns: tableColumns, rows: tableRows } : null,
+      differences: differenceColumns.length > 0 && differenceRows.length > 0 ? { columns: differenceColumns, rows: differenceRows, note: text(differences.note) } : null,
+      perDose: arr(card.perDose).flatMap((row) => {
+        const label = text(row.label);
+        return label ? [{ kind: text(row.kind) ?? "", label, select: readValueList(row.select), patients: readValueList(row.patients) }] : [];
+      }),
+      premises: readPremises(card.premises),
+      limited: text(card.limited),
+      selection: Object.keys(selection).length === 0 ? null : {
+        perArm: finite(selection.perArm), totalPatients: finite(selection.totalPatients), doses: finite(selection.doses) ?? 0,
+        margin: finite(selection.margin), targetProbability: finite(selection.targetProbability),
+        requiredFirst: finite(selection.requiredFirst), requiredStable: finite(selection.requiredStable), note: text(selection.note),
+        scenarios: arr(selection.scenarios).flatMap((row) => {
+          const label = text(row.label);
+          return label ? [{
+            label, rates: (Array.isArray(row.rates) ? row.rates : []).filter((rate): rate is number => finite(rate) !== null),
+            rightDose: finite(row.rightDose), correct: readPresentValue(row.correct), select: readValueList(row.select),
+          }] : [];
+        }),
+      },
+    }];
+  });
+}
+
+function readSimonDesign(raw: unknown): VcrSimonDesign | null {
+  const value = obj(raw), rule = text(value.rule);
+  return rule ? {
+    rule, typeOneError: readPresentValue(value.typeOneError), power: readPresentValue(value.power),
+    expectedNull: readPresentValue(value.expectedNull), expectedAlt: readPresentValue(value.expectedAlt),
+  } : null;
+}
+
+/** The Bayesian design cards; a card without a name or a known form, and anything of an unknown shape, is left out. */
+function readBayesianDesigns(raw: unknown): VcrBayesianCard[] {
+  return arr(raw).flatMap((card) => {
+    const id = text(card.id), title = text(card.title);
+    const form = (["bop2", "predictive", "calibration"] as const).find((entry) => entry === card.form);
+    if (!id || !title || !form) return [];
+    const operating = obj(card.operating), simon = obj(card.simon), calibration = obj(card.calibration);
+    const operatingRows = arr(operating.rows).flatMap((row) => {
+      const label = text(row.label);
+      if (!label) return [];
+      const cells = obj(row.cells);
+      return [{ role: text(row.role) ?? "", label, cells: { success: readPresentValue(cells.success), expected: readPresentValue(cells.expected), futility: readPresentValue(cells.futility), efficacy: readPresentValue(cells.efficacy) } }];
+    });
+    const stops = arr(operating.stops).flatMap((stop) => {
+      const look = finite(stop.look);
+      return look === null ? [] : [{ look, size: finite(stop.size), nullFutility: readPresentValue(stop.nullFutility), alternativeFutility: readPresentValue(stop.alternativeFutility) }];
+    });
+    const optimal = readSimonDesign(simon.optimal), minimax = readSimonDesign(simon.minimax);
+    const calibrationRows = arr(calibration.rows).flatMap((row) => {
+      const label = text(row.label);
+      return label ? [{ kind: text(row.kind) ?? "", label, threshold: readPresentValue(row.threshold), typeOneError: readPresentValue(row.typeOneError), power: readPresentValue(row.power) }] : [];
+    });
+    return [{
+      id, version: finite(card.version) ?? 1, form, design: text(card.design) ?? "", title, question: text(card.question) ?? "",
+      headline: readHeadlineLines(card.headline),
+      looks: arr(card.looks).flatMap((look) => {
+        const number = finite(look.look);
+        return number === null ? [] : [{ look: number, size: finite(look.size), rule: text(look.rule) ?? "" }];
+      }),
+      operating: operatingRows.length > 0 || stops.length > 0 ? { rows: operatingRows, stops } : null,
+      found: text(card.found),
+      // Only an explicit false is 「not reached」: a card that says nothing makes no such claim.
+      reachedPower: card.reachedPower !== false,
+      simon: optimal || minimax ? { optimal, minimax, saving: readPresentValue(simon.saving) } : null,
+      calibration: calibrationRows.length > 0 ? { endpoint: text(calibration.endpoint) ?? "", rows: calibrationRows, discrete: calibration.discrete === true, note: text(calibration.note) ?? "" } : null,
+      premises: readPremises(card.premises),
+      limited: text(card.limited),
+    }];
+  });
+}
+
+/** The win-ratio cards; a card without a name or the known form, and anything of an unknown shape, is left out. */
+function readWinRatioDesigns(raw: unknown): VcrWinRatioCard[] {
+  return arr(raw).flatMap((card) => {
+    const id = text(card.id), title = text(card.title);
+    if (!id || !title || card.form !== "win_ratio") return [];
+    const table = obj(card.table), size = obj(card.size), arms = obj(card.arms);
+    const columns = readColumnList(table.columns);
+    const rows = arr(table.rows).flatMap((row) => {
+      const label = text(row.label);
+      return label ? [{ key: text(row.key) ?? label, label, cells: readValueCells(row.cells) }] : [];
+    });
+    const perArm = finite(size.perArm);
+    return [{
+      id, version: finite(card.version) ?? 1, form: "win_ratio" as const, title, question: text(card.question) ?? "",
+      levels: arr(card.levels).flatMap((level) => {
+        const key = text(level.key), label = text(level.label);
+        return key && label ? [{ key, label }] : [];
+      }),
+      headline: readHeadlineLines(card.headline),
+      size: perArm === null ? null : { perArm, total: finite(size.total) ?? perArm * 2, powerWanted: finite(size.powerWanted), verified: size.verified !== false },
+      arms: { treat: finite(arms.treat), control: finite(arms.control) },
+      table: columns.length > 0 && rows.length > 0 ? { columns, rows } : null,
+      trials: finite(card.trials),
+      premises: readPremises(card.premises),
+      limited: text(card.limited),
+    }];
+  });
+}
+
+/** The cards of the trained prognostic models; a card with no id or title, or of another shape, is left out. */
+function readPrognosticModels(raw: unknown): VcrPrognosticModelCard[] {
+  const saving = (cell: Loose): VcrPrognosticSaving | null => (cell.saving ? { rho: finite(cell.rho), saving: readVcrValue(cell.saving), ratio: readVcrValue(cell.ratio) } : null);
+  return arr(raw).flatMap((card) => {
+    const id = text(card.id), title = text(card.title);
+    if (!id || !title || (card.form !== "trained" && card.form !== "refused")) return [];
+    const comparison = obj(card.comparison), trained = obj(card.trainedOn), savings = obj(card.savings);
+    const rows = arr(savings.rows).flatMap((row) => {
+      const key = text(row.key), lambda = finite(row.lambda), gamma = finite(row.gamma);
+      return key && lambda !== null && gamma !== null ? [{ key, lambda, gamma, estimate: saving(obj(row.estimate)), lower: saving(obj(row.lower)) }] : [];
+    });
+    return [{
+      id, version: finite(card.version) ?? 1, form: card.form as "trained" | "refused", title, question: text(card.question) ?? "", label: text(card.label), refusal: text(card.refusal),
+      headline: readHeadlineLines(card.headline), savings: rows.length ? { rows } : null,
+      terms: arr(card.terms).flatMap((term) => (text(term.label) && term.effect ? [{ label: text(term.label) as string, unit: text(term.unit), effect: readVcrValue(term.effect) }] : [])),
+      effectWords: text(card.effectWords),
+      comparison: comparison.value ? { label: text(comparison.label) ?? "", value: readVcrValue(comparison.value), difference: readVcrValue(comparison.difference) } : null,
+      correlationNote: text(card.correlationNote),
+      trainedOn: Object.keys(trained).length ? { rows: finite(trained.rows), events: finite(trained.events), folds: finite(trained.folds), excluded: finite(trained.excluded) } : null,
+      premises: readPremises(card.premises), limited: text(card.limited),
+    }];
+  });
+}
+
+/** The cards of the progression simulations; a card with no id, title or curve, or of another shape, is left out. */
+function readProgressions(raw: unknown): VcrProgressionCard[] {
+  return arr(raw).flatMap((card) => {
+    const id = text(card.id), title = text(card.title), table = obj(card.table);
+    const rows = arr(table.rows).flatMap((row) => {
+      const key = text(row.key), visit = finite(row.visit), control = obj(row.control), treated = obj(row.treated);
+      return key && visit !== null && control.mean && treated.mean
+        ? [{ key, visit, control: { mean: readVcrValue(control.mean), sd: readVcrValue(control.sd) }, treated: { mean: readVcrValue(treated.mean), sd: readVcrValue(treated.sd) }, gap: readVcrValue(row.gap) }] : [];
+    });
+    if (!id || !title || rows.length === 0) return [];
+    const expected = obj(card.expected);
+    return [{
+      id, version: finite(card.version) ?? 1, title, question: text(card.question) ?? "", label: text(card.label) ?? "", reason: text(card.reason),
+      power: card.power ? readVcrValue(card.power) : null, powerName: text(card.powerName) ?? "", approximation: card.approximation ? readVcrValue(card.approximation) : null,
+      expected: expected.value ? { value: readVcrValue(expected.value), words: text(expected.words) ?? "" } : null,
+      timeUnit: text(card.timeUnit) ?? "", visits: Array.isArray(card.visits) ? card.visits.map(Number).filter(Number.isFinite) : [],
+      series: readSeries(card.series), table: { rows }, trials: finite(card.trials), premises: readPremises(card.premises), limited: text(card.limited),
+    }];
+  });
+}
+
+/** The network meta-analysis cards; a card without an id, a title and a ranking, and anything of an unknown shape, is left out. */
+export function readNetworkMetaCards(raw: unknown): VcrNetworkMetaCard[] {
+  return arr(raw).flatMap((card) => {
+    const id = text(card.id), title = text(card.title);
+    const ranking = arr(card.ranking).flatMap((row) => {
+      const treatment = text(row.treatment), rank = finite(row.rank);
+      return treatment && rank !== null ? [{ rank, treatment, studies: finite(row.studies), score: readPresentValue(row.score), isReference: row.isReference === true }] : [];
+    });
+    if (!id || !title || ranking.length === 0) return [];
+    // Best first, whatever order the rows came in.
+    ranking.sort((a, b) => a.rank - b.rank);
+    const league = obj(card.league), treatments = strings(league.treatments);
+    // A row keeps its place: a treatment is a row and a column by its position, so a short row is padded and a long one cut.
+    const rows = arr(league.rows).flatMap((row) => {
+      const treatment = text(row.treatment);
+      if (!treatment) return [];
+      const cells = Array.isArray(row.cells) ? row.cells : [];
+      return [{
+        treatment,
+        cells: treatments.map((_, index) => {
+          const cell = obj(cells[index]), value = readPresentValue(cell.value);
+          return value ? { value, directStudies: finite(cell.directStudies), excludesNull: cell.excludesNull === true } : null;
+        }),
+      }];
+    });
+    return [{
+      id, version: finite(card.version) ?? 1, title, question: text(card.question) ?? "", ranking,
+      league: treatments.length > 0 && rows.length > 0 ? { treatments, meaning: text(league.meaning) ?? "", rows } : null,
+      consistency: text(obj(card.consistency).sentence), heterogeneity: text(obj(card.heterogeneity).sentence), scoreNote: text(card.scoreNote),
+      premises: readPremises(card.premises),
+    }];
+  });
+}
+
+/** The dose-response cards; a card without an id and a title, and anything of an unknown shape, is left out. */
+export function readDoseResponseCards(raw: unknown): VcrDoseResponseCard[] {
+  return arr(raw).flatMap((card) => {
+    const id = text(card.id), title = text(card.title);
+    if (!id || !title) return [];
+    const tests = obj(card.tests);
+    return [{
+      id, version: finite(card.version) ?? 1, title, question: text(card.question) ?? "", ratioWord: text(card.ratioWord) ?? "", doseUnit: text(card.doseUnit),
+      referenceDose: finite(card.referenceDose) ?? 0, headline: text(card.headline), firstDose: text(obj(card.firstDose).sentence),
+      predictions: arr(card.predictions).flatMap((row) => {
+        const dose = finite(row.dose), value = readPresentValue(row.value);
+        return dose !== null && value ? [{ dose, isReference: row.isReference === true, value }] : [];
+      }),
+      curve: arr(card.curve).flatMap((point) => {
+        const dose = finite(point.dose), ratio = finite(point.ratio), lower = finite(point.lower), upper = finite(point.upper);
+        return dose !== null && ratio !== null && lower !== null && upper !== null ? [{ dose, ratio, lower, upper }] : [];
+      }),
+      tests: { overall: text(obj(tests.overall).sentence), nonlinearity: readPresentValue(obj(tests.nonlinearity).p) },
+      heterogeneity: text(obj(card.heterogeneity).sentence),
+      excluded: arr(card.excluded).flatMap((row) => text(row.studyId) ?? []),
+      note: text(card.note),
+      premises: readPremises(card.premises),
+    }];
+  });
+}
+
+/** The published-effect cards; a card without an id, a title and a row, and anything of an unknown shape, is left out. */
+export function readEffectShrinkageCards(raw: unknown): VcrEffectShrinkageCard[] {
+  return arr(raw).flatMap((card) => {
+    const id = text(card.id), title = text(card.title);
+    const rows = arr(card.rows).flatMap((row) => {
+      const rowId = text(row.id), sentence = text(row.sentence);
+      return rowId && sentence ? [{
+        id: rowId, stated: readPresentValue(obj(row.stated).value), shrunken: readPresentValue(obj(row.shrunken).value),
+        degenerate: row.degenerate === true, sentence,
+      }] : [];
+    });
+    if (!id || !title || rows.length === 0) return [];
+    return [{ id, version: finite(card.version) ?? 1, title, question: text(card.question) ?? "", rows, note: text(card.note), premises: readPremises(card.premises) }];
+  });
+}
+
+const SUCCESS_RATE_FIGURES: readonly VcrSuccessRateFigure[] = ["toNext", "toFiling", "toApproval"];
+
+/** One source's figures for a phase: a figure the source does not have is null, and a source with nothing for the phase is null as a whole. */
+function readSuccessRateBlock(raw: unknown): Partial<Record<VcrSuccessRateFigure, VcrSuccessRate | null>> | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const block = raw as Loose;
+  return Object.fromEntries(SUCCESS_RATE_FIGURES.map((figure): [VcrSuccessRateFigure, VcrSuccessRate | null] => {
+    const rate = obj(block[figure]), rateText = text(rate.text);
+    return [figure, rateText ? { text: rateText, n: finite(rate.n) } : null];
+  }));
+}
+
+/** The success-rate reference; without a title, a phase and an area, and for anything of an unknown shape, there is nothing to show. */
+export function readSuccessRates(raw: unknown): VcrSuccessRates | null {
+  const value = obj(raw), title = text(value.title);
+  const sources = arr(value.sources).flatMap((source) => {
+    const id = text(source.id), label = text(source.label);
+    const key = id?.startsWith("bio") ? "bio" as const : id?.startsWith("wong") ? "wong" as const : null;
+    return id && label && key ? [{ key, id, label, endpoint: text(source.endpoint), method: text(source.method) }] : [];
+  });
+  const phases = arr(value.phases).flatMap((phase) => {
+    const id = text(phase.id), label = text(phase.label);
+    return id && label ? [{ id, label }] : [];
+  });
+  const areas = arr(value.areas).flatMap((area) => {
+    const id = text(area.id), label = text(area.label);
+    if (!id || !label) return [];
+    const byPhase = obj(area.phases);
+    return [{
+      id, label, wongGroup: text(area.wongGroup),
+      phases: Object.fromEntries(Object.keys(byPhase).map((phase) => [phase, { bio: readSuccessRateBlock(obj(byPhase[phase]).bio), wong: readSuccessRateBlock(obj(byPhase[phase]).wong) }])),
+    }];
+  });
+  if (!title || sources.length === 0 || phases.length === 0 || areas.length === 0) return null;
+  return { title, note: text(value.note) ?? "", sources, phases, areas };
+}
+
+function readBiasCell(raw: unknown): VcrBiasConfounderCell | null {
+  const cell = obj(raw);
+  const sentence = text(cell.sentence);
+  if (!sentence) return null;
+  return {
+    what: text(cell.what) ?? "", carrier: text(cell.carrier) ?? "", feasible: cell.feasible === true,
+    carrierPrevalence: readOptionalValue(cell.carrierPrevalence), difference: readOptionalValue(cell.difference), standardized: readOptionalValue(cell.standardized),
+    sentence,
+  };
+}
+
+/** The bias-analysis card; a card without its question and tipping sentence, and anything of an unknown shape, reads as nothing. */
+function readBiasAnalysis(raw: unknown): VcrBiasAnalysisCard | null {
+  const card = obj(raw), tipping = obj(card.tipping);
+  const question = text(card.question), sentence = text(tipping.sentence);
+  if (!question || !sentence) return null;
+  const shifted = obj(card.shiftedNull), confounder = obj(card.confounder), probabilistic = obj(card.probabilistic), systematic = obj(probabilistic.systematic);
+  const shiftedRows = arr(shifted.rows).flatMap((row) => {
+    const bias = text(row.bias);
+    return bias ? [{
+      bias, adjusted: readOptionalValue(row.adjusted), lower: readOptionalValue(row.lower), upper: readOptionalValue(row.upper), p: readOptionalValue(row.p),
+      holds: row.holds === true, sentence: text(row.sentence) ?? "",
+    }] : [];
+  });
+  const confounderRows = arr(confounder.rows).map((row) => ({ association: readOptionalValue(row.association), estimate: readBiasCell(row.estimate), limit: readBiasCell(row.limit) }))
+    .filter((row) => row.estimate || row.limit);
+  const hasProbabilistic = probabilistic.adjusted && typeof probabilistic.adjusted === "object" && probabilistic.persists && typeof probabilistic.persists === "object";
+  return {
+    question, estimate: text(card.estimate), direction: text(card.direction) ?? "",
+    tipping: { question: text(tipping.question) ?? question, sentence, limit: readOptionalValue(tipping.limit), estimate: readOptionalValue(tipping.estimate), alreadyIncludesNull: tipping.alreadyIncludesNull === true },
+    shiftedNull: shiftedRows.length > 0 ? { question: text(shifted.question) ?? "", note: text(shifted.note) ?? "", rows: shiftedRows } : null,
+    confounder: confounderRows.length > 0 ? { question: text(confounder.question) ?? "", note: text(confounder.note) ?? "", baseline: readOptionalValue(confounder.baseline), rows: confounderRows } : null,
+    probabilistic: hasProbabilistic ? {
+      question: text(probabilistic.question) ?? "", stated: text(probabilistic.stated),
+      adjusted: readVcrValue(probabilistic.adjusted), persists: readVcrValue(probabilistic.persists),
+      systematic: { median: readOptionalValue(systematic.median), lower: readOptionalValue(systematic.lower), upper: readOptionalValue(systematic.upper) },
+      draws: finite(probabilistic.draws), interrupted: text(probabilistic.interrupted), note: text(probabilistic.note) ?? "",
+    } : null,
+  };
+}
+
+/** The borrowing card; a card without its question and a posterior or one of the two tables, and anything of an unknown shape, reads as nothing. */
+function readBorrowing(raw: unknown): VcrBorrowingCard | null {
+  const card = obj(raw);
+  const question = text(card.question);
+  const kind = card.kind === "power" || card.kind === "sam" || card.kind === "elastic" ? card.kind : null;
+  if (!question || !kind) return null;
+  const posterior = arr(card.posterior).flatMap((row) => {
+    const which: "none" | "chosen" | "full" | null = row.which === "none" ? "none" : row.which === "chosen" ? "chosen" : row.which === "full" ? "full" : null;
+    return which ? [{ which, label: text(row.label) ?? "", mean: readOptionalValue(row.mean), lower: readOptionalValue(row.lower), upper: readOptionalValue(row.upper),
+      probabilityBetter: readOptionalValue(row.probabilityBetter), weight: readOptionalValue(row.weight) }] : [];
+  });
+  const conflict = obj(card.conflict), oc = obj(card.operatingCharacteristics);
+  const conflictRows = arr(conflict.rows).flatMap((row) => { const words = text(row.differenceWords); return words ? [{ differenceWords: words, weight: readOptionalValue(row.weight) }] : []; });
+  const ocRows = arr(oc.rows).flatMap((row) => {
+    const words = text(row.driftWords), none = obj(row.none), chosen = obj(row.chosen);
+    return words ? [{ driftWords: words, none: { typeOneError: readOptionalValue(none.typeOneError), power: readOptionalValue(none.power) },
+      chosen: { typeOneError: readOptionalValue(chosen.typeOneError), power: readOptionalValue(chosen.power), weight: readOptionalValue(chosen.weight) } }] : [];
+  });
+  if (!posterior.length && !conflictRows.length && !ocRows.length) return null;
+  return {
+    question, kind, kindWord: text(card.kindWord) ?? "", endpoint: card.endpoint === "continuous" ? "continuous" : "binary",
+    weight: readOptionalValue(card.weight), borrowedSampleSize: readOptionalValue(card.borrowedSampleSize), posterior,
+    conflict: conflictRows.length ? { patients: finite(conflict.patients), delta: text(conflict.delta) ?? "", note: text(conflict.note) ?? "", rows: conflictRows } : null,
+    operatingCharacteristics: ocRows.length ? { nControl: finite(oc.nControl), nTreatment: finite(oc.nTreatment), note: text(oc.note) ?? "", rows: ocRows } : null,
+    note: text(card.note) ?? "",
+  };
+}
+
+/** The spline-fit block; without its question and a curve, and for anything of an unknown shape, there is nothing to say. */
+export function readSplineFit(raw: unknown): VcrSplineFitBlock | null {
+  const block = obj(raw);
+  const question = text(block.question);
+  const curve = arr(block.curve).flatMap((point) => {
+    const timeWords = text(point.timeWords);
+    return timeWords ? [{ timeWords, survival: readOptionalValue(point.survival), beyondData: point.beyondData === true, timesLongestFollowUp: finite(point.timesLongestFollowUp) }] : [];
+  });
+  if (!question || !curve.length) return null;
+  const rmst = obj(block.rmst);
+  return {
+    question, median: readOptionalValue(block.median),
+    rmst: text(rmst.tauWords) ? { tauWords: text(rmst.tauWords) ?? "", value: readOptionalValue(rmst.value) } : null,
+    curve, longestFollowUp: text(block.longestFollowUp),
+    specifications: arr(block.specifications).map((spec) => ({ knots: finite(spec.knots) ?? 0, selected: spec.selected === true, estimable: spec.estimable === true,
+      survival: readOptionalValue(spec.survival), median: readOptionalValue(spec.median) })),
+    note: text(block.note) ?? "", premises: readPremises(block.premises),
+  };
+}
+
+/** The trimming restatement; without its sentence, and for anything of an unknown shape, there is nothing to say. */
+function readTrim(raw: unknown): VcrTrimCard | null {
+  const trim = obj(raw);
+  const sentence = text(trim.sentence);
+  if (!sentence) return null;
+  const side = (value: unknown) => ({ kept: text(obj(value).kept) ?? "—", removed: text(obj(value).removed) ?? "—" });
+  return {
+    rule: trim.rule === "crump" ? "crump" : "fixed", lower: finite(trim.lower), upper: finite(trim.upper),
+    trimmed: trim.trimmed === true, removed: finite(trim.removed), kept: finite(trim.kept), sentence,
+    arms: arr(trim.arms).flatMap((row) => {
+      const arm = text(row.arm);
+      return arm ? [{ arm, n: finite(row.n), kept: finite(row.kept), removed: finite(row.removed), share: text(row.share) ?? "—" }] : [];
+    }),
+    covariates: arr(trim.covariates).flatMap((row) => {
+      const covariate = text(row.covariate);
+      return covariate ? [{ covariate, treated: side(row.treated), control: side(row.control) }] : [];
+    }),
+  };
+}
+
+/**
+ * The imputation card; without its question and sentence, and for anything of an unknown shape, there is nothing to say. A row whose
+ * filled-in value cannot be read is dropped (it would be a row with no answer), and an agreement that is not one of the two words is none.
+ */
+function readImputation(raw: unknown): VcrImputationCard | null {
+  const card = obj(raw);
+  const question = text(card.question), sentence = text(card.sentence);
+  if (!question || !sentence) return null;
+  const completeCase = obj(card.completeCase), completeSentence = text(completeCase.sentence);
+  return {
+    question, sentence, assumption: text(card.assumption),
+    covariates: arr(card.covariates).flatMap((row) => {
+      const name = text(row.name);
+      return name ? [{ name, missing: finite(row.missing) ?? 0, share: text(row.share) ?? "—", method: text(row.method) ?? "—" }] : [];
+    }),
+    rows: arr(card.rows).flatMap((row, index) => {
+      const label = text(row.label);
+      const imputed = readOptionalValue(row.imputed);
+      if (!label || !imputed || (imputed.value === null && !imputed.text)) return [];
+      return [{
+        key: text(row.key) ?? `${index}`, label, imputed, completeCase: readOptionalValue(row.completeCase),
+        agreement: row.agreement === "same" || row.agreement === "different" ? row.agreement : null, loss: text(row.loss),
+      }];
+    }),
+    completeCase: completeSentence ? { rows: finite(completeCase.rows) ?? 0, dropped: finite(completeCase.dropped) ?? 0, sentence: completeSentence } : null,
+    budget: text(card.budget), stopped: text(card.stopped), few: text(card.few), note: text(card.note),
+  };
+}
+
+/**
+ * The target-trial emulation card; without its question and sentence, and for anything of an unknown shape, there is nothing to say.
+ * An estimand whose kind is not one of the two words, or whose risk difference cannot be read, is dropped (it would be a row with no
+ * answer); a card left with no estimand is nothing. The naive number is kept only with the sentence that says what it is.
+ */
+export function readTargetTrial(raw: unknown): VcrTargetTrialCard | null {
+  const card = obj(raw);
+  const question = text(card.question), sentence = text(card.sentence);
+  if (!question || !sentence) return null;
+  const readable = (value: VcrValue | null) => (value && (value.value !== null || value.text) ? value : null);
+  const estimands = arr(card.estimands).flatMap((row) => {
+    const kind: "itt" | "pp" | "start" | null = row.kind === "itt" ? "itt" : row.kind === "pp" ? "pp" : row.kind === "start" ? "start" : null;
+    const riskDifference = readable(readOptionalValue(row.riskDifference));
+    if (!kind || !riskDifference) return [];
+    return [{
+      kind, label: text(row.label) ?? (kind === "itt" ? "意向治疗" : kind === "start" ? "宽限期内开始治疗" : "按方案"), meaning: text(row.meaning), answers: text(row.answers),
+      riskTreated: readable(readOptionalValue(row.riskTreated)), riskControl: readable(readOptionalValue(row.riskControl)),
+      riskDifference, riskRatio: readable(readOptionalValue(row.riskRatio)),
+    }];
+  });
+  if (estimands.length === 0) return null;
+  const naiveSentence = text(card.naiveSentence);
+  const naive = naiveSentence ? readable(readOptionalValue(card.naive)) : null;
+  return {
+    question, sentence,
+    strategy: card.strategy === "sequential" || card.strategy === "clone_censor_weight" ? card.strategy : null,
+    horizon: finite(card.horizon), estimands,
+    checks: strings(card.checks),
+    naive, naiveSentence: naive ? naiveSentence : null,
+    weights: text(card.weights), bootstrap: text(card.bootstrap),
+  };
+}
+
+/** The simulated treatment comparison card; without its question, sentence and a readable estimate there is nothing to say. A row with no readable value is dropped. */
+export function readStcComparison(raw: unknown): VcrStcCard | null {
+  const card = obj(raw);
+  const question = text(card.question), sentence = text(card.sentence);
+  const estimate = readOptionalValue(card.estimate);
+  if (!question || !sentence || !estimate || (estimate.value === null && !estimate.text)) return null;
+  const ratio = readOptionalValue(card.ratio);
+  return {
+    question, sentence, anchored: card.anchored === true, scale: text(card.scale) ?? "",
+    estimate, ratio: ratio && ratio.value !== null ? ratio : null, ratioLabel: ratio && ratio.value !== null ? text(card.ratioLabel) : null,
+    rows: arr(card.rows).flatMap((row) => {
+      const key = text(row.key), label = text(row.label), value = readOptionalValue(row.value);
+      return key && label && value && value.value !== null ? [{ key, label, value, note: text(row.note) }] : [];
+    }),
+    outside: text(card.outside),
+  };
+}
+
 function readDesignRecord(raw: unknown): NonNullable<VcrDesign["record"]> | null {
   const value = obj(raw);
   if (!Object.keys(value).length) return null;
@@ -2165,6 +3237,12 @@ export function readVcrPopulation(raw: unknown): VcrPopulationTab {
       })),
       trainingRecords: finite(quality.trainingRecords),
       copies: finite(quality.copies),
+      rule: text(quality.rule),
+      atRisk: Object.keys(obj(quality.atRisk)).length ? {
+        bound: finite(obj(quality.atRisk).bound), size: finite(obj(quality.atRisk).size), described: obj(quality.atRisk).described === true,
+        rows: arr(obj(quality.atRisk).rows).flatMap((row) => (text(row.variable) && text(row.level)
+          ? [{ variable: text(row.variable) as string, level: text(row.level) as string, atRisk: finite(row.atRisk), all: finite(row.all), atRiskShare: finite(row.atRiskShare), allShare: finite(row.allShare) }] : [])),
+      } : null,
     } : null,
     check: readPopulationCheck(value.check),
     counts: readVcrCounts(value.counts),
@@ -2291,6 +3369,8 @@ export function readVcrPatients(raw: unknown): VcrPatientsTab {
     stale: readStale(value.stale),
     partial: readPartial(value.partial),
     sets: arr(value.sets) as unknown as VcrPatientsTab["sets"],
+    progressions: readProgressions(value.progressions),
+    splineFits: arr(value.splineFits).flatMap((block) => { const read = readSplineFit(block); return read ? [read] : []; }),
   };
 }
 
@@ -2332,6 +3412,13 @@ export function readVcrComparator(raw: unknown): VcrComparatorTab {
     dimensions: arr(value.dimensions) as unknown as VcrDimension[],
     diagnostics: arr(value.diagnostics).map((row) => ({ key: text(row.key) ?? "", label: text(row.label) ?? "", value: readVcrValue(row.value) })),
     prior: arr(value.prior).map((row) => ({ key: text(row.key) ?? "", label: text(row.label) ?? "", value: readVcrValue(row.value) })),
+    biasAnalysis: readBiasAnalysis(value.biasAnalysis),
+    borrowing: readBorrowing(value.borrowing),
+    prognosticModels: readPrognosticModels(value.prognosticModels),
+    trim: readTrim(value.trim),
+    imputation: readImputation(value.imputation),
+    targetTrialEmulation: readTargetTrial(value.targetTrialEmulation),
+    stcComparison: readStcComparison(value.stcComparison),
     gaps: Object.keys(gaps).length ? { ...(gaps as Loose), items: arr(gaps.items) } as VcrComparatorTab["gaps"] : null,
     counts: readVcrCounts(value.counts),
     verdict: Object.keys(verdict).length ? verdict as unknown as VcrComparatorTab["verdict"] : null,
@@ -2352,6 +3439,11 @@ export function readVcrTrial(raw: unknown): VcrTrialTab {
     objective: readTrialObjective(value.objective),
     ademp: arr(value.ademp) as unknown as VcrTrialTab["ademp"],
     accrualForecasts: arr(value.accrualForecasts).map(row => ({ id: text(row.id) ?? "", version: finite(row.version) ?? 1, scenarioId: text(row.scenarioId), scenarioVersion: finite(row.scenarioVersion), design: text(row.design), name: text(row.name) ?? "入组假设模拟", lastPatientIn: row.lastPatientIn ? readVcrValue(row.lastPatientIn) : null, targetEvents: row.targetEvents ? readVcrValue(row.targetEvents) : null, probabilityByMonth: arr(row.probabilityByMonth).filter(point => finite(point.month) !== null && Number(point.month) >= 0 && finite(point.probability) !== null && Number(point.probability) >= 0 && Number(point.probability) <= 1).map(point => ({ month: Number(point.month), probability: Number(point.probability) })) })),
+    confirmatoryDesigns: readConfirmatoryDesigns(value.confirmatoryDesigns),
+    doseDesigns: readDoseDesigns(value.doseDesigns),
+    bayesianDesigns: readBayesianDesigns(value.bayesianDesigns),
+    winRatioDesigns: readWinRatioDesigns(value.winRatioDesigns),
+    successRates: readSuccessRates(value.successRates),
     designs: arr(value.designs).map(readDesign),
     columns: arr(value.columns) as unknown as VcrTrialTab["columns"],
     grid: Object.keys(grid).length ? {
@@ -2463,6 +3555,8 @@ export function readVcrData(raw: unknown): VcrDataTab {
     assumptions: arr(value.assumptions).map((card) => ({
       ...(card as unknown as VcrAssumption),
       value: readVcrValue(card.value),
+      valueChecks: arr(card.valueChecks).flatMap((check) => (text(check.message)
+        ? [{ kind: check.kind === "second_read" ? "second_read" as const : "consistency" as const, message: text(check.message) as string }] : [])),
       detail: card.detail && typeof card.detail === "object" ? {
         ...(card.detail as Loose), stats: arr(obj(card.detail).stats), forest: arr(obj(card.detail).forest),
         usedBy: arr(obj(card.detail).usedBy), versions: arr(obj(card.detail).versions),
@@ -2470,6 +3564,9 @@ export function readVcrData(raw: unknown): VcrDataTab {
     })),
     precedents: arr(value.precedents) as unknown as VcrPrecedent[],
     precedentCandidates: arr(value.precedentCandidates) as unknown as VcrPrecedentCandidate[],
+    networkMeta: readNetworkMetaCards(value.networkMeta),
+    doseResponses: readDoseResponseCards(value.doseResponses),
+    effectShrinkages: readEffectShrinkageCards(value.effectShrinkages),
     snapshots: arr(value.snapshots).map((snapshot) => ({ ...(snapshot as unknown as VcrDataTab["snapshots"][number]), quality: arr(snapshot.quality) as unknown as NonNullable<VcrDataTab["snapshots"][number]["quality"]> })),
     decisions: arr(value.decisions) as unknown as VcrDataTab["decisions"],
     evidenceNote: text(value.evidenceNote),
@@ -3470,6 +4567,8 @@ export function saveVcrMethodConfiguration(studyId: string, input: { method: str
 }
 export interface VcrMethodResult {
   computationBasis?: VcrScientificComputationBasis | null;
+  /** A spline survival fit's block (C13), on a result that holds one. */
+  splineFit?: VcrSplineFitBlock | null;
   jobId: string;
   result: { id: string; kind: string; subjectId?: string | null; conclusion?: VcrConclusion; counts?: Partial<VcrCounts>; measures?: Array<{ name: string; label?: string; value: number | null; unit?: string; mcse?: number | null; interval?: VcrInterval | null; lower?: number | null; upper?: number | null; source?: VcrValueSource }>; diagnostics?: Record<string, unknown>; [key: string]: unknown } | null;
   execution?: { method: string; methodVersion?: string | null; seed?: number | null; scenarioHash?: string | null; sourceModel?: { id: string; version: string } | null };
@@ -3478,7 +4577,7 @@ export interface VcrMethodResult {
 /** The immutable result of this job, including a partial result; never the study's latest tab. */
 export async function getVcrMethodResult(studyId: string, jobId: string): Promise<VcrMethodResult> {
   const answer = await productRequest<VcrMethodResult>(`${study(studyId)}/jobs/${id(jobId)}/result`);
-  return { ...answer, records: { ...answer.records, profile: arr(answer.records?.profile).map(row => {
+  return { ...answer, splineFit: readSplineFit(answer.splineFit), records: { ...answer.records, profile: arr(answer.records?.profile).map(row => {
     const profile = readGeneratedRow({ ...row, levels: arr(row.levels).map(level => ({ ...level, percent: finite(level.percent) ?? (finite(level.p) == null ? null : Number(level.p) * 100) })) });
     const histogram = obj(row.histogram);
     if ([...Array.isArray(histogram.breaks) ? histogram.breaks : [], ...Array.isArray(histogram.counts) ? histogram.counts : []].some(value => finite(value) === null)) profile.histogram = null;

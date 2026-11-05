@@ -57,6 +57,13 @@ export const VCR_VALUE_SOURCE_LABELS_ZH = Object.freeze({
  * by it; the four are all it says about where a number came from.
  */
 export const VCR_PREMISE_SOURCES = frozen(['literature', 'assumed', 'default', 'given'])
+/**
+ * Where a premise of a result comes from, in the page's words. The meaning of `given` (你给的数据) is stated here and nowhere else: the value comes from
+ * a table or a record the person supplied, or the number is literally in a message the person typed in this conversation (the control plane lays a
+ * scenario's numbers against those messages when a design job starts: `apps/server/src/vcrPersonStated.mjs`). Everything a model wrote into a scenario
+ * is `assumed` (假设), a conversation whose messages cannot be read gives nothing the stronger word, and a result from before the record was kept
+ * reads as it read.
+ */
 export const VCR_PREMISE_SOURCE_LABELS_ZH = Object.freeze({ literature: '文献', assumed: '假设', default: '默认', given: '你给的数据' })
 /** At most this many premises stand open in the block; the rest are folded into one disclosure. */
 export const VCR_PREMISES_DECISIVE_MAX = 5
@@ -522,7 +529,9 @@ export const VCR_TAB_LABELS_ZH = Object.freeze({
  */
 export const VCR_RESULT_KIND_TABS = Object.freeze({
   population: 'population', patient_set: 'patients', comparator: 'comparator', trial_scenario: 'trial', design_grid: 'trial',
-  accrual_forecast: 'trial', matching: 'matching', match_extract: 'matching', evidence_pool: 'data', snapshot_profile: 'data', population_check: 'population',
+  prognostic_training: 'comparator', progression_simulation: 'patients', model_fit: 'patients',
+  accrual_forecast: 'trial', design_confirmatory: 'trial', design_dose: 'trial', design_bayesian: 'trial', design_win_ratio: 'trial', matching: 'matching', match_extract: 'matching', evidence_pool: 'data', snapshot_profile: 'data', population_check: 'population',
+  network_meta: 'data', dose_response_meta: 'data', effect_shrinkage: 'data',
 })
 /**
  * The writes that put a patient's matching on the matching tab. A matching is judged at the write -- there is no job to finish -- so
@@ -715,6 +724,11 @@ export const VCR_NOT_ESTIMABLE_RULES = frozen([
   // model fitted on the external controls. When either cannot be fitted (collinear covariates, fewer controls than the
   // model has coefficients) there is no estimate.
   'nuisance_model_not_estimable',
+  // Propensity trimming (algorithm round C14) removed so many people that a group has fewer than two left: nothing is weighted.
+  'trimmed_population_too_small',
+  // Target-trial emulation (algorithm round C3, C4): nobody is eligible, a treatment arm has no eligible start, the horizon is longer than anyone was
+  // followed, or the outcome model (or the model of starting treatment) cannot be fitted on the expanded data.
+  'no_eligible_person_trials', 'arm_without_person_trials', 'horizon_beyond_followup', 'outcome_model_not_estimable',
   // --- robustness methods (2026-10-04): negative controls, tipping point, prognostic adjustment ---
   // No negative control produced an estimate (every one has an arm with no event, or none was supplied in a usable form).
   'negative_controls_not_estimable',
@@ -737,6 +751,11 @@ export const VCR_NOT_ESTIMABLE_RULE_LABELS_ZH = Object.freeze({
   map_prior_conflict: 'MAP 先验与当前数据冲突检验越界',
   too_few_events: '某一组没有事件，或 Cox 模型没有收敛（事件太少，风险比不存在）',
   nuisance_model_not_estimable: '倾向性模型或结局模型拟合不出来（协变量共线，或外部对照的人数不足以拟合结局模型）',
+  trimmed_population_too_small: '按倾向评分修剪之后，某一组剩下不到两个人，没有可以加权的人群',
+  no_eligible_person_trials: '表里没有符合条件的人，或记录截断之后剩下的人不足两个，没有可以模拟的试验',
+  arm_without_person_trials: '某一个治疗组在任何一期都没有符合条件的起点，两组没法比较',
+  horizon_beyond_followup: '所选的随访期数超过了任何一个人被随访到的时间',
+  outcome_model_not_estimable: '结局模型（或开始治疗的模型）在这些数据上拟合不出来，或某一组在终点之前已经没有人留在风险集里',
   negative_controls_not_estimable: '没有一个阴性对照结局能得出估计（每个都有一组没有事件，或没有提供可用的数据）',
   primary_analysis_not_estimable: '这项分析本身的主要估计不存在（某一组没有事件或没有人、模型没有收敛、预后评分没有变异）',
   data_tier_insufficient: '现有数据档位不足以走这条对照路线',
@@ -774,6 +793,30 @@ export const VCR_PERFORMANCE_MEASURE_LABELS_ZH = Object.freeze({
 })
 /** Alpha-spending functions available for a group-sequential design. */
 export const VCR_SPENDING_FUNCTIONS = frozen(['obrien_fleming', 'pocock'])
+/**
+ * The confirmatory designs `design.confirmatory` computes (algorithm round T2-T6, 2026-11-03): a group-sequential design with a futility
+ * boundary, a sample-size re-estimation at an interim look, a multi-arm design that selects at the interim, an enrichment design that
+ * narrows the population at the interim, and a sample size for a count endpoint. They are not in `VCR_TRIAL_DESIGNS`: that list is the
+ * designs `design.analytic` and `design.simulate` take, and a design here is a different question with a different result.
+ */
+export const VCR_CONFIRMATORY_DESIGNS = frozen(['futility_group_sequential', 'sample_size_reestimation', 'multi_arm_selection', 'enrichment', 'count_endpoint'])
+/**
+ * The dose-finding designs `design.dose` computes (algorithm round T7, T15, 2026-11-03): the 3+3 rule, BOIN (local boundaries and a
+ * non-informative prior only), the keyboard design, the continual reassessment method, and the exact probability of choosing the right
+ * dose among two or three randomised ones. The first four are simulated on one toxicity curve with the same random numbers.
+ */
+export const VCR_DOSE_DESIGNS = frozen(['three_plus_three', 'boin', 'keyboard', 'crm', 'randomized_selection'])
+/** The designs of `design.dose` that are simulated trials on a toxicity curve (the randomised selection is exact). */
+export const VCR_DOSE_FINDING_DESIGNS = frozen(['three_plus_three', 'boin', 'keyboard', 'crm'])
+/**
+ * The Bayesian designs `design.bayesian` computes without MCMC (algorithm round T8, T10, 2026-11-03): the Bayesian optimal phase II design,
+ * predictive-probability monitoring, and the calibration of a posterior-probability success threshold under a conjugate prior.
+ */
+export const VCR_BAYESIAN_DESIGNS = frozen(['bop2', 'predictive_monitoring', 'threshold_calibration'])
+/** What a phase II Bayesian design is searched for: the largest power among the designs that keep alpha, or the fewest expected patients under the null among those that also reach the power. */
+export const VCR_BAYESIAN_OBJECTIVES = frozen(['max_power', 'min_expected_n'])
+/** The alpha- and beta-spending functions of a confirmatory group-sequential design (the Lan-DeMets O'Brien-Fleming and Pocock types, Hwang-Shih-DeCani and Kim-DeMets with their gamma). */
+export const VCR_CONFIRMATORY_SPENDING = frozen(['obrien_fleming', 'pocock', 'hwang_shih_decani', 'kim_demets'])
 export const VCR_SPENDING_FUNCTION_LABELS_ZH = Object.freeze({ obrien_fleming: "O'Brien-Fleming", pocock: 'Pocock' })
 
 /** Named interval kinds. A report never writes a bare 「区间」 (§8.3). */
@@ -855,6 +898,22 @@ export const VCR_JOB_KINDS = frozen([
   // --- end longitudinal ---
   // --- appended (2026-11-01): a generated population against a second baseline table (remediation plan D2) ---
   'population_check',
+  // --- appended (2026-11-03): the confirmatory designs (algorithm round T2-T6) ---
+  'design_confirmatory',
+  // --- appended (2026-11-03): quantitative bias analysis of an estimate and the G-computation form of the simulated treatment comparison (algorithm round C1, C2, C9) ---
+  'bias_analysis', 'stc_comparator',
+  // --- appended (2026-11-03): frequentist network meta-analysis, dose-response meta-analysis and the empirical shrinkage of a published effect (algorithm round C5, C6, E8) ---
+  'network_meta', 'dose_response_meta', 'effect_shrinkage',
+  // --- appended (2026-11-03): target-trial emulation from a person-period table: a sequence of trials and clone-censor-weight (algorithm round C3, C4) ---
+  'target_trial_emulation',
+  // --- appended (2026-11-03): dose-finding designs and Bayesian designs without MCMC (algorithm round T7, T15, T8, T10) ---
+  'design_dose', 'design_bayesian',
+  // --- appended (2026-11-03): hierarchical composite endpoints compared by win ratio (algorithm round T9) ---
+  'design_win_ratio',
+  // --- appended (2026-11-03): dynamic borrowing of an external control arm: the power, SAM and elastic priors (algorithm round C10, C11, C12) ---
+  'borrowing_prior',
+  // --- appended (2026-11-03): a prognostic model trained on the person's own historical table (algorithm round P3) and a population-level disease-progression simulator (P4) ---
+  'train_prognostic_model', 'generate_progression',
   // --- appended (2026-11-01): the batch reading of patient records for the criteria's facts (remediation plan D4) ---
   'match_extract',
   'forecast_trajectories', 'evaluate_forecast', 'compare_forecasts', 'benchmark_trial_effect',
@@ -867,6 +926,7 @@ export const VCR_JOB_KINDS = frozen([
 export const VCR_JOB_KIND_STEPS = Object.freeze({
   fit_survival_model: 'patients', apply_prognostic_model: 'patients',
   pool_evidence: 'evidence', reconstruct_km: 'evidence', map_prior: 'evidence',
+  network_meta: 'evidence', dose_response_meta: 'evidence', effect_shrinkage: 'evidence',
   profile_snapshot: 'population', build_cohort: 'population', generate_population: 'population', literature_population: 'population',
   synthesize_population: 'population', population_quality: 'population', population_check: 'population',
   generate_patients: 'patients', generate_patients_continuous: 'patients', generate_patients_binary: 'patients',
@@ -874,8 +934,8 @@ export const VCR_JOB_KIND_STEPS = Object.freeze({
   weight_comparator: 'comparator', propensity_weight_comparator: 'comparator', maic_comparator: 'comparator', evalue: 'comparator',
   rmst: 'comparator', weighted_cox_comparator: 'comparator', maic_time_to_event_comparator: 'comparator', aipw_comparator: 'comparator',
   covariate_set_comparator: 'comparator', negative_control_comparator: 'comparator', tipping_point: 'comparator',
-  prognostic_adjustment_comparator: 'comparator',
-  design_analytic: 'trial', design_simulation: 'trial', design_grid: 'trial', assurance: 'trial', procova: 'trial', accrual_forecast: 'trial',
+  prognostic_adjustment_comparator: 'comparator', bias_analysis: 'comparator', stc_comparator: 'comparator', target_trial_emulation: 'comparator', borrowing_prior: 'comparator', train_prognostic_model: 'comparator', generate_progression: 'patients',
+  design_analytic: 'trial', design_simulation: 'trial', design_confirmatory: 'trial', design_dose: 'trial', design_bayesian: 'trial', design_win_ratio: 'trial', design_grid: 'trial', assurance: 'trial', procova: 'trial', accrual_forecast: 'trial',
   match_criteria: 'matching', match_extract: 'matching',
 })
 export const VCR_JOB_STATES = frozen(['queued', 'running', 'succeeded', 'failed', 'canceled', 'awaiting_budget'])
@@ -1156,14 +1216,16 @@ export const VCR_NEGATIVE_CONTROL_VERDICT_LABELS_ZH = Object.freeze({
  * reads it from its snapshot, and a test holds the two equal.
  */
 export const VCR_PROGNOSTIC_QUALIFICATION = 'none_beyond_continuous'
+/** What a prognostic model trained on the person's own table is called wherever it is read: the library, the application of it and the page. */
+export const VCR_TRAINED_MODEL_LABEL_ZH = '用你自己的历史数据训练，未经外部验证'
 export const VCR_PROGNOSTIC_QUALIFICATION_LABEL_ZH = '二分类和事件时间终点的预后协变量调整，目前没有监管机构认可：EMA 2022 年的资格认定意见只覆盖连续终点。'
 /**
  * The stages of a comparison that stress it rather than make it: a bias screen with negative controls and a tipping-point analysis of
  * the missing outcomes. A stress test that cannot be computed (no control has an estimate) leaves the comparison as estimable as it was
  * but limited, and says which analysis is missing; the stage's own result stays whole under `diagnostics.stageResults`.
  */
-export const VCR_ROBUSTNESS_STAGES = frozen(['negative_control', 'tipping_point'])
-export const VCR_ROBUSTNESS_STAGE_LABELS_ZH = Object.freeze({ negative_control: '阴性对照结局', tipping_point: '缺失结局的临界点分析' })
+export const VCR_ROBUSTNESS_STAGES = frozen(['negative_control', 'tipping_point', 'bias_analysis'])
+export const VCR_ROBUSTNESS_STAGE_LABELS_ZH = Object.freeze({ negative_control: '阴性对照结局', tipping_point: '缺失结局的临界点分析', bias_analysis: '未测混杂的偏倚分析' })
 // --- end robustness methods ---
 export const VCR_MAP_CONFLICT_BOUND = 0.01
 export const VCR_RECONSTRUCTION_TOLERANCE = Object.freeze({
@@ -1181,6 +1243,11 @@ export const VCR_PEOPLE_COUNT_FIELDS = frozen([
   // the people with no event beside the people with one (a local calibration's table): `n` less `events`, so one hidden alone is
   // one subtraction away (`VCR_PEOPLE_COUNT_LINKS`); and the predictions an applied equation made for real people
   'nonEvents', 'validPredictions', 'invalidPredictions',
+  // the people a propensity trimming removed from an arm (the arm's cell: `n = kept + removed`, so a small one takes the other two with it),
+  // and the people of a target-trial emulation by when they began the strategy (`VCR_PEOPLE_COUNT_LINKS`)
+  'removed', 'startedWithinGrace', 'startedAfterGrace', 'neverStarted', 'startedAtTimeZero',
+  // the people of a clone-censor-weight design who were treated before time zero and not at or after it (review stats2 finding 17): the fourth part of its people
+  'treatedBeforeTimeZero',
 ])
 /**
  * Keys under which an object maps a category to a head count
@@ -1190,6 +1257,10 @@ export const VCR_PEOPLE_COUNT_MAP_KEYS = frozen([
   'levels',
   // an arm's head count under the arm's name (`{ treated, control }`): the comparison's people and the people whose date could be read
   'people', 'readable',
+  // the person-trials a sequential target-trial emulation began, by arm (`{ "0": 155, "1": 93 }`)
+  'startsByArm',
+  // the events of each arm of a weighted or augmented time-to-event comparison (`{ treated, control }`)
+  'eventsByArm',
 ])
 /**
  * Keys that count people only inside the block of this name, as they do anywhere under `VCR_PEOPLE_COUNT_FIELDS`: the keys of the
@@ -1204,6 +1275,11 @@ export const VCR_PEOPLE_COUNT_BLOCK_FIELDS = Object.freeze({
   byYear: frozen(['treated', 'control']),
   estimate: frozen(['people', 'records']),
   plan: frozen(['toRead', 'alreadyRead', 'prefiltered', 'noDocuments', 'deferred']),
+  // an imputation's table of covariates: one cell per covariate with the people who lack its value (`missing` is a plain word anywhere
+  // else), and a target-trial emulation's design: the people it was run on and the median and longest wait of those who began late
+  covariates: frozen(['missing']),
+  design: frozen(['people']),
+  waitingTime: frozen(['people']),
 })
 /**
  * Counts that stand in arithmetic with each other, and what is computed from them. A table of outcomes states its people, its events
@@ -1218,6 +1294,27 @@ export const VCR_PEOPLE_COUNT_LINKS = Object.freeze([
     whole: frozen(['n', 'events', 'nonEvents']),
     derived: frozen(['observedRisk', 'calibrationInLarge']),
   }),
+  // with the people treated before time zero as a fourth part (a result that states it holds all five); it comes first, because a link reads the counts as
+  // they stand and the three-part link below would hide the small one and leave this part to be read by subtraction
+  Object.freeze({
+    triggers: frozen(['startedWithinGrace', 'startedAfterGrace', 'neverStarted', 'treatedBeforeTimeZero']),
+    whole: frozen(['people', 'startedWithinGrace', 'startedAfterGrace', 'neverStarted', 'treatedBeforeTimeZero']),
+    derived: frozen([]),
+  }),
+  // a target-trial emulation's people by when they began the strategy: the three parts make the people, so one small part with the
+  // rest printed is a subtraction
+  Object.freeze({
+    triggers: frozen(['startedWithinGrace', 'startedAfterGrace', 'neverStarted']),
+    whole: frozen(['people', 'startedWithinGrace', 'startedAfterGrace', 'neverStarted']),
+    derived: frozen([]),
+  }),
+  // the rows a method started from, used and left out (a trained model's table), the rows an imputation analysed and the ones with a
+  // value missing, and a complete-case analysis's rows and the rows it dropped: each is a total and its part, so the part alone is a
+  // subtraction. The table's own size (`counts.realPatients`) stands beside them in another object and is never hidden unless it is
+  // small itself: that complement is the one this list cannot close.
+  Object.freeze({ triggers: frozen(['usedRows', 'excludedRows']), whole: frozen(['inputRows', 'usedRows', 'excludedRows']), derived: frozen([]) }),
+  Object.freeze({ triggers: frozen(['rowsIncomplete']), whole: frozen(['rowsAnalysed', 'rowsIncomplete']), derived: frozen([]) }),
+  Object.freeze({ triggers: frozen(['droppedRows']), whole: frozen(['rows', 'droppedRows']), derived: frozen([]) }),
 ])
 /**
  * Measures that are a function of a block's hidden count, by the field of the block they restate. A local calibration's observed risk
@@ -1227,11 +1324,13 @@ export const VCR_PEOPLE_COUNT_LINKS = Object.freeze([
 export const VCR_PEOPLE_DERIVED_MEASURES = Object.freeze({ observedRisk: 'observed_risk', calibrationInLarge: 'calibration_in_the_large' })
 /**
  * Blocks that are about one group of people and are withheld whole when the group is too small to show: of the keys named in `gates`
- * (each a map of arm to head count), any one hidden takes everything but `keep` with it. An enrolment-year row summarises the years
+ * (each a map of arm to head count, or one head count), any one hidden takes everything but `keep` with it. An enrolment-year row summarises the years
  * each arm entered in; the extremes and the middle of a handful of people are those people's dates.
  */
 export const VCR_PEOPLE_COUNT_WITHHELD_BLOCKS = Object.freeze({
   enrolmentYear: Object.freeze({ gates: frozen(['people', 'readable']), keep: frozen(['status', 'column', 'unit', 'note']) }),
+  // the median and longest wait of the people who began a strategy late: with a handful of people they are those people's waits
+  waitingTime: Object.freeze({ gates: frozen(['people']), keep: frozen(['unit', 'note']) }),
 })
 /**
  * Keys that count people but are never one of a list's sibling cells: a table's
@@ -1252,6 +1351,18 @@ export const VCR_PEOPLE_COUNT_SCALAR_FIELDS = frozen([
   // a batch reading of patient records (`matching.extract`): the people and the records it was asked to read, the records read and
   // the ones read before, and the people the table had already decided against (their records are left unread)
   'peopleSelected', 'recordsToRead', 'recordsRead', 'recordsAlreadyRead', 'prefiltered',
+  // what a trimming removed from the comparison and kept in it, and the rows a method started from and read (a table of one row per
+  // person: its rows are its people): an imputation's analysed and incomplete rows and the rows a complete-case analysis dropped, a
+  // trained model's input, used and excluded rows, and a target-trial emulation's persons, person-periods, person-trials and the rows
+  // its checks cut or dropped; the real table a synthetic one was made from or compared with (`observedRows`, `nTraining`, `nHoldout`,
+  // `holdoutRows`, `referenceSize`), the people left out of a correlation, and the smaller of the two groups a binary or time-to-event
+  // model needs people in
+  'removedTotal', 'keptTotal', 'rowsAnalysed', 'rowsIncomplete', 'droppedRows', 'inputRows', 'usedRows', 'excludedRows',
+  'persons', 'personsInTable', 'personPeriods', 'personTrials', 'expandedRows', 'eligiblePeriods', 'recordsCutShort', 'rowsDroppedWhereCut',
+  'rowsAfterEventDropped', 'observedRows', 'nTraining', 'nHoldout', 'holdoutRows', 'referenceSize', 'leftOut', 'smallerGroup',
+  // the rows of the active arm a single-arm simulated comparison was taken from (and the other arm's it left), and the control people an
+  // outcome model was fitted on
+  'rowsUsed', 'rowsOtherArm', 'controlPeopleUsed',
 ])
 /**
  * Names of measures — `{ name, value }` — whose value is a head count of the
@@ -1269,6 +1380,8 @@ export const VCR_PEOPLE_COUNT_MEASURES = frozen([
   ...VCR_ELIGIBILITY_SUMMARIES,
   // a batch reading's records, by the records of this study's people it read and the ones it had read before
   'records_read', 'records_already_read',
+  // the people a propensity trimming removed from each arm
+  'trimmed_treated', 'trimmed_control',
 ])
 
 /**

@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-protocol",
-  "version": "sha256:a56b86f1ad428a52411e93e730d00e7c935c979ee1b47dd2674bed21f1dda6a8",
+  "version": "sha256:b110158354a1872c9587fae5e42ed0c2914c35802744b3cbc30d4d203bf915cc",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 34,
@@ -627,6 +627,36 @@
               "fixed_effect"
             ],
             "default": "random_effects_reml"
+          },
+          "tauPrior": {
+            "type": "object",
+            "description": "Optional Cochrane reference for the spread between studies; gives two studies a prediction interval. Its shape is in vcr_simulate action=shape.",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "turner_2015",
+                  "turner_2015_generic",
+                  "bartos_2023"
+                ]
+              },
+              "outcome": {
+                "type": "string",
+                "maxLength": 60
+              },
+              "comparison": {
+                "type": "string",
+                "maxLength": 60
+              },
+              "effectScale": {
+                "type": "string",
+                "maxLength": 40
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "additionalProperties": false
           },
           "jobId": {
             "type": "string",
@@ -1254,7 +1284,8 @@
               "candidate_trials",
               "soa",
               "regulatory_contacts",
-              "candidates"
+              "candidates",
+              "success_rates"
             ]
           },
           "filter": {
@@ -1280,7 +1311,7 @@
     {
       "name": "mcp__evimed__vcr_simulate",
       "source": "mcp",
-      "description": "A human trial's sample size, power or events, comparing designs, a synthetic population from a paper's baseline, an external control: calculate here, not in a script of your own. No study needed; the first start opens a result page with versions and premises. action=shape with kind gives exact fields; do not guess keys. Long jobs resume here if they outlive this turn. modelId requires modelVersion.",
+      "description": "A human trial's sample size, power or events, comparing designs, dose finding, a synthetic cohort from a baseline table, an external control, comparing several drugs (network meta-analysis): calculate here, not in your own script. No study needed; a start opens a result page. action=shape with kind gives exact fields; do not guess keys. Long jobs resume here if they outlive this turn. modelId requires modelVersion.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1333,6 +1364,19 @@
               "prognostic_adjustment_comparator",
               "generate_patients_longitudinal",
               "population_check",
+              "design_confirmatory",
+              "bias_analysis",
+              "stc_comparator",
+              "network_meta",
+              "dose_response_meta",
+              "effect_shrinkage",
+              "target_trial_emulation",
+              "design_dose",
+              "design_bayesian",
+              "design_win_ratio",
+              "borrowing_prior",
+              "train_prognostic_model",
+              "generate_progression",
               "match_extract",
               "forecast_trajectories",
               "evaluate_forecast",

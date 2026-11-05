@@ -1,0 +1,453 @@
+{
+  "sequential": {
+    "question": "治疗起始时间各不相同的队列，开始治疗和不开始治疗的效应是多少，而且没有永恒时间偏倚？",
+    "sentence": "每一期符合条件的人都开一个模拟试验，当期是否在治疗决定分组，一个人可以进多个试验，区间按人重抽样。算的是第 6 个月末的风险差：意向治疗和按方案。",
+    "strategy": "sequential",
+    "horizon": 6,
+    "estimands": [
+      {
+        "kind": "itt",
+        "label": "意向治疗",
+        "meaning": "按每个试验开始时的治疗分组算，开始之后治疗有没有变都不管",
+        "answers": "第 6 个月末的累积风险差 = 试验组风险 − 对照组风险（意向治疗）",
+        "riskTreated": {
+          "value": 18.31100236,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": {
+            "kind": "confidence",
+            "low": 7.548749,
+            "high": 28.641071,
+            "level": 95
+          },
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "riskControl": {
+          "value": 25.99707469,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": {
+            "kind": "confidence",
+            "low": 15.939529,
+            "high": 37.062624,
+            "level": 95
+          },
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "riskDifference": {
+          "value": -7.68607234,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": {
+            "kind": "confidence",
+            "low": -21.8008,
+            "high": 5.879401,
+            "level": 95
+          },
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "riskRatio": {
+          "value": 0.70434857,
+          "text": null,
+          "unit": null,
+          "source": "calculated",
+          "interval": {
+            "kind": "confidence",
+            "low": 0.27,
+            "high": 1.29,
+            "level": 95
+          },
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 2,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        }
+      },
+      {
+        "kind": "pp",
+        "label": "按方案",
+        "meaning": "一个人的治疗偏离了所在组，就在那一期删失，并按实际接受的治疗加权，补回被删失的人",
+        "answers": "第 6 个月末的累积风险差 = 试验组风险 − 对照组风险（按方案）",
+        "riskTreated": {
+          "value": 18.0406147,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": {
+            "kind": "confidence",
+            "low": 6.86852,
+            "high": 29.497837,
+            "level": 95
+          },
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "riskControl": {
+          "value": 35.73569224,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": {
+            "kind": "confidence",
+            "low": 21.376809,
+            "high": 49.762653,
+            "level": 95
+          },
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "riskDifference": {
+          "value": -17.69507754,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": {
+            "kind": "confidence",
+            "low": -34.738869,
+            "high": -1.203109,
+            "level": 95
+          },
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "riskRatio": {
+          "value": 0.50483462,
+          "text": null,
+          "unit": null,
+          "source": "calculated",
+          "interval": {
+            "kind": "confidence",
+            "low": 0.191,
+            "high": 0.951,
+            "level": 95
+          },
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 3,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        }
+      }
+    ],
+    "checks": [
+      "符合条件的人-期里，开始时就已经在治疗的占 37.5%，他们进入试验组。",
+      "共 248 个模拟试验（每个符合条件的人-期一个），展开成 1502 行随访记录。"
+    ],
+    "naive": null,
+    "naiveSentence": null,
+    "weights": "补回删失的权重（稳定化）平均 1，范围 0.803 到 1.28。",
+    "bootstrap": "区间来自对人的整条记录重抽样 2000 次，每次重新估计权重和结局模型。"
+  },
+  "clone-censor-weight": {
+    "question": "符合条件后 3 周内开始治疗，与不开始治疗相比，效应是多少？",
+    "sentence": "每个人从符合条件的第一期起同时放进“宽限期内开始治疗”和“不开始治疗”两组：到宽限期结束还没开始治疗的人，在“开始”组里被删失；开始了治疗的人，在“不开始”组里被删失；被删失造成的偏差用权重补回。算的是第 12 周末的按方案风险差。",
+    "strategy": "clone_censor_weight",
+    "horizon": 12,
+    "estimands": [
+      {
+        "kind": "pp",
+        "label": "按方案",
+        "meaning": "一个人的治疗偏离了所在组，就在那一期删失，并按实际接受的治疗加权，补回被删失的人",
+        "answers": "第 12 周末的累积风险差 = 试验组风险 − 对照组风险（按方案）",
+        "riskTreated": {
+          "value": 11.77749382,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": {
+            "kind": "confidence",
+            "low": 6.353489,
+            "high": 18.555328,
+            "level": 95
+          },
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "riskControl": {
+          "value": 17.49833373,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": {
+            "kind": "confidence",
+            "low": 11.520184,
+            "high": 24.363455,
+            "level": 95
+          },
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "riskDifference": {
+          "value": -5.72083992,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": {
+            "kind": "confidence",
+            "low": -13.802402,
+            "high": 1.748501,
+            "level": 95
+          },
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "riskRatio": {
+          "value": 0.67306373,
+          "text": null,
+          "unit": null,
+          "source": "calculated",
+          "interval": {
+            "kind": "confidence",
+            "low": 0.365,
+            "high": 1.124,
+            "level": 95
+          },
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 3,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        }
+      }
+    ],
+    "checks": [
+      "符合条件的人-期里，开始时就已经在治疗的占 16%，他们算作宽限期内开始。",
+      "开始治疗的人中，从时间零点到开始的中位等待时间是 2 周：这段时间里他们不可能出现要比较的事件，所以只按“用过药没有”分组会高估治疗的好处。",
+      "宽限期内开始 97 人，宽限期后才开始 56 人，始终没有开始 97 人。"
+    ],
+    "naive": {
+      "value": -15.86820295,
+      "text": null,
+      "unit": "%",
+      "source": "calculated",
+      "interval": null,
+      "mcse": null,
+      "review": "ai_set",
+      "precision": 1,
+      "reason": null,
+      "stale": false,
+      "detail": null
+    },
+    "naiveSentence": "只按“后来有没有用过药”分组的朴素风险差：用来看等待时间造成的偏差，不是结果。",
+    "weights": "补回删失的权重（稳定化）平均 0.972，范围 0.517 到 3.83。",
+    "bootstrap": "区间来自对人的整条记录重抽样 2000 次，每次重新估计权重和结局模型。"
+  },
+  "sequential-stopped": {
+    "question": "治疗起始时间各不相同的队列，开始治疗和不开始治疗的效应是多少，而且没有永恒时间偏倚？",
+    "sentence": "每一期符合条件的人都开一个模拟试验，当期是否在治疗决定分组，一个人可以进多个试验，区间按人重抽样。算的是第 6 个月末的风险差：意向治疗和按方案。",
+    "strategy": "sequential",
+    "horizon": 6,
+    "estimands": [
+      {
+        "kind": "itt",
+        "label": "意向治疗",
+        "meaning": "按每个试验开始时的治疗分组算，开始之后治疗有没有变都不管",
+        "answers": "第 6 个月末的累积风险差 = 试验组风险 − 对照组风险（意向治疗）",
+        "riskTreated": {
+          "value": 18.31100236,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": {
+            "kind": "confidence",
+            "low": 7.547051,
+            "high": 29.263434,
+            "level": 95
+          },
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "riskControl": {
+          "value": 25.99707469,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": {
+            "kind": "confidence",
+            "low": 16.140112,
+            "high": 36.162525,
+            "level": 95
+          },
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "riskDifference": {
+          "value": -7.68607234,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": {
+            "kind": "confidence",
+            "low": -20.195052,
+            "high": 5.979925,
+            "level": 95
+          },
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "riskRatio": {
+          "value": 0.70434857,
+          "text": null,
+          "unit": null,
+          "source": "calculated",
+          "interval": {
+            "kind": "confidence",
+            "low": 0.27,
+            "high": 1.27,
+            "level": 95
+          },
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 2,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        }
+      },
+      {
+        "kind": "pp",
+        "label": "按方案",
+        "meaning": "一个人的治疗偏离了所在组，就在那一期删失，并按实际接受的治疗加权，补回被删失的人",
+        "answers": "第 6 个月末的累积风险差 = 试验组风险 − 对照组风险（按方案）",
+        "riskTreated": {
+          "value": 18.0406147,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": {
+            "kind": "confidence",
+            "low": 7.17645,
+            "high": 29.816948,
+            "level": 95
+          },
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "riskControl": {
+          "value": 35.73569224,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": {
+            "kind": "confidence",
+            "low": 21.112143,
+            "high": 49.013724,
+            "level": 95
+          },
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "riskDifference": {
+          "value": -17.69507754,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": {
+            "kind": "confidence",
+            "low": -33.732668,
+            "high": -1.422412,
+            "level": 95
+          },
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "riskRatio": {
+          "value": 0.50483462,
+          "text": null,
+          "unit": null,
+          "source": "calculated",
+          "interval": {
+            "kind": "confidence",
+            "low": 0.197,
+            "high": 0.937,
+            "level": 95
+          },
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 3,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        }
+      }
+    ],
+    "checks": [
+      "符合条件的人-期里，开始时就已经在治疗的占 37.5%，他们进入试验组。",
+      "共 248 个模拟试验（每个符合条件的人-期一个），展开成 1502 行随访记录。"
+    ],
+    "naive": null,
+    "naiveSentence": null,
+    "weights": "补回删失的权重（稳定化）平均 1，范围 0.803 到 1.28。",
+    "bootstrap": "区间来自对人的整条记录重抽样 1000 次（计划 2000 次，计算时间用完了），比计划的粗。"
+  }
+}

@@ -62,7 +62,7 @@ import { extractSelection } from "./vcrMatchBatch.mjs";
 import { locateSourceText, OTHER_TRIAL_MIN_SOURCE_CHARS, sourceTextLength } from "./vcrPatientTrials.mjs";
 import { factsOnSameWords, surfaceBasis } from "./vcrFactBasis.mjs";
 import { dataIntakeShapeValid } from "./vcrDataIntake.mjs";
-import { VCR_CONVERSATION_STUDY_NAME, clinicalFactIssues, clinicalFactPolarity, clinicalNumericValue } from "@evimed/domain";
+import { VCR_CONVERSATION_STUDY_NAME, VCR_JOB_STATES, clinicalFactIssues, clinicalFactPolarity, clinicalNumericValue } from "@evimed/domain";
 import { createHash } from "node:crypto";
 import { VCR_LONGITUDINAL_JOBS, VCR_LONGITUDINAL_ERROR_CODES } from '@evimed/domain';
 
@@ -80,6 +80,15 @@ import {
 import { HttpError } from "./security.mjs";
 import { VCR_READ_WHATS, VCR_READ_MAX_ITEMS, VCR_WRITE_WHATS, vcrRouteOptions } from "./vcrService.mjs";
 import { vcrResultEntry, withJobEntry, withWriteEntry } from "./vcrResultEntry.mjs";
+import { vcrPersonStated } from "./vcrPersonStated.mjs";
+import { vcrConfirmatorySubjectId } from "./vcrConfirmatory.mjs";
+import { vcrDoseSubjectId } from "./vcrDoseFinding.mjs";
+import { vcrBayesianSubjectId } from "./vcrBayesianDesign.mjs";
+import { vcrWinRatioSubjectId } from "./vcrWinRatio.mjs";
+import { vcrPrognosticSubjectId } from "./vcrPrognosticTraining.mjs";
+import { vcrProgressionSubjectId } from "./vcrProgression.mjs";
+import { vcrSynthesisSubjectId } from "./vcrEvidenceSynthesis.mjs";
+import { vcrBiasScenarioFromComparison } from "./vcrBiasAnalysis.mjs";
 import { renderVcrNumbers } from "./vcrRender.mjs";
 import { checkRegulatoryContact, resolveVisitsRef, visitKey } from "./vcrScheduleView.mjs";
 import { EVIDENCE_ARM_ROLES } from "./vcrEvidenceStore.mjs";
@@ -92,7 +101,7 @@ import { assumptionSourceEntry, carrySourceEntries, checkSourceEntries, standing
 import { resolveJobSubject, prepareVcrSubjectPopulation, vcrConversationSubject, vcrJobFroze } from "./vcrSubjects.mjs";
 import { prepareVcrModelDesign } from "./vcrModelDesign.mjs";
 import { VCR_COVERAGE_POPULATION_NAME, vcrCohortRulesFromCriteria } from "./vcrCoverage.mjs";
-import { readPoolResult, distributionFromPooled, naturalOf, parameterKindOf, poolTargetOf, defaultScaleOf, defaultArmRoleOf, evidenceItemGaps, EVIDENCE_DERIVED_VALUE_SOURCES, EVIDENCE_ITEM_WORDS_ZH, VCR_POOL_MAX_STUDIES } from "./vcrEvidence.mjs";
+import { readPoolResult, distributionFromPooled, naturalOf, parameterKindOf, poolTargetOf, defaultScaleOf, defaultArmRoleOf, evidenceItemGaps, EVIDENCE_DERIVED_VALUE_SOURCES, EVIDENCE_ITEM_WORDS_ZH, VCR_POOL_MAX_STUDIES, SECOND_READ_CARD_WAIT_MS } from "./vcrEvidence.mjs";
 
 const gatewayPath = "/internal/vcr/v1";
 const operations = Object.freeze(["read", "write", "simulate", "digitize"]);
@@ -229,7 +238,14 @@ function readRequest(body) {
   if (typeof body.what !== "string" || !VCR_READ_WHATS.includes(body.what)) {
     throw gatewayError(400, "vcr_read_what_invalid", `what must be one of: ${VCR_READ_WHATS.join(", ")}.`);
   }
-  const raw = object(body.filter);
+  // A job's row calls its state `state`, and the filter that picks jobs by it is `status` (the one name a candidate search has too): a call that
+  // wrote `state` meant that filter, so it is read as it, once, and the answer says so (the way the near-miss words of a write are).
+  /** @type {Array<{ from: string, as: string }>} */
+  const readAs = [];
+  const written = object(body.filter);
+  /** @type {Record<string, any>} */
+  const raw = written.state != null && written.status == null && !readFilterFields.includes("state")
+    ? (() => { readAs.push({ from: "state", as: "status" }); const { state, ...rest } = written; return { ...rest, status: state }; })() : written;
   if (body.filter != null && (typeof body.filter !== "object" || Array.isArray(body.filter)
     || Object.keys(raw).some((key) => !readFilterFields.includes(key)))) {
     throw gatewayError(400, "vcr_read_filter_invalid", `filter takes only: ${readFilterFields.join(", ")}.`);
@@ -247,7 +263,13 @@ function readRequest(body) {
     if (!ID.test(String(raw[key]))) throw gatewayError(400, "vcr_read_filter_invalid", `filter.${key} is not an id.`);
     filter[key] = String(raw[key]);
   }
-  if (CANDIDATE_FILTER_FIELDS.some((key) => raw[key] != null)) {
+  if (raw.status != null && body.what === "jobs") {
+    if (typeof raw.status !== "string" || !VCR_JOB_STATES.includes(raw.status)) {
+      throw gatewayError(400, "vcr_read_filter_invalid", `filter.status for jobs is one of: ${VCR_JOB_STATES.join(", ")}.`);
+    }
+    filter.status = raw.status;
+  }
+  if (CANDIDATE_FILTER_FIELDS.some((key) => raw[key] != null && !(key === "status" && body.what === "jobs"))) {
     if (body.what !== "candidates") throw gatewayError(400, "vcr_read_filter_invalid", `filter.${CANDIDATE_FILTER_FIELDS.find((key) => raw[key] != null)} belongs to what: candidates.`);
     // The request's own checks answer in words (`candidateRequest`); this only carries the keys through, bounded.
     const asked = candidateRequest(raw);
@@ -275,7 +297,7 @@ function readRequest(body) {
     }
     filter.offset = raw.offset;
   }
-  return { what: body.what, filter };
+  return { what: body.what, filter, readAs };
 }
 
 /** @param {Record<string, any>} body */
@@ -732,7 +754,7 @@ function distributionOf(item, field, value) {
  * runtime is reserved for, when it is a bounded one (`runtimeRunId`).
  * @typedef {{ store: any, service: any, orchestrator: any, study: any, evidence?: any, evidenceStore?: any, matchStore?: any,
  *   matching?: any, patientTrials?: any, seal?: any, dataPlane?: any, documents?: any, report?: (code: string) => void,
- *   caller?: { runtimeRunId?: string | null, provenance?: any } | null, knowledge?: any, afterFreeze?: boolean }} WriteDeps
+ *   caller?: { runtimeRunId?: string | null, provenance?: any } | null, knowledge?: any, afterFreeze?: boolean, waitUntil?: number, waitMs?: number }} WriteDeps
  */
 
 /** The criterion fields a protocol write takes. */
@@ -1192,6 +1214,7 @@ const WRITERS = {
       extracted.status === "registry_not_found" ? "registry_not_found" : "registry_unavailable");
     }
     extra.results.push({ index: item.index, registryId, extracted: extracted.counts.extracted, verified: extracted.counts.verified, refused: extracted.counts.refused });
+    for (const note of extracted.notes ?? []) item.issues.push(issue(item.index, "registryId", noteCode(note), note.message));
     return extracted.precedent?.id ?? null;
   },
 
@@ -1373,6 +1396,9 @@ const WRITERS = {
     const ciHigh = item.num("ciHigh");
     const sampleSize = item.num("sampleSize", { min: 0, integer: true });
     const events = item.num("events", { min: 0, integer: true });
+    // The p-value the paper prints for this value, only to be held against its interval: kept when its number is in the quotation.
+    const pValue = item.num("pValue", { min: 0, max: 1 });
+    const pRelation = item.choice("pRelation", ["=", "<", ">"]);
     if (ciLow != null && ciHigh != null && ciLow >= ciHigh) item.bad("ciLow", "ciLow 要小于 ciHigh。");
     const valueSource = item.choice("valueSource", ["extracted", "calculated"], { fallback: "extracted", words: vcrWordList("evidence_item", "valueSource") });
     // The one thing a paper that does not report a parameter cannot give is a sentence that states it: the quotation is asked for a
@@ -1399,6 +1425,7 @@ const WRITERS = {
     if (!evidence?.addEvidenceItem) return void item.bad("registryId", "证据参数化未接入本部署。", "vcr_write_refused");
     const written = await evidence.addEvidenceItem({ userId: study.userId, studyId: study.id, projectId: study.projectId, item: {
       registry, registryId, parameter, arm, armRole, value, valueText, unit, ciLow, ciHigh, sampleSize, events, valueSource, quote, locator,
+      ...(pValue != null ? { pValue, ...(pRelation ? { pRelation } : {}) } : {}),
       endpointKey, enrollmentKind, historicalBaseline: item.row.historicalBaseline === true, line, biomarker, outcome: item.row.outcome, note: item.row.note,
       ...(notReported ? { notReported: true } : {}),
       trialIdentity, timepoint: item.row.timepoint, ...(literatureSource ? { literatureSource } : {}), ...(publication ? { publication } : {}), evidenceKind, ...(source ? { source } : {}), ...(candidateFrom ? { candidateFrom } : {}),
@@ -1408,6 +1435,11 @@ const WRITERS = {
     const verified = written.state === "verified";
     extra.results.push({ index: item.index, id: written.id, verified, state: written.state, ...(notReported ? { notReported: true } : {}),
       ...(written.publication ? { publication: written.publication } : {}) });
+    // Numbers of this value that do not agree with each other or with its trial's other values: advice with the numbers named, the value is kept.
+    for (const note of written.notes ?? []) item.issues.push(issue(item.index, "value", noteCode(note), note.message));
+    if (written.pValueNotInQuote) {
+      item.issues.push(issue(item.index, "pValue", "vcr_evidence_item_incomplete", "pValue 没有出现在 quote 里，没有用来核对这条的区间；这一条已保存。要核对，把写着 p 值的那句原文也放进 quote。"));
+    }
     // What a pool needs of this parameter that the item does not carry: said once, in the answer of the write. The item is saved as it
     // stands (it is the paper that decides what it reports), and the run either reads the rest off the paper or records that the paper
     // does not report it.
@@ -2155,6 +2187,11 @@ const WRITERS = {
   },
 };
 
+/** The code of a note about the numbers of a value: two numbers of the item disagree (E2), or a second reading of its passage read another number (E1). @param {{ kind?: string }} note */
+function noteCode(note) {
+  return note.kind === "second_read" ? "vcr_evidence_second_read_differs" : "vcr_evidence_values_inconsistent";
+}
+
 // An effect card without its role is reminded and never refused (A13): the card is saved as it stands, and the answer says that the
 // difference worth finding and the difference expected are two numbers.
 {
@@ -2162,6 +2199,16 @@ const WRITERS = {
   WRITERS.assumption = async (item, deps, extra) => {
     const id = await writeCard(item, deps, extra);
     const key = typeof item.row.key === "string" ? item.row.key : "";
+    // The numbers the card is made of, held against each other (E2): said in the answer of the write that made the card, which is saved as it is.
+    if (id && item.ok && typeof deps.evidence?.valueNotes === "function") {
+      const stored = (await deps.store.assumptions(deps.study.id).catch(() => [])).find((/** @type {any} */ card) => card.id === id);
+      const cited = Array.isArray(stored?.evidenceIds) ? stored.evidenceIds.map(String) : [];
+      // The reading of the values the card cites by a second model (E1) may still be running: the answer waits for it, within a limit, and the card is already saved.
+      // The limit is the write's, not the card's: what the cards before this one waited is gone from it, so that a write of several cards answers inside the budget.
+      const left = Math.max(0, (deps.waitUntil ?? Date.now() + SECOND_READ_CARD_WAIT_MS) - Date.now());
+      const notes = cited.length ? await deps.evidence.valueNotes({ userId: deps.study.userId, studyId: deps.study.id, ids: cited, wait: left }).catch(() => []) : [];
+      for (const note of notes) item.issues.push(issue(item.index, "evidenceIds", noteCode(note), note.message));
+    }
     if (id && item.ok && vcrIsEffectCardKey(key) && !VCR_EFFECT_ROLES.includes(/** @type {any} */ (item.row.effectRole))) {
       const stored = (await deps.store.assumptions(deps.study.id)).find((card) => card.key === key);
       if (!stored?.effectRole) {
@@ -2181,7 +2228,8 @@ const WRITERS = {
  * @param {WriteDeps & { what: string, items: any[] | null, data: any | null }} input
  */
 export async function vcrRuntimeWrite({ store, service, orchestrator, study, what, items, data, evidence = null, evidenceStore = null,
-  matchStore = null, matching = null, patientTrials = null, seal = null, dataPlane = null, documents = null, report = () => {}, caller = null, knowledge = null }) {
+  matchStore = null, matching = null, patientTrials = null, seal = null, dataPlane = null, documents = null, report = () => {}, caller = null, knowledge = null,
+  waitMs = SECOND_READ_CARD_WAIT_MS }) {
   if (["site", "followup"].includes(what)) throw gatewayError(410, "vcr_recruitment_retired", "该运营流程已停用；患者匹配仍可使用，历史观察可在“依据”中只读查看或导出。");
   /** @type {string[]} */
   const ids = [];
@@ -2208,7 +2256,9 @@ export async function vcrRuntimeWrite({ store, service, orchestrator, study, wha
   /** What the writers of one request share: the changed nodes, the answers beside the ids, and the pairs to judge again. @type {{ changed: string[], results: any[], reevaluate?: Set<string> }} */
   const scratch = { changed, results };
   /** @type {WriteDeps} */
-  const deps = { store, service, orchestrator, study, evidence, evidenceStore, matchStore, matching, patientTrials, seal, dataPlane, documents, report, caller, knowledge };
+  const deps = { store, service, orchestrator, study, evidence, evidenceStore, matchStore, matching, patientTrials, seal, dataPlane, documents, report, caller, knowledge,
+    // the one wait the whole write may spend on the second readings of the values its cards cite
+    waitUntil: Date.now() + Math.max(0, waitMs) };
   // The run the platform sent to take new evidence into a study's cards (flywheel F24) writes its versions beside the frozen one when
   // the study's analysis plan has frozen: the dispatch names the run, and a card a run types never decides it. Any other writer — the
   // researcher's own conversation, an ordinary programme step — writes exactly as before, which for a frozen study is a new freeze.
@@ -2557,9 +2607,10 @@ function poolingSummary(result, about) {
  * @param {any} config @param {any} runtimeManager
  * @param {{ vcr: { service: any, store: any, jobs?: any, orchestrator?: any, evidence?: any, evidenceStore?: any, matchStore?: any,
  *   matching?: any, patientTrials?: any, seal?: any, dataPlaneSeam?: any, documents?: any, knowledge?: any, patientContext?: any, dataIntake?: any } | null,
- *   report?: (code: string) => void, budgetMs?: number, resolveStudyConversation?: ((study:any,options:any)=>Promise<any>)|null, resolveInvocation?: ((identity:any,header:any,operation:string,body:any)=>Promise<any>)|null, readProducerRun?: ((study:any,runId:string)=>Promise<any>)|null }} dependencies
+ *   report?: (code: string) => void, budgetMs?: number, resolveStudyConversation?: ((study:any,options:any)=>Promise<any>)|null, resolveInvocation?: ((identity:any,header:any,operation:string,body:any)=>Promise<any>)|null, readProducerRun?: ((study:any,runId:string)=>Promise<any>)|null,
+ *   readPersonMessages?: ((study:any,sessionId:string)=>Promise<readonly string[] | null>)|null }} dependencies
  */
-export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = () => {}, budgetMs = answerBudgetMs, readProducerRun = null, resolveInvocation = null, resolveStudyConversation = null }) {
+export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = () => {}, budgetMs = answerBudgetMs, readProducerRun = null, readPersonMessages = null, resolveInvocation = null, resolveStudyConversation = null }) {
   /** @type {Map<string, { until: number, count: number }>} */
   const windows = new Map();
   const registryDeadline = Number(config?.vcrRegistryTimeoutMs) > 0 ? Number(config.vcrRegistryTimeoutMs) : REGISTRY_DEADLINE_MS;
@@ -2669,7 +2720,8 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
           ? await vcr.dataIntake?.read(study, request.filter, origin) ?? { available: false, code: 'vcr_gateway_unavailable' }
           : request.what==='patient_context'
           ? origin && vcr.patientContext?.candidates ? await vcr.patientContext.candidates(origin,request.filter) : {candidates:[],nextBeforeSeq:null}
-          : await vcr.service.runtimeRead(study, request.what, request.filter)) });
+          : await vcr.service.runtimeRead(study, request.what, request.filter)),
+          ...(request.readAs.length ? { filterRead: request.readAs, note: "filter 里写的 state 已按 status 读（任务行里叫 state，过滤字段叫 status，取值 queued、running、succeeded、failed、canceled、awaiting_budget）；下次直接写 status。" } : {}) });
       } else if (operation === "write") {
         const request = writeRequest(body);
         // The token names the runtime, and a runtime reserved for one dispatch names that dispatch: with the
@@ -2706,6 +2758,8 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
             evidence: vcr.evidence ?? null, evidenceStore: vcr.evidenceStore ?? null, matchStore: vcr.matchStore ?? null,
             matching: vcr.matching ?? null, patientTrials: vcr.patientTrials ?? null, seal: vcr.seal ?? null, dataPlane: vcr.dataPlaneSeam ?? null, documents: vcr.documents ?? null, report,
             knowledge: vcr.knowledge ?? vcr.service?.packages?.knowledge ?? null,
+            // half of the answer budget at most: the wait is the write's own, and the rest of the budget is the write's work
+            waitMs: Math.min(SECOND_READ_CARD_WAIT_MS, Math.floor(budget / 2)),
             caller: { runtimeRunId: runtimeRunId == null ? null : String(runtimeRunId),
               ...(["fact", "language_judgment"].includes(request.what) && typeof vcr.matchStore?.producerContext === "function"
                 ? { provenance: { ...await vcr.matchStore.producerContext(study, runtimeRunId == null ? null : String(runtimeRunId)).catch(() => ({ schema: 1, status: "ledger_unavailable", runId: runtimeRunId })), runReceipt } } : {}) },
@@ -2746,6 +2800,12 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
             }
             // An object named with no scenario is checked as the programme would build it from the object (see `startJob`).
             let scenario = asked.scenario;
+            // and a bias analysis of a saved comparison is checked with the estimate the platform takes from its result
+            if (asked.kind === "bias_analysis") {
+              const taken = await vcrBiasScenarioFromComparison({ store: vcr.store, study, subjectId: asked.subjectId, scenario });
+              if ("refused" in taken) throw gatewayError(400, "vcr_simulate_payload_invalid", taken.refused.message);
+              if (taken.from) scenario = taken.scenario;
+            }
             if (asked.subjectId && !Object.keys(scenario).length && !asked.inputs.length && typeof vcr.orchestrator?.stageScenarioOf === "function") {
               const built = await vcr.orchestrator.stageScenarioOf(study, asked.subjectId, asked.kind);
               if ("refused" in built) throw gatewayError(400, "vcr_simulate_payload_invalid", built.refused.message);
@@ -2757,7 +2817,8 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
             return sources.length ? { ...checked, sources } : checked;
           }
           if (request.action === "start") {
-            const started = await startJob(vcr, study, /** @type {any} */ (request));
+            const started = await startJob(vcr, study, /** @type {any} */ (request),
+              { personMessages: readPersonMessages && origin?.rootSessionId ? () => readPersonMessages(study, String(origin.rootSessionId)).catch(() => null) : null });
             await nameWhatItHolds(vcr, study);
             return withJobEntry(started, { study, resultKind: vcrResultKindFor(String(/** @type {any} */ (request).kind)), publicUrl: config?.publicUrl });
           }
@@ -2865,8 +2926,9 @@ const sourcesNotForKind = () => ({ field: "", state: "assumption", because: "kin
  * @param {{ kind: string, scenario: Record<string, any>, inputs: unknown[], seed: number | null, replicates: number | null,
  *   cpuSecondsLimit: number | null, subjectId: string | null, reconstructionResultId?: string | null, selection?: any, modelId?:string|null, modelVersion?:string|null,
  *   sources?: unknown }} request
+ * @param {{ personMessages?: (() => Promise<readonly string[] | null>) | null }} [context]
  */
-async function startJob(vcr, study, request) {
+async function startJob(vcr, study, request, { personMessages = null } = {}) {
   if (Object.hasOwn(VCR_LONGITUDINAL_JOBS,request.kind)) {
     if (!vcr.longitudinal) throw gatewayError(503,'vcr_gateway_unavailable','纵向数据尚未接入；其他分析可以继续。');
     const {job} = await vcr.longitudinal.prepare(study,request,study.userId,{ detail: study.completionOrigin ? { conversationOrigin:study.completionOrigin } : {} });
@@ -2904,10 +2966,14 @@ async function startJob(vcr, study, request) {
     if (scenario.armRole != null && !EVIDENCE_ARM_ROLES.includes(String(scenario.armRole))) {
       throw gatewayError(400, "vcr_simulate_payload_invalid", `armRole 必须是：${EVIDENCE_ARM_ROLES.join("、")}。`);
     }
+    // The heterogeneity prior a run may name is one of the tables the domain holds, each number with its place in the paper: a prior typed in is not offered.
+    if (scenario.tauPrior != null && (typeof scenario.tauPrior !== "object" || !["turner_2015", "turner_2015_generic", "bartos_2023"].includes(String(scenario.tauPrior.kind)))) {
+      throw gatewayError(400, "vcr_simulate_payload_invalid", "tauPrior.kind 是 turner_2015（加 outcome、comparison）、turner_2015_generic 或 bartos_2023（加 effectScale）：先验来自文献里的表，不要自己带数。");
+    }
     const pooled = await vcr.evidence.poolParameter({
       userId: study.userId, studyId: study.id, parameter: scenario.parameter.trim(), endpointKey: scenario.endpointKey,
       armRole: scenario.armRole ?? "", target: poolTargetOf(scenario.target), poolingMethod: scenario.method ?? "random_effects_reml",
-      calibres: scenario.calibres ?? null,
+      calibres: scenario.calibres ?? null, tauPrior: scenario.tauPrior ?? null,
       conversationOrigin: study.completionOrigin ?? null,
     });
     const started = list(pooled.jobs).filter((/** @type {any} */ job) => job.jobId);
@@ -2929,7 +2995,9 @@ async function startJob(vcr, study, request) {
   let detail = { subjectId: request.subjectId, origin: "runtime" };
   if (request.kind === "apply_prognostic_model" && !request.modelId) throw gatewayError(400, "vcr_model_invalid", "Select an immutable source-bound prognostic model before applying it.");
   if (request.modelId) {
-    const sourceModel = await vcr.service.modelExecution({id:study.userId},study,request.modelId,request.kind,request.scenario);
+    // the equation of a model the person's own data trained is the model's, not the call's: it is filled in by code
+    scenario = await vcr.service.modelScenario({ id: study.userId }, request.modelId, request.kind, scenario);
+    const sourceModel = await vcr.service.modelExecution({id:study.userId},study,request.modelId,request.kind,scenario);
     if (sourceModel.version !== request.modelVersion) throw gatewayError(409,'vcr_model_version_changed','The selected source model version changed.');
     detail = {...detail,sourceModel};
   }
@@ -2980,6 +3048,13 @@ async function startJob(vcr, study, request) {
       detail = { ...detail, timeUnitBasis: { ...times.timeUnit } };
     }
   }
+  // A bias analysis that names a saved comparison and states no estimate takes the comparison's own estimate and interval, by code: the model
+  // never copies a number out of a result into a scenario (the reply that said an E-value of 3.0 where the page read 2.22, 2026-11-02).
+  if (request.kind === "bias_analysis") {
+    const taken = await vcrBiasScenarioFromComparison({ store: vcr.store, study, subjectId: request.subjectId, scenario });
+    if ("refused" in taken) throw gatewayError(400, "vcr_simulate_payload_invalid", taken.refused.message);
+    if (taken.from) { scenario = taken.scenario; detail = { ...detail, biasEstimateFrom: taken.from }; }
+  }
   // A start that names an object and sends no scenario computes the object as it was written: the platform builds the stage's scenario
   // from it, as the programme does, instead of asking the engine to run an empty one (2026-11-01: a design written in the conversation
   // and started by its id was refused three times for the design, endpoint and truth that were sitting in the object).
@@ -3009,6 +3084,20 @@ async function startJob(vcr, study, request) {
   const designBinding = await prepareVcrModelDesign({ store: vcr.store, study, subject, scenario: population.scenario, inputs: population.inputs });
   scenario = designBinding.scenario; inputs = designBinding.inputs; derived = [...derived, ...population.derived];
   detail = { ...detail, ...population.detail, ...designBinding.detail };
+  // A confirmatory design belongs to no object of the study, and a result with no subject would replace the last one of its kind: it is
+  // filed under the design and the endpoint it is about, so the futility design and the re-estimation of one study sit side by side and a
+  // second run of either is its next version. A run that names a subject keeps its own.
+  if (request.kind === "design_confirmatory" && !detail.subjectId) detail = { ...detail, subjectId: vcrConfirmatorySubjectId(scenario) };
+  // The same for the dose-finding designs (the designs compared and the curve) and the Bayesian designs (the design and what it was asked about).
+  if (request.kind === "design_dose" && !detail.subjectId) detail = { ...detail, subjectId: vcrDoseSubjectId(scenario) };
+  if (request.kind === "design_bayesian" && !detail.subjectId) detail = { ...detail, subjectId: vcrBayesianSubjectId(scenario) };
+  // and a hierarchical composite compared by win ratio (the scenario it was asked on)
+  if (request.kind === "design_win_ratio" && !detail.subjectId) detail = { ...detail, subjectId: vcrWinRatioSubjectId(scenario) };
+  // a prognostic model trained on the person's own table (the configuration it was trained on) and a progression simulation (the scenario it was asked on)
+  if (request.kind === "train_prognostic_model" && !detail.subjectId) detail = { ...detail, subjectId: vcrPrognosticSubjectId(scenario) };
+  if (request.kind === "generate_progression" && !detail.subjectId) detail = { ...detail, subjectId: vcrProgressionSubjectId(scenario) };
+  // The same for a network, a dose-response and a shrinkage: they are filed under the label the call gave them, so two analyses of two outcomes stand side by side.
+  if (["network_meta", "dose_response_meta", "effect_shrinkage"].includes(request.kind) && !detail.subjectId) detail = { ...detail, subjectId: vcrSynthesisSubjectId(request.kind, scenario) };
   if (subject) {
     detail = { ...detail, ...subject.detail };
     // The stage in flight is the answer to the scenario it froze, and to no other: a start that states another number is another job.
@@ -3046,6 +3135,9 @@ async function startJob(vcr, study, request) {
       detail = { ...detail, bound: [...standing.filter((entry) => !named.has(entry.path)), ...(Array.isArray(detail.bound) ? detail.bound : [])] };
     }
   }
+  // Which numbers of a design are in the person's own messages (the premise word 「你给的数据」 means that and a table the person supplied, and
+  // nothing a model chose): decided here, in code, frozen with the job. A conversation whose messages cannot be read records that it could not.
+  if (personMessages && sourcesAreForKind(request.kind)) detail = { ...detail, personStated: vcrPersonStated(scenario, await personMessages()) };
   const scenarioHash = createHash("sha256").update(canonicalScenarioJson({ scenario, reconstruction: request.reconstructionResultId ?? null,
     ...(Array.isArray(detail.bound) && detail.bound.length ? { bound: detail.bound } : {}) })).digest("hex").slice(0, 16);
   const { job, notice } = await vcr.jobs.enqueue({

@@ -65,6 +65,8 @@ vcr_engine_load <- function(root = NULL) {
 vcr_engine_handlers <- function() list(
   "model.survival_fit" = vcr_job_fit_survival_model,
   "model.prognostic_apply" = vcr_job_apply_prognostic_model,
+  "model.prognostic_train" = vcr_job_train_prognostic_model,
+  "patients.progression" = vcr_job_patients_progression,
   "profile.snapshot" = vcr_job_profile_snapshot,
   "cohort.build" = vcr_job_build_cohort,
   "population.scenario" = vcr_job_generate_population,
@@ -77,19 +79,30 @@ vcr_engine_handlers <- function() list(
   "patients.time_to_event" = vcr_job_generate_patients,
   "patients.longitudinal" = vcr_job_generate_patients_longitudinal,
   "evidence.pool" = vcr_job_pool_evidence,
+  "evidence.network" = vcr_job_network_meta,
+  "evidence.dose_response" = vcr_job_dose_response,
+  "evidence.shrinkage" = vcr_job_effect_shrinkage,
   "evidence.reconstruct_km" = vcr_job_reconstruct_km,
-  "comparator.entropy_balance" = vcr_job_weight_comparator,
-  "comparator.propensity_weight" = vcr_job_weight_comparator,
+  "comparator.entropy_balance" = vcr_with_imputation(vcr_job_weight_comparator),
+  "comparator.propensity_weight" = vcr_with_imputation(vcr_job_weight_comparator),
   "comparator.rmst" = vcr_job_rmst,
   "comparator.maic" = vcr_job_maic,
-  "comparator.weighted_cox" = vcr_job_weighted_cox,
+  "comparator.weighted_cox" = vcr_with_imputation(vcr_job_weighted_cox),
   "comparator.maic_time_to_event" = vcr_job_maic_tte,
-  "comparator.aipw" = vcr_job_aipw,
+  "comparator.aipw" = vcr_with_imputation(vcr_job_aipw),
   "comparator.covariate_sets" = vcr_job_covariate_sets,
   "comparator.evalue" = vcr_job_evalue,
   "comparator.map_prior" = vcr_job_map_prior,
+  "comparator.borrowing" = vcr_job_comparator_borrowing,
   "design.analytic" = vcr_job_design_analytic,
   "design.simulate" = vcr_job_design_simulate,
+  "design.confirmatory" = vcr_job_design_confirmatory,
+  "design.dose" = vcr_job_design_dose,
+  "design.win_ratio" = vcr_job_design_win_ratio,
+  "design.bayesian" = vcr_job_design_bayesian,
+  "comparator.bias_analysis" = vcr_job_bias_analysis,
+  "comparator.stc" = vcr_job_stc,
+  "comparator.target_trial" = vcr_job_target_trial,
   "design.grid" = vcr_job_design_grid,
   "design.assurance" = vcr_job_assurance,
   "design.procova" = vcr_job_procova,
@@ -114,9 +127,53 @@ VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "longitudinal")
 VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "population_check")
 # --- end population check ---
 
+# --- the confirmatory designs (algorithm round T2-T6, 2026-11-03): rpact behind its adapter, the five designs in their own file ---
+VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "rpact_adapter", "design_confirmatory")
+# --- end confirmatory designs ---
+
+# --- dose-finding designs (T7, T15) and Bayesian designs without MCMC (T8, T10), 2026-11-03: written here, never calling a package ---
+VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "design_dose", "design_bayesian")
+# --- end dose-finding and Bayesian designs ---
+
+# --- hierarchical composite endpoints (T9), 2026-11-03: the win ratio simulated and sized in the engine's own code; hce is the check ---
+VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "design_win_ratio")
+# --- end win ratio ---
+
+# --- quantitative bias analysis of an estimate (C1, C2) and the G-computation simulated treatment comparison (C9), 2026-11-03 ---
+VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "bias_analysis", "stc")
+# --- end bias analysis and STC ---
+
+# --- multiple imputation of missing covariates for the weighting comparators (C7), 2026-11-03; sourced after them, wraps their handlers ---
+VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "imputation")
+# --- end imputation ---
+
+# --- target-trial emulation from a person-period table (C3, C4), 2026-11-03 ---
+VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "target_trial")
+# --- end target trial ---
+
+# --- evidence synthesis beyond a pairwise pool (algorithm round C5, C6, E7, E8, 2026-11-03): a prior for tau, a network, a dose-response, a shrinkage ---
+VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "evidence_tau_prior", "evidence_network", "dose_response", "effect_shrinkage")
+# --- end evidence synthesis ---
+
 # --- single-arm trials of a mean and of a survival time against a benchmark (2026-10-07) ---
 VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "single_arm")
 # --- end single arm ---
+
+# --- dynamic borrowing of an external control arm (algorithm round C10-C12, 2026-11-03): the power, SAM and elastic priors, in their own file ---
+VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "borrowing")
+# --- end dynamic borrowing ---
+
+# --- inference validity and per-record privacy of a synthetic population (algorithm round P1, P2, 2026-11-03) ---
+VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "quality_inference")
+# --- end quality inference ---
+
+# --- a prognostic model trained on the user's own table, cross-fitted (algorithm round P3, 2026-11-03) ---
+VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "model_prognostic_train")
+# --- end prognostic training ---
+
+# --- a population-level disease-progression simulator from a published model family (algorithm round P4, 2026-11-03) ---
+VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "patients_progression")
+# --- end progression ---
 
 #' Startup self-check: the local registry and the domain must agree, exactly.
 vcr_engine_self_check <- function() {
@@ -191,11 +248,13 @@ vcr_default_measure_source <- function(method) {
 #' sources and fails when a literal code is in neither list, because a code that
 #' is misspelt here is a refusal nobody has a message for.
 VCR_ENGINE_OWN_ISSUE_CODES <- c(
-  "constraint_unsatisfiable", "cpu_budget_exhausted", "design_effect_null", "grid_cell_failed", "handler_error",
+  "constraint_unsatisfiable", "cpu_budget_exhausted", "design_effect_null", "design_not_computable", "effect_against_direction", "grid_cell_failed", "handler_error",
   "input_format_unsupported", "input_hash_mismatch", "input_parse_failed", "input_source_not_reconstructed", "input_too_large",
   "job_invalid", "mechanistic_engine_unknown", "mechanistic_field_missing", "missing_covariate",
-  "model_card_field_missing", "model_risk_unknown", "performance_measure_unsupported", "replicates_all_failed",
-  "twin_label_inconsistent", "uncertainty_and_variability_conflated")
+  "model_card_field_missing", "model_risk_unknown", "non_inferiority_effect_beyond_margin", "performance_measure_unsupported", "replicates_all_failed",
+  "twin_label_inconsistent", "uncertainty_and_variability_conflated",
+  "dose_response_not_computable", "dose_response_method_unavailable", "network_not_connected", "network_not_computable",
+  "imputation_not_possible", "too_many_person_periods")
 
 #' A column named by one string, or a named refusal (a number, an empty array
 #' or an object in its place used to reach `subj[[...]]` and end as an R error).
@@ -262,7 +321,8 @@ vcr_run_job <- function(job, output_dir = NULL, cancel_file = NULL, progress = N
         rc <- diagnostics$replicatesCompleted
         # a run stopped before its first batch completed none, and says so by
         # naming no count rather than by echoing the requested one
-        if (is.null(rc)) job$replicates else if (rc >= 1) rc else NULL
+        # (a run that spent its CPU budget before any batch of trials names none either: it ran none, whatever it was asked for)
+        if (is.null(rc)) { if (any(vapply(issues, function(i) identical(i$code, "cpu_budget_exhausted"), logical(1)))) NULL else job$replicates } else if (rc >= 1) rc else NULL
       },
       conclusion = con,
       notEstimableRule = rule,
@@ -721,6 +781,67 @@ vcr_job_population_literature <- function(job, output_dir = NULL, ...) {
        issues = list(vcr_issue("cpu_budget_exhausted", "cpuSecondsLimit", sprintf("The CPU budget ran out: %s.", detail))))
 }
 
+# --- the 1.1.0 report of a synthetic population (P1, P2): combined inference, the permuted-arm type I error, per-record privacy ---
+
+#' The scenario's `privacy` block as the disclosure report reads it.
+.vcr_privacy_from_scenario <- function(p) list(bound = vcr_scalar(p[["membershipRiskBound"]], 0.75), secrets = if (length(p[["secrets"]])) vcr_chr(p[["secrets"]]) else NULL,
+                                              attacks = as.integer(vcr_scalar(p[["attacks"]], 500L)))
+
+#' The permuted-arm calibration the scenario asked for, against the analysis it names, or the reason there is none. `regenerate` is the
+#' job's own generator (table, seed -> copies); a generator that cannot be re-run gives no calibration and says why.
+.vcr_null_calibration_job <- function(nc, specs, train, regenerate, seed, can_regenerate = TRUE) {
+  nm <- as.character(nc[["analysis"]])
+  names_ <- vapply(seq_along(specs), function(i) as.character(specs[[i]]$name %||% sprintf("analysis_%d", i)), character(1))
+  i <- match(nm, names_)
+  if (is.na(i)) vcr_abort("scenario_value_invalid", "scenario.inference.nullCalibration.analysis", "The calibration names a declared analysis.")
+  arm <- vcr_analysis_arm_column(specs[[i]])
+  if (is.null(arm)) vcr_abort("scenario_value_invalid", "scenario.inference.nullCalibration.analysis", "A calibration permutes the arm labels: the analysis must have a target, or a group.")
+  if (!(arm %in% names(train))) vcr_abort("scenario_value_invalid", "scenario.inference.nullCalibration.analysis", "The analysis's arm column is not in the training table.")
+  if (!can_regenerate) return(list(available = FALSE, reason = "generator_not_rerunnable", analysis = nm, arm = arm))
+  f <- vcr_analysis_from_spec(specs[[i]])
+  r <- as.integer(vcr_scalar(nc[["replicates"]], 100L))
+  out <- vcr_null_calibration(train, f, arm, regenerate, r, seed)
+  c(out, list(analysis = nm, arm = arm, copiesPerReplicate = as.integer(vcr_scalar(nc[["copies"]], 1L))))
+}
+
+#' Headline numbers of the 1.1.0 report, each through `vcr_measure`: the three false-positive rates are simulated and carry their error.
+.vcr_inference_measures <- function(q) {
+  out <- list()
+  nc <- q$inference$nullCalibration
+  if (isTRUE(nc$available)) {
+    one <- function(name, x) vcr_measure(name, x$value, simulated = TRUE, mcse = x$mcse, source = "synthetic")
+    out <- c(out, list(one("false_positive_rate_real_permuted", nc$realPermuted), one("false_positive_rate_synthetic_naive", nc$syntheticNaive),
+                       one("false_positive_rate_synthetic_combined", nc$syntheticCombined)))
+  }
+  pr <- q$disclosure$perRecord
+  if (isTRUE(pr$available)) {
+    stated <- Filter(function(x) isTRUE(x$stated), pr$riskShares)
+    if (length(stated) && !is.null(stated[[1]]$trainingShare)) out <- c(out, list(vcr_measure("records_above_risk_bound", stated[[1]]$trainingShare, source = "calculated")))
+  }
+  ai <- q$disclosure$attributeInference
+  if (isTRUE(ai$available)) {
+    w <- ai$secrets[[which.max(vapply(ai$secrets, function(x) x$riskLow, numeric(1)))]]
+    out <- c(out, list(vcr_measure("attribute_inference_risk", max(0, w$risk), source = "calculated", interval = vcr_interval("confidence", max(0, w$riskLow), max(0, w$riskHigh)))))
+  }
+  out
+}
+
+#' Every copy scored on its own (the table of `qualityByCopy`).
+.vcr_quality_by_copy <- function(train, copies, holdout, constraints) {
+  do.call(rbind, lapply(seq_along(copies), function(k) {
+    uni <- vcr_fidelity_univariate(train, copies[[k]])
+    pr <- tryCatch(vcr_utility_propensity(train, copies[[k]]), error = function(e) list(sPMSE = NA_real_, propensityAuc = NA_real_))
+    viol <- vcr_constraint_violations(copies[[k]], constraints)
+    dis <- tryCatch(vcr_disclosure_report(train, copies[[k]], holdout), error = function(e) list(available = FALSE))
+    got <- function(key) if (isTRUE(dis$available) && !is.na(dis[[key]])) dis[[key]] else NA_real_
+    data.frame(copy = k, worstKsD = suppressWarnings(max(uni$value[uni$statistic == "ks_d"], -Inf)),
+               worstTvd = suppressWarnings(max(uni$value[uni$statistic == "tvd"], -Inf)),
+               sPMSE = pr$sPMSE, propensityAuc = pr$propensityAuc,
+               constraintViolations = if (nrow(viol)) sum(viol$violations) else 0,
+               replicationRatio = got("replicationRatio"), nearestNeighbourInTrainShare = got("nearestNeighbourInTrainShare"), membershipAuc = got("membershipAuc"))
+  }))
+}
+
 vcr_job_synthesize_population <- function(job, output_dir = NULL, ...) {
   sc <- job$scenario
   df <- .vcr_main_table(vcr_job_tables(job))
@@ -751,6 +872,11 @@ vcr_job_synthesize_population <- function(job, output_dir = NULL, ...) {
   if (!is.null(syn$interrupted)) return(.vcr_interrupted_result(syn$interrupted, sprintf("%d of %d synthetic copies were made", length(syn$data), as.integer(m))))
   copies <- do.call(rbind, lapply(seq_along(syn$data), function(k) cbind(copy = k, syn$data[[k]])))
   analyses <- .vcr_analyses_from_scenario(sc$analyses)
+  # 1.1.0 (P1, P2): the copies are combined by the rules for synthetic data, the per-record and attribute risks are measured, and the type I
+  # error of an analysis on this generator's copies can be calibrated. A job labelled 1.0.0 replays without any of it.
+  mv <- job[["methodVersion"]]
+  v11 <- is.character(mv) && length(mv) == 1L && nzchar(mv) && utils::compareVersion(mv, "1.1.0") >= 0L
+  infer <- if (v11) list(proper = FALSE, privacy = .vcr_privacy_from_scenario(sc[["privacy"]])) else NULL
   # The table that ships holds every copy, so the hard constraints and the leakage check read all of them stacked (`copies`); the
   # fidelity and utility axes describe the first copy and the others are scored one by one below.
   report <- vcr_quality_report(train, syn$data[[1]], holdout,
@@ -758,27 +884,25 @@ vcr_job_synthesize_population <- function(job, output_dir = NULL, ...) {
                                criteria = sc$criteria,
                                generator = list(family = "synthpop_cart", m = syn$m,
                                                 smoothing = syn$smoothing, seed = job$seed),
-                               tstr_outcome = sc$tstrOutcome, copies = syn$data)
-  by_copy <- do.call(rbind, lapply(seq_along(syn$data), function(k) {
-    uni <- vcr_fidelity_univariate(train, syn$data[[k]])
-    pr <- tryCatch(vcr_utility_propensity(train, syn$data[[k]]), error = function(e) list(sPMSE = NA_real_, propensityAuc = NA_real_))
-    viol <- vcr_constraint_violations(syn$data[[k]], sc$constraints)
-    dis <- tryCatch(vcr_disclosure_report(train, syn$data[[k]], holdout), error = function(e) list(available = FALSE))
-    got <- function(key) if (isTRUE(dis$available) && !is.na(dis[[key]])) dis[[key]] else NA_real_
-    data.frame(copy = k, worstKsD = suppressWarnings(max(uni$value[uni$statistic == "ks_d"], -Inf)),
-               worstTvd = suppressWarnings(max(uni$value[uni$statistic == "tvd"], -Inf)),
-               sPMSE = pr$sPMSE, propensityAuc = pr$propensityAuc,
-               constraintViolations = if (nrow(viol)) sum(viol$violations) else 0,
-               replicationRatio = got("replicationRatio"), nearestNeighbourInTrainShare = got("nearestNeighbourInTrainShare"), membershipAuc = got("membershipAuc"))
-  }))
+                               tstr_outcome = sc$tstrOutcome, copies = syn$data, inference = infer)
+  by_copy <- .vcr_quality_by_copy(train, syn$data, holdout, sc$constraints)
   worst <- which.max(ifelse(is.finite(by_copy$sPMSE), by_copy$sPMSE, -Inf))
-  list(status = "succeeded",
-       measures = list(vcr_measure("generated_records", syn$generatedRecords, source = "synthetic"),
-                       vcr_measure("training_observations", syn$trainingObservations, source = used_train$source %||% "observed"),
-                       vcr_measure("synthetic_copies", syn$m, source = "synthetic")),
+  stopped <- NULL
+  if (v11 && !is.null(sc[["inference"]][["nullCalibration"]])) {
+    nc <- sc[["inference"]][["nullCalibration"]]
+    k_per <- as.integer(vcr_scalar(nc[["copies"]], 1L))
+    regenerate <- function(tbl, seed) { r <- vcr_population_synthpop(tbl, m = k_per, seed = seed); if (!is.null(r$interrupted)) r["interrupted"] else r$data }
+    report$inference$nullCalibration <- .vcr_null_calibration_job(nc, sc$analyses, train, regenerate, job$seed)
+    stopped <- report$inference$nullCalibration$stopped
+  }
+  result <- list(status = "succeeded",
+       measures = c(list(vcr_measure("generated_records", syn$generatedRecords, source = "synthetic"),
+                         vcr_measure("training_observations", syn$trainingObservations, source = used_train$source %||% "observed"),
+                         vcr_measure("synthetic_copies", syn$m, source = "synthetic")),
+                    if (v11) .vcr_inference_measures(report)),
        counts = vcr_counts(realPatients = 0, generatedRecords = syn$generatedRecords),
        diagnostics = list(quality = report, qualityByCopy = by_copy, worstCopy = if (length(worst)) worst else NA_integer_,
-                          lowSampleWarning = syn$lowSampleWarning,
+                          lowSampleWarning = syn$lowSampleWarning, smoothingNotApplied = if (length(syn$smoothingNotApplied)) syn$smoothingNotApplied else NULL,
                           inferenceLabel = syn$inferenceLabel, holdoutRows = if (is.null(holdout)) 0L else nrow(holdout),
                           # which columns had levels merged into "other" and how many; never a level's name
                           rareLevelsMerged = syn$rareLevelsMerged, rareLevelFloor = syn$rareLevelFloor,
@@ -788,6 +912,22 @@ vcr_job_synthesize_population <- function(job, output_dir = NULL, ...) {
                           profile = tryCatch(vcr_population_profile(syn$data[[1]], empirical = TRUE), error = function(e) NULL), profileCopy = 1L,
                           allowedUses = vcr_domain()$syntheticUses),
        tables = .vcr_tables_of(list(vcr_write_table(copies, "synthetic-population", output_dir))))
+  .vcr_calibration_stopped(result, report, stopped)
+}
+
+#' What a stopped permuted-arm calibration does to the result of its job: a spent CPU budget keeps the finished tables and says so (limited); a cancel is
+#' a cancel (the status of every other job that is canceled), with what had finished kept in the result. It used to report a cancel as a success.
+.vcr_calibration_stopped <- function(result, report, stopped) {
+  nc <- report$inference$nullCalibration
+  if (identical(stopped, "canceled")) {
+    result$status <- "canceled"
+    result$diagnostics$interrupted <- sprintf("canceled after %s of the %s permuted tables", nc$replicates %||% 0L, nc$replicatesPlanned %||% 0L)
+  } else if (identical(stopped, "cpu_budget")) {
+    result$conclusion <- "limited"
+    result$issues <- list(vcr_issue("cpu_budget_exhausted", "cpuSecondsLimit",
+      sprintf("The CPU budget ran out after %s of the %s permuted tables; the false-positive rates are those of the finished ones.", nc$replicates %||% 0L, nc$replicatesPlanned)))
+  }
+  result
 }
 
 vcr_job_population_quality <- function(job, output_dir = NULL, ...) {
@@ -804,18 +944,46 @@ vcr_job_population_quality <- function(job, output_dir = NULL, ...) {
   }
   train <- read("trainingInputId"); synth <- read("syntheticInputId"); holdout <- read("holdoutInputId", FALSE)
   analyses <- .vcr_analyses_from_scenario(sc$analyses)
+  mv <- job[["methodVersion"]]
+  v11 <- is.character(mv) && length(mv) == 1L && nzchar(mv) && utils::compareVersion(mv, "1.1.0") >= 0L
+  copies <- NULL; by_copy <- NULL; stopped <- NULL
+  if (v11) {
+    # a table that carries a `copy` column is the engine's own stacked release: its copies are read one by one, and the analyses are combined
+    if ("copy" %in% names(synth) && length(unique(synth[["copy"]])) > 1L) {
+      copies <- lapply(split(seq_len(nrow(synth)), synth[["copy"]]), function(i) synth[i, setdiff(names(synth), "copy"), drop = FALSE])
+      names(copies) <- NULL
+      synth <- copies[[1L]]
+    } else if ("copy" %in% names(synth)) synth <- synth[, setdiff(names(synth), "copy"), drop = FALSE]
+  }
+  # a table from a generator that redraws its parameters for every copy is combined by the proper-synthesis rule when the scenario says so (the
+  # engine's own generator never redraws them, so its tables are read by the simple rule)
+  redrawn <- isTRUE(sc[["inference"]][["parametersRedrawn"]])
+  infer <- if (v11) list(proper = redrawn, privacy = .vcr_privacy_from_scenario(sc[["privacy"]])) else NULL
   report <- vcr_quality_report(train, synth, holdout, constraints = sc$constraints, analyses = analyses,
-                               criteria = sc$criteria, generator = sc$generator %||% list(), tstr_outcome = sc$tstrOutcome)
+                               criteria = sc$criteria, generator = sc$generator %||% list(), tstr_outcome = sc$tstrOutcome,
+                               copies = copies, inference = infer)
+  if (v11 && length(copies) > 1L && !is.null(holdout) && nrow(holdout)) by_copy <- .vcr_quality_by_copy(train, copies, holdout, sc$constraints)
+  if (v11 && !is.null(sc[["inference"]][["nullCalibration"]])) {
+    nc <- sc[["inference"]][["nullCalibration"]]
+    k_per <- as.integer(vcr_scalar(nc[["copies"]], 1L))
+    learn <- intersect(names(train), names(synth))
+    regenerate <- function(tbl, seed) { r <- vcr_population_synthpop(tbl[, learn, drop = FALSE], m = k_per, seed = seed); if (!is.null(r$interrupted)) r["interrupted"] else r$data }
+    can <- identical(as.character(sc$generator$family %||% ""), "synthpop_cart") && !redrawn
+    report$inference$nullCalibration <- .vcr_null_calibration_job(nc, sc$analyses, train, regenerate, job$seed, can_regenerate = can)
+    stopped <- report$inference$nullCalibration$stopped
+  }
   finite <- function(x) is.numeric(x) && length(x) == 1L && is.finite(x)
   measures <- list()
   if (finite(report$fidelity$global$sPMSE)) measures <- c(measures, list(vcr_measure("s_pmse", report$fidelity$global$sPMSE, source = "synthetic")))
   if (finite(report$fidelity$global$propensityAuc)) measures <- c(measures, list(vcr_measure("propensity_auc", report$fidelity$global$propensityAuc, source = "synthetic")))
-  list(status = "succeeded", measures = measures,
-       counts = vcr_counts(realPatients = 0, generatedRecords = nrow(synth)),
-       diagnostics = list(quality = report),
+  if (v11) measures <- c(measures, .vcr_inference_measures(report))
+  result <- list(status = "succeeded", measures = measures,
+       counts = vcr_counts(realPatients = 0, generatedRecords = if (length(copies)) sum(vapply(copies, nrow, numeric(1))) else nrow(synth)),
+       diagnostics = c(list(quality = report), if (!is.null(by_copy)) list(qualityByCopy = by_copy)),
        tables = .vcr_tables_of(list(
          vcr_write_table(report$fidelity$univariate, "fidelity-univariate", output_dir),
          vcr_write_table(report$fidelity$pairwise, "fidelity-pairwise", output_dir))))
+  .vcr_calibration_stopped(result, report, stopped)
 }
 
 # --- virtual patients ----------------------------------------------------------
@@ -926,6 +1094,10 @@ vcr_job_pool_evidence <- function(job, output_dir = NULL, ...) {
   if (!(scale %in% c("identity", "log", "logit"))) vcr_abort("scenario_value_invalid", "scenario.scale", "The analysis scale is identity, log or logit.")
   pool <- vcr_pool(yi, se^2, method, level)
   family <- switch(scale, logit = "beta", log = "lognormal", "normal")
+  # An informative prior for tau (algorithm round E7, evidence.pool 1.1.0): the headline becomes the Bayesian pooling, the frequentist one stays
+  # beside it in `diagnostics.frequentist`, and a pooling of two studies (or one) has a prediction interval.
+  tp <- if (is.null(sc$tauPrior)) NULL else vcr_tau_prior_resolve(sc$tauPrior)
+  if (!is.null(tp)) return(.vcr_pool_with_tau_prior(sc, yi, se, scale, family, method, level, pool, tp))
   dist <- vcr_pool_to_distribution(pool, family)
   has_pi <- is.finite(pool$predictionInterval[1]) && is.finite(pool$predictionInterval[2])
   measures <- list(
@@ -936,8 +1108,7 @@ vcr_job_pool_evidence <- function(job, output_dir = NULL, ...) {
       "prediction_interval", pool$estimate, unit = scale, source = "aggregate",
       interval = vcr_interval("prediction", pool$predictionInterval[1], pool$predictionInterval[2], pool$level))))
   }
-  measures <- c(measures, list(
-    vcr_measure("i_squared", pool$i2, source = "aggregate"),
+  measures <- c(measures, if (is.finite(pool$i2)) list(vcr_measure("i_squared", pool$i2, source = "aggregate")), list(
     vcr_measure("tau_squared", pool$tau2, unit = scale, source = "aggregate"),
     vcr_measure("tau", pool$tau, unit = scale, source = "aggregate"),
     vcr_measure("k", pool$k, source = "aggregate")))
@@ -952,6 +1123,47 @@ vcr_job_pool_evidence <- function(job, output_dir = NULL, ...) {
            else "a Higgins-Thompson-Spiegelhalter prediction interval needs at least three studies (t on k - 2 df)",
          heterogeneity = list(Q = pool$Q, df = pool$df, pQ = pool$pQ, h2 = pool$h2),
          distribution = dist, weights = pool$weights))
+}
+
+#' The pooling with an informative prior for tau (E7). The measures are the Bayesian ones (posterior mean and credible interval of the pooled
+#' effect, the posterior-predictive interval for a new study, the posterior median of tau); the frequentist numbers are kept beside them.
+.vcr_pool_with_tau_prior <- function(sc, yi, se, scale, family, method, level, pool, tp) {
+  b <- vcr_pool_bayes(yi, se^2, tp, level)
+  # the distribution a simulation samples from: the posterior predictive, moment-matched (the same `vcr_pool_to_distribution` the frequentist
+  # route uses, with the pooled effect's posterior sd and the heterogeneity that makes up the rest of the predictive variance)
+  pred_var <- b$predictionSd^2
+  as_pool <- list(estimate = b$estimate, se = b$sd, tau2 = max(0, pred_var - b$sd^2), tau = sqrt(max(0, pred_var - b$sd^2)), k = max(pool$k, 3L))
+  dist <- vcr_pool_to_distribution(as_pool, family)
+  dist$basis <- "prediction"
+  prior_kind <- as.character(sc$tauPrior$kind)
+  measures <- list(
+    vcr_measure("pooled_estimate", b$estimate, unit = scale, source = "aggregate", interval = vcr_interval("credible", b$interval[1], b$interval[2], level)),
+    vcr_measure("prediction_interval", b$estimate, unit = scale, source = "aggregate", interval = vcr_interval("prediction", b$predictionInterval[1], b$predictionInterval[2], level)),
+    if (is.finite(pool$i2)) vcr_measure("i_squared", pool$i2, source = "aggregate"),
+    vcr_measure("tau_squared", b$tau2, unit = scale, source = "aggregate", interval = vcr_interval("credible", b$tau2Interval[1], b$tau2Interval[2], level)),
+    vcr_measure("tau", b$tau, unit = scale, source = "aggregate", interval = vcr_interval("credible", b$tauInterval[1], b$tauInterval[2], level)),
+    vcr_measure("k", pool$k, source = "aggregate"))
+  measures <- Filter(Negate(is.null), measures)
+  fr_pi <- is.finite(pool$predictionInterval[1]) && is.finite(pool$predictionInterval[2])
+  list(status = "succeeded", measures = measures,
+       counts = vcr_counts(realPatients = NULL, generatedRecords = 0),
+       diagnostics = list(
+         scale = scale, poolingMethod = method, poolingMethodApplied = pool$method,
+         k = pool$k, i2 = pool$i2, tau2 = b$tau2,
+         predictionDf = NULL,
+         predictionIntervalAvailable = TRUE, predictionIntervalReason = NULL,
+         heterogeneity = list(Q = pool$Q, df = pool$df, pQ = pool$pQ, h2 = pool$h2),
+         distribution = dist, weights = pool$weights,
+         tauPrior = list(kind = prior_kind, source = tp$source, params = tp$params,
+                         priorMedianTau = tp$medianTau, priorTauInterval = b$priorTauInterval,
+                         posteriorMedianTau = b$tau, posteriorTauInterval = b$tauInterval, posteriorTau2Mean = b$tau2Mean,
+                         family = tp$kind, onlyOneStudy = pool$k == 1L,
+                         setting = if (identical(prior_kind, "turner_2015")) list(outcome = sc$tauPrior$outcome, comparison = sc$tauPrior$comparison)
+                                   else if (identical(prior_kind, "bartos_2023")) list(effectScale = sc$tauPrior$effectScale) else NULL),
+         frequentist = list(method = method, methodApplied = pool$method, estimate = pool$estimate, interval = pool$interval,
+                            predictionInterval = if (fr_pi) pool$predictionInterval else NULL, tau2 = pool$tau2, tau = pool$tau,
+                            predictionIntervalAvailable = fr_pi),
+         posterior = list(sd = b$sd, predictionSd = b$predictionSd, gridNodes = b$nodes, tauRange = b$tauRange)))
 }
 
 .VCR_CURVE_PROVENANCE <- c("digitizer", "human_click")
@@ -1202,7 +1414,7 @@ vcr_job_weight_comparator <- function(job, output_dir = NULL, cancel_file = NULL
   X <- as.matrix(subj[, covs, drop = FALSE])
   if (!is.numeric(X)) vcr_abort("input_shape_invalid", "scenario.covariates", "Covariates are numeric (code categories as indicators).")
   miss <- which(colSums(is.na(X)) > 0L)
-  if (length(miss)) vcr_abort("missing_covariate", "scenario.covariates", sprintf("Covariate '%s' has missing values; weights are not estimated on incomplete rows.", covs[miss[1]]))
+  if (length(miss)) vcr_abort("missing_covariate", "scenario.covariates", sprintf("Covariate '%s' has missing values; weights are not estimated on incomplete rows (state `imputation` to impute them).", covs[miss[1]]))
   if (sum(treat == 1L) < 2L || sum(treat == 0L) < 2L) vcr_abort("input_shape_invalid", "scenario.treatmentColumn", "Both groups need at least two people.")
 
   endpoint <- as.character(sc$endpoint$type %||% (if (!is.null(sc$tau) || !is.null(tabs$event)) "time_to_event" else "continuous"))
@@ -1228,26 +1440,35 @@ vcr_job_weight_comparator <- function(job, output_dir = NULL, cancel_file = NULL
     }
   }
 
+  # Propensity trimming (1.4.0): who has no comparable counterpart is removed, the weights are fitted on who is left, and the result says
+  # who was removed. A removed person has weight 0 here, so every vector stays the length of the table; what is computed about the
+  # analysis sample (balance, overlap, curves) reads the kept people (`kp`).
+  trim <- sc$trim
+  if (!is.null(trim) && !identical(method, "propensity")) vcr_abort("scenario_field_unknown", "scenario.trim", "Trimming is by the propensity score; entropy balancing has none.")
   fit_weights <- function(Xb, tb) {
     if (identical(method, "entropy_balance")) vcr_att_entropy_weights(Xb, tb, vcr_scalar(sc$moments, 1L))
+    else if (!is.null(trim)) vcr_trimmed_weights(Xb, tb, estimand, trim)
     else list(allWeights = vcr_propensity_weights(Xb, tb, estimand)$weights)
   }
-  fit <- if (identical(method, "entropy_balance")) fit_weights(X, treat)
+  fit <- if (identical(method, "entropy_balance") || !is.null(trim)) fit_weights(X, treat)
          else { p <- vcr_propensity_weights(X, treat, estimand); list(allWeights = p$weights, converged = TRUE, propensity = p$propensity, rule = NULL) }
   if (is.null(fit$allWeights)) {
     return(list(status = "not_estimable", notEstimableRule = fit$rule %||% "entropy_balance_infeasible",
                 measures = list(),
                 counts = vcr_counts(realPatients = nrow(subj)),
-                diagnostics = list(detail = fit$detail, method = method, cohort = cohort$info)))
+                diagnostics = c(list(detail = fit$detail, method = method, cohort = cohort$info),
+                                if (!is.null(trim)) list(trim = vcr_trim_restatement(X, treat, fit$keep, fit$trim)))))
   }
   w <- fit$allWeights
+  kp <- if (is.null(trim)) rep(TRUE, length(treat)) else fit$keep
+  trim_info <- if (is.null(trim)) NULL else vcr_trim_restatement(X, treat, kp, fit$trim)
   # What a release added runs only for the jobs labelled with it (replay): 1.2.0 reads the weighted balance and never refuses on it, and
   # adds the E-value; 1.3.0 adds the enrolment-year row. An older label gets the refusal on the balance and none of the rest.
   reads_balance <- vcr_job_at_least(job, "1.2.0"); with_year <- vcr_job_at_least(job, "1.3.0")
-  balance <- vcr_balance_table(X, treat, w, estimand)
-  enrolment <- if (with_year) vcr_enrolment_year(subj, tabs, sc, treat, w, estimand) else NULL
-  ps <- vcr_propensity_weights(X, treat, "ATT")$propensity
-  support <- vcr_common_support(ps, treat)
+  balance <- vcr_balance_table(X[kp, , drop = FALSE], treat[kp], w[kp], estimand)
+  enrolment <- if (with_year) vcr_enrolment_year(subj[kp, , drop = FALSE], tabs, sc, treat[kp], w[kp], estimand) else NULL
+  ps <- vcr_propensity_weights(X[kp, , drop = FALSE], treat[kp], "ATT")$propensity
+  support <- vcr_common_support(ps, treat[kp])
   ess <- vcr_ess(w[treat == 0L])
   # Every threshold that decides "not estimable" is the domain's: a scenario is
   # written by the run and may not loosen (or set) them (EB-5).
@@ -1261,11 +1482,13 @@ vcr_job_weight_comparator <- function(job, output_dir = NULL, cancel_file = NULL
                 counts = vcr_counts(realPatients = nrow(subj), effectiveSampleSize = ess,
                                     events = if (identical(endpoint, "time_to_event")) sum(outcome$status) else NULL),
                 diagnostics = c(list(detail = rule$detail, balance = balance), if (with_year) list(enrolmentYear = enrolment),
-                                list(support = support, weights = wdiag, thresholds = limits_used, cohort = cohort$info))))
+                                list(support = support, weights = wdiag, thresholds = limits_used, cohort = cohort$info),
+                                if (!is.null(trim_info)) list(trim = trim_info))))
   }
 
   # one function of (weights, rows) -> the primary estimate followed by its secondaries
   est_of <- function(wv, idx) {
+    if (!is.null(trim)) { k <- wv > 0; idx <- idx[k]; wv <- wv[k] }   # the people who were trimmed are not in the estimate
     tb <- treat[idx]; wb <- wv
     if (identical(endpoint, "time_to_event")) {
       tm <- outcome$time[idx]; st <- outcome$status[idx]
@@ -1290,7 +1513,9 @@ vcr_job_weight_comparator <- function(job, output_dir = NULL, cancel_file = NULL
     f <- fit_weights(X[idx, , drop = FALSE], treat[idx])
     if (is.null(f$allWeights)) return(rep(NA_real_, length(est)))
     est_of(f$allWeights, idx)
-  }, replicates = B, seed = job$seed, strata = treat, cores = vcr_cores(job$cores))
+  }, replicates = B, seed = job$seed, strata = treat, cores = vcr_cores(job$cores),
+  components = if (identical(endpoint, "time_to_event")) c("rmst_difference", "rmst_treatment", "rmst_control", "survival_difference_at_tau")
+               else if (identical(endpoint, "binary")) c("weighted_difference", "weighted_risk_ratio", "weighted_odds_ratio") else "weighted_difference")
   if (identical(boot$interrupted, "canceled")) {
     return(list(status = "canceled", measures = list(), counts = vcr_counts(realPatients = nrow(subj)),
                 diagnostics = list(bootstrapCompleted = boot$replicates, bootstrapRequested = B)))
@@ -1324,16 +1549,19 @@ vcr_job_weight_comparator <- function(job, output_dir = NULL, cancel_file = NULL
   } else NULL
   if (!is.null(evalue)) measures <- c(measures, evalue$measures)
   # weight truncation as a sensitivity analysis only (plan 5.3)
-  cap <- stats::quantile(w[treat == 0L], 0.99, names = FALSE)
-  wt <- w; wt[treat == 0L] <- pmin(wt[treat == 0L], cap)
-  if (identical(estimand, "ATT")) wt[treat == 0L] <- wt[treat == 0L] * sum(treat == 1L) / sum(wt[treat == 0L])
+  cap <- stats::quantile(w[treat == 0L & kp], 0.99, names = FALSE)
+  wt <- w; wt[treat == 0L & kp] <- pmin(wt[treat == 0L & kp], cap)
+  if (identical(estimand, "ATT")) wt[treat == 0L & kp] <- wt[treat == 0L & kp] * sum(treat[kp] == 1L) / sum(wt[treat == 0L & kp])
   trunc_est <- tryCatch(est_of(wt, all_idx)[1], error = function(e) NA_real_)
   tt_limits <- .vcr_target_trial_limits(sc)
   changed <- !identical(estimand, "ATT")
+  trimmed_someone <- !is.null(trim_info) && isTRUE(trim_info$trimmedAnyone)
   # the balance is read, not judged: a weighted covariate still apart limits the estimate and rides beside it (2026-11-01)
   verdict <- if (reads_balance) vcr_balance_verdict(balance) else NULL
   imbalance <- vcr_balance_limit(verdict)
-  limited <- boot$failureShare > 0.01 || changed || length(tt_limits) > 0L || !is.null(imbalance)
+  limited <- boot$failureShare > 0.01 || changed || length(tt_limits) > 0L || !is.null(imbalance) || trimmed_someone
+  # how many people the trimming removed, as numbers of their own beside the estimate (the baseline of who they are is in `trim`)
+  if (!is.null(trim_info)) measures <- c(measures, vcr_trim_measures(trim_info))
   list(status = "succeeded", measures = measures,
        conclusion = if (limited) "limited" else "estimable",
        counts = vcr_counts(realPatients = nrow(subj), effectiveSampleSize = ess,
@@ -1341,11 +1569,12 @@ vcr_job_weight_comparator <- function(job, output_dir = NULL, cancel_file = NULL
        diagnostics = c(list(method = method, estimand = estimand, endpoint = endpoint, timeUnit = time_unit,
                             tau = if (identical(endpoint, "time_to_event")) tau else NULL,
                             curves = if (identical(endpoint, "time_to_event"))
-                              vcr_arm_curves(outcome$time, outcome$status, treat, weights = w, source = data_src, tau = tau)
+                              vcr_arm_curves(outcome$time[kp], outcome$status[kp], treat[kp], weights = w[kp], source = data_src, tau = tau)
                             else NULL,
                             valueSourcesUsed = vcr_value_sources_used(used),
                             estimandChanged = changed,
                             balance = balance),
+                       if (!is.null(trim_info)) list(trim = trim_info),
                        if (with_year) list(enrolmentYear = enrolment),
                        list(support = support, weights = wdiag,
                             thresholds = limits_used,
@@ -1356,6 +1585,7 @@ vcr_job_weight_comparator <- function(job, output_dir = NULL, cancel_file = NULL
                                                  if (identical(endpoint, "binary")) "no_risk_ratio" else if (identical(endpoint, "time_to_event")) "rmst_difference_has_no_ratio" else "continuous_outcome")),
                        list(limitedBy = as.list(c(if (boot$failureShare > 0.01) "bootstrap_failure_share",
                                                   if (changed) "estimand_changed_from_att",
+                                                  if (trimmed_someone) "target_population_trimmed",
                                                   if (length(tt_limits)) "target_trial_item_cannot_be_emulated",
                                                   imbalance)),
                             targetTrialCannot = as.list(tt_limits), cohort = cohort$info,
@@ -1696,7 +1926,10 @@ vcr_job_design_analytic <- function(job, ...) {
   alloc <- vcr_scalar(d$allocation, 0.5)
   tr <- sc$truth
   # A closed-form size needs an effect to size for; a null one is refused by name here, never as a non-finite measure below
-  vcr_analytic_effect_guard(kind, e, tr)
+  hyp <- vcr_hypothesis(sc)   # 1.4.0: a non-inferiority margin moves the null every formula below is measured from
+  nl <- if (is.null(hyp)) 0 else hyp[["null"]]
+  nh <- if (is.null(hyp)) 1 else hyp$nullHr
+  vcr_analytic_effect_guard(kind, e, tr, hyp)
   if(identical(kind,"single_arm")) {
     if(!identical(e,"binary"))vcr_abort("design_not_supported","scenario.endpoint.type","Exact single-arm analysis requires a binary endpoint.")
     ex<-vcr_exact_binomial(vcr_scalar(d$n),vcr_scalar(tr$nullRate),vcr_scalar(tr$responseRate),alpha,sc$analysis$alternative)
@@ -1705,16 +1938,19 @@ vcr_job_design_analytic <- function(job, ...) {
       vcr_measure("sample_size",ex$n,source="calculated"))),diagnostics=list(exactBinomial=ex)))
   }
   measures <- list(); diag <- list()
+  if (!is.null(hyp)) diag$hypothesis <- vcr_hypothesis_note(hyp)
   # 1.0/1.1 replay the historical totals and aliases unchanged. Version 1.2 sizes each integer arm first.
-  integer_allocation <- job$methodVersion %in% c("1.2.0", "1.3.0")
+  # (a job with no label, a handler called directly, replays the oldest release: only a labelled job is counted as having a later one)
+  labelled_at_least <- function(from) { mv <- job[["methodVersion"]]; is.character(mv) && length(mv) == 1L && nzchar(mv) && utils::compareVersion(mv, from) >= 0L }
+  integer_allocation <- labelled_at_least("1.2.0")
   # 1.3.0 adds what the sample size rests on: the fixed-sample baseline of a sequential design, the sweep of one input at a time and
   # the effect discounted by the published gap (C5, C6). A job labelled 1.2.0 replays without them.
-  extras <- identical(job$methodVersion, "1.3.0")
+  extras <- labelled_at_least("1.3.0")
   allocated <- NULL
   add <- function(name, value, ...) measures[[length(measures) + 1L]] <<- vcr_measure(name, value, source = "calculated", ...)
   gs <- NULL; inflation <- 1
   if (identical(kind, "group_sequential")) {
-    gs <- vcr_group_sequential(vcr_num(d$informationRates), alpha / sided, as.character(d$spending %||% "obrien_fleming"))
+    gs <- vcr_group_sequential(vcr_num(d$informationRates), alpha / sided, as.character(d[["spending"]] %||% "obrien_fleming"))
     for (k in seq_along(gs$criticalValues)) {
       add(sprintf("boundary_%d", k), gs$criticalValues[k])
       add(sprintf("cumulative_alpha_%d", k), gs$cumulativeAlphaSpent[k])
@@ -1722,7 +1958,7 @@ vcr_job_design_analytic <- function(job, ...) {
     inflation <- vcr_gs_inflation(gs, power)
     diag$inflationFactor <- inflation
     diag$informationRates <- gs$informationRates
-    diag$spending <- gs$spending
+    diag$spending <- gs[["spending"]]
     fixed <- stats::qnorm(1 - alpha / sided) + stats::qnorm(power)
     h1 <- vcr_group_sequential_power(gs, sqrt(inflation) * fixed)
     h0 <- vcr_group_sequential_power(gs, 0)
@@ -1730,7 +1966,7 @@ vcr_job_design_analytic <- function(job, ...) {
   }
   if (identical(e, "time_to_event")) {
     hr <- .vcr_need(tr$hazardRatio, "scenario.truth.hazardRatio", "A time-to-event design states the hazard ratio.")
-    ev <- vcr_events_schoenfeld(hr, alpha, power, alloc, sided)
+    ev <- vcr_events_schoenfeld(hr, alpha, power, alloc, sided, nh)
     add("required_events", ceiling(ev)); add("required_events_exact", ev)
     if (!is.null(gs)) {
       add("max_events", ceiling(ev * inflation))
@@ -1766,13 +2002,13 @@ vcr_job_design_analytic <- function(job, ...) {
         allocated <- vcr_integer_allocation(raw)
         add("required_patients", allocated$total); add("required_treatment", allocated$treatment); add("required_control", allocated$control)
         expected_events <- allocated$treatment * p1 + allocated$control * p0
-        delta <- abs(log(hr)) * sqrt(expected_events * allocated$treatment / allocated$total * allocated$control / allocated$total)
+        delta <- (if (nh == 1) abs(log(hr)) else log(nh) - log(hr)) * sqrt(expected_events * allocated$treatment / allocated$total * allocated$control / allocated$total)
         diag$sampleSize <- list(basis = "schoenfeld_event_probability", formula = "schoenfeld_lachin_foulkes",
           rounding = "ceiling_each_arm_then_sum", unrounded = raw, targetPower = power,
           nTreatment = allocated$treatment, nControl = allocated$control, total = allocated$total,
           allocationRequested = alloc, allocationAchieved = allocated$treatment / allocated$total,
-          powerCheckBasis = "logrank_martingale_integral", powerAtAllocatedN = vcr_logrank_power(hr, dist, allocated$treatment, allocated$control, A, Fu, eta, alpha, vcr_scalar(sc$accrual$maxFollowup, Inf), sided = sided)$power,
-          schoenfeldPowerAtAllocatedN = pnorm(delta - qnorm(1 - alpha / sided)) + if (sided == 2) pnorm(-delta - qnorm(1 - alpha / sided)) else 0,
+          powerCheckBasis = "logrank_martingale_integral", powerAtAllocatedN = vcr_logrank_power(hr, dist, allocated$treatment, allocated$control, A, Fu, eta, alpha, vcr_scalar(sc$accrual$maxFollowup, Inf), sided = sided, null_hr = nh)$power,
+          schoenfeldPowerAtAllocatedN = pnorm(delta - qnorm(1 - alpha / sided)) + if (sided == 2 && nh == 1) pnorm(-delta - qnorm(1 - alpha / sided)) else 0,
           expectedEventsAtAllocatedN = expected_events)
         if (!is.null(gs)) {
           max_allocated <- vcr_integer_allocation(list(treat = raw$treat * inflation, control = raw$control * inflation, total = raw$total * inflation))
@@ -1785,7 +2021,7 @@ vcr_job_design_analytic <- function(job, ...) {
     }
   } else if (identical(e, "continuous")) {
     eff <- .vcr_need(tr$effect, "scenario.truth.effect", "A continuous design states the effect to detect.")
-    n <- vcr_n_means(eff, vcr_scalar(tr$sd, 1), alpha, power, alloc, sided)
+    n <- vcr_n_means(eff, vcr_scalar(tr$sd, 1), alpha, power, alloc, sided, nl)
     if (integer_allocation) {
       allocated <- vcr_integer_allocation(n)
       add("required_total", allocated$total); add("required_treatment", allocated$treatment); add("required_control", allocated$control)
@@ -1794,12 +2030,12 @@ vcr_job_design_analytic <- function(job, ...) {
         rounding = "ceiling_each_arm_then_sum", unrounded = n, targetPower = power,
         nTreatment = allocated$treatment, nControl = allocated$control, total = allocated$total,
         allocationRequested = alloc, allocationAchieved = allocated$treatment / allocated$total,
-        powerCheckBasis = "pooled_two_sample_t", powerAtAllocatedN = vcr_power_means(eff, vcr_scalar(tr$sd, 1), allocated$treatment, allocated$control, alpha, sided))
+        powerCheckBasis = "pooled_two_sample_t", powerAtAllocatedN = vcr_power_means(eff, vcr_scalar(tr$sd, 1), allocated$treatment, allocated$control, alpha, sided, nl))
     } else { add("required_total", ceiling(n$total)); add("required_per_arm", ceiling(n$total * alloc)) }
   } else if (identical(e, "binary") && identical(kind, "two_arm_fixed")) {
     p0 <- vcr_scalar(tr[["controlRate"]], NULL)
     p1 <- vcr_binary_treatment_rate(p0, vcr_scalar(tr[["treatmentRate"]], NULL), vcr_scalar(tr$riskDifference, NULL), vcr_scalar(tr$oddsRatio, NULL))
-    n <- vcr_n_proportions(p0, p1, alpha, power, alloc, sided)
+    n <- vcr_n_proportions(p0, p1, alpha, power, alloc, sided, nl)
     if (integer_allocation) {
       allocated <- vcr_integer_allocation(n)
       add("required_total", allocated$total); add("required_treatment", allocated$treatment); add("required_control", allocated$control)
@@ -1808,7 +2044,7 @@ vcr_job_design_analytic <- function(job, ...) {
         rounding = "ceiling_each_arm_then_sum", unrounded = n, targetPower = power,
         nTreatment = allocated$treatment, nControl = allocated$control, total = allocated$total,
         allocationRequested = alloc, allocationAchieved = allocated$treatment / allocated$total,
-        powerCheckBasis = "two_proportion_normal_approximation", powerAtAllocatedN = vcr_power_proportions(p0, p1, allocated$treatment, allocated$control, alpha, sided))
+        powerCheckBasis = if (is.null(hyp)) "two_proportion_normal_approximation" else "farrington_manning_score_test", powerAtAllocatedN = vcr_power_proportions(p0, p1, allocated$treatment, allocated$control, alpha, sided, nl))
     } else { add("required_total", ceiling(n$total)); add("required_control", ceiling(n$control)) }
   }
   if (identical(kind, "simon_two_stage")) {
@@ -1841,10 +2077,10 @@ vcr_job_design_analytic <- function(job, ...) {
   # the required size moves if the stated effect is off by a fifth
   if (identical(kind, "two_arm_fixed")) {
     n_total <- if (identical(e, "time_to_event")) NULL else if (identical(e, "continuous")) ceiling(vcr_n_means(
-      vcr_scalar(tr$effect, NA_real_), vcr_scalar(tr$sd, 1), alpha, power, alloc, sided)$total) else {
+      vcr_scalar(tr$effect, NA_real_), vcr_scalar(tr$sd, 1), alpha, power, alloc, sided, nl)$total) else {
       p0 <- vcr_scalar(tr[["controlRate"]], NULL)
       p1 <- vcr_binary_treatment_rate(p0, vcr_scalar(tr[["treatmentRate"]], NULL), vcr_scalar(tr$riskDifference, NULL), vcr_scalar(tr$oddsRatio, NULL))
-      ceiling(vcr_n_proportions(p0, p1, alpha, power, alloc, sided)$total)
+      ceiling(vcr_n_proportions(p0, p1, alpha, power, alloc, sided, nl)$total)
     }
     diag$powerCurve <- tryCatch({
       sc2 <- sc
@@ -1916,10 +2152,22 @@ vcr_job_design_simulate <- function(job, output_dir = NULL, cancel_file = NULL, 
   cp <- if (is.null(output_dir)) NULL else file.path(output_dir, "checkpoint.rds")
   if (!is.null(output_dir)) dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
   sc <- job$scenario
+  # 1.4.0 (T13): a MaxCombo analysis also reports the log-rank test on the same replicates, and the strong null beside it (1.5.0: the modestly weighted test too)
+  weighted <- isTRUE(sc$analysis$method %in% c("maxcombo", "modestly_weighted"))
+  sequential <- identical(sc$design$kind, "group_sequential")
+  maxcombo <- weighted && (sequential || identical(sc$design$kind %||% "two_arm_fixed", "two_arm_fixed")) && is.character(job[["methodVersion"]]) && vcr_job_at_least(job, "1.4.0")
+  # 1.5.0 (T14): a group-sequential design analysed by a weighted test has boundaries found by simulation under the null, from another seed than the power run
+  edges <- if (weighted && sequential) vcr_gs_boundaries_job(job, sc, cancel_file) else NULL
   res <- vcr_run_simulation(sc, job$seed, job$replicates, vcr_cores(job$cores),
                             checkpoint = cp, cancel_file = cancel_file,
                             batch_size = vcr_scalar(job$batchSize, 500L), progress = progress,
-                            cpu_seconds_limit = vcr_scalar(job$cpuSecondsLimit, Inf))
+                            cpu_seconds_limit = vcr_scalar(job$cpuSecondsLimit, Inf), extras = list(logrank = maxcombo, bounds = edges$bounds))
+  if (!is.null(edges)) {
+    res$diagnostics$groupSequentialBoundaries <- edges$info
+    if (edges$trials < edges$planned) res$diagnostics$conclusion <- "limited"
+  }
+  strong <- if (maxcombo && identical(res$status, "succeeded")) tryCatch(vcr_maxcombo_strong_null(job, sc, cancel_file, spent = res$diagnostics$cpuSeconds, completed = res$diagnostics$replicatesCompleted, bounds = edges$bounds), error = function(e) NULL) else NULL
+  if (!is.null(strong)) { res$measures <- c(res$measures, strong$measures); res$diagnostics$strongNull <- strong$diagnostics }
   check <- tryCatch(vcr_analytic_check(sc, res$measures), error = function(e) NULL)
   tables <- if (!is.null(output_dir) && !is.null(res$values) && nrow(res$values)) {
     .vcr_tables_of(list(vcr_write_table(as.data.frame(res$values), "replicates", output_dir)))
@@ -1931,8 +2179,8 @@ vcr_job_design_simulate <- function(job, output_dir = NULL, cancel_file = NULL, 
   generated<-if(!is.null(res$values) && "generatedRecords" %in% colnames(res$values))sum(res$values[,"generatedRecords"],na.rm=TRUE) else res$diagnostics$replicatesCompleted*n_per
   # the analytic power curve at this size with the simulated point on it: analytic first, the simulation as the check
   simulated <- Filter(function(m) identical(m$name, "power"), res$measures)
-  # the analytic curve is the log-rank's: a MaxCombo analysis has no closed form to draw it from
-  curve <- if (identical(sc$analysis$method, "maxcombo")) NULL else tryCatch(vcr_power_curve_summary(sc, vcr_scalar(sc$analysis$alpha, 0.025), vcr_check_sided(sc$analysis$sided),
+  # the analytic curve is the log-rank's: a MaxCombo or modestly weighted analysis has no closed form to draw it from
+  curve <- if (isTRUE(sc$analysis$method %in% c("maxcombo", "modestly_weighted"))) NULL else tryCatch(vcr_power_curve_summary(sc, vcr_scalar(sc$analysis$alpha, 0.025), vcr_check_sided(sc$analysis$sided),
                                             if (length(simulated)) list(value = simulated[[1]]$value, mcse = simulated[[1]]$mcse %||% NA_real_) else NULL),
                     error = function(e) NULL)
   list(status = res$status, measures = res$measures, issues = res$issues,

@@ -783,6 +783,10 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   "vcr_evidence_item_incomplete",
   // A publication's number the platform could not hold against a text it read: saved as reported and unchecked, a reminder on the item.
   "vcr_evidence_reported_unverified",
+  // The numbers of an extracted value (or of a trial's values) that do not agree with each other: a note on the item, which is saved as read.
+  "vcr_evidence_values_inconsistent",
+  // A second, independent reading of the passage a value was read from found another number: a note on the card, the first value stands.
+  "vcr_evidence_second_read_differs",
   // A candidate trial written for a registry record that has no original eligibility wording (ChiCTR is a listing): saved, every criterion
   // unknown for 缺登记原文. A warning on the item the run wrote, not a refusal.
   "registry_text_missing",
@@ -1534,6 +1538,8 @@ export const VCR_WRITE_ISSUE_CODES = Object.freeze([
   'vcr_assumption_role_missing',
   'vcr_evidence_item_incomplete',
   'vcr_evidence_reported_unverified',
+  'vcr_evidence_values_inconsistent',
+  'vcr_evidence_second_read_differs',
   'registry_text_missing',
   'vcr_report_section_invalid',
 ])
@@ -1680,12 +1686,18 @@ export const VCR_PROTOCOL_ISSUE_CODES = Object.freeze([
  * result's reason.
  */
 export const VCR_ENGINE_ISSUE_CODES = Object.freeze([
-  'constraint_unsatisfiable', 'cpu_budget_exhausted', 'design_effect_null', 'grid_cell_failed', 'handler_error',
+  'constraint_unsatisfiable', 'cpu_budget_exhausted', 'design_effect_null', 'design_not_computable', 'effect_against_direction', 'grid_cell_failed', 'handler_error',
   'input_format_unsupported', 'input_hash_mismatch', 'input_out_of_range', 'input_parse_failed', 'input_source_not_reconstructed',
   'input_too_large',
   'job_invalid', 'mechanistic_engine_unknown', 'mechanistic_field_missing', 'missing_covariate',
-  'model_card_field_missing', 'model_risk_unknown', 'performance_measure_unsupported', 'replicates_all_failed',
+  'model_card_field_missing', 'model_risk_unknown', 'non_inferiority_effect_beyond_margin', 'performance_measure_unsupported', 'replicates_all_failed',
   'required_field_missing', 'twin_label_inconsistent', 'uncertainty_and_variability_conflated',
+  // evidence synthesis beyond a pairwise pool (algorithm round C5, C6)
+  'dose_response_not_computable', 'dose_response_method_unavailable', 'network_not_connected', 'network_not_computable',
+  // imputation of missing covariates (algorithm round C7)
+  'imputation_not_possible',
+  // target-trial emulation (algorithm round C3, C4)
+  'too_many_person_periods',
 ])
 
 export const GEO_ROUTE_ERROR_CODES = Object.freeze([
@@ -2410,6 +2422,8 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   registry_text_missing: '这条登记记录没有入排条件原文（ChiCTR 经证据接口只有清单）；条件已保存，评估时一律按未知算，原因是缺登记原文，不会判成满足或不满足。',
   vcr_evidence_item_incomplete: '这条抽取值还缺合并要用的项（置信区间或样本量）；已保存，论文里有就补进同一条，论文没有报告就另写一条“未报告”。',
   vcr_evidence_reported_unverified: '这条文献数值已保存，但引文没能对上平台读到的原文，所以标为“未核对”；它仍可作为假设卡的依据，取回原文后再写同一条就会核对。',
+  vcr_evidence_values_inconsistent: '这条抽取值的几个数彼此对不上（区间、p 值、事件数或各组人数）；已按读到的保存、照常使用，请回到原文核对是不是抄错了。',
+  vcr_evidence_second_read_differs: '同一段原文被独立读了两次，两次读到的数不一样；已按第一次读到的保存、照常使用，请回到原文核对是哪一个。',
   vcr_model_assessment_incomplete: '这条模型评估记录还有没填的项（关注的问题、使用情境、评级及理由、技术标准等）；已保存，文件里会写「未填写」，补上后再写一个版本。',
   vcr_report_section_invalid: '这份文件的文字只写规定的几节，表格与登记项由平台写；这次提交的文字没有保存，换成允许的节再写。',
   // The trial registry channel.
@@ -2560,6 +2574,15 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   constraint_unsatisfiable: '人群的约束条件在重抽 200 轮后仍无法同时满足；放宽或改写约束。',
   cpu_budget_exhausted: '这项计算用完了它的计算时间上限；已完成的部分作为有限结果保留。',
   design_effect_null: '这个情景没有效应，解析法给不出样本量；方案的 I 类错误请用同一情景的模拟来测。',
+  design_not_computable: '这个设计在这些设定下算不出来；换一组设定（样本量、效应、期中分析的时点）再试，其余结果不受影响。',
+  effect_against_direction: '要为它定样本量的效应，必须是有利的一边：风险比和率比要小于 1，均数差和率差要落在你写的“哪个方向更好”那一侧；改一下效应的正负号或方向再算，其余结果不受影响。',
+  non_inferiority_effect_beyond_margin: '预期效应比非劣效界值还差，样本越多检验越不可能通过，所以不存在能达到目标把握度的样本量；把预期效应改到界值好的一侧再算。已定样本量下的把握度可以用模拟来看。',
+  dose_response_method_unavailable: '剂量反应方法所需的程序包在这个引擎里没能加载，和你的研究无关；稍后再试，其余结果不受影响。',
+  dose_response_not_computable: '这些研究的剂量水平太少，或水平之间太接近，拟合不出所选的剂量反应模型；改用线性模型，或补上研究的水平和病例数再试，其余结果不受影响。',
+  network_not_connected: '这些研究连不成一张网：有的治疗与其余治疗之间没有任何研究相连，无法比较；补上连接它们的研究，或把不相连的治疗分开分析，其余结果不受影响。',
+  network_not_computable: '这张网络在这些数据下算不出来；检查每项研究的结局数据和治疗名称是否写全、是否一致，其余结果不受影响。',
+  imputation_not_possible: '有缺失值的协变量观察到的值太少、类别太多或类别没有写清，插补不出来；换一个更完整的协变量，或去掉这个协变量，其余设置不受影响。',
+  too_many_person_periods: '这份人-期数据展开成随访表之后太大，超过了计算引擎的内存；缩短随访期数、让试验从更少的期开始，或者用更少的人。',
   grid_cell_failed: '方案网格里有一个格子没有算出来；其余格子照常给出。',
   handler_error: '统计引擎在这项计算里遇到了意外错误，没有给出任何数字。',
   input_format_unsupported: '数据文件的格式不受支持：请用 CSV、TSV、JSON 或 Excel（.xlsx）；Parquet 请先转成 CSV。',

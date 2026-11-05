@@ -345,6 +345,21 @@ export function vcrScenarioColumns(scenario) {
 const HEAVY_KINDS = new Set(["design_simulation", "design_grid", "synthesize_population", "generate_patients",
   "generate_patients_continuous", "generate_patients_binary", "generate_patients_longitudinal"]);
 
+/**
+ * The cost class a job answers in `validate` and carries in its record: heavy when a run of it at its defaults is the study's budget question.
+ * Measured at the defaults (2 cores, CPU seconds, the committed results' manifests and the stream notes): a win-ratio design 125 (the help
+ * example; the null floor alone is 440 at 600 people), a target-trial emulation 19 to 21, a multi-arm confirmatory design 24, enrichment 18,
+ * sample-size re-estimation 13 against a futility design 1.2 and a count endpoint 0.07. A kind that is heavy only for some of its variants is
+ * judged by the variant (`design_confirmatory`), because a futility design called heavy would warn about a second and a half.
+ * @param {string} kind @param {Record<string, any>} [scenario]
+ * @returns {"heavy" | "light"}
+ */
+export function vcrJobCostClass(kind, scenario = {}) {
+  if (HEAVY_KINDS.has(kind) || kind === "design_win_ratio" || kind === "target_trial_emulation") return "heavy";
+  if (kind === "design_confirmatory") return ["futility_group_sequential", "count_endpoint"].includes(String(object(scenario.design).kind)) ? "light" : "heavy";
+  return "light";
+}
+
 /** The kinds whose replicate count is a floor (`vcrReplicatePlanForJob`), which the study's intended use can raise. */
 const SIZED_KINDS = new Set(["design_simulation", "design_grid", "map_prior"]);
 
@@ -393,6 +408,12 @@ const ORDER_OF_CONCLUSIONS = ["estimable", "limited", "not_estimable"];
  * conclusions, and a record of which job made which part. The result stays
  * one row per version — a new version each time a stage lands — so a page that
  * reads an object's result reads all its stages at once.
+ *
+ * **A stage landing again replaces what that stage wrote before** (review RF2 P0-3). The stage record of the earlier landing
+ * (`stages[stage]`, `stageResults[stage]`) names the measures, the diagnostics keys, the counts and the tables it wrote; the new landing
+ * takes them out before it adds its own, so a rerun without a trimming does not keep the trimming's measures, limit and sentence, and a
+ * different method on the same comparison does not leave the first method's numbers beside its own. What another stage wrote is left
+ * alone, and so is a result that has no record of its stages (written before they were kept).
  *
  * **A number carried over from before a change is said to be old.** When the
  * object was marked stale (an assumption moved, a method changed) the stages
@@ -458,10 +479,17 @@ export function vcrMergeStageResult(prior, incoming, stage, { staleSince = null,
   const carriedNames = namesOf(carried);
   const droppedNames = namesOf([...dropped, ...foreign]);
 
+  // What this stage wrote the last time it landed is replaced, not added to (a check landing late keeps the numbers it checks).
+  const replaced = late ? null : list(object(prior.diagnostics).stages).map(object).find((each) => each.stage === stage.stage) ?? null;
+  const replacedResult = object(object(object(prior.diagnostics).stageResults)[stage.stage]);
+  const replacedNames = new Set(list(replaced?.measures).map(String));
+  const otherNames = namesOf([...current.filter((each) => each.stage !== stage.stage), ...carried]);
+
   /** @type {Map<string, any>} */
   const byName = new Map();
   for (const measure of list(prior.measures)) {
     const name = String(object(measure).name);
+    if (replacedNames.has(name) && !otherNames.has(name)) continue;
     if (currentNames.has(name)) byName.set(name, measure);
     else if (carriedNames.has(name)) byName.set(name, { ...object(measure), stale: true });
     else if (!droppedNames.has(name)) byName.set(name, measure);
@@ -474,14 +502,19 @@ export function vcrMergeStageResult(prior, incoming, stage, { staleSince = null,
   }
 
   const counts = { ...object(prior.counts) };
+  if (replaced) {
+    const writtenElsewhere = new Set([...current.filter((each) => each.stage !== stage.stage), ...carried].flatMap((each) => Object.keys(object(object(object(prior.diagnostics).stageResults)[String(each.stage)]).counts ?? {})));
+    for (const key of Object.keys(object(replacedResult.counts))) if (!writtenElsewhere.has(key)) delete counts[key];
+  }
   if (!late) for (const [key, value] of Object.entries(object(incoming.counts))) if (value !== null && value !== undefined) counts[key] = value;
   const kept = [...current, ...carried];
   const keptNames = new Set(kept.map((each) => String(each.stage)));
   const stageResults = Object.fromEntries(Object.entries(object(object(prior.diagnostics).stageResults))
     .filter(([name]) => keptNames.has(name)).map(([name, value]) => [name, { ...object(value), stale: carried.some((each) => each.stage === name) }]));
   stageResults[stage.stage] = stageResult;
+  // (a result that kept no record of its stages has only its own conclusion to lean on; one that did has the stage's, and it is replaced)
   const conclusions = kept.length ? [countedAs(stage.stage, incoming.conclusion), ...kept.map((each) => countedAs(String(each.stage), each.conclusion))]
-    : [prior.conclusion, countedAs(stage.stage, incoming.conclusion)];
+    : replaced ? [countedAs(stage.stage, incoming.conclusion)] : [prior.conclusion, countedAs(stage.stage, incoming.conclusion)];
   const worst = conclusions.filter(Boolean)
     .sort((a, b) => ORDER_OF_CONCLUSIONS.indexOf(String(b)) - ORDER_OF_CONCLUSIONS.indexOf(String(a)))[0] ?? incoming.conclusion;
   // --- robustness methods ---
@@ -499,13 +532,22 @@ export function vcrMergeStageResult(prior, incoming, stage, { staleSince = null,
     verdict = { conclusion, notEstimableRule: conclusion === "not_estimable" ? (ruled?.notEstimableRule ?? incoming.notEstimableRule ?? prior.notEstimableRule ?? null) : null };
   }
   // --- end robustness methods ---
-  const tables = new Map(list(prior.tables).map((table) => [String(object(table).name), table]));
+  const replacedTables = new Set(list(replacedResult.tables).map((table) => String(object(table).name)));
+  const tablesElsewhere = new Set([...current.filter((each) => each.stage !== stage.stage), ...carried].flatMap((each) => list(object(object(object(prior.diagnostics).stageResults)[String(each.stage)]).tables).map((table) => String(object(table).name))));
+  const tables = new Map(list(prior.tables).filter((table) => late || !replacedTables.has(String(object(table).name)) || tablesElsewhere.has(String(object(table).name)))
+    .map((table) => [String(object(table).name), table]));
   for (const table of incoming.tables) tables.set(String(object(table).name), table);
   // What an earlier merge of this cycle dropped stays said, until the stage itself runs again.
   const notRerun = [...list(object(prior.diagnostics).notRerun).map(object).filter((each) => each.stage !== stage.stage),
     ...dropped.map((each) => ({ stage: String(each.stage), measures: list(each.measures).map(String) }))];
   /** @type {Record<string, any>} */
   const diagnostics = { ...prior.diagnostics, ...(late ? {} : incoming.diagnostics), stages: [...current, ...carried, entry], stageResults };
+  if (replaced) {
+    // the keys the replaced stage wrote and this one (or another stage still standing) does not: `trim`, `imputation`, `targetTrial`, `limitedBy`...
+    const written = new Set([...Object.keys(incoming.diagnostics), ...[...current.filter((each) => each.stage !== stage.stage), ...carried]
+      .flatMap((each) => Object.keys(object(object(object(prior.diagnostics).stageResults)[String(each.stage)]).diagnostics ?? {}))]);
+    for (const key of Object.keys(object(replacedResult.diagnostics))) if (!written.has(key) && key !== "stages" && key !== "stageResults" && key !== "notRerun") delete diagnostics[key];
+  }
   if (notRerun.length) diagnostics.notRerun = notRerun;
   else delete diagnostics.notRerun;
   return {
@@ -530,6 +572,9 @@ export function vcrResultKindFor(kind) {
   if (Object.hasOwn(VCR_LONGITUDINAL_JOBS, kind)) return 'longitudinal';
   const method = /** @type {Record<string, string>} */ (VCR_JOB_METHODS)[kind] ?? "";
   if (kind === "fit_survival_model") return "model_fit";
+  // A prognostic model trained on the person's own table (P3) and a population-level progression simulation (P4): each its own result, filed under what it was asked on.
+  if (kind === "train_prognostic_model") return "prognostic_training";
+  if (kind === "generate_progression") return "progression_simulation";
   if (kind === "apply_prognostic_model") return "model_prediction";
   if (kind === "population_quality") return "population_quality";
   // The check of a generated population against a second baseline table is its own result, filed under the population it is about and
@@ -544,6 +589,12 @@ export function vcrResultKindFor(kind) {
   // The batch reading of patient records leaves a record of what was read, not a matching: its own kind, read by nothing that lists matchings.
   if (kind === "match_extract") return "match_extract";
   if (kind === "accrual_forecast") return "accrual_forecast";
+  // A confirmatory design is its own result, not a stage of a trial scenario: it is not a design of the page's table (A, B, C) and has its own card.
+  if (kind === "design_confirmatory") return "design_confirmatory";
+  // The dose-finding designs, the Bayesian designs without MCMC (algorithm round T7, T15, T8, T10) and the win-ratio design (T9): each its own result, filed under what it is about.
+  if (kind === "design_dose" || kind === "design_bayesian" || kind === "design_win_ratio") return kind;
+  // Evidence synthesis beyond a pairwise pool (algorithm round C5, C6, E8): each its own result, filed under what it is about, read on the evidence tab.
+  if (["network_meta", "dose_response_meta", "effect_shrinkage"].includes(kind)) return kind;
   if (["pool_evidence", "reconstruct_km"].includes(kind)) return "evidence_pool";
   return "snapshot_profile";
 }
@@ -569,7 +620,7 @@ export function vcrJobObjectKind(kind) {
  * @param {string} method @param {Record<string,any>} scenario @param {Record<string,any>[]} inputs
  */
 export function vcrBindScientificInputUnits(method, scenario, inputs) {
-  if (!["model.prognostic_apply", "model.survival_fit"].includes(method)) return { scenario, detail: null };
+  if (!["model.prognostic_apply", "model.survival_fit", "model.prognostic_train"].includes(method)) return { scenario, detail: null };
   const selected = inputs.find(entry => entry.id === scenario.inputId);
   if (!selected || !["observed", "extracted", "calculated", "imputed"].includes(selected.valueSource)) return { scenario,
     detail: { basis: selected?.valueSource === "synthetic" ? "declared_synthetic_scenario" : "declared_reconstruction_scale", conversion: "none" } };
@@ -578,6 +629,18 @@ export function vcrBindScientificInputUnits(method, scenario, inputs) {
     const timeUnit = vcrTimeUnitOf(units[scenario.timeColumn]);
     if (!timeUnit || timeUnit !== scenario.timeUnit) throw new HttpError(400, "vcr_model_not_applicable", "The survival time unit is unknown or differs from the frozen snapshot field map; no implicit conversion is applied.");
     return { scenario, detail: { basis: "frozen_snapshot_field_map", columns: { [scenario.timeColumn]: timeUnit }, conversion: "none" } };
+  }
+  if (method === "model.prognostic_train") {
+    // The predictors' units are the frozen field map's (a text predictor is a category to the engine, whatever is written here); a time-to-event outcome's time
+    // unit must be the one the snapshot recorded, found in the subject table or the event table the job also reads.
+    const columns = Object.fromEntries(list(scenario.predictors).map(predictor => [object(predictor).column, units[object(predictor).column] ?? "unknown"]));
+    const predictors = list(scenario.predictors).map(predictor => ({ ...object(predictor), unit: columns[object(predictor).column] }));
+    const endpoint = object(scenario.endpoint);
+    if (endpoint.type === "time_to_event") {
+      const observed = inputs.map(entry => vcrTimeUnitOf(object(object(entry).columnUnits)[endpoint.timeColumn])).find(Boolean);
+      if (!observed || observed !== endpoint.timeUnit) throw new HttpError(400, "vcr_model_not_applicable", "The survival time unit is unknown or differs from the frozen snapshot field map; no implicit conversion is applied.");
+    }
+    return { scenario: { ...scenario, predictors }, detail: { basis: "frozen_snapshot_field_map", columns, conversion: "none" } };
   }
   const bound = Object.fromEntries(list(object(scenario.model).terms).map(term => {
     const observed = units[term.column] ?? "unknown";
@@ -591,12 +654,12 @@ export function vcrBindScientificInputUnits(method, scenario, inputs) {
  * The comparators whose R path reads the scenario's unit through `.vcr_observed_time_unit` (`R/engine.R`) and aborts on text outside the
  * four words: the restricted-mean comparison, the weighted Cox model and the time-to-event MAIC always, the two weighting comparators
  * (entropy balance and propensity weighting) when their endpoint is time to event. The others either never read `timeUnit` (aipw, covariate sets,
- * negative control, e-value, MAP prior) or take it as a label (`comparator.tipping_point` and `comparator.prognostic_adjustment` write
+ * negative control, e-value, bias analysis, MAP prior) or take it as a label (`comparator.tipping_point` and `comparator.prognostic_adjustment` write
  * `as.character(sc$timeUnit %||% "months")` into the result), and text outside the table is taken as written there
  * (`vcrTimeUnits.mjs`: "cycles" converts nothing and is said to be so).
  */
 const OBSERVED_TIME_UNIT_ALWAYS = Object.freeze(["comparator.rmst", "comparator.weighted_cox", "comparator.maic_time_to_event"]);
-const OBSERVED_TIME_UNIT_FOR_TIME_TO_EVENT = Object.freeze(["comparator.entropy_balance", "comparator.propensity_weight"]);
+const OBSERVED_TIME_UNIT_FOR_TIME_TO_EVENT = Object.freeze(["comparator.entropy_balance", "comparator.propensity_weight", "comparator.aipw"]);
 
 /**
  * Whether the engine will read this scenario's `timeUnit` and abort on text that is not a unit.
@@ -910,7 +973,7 @@ export class VcrJobs {
       ...normalized,
       ...(plan ? { replicates: { count: plan.replicates, reason: replicateReasonOf(plan, scenario, input.replicates) } } : {}),
       seed: skeleton.seed,
-      cost: { class: HEAVY_KINDS.has(kind) ? "heavy" : "light", cpuSecondsLimit: this.jobCpuSeconds },
+      cost: { class: vcrJobCostClass(kind, scenario), cpuSecondsLimit: this.jobCpuSeconds },
     };
   }
 
@@ -1129,7 +1192,7 @@ export class VcrJobs {
     [id, studyId, String(input.userId), kind, method, methodVersion, state, JSON.stringify(scenario), scenarioHash,
       JSON.stringify(inputs), seed, replicates, cpuSecondsLimit,
       Math.max(1, Number(input.maxAttempts ?? VCR_JOB_MAX_ATTEMPTS)), input.runId ?? null, key,
-      JSON.stringify({ ...object(input.detail), ...(randomization ? { randomization } : {}), ...(unitBinding.detail ? { inputUnitBinding: unitBinding.detail } : {}), ...curveDetail, ...baselineDetail, ...(derivedEntries.some(entry => isReconstructionReference(kind, entry)) ? { reconstructionResultId: derivedEntries.find(entry => isReconstructionReference(kind, entry))?.resultId } : {}), ...(kind === "reconstruct_km" ? { keepTables: ["reconstructed-ipd"] } : {}), ...(kind === "apply_prognostic_model" ? { keepTables: ["prognostic-predictions"] } : {}), ...(sized && replicatePlan ? { replicatePlan: { floor: replicatePlan.floor, basis: replicatePlan.basis, intendedUse: replicatePlan.intendedUse, targetMcse: replicatePlan.targetMcse } } : {}), ...(defaulted.length ? { appliedDefaults: defaulted } : {}), ...(described.applied.length ? { normalizedKeys: described.applied } : {}), ...(qualityBasis ? { qualityBasis } : {}), ...(kind === "population_quality" ? { qualityAttachmentResultId } : {}), configurationInputRefs: asked.map((entry) => ({ kind: object(entry).kind, id: object(entry).id })), cost: HEAVY_KINDS.has(kind) ? "heavy" : "light" })])).rows[0];
+      JSON.stringify({ ...object(input.detail), ...(randomization ? { randomization } : {}), ...(unitBinding.detail ? { inputUnitBinding: unitBinding.detail } : {}), ...curveDetail, ...baselineDetail, ...(derivedEntries.some(entry => isReconstructionReference(kind, entry)) ? { reconstructionResultId: derivedEntries.find(entry => isReconstructionReference(kind, entry))?.resultId } : {}), ...(kind === "reconstruct_km" ? { keepTables: ["reconstructed-ipd"] } : {}), ...(kind === "apply_prognostic_model" ? { keepTables: ["prognostic-predictions"] } : {}), ...(sized && replicatePlan ? { replicatePlan: { floor: replicatePlan.floor, basis: replicatePlan.basis, intendedUse: replicatePlan.intendedUse, targetMcse: replicatePlan.targetMcse } } : {}), ...(defaulted.length ? { appliedDefaults: defaulted } : {}), ...(described.applied.length ? { normalizedKeys: described.applied } : {}), ...(qualityBasis ? { qualityBasis } : {}), ...(kind === "population_quality" ? { qualityAttachmentResultId } : {}), configurationInputRefs: asked.map((entry) => ({ kind: object(entry).kind, id: object(entry).id })), cost: vcrJobCostClass(kind, scenario) })])).rows[0];
       // Completion locks the job before its population. A duplicate enqueue must take the same order:
       // the UPSERT may wait for a finishing job; only then lock and recheck its generation in this transaction.
       if (qualityBasis) {
@@ -1183,7 +1246,7 @@ export class VcrJobs {
         const resolved = await this.dataPlane.resolveEngineInputs({
           studyId, snapshotId: String(entry.id), principal, purpose: VCR_JOB_PURPOSE, kind, method,
           endpointType: object(scenario.endpoint).type ?? null, ...(fields.length ? { fields } : {}),
-          ...(typeof scenario.parameterCode === "string" && scenario.parameterCode ? { parameterCode: scenario.parameterCode } : {}),
+          ...(typeof (scenario.parameterCode ?? object(scenario.endpoint).parameterCode) === "string" && (scenario.parameterCode ?? object(scenario.endpoint).parameterCode) ? { parameterCode: scenario.parameterCode ?? object(scenario.endpoint).parameterCode } : {}),
           ...(["model.prognostic_apply", "model.survival_fit"].includes(method) && typeof scenario.inputId === "string" && scenario.inputId.startsWith(`${entry.id}:`)
             ? { include: [scenario.inputId.slice(String(entry.id).length + 1)].every(shape => ["subject", "events", "longitudinal"].includes(shape))
               ? [scenario.inputId.slice(String(entry.id).length + 1)] : ["files"] } : {}),
@@ -2048,6 +2111,8 @@ export class VcrJobs {
             ...(Object.keys(object(detail.timeUnitBasis)).length ? { timeUnitBasis: object(detail.timeUnitBasis) } : {}),
             // Control-plane facts about the run, frozen with the job: the defaults it took, and why it ran as many replicates as it did.
             ...(list(detail.appliedDefaults).length ? { appliedDefaults: list(detail.appliedDefaults) } : {}),
+            // Which numbers of the scenario are in the person's own messages (a conversation's design job): the premise word 「你给的数据」 reads it.
+            ...(Object.keys(object(detail.personStated)).length ? { personStated: object(detail.personStated) } : {}),
             ...(recordLimits.length ? { applicabilityLimits: recordLimits.map((entry) => ({ code: String(entry.code), reason: String(entry.reason ?? "") })) } : {}),
             ...(Object.keys(object(detail.replicatePlan)).length ? { replicatePlan: object(detail.replicatePlan) } : {}),
             // What a population check was about and whether its second table was made from other evidence: the control plane's account.

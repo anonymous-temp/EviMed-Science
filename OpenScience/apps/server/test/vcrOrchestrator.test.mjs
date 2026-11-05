@@ -17,7 +17,7 @@ import { VCR_NOTICE_KINDS, createVcrNotifier, vcrNoticeHref, vcrStudyName } from
 import {
   VCR_ENGINE_METHODS, VCR_EXPORT_KINDS, VCR_EXPORT_KIND_LABELS_ZH, VCR_JOB_KINDS, VCR_JOB_METHODS, VCR_NOTIFICATION_KINDS, VCR_NOT_ESTIMABLE_RULES,
   VCR_MODEL_DOCUMENT_SECTIONS, VCR_NOT_ESTIMABLE_RULE_LABELS_ZH, VCR_SCENARIO_SCHEMAS, VCR_STEPS, VCR_STEP_CAPABILITIES, VCR_STEP_NEEDS, validateEngineJob,
-  knownErrorCodeMessage, validateLongitudinalScenario, validateScenario, vcrIsNullScenario,
+  VCR_SCENARIO_EXAMPLES, knownErrorCodeMessage, validateLongitudinalScenario, validateScenario, vcrIsNullScenario,
 } from "@evimed/domain";
 
 /** @param {string[]} requested */
@@ -880,6 +880,24 @@ const planComparator = (configuration, row = {}, ctx = CMP_T2) => /** @type {any
 const stageIssues = (stage) => validateScenario(VCR_JOB_METHODS[stage.jobKind],
   stage.derived.some((/** @type {any} */ entry) => entry.bindTo) ? { ...stage.scenario, pseudoIpdInputId: "res_x:reconstructed-ipd" } : stage.scenario);
 
+test("a design's propensity trimming and a time-to-event doubly robust design reach the engine's stage as the schema reads them", () => {
+  // trim is the weighting jobs' key (algorithm round C14): the plan keeps it where the method reads it and nowhere else
+  const weighted = planComparator({ covariates: ["age"], method: "propensity", tau: 12, trim: { rule: "crump" } }, { estimand: "ATE" });
+  assert.equal(weighted.ok, true, JSON.stringify(weighted));
+  assert.equal(weighted.stages[0].jobKind, "propensity_weight_comparator");
+  assert.deepEqual(weighted.stages[0].scenario.trim, { rule: "crump" });
+  assert.deepEqual(stageIssues(weighted.stages[0]), [], "and the engine's schema accepts it");
+  const cox = planComparator({ covariates: ["age"], method: "weighted_cox", weighting: "propensity", tau: 12, trim: { rule: "fixed", lower: 0.1 } });
+  assert.equal(cox.ok, true, JSON.stringify(cox));
+  assert.deepEqual(cox.stages[0].scenario.trim, { rule: "fixed", lower: 0.1 });
+  assert.deepEqual(stageIssues(cox.stages[0]), []);
+  const aipw = planComparator({ covariates: ["age"], method: "aipw", tau: 12, summary: "survival", trim: { rule: "crump" } });
+  assert.equal(aipw.ok, true, JSON.stringify(aipw));
+  assert.equal(aipw.stages[0].scenario.summary, "survival");
+  assert.deepEqual(aipw.stages[0].scenario.trim, { rule: "crump" });
+  assert.deepEqual(stageIssues(aipw.stages[0]), []);
+});
+
 test("a study's declared design reaches the comparator-effect methods: weighted Cox, doubly robust, covariate sets", () => {
   const base = { covariates: ["age", "ecog"], tau: 12, parameterCode: "OS", snapshotId: "snp_1" };
   // the declared method and endpoint decide; nothing is read from a word of prose
@@ -938,7 +956,11 @@ test("a design the study's endpoint cannot support is refused in a sentence, not
   };
   const binary = { ...CMP_T2, definition: { ...definition, endpointType: "binary" } };
   refused(planComparator({ covariates: ["age"], method: "weighted_cox", tau: 12 }, {}, binary), "vcr_job_scenario_invalid", /事件时间终点/);
-  refused(planComparator({ covariates: ["age"], method: "aipw", tau: 12 }), "vcr_job_scenario_invalid", /连续或二分类/);
+  // the doubly robust job reads a time-to-event outcome since 1.3.0 (C8): the plan is made, and carries the horizon; only the covariate-set comparison still refuses it
+  const aipwTte = planComparator({ covariates: ["age"], method: "aipw", tau: 12 });
+  assert.equal(aipwTte.ok, true, JSON.stringify(aipwTte));
+  assert.equal(aipwTte.stages[0].jobKind, "aipw_comparator");
+  assert.equal(aipwTte.stages[0].scenario.tau, 12);
   refused(planComparator({ covariates: ["age"], method: "aipw" }, { estimand: "ATE" }, binary), "vcr_job_scenario_invalid", /ATT/);
   refused(planComparator({ covariateSets: [{ name: "a", covariates: ["x"] }, { name: "b", covariates: ["y"] }], method: "aipw", tau: 12 }), "vcr_job_scenario_invalid", /连续或二分类/);
   const noEndpoint = { ...CMP_T2, definition: null };
@@ -1654,4 +1676,14 @@ test("a stage states the unit its times are in — the design's own, the one its
   assert.ok(binary.ok, JSON.stringify(binary));
   for (const entry of binary.stages) assert.equal(entry.scenario.timeUnit, undefined, `${entry.stage}: no time, no unit`);
   assert.equal(binary.stages.some((entry) => entry.detail.timeUnitBasis !== undefined), false);
+});
+
+test("a borrowed control started by the id of a comparison that holds its scenario is built from the object; another method's configuration is not taken for it (review RF2 P2-2)", async () => {
+  const example = VCR_SCENARIO_EXAMPLES["comparator.borrowing"][0].scenario;
+  const self = { store: { async comparatorDesigns() { return [{ id: "cmp_b", configuration: example }, { id: "cmp_w", configuration: { covariates: ["age"], endpoint: { type: "binary" }, treatmentColumn: "arm", outcomeColumn: "y" } }, { id: "cmp_e", configuration: {} }]; } } };
+  const stage = (/** @type {string} */ id, /** @type {string} */ kind) => VcrOrchestrator.prototype.stageScenarioOf.call(self, { id: "std_1" }, id, kind);
+  assert.deepEqual(await stage("cmp_b", "borrowing_prior"), { scenario: example, detail: {} });
+  assert.deepEqual(await stage("cmp_w", "borrowing_prior"), { unavailable: true }, "a weighting's configuration is not a borrowing scenario");
+  assert.deepEqual(await stage("cmp_e", "borrowing_prior"), { unavailable: true }, "an object that holds nothing has no scenario to build");
+  assert.deepEqual(await stage("cmp_missing", "borrowing_prior"), { unavailable: true });
 });

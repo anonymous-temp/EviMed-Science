@@ -5,14 +5,16 @@
 # favourable of the four Fleming-Harrington weighted log-rank statistics G(0,0), G(0,1), G(1,0), G(1,1) under the maximum of their joint
 # normal null distribution. Neither is a default, and the analytic design refuses both by name.
 #
-# What the cases are held against, and what they are not: `simtrial` and `gsDesign2` are not in the locked library (and a package is not
-# added to the lock for a case), so the references are independent of this code instead: (a) the treated arm's survival function written
-# out in closed form for the exponential, Weibull and piecewise control laws, against a sample of 4e5; (b) the four statistics rewritten
-# from the definition on `survival::survfit`'s Kaplan-Meier estimate and risk tables, and, for rho 0 and 1 with gamma 0, against
-# `survival::survdiff`'s own chi-square; (c) the type I error of the whole path (statistics, correlation, `mvtnorm`) in a simulation
-# with its Monte-Carlo error, and the log-rank special case, in which MaxCombo with one combination IS the log-rank. A comparison with
-# `coin`'s Fleming-Harrington test was tried and left out: coin weights by S(t) and takes a permutation variance, so it differs from the
-# definition in the second digit for gamma > 0 (the usual S(t-) of Harrington and Fleming is what is implemented here).
+# What the cases are held against, and what they are not: (a) the treated arm's survival function written out in closed form for the
+# exponential, Weibull and piecewise control laws, against a sample of 4e5; (b) the four statistics rewritten from the definition on
+# `survival::survfit`'s Kaplan-Meier estimate and risk tables, and, for rho 0 and 1 with gamma 0, against `survival::survdiff`'s own
+# chi-square; (c) the type I error of the whole path (statistics, correlation, `mvtnorm`) in a simulation with its Monte-Carlo error,
+# and the log-rank special case, in which MaxCombo with one combination IS the log-rank. Two other implementations of the same method
+# are cross-check packages (never called from R/*.R): (e) `simtrial::maxcombo` on the same data set, statistic by statistic, the
+# correlation and the p-value; (f) `gsDesign2::fixed_design_maxcombo`, its asymptotic power and expected events for a delayed effect
+# against the engine's simulated power within the Monte-Carlo error. A comparison with `coin`'s Fleming-Harrington test was tried and
+# left out: coin weights by S(t) and takes a permutation variance, so it differs from the definition in the second digit for gamma > 0
+# (the usual S(t-) of Harrington and Fleming is what is implemented here).
 
 .n58_two_arm <- function(n = 150, nph = NULL, hr = 1, analysis = "logrank", median = 12, kind = "two_arm_fixed", extra = list()) {
   truth <- list(controlMedian = median)
@@ -169,7 +171,7 @@ vcr_case("N58d", c("AC-04", "AC-13"), function() {
     truth = list(hazardRatio = 0.7, controlMedian = 12, treatmentHazardRatios = nph), accrual = list(duration = 12, followup = 18),
     analysis = list(alpha = 0.025, power = 0.9, sided = 1)), job_id = "job_n58d_a")
   gs_mc <- vcr_test_job("design.simulate", .n58_two_arm(150, hr = 0.7, analysis = "maxcombo", kind = "group_sequential",
-    extra = list(design = list(kind = "group_sequential", nTreat = 150, nControl = 150, informationRates = list(0.5, 1)))), job_id = "job_n58d_gs")
+    extra = list(design = list(kind = "group_sequential", nTreat = 150, nControl = 150, informationRates = list(0.5, 1)))), job_id = "job_n58d_gs", extra = list(methodVersion = "1.4.0"))
   both_sc <- .n58_two_arm(150, nph = nph); both_sc$truth$hazardRatio <- 0.7
   both <- vcr_test_job("design.simulate", both_sc, job_id = "job_n58d_both")
   none_sc <- .n58_two_arm(150, nph = nph); none_sc$truth <- list(controlMedian = 12)
@@ -187,7 +189,7 @@ vcr_case("N58d", c("AC-04", "AC-13"), function() {
   has <- function(job, code) code %in% codes(job)
   ok <- has(analytic, "scenario_value_invalid@scenario.truth.treatmentHazardRatios") &&
     !any(grepl("^scenario_field_unknown@scenario.truth.treatmentHazardRatios", codes(analytic))) &&
-    has(gs_mc, "scenario_value_invalid@scenario.analysis.method") &&
+    has(gs_mc, "method_version_mismatch@methodVersion") &&   # (T14, design.simulate 1.5.0: MaxCombo in a group-sequential design is no longer refused at the current version; the 1.4.0 label, which refused it, cannot carry it)
     has(both, "scenario_value_invalid@scenario.truth.treatmentHazardRatios") && has(none, "scenario_field_missing@scenario.truth.hazardRatio") &&
     has(short, "scenario_value_invalid@scenario.truth.treatmentHazardRatios.ratios") &&
     has(old_nph, "method_version_mismatch@methodVersion") && has(old_mc, "method_version_mismatch@methodVersion") && !length(issues(old_ph)) &&
@@ -195,6 +197,68 @@ vcr_case("N58d", c("AC-04", "AC-13"), function() {
   # a refused analysis is a failed job with the same name, not a number
   run <- vcr_test_run(gs_mc)
   ok <- ok && identical(run$status, "failed")
-  list(pass = ok, detail = sprintf("analytic + NPH -> %s; group-sequential MaxCombo -> %s; both laws / neither / one ratio too few refused; 1.2.0 + NPH/MaxCombo/grid NPH -> method_version_mismatch, 1.2.0 + proportional hazards valid; a grid cell that states its own hazard law replaces the base's",
-                                   paste(grep("treatmentHazardRatios", codes(analytic), value = TRUE), collapse = ","), paste(grep("analysis.method", codes(gs_mc), value = TRUE), collapse = ",")))
+  list(pass = ok, detail = sprintf("analytic + NPH -> %s; group-sequential MaxCombo under the 1.4.0 label -> %s; both laws / neither / one ratio too few refused; 1.2.0 + NPH/MaxCombo/grid NPH -> method_version_mismatch, 1.2.0 + proportional hazards valid; a grid cell that states its own hazard law replaces the base's",
+                                   paste(grep("treatmentHazardRatios", codes(analytic), value = TRUE), collapse = ","), paste(grep("methodVersion", codes(gs_mc), value = TRUE), collapse = ",")))
+})
+
+# --- (e) the test against simtrial, (f) the power against gsDesign2 -----------------------------------------------------------------
+
+vcr_case("N58e", c("AC-30"), function() {
+  # The MaxCombo test of `simtrial` (Anderson's package for the same four Fleming-Harrington weights of the pooled Kaplan-Meier S(t-))
+  # on the very data set the engine analyses: three data sets -- a delayed effect, no effect with 5% a year lost, and a crossing of the
+  # curves with 10% a year lost. The four standardized statistics and their 4x4 correlation are the same arithmetic and agree to rounding
+  # (1e-9). The p-value is the same distribution function of the maximum, evaluated by the same Genz-Bretz algorithm with other tolerances
+  # (simtrial: absolute 1e-5 and a random shift on every call, the engine: 1e-6 and a shift fixed by the statistic): the engine's p is
+  # held to the mean of 10 simtrial evaluations within 1e-4, which is 0.4% of alpha and about four times the spread of a single one.
+  if (!requireNamespace("simtrial", quietly = TRUE)) stop("N58e requires the locked simtrial library")
+  exp_d <- vcr_dist_exponential_from_median(12)
+  sets <- list(delayed = list(n = 150, hr = list(breaks = list(6), ratios = list(1, 0.55)), seed = 5L, drop = 0),
+               null = list(n = 200, hr = 1, seed = 6L, drop = 0.05),
+               crossing = list(n = 180, hr = list(breaks = list(8), ratios = list(1.4, 0.6)), seed = 7L, drop = 0.1))
+  rows <- lapply(names(sets), function(nm) {
+    s <- sets[[nm]]
+    set.seed(s$seed, kind = VCR_RNG_KIND)
+    hr <- if (is.list(s$hr)) .vcr_nph_spec(s$hr, exp_d) else s$hr
+    d <- vcr_sim_tte(s$n, s$n, exp_d, hr, list(kind = "uniform", duration = 12), 18, dropout_annual = s$drop)
+    st <- data.frame(stratum = "All", tte = d$time, event = d$status, treatment = ifelse(d$arm == 1L, "experimental", "control"))
+    ours <- vcr_analyse_maxcombo(d, 0.025, 1); fh <- vcr_fh_statistics(d$time, d$status, d$arm)
+    # the package draws a random shift on every call: seed it, then average ten evaluations
+    pkg_p <- vapply(1:10, function(i) { set.seed(i); simtrial::maxcombo(st, rho = c(0, 0, 1, 1), gamma = c(0, 1, 0, 1))$p_value }, numeric(1))
+    pkg <- simtrial::maxcombo(st, rho = c(0, 0, 1, 1), gamma = c(0, 1, 0, 1), return_corr = TRUE)
+    list(name = nm, dz = max(abs(pkg$z - fh$z)), dcorr = max(abs(as.matrix(pkg$corr) - fh$corr)), stat = as.numeric(ours["statistic"]), stat_pkg = min(pkg$z),
+         p = as.numeric(ours["p"]), p_pkg = mean(pkg_p), p_spread = stats::sd(pkg_p), events = unname(ours["events"]))
+  })
+  ok <- all(vapply(rows, function(r) r$dz < 1e-9 && r$dcorr < 1e-9 && abs(r$stat - r$stat_pkg) < 1e-9 && abs(r$p - r$p_pkg) < 1e-4, logical(1)))
+  list(pass = ok,
+       detail = sprintf("same data through vcr_analyse_maxcombo and simtrial::maxcombo (rho 0,0,1,1 gamma 0,1,0,1): %s; statistics and correlation to 1e-9, p within 1e-4 of the package's mean of 10 evaluations",
+                        paste(vapply(rows, function(r) sprintf("%s: max|z - package| %.1e, max|corr - package| %.1e, statistic %.4f, p %.6f vs %.6f (package spread %.1e, %d events)",
+                                                             r$name, r$dz, r$dcorr, r$stat, r$p, r$p_pkg, r$p_spread, as.integer(r$events)), character(1)), collapse = "; ")))
+})
+
+vcr_case("N58f", c("AC-28", "AC-29", "AC-30"), function() {
+  # The power of the MaxCombo test under a delayed effect, simulated by the engine, against `gsDesign2::fixed_design_maxcombo`'s
+  # asymptotic power for the same trial (uniform accrual over 12, an exponential control, a hazard ratio of 1 until the delay and then
+  # the stated ratio, no dropout, the analysis at the end of follow-up, the four combinations, one-sided 0.025; the package sets the
+  # critical value so that its own type I error is alpha). Two trials: the one N58c simulates (300 patients, a 6-month delay, ratio
+  # 0.55) and a larger one with a shorter delay (400 patients, 4 months, 0.6, median 15). The simulated power is held to the package's
+  # within 3 Monte-Carlo errors, and the expected number of events at the analysis likewise: both are the engine's simulation
+  # against a formula, so a disagreement beyond the Monte-Carlo error is the engine's generator, test or timing and not noise. Each
+  # simulation runs the power's 5,000-replicate floor, about 30 s at 2 cores, which is why the case takes a minute.
+  if (!requireNamespace("gsDesign2", quietly = TRUE)) stop("N58f requires the locked gsDesign2 library")
+  one <- function(tag, n, delay, ratio, median, replicates, seed) {
+    nph <- list(breaks = list(delay), ratios = list(1, ratio))
+    sim <- vcr_test_run(vcr_test_job("design.simulate", .n58_two_arm(n, nph = nph, analysis = "maxcombo", median = median), seed = seed, replicates = replicates, cores = VCR_TEST_CORES, job_id = paste0("job_n58f_", tag)))
+    pw <- vcr_get_measure(sim, "power"); ev <- vcr_get_measure(sim, "expected_events")
+    ref <- gsDesign2::fixed_design_maxcombo(alpha = 0.025, power = NULL, ratio = 1, study_duration = 30,
+      enroll_rate = gsDesign2::define_enroll_rate(duration = 12, rate = 2 * n / 12),
+      fail_rate = gsDesign2::define_fail_rate(duration = c(delay, 100), fail_rate = log(2) / median, hr = c(1, ratio), dropout_rate = 0),
+      rho = c(0, 0, 1, 1), gamma = c(0, 1, 0, 1), tau = rep(-1, 4))
+    ref_power <- ref$analysis$power; ref_events <- ref$analysis$event
+    list(status = sim$status, power = pw$value, mcse = pw$mcse, ref_power = ref_power, events = ev$value, events_mcse = ev$mcse, ref_events = ref_events,
+         ok = identical(sim$status, "succeeded") && is.finite(pw$mcse) && abs(pw$value - ref_power) <= 3 * pw$mcse && abs(ev$value - ref_events) <= 3 * ev$mcse)
+  }
+  a <- one("a", 150, 6, 0.55, 12, 5000L, 99L)
+  b <- one("b", 200, 4, 0.6, 15, 5000L, 98L)
+  line <- function(x) sprintf("simulated power %.4f (+-%.4f) vs gsDesign2 %.4f, expected events %.1f (+-%.2f) vs %.1f", x$power, x$mcse, x$ref_power, x$events, x$events_mcse, x$ref_events)
+  list(pass = a$ok && b$ok, detail = sprintf("delayed effect, MaxCombo, one-sided 0.025, analysis at month 30: 300 patients, delay 6, ratio 0.55: %s; 400 patients, delay 4, ratio 0.6, median 15: %s", line(a), line(b)))
 })

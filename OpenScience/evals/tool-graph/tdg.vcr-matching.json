@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-matching",
-  "version": "sha256:b032eb023567f855311e26410d523c7801c860a66afa38996ff7066f3c972326",
+  "version": "sha256:2e804eef71a2b4ff88cf82b5dd72fdd414bad32f4ea2555c625d2c15bbc504d3",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 31,
@@ -1630,7 +1630,8 @@
               "candidate_trials",
               "soa",
               "regulatory_contacts",
-              "candidates"
+              "candidates",
+              "success_rates"
             ]
           },
           "filter": {
@@ -1656,7 +1657,7 @@
     {
       "name": "mcp__evimed__vcr_simulate",
       "source": "mcp",
-      "description": "A human trial's sample size, power or events, comparing designs, a synthetic population from a paper's baseline, an external control: calculate here, not in a script of your own. No study needed; the first start opens a result page with versions and premises. action=shape with kind gives exact fields; do not guess keys. Long jobs resume here if they outlive this turn. modelId requires modelVersion.",
+      "description": "A human trial's sample size, power or events, comparing designs, dose finding, a synthetic cohort from a baseline table, an external control, comparing several drugs (network meta-analysis): calculate here, not in your own script. No study needed; a start opens a result page. action=shape with kind gives exact fields; do not guess keys. Long jobs resume here if they outlive this turn. modelId requires modelVersion.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1709,6 +1710,19 @@
               "prognostic_adjustment_comparator",
               "generate_patients_longitudinal",
               "population_check",
+              "design_confirmatory",
+              "bias_analysis",
+              "stc_comparator",
+              "network_meta",
+              "dose_response_meta",
+              "effect_shrinkage",
+              "target_trial_emulation",
+              "design_dose",
+              "design_bayesian",
+              "design_win_ratio",
+              "borrowing_prior",
+              "train_prognostic_model",
+              "generate_progression",
               "match_extract",
               "forecast_trajectories",
               "evaluate_forecast",

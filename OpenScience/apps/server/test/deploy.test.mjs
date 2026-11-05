@@ -1595,6 +1595,16 @@ test("Web CI includes a Linux Docker Compose release and real runtime smoke job"
   assert.match(workflow, /--profile runtime-image --profile vcr build/);
   assert.match(workflow, /docker-compose\.result-replay\.yml/);
   assert.match(workflow, /Qualify isolated VCR candidate image without enabling the module/);
+  // (algorithm round G6) the runtime image runs a confirmatory design through service/run_job.R under the compose limits, and fails on a non-success
+  assert.match(workflow, /Run a confirmatory design inside the isolated VCR candidate image/);
+  assert.match(workflow, /--memory 4g --cpus 2 --tmpfs/);
+  assert.match(workflow, /ulimit -v 3145728; exec Rscript \/opt\/vcr-engine\/service\/run_job.R/);
+  assert.match(workflow, /service\/run_job\.R \/in\/job\.json \/out/);
+  // the job the step runs is one this build accepts: the first version of the step ran a job the domain had come to refuse, and failed with no words
+  const { validateEngineJob } = await import('@evimed/domain');
+  const smokeJob = JSON.parse(/<<'JSON'\n([\s\S]*?)\n\s*JSON\n/.exec(workflow.slice(workflow.indexOf('Run a confirmatory design inside the isolated VCR candidate image')))[1]);
+  assert.deepEqual(validateEngineJob(smokeJob), []);
+  assert.match(workflow, /library\(dosresmeta\)/);
   assert.match(workflow, /pnpm release:manifest/);
   assert.match(workflow, /pnpm verify:release-manifest/);
   assert.match(workflow, /pnpm configure:monitoring/);

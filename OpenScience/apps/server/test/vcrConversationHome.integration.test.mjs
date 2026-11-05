@@ -198,6 +198,21 @@ test('the home lists a conversation\'s study in a field of its own, only once it
   assert.deepEqual(home.draftProjectIds, []);
 });
 
+test('a study that holds only a result no object owns is listed on the tab that shows it (live 2026-11-04: a 3+3 against BOIN comparison was not on the home)', options, async () => {
+  const user = { id: 'home_resultonly' };
+  const result = (/** @type {string} */ studyId, /** @type {string} */ kind) => vcr.store.recordResult({ studyId, userId: user.id, kind, subjectId: `${kind}:one`, conclusion: 'estimable', measures: [], diagnostics: {} });
+  const dose = await vcr.store.taskContext(origin('ro_dose', user.id));
+  await result(dose.id, 'design_dose');
+  const network = await vcr.store.taskContext(origin('ro_network', user.id));
+  await result(network.id, 'network_meta');
+  const empty = await vcr.store.taskContext(origin('ro_empty', user.id));
+  const listed = new Map((await vcr.service.listStudies(user)).conversationStudies.map((/** @type {any} */ row) => [row.id, row]));
+  assert.deepEqual(listed.get(dose.id)?.tabs, ['trial'], 'a dose-finding comparison is a trial-page result');
+  assert.deepEqual(listed.get(network.id)?.tabs, ['data'], 'a network meta-analysis is read on the data page');
+  assert.ok(!listed.has(empty.id), 'a study that holds nothing is still not listed');
+  assert.deepEqual(await vcr.store.heldTabs(dose.id), ['trial']);
+});
+
 test('the home lists the newest fifty, and says when the list could not be read instead of drawing an empty one', options, async () => {
   const user = { id: 'home_many' };
   /** @type {string[]} */ const ids = [];

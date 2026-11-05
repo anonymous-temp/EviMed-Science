@@ -2,14 +2,43 @@
   "protocolVersion": 1,
   "methods": {
     "model.survival_fit": {
-      "version": "1.0.0",
+      "version": "1.1.0",
       "endpoints": [],
       "crossChecks": [
         "independent base-R likelihood optimization",
         "flexsurv distribution and delta-method output oracle",
-        "closed-form censored exponential likelihood"
+        "closed-form censored exponential likelihood",
+        "flexsurv::flexsurvspline (the spline family: knots, log likelihood, AIC, coefficients, the survival, median and restricted mean beyond the data, and their delta-method errors from the package's own covariance)"
       ],
-      "modelTier": "literature"
+      "modelTier": "literature",
+      "compatibleVersions": [
+        "1.0.0"
+      ]
+    },
+    "model.prognostic_train": {
+      "version": "1.0.0",
+      "endpoints": [
+        "continuous",
+        "binary",
+        "time_to_event"
+      ],
+      "crossChecks": [
+        "coxph, glm and lm refits on the held-out folds by hand",
+        "design.procova for the sample-size ratios",
+        "a known-truth simulation of the out-of-fold discrimination, calibration and correlation"
+      ],
+      "modelTier": "data"
+    },
+    "patients.progression": {
+      "version": "1.0.0",
+      "endpoints": [
+        "continuous"
+      ],
+      "crossChecks": [
+        "the moments of the outcome at every visit in closed form",
+        "the closed-form power of the same test (noncentral t with Welch degrees of freedom)"
+      ],
+      "modelTier": "scenario"
     },
     "model.prognostic_apply": {
       "version": "1.1.0",
@@ -30,7 +59,7 @@
       "version": "1.1.0",
       "endpoints": [],
       "crossChecks": [
-        "profile_dataset.py"
+        "every printed figure recomputed from its definition (means, spreads, type-7 quantiles, counts)"
       ],
       "modelTier": null,
       "compatibleVersions": [
@@ -50,7 +79,7 @@
       "version": "1.1.0",
       "endpoints": [],
       "crossChecks": [
-        "simstudy semantics"
+        "truncated-normal moments and a Gauss-Hermite integral of the copula correlation"
       ],
       "modelTier": "scenario",
       "compatibleVersions": [
@@ -67,18 +96,29 @@
       ]
     },
     "population.synthpop": {
-      "version": "1.0.0",
+      "version": "1.1.0",
       "endpoints": [],
       "crossChecks": [
-        "synthpop"
+        "the training table it was fitted to: marginals, correlations and logistic coefficients",
+        "synthpop summary of a fit to m copies (the combining rules of Raab, Nowok and Dibben)"
       ],
-      "modelTier": "data"
+      "modelTier": "data",
+      "compatibleVersions": [
+        "1.0.0"
+      ]
     },
     "population.quality": {
-      "version": "1.0.0",
+      "version": "1.1.0",
       "endpoints": [],
-      "crossChecks": [],
-      "modelTier": "data"
+      "crossChecks": [
+        "synthpop summary of a fit to m copies (the combining rules)",
+        "survRM2 restricted mean difference",
+        "closed-form false-positive rate of an uncorrected analysis"
+      ],
+      "modelTier": "data",
+      "compatibleVersions": [
+        "1.0.0"
+      ]
     },
     "population.check": {
       "version": "1.0.0",
@@ -116,7 +156,8 @@
         "time_to_event"
       ],
       "crossChecks": [
-        "simsurv"
+        "simsurv (exponential and Weibull event times at the same parameters)",
+        "regression on the output table"
       ],
       "modelTier": "scenario",
       "compatibleVersions": [
@@ -124,13 +165,16 @@
       ]
     },
     "evidence.pool": {
-      "version": "1.0.0",
+      "version": "1.1.0",
       "endpoints": [],
       "crossChecks": [
         "metafor",
-        "meta engine"
+        "bayesmeta (a stated log-normal, inverse-gamma and half-normal prior for the heterogeneity: the pooled effect's mean and credible interval and the median heterogeneity, with two and four studies)"
       ],
-      "modelTier": "literature"
+      "modelTier": "literature",
+      "compatibleVersions": [
+        "1.0.0"
+      ]
     },
     "evidence.reconstruct_km": {
       "version": "1.1.0",
@@ -138,7 +182,8 @@
         "time_to_event"
       ],
       "crossChecks": [
-        "IPDfromKM"
+        "IPDfromKM (the same digitized curve, risk table and event total: medians and hazard ratio)",
+        "Cox on the original rows"
       ],
       "modelTier": "literature",
       "compatibleVersions": [
@@ -146,7 +191,7 @@
       ]
     },
     "comparator.entropy_balance": {
-      "version": "1.3.0",
+      "version": "1.4.0",
       "endpoints": [
         "continuous",
         "binary",
@@ -154,30 +199,39 @@
       ],
       "crossChecks": [
         "WeightIt",
-        "cobalt"
+        "cobalt",
+        "mice (the same incomplete table imputed 100 times by mice and by the engine: the means, proportions and regression coefficients of the completed tables agree within Monte-Carlo error; Rubin's rules with their Barnard-Rubin degrees of freedom and the Nelson-Aalen estimate equal mice's)",
+        "known-truth simulation with outcome-dependent missingness: the complete-case slope is biased and the pooled imputed slope is not"
       ],
       "modelTier": "data",
       "compatibleVersions": [
         "1.0.0",
         "1.1.0",
-        "1.2.0"
+        "1.2.0",
+        "1.3.0"
       ]
     },
     "comparator.propensity_weight": {
-      "version": "1.3.0",
+      "version": "1.5.0",
       "endpoints": [
         "continuous",
         "binary",
         "time_to_event"
       ],
       "crossChecks": [
-        "WeightIt"
+        "WeightIt",
+        "closed-form Crump et al. (2009) trimming bound on a uniform score",
+        "the estimate recomputed by hand on the kept people",
+        "mice (the same incomplete table imputed 100 times by mice and by the engine: the means, proportions and regression coefficients of the completed tables agree within Monte-Carlo error; Rubin's rules with their Barnard-Rubin degrees of freedom and the Nelson-Aalen estimate equal mice's)",
+        "known-truth simulation with outcome-dependent missingness: the complete-case slope is biased and the pooled imputed slope is not"
       ],
       "modelTier": "data",
       "compatibleVersions": [
         "1.0.0",
         "1.1.0",
-        "1.2.0"
+        "1.2.0",
+        "1.3.0",
+        "1.4.0"
       ]
     },
     "comparator.rmst": {
@@ -231,7 +285,7 @@
       ]
     },
     "design.analytic": {
-      "version": "1.3.0",
+      "version": "1.4.0",
       "endpoints": [
         "continuous",
         "binary",
@@ -245,7 +299,8 @@
       ],
       "modelTier": "scenario",
       "compatibleVersions": [
-        "1.2.0"
+        "1.2.0",
+        "1.3.0"
       ],
       "legacyVersion": "1.0.0",
       "legacyDesigns": [
@@ -276,7 +331,7 @@
       ]
     },
     "design.simulate": {
-      "version": "1.3.0",
+      "version": "1.5.0",
       "endpoints": [
         "continuous",
         "binary",
@@ -286,11 +341,15 @@
         "design.analytic",
         "independent beta-binomial variance",
         "exact non-central t power of the one-sample test",
-        "independent normal approximation of the one-sample log-rank score"
+        "independent normal approximation of the one-sample log-rank score",
+        "simtrial (wlr with mb): the modestly weighted statistic of the same patients to 1e-9, and its rejection probability against the package's own generator and test",
+        "gsDesign2 (gs_power_combo): the power of a group-sequential MaxCombo design with its spending, against the simulation with boundaries found under the null"
       ],
       "modelTier": "scenario",
       "compatibleVersions": [
-        "1.2.0"
+        "1.2.0",
+        "1.3.0",
+        "1.4.0"
       ],
       "legacyVersion": "1.0.0",
       "legacyDesigns": [
@@ -322,8 +381,68 @@
         }
       ]
     },
+    "design.confirmatory": {
+      "version": "1.2.0",
+      "endpoints": [
+        "continuous",
+        "binary",
+        "time_to_event"
+      ],
+      "crossChecks": [
+        "gsDesign::gsDesign (test.type 3 and 4): efficacy and futility boundaries and the inflation over the fixed design",
+        "known-truth simulation of the group-sequential statistic, of the conditional-power rule and of the promising-zone rule in plain R",
+        "mvtnorm: the probability that an arm is selected at the interim (continuous, and event time with the correlation of log-rank statistics that share a control)",
+        "patient-level survival simulation in plain R: the probability that an arm, or the biomarker subset, is kept at the event-time interim",
+        "closed-form negative-binomial sample size (Zhu & Lakkis 2014)",
+        "the engine's own group-sequential recursion (the efficacy boundaries and the non-adaptive limit)"
+      ],
+      "modelTier": "scenario",
+      "compatibleVersions": [
+        "1.0.0",
+        "1.1.0"
+      ]
+    },
+    "design.dose": {
+      "version": "1.0.0",
+      "endpoints": [],
+      "crossChecks": [
+        "BOIN (get.boundary, select.mtd, get.oc): the decision tables, the final dose of 300 random trials and the operating characteristics",
+        "Keyboard (get.boundary.kb, get.oc.kb): the decision tables and the operating characteristics",
+        "dfcrm (crm, getprior, crmsim): the Bayes estimate of the parameter to 3e-8, the skeleton and the operating characteristics",
+        "exact enumeration of the 3+3 rule as a Markov chain over the patients treated at each dose",
+        "brute-force enumeration of every outcome of a randomised selection"
+      ],
+      "modelTier": "scenario"
+    },
+    "design.bayesian": {
+      "version": "1.0.0",
+      "endpoints": [
+        "continuous",
+        "binary",
+        "time_to_event"
+      ],
+      "crossChecks": [
+        "BOP2FE (get_boundary_binary): the futility and success boundaries; get_oc_binary: a simulated check of the operating characteristics",
+        "RBesT (oc2S, pmixdiff): the type I error and power of a probability threshold between two beta-binomial arms, and the probability that a difference exceeds a margin",
+        "Simon's two-stage design (1989: 1/10, 5/29, expected size 15.0 at 0.1 and 0.3)",
+        "brute-force enumeration of every path of a small phase II trial",
+        "a simulation in plain R of the predictive-probability rule and of a normal threshold"
+      ],
+      "modelTier": "scenario"
+    },
+    "design.win_ratio": {
+      "version": "1.0.0",
+      "endpoints": [],
+      "crossChecks": [
+        "hce (calcWO): the wins, losses, ties and win odds of the same uncensored patients on the single scale of ranks it takes",
+        "exact win, loss and tie probabilities of independent levels (exponential deaths, negative-binomial counts, a normal score with a threshold) against the simulated proportions",
+        "a pair-by-pair loop in plain R, written apart from the engine, on patients who drop out (the three levels, to the last pair)",
+        "the permutation variance of the Finkelstein-Schoenfeld statistic from relabelling the arms in plain R"
+      ],
+      "modelTier": "scenario"
+    },
     "design.grid": {
-      "version": "1.3.0",
+      "version": "1.5.0",
       "endpoints": [
         "continuous",
         "binary",
@@ -332,7 +451,9 @@
       "crossChecks": [],
       "modelTier": "scenario",
       "compatibleVersions": [
-        "1.2.0"
+        "1.2.0",
+        "1.3.0",
+        "1.4.0"
       ],
       "legacyVersion": "1.0.0",
       "legacyDesigns": [
@@ -372,7 +493,7 @@
         "time_to_event"
       ],
       "crossChecks": [
-        "O'Hagan 2005",
+        "numerical integration of power over the design prior (the O'Hagan 2005 definition)",
         "independent Monte Carlo of the sequential design under the design prior"
       ],
       "modelTier": "scenario",
@@ -387,7 +508,7 @@
         "continuous"
       ],
       "crossChecks": [
-        "EMA 2022 qualification opinion"
+        "closed-form sample size under the EMA 2022 opinion's correlation and variance discounts"
       ],
       "modelTier": "scenario"
     },
@@ -395,7 +516,7 @@
       "version": "1.0.0",
       "endpoints": [],
       "crossChecks": [
-        "Anisimov & Fedorov 2007"
+        "independent gamma, Poisson and binomial constructions of the Anisimov & Fedorov 2007 model"
       ],
       "modelTier": "scenario"
     },
@@ -408,19 +529,23 @@
       "modelTier": null
     },
     "comparator.weighted_cox": {
-      "version": "1.3.0",
+      "version": "1.5.0",
       "endpoints": [
         "time_to_event"
       ],
       "crossChecks": [
         "survival::coxph on WeightIt weights",
-        "independent score test for non-proportional hazards"
+        "independent score test for non-proportional hazards",
+        "mice (the same incomplete table imputed 100 times by mice and by the engine: the means, proportions and regression coefficients of the completed tables agree within Monte-Carlo error; Rubin's rules with their Barnard-Rubin degrees of freedom and the Nelson-Aalen estimate equal mice's)",
+        "known-truth simulation with outcome-dependent missingness: the complete-case slope is biased and the pooled imputed slope is not"
       ],
       "modelTier": "data",
       "compatibleVersions": [
         "1.0.0",
         "1.1.0",
-        "1.2.0"
+        "1.2.0",
+        "1.3.0",
+        "1.4.0"
       ]
     },
     "comparator.maic_time_to_event": {
@@ -439,19 +564,27 @@
       ]
     },
     "comparator.aipw": {
-      "version": "1.2.0",
+      "version": "1.4.0",
       "endpoints": [
         "continuous",
-        "binary"
+        "binary",
+        "time_to_event"
       ],
       "crossChecks": [
         "closed-form AIPW (Bang & Robins 2005) on WeightIt weights",
-        "simulation with a known ATT: double robustness"
+        "simulation with a known ATT: double robustness",
+        "survRM2::rmst2 (the Kaplan-Meier restricted mean of each arm, which the pseudo-observations average to)",
+        "exact leave-one-out jackknife pseudo-observations",
+        "simulation with a known restricted-mean ATT (exponential times): double robustness",
+        "mice (the same incomplete table imputed 100 times by mice and by the engine: the means, proportions and regression coefficients of the completed tables agree within Monte-Carlo error; Rubin's rules with their Barnard-Rubin degrees of freedom and the Nelson-Aalen estimate equal mice's)",
+        "known-truth simulation with outcome-dependent missingness: the complete-case slope is biased and the pooled imputed slope is not"
       ],
       "modelTier": "data",
       "compatibleVersions": [
         "1.0.0",
-        "1.1.0"
+        "1.1.0",
+        "1.2.0",
+        "1.3.0"
       ]
     },
     "comparator.covariate_sets": {
@@ -480,8 +613,8 @@
       ],
       "crossChecks": [
         "EmpiricalCalibration 3.1.4 (sccs example)",
-        "Lipsitch 2010",
-        "Schuemie 2014"
+        "metafor::rma maximum-likelihood fit of the empirical null",
+        "known-truth simulation of a common systematic bias"
       ],
       "modelTier": "data",
       "compatibleVersions": [
@@ -497,7 +630,7 @@
       "crossChecks": [
         "stats::fisher.test and stats::binom.test",
         "closed-form worst case (censoring as event)",
-        "Jackson et al. 2014"
+        "survival::coxph with Breslow ties"
       ],
       "modelTier": "data"
     },
@@ -515,18 +648,99 @@
       "modelTier": "data"
     },
     "patients.longitudinal": {
-      "version": "1.1.0",
+      "version": "1.2.0",
       "endpoints": [
         "continuous"
       ],
       "crossChecks": [
         "nlme::lme on the output table",
-        "closed-form model-implied mean and variance"
+        "closed-form model-implied mean and variance",
+        "output hashes recorded from the previous release's code (a scenario that states none of the new keys replays byte for byte)",
+        "a mixed model and a plain comparison of the people still in, against the known effect under completely random, random and not random dropout",
+        "the treatment-policy and hypothetical effects of a rescue medication, from the potential outcomes of every generated person"
       ],
       "modelTier": "scenario",
       "compatibleVersions": [
-        "1.0.0"
+        "1.0.0",
+        "1.1.0"
       ]
+    },
+    "comparator.bias_analysis": {
+      "version": "1.0.0",
+      "endpoints": [],
+      "crossChecks": [
+        "tipr (the tipping confounder: binary and normal confounders, ratio and difference measures)",
+        "closed-form shifted-null and tipping bias",
+        "known-truth simulation of a confounded study: the probabilistic adjustment recovers the truth",
+        "published worked example (Fox, MacLehose & Lash, probabilistic bias analysis)"
+      ],
+      "modelTier": "scenario"
+    },
+    "comparator.stc": {
+      "version": "1.0.0",
+      "endpoints": [
+        "continuous",
+        "binary"
+      ],
+      "crossChecks": [
+        "known-truth simulation of two trials with different covariate means: the marginal effect in the aggregate trial's population",
+        "comparator.maic on the same case (the identity link without a modifier, where the two estimate the same number)",
+        "stats::glm predictions averaged by hand over the same covariate sample"
+      ],
+      "modelTier": "data"
+    },
+    "comparator.borrowing": {
+      "version": "1.0.0",
+      "endpoints": [
+        "binary",
+        "continuous"
+      ],
+      "crossChecks": [
+        "SAMprior (SAM_weight, and the exact operating characteristics eval_oc_bin_2arm and eval_oc_cont_2arm: type I error, power, bias and mean weight, binary and normal)",
+        "RBesT (postmix, pmixdiff, ess): the updated mixture, the probability that the treatment is better and the prior effective sample size",
+        "the power prior integrated numerically from its definition (the historical likelihood raised to the discount): mean, interval and probability",
+        "closed-form power-prior operating characteristics for a mean",
+        "the elastic function's two constants from the paper's equation and the congruence measure's exact law against a simulation"
+      ],
+      "modelTier": "literature"
+    },
+    "comparator.target_trial": {
+      "version": "1.0.0",
+      "endpoints": [
+        "time_to_event"
+      ],
+      "crossChecks": [
+        "TrialEmulation (its trial_example: the expanded person-trial-periods row for row, the intention-to-treat and per-protocol outcome-model coefficients and the standardised risks)",
+        "known-truth simulation with immortal time: the naive comparison is biased and clone-censor-weight recovers the truth, integrated exactly"
+      ],
+      "modelTier": "data"
+    },
+    "evidence.network": {
+      "version": "1.0.0",
+      "endpoints": [],
+      "crossChecks": [
+        "netmeta (Senn2013 in contrast form with a three-arm study, and smokingcessation in arm form with multi-arm studies: effects, standard errors, tau-squared, Q and its split between designs, P-scores)",
+        "closed-form pairwise DerSimonian-Laird pooling of a network of two treatments"
+      ],
+      "modelTier": "literature"
+    },
+    "evidence.dose_response": {
+      "version": "1.0.0",
+      "endpoints": [],
+      "crossChecks": [
+        "the package's own article (Crippa & Orsini 2016): the linear and the four-knot spline fit of the colorectal-cancer data, the test of non-linearity and the table of ratios",
+        "a hand Greenland-Longnecker generalized-least-squares slope on counts whose variances are exact"
+      ],
+      "modelTier": "literature"
+    },
+    "evidence.shrinkage": {
+      "version": "1.0.0",
+      "endpoints": [],
+      "crossChecks": [
+        "van Zwet et al. (2023), Tables 2 and 3: the quantities of the Cochrane reference population by P value, integrated over the strata",
+        "a numerical integral of the mixture distribution given the data"
+      ],
+      "modelTier": "literature"
     }
   },
   "jobMethods": {
@@ -564,11 +778,25 @@
     "tipping_point": "comparator.tipping_point",
     "prognostic_adjustment_comparator": "comparator.prognostic_adjustment",
     "generate_patients_longitudinal": "patients.longitudinal",
-    "population_check": "population.check"
+    "population_check": "population.check",
+    "design_confirmatory": "design.confirmatory",
+    "bias_analysis": "comparator.bias_analysis",
+    "stc_comparator": "comparator.stc",
+    "network_meta": "evidence.network",
+    "dose_response_meta": "evidence.dose_response",
+    "effect_shrinkage": "evidence.shrinkage",
+    "target_trial_emulation": "comparator.target_trial",
+    "design_dose": "design.dose",
+    "design_bayesian": "design.bayesian",
+    "design_win_ratio": "design.win_ratio",
+    "borrowing_prior": "comparator.borrowing",
+    "train_prognostic_model": "model.prognostic_train",
+    "generate_progression": "patients.progression"
   },
   "patientLevelJobKinds": [
     "fit_survival_model",
     "apply_prognostic_model",
+    "train_prognostic_model",
     "profile_snapshot",
     "build_cohort",
     "synthesize_population",
@@ -581,15 +809,20 @@
     "maic_time_to_event_comparator",
     "aipw_comparator",
     "covariate_set_comparator",
+    "stc_comparator",
+    "target_trial_emulation",
     "prognostic_adjustment_comparator"
   ],
   "observedOnlyMethods": [
     "model.survival_fit",
     "model.prognostic_apply",
+    "model.prognostic_train",
     "population.synthpop",
     "comparator.entropy_balance",
     "comparator.propensity_weight",
     "comparator.maic",
+    "comparator.stc",
+    "comparator.target_trial",
     "comparator.weighted_cox",
     "comparator.aipw",
     "comparator.covariate_sets",
@@ -630,6 +863,12 @@
       "imputed",
       "synthetic"
     ],
+    "model.prognostic_train": [
+      "observed",
+      "extracted",
+      "calculated",
+      "imputed"
+    ],
     "population.synthpop": [
       "observed",
       "extracted",
@@ -649,6 +888,18 @@
       "imputed"
     ],
     "comparator.maic": [
+      "observed",
+      "extracted",
+      "calculated",
+      "imputed"
+    ],
+    "comparator.stc": [
+      "observed",
+      "extracted",
+      "calculated",
+      "imputed"
+    ],
+    "comparator.target_trial": [
       "observed",
       "extracted",
       "calculated",
@@ -795,9 +1046,22 @@
             "exponential",
             "weibull",
             "lognormal",
-            "loglogistic"
+            "loglogistic",
+            "spline"
           ],
           "req": true
+        },
+        "knots": {
+          "t": "integer",
+          "min": 0,
+          "max": 4,
+          "default": 2,
+          "when": {
+            "path": "distribution",
+            "in": [
+              "spline"
+            ]
+          }
         },
         "timeUnit": {
           "t": "string",
@@ -1251,6 +1515,637 @@
                 ]
               },
               "req": true
+            }
+          }
+        }
+      }
+    },
+    "model.prognostic_train": {
+      "t": "object",
+      "fields": {
+        "inputId": {
+          "t": "string",
+          "ref": "input",
+          "maxLength": 141,
+          "req": true
+        },
+        "idColumn": {
+          "t": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+          "maxLength": 64,
+          "req": true
+        },
+        "sourceCondition": {
+          "t": "string",
+          "values": [
+            "control",
+            "natural_history",
+            "standard_care"
+          ],
+          "req": true
+        },
+        "armColumn": {
+          "t": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+          "maxLength": 64
+        },
+        "armValue": {
+          "t": "string",
+          "maxLength": 80
+        },
+        "endpoint": {
+          "t": "object",
+          "fields": {
+            "type": {
+              "t": "string",
+              "values": [
+                "continuous",
+                "binary",
+                "time_to_event"
+              ],
+              "req": true
+            },
+            "outcomeColumn": {
+              "t": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+              "maxLength": 64,
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "continuous",
+                  "binary"
+                ]
+              },
+              "req": true
+            },
+            "timeColumn": {
+              "t": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+              "maxLength": 64,
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "time_to_event"
+                ]
+              },
+              "req": true
+            },
+            "statusColumn": {
+              "t": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+              "maxLength": 64,
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "time_to_event"
+                ]
+              },
+              "req": true
+            },
+            "parameterCode": {
+              "t": "string",
+              "maxLength": 64,
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "time_to_event"
+                ]
+              }
+            },
+            "horizon": {
+              "t": "number",
+              "gt": 0,
+              "req": true
+            },
+            "timeUnit": {
+              "t": "string",
+              "values": [
+                "days",
+                "weeks",
+                "months",
+                "years"
+              ],
+              "req": true
+            }
+          },
+          "req": true
+        },
+        "predictors": {
+          "t": "array",
+          "items": {
+            "t": "object",
+            "fields": {
+              "column": {
+                "t": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                "maxLength": 64,
+                "req": true
+              },
+              "unit": {
+                "t": "string",
+                "maxLength": 80,
+                "req": true
+              },
+              "transform": {
+                "t": "string",
+                "values": [
+                  "identity",
+                  "log",
+                  "log1p",
+                  "square"
+                ],
+                "default": "identity"
+              }
+            }
+          },
+          "min": 1,
+          "max": 50,
+          "req": true
+        },
+        "folds": {
+          "t": "integer",
+          "min": 3,
+          "max": 10,
+          "default": 5
+        },
+        "comparison": {
+          "t": "object",
+          "fields": {
+            "ranger": {
+              "t": "boolean",
+              "default": true
+            }
+          }
+        },
+        "procova": {
+          "t": "object",
+          "fields": {
+            "lambdas": {
+              "t": "array",
+              "items": {
+                "t": "number",
+                "min": 0,
+                "max": 1
+              },
+              "min": 1,
+              "max": 8
+            },
+            "gammas": {
+              "t": "array",
+              "items": {
+                "t": "number",
+                "min": 1
+              },
+              "min": 1,
+              "max": 8
+            },
+            "allocation": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "default": 0.5
+            }
+          }
+        }
+      },
+      "requires": {
+        "armColumn": [
+          "armValue"
+        ],
+        "armValue": [
+          "armColumn"
+        ]
+      }
+    },
+    "patients.progression": {
+      "t": "object",
+      "fields": {
+        "endpoint": {
+          "t": "object",
+          "fields": {
+            "type": {
+              "t": "string",
+              "values": [
+                "continuous"
+              ],
+              "req": true
+            },
+            "unit": {
+              "t": "string",
+              "maxLength": 40
+            }
+          },
+          "req": true
+        },
+        "design": {
+          "t": "object",
+          "fields": {
+            "nTreat": {
+              "t": "integer",
+              "min": 2,
+              "max": 100000,
+              "req": true
+            },
+            "nControl": {
+              "t": "integer",
+              "min": 2,
+              "max": 100000,
+              "req": true
+            }
+          },
+          "req": true
+        },
+        "timeUnit": {
+          "t": "string",
+          "values": [
+            "days",
+            "weeks",
+            "months",
+            "years"
+          ],
+          "req": true
+        },
+        "visits": {
+          "t": "array",
+          "items": {
+            "t": "number",
+            "min": 0
+          },
+          "min": 3,
+          "max": 40,
+          "increasing": true,
+          "req": true
+        },
+        "model": {
+          "t": "object",
+          "fields": {
+            "family": {
+              "t": "string",
+              "values": [
+                "linear",
+                "exponential",
+                "logistic",
+                "emax"
+              ],
+              "req": true
+            },
+            "slope": {
+              "t": "object",
+              "fields": {
+                "value": {
+                  "t": "number",
+                  "req": true
+                },
+                "basis": {
+                  "t": "string",
+                  "values": [
+                    "literature",
+                    "assumed",
+                    "data"
+                  ],
+                  "req": true
+                },
+                "citation": {
+                  "t": "string",
+                  "maxLength": 300
+                }
+              },
+              "when": {
+                "path": "model.family",
+                "in": [
+                  "linear",
+                  "exponential"
+                ]
+              },
+              "req": true
+            },
+            "betweenPersonSd": {
+              "t": "object",
+              "fields": {
+                "value": {
+                  "t": "number",
+                  "min": 0,
+                  "req": true
+                },
+                "basis": {
+                  "t": "string",
+                  "values": [
+                    "literature",
+                    "assumed",
+                    "data"
+                  ],
+                  "req": true
+                },
+                "citation": {
+                  "t": "string",
+                  "maxLength": 300
+                }
+              },
+              "req": true
+            },
+            "acceleration": {
+              "t": "object",
+              "fields": {
+                "value": {
+                  "t": "number",
+                  "req": true
+                },
+                "basis": {
+                  "t": "string",
+                  "values": [
+                    "literature",
+                    "assumed",
+                    "data"
+                  ],
+                  "req": true
+                },
+                "citation": {
+                  "t": "string",
+                  "maxLength": 300
+                }
+              },
+              "when": {
+                "path": "model.family",
+                "in": [
+                  "exponential"
+                ]
+              },
+              "req": true
+            },
+            "amplitude": {
+              "t": "object",
+              "fields": {
+                "value": {
+                  "t": "number",
+                  "req": true
+                },
+                "basis": {
+                  "t": "string",
+                  "values": [
+                    "literature",
+                    "assumed",
+                    "data"
+                  ],
+                  "req": true
+                },
+                "citation": {
+                  "t": "string",
+                  "maxLength": 300
+                }
+              },
+              "when": {
+                "path": "model.family",
+                "in": [
+                  "logistic",
+                  "emax"
+                ]
+              },
+              "req": true
+            },
+            "midpoint": {
+              "t": "object",
+              "fields": {
+                "value": {
+                  "t": "number",
+                  "req": true
+                },
+                "basis": {
+                  "t": "string",
+                  "values": [
+                    "literature",
+                    "assumed",
+                    "data"
+                  ],
+                  "req": true
+                },
+                "citation": {
+                  "t": "string",
+                  "maxLength": 300
+                }
+              },
+              "when": {
+                "path": "model.family",
+                "in": [
+                  "logistic"
+                ]
+              },
+              "req": true
+            },
+            "steepness": {
+              "t": "object",
+              "fields": {
+                "value": {
+                  "t": "number",
+                  "gt": 0,
+                  "req": true
+                },
+                "basis": {
+                  "t": "string",
+                  "values": [
+                    "literature",
+                    "assumed",
+                    "data"
+                  ],
+                  "req": true
+                },
+                "citation": {
+                  "t": "string",
+                  "maxLength": 300
+                }
+              },
+              "when": {
+                "path": "model.family",
+                "in": [
+                  "logistic"
+                ]
+              },
+              "req": true
+            },
+            "halfTime": {
+              "t": "object",
+              "fields": {
+                "value": {
+                  "t": "number",
+                  "gt": 0,
+                  "req": true
+                },
+                "basis": {
+                  "t": "string",
+                  "values": [
+                    "literature",
+                    "assumed",
+                    "data"
+                  ],
+                  "req": true
+                },
+                "citation": {
+                  "t": "string",
+                  "maxLength": 300
+                }
+              },
+              "when": {
+                "path": "model.family",
+                "in": [
+                  "emax"
+                ]
+              },
+              "req": true
+            }
+          },
+          "req": true
+        },
+        "baseline": {
+          "t": "object",
+          "fields": {
+            "mean": {
+              "t": "object",
+              "fields": {
+                "value": {
+                  "t": "number",
+                  "req": true
+                },
+                "basis": {
+                  "t": "string",
+                  "values": [
+                    "literature",
+                    "assumed",
+                    "data"
+                  ],
+                  "req": true
+                },
+                "citation": {
+                  "t": "string",
+                  "maxLength": 300
+                }
+              },
+              "req": true
+            },
+            "sd": {
+              "t": "object",
+              "fields": {
+                "value": {
+                  "t": "number",
+                  "min": 0,
+                  "req": true
+                },
+                "basis": {
+                  "t": "string",
+                  "values": [
+                    "literature",
+                    "assumed",
+                    "data"
+                  ],
+                  "req": true
+                },
+                "citation": {
+                  "t": "string",
+                  "maxLength": 300
+                }
+              },
+              "req": true
+            }
+          },
+          "req": true
+        },
+        "residualSd": {
+          "t": "object",
+          "fields": {
+            "value": {
+              "t": "number",
+              "min": 0,
+              "req": true
+            },
+            "basis": {
+              "t": "string",
+              "values": [
+                "literature",
+                "assumed",
+                "data"
+              ],
+              "req": true
+            },
+            "citation": {
+              "t": "string",
+              "maxLength": 300
+            }
+          },
+          "req": true
+        },
+        "correlation": {
+          "t": "object",
+          "fields": {
+            "value": {
+              "t": "number",
+              "min": -1,
+              "max": 1,
+              "req": true
+            },
+            "basis": {
+              "t": "string",
+              "values": [
+                "literature",
+                "assumed",
+                "data"
+              ],
+              "req": true
+            },
+            "citation": {
+              "t": "string",
+              "maxLength": 300
+            }
+          }
+        },
+        "treatment": {
+          "t": "object",
+          "fields": {
+            "slowing": {
+              "t": "object",
+              "fields": {
+                "value": {
+                  "t": "number",
+                  "min": 0,
+                  "lt": 1,
+                  "req": true
+                },
+                "basis": {
+                  "t": "string",
+                  "values": [
+                    "literature",
+                    "assumed",
+                    "data"
+                  ],
+                  "req": true
+                },
+                "citation": {
+                  "t": "string",
+                  "maxLength": 300
+                }
+              },
+              "req": true
+            }
+          },
+          "req": true
+        },
+        "analysis": {
+          "t": "object",
+          "fields": {
+            "kind": {
+              "t": "string",
+              "values": [
+                "change",
+                "slope"
+              ],
+              "default": "change"
+            },
+            "visit": {
+              "t": "number",
+              "min": 0
+            },
+            "alpha": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "default": 0.05
             }
           }
         }
@@ -2140,6 +3035,97 @@
                   ],
                   "req": true
                 }
+              },
+              "cox": {
+                "name": {
+                  "t": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                },
+                "time": {
+                  "t": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                  "maxLength": 64,
+                  "req": true
+                },
+                "status": {
+                  "t": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                  "maxLength": 64,
+                  "req": true
+                },
+                "predictors": {
+                  "t": "array",
+                  "items": {
+                    "t": "string",
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                    "maxLength": 64
+                  },
+                  "min": 1,
+                  "max": 50,
+                  "req": true
+                },
+                "target": {
+                  "t": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                  "maxLength": 64,
+                  "req": true
+                }
+              },
+              "logrank": {
+                "name": {
+                  "t": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                },
+                "time": {
+                  "t": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                  "maxLength": 64,
+                  "req": true
+                },
+                "status": {
+                  "t": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                  "maxLength": 64,
+                  "req": true
+                },
+                "group": {
+                  "t": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                  "maxLength": 64,
+                  "req": true
+                }
+              },
+              "rmst": {
+                "name": {
+                  "t": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                },
+                "time": {
+                  "t": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                  "maxLength": 64,
+                  "req": true
+                },
+                "status": {
+                  "t": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                  "maxLength": 64,
+                  "req": true
+                },
+                "group": {
+                  "t": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                  "maxLength": 64,
+                  "req": true
+                },
+                "tau": {
+                  "t": "number",
+                  "gt": 0,
+                  "req": true
+                }
               }
             }
           },
@@ -2150,6 +3136,62 @@
           "t": "string",
           "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
           "maxLength": 64
+        },
+        "inference": {
+          "t": "object",
+          "fields": {
+            "nullCalibration": {
+              "t": "object",
+              "fields": {
+                "analysis": {
+                  "t": "string",
+                  "minLength": 1,
+                  "maxLength": 80,
+                  "req": true
+                },
+                "replicates": {
+                  "t": "integer",
+                  "min": 20,
+                  "max": 1000,
+                  "default": 100
+                },
+                "copies": {
+                  "t": "integer",
+                  "min": 1,
+                  "max": 5,
+                  "default": 1
+                }
+              }
+            }
+          }
+        },
+        "privacy": {
+          "t": "object",
+          "fields": {
+            "membershipRiskBound": {
+              "t": "number",
+              "gt": 0.5,
+              "lt": 1,
+              "default": 0.75
+            },
+            "secrets": {
+              "t": "array",
+              "items": {
+                "t": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                "maxLength": 64
+              },
+              "min": 1,
+              "max": 10,
+              "unique": true
+            },
+            "attacks": {
+              "t": "integer",
+              "min": 50,
+              "max": 2000,
+              "default": 500
+            }
+          }
         }
       }
     },
@@ -2237,6 +3279,97 @@
                   ],
                   "req": true
                 }
+              },
+              "cox": {
+                "name": {
+                  "t": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                },
+                "time": {
+                  "t": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                  "maxLength": 64,
+                  "req": true
+                },
+                "status": {
+                  "t": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                  "maxLength": 64,
+                  "req": true
+                },
+                "predictors": {
+                  "t": "array",
+                  "items": {
+                    "t": "string",
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                    "maxLength": 64
+                  },
+                  "min": 1,
+                  "max": 50,
+                  "req": true
+                },
+                "target": {
+                  "t": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                  "maxLength": 64,
+                  "req": true
+                }
+              },
+              "logrank": {
+                "name": {
+                  "t": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                },
+                "time": {
+                  "t": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                  "maxLength": 64,
+                  "req": true
+                },
+                "status": {
+                  "t": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                  "maxLength": 64,
+                  "req": true
+                },
+                "group": {
+                  "t": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                  "maxLength": 64,
+                  "req": true
+                }
+              },
+              "rmst": {
+                "name": {
+                  "t": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                },
+                "time": {
+                  "t": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                  "maxLength": 64,
+                  "req": true
+                },
+                "status": {
+                  "t": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                  "maxLength": 64,
+                  "req": true
+                },
+                "group": {
+                  "t": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                  "maxLength": 64,
+                  "req": true
+                },
+                "tau": {
+                  "t": "number",
+                  "gt": 0,
+                  "req": true
+                }
               }
             }
           },
@@ -2268,6 +3401,66 @@
               "t": "integer",
               "min": 0,
               "max": 2147483647
+            }
+          }
+        },
+        "inference": {
+          "t": "object",
+          "fields": {
+            "nullCalibration": {
+              "t": "object",
+              "fields": {
+                "analysis": {
+                  "t": "string",
+                  "minLength": 1,
+                  "maxLength": 80,
+                  "req": true
+                },
+                "replicates": {
+                  "t": "integer",
+                  "min": 20,
+                  "max": 1000,
+                  "default": 100
+                },
+                "copies": {
+                  "t": "integer",
+                  "min": 1,
+                  "max": 5,
+                  "default": 1
+                }
+              }
+            },
+            "parametersRedrawn": {
+              "t": "boolean",
+              "default": false
+            }
+          }
+        },
+        "privacy": {
+          "t": "object",
+          "fields": {
+            "membershipRiskBound": {
+              "t": "number",
+              "gt": 0.5,
+              "lt": 1,
+              "default": 0.75
+            },
+            "secrets": {
+              "t": "array",
+              "items": {
+                "t": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                "maxLength": 64
+              },
+              "min": 1,
+              "max": 10,
+              "unique": true
+            },
+            "attacks": {
+              "t": "integer",
+              "min": 50,
+              "max": 2000,
+              "default": 500
             }
           }
         }
@@ -3696,6 +4889,87 @@
           "lt": 1,
           "default": 0,
           "unit": "probability of leaving before each follow-up visit"
+        },
+        "trajectory": {
+          "t": "object",
+          "fields": {
+            "kind": {
+              "t": "string",
+              "values": [
+                "linear",
+                "plateau",
+                "quadratic"
+              ],
+              "req": true
+            },
+            "halfTime": {
+              "t": "number",
+              "gt": 0,
+              "unit": "time units",
+              "when": {
+                "path": "trajectory.kind",
+                "in": [
+                  "plateau"
+                ]
+              },
+              "req": true
+            },
+            "curvature": {
+              "t": "number",
+              "unit": "per time unit",
+              "when": {
+                "path": "trajectory.kind",
+                "in": [
+                  "quadratic"
+                ]
+              },
+              "req": true
+            }
+          }
+        },
+        "dropoutModel": {
+          "t": "object",
+          "fields": {
+            "mechanism": {
+              "t": "string",
+              "values": [
+                "mar",
+                "mnar"
+              ],
+              "req": true
+            },
+            "logOddsPerSd": {
+              "t": "number",
+              "min": -5,
+              "max": 5,
+              "unit": "change in the log-odds of leaving per standard deviation of the outcome",
+              "req": true
+            }
+          }
+        },
+        "rescue": {
+          "t": "object",
+          "fields": {
+            "perVisit": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "unit": "probability of starting rescue before each follow-up visit",
+              "req": true
+            },
+            "effect": {
+              "t": "number",
+              "unit": "outcome units",
+              "req": true
+            },
+            "logOddsPerSd": {
+              "t": "number",
+              "min": -5,
+              "max": 5,
+              "default": 0,
+              "unit": "change in the log-odds of starting rescue per standard deviation of the previous value"
+            }
+          }
         }
       }
     },
@@ -3753,6 +5027,473 @@
             "logit"
           ],
           "default": "identity"
+        },
+        "tauPrior": {
+          "t": "variant",
+          "on": "kind",
+          "variants": {
+            "half_normal": {
+              "scale": {
+                "t": "number",
+                "gt": 0,
+                "req": true
+              }
+            },
+            "log_normal": {
+              "meanLog": {
+                "t": "number",
+                "req": true
+              },
+              "sdLog": {
+                "t": "number",
+                "gt": 0,
+                "req": true
+              }
+            },
+            "inverse_gamma": {
+              "shape": {
+                "t": "number",
+                "gt": 0,
+                "req": true
+              },
+              "scale": {
+                "t": "number",
+                "gt": 0,
+                "req": true
+              }
+            },
+            "log_t": {
+              "location": {
+                "t": "number",
+                "req": true
+              },
+              "scale": {
+                "t": "number",
+                "gt": 0,
+                "req": true
+              },
+              "df": {
+                "t": "number",
+                "gt": 0,
+                "req": true
+              }
+            },
+            "turner_2015": {
+              "outcome": {
+                "t": "string",
+                "values": [
+                  "all_cause_mortality",
+                  "obstetric",
+                  "cause_specific_mortality_or_morbidity",
+                  "resource_use",
+                  "surgical_device_success",
+                  "withdrawals",
+                  "structure_related",
+                  "general_physical_health",
+                  "adverse_events",
+                  "infection_new_disease",
+                  "signs_symptoms",
+                  "pain",
+                  "quality_of_life",
+                  "mental_health",
+                  "biological_markers",
+                  "subjective_various"
+                ],
+                "req": true
+              },
+              "comparison": {
+                "t": "string",
+                "values": [
+                  "pharmacological_vs_placebo",
+                  "pharmacological_vs_pharmacological",
+                  "non_pharmacological_vs_placebo",
+                  "non_pharmacological_vs_pharmacological",
+                  "non_pharmacological_vs_non_pharmacological"
+                ],
+                "req": true
+              }
+            },
+            "turner_2015_generic": {},
+            "bartos_2023": {
+              "effectScale": {
+                "t": "string",
+                "values": [
+                  "log_odds_ratio",
+                  "log_risk_ratio",
+                  "risk_difference",
+                  "log_hazard_ratio"
+                ],
+                "req": true
+              }
+            }
+          }
+        }
+      }
+    },
+    "evidence.network": {
+      "t": "object",
+      "fields": {
+        "label": {
+          "t": "string",
+          "maxLength": 120
+        },
+        "measure": {
+          "t": "string",
+          "values": [
+            "odds_ratio",
+            "risk_ratio",
+            "mean_difference",
+            "log_ratio",
+            "difference"
+          ],
+          "req": true
+        },
+        "direction": {
+          "t": "string",
+          "values": [
+            "lower_better",
+            "higher_better"
+          ],
+          "req": true
+        },
+        "studies": {
+          "t": "array",
+          "items": {
+            "t": "object",
+            "fields": {
+              "studyId": {
+                "t": "string",
+                "minLength": 1,
+                "maxLength": 121,
+                "req": true
+              },
+              "arms": {
+                "t": "array",
+                "items": {
+                  "t": "object",
+                  "fields": {
+                    "treatment": {
+                      "t": "string",
+                      "minLength": 1,
+                      "maxLength": 80,
+                      "req": true
+                    },
+                    "events": {
+                      "t": "integer",
+                      "min": 0
+                    },
+                    "n": {
+                      "t": "integer",
+                      "min": 1
+                    },
+                    "mean": {
+                      "t": "number"
+                    },
+                    "sd": {
+                      "t": "number",
+                      "gt": 0
+                    }
+                  }
+                },
+                "min": 2,
+                "max": 12
+              },
+              "contrasts": {
+                "t": "array",
+                "items": {
+                  "t": "object",
+                  "fields": {
+                    "treatment": {
+                      "t": "string",
+                      "minLength": 1,
+                      "maxLength": 80,
+                      "req": true
+                    },
+                    "comparator": {
+                      "t": "string",
+                      "minLength": 1,
+                      "maxLength": 80,
+                      "req": true
+                    },
+                    "effect": {
+                      "t": "number",
+                      "req": true
+                    },
+                    "se": {
+                      "t": "number",
+                      "gt": 0,
+                      "req": true
+                    }
+                  }
+                },
+                "min": 1,
+                "max": 66
+              }
+            },
+            "exactlyOne": [
+              [
+                "arms",
+                "contrasts"
+              ]
+            ]
+          },
+          "min": 2,
+          "max": 500,
+          "req": true
+        },
+        "reference": {
+          "t": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "model": {
+          "t": "string",
+          "values": [
+            "random",
+            "common"
+          ],
+          "default": "random"
+        },
+        "level": {
+          "t": "number",
+          "gt": 0,
+          "lt": 1,
+          "default": 0.95
+        },
+        "continuityCorrection": {
+          "t": "number",
+          "gt": 0,
+          "max": 1,
+          "default": 0.5
+        }
+      }
+    },
+    "evidence.dose_response": {
+      "t": "object",
+      "fields": {
+        "label": {
+          "t": "string",
+          "maxLength": 120
+        },
+        "doseUnit": {
+          "t": "string",
+          "maxLength": 40
+        },
+        "ratioKind": {
+          "t": "string",
+          "values": [
+            "relative_risk",
+            "odds_ratio",
+            "hazard_ratio"
+          ],
+          "default": "relative_risk"
+        },
+        "studies": {
+          "t": "array",
+          "items": {
+            "t": "object",
+            "fields": {
+              "studyId": {
+                "t": "string",
+                "minLength": 1,
+                "maxLength": 121,
+                "req": true
+              },
+              "type": {
+                "t": "string",
+                "values": [
+                  "cc",
+                  "ci",
+                  "ir"
+                ],
+                "req": true
+              },
+              "rows": {
+                "t": "array",
+                "items": {
+                  "t": "object",
+                  "fields": {
+                    "dose": {
+                      "t": "number",
+                      "req": true
+                    },
+                    "effect": {
+                      "t": "number",
+                      "req": true
+                    },
+                    "se": {
+                      "t": "number",
+                      "gt": 0
+                    },
+                    "cases": {
+                      "t": "number",
+                      "min": 0
+                    },
+                    "n": {
+                      "t": "number",
+                      "gt": 0
+                    }
+                  }
+                },
+                "min": 2,
+                "max": 60,
+                "req": true
+              }
+            }
+          },
+          "min": 1,
+          "max": 500,
+          "req": true
+        },
+        "model": {
+          "t": "object",
+          "fields": {
+            "kind": {
+              "t": "string",
+              "values": [
+                "linear",
+                "spline"
+              ],
+              "req": true
+            },
+            "knots": {
+              "t": "array",
+              "items": {
+                "t": "number"
+              },
+              "min": 3,
+              "max": 5,
+              "increasing": true,
+              "when": {
+                "path": "model.kind",
+                "in": [
+                  "spline"
+                ]
+              }
+            },
+            "knotPercentiles": {
+              "t": "array",
+              "items": {
+                "t": "number",
+                "gt": 0,
+                "lt": 1
+              },
+              "min": 3,
+              "max": 5,
+              "increasing": true,
+              "when": {
+                "path": "model.kind",
+                "in": [
+                  "spline"
+                ]
+              }
+            }
+          }
+        },
+        "stage": {
+          "t": "string",
+          "values": [
+            "one",
+            "two"
+          ],
+          "default": "two"
+        },
+        "method": {
+          "t": "string",
+          "values": [
+            "reml",
+            "ml",
+            "fixed"
+          ],
+          "default": "reml"
+        },
+        "covariance": {
+          "t": "string",
+          "values": [
+            "gl",
+            "h",
+            "indep"
+          ],
+          "default": "gl"
+        },
+        "referenceDose": {
+          "t": "number"
+        },
+        "predictAt": {
+          "t": "array",
+          "items": {
+            "t": "number"
+          },
+          "min": 1,
+          "max": 50
+        },
+        "perDose": {
+          "t": "number",
+          "gt": 0
+        },
+        "level": {
+          "t": "number",
+          "gt": 0,
+          "lt": 1,
+          "default": 0.95
+        }
+      }
+    },
+    "evidence.shrinkage": {
+      "t": "object",
+      "fields": {
+        "label": {
+          "t": "string",
+          "maxLength": 120
+        },
+        "scale": {
+          "t": "string",
+          "values": [
+            "identity",
+            "log"
+          ],
+          "req": true
+        },
+        "values": {
+          "t": "array",
+          "items": {
+            "t": "object",
+            "fields": {
+              "id": {
+                "t": "string",
+                "minLength": 1,
+                "maxLength": 80
+              },
+              "estimate": {
+                "t": "number",
+                "req": true
+              },
+              "se": {
+                "t": "number",
+                "gt": 0,
+                "req": true
+              },
+              "futureSe": {
+                "t": "number",
+                "gt": 0
+              }
+            }
+          },
+          "min": 1,
+          "max": 20,
+          "req": true
+        },
+        "level": {
+          "t": "number",
+          "gt": 0,
+          "lt": 1,
+          "default": 0.95
+        },
+        "alpha": {
+          "t": "number",
+          "gt": 0,
+          "lt": 1,
+          "default": 0.05
         }
       }
     },
@@ -3955,6 +5696,34 @@
           ],
           "default": "ATT"
         },
+        "imputation": {
+          "t": "object",
+          "fields": {
+            "m": {
+              "t": "integer",
+              "min": 2,
+              "max": 50,
+              "req": true
+            },
+            "maxIterations": {
+              "t": "integer",
+              "min": 1,
+              "max": 30,
+              "default": 10
+            },
+            "categorical": {
+              "t": "array",
+              "items": {
+                "t": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                "maxLength": 64
+              },
+              "min": 1,
+              "max": 20,
+              "unique": true
+            }
+          }
+        },
         "endpoint": {
           "t": "object",
           "fields": {
@@ -4079,6 +5848,70 @@
             "ATO"
           ],
           "default": "ATT"
+        },
+        "trim": {
+          "t": "object",
+          "fields": {
+            "rule": {
+              "t": "string",
+              "values": [
+                "fixed",
+                "crump"
+              ],
+              "req": true
+            },
+            "lower": {
+              "t": "number",
+              "gt": 0,
+              "lt": 0.5,
+              "when": {
+                "path": "trim.rule",
+                "in": [
+                  "fixed"
+                ]
+              },
+              "req": true
+            },
+            "upper": {
+              "t": "number",
+              "gt": 0.5,
+              "lt": 1,
+              "when": {
+                "path": "trim.rule",
+                "in": [
+                  "fixed"
+                ]
+              }
+            }
+          }
+        },
+        "imputation": {
+          "t": "object",
+          "fields": {
+            "m": {
+              "t": "integer",
+              "min": 2,
+              "max": 50,
+              "req": true
+            },
+            "maxIterations": {
+              "t": "integer",
+              "min": 1,
+              "max": 30,
+              "default": 10
+            },
+            "categorical": {
+              "t": "array",
+              "items": {
+                "t": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                "maxLength": 64
+              },
+              "min": 1,
+              "max": 20,
+              "unique": true
+            }
+          }
         },
         "endpoint": {
           "t": "object",
@@ -4218,6 +6051,76 @@
             "ATO"
           ],
           "default": "ATT"
+        },
+        "trim": {
+          "t": "object",
+          "fields": {
+            "rule": {
+              "t": "string",
+              "values": [
+                "fixed",
+                "crump"
+              ],
+              "req": true
+            },
+            "lower": {
+              "t": "number",
+              "gt": 0,
+              "lt": 0.5,
+              "when": {
+                "path": "trim.rule",
+                "in": [
+                  "fixed"
+                ]
+              },
+              "req": true
+            },
+            "upper": {
+              "t": "number",
+              "gt": 0.5,
+              "lt": 1,
+              "when": {
+                "path": "trim.rule",
+                "in": [
+                  "fixed"
+                ]
+              }
+            }
+          },
+          "when": {
+            "path": "weighting",
+            "in": [
+              "propensity"
+            ]
+          }
+        },
+        "imputation": {
+          "t": "object",
+          "fields": {
+            "m": {
+              "t": "integer",
+              "min": 2,
+              "max": 50,
+              "req": true
+            },
+            "maxIterations": {
+              "t": "integer",
+              "min": 1,
+              "max": 30,
+              "default": 10
+            },
+            "categorical": {
+              "t": "array",
+              "items": {
+                "t": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                "maxLength": 64
+              },
+              "min": 1,
+              "max": 20,
+              "unique": true
+            }
+          }
         },
         "tau": {
           "t": "number",
@@ -4536,7 +6439,13 @@
           "t": "string",
           "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
           "maxLength": 64,
-          "default": "y"
+          "default": "y",
+          "when": {
+            "path": "endpoint.type",
+            "notIn": [
+              "time_to_event"
+            ]
+          }
         },
         "endpoint": {
           "t": "object",
@@ -4560,6 +6469,116 @@
             "ATT"
           ],
           "default": "ATT"
+        },
+        "tau": {
+          "t": "number",
+          "gt": 0,
+          "unit": "time units",
+          "when": {
+            "path": "endpoint.type",
+            "in": [
+              "time_to_event"
+            ]
+          },
+          "req": true
+        },
+        "summary": {
+          "t": "string",
+          "values": [
+            "rmst",
+            "survival"
+          ],
+          "default": "rmst",
+          "when": {
+            "path": "endpoint.type",
+            "in": [
+              "time_to_event"
+            ]
+          }
+        },
+        "timeUnit": {
+          "t": "string",
+          "maxLength": 20,
+          "when": {
+            "path": "endpoint.type",
+            "in": [
+              "time_to_event"
+            ]
+          }
+        },
+        "parameterCode": {
+          "t": "string",
+          "maxLength": 64,
+          "when": {
+            "path": "endpoint.type",
+            "in": [
+              "time_to_event"
+            ]
+          }
+        },
+        "trim": {
+          "t": "object",
+          "fields": {
+            "rule": {
+              "t": "string",
+              "values": [
+                "fixed",
+                "crump"
+              ],
+              "req": true
+            },
+            "lower": {
+              "t": "number",
+              "gt": 0,
+              "lt": 0.5,
+              "when": {
+                "path": "trim.rule",
+                "in": [
+                  "fixed"
+                ]
+              },
+              "req": true
+            },
+            "upper": {
+              "t": "number",
+              "gt": 0.5,
+              "lt": 1,
+              "when": {
+                "path": "trim.rule",
+                "in": [
+                  "fixed"
+                ]
+              }
+            }
+          }
+        },
+        "imputation": {
+          "t": "object",
+          "fields": {
+            "m": {
+              "t": "integer",
+              "min": 2,
+              "max": 50,
+              "req": true
+            },
+            "maxIterations": {
+              "t": "integer",
+              "min": 1,
+              "max": 30,
+              "default": 10
+            },
+            "categorical": {
+              "t": "array",
+              "items": {
+                "t": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                "maxLength": 64
+              },
+              "min": 1,
+              "max": 20,
+              "unique": true
+            }
+          }
         },
         "cohortRules": {
           "t": "array",
@@ -4966,6 +6985,686 @@
         }
       }
     },
+    "comparator.bias_analysis": {
+      "t": "object",
+      "fields": {
+        "scale": {
+          "t": "string",
+          "values": [
+            "hazard_ratio",
+            "risk_ratio",
+            "odds_ratio",
+            "difference"
+          ],
+          "req": true
+        },
+        "estimate": {
+          "t": "number",
+          "req": true
+        },
+        "lower": {
+          "t": "number"
+        },
+        "upper": {
+          "t": "number"
+        },
+        "se": {
+          "t": "number",
+          "gt": 0
+        },
+        "confidenceLevel": {
+          "t": "number",
+          "gt": 0.5,
+          "lt": 1,
+          "default": 0.95
+        },
+        "shiftedNull": {
+          "t": "object",
+          "fields": {
+            "biases": {
+              "t": "array",
+              "items": {
+                "t": "number",
+                "min": 0
+              },
+              "min": 1,
+              "max": 20,
+              "req": true
+            }
+          }
+        },
+        "confounderTipping": {
+          "t": "object",
+          "fields": {
+            "associations": {
+              "t": "array",
+              "items": {
+                "t": "number"
+              },
+              "min": 1,
+              "max": 20
+            },
+            "baselinePrevalence": {
+              "t": "number",
+              "min": 0,
+              "lt": 1
+            }
+          }
+        },
+        "probabilistic": {
+          "t": "object",
+          "fields": {
+            "bias": {
+              "t": "variant",
+              "on": "family",
+              "variants": {
+                "constant": {
+                  "value": {
+                    "t": "number",
+                    "req": true
+                  }
+                },
+                "uniform": {
+                  "min": {
+                    "t": "number",
+                    "req": true
+                  },
+                  "max": {
+                    "t": "number",
+                    "req": true
+                  }
+                },
+                "triangular": {
+                  "min": {
+                    "t": "number",
+                    "req": true
+                  },
+                  "mode": {
+                    "t": "number",
+                    "req": true
+                  },
+                  "max": {
+                    "t": "number",
+                    "req": true
+                  }
+                },
+                "normal": {
+                  "mean": {
+                    "t": "number",
+                    "req": true
+                  },
+                  "sd": {
+                    "t": "number",
+                    "gt": 0,
+                    "req": true
+                  }
+                },
+                "lognormal": {
+                  "median": {
+                    "t": "number",
+                    "gt": 0,
+                    "req": true
+                  },
+                  "sdlog": {
+                    "t": "number",
+                    "gt": 0,
+                    "req": true
+                  }
+                }
+              }
+            },
+            "confounder": {
+              "t": "object",
+              "fields": {
+                "exposedPrevalence": {
+                  "t": "variant",
+                  "on": "family",
+                  "variants": {
+                    "constant": {
+                      "value": {
+                        "t": "number",
+                        "req": true
+                      }
+                    },
+                    "uniform": {
+                      "min": {
+                        "t": "number",
+                        "req": true
+                      },
+                      "max": {
+                        "t": "number",
+                        "req": true
+                      }
+                    },
+                    "triangular": {
+                      "min": {
+                        "t": "number",
+                        "req": true
+                      },
+                      "mode": {
+                        "t": "number",
+                        "req": true
+                      },
+                      "max": {
+                        "t": "number",
+                        "req": true
+                      }
+                    }
+                  },
+                  "req": true
+                },
+                "unexposedPrevalence": {
+                  "t": "variant",
+                  "on": "family",
+                  "variants": {
+                    "constant": {
+                      "value": {
+                        "t": "number",
+                        "req": true
+                      }
+                    },
+                    "uniform": {
+                      "min": {
+                        "t": "number",
+                        "req": true
+                      },
+                      "max": {
+                        "t": "number",
+                        "req": true
+                      }
+                    },
+                    "triangular": {
+                      "min": {
+                        "t": "number",
+                        "req": true
+                      },
+                      "mode": {
+                        "t": "number",
+                        "req": true
+                      },
+                      "max": {
+                        "t": "number",
+                        "req": true
+                      }
+                    }
+                  },
+                  "req": true
+                },
+                "association": {
+                  "t": "variant",
+                  "on": "family",
+                  "variants": {
+                    "constant": {
+                      "value": {
+                        "t": "number",
+                        "req": true
+                      }
+                    },
+                    "uniform": {
+                      "min": {
+                        "t": "number",
+                        "req": true
+                      },
+                      "max": {
+                        "t": "number",
+                        "req": true
+                      }
+                    },
+                    "triangular": {
+                      "min": {
+                        "t": "number",
+                        "req": true
+                      },
+                      "mode": {
+                        "t": "number",
+                        "req": true
+                      },
+                      "max": {
+                        "t": "number",
+                        "req": true
+                      }
+                    },
+                    "normal": {
+                      "mean": {
+                        "t": "number",
+                        "req": true
+                      },
+                      "sd": {
+                        "t": "number",
+                        "gt": 0,
+                        "req": true
+                      }
+                    },
+                    "lognormal": {
+                      "median": {
+                        "t": "number",
+                        "gt": 0,
+                        "req": true
+                      },
+                      "sdlog": {
+                        "t": "number",
+                        "gt": 0,
+                        "req": true
+                      }
+                    }
+                  },
+                  "req": true
+                }
+              }
+            }
+          },
+          "exactlyOne": [
+            [
+              "bias",
+              "confounder"
+            ]
+          ]
+        }
+      },
+      "exactlyOne": [
+        [
+          "lower",
+          "se"
+        ]
+      ],
+      "requires": {
+        "lower": [
+          "upper"
+        ],
+        "upper": [
+          "lower"
+        ]
+      }
+    },
+    "comparator.stc": {
+      "t": "object",
+      "fields": {
+        "covariates": {
+          "t": "array",
+          "items": {
+            "t": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+            "maxLength": 64
+          },
+          "min": 1,
+          "max": 100,
+          "unique": true,
+          "req": true
+        },
+        "effectModifiers": {
+          "t": "array",
+          "items": {
+            "t": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+            "maxLength": 64
+          },
+          "min": 1,
+          "max": 100,
+          "unique": true
+        },
+        "aggregateCovariates": {
+          "t": "array",
+          "items": {
+            "t": "object",
+            "fields": {
+              "variable": {
+                "t": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                "maxLength": 64,
+                "req": true
+              },
+              "label": {
+                "t": "string",
+                "maxLength": 80
+              },
+              "mean": {
+                "t": "number"
+              },
+              "sd": {
+                "t": "number",
+                "gt": 0
+              },
+              "proportion": {
+                "t": "number",
+                "min": 0,
+                "max": 1
+              },
+              "proportions": {
+                "t": "array",
+                "items": {
+                  "t": "number",
+                  "min": 0,
+                  "max": 1
+                },
+                "min": 2,
+                "max": 50
+              },
+              "levels": {
+                "t": "array",
+                "items": {
+                  "t": "string",
+                  "maxLength": 64
+                },
+                "min": 2,
+                "max": 50
+              },
+              "min": {
+                "t": "number",
+                "nullable": true
+              },
+              "max": {
+                "t": "number",
+                "nullable": true
+              },
+              "distribution": {
+                "t": "string",
+                "values": [
+                  "normal",
+                  "lognormal"
+                ],
+                "default": "normal"
+              }
+            },
+            "exactlyOne": [
+              [
+                "proportion",
+                "mean",
+                "proportions"
+              ]
+            ],
+            "requires": {
+              "mean": [
+                "sd"
+              ],
+              "levels": [
+                "proportions"
+              ]
+            }
+          },
+          "min": 1,
+          "max": 100,
+          "req": true
+        },
+        "correlation": {
+          "t": "matrix",
+          "min": -1,
+          "max": 1,
+          "size": "covariates"
+        },
+        "treatmentColumn": {
+          "t": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+          "maxLength": 64,
+          "default": "arm"
+        },
+        "outcomeColumn": {
+          "t": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+          "maxLength": 64,
+          "default": "y"
+        },
+        "endpoint": {
+          "t": "object",
+          "fields": {
+            "type": {
+              "t": "string",
+              "values": [
+                "continuous",
+                "binary",
+                "time_to_event"
+              ],
+              "badValueCode": "endpoint_unknown",
+              "req": true
+            }
+          },
+          "req": true
+        },
+        "anchored": {
+          "t": "boolean",
+          "default": false
+        },
+        "link": {
+          "t": "string",
+          "values": [
+            "identity",
+            "log",
+            "logit"
+          ]
+        },
+        "aggregateEstimate": {
+          "t": "number",
+          "unit": "link scale",
+          "when": {
+            "path": "anchored",
+            "in": [
+              "true"
+            ]
+          },
+          "req": true
+        },
+        "aggregateOutcome": {
+          "t": "number",
+          "unit": "the outcome's own scale",
+          "when": {
+            "path": "anchored",
+            "notIn": [
+              "true"
+            ]
+          },
+          "req": true
+        },
+        "aggregateSe": {
+          "t": "number",
+          "gt": 0,
+          "req": true
+        },
+        "size": {
+          "t": "integer",
+          "min": 1000,
+          "max": 200000,
+          "default": 10000
+        },
+        "unadjustedEffectModifiers": {
+          "t": "array",
+          "items": {
+            "t": "string",
+            "maxLength": 80
+          },
+          "min": 0,
+          "max": 50
+        }
+      }
+    },
+    "comparator.target_trial": {
+      "t": "object",
+      "fields": {
+        "parameters": {
+          "t": "object",
+          "fields": {
+            "treatment": {
+              "t": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "default": "treatment"
+            },
+            "outcome": {
+              "t": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "default": "outcome"
+            },
+            "eligible": {
+              "t": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "default": "eligible"
+            }
+          }
+        },
+        "covariates": {
+          "t": "array",
+          "items": {
+            "t": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "max": 50,
+          "unique": true
+        },
+        "strategy": {
+          "t": "object",
+          "fields": {
+            "kind": {
+              "t": "string",
+              "values": [
+                "sequential",
+                "clone_censor_weight"
+              ],
+              "req": true
+            },
+            "estimand": {
+              "t": "string",
+              "values": [
+                "itt",
+                "per_protocol",
+                "both"
+              ],
+              "default": "both",
+              "when": {
+                "path": "strategy.kind",
+                "in": [
+                  "sequential"
+                ]
+              }
+            },
+            "weights": {
+              "t": "object",
+              "fields": {
+                "numerator": {
+                  "t": "array",
+                  "items": {
+                    "t": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "max": 50,
+                  "unique": true
+                },
+                "denominator": {
+                  "t": "array",
+                  "items": {
+                    "t": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "max": 50,
+                  "unique": true
+                }
+              },
+              "when": {
+                "path": "strategy.kind",
+                "in": [
+                  "sequential"
+                ]
+              }
+            },
+            "gracePeriod": {
+              "t": "integer",
+              "min": 0,
+              "max": 1000,
+              "unit": "periods",
+              "when": {
+                "path": "strategy.kind",
+                "in": [
+                  "clone_censor_weight"
+                ]
+              },
+              "req": true
+            }
+          },
+          "req": true
+        },
+        "horizon": {
+          "t": "integer",
+          "min": 1,
+          "max": 5000,
+          "unit": "periods",
+          "req": true
+        },
+        "outcomeModel": {
+          "t": "object",
+          "fields": {
+            "followupDegree": {
+              "t": "integer",
+              "min": 1,
+              "max": 3,
+              "default": 2
+            },
+            "trialPeriodDegree": {
+              "t": "integer",
+              "min": 0,
+              "max": 3,
+              "default": 2
+            },
+            "armByFollowup": {
+              "t": "boolean",
+              "default": false
+            }
+          },
+          "when": {
+            "path": "strategy.kind",
+            "in": [
+              "sequential"
+            ]
+          }
+        },
+        "firstPeriod": {
+          "t": "integer",
+          "min": -100000,
+          "max": 100000,
+          "unit": "periods",
+          "when": {
+            "path": "strategy.kind",
+            "in": [
+              "sequential"
+            ]
+          }
+        },
+        "lastPeriod": {
+          "t": "integer",
+          "min": -100000,
+          "max": 100000,
+          "unit": "periods",
+          "when": {
+            "path": "strategy.kind",
+            "in": [
+              "sequential"
+            ]
+          }
+        },
+        "followUpLimit": {
+          "t": "integer",
+          "min": 1,
+          "max": 5000,
+          "unit": "periods",
+          "when": {
+            "path": "strategy.kind",
+            "in": [
+              "sequential"
+            ]
+          }
+        },
+        "timeUnit": {
+          "t": "string",
+          "values": [
+            "days",
+            "weeks",
+            "months",
+            "years"
+          ]
+        }
+      }
+    },
     "comparator.map_prior": {
       "t": "object",
       "fields": {
@@ -5124,6 +7823,309 @@
             }
           }
         }
+      }
+    },
+    "comparator.borrowing": {
+      "t": "object",
+      "fields": {
+        "endpoint": {
+          "t": "object",
+          "fields": {
+            "type": {
+              "t": "string",
+              "values": [
+                "continuous",
+                "binary",
+                "time_to_event"
+              ],
+              "badValueCode": "endpoint_unknown",
+              "req": true
+            }
+          },
+          "req": true
+        },
+        "historical": {
+          "t": "object",
+          "fields": {
+            "n": {
+              "t": "integer",
+              "min": 1,
+              "max": 100000000,
+              "req": true
+            },
+            "responders": {
+              "t": "integer",
+              "min": 0,
+              "max": 100000000,
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "binary"
+                ]
+              },
+              "req": true
+            },
+            "mean": {
+              "t": "number",
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "continuous"
+                ]
+              },
+              "req": true
+            },
+            "sd": {
+              "t": "number",
+              "gt": 0,
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "continuous"
+                ]
+              },
+              "req": true
+            }
+          },
+          "req": true
+        },
+        "current": {
+          "t": "object",
+          "fields": {
+            "n": {
+              "t": "integer",
+              "min": 1,
+              "max": 100000000,
+              "req": true
+            },
+            "responders": {
+              "t": "integer",
+              "min": 0,
+              "max": 100000000,
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "binary"
+                ]
+              },
+              "req": true
+            },
+            "mean": {
+              "t": "number",
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "continuous"
+                ]
+              },
+              "req": true
+            }
+          }
+        },
+        "treatment": {
+          "t": "object",
+          "fields": {
+            "n": {
+              "t": "integer",
+              "min": 1,
+              "max": 100000000,
+              "req": true
+            },
+            "responders": {
+              "t": "integer",
+              "min": 0,
+              "max": 100000000,
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "binary"
+                ]
+              },
+              "req": true
+            },
+            "mean": {
+              "t": "number",
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "continuous"
+                ]
+              },
+              "req": true
+            }
+          }
+        },
+        "prior": {
+          "t": "object",
+          "fields": {
+            "kind": {
+              "t": "string",
+              "values": [
+                "power",
+                "sam",
+                "elastic"
+              ],
+              "req": true
+            },
+            "a0": {
+              "t": "number",
+              "min": 0,
+              "max": 1,
+              "when": {
+                "path": "prior.kind",
+                "in": [
+                  "power"
+                ]
+              },
+              "req": true
+            },
+            "delta": {
+              "t": "number",
+              "gt": 0,
+              "when": {
+                "path": "prior.kind",
+                "in": [
+                  "sam",
+                  "elastic"
+                ]
+              },
+              "req": true
+            },
+            "vague": {
+              "t": "object",
+              "fields": {
+                "alpha": {
+                  "t": "number",
+                  "gt": 0,
+                  "max": 1000,
+                  "req": true
+                },
+                "beta": {
+                  "t": "number",
+                  "gt": 0,
+                  "max": 1000,
+                  "req": true
+                }
+              },
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "binary"
+                ]
+              }
+            },
+            "function": {
+              "t": "string",
+              "values": [
+                "logistic",
+                "step"
+              ],
+              "when": {
+                "path": "prior.kind",
+                "in": [
+                  "elastic"
+                ]
+              }
+            },
+            "q0": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "when": {
+                "path": "prior.kind",
+                "in": [
+                  "elastic"
+                ]
+              }
+            },
+            "q1": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "when": {
+                "path": "prior.kind",
+                "in": [
+                  "elastic"
+                ]
+              }
+            },
+            "c1": {
+              "t": "number",
+              "gt": 0.5,
+              "lt": 1,
+              "when": {
+                "path": "prior.kind",
+                "in": [
+                  "elastic"
+                ]
+              }
+            },
+            "c2": {
+              "t": "number",
+              "gt": 0,
+              "lt": 0.5,
+              "when": {
+                "path": "prior.kind",
+                "in": [
+                  "elastic"
+                ]
+              }
+            }
+          },
+          "req": true
+        },
+        "analysis": {
+          "t": "object",
+          "fields": {
+            "alpha": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "default": 0.025
+            }
+          }
+        },
+        "operatingCharacteristics": {
+          "t": "object",
+          "fields": {
+            "nControl": {
+              "t": "integer",
+              "min": 2,
+              "max": 2000,
+              "req": true
+            },
+            "nTreatment": {
+              "t": "integer",
+              "min": 2,
+              "max": 2000,
+              "req": true
+            },
+            "drifts": {
+              "t": "array",
+              "items": {
+                "t": "number"
+              },
+              "min": 1,
+              "max": 21,
+              "req": true
+            },
+            "effect": {
+              "t": "number",
+              "req": true
+            }
+          }
+        }
+      },
+      "atLeastOne": [
+        [
+          "current",
+          "operatingCharacteristics"
+        ]
+      ],
+      "requires": {
+        "treatment": [
+          "current"
+        ]
       }
     },
     "design.analytic": {
@@ -5616,6 +8618,53 @@
             "in": [
               "time_to_event"
             ]
+          }
+        },
+        "hypothesis": {
+          "t": "object",
+          "fields": {
+            "kind": {
+              "t": "string",
+              "values": [
+                "superiority",
+                "non_inferiority"
+              ],
+              "req": true
+            },
+            "margin": {
+              "t": "number",
+              "gt": 0,
+              "unit": "the endpoint's own scale: outcome units, risk difference, or hazard ratio",
+              "when": {
+                "path": "hypothesis.kind",
+                "in": [
+                  "non_inferiority"
+                ]
+              },
+              "req": true
+            },
+            "direction": {
+              "t": "string",
+              "values": [
+                "higher_better",
+                "lower_better"
+              ],
+              "when": [
+                {
+                  "path": "hypothesis.kind",
+                  "in": [
+                    "non_inferiority"
+                  ]
+                },
+                {
+                  "path": "endpoint.type",
+                  "notIn": [
+                    "time_to_event"
+                  ]
+                }
+              ],
+              "req": true
+            }
           }
         }
       }
@@ -6243,6 +9292,7 @@
                 "logrank",
                 "rmst",
                 "maxcombo",
+                "modestly_weighted",
                 "exact_binomial",
                 "simon_boundary",
                 "stratified_risk_difference",
@@ -6322,6 +9372,18 @@
                 ]
               },
               "req": true
+            },
+            "sStar": {
+              "t": "number",
+              "gt": 0,
+              "max": 1,
+              "default": 0.5,
+              "when": {
+                "path": "analysis.method",
+                "in": [
+                  "modestly_weighted"
+                ]
+              }
             }
           },
           "reqWhen": {
@@ -6505,6 +9567,53 @@
             ]
           }
         },
+        "hypothesis": {
+          "t": "object",
+          "fields": {
+            "kind": {
+              "t": "string",
+              "values": [
+                "superiority",
+                "non_inferiority"
+              ],
+              "req": true
+            },
+            "margin": {
+              "t": "number",
+              "gt": 0,
+              "unit": "the endpoint's own scale: outcome units, risk difference, or hazard ratio",
+              "when": {
+                "path": "hypothesis.kind",
+                "in": [
+                  "non_inferiority"
+                ]
+              },
+              "req": true
+            },
+            "direction": {
+              "t": "string",
+              "values": [
+                "higher_better",
+                "lower_better"
+              ],
+              "when": [
+                {
+                  "path": "hypothesis.kind",
+                  "in": [
+                    "non_inferiority"
+                  ]
+                },
+                {
+                  "path": "endpoint.type",
+                  "notIn": [
+                    "time_to_event"
+                  ]
+                }
+              ],
+              "req": true
+            }
+          }
+        },
         "performance": {
           "t": "array",
           "items": {
@@ -6549,6 +9658,1585 @@
               "min": 0
             }
           }
+        }
+      }
+    },
+    "design.confirmatory": {
+      "t": "object",
+      "fields": {
+        "design": {
+          "t": "object",
+          "fields": {
+            "kind": {
+              "t": "string",
+              "values": [
+                "futility_group_sequential",
+                "sample_size_reestimation",
+                "multi_arm_selection",
+                "enrichment",
+                "count_endpoint"
+              ],
+              "badValueCode": "design_unknown",
+              "req": true
+            },
+            "informationRates": {
+              "t": "array",
+              "items": {
+                "t": "number",
+                "gt": 0,
+                "max": 1
+              },
+              "min": 2,
+              "max": 8,
+              "increasing": true,
+              "last": 1,
+              "reqWhen": {
+                "path": "design.kind",
+                "notIn": [
+                  "count_endpoint"
+                ]
+              }
+            },
+            "spending": {
+              "t": "string",
+              "values": [
+                "obrien_fleming",
+                "pocock",
+                "hwang_shih_decani",
+                "kim_demets"
+              ],
+              "default": "obrien_fleming"
+            },
+            "spendingGamma": {
+              "t": "number",
+              "min": -10,
+              "max": 10,
+              "when": {
+                "path": "design.spending",
+                "in": [
+                  "hwang_shih_decani",
+                  "kim_demets"
+                ]
+              },
+              "req": true
+            },
+            "allocation": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "default": 0.5,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "futility_group_sequential",
+                  "sample_size_reestimation",
+                  "count_endpoint"
+                ]
+              }
+            },
+            "futility": {
+              "t": "object",
+              "fields": {
+                "spending": {
+                  "t": "string",
+                  "values": [
+                    "obrien_fleming",
+                    "pocock",
+                    "hwang_shih_decani",
+                    "kim_demets"
+                  ],
+                  "default": "obrien_fleming"
+                },
+                "gamma": {
+                  "t": "number",
+                  "min": -10,
+                  "max": 10,
+                  "when": {
+                    "path": "design.futility.spending",
+                    "in": [
+                      "hwang_shih_decani",
+                      "kim_demets"
+                    ]
+                  },
+                  "req": true
+                },
+                "binding": {
+                  "t": "boolean",
+                  "default": false
+                }
+              },
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "futility_group_sequential"
+                ]
+              }
+            },
+            "conditionalPower": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "default": 0.8,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "sample_size_reestimation"
+                ]
+              }
+            },
+            "promisingZone": {
+              "t": "object",
+              "fields": {
+                "lower": {
+                  "t": "number",
+                  "min": 0,
+                  "max": 1,
+                  "unit": "conditional power",
+                  "req": true
+                },
+                "upper": {
+                  "t": "number",
+                  "min": 0,
+                  "max": 1,
+                  "unit": "conditional power",
+                  "req": true
+                }
+              },
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "sample_size_reestimation"
+                ]
+              }
+            },
+            "maxSampleSizeFactor": {
+              "t": "number",
+              "gt": 1,
+              "max": 10,
+              "default": 2,
+              "unit": "times the planned size",
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "sample_size_reestimation"
+                ]
+              }
+            },
+            "plannedSize": {
+              "t": "integer",
+              "min": 4,
+              "max": 1000000,
+              "unit": "patients, or events for a time-to-event endpoint",
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "sample_size_reestimation",
+                  "multi_arm_selection",
+                  "enrichment"
+                ]
+              }
+            },
+            "activeArms": {
+              "t": "integer",
+              "min": 2,
+              "max": 4,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "multi_arm_selection"
+                ]
+              },
+              "req": true
+            },
+            "selection": {
+              "t": "object",
+              "fields": {
+                "rule": {
+                  "t": "string",
+                  "values": [
+                    "best",
+                    "rbest",
+                    "epsilon",
+                    "all"
+                  ],
+                  "default": "best"
+                },
+                "r": {
+                  "t": "integer",
+                  "min": 1,
+                  "max": 3,
+                  "when": {
+                    "path": "design.selection.rule",
+                    "in": [
+                      "rbest"
+                    ]
+                  },
+                  "req": true
+                },
+                "epsilon": {
+                  "t": "number",
+                  "gt": 0,
+                  "max": 5,
+                  "when": {
+                    "path": "design.selection.rule",
+                    "in": [
+                      "epsilon"
+                    ]
+                  },
+                  "req": true
+                }
+              },
+              "when": [
+                {
+                  "path": "design.kind",
+                  "in": [
+                    "multi_arm_selection",
+                    "enrichment"
+                  ]
+                }
+              ]
+            },
+            "intersectionTest": {
+              "t": "string",
+              "values": [
+                "simes",
+                "bonferroni",
+                "dunnett"
+              ],
+              "default": "simes",
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "multi_arm_selection",
+                  "enrichment"
+                ]
+              }
+            },
+            "subsetPrevalence": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "enrichment"
+                ]
+              },
+              "req": true
+            }
+          },
+          "req": true
+        },
+        "endpoint": {
+          "t": "object",
+          "fields": {
+            "type": {
+              "t": "string",
+              "values": [
+                "continuous",
+                "binary",
+                "time_to_event"
+              ],
+              "badValueCode": "endpoint_unknown",
+              "req": true
+            }
+          },
+          "when": {
+            "path": "design.kind",
+            "notIn": [
+              "count_endpoint"
+            ]
+          },
+          "req": true
+        },
+        "hypothesis": {
+          "t": "object",
+          "fields": {
+            "kind": {
+              "t": "string",
+              "values": [
+                "superiority"
+              ]
+            },
+            "direction": {
+              "t": "string",
+              "values": [
+                "higher_better",
+                "lower_better"
+              ],
+              "req": true
+            }
+          },
+          "when": {
+            "path": "endpoint.type",
+            "in": [
+              "continuous",
+              "binary"
+            ]
+          },
+          "req": true
+        },
+        "truth": {
+          "t": "object",
+          "fields": {
+            "plannedEffect": {
+              "t": "number",
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "futility_group_sequential",
+                  "sample_size_reestimation"
+                ]
+              },
+              "req": true
+            },
+            "effects": {
+              "t": "array",
+              "items": {
+                "t": "number"
+              },
+              "min": 1,
+              "max": 8,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "sample_size_reestimation"
+                ]
+              }
+            },
+            "effectScenarios": {
+              "t": "array",
+              "items": {
+                "t": "array",
+                "items": {
+                  "t": "number"
+                },
+                "min": 2,
+                "max": 4
+              },
+              "min": 1,
+              "max": 8,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "multi_arm_selection"
+                ]
+              },
+              "req": true
+            },
+            "subsetEffects": {
+              "t": "array",
+              "items": {
+                "t": "object",
+                "fields": {
+                  "subset": {
+                    "t": "number",
+                    "req": true
+                  },
+                  "rest": {
+                    "t": "number",
+                    "req": true
+                  }
+                }
+              },
+              "min": 1,
+              "max": 8,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "enrichment"
+                ]
+              },
+              "req": true
+            },
+            "sd": {
+              "t": "number",
+              "gt": 0,
+              "default": 1,
+              "unit": "outcome units",
+              "when": [
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "continuous"
+                  ]
+                },
+                {
+                  "path": "design.kind",
+                  "notIn": [
+                    "count_endpoint"
+                  ]
+                }
+              ]
+            },
+            "controlRate": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "when": [
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "binary"
+                  ]
+                },
+                {
+                  "path": "design.kind",
+                  "notIn": [
+                    "count_endpoint"
+                  ]
+                }
+              ],
+              "req": true
+            },
+            "controlMedian": {
+              "t": "number",
+              "gt": 0,
+              "unit": "time units",
+              "when": [
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "time_to_event"
+                  ]
+                },
+                {
+                  "path": "design.kind",
+                  "in": [
+                    "futility_group_sequential",
+                    "sample_size_reestimation",
+                    "multi_arm_selection",
+                    "enrichment"
+                  ]
+                }
+              ],
+              "reqWhen": [
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "time_to_event"
+                  ]
+                },
+                {
+                  "path": "design.kind",
+                  "notIn": [
+                    "multi_arm_selection",
+                    "enrichment"
+                  ]
+                }
+              ]
+            },
+            "controlEventRate": {
+              "t": "number",
+              "gt": 0,
+              "unit": "events per patient per unit of exposure time",
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "count_endpoint"
+                ]
+              },
+              "req": true
+            },
+            "rateRatio": {
+              "t": "number",
+              "gt": 0,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "count_endpoint"
+                ]
+              },
+              "req": true
+            },
+            "overdispersion": {
+              "t": "number",
+              "min": 0,
+              "max": 20,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "count_endpoint"
+                ]
+              },
+              "req": true
+            },
+            "exposureTime": {
+              "t": "number",
+              "gt": 0,
+              "default": 1,
+              "unit": "unit of exposure time",
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "count_endpoint"
+                ]
+              }
+            }
+          },
+          "req": true
+        },
+        "analysis": {
+          "t": "object",
+          "fields": {
+            "alpha": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "default": 0.025,
+              "unit": "one-sided level"
+            },
+            "power": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "default": 0.9
+            }
+          }
+        },
+        "accrual": {
+          "t": "object",
+          "fields": {
+            "duration": {
+              "t": "number",
+              "min": 0,
+              "unit": "time units",
+              "req": true
+            },
+            "followup": {
+              "t": "number",
+              "min": 0,
+              "unit": "time units",
+              "req": true
+            },
+            "dropoutAnnual": {
+              "t": "number",
+              "min": 0,
+              "lt": 1,
+              "default": 0,
+              "unit": "proportion per year"
+            }
+          },
+          "when": [
+            {
+              "path": "endpoint.type",
+              "in": [
+                "time_to_event"
+              ]
+            },
+            {
+              "path": "design.kind",
+              "in": [
+                "futility_group_sequential",
+                "sample_size_reestimation",
+                "multi_arm_selection",
+                "enrichment"
+              ]
+            }
+          ]
+        },
+        "timeUnit": {
+          "t": "string",
+          "values": [
+            "days",
+            "weeks",
+            "months",
+            "years"
+          ],
+          "default": "months",
+          "when": [
+            {
+              "path": "endpoint.type",
+              "in": [
+                "time_to_event"
+              ]
+            },
+            {
+              "path": "design.kind",
+              "in": [
+                "futility_group_sequential",
+                "sample_size_reestimation",
+                "multi_arm_selection",
+                "enrichment"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "design.dose": {
+      "t": "object",
+      "fields": {
+        "design": {
+          "t": "object",
+          "fields": {
+            "kind": {
+              "t": "string",
+              "values": [
+                "three_plus_three",
+                "boin",
+                "keyboard",
+                "crm",
+                "randomized_selection"
+              ],
+              "badValueCode": "design_unknown",
+              "req": true
+            },
+            "compare": {
+              "t": "array",
+              "items": {
+                "t": "string",
+                "values": [
+                  "three_plus_three",
+                  "boin",
+                  "keyboard",
+                  "crm"
+                ]
+              },
+              "min": 1,
+              "max": 3,
+              "unique": true,
+              "when": {
+                "path": "design.kind",
+                "notIn": [
+                  "randomized_selection"
+                ]
+              }
+            },
+            "targetToxicity": {
+              "t": "number",
+              "min": 0.05,
+              "max": 0.6,
+              "default": 0.3,
+              "unit": "probability of a dose-limiting toxicity",
+              "when": {
+                "path": "design.kind",
+                "notIn": [
+                  "randomized_selection"
+                ]
+              }
+            },
+            "cohortSize": {
+              "t": "integer",
+              "min": 1,
+              "max": 6,
+              "default": 3,
+              "unit": "patients",
+              "when": {
+                "path": "design.kind",
+                "notIn": [
+                  "randomized_selection"
+                ]
+              }
+            },
+            "maxPatients": {
+              "t": "integer",
+              "min": 6,
+              "max": 200,
+              "default": 30,
+              "unit": "patients",
+              "when": {
+                "path": "design.kind",
+                "notIn": [
+                  "randomized_selection"
+                ]
+              }
+            },
+            "startDose": {
+              "t": "integer",
+              "min": 1,
+              "max": 10,
+              "default": 1,
+              "when": {
+                "path": "design.kind",
+                "notIn": [
+                  "randomized_selection"
+                ]
+              }
+            },
+            "boin": {
+              "t": "object",
+              "fields": {
+                "safeRate": {
+                  "t": "number",
+                  "gt": 0,
+                  "lt": 1,
+                  "unit": "toxicity rate deemed safe"
+                },
+                "toxicRate": {
+                  "t": "number",
+                  "gt": 0,
+                  "lt": 1,
+                  "unit": "toxicity rate deemed too toxic"
+                },
+                "eliminationCutoff": {
+                  "t": "number",
+                  "gt": 0.5,
+                  "lt": 1,
+                  "default": 0.95
+                }
+              },
+              "when": {
+                "path": "design.kind",
+                "notIn": [
+                  "randomized_selection"
+                ]
+              }
+            },
+            "keyboard": {
+              "t": "object",
+              "fields": {
+                "margin": {
+                  "t": "number",
+                  "gt": 0,
+                  "max": 0.2,
+                  "default": 0.05,
+                  "unit": "half the width of the target key"
+                },
+                "eliminationCutoff": {
+                  "t": "number",
+                  "gt": 0.5,
+                  "lt": 1,
+                  "default": 0.95
+                }
+              },
+              "when": {
+                "path": "design.kind",
+                "notIn": [
+                  "randomized_selection"
+                ]
+              }
+            },
+            "crm": {
+              "t": "object",
+              "fields": {
+                "skeleton": {
+                  "t": "array",
+                  "items": {
+                    "t": "number",
+                    "gt": 0,
+                    "lt": 1
+                  },
+                  "min": 2,
+                  "max": 10
+                },
+                "halfwidth": {
+                  "t": "number",
+                  "gt": 0,
+                  "max": 0.2,
+                  "default": 0.05
+                },
+                "priorVariance": {
+                  "t": "number",
+                  "gt": 0,
+                  "max": 20,
+                  "default": 1.34
+                },
+                "restrictEscalation": {
+                  "t": "boolean",
+                  "default": true
+                }
+              },
+              "when": {
+                "path": "design.kind",
+                "notIn": [
+                  "randomized_selection"
+                ]
+              }
+            },
+            "margin": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "unit": "response rate difference",
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "randomized_selection"
+                ]
+              },
+              "req": true
+            },
+            "perArm": {
+              "t": "integer",
+              "min": 2,
+              "max": 2000,
+              "unit": "patients per dose",
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "randomized_selection"
+                ]
+              }
+            },
+            "maxPerArm": {
+              "t": "integer",
+              "min": 4,
+              "max": 2000,
+              "default": 300,
+              "unit": "patients per dose",
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "randomized_selection"
+                ]
+              }
+            },
+            "targetProbability": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "default": 0.9,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "randomized_selection"
+                ]
+              }
+            }
+          },
+          "req": true
+        },
+        "truth": {
+          "t": "object",
+          "fields": {
+            "toxicity": {
+              "t": "array",
+              "items": {
+                "t": "number",
+                "gt": 0,
+                "lt": 1
+              },
+              "min": 2,
+              "max": 10,
+              "when": {
+                "path": "design.kind",
+                "notIn": [
+                  "randomized_selection"
+                ]
+              },
+              "req": true
+            },
+            "responseScenarios": {
+              "t": "array",
+              "items": {
+                "t": "array",
+                "items": {
+                  "t": "number",
+                  "gt": 0,
+                  "lt": 1
+                },
+                "min": 2,
+                "max": 3
+              },
+              "min": 1,
+              "max": 6,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "randomized_selection"
+                ]
+              },
+              "req": true
+            }
+          },
+          "req": true
+        }
+      }
+    },
+    "design.bayesian": {
+      "t": "object",
+      "fields": {
+        "design": {
+          "t": "object",
+          "fields": {
+            "kind": {
+              "t": "string",
+              "values": [
+                "bop2",
+                "predictive_monitoring",
+                "threshold_calibration"
+              ],
+              "badValueCode": "design_unknown",
+              "req": true
+            },
+            "maxN": {
+              "t": "integer",
+              "min": 10,
+              "max": 300,
+              "unit": "patients",
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "bop2",
+                  "predictive_monitoring"
+                ]
+              },
+              "req": true
+            },
+            "lookEvery": {
+              "t": "integer",
+              "min": 1,
+              "max": 300,
+              "default": 10,
+              "unit": "patients",
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "bop2",
+                  "predictive_monitoring"
+                ]
+              }
+            },
+            "prior": {
+              "t": "object",
+              "fields": {
+                "a": {
+                  "t": "number",
+                  "gt": 0,
+                  "max": 1000,
+                  "req": true
+                },
+                "b": {
+                  "t": "number",
+                  "gt": 0,
+                  "max": 1000,
+                  "req": true
+                }
+              },
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "bop2",
+                  "predictive_monitoring"
+                ]
+              }
+            },
+            "objective": {
+              "t": "string",
+              "values": [
+                "max_power",
+                "min_expected_n"
+              ],
+              "default": "max_power",
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "bop2",
+                  "predictive_monitoring"
+                ]
+              }
+            },
+            "bop2": {
+              "t": "object",
+              "fields": {
+                "lambda": {
+                  "t": "number",
+                  "gt": 0,
+                  "lt": 1
+                },
+                "gamma": {
+                  "t": "number",
+                  "gt": 0,
+                  "max": 10
+                },
+                "efficacyEta": {
+                  "t": "number",
+                  "gt": 0,
+                  "max": 10
+                }
+              },
+              "requires": {
+                "lambda": [
+                  "gamma"
+                ],
+                "gamma": [
+                  "lambda"
+                ]
+              },
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "bop2"
+                ]
+              }
+            },
+            "predictive": {
+              "t": "object",
+              "fields": {
+                "final": {
+                  "t": "number",
+                  "gt": 0,
+                  "lt": 1
+                },
+                "futility": {
+                  "t": "number",
+                  "gt": 0,
+                  "lt": 1,
+                  "default": 0.05
+                },
+                "efficacy": {
+                  "t": "number",
+                  "gt": 0,
+                  "lt": 1
+                }
+              },
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "predictive_monitoring"
+                ]
+              }
+            },
+            "nTreat": {
+              "t": "integer",
+              "min": 2,
+              "max": 600,
+              "unit": "patients",
+              "when": [
+                {
+                  "path": "design.kind",
+                  "in": [
+                    "threshold_calibration"
+                  ]
+                },
+                {
+                  "path": "endpoint.type",
+                  "notIn": [
+                    "time_to_event"
+                  ]
+                }
+              ],
+              "req": true
+            },
+            "nControl": {
+              "t": "integer",
+              "min": 2,
+              "max": 600,
+              "unit": "patients",
+              "when": [
+                {
+                  "path": "design.kind",
+                  "in": [
+                    "threshold_calibration"
+                  ]
+                },
+                {
+                  "path": "endpoint.type",
+                  "notIn": [
+                    "time_to_event"
+                  ]
+                }
+              ],
+              "req": true
+            },
+            "events": {
+              "t": "integer",
+              "min": 2,
+              "max": 100000,
+              "unit": "events",
+              "when": [
+                {
+                  "path": "design.kind",
+                  "in": [
+                    "threshold_calibration"
+                  ]
+                },
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "time_to_event"
+                  ]
+                }
+              ],
+              "req": true
+            },
+            "allocation": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "default": 0.5,
+              "when": [
+                {
+                  "path": "design.kind",
+                  "in": [
+                    "threshold_calibration"
+                  ]
+                },
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "time_to_event"
+                  ]
+                }
+              ]
+            },
+            "margin": {
+              "t": "number",
+              "min": -1,
+              "max": 1000,
+              "unit": "the effect the posterior must exceed: a difference, a risk difference, or a hazard ratio below which the treatment is better",
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "threshold_calibration"
+                ]
+              }
+            },
+            "threshold": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "threshold_calibration"
+                ]
+              }
+            },
+            "priorTreatment": {
+              "t": "object",
+              "fields": {
+                "a": {
+                  "t": "number",
+                  "gt": 0,
+                  "max": 1000,
+                  "req": true
+                },
+                "b": {
+                  "t": "number",
+                  "gt": 0,
+                  "max": 1000,
+                  "req": true
+                }
+              },
+              "when": [
+                {
+                  "path": "design.kind",
+                  "in": [
+                    "threshold_calibration"
+                  ]
+                },
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "binary"
+                  ]
+                }
+              ]
+            },
+            "priorControl": {
+              "t": "object",
+              "fields": {
+                "a": {
+                  "t": "number",
+                  "gt": 0,
+                  "max": 1000,
+                  "req": true
+                },
+                "b": {
+                  "t": "number",
+                  "gt": 0,
+                  "max": 1000,
+                  "req": true
+                }
+              },
+              "when": [
+                {
+                  "path": "design.kind",
+                  "in": [
+                    "threshold_calibration"
+                  ]
+                },
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "binary"
+                  ]
+                }
+              ]
+            },
+            "priorEffect": {
+              "t": "object",
+              "fields": {
+                "mean": {
+                  "t": "number",
+                  "req": true
+                },
+                "sd": {
+                  "t": "number",
+                  "gt": 0,
+                  "req": true
+                }
+              },
+              "when": [
+                {
+                  "path": "design.kind",
+                  "in": [
+                    "threshold_calibration"
+                  ]
+                },
+                {
+                  "path": "endpoint.type",
+                  "notIn": [
+                    "binary"
+                  ]
+                }
+              ]
+            }
+          },
+          "req": true
+        },
+        "endpoint": {
+          "t": "object",
+          "fields": {
+            "type": {
+              "t": "string",
+              "values": [
+                "continuous",
+                "binary",
+                "time_to_event"
+              ],
+              "badValueCode": "endpoint_unknown",
+              "req": true
+            }
+          },
+          "when": {
+            "path": "design.kind",
+            "in": [
+              "threshold_calibration"
+            ]
+          },
+          "req": true
+        },
+        "truth": {
+          "t": "object",
+          "fields": {
+            "nullRate": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "bop2",
+                  "predictive_monitoring"
+                ]
+              },
+              "req": true
+            },
+            "alternativeRate": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "bop2",
+                  "predictive_monitoring"
+                ]
+              },
+              "req": true
+            },
+            "sd": {
+              "t": "number",
+              "gt": 0,
+              "default": 1,
+              "unit": "outcome units",
+              "when": [
+                {
+                  "path": "design.kind",
+                  "in": [
+                    "threshold_calibration"
+                  ]
+                },
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "continuous"
+                  ]
+                }
+              ]
+            },
+            "effect": {
+              "t": "number",
+              "when": [
+                {
+                  "path": "design.kind",
+                  "in": [
+                    "threshold_calibration"
+                  ]
+                },
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "continuous"
+                  ]
+                }
+              ],
+              "req": true
+            },
+            "hazardRatio": {
+              "t": "number",
+              "gt": 0,
+              "when": [
+                {
+                  "path": "design.kind",
+                  "in": [
+                    "threshold_calibration"
+                  ]
+                },
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "time_to_event"
+                  ]
+                }
+              ],
+              "req": true
+            },
+            "controlRate": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "when": [
+                {
+                  "path": "design.kind",
+                  "in": [
+                    "threshold_calibration"
+                  ]
+                },
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "binary"
+                  ]
+                }
+              ],
+              "req": true
+            },
+            "treatmentRate": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "when": [
+                {
+                  "path": "design.kind",
+                  "in": [
+                    "threshold_calibration"
+                  ]
+                },
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "binary"
+                  ]
+                }
+              ],
+              "req": true
+            }
+          },
+          "req": true
+        },
+        "analysis": {
+          "t": "object",
+          "fields": {
+            "alpha": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "unit": "one-sided level"
+            },
+            "power": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "bop2",
+                  "predictive_monitoring"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "design.win_ratio": {
+      "t": "object",
+      "fields": {
+        "design": {
+          "t": "object",
+          "fields": {
+            "nTreat": {
+              "t": "integer",
+              "min": 10,
+              "max": 1500,
+              "unit": "patients",
+              "reqWhen": {
+                "path": "analysis.power",
+                "present": false
+              }
+            },
+            "nControl": {
+              "t": "integer",
+              "min": 10,
+              "max": 1500,
+              "unit": "patients",
+              "when": {
+                "path": "design.nTreat",
+                "present": true
+              }
+            },
+            "maxPerArm": {
+              "t": "integer",
+              "min": 10,
+              "max": 1500,
+              "default": 1000,
+              "unit": "patients per arm",
+              "when": {
+                "path": "analysis.power",
+                "present": true
+              }
+            },
+            "followup": {
+              "t": "number",
+              "gt": 0,
+              "unit": "time units",
+              "req": true
+            },
+            "dropoutAnnual": {
+              "t": "number",
+              "min": 0,
+              "lt": 1,
+              "default": 0,
+              "unit": "proportion per year"
+            }
+          },
+          "req": true
+        },
+        "truth": {
+          "t": "object",
+          "fields": {
+            "death": {
+              "t": "object",
+              "fields": {
+                "hazardRatio": {
+                  "t": "number",
+                  "gt": 0,
+                  "req": true
+                },
+                "controlMedian": {
+                  "t": "number",
+                  "gt": 0,
+                  "unit": "time units"
+                },
+                "controlRisk": {
+                  "t": "number",
+                  "gt": 0,
+                  "lt": 1,
+                  "unit": "proportion dying within the follow-up"
+                }
+              },
+              "exactlyOne": [
+                [
+                  "controlMedian",
+                  "controlRisk"
+                ]
+              ],
+              "req": true
+            },
+            "events": {
+              "t": "object",
+              "fields": {
+                "controlRate": {
+                  "t": "number",
+                  "gt": 0,
+                  "unit": "events per person per time unit",
+                  "req": true
+                },
+                "rateRatio": {
+                  "t": "number",
+                  "gt": 0,
+                  "req": true
+                },
+                "overdispersion": {
+                  "t": "number",
+                  "min": 0,
+                  "max": 5,
+                  "default": 1
+                }
+              }
+            },
+            "score": {
+              "t": "object",
+              "fields": {
+                "shift": {
+                  "t": "number",
+                  "unit": "score units, treatment minus control, higher is better",
+                  "req": true
+                },
+                "sd": {
+                  "t": "number",
+                  "gt": 0,
+                  "default": 1,
+                  "unit": "score units"
+                },
+                "threshold": {
+                  "t": "number",
+                  "min": 0,
+                  "default": 0,
+                  "unit": "score units"
+                }
+              }
+            },
+            "correlation": {
+              "t": "number",
+              "min": 0,
+              "max": 0.95,
+              "default": 0.3
+            }
+          },
+          "atLeastOne": [
+            [
+              "events",
+              "score"
+            ]
+          ],
+          "req": true
+        },
+        "analysis": {
+          "t": "object",
+          "fields": {
+            "alpha": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "default": 0.025
+            },
+            "sided": {
+              "t": "integer",
+              "min": 1,
+              "max": 2,
+              "default": 1
+            },
+            "power": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1
+            }
+          }
+        },
+        "timeUnit": {
+          "t": "string",
+          "values": [
+            "days",
+            "weeks",
+            "months",
+            "years"
+          ],
+          "default": "months"
         }
       }
     },
@@ -7175,6 +11863,7 @@
                 "logrank",
                 "rmst",
                 "maxcombo",
+                "modestly_weighted",
                 "exact_binomial",
                 "simon_boundary",
                 "stratified_risk_difference",
@@ -7254,6 +11943,18 @@
                 ]
               },
               "req": true
+            },
+            "sStar": {
+              "t": "number",
+              "gt": 0,
+              "max": 1,
+              "default": 0.5,
+              "when": {
+                "path": "analysis.method",
+                "in": [
+                  "modestly_weighted"
+                ]
+              }
             }
           },
           "reqWhen": {
@@ -7435,6 +12136,53 @@
             "in": [
               "time_to_event"
             ]
+          }
+        },
+        "hypothesis": {
+          "t": "object",
+          "fields": {
+            "kind": {
+              "t": "string",
+              "values": [
+                "superiority",
+                "non_inferiority"
+              ],
+              "req": true
+            },
+            "margin": {
+              "t": "number",
+              "gt": 0,
+              "unit": "the endpoint's own scale: outcome units, risk difference, or hazard ratio",
+              "when": {
+                "path": "hypothesis.kind",
+                "in": [
+                  "non_inferiority"
+                ]
+              },
+              "req": true
+            },
+            "direction": {
+              "t": "string",
+              "values": [
+                "higher_better",
+                "lower_better"
+              ],
+              "when": [
+                {
+                  "path": "hypothesis.kind",
+                  "in": [
+                    "non_inferiority"
+                  ]
+                },
+                {
+                  "path": "endpoint.type",
+                  "notIn": [
+                    "time_to_event"
+                  ]
+                }
+              ],
+              "req": true
+            }
           }
         },
         "performance": {
@@ -8886,6 +13634,29 @@
       ]
     }
   },
+  "confirmatorySupport": {
+    "futility_group_sequential": [
+      "continuous",
+      "binary",
+      "time_to_event"
+    ],
+    "sample_size_reestimation": [
+      "continuous",
+      "binary",
+      "time_to_event"
+    ],
+    "multi_arm_selection": [
+      "continuous",
+      "binary",
+      "time_to_event"
+    ],
+    "enrichment": [
+      "continuous",
+      "binary",
+      "time_to_event"
+    ],
+    "count_endpoint": []
+  },
   "rules": {
     "rowRule": {
       "ops": [
@@ -8969,7 +13740,20 @@
     "tipping_point",
     "prognostic_adjustment_comparator",
     "generate_patients_longitudinal",
-    "population_check"
+    "population_check",
+    "design_confirmatory",
+    "bias_analysis",
+    "stc_comparator",
+    "network_meta",
+    "dose_response_meta",
+    "effect_shrinkage",
+    "target_trial_emulation",
+    "design_dose",
+    "design_bayesian",
+    "design_win_ratio",
+    "borrowing_prior",
+    "train_prognostic_model",
+    "generate_progression"
   ],
   "endpointTypes": [
     "continuous",
@@ -8996,6 +13780,31 @@
     "obrien_fleming",
     "pocock"
   ],
+  "confirmatoryDesigns": [
+    "futility_group_sequential",
+    "sample_size_reestimation",
+    "multi_arm_selection",
+    "enrichment",
+    "count_endpoint"
+  ],
+  "confirmatorySpending": [
+    "obrien_fleming",
+    "pocock",
+    "hwang_shih_decani",
+    "kim_demets"
+  ],
+  "doseDesigns": [
+    "three_plus_three",
+    "boin",
+    "keyboard",
+    "crm",
+    "randomized_selection"
+  ],
+  "bayesianDesigns": [
+    "bop2",
+    "predictive_monitoring",
+    "threshold_calibration"
+  ],
   "notEstimableRules": [
     "entropy_balance_infeasible",
     "outside_common_support",
@@ -9006,6 +13815,11 @@
     "map_prior_conflict",
     "too_few_events",
     "nuisance_model_not_estimable",
+    "trimmed_population_too_small",
+    "no_eligible_person_trials",
+    "arm_without_person_trials",
+    "horizon_beyond_followup",
+    "outcome_model_not_estimable",
     "negative_controls_not_estimable",
     "primary_analysis_not_estimable",
     "data_tier_insufficient",
@@ -9085,6 +13899,619 @@
     "random_effects_hksj",
     "fixed_effect"
   ],
+  "heterogeneityPriors": {
+    "turner2015": {
+      "generic": [
+        -2.56,
+        1.74
+      ],
+      "priors": {
+        "all_cause_mortality": {
+          "pharmacological_vs_placebo": [
+            -3.95,
+            1.34
+          ],
+          "pharmacological_vs_pharmacological": [
+            -4.18,
+            1.41
+          ],
+          "non_pharmacological_vs_placebo": [
+            -4.17,
+            1.55
+          ],
+          "non_pharmacological_vs_pharmacological": [
+            -2.92,
+            1.02
+          ],
+          "non_pharmacological_vs_non_pharmacological": [
+            -3.5,
+            1.26
+          ]
+        },
+        "obstetric": {
+          "pharmacological_vs_placebo": [
+            -3.52,
+            1.74
+          ],
+          "pharmacological_vs_pharmacological": [
+            -3.75,
+            1.79
+          ],
+          "non_pharmacological_vs_placebo": [
+            -3.74,
+            1.91
+          ],
+          "non_pharmacological_vs_pharmacological": [
+            -2.49,
+            1.5
+          ],
+          "non_pharmacological_vs_non_pharmacological": [
+            -3.08,
+            1.68
+          ]
+        },
+        "cause_specific_mortality_or_morbidity": {
+          "pharmacological_vs_placebo": [
+            -3.71,
+            1.74
+          ],
+          "pharmacological_vs_pharmacological": [
+            -3.95,
+            1.79
+          ],
+          "non_pharmacological_vs_placebo": [
+            -3.93,
+            1.91
+          ],
+          "non_pharmacological_vs_pharmacological": [
+            -2.68,
+            1.51
+          ],
+          "non_pharmacological_vs_non_pharmacological": [
+            -3.27,
+            1.68
+          ]
+        },
+        "resource_use": {
+          "pharmacological_vs_placebo": [
+            -2.34,
+            1.74
+          ],
+          "pharmacological_vs_pharmacological": [
+            -2.58,
+            1.79
+          ],
+          "non_pharmacological_vs_placebo": [
+            -2.56,
+            1.91
+          ],
+          "non_pharmacological_vs_pharmacological": [
+            -1.31,
+            1.5
+          ],
+          "non_pharmacological_vs_non_pharmacological": [
+            -1.9,
+            1.68
+          ]
+        },
+        "surgical_device_success": {
+          "pharmacological_vs_placebo": [
+            -2.14,
+            1.74
+          ],
+          "pharmacological_vs_pharmacological": [
+            -2.37,
+            1.79
+          ],
+          "non_pharmacological_vs_placebo": [
+            -2.36,
+            1.91
+          ],
+          "non_pharmacological_vs_pharmacological": [
+            -1.11,
+            1.5
+          ],
+          "non_pharmacological_vs_non_pharmacological": [
+            -1.69,
+            1.68
+          ]
+        },
+        "withdrawals": {
+          "pharmacological_vs_placebo": [
+            -2.99,
+            1.74
+          ],
+          "pharmacological_vs_pharmacological": [
+            -3.23,
+            1.79
+          ],
+          "non_pharmacological_vs_placebo": [
+            -3.21,
+            1.91
+          ],
+          "non_pharmacological_vs_pharmacological": [
+            -1.96,
+            1.51
+          ],
+          "non_pharmacological_vs_non_pharmacological": [
+            -2.55,
+            1.68
+          ]
+        },
+        "structure_related": {
+          "pharmacological_vs_placebo": [
+            -2.71,
+            1.74
+          ],
+          "pharmacological_vs_pharmacological": [
+            -2.94,
+            1.79
+          ],
+          "non_pharmacological_vs_placebo": [
+            -2.93,
+            1.92
+          ],
+          "non_pharmacological_vs_pharmacological": [
+            -1.67,
+            1.51
+          ],
+          "non_pharmacological_vs_non_pharmacological": [
+            -2.26,
+            1.68
+          ]
+        },
+        "general_physical_health": {
+          "pharmacological_vs_placebo": [
+            -2.29,
+            1.53
+          ],
+          "pharmacological_vs_pharmacological": [
+            -2.53,
+            1.58
+          ],
+          "non_pharmacological_vs_placebo": [
+            -2.51,
+            1.72
+          ],
+          "non_pharmacological_vs_pharmacological": [
+            -1.26,
+            1.25
+          ],
+          "non_pharmacological_vs_non_pharmacological": [
+            -1.85,
+            1.46
+          ]
+        },
+        "adverse_events": {
+          "pharmacological_vs_placebo": [
+            -1.87,
+            1.52
+          ],
+          "pharmacological_vs_pharmacological": [
+            -2.1,
+            1.58
+          ],
+          "non_pharmacological_vs_placebo": [
+            -2.1,
+            1.71
+          ],
+          "non_pharmacological_vs_pharmacological": [
+            -0.84,
+            1.24
+          ],
+          "non_pharmacological_vs_non_pharmacological": [
+            -1.43,
+            1.45
+          ]
+        },
+        "infection_new_disease": {
+          "pharmacological_vs_placebo": [
+            -2.49,
+            1.52
+          ],
+          "pharmacological_vs_pharmacological": [
+            -2.73,
+            1.58
+          ],
+          "non_pharmacological_vs_placebo": [
+            -2.71,
+            1.71
+          ],
+          "non_pharmacological_vs_pharmacological": [
+            -1.46,
+            1.24
+          ],
+          "non_pharmacological_vs_non_pharmacological": [
+            -2.05,
+            1.45
+          ]
+        },
+        "signs_symptoms": {
+          "pharmacological_vs_placebo": [
+            -2.06,
+            1.51
+          ],
+          "pharmacological_vs_pharmacological": [
+            -2.29,
+            1.58
+          ],
+          "non_pharmacological_vs_placebo": [
+            -2.28,
+            1.71
+          ],
+          "non_pharmacological_vs_pharmacological": [
+            -1.03,
+            1.24
+          ],
+          "non_pharmacological_vs_non_pharmacological": [
+            -1.61,
+            1.45
+          ]
+        },
+        "pain": {
+          "pharmacological_vs_placebo": [
+            -1.83,
+            1.52
+          ],
+          "pharmacological_vs_pharmacological": [
+            -2.06,
+            1.58
+          ],
+          "non_pharmacological_vs_placebo": [
+            -2.05,
+            1.71
+          ],
+          "non_pharmacological_vs_pharmacological": [
+            -0.8,
+            1.25
+          ],
+          "non_pharmacological_vs_non_pharmacological": [
+            -1.38,
+            1.45
+          ]
+        },
+        "quality_of_life": {
+          "pharmacological_vs_placebo": [
+            -2.54,
+            1.54
+          ],
+          "pharmacological_vs_pharmacological": [
+            -2.78,
+            1.6
+          ],
+          "non_pharmacological_vs_placebo": [
+            -2.77,
+            1.73
+          ],
+          "non_pharmacological_vs_pharmacological": [
+            -1.51,
+            1.27
+          ],
+          "non_pharmacological_vs_non_pharmacological": [
+            -2.1,
+            1.47
+          ]
+        },
+        "mental_health": {
+          "pharmacological_vs_placebo": [
+            -2.12,
+            1.53
+          ],
+          "pharmacological_vs_pharmacological": [
+            -2.35,
+            1.6
+          ],
+          "non_pharmacological_vs_placebo": [
+            -2.34,
+            1.72
+          ],
+          "non_pharmacological_vs_pharmacological": [
+            -1.09,
+            1.27
+          ],
+          "non_pharmacological_vs_non_pharmacological": [
+            -1.67,
+            1.47
+          ]
+        },
+        "biological_markers": {
+          "pharmacological_vs_placebo": [
+            -1.77,
+            1.52
+          ],
+          "pharmacological_vs_pharmacological": [
+            -2,
+            1.58
+          ],
+          "non_pharmacological_vs_placebo": [
+            -1.99,
+            1.71
+          ],
+          "non_pharmacological_vs_pharmacological": [
+            -0.74,
+            1.24
+          ],
+          "non_pharmacological_vs_non_pharmacological": [
+            -1.33,
+            1.45
+          ]
+        },
+        "subjective_various": {
+          "pharmacological_vs_placebo": [
+            -2.7,
+            1.52
+          ],
+          "pharmacological_vs_pharmacological": [
+            -2.93,
+            1.58
+          ],
+          "non_pharmacological_vs_placebo": [
+            -2.92,
+            1.71
+          ],
+          "non_pharmacological_vs_pharmacological": [
+            -1.67,
+            1.25
+          ],
+          "non_pharmacological_vs_non_pharmacological": [
+            -2.26,
+            1.45
+          ]
+        }
+      }
+    },
+    "bartos2023": {
+      "priors": {
+        "log_odds_ratio": {
+          "kind": "inverse_gamma",
+          "shape": 1.77,
+          "scale": 0.55
+        },
+        "log_risk_ratio": {
+          "kind": "inverse_gamma",
+          "shape": 1.51,
+          "scale": 0.23
+        },
+        "risk_difference": {
+          "kind": "half_normal",
+          "scale": 0.1
+        },
+        "log_hazard_ratio": {
+          "kind": "inverse_gamma",
+          "shape": 2.42,
+          "scale": 0.3
+        }
+      }
+    }
+  },
+  "vanZwet2023": {
+    "source": {
+      "citation": "van Zwet E, Gelman A, Greenland S, Imbens G, Schwab S, Goodman SN. A New Look at P Values for Randomized Clinical Trials. NEJM Evidence 2023;3(1). doi:10.1056/EVIDoa2300003",
+      "place": "Table 1 (the mixture), Table 2 and Table 3 (the quantities derived from it, by P value)",
+      "data": "the z statistics of the primary efficacy outcome of 23,551 randomized trials of the Cochrane Database of Systematic Reviews",
+      "note": "the reference population is every kind of intervention and trial size in the database, so it can shrink a sponsor-run confirmatory trial more than it deserves"
+    },
+    "table2": [
+      {
+        "p": [
+          0.05,
+          1
+        ],
+        "proportion": 0.71,
+        "exaggeration": [
+          0.6,
+          1.2,
+          2.66
+        ],
+        "coverage": 0.97,
+        "correctSign": 0.71,
+        "replicate": 0.13
+      },
+      {
+        "p": [
+          0,
+          0.05
+        ],
+        "proportion": 0.29,
+        "exaggeration": [
+          1.02,
+          1.29,
+          1.92
+        ],
+        "coverage": 0.89,
+        "correctSign": 0.98,
+        "replicate": 0.6
+      }
+    ],
+    "table3": [
+      {
+        "p": [
+          0.9,
+          1
+        ],
+        "proportion": 0.06,
+        "exaggeration": [
+          0.06,
+          0.12,
+          0.29
+        ],
+        "coverage": 0.99,
+        "correctSign": 0.52,
+        "replicate": 0.06
+      },
+      {
+        "p": [
+          0.8,
+          0.9
+        ],
+        "proportion": 0.06,
+        "exaggeration": [
+          0.23,
+          0.41,
+          0.89
+        ],
+        "coverage": 0.99,
+        "correctSign": 0.55,
+        "replicate": 0.07
+      },
+      {
+        "p": [
+          0.7,
+          0.8
+        ],
+        "proportion": 0.06,
+        "exaggeration": [
+          0.39,
+          0.68,
+          1.47
+        ],
+        "coverage": 0.99,
+        "correctSign": 0.59,
+        "replicate": 0.07
+      },
+      {
+        "p": [
+          0.6,
+          0.7
+        ],
+        "proportion": 0.06,
+        "exaggeration": [
+          0.54,
+          0.95,
+          2.05
+        ],
+        "coverage": 0.99,
+        "correctSign": 0.63,
+        "replicate": 0.08
+      },
+      {
+        "p": [
+          0.5,
+          0.6
+        ],
+        "proportion": 0.06,
+        "exaggeration": [
+          0.67,
+          1.19,
+          2.55
+        ],
+        "coverage": 0.99,
+        "correctSign": 0.66,
+        "replicate": 0.1
+      },
+      {
+        "p": [
+          0.1,
+          0.5
+        ],
+        "proportion": 0.33,
+        "exaggeration": [
+          0.95,
+          1.67,
+          3.59
+        ],
+        "coverage": 0.97,
+        "correctSign": 0.79,
+        "replicate": 0.15
+      },
+      {
+        "p": [
+          0.05,
+          0.1
+        ],
+        "proportion": 0.07,
+        "exaggeration": [
+          1.06,
+          1.74,
+          3.51
+        ],
+        "coverage": 0.94,
+        "correctSign": 0.91,
+        "replicate": 0.26
+      },
+      {
+        "p": [
+          0.01,
+          0.05
+        ],
+        "proportion": 0.1,
+        "exaggeration": [
+          1.05,
+          1.56,
+          2.81
+        ],
+        "coverage": 0.9,
+        "correctSign": 0.95,
+        "replicate": 0.37
+      },
+      {
+        "p": [
+          0.005,
+          0.01
+        ],
+        "proportion": 0.03,
+        "exaggeration": [
+          1.04,
+          1.41,
+          2.25
+        ],
+        "coverage": 0.87,
+        "correctSign": 0.98,
+        "replicate": 0.48
+      },
+      {
+        "p": [
+          0.001,
+          0.005
+        ],
+        "proportion": 0.04,
+        "exaggeration": [
+          1.04,
+          1.35,
+          1.95
+        ],
+        "coverage": 0.87,
+        "correctSign": 0.99,
+        "replicate": 0.58
+      },
+      {
+        "p": [
+          0,
+          0.001
+        ],
+        "proportion": 0.11,
+        "exaggeration": [
+          1,
+          1.16,
+          1.44
+        ],
+        "coverage": 0.89,
+        "correctSign": 1,
+        "replicate": 0.86
+      }
+    ],
+    "mixture": {
+      "trials": 23551,
+      "proportion": [
+        0.32,
+        0.31,
+        0.3,
+        0.07
+      ],
+      "sdZ": [
+        1.17,
+        1.74,
+        2.38,
+        5.73
+      ],
+      "sdSnr": [
+        0.61,
+        1.42,
+        2.16,
+        5.64
+      ]
+    }
+  },
   "distributions": [
     "point",
     "normal",

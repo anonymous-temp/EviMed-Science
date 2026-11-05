@@ -195,6 +195,29 @@ test("read and write vocabularies are closed, and the filter fields are too", as
   }
 });
 
+test("a job's row calls its state `state` and the filter that picks jobs by it `status`: the near-miss is read as the word it means, and the answer says so (live check 2026-11-04)", async () => {
+  const { calls, handler } = fixture();
+  const ask = async (body) => { const res = response(); await handler(request("/internal/vcr/v1/read", body), res); return res; };
+  const state = await ask({ what: "jobs", filter: { state: "running", limit: 5 } });
+  assert.equal(state.status, 200, JSON.stringify(state.json()));
+  assert.deepEqual(calls.at(-1), ["read", "jobs", { status: "running", limit: 5 }], "the service reads the word it means");
+  assert.deepEqual(state.json().data.filterRead, [{ from: "state", as: "status" }]);
+  assert.match(state.json().data.note, /state 已按 status 读/);
+  // the word itself is not a near-miss: nothing is said
+  const plain = await ask({ what: "jobs", filter: { status: "succeeded" } });
+  assert.equal(plain.status, 200);
+  assert.deepEqual(calls.at(-1), ["read", "jobs", { status: "succeeded" }]);
+  assert.equal(plain.json().data.filterRead, undefined);
+  // a job state is one of the closed list; an unknown one is refused in words, and so is the filter on a read that has no states
+  for (const bad of [{ what: "jobs", filter: { status: "finished" } }, { what: "jobs", filter: { state: "done" } }, { what: "results", filter: { state: "running" } }]) {
+    const res = await ask(bad);
+    assert.deepEqual([res.status, res.json().code], [400, "vcr_read_filter_invalid"], JSON.stringify(bad));
+  }
+  // both written: the call's own `status` stands and `state` stays an unknown key
+  const both = await ask({ what: "jobs", filter: { state: "running", status: "queued" } });
+  assert.deepEqual([both.status, both.json().code], [400, "vcr_read_filter_invalid"]);
+});
+
 test("the registry search keys belong to what: candidates, are checked in words, and reach the service bounded (M1)", async () => {
   const { calls, handler } = fixture();
   const ask = async (body) => { const res = response(); await handler(request("/internal/vcr/v1/read", body), res); return res; };
@@ -653,6 +676,110 @@ test("D4: a batch reading starts with a selection and no scenario, and the answe
   const res = response();
   await none.handler(request("/internal/vcr/v1/simulate", { action: "start", kind: "match_extract" }), res);
   assert.equal(res.status, 503);
+});
+
+test("a network, a dose-response and a shrinkage start through the gateway, filed under the label the call gave them; a pooled reference for the spread is a table, never typed numbers", async () => {
+  /** @type {any[]} */
+  const queued = [];
+  const jobs = {
+    async enqueue(/** @type {any} */ input) { queued.push(input); return { job: { id: "job_n", state: "queued", progress: {} }, created: true }; },
+    async get() { return null; }, async cancel() { return { job: { id: "job_n", state: "canceled" }, canceled: true }; },
+  };
+  const { handler } = fixture({ jobs });
+  const start = async (/** @type {Record<string, any>} */ body) => { const res = response(); await handler(request("/internal/vcr/v1/simulate", { action: "start", ...body }), res); return res; };
+  const network = { label: "response", measure: "log_ratio", direction: "lower_better", studies: [
+    { studyId: "H1", contrasts: [{ treatment: "B", comparator: "A", effect: -0.3, se: 0.12 }] }, { studyId: "H2", contrasts: [{ treatment: "C", comparator: "B", effect: -0.15, se: 0.18 }] }] };
+  for (const [kind, scenario, subject] of /** @type {Array<[string, any, RegExp]>} */ ([
+    ["network_meta", network, /^nm:response:[0-9a-f]{10}$/],
+    ["effect_shrinkage", { label: "phase 2", scale: "log", values: [{ estimate: -0.4, se: 0.19 }] }, /^es:phase 2:[0-9a-f]{10}$/],
+    ["dose_response_meta", { studies: [{ studyId: "K1", type: "ir", rows: [{ dose: 0, effect: 0 }, { dose: 10, effect: 0.1, se: 0.1 }] }], model: { kind: "linear" } }, /^dr:default:[0-9a-f]{10}$/],
+  ])) {
+    const res = await start({ kind, scenario });
+    assert.equal(res.status, 200, `${kind}: ${res.body}`);
+    assert.equal(queued.at(-1).kind, kind);
+    assert.match(queued.at(-1).detail.subjectId, subject, `${kind} is filed under what it is about`);
+  }
+  // the pooled reference: a table kind reaches the pooling; a prior typed in is refused, and a number is never the run's
+  /** @type {any[]} */
+  const pooledCalls = [];
+  const pooling = fixture({ evidence: { async poolParameter(/** @type {any} */ input) { pooledCalls.push(input); return { status: "queued", jobs: [{ jobId: "job_p", status: "queued" }], refused: [] }; } } });
+  const call = async (/** @type {any} */ tauPrior) => { const res = response(); await pooling.handler(request("/internal/vcr/v1/simulate", { action: "start", kind: "pool_evidence", scenario: { parameter: "median_time", endpointKey: "pfs", tauPrior } }), res); return res; };
+  const pooled = await call({ kind: "turner_2015_generic" });
+  assert.equal(pooled.status, 200, pooled.body);
+  assert.deepEqual(pooledCalls.at(-1).tauPrior, { kind: "turner_2015_generic" });
+  const typed = await call({ kind: "log_normal", meanLog: -3, sdLog: 1 });
+  assert.equal(typed.status, 400, typed.body);
+  assert.match(typed.body, /先验来自文献里的表/);
+  assert.equal(pooledCalls.length, 1, "a prior typed in never reaches the pooling");
+});
+
+test("a design started in a conversation freezes which of its numbers the person typed; a conversation whose messages cannot be read freezes that, and a job outside a conversation freezes nothing (2026-11-04)", async () => {
+  /** @type {any[]} */
+  const queued = [];
+  const jobs = {
+    async enqueue(/** @type {any} */ input) { queued.push(input); return { job: { id: "job_s", state: "queued", progress: {} }, created: true }; },
+    async get() { return null; }, async cancel() { return { job: { id: "job_s", state: "canceled" }, canceled: true }; },
+  };
+  const made = fixture({ jobs });
+  made.vcr.store.taskContext = async (/** @type {any} */ origin) => ({ id: "std_task", userId: "u1", projectId: "prj_1", scope: "conversation", purpose: "task", conversationSessionId: origin.rootSessionId });
+  /** @type {string[]} */
+  const asked = [];
+  const handlerWith = (/** @type {() => Promise<string[] | null>} */ read) => createVcrGatewayHandler(config, runtimeManager, { vcr: made.vcr,
+    resolveInvocation: async () => ({ userId: "u1", projectId: "prj_1", runId: "run_1", rootSessionId: "sess_1", callId: "call_1" }),
+    readPersonMessages: async (_study, sessionId) => { asked.push(sessionId); return read(); } });
+  const start = async (/** @type {any} */ handler, /** @type {Record<string, any>} */ body) => {
+    const res = response();
+    await handler(request("/internal/vcr/v1/simulate", { action: "start", ...body }, { authorization: "Bearer token", "x-evimed-execution-context": "{}" }), res);
+    assert.equal(res.status, 200, res.body);
+    return queued.at(-1).detail.personStated;
+  };
+  const winRatio = { design: { nTreat: 250, followup: 24, dropoutAnnual: 0.05 }, truth: { death: { controlRisk: 0.15, hazardRatio: 0.75 }, score: { shift: 4, sd: 20 }, correlation: 0.3 } };
+  // the person said 24 months, 5% and a hazard ratio of 0.75; the model chose the rest
+  const said = await start(handlerWith(async () => ["心衰试验，随访 24 个月，年脱落率 5%，死亡风险比 0.75，三层比较要多少人？"]), { kind: "design_win_ratio", scenario: winRatio });
+  assert.deepEqual(asked.at(-1), "sess_1", "the conversation the call came from");
+  assert.deepEqual(said, { schema: 1, readable: true, paths: ["design.followup", "design.dropoutAnnual", "truth.death.hazardRatio"] }, "250, 0.15, 4, 20 and 0.3 are the model's");
+  // a conversation that cannot be read, or has no message of the person's: the strong word is never given on no evidence
+  for (const read of [async () => null, async () => [], async () => { throw new Error("ledger unreadable"); }]) {
+    assert.deepEqual(await start(handlerWith(/** @type {any} */ (read)), { kind: "design_win_ratio", scenario: winRatio }), { schema: 1, readable: false, paths: [] });
+  }
+  // a kind that is not a design is not asked, and a job started outside a conversation has no record (it reads as it read)
+  const network = { label: "response", measure: "log_ratio", direction: "lower_better", studies: [{ studyId: "H1", contrasts: [{ treatment: "B", comparator: "A", effect: -0.3, se: 0.12 }] }] };
+  const res = response();
+  await handlerWith(async () => ["effect -0.3"])(request("/internal/vcr/v1/simulate", { action: "start", kind: "network_meta", scenario: network }, { authorization: "Bearer token", "x-evimed-execution-context": "{}" }), res);
+  assert.equal(queued.at(-1).detail.personStated, undefined, "a network meta-analysis is not a design");
+  const outside = fixture({ jobs });
+  const plain = response();
+  await outside.handler(request("/internal/vcr/v1/simulate", { action: "start", kind: "design_win_ratio", scenario: winRatio }), plain);
+  assert.equal(queued.at(-1).detail.personStated, undefined, "no conversation, no messages, no record");
+});
+
+test("a dose-finding design and a Bayesian design start through the gateway, filed under what they are about", async () => {
+  /** @type {any[]} */
+  const queued = [];
+  const jobs = {
+    async enqueue(/** @type {any} */ input) { queued.push(input); return { job: { id: "job_d", state: "queued", progress: {} }, created: true }; },
+    async get() { return null; }, async cancel() { return { job: { id: "job_d", state: "canceled" }, canceled: true }; },
+  };
+  const { handler } = fixture({ jobs });
+  const start = async (/** @type {Record<string, any>} */ body) => { const res = response(); await handler(request("/internal/vcr/v1/simulate", { action: "start", ...body }), res); return res; };
+  const curve = [0.05, 0.1, 0.2, 0.3, 0.45, 0.6];
+  const first = await start({ kind: "design_dose", scenario: { design: { kind: "boin", compare: ["three_plus_three"] }, truth: { toxicity: curve } } });
+  assert.equal(first.status, 200, first.body);
+  assert.equal(queued.at(-1).kind, "design_dose");
+  assert.match(queued.at(-1).detail.subjectId, /^dose:boin\+three_plus_three:[0-9a-f]{10}$/);
+  const again = await start({ kind: "design_dose", scenario: { design: { kind: "three_plus_three", compare: ["boin"] }, truth: { toxicity: curve } } });
+  assert.equal(again.status, 200, again.body);
+  assert.equal(queued.at(-1).detail.subjectId, queued.at(-2).detail.subjectId, "the same two designs on the same curve are one question, whichever is asked about");
+  const bayes = await start({ kind: "design_bayesian", scenario: { design: { kind: "bop2", maxN: 40, lookEvery: 10 }, truth: { nullRate: 0.1, alternativeRate: 0.3 } } });
+  assert.equal(bayes.status, 200, bayes.body);
+  assert.match(queued.at(-1).detail.subjectId, /^bayes:bop2:[0-9a-f]{10}$/);
+  const winRatio = { design: { nTreat: 250, followup: 24 }, truth: { death: { controlRisk: 0.15, hazardRatio: 0.75 }, score: { shift: 4, sd: 20 } } };
+  const wr = await start({ kind: "design_win_ratio", scenario: winRatio });
+  assert.equal(wr.status, 200, wr.body);
+  assert.equal(queued.at(-1).kind, "design_win_ratio");
+  assert.match(queued.at(-1).detail.subjectId, /^wr:[0-9a-f]{10}$/);
+  await start({ kind: "design_win_ratio", scenario: { ...winRatio, design: { nTreat: 300, followup: 24 } } });
+  assert.notEqual(queued.at(-1).detail.subjectId, queued.at(-2).detail.subjectId, "another size is another question");
 });
 
 test("the comparator-effect kinds start through the gateway; a time-to-event MAIC names its comparator by a reconstruction result, never by rows", async () => {
@@ -1399,7 +1526,7 @@ test("a defect in the metadata no verdict reads costs that metadata, never the q
 });
 test('native model calculations require the exact immutable string model version',async()=>{
  const base=fixture();const seen=[];
- base.vcr.service.modelExecution=async(_user,_study,id,kind,scenario)=>{seen.push({id,kind,scenario});return{id,version:'1.0.0'};};
+ base.vcr.service.modelScenario=async(_user,_id,_kind,scenario)=>scenario;base.vcr.service.modelExecution=async(_user,_study,id,kind,scenario)=>{seen.push({id,kind,scenario});return{id,version:'1.0.0'};};
  base.vcr.store.trialScenarios=async()=>[DESIGN_A];
  const handler=createVcrGatewayHandler(config,runtimeManager,{vcr:base.vcr});
  const body={action:'start',kind:'design_simulation',scenario:{design:{kind:'two_arm_fixed'}},modelId:'mdl_source',modelVersion:'1.0.0'};
@@ -1695,4 +1822,37 @@ test("a unit the quotation does not print drops the unit and keeps the fact; a b
   // A number the quotation does not print is still refused whole.
   const invented = factWriter({ text });
   assert.equal((await invented.write(item({ variable: "hba1c", value: 7.9, unit: "%", surface: "7.9", quote: "HgbA1c 7.4 last month." }))).ok, false);
+});
+
+test("a write of several cards waits once for the second readings, and answers inside the gateway's budget with every card saved (review RF2 P1-6)", async () => {
+  const evidenceRow = (/** @type {string} */ id) => ({ id, parameter: "hazard_ratio", arm_role: "contrast", value: 0.62, ci_low: 0.48, ci_high: 0.95, value_source: "extracted", detail: {}, locator: { verification: "verified" } });
+  /** @type {any[]} */ const saved = [];
+  const evidenceStore = {
+    async citableEvidenceIds(/** @type {any} */ call) { return call.ids ?? ["ev1", "ev2", "ev3"]; },
+    async citableItemsById(/** @type {any} */ call) { return (call.ids ?? ["ev1", "ev2", "ev3"]).map(evidenceRow); },
+    async saveAssumption(/** @type {any} */ call) { saved.push(call); return { id: `a${saved.length}`, key: call.key, version: 1 }; },
+  };
+  /** @type {number[]} */ const waits = [];
+  // a second reading that is slow: it waits as long as it is allowed to, the documented worst case
+  const evidence = { async valueNotes(/** @type {any} */ call) {
+    waits.push(call.wait);
+    const limit = call.wait === true ? 5000 : Number(call.wait) || 0;
+    if (limit > 0) await new Promise((resolve) => setTimeout(resolve, limit));
+    return [];
+  } };
+  const { vcr } = fixture({ evidence, evidenceStore });
+  vcr.store.assumptions = async () => saved.map((call, at) => ({ id: `a${at + 1}`, key: call.key, version: 1, evidenceIds: [`ev${at + 1}`] }));
+  const budgetMs = 1200;
+  const handler = createVcrGatewayHandler(config, runtimeManager, { vcr, budgetMs });
+  const items = [1, 2, 3].map((n) => ({ key: `control_hr_${n}`, name: `对照风险比 ${n}`, parameter: "hazard_ratio", sourceKind: "external_evidence", evidenceIds: [`ev${n}`], effectRole: "realistic_expectation" }));
+  const res = response();
+  const started = Date.now();
+  await handler(request("/internal/vcr/v1/write", { what: "assumption", items }), res);
+  const took = Date.now() - started;
+  assert.equal(res.status, 200, res.body);
+  assert.equal(saved.length, 3, "every card is saved");
+  assert.ok(took < budgetMs, `the answer came in ${took} ms, inside the ${budgetMs} ms budget (three cards waited one after another would be three times the limit)`);
+  assert.equal(waits.length, 3);
+  assert.ok(waits[0] > 0 && waits[0] <= budgetMs / 2, "the first card may wait up to half the budget");
+  assert.ok(waits[1] < waits[0] && waits[2] <= waits[1], "and what it waited is gone from the next ones");
 });

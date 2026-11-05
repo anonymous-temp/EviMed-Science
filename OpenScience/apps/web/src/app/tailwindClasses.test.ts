@@ -47,6 +47,7 @@ const NOT_UTILITIES: Readonly<Record<string, string>> = {
   "not-offered": "an enum value (app/routes/FrontierEventPage.tsx)",
   "not-in": "a zone item's feedback kind (lib/evidenceTopicClient.ts)",
   "max-tokens": "a kernel turn-end kind (lib/researchObservation.ts)",
+  "self-adapting": "a word of an authored example label in vcrScenarioHelp.mjs that components/vcr/vcrMethodChoiceText.ts uses as a lookup key; the reader sees the Chinese label",
   "width:max-content": "CSS text written into a rendered Office document",
 };
 

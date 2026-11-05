@@ -423,9 +423,11 @@ test("the comparator-effect methods are appended, read patients, and every rule 
     assert.ok(VCR_PATIENT_LEVEL_JOB_KINDS.includes(kind), `${kind} reads patient-level rows`);
     // 1.2.0: the weighted balance is read, not a rule (owner decision 2026-11-01) and the E-value follows the estimate; 1.3.0: the enrolment-year
     // row when the field map has a time-zero date (D6). AIPW is at 1.2.0 for the same row; older results replay.
-    const version = { "comparator.weighted_cox": "1.3.0", "comparator.covariate_sets": "1.2.0", "comparator.aipw": "1.2.0", "comparator.maic_time_to_event": "1.1.0" };
+    // 1.4.0 (weighted Cox) and 1.3.0 (AIPW, which also takes a time-to-event outcome): propensity trimming (algorithm round C14, C8).
+    // 1.5.0 (weighted Cox) and 1.4.0 (AIPW): the imputation of missing covariates (algorithm round C7).
+    const version = { "comparator.weighted_cox": "1.5.0", "comparator.covariate_sets": "1.2.0", "comparator.aipw": "1.4.0", "comparator.maic_time_to_event": "1.1.0" };
     assert.equal(/** @type {any} */ (VCR_ENGINE_METHODS)[method].version, /** @type {Record<string, string>} */ (version)[method] ?? "1.0.0", method);
-    const older = { "1.2.0": ["1.0.0", "1.1.0"], "1.3.0": ["1.0.0", "1.1.0", "1.2.0"] }[/** @type {Record<string, string>} */ (version)[method]];
+    const older = { "1.2.0": ["1.0.0", "1.1.0"], "1.3.0": ["1.0.0", "1.1.0", "1.2.0"], "1.4.0": ["1.0.0", "1.1.0", "1.2.0", "1.3.0"], "1.5.0": ["1.0.0", "1.1.0", "1.2.0", "1.3.0", "1.4.0"] }[/** @type {Record<string, string>} */ (version)[method]];
     if (older) assert.deepEqual([.../** @type {any} */ (VCR_ENGINE_METHODS)[method].compatibleVersions], older, `${method}: older results replay`);
     assert.equal(/** @type {any} */ (VCR_ENGINE_METHODS)[method].modelTier, "data", method);
     assert.ok(/** @type {any} */ (VCR_ENGINE_METHODS)[method].crossChecks.length > 0, `${method} names what its numeric cases are held against`);
@@ -491,7 +493,11 @@ test("an AIPW job: one covariate set for both models or one for each, the weight
   assert.deepEqual(bad((j) => { j.scenario.propensityCovariates = ["age"]; delete j.scenario.covariates; }), ["scenario_field_missing@scenario.covariates"], "the outcome model has none");
   assert.deepEqual(bad((j) => { j.scenario.propensityCovariates = ["age"]; j.scenario.outcomeCovariates = ["age", "male"]; delete j.scenario.covariates; }), []);
   assert.deepEqual(bad((j) => { delete j.scenario.endpoint; }), ["scenario_field_missing@scenario.endpoint"]);
-  assert.deepEqual(bad((j) => { j.scenario.endpoint = { type: "time_to_event" }; }), ["endpoint_not_supported@scenario.endpoint.type"]);
+  // a time-to-event outcome is 1.3.0's (algorithm round C8): it was refused by name before, and now needs its horizon, takes its events from the events
+  // table and not from an outcome column, and is refused under an older label
+  assert.deepEqual(bad((j) => { j.scenario.endpoint = { type: "time_to_event" }; j.methodVersion = "1.3.0"; delete j.scenario.outcomeColumn; }), ["scenario_field_missing@scenario.tau"]);
+  assert.deepEqual(bad((j) => { j.scenario.endpoint = { type: "time_to_event" }; j.methodVersion = "1.3.0"; j.scenario.tau = 24; }), ["scenario_field_unknown@scenario.outcomeColumn"]);
+  assert.deepEqual(bad((j) => { j.scenario.endpoint = { type: "time_to_event" }; delete j.scenario.outcomeColumn; j.scenario.tau = 24; }), ["method_version_mismatch@methodVersion"], "a 1.0.0 job never had it");
   assert.deepEqual(bad((j) => { j.scenario.estimand = "ATE"; }), ["scenario_value_invalid@scenario.estimand"], "the effect in the trial's own population");
   assert.deepEqual(bad((j) => { j.scenario.weightColumn = "w"; }), ["scenario_field_unknown@scenario.weightColumn"]);
   assert.ok(VCR_NOT_ESTIMABLE_RULES.includes("nuisance_model_not_estimable"));

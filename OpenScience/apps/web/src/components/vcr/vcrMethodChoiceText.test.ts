@@ -18,20 +18,20 @@ function choices(node: Schema, path = ""): Choice[] {
 }
 it("covers all declared choices and authored examples of all preserved method-form choices", () => {
   const methods = Object.values(VCR_JOB_METHODS).filter(method => !method.startsWith("forecast.") && !method.startsWith("model.") && method !== "matching.extract");
-  expect(methods).toHaveLength(33);
+  expect(methods).toHaveLength(45);
   let count = 0; const values = new Set<string>();
   for (const method of methods) {
     for (const row of choices((VCR_SCENARIO_SCHEMAS as Record<string, unknown>)[method] as Schema)) {
       count += 1;
       for (const value of row.values) {
         values.add(value); const label = methodChoiceLabel(method, row.path, value);
-        expect(label, `${method}:${row.path}:${value}`).toMatch(/[\u3400-\u9fff]|O'Brien-Fleming|Pocock/);
+        expect(label, `${method}:${row.path}:${value}`).toMatch(/[\u3400-\u9fff]|O'Brien-Fleming|Pocock|^(3\+3|BOIN|Keyboard|CRM)$/);
         if (!["obrien_fleming", "pocock"].includes(value)) expect(label).not.toBe(value);
       }
     }
     for (const example of VCR_SCENARIO_EXAMPLES[method]) expect(methodExampleLabel(method, example.label), `${method}:${example.label}`).toMatch(/[\u3400-\u9fff]/);
   }
-  expect(count).toBe(130); expect(values.size).toBe(129); expect(methods.flatMap(method => VCR_SCENARIO_EXAMPLES[method])).toHaveLength(40);
+  expect(count).toBe(206); expect(values.size).toBe(226); expect(methods.flatMap(method => VCR_SCENARIO_EXAMPLES[method])).toHaveLength(87);
   for (const value of [...VCR_ROW_RULE_OPS, ...VCR_ROW_RULE_COMPARATORS]) expect(ruleChoiceLabel(value)).not.toBe(value);
   expect(Object.keys(VCR_LONGITUDINAL_METHODS)).toHaveLength(4);
 });

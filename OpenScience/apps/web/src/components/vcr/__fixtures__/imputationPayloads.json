@@ -1,0 +1,565 @@
+{
+  "propensity-binary": {
+    "question": "有缺失值的协变量，补齐之后结论还是这样吗？",
+    "sentence": "300 人里有 120 人（40%）至少缺一个协变量。只用完整病例会把他们丢掉；这里把缺失值补齐 10 次，每次在补齐的数据上重做同样的分析，再按 Rubin 规则合并，旁边是只用完整病例的结果。",
+    "assumption": "前提是缺失与否只取决于已经看到的协变量、治疗分组和结局（随机缺失）；如果缺失本身与没有看到的值有关，补齐的结果仍会有偏。",
+    "covariates": [
+      {
+        "name": "x1",
+        "missing": 73,
+        "share": "24.3%",
+        "method": "数值：取与它预测值最接近的几个人的实际值（预测均值匹配）"
+      },
+      {
+        "name": "x2",
+        "missing": 57,
+        "share": "19%",
+        "method": "0/1：按逻辑回归抽样"
+      }
+    ],
+    "rows": [
+      {
+        "key": "weighted_difference",
+        "label": "加权后的效应差",
+        "imputed": {
+          "value": -0.02823932,
+          "text": null,
+          "unit": null,
+          "source": "imputed",
+          "interval": {
+            "kind": "confidence",
+            "low": -0.165,
+            "high": 0.108,
+            "level": 95
+          },
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 3,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "completeCase": {
+          "value": -0.0335384,
+          "text": null,
+          "unit": null,
+          "source": "calculated",
+          "interval": {
+            "kind": "confidence",
+            "low": -0.199,
+            "high": 0.132,
+            "level": 95
+          },
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 3,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "agreement": "same",
+        "loss": "缺失造成的信息损失约 6.05%"
+      },
+      {
+        "key": "weighted_risk_ratio",
+        "label": "加权后的相对危险度（RR）",
+        "imputed": {
+          "value": 0.92525734,
+          "text": null,
+          "unit": null,
+          "source": "imputed",
+          "interval": {
+            "kind": "confidence",
+            "low": 0.632,
+            "high": 1.356,
+            "level": 95
+          },
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 3,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "completeCase": {
+          "value": 0.91335397,
+          "text": null,
+          "unit": null,
+          "source": "calculated",
+          "interval": {
+            "kind": "confidence",
+            "low": 0.588,
+            "high": 1.419,
+            "level": 95
+          },
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 3,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "agreement": "same",
+        "loss": "缺失造成的信息损失约 5.51%"
+      },
+      {
+        "key": "weighted_odds_ratio",
+        "label": "加权后的比值比（OR）",
+        "imputed": {
+          "value": 0.88505756,
+          "text": null,
+          "unit": null,
+          "source": "imputed",
+          "interval": {
+            "kind": "confidence",
+            "low": 0.49,
+            "high": 1.61,
+            "level": 95
+          },
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 2,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "completeCase": {
+          "value": 0.86596943,
+          "text": null,
+          "unit": null,
+          "source": "calculated",
+          "interval": {
+            "kind": "confidence",
+            "low": 0.42,
+            "high": 1.77,
+            "level": 95
+          },
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 2,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "agreement": "same",
+        "loss": "缺失造成的信息损失约 5.76%"
+      }
+    ],
+    "completeCase": {
+      "rows": 180,
+      "dropped": 120,
+      "sentence": "只用完整病例：剩 180 人，去掉 120 人。"
+    },
+    "budget": "区间按 Rubin 规则从每份补齐数据的自助法标准误合并而来；自助法的重抽样次数由 11 次计算分摊（每次 182 次），补齐的份数多不会让计算变慢。",
+    "stopped": null,
+    "few": "补齐的份数（10）少于有缺失的人所占的百分比（40），份数偏少，合并后的区间可能不稳；可以加到 40 份以上。",
+    "note": "平衡表、权重和生存曲线取自第一份补齐的数据。"
+  },
+  "cox-time-to-event": {
+    "question": "有缺失值的协变量，补齐之后结论还是这样吗？",
+    "sentence": "300 人里有 120 人（40%）至少缺一个协变量。只用完整病例会把他们丢掉；这里把缺失值补齐 3 次，每次在补齐的数据上重做同样的分析，再按 Rubin 规则合并，旁边是只用完整病例的结果。",
+    "assumption": "前提是缺失与否只取决于已经看到的协变量、治疗分组和结局（随机缺失）；如果缺失本身与没有看到的值有关，补齐的结果仍会有偏。",
+    "covariates": [
+      {
+        "name": "x1",
+        "missing": 73,
+        "share": "24.3%",
+        "method": "数值：取与它预测值最接近的几个人的实际值（预测均值匹配）"
+      },
+      {
+        "name": "x2",
+        "missing": 57,
+        "share": "19%",
+        "method": "0/1：按逻辑回归抽样"
+      }
+    ],
+    "rows": [
+      {
+        "key": "hazard_ratio",
+        "label": "风险比",
+        "imputed": {
+          "value": 0.83325561,
+          "text": null,
+          "unit": null,
+          "source": "imputed",
+          "interval": {
+            "kind": "confidence",
+            "low": 0.591,
+            "high": 1.175,
+            "level": 95
+          },
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 3,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "completeCase": {
+          "value": 0.69382152,
+          "text": null,
+          "unit": null,
+          "source": "calculated",
+          "interval": {
+            "kind": "confidence",
+            "low": 0.456,
+            "high": 1.056,
+            "level": 95
+          },
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 3,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "agreement": "same",
+        "loss": "缺失造成的信息损失约 5.32%"
+      },
+      {
+        "key": "rmst_difference",
+        "label": "RMST 差",
+        "imputed": {
+          "value": 0.83843018,
+          "text": null,
+          "unit": "个月",
+          "source": "imputed",
+          "interval": {
+            "kind": "confidence",
+            "low": -1.35,
+            "high": 3.03,
+            "level": 95
+          },
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 2,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "completeCase": {
+          "value": 1.92347715,
+          "text": null,
+          "unit": "个月",
+          "source": "calculated",
+          "interval": {
+            "kind": "confidence",
+            "low": -0.57,
+            "high": 4.41,
+            "level": 95
+          },
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 2,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "agreement": "same",
+        "loss": "缺失造成的信息损失约 3.64%"
+      },
+      {
+        "key": "rmst_treatment",
+        "label": "试验组 RMST",
+        "imputed": {
+          "value": 9.81734258,
+          "text": null,
+          "unit": "个月",
+          "source": "imputed",
+          "interval": {
+            "kind": "confidence",
+            "low": 8.6,
+            "high": 11.04,
+            "level": 95
+          },
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 2,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "completeCase": {
+          "value": 11.03428267,
+          "text": null,
+          "unit": "个月",
+          "source": "calculated",
+          "interval": {
+            "kind": "confidence",
+            "low": 9.52,
+            "high": 12.55,
+            "level": 95
+          },
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 2,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "agreement": "same",
+        "loss": "缺失造成的信息损失约 0%"
+      },
+      {
+        "key": "rmst_control",
+        "label": "对照组 RMST",
+        "imputed": {
+          "value": 8.9789124,
+          "text": null,
+          "unit": "个月",
+          "source": "imputed",
+          "interval": {
+            "kind": "confidence",
+            "low": 7.16,
+            "high": 10.8,
+            "level": 95
+          },
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 2,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "completeCase": {
+          "value": 9.11080553,
+          "text": null,
+          "unit": "个月",
+          "source": "calculated",
+          "interval": {
+            "kind": "confidence",
+            "low": 7.26,
+            "high": 10.96,
+            "level": 95
+          },
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 2,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "agreement": "same",
+        "loss": "缺失造成的信息损失约 5.04%"
+      },
+      {
+        "key": "survival_difference_at_tau",
+        "label": "τ 时的生存率差",
+        "imputed": {
+          "value": 13.70274754,
+          "text": null,
+          "unit": "%",
+          "source": "imputed",
+          "interval": {
+            "kind": "confidence",
+            "low": -0.465477,
+            "high": 27.870972,
+            "level": 95
+          },
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "completeCase": {
+          "value": 22.87223843,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": {
+            "kind": "confidence",
+            "low": 8.391,
+            "high": 37.353477,
+            "level": 95
+          },
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "agreement": "different",
+        "loss": "缺失造成的信息损失约 21.1%"
+      }
+    ],
+    "completeCase": {
+      "rows": 180,
+      "dropped": 120,
+      "sentence": "只用完整病例：剩 180 人，去掉 120 人。"
+    },
+    "budget": "区间按 Rubin 规则从每份补齐数据的自助法标准误合并而来；自助法的重抽样次数由 4 次计算分摊（每次 500 次），补齐的份数多不会让计算变慢。",
+    "stopped": null,
+    "few": "补齐的份数（3）少于有缺失的人所占的百分比（40），份数偏少，合并后的区间可能不稳；可以加到 40 份以上。",
+    "note": "平衡表、权重和生存曲线取自第一份补齐的数据。"
+  },
+  "propensity-stopped": {
+    "question": "有缺失值的协变量，补齐之后结论还是这样吗？",
+    "sentence": "300 人里有 120 人（40%）至少缺一个协变量。只用完整病例会把他们丢掉；这里把缺失值补齐 7 次，每次在补齐的数据上重做同样的分析，再按 Rubin 规则合并，旁边是只用完整病例的结果。",
+    "assumption": "前提是缺失与否只取决于已经看到的协变量、治疗分组和结局（随机缺失）；如果缺失本身与没有看到的值有关，补齐的结果仍会有偏。",
+    "covariates": [
+      {
+        "name": "x1",
+        "missing": 73,
+        "share": "24.3%",
+        "method": "数值：取与它预测值最接近的几个人的实际值（预测均值匹配）"
+      },
+      {
+        "name": "x2",
+        "missing": 57,
+        "share": "19%",
+        "method": "0/1：按逻辑回归抽样"
+      }
+    ],
+    "rows": [
+      {
+        "key": "weighted_difference",
+        "label": "加权后的效应差",
+        "imputed": {
+          "value": -0.02585788,
+          "text": null,
+          "unit": null,
+          "source": "imputed",
+          "interval": {
+            "kind": "confidence",
+            "low": -0.162,
+            "high": 0.11,
+            "level": 95
+          },
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 3,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "completeCase": {
+          "value": -0.0335384,
+          "text": null,
+          "unit": null,
+          "source": "calculated",
+          "interval": {
+            "kind": "confidence",
+            "low": -0.194,
+            "high": 0.127,
+            "level": 95
+          },
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 3,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "agreement": "same",
+        "loss": "缺失造成的信息损失约 5.21%"
+      },
+      {
+        "key": "weighted_risk_ratio",
+        "label": "加权后的相对危险度（RR）",
+        "imputed": {
+          "value": 0.93103582,
+          "text": null,
+          "unit": null,
+          "source": "imputed",
+          "interval": {
+            "kind": "confidence",
+            "low": 0.636,
+            "high": 1.364,
+            "level": 95
+          },
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 3,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "completeCase": {
+          "value": 0.91335397,
+          "text": null,
+          "unit": null,
+          "source": "calculated",
+          "interval": {
+            "kind": "confidence",
+            "low": 0.598,
+            "high": 1.395,
+            "level": 95
+          },
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 3,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "agreement": "same",
+        "loss": "缺失造成的信息损失约 4.89%"
+      },
+      {
+        "key": "weighted_odds_ratio",
+        "label": "加权后的比值比（OR）",
+        "imputed": {
+          "value": 0.89403394,
+          "text": null,
+          "unit": null,
+          "source": "imputed",
+          "interval": {
+            "kind": "confidence",
+            "low": 0.49,
+            "high": 1.62,
+            "level": 95
+          },
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 2,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "completeCase": {
+          "value": 0.86596943,
+          "text": null,
+          "unit": null,
+          "source": "calculated",
+          "interval": {
+            "kind": "confidence",
+            "low": 0.43,
+            "high": 1.73,
+            "level": 95
+          },
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 2,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "agreement": "same",
+        "loss": "缺失造成的信息损失约 5.02%"
+      }
+    ],
+    "completeCase": {
+      "rows": 180,
+      "dropped": 120,
+      "sentence": "只用完整病例：剩 180 人，去掉 120 人。"
+    },
+    "budget": "区间按 Rubin 规则从每份补齐数据的自助法标准误合并而来；自助法的重抽样次数由 15 次计算分摊（每次 134 次），补齐的份数多不会让计算变慢。",
+    "stopped": "计算时间用完了：只用了 7 份（计划 14 份）合并，区间比计划的粗。",
+    "few": "补齐的份数（14）少于有缺失的人所占的百分比（40），份数偏少，合并后的区间可能不稳；可以加到 40 份以上。",
+    "note": "平衡表、权重和生存曲线取自第一份补齐的数据。"
+  },
+  "none-missing": {
+    "question": "有缺失值的协变量，补齐之后结论还是这样吗？",
+    "sentence": "被分析的人里没有协变量缺失，所以没有做插补，分析照常进行。",
+    "assumption": null,
+    "covariates": [],
+    "rows": [],
+    "completeCase": null,
+    "budget": null,
+    "stopped": null,
+    "few": null
+  }
+}

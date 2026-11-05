@@ -755,7 +755,8 @@ jobs:
             apps/server/test/vcrEngineContract.integration.test.mjs \
             apps/server/test/vcrIntake.integration.test.mjs \
             apps/server/test/vcrKnowledgeEngine.integration.test.mjs \
-            apps/server/test/vcrModelScience.integration.test.mjs
+            apps/server/test/vcrModelScience.integration.test.mjs \
+            apps/server/test/vcrTrainedModel.integration.test.mjs
           NO_COLOR=1 node --test --test-reporter=spec --test-concurrency=1 \
             apps/server/test/resultReplayLifecycle.integration.test.mjs \
             2>&1 | tee "$RUNNER_TEMP/result-replay-five-paths.log"
@@ -1232,6 +1233,38 @@ jobs:
           fs.writeFileSync(path.join(process.env.RUNNER_TEMP, 'vcr-image-qualification.json'), JSON.stringify(report) + '\n');
           fs.appendFileSync(process.env.GITHUB_ENV, `OPEN_SCIENCE_VCR_ENGINE_IMAGE_ID=${inspected.Id}\n`);
           console.log(JSON.stringify({ image, imageId: inspected.Id, imageSize: inspected.Size, codeDigest, ready: true, moduleEnabled: false }));
+          JS
+
+      # (algorithm round G6, 2026-11-03) The lean image is the runtime the engine ships: it holds rpact and dosresmeta and nothing of the test lock.
+      # One confirmatory design (a sample-size re-estimation: rpact's simulation in batches) runs inside it through `service/run_job.R`, under
+      # the limits of the compose file (2 CPUs, 4 GB, 3 GiB of address space), offline and read-only, and the step fails on any result that is
+      # not a success. dosresmeta, the other runtime package of the algorithm round, is loaded in the same way.
+      - name: Run a confirmatory design inside the isolated VCR candidate image
+        run: |
+          dir="$RUNNER_TEMP/vcr-confirmatory"
+          rm -rf "$dir"; mkdir -p "$dir/in" "$dir/out"; chmod 0777 "$dir/out"
+          cat > "$dir/in/job.json" <<'JSON'
+          {"jobId": "job_ci_confirmatory", "studyId": "std_ci", "kind": "design_confirmatory", "method": "design.confirmatory", "methodVersion": "1.2.0",
+           "protocolVersion": 1, "seed": 20261103, "cpuSecondsLimit": 600, "cores": 2, "inputs": [{"kind": "assumption", "id": "asm_ci@1"}],
+           "scenario": {"design": {"kind": "sample_size_reestimation", "informationRates": [0.5, 1], "conditionalPower": 0.8, "maxSampleSizeFactor": 1.5},
+                        "hypothesis": {"direction": "higher_better"},
+                        "endpoint": {"type": "continuous"}, "truth": {"plannedEffect": 0.4, "effects": [0.3], "sd": 1}, "analysis": {"alpha": 0.025, "power": 0.9}}}
+          JSON
+          limits=(--rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges:true --pids-limit 128 --memory 4g --cpus 2 --tmpfs /tmp:size=512m,mode=1777)
+          # docker's --ulimit has no address-space type, so the shell sets the limit the service sets on a job (VCR_ENGINE_MEMORY_BYTES, 3 GiB in compose).
+          timeout 900 docker run "${limits[@]}" -v "$dir/in:/in:ro" -v "$dir/out:/out" --entrypoint sh "$EVIMED_VCR_ENGINE_IMAGE" -c 'ulimit -v 3145728; exec Rscript /opt/vcr-engine/service/run_job.R /in/job.json /out' || echo "run_job exited $?; the assertions below say why"
+          timeout 120 docker run "${limits[@]}" --entrypoint sh "$EVIMED_VCR_ENGINE_IMAGE" -c "ulimit -v 3145728; exec Rscript -e 'library(dosresmeta); cat(\"dosresmeta\", as.character(packageVersion(\"dosresmeta\")), \"\\n\")'"
+          DIR="$dir" node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          import fs from 'node:fs';
+          import path from 'node:path';
+          const result = JSON.parse(fs.readFileSync(path.join(process.env.DIR, 'out', 'result.json'), 'utf8'));
+          assert.equal(result.status, 'succeeded', JSON.stringify(result.diagnostics?.issues ?? result.status));
+          assert.equal(result.method, 'design.confirmatory');
+          assert.equal(result.conclusion, 'estimable');
+          assert.ok(result.measures.length > 0 && result.measures.every(measure => Number.isFinite(measure.value)));
+          assert.match(result.manifest.outputHash, /^[a-f0-9]{64}$/);
+          console.log(JSON.stringify({ status: result.status, cpuSeconds: result.manifest.cpuSeconds, replicates: result.replicates, measures: result.measures.length }));
           JS
 
       - name: Preserve isolated VCR candidate image qualification

@@ -1,4 +1,5 @@
 import { VcrScientificBasis } from "./VcrScientificBasis";
+import { VcrSplineFit } from "./VcrSplineFit";
 import type { ReactNode } from "react";
 import { getVcrMethodResult, type VcrJob } from "@/lib/vcrClient";
 import { Button } from "@/components/ui/Button";
@@ -17,7 +18,7 @@ import { engineIntervalForDisplay, intervalText } from "./vcrText";
 import { PartialResultNote, VcrTabSkeleton } from "./VcrStates";
 import { useVcrLoad, VcrTabError } from "./vcrTabKit";
 
-const measureNames: Record<string, string> = { fitted_median: "拟合生存中位时间", aic: "AIC", predicted_population_mean: "人群预测均值", predicted_outcome_sd: "预测结局标准差", mean_relative_score: "平均相对预后评分", hazard_ratio_robust: "风险比（稳健方差）", hazard_ratio_unadjusted: "未调整的风险比", hazard_ratio_ac_adjusted: "调整后的 A 对 C 风险比", hazard_ratio_ac_unadjusted: "未调整的 A 对 C 风险比", hazard_ratio_bc: "B 对 C 风险比", log_hazard_ratio_se_robust: "对数风险比的标准误（稳健）", log_hazard_ratio_se_bootstrap: "对数风险比的标准误（自助法）", ph_test_chisq: "等比例风险检验统计量", ph_test_p: "等比例风险检验 P 值", power: "把握度", type_one_error: "I 类错误", bias: "偏倚", coverage: "区间覆盖率", expected_sample_size: "期望样本量", sample_size: "样本量", generated_records: "生成记录", required_events: "所需事件数", hazard_ratio: "风险比", risk_ratio: "风险比值", odds_ratio: "优势比", e_value: "E-value", e_value_confidence_limit: "置信限 E-value", evalue: "E-value", evalue_estimate: "E-value", evalue_limit: "置信限 E-value", duration_months: "平均研究时长（月）", last_patient_in_months: "最后一例入组时间预测（月）", effective_sample_size: "有效样本量", cost: "成本" };
+const measureNames: Record<string, string> = { fitted_median: "拟合生存中位时间", aic: "AIC", restricted_mean_survival_time: "限制性平均生存时间（RMST）", survival_at_last_horizon: "最后一个时间点的生存率", predicted_population_mean: "人群预测均值", predicted_outcome_sd: "预测结局标准差", mean_relative_score: "平均相对预后评分", hazard_ratio_robust: "风险比（稳健方差）", hazard_ratio_unadjusted: "未调整的风险比", hazard_ratio_ac_adjusted: "调整后的 A 对 C 风险比", hazard_ratio_ac_unadjusted: "未调整的 A 对 C 风险比", hazard_ratio_bc: "B 对 C 风险比", log_hazard_ratio_se_robust: "对数风险比的标准误（稳健）", log_hazard_ratio_se_bootstrap: "对数风险比的标准误（自助法）", ph_test_chisq: "等比例风险检验统计量", ph_test_p: "等比例风险检验 P 值", power: "把握度", type_one_error: "I 类错误", bias: "偏倚", coverage: "区间覆盖率", expected_sample_size: "期望样本量", sample_size: "样本量", generated_records: "生成记录", required_events: "所需事件数", hazard_ratio: "风险比", risk_ratio: "风险比值", odds_ratio: "优势比", e_value: "E-value", e_value_confidence_limit: "置信限 E-value", evalue: "E-value", evalue_estimate: "E-value", evalue_limit: "置信限 E-value", duration_months: "平均研究时长（月）", last_patient_in_months: "最后一例入组时间预测（月）", effective_sample_size: "有效样本量", cost: "成本" };
 function measureLabel(row: { name: string; label?: string }, method = "") {
   if (method === "accrual.poisson_gamma" && row.name === "duration_months") return "最后一例入组时间预测（月，历史结果）";
   return row.label && row.label !== row.name ? row.label : measureNames[row.name] ?? row.name;
@@ -36,6 +37,7 @@ export function VcrMethodResult({ studyId, job, continuation }: { studyId: strin
     <div className="flex flex-wrap items-center gap-2"><ConclusionChip state={result.conclusion} /><span className="text-caption text-text-3">本次运行的保留结果</span></div>
     {(job.error?.partial || ["failed", "canceled"].includes(job.state)) && <PartialResultNote sentence="这次运行没有完整结束，下面保留已经得到的结果。" />}{continuation && (job.error?.partial || ["failed", "canceled"].includes(job.state)) && continuation}
     {state.data.computationBasis && <VcrScientificBasis basis={state.data.computationBasis} />}
+    <VcrSplineFit block={state.data.splineFit} />
     {longitudinalCounts && <DataTable label="纵向模拟人数与记录" rows={[{ label: "生成个体人数", value: longitudinalCounts.persons }, { label: "纵向记录条数", value: longitudinalCounts.observations }]} rowKey={row => row.label} columns={[{ key: "label", header: "类别", rowHeader: true, cell: row => row.label }, { key: "value", header: "数量", cell: row => row.value }]} />}
     {measures.length > 0 && <DataTable label="本次计算指标" columns={[
       { key: "name", header: "指标", rowHeader: true, cell: row => measureLabel(row, execution?.method) },

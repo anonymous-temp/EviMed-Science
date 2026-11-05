@@ -22,6 +22,10 @@
       "version": "0.1-6"
     },
     {
+      "package": "bayesmeta",
+      "version": "3.5"
+    },
+    {
       "package": "bayesplot",
       "version": "1.16.0"
     },
@@ -42,8 +46,32 @@
       "version": "0.3.1"
     },
     {
+      "package": "bit",
+      "version": "4.6.0"
+    },
+    {
+      "package": "bit64",
+      "version": "4.8.6"
+    },
+    {
       "package": "bitops",
       "version": "1.1-0"
+    },
+    {
+      "package": "bmp",
+      "version": "0.3.1"
+    },
+    {
+      "package": "BOIN",
+      "version": "2.7.2"
+    },
+    {
+      "package": "BOP2FE",
+      "version": "1.0.3"
+    },
+    {
+      "package": "broom",
+      "version": "1.0.13"
     },
     {
       "package": "bslib",
@@ -62,12 +90,32 @@
       "version": "2.3.4"
     },
     {
+      "package": "clipr",
+      "version": "0.8.1"
+    },
+    {
       "package": "cobalt",
       "version": "5.0.0"
     },
     {
+      "package": "colorspace",
+      "version": "2.1-3"
+    },
+    {
       "package": "commonmark",
       "version": "2.0.0"
+    },
+    {
+      "package": "CompQuadForm",
+      "version": "1.4.4"
+    },
+    {
+      "package": "corpcor",
+      "version": "1.6.10"
+    },
+    {
+      "package": "crayon",
+      "version": "1.5.3"
     },
     {
       "package": "curl",
@@ -78,6 +126,10 @@
       "version": "1.18.6.1"
     },
     {
+      "package": "DBI",
+      "version": "1.3.0"
+    },
+    {
       "package": "desc",
       "version": "1.4.3"
     },
@@ -86,16 +138,24 @@
       "version": "1.42"
     },
     {
+      "package": "dfcrm",
+      "version": "0.2-2.1"
+    },
+    {
       "package": "distributional",
       "version": "0.9.0"
+    },
+    {
+      "package": "doFuture",
+      "version": "1.3.0"
     },
     {
       "package": "dplyr",
       "version": "1.2.1"
     },
     {
-      "package": "evaluate",
-      "version": "1.0.5"
+      "package": "duckdb",
+      "version": "1.5.5"
     },
     {
       "package": "EValue",
@@ -118,8 +178,20 @@
       "version": "0.5.3"
     },
     {
+      "package": "foreach",
+      "version": "1.5.2"
+    },
+    {
+      "package": "forestplot",
+      "version": "3.2.0"
+    },
+    {
       "package": "Formula",
       "version": "1.2-6"
+    },
+    {
+      "package": "formula.tools",
+      "version": "1.7.1"
     },
     {
       "package": "fs",
@@ -134,8 +206,16 @@
       "version": "3.3.3"
     },
     {
+      "package": "ggrepel",
+      "version": "0.9.8"
+    },
+    {
       "package": "ggridges",
       "version": "0.5.7"
+    },
+    {
+      "package": "glmnet",
+      "version": "5.1"
     },
     {
       "package": "gridExtra",
@@ -146,12 +226,24 @@
       "version": "3.11.0"
     },
     {
+      "package": "gsDesign2",
+      "version": "1.2.0"
+    },
+    {
       "package": "gt",
       "version": "1.3.0"
     },
     {
-      "package": "highr",
-      "version": "0.12"
+      "package": "haven",
+      "version": "2.5.5"
+    },
+    {
+      "package": "hce",
+      "version": "0.9.4"
+    },
+    {
+      "package": "hms",
+      "version": "1.1.4"
     },
     {
       "package": "htmltools",
@@ -162,8 +254,32 @@
       "version": "1.6.4"
     },
     {
+      "package": "igraph",
+      "version": "2.3.3"
+    },
+    {
       "package": "inline",
       "version": "0.3.21"
+    },
+    {
+      "package": "IPDfromKM",
+      "version": "0.1.10"
+    },
+    {
+      "package": "Iso",
+      "version": "0.0-21"
+    },
+    {
+      "package": "iterators",
+      "version": "1.0.14"
+    },
+    {
+      "package": "jomo",
+      "version": "2.7-6"
+    },
+    {
+      "package": "jpeg",
+      "version": "0.1-11"
     },
     {
       "package": "jquerylib",
@@ -174,12 +290,20 @@
       "version": "0.1.0"
     },
     {
-      "package": "knitr",
-      "version": "1.52"
+      "package": "Keyboard",
+      "version": "0.1.3"
     },
     {
       "package": "litedown",
       "version": "0.11"
+    },
+    {
+      "package": "lme4",
+      "version": "2.0-6"
+    },
+    {
+      "package": "lmtest",
+      "version": "0.9-40"
     },
     {
       "package": "loo",
@@ -188,6 +312,14 @@
     {
       "package": "lsoda",
       "version": "1.2"
+    },
+    {
+      "package": "lt",
+      "version": "0.4"
+    },
+    {
+      "package": "magic",
+      "version": "1.6-1-1"
     },
     {
       "package": "markdown",
@@ -206,6 +338,14 @@
       "version": "2.0.1"
     },
     {
+      "package": "meta",
+      "version": "8.5-0"
+    },
+    {
+      "package": "metabook",
+      "version": "0.2-0"
+    },
+    {
       "package": "metadat",
       "version": "1.6-0"
     },
@@ -218,8 +358,24 @@
       "version": "2.1.2"
     },
     {
+      "package": "Metrics",
+      "version": "0.1.4"
+    },
+    {
+      "package": "mice",
+      "version": "3.19.0"
+    },
+    {
       "package": "mime",
       "version": "0.13"
+    },
+    {
+      "package": "minqa",
+      "version": "1.2.8"
+    },
+    {
+      "package": "mitml",
+      "version": "0.4-5"
     },
     {
       "package": "mstate",
@@ -230,8 +386,36 @@
       "version": "1.2.6.5"
     },
     {
+      "package": "netmeta",
+      "version": "3.7-0"
+    },
+    {
+      "package": "nloptr",
+      "version": "2.2.1"
+    },
+    {
+      "package": "npsurvSS",
+      "version": "1.1.0"
+    },
+    {
+      "package": "operator.tools",
+      "version": "1.6.3.1"
+    },
+    {
+      "package": "ordinal",
+      "version": "2026.7-26"
+    },
+    {
       "package": "otel",
       "version": "0.2.0"
+    },
+    {
+      "package": "pan",
+      "version": "2.0"
+    },
+    {
+      "package": "patchwork",
+      "version": "1.3.2"
     },
     {
       "package": "pbapply",
@@ -242,12 +426,24 @@
       "version": "1.4.8"
     },
     {
+      "package": "png",
+      "version": "0.1-9"
+    },
+    {
       "package": "posterior",
       "version": "1.7.0"
     },
     {
+      "package": "prettyunits",
+      "version": "1.2.0"
+    },
+    {
       "package": "processx",
       "version": "3.9.0"
+    },
+    {
+      "package": "progress",
+      "version": "1.2.3"
     },
     {
       "package": "ps",
@@ -302,6 +498,18 @@
       "version": "0.6.1"
     },
     {
+      "package": "readbitmap",
+      "version": "0.1.5"
+    },
+    {
+      "package": "readr",
+      "version": "2.2.0"
+    },
+    {
+      "package": "reformulas",
+      "version": "0.4.4"
+    },
+    {
       "package": "reshape2",
       "version": "1.4.5"
     },
@@ -310,8 +518,8 @@
       "version": "2.32"
     },
     {
-      "package": "rpact",
-      "version": "4.4.0"
+      "package": "rsimsum",
+      "version": "0.13.1"
     },
     {
       "package": "rstan",
@@ -326,12 +534,28 @@
       "version": "1.7.1"
     },
     {
+      "package": "SAMprior",
+      "version": "3.0.0"
+    },
+    {
       "package": "sass",
       "version": "0.4.10"
     },
     {
+      "package": "sensemakr",
+      "version": "0.1.6"
+    },
+    {
+      "package": "shape",
+      "version": "1.4.6.1"
+    },
+    {
       "package": "simsurv",
       "version": "1.0.1"
+    },
+    {
+      "package": "simtrial",
+      "version": "1.1.0"
     },
     {
       "package": "StanHeaders",
@@ -358,20 +582,40 @@
       "version": "1.2.1"
     },
     {
+      "package": "tiff",
+      "version": "0.1-12"
+    },
+    {
       "package": "tinytex",
       "version": "0.61"
+    },
+    {
+      "package": "tipr",
+      "version": "1.0.2"
+    },
+    {
+      "package": "TrialEmulation",
+      "version": "0.0.5"
+    },
+    {
+      "package": "tzdb",
+      "version": "0.5.0"
+    },
+    {
+      "package": "ucminf",
+      "version": "1.2.3"
     },
     {
       "package": "V8",
       "version": "8.2.0"
     },
     {
-      "package": "WeightIt",
-      "version": "2.0.0"
+      "package": "vroom",
+      "version": "1.7.1"
     },
     {
-      "package": "xfun",
-      "version": "0.61"
+      "package": "WeightIt",
+      "version": "2.0.0"
     },
     {
       "package": "xml2",
@@ -380,10 +624,6 @@
     {
       "package": "xtable",
       "version": "1.8-8"
-    },
-    {
-      "package": "yaml",
-      "version": "2.3.12"
     }
   ]
 }

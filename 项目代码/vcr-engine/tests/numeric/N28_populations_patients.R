@@ -256,3 +256,55 @@ vcr_case("N28g", c("AC-04", "AC-11"), function() {
                         s_none$diagnostics$correlationVerification %||% "NULL", s_given$diagnostics$correlationVerification %||% "NULL",
                         none$diagnostics$parameterDraws %||% "NULL", s_none$diagnostics$parameterDraws %||% "NULL"))
 })
+
+vcr_case("N28h", c("AC-11", "AC-30"), function() {
+  # The time-to-event generator against simsurv::simsurv (Brilleman et al. 2021) at the SAME parameters: two samples drawn
+  # independently, so the engine's job and the package must agree within their joint Monte Carlo error, which is the check that
+  # the engine's inversion samples the distribution a reader would write down (Weibull h(t) = k * lambda * t^(k-1) with
+  # lambda = scale^-k, a proportional-hazards multiplier on the treated arm, administrative censoring at the follow-up). Two
+  # scenarios -- a Weibull control with a hazard ratio of 0.6, an exponential one stated by its median with a hazard ratio of 0.75
+  # -- each at 6,000 per arm: the Kaplan-Meier survival of each arm at four times (difference over the root of the summed squared
+  # standard errors), the Cox log hazard ratio of each sample, and the closed-form truth S(t) = exp(-lambda t^k HR^arm) that both
+  # samples are held to as well. The package is the check only; R/*.R never calls it. Piecewise hazards are not covered here
+  # (simsurv has no piecewise-exponential family): their truth is N28c's regression on the output table.
+  if (!requireNamespace("simsurv", quietly = TRUE)) stop("N28h requires the locked simsurv library")
+  suppressMessages(library(survival))
+  n <- 6000L; fu <- 14; times <- c(3, 6, 9, 12)
+  km_at <- function(d, arm) {
+    s <- summary(survival::survfit(survival::Surv(time, status) ~ 1, d[d$arm == arm, ]), times = times, extend = TRUE)
+    list(s = s$surv, se = s$std.err)
+  }
+  scenarios <- list(
+    weibull = list(truth = list(hazardRatio = 0.6, controlDistribution = list(kind = "weibull", shape = 1.5, scale = 10)),
+                   lambda = 10^-1.5, gamma = 1.5, dist = "weibull", hr = 0.6, seed = 2841L),
+    exponential = list(truth = list(hazardRatio = 0.75, controlMedian = 8), lambda = log(2) / 8, gamma = 1, dist = "exponential", hr = 0.75, seed = 2842L))
+  dir <- tempfile("n28h"); dir.create(dir)
+  rows <- lapply(names(scenarios), function(nm) {
+    s <- scenarios[[nm]]
+    job <- vcr_test_run(vcr_test_job("patients.time_to_event", list(design = list(nTreat = n, nControl = n), endpoint = list(type = "time_to_event"), truth = s$truth,
+                                                                     accrual = list(kind = "uniform", duration = 0, followup = fu)), seed = s$seed, job_id = paste0("job_n28h_", nm)), output_dir = dir)
+    eng <- vcr_test_table(job, "virtual-patients", dir)
+    set.seed(s$seed + 1000L, kind = VCR_RNG_KIND)
+    sim <- simsurv::simsurv(dist = s$dist, lambdas = s$lambda, gammas = if (s$dist == "weibull") s$gamma else NULL,
+                            x = data.frame(arm = rep(c(0, 1), each = n)), betas = c(arm = log(s$hr)), maxt = fu)
+    pkg <- data.frame(arm = rep(c(0L, 1L), each = n), time = sim$eventtime, status = sim$status)
+    z <- unlist(lapply(c(0L, 1L), function(arm) {
+      a <- km_at(eng, arm); b <- km_at(pkg, arm)
+      truth <- exp(-s$lambda * times^s$gamma * (if (arm == 1L) s$hr else 1))
+      c((a$s - b$s) / sqrt(a$se^2 + b$se^2), (a$s - truth) / a$se, (b$s - truth) / b$se)
+    }))
+    cx <- function(d) summary(survival::coxph(survival::Surv(time, status) ~ arm, d))$coefficients[1, c(1, 3)]
+    ce <- cx(eng); cp <- cx(pkg)
+    list(job = job, z_surv = z, z_hr = unname((ce[1] - cp[1]) / sqrt(ce[2]^2 + cp[2]^2)), loghr = c(engine = unname(ce[1]), simsurv = unname(cp[1]), truth = log(s$hr)),
+         events = c(sum(eng$status), sum(pkg$status)))
+  })
+  unlink(dir, recursive = TRUE)
+  names(rows) <- names(scenarios)
+  worst <- max(unlist(lapply(rows, function(r) abs(c(r$z_surv, r$z_hr)))))
+  ok <- all(vapply(rows, function(r) identical(r$job$status, "succeeded"), logical(1))) && worst <= 4
+  list(pass = ok,
+       detail = sprintf("engine job vs simsurv at the same parameters, %d per arm, follow-up %g: Weibull (shape 1.5, scale 10, HR 0.6) log HR %.4f vs %.4f (truth %.4f, difference %.2f SE), events %d vs %d; exponential (median 8, HR 0.75) log HR %.4f vs %.4f (truth %.4f, difference %.2f SE), events %d vs %d; survival at t = %s in both arms, engine vs package and each vs the closed form, worst %.2f SE (tol 4)",
+                        n, fu, rows$weibull$loghr[["engine"]], rows$weibull$loghr[["simsurv"]], rows$weibull$loghr[["truth"]], rows$weibull$z_hr, rows$weibull$events[1], rows$weibull$events[2],
+                        rows$exponential$loghr[["engine"]], rows$exponential$loghr[["simsurv"]], rows$exponential$loghr[["truth"]], rows$exponential$z_hr, rows$exponential$events[1], rows$exponential$events[2],
+                        paste(times, collapse = "/"), worst))
+})

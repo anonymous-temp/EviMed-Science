@@ -1,0 +1,232 @@
+{
+ "stc-anchored": {
+  "question": "放到对方试验的人群上，我们的治疗和对方的治疗相比，差多少？",
+  "sentence": "把我们的试验数据放到对方试验的人群上，算出我们的治疗相对共同对照的效应，再减去对方的治疗相对共同对照的效应；这个估计针对的是对方试验的人群，那个人群只有汇总数。",
+  "anchored": true,
+  "scale": "对数比值比（log OR）",
+  "estimate": {
+   "value": 0.01004435,
+   "text": null,
+   "unit": null,
+   "source": "calculated",
+   "interval": {
+    "kind": "confidence",
+    "low": -0.428456,
+    "high": 0.448544,
+    "level": 95
+   },
+   "mcse": 0.00218457,
+   "review": "ai_set",
+   "precision": 3,
+   "reason": null,
+   "stale": false,
+   "detail": {
+    "kind": "run",
+    "title": "间接比较估计",
+    "fields": [
+     {
+      "label": "蒙特卡洛标准误",
+      "value": "0.002185"
+     }
+    ],
+    "quote": null,
+    "quoteSource": null,
+    "ref": {
+     "kind": "result",
+     "id": "undefined",
+     "tab": "comparator"
+    }
+   }
+  },
+  "ratio": {
+   "value": 1.01009496,
+   "text": null,
+   "unit": null,
+   "source": "calculated",
+   "interval": {
+    "kind": "confidence",
+    "low": 0.652,
+    "high": 1.566,
+    "level": 95
+   },
+   "mcse": null,
+   "review": "ai_set",
+   "precision": 3,
+   "reason": null,
+   "stale": false,
+   "detail": null
+  },
+  "ratioLabel": "比值比（OR）",
+  "rows": [
+   {
+    "key": "marginal",
+    "label": "我们的治疗相对共同对照的效应，放到对方人群上（边际）",
+    "value": {
+     "value": -0.23995565,
+     "text": null,
+     "unit": null,
+     "source": "calculated",
+     "interval": null,
+     "mcse": 0.00218457,
+     "review": "ai_set",
+     "precision": 3,
+     "reason": null,
+     "stale": false,
+     "detail": {
+      "kind": "run",
+      "title": "试验数据放到对方人群后的边际效应",
+      "fields": [
+       {
+        "label": "蒙特卡洛标准误",
+        "value": "0.002185"
+       }
+      ],
+      "quote": null,
+      "quoteSource": null,
+      "ref": {
+       "kind": "result",
+       "id": "undefined",
+       "tab": "comparator"
+      }
+     }
+    },
+    "note": null
+   },
+   {
+    "key": "aggregate",
+    "label": "对方的治疗相对共同对照的效应（你给的汇总数）",
+    "value": {
+     "value": -0.25,
+     "text": null,
+     "unit": null,
+     "source": "aggregate",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    },
+    "note": null
+   },
+   {
+    "key": "conditional",
+    "label": "常规回归给出的条件效应",
+    "value": {
+     "value": -0.50490099,
+     "text": null,
+     "unit": null,
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    },
+    "note": "它不是边际效应，不能直接和对方的汇总数相减；这里只是摆在旁边，以便和常规做法对照。"
+   }
+  ],
+  "outside": "对方人群里约有 1.1% 的人，“x1”超出了我们数据的范围，这部分是外推。"
+ },
+ "stc-unanchored": {
+  "question": "放到对方试验的人群上，我们的治疗的预期结局，和对方那一组差多少？",
+  "sentence": "没有共同对照把两个试验连起来，这里比的是两个结局水平，不是治疗效应；这个估计针对的是对方试验的人群，那个人群只有汇总数，所以只能当作参照。",
+  "anchored": false,
+  "scale": "对数比值比（log OR）",
+  "estimate": {
+   "value": 0.26125503,
+   "text": null,
+   "unit": null,
+   "source": "calculated",
+   "interval": {
+    "kind": "confidence",
+    "low": -0.168385,
+    "high": 0.690895,
+    "level": 95
+   },
+   "mcse": 0.00651816,
+   "review": "ai_set",
+   "precision": 3,
+   "reason": null,
+   "stale": false,
+   "detail": {
+    "kind": "run",
+    "title": "间接比较估计",
+    "fields": [
+     {
+      "label": "蒙特卡洛标准误",
+      "value": "0.006518"
+     }
+    ],
+    "quote": null,
+    "quoteSource": null,
+    "ref": {
+     "kind": "result",
+     "id": "undefined",
+     "tab": "comparator"
+    }
+   }
+  },
+  "ratio": {
+   "value": 1.2985588,
+   "text": null,
+   "unit": null,
+   "source": "calculated",
+   "interval": {
+    "kind": "confidence",
+    "low": 0.85,
+    "high": 2,
+    "level": 95
+   },
+   "mcse": null,
+   "review": "ai_set",
+   "precision": 2,
+   "reason": null,
+   "stale": false,
+   "detail": null
+  },
+  "ratioLabel": "比值比（OR）",
+  "rows": [
+   {
+    "key": "expected",
+    "label": "我们的治疗放到对方人群上的预期结局",
+    "value": {
+     "value": 51.51414537,
+     "text": null,
+     "unit": "%",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": 1,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    },
+    "note": null
+   },
+   {
+    "key": "aggregate",
+    "label": "对方试验那一组的结局（你给的汇总数）",
+    "value": {
+     "value": 45,
+     "text": null,
+     "unit": "%",
+     "source": "aggregate",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": 1,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    },
+    "note": null
+   }
+  ],
+  "outside": "对方人群里约有 6.2% 的人，“x1”超出了我们数据的范围，这部分是外推。"
+ }
+}

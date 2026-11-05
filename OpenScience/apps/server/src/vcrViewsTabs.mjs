@@ -54,10 +54,25 @@ import { phaseLabel, registryStatusLabel } from "./vcrPatientTrials.mjs";
 import { reportSchedule } from "./vcrScheduleView.mjs";
 import { vcrPremises } from "./vcrPremises.mjs";
 import { presentPopulationCheck } from "./vcrPopulationCheck.mjs";
+import { presentConfirmatoryDesigns } from "./vcrConfirmatory.mjs";
+import { presentDoseDesigns } from "./vcrDoseFinding.mjs";
+import { presentBayesianDesigns } from "./vcrBayesianDesign.mjs";
+import { presentWinRatioDesigns } from "./vcrWinRatio.mjs";
+import { presentPrognosticModels } from "./vcrPrognosticTraining.mjs";
+import { presentProgressions } from "./vcrProgression.mjs";
+import { presentEvidenceSyntheses, tauPriorWords, vcrSuccessRatesPage } from "./vcrEvidenceSynthesis.mjs";
+import { presentBiasAnalysis } from "./vcrBiasAnalysis.mjs";
+import { presentBorrowing } from "./vcrBorrowing.mjs";
+import { evidenceValueFindings } from "./vcrValueChecks.mjs";
+import { presentSplineFits } from "./vcrSplineFit.mjs";
+import { presentStcComparison } from "./vcrStcComparison.mjs";
+import { presentTrim } from "./vcrTrimView.mjs";
+import { presentImputation } from "./vcrImputationView.mjs";
+import { presentTargetTrial } from "./vcrTargetTrialView.mjs";
 import { localCalibrationView } from "./vcrLocalCalibration.mjs";
 import {
   abilitiesOf, assumptionSummary, assumptionValue, designsSentence, nodeLabel, notEstimableDesign, presentDesigns, reviewContextOf,
-  presentModelCard, registryDesignWords, resultNode, scenarioName, valueString,
+  presentModelCard, registryDesignWords, resultNode, scenarioName, simonBoundaryText, valueString,
 } from "./vcrViews.mjs";
 import {
   allResultsOf, countsView, finite, intervalView, letterCode, list, markFor, measureLabel, measureValue, naturalScale, numeric, object,
@@ -182,6 +197,9 @@ function waterfallEntry(entry, index) {
 /** The population profile's rows, in whatever list the population step stored them. @param {Record<string, any>} profile */
 const profileRows = (profile) => list(profile.rows ?? profile.covariates ?? (Array.isArray(profile) ? profile : []));
 
+/** The groups the engine cuts a column that is a number into when it describes the records easiest to recognise, and the group of a missing value, as the page says them. */
+const AT_RISK_LEVEL_WORDS = Object.freeze(/** @type {Record<string, string>} */ ({ "low third": "最低的三分之一", "middle third": "中间的三分之一", "high third": "最高的三分之一", "(missing)": "缺失" }));
+
 /**
  * The quality report as values, with no verdict word: the fixed metric set the
  * engine reports (fidelity, utility, leakage), each number with its source, and
@@ -208,6 +226,29 @@ export function qualityReportView(quality) {
   const violations = list(object(report.constraints).violations ?? report.constraints).map((entry) => numeric(object(entry).violations)).filter((value) => value !== null);
   const generator = object(report.generator);
   const copiesReleased = numeric(object(report.release).copies);
+  // 1.1.0 (P1, P2): the copies combined by the rules for synthetic data, the false-positive rate of an analysis on the generator's own copies, the records easiest to recognise
+  const inference = object(report.inference);
+  const calibration = object(inference.nullCalibration);
+  const percent = (/** @type {string} */ key, /** @type {string} */ label, /** @type {Record<string, any>} */ rate) => {
+    const value = numeric(rate.value);
+    if (value === null) return null;
+    const mcse = numeric(rate.mcse);
+    return { key, label, value: { ...plainValue({ value: value * 100, unit: "%" }, { source: "synthetic", precision: 1 }), mcse: mcse === null || mcse === 0 ? null : mcse * 100 } };
+  };
+  const withheld = (/** @type {string} */ key, /** @type {string} */ label) => ({ key, label, value: { ...plainValue({}, { source: "synthetic", precision: null }), text: "少于 10 条（不显示）" } });
+  const combinedRows = specific.flatMap((entry, index) => {
+    const combined = object(entry.combined);
+    if (combined.available !== true) return [];
+    const interval = list(combined.interval).map(numeric);
+    return [{ key: `combined_${index}`, label: `${text(entry.analysis) ?? "分析"}：${numeric(combined.copies)} 份合并后的估计`,
+      value: { ...plainValue({ value: numeric(combined.estimate), interval: interval.length === 2 && interval.every((bound) => bound !== null) ? { kind: "confidence", low: interval[0], high: interval[1], level: 0.95 } : undefined }, { source: "synthetic", precision: null }) } }];
+  });
+  const overlapRow = (/** @type {Record<string, any>} */ entry, /** @type {number} */ index) => row(`overlap_${index}`, `${text(entry.analysis) ?? "分析"}：置信区间重叠`, object(entry.combined).confidenceIntervalOverlap ?? entry.confidenceIntervalOverlap);
+  const perRecord = object(disclosure.perRecord);
+  const stated = list(perRecord.riskShares).map(object).find((share) => share.stated === true);
+  const attribute = object(disclosure.attributeInference);
+  const worstAttribute = list(attribute.secrets).map(object).sort((a, b) => (numeric(b.riskLow) ?? -1) - (numeric(a.riskLow) ?? -1))[0] ?? null;
+  const boundWords = stated ? `${numeric(stated.bound)}` : "";
   const groups = [
     { key: "fidelity", label: "保真度", rows: [
       ks.length ? row("ks", "最大 KS 距离", Math.max(...ks)) : null,
@@ -219,20 +260,42 @@ export function qualityReportView(quality) {
     ].filter((entry) => entry !== null) },
     { key: "utility", label: "可用性", rows: [
       row("joint", "入排通过率的相对差", feasibility.jointPassRateRelativeDifference),
-      ...specific.map((entry, index) => row(`overlap_${index}`, `${text(entry.analysis) ?? "分析"}：置信区间重叠`, entry.confidenceIntervalOverlap)),
+      ...combinedRows,
+      ...specific.map(overlapRow),
       violations.length ? row("violations", "硬约束违反的记录数", violations.reduce((sum, value) => sum + value, 0)) : null,
     ].filter((entry) => entry !== null) },
+    { key: "inference", label: "推断是否可信", rows: calibration.available === true ? [
+      percent("fp_real", "把臂标签打乱后，直接在真实表上做这个分析，误判有效的概率", object(calibration.realPermuted)),
+      percent("fp_naive", "把合成表的第 1 份当真实数据做同一个分析，误判有效的概率", object(calibration.syntheticNaive)),
+      percent("fp_combined", "合成表各份按规则合并后，误判有效的概率", object(calibration.syntheticCombined)),
+    ].filter((entry) => entry !== null) : [] },
     { key: "leakage", label: "泄露风险", rows: disclosure.available === false ? [] : [
       row("replication", "复制率（相对留出集）", disclosure.replicationRatio),
       row("nn", "最近邻落在训练集的比例", disclosure.nearestNeighbourInTrainShare),
       row("membership", "成员推断 AUC", disclosure.membershipAuc),
       row("dcr", "到最近训练记录的距离（中位）", disclosure.dcrMedian ?? disclosure.medianDcr),
+      stated && stated.trainingShare !== undefined ? (numeric(stated.trainingShare) === null ? withheld("risk_share", `真实记录里被认出来的风险高于 ${boundWords} 的`) : percent("risk_share", `真实记录里被认出来的风险高于 ${boundWords} 的占比`, { value: stated.trainingShare })) : null,
+      stated && perRecord.available === true && stated.holdoutShare !== undefined ? (numeric(stated.holdoutShare) === null ? withheld("risk_share_holdout", "没进过数据的留出记录里同样高风险的（碰巧会有的水平）") : percent("risk_share_holdout", "没进过数据的留出记录里同样高风险的占比（碰巧会有的水平）", { value: stated.holdoutShare })) : null,
+      worstAttribute ? percent("attribute_inference", "属性推断：最危险的一列比从没进过数据的人多猜对的部分", { value: Math.max(0, numeric(worstAttribute.risk) ?? 0) }) : null,
     ].filter((entry) => entry !== null) },
   ].filter((group) => group.rows.length);
   if (!groups.length && !Object.keys(generator).length) return null;
+  const atRisk = object(perRecord.atRiskGroup);
   return {
     tag: "合成 · 探索性",
     groups,
+    // 「哪些人最容易被认出来」: the kind of person the at-risk group is, by the share of each level in it; counts of 1 to 9 people are never shown and no row ever is
+    atRisk: perRecord.available === true && stated ? {
+      bound: numeric(stated.bound), size: numeric(atRisk.size), rows: list(atRisk.rows).map(object).map((entry) => ({
+        variable: text(entry.variable) ?? "", level: AT_RISK_LEVEL_WORDS[String(entry.level)] ?? text(entry.level) ?? "", atRisk: numeric(entry.atRisk), all: numeric(entry.all),
+        atRiskShare: numeric(entry.atRiskShare) === null ? null : numeric(entry.atRiskShare) * 100, allShare: numeric(entry.allShare) === null ? null : numeric(entry.allShare) * 100,
+      })).filter((entry) => entry.variable && entry.level),
+      described: atRisk.size !== undefined,
+    } : null,
+    // How the copies were combined, in a sentence the reader can check
+    rule: inference.rule ? (inference.rule === "proper_synthesis"
+      ? `合成表的 ${numeric(inference.copies) ?? "?"} 份按 Raab 等人的规则合并（每份都重新抽过参数）：方差里加上了生成模型本身的抽样误差。`
+      : `合成表的 ${numeric(inference.copies) ?? "?"} 份按 Raab 等人的规则合并（每份用同一组参数）：方差里加上了生成模型本身的抽样误差，直接把一份当真实数据分析会低估它。`) : null,
     trainingRecords: numeric(generator.trainingObservations ?? generator.trainingRecords),
     copies: numeric(generator.syntheticCopies ?? generator.copies ?? generator.m),
     // Which table each group of numbers describes, when the generator made several copies and the release holds them all: the
@@ -563,6 +626,10 @@ export function presentPatientsTab(bundle) {
     counts: current ? countsView(result?.counts && Object.keys(result.counts).length ? result.counts : current.counts, { tier: study.dataTier, scope: current.name || null }) : null,
     stale: staleNote(marks),
     partial: partialOf(bundle, ["patient_set"], "这次生成"),
+    // Population-level progression simulations (P4) the conversation computed: a card each, curves and power.
+    progressions: presentProgressions(bundle, { nodeOf: resultNode }),
+    // Survival fits with a spline (C13) the conversation computed: the curve beyond the data, with how far beyond, and the premises.
+    splineFits: presentSplineFits(bundle, { nodeOf: resultNode }),
     sets: patientSets.map((/** @type {any} */ set) => ({ id: set.id, version: set.version, ...(set.resultId ? { resultId: set.resultId, resultVersion: resultById(bundle, set.resultId)?.version } : {}), label: `虚拟患者集 v${set.version}`, stale: Boolean(markFor(stale, vcrObjectNode("patient_set", set))) })),
   };
 }
@@ -721,7 +788,12 @@ export function presentComparatorTab(bundle) {
     const v = numeric(raw);
     return v === null ? null : { key, label, value: plainValue({ value: unit === "%" ? roundTo(v * 100, 4) : v, unit: unit || undefined }, { source: "calculated", review: result?.reviewState ?? null }) };
   }).filter((row) => row !== null);
-  const estimandLabel = current ? (/** @type {Record<string, string>} */ (VCR_ESTIMAND_LABELS_ZH))[current.estimand] ?? current.estimand : null;
+  // The estimand is the method's own: the one its result says it computed (the weighting comparisons state ATT, ATE or ATO; the augmented
+  // estimate is the effect among the trial's people; a target-trial emulation, a simulated treatment comparison and a borrowed control read
+  // none of the three). The object's `estimand` is a default the comparison was written with, and what a method that does not read it
+  // would then be labelled with is a statement it never made (review RF2 P1-8).
+  const ownEstimand = text(diagnostics.estimand) !== null && Object.hasOwn(VCR_ESTIMAND_LABELS_ZH, String(diagnostics.estimand)) ? String(diagnostics.estimand) : null;
+  const estimandLabel = current && ownEstimand ? (/** @type {Record<string, string>} */ (VCR_ESTIMAND_LABELS_ZH))[ownEstimand] : null;
   const rmstValue = rmstMeasure ? value(rmstMeasure) : null;
   // The unit τ is in is the one the engine echoed (months when it echoed none); a spelling the unit table does not hold is left unnamed, never called months.
   const echoedUnit = diagnostics.timeUnit === undefined ? TIME_UNIT_WORDS.months : TIME_UNIT_WORDS[String(diagnostics.timeUnit)] ?? null;
@@ -739,7 +811,9 @@ export function presentComparatorTab(bundle) {
   const targetTrial = current ? vcrTargetTrial(current.targetTrial, current.configuration?.targetTrial) : null;
   // The owned execution identifies a sensitivity-only run. An E-value measure alongside
   // another method's effect estimate must not relabel that comparison.
-  const sensitivityOnly = execution?.method === "comparator.evalue";
+  // A bias analysis alone is the same (a stand-alone one has no stage beside it); one filed as a stage of a comparison is not that comparison's method.
+  const sensitivityOnly = execution?.method === "comparator.evalue"
+    || (execution?.method === "comparator.bias_analysis" && list(diagnostics.stages).every((/** @type {any} */ stage) => object(stage).stage === "bias_analysis"));
   return {
     versions: comparators.map(row => ({ objectId: row.id, version: row.version, label: row.name || `对照版本 ${row.version}`, ...(row.resultId ? { resultId: row.resultId, resultVersion: resultById(bundle, row.resultId)?.version } : {}) })),
     selection: shown ? { id: shown.id, version: shown.version, resultId: result?.id ?? null, resultVersion: result?.version ?? null, route: shown.route } : null,
@@ -749,7 +823,9 @@ export function presentComparatorTab(bundle) {
       outcomeSd: measureOf("predicted_outcome_sd") ? value(measureOf("predicted_outcome_sd")) : null,
       relativeScore: measureOf("mean_relative_score") ? value(measureOf("mean_relative_score")) : null,
       absoluteRiskAvailable: diagnostics.absoluteRiskAvailable === true, causalEffectIdentified: false,
-      limits: list(diagnostics.limits).map(vcrPredictionLimit),
+      limits: [...list(diagnostics.limits).map(vcrPredictionLimit),
+        // an equation the person's own data trained says so wherever its predictions are read
+        ...(object(object(diagnostics.sourceModel).source).kind === "trained_result" ? [{ code: "trained_on_own_data" }] : [])],
       // Held against the outcome the table itself has (D3): the calibration intercept and slope, or why the slope is not there.
       calibration: localCalibrationView(diagnostics.localCalibration),
     } : null,
@@ -775,7 +851,7 @@ export function presentComparatorTab(bundle) {
     // block (above) shows of it is the components that are not exact; this is the whole record, folded into the section.
     estimand: current ? {
       rows: [
-        { label: "估计目标", value: estimandLabel ?? "" },
+        ...(estimandLabel ? [{ label: "估计目标", value: estimandLabel }] : []),
         ...(targetTrial?.components ?? []).map((entry) => ({ label: entry.label, value: [entry.statusLabel, entry.text].filter(Boolean).join("：") || "没有写" })),
         ...(targetTrial?.other ?? []).map((entry) => ({ label: entry.item, value: entry.status ? (/** @type {Record<string, string>} */ ({ exact: "可精确复现", approximate: "只能近似", not_possible: "无法复现" }))[entry.status] : "没有写" })),
       ],
@@ -803,7 +879,7 @@ export function presentComparatorTab(bundle) {
     operatingCharacteristics: operatingCharacteristicsView(diagnostics),
     // 「这个结论的前提」: the list and its rules are `vcrPremises`'s; the comparator's facts are filled in beside the route's own rows.
     premises: vcrPremises("comparator", {
-      route: shown?.route ?? null, estimand: shown?.estimand ?? null, estimandStated: shown ? shown.estimand !== "ATT" : false, diagnostics,
+      route: shown?.route ?? null, estimand: ownEstimand, estimandStated: ownEstimand !== null && shown ? shown.estimand !== "ATT" && shown.estimand === ownEstimand : false, diagnostics,
       measures: Object.fromEntries(list(result?.measures).map(object).map((measure) => [String(measure.name), numeric(measure.value)])),
       applicability: shown ? vcrApplicability(shown.configuration) : null,
       targetTrial: shown ? vcrTargetTrial(shown.targetTrial, shown.configuration?.targetTrial) : null,
@@ -812,6 +888,19 @@ export function presentComparatorTab(bundle) {
     }),
     limits,
     robustness: robustnessView(result, value),
+    // Quantitative bias analysis (C1, C2) and who a propensity trimming left (C14): cards of the comparison, null when the result has neither.
+    biasAnalysis: presentBiasAnalysis(result, value),
+    // Dynamic borrowing of an external control arm (C10-C12): the posterior beside no and full borrowing, the conflict table, the operating characteristics.
+    borrowing: presentBorrowing(result, value),
+    // Prognostic models trained on the person's own table (P3): a card each, with the out-of-fold figures and the table of sample-size savings.
+    prognosticModels: presentPrognosticModels(bundle, { nodeOf: resultNode }),
+    trim: presentTrim(diagnostics.trim),
+    // Missing covariates that were imputed (C7): the pooled answer beside the complete-case one, and what it assumed.
+    imputation: presentImputation(result, value),
+    // A target-trial emulation (C3, C4): the question, which estimand was computed, and the two arms' risks beside the difference.
+    targetTrialEmulation: presentTargetTrial(result, value),
+    // A simulated treatment comparison (C2): the indirect estimate, the marginal and the conditional effect, and the population it is about.
+    stcComparison: presentStcComparison(result, value),
     gaps,
     counts: current ? countsView(result?.counts && Object.keys(result.counts).length ? result.counts : {}, { tier: study.dataTier }) : null,
     verdict: shown ? { conclusion: readAs } : null,
@@ -959,24 +1048,67 @@ function replicateReasons(bundle, stages) {
 
 const TRUTH_LABELS = Object.freeze(/** @type {Record<string, string>} */ ({
   effect: "真实效应", sd: "标准差", hazardRatio: "真实 HR", controlMedian: "对照组中位", controlRate: "对照事件率", treatmentRate: "试验事件率",
+  // The keys a binary design and a single-arm design state their truth with (found live 2026-11-04: a non-inferiority sample size and a Simon
+  // two-stage design printed `riskDifference 0` and `nullRate 0.2` in the first line of the data generation).
+  riskDifference: "真实率差", oddsRatio: "真实优势比", responseRate: "真实应答率", nullRate: "零假设应答率", alternativeRate: "备择应答率",
+  baselineCorrelation: "基线相关",
 }));
 
 /**
- * The trial tab's first sentence: what each design needs where the closed form computed it, then how the designs did where they
- * were simulated. Every number is a measure of the design's own results, formatted here.
- * @param {ReadonlyArray<Record<string, any>>} designs
+ * What a design needs, in the words of the first sentence: the events and patients the closed form computed, or -- for Simon's two-stage design,
+ * which has neither -- its answer: the stage sizes, the boundaries, the expected size and the chance of stopping early under the null, the type I
+ * error and the power. `named` adds what the design is after its letter, for a page that speaks of one design among many.
+ * @param {Record<string, any>} design @param {boolean} [named]
  */
-export function trialHeadline(designs) {
-  const needs = designs.filter((design) => !design.dominated).map((design) => {
-    const events = numeric(design.measures.required_events?.value);
-    const patients = design.measures.sample_size?.source === "calculated" ? numeric(design.measures.sample_size?.value) : null;
-    if (events === null && patients === null) return null;
-    return `方案 ${design.code} 需要 ${[events !== null ? `${Math.round(events).toLocaleString("en-US")} 例事件` : null,
-      patients !== null ? `${Math.round(patients).toLocaleString("en-US")} 名患者` : null].filter(Boolean).join("、")}`;
-  }).filter(Boolean).slice(0, 3);
+function designNeeds(design, named = false) {
+  const word = `方案 ${design.code}${named && text(design.name) && design.name !== `方案 ${design.code}` ? `（${design.name}）` : ""}`;
+  const simon = design.simon?.optimal;
+  if (simon) {
+    const percent = (/** @type {unknown} */ x, /** @type {number} */ decimals = 1) => (numeric(x) === null ? null : `${roundTo(Number(x) * 100, decimals)}%`);
+    const tail = [numeric(simon.expectedNull) !== null ? `零假设下期望入组 ${roundTo(Number(simon.expectedNull), 1)} 例` : null,
+      percent(simon.earlyStopNull) ? `第一阶段就停止的概率 ${percent(simon.earlyStopNull)}` : null].filter(Boolean).join("，");
+    const error = [percent(simon.typeOneError, 2) ? `I 类错误 ${percent(simon.typeOneError, 2)}` : null, percent(simon.power) ? `功效 ${percent(simon.power)}` : null].filter(Boolean).join("，");
+    const minimax = design.simon.minimax ? `；总例数最少的设计共 ${design.simon.minimax.n} 例` : "";
+    return `${word} 的 Simon 两阶段最优设计：${simonBoundaryText(simon)}${tail ? `；${tail}` : ""}${error ? `；${error}` : ""}${minimax}`;
+  }
+  const events = numeric(design.measures.required_events?.value);
+  const patients = design.measures.sample_size?.source === "calculated" ? numeric(design.measures.sample_size?.value) : null;
+  if (events === null && patients === null) return null;
+  return `${word} 需要 ${[events !== null ? `${Math.round(events).toLocaleString("en-US")} 例事件` : null,
+    patients !== null ? `${Math.round(patients).toLocaleString("en-US")} 名患者` : null].filter(Boolean).join("、")}`;
+}
+
+/**
+ * The trial tab's first sentence. Up to three designs, each says what it needs where the closed form computed it, then how the designs did
+ * where they were simulated. More than three designs, or a link that names one (`object=`), is about ONE design -- the one named, else the most
+ * recent -- the same the premises and the data-generation lines read, with the others a count: a sentence of the first three was about designs the
+ * page was no longer reading. Every number is a measure of the design's own results, formatted here.
+ * @param {ReadonlyArray<Record<string, any>>} designs @param {{ primary?: Record<string, any> | null, asked?: boolean }} [options]
+ */
+export function trialHeadline(designs, { primary = null, asked = false } = {}) {
+  const live = designs.filter((design) => !design.dominated);
+  if (primary && (asked || live.length > 3)) {
+    const own = designNeeds(primary, true);
+    const others = live.filter((design) => design.id !== primary.id).length;
+    return own ? `${own}${others ? `；页面上另有 ${others} 个方案，各在下面的表里` : ""}。` : null;
+  }
+  const needs = live.map((design) => designNeeds(design)).filter(Boolean).slice(0, 3);
   const sentence = designsSentence(designs);
   const parts = [...needs, ...(sentence && designs.some((design) => design.measures.power || design.measures.assurance) ? [sentence] : [])];
   return parts.length ? `${parts.join("；")}。` : (sentence ? `${sentence}。` : null);
+}
+
+/**
+ * The first sentence of a page whose subject is a card of a design the conversation computed (a re-estimation, a dose-finding comparison, a
+ * Bayesian design, a hierarchical composite): the card's own title and its first numbers, and the fixed designs of the page as the baselines
+ * they are. The composite's number comes first: the single-endpoint sizes beside it are what it is read against.
+ * @param {Record<string, any>} card @param {ReadonlyArray<Record<string, any>>} designs
+ */
+function cardHeadline(card, designs) {
+  const numbers = list(card.headline).map(object).slice(0, 3).map((entry) => `${entry.label} ${valueString(object(entry.value))}`);
+  if (!numbers.length) return null;
+  const baselines = designs.filter((design) => !design.dominated).map((design) => designNeeds(design)).filter(Boolean).slice(0, 3);
+  return `${card.title}：${numbers.join("；")}${baselines.length ? `。作为对照，${baselines.join("；")}` : ""}。`;
 }
 
 /**
@@ -1061,11 +1193,32 @@ export function presentTrialTab(bundle) {
   const { rows: designRows, designs } = presentDesigns(bundle);
   const live = designs.filter((design) => !design.dominated);
   // The counts belong to the design a person chose, else to the last one still in the running.
-  const headlineRow = designRows.find((row) => row.chosen && row._result) ?? [...designRows].reverse().find((row) => !row.dominated && row._result) ?? null;
+  // What the page is about. A link that names a design (`?object=`, the id of a design or of a card's subject) is about that one; else the design
+  // the researcher chose; else the most recent -- of the fixed designs and of the cards the conversation computed -- and the first sentence, the
+  // premises and the data-generation lines all read that one (they once read different ones once the page held more than three designs).
+  const asked = typeof bundle.askedObject === "string" ? bundle.askedObject : null;
+  const cards = {
+    confirmatoryDesigns: presentConfirmatoryDesigns(bundle, { nodeOf: resultNode }),
+    doseDesigns: presentDoseDesigns(bundle, { nodeOf: resultNode }),
+    bayesianDesigns: presentBayesianDesigns(bundle, { nodeOf: resultNode }),
+    winRatioDesigns: presentWinRatioDesigns(bundle, { nodeOf: resultNode }),
+  };
+  const everyResult = allResultsOf(bundle);
+  const cardRows = Object.values(cards).flat().map((card) => {
+    const result = everyResult.find((row) => row.id === card.id);
+    return { card, subjectId: text(result?.subjectId), createdAt: String(result?.createdAt ?? "") };
+  });
+  const askedRow = asked ? designRows.find((row) => row.id === asked && row._result) ?? null : null;
+  const askedCard = asked && !askedRow ? cardRows.find((entry) => entry.subjectId === asked || entry.card.id === asked) ?? null : null;
+  const chosenRow = designRows.find((row) => row.chosen && row._result) ?? null;
+  const newestRow = askedRow ?? chosenRow ?? [...designRows].reverse().find((row) => !row.dominated && row._result) ?? null;
+  const newestCard = asked || chosenRow ? null : [...cardRows].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null;
+  const primaryCard = askedCard ?? (newestCard && (!newestRow || newestCard.createdAt > String(newestRow._result?.createdAt ?? "")) ? newestCard : null);
+  const headlineRow = newestRow;
   const decision = decisions[0] ?? null;
   const columnSpec = [
     ["required_events", "所需事件数", "例"], ["sample_size", "样本量", "例"], ["expected_events", "期望事件数", null], ["power", "功效", "%"], ["assurance", "成功把握", "%"],
-    ["type_one_error", "I 类错误", "%"], ["bias", "偏倚", null], ["coverage", "覆盖率", "%"], ["expected_sample_size", "期望样本量", "例"], ["duration_months", "平均研究时长", "月"], ["last_patient_in_months", "末例入组（入组假设模拟）", "月"], ["cost", "成本", "万元"],
+    ["type_one_error", "I 类错误", "%"], ["bias", "偏倚", null], ["coverage", "覆盖率", "%"], ["expected_sample_size", "期望样本量", "例"], ["expected_sample_size_null", "无效应时的期望样本量", "例"], ["first_stage_stop_probability_null", "无效应时在第一阶段就停止的概率", "%"], ["duration_months", "平均研究时长", "月"], ["last_patient_in_months", "末例入组（入组假设模拟）", "月"], ["cost", "成本", "万元"],
   ];
   // The type I error is a column as soon as a design waits for one (the check follows the result): a cell that says 排队中 needs its column.
   const columns = columnSpec
@@ -1132,10 +1285,10 @@ export function presentTrialTab(bundle) {
   });
   const goal = text(decision?.question) ?? text(object(grid?.comparisonGoal).text) ?? null;
   return {
-    headline: trialHeadline(designs),
-    ademp: adempOf(bundle, headlineRow?._scenario ?? scenarios[0] ?? null, object(headlineRow?._result?.diagnostics), headlineRow?._stages ?? {}),
+    headline: (primaryCard ? cardHeadline(primaryCard.card, designs) : null) ?? trialHeadline(designs, { primary: headlineRow ? designs.find((design) => design.id === headlineRow.id) : null, asked: Boolean(askedRow) }),
+    ademp: primaryCard ? adempOf(bundle, null) : adempOf(bundle, headlineRow?._scenario ?? scenarios[0] ?? null, object(headlineRow?._result?.diagnostics), headlineRow?._stages ?? {}),
     // 「这个结论的前提」: the numbers the headline design's result stands on, where each came from, and the defaults among them.
-    premises: headlineRow ? vcrPremises("trial", trialPremiseInput(bundle, headlineRow)) : [],
+    premises: primaryCard ? list(primaryCard.card.premises) : headlineRow ? vcrPremises("trial", trialPremiseInput(bundle, headlineRow)) : [],
     // What the sample size rests on, one input at a time, and the power the effect's published shrinkage leaves (C6).
     sensitivity: trialSensitivity(headlineRow),
     // The yardstick the trade-off is drawn against when nobody wrote one: alpha and the target power (C7).
@@ -1143,7 +1296,7 @@ export function presentTrialTab(bundle) {
     designs: recorded,
     columns,
     grid: grids.heat,
-    footnotes: notRerunNotes(designRows),
+    footnotes: [...notRerunNotes(designRows), ...maxComboNotes(designRows)],
     powerCurve: powerSeries.length ? {
       xLabel: text(powerRaw.xLabel) ?? "真实效应", yLabel: text(powerRaw.yLabel) ?? "功效", unit: "%", series: powerSeries,
       markers: markersOf(headlineRow?._scenario), prior: list(powerRaw.prior).map(object).filter((point) => finite(point.x) !== null && finite(point.y) !== null).map((point) => ({ x: Number(point.x), y: Number(point.y) })),
@@ -1158,6 +1311,15 @@ export function presentTrialTab(bundle) {
     } : null,
     forecasts: forecastRows,
     accrualForecasts,
+    // The base rates of development, two sources side by side, beside an assurance (E6): a reference, never this trial's probability.
+    successRates: designs.some((design) => design.measures.assurance) ? vcrSuccessRatesPage() : null,
+    // The confirmatory designs the conversation computed (design_confirmatory): a card each, with its own premises and baselines.
+    confirmatoryDesigns: cards.confirmatoryDesigns,
+    // The dose-finding designs (design_dose) and the Bayesian designs without MCMC (design_bayesian) the conversation computed: a card each.
+    doseDesigns: cards.doseDesigns,
+    bayesianDesigns: cards.bayesianDesigns,
+    // The hierarchical composite endpoints compared by win ratio (design_win_ratio) the conversation computed: a card each.
+    winRatioDesigns: cards.winRatioDesigns,
     milestones,
     // The protocol's visit schedule (「访视日程」) and the study's regulatory contacts (「监管沟通记录」): records, not results.
     schedule: reportSchedule(bundle.schedule),
@@ -1193,6 +1355,8 @@ function trialPremiseInput(bundle, row) {
     bound,
     cards: list(bundle.assumptions),
     appliedDefaults: appliedDefaultsOf(scenario, stages),
+    // which numbers are in the person's own messages (a conversation's design job froze it): the newest stage that has the record
+    personStated: stages.simulation?.diagnostics?.personStated ?? stages.analytic?.diagnostics?.personStated ?? row._result?.diagnostics?.personStated ?? null,
     hasAssurance: !(supportsAssurance && ran) || Boolean(stages.assurance),
     assuranceReason: "没有算：效应只有一个值，没有可以积分的预测分布",
     // The power the design keeps at the effect reduced by the published gap, from the analytic stage (C6); absent where there is none.
@@ -1317,6 +1481,39 @@ function notRerunNotes(designRows) {
   }
   return notes;
 }
+
+/**
+ * What a MaxCombo run says beside its own power (T13): the log-rank power of the same replicates and the strong null — a world in which the
+ * treatment is never better and is worse early on — where both tests are asked how often they call the treatment better. Information in
+ * the table's notes, not a verdict.
+ * @param {ReadonlyArray<Record<string, any>>} designRows
+ */
+export function maxComboNotes(designRows) {
+  /** @type {string[]} */
+  const notes = [];
+  for (const row of designRows) {
+    if (row.dominated) continue;
+    const measures = list(row._stages?.simulation?.measures).map(object);
+    const find = (/** @type {string} */ name) => measures.find((entry) => entry.name === name) ?? null;
+    // three significant digits: a rejection probability of 0.03% is not "0%"
+    const percent = (/** @type {Record<string, any> | null} */ entry) => (entry && numeric(entry.value) !== null
+      ? `${plainNumber(Number(entry.value) * 100)}%${numeric(entry.mcse) !== null ? `（±${plainNumber(Number(entry.mcse) * 100)}）` : ""}` : null);
+    const logrank = percent(find("power_logrank") ?? find("type_one_error_logrank"));
+    if (logrank) notes.push(`方案 ${row.code}：同样的模拟里，log-rank 检验的${find("power_logrank") ? "功效" : "I 类错误"}是 ${logrank}。`);
+    const strong = percent(find("type_one_error_strong_null"));
+    const strongLogrank = percent(find("type_one_error_strong_null_logrank"));
+    if (strong && strongLogrank) {
+      const law = object(row._stages?.simulation?.diagnostics?.strongNull);
+      const ratios = list(law.ratios).map(Number).filter(Number.isFinite);
+      const when = ratios.length === 2 && numeric(law.breaks) !== null ? `试验组前 ${plainNumber(Number(law.breaks))} ${TIME_UNIT_WORDS[String(law.timeUnit)]?.after ?? "个月"}的风险比为 ${plainNumber(ratios[0])}、之后与对照相同` : "试验组从不优于对照";
+      notes.push(`方案 ${row.code}：在“${when}”的情形里（试验组从未更好），MaxCombo 判为试验组更优的概率是 ${strong}，log-rank 是 ${strongLogrank}；名义水平 ${plainNumber(Number(law.alpha ?? 0.025) * 100)}%。`);
+    }
+  }
+  return notes;
+}
+
+/** @param {number} value */
+const plainNumber = (value) => String(Number(value.toPrecision(3)));
 
 /** The vertical markers of a power curve: the assumed effect, which is a setting and not an estimate. @param {Record<string, any> | null | undefined} scenario */
 function markersOf(scenario) {
@@ -1749,9 +1946,18 @@ export function presentDataTab(bundle, query = {}) {
     }
     return objects.slice(0, 8);
   };
+  // The numbers of the study's extracted values that do not agree with each other (E2), once; a card carries those of the evidence it cites.
+  const consistency = list(evidence?.items).length ? evidenceValueFindings(list(evidence?.items)) : [];
   const cards = assumptions.map((/** @type {any} */ card) => {
     const items = evidenceFor(card);
     const value = assumptionValue(card, { now, evidence: items });
+    const cited = new Set(list(card.evidenceIds).map(String));
+    const valueChecks = [
+      ...consistency.filter((finding) => finding.ids.some((id) => cited.has(id))).map((finding) => ({ kind: "consistency", message: finding.message })),
+      // Where a second, independent reading of the passage a cited value was read from read another number (E1): both numbers and the quotation.
+      ...list(evidence?.secondReads).filter((read) => cited.has(String(read.evidence_id)) && text(object(read.reading).message))
+        .map((read) => ({ kind: "second_read", message: text(object(read.reading).message) })),
+    ];
     const pooling = object(card.pooling);
     const versions = (bundle.assumptionVersions?.get?.(card.key) ?? []).map((/** @type {any} */ row) => ({
       version: row.version, at: zhTime(row.createdAt, now), text: text(row.note) ?? `${row.name || row.key}${row.pointValue != null ? ` = ${row.pointValue}` : ""}`,
@@ -1778,6 +1984,8 @@ export function presentDataTab(bundle, query = {}) {
       sensitivity: sensitivityText(card),
       review: reviewOf(card),
       ...(newEvidence ? { newEvidence } : {}),
+      // ⚠ The numbers the card is made of that do not agree: advice with the numbers named; the value stands as it was read.
+      ...(valueChecks.length ? { valueChecks } : {}),
       // What an edit starts from. A person's value is an expert setting: it keeps the card's endpoint and applicability but not the pooled
       // evidence, which no longer supports the number (AC-25).
       edit: { pointValue: numeric(card.pointValue), unit: zhUnit(text(card.unit)), note: text(card.note), endpoint: text(card.endpoint), applicability: object(card.applicability) },
@@ -1787,6 +1995,8 @@ export function presentDataTab(bundle, query = {}) {
           ...(numeric(pooling.k) !== null ? [{ label: "研究数", value: String(numeric(pooling.k)) }] : []),
           ...(numeric(pooling.i2) !== null ? [{ label: "I²", value: `${roundTo(Number(pooling.i2) <= 1 ? Number(pooling.i2) * 100 : Number(pooling.i2), 0)}%` }] : []),
           ...(numeric(pooling.tau2) !== null ? [{ label: "τ²", value: String(roundTo(Number(pooling.tau2), 3)) }] : []),
+          // A pooling with a reference for the spread between studies (two studies get a prediction interval from it): said, with where the reference is from.
+          ...(text(object(pooling.tauPrior).kind) ? [{ label: "研究之间差异的参照", value: tauPriorWords(object(pooling.tauPrior)) }] : []),
         ],
         forest: forestOf(card, items, precedentById),
         forestNote: text(pooling.calibreReason) ? "汇总口径与理由已记在卡上。" : null,
@@ -1822,6 +2032,8 @@ export function presentDataTab(bundle, query = {}) {
     selectedId: cards.find((card) => card.id === query.card || card.key === query.card)?.id ?? null,
     precedents,
     precedentSources: precedents.length ? `${precedents.length} 项参考试验` : null,
+    // Network meta-analysis, dose-response meta-analysis and the shrinkage of a published effect (the conversation computed them): a card each.
+    ...presentEvidenceSyntheses(bundle, { nodeOf: resultNode }),
     precedentNote: null,
     // Trial events the feed reported for this study's subject: pointers marked as candidates, never precedents (flywheel F24).
     ...(bundle.candidates?.length ? { precedentCandidates: bundle.candidates } : {}),

@@ -174,12 +174,15 @@ vcr_case("N62i", c("AC-04", "AC-27"), function() {
   # nothing of this remediation reaches a label that is not compatible: the table the control plane reads stays what it says
   d <- vcr_domain()$methods
   compat <- function(m) as.character(unlist(d[[m]]$compatibleVersions))
-  ok <- identical(compat("comparator.entropy_balance"), c("1.0.0", "1.1.0", "1.2.0")) && identical(compat("comparator.propensity_weight"), c("1.0.0", "1.1.0", "1.2.0")) &&
-    identical(compat("comparator.weighted_cox"), c("1.0.0", "1.1.0", "1.2.0")) && identical(compat("comparator.aipw"), c("1.0.0", "1.1.0")) &&
+  # propensity weighting is 1.5.0 and weighted Cox 1.5.0 (trimming, C14, then the imputation of missing covariates, C7), entropy balancing 1.4.0 and the doubly
+  # robust estimate 1.4.0 (its trimming and time-to-event outcome were 1.3.0, C8, C14): the labels before them replay; the three design methods are 1.4.0
+  # (non-inferiority, T1) with 1.2.0 and 1.3.0 compatible
+  ok <- identical(compat("comparator.entropy_balance"), c("1.0.0", "1.1.0", "1.2.0", "1.3.0")) && identical(compat("comparator.propensity_weight"), c("1.0.0", "1.1.0", "1.2.0", "1.3.0", "1.4.0")) &&
+    identical(compat("comparator.weighted_cox"), c("1.0.0", "1.1.0", "1.2.0", "1.3.0", "1.4.0")) && identical(compat("comparator.aipw"), c("1.0.0", "1.1.0", "1.2.0", "1.3.0")) &&
     identical(compat("comparator.covariate_sets"), c("1.0.0", "1.1.0")) && identical(compat("comparator.negative_control"), "1.0.0") &&
     identical(compat("evidence.reconstruct_km"), "1.0.0") && identical(compat("comparator.map_prior"), "1.0.0") &&
     identical(compat("population.scenario"), "1.0.0") && identical(compat("population.literature"), "1.0.0") && identical(compat("model.prognostic_apply"), "1.0.0") &&
-    identical(compat("design.analytic"), "1.2.0") && identical(compat("design.simulate"), "1.2.0") && identical(compat("design.grid"), "1.2.0") &&
+    identical(compat("design.analytic"), c("1.2.0", "1.3.0")) && identical(compat("design.simulate"), c("1.2.0", "1.3.0", "1.4.0")) && identical(compat("design.grid"), c("1.2.0", "1.3.0", "1.4.0")) &&
     identical(vcr_job_at_least(list(methodVersion = "1.1.0"), "1.2.0"), FALSE) && identical(vcr_job_at_least(list(methodVersion = "1.2.0"), "1.2.0"), TRUE) &&
     identical(vcr_job_at_least(list(methodVersion = "1.10.0"), "1.9.0"), TRUE) && identical(vcr_job_at_least(list(), "9.9.9"), TRUE)
   list(pass = ok, detail = "the compatible labels are the ones this case gates on; the comparison of labels is by version, not by text")

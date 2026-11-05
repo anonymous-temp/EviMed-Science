@@ -1,0 +1,189 @@
+# N90 — group-sequential MaxCombo and modestly weighted designs (algorithm round T14, 2026-11-03): design.simulate and design.grid 1.5.0.
+#
+# "延迟效应下不能中途看数据": until 1.4.0 a group-sequential design looked with the log-rank statistic only. Now a design with looks may analyse by MaxCombo
+# or the modestly weighted test, with boundaries found by simulating the design under no effect and spending the planned alpha look by look. Held to:
+#
+#   a  the boundary machinery against a closed form: with the weight cap at 1 the modestly weighted statistic IS the log-rank statistic, whose group-sequential
+#      boundaries the engine also computes analytically (Lan-DeMets, checked against gsDesign and rpact); the simulated boundaries equal them within the
+#      sampling error of a quantile, the realized spend equals the planned spend look by look, and a look whose planned spend is below one trial cannot stop
+#   b  the type I error of MaxCombo at three looks, run apart from the boundary run with another seed, is the level within the combined error; one and
+#      two cores give the same bits; a spent budget leaves fewer null trials and says limited; no budget for 2,000 null trials is a named refusal
+#   e  what a stopped trial reports: the estimate, its error and its interval are the log-rank estimate on the data of the STOPPING look (as the
+#      log-rank group-sequential design beside it reports them), so bias, coverage and mse of a weighted design are comparable with the log-rank's
+#      (they were read on all the data: bias -0.004 against -0.036 at a hazard ratio of 0.6)
+#   c  gsDesign2::gs_power_combo: the cumulative probability of having stopped at each look of a delayed-effect design (its calendar looks put on the
+#      engine's event fractions), against the simulation with boundaries found under the null
+#
+# (the boundary run is the cost: 20,000 trials of the design at the job's defaults; the cases use fewer and say so)
+
+.n90_scenario <- function(n = 60, method = "modestly_weighted", rates = c(0.5, 1), ratios = c(1, 1), at = 4, s_star = NULL, alpha = 0.025, sided = 1, followup = 24) {
+  an <- list(method = method, alpha = alpha, sided = sided)
+  if (!is.null(s_star)) an$sStar <- s_star
+  list(design = list(kind = "group_sequential", nTreat = n, nControl = n, informationRates = as.list(rates), spending = "obrien_fleming"), endpoint = list(type = "time_to_event"),
+       truth = list(treatmentHazardRatios = list(breaks = list(at), ratios = as.list(ratios)), controlMedian = 12),
+       accrual = list(kind = "uniform", duration = 12, followup = followup, dropoutAnnual = 0.05), analysis = an)
+}
+.n90_null <- function(sc) { sc$truth <- list(hazardRatio = 1, controlMedian = 12); sc }
+# R trials of a scenario, one stream each, as the engine runs them but with the count asked for (a job's null floor is 20,000 trials)
+.n90_trials <- function(sc, seed, R, extras = list()) {
+  runner <- vcr_scenario_runner(sc, extras)
+  out <- vcr_map_streams(vcr_stream_bank(seed)$take(R), function(i) runner$run(i), cores = vcr_cores(NULL), indices = seq_len(R))
+  do.call(rbind, out)
+}
+
+vcr_case("N90a", c("AC-28", "AC-29"), function() {
+  rates <- c(0.4, 0.7, 1); R <- 12000L
+  sc <- .n90_null(.n90_scenario(80, "modestly_weighted", rates, s_star = 1))
+  stats_m <- .n90_trials(sc, 9001L, R)[, paste0("stat", 1:3), drop = FALSE]
+  gs <- vcr_group_sequential(rates, 0.025, "obrien_fleming")
+  b <- vcr_gs_simulated_bounds(stats_m, gs$alphaSpent)
+  # the sampling error of a quantile with probability p: sqrt(p (1 - p) / R) / density at the boundary
+  se <- sqrt(gs$alphaSpent * (1 - gs$alphaSpent) / R) / stats::dnorm(gs$criticalValues)
+  z <- (b$bounds - gs$criticalValues) / se
+  # a design whose first look spends less than one null trial cannot stop there
+  tiny <- vcr_gs_simulated_bounds(stats_m[1:500, , drop = FALSE], gs$alphaSpent)
+  list(pass = all(abs(z[2:3]) < 4) && abs(z[1]) < 5 && all(abs(b$crossed - round(gs$alphaSpent * R)) <= 1) && abs(sum(b$spendRealized) - 0.025) < 1 / R * 3 && is.infinite(tiny$bounds[1]) && tiny$unresolved[1] && !tiny$unresolved[3],
+       detail = sprintf("%d null trials of 80 + 80 people, looks at 40%%, 70%% and 100%% of the events, O'Brien-Fleming spending: the boundaries found by simulation %s against the analytic Lan-DeMets %s (%s sampling errors apart); the realized spend %s equals the planned %s to the trial; with 500 trials the first look, planned %.5f, cannot stop (%s)",
+                        R, paste(sprintf("%.3f", b$bounds), collapse = " / "), paste(sprintf("%.3f", gs$criticalValues), collapse = " / "), paste(sprintf("%.2f", z), collapse = " / "),
+                        paste(b$crossed, collapse = "/"), paste(round(gs$alphaSpent * R), collapse = "/"), gs$alphaSpent[1], tiny$unresolved[1]))
+})
+
+vcr_case("N90b", c("AC-28", "AC-31", "AC-38"), function() {
+  # (1) MaxCombo at three looks: boundaries from one run, the type I error from another with its own seed
+  rates <- c(0.5, 0.8, 1)
+  sc <- .n90_null(.n90_scenario(40, "maxcombo", rates))
+  gs <- vcr_group_sequential(rates, 0.025, "obrien_fleming")
+  b <- vcr_gs_simulated_bounds(.n90_trials(sc, 9002L, 6000L)[, paste0("stat", 1:3), drop = FALSE], gs$alphaSpent)
+  v <- .n90_trials(sc, 9003L, 6000L, list(bounds = b$bounds, logrank = TRUE))
+  rate <- function(x) { p <- mean(x); c(value = p, mcse = sqrt(p * (1 - p) / length(x))) }
+  m <- rate(v[, "reject"]); lr <- rate(v[, "logrankReject"])
+  boundary_se <- sqrt(0.025 * 0.975 / 6000)
+  # (2) the boundary run of a job: one and two cores give the same bits; a smaller budget leaves fewer null trials; none at all is a named refusal
+  small <- .n90_scenario(25, "modestly_weighted", c(0.6, 1), ratios = c(1, 0.6))
+  edges <- function(cores, limit = 600, sc = small) { j <- vcr_test_job("design.simulate", sc, seed = 9004L, replicates = 300L, cores = cores); j$cpuSecondsLimit <- limit; vcr_gs_boundaries_job(j, sc) }
+  one <- edges(1L); two <- edges(2L)
+  same <- identical(one$bounds, two$bounds) && identical(vcr_canonical_json(one$info), vcr_canonical_json(two$info))
+  tight <- edges(1L, 12, .n90_scenario(100, "modestly_weighted", c(0.6, 1), ratios = c(1, 0.6)))
+  refused <- tryCatch({ edges(1L, 0.2); "no refusal" }, vcr_refusal = function(e) e$issue$code)
+  list(pass = abs(m[["value"]] - 0.025) < 3.5 * sqrt(m[["mcse"]]^2 + boundary_se^2) && abs(lr[["value"]] - 0.025) < 3.5 * sqrt(lr[["mcse"]]^2 + boundary_se^2) && same &&
+         one$trials == one$planned && length(one$bounds) == 2L && all(is.finite(one$bounds)) && tight$trials < tight$planned && tight$trials >= 2000L && identical(refused, "cpu_budget_exhausted"),
+       detail = sprintf("MaxCombo at three looks, 40 + 40 people, no effect: boundaries %s from 6,000 null trials, the type I error of a separate run of 6,000 is %.4f (error %.4f) beside the log-rank test's %.4f; the boundary run of a modestly weighted job at two looks: 1 and 2 cores give the same boundaries and record (%s), %d null trials; a 12 s budget on 100 + 100 people leaves %d null trials; a budget of 0.2 s is refused (%s)",
+                        paste(sprintf("%.3f", b$bounds), collapse = " / "), m[["value"]], m[["mcse"]], lr[["value"]], same, as.integer(one$trials), as.integer(tight$trials), refused))
+})
+
+vcr_case("N90d", c("AC-04", "AC-28"), function() {
+  # a whole job, slow because the boundary run and the strong null each run a null floor of 20,000 trials (25 + 25 people, two looks, the modestly weighted test)
+  small <- .n90_scenario(25, "modestly_weighted", c(0.6, 1), ratios = c(1, 0.6))
+  r <- vcr_test_run(vcr_test_job("design.simulate", small, seed = 9007L, replicates = 300L, cores = vcr_cores(NULL)))
+  names_ <- vapply(r$measures, function(x) x$name, character(1))
+  info <- r$diagnostics$groupSequentialBoundaries
+  old <- vcr_test_job("design.simulate", small, seed = 9007L, replicates = 300L); old$methodVersion <- "1.4.0"
+  old_run <- vcr_test_run(old)
+  list(pass = identical(r$status, "succeeded") && all(c("power", "power_logrank", "expected_events", "expected_analyses", "type_one_error_strong_null", "type_one_error_strong_null_logrank") %in% names_) &&
+         isTRUE(r$diagnostics$strongNull$computed) && info$nullTrials >= 20000L && length(info$criticalValues) == 2L && identical(old_run$status, "failed") && "method_version_mismatch" %in% vcr_test_issue_codes(old_run),
+       detail = sprintf("a whole job: power %.3f beside the log-rank power %.3f on the same trials, the expected number of analyses %.2f, the strong null %.4f against the log-rank test's %.4f; the boundaries (%s) rest on %d null trials of the design; the same job under a 1.4.0 label is refused (method_version_mismatch)",
+                        vcr_measure_value(r, "power"), vcr_measure_value(r, "power_logrank"), vcr_measure_value(r, "expected_analyses"), vcr_measure_value(r, "type_one_error_strong_null"), vcr_measure_value(r, "type_one_error_strong_null_logrank"),
+                        paste(sprintf("%.3f", unlist(info$criticalValues)), collapse = " / "), as.integer(info$nullTrials)))
+})
+
+vcr_case("N90c", c("AC-29"), function() {
+  # gsDesign2::gs_power_combo, a MaxCombo of the four Fleming-Harrington weights at three looks on a delayed effect. Two comparisons, each held to Monte-Carlo error and nothing
+  # else (the old tolerance added three points on top of three errors, 4 errors at 4,000 trials, and it hid what is written below):
+  #   (1) the LAW of the engine's statistic against the reference's, at the reference's own calendar looks (18, 30 and 42 months) and its own boundaries: the probability of
+  #       having crossed by each look under the delayed effect is the reference's within 3.5 binomial errors of 6,000 trials, and the probability under the null is reported
+  #       beside it. (The finite-sample null tail of the four weighted statistics at 150 + 150 people is a little heavier than the asymptotic law the reference integrates:
+  #       0.0273 against 0.0248 cumulative at 20,000 trials, 0.0270 at 60,000 -- so the boundaries found by simulation are higher than the reference's, 2.96 and 2.29 against 2.92
+  #       and 2.25, and the engine is the conservative one; that is a property of the sample size and not a tolerance.)
+  #   (2) the whole pipeline: looks at the same EVENT FRACTIONS, boundaries found by simulation under the null with the reference's null spend, then the same crossing
+  #       probabilities. Its error is the bootstrap error of the difference, which holds the alternative run AND the boundary run (the quantile of 8,000 null trials at a
+  #       spend of 0.0037 rests on 30 trials): the gap must lie within 3.5 of those errors.
+  # The reference integrates with mvtnorm's randomized algorithm, so it is seeded: unseeded, its null spend and so the boundaries moved from run to run.
+  if (!requireNamespace("gsDesign2", quietly = TRUE)) return(list(pass = FALSE, detail = "gsDesign2 (the cross-check package) is not installed"))
+  suppressMessages(requireNamespace("gsDesign", quietly = TRUE))
+  n_total <- 300L
+  enroll <- gsDesign2::define_enroll_rate(duration = 12, rate = n_total / 12)
+  fail <- gsDesign2::define_fail_rate(duration = c(4, 100), fail_rate = log(2) / 12, hr = c(1, 0.6), dropout_rate = -log(0.95) / 12)
+  times <- c(18, 30, 42)
+  fh <- do.call(rbind, lapply(seq_len(4), function(k) data.frame(rho = c(0, 0, 1, 1)[k], gamma = c(0, 1, 0, 1)[k], tau = -1, test = k, analysis = 1:3, analysis_time = times)))
+  set.seed(9090L)
+  ref <- suppressMessages(gsDesign2::gs_power_combo(enroll_rate = enroll, fail_rate = fail, fh_test = fh, ratio = 1, binding = FALSE,
+    upper = gsDesign2::gs_spending_combo, upar = list(sf = gsDesign::sfLDOF, total_spend = 0.025, param = NULL), lower = gsDesign2::gs_b, lpar = rep(-Inf, 3)))
+  ups <- ref$bound[ref$bound$bound == "upper", ]
+  frac <- ref$analysis$event_frac
+  crossed <- function(b, S) {          # the probability of having crossed by each look: the first crossing counts once
+    alive <- rep(TRUE, nrow(S)); out <- numeric(ncol(S)); cum <- 0
+    for (k in seq_len(ncol(S))) { hit <- alive & is.finite(S[, k]) & S[, k] > b[k]; cum <- cum + mean(hit); out[k] <- cum; alive <- alive & !hit }
+    out
+  }
+  binom_se <- function(p, n) sqrt(p * (1 - p) / n + 1e-12)
+  # (1) the law at calendar looks
+  dist <- vcr_dist_exponential_from_median(12)
+  delayed <- .vcr_nph_spec(list(breaks = list(4), ratios = list(1, 0.6)), dist)
+  at_calendar <- function(hr, seed, R) {
+    one <- function(i) {
+      d <- vcr_sim_tte(150L, 150L, dist, hr, list(kind = "uniform", duration = 12), 30, 0.05, dropout_period = 12, max_followup = Inf)
+      vapply(times, function(cut) {
+        dk <- d[d$entry <= cut, , drop = FALSE]; end <- dk$entry + dk$time
+        dk$status <- as.integer(dk$status == 1L & end <= cut); dk$time <- pmin(dk$time, cut - dk$entry)
+        z <- vcr_fh_statistics(dk$time, dk$status, dk$arm)$z
+        if (length(z)) -min(z) else NA_real_
+      }, numeric(1))
+    }
+    do.call(rbind, vcr_map_streams(vcr_stream_bank(seed)$take(R), one, cores = vcr_cores(NULL), indices = seq_len(R)))
+  }
+  alt_cal <- crossed(ups$z, at_calendar(delayed, 9005L, 6000L)); null_cal <- crossed(ups$z, at_calendar(1, 9008L, 8000L))
+  z_law <- (alt_cal - ups$probability) / binom_se(alt_cal, 6000L)
+  # (2) the pipeline
+  sc <- .n90_scenario(n_total / 2, "maxcombo", frac, ratios = c(1, 0.6), at = 4, followup = 30)
+  spend <- diff(c(0, ups$probability0))
+  S0 <- .n90_trials(.n90_null(sc), 9005L, 8000L)[, paste0("stat", 1:3), drop = FALSE]
+  S1 <- .n90_trials(sc, 9006L, 4000L)[, paste0("stat", 1:3), drop = FALSE]      # the statistic at every look (no boundary), so that the crossing can be recomputed
+  b <- vcr_gs_simulated_bounds(S0, spend)$bounds
+  mine <- crossed(b, S1)
+  v <- .n90_trials(sc, 9006L, 1000L, list(bounds = b))                          # and the engine's own run with those boundaries on the first 1,000 of the same trials: the same answer
+  job <- vapply(1:3, function(k) mean(v[, "reject"] == 1 & v[, "look"] <= k), numeric(1))
+  set.seed(9091L)
+  boot <- t(vapply(seq_len(300L), function(i) crossed(vcr_gs_simulated_bounds(S0[sample.int(nrow(S0), replace = TRUE), , drop = FALSE], spend)$bounds, S1[sample.int(nrow(S1), replace = TRUE), , drop = FALSE]), numeric(3)))
+  se_pipe <- apply(boot, 2, stats::sd)
+  resolved <- is.finite(b)                      # a look that spends less than one null trial cannot stop the trial; the reference's own probability there is 0.001
+  z_pipe <- ifelse(resolved, (mine - ups$probability) / pmax(se_pipe, 1e-12), 0)
+  ok <- c(law = all(abs(z_law) < 3.5), pipeline = all(abs(z_pipe) < 3.5), same_trials = max(abs(job - crossed(b, S1[1:1000, , drop = FALSE]))) < 1e-12, look1_negligible = ups$probability[1] < 0.002 && !resolved[1],
+          conservative = b[3] > ups$z[3] - 3.5 * stats::sd(vapply(seq_len(300L), function(i) vcr_gs_simulated_bounds(S0[sample.int(nrow(S0), replace = TRUE), , drop = FALSE], spend)$bounds[3], numeric(1))))
+  list(pass = all(ok),
+       detail = sprintf("MaxCombo at 3 looks on a delayed effect (HR 1 for 4 months, then 0.6; 150 + 150 people) against gsDesign2::gs_power_combo. (1) the statistic at its calendar looks 18/30/42 and the reference's boundaries %s: crossed by each look %s against %s (%s binomial errors; 6,000 trials), under the null %s against %s. (2) the pipeline, looks at the event fractions %s, boundaries %s from 8,000 null trials spending the reference's null spend %s: %s against %s, %s errors of the difference (bootstrap, boundary run included; tolerance 3.5), the first look (spend %.1e) cannot stop a trial%s",
+                        paste(sprintf("%.3f", ups$z), collapse = "/"), paste(sprintf("%.4f", alt_cal), collapse = "/"), paste(sprintf("%.4f", ups$probability), collapse = "/"), paste(sprintf("%.1f", z_law), collapse = "/"),
+                        paste(sprintf("%.4f", null_cal), collapse = "/"), paste(sprintf("%.4f", ups$probability0), collapse = "/"),
+                        paste(sprintf("%.3f", frac), collapse = "/"), paste(sprintf("%.3f", b), collapse = "/"), paste(sprintf("%.2g", spend), collapse = "/"),
+                        paste(sprintf("%.4f", mine), collapse = "/"), paste(sprintf("%.4f", ups$probability), collapse = "/"), paste(sprintf("%.1f", z_pipe), collapse = "/"), spend[1],
+                        if (all(ok)) "" else paste0("; FAILED: ", paste(names(ok)[!ok], collapse = ","))))
+})
+
+vcr_case("N90e", c("AC-28", "AC-29"), function() {
+  # (1) the estimate is the stopping look's, exactly: one trial analysed with a boundary that stops it at look 1 (-Inf), with none that can (Inf), and with the
+  # log-rank estimate computed on the look's own data
+  set.seed(9051L, kind = VCR_RNG_KIND)
+  d <- vcr_sim_tte(150L, 150L, vcr_dist_exponential_from_median(12), 0.6, list(kind = "uniform", duration = 12), 24, 0.05, dropout_period = 12, max_followup = Inf)
+  gs <- vcr_group_sequential(c(0.5, 1), 0.025, "obrien_fleming")
+  cal <- d$entry + d$time; ev_cal <- sort(cal[d$status == 1L]); total <- length(ev_cal); targets <- ceiling(gs$informationRates * total)
+  look1 <- .vcr_gs_look_data(d, gs, 1L, cal, ev_cal, total, targets)$data
+  early <- .vcr_run_gs_weighted(d, gs, 0.025, 1, "maxcombo", 0.5, bounds = c(-Inf, Inf))
+  never <- .vcr_run_gs_weighted(d, gs, 0.025, 1, "maxcombo", 0.5, bounds = c(Inf, Inf))
+  ref1 <- vcr_analyse_logrank(look1, 0.025, 1, 1); refK <- vcr_analyse_logrank(d, 0.025, 1, 1)
+  exact <- c(early = early[["look"]] == 1 && abs(early[["estimate"]] - ref1[["estimate"]]) < 1e-14 && abs(early[["se"]] - ref1[["se"]]) < 1e-14 && abs(early[["ci_low"]] - ref1[["ci_low"]]) < 1e-14,
+             never = never[["look"]] == 2 && abs(never[["estimate"]] - refK[["estimate"]]) < 1e-14 && abs(never[["ci_high"]] - refK[["ci_high"]]) < 1e-14,
+             differs = abs(ref1[["estimate"]] - refK[["estimate"]]) > 1e-3)
+  # (2) bias and coverage of the weighted design against the log-rank design on the same hazard ratio
+  mk <- function(method) list(design = list(kind = "group_sequential", nTreat = 150, nControl = 150, informationRates = list(0.5, 1), spending = "obrien_fleming"), endpoint = list(type = "time_to_event"),
+    truth = list(hazardRatio = 0.6, controlMedian = 12), accrual = list(kind = "uniform", duration = 12, followup = 24, dropoutAnnual = 0.05), analysis = list(method = method, alpha = 0.025, sided = 1))
+  null <- mk("maxcombo"); null$truth <- list(hazardRatio = 1, controlMedian = 12)
+  b <- vcr_gs_simulated_bounds(.n90_trials(null, 9052L, 3000L)[, c("stat1", "stat2")], gs$alphaSpent)
+  w <- .n90_trials(mk("maxcombo"), 9053L, 2500L, list(bounds = b$bounds))
+  l <- .n90_trials(mk("logrank"), 9054L, 2500L)
+  bias <- function(x) c(mean(x[, "estimate"]) - log(0.6), stats::sd(x[, "estimate"]) / sqrt(nrow(x)))
+  cover <- function(x) { p <- mean(x[, "ci_low"] <= log(0.6) & x[, "ci_high"] >= log(0.6)); c(p, sqrt(p * (1 - p) / nrow(x))) }
+  bw <- bias(w); bl <- bias(l); cw <- cover(w); cl <- cover(l)
+  z_bias <- abs(bw[1] - bl[1]) / sqrt(bw[2]^2 + bl[2]^2); z_cover <- abs(cw[1] - cl[1]) / sqrt(cw[2]^2 + cl[2]^2)
+  ok <- c(exact, comparable = z_bias < 3.5 && z_cover < 3.5, truncated = bl[1] < -0.02 && bw[1] < -0.02)
+  list(pass = all(ok), detail = sprintf("the estimate of a trial stopped at look 1 is the log-rank estimate on that look's data (%s) and a trial that never stops reports the final one (%s); hazard ratio 0.6, 150 + 150, looks at 50%% and 100%%, 2,500 trials each: bias of the MaxCombo design %.4f (error %.4f) beside the log-rank design's %.4f (%.4f), %.2f errors apart (it was -0.004 against -0.036 when read on all the data); coverage %.3f / %.3f%s",
+                                        exact[["early"]], exact[["never"]], bw[1], bw[2], bl[1], bl[2], z_bias, cw[1], cl[1], if (all(ok)) "" else paste0("; FAILED: ", paste(names(ok)[!ok], collapse = ","))))
+})

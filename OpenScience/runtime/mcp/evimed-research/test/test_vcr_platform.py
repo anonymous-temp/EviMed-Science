@@ -207,6 +207,16 @@ class VcrToolDefinitionTests(unittest.TestCase):
         self.assertIn("validate", definitions["vcr_simulate"]["inputSchema"]["properties"]["action"]["enum"])
         self.assertNotIn("validate", definitions["vcr_simulate"]["description"], "it is found in the schema and in the answer of shape, not in the description")
 
+    def test_the_one_line_a_general_conversation_always_reads_names_dose_finding_and_the_comparison_of_several_drugs(self):
+        # Live check 2026-11-04: a pasted small table of three drugs asked for the best one was worked out in a script of the conversation's own (no
+        # vcr tool opened), and dose escalation reached the engine in two of five runs. The line stays within its cap and says both, in the words a
+        # person uses, beside what it already covered; shortened elsewhere (the pointer to the result page, the examples of dose finding) to fit.
+        description = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}["vcr_simulate"]["description"]
+        self.assertLessEqual(len(description), 420)
+        for words in ("sample size", "power or events", "comparing designs", "dose finding", "synthetic cohort", "baseline table", "external control",
+                      "comparing several drugs", "network meta-analysis"):
+            self.assertIn(words, description)
+
     def test_a_refusal_the_gateway_answers_with_400_is_the_run_s_to_fix(self):
         # "Go on without the study" is for a module that is not there, not for a sentence that says what to write first.
         fixable = vcr_platform.VcrPlatformError("vcr_simulate_subject_required", "first write a trial_scenario", status=400)
@@ -332,6 +342,17 @@ class VcrToolDefinitionTests(unittest.TestCase):
         notes = vcr_platform.shape({"kind": "literature_population"})["data"]["notes"]
         self.assertTrue(any("generate_population" in note for note in notes))
 
+    def test_the_shape_of_a_generic_design_names_the_kinds_that_answer_dose_finding_single_arm_looks_composites_and_networks(self):
+        # Live 2026-11-04: the model shaped a generic design kind and then wrote its own simulation of what design_dose / design_bayesian compute.
+        for kind in ("design_analytic", "design_simulation", "design_grid"):
+            notes = " ".join(vcr_platform.shape({"action": "shape", "kind": kind})["data"]["notes"])
+            for other in ("design_dose", "design_bayesian", "design_confirmatory", "design_win_ratio", "network_meta"):
+                self.assertIn(other, notes, (kind, other))
+        self.assertTrue(all(kind in vcr_platform.JOB_KINDS for kind in ("design_dose", "design_bayesian", "design_confirmatory", "design_win_ratio", "network_meta")))
+        # A kind that is not a generic design carries no pointer.
+        notes = " ".join(vcr_platform.shape({"action": "shape", "kind": "design_dose"}).get("data", {}).get("notes", []))
+        self.assertNotIn("instead of writing your own simulation", notes)
+
     def test_every_row_of_shape_says_what_it_asks_of_a_person_and_no_object_does(self):
         # C2: the role is read off the schema by the platform (research_fact: required, no default, not a choice of words; defaultable: the
         # rest), printed on every key, and explained once.
@@ -386,7 +407,7 @@ class VcrToolDefinitionTests(unittest.TestCase):
     def test_the_kinds_the_platform_builds_say_what_a_run_states_and_where_the_rest_comes_from(self):
         pool = vcr_platform.shape({"kind": "pool_evidence"})["data"]
         self.assertTrue(pool["builtByPlatform"])
-        self.assertEqual(pool["runStates"], ["parameter", "endpointKey", "calibres", "armRole", "target", "method"])
+        self.assertEqual(pool["runStates"], ["parameter", "endpointKey", "calibres", "armRole", "target", "method", "tauPrior"])
         self.assertTrue(any("evidence_pool" in note for note in pool["notes"]))
         self.assertNotIn("examples", pool)
         match = vcr_platform.shape({"kind": "match_criteria"})["data"]
@@ -424,7 +445,7 @@ class VcrToolDefinitionTests(unittest.TestCase):
 
     def test_evidence_pool_names_a_parameter_and_never_takes_numbers(self):
         properties = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}["evidence_pool"]["inputSchema"]["properties"]
-        self.assertEqual(set(properties), {"action", "parameter", "endpointKey", "calibres", "method", "jobId"})
+        self.assertEqual(set(properties), {"action", "parameter", "endpointKey", "calibres", "method", "tauPrior", "jobId"})
         self.assertNotIn("studies", properties)
 
     def test_the_response_cap_is_four_mebibytes(self):
@@ -582,6 +603,26 @@ class VcrReadWriteTests(_GatewayCase):
         saved = self.server.call_tool("vcr_write", {"what": "evidence_item", "items": [{"publication": {"pmid": "37676259"}}]})
         self.assertIn("1 written, 1 reminder(s)", saved["summary"])
         self.assertNotIn("refused", saved["summary"])
+
+    def test_numbers_that_do_not_agree_are_advice_on_a_saved_item_and_say_what_to_do_with_the_value(self):
+        # E2: the item is saved as read; the answer names the numbers and does not tell the run to rewrite it or to wait for anyone.
+        _Gateway.answers["write"] = (200, {"data": {"what": "evidence_item", "ok": True, "ids": ["evd_1"], "issues": [
+            {"index": 0, "field": "value", "code": "vcr_evidence_values_inconsistent", "message": "风险比：估计值 0.62、区间 0.48–0.95 对不上。"}]}})
+        result = self.server.call_tool("vcr_write", {"what": "evidence_item", "items": [{"registryId": "NCT01234567"}]})
+        self.assertEqual(result["status"], "warning")
+        self.assertIn("1 written, 1 reminder(s)", result["summary"])
+        self.assertNotIn("refused", result["summary"])
+        self.assertEqual(result["warnings"], ["item 0, value: 风险比：估计值 0.62、区间 0.48–0.95 对不上。"])
+        joined = " ".join(result["next_actions"])
+        self.assertIn("The value is kept as read either way", joined)
+        self.assertNotIn("Correct the refused items", joined)
+        # The second, independent reading of the same passage that read another number is the same kind of advice.
+        _Gateway.answers["write"] = (200, {"data": {"what": "assumption", "ok": True, "ids": ["asm_1"], "issues": [
+            {"index": 0, "field": "evidenceIds", "code": "vcr_evidence_second_read_differs", "message": "风险比：同一段原文读了两次，结果不一致。"}]}})
+        second = self.server.call_tool("vcr_write", {"what": "assumption", "items": [{"key": "control_hr"}]})
+        self.assertIn("1 written, 1 reminder(s)", second["summary"])
+        self.assertNotIn("refused", second["summary"])
+        self.assertIn("The value is kept as read either way", " ".join(second["next_actions"]))
 
     def test_a_matching_write_hands_over_the_link_to_the_matching_page(self):
         entry = {"studyId": "std_conv", "tab": "matching", "label": "在“匹配”页查看", "url": "https://evimed.example/app/virtual-research/std_conv/matching"}
@@ -1011,6 +1052,11 @@ class VcrJobWaitTests(_GatewayCase):
             self.assertIn("notice", advice)
             self.assertIn("end the turn", advice)
             self.assertIn("vcr_read (what: results)", advice)
+            # Live 2026-11-04: told to answer with what it had, the model worked the sample size out itself and gave its own number
+            # beside the engine's. A job that finishes before the reply is written is read once more, not computed twice.
+            self.assertIn("give no number of your own", advice)
+            self.assertIn("look once more with status just before you answer", advice)
+            self.assertNotIn("action status", advice)
 
     def test_a_job_that_finishes_during_the_wait_comes_back_finished_from_one_start(self):
         self.wait_for("20")

@@ -306,9 +306,12 @@
           "随访时间表",
           "基线水平与对照组的变化速度",
           "处理效应（每个时间单位变化速度的差）",
+          "平均轨迹的形状（直线、逐渐趋平或二次曲线）",
           "个体间的差异（截距与斜率的标准差及相关）",
           "残差标准差",
           "每次随访前退出的概率",
+          "与结局有关的退出（看上一次或这一次的值）",
+          "救援用药（每次随访前开始的概率及对结局的平移）",
           "协变量效应（取自已存人群）",
           "目标队列规则",
           "同队列的配对模拟标识"
@@ -318,8 +321,8 @@
         "interface": "vcr-engine patients.longitudinal",
         "retirement": "当引擎的 patients.longitudinal 方法版本变更时退役并重新发布。",
         "knownLimits": [
-          "线性轨迹，随机截距与随机斜率",
-          "退出为完全随机缺失，不模拟与结局有关的退出",
+          "平均轨迹是直线、逐渐趋平或二次曲线三种之一，个体偏离为随机截距与随机斜率",
+          "不设退出模型时，退出为完全随机缺失；与结局有关的退出只按设定的一种机制模拟",
           "不含任何真实人群的协变量结构",
           "不可用于个体层面的预测",
           "不承载疗效或安全性证据"
@@ -359,9 +362,12 @@
         "随访时间表",
         "基线水平与对照组的变化速度",
         "处理效应（每个时间单位变化速度的差）",
+        "平均轨迹的形状（直线、逐渐趋平或二次曲线）",
         "个体间的差异（截距与斜率的标准差及相关）",
         "残差标准差",
         "每次随访前退出的概率",
+        "与结局有关的退出（看上一次或这一次的值）",
+        "救援用药（每次随访前开始的概率及对结局的平移）",
         "协变量效应（取自已存人群）",
         "目标队列规则",
         "同队列的配对模拟标识"
@@ -385,8 +391,8 @@
         }
       ],
       "limits": [
-        "线性轨迹，随机截距与随机斜率",
-        "退出为完全随机缺失，不模拟与结局有关的退出",
+        "平均轨迹是直线、逐渐趋平或二次曲线三种之一，个体偏离为随机截距与随机斜率",
+        "不设退出模型时，退出为完全随机缺失；与结局有关的退出只按设定的一种机制模拟",
         "不含任何真实人群的协变量结构",
         "不可用于个体层面的预测",
         "不承载疗效或安全性证据"
@@ -475,7 +481,7 @@
         {
           "label": "代码核对",
           "state": "passed",
-          "detail": "对照 simsurv 的已知真值"
+          "detail": "同参数对照 simsurv 的生存率与风险比，并对照解析真值（指数与 Weibull 分布）"
         },
         {
           "label": "种子可复现",
@@ -527,8 +533,8 @@
       "id": "mth_3",
       "name": "双重稳健估计（AIPW）",
       "method": "comparator.aipw",
-      "version": "1.2.0",
-      "endpoints": "连续 · 二分类",
+      "version": "1.4.0",
+      "endpoints": "连续 · 二分类 · 事件时间",
       "numeric": null,
       "validation": {
         "status": "unmeasured",
@@ -539,6 +545,34 @@
     },
     {
       "id": "mth_4",
+      "name": "未测混杂的偏倚分析",
+      "method": "comparator.bias_analysis",
+      "version": "1.0.0",
+      "endpoints": null,
+      "numeric": null,
+      "validation": {
+        "status": "unmeasured",
+        "reason": "not_configured"
+      },
+      "assumptions": [],
+      "usedIn": null
+    },
+    {
+      "id": "mth_5",
+      "name": "外部对照的动态借用",
+      "method": "comparator.borrowing",
+      "version": "1.0.0",
+      "endpoints": "二分类 · 连续",
+      "numeric": null,
+      "validation": {
+        "status": "unmeasured",
+        "reason": "not_configured"
+      },
+      "assumptions": [],
+      "usedIn": null
+    },
+    {
+      "id": "mth_6",
       "name": "协变量集敏感性分析",
       "method": "comparator.covariate_sets",
       "version": "1.2.0",
@@ -552,10 +586,10 @@
       "usedIn": null
     },
     {
-      "id": "mth_5",
+      "id": "mth_7",
       "name": "熵平衡加权",
       "method": "comparator.entropy_balance",
-      "version": "1.3.0",
+      "version": "1.4.0",
       "endpoints": "连续 · 二分类 · 事件时间",
       "numeric": null,
       "validation": {
@@ -566,7 +600,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_6",
+      "id": "mth_8",
       "name": "E 值",
       "method": "comparator.evalue",
       "version": "1.0.0",
@@ -580,7 +614,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_7",
+      "id": "mth_9",
       "name": "匹配调整间接比较",
       "method": "comparator.maic",
       "version": "1.0.0",
@@ -594,7 +628,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_8",
+      "id": "mth_10",
       "name": "事件时间终点的匹配调整间接比较",
       "method": "comparator.maic_time_to_event",
       "version": "1.1.0",
@@ -608,7 +642,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_9",
+      "id": "mth_11",
       "name": "MAP 先验",
       "method": "comparator.map_prior",
       "version": "1.1.0",
@@ -622,7 +656,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_10",
+      "id": "mth_12",
       "name": "阴性对照结局",
       "method": "comparator.negative_control",
       "version": "1.1.0",
@@ -636,7 +670,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_11",
+      "id": "mth_13",
       "name": "预后评分校正（二分类/事件时间）",
       "method": "comparator.prognostic_adjustment",
       "version": "1.0.0",
@@ -650,10 +684,10 @@
       "usedIn": null
     },
     {
-      "id": "mth_12",
+      "id": "mth_14",
       "name": "倾向评分加权",
       "method": "comparator.propensity_weight",
-      "version": "1.3.0",
+      "version": "1.5.0",
       "endpoints": "连续 · 二分类 · 事件时间",
       "numeric": null,
       "validation": {
@@ -664,7 +698,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_13",
+      "id": "mth_15",
       "name": "RMST 比较",
       "method": "comparator.rmst",
       "version": "1.1.0",
@@ -678,7 +712,35 @@
       "usedIn": null
     },
     {
-      "id": "mth_14",
+      "id": "mth_16",
+      "name": "模拟治疗比较（G 计算）",
+      "method": "comparator.stc",
+      "version": "1.0.0",
+      "endpoints": "连续 · 二分类",
+      "numeric": null,
+      "validation": {
+        "status": "unmeasured",
+        "reason": "not_configured"
+      },
+      "assumptions": [],
+      "usedIn": null
+    },
+    {
+      "id": "mth_17",
+      "name": "目标试验模拟",
+      "method": "comparator.target_trial",
+      "version": "1.0.0",
+      "endpoints": "事件时间",
+      "numeric": null,
+      "validation": {
+        "status": "unmeasured",
+        "reason": "not_configured"
+      },
+      "assumptions": [],
+      "usedIn": null
+    },
+    {
+      "id": "mth_18",
       "name": "缺失数据的临界点分析",
       "method": "comparator.tipping_point",
       "version": "1.0.0",
@@ -692,10 +754,10 @@
       "usedIn": null
     },
     {
-      "id": "mth_15",
+      "id": "mth_19",
       "name": "加权 Cox 风险比",
       "method": "comparator.weighted_cox",
-      "version": "1.3.0",
+      "version": "1.5.0",
       "endpoints": "事件时间",
       "numeric": null,
       "validation": {
@@ -706,10 +768,10 @@
       "usedIn": null
     },
     {
-      "id": "mth_16",
+      "id": "mth_20",
       "name": "方案的解析计算",
       "method": "design.analytic",
-      "version": "1.3.0",
+      "version": "1.4.0",
       "endpoints": "连续 · 二分类 · 事件时间",
       "numeric": null,
       "validation": {
@@ -720,7 +782,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_17",
+      "id": "mth_21",
       "name": "成功把握",
       "method": "design.assurance",
       "version": "1.1.0",
@@ -734,10 +796,10 @@
       "usedIn": null
     },
     {
-      "id": "mth_18",
-      "name": "设计网格",
-      "method": "design.grid",
-      "version": "1.3.0",
+      "id": "mth_22",
+      "name": "贝叶斯设计（无需 MCMC）",
+      "method": "design.bayesian",
+      "version": "1.0.0",
       "endpoints": "连续 · 二分类 · 事件时间",
       "numeric": null,
       "validation": {
@@ -748,7 +810,49 @@
       "usedIn": null
     },
     {
-      "id": "mth_19",
+      "id": "mth_23",
+      "name": "确认性设计",
+      "method": "design.confirmatory",
+      "version": "1.2.0",
+      "endpoints": "连续 · 二分类 · 事件时间",
+      "numeric": null,
+      "validation": {
+        "status": "unmeasured",
+        "reason": "not_configured"
+      },
+      "assumptions": [],
+      "usedIn": null
+    },
+    {
+      "id": "mth_24",
+      "name": "剂量探索设计",
+      "method": "design.dose",
+      "version": "1.0.0",
+      "endpoints": null,
+      "numeric": null,
+      "validation": {
+        "status": "unmeasured",
+        "reason": "not_configured"
+      },
+      "assumptions": [],
+      "usedIn": null
+    },
+    {
+      "id": "mth_25",
+      "name": "设计网格",
+      "method": "design.grid",
+      "version": "1.5.0",
+      "endpoints": "连续 · 二分类 · 事件时间",
+      "numeric": null,
+      "validation": {
+        "status": "unmeasured",
+        "reason": "not_configured"
+      },
+      "assumptions": [],
+      "usedIn": null
+    },
+    {
+      "id": "mth_26",
       "name": "预后协变量调整",
       "method": "design.procova",
       "version": "1.0.0",
@@ -762,10 +866,10 @@
       "usedIn": null
     },
     {
-      "id": "mth_20",
+      "id": "mth_27",
       "name": "方案的模拟运行",
       "method": "design.simulate",
-      "version": "1.3.0",
+      "version": "1.5.0",
       "endpoints": "连续 · 二分类 · 事件时间",
       "numeric": null,
       "validation": {
@@ -776,9 +880,9 @@
       "usedIn": null
     },
     {
-      "id": "mth_21",
-      "name": "证据合并",
-      "method": "evidence.pool",
+      "id": "mth_28",
+      "name": "分层复合终点的胜率比设计",
+      "method": "design.win_ratio",
       "version": "1.0.0",
       "endpoints": null,
       "numeric": null,
@@ -790,7 +894,49 @@
       "usedIn": null
     },
     {
-      "id": "mth_22",
+      "id": "mth_29",
+      "name": "剂量反应荟萃分析",
+      "method": "evidence.dose_response",
+      "version": "1.0.0",
+      "endpoints": null,
+      "numeric": null,
+      "validation": {
+        "status": "unmeasured",
+        "reason": "not_configured"
+      },
+      "assumptions": [],
+      "usedIn": null
+    },
+    {
+      "id": "mth_30",
+      "name": "网络荟萃分析",
+      "method": "evidence.network",
+      "version": "1.0.0",
+      "endpoints": null,
+      "numeric": null,
+      "validation": {
+        "status": "unmeasured",
+        "reason": "not_configured"
+      },
+      "assumptions": [],
+      "usedIn": null
+    },
+    {
+      "id": "mth_31",
+      "name": "证据合并",
+      "method": "evidence.pool",
+      "version": "1.1.0",
+      "endpoints": null,
+      "numeric": null,
+      "validation": {
+        "status": "unmeasured",
+        "reason": "not_configured"
+      },
+      "assumptions": [],
+      "usedIn": null
+    },
+    {
+      "id": "mth_32",
       "name": "生存曲线重建（Guyot）",
       "method": "evidence.reconstruct_km",
       "version": "1.1.0",
@@ -804,7 +950,21 @@
       "usedIn": null
     },
     {
-      "id": "mth_23",
+      "id": "mth_33",
+      "name": "已发表效应的经验收缩",
+      "method": "evidence.shrinkage",
+      "version": "1.0.0",
+      "endpoints": null,
+      "numeric": null,
+      "validation": {
+        "status": "unmeasured",
+        "reason": "not_configured"
+      },
+      "assumptions": [],
+      "usedIn": null
+    },
+    {
+      "id": "mth_34",
       "name": "逐条匹配",
       "method": "matching.evaluate",
       "version": "1.0.0",
@@ -818,7 +978,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_24",
+      "id": "mth_35",
       "name": "应用已发表的预后模型",
       "method": "model.prognostic_apply",
       "version": "1.1.0",
@@ -832,10 +992,24 @@
       "usedIn": null
     },
     {
-      "id": "mth_25",
+      "id": "mth_36",
+      "name": "用自己的历史数据训练预后模型",
+      "method": "model.prognostic_train",
+      "version": "1.0.0",
+      "endpoints": "连续 · 二分类 · 事件时间",
+      "numeric": null,
+      "validation": {
+        "status": "unmeasured",
+        "reason": "not_configured"
+      },
+      "assumptions": [],
+      "usedIn": null
+    },
+    {
+      "id": "mth_37",
       "name": "拟合人群生存模型",
       "method": "model.survival_fit",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "endpoints": null,
       "numeric": null,
       "validation": {
@@ -846,7 +1020,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_26",
+      "id": "mth_38",
       "name": "虚拟患者（二分类终点）",
       "method": "patients.binary",
       "version": "1.1.0",
@@ -860,7 +1034,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_27",
+      "id": "mth_39",
       "name": "虚拟患者（连续终点）",
       "method": "patients.continuous",
       "version": "1.1.0",
@@ -874,10 +1048,10 @@
       "usedIn": null
     },
     {
-      "id": "mth_28",
+      "id": "mth_40",
       "name": "虚拟患者（纵向轨迹）",
       "method": "patients.longitudinal",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "endpoints": "连续",
       "numeric": null,
       "validation": {
@@ -888,7 +1062,21 @@
       "usedIn": null
     },
     {
-      "id": "mth_29",
+      "id": "mth_41",
+      "name": "人群层面的疾病进展模拟",
+      "method": "patients.progression",
+      "version": "1.0.0",
+      "endpoints": "连续",
+      "numeric": null,
+      "validation": {
+        "status": "unmeasured",
+        "reason": "not_configured"
+      },
+      "assumptions": [],
+      "usedIn": null
+    },
+    {
+      "id": "mth_42",
       "name": "虚拟患者（事件时间终点）",
       "method": "patients.time_to_event",
       "version": "1.1.0",
@@ -902,7 +1090,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_30",
+      "id": "mth_43",
       "name": "与第二份基线表对照",
       "method": "population.check",
       "version": "1.0.0",
@@ -916,7 +1104,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_31",
+      "id": "mth_44",
       "name": "文献人群",
       "method": "population.literature",
       "version": "1.1.0",
@@ -930,10 +1118,10 @@
       "usedIn": null
     },
     {
-      "id": "mth_32",
+      "id": "mth_45",
       "name": "人群质量报告",
       "method": "population.quality",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "endpoints": null,
       "numeric": null,
       "validation": {
@@ -944,7 +1132,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_33",
+      "id": "mth_46",
       "name": "情景人群生成",
       "method": "population.scenario",
       "version": "1.1.0",
@@ -958,10 +1146,10 @@
       "usedIn": null
     },
     {
-      "id": "mth_34",
+      "id": "mth_47",
       "name": "经验合成人群",
       "method": "population.synthpop",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "endpoints": null,
       "numeric": null,
       "validation": {
@@ -972,7 +1160,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_35",
+      "id": "mth_48",
       "name": "数据快照画像",
       "method": "profile.snapshot",
       "version": "1.1.0",

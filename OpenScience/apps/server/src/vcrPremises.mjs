@@ -24,8 +24,13 @@
  * @module vcrPremises
  */
 
-import { VCR_EFFECT_DISCOUNT_LABEL_ZH, VCR_EFFECT_DISCOUNT_LIMITS_ZH, VCR_ESTIMAND_LABELS_ZH, VCR_PREMISES_DECISIVE_MAX, VCR_PREMISE_SOURCES } from "@evimed/domain";
+import { VCR_EFFECT_DISCOUNT_LABEL_ZH, VCR_EFFECT_DISCOUNT_LIMITS_ZH, VCR_ESTIMAND_LABELS_ZH, VCR_MIN_CELL_SIZE, VCR_PREMISES_DECISIVE_MAX, VCR_PREMISE_SOURCES } from "@evimed/domain";
+import { personWord } from "./vcrPersonStated.mjs";
+import { imputationPremise } from "./vcrImputationView.mjs";
+import { targetTrialPremises } from "./vcrTargetTrialView.mjs";
 import { TIME_UNIT_WORDS, hazardLawWords, list, numeric, object, text } from "./vcrViewsKit.mjs";
+import { biasEstimatePhrase, biasStatedWords } from "./vcrBiasAnalysis.mjs";
+import { borrowingPremises } from "./vcrBorrowing.mjs";
 
 /**
  * @typedef {{ key: string, label: string, value: string, source: 'literature' | 'assumed' | 'default' | 'given', decisive: boolean,
@@ -40,7 +45,17 @@ const PRIORITY = Object.freeze([
   "effect", "control", "dropout", "correlation", "similarity", "sampling", "accrual", "alpha", "assurance",
   // a comparison: how suitable it is, how far the target trial is emulated, what an indirect comparison leaves unadjusted, what a
   // borrowed prior rests on, how strong an unmeasured confounder would have to be
-  "applicability", "targetTrial", "maicTarget", "maicModifiers", "residual", "borrowedHistory", "priorWorth", "unmeasured",
+  "applicability", "targetTrial", "trimmedPopulation", "missingAtRandom", "trialStrategy", "trialWeights", "maicTarget", "maicModifiers", "residual", "borrowedHistory", "priorWorth", "unmeasured",
+  // a bias analysis: the estimate it analyses and the bias that was stated
+  "biasEstimate", "biasStated",
+  // a dynamic borrowing: the history, the way of borrowing, the difference that stops it, the elastic function
+  "borrowingHistory", "borrowingPrior", "borrowingDelta", "borrowingFunction", "borrowingWeight",
+  // a spline survival fit: how far beyond the data, how flexible, the tail it assumes
+  "splineBeyond", "splineKnots", "splineTail",
+  // a trained prognostic model: the data, the cross-fitting, the correlation, the discounts
+  "prognosticTraining", "prognosticFolds", "prognosticRho", "prognosticDiscount", "prognosticForest",
+  // a progression simulation: its parameters, in the order a conclusion turns on them
+  "progression:model.amplitude", "progression:model.betweenPersonSd", "progression:treatment.slowing", "progression:baseline.sd", "progression:residualSd",
 ]);
 
 /**
@@ -135,7 +150,7 @@ function timeWord(configuration, diagnostics) {
  * @param {{ endpointType?: string | null, configuration?: Record<string, any>, diagnostics?: Record<string, any>, effectDiscount?: Record<string, any> | null,
  *   bound?: ReadonlyArray<{ key?: string, path?: string }>, cards?: ReadonlyArray<Record<string, any>>,
  *   appliedDefaults?: ReadonlyArray<{ path: string, value?: unknown }>, hasAssurance?: boolean, assuranceReason?: string | null,
- *   designKind?: string | null }} input
+ *   designKind?: string | null, personStated?: Record<string, any> | null }} input
  * `bound`: the cards that were laid over the scenario (the job's own record), by the path each filled; `cards`: the study's cards.
  * @returns {Array<Partial<VcrPremise>>}
  */
@@ -161,7 +176,8 @@ function trialPremises(input) {
     const card = cardByPath.get(path);
     if (card && numeric(card.pointValue) !== null) return { value: numeric(card.pointValue), source: premiseSourceOfCard(card), reason: premiseReasonOfCard(card) };
     if (defaults.has(path)) return { value: defaults.get(path), source: "default" };
-    return stated === undefined || stated === null ? null : { value: stated, source: "assumed" };
+    // a number the scenario states is 「你给的数据」 only when it is in the person's own message (`personStated`, frozen with the job); else a premise
+    return stated === undefined || stated === null ? null : { value: stated, source: personWord(input.personStated, path, "assumed") };
   };
   /** @type {Array<Partial<VcrPremise>>} */
   const rows = [];
@@ -170,6 +186,17 @@ function trialPremises(input) {
   // A single-arm binary design (exact, Simon) has no control arm: it is held to a response rate it must beat and sized for the one it is
   // expected to have.
   const single = ["single_arm", "simon_two_stage"].includes(String(input.designKind ?? object(configuration.design).kind)) && type === "binary";
+  // A non-inferiority margin (design.analytic / design.simulate 1.4.0): what the design has to rule out, as large a premise as the effect.
+  const hypothesis = object(configuration.hypothesis);
+  if (hypothesis.kind === "non_inferiority" && numeric(hypothesis.margin) !== null) {
+    const margin = Number(hypothesis.margin);
+    // (a result recorded before the direction existed read a higher value as the better one)
+    const lower = hypothesis.direction === "lower_better";
+    const words = type === "time_to_event" ? `风险比不超过 ${plain(margin)}`
+      : type === "binary" ? (lower ? `率差不高于 +${percent(margin)}` : `率差不低于 −${percent(margin)}`)
+      : lower ? `均数差不高于 ${plain(margin)}` : `均数差不低于 −${plain(margin)}`;
+    rows.push({ key: "margin", label: "非劣效界值", value: words, source: personWord(input.personStated, "hypothesis.margin", "assumed"), decisive: true });
+  }
   // The effect the design is sized for.
   if (single) {
     const alternative = stand("truth.alternativeRate", truth.alternativeRate ?? truth.responseRate);
@@ -327,8 +354,8 @@ function populationPremises(input) {
  * A record the run has not written is not a premise (no row has a value to show); the run is reminded of it in the answer of the
  * write, and what it costs the result is on the page as a limit.
  *
- * What an E-value is: how strong an unmeasured confounder would have to be to explain the estimate away. It is worded that way and
- * never as the absence of bias, which no number from the data can show.
+ * What an E-value is: how strong an unmeasured confounder would have to be to explain the estimate away. It is worded that way, as
+ * the simplest level of bias analysis (it estimates no bias), and never as the absence of bias, which no number from the data can show.
  *
  * @param {{ route?: string | null, estimand?: string | null, estimandStated?: boolean, diagnostics?: Record<string, any>,
  *   measures?: Record<string, number | null>, applicability?: Record<string, any> | null,
@@ -370,11 +397,13 @@ function comparatorPremises(input) {
     }
     const modifiers = list(diagnostics.unadjustedEffectModifiers).map(String).filter(Boolean);
     rows.push({ key: "maicModifiers", label: "未调整的效应修饰因子", value: modifiers.length ? modifiers.join("、") : "没有列出", source: "assumed", decisive: true });
-    if (input.anchored === false) rows.push({ key: "residual", label: "非锚定比较", value: "残余误差大小未知", source: "default", decisive: true });
+    // Without a common comparator the comparison is unbiased only if every prognostic factor and effect modifier was adjusted: that is the
+    // premise itself, said once with its value, and not a caveat about error of an unknown size.
+    if (input.anchored === false) rows.push({ key: "residual", label: "无锚定", value: "假定所有预后因子和效应修饰因子都已调整", source: "default", decisive: true });
   }
 
   // A borrowed prior rests on the historical numbers it was built from, and is worth some number of this study's patients.
-  if (route === "hybrid_control") {
+  if (route === "hybrid_control" && !Object.keys(object(diagnostics.borrowing)).length) {
     rows.push({ key: "borrowedHistory", label: "历史对照的数字",
       value: diagnostics.inputsAssumed === true ? "没有经过核对的来源（输入为假设）" : "来自核对过的证据",
       source: diagnostics.inputsAssumed === true ? "assumed" : "literature", decisive: true });
@@ -387,8 +416,52 @@ function comparatorPremises(input) {
   if (point !== null) {
     const limit = numeric(measures.e_value_confidence_limit);
     rows.push({ key: "unmeasured", label: "未测量的混杂",
-      value: `E 值 ${plain(point)}${limit !== null ? `（置信限 ${plain(limit)}）` : ""}：未测量的混杂要和处理、结局各有这么强的关联，才能解释掉这个结果`,
+      value: `E 值 ${plain(point)}${limit !== null ? `（置信限 ${plain(limit)}）` : ""}：未测量的混杂要和处理、结局各有这么强的关联，才能解释掉这个结果；它只回答“要多强”，是偏倚分析里最简单的一层，不估计偏倚本身`,
       source: "assumed", decisive: true });
+  }
+
+  // The bias analysis of an estimate (C1, C2): which estimate, and the bias the person said, with the grid of associations the engine took
+  // when none was said (a default, not a finding). Only the exaggerating bias is considered, and that is a premise too.
+  const bias = object(diagnostics.biasAnalysis);
+  if (Object.keys(bias).length) {
+    const phrase = biasEstimatePhrase(bias);
+    if (phrase) rows.push({ key: "biasEstimate", label: "被分析的估计", value: phrase, source: "given", decisive: true });
+    const stated = biasStatedWords(bias);
+    if (stated) rows.push({ key: "biasStated", label: "设定的偏倚", value: stated, source: "assumed", decisive: true });
+    const grid = list(bias.assumed).map(object).find((entry) => entry.key === "confounderTipping.associations");
+    if (grid) rows.push({ key: "biasGrid", label: "混杂强度的取值", value: `${list(grid.value).map((entry) => plain(Number(entry))).join("、")}（没有设定，按参考网格算）`, source: "default", decisive: false });
+    rows.push({ key: "biasDirection", label: "偏倚的方向", value: "只考虑把效应夸大的偏倚（去掉它，估计值向无效线靠近）", source: "default", decisive: false });
+  }
+
+  // Dynamic borrowing (C10-C12): the history it borrows from, the kind of prior and what it was told, the clinical difference that places it, the elastic function.
+  const borrowing = object(diagnostics.borrowing);
+  if (Object.keys(borrowing).length) rows.push(...borrowingPremises(borrowing));
+
+  // Who the estimate is about after a propensity trimming: the people with no comparable counterpart are removed, so the conclusion is the
+  // kept people's (EU HTA guideline 6.2). A fixed bound is the person's; Crump's rule is the engine's default.
+  const trim = object(diagnostics.trim);
+  if (Object.keys(trim).length && (typeof trim.trimmedAnyone === "boolean" ? trim.trimmedAnyone : Number(trim.removedTotal) > 0)) {
+    const arms = list(trim.arms).map(object);
+    // a group of one to nine people is not stated (the engine's small-cell rule)
+    const removed = (/** @type {string} */ arm, /** @type {string} */ name) => {
+      const count = numeric(arms.find((entry) => entry.arm === arm)?.removed);
+      return count === null ? `${name}不足 ${VCR_MIN_CELL_SIZE} 例的部分不逐一列出` : `${name} ${count} 例`;
+    };
+    rows.push({ key: "trimmedPopulation", label: "修剪后的目标人群",
+      value: `去掉${removed("treated", "试验组")}、${removed("control", "对照组")}（倾向评分低于 ${plain(Number(trim.lower))} 或高于 ${plain(Number(trim.upper))}）；结论只适用于留下的人`,
+      source: trim.rule === "fixed" ? "assumed" : "default", decisive: true });
+  }
+
+  // A target-trial emulation: the two strategies compared, what the weights that make up for the censoring assume, and what follow-up means.
+  rows.push(...targetTrialPremises(diagnostics));
+
+  // Missing covariates that were imputed: how much, how often, and the assumption about why (missing at random given what was seen).
+  const imputed = imputationPremise(diagnostics);
+  if (imputed) rows.push(imputed);
+
+  // A time-to-event doubly robust estimate rests on pseudo-observations, which need censoring not to depend on the covariates within an arm.
+  if (object(diagnostics.timeToEvent).censoring) {
+    rows.push({ key: "censoringIndependent", label: "删失的假定", value: "每一组内，删失与协变量无关（伪观测值法的前提）", source: "default", decisive: false });
   }
 
   // What an external control is estimated for, and what it is adjusted by: stated, and folded.

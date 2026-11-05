@@ -32,19 +32,27 @@ const numbers = (value) => (typeof value === "number" ? [value]
 test("the people-count keys are the contract's, and the floor is ten", () => {
   assert.equal(VCR_MIN_CELL_SIZE, 10);
   assert.deepEqual([...VCR_PEOPLE_COUNT_FIELDS], ["n", "count", "patients", "realPatients", "subjects", "events", "kept", "excluded",
-    "indeterminate", "cohortSize", "screened", "eligible", "enrolled", "referred", "contacted", "candidates", "nonEvents", "validPredictions", "invalidPredictions"]);
-  assert.deepEqual([...VCR_PEOPLE_COUNT_MAP_KEYS], ["levels", "people", "readable"]);
+    "indeterminate", "cohortSize", "screened", "eligible", "enrolled", "referred", "contacted", "candidates", "nonEvents", "validPredictions", "invalidPredictions",
+    "removed", "startedWithinGrace", "startedAfterGrace", "neverStarted", "startedAtTimeZero", "treatedBeforeTimeZero"]);
+  assert.deepEqual([...VCR_PEOPLE_COUNT_MAP_KEYS], ["levels", "people", "readable", "startsByArm", "eventsByArm"]);
   assert.deepEqual([...VCR_PEOPLE_COUNT_SCALAR_FIELDS], ["rows", "startingRows", "keptRows", "trainingObservations", "effectiveSampleSize",
     "requestedSubjects", "batchSubjects", "batchEvaluated", "batchUnavailable", "outsideBatch", "subjectsNotEvaluated",
-    "peopleSelected", "recordsToRead", "recordsRead", "recordsAlreadyRead", "prefiltered"]);
+    "peopleSelected", "recordsToRead", "recordsRead", "recordsAlreadyRead", "prefiltered",
+    "removedTotal", "keptTotal", "rowsAnalysed", "rowsIncomplete", "droppedRows", "inputRows", "usedRows", "excludedRows", "persons", "personsInTable", "personPeriods",
+    "personTrials", "expandedRows", "eligiblePeriods", "recordsCutShort", "rowsDroppedWhereCut", "rowsAfterEventDropped", "observedRows", "nTraining", "nHoldout",
+    "holdoutRows", "referenceSize", "leftOut", "smallerGroup", "rowsUsed", "rowsOtherArm", "controlPeopleUsed"]);
   assert.deepEqual([...VCR_PEOPLE_COUNT_MEASURES], ["rows", "cohort_size", "cohort_size_strict", "cohort_size_lenient", "training_observations", "effective_sample_size",
-    "eligible", "ineligible", "insufficient_evidence", "pending", "records_read", "records_already_read"]);
+    "eligible", "ineligible", "insufficient_evidence", "pending", "records_read", "records_already_read", "trimmed_treated", "trimmed_control"]);
   assert.deepEqual(Object.fromEntries(Object.entries(VCR_PEOPLE_COUNT_BLOCK_FIELDS).map(([block, keys]) => [block, [...keys]])),
-    { byYear: ["treated", "control"], estimate: ["people", "records"], plan: ["toRead", "alreadyRead", "prefiltered", "noDocuments", "deferred"] });
+    { byYear: ["treated", "control"], estimate: ["people", "records"], plan: ["toRead", "alreadyRead", "prefiltered", "noDocuments", "deferred"],
+      covariates: ["missing"], design: ["people"], waitingTime: ["people"] });
   assert.deepEqual(VCR_PEOPLE_COUNT_LINKS.map((link) => [[...link.triggers], [...link.whole], [...link.derived]]),
-    [[["events", "nonEvents"], ["n", "events", "nonEvents"], ["observedRisk", "calibrationInLarge"]]]);
+    [[["events", "nonEvents"], ["n", "events", "nonEvents"], ["observedRisk", "calibrationInLarge"]],
+      [["startedWithinGrace", "startedAfterGrace", "neverStarted", "treatedBeforeTimeZero"], ["people", "startedWithinGrace", "startedAfterGrace", "neverStarted", "treatedBeforeTimeZero"], []],
+      [["startedWithinGrace", "startedAfterGrace", "neverStarted"], ["people", "startedWithinGrace", "startedAfterGrace", "neverStarted"], []],
+      [["usedRows", "excludedRows"], ["inputRows", "usedRows", "excludedRows"], []], [["rowsIncomplete"], ["rowsAnalysed", "rowsIncomplete"], []], [["droppedRows"], ["rows", "droppedRows"], []]]);
   assert.deepEqual({ ...VCR_PEOPLE_DERIVED_MEASURES }, { observedRisk: "observed_risk", calibrationInLarge: "calibration_in_the_large" });
-  assert.deepEqual(Object.keys(VCR_PEOPLE_COUNT_WITHHELD_BLOCKS), ["enrolmentYear"]);
+  assert.deepEqual(Object.keys(VCR_PEOPLE_COUNT_WITHHELD_BLOCKS), ["enrolmentYear", "waitingTime"]);
 });
 
 test("a count of 1 to 9 that stands alone becomes null, and its object says which keys it hid", () => {
@@ -443,4 +451,54 @@ test("a batch reading's start answer: the plan's counts are judged one by one, a
     { estimate: { people: null, suppressed: ["people"] }, plan: { toRead: null, name: "x", estimate: 4, suppressed: ["toRead"] } });
   // `estimate` in another place is a point estimate and `plan` a plan: no key there is a count.
   assert.deepEqual(suppressForModel({ result: { estimate: 4, plan: { rule: "x", records: 3 } } }), { result: { estimate: 4, plan: { rule: "x", records: 3 } } });
+});
+
+test("a propensity trimming's arms: a small removed group takes the cell, the totals and the measure with it (review P0-1)", () => {
+  const trim = {
+    arms: [{ arm: "treated", n: 295, kept: 294, removed: 1, removedShare: 0.0034 }, { arm: "control", n: 305, kept: 305, removed: 0, removedShare: 0 }],
+    removedTotal: 1, keptTotal: 599,
+    baseline: [{ covariate: "age", arm: "treated", binary: false, keptMean: 63.6, removedMean: 97.5 }],
+  };
+  const shown = suppressForModel({ diagnostics: { trim }, measures: [{ name: "trimmed_treated", value: 1, unit: "例" }, { name: "trimmed_control", value: 0, unit: "例" }] });
+  assert.deepEqual(shown.diagnostics.trim.arms[0], { arm: "treated", n: null, kept: null, removed: null, suppressed: ["n", "kept", "removed"] });
+  assert.equal(shown.diagnostics.trim.removedTotal, null, "the total is the removed person's count");
+  assert.deepEqual(shown.measures[0], { name: "trimmed_treated", unit: "例", value: null, suppressed: ["value"] });
+  assert.equal(shown.measures[1].value, 0, "nobody removed is not a person");
+  assert.equal(JSON.stringify(shown).includes("0.0034"), false, "the share is not left beside the hidden count");
+});
+
+test("a mean under a name that is not a count is left alone, and a count under a new name is hidden (review P0-1, P0-2)", () => {
+  // the baseline of a trimming is named for what it is, so `kept` can be a head count only where a head count is
+  assert.deepEqual(suppressForModel({ baseline: [{ covariate: "female", arm: "treated", keptMean: 0.4, removedMean: 8.2 }] }), { baseline: [{ covariate: "female", arm: "treated", keptMean: 0.4, removedMean: 8.2 }] });
+  const imputation = suppressForModel({ imputation: { rowsAnalysed: 300, rowsIncomplete: 3, covariates: [{ name: "age", missing: 3 }, { name: "bmi", missing: 57 }], completeCase: { rows: 297, droppedRows: 3 } } }).imputation;
+  assert.equal(imputation.rowsIncomplete, null);
+  assert.equal(imputation.rowsAnalysed, null, "the part alone is a subtraction from the whole");
+  assert.deepEqual([imputation.completeCase.rows, imputation.completeCase.droppedRows], [null, null]);
+  assert.deepEqual(imputation.covariates.map((/** @type {any} */ cell) => cell.missing), [null, null], "a small cell takes the next smallest with it");
+  assert.deepEqual(imputation.covariates.map((/** @type {any} */ cell) => cell.name), ["age", "bmi"], "and keeps its name");
+  // a refusal's counts: the smaller of the two groups goes like events
+  assert.deepEqual(suppressForModel({ diagnostics: { inputRows: 600, usedRows: 8, excludedRows: 592, needed: 15, smallerGroup: 4 } }).diagnostics,
+    { inputRows: null, usedRows: null, excludedRows: null, needed: 15, smallerGroup: null, suppressed: ["inputRows", "usedRows", "excludedRows", "smallerGroup"] });
+});
+
+test("a target-trial emulation's people by when they began: the parts make the whole, the waits of a handful of people are withheld (review P0-2)", () => {
+  const design = { people: 14, startedWithinGrace: 2, startedAfterGrace: 2, neverStarted: 10, startedAtTimeZero: 2, waitingTime: { max: 4, median: 2, people: 4 }, startsByArm: { "0": 155, "1": 3 }, personTrials: 248 };
+  const shown = suppressForModel({ design }).design;
+  assert.deepEqual([shown.people, shown.startedWithinGrace, shown.startedAfterGrace, shown.neverStarted, shown.startedAtTimeZero], [null, null, null, null, null]);
+  assert.deepEqual(shown.waitingTime, { suppressed: ["max", "median", "people"] }, "the median and the longest wait of four people are those people's values");
+  assert.deepEqual(shown.startsByArm, { "0": null, "1": null }, "an arm map hides the small cell and the next with it");
+  assert.equal(shown.personTrials, 248);
+  // enough people: nothing is hidden
+  const large = { people: 250, startedWithinGrace: 97, startedAfterGrace: 56, neverStarted: 97, startedAtTimeZero: 40, waitingTime: { max: 17, median: 2, people: 153 } };
+  assert.deepEqual(suppressForModel({ design: large }), { design: large });
+  // the people treated before time zero are the fourth part of the people: a small one hides the others, and a small other hides it (review stats2 finding 17)
+  const withPrior = { people: 260, startedWithinGrace: 97, startedAfterGrace: 56, neverStarted: 98, treatedBeforeTimeZero: 9 };
+  assert.deepEqual(suppressForModel({ design: withPrior }).design, { people: null, startedWithinGrace: null, startedAfterGrace: null, neverStarted: null, treatedBeforeTimeZero: null, suppressed: ["people", "startedWithinGrace", "startedAfterGrace", "neverStarted", "treatedBeforeTimeZero"] });
+  const smallOther = suppressForModel({ design: { people: 260, startedWithinGrace: 97, startedAfterGrace: 5, neverStarted: 98, treatedBeforeTimeZero: 60 } }).design;
+  assert.equal(smallOther.treatedBeforeTimeZero, null, "the part that would give the small one away by subtraction goes with it");
+  assert.equal(suppressForModel({ design: { ...withPrior, treatedBeforeTimeZero: 0, neverStarted: 107 } }).design.treatedBeforeTimeZero, 0, "none treated before is not a small cell");
+  // the people a design was run on when it is the only count that is small
+  assert.deepEqual(suppressForModel({ design: { people: 6, gracePeriod: 3 } }).design, { people: null, gracePeriod: 3, suppressed: ["people"] });
+  assert.deepEqual(suppressForModel({ checks: { persons: 5, personPeriods: 40, eligiblePeriods: 38, recordsCutShort: 0 } }).checks,
+    { persons: null, personPeriods: 40, eligiblePeriods: 38, recordsCutShort: 0, suppressed: ["persons"] });
 });

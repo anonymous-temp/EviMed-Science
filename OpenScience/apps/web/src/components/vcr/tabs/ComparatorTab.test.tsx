@@ -6,6 +6,8 @@ import { ComparatorTab, VCR_ASSESS_COMPARABILITY_DRAFT } from "./ComparatorTab";
 import { fakeRoom, renderTab } from "../__fixtures__/tabFrame";
 import { EMPTY_STUDY_ID, fixture, installVcrServer, STUDY_ID } from "../__fixtures__/serverFixtures";
 import { VCR_NO_DEFINITION } from "../vcrText";
+import biasPayloads from "../__fixtures__/biasAnalysisPayloads.json";
+import stcPayloads from "../__fixtures__/stcPayloads.json";
 
 /**
  * 对照 (R19; audit B §4.4): who this study can be compared with, as routes beside the record of the one in use — its curves with the
@@ -523,4 +525,69 @@ it("keeps an unavailable absolute risk absent rather than treating a relative sc
   expect(section).toHaveTextContent("1.8");
   expect(section).toHaveTextContent("未提供适用的基线风险");
   expect(within(section).queryByText("人群预测均值")).toBeNull();
+});
+
+describe("对照 · the bias analysis and the trimmed population", () => {
+  it("says who the estimate is about before the premises, and draws the bias analysis beside the robustness numbers", async () => {
+    const raw = fixture("ev201/comparator.json");
+    raw.limits = [{ key: "balance", text: "加权后仍有失衡。" }];
+    raw.trim = biasPayloads.trim;
+    raw.biasAnalysis = biasPayloads["bias-ratio"];
+    raw.robustness = { rows: [{ key: "e_value", label: "E 值", value: { value: 2.2, source: "calculated" } }], notes: [], qualification: null };
+    installVcrServer(network.productRequest, { [tab("comparator")]: raw });
+    const { container } = draw();
+    const bias = await found(container, "[data-vcr-bias-analysis]");
+    const trim = container.querySelector("[data-vcr-trim]") as HTMLElement;
+    expect(trim).toHaveTextContent("结论只适用于留下的人");
+    // limits, then who the estimate is about, then the route's record (the bias analysis among it)
+    const limits = container.querySelector("[data-vcr-limits]") as HTMLElement;
+    expect(limits.compareDocumentPosition(trim) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(trim.compareDocumentPosition(container.querySelector("[data-master-detail]") as HTMLElement) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const robustness = container.querySelector("[data-vcr-robustness]") as HTMLElement;
+    expect(bias.compareDocumentPosition(robustness) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(bias).toHaveTextContent("被分析的估计：风险比（HR） 0.7");
+  });
+
+  it("draws neither where the result has neither", async () => {
+    const { container } = draw();
+    await found(container, "[data-vcr-diagnostics]");
+    expect(container.querySelector("[data-vcr-bias-analysis]")).toBeNull();
+    expect(container.querySelector("[data-vcr-trim]")).toBeNull();
+  });
+
+  it("is not an empty tab when its only content is a bias analysis filed alone", async () => {
+    const raw = fixture("empty/comparator.json");
+    raw.headline = "未测量混杂敏感性分析：已计算；输入效应值的来源需另行核实。";
+    raw.verdict = { conclusion: "limited" };
+    raw.biasAnalysis = biasPayloads["bias-null"];
+    installVcrServer(network.productRequest, { [tab("comparator")]: raw });
+    const { container } = draw();
+    const bias = await found(container, "[data-vcr-bias-analysis]");
+    expect(bias).toHaveTextContent("这个估计的区间本来就包含无效线（1）");
+    expect(container.querySelector("[data-headline]")).toHaveTextContent("未测量混杂敏感性分析");
+    expect(screen.queryByText(/还没有|尚未/)).toBeNull();
+  });
+
+  it("holds even when the page has no verdict or headline to carry it", async () => {
+    const raw = fixture("empty/comparator.json");
+    raw.biasAnalysis = biasPayloads["bias-difference"];
+    installVcrServer(network.productRequest, { [tab("comparator")]: raw });
+    const { container } = draw(emptyStudy());
+    await found(container, "[data-vcr-bias-analysis]");
+  });
+});
+
+describe("对照 · the simulated treatment comparison", () => {
+  it("is on the page with the estimate, and is not an empty tab when it is the only result", async () => {
+    const raw = fixture("empty/comparator.json");
+    raw.headline = "文献对照：可估计。";
+    raw.verdict = { conclusion: "estimable" };
+    raw.stcComparison = stcPayloads["stc-anchored"];
+    installVcrServer(network.productRequest, { [tab("comparator")]: raw });
+    const { container } = draw();
+    const card = await found(container, "[data-vcr-stc]");
+    expect(card.querySelector("[data-vcr-stc-estimate]")).toHaveTextContent("0.010");
+    expect(card).toHaveTextContent("比值比（OR）");
+    expect(screen.queryByText(/还没有|尚未/)).toBeNull();
+  });
 });

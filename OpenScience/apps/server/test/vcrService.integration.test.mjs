@@ -213,6 +213,12 @@ test("every runtime read answers, and the ones whose package is absent say so by
   const criteria = await service.runtimeRead(study, "criteria", {});
   assert.equal(criteria.criteria[0].sourceText, "ECOG 0–1");
   assert.ok(service.counters.reads >= VCR_READ_WHATS.length);
+  // jobs by the state a job row calls `state` (the filter is `status`; live check 2026-11-04): only that state's, and every job when none is asked
+  const everyJob = (await service.runtimeRead(study, "jobs", {})).jobs;
+  for (const state of ["queued", "succeeded", "nothing"]) {
+    const some = (await service.runtimeRead(study, "jobs", { status: state })).jobs;
+    assert.deepEqual(some.map((job) => job.id), everyJob.filter((job) => job.state === state).map((job) => job.id), state);
+  }
 });
 
 test("the model library answers from the seeded catalogue, and a study may take its own model into it", options, async () => {

@@ -1,0 +1,21 @@
+{"pmcid": "PMC12831356", "page": 6, "table": "Table 1", "caption": "Baseline characteristics of the study participants included at T3.", "columns": ["INT (n=77)", "CTR (n=95)", "p"], "keys": ["INT", "CTR", "p"], "note": "two-column body text on the same page; footnote markers are not part of the recorded values","rows":[
+["Gender, female (n (%))", "30 (39)", "38 (40)", "0.890"],
+["Age (years)", "72 (6)", "74 (5)", "0.008"],
+["Body height (cm)", "174 (9)", "173 (9)", "0.957"],
+["Body mass (kg)", "84 (15)", "82 (15)", "0.988"],
+["BMI (kg/m2)", "28 (4)", "27 (4)", "0.357"],
+["SI value at T0 (%)", "66.1 (17.1)", "62.5 (16.5)", "0.188"],
+["TUG time at T0 (s)", "8.3 (1.9)", "8.1 (1.6)", "0.741"],
+["Gait speed at T0 (m/s)", "1.2 (0.2)", "1.3 (0.2)", "0.144"],
+["Falls in the past year at T0 (n (%))", "", "", "0.191"],
+["No falls", "47 (61.0)", "67 (70.5)", ""],
+["Fall(s)", "30 (39.0)", "28 (29.5)", ""],
+["Mobility", "1.3 (0.6)", "1.1 (0.3)", "0.232"],
+["Self-care", "1.0 (0.1)", "1.1 (0.4)", "0.197"],
+["Usual activities", "1.1 (0.3)", "1.1 (0.4)", "0.208"],
+["Pain/discomfort", "1.5 (0.6)", "1.4 (0.6)", "0.806"],
+["Anxiety/depression", "1.1 (0.5)", "1.1 (0.3)", "0.981"],
+["Health status", "79.8 (14.0)", "82.3 (13.0)", "0.274"],
+["Activity (MET-hours/week)", "134.7 (69.0)", "145.4 (88.2)", "0.845"],
+["Energy (kcal/week)", "10,602.0 (5721.0)", "11,498.3 (7238.4)", "0.910"]
+]}

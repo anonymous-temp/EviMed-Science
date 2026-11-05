@@ -37,6 +37,18 @@
 #   patient with no comparable control.
 # - **Truncation is a sensitivity analysis only**, as in the weighting jobs: the
 #   odds weights capped at the 99th percentile of the controls', re-estimated.
+# - **A time-to-event outcome enters as pseudo-observations, not as a new estimator** (1.3.0, algorithm round C8). The estimand is
+#   the restricted mean survival time up to tau or the survival probability at tau; each person gets the Kaplan-Meier value of
+#   his own arm plus his influence on it (Andersen & Perme 2010: theta_i = theta + IF_i, which is the infinitesimal jackknife), the
+#   pseudo-observations are a continuous outcome with no censoring left in it, and the augmented estimator above runs on them
+#   unchanged. The alternative, an augmented IPCW estimator (Bai, Tsiatis & O'Brien 2013), needs a censoring model and a second set of
+#   nuisance parameters; the pseudo-observation route needs only that censoring does not depend on the covariates within an arm (the
+#   result says so as a premise). The leave-one-out jackknife is O(n^2) per bootstrap resample - minutes for one interval - while the
+#   influence function is O(n log n) and differs from it by O(1/n) (case N71a holds both). The mean of an arm's pseudo-observations
+#   is exactly its Kaplan-Meier value, so the trial arm's mean here is the trial's RMST or survival and nothing estimated.
+# - **Trimming is by the propensity score, redone in every resample** (1.3.0, C14): the score is fitted on everybody, the people
+#   outside the bounds are removed, and both models are fitted on who is left. The result restates who was removed
+#   (`diagnostics.trim`, `vcr_trim_restatement`).
 # ---------------------------------------------------------------------------
 
 #' The ATT-AIPW estimate from the two nuisance models. `Xps` and `Xout` are the
@@ -87,12 +99,70 @@ vcr_aipw_att <- function(y, treat, Xps, Xout, binary, with_if = TRUE, cap = NULL
   out
 }
 
+#' Kaplan-Meier pseudo-observations of one arm: `estimate + IF_i`, the infinitesimal jackknife of the Kaplan-Meier restricted mean
+#' survival time up to `tau` (`summary = "rmst"`) or survival probability at `tau` (`"survival"`). Their mean is the Kaplan-Meier
+#' value exactly. With `h(u) = n / Y(u)` (the inverse at-risk fraction) and `C(s)` the sum of `h d / Y` over the event times up to s,
+#'   IF_i(t) = -S(t) [ delta_i 1(T_i <= t) h(T_i) - C(min(T_i, t)) ],
+#' and the restricted mean's influence is its integral over [0, tau], done in closed form on the event-time grid.
+#' @return list(pseudo, estimate)
+vcr_km_pseudo <- function(time, status, tau, summary = c("rmst", "survival")) {
+  summary <- match.arg(summary)
+  n <- length(time)
+  ut <- sort(unique(time[status == 1L & time <= tau]))
+  K <- length(ut)
+  if (K == 0L) return(list(pseudo = rep(if (identical(summary, "rmst")) tau else 1, n), estimate = if (identical(summary, "rmst")) tau else 1))
+  Y <- vapply(ut, function(t) sum(time >= t), numeric(1))
+  d <- vapply(ut, function(t) sum(time == t & status == 1L), numeric(1))
+  S <- cumprod(1 - d / Y)                         # S at u_k, right after the jump
+  h <- n / Y
+  Cs <- cumsum(h * d / Y)                         # C at u_k
+  # a right-continuous step function's value at s: index 0 is the value before the first event time
+  Sat <- function(s) c(1, S)[findInterval(s, ut) + 1L]
+  Cat <- function(s) c(0, Cs)[findInterval(s, ut) + 1L]
+  ti <- pmin(time, tau)
+  event_i <- status == 1L & time <= tau
+  hi <- h[match(time, ut)]                         # h at the person's own event time (NA for a censored person)
+  if (identical(summary, "survival")) {
+    s_tau <- Sat(tau)
+    IF <- -s_tau * (ifelse(event_i, hi, 0) - Cat(ti))
+    return(list(pseudo = s_tau + IF, estimate = s_tau))
+  }
+  # the restricted mean: S and S C are step functions on the grid, integrated exactly
+  edges <- c(0, ut); S_after <- c(1, S); SC_after <- c(0, S * Cs)
+  seg <- diff(c(edges, tau)); seg[seg < 0] <- 0
+  # the grid ends at the last event time <= tau; the last segment runs to tau
+  G1_nodes <- c(0, cumsum(S_after * seg))
+  G2_nodes <- c(0, cumsum(SC_after * seg))
+  G <- function(nodes, after, s) { k <- findInterval(s, ut); nodes[k + 1L] + after[k + 1L] * (s - edges[k + 1L]) }
+  G1_tau <- G(G1_nodes, S_after, tau)
+  G1_i <- G(G1_nodes, S_after, ti); G2_i <- G(G2_nodes, SC_after, ti)
+  IF <- -(ifelse(event_i, hi * (G1_tau - G(G1_nodes, S_after, time)), 0) - G2_i - Cat(ti) * (G1_tau - G1_i))
+  list(pseudo = G1_tau + IF, estimate = G1_tau)
+}
+
+#' The ATT-AIPW estimate of a time-to-event outcome: pseudo-observations per arm, then the continuous-outcome estimator on them.
+vcr_aipw_tte_att <- function(time, status, treat, Xps, Xout, tau, summary, with_if = TRUE, cap = NULL) {
+  y <- numeric(length(time))
+  for (a in 0:1) y[treat == a] <- vcr_km_pseudo(time[treat == a], status[treat == a], tau, summary)$pseudo
+  out <- vcr_aipw_att(y, treat, Xps, Xout, FALSE, with_if = with_if, cap = cap)
+  out$pseudo <- y
+  out
+}
+
+#' The propensity score of the trial against the external source, on its covariates (a logistic model, main effects), or NULL when the
+#' model has collinear covariates.
+vcr_aipw_score <- function(Xps, treat) {
+  d <- as.data.frame(Xps); d$..t.. <- treat
+  fit <- suppressWarnings(stats::glm(..t.. ~ ., data = d, family = stats::binomial()))
+  if (anyNA(stats::coef(fit))) NULL else as.vector(stats::fitted(fit))
+}
+
 vcr_job_aipw <- function(job, output_dir = NULL, cancel_file = NULL, ...) {
   sc <- job$scenario
   tabs <- vcr_job_tables(job)
   endpoint <- as.character(sc$endpoint$type %||% "")
-  if (!(endpoint %in% c("continuous", "binary"))) vcr_abort("endpoint_not_supported", "scenario.endpoint.type", "A doubly robust comparison is for a continuous or a binary outcome.")
-  binary <- identical(endpoint, "binary")
+  if (!(endpoint %in% c("continuous", "binary", "time_to_event"))) vcr_abort("endpoint_not_supported", "scenario.endpoint.type", "A doubly robust comparison is for a continuous, a binary or a time-to-event outcome.")
+  binary <- identical(endpoint, "binary"); tte <- identical(endpoint, "time_to_event")
   covs <- vcr_chr(sc$covariates)
   ps_covs <- if (!is.null(sc$propensityCovariates)) vcr_chr(sc$propensityCovariates) else covs
   out_covs <- if (!is.null(sc$outcomeCovariates)) vcr_chr(sc$outcomeCovariates) else covs
@@ -101,68 +171,127 @@ vcr_job_aipw <- function(job, output_dir = NULL, cancel_file = NULL, ...) {
   all_covs <- unique(c(ps_covs, out_covs))
   fr <- vcr_comparison_frame(job, sc, tabs, "A doubly robust comparison", all_covs)
   subj <- fr$subj; treat <- fr$treat; cohort <- fr$cohort; keep <- fr$keep
-  oc <- .vcr_column_name(sc$outcomeColumn, "y", "scenario.outcomeColumn")
-  if (!(oc %in% names(subj))) vcr_abort("input_shape_invalid", "scenario.outcomeColumn", "The outcome column is not in the table.")
-  y <- suppressWarnings(as.numeric(subj[[oc]]))
-  if (anyNA(y)) vcr_abort("input_shape_invalid", "scenario.outcomeColumn", "The outcome is a number, complete.")
-  if (binary && !all(y %in% c(0, 1))) vcr_abort("input_shape_invalid", "scenario.outcomeColumn", "A binary outcome is 0/1.")
+  y <- NULL; time <- NULL; status <- NULL; tau <- NULL; summary <- "rmst"; time_unit <- NULL; oc <- NULL
+  if (tte) {
+    tau <- vcr_scalar(sc$tau, NULL)
+    if (is.null(tau) || !(tau > 0)) vcr_abort("scenario_field_missing", "scenario.tau", "A time-to-event doubly robust comparison states the horizon tau (the restricted-mean horizon, or the time the survival is read at).")
+    summary <- as.character(sc$summary %||% "rmst")
+    if (!(summary %in% c("rmst", "survival"))) vcr_abort("scenario_value_invalid", "scenario.summary", "The summary is rmst (the restricted mean survival time up to tau) or survival (the survival probability at tau).")
+    time_unit <- .vcr_observed_time_unit(job, tabs, subj)
+    outcome <- vcr_outcome_frame(sc, tabs, subj, "time_to_event")
+    time <- outcome$time; status <- outcome$status
+    if (anyNA(time) || anyNA(status)) vcr_abort("input_shape_invalid", "inputs", "Time and status are complete.")
+    if (any(time < 0)) vcr_abort("input_shape_invalid", "inputs", "Follow-up times are not negative.")
+  } else {
+    oc <- .vcr_column_name(sc$outcomeColumn, "y", "scenario.outcomeColumn")
+    if (!(oc %in% names(subj))) vcr_abort("input_shape_invalid", "scenario.outcomeColumn", "The outcome column is not in the table.")
+    y <- suppressWarnings(as.numeric(subj[[oc]]))
+    if (anyNA(y)) vcr_abort("input_shape_invalid", "scenario.outcomeColumn", "The outcome is a number, complete.")
+    if (binary && !all(y %in% c(0, 1))) vcr_abort("input_shape_invalid", "scenario.outcomeColumn", "A binary outcome is 0/1.")
+  }
   Xall <- fr$X
   Xps <- Xall[, ps_covs, drop = FALSE]; Xout <- Xall[, out_covs, drop = FALSE]
-  used <- vcr_used_sources(list(list(df = subj, columns = c(all_covs, fr$tc, oc))))
+  used <- vcr_used_sources(c(list(list(df = subj, columns = c(all_covs, fr$tc, oc))), if (tte) .vcr_outcome_parts(sc, tabs, subj, "time_to_event")))
   est_src <- vcr_estimate_source(used$source)
   sources_used <- vcr_value_sources_used(used)
   n <- nrow(subj)
-
-  core <- vcr_aipw_att(y, treat, Xps, Xout, binary)
-  if (!isTRUE(core$ok)) {
-    return(list(status = "not_estimable", notEstimableRule = "nuisance_model_not_estimable", measures = list(), counts = vcr_counts(realPatients = n),
-                diagnostics = list(detail = core$reason, propensityCovariates = as.list(ps_covs), outcomeCovariates = as.list(out_covs),
-                                   cohort = cohort$info, valueSourcesUsed = sources_used)))
+  if (tte) {
+    tau_rule <- vcr_tau_rule(time, status, treat, tau)
+    if (!is.null(tau_rule)) {
+      return(list(status = "not_estimable", notEstimableRule = tau_rule$rule, measures = list(), counts = vcr_counts(realPatients = n, events = sum(status)),
+                  diagnostics = c(tau_rule, list(cohort = cohort$info, valueSourcesUsed = sources_used))))
+    }
   }
-  w_ctl <- core$w[treat == 0L]
-  w_scaled <- core$w; w_scaled[treat == 1L] <- 1; w_scaled[treat == 0L] <- w_scaled[treat == 0L] * sum(treat == 1L) / sum(w_scaled[treat == 0L])
+
+  # One analysis of the rows `idx` of the whole table: the trimming (when asked for) from a score fitted on those rows, then the two
+  # models and the estimator on who is left. The point estimate and every bootstrap resample go through here, so the interval carries
+  # the uncertainty of who is trimmed.
+  trim <- sc$trim
+  analyse <- function(idx, with_if = TRUE, cap = NULL) {
+    tb <- treat[idx]; kept <- rep(TRUE, length(idx)); cut <- NULL
+    if (!is.null(trim)) {
+      e <- vcr_aipw_score(Xps[idx, , drop = FALSE], tb)
+      if (is.null(e)) return(list(ok = FALSE, reason = "the propensity model has collinear covariates"))
+      cut <- vcr_ps_trim(e, tb, trim); kept <- cut$keep
+      if (sum(tb[kept] == 1L) < 2L || sum(tb[kept] == 0L) < 2L) return(list(ok = FALSE, reason = "trimmed_population_too_small", trim = cut, kept = kept))
+    }
+    j <- idx[kept]
+    core <- if (tte) vcr_aipw_tte_att(time[j], status[j], treat[j], Xps[j, , drop = FALSE], Xout[j, , drop = FALSE], tau, summary, with_if, cap)
+            else vcr_aipw_att(y[j], treat[j], Xps[j, , drop = FALSE], Xout[j, , drop = FALSE], binary, with_if, cap)
+    core$kept <- kept; core$trim <- cut
+    core
+  }
+  all_idx <- seq_len(n)
+  core <- analyse(all_idx, TRUE)
+  trim_info <- NULL
+  if (!is.null(trim) && !is.null(core$trim)) trim_info <- vcr_trim_restatement(Xall, treat, core$kept, core$trim)
+  if (!isTRUE(core$ok)) {
+    too_small <- identical(core$reason, "trimmed_population_too_small")
+    return(list(status = "not_estimable", notEstimableRule = if (too_small) "trimmed_population_too_small" else "nuisance_model_not_estimable", measures = list(), counts = vcr_counts(realPatients = n),
+                diagnostics = c(list(detail = if (too_small) "after the trimming fewer than two trial or two control people remain" else core$reason,
+                                     propensityCovariates = as.list(ps_covs), outcomeCovariates = as.list(out_covs),
+                                     cohort = cohort$info, valueSourcesUsed = sources_used),
+                                if (!is.null(trim_info)) list(trim = trim_info))))
+  }
+  # From here on the analysis sample is the kept people: balance, overlap, the weights table and the curves are theirs.
+  kp <- core$kept
+  rows_kept <- which(kp)
+  treat_k <- treat[kp]; Xall_k <- Xall[kp, , drop = FALSE]; subj_k <- subj[kp, , drop = FALSE]
+  n_k <- sum(kp)
+  w_ctl <- core$w[treat_k == 0L]
+  w_scaled <- core$w; w_scaled[treat_k == 1L] <- 1; w_scaled[treat_k == 0L] <- w_scaled[treat_k == 0L] * sum(treat_k == 1L) / sum(w_scaled[treat_k == 0L])
   # What a release added runs only for the jobs labelled with it (replay): 1.1.0 reads the weighted balance as a verdict beside the
   # estimate and adds the E-value; 1.2.0 adds the enrolment-year row. The doubly robust job never refused on the balance.
   reads_balance <- vcr_job_at_least(job, "1.1.0"); with_year <- vcr_job_at_least(job, "1.2.0")
-  balance <- vcr_balance_table(Xall, treat, w_scaled, "ATT")
-  enrolment <- if (with_year) vcr_enrolment_year(subj, tabs, sc, treat, w_scaled, "ATT") else NULL
-  support <- vcr_common_support(core$e, treat)
+  balance <- vcr_balance_table(Xall_k, treat_k, w_scaled, "ATT")
+  enrolment <- if (with_year) vcr_enrolment_year(subj_k, tabs, sc, treat_k, w_scaled, "ATT") else NULL
+  support <- vcr_common_support(core$e, treat_k)
   ess <- vcr_ess(w_ctl)
   rule <- vcr_not_estimable_weighting(ess = ess, support = support)
   limits_used <- c(list(essFloor = vcr_limit("essFloor", 10), supportCeiling = vcr_limit("supportCeiling", 0.1), smdFloor = vcr_limit("smdFloor", 0.1)),
                    if (reads_balance) list(smdSevere = vcr_limit("smdSevere", 0.25)), list(bootstrapMin = vcr_limit("bootstrapMin", 2000)))
-  wdiag <- vcr_weight_diagnostics(w_scaled, treat)
-  counts <- vcr_counts(realPatients = n, effectiveSampleSize = ess)
+  wdiag <- vcr_weight_diagnostics(w_scaled, treat_k)
+  counts <- vcr_counts(realPatients = n, effectiveSampleSize = ess, events = if (tte) sum(status) else NULL)
   if (!is.null(rule)) {
     return(list(status = "not_estimable", notEstimableRule = rule$rule, measures = list(), counts = counts,
                 diagnostics = c(list(detail = rule$detail, balance = balance), if (with_year) list(enrolmentYear = enrolment),
-                                list(support = support, weights = wdiag, thresholds = limits_used, cohort = cohort$info, valueSourcesUsed = sources_used))))
+                                list(support = support, weights = wdiag, thresholds = limits_used, cohort = cohort$info, valueSourcesUsed = sources_used),
+                                if (!is.null(trim_info)) list(trim = trim_info))))
   }
 
-  # the whole pipeline in every resample: both models refitted, the estimate recomputed
+  # An arm with no event up to tau has constant Kaplan-Meier pseudo-observations: the arm's estimate is a number (1, or tau), but its
+  # influence function is identically zero, so the standard error and the interval of the difference come from the OTHER arm alone and are
+  # an artefact, not knowledge (all censored: a difference of 0 with a standard error of 3e-16; one arm with no events: an interval as narrow
+  # as one arm's). The estimate is kept and said to be limited; the standard errors and intervals are withheld.
+  no_event_arm <- if (tte) vapply(0:1, function(a) { i <- rows_kept[treat_k == a]; !any(status[i] == 1L & time[i] <= tau) }, logical(1)) else c(FALSE, FALSE)
+  degenerate <- any(no_event_arm)
+
+  # the whole pipeline in every resample: the trimming, both models refitted, the estimate recomputed
   k <- length(core$estimates)
   B <- vcr_bootstrap_replicates(vcr_scalar(job$replicates, NULL))
   boot <- vcr_bootstrap_pipeline(n, function(idx) {
-    r <- vcr_aipw_att(y[idx], treat[idx], Xps[idx, , drop = FALSE], Xout[idx, , drop = FALSE], binary, with_if = FALSE)
+    r <- analyse(idx, with_if = FALSE)
     if (!isTRUE(r$ok)) return(rep(NA_real_, k))
     r$estimates
-  }, replicates = B, seed = job$seed, strata = treat, cores = vcr_cores(job$cores))
+  }, replicates = B, seed = job$seed, strata = treat, cores = vcr_cores(job$cores),
+  components = c("aipw_difference", "aipw_risk_ratio", "aipw_odds_ratio")[seq_len(k)])
   if (identical(boot$interrupted, "canceled")) {
     return(list(status = "canceled", measures = list(), counts = vcr_counts(realPatients = n),
                 diagnostics = list(bootstrapCompleted = boot$replicates, bootstrapRequested = B)))
   }
   z <- stats::qnorm(0.975)
-  tau <- core$tau; se_if <- core$influence$se
+  tau_hat <- core$tau; se_if <- core$influence$se
+  unit <- if (tte && identical(summary, "rmst")) time_unit$unit else NULL
   wald <- function(b, se, transform = identity) vcr_interval("confidence", transform(b - z * se), transform(b + z * se))
   base_measures <- c(
-    list(vcr_measure("aipw_difference_influence", tau, interval = wald(tau, se_if), source = est_src),
-         vcr_measure("aipw_difference_se_influence", se_if, source = est_src),
-         vcr_measure("outcome_mean_treated", core$mu1, source = est_src),
-         vcr_measure("outcome_mean_control_adjusted", core$mu0, source = est_src)),
+    list(vcr_measure("aipw_difference_influence", tau_hat, unit = unit, interval = wald(tau_hat, se_if), source = est_src),
+         vcr_measure("aipw_difference_se_influence", se_if, unit = unit, source = est_src),
+         vcr_measure("outcome_mean_treated", core$mu1, unit = unit, source = est_src),
+         vcr_measure("outcome_mean_control_adjusted", core$mu0, unit = unit, source = est_src)),
     list(vcr_measure("effective_sample_size", ess, source = est_src),
          vcr_measure("worst_standardized_difference", max(abs(balance$smdAdjusted)), source = est_src)))
   if (!is.null(boot$interrupted) || boot$replicates < B) {
-    return(list(status = "failed", measures = c(list(vcr_measure("aipw_difference", tau, source = est_src)), base_measures), counts = counts,
+    return(list(status = "failed", measures = c(list(vcr_measure("aipw_difference", tau_hat, unit = unit, source = est_src)), base_measures), counts = counts,
                 issues = list(vcr_issue("cpu_budget_exhausted", "cpuSecondsLimit", "The CPU budget ran out during the bootstrap; the estimate and its influence-function standard error are kept and no bootstrap interval is reported.")),
                 diagnostics = list(bootstrapCompleted = boot$replicates, bootstrapRequested = B, valueSourcesUsed = sources_used)))
   }
@@ -174,7 +303,7 @@ vcr_job_aipw <- function(job, output_dir = NULL, cancel_file = NULL, ...) {
     vcr_measure(name, exp(log_value), interval = bint(s), source = est_src)
   }
   measures <- c(
-    list(vcr_measure("aipw_difference", tau, interval = bint(bs), source = est_src)),
+    list(vcr_measure("aipw_difference", tau_hat, unit = unit, interval = bint(bs), source = est_src)),
     base_measures[1:2],
     Filter(Negate(is.null), list(vcr_boot_se_measure("aipw_difference_se_bootstrap", bs, est_src))),
     base_measures[3:4],
@@ -182,45 +311,61 @@ vcr_job_aipw <- function(job, output_dir = NULL, cancel_file = NULL, ...) {
                                               ratio_measure("aipw_odds_ratio", 3L, core$estimates[["logOddsRatio"]]))),
     base_measures[5:6])
 
-  # weight truncation as a sensitivity analysis only, as in the weighting jobs (plan 5.3)
+  # weight truncation as a sensitivity analysis only, as in the weighting jobs (plan 5.3); on the kept people
   cap <- stats::quantile(w_ctl, 0.99, names = FALSE)
-  trunc <- vcr_aipw_att(y, treat, Xps, Xout, binary, with_if = FALSE, cap = cap)
-  # the E-value of the risk ratio of a binary outcome, after the estimate and beside it (A5); a continuous outcome has no ratio
+  trunc <- {
+    j <- rows_kept
+    if (tte) vcr_aipw_tte_att(time[j], status[j], treat[j], Xps[j, , drop = FALSE], Xout[j, , drop = FALSE], tau, summary, FALSE, cap)
+    else vcr_aipw_att(y[j], treat[j], Xps[j, , drop = FALSE], Xout[j, , drop = FALSE], binary, with_if = FALSE, cap = cap)
+  }
+  # the E-value of the risk ratio of a binary outcome, after the estimate and beside it (A5); a continuous or a time-to-event outcome has no ratio
   rr_measure <- Filter(function(m) identical(m$name, "aipw_risk_ratio"), measures)
   evalue <- if (reads_balance && binary && length(rr_measure)) {
     m <- rr_measure[[1]]
     vcr_evalue_after(m$value, m$interval$low, m$interval$high, "risk_ratio", FALSE, est_src)
   } else NULL
   if (!is.null(evalue)) measures <- c(measures, evalue$measures)
+  trimmed_someone <- !is.null(trim_info) && isTRUE(trim_info$trimmedAnyone)
+  if (!is.null(trim_info)) measures <- c(measures, vcr_trim_measures(trim_info))
   tt_limits <- .vcr_target_trial_limits(sc)
   verdict <- if (reads_balance) vcr_balance_verdict(balance) else NULL
   # before the verdict, a weighted covariate still apart by the floor was said by this one code and nothing else
   smd_notice <- !reads_balance && is.finite(max(abs(balance$smdAdjusted))) && max(abs(balance$smdAdjusted)) >= limits_used$smdFloor
-  limited_by <- c(if (bs$failureShare > 0.01) "bootstrap_failure_share",
+  limited_by <- c(if (degenerate) "arm_without_events_before_tau",
+                  if (bs$failureShare > 0.01) "bootstrap_failure_share",
+                  if (trimmed_someone) "target_population_trimmed",
                   if (length(tt_limits)) "target_trial_item_cannot_be_emulated",
                   if (smd_notice) "standardized_difference_above_floor",
                   vcr_balance_limit(verdict),
                   if (isTRUE(core$separation)) "outcome_model_separation",
                   if (binary && (core$mu0 < 0 || core$mu0 > 1)) "adjusted_control_mean_outside_unit_interval",
                   if (!core$psConverged || !core$outConverged) "nuisance_model_not_converged")
-  influence_block <- list(se = se_if, interval = c(tau - z * se_if, tau + z * se_if),
+  scale_word <- if (tte) (if (identical(summary, "rmst")) "restricted mean survival time difference" else "survival difference") else if (binary) "risk difference" else "mean difference"
+  influence_block <- list(se = se_if, interval = c(tau_hat - z * se_if, tau_hat + z * se_if),
                           riskRatio = if (binary && is.finite(core$influence$seLogRiskRatio)) list(se = core$influence$seLogRiskRatio, scale = "log risk ratio") else NULL,
                           oddsRatio = if (binary && is.finite(core$influence$seLogOddsRatio)) list(se = core$influence$seLogOddsRatio, scale = "log odds ratio") else NULL,
                           basis = "efficient influence function of the ATT with the nuisance estimates plugged in; it ignores the estimation of the two models")
-  list(status = "succeeded", measures = measures, conclusion = if (length(limited_by)) "limited" else "estimable", counts = counts,
+  res <- list(status = "succeeded", measures = measures, conclusion = if (length(limited_by)) "limited" else "estimable", counts = counts,
        diagnostics = c(list(
-         method = "aipw", estimand = "ATT", endpoint = endpoint, scale = if (binary) "risk difference" else "mean difference",
+         method = "aipw", estimand = "ATT", endpoint = endpoint, scale = scale_word,
          nuisance = list(propensity = list(covariates = as.list(ps_covs), family = "binomial", converged = core$psConverged),
                          outcome = list(covariates = as.list(out_covs), family = if (binary) "binomial" else "gaussian", fittedOn = "external controls only",
-                                        controlsUsed = sum(treat == 0L), converged = core$outConverged, separation = isTRUE(core$separation))),
-         components = list(outcomeRegression = core$regression, weighting = core$weighting, aipw = tau,
+                                        controlPeopleUsed = sum(treat_k == 0L), converged = core$outConverged, separation = isTRUE(core$separation))),
+         components = list(outcomeRegression = core$regression, weighting = core$weighting, aipw = tau_hat,
                            note = "the plug-in of the outcome model and the odds-weighted control mean beside the augmented estimate; their agreement is what double robustness looks like when both models are right"),
          influence = influence_block,
-         bootstrap = vcr_boot_diagnostics(bs, B, "rows resampled within arm; the propensity and the outcome model are both refitted in every resample",
-                                          se_scale = if (binary) "risk difference" else "mean difference", interval_scale = if (binary) "risk difference" else "mean difference"),
+         bootstrap = vcr_boot_diagnostics(bs, B, if (is.null(trim)) "rows resampled within arm; the propensity and the outcome model are both refitted in every resample"
+                                                 else "rows resampled within arm; the trimming, the propensity model and the outcome model are all redone in every resample",
+                                          se_scale = scale_word, interval_scale = scale_word),
          varianceComparison = list(influenceSe = se_if, bootstrapSe = bs$se, ratioInfluenceToBootstrap = se_if / bs$se,
                                    note = "a metric, never a gate: the influence-function standard error ignores the estimation of the two models")),
-         if (reads_balance) list(eValue = if (!is.null(evalue)) evalue$diagnostics else .vcr_evalue_absent(if (binary) "no_risk_ratio" else "continuous_outcome")),
+         if (tte) list(timeToEvent = list(summary = summary, tau = tau, timeUnit = time_unit,
+                                          outcome = "Kaplan-Meier pseudo-observations of each arm (the influence function of the estimate), then the continuous-outcome estimator",
+                                          censoring = "independent of the covariates within an arm",
+                                          eventsByArm = list(control = sum(status[treat == 0L]), treated = sum(status[treat == 1L])),
+                                          treatedArmEstimate = core$mu1)),
+         if (reads_balance) list(eValue = if (!is.null(evalue)) evalue$diagnostics else .vcr_evalue_absent(if (tte) "time_to_event_difference_has_no_ratio" else if (binary) "no_risk_ratio" else "continuous_outcome")),
+         if (!is.null(trim_info)) list(trim = trim_info),
          list(balance = balance),
          if (with_year) list(enrolmentYear = enrolment),
          if (reads_balance) list(balanceVerdict = verdict),
@@ -230,5 +375,15 @@ vcr_job_aipw <- function(job, output_dir = NULL, cancel_file = NULL, ...) {
          valueSourcesUsed = sources_used, comparabilityDimensions = vcr_domain()$comparabilityDimensions)),
        tables = .vcr_tables_of(list(
          vcr_write_table(balance, "balance", output_dir),
-         vcr_write_table(data.frame(row = which(keep), arm = treat, propensity = core$e, oddsWeight = core$w, outcomePrediction = core$m0), "weights", output_dir))))
+         vcr_write_table(data.frame(row = which(keep)[rows_kept], arm = treat_k, propensity = core$e, oddsWeight = core$w, outcomePrediction = core$m0), "weights", output_dir))))
+  if (degenerate) {
+    withheld <- c("aipw_difference_influence", "aipw_difference_se_influence", "aipw_difference_se_bootstrap")
+    res$measures <- lapply(Filter(function(m) !(m$name %in% withheld), res$measures), function(m) { if (identical(m$name, "aipw_difference")) m$interval <- NULL; m })
+    res$diagnostics$influence <- list(withheld = TRUE, basis = "the Kaplan-Meier influence function of an arm with no event up to tau is zero, so a standard error from it describes the other arm only")
+    res$diagnostics$bootstrap <- NULL; res$diagnostics$varianceComparison <- NULL
+    res$diagnostics$timeToEvent$noEventArm <- list(
+      arms = as.list(c("control", "treated")[no_event_arm]),
+      reason = "an arm has no event up to tau: its estimate is the Kaplan-Meier value of an arm that never failed, and no standard error or interval is reported for the difference")
+  }
+  res
 }

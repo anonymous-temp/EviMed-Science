@@ -83,7 +83,7 @@ READ_WHATS = (
     "study", "definition", "criteria", "assumptions", "evidence", "population", "patients", "comparator", "trial",
     "precedents", "matching", "subject_document", "followup_history", "model_source", "generated_records", "results", "report_model", "snapshot_profile", "models", "jobs",
     "trial_registry_record", "patient_context", "pack", "library", "model_assessments", "longitudinal", "candidate_trials", "soa", "regulatory_contacts",
-    "candidates",
+    "candidates", "success_rates",
 )
 WRITE_WHATS = ("data_intake", "task_context", "patient_context",
     "definition", "protocol", "criteria", "assumption", "evidence_item", "precedent", "population", "patient_set",
@@ -108,12 +108,28 @@ JOB_KINDS = ("fit_survival_model", "apply_prognostic_model",
     "generate_patients_longitudinal",
     # a generated population against a second baseline table (2026-11-01)
     "population_check",
+    # the confirmatory designs: futility boundaries, sample-size re-estimation, multi-arm, enrichment, counts (2026-11-03)
+    "design_confirmatory",
+    # quantitative bias analysis of an estimate and the G-computation simulated treatment comparison (2026-11-03)
+    "bias_analysis", "stc_comparator",
+    # network and dose-response meta-analysis and the empirical shrinkage of a published effect (2026-11-03)
+    "network_meta", "dose_response_meta", "effect_shrinkage",
+    # target-trial emulation from a person-period table: a sequence of trials and clone-censor-weight (2026-11-03)
+    "target_trial_emulation",
+    # dose-finding designs and Bayesian designs without MCMC (2026-11-03)
+    "design_dose", "design_bayesian", "design_win_ratio",
+    # dynamic borrowing of an external control arm: the power, SAM and elastic priors (2026-11-03)
+    "borrowing_prior",
+    # a prognostic model trained on the person's own historical table, cross-fitted, and a population-level disease-progression simulator (2026-11-03)
+    "train_prognostic_model", "generate_progression",
     # the batch reading of patient records for the criteria's facts (2026-11-01)
     "match_extract",
     "forecast_trajectories", "evaluate_forecast", "compare_forecasts", "benchmark_trial_effect",
 )
 POOLING_METHODS = ("single_study", "random_effects_dl", "random_effects_reml", "random_effects_hksj", "fixed_effect")
 POOLING_CALIBRES = ("closest", "overall", "next_closest")
+# The empirical priors for the between-study spread a pooling may name (`packages/domain/src/vcrEvidencePriors.mjs`); a prior the run types in is not offered here.
+TAU_PRIOR_KINDS = ("turner_2015", "turner_2015_generic", "bartos_2023")
 SIMULATE_ACTIONS = ("start", "status", "cancel", "shape", "validate")
 # The objects `vcr_write` takes whose configuration, scenario or definition carries the keys of a job kind's scenario (the
 # platform projects the object onto that kind's schema and refuses what it does not read): where to look a shape up before
@@ -125,7 +141,8 @@ OBJECT_SHAPES = {
     "population (definition)": ("generate_population", "literature_population", "synthesize_population"),
     "comparator (configuration)": ("weight_comparator", "propensity_weight_comparator", "weighted_cox_comparator", "aipw_comparator",
                                    "covariate_set_comparator", "maic_comparator", "maic_time_to_event_comparator", "map_prior", "procova",
-                                   "prognostic_adjustment_comparator", "negative_control_comparator", "tipping_point"),
+                                   "prognostic_adjustment_comparator", "negative_control_comparator", "tipping_point", "stc_comparator", "bias_analysis",
+                                   "target_trial_emulation", "borrowing_prior"),
 }
 # What the platform generates from the domain's scenario schemas (`pnpm generate:vcr-scenario-help`): every key each method's
 # scenario reads. It rides in the image beside this file and is never edited by hand.
@@ -133,6 +150,15 @@ OBJECT_SHAPES = {
 RECORD_KINDS = tuple(OBJECT_SHAPES["population (definition)"] + OBJECT_SHAPES["patient_set (scenario)"])
 # The kinds whose scenario states the truth a design assumes: a number read in a paper can be tied to its field there (`sources`).
 SOURCE_KINDS = ("design_analytic", "design_simulation", "design_grid", "assurance", "procova")
+
+# The generic design kinds the model opens first. A question that has a method of its own is answered by that kind, and in three live conversations
+# (2026-11-04: dose escalation, a single-arm look every ten patients, a three-level composite) the model had shaped a generic kind and then wrote its own
+# simulation for what another kind computes. The pointer rides on the shape answer, where the model is already choosing, and not in the tool description.
+DESIGN_POINTER_KINDS = ("design_analytic", "design_simulation", "design_grid")
+DESIGN_POINTER = ("This kind designs one trial of the usual kinds. If the question is of another sort, shape that kind instead of writing your own simulation: "
+                  "design_dose (3+3, BOIN, CRM, Keyboard: which dose is chosen), design_bayesian (a single-arm trial looked at every few patients: BOP2, "
+                  "predictive monitoring, against Simon), design_confirmatory (futility stops, sample-size re-estimation, multi-arm selection, enrichment), "
+                  "design_win_ratio (death, then admissions, then a score, compared in order), network_meta (which of several treatments is best).")
 HELP_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "vcr_scenario_help.json")
 # Where the VCR methods are in the runtime image. They are capability skill bodies, which delegation injects into a planned
 # capability's run; a plain conversation in a study uses these tools too and its skill catalogue does not list them, so the tools
@@ -498,6 +524,18 @@ def _detailed_tool_definitions():
                     "endpointKey": {"type": "string", "minLength": 1, "maxLength": 80, "pattern": r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,79}$"},
                     "calibres": {"type": "array", "minItems": 1, "maxItems": 3, "items": {"type": "string", "enum": list(POOLING_CALIBRES)}},
                     "method": {"type": "string", "enum": list(POOLING_METHODS), "default": "random_effects_reml"},
+                    "tauPrior": {
+                        "type": "object",
+                        "description": "Optional Cochrane reference for the spread between studies; gives two studies a prediction interval. Its shape is in vcr_simulate action=shape.",
+                        "properties": {
+                            "kind": {"type": "string", "enum": list(TAU_PRIOR_KINDS)},
+                            "outcome": {"type": "string", "maxLength": 60},
+                            "comparison": {"type": "string", "maxLength": 60},
+                            "effectScale": {"type": "string", "maxLength": 40},
+                        },
+                        "required": ["kind"],
+                        "additionalProperties": False,
+                    },
                     "jobId": ID,
                 },
                 "required": ["action"],
@@ -519,7 +557,7 @@ def tool_definitions():
     descriptions = {
         "vcr_read": "Read this conversation's research. what=study opens compact context and enables specialist tools. patient_context lists authenticated human-message references (filter beforeSeq/limit); use messageSeq to preserve an earlier case. subject_document reads permitted original material. trial_registry_record reads one registry (filter registryId). contracts gives write syntax before any task exists; data_intake lists original upload handles; matching filter.kind=contract gives write syntax; candidate_trials reads patient trial matches. Any eligibility verdict you deliver (reply, table or file) is copied from the saved read-back (matching or candidate_trials with filter.subjectKey), never retyped.",
         "vcr_write": "Save a research object; data_intake imports an owned original upload then maps/freezes it (read contracts first). candidate_trial stores registry-linked eligibility. Never write calculated results. patient_context data={messageSeq} preserves a listed original human case, or {sourceId} an owned human upload; no model-written prose. task_context opens an independent hidden task. A fact states only what its quote says: what the text does not mention is unknown, never negated, and age, sex or a diagnosis do not imply pregnancy, menopause or a negative result. A candidate_trial's criteria are that one trial's own eligibility lines. Use the VCR workflow skill for object contracts (read %s/vcr-matching/SKILL.md before writing facts, criteria or trials; vcr-protocol, vcr-evidence, vcr-analysis and vcr-package sit beside it; none is in the skill catalogue) and vcr_simulate action=shape for numerical inputs." % root,
-        "vcr_simulate": "A human trial's sample size, power or events, comparing designs, a synthetic population from a paper's baseline, an external control: calculate here, not in a script of your own. No study needed; the first start opens a result page with versions and premises. action=shape with kind gives exact fields; do not guess keys. Long jobs resume here if they outlive this turn. modelId requires modelVersion.",
+        "vcr_simulate": "A human trial's sample size, power or events, comparing designs, dose finding, a synthetic cohort from a baseline table, an external control, comparing several drugs (network meta-analysis): calculate here, not in your own script. No study needed; a start opens a result page. action=shape with kind gives exact fields; do not guess keys. Long jobs resume here if they outlive this turn. modelId requires modelVersion.",
     }
     tools = _detailed_tool_definitions()
     for tool in tools:
@@ -804,6 +842,9 @@ def write(arguments: dict) -> dict:
     if reminders:
         next_actions.append("The warnings that name a record or a role are reminders: the object is saved and its result is delivered as it "
                             "stands. Add what they name by writing the same object again (a new version), without waiting for anyone.")
+    if any(issue.get("code") in ("vcr_evidence_values_inconsistent", "vcr_evidence_second_read_differs") for issue in reminders):
+        next_actions.append("A warning that names numbers which do not agree (or two readings of one passage) is advice: read those numbers in the source again; if one was copied wrong, "
+                            "write the item again with the right one, otherwise leave it. The value is kept as read either way.")
     return _with_entry({
         "status": "warning" if issues else "success",
         "summary": "Wrote %s: %d written%s%s." % (what, len(ids), ", %d refused" % len(refused) if refused else "",
@@ -815,7 +856,8 @@ def write(arguments: dict) -> dict:
 
 
 # The write issues that are reminders of a record the object has not got yet, not refusals (the object is saved).
-_REMINDER_CODES = frozenset({"vcr_comparator_record_incomplete", "vcr_assumption_role_missing", "vcr_evidence_item_incomplete", "vcr_evidence_reported_unverified"})
+_REMINDER_CODES = frozenset({"vcr_comparator_record_incomplete", "vcr_assumption_role_missing", "vcr_evidence_item_incomplete", "vcr_evidence_reported_unverified",
+                            "vcr_evidence_values_inconsistent", "vcr_evidence_second_read_differs"})
 
 
 def _issue_line(issue: dict) -> str:
@@ -1080,12 +1122,16 @@ def shape(arguments: dict) -> dict:
         data["endpoints"] = list(method["endpoints"])
     if platform is not None:
         # The platform freezes this scenario itself; the run states only the keys named here.
-        keys = [_row_line(by_path[name], by_path) for name in platform if name in by_path]
+        # an object row (tauPrior) is only its keys; the note below says what it takes
+        keys = [_row_line(by_path[name], by_path) for name in platform if name in by_path and by_path[name].get("type") != "object"]
         data["builtByPlatform"] = True
         data["runStates"] = list(platform)
         data["keys"] = keys
         if kind == "pool_evidence":
             notes.append("Use the evidence_pool tool: you name the parameter and the endpoint definition, never the numbers; the pooled values are this study's verified extractions.")
+            notes.append("tauPrior (optional) is the Cochrane reference for how much studies of one comparison differ, so that two studies get a prediction interval: {kind: turner_2015, outcome, comparison} "
+                         "for a binary outcome on the log odds ratio scale, {kind: turner_2015_generic}, or {kind: bartos_2023, effectScale: log_odds_ratio | log_risk_ratio | risk_difference | log_hazard_ratio}. "
+                         "Say which prior you used and why that setting fits, and that it is a reference for such comparisons in general, not for this drug.")
         elif kind == "match_criteria":
             notes.append("Start it with an empty scenario: the platform freezes the newest protocol version's criteria and the facts written for the study.")
         else:
@@ -1098,6 +1144,8 @@ def shape(arguments: dict) -> dict:
             data["rules"] = [_rule_line(rule) for rule in method["rules"]]
         if method.get("gridCells"):
             notes.append("A grid has at most %s cells (designs x truths), and every cell is a valid scenario of its own." % method["gridCells"])
+        if kind in DESIGN_POINTER_KINDS:
+            notes.append(DESIGN_POINTER)
         if kind == "literature_population":
             # On 2026-11-01 the run read this path's evidence bindings, saw no source to bind a pasted table to, and left for its own R.
             notes.append("A baseline table the person pasted, with no paper preserved to bind its numbers to, goes through generate_population with the "
@@ -1420,6 +1468,9 @@ def _job_answer(data: dict, action: str) -> dict:
                 "Do not wait for it in this turn -- no status loop, no sleep or wait command. Tell the researcher what is "
                 "computing, where the result will appear and how far it got, answer with what you already have, and end the turn "
                 "(or go on with work that does not need this result).",
+                "Do not work out the same quantity yourself meanwhile and give no number of your own for it: the number the researcher "
+                "is given is the engine's. A small job is usually finished by the time you have written your reply, so look once more "
+                "with status just before you answer and use the result if it is there; one more look is not a loop.",
                 "In a later turn, when asked, read the result with vcr_read (what: results).",
             ],
         }
@@ -1577,6 +1628,11 @@ def evidence_pool(arguments: dict) -> dict:
         if method not in POOLING_METHODS:
             raise VcrPlatformError("vcr_simulate_payload_invalid", "method must be one of: %s." % ", ".join(POOLING_METHODS))
         scenario["method"] = method
+    tau_prior = arguments.get("tauPrior")
+    if tau_prior is not None:
+        if not isinstance(tau_prior, dict) or tau_prior.get("kind") not in TAU_PRIOR_KINDS:
+            raise VcrPlatformError("vcr_simulate_payload_invalid", "tauPrior.kind is one of: %s." % ", ".join(TAU_PRIOR_KINDS))
+        scenario["tauPrior"] = tau_prior
     return simulate({
         "action": "start",
         "kind": "pool_evidence",

@@ -1,0 +1,2911 @@
+{
+  "power-binary": {
+    "question": "外部对照每个人只按一部分算时，结论如何？",
+    "kind": "power",
+    "kindWord": "固定折扣（幂先验）",
+    "endpoint": "binary",
+    "weight": {
+      "value": 30,
+      "text": null,
+      "unit": "%",
+      "source": "calculated",
+      "interval": null,
+      "mcse": null,
+      "review": "ai_set",
+      "precision": 1,
+      "reason": null,
+      "stale": false,
+      "detail": null
+    },
+    "borrowedSampleSize": {
+      "value": 90,
+      "text": null,
+      "unit": "例",
+      "source": "calculated",
+      "interval": null,
+      "mcse": null,
+      "review": "ai_set",
+      "precision": null,
+      "reason": null,
+      "stale": false,
+      "detail": null
+    },
+    "posterior": [
+      {
+        "label": "不借用",
+        "which": "none",
+        "mean": {
+          "value": 26.97368421,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "lower": {
+          "value": 20.24224715,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "upper": {
+          "value": 34.27895485,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "probabilityBetter": {
+          "value": 92.31810122,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "weight": {
+          "value": 0,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        }
+      },
+      {
+        "label": "固定折扣（幂先验）",
+        "which": "chosen",
+        "mean": {
+          "value": 28.09917355,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "lower": {
+          "value": 22.6260501,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "upper": {
+          "value": 33.91514362,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "probabilityBetter": {
+          "value": 91.10532571,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "weight": {
+          "value": 30,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        }
+      },
+      {
+        "label": "全部借用（折扣 1）",
+        "which": "full",
+        "mean": {
+          "value": 28.98230088,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "lower": {
+          "value": 24.8952206,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "upper": {
+          "value": 33.24554699,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "probabilityBetter": {
+          "value": 90.24593752,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "weight": {
+          "value": 100,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        }
+      }
+    ],
+    "conflict": null,
+    "operatingCharacteristics": {
+      "nControl": 150,
+      "nTreatment": 300,
+      "effect": 0.1,
+      "alpha": 0.025,
+      "rows": [
+        {
+          "drift": -0.1,
+          "driftWords": "低于历史 10 个百分点",
+          "controlValue": 0.19999999999999998,
+          "none": {
+            "typeOneError": {
+              "value": 2.33026849,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "power": {
+              "value": 62.42431685,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "bias": {
+              "value": 0.39473684,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            }
+          },
+          "chosen": {
+            "typeOneError": {
+              "value": 0.01886237,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "power": {
+              "value": 34.5369429,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "bias": {
+              "value": 3.96694215,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "weight": {
+              "value": 30,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            }
+          }
+        },
+        {
+          "drift": 0,
+          "driftWords": "与历史一致",
+          "controlValue": 0.3,
+          "none": {
+            "typeOneError": {
+              "value": 2.37022344,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "power": {
+              "value": 54.90853986,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "bias": {
+              "value": 0.26315789,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            }
+          },
+          "chosen": {
+            "typeOneError": {
+              "value": 1.32677552,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "power": {
+              "value": 69.75272982,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "bias": {
+              "value": 0.16528926,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "weight": {
+              "value": 30,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            }
+          }
+        },
+        {
+          "drift": 0.1,
+          "driftWords": "高出历史 10 个百分点",
+          "controlValue": 0.4,
+          "none": {
+            "typeOneError": {
+              "value": 2.47861495,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "power": {
+              "value": 51.49928529,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "bias": {
+              "value": 0.13157895,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            }
+          },
+          "chosen": {
+            "typeOneError": {
+              "value": 11.50602512,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "power": {
+              "value": 91.88252876,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "bias": {
+              "value": -3.63636364,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "weight": {
+              "value": 30,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            }
+          }
+        }
+      ],
+      "note": "I 类错误是对照组的真实水平偏离历史时，把无效的试验组判成更好的概率；这里的数是穷举所有可能的结果算出的，没有模拟误差。"
+    },
+    "elastic": null,
+    "note": "试验组按无借用的均匀先验读；借用只加在对照组。"
+  },
+  "sam-binary": {
+    "question": "借用多少由数据决定时，结果如何？",
+    "kind": "sam",
+    "kindWord": "自适应混合先验（SAM）",
+    "endpoint": "binary",
+    "weight": {
+      "value": 80.47533576,
+      "text": null,
+      "unit": "%",
+      "source": "calculated",
+      "interval": null,
+      "mcse": null,
+      "review": "ai_set",
+      "precision": 1,
+      "reason": null,
+      "stale": false,
+      "detail": null
+    },
+    "borrowedSampleSize": {
+      "value": 6.74467163,
+      "text": null,
+      "unit": "例",
+      "source": "calculated",
+      "interval": null,
+      "mcse": null,
+      "review": "ai_set",
+      "precision": null,
+      "reason": null,
+      "stale": false,
+      "detail": null
+    },
+    "posterior": [
+      {
+        "label": "不借用",
+        "which": "none",
+        "mean": {
+          "value": 26.97368421,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "lower": {
+          "value": 20.24224715,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "upper": {
+          "value": 34.27895485,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "probabilityBetter": {
+          "value": 92.31810122,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "weight": {
+          "value": 0,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        }
+      },
+      {
+        "label": "自适应混合先验（SAM）",
+        "which": "chosen",
+        "mean": {
+          "value": 28.91338272,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "lower": {
+          "value": 24.56469612,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "upper": {
+          "value": 33.27216937,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "probabilityBetter": {
+          "value": 90.31703606,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "weight": {
+          "value": 80.47533576,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        }
+      },
+      {
+        "label": "全部借用（折扣 1）",
+        "which": "full",
+        "mean": {
+          "value": 28.98230088,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "lower": {
+          "value": 24.8952206,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "upper": {
+          "value": 33.24554699,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "probabilityBetter": {
+          "value": 90.24593752,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "weight": {
+          "value": 100,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        }
+      }
+    ],
+    "conflict": {
+      "patients": 150,
+      "delta": "10 个百分点",
+      "rows": [
+        {
+          "difference": -0.2,
+          "differenceWords": "低于历史 20 个百分点",
+          "observed": 0.1,
+          "weight": {
+            "value": 0.0006085,
+            "text": null,
+            "unit": "%",
+            "source": "calculated",
+            "interval": null,
+            "mcse": null,
+            "review": "ai_set",
+            "precision": 1,
+            "reason": null,
+            "stale": false,
+            "detail": null
+          }
+        },
+        {
+          "difference": -0.1,
+          "differenceWords": "低于历史 10 个百分点",
+          "observed": 0.2,
+          "weight": {
+            "value": 1.88149698,
+            "text": null,
+            "unit": "%",
+            "source": "calculated",
+            "interval": null,
+            "mcse": null,
+            "review": "ai_set",
+            "precision": 1,
+            "reason": null,
+            "stale": false,
+            "detail": null
+          }
+        },
+        {
+          "difference": -0.05,
+          "differenceWords": "低于历史 5 个百分点",
+          "observed": 0.25333333333333335,
+          "weight": {
+            "value": 58.47238958,
+            "text": null,
+            "unit": "%",
+            "source": "calculated",
+            "interval": null,
+            "mcse": null,
+            "review": "ai_set",
+            "precision": 1,
+            "reason": null,
+            "stale": false,
+            "detail": null
+          }
+        },
+        {
+          "difference": 0,
+          "differenceWords": "与历史一致",
+          "observed": 0.3,
+          "weight": {
+            "value": 96.52023012,
+            "text": null,
+            "unit": "%",
+            "source": "calculated",
+            "interval": null,
+            "mcse": null,
+            "review": "ai_set",
+            "precision": 1,
+            "reason": null,
+            "stale": false,
+            "detail": null
+          }
+        },
+        {
+          "difference": 0.05,
+          "differenceWords": "高出历史 5 个百分点",
+          "observed": 0.3466666666666667,
+          "weight": {
+            "value": 55.85900217,
+            "text": null,
+            "unit": "%",
+            "source": "calculated",
+            "interval": null,
+            "mcse": null,
+            "review": "ai_set",
+            "precision": 1,
+            "reason": null,
+            "stale": false,
+            "detail": null
+          }
+        },
+        {
+          "difference": 0.1,
+          "differenceWords": "高出历史 10 个百分点",
+          "observed": 0.4,
+          "weight": {
+            "value": 3.58137587,
+            "text": null,
+            "unit": "%",
+            "source": "calculated",
+            "interval": null,
+            "mcse": null,
+            "review": "ai_set",
+            "precision": 1,
+            "reason": null,
+            "stale": false,
+            "detail": null
+          }
+        },
+        {
+          "difference": 0.2,
+          "differenceWords": "高出历史 20 个百分点",
+          "observed": 0.5,
+          "weight": {
+            "value": 0.0049738,
+            "text": null,
+            "unit": "%",
+            "source": "calculated",
+            "interval": null,
+            "mcse": null,
+            "review": "ai_set",
+            "precision": 1,
+            "reason": null,
+            "stale": false,
+            "detail": null
+          }
+        }
+      ],
+      "note": "数据与历史的差异越接近你设定的“不该再借的差异”，借用的权重越低；权重是当前对照组数据决定的，不是事先设的。"
+    },
+    "operatingCharacteristics": {
+      "nControl": 150,
+      "nTreatment": 300,
+      "effect": 0.1,
+      "alpha": 0.025,
+      "rows": [
+        {
+          "drift": -0.1,
+          "driftWords": "低于历史 10 个百分点",
+          "controlValue": 0.19999999999999998,
+          "none": {
+            "typeOneError": {
+              "value": 2.33026849,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "power": {
+              "value": 62.42431685,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "bias": {
+              "value": 0.39473684,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            }
+          },
+          "chosen": {
+            "typeOneError": {
+              "value": 2.32935043,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "power": {
+              "value": 58.28266866,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "bias": {
+              "value": 0.95056915,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "weight": {
+              "value": 10.75841134,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            }
+          }
+        },
+        {
+          "drift": -0.05,
+          "driftWords": "低于历史 5 个百分点",
+          "controlValue": 0.25,
+          "none": {
+            "typeOneError": {
+              "value": 2.32565989,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "power": {
+              "value": 57.92277153,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "bias": {
+              "value": 0.32894737,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            }
+          },
+          "chosen": {
+            "typeOneError": {
+              "value": 2.10649444,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "power": {
+              "value": 56.10007193,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "bias": {
+              "value": 1.5507302,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "weight": {
+              "value": 49.43837763,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            }
+          }
+        },
+        {
+          "drift": 0,
+          "driftWords": "与历史一致",
+          "controlValue": 0.3,
+          "none": {
+            "typeOneError": {
+              "value": 2.37022344,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "power": {
+              "value": 54.90853986,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "bias": {
+              "value": 0.26315789,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            }
+          },
+          "chosen": {
+            "typeOneError": {
+              "value": 1.82528352,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "power": {
+              "value": 77.9888808,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "bias": {
+              "value": 0.12347508,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "weight": {
+              "value": 74.89261118,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            }
+          }
+        },
+        {
+          "drift": 0.05,
+          "driftWords": "高出历史 5 个百分点",
+          "controlValue": 0.35,
+          "none": {
+            "typeOneError": {
+              "value": 2.42599338,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "power": {
+              "value": 52.81958144,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "bias": {
+              "value": 0.19736842,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            }
+          },
+          "chosen": {
+            "typeOneError": {
+              "value": 8.17104232,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "power": {
+              "value": 67.98667555,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "bias": {
+              "value": -1.20520613,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "weight": {
+              "value": 49.44592872,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            }
+          }
+        },
+        {
+          "drift": 0.1,
+          "driftWords": "高出历史 10 个百分点",
+          "controlValue": 0.4,
+          "none": {
+            "typeOneError": {
+              "value": 2.47861495,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "power": {
+              "value": 51.49928529,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "bias": {
+              "value": 0.13157895,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            }
+          },
+          "chosen": {
+            "typeOneError": {
+              "value": 8.82570772,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "power": {
+              "value": 53.6710208,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "bias": {
+              "value": -0.6666538,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "weight": {
+              "value": 15.0014874,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            }
+          }
+        }
+      ],
+      "note": "I 类错误是对照组的真实水平偏离历史时，把无效的试验组判成更好的概率；这里的数是穷举所有可能的结果算出的，没有模拟误差。"
+    },
+    "elastic": null,
+    "note": "试验组按无借用的均匀先验读；借用只加在对照组。"
+  },
+  "elastic-binary": {
+    "question": "数据与历史冲突时，怎样换算成借用程度？",
+    "kind": "elastic",
+    "kindWord": "弹性先验",
+    "endpoint": "binary",
+    "weight": null,
+    "borrowedSampleSize": null,
+    "posterior": [],
+    "conflict": {
+      "patients": 150,
+      "delta": "10 个百分点",
+      "rows": [
+        {
+          "difference": -0.2,
+          "differenceWords": "低于历史 20 个百分点",
+          "observed": 0.1,
+          "weight": {
+            "value": 0.00351914,
+            "text": null,
+            "unit": "%",
+            "source": "calculated",
+            "interval": null,
+            "mcse": null,
+            "review": "ai_set",
+            "precision": 1,
+            "reason": null,
+            "stale": false,
+            "detail": null
+          }
+        },
+        {
+          "difference": -0.1,
+          "differenceWords": "低于历史 10 个百分点",
+          "observed": 0.2,
+          "weight": {
+            "value": 0.63913994,
+            "text": null,
+            "unit": "%",
+            "source": "calculated",
+            "interval": null,
+            "mcse": null,
+            "review": "ai_set",
+            "precision": 1,
+            "reason": null,
+            "stale": false,
+            "detail": null
+          }
+        },
+        {
+          "difference": -0.05,
+          "differenceWords": "低于历史 5 个百分点",
+          "observed": 0.25333333333333335,
+          "weight": {
+            "value": 61.67403877,
+            "text": null,
+            "unit": "%",
+            "source": "calculated",
+            "interval": null,
+            "mcse": null,
+            "review": "ai_set",
+            "precision": 1,
+            "reason": null,
+            "stale": false,
+            "detail": null
+          }
+        },
+        {
+          "difference": 0,
+          "differenceWords": "与历史一致",
+          "observed": 0.3,
+          "weight": {
+            "value": 100,
+            "text": null,
+            "unit": "%",
+            "source": "calculated",
+            "interval": null,
+            "mcse": null,
+            "review": "ai_set",
+            "precision": 1,
+            "reason": null,
+            "stale": false,
+            "detail": null
+          }
+        },
+        {
+          "difference": 0.05,
+          "differenceWords": "高出历史 5 个百分点",
+          "observed": 0.3466666666666667,
+          "weight": {
+            "value": 66.49054474,
+            "text": null,
+            "unit": "%",
+            "source": "calculated",
+            "interval": null,
+            "mcse": null,
+            "review": "ai_set",
+            "precision": 1,
+            "reason": null,
+            "stale": false,
+            "detail": null
+          }
+        },
+        {
+          "difference": 0.1,
+          "differenceWords": "高出历史 10 个百分点",
+          "observed": 0.4,
+          "weight": {
+            "value": 1,
+            "text": null,
+            "unit": "%",
+            "source": "calculated",
+            "interval": null,
+            "mcse": null,
+            "review": "ai_set",
+            "precision": 1,
+            "reason": null,
+            "stale": false,
+            "detail": null
+          }
+        },
+        {
+          "difference": 0.2,
+          "differenceWords": "高出历史 20 个百分点",
+          "observed": 0.5,
+          "weight": {
+            "value": 0.00883997,
+            "text": null,
+            "unit": "%",
+            "source": "calculated",
+            "interval": null,
+            "mcse": null,
+            "review": "ai_set",
+            "precision": 1,
+            "reason": null,
+            "stale": false,
+            "detail": null
+          }
+        }
+      ],
+      "note": "数据与历史的差异越大，借用程度越低；这条曲线是你设的函数，不是数据的结论。"
+    },
+    "operatingCharacteristics": {
+      "nControl": 150,
+      "nTreatment": 300,
+      "effect": 0.1,
+      "alpha": 0.025,
+      "rows": [
+        {
+          "drift": -0.1,
+          "driftWords": "低于历史 10 个百分点",
+          "controlValue": 0.19999999999999998,
+          "none": {
+            "typeOneError": {
+              "value": 2.96868293,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "power": {
+              "value": 65.68125537,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "bias": {
+              "value": 0.03994674,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            }
+          },
+          "chosen": {
+            "typeOneError": {
+              "value": 2.96824818,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "power": {
+              "value": 63.65622588,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "bias": {
+              "value": 0.47133957,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "weight": {
+              "value": 8.70215018,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            }
+          }
+        },
+        {
+          "drift": 0,
+          "driftWords": "与历史一致",
+          "controlValue": 0.3,
+          "none": {
+            "typeOneError": {
+              "value": 2.77936874,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "power": {
+              "value": 56.60057939,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "bias": {
+              "value": 0.02663116,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            }
+          },
+          "chosen": {
+            "typeOneError": {
+              "value": 2.42301131,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "power": {
+              "value": 80.42985005,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "bias": {
+              "value": 0.00775661,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "weight": {
+              "value": 81.28507793,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            }
+          }
+        },
+        {
+          "drift": 0.1,
+          "driftWords": "高出历史 10 个百分点",
+          "controlValue": 0.4,
+          "none": {
+            "typeOneError": {
+              "value": 2.64934228,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "power": {
+              "value": 52.03410166,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "bias": {
+              "value": 0.01331558,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            }
+          },
+          "chosen": {
+            "typeOneError": {
+              "value": 10.67101745,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "power": {
+              "value": 55.72948964,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "bias": {
+              "value": -0.61545248,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "weight": {
+              "value": 13.51633378,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            }
+          }
+        }
+      ],
+      "note": "I 类错误是对照组的真实水平偏离历史时，把无效的试验组判成更好的概率；这里的数是穷举所有可能的结果算出的，没有模拟误差。"
+    },
+    "elastic": {
+      "function": "logistic",
+      "patients": 150
+    },
+    "note": "试验组按无借用的均匀先验读；借用只加在对照组。"
+  },
+  "elastic-mean": {
+    "question": "数据与历史冲突时，怎样换算成借用程度？",
+    "kind": "elastic",
+    "kindWord": "弹性先验",
+    "endpoint": "continuous",
+    "weight": {
+      "value": 0,
+      "text": null,
+      "unit": "%",
+      "source": "calculated",
+      "interval": null,
+      "mcse": null,
+      "review": "ai_set",
+      "precision": 1,
+      "reason": null,
+      "stale": false,
+      "detail": null
+    },
+    "borrowedSampleSize": {
+      "value": 0,
+      "text": null,
+      "unit": "例",
+      "source": "calculated",
+      "interval": null,
+      "mcse": null,
+      "review": "ai_set",
+      "precision": null,
+      "reason": null,
+      "stale": false,
+      "detail": null
+    },
+    "posterior": [
+      {
+        "label": "不借用",
+        "which": "none",
+        "mean": {
+          "value": 11,
+          "text": null,
+          "unit": null,
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": null,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "lower": {
+          "value": 9.98787895,
+          "text": null,
+          "unit": null,
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": null,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "upper": {
+          "value": 12.01212105,
+          "text": null,
+          "unit": null,
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": null,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "probabilityBetter": {
+          "value": 93.31927987,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "weight": {
+          "value": 0,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        }
+      },
+      {
+        "label": "弹性先验",
+        "which": "chosen",
+        "mean": {
+          "value": 11,
+          "text": null,
+          "unit": null,
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": null,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "lower": {
+          "value": 9.98787895,
+          "text": null,
+          "unit": null,
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": null,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "upper": {
+          "value": 12.01212105,
+          "text": null,
+          "unit": null,
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": null,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "probabilityBetter": {
+          "value": 93.31927987,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "weight": {
+          "value": 0,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        }
+      },
+      {
+        "label": "全部借用（折扣 1）",
+        "which": "full",
+        "mean": {
+          "value": 10.33333333,
+          "text": null,
+          "unit": null,
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": null,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "lower": {
+          "value": 9.74898497,
+          "text": null,
+          "unit": null,
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": null,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "upper": {
+          "value": 10.91768169,
+          "text": null,
+          "unit": null,
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": null,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "probabilityBetter": {
+          "value": 99.93755845,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "weight": {
+          "value": 100,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        }
+      }
+    ],
+    "conflict": {
+      "patients": 60,
+      "delta": "2",
+      "rows": [
+        {
+          "difference": -4,
+          "differenceWords": "低于历史 4",
+          "observed": 6,
+          "weight": {
+            "value": 0,
+            "text": null,
+            "unit": "%",
+            "source": "calculated",
+            "interval": null,
+            "mcse": null,
+            "review": "ai_set",
+            "precision": 1,
+            "reason": null,
+            "stale": false,
+            "detail": null
+          }
+        },
+        {
+          "difference": -2,
+          "differenceWords": "低于历史 2",
+          "observed": 8,
+          "weight": {
+            "value": 0,
+            "text": null,
+            "unit": "%",
+            "source": "calculated",
+            "interval": null,
+            "mcse": null,
+            "review": "ai_set",
+            "precision": 1,
+            "reason": null,
+            "stale": false,
+            "detail": null
+          }
+        },
+        {
+          "difference": -1,
+          "differenceWords": "低于历史 1",
+          "observed": 9,
+          "weight": {
+            "value": 0,
+            "text": null,
+            "unit": "%",
+            "source": "calculated",
+            "interval": null,
+            "mcse": null,
+            "review": "ai_set",
+            "precision": 1,
+            "reason": null,
+            "stale": false,
+            "detail": null
+          }
+        },
+        {
+          "difference": 0,
+          "differenceWords": "与历史一致",
+          "observed": 10,
+          "weight": {
+            "value": 100,
+            "text": null,
+            "unit": "%",
+            "source": "calculated",
+            "interval": null,
+            "mcse": null,
+            "review": "ai_set",
+            "precision": 1,
+            "reason": null,
+            "stale": false,
+            "detail": null
+          }
+        },
+        {
+          "difference": 1,
+          "differenceWords": "高出历史 1",
+          "observed": 11,
+          "weight": {
+            "value": 0,
+            "text": null,
+            "unit": "%",
+            "source": "calculated",
+            "interval": null,
+            "mcse": null,
+            "review": "ai_set",
+            "precision": 1,
+            "reason": null,
+            "stale": false,
+            "detail": null
+          }
+        },
+        {
+          "difference": 2,
+          "differenceWords": "高出历史 2",
+          "observed": 12,
+          "weight": {
+            "value": 0,
+            "text": null,
+            "unit": "%",
+            "source": "calculated",
+            "interval": null,
+            "mcse": null,
+            "review": "ai_set",
+            "precision": 1,
+            "reason": null,
+            "stale": false,
+            "detail": null
+          }
+        },
+        {
+          "difference": 4,
+          "differenceWords": "高出历史 4",
+          "observed": 14,
+          "weight": {
+            "value": 0,
+            "text": null,
+            "unit": "%",
+            "source": "calculated",
+            "interval": null,
+            "mcse": null,
+            "review": "ai_set",
+            "precision": 1,
+            "reason": null,
+            "stale": false,
+            "detail": null
+          }
+        }
+      ],
+      "note": "数据与历史的差异越大，借用程度越低；这条曲线是你设的函数，不是数据的结论。"
+    },
+    "operatingCharacteristics": {
+      "nControl": 60,
+      "nTreatment": 90,
+      "effect": 1.5,
+      "alpha": 0.025,
+      "rows": [
+        {
+          "drift": -2,
+          "driftWords": "低于历史 2",
+          "controlValue": 8,
+          "none": {
+            "typeOneError": {
+              "value": 2.5,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "power": {
+              "value": 61.41056576,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "bias": {
+              "value": 0,
+              "text": null,
+              "unit": null,
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": null,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            }
+          },
+          "chosen": {
+            "typeOneError": {
+              "value": 2.5,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "power": {
+              "value": 61.41056344,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "bias": {
+              "value": 0.00057678,
+              "text": null,
+              "unit": null,
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": null,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "weight": {
+              "value": 0.2264651,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            }
+          }
+        },
+        {
+          "drift": 0,
+          "driftWords": "与历史一致",
+          "controlValue": 10,
+          "none": {
+            "typeOneError": {
+              "value": 2.5,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "power": {
+              "value": 61.41056576,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "bias": {
+              "value": 0,
+              "text": null,
+              "unit": null,
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": null,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            }
+          },
+          "chosen": {
+            "typeOneError": {
+              "value": 2.85285094,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "power": {
+              "value": 77.19081106,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "bias": {
+              "value": 0,
+              "text": null,
+              "unit": null,
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": null,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "weight": {
+              "value": 70.10406407,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            }
+          }
+        },
+        {
+          "drift": 2,
+          "driftWords": "高出历史 2",
+          "controlValue": 12,
+          "none": {
+            "typeOneError": {
+              "value": 2.5,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "power": {
+              "value": 61.41056576,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "bias": {
+              "value": 0,
+              "text": null,
+              "unit": null,
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": null,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            }
+          },
+          "chosen": {
+            "typeOneError": {
+              "value": 2.55014872,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "power": {
+              "value": 61.41056934,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "bias": {
+              "value": -0.00057678,
+              "text": null,
+              "unit": null,
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": null,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            },
+            "weight": {
+              "value": 0.2264651,
+              "text": null,
+              "unit": "%",
+              "source": "calculated",
+              "interval": null,
+              "mcse": null,
+              "review": "ai_set",
+              "precision": 1,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            }
+          }
+        }
+      ],
+      "note": "I 类错误是对照组的真实水平偏离历史时，把无效的试验组判成更好的概率；这里的数是穷举所有可能的结果算出的，没有模拟误差。"
+    },
+    "elastic": {
+      "function": "step",
+      "patients": 60
+    },
+    "note": "试验组按无借用的均匀先验读；借用只加在对照组。"
+  },
+  "spline": {
+    "question": "风险曲线不单调时，长期生存和 RMST 是多少？",
+    "median": {
+      "value": 10.37919312,
+      "text": null,
+      "unit": "个月",
+      "source": "calculated",
+      "interval": {
+        "kind": "confidence",
+        "low": 9.64,
+        "high": 11.17,
+        "level": 95
+      },
+      "mcse": null,
+      "review": "ai_set",
+      "precision": 2,
+      "reason": null,
+      "stale": false,
+      "detail": null
+    },
+    "rmst": {
+      "tau": 60,
+      "tauWords": "60个月",
+      "value": {
+        "value": 12.73855239,
+        "text": null,
+        "unit": "个月",
+        "source": "calculated",
+        "interval": {
+          "kind": "confidence",
+          "low": 11.74,
+          "high": 13.74,
+          "level": 95
+        },
+        "mcse": null,
+        "review": "ai_set",
+        "precision": 2,
+        "reason": null,
+        "stale": false,
+        "detail": null
+      }
+    },
+    "curve": [
+      {
+        "time": 12,
+        "timeWords": "12个月",
+        "survival": {
+          "value": 42.0425769,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": {
+            "kind": "confidence",
+            "low": 37.873004,
+            "high": 46.149767,
+            "level": 95
+          },
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "beyondData": false,
+        "timesLongestFollowUp": 0.40713405935707814
+      },
+      {
+        "time": 24,
+        "timeWords": "24个月",
+        "survival": {
+          "value": 11.08608303,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": {
+            "kind": "confidence",
+            "low": 7.971386,
+            "high": 14.768719,
+            "level": 95
+          },
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "beyondData": false,
+        "timesLongestFollowUp": 0.8142681187141563
+      },
+      {
+        "time": 60,
+        "timeWords": "60个月",
+        "survival": {
+          "value": 0.09796641,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": {
+            "kind": "confidence",
+            "low": 0.00438,
+            "high": 0.837149,
+            "level": 95
+          },
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "beyondData": true,
+        "timesLongestFollowUp": 2.035670296785391
+      }
+    ],
+    "longestFollowUp": "29.5个月",
+    "specifications": [
+      {
+        "knots": 0,
+        "selected": false,
+        "estimable": true,
+        "aic": 2738.25159938344,
+        "median": {
+          "value": 11.07340937,
+          "text": null,
+          "unit": null,
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": null,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "rmst": {
+          "value": 12.33722259,
+          "text": null,
+          "unit": null,
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": null,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "survival": {
+          "value": 0.00101012,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        }
+      },
+      {
+        "knots": 1,
+        "selected": false,
+        "estimable": true,
+        "aic": 2721.123853977444,
+        "median": {
+          "value": 10.39461393,
+          "text": null,
+          "unit": null,
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": null,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "rmst": {
+          "value": 12.71093489,
+          "text": null,
+          "unit": null,
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": null,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "survival": {
+          "value": 0.08142463,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        }
+      },
+      {
+        "knots": 2,
+        "selected": true,
+        "estimable": true,
+        "aic": 2722.962031675038,
+        "median": {
+          "value": 10.37919312,
+          "text": null,
+          "unit": null,
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": null,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "rmst": {
+          "value": 12.73855239,
+          "text": null,
+          "unit": null,
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": null,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "survival": {
+          "value": 0.09796641,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        }
+      },
+      {
+        "knots": 3,
+        "selected": false,
+        "estimable": true,
+        "aic": 2723.3509248495066,
+        "median": {
+          "value": 10.47427189,
+          "text": null,
+          "unit": null,
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": null,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "rmst": {
+          "value": 12.83905781,
+          "text": null,
+          "unit": null,
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": null,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        },
+        "survival": {
+          "value": 0.1854289,
+          "text": null,
+          "unit": "%",
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        }
+      }
+    ],
+    "note": "区间只含这一条曲线的抽样误差；不同结点数给出的差别是模型形式带来的不确定性，没有算进区间。",
+    "premises": [
+      {
+        "key": "splineBeyond",
+        "label": "最后一个时间点离数据有多远",
+        "value": "60个月，是最长随访 29.5个月的 2.04 倍；超出随访的部分没有观察到的人，是按模型外推的",
+        "source": "default",
+        "decisive": true,
+        "reason": null
+      },
+      {
+        "key": "splineKnots",
+        "label": "曲线的灵活程度",
+        "value": "2 个内部结点（在 6.34、10.5个月处）；换成 0 到 3 个结点，最后一个时间点的生存率在 0.101% 到 18.5% 之间",
+        "source": "given",
+        "decisive": true,
+        "reason": null
+      },
+      {
+        "key": "splineTail",
+        "label": "最后一个结点之后的形状",
+        "value": "对数累积风险随对数时间走直线（相当于韦伯分布的尾部）；真实的风险未必如此",
+        "source": "default",
+        "decisive": true,
+        "reason": null
+      }
+    ]
+  }
+}

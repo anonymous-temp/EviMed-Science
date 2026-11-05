@@ -1,8 +1,14 @@
 import { VcrAccrualForecasts } from "../VcrAccrualForecasts";
+import { VcrBayesianDesigns } from "../VcrBayesianDesigns";
+import { VcrConfirmatoryDesigns } from "../VcrConfirmatoryDesigns";
+import { VcrDoseDesigns } from "../VcrDoseDesigns";
+import { VcrSuccessRates } from "../VcrSuccessRates";
 import { VcrScientificBasis } from "../VcrScientificBasis";
 import { VcrVersionComparison } from "../VcrVersionComparison";
+import { VcrWinRatioDesigns } from "../VcrWinRatioDesigns";
 import { useRef, useState } from "react";
 import { CircleCheck, PenLine, TriangleAlert } from "lucide-react";
+import { useSearchParams } from "react-router";
 import { getVcrTrial, recordVcrDecision, type VcrDesign, type VcrPremise, type VcrStudy, type VcrTrialTab as TrialData } from "@/lib/vcrClient";
 import { webErrorMessage } from "@/lib/apiClient";
 import { toast } from "@/lib/toast";
@@ -97,7 +103,10 @@ type TrialView = "designs" | "schedule" | "regulatory";
  * record, behind a press on it; the check is a ✓ or a ⚠ with the two numbers, and no sentence about it stands on the page.
  */
 export function TrialTab({ studyId, study }: { studyId: string; study: VcrStudy }) {
-  const { state, reload } = useVcrLoad(`${studyId}:trial`, () => getVcrTrial(studyId));
+  // The design a reply's link named (`?object=`) is what the first sentence and the premises are about; without one it is the most recent.
+  const [params] = useSearchParams();
+  const object = params.get("object");
+  const { state, reload } = useVcrLoad(`${studyId}:trial:${object ?? ""}`, () => getVcrTrial(studyId, object ? { object } : undefined));
   if (state.kind === "loading") return <VcrTabSkeleton />;
   if (state.kind === "error") return <VcrTabError message={state.message} onRetry={reload} />;
   return <TrialView studyId={studyId} study={study} data={state.data} reload={reload} />;
@@ -114,7 +123,7 @@ function TrialView({ studyId, study, data, reload }: { studyId: string; study: V
   const failed = study.steps.trial?.status === "failed";
   const canWrite = study.abilities.includes("write");
   // The protocol's visit schedule and the regulatory log are records of the study, not results of this step: a study that has either is not empty.
-  const hasDesigns = data.designs.length > 0 || data.ademp.length > 0 || data.forecasts.length > 0 || data.milestones.length > 0 || Boolean(data.accrualForecasts?.length);
+  const hasDesigns = data.designs.length > 0 || data.ademp.length > 0 || data.forecasts.length > 0 || data.milestones.length > 0 || Boolean(data.accrualForecasts?.length) || Boolean(data.confirmatoryDesigns?.length) || Boolean(data.doseDesigns?.length) || Boolean(data.bayesianDesigns?.length) || Boolean(data.winRatioDesigns?.length);
   const nothing = !hasDesigns && !data.schedule && data.regulatory.length === 0;
   const noneRan = !data.designs.some(designRan);
   const decided = Boolean(data.decision?.chosen);
@@ -397,6 +406,9 @@ function DesignsView({ studyId, study, data, headline, noneRan, failed, onOpen, 
           </div>
         )}
 
+      {/* The base rates of development beside the assurance the table gives: a reference for the phase, in two columns, never this trial's probability. */}
+      {!noneRan && <VcrSuccessRates rates={data.successRates} />}
+
       {/* How the simulation was set up, folded under the comparison it explains: the lines are what a reviewer checks, not what a
           reader of the table needs first. */}
       {setup.length > 0 && (
@@ -427,6 +439,10 @@ function DesignsView({ studyId, study, data, headline, noneRan, failed, onOpen, 
 
       {cells.length > 0 && <ChartGrid rows={pairRows(cells)} />}
       {data.accrualForecasts?.length ? <VcrAccrualForecasts forecasts={data.accrualForecasts} /> : null}
+      <VcrConfirmatoryDesigns designs={data.confirmatoryDesigns ?? []} />
+      <VcrDoseDesigns designs={data.doseDesigns ?? []} />
+      <VcrBayesianDesigns designs={data.bayesianDesigns ?? []} />
+      <VcrWinRatioDesigns designs={data.winRatioDesigns ?? []} />
     </div>
   );
 }
