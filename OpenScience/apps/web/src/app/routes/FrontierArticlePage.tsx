@@ -1,3 +1,4 @@
+import { sanitizeRuntimeUiHistoryState } from "@/lib/runtimeUiNavigation";
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { useLocation, useParams, useSearchParams } from "react-router";
 import { cn } from "@/lib/cn";
@@ -131,7 +132,7 @@ function ArticleBody({ item, back, onItem }: { item: FrontierItemDetail; back: R
     label: textKind,
     text: textView,
     onToggle: () => {
-      setParams((current) => withParam(current, "view", textView ? null : "text"), { replace: true, state: location.state });
+      setParams((current) => withParam(current, "view", textView ? null : "text"), { replace: true, state: sanitizeRuntimeUiHistoryState(location.state) });
       const scroller = article.current?.closest<HTMLElement>(".overflow-y-auto");
       if (scroller && typeof scroller.scrollTo === "function") scroller.scrollTo({ top: 0 });
     },
@@ -139,7 +140,7 @@ function ArticleBody({ item, back, onItem }: { item: FrontierItemDetail; back: R
   // The abstract asked for is not there: back to what was written about the item, and the switch is gone (an empty view is no view).
   const abstractMissing = useCallback(() => {
     setNoAbstract(true);
-    if (params.get("view") === "text") setParams((current) => withParam(current, "view", null), { replace: true, state: location.state });
+    if (params.get("view") === "text") setParams((current) => withParam(current, "view", null), { replace: true, state: sanitizeRuntimeUiHistoryState(location.state) });
   }, [params, setParams, location.state]);
   const toggleStar = async () => {
     try {

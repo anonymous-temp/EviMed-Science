@@ -3,11 +3,13 @@ import test from 'node:test';
 import { computeGeoSelection } from '../src/geoReadScope.mjs';
 import { compareGeoMetricCohorts } from '../src/geoComparison.mjs';
 import { presentGeoAnalysis } from '../src/geoAnalysis.mjs';
+import { geoRivalMonitoringRows } from '../src/geoAnalysisMetrics.mjs';
+import { geoCoverageDifference } from '@evimed/domain';
 import { brandRegistry, registryKey } from '../src/geoParse.mjs';
 const product = { brandName: 'Ours' }, competitors = [{ id: 'saved-rival', brandName: 'Rival', aliases: ['R alias'] }, { id: 'generic-only', genericName: 'Generic' }];
 function cohort(prefix, proportion = 0) {
     const options = { engines: ['deepseek'], samplingMode: 'web', competitors: ['Rival'], owned: {} };
-    const rows = Array.from({ length: 50 }, (_, n) => ({ snapshotId: `${prefix}-${n}`, questionId: `q${n}`, engine: 'deepseek', roundId: prefix, roundKind: 'baseline', repeatIndex: 0, status: 'valid', pool: 'P2', groupId: 'g', askedAt: `2026-10-0${prefix === 'old' ? 1 : 2}T00:00:00Z`, surface: { mode: 'web' }, citations: [], facts: { registryKey: registryKey(brandRegistry(product, competitors), {}), parserVersion: 'p1', judgedAt: '2026-10-01', brands: [{ name: 'Ours', ours: true, count: n < proportion ? 1 : 0 }, { name: 'Rival', competitor: true, count: n < 10 ? 1 : 0 }], statements: [], checks: { judgementCoverage: { status: 'complete' } } } }));
+    const rows = Array.from({ length: 50 }, (_, n) => ({ snapshotId: `${prefix}-${n}`, questionId: `q${n}`, engine: 'deepseek', roundId: prefix, roundKind: 'baseline', repeatIndex: 0, status: 'valid', pool: 'P2', groupId: 'g', askedAt: `2026-10-0${prefix === 'old' ? 1 : 2}T00:00:00Z`, surface: { mode: 'web' }, citations: [], facts: { judgeExtract: { rubricVersion: 'v1' }, registryKey: registryKey(brandRegistry(product, competitors), {}), parserVersion: 'p1', judgedAt: '2026-10-01', brands: [{ name: 'Ours', ours: true, count: n < proportion ? 1 : 0 }, { name: 'Rival', competitor: true, count: n < 10 ? 1 : 0 }], statements: [], checks: { judgementCoverage: { status: 'complete' } } } }));
     return { scope: { timeZone: 'Asia/Shanghai' }, selection: { reference: `gsel_${prefix}`, methodVersion: 'v1', dataRevision: prefix, counts: {}, engines: ['deepseek'], comparability: { samplingContracts: [null], methodVersions: ['v1'] } }, rows, computed: computeGeoSelection(rows, options), metricOptions: options, rounds: [{ id: prefix, kind: 'baseline', set_version: 1, ref: { evaluationBasis: { product, competitors, owned: {} } } }], questions: [], comparison: null };
 }
 function compared(current, previous, mode = 'common') { const cells = compareGeoMetricCohorts(current, previous, { mode, commonCount: 50 }); current.comparison = { mode, cells, currentSelection: current.selection, previousSelection: previous.selection, excluded: { current: 2, previous: 3 } }; Object.defineProperty(current.comparison, 'cohorts', { value: { current, previous }, enumerable: false }); return current; }
@@ -189,4 +191,130 @@ test('V08 paired charts keep a generic-only own observation independent of brand
     assert.ok(view.chart.cells.some(cell => cell.rowKey === own.key && cell.unit === 'answers' && cell.value === 10));
     assert.equal(rival.values.pairedOwn.value, null);
     assert.equal(rival.values.pairedOwn.reason, 'own_brand_not_registered');
+});
+test('medical comparisons require a single matching recorded rubric', () => {
+    for (const [versions, expected] of [[[null], 'judge_version_unknown_or_mixed'], [['v1', 'v2'], 'judge_version_unknown_or_mixed'], [['v2'], 'judge_version_changed'], [['v1'], null]]) {
+        const a = cohort('now'), b = cohort('old');
+        for (const [selection, values] of [[a, ['v1']], [b, versions]]) {
+            selection.rows.forEach((row, i) => {
+                row.facts.judgeExtract = { rubricVersion: values[i % values.length] };
+                row.facts.statements = [{ text: 'fact', verdict: 'correct' }];
+            });
+            selection.computed = computeGeoSelection(selection.rows, selection.metricOptions);
+        }
+        const cells = compareGeoMetricCohorts(a, b, { mode: 'common', commonCount: 50 });
+        assert.equal(cells.find(cell => cell.metricId === 'M-06' && cell.scope === 'project').reason, expected);
+        assert.equal(cells.find(cell => cell.metricId === 'M-01' && cell.scope === 'project').reason, expected);
+        assert.equal(cells.find(cell => cell.metricId === 'M-10' && cell.scope === 'project').reason, null);
+    }
+});
+test('overlapping extracted entity can suppress a registered literal match', async () => {
+    const { parseAnswer, brandRegistry } = await import('../src/geoParse.mjs');
+    const registry = brandRegistry({ brandName: 'abc' }, []);
+    assert.equal(parseAnswer({answer:'abcde',registry,entities:[]}).mentionsOurs, true);
+    assert.equal(parseAnswer({answer:'abcde',registry,entities:['bcde']}).mentionsOurs, false);
+});
+test('V08 keeps observations but suppresses trend across mixed rubrics', () => {
+    const input = cohort('now', 10), old = cohort('old', 5);
+    old.rows.forEach(row => { row.facts.judgeExtract.rubricVersion = 'v2'; });
+    input.rows.push(...old.rows); input.rounds.push(...old.rounds);
+    input.computed = computeGeoSelection(input.rows, input.metricOptions);
+    const view = presentGeoAnalysis(input, { viewId: 'V08' }, context());
+    assert.ok(view.chart.series.length);
+    assert.ok(view.chart.series.every(series => series.values.every(value => value === null)));
+    assert.ok(view.rows.some(row => row.values.current.value != null));
+});
+test('V08 discloses unknown trend provenance when an eligible answer has no facts', () => {
+    const input = cohort('now', 10), old = cohort('old', 5);
+    old.rows[0].facts = null;
+    input.rows.push(...old.rows); input.rounds.push(...old.rounds);
+    input.computed = computeGeoSelection(input.rows, input.metricOptions);
+    const view = presentGeoAnalysis(input, { viewId: 'V08' }, context());
+    assert.ok(view.availability.reasons.includes('judge_version_unknown_or_mixed'));
+    assert.ok(view.chart.series.every(series => series.values.every(value => value === null)));
+    assert.ok(view.rows.some(row => row.values.current.value != null));
+});
+
+test('V08 monitoring projection retains daily readings without comparing differing judge versions', () => {
+    const input = cohort('now',10), old = cohort('old',5);
+    old.rows.forEach(row => { row.facts.judgeExtract.rubricVersion = 'v2'; });
+    input.rows.push(...old.rows); input.rounds.push(...old.rounds);
+    input.computed = computeGeoSelection(input.rows,input.metricOptions);
+    const view = presentGeoAnalysis(input,{viewId:'V08'},context());
+    const row = geoRivalMonitoringRows(view).find(item => item.entityKey === 'saved-rival');
+    assert.equal(row.points.length,2);
+    for (const points of [row.points,row.ownPoints]) {
+        assert.ok(points.every(point => point.value !== null));
+        assert.equal(geoCoverageDifference(points[0].coverage,points[1].coverage).comparable,false);
+    }
+});
+test('a refusal with facts cannot hide an unknown judge version', () => {
+    const a=cohort('now',10), b=cohort('old',5);
+    for (const selection of [a,b]) {
+        selection.rows[0].status='refusal';
+        selection.computed=computeGeoSelection(selection.rows,selection.metricOptions);
+    }
+    b.rows[0].facts.judgeExtract.rubricVersion=null;
+    const cell=compareGeoMetricCohorts(a,b,{mode:'common',commonCount:50}).find(item=>item.metricId==='M-01' && item.scope==='project');
+    assert.equal(cell.reason,'judge_version_unknown_or_mixed');
+});
+test('inclusion answers without a judge remain comparable on the same surface', () => {
+    const a=cohort('now',25), b=cohort('old',10);
+    for (const selection of [a,b]) {
+        selection.rows.forEach(row=>{row.engine='baidu';row.surface.mode='inclusion';row.facts.judgeExtract=null;row.facts.judgedAt=null;});
+        selection.metricOptions={...selection.metricOptions,engines:['baidu'],samplingMode:'inclusion'};
+        selection.computed=computeGeoSelection(selection.rows,selection.metricOptions);
+    }
+    const cell=compareGeoMetricCohorts(a,b,{mode:'common',commonCount:50}).find(item=>item.metricId==='M-01' && item.scope==='engine' && item.engine==='baidu');
+    assert.equal(cell.reason,null);
+    assert.equal(cell.delta,30);
+});
+test('V08 ignores inclusion answers when evaluating web rival trend provenance', () => {
+    for (const mixed of [false,true]) {
+        const input=cohort('now',10), old=cohort('old',5);
+        if (mixed) old.rows.forEach(row=>{row.facts.judgeExtract.rubricVersion='v2';});
+        const inclusion=structuredClone(old.rows[0]);
+        inclusion.snapshotId='inclusion'; inclusion.questionId='baidu-only'; inclusion.engine='baidu'; inclusion.roundId='inclusion-round';
+        inclusion.surface.mode='inclusion'; inclusion.facts.judgeExtract=null; inclusion.facts.judgedAt=null;
+        input.rows.push(...old.rows,inclusion); input.rounds.push(...old.rounds,{...old.rounds[0],id:'inclusion-round'});
+        input.computed=computeGeoSelection(input.rows,input.metricOptions);
+        const view=presentGeoAnalysis(input,{viewId:'V08'},context());
+        const row=geoRivalMonitoringRows(view).find(item=>item.entityKey==='saved-rival');
+        assert.equal(geoCoverageDifference(row.points[0].coverage,row.points[1].coverage).comparable,!mixed,JSON.stringify(row.points));
+    }
+});
+test('P4 medical comparisons examine P4 judge versions, including project scope', () => {
+    for(const changed of [false,true]) {
+        const a=cohort('now'),b=cohort('old');
+        for(const selection of [a,b]) {
+            selection.rows.forEach((row,i)=>{
+                row.pool=i<25?'P1':'P4';
+                row.facts.redFlagExpected=['flag'];
+                row.facts.redFlagHits=selection===a?['flag']:[];
+                if(changed && selection===b && row.pool==='P4') row.facts.judgeExtract.rubricVersion='v2';
+            });
+            selection.computed=computeGeoSelection(selection.rows,selection.metricOptions);
+        }
+        const cell=compareGeoMetricCohorts(a,b,{mode:'common',commonCount:50}).find(item=>item.metricId==='M-11'&&item.scope==='project');
+        assert.equal(cell.reason,changed?'judge_version_unknown_or_mixed':null);
+        if(changed) assert.equal(cell.delta,null);
+    }
+});
+test('refusals without any facts need no judgment version to compare zero mention', () => {
+    const a=cohort('now'),b=cohort('old');
+    for(const selection of [a,b]) {
+        selection.rows.forEach(row=>{row.status='refusal';row.facts=null;});
+        selection.computed=computeGeoSelection(selection.rows,selection.metricOptions);
+    }
+    const cell=compareGeoMetricCohorts(a,b,{mode:'common',commonCount:50}).find(item=>item.metricId==='M-01'&&item.scope==='project');
+    assert.equal(cell.reason,null);
+    assert.equal(cell.delta,0);
+});
+test('unjudged refusals do not conflict with known-version valid answers', () => {
+    const a=cohort('now',25),b=cohort('old');
+    b.rows.forEach(row=>{row.status='refusal';row.facts=null;});
+    b.computed=computeGeoSelection(b.rows,b.metricOptions);
+    const cell=compareGeoMetricCohorts(a,b,{mode:'common',commonCount:50}).find(item=>item.metricId==='M-01'&&item.scope==='project');
+    assert.equal(cell.reason,null);
+    assert.equal(cell.delta,50);
 });

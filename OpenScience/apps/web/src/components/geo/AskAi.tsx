@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useLocation } from "react-router";
 import { PenLine } from "lucide-react";
 import type { GeoCell } from "@/lib/geoClient";
+import { runtimeUiIntentFromState } from "@/lib/runtimeUiNavigation";
 import { buttonClasses } from "@/components/ui/Button";
 import { geoCellPhrase } from "./GeoCellText";
 import { geoMayConverse, useGeoFrame } from "./geoFrame";
@@ -56,6 +58,7 @@ export function AskAi({
   date,
   label = "让 AI 解读",
   className,
+  onOpened,
 }: {
   project: GeoConversationTarget;
   draft?: string;
@@ -67,9 +70,23 @@ export function AskAi({
   date?: string | null;
   label?: string;
   className?: string;
+  /** Runs when this draft has landed in the conversation route. */
+  onOpened?: () => void;
 }) {
   const open = useOpenGeoConversation();
   const [busy, setBusy] = useState(false);
+  const location = useLocation();
+  const intent = onOpened ? runtimeUiIntentFromState(location.state, project.projectId) : null;
+  const pending = useRef<{ fromKey: string; previousRequestId?: string; geoId?: string; draft: string } | null>(null);
+  useEffect(() => {
+    const attempt = pending.current;
+    if (!attempt || location.key === attempt.fromKey) return;
+    pending.current = null;
+    // The opener can finish before a navigation guard allows its destination to commit.
+    if (intent?.kind === "open" && intent.requestId !== attempt.previousRequestId
+      && intent.scope && (!attempt.geoId || intent.scope.geoProjectId === attempt.geoId)
+      && intent.draft === attempt.draft) onOpened?.();
+  }, [location.key, intent, onOpened]);
   // A role that may not open the conversation (it takes run and edit) is not offered a button that can only be refused.
   const frame = useGeoFrame();
   if (frame && !geoMayConverse(frame.project)) return null;
@@ -86,7 +103,12 @@ export function AskAi({
       aria-busy={busy || undefined}
       onClick={() => {
         setBusy(true);
-        void open({ ...project, geoId: project.geoId ?? frame?.geoId, primarySessionId: project.primarySessionId ?? project.sessionId ?? frame?.project.sessionId ?? null }, text).finally(() => setBusy(false));
+        const geoId = project.geoId ?? frame?.geoId;
+        const attempt = onOpened ? { fromKey: location.key, previousRequestId: intent?.requestId, geoId, draft: text } : null;
+        pending.current = attempt;
+        void open({ ...project, geoId, primarySessionId: project.primarySessionId ?? project.sessionId ?? frame?.project.sessionId ?? null }, text)
+          .then((requested) => { if (!requested && pending.current === attempt) pending.current = null; })
+          .finally(() => setBusy(false));
       }}
       className={buttonClasses({ variant: "text", size: "sm", className: `text-accent hover:text-accent ${className ?? ""}` })}
     >

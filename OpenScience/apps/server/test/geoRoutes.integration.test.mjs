@@ -68,13 +68,17 @@ before(async () => {
   store = new GeoStore({ database });
   service = new GeoService({ store, config: { ...config, dataDir }, now: () => new Date() });
   await service.ready();
+  for (const id of [ALICE, MALLORY, OPS]) {
+    await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES ($1,$1,'development')", [id]);
+  }
   // The platform's own authentication, reduced to what the routes ask of it:
   // the account is the one the test names in a header.
   const auth = {
     async ensureSessionUser(/** @type {any} */ req) {
       const id = String(req.headers["x-test-user"] ?? "");
       if (!id) throw Object.assign(new Error("Authentication required."), { status: 401, code: "auth_required" });
-      return { user: { id } };
+      const account = await database.query("SELECT created_at::text AS generation FROM evimed_control.users WHERE id=$1", [id]);
+      return { user: { id, accountCreatedAt: account.rows[0]?.generation } };
     },
     async assertCsrf() {},
   };
@@ -240,7 +244,7 @@ test("creating a project makes the control-plane project, its GEO row and a boun
   assert.deepEqual(listed.engines, ["doubao", "deepseek", "kimi"], "the deployment's engines when none are given");
   assert.equal(listed.coverageDays, 90);
   assert.deepEqual(listed.headline.gvi, { value: null, numerator: null, denominator: null, ciLow: null, ciHigh: null, status: "absent",
-    dataType: "measured", reason: null, target: null, trend: [] }, "an unmeasured number is absent, never zero");
+    dataType: "measured", reason: null, target: null, trend: [], trendCoverage: [] }, "an unmeasured number is absent, never zero");
   assert.deepEqual(listed.alert, { wrongOurs: 0, severe: 0, safety: 0, severity: null }, "no sentence of an engine rides on the row");
   assert.ok(audits.some((entry) => entry.event === "geo.project.create" && entry.code === created.payload.data.id));
   const unnamed = await call("POST", "/api/geo/projects", { body: {} });
@@ -509,7 +513,8 @@ test("measured rows become the diagnosis, the answer page, the overview and moni
   assert.deepEqual(monitoring.series[0], { key: "gvi", points: [{ date: "2026-09-24", value: 31.5, n: null, k: null, coverage: null }] });
   assert.deepEqual(monitoring.arms.pilot, [{ date: "2026-09-24", value: 33.2, coverage: null }], "the arm-scope index at pool null");
   assert.deepEqual(monitoring.arms.control, [{ date: "2026-09-24", value: 30.1, coverage: null }]);
-  assert.equal(monitoring.arms.netEffect.value, 0.06);
+  assert.equal(monitoring.arms.netEffect.value, null);
+  assert.equal(monitoring.arms.netEffect.reason, "judge_version_unrecorded", "legacy stored NET is not a verified calculation");
   assert.equal(monitoring.arms.netEffect.noiseBand, 0.04);
   assert.equal(monitoring.arms.netEffect.noiseMeasured, null, "a row written before it kept its band says nothing about it");
   // Q-2: the net effect's own row names the band it was judged against and whether anyone measured it.
@@ -806,11 +811,11 @@ test("a rival's mention rate over full measurements is a series of its own, judg
       FROM unnest($6::text[]) WITH ORDINALITY AS q(id, n) CROSS JOIN unnest($7::text[]) AS e(engine)`,
     [rid, ALICE, id, `${day}T09:00:00Z`, link, asked, asking]);
     await insert(`INSERT INTO evimed_geo.facts (snapshot_id, user_id, geo_project_id, failure_mode, mentions_ours, judged_at, brands, retrieval_triggered, checks,
-        registry_key, parser_version)
+        registry_key, parser_version, judge_extract)
       SELECT s.id, s.user_id, s.geo_project_id, 'omitted', false, now(),
         jsonb_build_array(jsonb_build_object('name', $2::text, 'ours', true, 'count', 0),
           jsonb_build_object('name', $3::text, 'competitor', true, 'count', CASE WHEN q.n <= $4 THEN 1 ELSE 0 END)),
-        q.n <= $5, '{"judgementCoverage":{"status":"complete"}}'::jsonb, $6, $7
+        q.n <= $5, '{"judgementCoverage":{"status":"complete"}}'::jsonb, $6, $7, '{"rubricVersion":"route-rival-fixture-v1"}'::jsonb
       FROM evimed_geo.snapshots s JOIN unnest($8::text[]) WITH ORDINALITY AS q(id, n) ON q.id = s.question_id WHERE s.round_id = $1`,
     [rid, ours, rival, mentions, retrieved, registered, GEO_PARSER_VERSION, asked]);
   };
@@ -1073,7 +1078,7 @@ test("a source's detail lists the pages of the site that were cited, and its cou
   assert.deepEqual([idle.pages, idle.pagesTotal, idle.history.map((/** @type {any} */ point) => point.cited)], [[], 0, [0, 0, 0, 0]]);
 });
 
-test("every point of a trend carries the coverage key of its round, and a change of the engine set changes the key and nothing else", options, async () => {
+test("legacy trend readings retain their values without inventing a calculation-time coverage key", options, async () => {
   const { project } = await seededProject();
   const id = project.id;
   const [question] = (await store.questionMap(id, 1)).flatMap((group) => group.questions);
@@ -1098,36 +1103,20 @@ test("every point of a trend carries the coverage key of its round, and a change
     await insert(`UPDATE evimed_geo.rounds SET ref = coalesce(ref, '{}'::jsonb) || jsonb_build_object('evaluationBasis', $2::jsonb) WHERE id = $1`,
       [round, JSON.stringify(index === 3 ? widened : basis)]);
   }
-  const keys = (/** @type {any[]} */ points) => points.map((point) => point.coverage);
-  const shape = (/** @type {string[]} */ list) => list.map((key, index) => (index === 0 ? 0 : key === list[index - 1] ? 0 : 1)).join("");
-
   const page = (await call("GET", `/api/geo/projects/${id}`)).payload.data;
   const gvi = page.overview.metrics.find((/** @type {any} */ entry) => entry.key === "gvi");
   assert.equal(gvi.trend.length, 4);
-  assert.equal(shape(keys(gvi.trend)), "0010", "the key moves once, where the engine set did");
-  assert.ok(gvi.trend.every((/** @type {any} */ point) => typeof point.coverage === "string" && point.coverage.startsWith("v1|")));
-  assert.ok(gvi.trend[0].coverage.includes(`|deepseek,kimi|web;fast;newchat;method=${GEO_MEASUREMENT_METHOD_VERSION};questions=`));
-  assert.ok(gvi.trend[3].coverage.includes(`|deepseek,doubao,kimi|web;fast;newchat;method=${GEO_MEASUREMENT_METHOD_VERSION};questions=`));
-
+  assert.deepEqual(gvi.trend.map(point => point.value), [50, 47, 44, 41]);
+  assert.ok(gvi.trend.every(point => point.coverage === null), "these manual metric rows have no frozen calculation inputs");
   const watch = (await call("GET", `/api/geo/projects/${id}/monitoring`)).payload.data;
-  assert.equal(shape(keys(watch.series.find((/** @type {any} */ line) => line.key === "gvi").points)), "0010");
-  assert.equal(shape(keys(watch.series.find((/** @type {any} */ line) => line.key === "mention").points)), "0010");
-  // A rival's reading is of its pool and the registry its round froze (the engines are the other readings' part of the key): joining
-  // the engine set at the third round does not move it, a registry that changed at the fourth does.
+  for (const key of ["gvi", "mention"]) assert.ok(watch.series.find(line => line.key === key).points.every(point => point.coverage === null));
   const ranged = (await call("GET", `/api/geo/projects/${id}/monitoring?from=2026-09-07&to=2026-09-28`)).payload.data;
   assert.equal(ranged.rivals.length, 1);
-  assert.deepEqual(ranged.rivals[0].points.map((/** @type {any} */ point) => point.date), ["2026-09-07", "2026-09-14", "2026-09-21", "2026-09-28"]);
-  assert.ok(ranged.rivals[0].points.every((/** @type {any} */ point) => typeof point.coverage === "string" && point.coverage));
-  assert.equal(shape(keys(ranged.rivals[0].points)), "0001", "a rival's reading moves where the registry did, not where the engine set did");
-  assert.deepEqual(keys(ranged.rivals[0].ownPoints), keys(ranged.rivals[0].points), "ours, over the same answers, is under the same key");
-  // Read over the range, the headline and mention series are the answers' own and keep the engines in their key: it moves once, where the set did.
-  for (const key of ["gvi", "mention"]) assert.equal(shape(keys(ranged.series.find((/** @type {any} */ line) => line.key === key).points)), "0010", key);
-  const rangedGvi = ranged.series.find((/** @type {any} */ line) => line.key === "gvi").points;
-  assert.ok(rangedGvi[0].coverage.includes("|deepseek,kimi|") && rangedGvi[3].coverage.includes("|deepseek,doubao,kimi|"));
-  // An engine's own series is of that engine alone: the others joining the sample is not a change of what it covers.
-  const kimi = watch.byEngine.find((/** @type {any} */ line) => line.engine === "kimi");
-  assert.equal(shape(keys(kimi.points)), "0000");
-  assert.ok(kimi.points[0].coverage.includes(`|kimi|web;fast;newchat;method=${GEO_MEASUREMENT_METHOD_VERSION};questions=`));
+  assert.deepEqual(ranged.rivals[0].points.map(point => point.date), ["2026-09-07", "2026-09-14", "2026-09-21", "2026-09-28"]);
+  assert.ok(ranged.rivals[0].points.every(point => point.coverage === null), "a historical registry alone does not record the judgment rubric");
+  for (const key of ["gvi", "mention"]) assert.ok(ranged.series.find(line => line.key === key).points.every(point => point.coverage === null));
+  const kimi = watch.byEngine.find(line => line.engine === "kimi");
+  assert.ok(kimi.points.every(point => point.coverage === null));
   await database.query("UPDATE evimed_geo.metrics SET method_version = $1 WHERE round_id = $2", ["another-measurement-method", rounds[3]]);
   const changed = (await call("GET", `/api/geo/projects/${id}/monitoring`)).payload.data;
   const changedPoints = changed.series.find((/** @type {any} */ line) => line.key === "gvi").points;

@@ -1,3 +1,4 @@
+import { optionalOpaqueRuntimeUiIntent } from "@/test/runtimeUiIntentAssertions";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
@@ -34,7 +35,7 @@ vi.mock("@/lib/apiClient", async (importOriginal) => ({
 
 function Probe() {
   const location = useLocation();
-  return <><div data-testid="location">{location.pathname}</div><div data-testid="state">{JSON.stringify(location.state ?? null)}</div></>;
+  return <><div data-testid="location">{location.pathname + location.search}</div><div data-testid="state">{JSON.stringify(location.state ?? null)}</div></>;
 }
 
 function renderAsk() {
@@ -65,9 +66,9 @@ describe("让 AI 解读", () => {
   it("opens the project's conversation with the draft, unsent", async () => {
     renderAsk();
     await userEvent.click(screen.getByRole("button", { name: "开始药品价值分析" }));
-    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app/geo/geo_1/chat/ses_geo_1"));
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app/geo/geo_1/plan?conversation=open&session=ses_geo_1"));
     const state = JSON.parse(screen.getByTestId("state").textContent ?? "null") as { runtimeUiIntent?: { draft?: string; sessionId?: string } } | null;
-    expect(state?.runtimeUiIntent).toMatchObject({ kind: "open", projectId: "prj_geo_1", draft: "请开始药品价值分析。", sessionId: "ses_geo_1", scope: descriptor().scope });
+    expect(optionalOpaqueRuntimeUiIntent(state)).toMatchObject({ kind: "open", projectId: "prj_geo_1", draft: "请开始药品价值分析。", sessionId: "ses_geo_1", scope: descriptor().scope });
     expect(state?.runtimeUiIntent).not.toHaveProperty("send");
     expect(client.open).toHaveBeenCalledWith("geo_1", { kind: "primary" });
     expect(store.select).not.toHaveBeenCalled();
@@ -102,13 +103,13 @@ it("is not offered to a role that may not open the conversation: there is nothin
 it('keeps the exact result reference, conversation and scoped return destination during a handoff',async()=>{
   const referenceId=`rr_${'a'.repeat(64)}`;
   render(<MemoryRouter initialEntries={['/app/geo/geo_1/plan?strategyVersion=3&selectionRef=selected&step=sources']}><Routes>
-    <Route path="/app/geo/geo_1/plan" element={<AskAi project={{geoId:'geo_1',projectId:'prj_geo_1',sessionId:'historical',resultRevision:{referenceId}}} label="在对话中解释所选版本" draft="Explain selected version"/>}/>
+    <Route path="/app/geo/geo_1/plan" element={<><AskAi project={{geoId:'geo_1',projectId:'prj_geo_1',sessionId:'historical',resultRevision:{referenceId}}} label="在对话中解释所选版本" draft="Explain selected version"/><Probe /></>}/>
     <Route path="*" element={<Probe/>}/>
   </Routes></MemoryRouter>);
   await userEvent.click(screen.getByRole('button',{name:'在对话中解释所选版本'}));
-  await waitFor(()=>expect(screen.getByTestId('location')).toHaveTextContent('/chat/historical'));
+  await waitFor(()=>expect(screen.getByTestId('location')).toHaveTextContent('/app/geo/geo_1/plan?strategyVersion=3&selectionRef=selected&step=sources&conversation=open&session=historical'));
   const state=JSON.parse(screen.getByTestId('state').textContent??'{}');
-  expect(state.runtimeUiIntent).toMatchObject({sessionId:'historical',resultRevision:{referenceId},draft:'Explain selected version',scope:{kind:'geo',geoProjectId:'geo_1'}});
+  expect(optionalOpaqueRuntimeUiIntent(state)).toMatchObject({sessionId:'historical',resultRevision:{referenceId},draft:'Explain selected version',scope:{kind:'geo',geoProjectId:'geo_1'}});
   expect(client.open).toHaveBeenCalledWith('geo_1',{kind:'session',sessionId:'historical'});
   expect(state.runtimeUiIntent).not.toHaveProperty('send');
 });

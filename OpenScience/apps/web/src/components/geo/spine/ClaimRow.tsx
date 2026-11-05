@@ -42,6 +42,7 @@ export function ClaimRow({
     showEngines ? claim.engines.map(engineName).join("、") : null,
     showEngines ? times : null,
     trace,
+    !withdrawn && !claim.severity ? "严重程度未知" : null,
     withdrawn ? "原判定已撤回" : GEO_ERROR_STATUS_WORDS[claim.status] ?? null,
     lead ? `纠错稿：${statusWord(lead.status)}${corrections.length > 1 ? `等 ${corrections.length} 条` : ""}` : null,
   ].filter(Boolean).join(" · ");

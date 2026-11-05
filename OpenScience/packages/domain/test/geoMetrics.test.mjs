@@ -181,6 +181,15 @@ test("a ratio derived from cells that are insufficient is insufficient, whatever
   assert.deepEqual([none.status, none.value, none.reason], ["not_measurable", null, "conversion_not_derivable"]);
 });
 
+test("the historical M-13 ratio describes two question pools, not user conversion or a universal target", () => {
+  const definition = geoMetricDefinition("M-13");
+  assert.equal(definition?.formula, "P1 池 M-01 / P2 池 M-01");
+  assert.equal(definition?.direction, "neutral");
+  assert.match(definition?.note ?? "", /不是用户转化率/);
+  assert.match(GEO_METRICS.net_effect.rule, /验收按双方约定/);
+  assert.doesNotMatch(GEO_METRICS.net_effect.rule, /一律用净效应/);
+});
+
 test("a suspect answer leaves the denominator; a refusal stays in it", () => {
   const rows = [
     row({}, ours),

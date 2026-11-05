@@ -117,6 +117,19 @@ test("a leased loop runs inside its lease; held elsewhere it is skipped, not fai
   assert.deepEqual(worker.status().loops.orders.last, { planned: 2 });
 });
 
+test('market capacity diagnostics retain bounded project IDs privately, while readiness sees only counts',async()=>{
+  const ids=Array.from({length:101},(_,index)=>`geo_${index.toString(16).padStart(32,'0')}`);
+  const worker=new GeoWorker({loops:{orders:async()=>({projects:101,skipped:{decision_input_incomplete:101},incompleteProjectIds:ids})}});
+  await worker.runNow('orders');
+  const status=worker.status(),last=status.loops.orders.last;
+  assert.equal(last.decisionInputIncomplete,101);assert.equal(last.incompleteProjectsTruncated,true);
+  assert.equal(JSON.stringify(status).includes(ids[0]),false);
+  const diagnostic=worker.marketCapacityDiagnostics();
+  assert.equal(diagnostic.projectIds.length,100);assert.equal(diagnostic.truncated,true);assert.equal(diagnostic.projectIds[0],ids[0]);
+  diagnostic.projectIds.length=0;assert.equal(worker.marketCapacityDiagnostics().projectIds.length,100);
+  await worker.close();
+});
+
 test("maintenance stops the loops; close waits for the running ones; the table is the build spec's", async () => {
   let allowed = false;
   let runs = 0;

@@ -1,3 +1,4 @@
+import { sanitizeRuntimeUiHistoryState } from "@/lib/runtimeUiNavigation";
 import { GEO_METRICS, knownErrorCodeMessage, previewGeoQuestionImport } from '@evimed/domain';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router';
@@ -52,6 +53,7 @@ const jobFailure = (code: string) => knownErrorCodeMessage(code) ?? JOB_FAILURES
  */
 export function GeoQuestionWorkbench({ geoId, project, data, onSaved }: { geoId: string; project: GeoProject; data: GeoQuestions; onSaved: (version: number) => void }) {
   const [params, setParams] = useSearchParams();
+  const { state: navigationState } = useLocation();
   const editRevision = useRef(0);
   const replacementGeneration = useRef(0);
   const working = useRef(false);
@@ -62,7 +64,7 @@ export function GeoQuestionWorkbench({ geoId, project, data, onSaved }: { geoId:
   const [storageScope, setStorageScope] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const editingMode = geoQuestionMode(params, canEdit) !== null;
-  const setMode = useCallback((mode: "import" | "edit" | null) => setParams(previous => { const next = new URLSearchParams(previous); if (mode) next.set("questionMode", mode); else next.delete("questionMode"); return next; }, { replace: true }), [setParams]);
+  const setMode = useCallback((mode: "import" | "edit" | null) => setParams(previous => { const next = new URLSearchParams(previous); if (mode) next.set("questionMode", mode); else next.delete("questionMode"); return next; }, { replace: true, state: sanitizeRuntimeUiHistoryState(navigationState) }), [setParams, navigationState]);
   const currentMode = useRef(params.get("questionMode")); currentMode.current = params.get("questionMode");
   const setModeRef = useRef(setMode); setModeRef.current = setMode;
   const [book, setBook] = useState<QuestionWorkbook | null>(null);
@@ -162,8 +164,8 @@ export function GeoQuestionWorkbench({ geoId, project, data, onSaved }: { geoId:
   const activeContract = saved != null ? contract : data.contract;
   const round = params.get('diagnosisRound');
   const target = { geoId, projectId: project.projectId, sessionId: project.sessionId };
-  const selectRound = (roundId: string) => { sessionStorage.setItem(`${storageScope}:diagnosis`, roundId); setParams(previous => { const next = new URLSearchParams(previous); next.set('diagnosisRound', roundId); return next; }, { replace: true }); };
-  useEffect(() => { if (!storageScope) return; const prior = sessionStorage.getItem(`${storageScope}:diagnosis`); if (!round && prior) setParams(previous => { const next = new URLSearchParams(previous); next.set('diagnosisRound', prior); return next; }, { replace: true }); }, [storageScope, round, setParams]);
+  const selectRound = (roundId: string) => { sessionStorage.setItem(`${storageScope}:diagnosis`, roundId); setParams(previous => { const next = new URLSearchParams(previous); next.set('diagnosisRound', roundId); return next; }, { replace: true, state: sanitizeRuntimeUiHistoryState(navigationState) }); };
+  useEffect(() => { if (!storageScope) return; const prior = sessionStorage.getItem(`${storageScope}:diagnosis`); if (!round && prior) setParams(previous => { const next = new URLSearchParams(previous); next.set('diagnosisRound', prior); return next; }, { replace: true, state: sanitizeRuntimeUiHistoryState(navigationState) }); }, [storageScope, round, setParams, navigationState]);
   useEffect(() => { if (!editing) setContract(data.contract ?? initialContract); }, [data.contract, editing]);
   const act = async (fn: () => Promise<void>) => { if (working.current) return; working.current = true; const generation = identityGeneration.current; setBusy(true); setError(''); try { await fn(); } catch (cause) { if (generation === identityGeneration.current) setError(failure(cause)); } finally { working.current = false; setBusy(false); } };
   const changed = useCallback(() => { editRevision.current++; setPreview(null); pendingImport.current = null; }, []);

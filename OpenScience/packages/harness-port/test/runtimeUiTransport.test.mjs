@@ -121,6 +121,89 @@ test('logical streams share one carrier, cancel independently and retain upstrea
   hooks.dispose();
 });
 
+test('a scoped workspace waits for its authorized session without holding other streams', async () => {
+  const { target, sockets } = browser();
+  const access = { type: 'baseline', owner: false, grants: [{ resource: { kind: 'session', id: 'root' }, actions: ['session/page', 'session/prompt'] }] };
+  const hooks = installRuntimeUiTransport({ ...frame, access }, target);
+  const workspace = hooks.openStream('workspace/follow', { args: {} }, new AbortController().signal)[Symbol.asyncIterator]();
+  const session = hooks.openStream('session/follow', { args: {} }, new AbortController().signal)[Symbol.asyncIterator]();
+  let workspaceDelivered = false;
+  const workspaceNext = workspace.next().then(value => { workspaceDelivered = true; return value; });
+  const sessionNext = session.next();
+  sockets[0].open(); await new Promise(resolve => setImmediate(resolve));
+  const [workspaceOpen, sessionOpen] = sockets[0].sent;
+  sockets[0].message({ type: 'item', streamId: workspaceOpen.streamId, value: { type: 'baseline', value: { items: [] } } });
+  sockets[0].message({ type: 'item', streamId: sessionOpen.streamId, value: { type: 'ready' } });
+  assert.deepEqual(await sessionNext, { done: false, value: { type: 'ready' } });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(workspaceDelivered, false);
+  assert.equal(target.__EVIMED_SCOPED_STARTUP__.release('other'), false);
+  assert.equal(target.__EVIMED_SCOPED_STARTUP__.release('root'), true);
+  assert.deepEqual(await workspaceNext, { done: false, value: { type: 'baseline', value: { items: [] } } });
+  await workspace.return(); await session.return(); hooks.dispose();
+});
+
+test('a held scoped workspace stream releases its resources when cancelled', async () => {
+  const { target, sockets } = browser();
+  const access = { type: 'baseline', owner: false, grants: [{ resource: { kind: 'session', id: 'root' }, actions: ['session/page', 'session/prompt'] }] };
+  const hooks = installRuntimeUiTransport({ ...frame, access }, target);
+  const abort = new AbortController();
+  const workspace = hooks.openStream('workspace/follow', { args: {} }, abort.signal)[Symbol.asyncIterator]();
+  const next = workspace.next(); sockets[0].open(); await new Promise(resolve => setImmediate(resolve));
+  const id = sockets[0].sent[0].streamId;
+  sockets[0].message({ type: 'item', streamId: id, value: { type: 'baseline', value: { items: [] } } });
+  await new Promise(resolve => setImmediate(resolve)); abort.abort();
+  await assert.rejects(next);
+  assert.ok(sockets[0].sent.some((/** @type {any} */ item) => item.type === 'cancel' && item.streamId === id));
+  hooks.dispose();
+});
+
+test('a scoped startup timeout fails visibly and cannot release a stale workspace', async () => {
+  const { target, sockets } = browser();
+  const access = { type: 'baseline', owner: false, grants: [{ resource: { kind: 'session', id: 'root' }, actions: ['session/page', 'session/prompt'] }] };
+  /** @type {() => void} */ let deadline = () => {};
+  const timerId = {};
+  target.setTimeout = (/** @type {() => void} */ fn, /** @type {number} */ ms) => ms === 15_000 ? (deadline = fn, timerId) : setTimeout(fn, ms);
+  target.clearTimeout = (/** @type {any} */ id) => { if (id !== timerId) clearTimeout(id); };
+  const hooks = installRuntimeUiTransport({ ...frame, access }, target);
+  let failureCount = 0;
+  target.__EVIMED_SCOPED_STARTUP__.onFailure(() => { failureCount++; });
+  const workspace = hooks.openStream('workspace/follow', { args: {} }, new AbortController().signal)[Symbol.asyncIterator]();
+  const next = workspace.next(); sockets[0].open(); await new Promise(resolve => setImmediate(resolve));
+  sockets[0].message({ type: 'item', streamId: sockets[0].sent[0].streamId, value: { type: 'baseline', value: { items: [] } } });
+  await new Promise(resolve => setImmediate(resolve)); deadline();
+  await assert.rejects(next, /Scoped session initialization failed/);
+  assert.equal(failureCount, 1);
+  assert.equal(target.__EVIMED_SCOPED_STARTUP__.release('root'), false);
+  hooks.dispose();
+});
+
+test('carrier loss interrupts a held scoped workspace stream', async () => {
+  const { target, sockets } = browser();
+  const access = { type: 'baseline', owner: false, grants: [{ resource: { kind: 'session', id: 'root' }, actions: ['session/page', 'session/prompt'] }] };
+  const hooks = installRuntimeUiTransport({ ...frame, access }, target);
+  const workspace = hooks.openStream('workspace/follow', { args: {} }, new AbortController().signal)[Symbol.asyncIterator]();
+  const next = workspace.next(); sockets[0].open(); await new Promise(resolve => setImmediate(resolve));
+  sockets[0].message({ type: 'item', streamId: sockets[0].sent[0].streamId, value: { type: 'baseline', value: { items: [] } } });
+  await new Promise(resolve => setImmediate(resolve)); sockets[0].close();
+  await assert.rejects(next, (/** @type {any} */ error) => error.dshRemoteStreamFailure?.kind === 'carrier');
+  hooks.dispose();
+});
+
+test('a held workspace still obeys the shared receive queue bound', async () => {
+  const { target, sockets } = browser();
+  const access = { type: 'baseline', owner: false, grants: [{ resource: { kind: 'session', id: 'root' }, actions: ['session/page', 'session/prompt'] }] };
+  const hooks = installRuntimeUiTransport({ ...frame, access }, target);
+  const workspace = hooks.openStream('workspace/follow', { args: {} }, new AbortController().signal)[Symbol.asyncIterator]();
+  const next = workspace.next(); sockets[0].open(); await new Promise(resolve => setImmediate(resolve));
+  const id = sockets[0].sent[0].streamId;
+  sockets[0].message({ type: 'item', streamId: id, value: 0 });
+  await new Promise(resolve => setImmediate(resolve));
+  for (let n = 0; n < 140; n++) sockets[0].message({ type: 'item', streamId: id, value: n });
+  await assert.rejects(next, (/** @type {any} */ error) => error.dshRemoteStreamFailure?.kind === 'carrier');
+  hooks.dispose();
+});
+
 test('carrier closure fails every active stream and the next generation can open one fresh carrier', async () => {
   const { target, sockets } = browser(); const hooks = installRuntimeUiTransport(frame, target);
   const stream = hooks.openStream('$events', {}, new AbortController().signal)[Symbol.asyncIterator]();

@@ -438,9 +438,9 @@ test("GVI comparisons reject a changed measurable component basis even for ident
       VALUES ($1,$2,$3,'baseline','done',1,'{deepseek}',$4::date,$4::date,'{"mode":"web"}')`, [roundId, user.id, composite.id, date]);
     await store.query(`INSERT INTO evimed_geo.snapshots (id,user_id,geo_project_id,round_id,question_id,engine,asked_at,status,answer_text,surface)
       SELECT $1 || '-' || n,$2,$3,$1,'gvi-basis-q-' || n,'deepseek',$4::date,'valid','Identical answer','{"mode":"web"}' FROM generate_series(1,40) n`, [roundId, user.id, composite.id, date]);
-    await store.query(`INSERT INTO evimed_geo.facts (snapshot_id,user_id,geo_project_id,judged_at,brands,first_ours,position_ours,recommended_ours,mentions_ours,retrieval_triggered,statements,checks)
+    await store.query(`INSERT INTO evimed_geo.facts (snapshot_id,user_id,geo_project_id,judged_at,brands,first_ours,position_ours,recommended_ours,mentions_ours,retrieval_triggered,statements,checks,judge_extract)
       SELECT $1 || '-' || n,$2,$3,$4::date,'[{"name":"Ours","ours":true,"count":1}]',true,1,true,true,false,
-      '[{"text":"Correct","verdict":"correct"}]',jsonb_build_object('judgementCoverage',jsonb_build_object('status',$5::text)) FROM generate_series(1,40) n`, [roundId, user.id, composite.id, date, coverage]);
+      '[{"text":"Correct","verdict":"correct"}]',jsonb_build_object('judgementCoverage',jsonb_build_object('status',$5::text)),'{"rubricVersion":"fixture-v1"}' FROM generate_series(1,40) n`, [roundId, user.id, composite.id, date, coverage]);
   }
   const filter = { from: "2026-10-02", to: "2026-10-02", compareFrom: "2026-10-01", compareTo: "2026-10-01" };
   const result = await readGeoSelection(store, composite, filter);

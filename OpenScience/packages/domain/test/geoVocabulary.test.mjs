@@ -143,6 +143,8 @@ test("the tool codes are classified for a run, the route codes are registered, a
   assert.ok(toolFamily, "the tool codes have a family");
   for (const code of [...recoverable, ...terminal]) assert.ok(toolFamily.test(code), `${code} falls outside the tool family`);
   assert.ok(GEO_ROUTE_ERROR_CODES.length >= 20);
+  assert.match(knownErrorCodeMessage('geo_spine_incomplete') ?? '', /完整读取上限.*联系管理员/);
+  assert.match(knownErrorCodeMessage('geo_source_preview_interrupted') ?? '', /信源读取被中断.*重试/);
   // What the gateway folds into `geo_write_payload_invalid` only a page hears by name.
   for (const code of ["geo_question_import_invalid", "geo_diagnosis_invalid", "geo_contract_missing", "geo_recovery_invalid", "geo_round_empty",
     "geo_round_question_invalid", "geo_round_engine_invalid", "geo_round_too_large", "geo_round_not_found"]) assert.ok(GEO_ROUTE_ERROR_CODES.includes(code), code);
@@ -186,13 +188,15 @@ test("a metric id has one reader name and a name one id: the table every page, r
   const units = /** @type {Record<string, string>} */ (GEO_METRIC_UNITS);
   for (const id of ids) {
     assert.ok(typeof labels[id] === "string" && labels[id].length > 0, `${id} has no reader name`);
-    assert.ok(["percent", "index", "count"].includes(units[id]), `${id} has no unit`);
+    assert.ok(["percent", "index", "count", "ratio"].includes(units[id]), `${id} has no unit`);
   }
   assert.deepEqual(Object.keys(GEO_METRIC_LABELS_ZH).sort(), [...ids].sort(), "the table names exactly the metrics there are");
   const names = Object.values(GEO_METRIC_LABELS_ZH);
   assert.equal(new Set(names).size, names.length, "no name stands for two ids");
   assert.equal(GEO_METRIC_LABELS_ZH["M-01"], "品牌提及率");
   assert.equal(GEO_METRIC_LABELS_ZH["M-01S"], "品类问题可见率");
+  assert.equal(GEO_METRIC_LABELS_ZH["M-13"], "品牌问法与品类问法提及率比值");
+  assert.equal(geoMetricUnit("M-13"), "ratio");
   assert.notEqual(GEO_METRIC_LABELS_ZH["M-01S"], GEO_METRIC_LABELS_ZH["M-01"], "mention over a pool and mention over the category questions are not one name");
   // a reader asking by the overview's key gets the id's name
   for (const { key, metricId } of GEO_OVERVIEW_METRICS) {

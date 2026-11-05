@@ -1,11 +1,11 @@
-import { isComposingKey } from "@/lib/compositionKeys";
-import { useEffect, useId, useRef, type ReactNode } from "react";
+import { useId, useRef, type ReactNode } from "react";
 import { X } from "lucide-react";
-import { focusableIn, registerFocusLayer, ownsKeyboard, trapTab } from "@/lib/focusTrap";
+import { focusableIn } from "@/lib/focusTrap";
 import { useUnsavedGuard } from "@/lib/useUnsavedGuard";
 import { IconButton } from "./IconButton";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { cn } from "@/lib/cn";
+import { ResultModalSurface, useResultModalFocus } from "@/components/workspace/WorkspaceResultActivity";
 
 /**
  * Component: FormDialog; owner: H; rules: DS21, DESIGN.md component adoption.
@@ -26,25 +26,16 @@ export function FormDialog({ title, children, onClose, busy = false, dirty = fal
 }) {
   const panel = useRef<HTMLDivElement>(null), titleId = useId(), errorId = useId();
   const guard = useUnsavedGuard(dirty, onClose, busy);
-  const requestClose = useRef(guard.requestClose); requestClose.current = guard.requestClose;
-  useEffect(() => {
-    const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const unregister = registerFocusLayer(panel.current);
+  const modal = useResultModalFocus(panel, "dialog", () => {
     const controls = focusableIn(panel.current);
-    const field = controls.find(element => element.hasAttribute("data-autofocus"))
-      ?? controls.find(element => element.matches("input,textarea,select"));
-    (field ?? panel.current)?.focus();
-    const key = (event: KeyboardEvent) => {
-      if (!ownsKeyboard(panel.current, event)) return;
-      if (event.key === "Escape" && !isComposingKey(event)) { event.preventDefault(); event.stopPropagation(); requestClose.current(); }
-      else trapTab(panel.current, event);
-    };
-    document.addEventListener("keydown", key);
-    return () => { unregister(); document.removeEventListener("keydown", key); trigger?.focus(); };
-  }, []);
-  return <>
+    return controls.find(element => element.hasAttribute("data-autofocus"))
+      ?? controls.find(element => element.matches("input,textarea,select"))
+      ?? panel.current;
+  }, guard.requestClose);
+
+  return <ResultModalSurface scoped={modal.scoped} suspended={modal.suspended}>
     <div role="presentation" className="fixed inset-0 z-modal flex items-center justify-center bg-scrim p-4" onClick={event => { if (event.target === event.currentTarget) guard.requestClose(); }}>
-      <div ref={panel} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={errors.length ? errorId : undefined} aria-busy={busy || undefined} className={cn("flex max-h-full w-full max-w-xl flex-col rounded-panel border border-border bg-surface shadow-e3 focus:outline-none", className)}>
+      <div ref={panel} onFocus={modal.onFocus} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={errors.length ? errorId : undefined} aria-busy={busy || undefined} className={cn("flex max-h-full w-full max-w-xl flex-col rounded-panel border border-border bg-surface shadow-e3 focus:outline-none", className)}>
         <header className="flex shrink-0 items-center justify-between gap-3 px-6 pb-3 pt-5"><h2 id={titleId} className="text-body font-semibold text-text">{title}</h2><IconButton icon={X} label="关闭" disabled={busy} onClick={guard.requestClose} /></header>
         {errors.length > 0 && <div id={errorId} className="shrink-0 px-6 pb-3 text-ui text-error"><p>请检查以下内容：</p><ul>{errors.map((error, index) => <li key={index}>{error.fieldId ? <a href={`#${error.fieldId}`} onClick={event => { event.preventDefault(); document.getElementById(error.fieldId!)?.focus(); }}>{error.message}</a> : error.message}</li>)}</ul></div>}
         <div className="min-h-0 overflow-y-auto px-6 pb-5">{typeof children === "function" ? children(guard.requestClose, guard.markSaved) : children}</div>
@@ -52,5 +43,5 @@ export function FormDialog({ title, children, onClose, busy = false, dirty = fal
       </div>
     </div>
     {guard.confirming && <ConfirmDialog title="放弃未保存的修改？" subject={title} consequences="未保存的修改将丢失。" recovery="返回编辑可继续保留修改。" confirmLabel="放弃修改" onConfirm={guard.discard} onCancel={guard.keepEditing} />}
-  </>;
+  </ResultModalSurface>;
 }

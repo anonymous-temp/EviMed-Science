@@ -1178,6 +1178,28 @@ reports as `data.downloadRoutes`. Counted on
 route to the matrix: it redirects to the file server's `suppl/` directory (no
 matrix there) or answers a reCAPTCHA page.
 
+### Long research goals: what the control plane does about them
+
+LoopX runs a goal's rounds from inside the kernel, and its driver goes with the kernel. `researchGoalService.mjs` keeps one
+`research-goal` document per goal and looks at the active ones every `OPEN_SCIENCE_RESEARCH_GOAL_TICK_MS` (30 s). One counter,
+`open_science_research_goal_events_total{event}`, every label present from the start at zero:
+
+- `revived`, `retried`, `revive_failed`: a goal a runtime or the provider interrupted was taken up with one automated turn, set again
+  because its first turn came back empty, or could not be. At most `OPEN_SCIENCE_RESEARCH_GOAL_REVIVE_ATTEMPTS` (3), after 30 s, 5 min, 15 min.
+- `paused_no_progress`, `paused_budget`: the guard paused a goal through LoopX's bar, after
+  `OPEN_SCIENCE_RESEARCH_GOAL_MAX_ROUNDS_WITHOUT_PROGRESS` (3) rounds with no file or at `OPEN_SCIENCE_RESEARCH_GOAL_MAX_CNY` (50). 0 turns either off.
+- `paused_person`, `resumed_person`: the page's 暂停 and 继续, and a pause found on LoopX's own bar.
+- `finished`, `waiting`, `interrupted`: what a goal with no round for `OPEN_SCIENCE_RESEARCH_GOAL_QUIET_MS` (3 min) came to, from the bar.
+  `interrupted` with reason `stale` is a goal nobody took up for `OPEN_SCIENCE_RESEARCH_GOAL_STALE_MS` (48 h).
+- `noted_sources`: a running unattended round was told what arrived in the knowledge base meanwhile.
+- `observe_failed`, `review_failed`, `tick_failed`: the bookkeeping failed and the goal is untouched. A rise here is the one to look at.
+
+A taken-up goal starts its project's runtime when there is room, and its turn is charged to the researcher like any of LoopX's rounds.
+The pass stands down while a maintenance hold is on. `OPEN_SCIENCE_RESEARCH_GOAL_WATCH_ENABLED=false` turns all of it off, and a goal
+then behaves as it did before: it ends silently with its kernel and the page reads it by its rounds alone. A goal a person stopped is
+never taken up. LoopX's bar has two timing levers of its own:
+`OPEN_SCIENCE_RUNTIME_GOALBAR_ACTION_TIMEOUT_MS` (60 s) and `OPEN_SCIENCE_RUNTIME_GOALBAR_READ_WAIT_MS` (8 s).
+
 ### The research-database connector: refusals, limits and what an import left out
 
 The connector (`OPEN_SCIENCE_RESEARCH_DB_ALLOW` + `OPEN_SCIENCE_RESEARCH_DB_KEYRING_FILE`) reads one table of a researcher's

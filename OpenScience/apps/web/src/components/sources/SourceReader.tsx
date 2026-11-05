@@ -1,3 +1,4 @@
+import { sessionOwner } from "@/lib/sessionLifecycle";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { ChevronLeft, FileQuestion, MessageSquare } from "lucide-react";
@@ -7,7 +8,7 @@ import { parseFailureMessage } from "@/lib/errorText";
 import { listPath, readReaderView, readerPath, type KnowledgeListState, type ReaderTab } from "@/lib/knowledgeNav";
 import { productErrorMessage } from "@/lib/productClient";
 import { useProjectStore } from "@/lib/projects";
-import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
+import { prepareRuntimeUiIntent, newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import {
   decideDuplicateGroup, getSource, listDuplicateCandidates, refetchSource, removeDocument, retrySource,
   type DuplicateGroup, type KnowledgePage, type SourceRecord,
@@ -62,6 +63,16 @@ type Loaded =
  *
  * A document that is not there, or is not this account's, is one sentence — the same one for both, so the page does not say which — and
  * the way back.
+ *
+ * Anatomy: document header, content, original preview and contextual actions.
+ * Variants: addressed page or pane within the knowledge base.
+ * States: loading, partial reads, errors and unavailable documents retain their own recovery.
+ * Hit area: document actions and preview controls use the shared action targets.
+ * Keyboard: the content switch, document actions and return link remain focusable.
+ * Long content: the original keeps its preview controls and the content keeps its reading width.
+ * Theme: the pane uses a semantic reading surface beside the library list.
+ * Responsive: the reader's own width decides between side-by-side content and a switch.
+ * Verification: the knowledge source, original-file and return-path fixture views.
  */
 export function SourceReader({ sourceId, listState, mode, backLabel, refresh = 0, onApplied, onRemoved }: {
   sourceId: string;
@@ -189,13 +200,15 @@ export function SourceReader({ sourceId, listState, mode, backLabel, refresh = 0
   const openConversation = (projectOf: string, draft: string, excerpt?: ConversationExcerpt) => {
     if (!source) return;
     const page = isKnowledgePage(source) ? knowledgePage : null;
+    const owner = sessionOwner();
     void select(projectOf, () => {
-      navigate("/app/chat", { flushSync: true, state: { runtimeUiIntent: {
+      if (owner !== sessionOwner()) return;
+      navigate("/app/chat", { flushSync: true, state: { runtimeUiIntent: prepareRuntimeUiIntent({
         ...newRuntimeUiIntent(excerpt
           ? `请结合“${source.display.title}”第 ${source.revision} 版${excerpt.page ? `，第 ${excerpt.page} 页` : ""}的这段原文继续讨论（字符 ${excerpt.start}–${excerpt.end}）：\n\n${excerpt.text}`
           : page ? knowledgeConversationDraft(source.display.title) : draft),
         references: conversationReferences({ id: source.id, title: source.display.title }, page?.sources ?? []),
-      } } });
+      }) } });
     }).catch((failure) => toast.error(webErrorMessage(failure)));
   };
   const prepareConversation = (excerpt?: ConversationExcerpt) => {
@@ -333,7 +346,7 @@ export function SourceReader({ sourceId, listState, mode, backLabel, refresh = 0
 
   if (!asPage) {
     return (
-      <div ref={rootRef} data-source-reader="pane" className="h-full min-h-0">
+      <div ref={rootRef} data-source-reader="pane" className="h-full min-h-0 bg-surface">
         <div className="h-full min-h-0 overflow-y-auto">
           <div className="px-6 py-6">
             {backLabel && source && isKnowledgePage(source) && <PaneBack to={back} label={backLabel} />}

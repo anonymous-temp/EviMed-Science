@@ -1,3 +1,4 @@
+import { sessionOwner } from "@/lib/sessionLifecycle";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { Button } from "@/components/ui/Button";
@@ -13,7 +14,7 @@ import {
   type EvidenceContinuation,
 } from "@/lib/evidenceZoneClient";
 import { useProjectStore } from "@/lib/projects";
-import type { RuntimeUiIntent } from "@/lib/runtimeUiNavigation";
+import { prepareRuntimeUiIntent, type RuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 
 const RELATION_LABEL = { next_version: "后续版本", research_from_card: "后续研究" } as const;
 
@@ -21,7 +22,7 @@ const cardPath = (card: Pick<EvidenceCardRef, "zoneId" | "id">) => `/app/frontie
 
 /** The conversation `continueResearchFromCard` bound, opened the way every new one opens: the question in the composer, unsent. */
 export function continuationIntent(continuation: EvidenceContinuation): RuntimeUiIntent {
-  return { kind: "create", projectId: continuation.projectId, requestId: crypto.randomUUID(), sessionId: continuation.sessionId, draft: continuation.draft };
+  return { kind: "create", projectId: continuation.projectId, requestId: crypto.randomUUID(), owner: sessionOwner(), sessionId: continuation.sessionId, draft: continuation.draft };
 }
 
 /**
@@ -36,15 +37,19 @@ export function EvidenceContinueAction({ evidence }: { evidence: Pick<EvidenceCa
   const [pending, setPending] = useState<EvidenceContinuation | null>(null);
   if (!evidence.canResearch) return null;
   const open = (continuation: EvidenceContinuation) => {
+    const owner = sessionOwner();
     void useProjectStore.getState().select(continuation.projectId, () => {
-      navigate("/app/chat", { flushSync: true, state: { runtimeUiIntent: continuationIntent(continuation) } });
+      if (owner !== sessionOwner()) return;
+      navigate("/app/chat", { flushSync: true, state: { runtimeUiIntent: prepareRuntimeUiIntent(continuationIntent(continuation)) } });
     });
   };
   const start = async () => {
+    const owner = sessionOwner();
     setBusy(true);
     setError(null);
     try {
       const continuation = await continueResearchFromCard(evidence.id);
+      if (owner !== sessionOwner()) return;
       if (continuation.library.failed.length > 0) setPending(continuation);
       else open(continuation);
     } catch (reason) {

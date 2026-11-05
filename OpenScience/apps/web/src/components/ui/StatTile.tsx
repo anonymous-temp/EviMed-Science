@@ -58,6 +58,8 @@ export interface StatTileProps {
    * it is the ordinary tile. Not for the band's leading metric.
    */
   dense?: boolean;
+  /** A compact comparison row uses the existing section-size type rung. */
+  valueSize?: "metric" | "section";
   className?: string;
 }
 
@@ -77,6 +79,7 @@ export function StatTile({
   lead = false,
   tone = "default",
   dense = false,
+  valueSize = "metric",
   className,
 }: StatTileProps) {
   if (reading.kind === "loading") {
@@ -100,7 +103,7 @@ export function StatTile({
       <>
         <span className="block truncate pr-5 text-caption text-text-3">{label}</span>
         {measured && <span className="sr-only">范围：{measured.scope}</span>}
-        <span data-stat-value className={cn("mt-1.5 flex flex-wrap items-baseline gap-x-2 text-metric font-semibold tabular-nums text-text", dense && !lead && "max-sm:mt-1 max-sm:text-heading")}>
+        <span data-stat-value className={cn("mt-1.5 flex flex-wrap items-baseline gap-x-2 font-semibold tabular-nums text-text", valueSize === "section" ? "text-section" : "text-metric", dense && !lead && valueSize === "metric" && "max-sm:mt-1 max-sm:text-heading")}>
           {value}
           {unit != null && <span className="text-ui font-normal text-text-3">{unit}</span>}
         </span>
@@ -126,8 +129,8 @@ export function StatTile({
           "mt-1.5 flex flex-wrap items-baseline gap-x-2 font-semibold tabular-nums",
           // A word does not get a number's size: 「样本不足」 set in 32 px
           // shouts louder than every measurement beside it.
-          placeholder ? "text-section text-text-2" : "text-metric",
-          dense && !lead && !placeholder && "max-sm:mt-1 max-sm:text-heading",
+          placeholder ? "text-section text-text-2" : valueSize === "section" ? "text-section" : "text-metric",
+          dense && !lead && !placeholder && valueSize === "metric" && "max-sm:mt-1 max-sm:text-heading",
           !placeholder && (tone === "safety" ? "text-danger-strong" : "text-text"),
         )}
       >

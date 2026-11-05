@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import { Check, PenLine, X } from "lucide-react";
 import { getGeoArticles, type GeoAction, type GeoArticle, type GeoProject } from "@/lib/geoClient";
 import { Button } from "@/components/ui/Button";
+import { FactList } from "@/components/ui/FactList";
 import { Drawer } from "@/components/ui/Drawer";
 import { List, ListRow } from "@/components/ui/ListRow";
 import { Note } from "@/components/ui/Note";
@@ -79,7 +80,7 @@ export function ErrorDrawer({
       widthClassName="max-w-2xl"
       description={(
         <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
-          {claim.severity && <SeverityBadge level={claim.severity} label />}
+          {claim.severity ? <SeverityBadge level={claim.severity} label /> : <span>严重程度未知</span>}
           <span>{`${claim.engines.length} 个引擎`}</span>
           <span>{withdrawn ? "原判定已撤回" : GEO_ERROR_STATUS_WORDS[claim.status] ?? ""}</span>
         </span>
@@ -100,7 +101,7 @@ export function ErrorDrawer({
             </p>
           )}
           {basis && <p data-geo-error-basis="" className="mt-1 text-caption text-text-3">{`依据：${basis}`}</p>}
-          {claim.severity && <p className="mt-2 text-caption text-text-3">{`${claim.severity}：${SEVERITY_WORDS[claim.severity]}`}</p>}
+          {claim.severity && <FactList ruled={false} rows={[{ label: "潜在临床风险", value: `${claim.severity}：${SEVERITY_WORDS[claim.severity]}。仅凭回答无法判断患者是否已用药或受伤。` }]} />}
         </Section>
 
         <Section title="各引擎怎么说" count={`${claim.rows.length} 条`} level="sub">
@@ -117,7 +118,8 @@ export function ErrorDrawer({
                   meta={(
                     <span className="inline-flex flex-wrap items-baseline gap-x-2">
                       <span className="text-text-2">{engineName(row.engine)}</span>
-                      <span>{[GEO_ERROR_TYPE_WORDS[row.errorType], row.stability ? GEO_STABILITY_WORDS[row.stability] ?? null : null, (row.judgmentState === "withdrawn" ? "原判定已撤回" : GEO_ERROR_STATUS_WORDS[row.status])].filter(Boolean).join(" · ")}</span>
+                      <span>{[GEO_ERROR_TYPE_WORDS[row.errorType], claim.severity && row.severity === null ? "严重程度未知" : null, row.stability ? GEO_STABILITY_WORDS[row.stability] ?? null : null, (row.judgmentState === "withdrawn" ? "原判定已撤回" : GEO_ERROR_STATUS_WORDS[row.status])].filter(Boolean).join(" · ")}</span>
+                      {row.confirmationReason === "delivery_unknown_no_automatic_retry" && <span>复问结果未知，未自动重试，请人工核查。</span>}
                       {group && <ClusterLink groupId={group.id} className="relative z-sticky">{clusterName(group)}</ClusterLink>}
                     </span>
                   )}

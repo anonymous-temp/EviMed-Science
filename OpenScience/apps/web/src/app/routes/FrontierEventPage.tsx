@@ -16,7 +16,7 @@ import {
   type FrontierEventRole,
   type FrontierItem,
 } from "@/lib/frontierClient";
-import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
+import { sanitizeRuntimeUiHistoryState, prepareRuntimeUiIntent, newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { useWide } from "@/lib/useMediaQuery";
 import { LoadError } from "@/components/cards/LoadError";
 import { PageShell } from "@/components/layout/PageShell";
@@ -118,7 +118,7 @@ function EventView({ eventId, ready }: { eventId: string; ready: boolean }) {
         if (!active) return;
         setState({ kind: "ready", event });
         if (event.readingMark) void markFrontierEventRead(event.id, event.readingMark).catch(() => {});
-        if (event.id !== eventId) navigate(`/app/frontier/events/${encodeURIComponent(event.id)}${location.search}`, { replace: true, state: location.state });
+        if (event.id !== eventId) navigate(`/app/frontier/events/${encodeURIComponent(event.id)}${location.search}`, { replace: true, state: sanitizeRuntimeUiHistoryState(location.state) });
       },
       (error: unknown) => {
         if (!active) return;
@@ -164,7 +164,7 @@ function EventView({ eventId, ready }: { eventId: string; ready: boolean }) {
     const updated = new URLSearchParams(current);
     if (next === "asc") updated.set("order", "asc"); else updated.delete("order");
     return updated;
-  }, { replace: true, state: location.state });
+  }, { replace: true, state: sanitizeRuntimeUiHistoryState(location.state) });
   return <EventBody event={state.event} order={order} onOrder={setOrder} wide={wide} />;
 }
 
@@ -209,7 +209,7 @@ function EventBody({ event, order, onOrder, wide }: { event: FrontierEvent; orde
   // The server reads the event in the order asked; the page sorts it too, so a server that does not know the order reads the same.
   const timeline = useMemo(() => [...event.items]
     .sort((a, b) => (order === "asc" ? 1 : -1) * (Date.parse(a.timelineAt) - Date.parse(b.timelineAt))), [event.items, order]);
-  const research = () => navigate("/app/chat", { state: { runtimeUiIntent: { ...newRuntimeUiIntent(eventResearchDraft(event)), originReference: { kind: "frontier-event", id: event.id, title: event.title } } } });
+  const research = () => navigate("/app/chat", { state: { runtimeUiIntent: prepareRuntimeUiIntent({ ...newRuntimeUiIntent(eventResearchDraft(event)), originReference: { kind: "frontier-event", id: event.id, title: event.title } }) } });
   // 就此提问: the questions of the event's first-hand report open the conversation with that report as its origin (c3-ask).
   const askEntry = event.ask ?? null;
   const askReport = askEntry ? event.items.find((item) => item.id === askEntry.itemId) : undefined;
@@ -305,7 +305,7 @@ function EventBody({ event, order, onOrder, wide }: { event: FrontierEvent; orde
               <ul className="space-y-2">
                 {event.related.map((related) => (
                   <li key={`${related.relation}-${related.id}`}>
-                    <Link state={location.state} replace to={`/app/frontier/events/${encodeURIComponent(related.id)}`} className="text-ui text-text hover:text-accent">{related.title}</Link>
+                    <Link state={sanitizeRuntimeUiHistoryState(location.state)} replace to={`/app/frontier/events/${encodeURIComponent(related.id)}`} className="text-ui text-text hover:text-accent">{related.title}</Link>
                     <p className="text-caption text-text-3">{RELATION_WORDS[related.relation] ?? "相关"}{related.at ? ` · ${dateClock(related.at)}` : ""}</p>
                   </li>
                 ))}

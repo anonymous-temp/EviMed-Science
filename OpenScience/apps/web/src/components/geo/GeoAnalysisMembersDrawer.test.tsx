@@ -1,10 +1,28 @@
 import {render,screen,fireEvent} from '@testing-library/react';
 import {MemoryRouter} from 'react-router';
 import {expect,it,vi} from 'vitest';
-import {GeoAnalysisMembersDrawer} from './GeoAnalysisMembersDrawer';
+import {GeoAnalysisMembersDrawer,geoMemberVersionTarget} from './GeoAnalysisMembersDrawer';
 import type {GeoAnalysisMembers} from '@/lib/geoAnalysisClient';
 const read=vi.hoisted(()=>vi.fn());
+const readPublication=vi.hoisted(()=>vi.fn());
 vi.mock('@/lib/geoAnalysisClient',async original=>({...await original<typeof import('@/lib/geoAnalysisClient')>(),getGeoAnalysisMembers:read}));
+vi.mock('@/lib/geoClient',async original=>({...await original<typeof import('@/lib/geoClient')>(),readGeoPublicationVersion:readPublication}));
+it('uses an actual GEO record identity for a version and refuses an ambiguous reference',()=>{
+ expect(geoMemberVersionTarget({id:'row',unit:'orders',objectId:'order-1',resultVersionId:'v1',digest:'d1'})).toEqual({kind:'orders',recordId:'order-1',versionId:'v1',digest:'d1'});
+ expect(geoMemberVersionTarget({id:'row',unit:'result_versions',articleId:'article-1',resultVersionId:'v2',digest:'d2'})).toEqual({kind:'article',recordId:'article-1',versionId:'v2',digest:'d2'});
+ expect(geoMemberVersionTarget({id:'row',unit:'business_events',kind:'publication_update',linkId:'link-1',resultVersionId:'v3',digest:'d3',revision:2})).toEqual({kind:'owned-links',recordId:'link-1',versionId:'v3',digest:'d3',revision:2});
+ expect(geoMemberVersionTarget({id:'row',unit:'publications',objectId:'link-1',resultVersionId:'v3',digest:'d3',receipt:{revision:8}})).toEqual({kind:'owned-links',recordId:'link-1',versionId:'v3',digest:'d3'});
+ expect(geoMemberVersionTarget({id:'row',unit:'history_answer_refs',resultVersionId:'v4',digest:'d4'})).toBeNull();
+});
+it('opens the historical publication receipt rather than the current pin',async()=>{
+ const member:GeoAnalysisMembers={selectionRef:'gsel_history',view:{viewId:'V27'},rowKey:'events',columnKey:'publications',expectedDigest:'history',unit:'business_events',total:1,exact:true};
+ read.mockResolvedValueOnce({unit:'business_events',total:1,nextOffset:null,digest:'history',items:[{id:'old-event',unit:'business_events',kind:'publication_update',linkId:'link-1',revision:2,resultVersionId:'old',digest:'old-digest'}]});
+ readPublication.mockResolvedValueOnce({text:'Original published text'});
+ render(<MemoryRouter><GeoAnalysisMembersDrawer geoId="g" members={member} onClose={()=>{}}/></MemoryRouter>);
+ fireEvent.click(await screen.findByRole('button',{name:'打开事件关联的内容版本'}));
+ expect(await screen.findByText('Original published text')).toBeVisible();
+ expect(readPublication).toHaveBeenCalledWith('g','owned-links','link-1','old','old-digest',2);
+});
 it('links exact preserved expressions and assessment history while retaining the return scope',async()=>{
  const version='a'.repeat(64),member:GeoAnalysisMembers={selectionRef:'gsel_c3',view:{viewId:'V09'},rowKey:'condition',columnKey:'expressions',expectedDigest:'c3',unit:'expressions',total:1,exact:true};
  read.mockResolvedValue({unit:'expressions',total:1,nextOffset:null,digest:'c3',items:[{id:'expr',unit:'expressions',snapshotId:'answer1',assessmentVersion:version,question:{text:'Original question'},expression:{quote:'If adult, Alpha recommended.',entity:'Alpha',state:'conditional',conditionQuote:'If adult',claimRefs:[],explicitPosition:null,positionQuote:null}}]});

@@ -57,7 +57,7 @@ export const TIER_WORDS: Readonly<Record<GeoTierId, string>> = Object.freeze({ "
 const HEAD_METRICS: readonly string[] = ["M-19", "M-01S", "M-06", "M-08"];
 
 function unitOf(row: GeoStrategyTargetRow): GeoUnit {
-  return row.unit === "index" ? "index" : row.unit === "count" ? "count" : "percent";
+  return row.unit === "index" ? "index" : row.unit === "count" ? "count" : row.unit === "ratio" ? "ratio" : "percent";
 }
 
 /** The row's name as a reader says it: the metric's, and the pool it is over when it is not the whole project. */
@@ -213,7 +213,7 @@ function TargetBarRow({ row, tier, baselineDay, latestDay, currentLabel }: { row
   const scaled = unit === "percent" || unit === "index";
   // A target the reading has already passed is not a deadline any more: 「12% 12月18日前」 beside a bar at 21% read as the page
   // contradicting itself. Said the way 总览 says it (the head metrics are all ones that rise).
-  const reached = typeof target === "number" && latest !== null && latest >= target;
+  const reached = unit !== "ratio" && typeof target === "number" && latest !== null && latest >= target;
   return (
     <li data-geo-target={row.metricId} data-geo-reached={reached || undefined} className="min-w-0">
       <div className="flex items-baseline justify-between gap-3">

@@ -150,6 +150,7 @@ export function ReviewBlock({
   onOpen,
   onRelease,
   addressed = null,
+  total,
 }: {
   articles: readonly GeoArticle[];
   groupOf: (article: GeoArticle) => GeoClusterRow | null;
@@ -160,11 +161,13 @@ export function ReviewBlock({
   onRelease: (article: GeoArticle) => void;
   /** The article the address names (`?article=`, a 「本周」 line about it): its row is the marked one. */
   addressed?: string | null;
+  total?: number | null;
 }) {
   if (articles.length === 0) return null;
   return (
     <section id={geoSectionId("review")} aria-label="等你放行的稿件" data-geo-review="">
-      <Note tone="warn" result={[{ n: articles.length }, " 篇稿件有安全问题没有看过，放行之前不会投放。"]} />
+      {total === null ? <Note tone="warn" action={null}>指定稿件仍待安全复核，其他待复核数量暂不可用。</Note>
+        : <Note tone="warn" result={[{ n: total ?? articles.length }, " 篇稿件有安全问题没有看过，放行之前不会投放。"]} />}
       <List label="等你放行的稿件" divided className="mt-2">
         {articles.map((article) => {
           const group = groupOf(article);

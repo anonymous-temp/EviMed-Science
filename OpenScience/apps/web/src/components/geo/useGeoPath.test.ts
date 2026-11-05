@@ -69,3 +69,11 @@ describe("a link in the results while the conversation is open", () => {
   const query=new URL(result,'https://local.example').searchParams;
   expect([...query.entries()].sort()).toEqual([['error','rare'],['selectionRef','gsel_exact'],['session','ses1']]);
  });
+
+it("carries an open pane only within the same project, preserving target fragment", () => {
+  const from = { pathname: "/app/geo/g/answers/snap", search: "?conversation=open&session=ses1&round=r1" };
+  expect(geoPathWithContext("/app/geo/g/accuracy#evidence", from)).toContain("conversation=open");
+  expect(geoPathWithContext("/app/geo/g/accuracy#evidence", from)).toContain("session=ses1");
+  expect(geoPathWithContext("/app/geo/g/accuracy#evidence", from)).toMatch(/#evidence$/);
+  expect(geoPathWithContext("/app/geo/other/accuracy", from)).toBe("/app/geo/other/accuracy");
+});

@@ -17,6 +17,7 @@ import { createGeoNotifier } from "../src/geoNotify.mjs";
 import { geoRuntimeWrite } from "../src/geoWrites.mjs";
 import { HttpError } from "../src/security.mjs";
 import { runRoleOf } from "@evimed/domain";
+import { authorizeGeoConfirmation, previewGeoConfirmationAuthorization } from "../src/geoConfirmationAuthorization.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (databaseUrl) {
@@ -129,6 +130,54 @@ async function newProject(brand = "玛仕度肽") {
     product: { brandName: brand, genericName: "mazdutide" } });
   return { userId, project, user: { id: userId }, control: { userId, id: project.projectId } };
 }
+
+test("confirmation authorization uses the server preview and never revives after scope changes", options, async () => {
+  const { userId, project } = await newProject();
+  const groups = [{ name: "group", questions: [{ text: "Question?", isMeasured: true }] }];
+  await store.writeQuestionSet(userId, project.id, { groups, contract: { samplingMode: "recurring", engines: ENGINES, repeats: 2 } });
+  const first = await previewGeoConfirmationAuthorization(store, userId, project.id);
+  assert.equal(first.allowed, true);
+  assert.equal(first.repeats, 2);
+  assert.equal(first.questionVersion, 1);
+  assert.equal(first.cost, null);
+  const granted = await authorizeGeoConfirmation(store, userId, project.id, userId, first.token);
+  assert.equal(granted.repeats, 2);
+  await assert.rejects(authorizeGeoConfirmation(store, userId, project.id, userId, first.token), { code: "geo_confirmation_scope_changed" });
+  await store.updateProject(userId, project.id, { engines: ["deepseek"] });
+  await store.updateProject(userId, project.id, { engines: ENGINES });
+  const [row] = await q(`SELECT confirmation_generation, confirmation_authorization FROM evimed_geo.projects WHERE id=$1`, [project.id]);
+  assert.equal(row.confirmation_authorization, null);
+  const restored = await previewGeoConfirmationAuthorization(store, userId, project.id);
+  assert.notEqual(restored.token, first.token);
+  assert.ok(BigInt(row.confirmation_generation) > BigInt(granted.generation));
+  await store.writeQuestionSet(userId, project.id, { groups, contract: { samplingMode: "recurring", engines: ENGINES, repeats: 7 } });
+  await assert.rejects(authorizeGeoConfirmation(store, userId, project.id, userId, restored.token), { code: "geo_confirmation_scope_changed" });
+  assert.equal((await previewGeoConfirmationAuthorization(store, userId, project.id)).repeats, 7);
+  await authorizeAutomation(project);
+  const [legacy] = await q(`SELECT confirmation_authorization FROM evimed_geo.projects WHERE id=$1`, [project.id]);
+  assert.equal(legacy.confirmation_authorization, null, "legacy monitoring consent grants no confirmation authority");
+  const simultaneous = await previewGeoConfirmationAuthorization(store, userId, project.id);
+  const attempts = await Promise.allSettled([
+    authorizeGeoConfirmation(store, userId, project.id, userId, simultaneous.token),
+    authorizeGeoConfirmation(store, userId, project.id, userId, simultaneous.token),
+  ]);
+  assert.equal(attempts.filter(result => result.status === "fulfilled").length, 1);
+  assert.equal(attempts.filter(result => result.status === "rejected").length, 1);
+  const beforeLock = await previewGeoConfirmationAuthorization(store, userId, project.id);
+  await store.lockQuestionSet(project.id, 2, 1);
+  await assert.rejects(authorizeGeoConfirmation(store, userId, project.id, userId, beforeLock.token), { code: "geo_confirmation_scope_changed" });
+  await assert.rejects(previewGeoConfirmationAuthorization(store, "other-user", project.id), { code: "geo_project_not_found" });
+  const racing = await previewGeoConfirmationAuthorization(store, userId, project.id);
+  const secondStore = new GeoStore({ database });
+  const race = await Promise.allSettled([
+    authorizeGeoConfirmation(store, userId, project.id, userId, racing.token),
+    secondStore.writeQuestionSet(userId, project.id, { groups, contract: { samplingMode: "recurring", engines: ENGINES, repeats: 3 } }),
+  ]);
+  assert.equal(race[1].status, "fulfilled");
+  const [afterRace] = await q(`SELECT confirmation_authorization FROM evimed_geo.projects WHERE id=$1`, [project.id]);
+  assert.equal(afterRace.confirmation_authorization, null, "a concurrent new set invalidates the old preview in either lock order");
+  assert.equal((await previewGeoConfirmationAuthorization(store, userId, project.id)).repeats, 3);
+});
 
 /** @param {string} id */
 const reload = async (id) => {
@@ -519,6 +568,53 @@ test("a single step (信源分析与预期) builds only its minimal upstream: id
   assert.equal(world.dispatched.length, 3);
   assert.match(world.dispatched[2].brief, /锁定适量测量问句/);
   assert.equal(world.dispatched[2].dispatchId, "geo-insight-a2", "a new attempt, never the old run's id");
+});
+
+test("a person's stop is not tried again: the step is back where it was until they ask, and asking gives it new tries", options, async () => {
+  const world = harness();
+  const { project, control, user } = await newProject();
+  await world.orchestrator.runStep(user, project, "evidence");
+  assert.equal(world.dispatched.length, 1);
+  assert.equal((await statuses(project.id)).evidence, "running");
+  await world.orchestrator.onRunFinished(control, { id: `run-1-${world.dispatched[0].dispatchId}`, dispatchId: world.dispatched[0].dispatchId, status: "canceled", canceledBy: "user" });
+  await world.orchestrator.advance(project.id);
+  await world.orchestrator.advance(project.id);
+  assert.equal(world.dispatched.length, 1, "nothing starts by itself after 停止");
+  const { steps } = await reload(project.id);
+  assert.deepEqual([steps.evidence.status, steps.evidence.requested], ["none", false]);
+  await world.orchestrator.runStep(user, project, "evidence");
+  assert.equal(world.dispatched.length, 2, "asking again starts it");
+  assert.equal(world.dispatched[1].dispatchId, "geo-insight-a2");
+  // A stop the platform made (a runtime going away) is still tried again.
+  const other = await newProject();
+  await world.orchestrator.runStep(other.user, other.project, "evidence");
+  const third = world.dispatched.at(-1);
+  await world.orchestrator.onRunFinished(other.control, { id: "run-platform", dispatchId: third.dispatchId, status: "canceled", canceledBy: "platform" });
+  await world.orchestrator.advance(other.project.id);
+  assert.equal(world.dispatched.at(-1).dispatchId, "geo-insight-a2", "the platform's stop is not the person's");
+});
+
+test("a run refused inside its own dispatch ends the step and frees the project: the fold does not wait for the turn its dispatch holds", options, async () => {
+  const { project, control, user } = await newProject();
+  /** @type {any} */ let orchestrator = null;
+  const dispatched = [];
+  orchestrator = new GeoOrchestrator({ store, config: { geoTimeZone: "Asia/Shanghai", operatorUsers: [] }, now: () => new Date(),
+    enqueueRound: async () => ({ roundId: null, planned: 0 }),
+    // As the run ledger does: a dispatch refused at the prompt finishes its run, and the finish reaches the module, before the dispatch answers.
+    dispatchRun: async (input) => {
+      dispatched.push(input);
+      await orchestrator.onRunFinished(control, { id: "run-refused", dispatchId: input.dispatchId, status: "failed", errorCode: "runtime_prompt_rejected" });
+      return { runId: "run-refused", sessionId: "session-refused", status: "failed" };
+    } });
+  const answer = await Promise.race([orchestrator.runStep(user, project, "evidence"), new Promise((resolve) => { setTimeout(resolve, 15_000, "still waiting"); })]);
+  assert.notEqual(answer, "still waiting", "the request came back");
+  assert.equal(dispatched.length, 1);
+  assert.equal((await statuses(project.id)).evidence, "failed");
+  const mark = (await q(`SELECT state, run_id FROM evimed_geo.schedule_marks WHERE geo_project_id = $1 AND key = 'run:insight'`, [project.id]))[0];
+  assert.deepEqual([mark.state, mark.run_id], ["failed", "run-refused"]);
+  // The project's turn is free: the next advance runs instead of joining a queue that never moves.
+  const next = await Promise.race([orchestrator.advance(project.id), new Promise((resolve) => { setTimeout(resolve, 15_000, "still waiting"); })]);
+  assert.notEqual(next, "still waiting");
 });
 
 test("the runtime cap defers the dispatch to the next tick, with the same dispatch id; a failed run is retried once", options, async () => {

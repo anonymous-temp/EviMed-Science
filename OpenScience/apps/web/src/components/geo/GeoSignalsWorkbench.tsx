@@ -5,6 +5,7 @@ import { GEO_SIGNAL_STATE_LABELS_ZH } from '@evimed/domain';
 import { getGeoProject, stageGeoPlanContext, type GeoProject } from '@/lib/geoClient';
 import { getGeoSignal, listGeoSignals, setGeoSignalDisposition, getGeoSignalRunRecord, geoSignalResultHref, type GeoSignal, type GeoSignalDetail, type GeoSignalPage, type GeoSignalState, type GeoSignalAttempt } from '@/lib/geoSignalsClient';
 import { webErrorMessage } from '@/lib/apiClient';
+import { sanitizeRuntimeUiHistoryState } from '@/lib/runtimeUiNavigation';
 import type { ProgrammeRun } from '@/lib/programmeRuns';
 import { useContainerNarrow } from '@/lib/useContainerNarrow';
 import { Button } from '@/components/ui/Button';
@@ -24,6 +25,7 @@ import { metricName } from './tabs/geoTabText';
 
 const kinds: Record<GeoSignal['kind'], string> = { error_observed: '医学说法待核查', source_changed: '资料变化', citation_observed: '新增引用页面', group_changed: '问题群变化', order_anomaly: '投放异常' };
 const outcomes: Record<string, string> = { open: '问题仍待处理', acting: '已开展处理', awaiting_remeasure: '等待后续观察', closed: '后续观察支持已消失', withdrawn: '原判断已撤回', unreviewed: '受影响版本仍需核查', partial: '部分版本仍待处理', handled: '本次版本均有核查结果', observed: '已观察到', unknown: '当前业务结果未确认', cancelled: '订单已取消', refunded: '订单已退款', published: '已发布', verified: '已核对发布', settled: '已结算', problem: '订单需要处理', rejected: '订单被拒绝', lost: '订单未能追回' };
+const groupDeltaText = (delta: number | null) => typeof delta === 'number' && Number.isFinite(delta) ? `差异 ${delta > 0 ? '+' : ''}${delta} 个百分点` : '差异不可比';
 const reviewWords = { unhandled: '尚未核查', no_change_needed: '核查认为无需修改', update_proposed: '已提出修改，更新未确认', updated: '已关联更新版本', uncertain: '仍待核实' };
 const time = (value: string | null) => value ? new Date(value).toLocaleString('zh-CN', { hour12: false, timeZone: 'Asia/Shanghai' }) : '时间未记录';
 const stateWord = (row: GeoSignal) => `${GEO_SIGNAL_STATE_LABELS_ZH[row.state]}${row.state === 'ignored' && row.executionState === 'processing' ? ' · AI 仍在处理' : ''}`;
@@ -44,8 +46,9 @@ const runOf = (attempt: GeoSignalAttempt, label: string): ProgrammeRun => ({ run
  * Responsive: Dates follow metadata below 640px container width and trail rows above it.
  * Verification: Focused component behavior tests and fixture walkthrough.
  */
-export function GeoSignalsWorkbench({ geoId, project, step }: { geoId: string; project: GeoProject; step?: string | null }) {
+export function GeoSignalsWorkbench({ geoId, project, step, compact = false }: { geoId: string; project: GeoProject; step?: string | null; compact?: boolean }) {
   const [params, setParams] = useSearchParams();
+  const location = useLocation();
   const signalId = params.get('signal');
   const expanded = params.get('signals') === 'all';
   const [filter, setFilter] = useState<GeoSignalState | ''>('');
@@ -55,13 +58,13 @@ export function GeoSignalsWorkbench({ geoId, project, step }: { geoId: string; p
     if (id) next.set('signal', id); else next.delete('signal');
     if (all) next.set('signals', 'all'); else next.delete('signals');
     return next;
-  });
+  }, { state: sanitizeRuntimeUiHistoryState(location.state) });
   return signalId ? <SignalDetail key={identity} geoId={geoId} project={project} signalId={signalId} onBack={() => address(null, true)} />
-    : <SignalList key={identity} geoId={geoId} step={step} expanded={expanded} filter={filter} setFilter={setFilter} onOpen={id => address(id)} onExpand={() => address(null, !expanded)} />;
+    : <SignalList key={identity} geoId={geoId} step={step} compact={compact} expanded={expanded} filter={filter} setFilter={setFilter} onOpen={id => address(id)} onExpand={() => address(null, !expanded)} />;
 }
 
-function SignalList({ geoId, step, expanded, filter, setFilter, onOpen, onExpand }: {
-  geoId: string; step?: string | null; expanded: boolean; filter: GeoSignalState | ''; setFilter(value: GeoSignalState | ''): void; onOpen(id: string): void; onExpand(): void;
+function SignalList({ geoId, step, compact, expanded, filter, setFilter, onOpen, onExpand }: {
+  geoId: string; step?: string | null; compact: boolean; expanded: boolean; filter: GeoSignalState | ''; setFilter(value: GeoSignalState | ''): void; onOpen(id: string): void; onExpand(): void;
 }) {
   const [page, setPage] = useState<GeoSignalPage | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -69,7 +72,7 @@ function SignalList({ geoId, step, expanded, filter, setFilter, onOpen, onExpand
   const [paging, setPaging] = useState(false);
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
-  const query = { limit: expanded ? 20 : step ? 3 : 5, ...(step ? { step } : {}), ...(filter ? { state: filter } : {}), ...(!expanded ? { actionable: true } : {}) };
+  const query = { limit: expanded ? 20 : step ? 3 : 5, ...(step ? { step } : {}), ...(expanded && filter ? { state: filter } : {}), ...(!expanded ? { actionable: true } : {}) };
   useEffect(() => {
     let current = true;
     void listGeoSignals(geoId, query).then(value => { if (current) { setPage(value); setError(null); } }, failure => { if (current) setError(webErrorMessage(failure, { fallback: '发现与处理暂时读不到，请稍后重试。' })); });
@@ -93,6 +96,10 @@ function SignalList({ geoId, step, expanded, filter, setFilter, onOpen, onExpand
   if (!expanded && page.total === 0 && page.items.length === 0 && !error) return <div data-geo-signals-summary="" className="flex flex-wrap items-center gap-x-3 gap-y-1">
     <p className="text-caption text-text-3">{step ? "本阶段暂无待处理发现" : `当前没有待处理发现 · 已保留 ${Object.values(page.counts).reduce((sum, count) => sum + count, 0)} 条发现记录`}</p>
     <Button variant="text" size="sm" onClick={onExpand}>{step ? "查看本阶段发现" : "查看全部发现"}</Button>
+  </div>;
+  if (compact && !expanded && !error) return <div data-geo-signals-summary="" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-ui">
+    <span>{`${step ? '本阶段' : '当前'}有 ${page.total} 条待处理发现`}</span>
+    <Button variant="text" size="sm" onClick={onExpand}>{step ? '查看本阶段发现' : '查看全部发现'}</Button>
   </div>;
   return <Section className="!mt-0 rounded border border-border bg-surface p-4 sm:p-5" title="发现与处理" count={page.total} toolbar={<div className="flex items-center gap-2">
     {expanded && <Select aria-label="处理状态" value={filter} onChange={event => setFilter(event.target.value as GeoSignalState | '')}><option value="">全部状态</option>{Object.entries(GEO_SIGNAL_STATE_LABELS_ZH).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</Select>}
@@ -141,7 +148,7 @@ function SignalDetail({ geoId, project, signalId, onBack }: { geoId: string; pro
   }, [geoId, signalId, round]);
   const keyFor = (signature: string) => { if (!keys.current.has(signature)) keys.current.set(signature, crypto.randomUUID()); return keys.current.get(signature)!; };
   const canEdit = !project.access?.abilities || project.access.abilities.includes('edit');
-  if (!signal && error) return <LoadError message={error} onRetry={() => setRound(value => value + 1)} />;
+  if (!signal && error) return <div className="flex flex-col gap-3"><Button variant="text" size="sm" onClick={onBack}>返回记录</Button><LoadError message={error} onRetry={() => setRound(value => value + 1)} /></div>;
   if (!signal) return <p role="status" className="py-2 text-ui text-text-3">正在读取这条发现</p>;
   const targets = signal.targets ?? signal.basis.targets ?? [];
   const reviews = new Map((signal.sourceReview?.records ?? []).map(record => [record.targetKey, record]));
@@ -156,7 +163,7 @@ function SignalDetail({ geoId, project, signalId, onBack }: { geoId: string; pro
   const groupAnalysisHref = (side: 'before' | 'after') => {
     const url = new URL(cleanSignal(destination(geoId, { tab: 'visibility', section: 'trend' })), 'https://evimed.invalid');
     const session = url.searchParams.get('session');
-    url.search = new URLSearchParams({ selectionRef: signal.basis.sides?.[side].selectionRef ?? '' }).toString();
+    url.search = new URLSearchParams({ selectionRef: signal.basis.sides?.[side]?.selectionRef ?? '' }).toString();
     if (session) url.searchParams.set('session', session);
     return `${url.pathname}${url.search}${url.hash}`;
   };
@@ -205,15 +212,15 @@ function SignalDetail({ geoId, project, signalId, onBack }: { geoId: string; pro
       {signal.kind === 'group_changed' && <>
         <p className="text-ui text-text-2">{[signal.basis.group?.label ?? '问题群', signal.basis.group?.pool ? poolName(signal.basis.group.pool) : null, signal.basis.group?.questionVersion ? `问句版本 ${signal.basis.group.questionVersion}` : null].filter(Boolean).join(' · ')}</p>
         <p className="text-caption text-text-3">前次完成：{time(signal.basis.previous?.completedAt ?? null)} · 本次完成：{time(signal.basis.current?.completedAt ?? null)}</p>
-        <p className="text-caption text-text-3">参与比较的平台：{signal.basis.methods?.before.engines.map(engineName).join("、")||"未记录"}</p>
+        <p className="text-caption text-text-3">{signal.basis.comparability ? "观测平台" : "参与比较的平台"}：{signal.basis.methods?.before?.engines?.map(engineName).join("、")||"未记录"}</p>
         <List label="前后观测指标" divided>{signal.basis.cells?.map(cell => <ListRow key={cell.key}
           title={`${metricName(cell.metricId) ?? '指标'}：${cell.before.value}% → ${cell.after.value}%`}
-          meta={`前次 ${cell.before.numerator ?? '未知'} / ${cell.before.denominator ?? '未知'}；本次 ${cell.after.numerator ?? '未知'} / ${cell.after.denominator ?? '未知'}；差异 ${cell.delta > 0 ? '+' : ''}${cell.delta} 个百分点`} />)}</List>
-        <Note result={['观测差异绝对值大于 ', { n: signal.basis.policy?.threshold ?? '未知' }, ' 个百分点；噪声未实测，不能据此判断由内容调整造成。分析任务完成仅表示任务已完成。']} />
+          meta={`前次 ${cell.before.numerator ?? '未知'} / ${cell.before.denominator ?? '未知'}；本次 ${cell.after.numerator ?? '未知'} / ${cell.after.denominator ?? '未知'}；${groupDeltaText(cell.delta)}`} />)}</List>
+        {signal.basis.comparability || signal.basis.cells?.some(cell => typeof cell.delta !== 'number' || !Number.isFinite(cell.delta)) ? <Note action={<Link className="text-link hover:underline" to={cleanSignal(destination(geoId, { tab: 'visibility' }))}>查看 AI 表现</Link>}>{signal.basis.comparability === 'sampling_surface_unverified' ? '历史观测缺少可核对的采样口径，保留两期读数。' : '历史观测的比较依据不完整，保留两期读数。'}</Note> : <Note result={['观测差异绝对值大于 ', { n: signal.basis.policy?.threshold ?? '未知' }, ' 个百分点；噪声未实测，不能据此判断由内容调整造成。分析任务完成仅表示任务已完成。']} />}
         {(['before', 'after'] as const).map(side => <div key={side} className="flex flex-col gap-2">
-          <p className="text-ui text-text-2">{side === 'before' ? '前次' : '本次'}样本：{signal.basis.sides?.[side].count ?? '未知'} 条</p>
+          <p className="text-ui text-text-2">{side === 'before' ? '前次' : '本次'}样本：{signal.basis.sides?.[side]?.count ?? '未知'} 条</p>
           <GeoGroupMembers key={`${signalId}:${side}:${signal.basisDigest}`} geoId={geoId} signalId={signalId} side={side} basisDigest={signal.basisDigest}/>
-          <Link className="text-ui text-link hover:underline" to={groupAnalysisHref(side)}>查看{side === 'before' ? '前轮' : '后轮'}共同样本</Link>
+          {signal.basis.sides?.[side]?.selectionRef && <Link className="text-ui text-link hover:underline" to={groupAnalysisHref(side)}>查看{side === 'before' ? '前轮' : '后轮'}{signal.basis.comparability ? '观测' : '共同'}样本</Link>}
         </div>)}
       </>}
       {signal.kind === 'source_changed' && <>

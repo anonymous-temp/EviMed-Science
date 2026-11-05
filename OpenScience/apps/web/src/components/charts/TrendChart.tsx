@@ -44,6 +44,7 @@ export function TrendChart({
   integer = false,
   bounds = null,
   unpainted,
+  connectLines = true,
 }: {
   input: TrendInput;
   /** The value as a reader says it: “61”“15%”. */
@@ -60,6 +61,8 @@ export function TrendChart({
   bounds?: readonly [number, number] | null;
   /** What the figure says where no canvas can be painted; its measurements by default. */
   unpainted?: string;
+  /** Show individual points without implying a comparison between them. */
+  connectLines?: boolean;
 }) {
   const model = useMemo(() => trendModel(input), [input]);
   // The scheme is a dependency of the option, not only of the instance: the
@@ -69,7 +72,7 @@ export function TrendChart({
   // resolves the palette's custom properties against the live document, and a
   // theme flip changes every one of them.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const option = useMemo(() => (model.mode === "empty" ? null : chartOption(model, format, { integer, bounds })), [model, format, integer, bounds, scheme]);
+  const option = useMemo(() => (model.mode === "empty" ? null : chartOption(model, format, { integer, bounds, connectLines })), [model, format, integer, bounds, scheme, connectLines]);
   const host = useEChart(option);
   // One or two readings are a short line: a tall frame around them is mostly air.
   const plot = model.readings <= 2 ? Math.min(height, 176) : height;
@@ -77,6 +80,7 @@ export function TrendChart({
     <figure
       data-chart="trend"
       data-chart-mode={model.mode}
+      data-chart-connected={connectLines ? "true" : "false"}
       data-chart-readings={model.readings}
       data-chart-rivals={model.rivals.length}
       className="m-0 min-w-0"
@@ -127,12 +131,12 @@ export function ruleLabelPlaces(model: TrendModel): { target: string; baseline: 
 export function chartOption(
   model: TrendModel,
   format: (value: number) => string,
-  { integer = false, bounds = null }: { integer?: boolean; bounds?: readonly [number, number] | null } = {},
+  { integer = false, bounds = null, connectLines = true }: { integer?: boolean; bounds?: readonly [number, number] | null; connectLines?: boolean } = {},
 ): EChartsCoreOption {
   const axis = bounds ? trendAxis(model, { bounds }) : null;
   const own = resolvedColor(model.own.color);
   const target = resolvedColor(TARGET_COLOR);
-  const band = model.band;
+  const band = connectLines ? model.band : null;
   const lower = band === null ? null : model.own.values.map((value) => (value === null ? null : value - band));
   const width = band === null ? null : model.own.values.map((value) => (value === null ? null : band * 2));
   const places = ruleLabelPlaces(model);
@@ -208,9 +212,10 @@ export function chartOption(
         type: "line",
         name: model.own.name,
         symbol: "circle",
+        showSymbol: true,
         symbolSize: CHART_STROKES.marker,
         connectNulls: false,
-        lineStyle: { color: own, width: CHART_STROKES.own, cap: "round" },
+        lineStyle: { color: own, width: connectLines ? CHART_STROKES.own : 0, cap: "round" },
         itemStyle: { color: own },
         data: model.own.values.map((value, index) => {
           if (value === null) return null;
@@ -234,9 +239,10 @@ export function chartOption(
       ...model.rivals.map((line) => ({
         type: "line" as const,
         name: line.name,
-        symbol: "none" as const,
+        symbol: connectLines ? "none" as const : "circle" as const,
+        showSymbol: !connectLines,
         connectNulls: false,
-        lineStyle: { color: resolvedColor(line.color), width: CHART_STROKES.other },
+        lineStyle: { color: resolvedColor(line.color), width: connectLines ? CHART_STROKES.other : 0 },
         itemStyle: { color: resolvedColor(line.color) },
         // Directly labelled at the line's end: a legend a reader has to look
         // up is what makes a five-line chart unreadable.

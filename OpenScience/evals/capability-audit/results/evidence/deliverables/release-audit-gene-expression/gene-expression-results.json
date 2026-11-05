@@ -29,12 +29,12 @@
       "date": "2018-02-18"
     },
     "platform": "GPL81",
-    "platformTitle": "[MG_U74Av2] Affymetrix Murine Genome U74A Version 2 Array",
-    "organism": "Mus musculus",
-    "captureDirectory": ".evimed-sources/gene-expression/GSE5583-GPL81/1204bfb4c4d69c71364fb8881dbb17a48a26a2c55410fc269da4a3e8bcc5cf21",
+    "platformTitle": null,
+    "organism": null,
+    "captureDirectory": ".evimed-sources/gene-expression/GSE5583-GPL81/8ded56794db9a4aba3373b21cc772017371535a44dbd07807726b508c9eae1e3",
     "matrixSha256": "bca34f9908a6f5ad4ef5b1b3fa5e0f017704dcfbd2bffea80d76abf42001e220",
     "matrixBytes": 216671,
-    "platformSha256": "be1521a21990ada3dac89e2c855d493e9831612913cb3228f35f9d571a7b22d0"
+    "platformSha256": null
   },
   "design": {
     "reference": "wild type",
@@ -94,12 +94,12 @@
       "detail": "All samples are on one platform, GPL81."
     },
     "platformRecord": {
-      "status": "ok",
-      "detail": "12488 of 12488 matrix probes are in the platform record's table."
+      "status": "unknown",
+      "detail": "No platform record was read, so probes carry no gene annotation."
     },
     "organism": {
-      "status": "ok",
-      "detail": "The samples' taxon (10090) matches the platform's (10090)."
+      "status": "unknown",
+      "detail": "The samples' or the platform's taxon is not stated."
     },
     "genomeBuild": {
       "status": "unknown",
@@ -123,10 +123,10 @@
     },
     "probesDroppedTotal": 0,
     "missingValueCells": 0,
-    "multiGeneProbes": 521,
+    "multiGeneProbes": 0,
     "multiGeneHandling": "A probe annotated with several genes stays one row, listed with all its symbols and flagged; it is not copied to each gene, and nothing is collapsed to a gene level, so a gene with several probes has several rows.",
-    "unannotatedProbes": 531,
-    "genesWithSeveralProbes": 2568,
+    "unannotatedProbes": 12488,
+    "genesWithSeveralProbes": 0,
     "probesSignificantAtFdr05": 29,
     "probesSignificantAtFdr01": 0,
     "probesPBelow05": 1287,
@@ -148,13 +148,9 @@
     {
       "rank": 1,
       "probe": "101451_at",
-      "geneSymbols": [
-        "Peg3"
-      ],
-      "entrezIds": [
-        "18616"
-      ],
-      "geneTitle": "paternally expressed 3",
+      "geneSymbols": [],
+      "entrezIds": [],
+      "geneTitle": "",
       "multiGene": false,
       "nReference": 3,
       "nComparison": 3,
@@ -171,13 +167,9 @@
     {
       "rank": 2,
       "probe": "98525_f_at",
-      "geneSymbols": [
-        "Erdr1"
-      ],
-      "entrezIds": [
-        "170942"
-      ],
-      "geneTitle": "erythroid differentiation regulator 1",
+      "geneSymbols": [],
+      "entrezIds": [],
+      "geneTitle": "",
       "multiGene": false,
       "nReference": 3,
       "nComparison": 3,
@@ -194,13 +186,9 @@
     {
       "rank": 3,
       "probe": "102670_at",
-      "geneSymbols": [
-        "Vps54"
-      ],
-      "entrezIds": [
-        "245944"
-      ],
-      "geneTitle": "vacuolar protein sorting 54 (yeast)",
+      "geneSymbols": [],
+      "entrezIds": [],
+      "geneTitle": "",
       "multiGene": false,
       "nReference": 3,
       "nComparison": 3,
@@ -217,13 +205,9 @@
     {
       "rank": 4,
       "probe": "160520_at",
-      "geneSymbols": [
-        "Yap1"
-      ],
-      "entrezIds": [
-        "22601"
-      ],
-      "geneTitle": "yes-associated protein 1",
+      "geneSymbols": [],
+      "entrezIds": [],
+      "geneTitle": "",
       "multiGene": false,
       "nReference": 3,
       "nComparison": 3,
@@ -240,13 +224,9 @@
     {
       "rank": 5,
       "probe": "102332_at",
-      "geneSymbols": [
-        "Ulk1"
-      ],
-      "entrezIds": [
-        "22241"
-      ],
-      "geneTitle": "unc-51 like kinase 1",
+      "geneSymbols": [],
+      "entrezIds": [],
+      "geneTitle": "",
       "multiGene": false,
       "nReference": 3,
       "nComparison": 3,

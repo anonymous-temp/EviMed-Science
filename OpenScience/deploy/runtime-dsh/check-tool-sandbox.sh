@@ -57,6 +57,9 @@ check "a write outside the grants is still refused" "$(sandboxed bash -c 'touch 
 # launch plan's TMPDIR lives in it): a command is kept out of it by the sandbox alone, and a write the same shell makes outside the sandbox shows it was open.
 check "/runtime is writable without the sandbox (the control for the next check)" "$(touch /runtime/.evimed-probe 2> /dev/null && rm -f /runtime/.evimed-probe && echo writable || echo denied)" writable
 check "a write to /runtime, writable in this container, is refused by Landlock and not by the read-only root" "$(sandboxed bash -c 'touch /runtime/.evimed-probe 2> /dev/null; echo $?' 2> /dev/null)" 1
+mkdir -p /runtime/home/.loopx
+check "LoopX's own directory is writable to a command" "$(sandboxed bash -c 'touch /runtime/home/.loopx/.evimed-probe 2> /dev/null && rm -f /runtime/home/.loopx/.evimed-probe && echo writable' 2> /dev/null)" writable
+check "the rest of the home is not" "$(sandboxed bash -c 'touch /runtime/home/.evimed-probe 2> /dev/null; echo $?' 2> /dev/null)" 1
 check "a write to /proc is still refused" "$(sandboxed bash -c 'echo 1 > /proc/self/oom_score_adj 2> /dev/null; echo $?' 2> /dev/null)" 1
 out="$(sandboxed bash -c 'echo to-stderr >&2; exit 7' 2>&1)"; status=$?
 check "a command's exit status passes through unchanged" "${status}" 7

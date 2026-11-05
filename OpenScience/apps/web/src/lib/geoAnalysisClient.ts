@@ -126,6 +126,8 @@ export interface GeoAnalysisRow {
     pool?: string | null;
     entityKind?: "brand" | "generic";
     entityName?: string;
+    /** Current and recorded historical names, when they differ. */
+    entityLabel?: string;
     entityKey?: string | null;
     own?: boolean;
     unit?: string;
@@ -198,10 +200,10 @@ export interface GeoAnalysisView {
   availability: { status: string; reasons?: string[] };
 }
 export interface GeoAnalysisMemberItem {
-  receipt?:{kind?:string;snapshotId?:string;previousAssessmentVersion?:string|null;assessmentVersion?:string|null;claimVersion?:number|null;changedAt?:string;recordedAt?:string;previousStatus?:string};
+  receipt?:{kind?:string;revision?:number;snapshotId?:string;previousAssessmentVersion?:string|null;assessmentVersion?:string|null;claimVersion?:number|null;changedAt?:string;recordedAt?:string;previousStatus?:string};
   eventId?:string;signalId?:string;errorId?:string|null;currentStatus?:string|null;currentJudgmentState?:string|null;
   currentDisposition?:string|null;currentExecutionState?:string|null;executionState?:string;recordedAt?:string|null;detectedAt?:string|null;
-  publicationId?:string;linkId?:string;basisDigest?:string;side?:string;preservedSelectionRef?:string|null;
+  publicationId?:string;linkId?:string;revision?:number;basisDigest?:string;side?:string;preservedSelectionRef?:string|null;
   preservedQuestion?:{text?:string};preservedAnswer?:{text?:string};facts?:{statements?:Array<{text:string;verdict?:string}>};
   targetId?:string;type?:string;label?:string|null;materialVersion?:string|number|null;
   preservedMemberLinks?:{before:number;after:number;targets:number};
@@ -210,6 +212,7 @@ export interface GeoAnalysisMemberItem {
   groupContext?: string; businessScopeState?: string;
   amountCny?: number; currency?: string; balance?: Record<string,number|null>;
   strategyVersion?: number; targetVersion?: number; memberReference?: string|null; memberDigest?: string|null; memberCount?:number|null;
+  metricId?: string;
   numerator?:number|null;denominator?:number|null;value?:number|null;target?:number|null;baseline?:number|null;budgetCny?:number|null;horizonWeeks?:number|null;placements?:number|null;
   errorStatement?: string | null; fingerprint?: string; errorType?: string | null; severity?: string | null;
   judgmentState?: string; errorRevision?: string | null; evidenceQuote?: string | null;

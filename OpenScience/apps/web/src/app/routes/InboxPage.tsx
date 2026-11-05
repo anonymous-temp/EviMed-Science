@@ -86,6 +86,16 @@ const REFRESH_MS = 60_000;
  * notifies, and 「自动运行 N 条」 — an evaluation writes no notice any more and
  * a proactive result is an ordinary one, so every item the list route returns
  * is rendered as a row and no grouping field is read.
+ *
+ * Anatomy: filter toolbar, priority notices and the ordinary message list.
+ * Variants: all or unread, with optional source and expanded-group filters.
+ * States: each list read keeps its loading, empty, failed and retry states.
+ * Hit area: the stretched row opens the notice; row actions have their own targets.
+ * Keyboard: row targets and disclosure actions remain individually focusable.
+ * Long content: notice summaries wrap within the row and keep their detail accessible.
+ * Theme: semantic ink and rules separate messages and distinguish unread notices.
+ * Responsive: priority and ordinary rows keep one reading order at every width.
+ * Verification: InboxPage.test.tsx and the inbox fixture walk.
  */
 export function InboxPage() {
   const operator = useOperator();
@@ -471,11 +481,14 @@ export function InboxPage() {
                     <h2 id="inbox-pinned" className="mb-1 flex items-center gap-1.5 px-2 text-caption text-danger-strong">
                       <ShieldAlert size={16} aria-hidden="true" />需要优先查看 · 未读 {safetyUnread} 条
                     </h2>
-                    <List label="需要优先查看">{pinnedEntries.map(entryRow)}</List>
+                    <List label="需要优先查看" divided>{pinnedEntries.map(entryRow)}</List>
                     {safety?.cursor && !source && <ShowMore remaining={null} unit="条" loading={loadingSafety} onMore={() => void loadMoreSafety()} />}
                   </section>
                 )}
-                {restEntries.length > 0 && <List label="消息">{restEntries.map(entryRow)}</List>}
+                {restEntries.length > 0 && <>
+                  {pinnedEntries.length > 0 && <h2 className="mb-1 px-2 text-caption text-text-2">其他消息</h2>}
+                  <List label="消息" divided>{restEntries.map(entryRow)}</List>
+                </>}
                 {cursor && <ShowMore remaining={null} unit="条" loading={loadingMore} onMore={() => void loadMore()} />}
               </>
             )}

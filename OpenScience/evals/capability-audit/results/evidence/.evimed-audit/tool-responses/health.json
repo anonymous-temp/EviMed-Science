@@ -152,18 +152,20 @@
       }
     ],
     "dataSourceCatalog": {
-      "reviewedTotal": 123,
-      "connectedPublic": 63,
+      "reviewedTotal": 124,
+      "connectedPublic": 64,
       "skillGuidanceOnly": 13,
-      "notConnected": 47,
+      "viaEvimedIndex": 8,
+      "notConnected": 39,
       "connectionStateCounts": {
         "adapter_credentials_required": 2,
         "blocked_approval": 4,
-        "blocked_license": 18,
-        "blocked_no_api": 11,
-        "connected_public": 63,
+        "blocked_license": 12,
+        "blocked_no_api": 10,
+        "connected_public": 64,
+        "connected_via_evimed_index": 8,
         "ready_credentials": 9,
-        "ready_private_adapter": 3,
+        "ready_private_adapter": 2,
         "skill_guidance": 13
       },
       "productionConnectorRoute": "controlled_connector_routes",
@@ -222,6 +224,7 @@
         "openneuro",
         "pmc",
         "pride",
+        "prospero",
         "pubchem",
         "pubmed",
         "quickgo",
@@ -249,10 +252,10 @@
       "tool": "health",
       "arguments": {},
       "scope": {
-        "tenantId": "tool-probe-1cb73eaa",
-        "userId": "tool-probe-1cb73eaa",
-        "projectId": "tool-probe",
-        "workspaceDir": "/workspace/.audit-repo-20261012T071445Z/OpenScience/evals/capability-audit/tool-probe-workspace"
+        "tenantId": "ck-probe-14d43468",
+        "userId": "ck-probe-14d43468",
+        "projectId": "audit-tool-probe",
+        "workspaceDir": "/workspace/.audit-repo-20261104T131143Z/OpenScience/evals/capability-audit/tool-probe-workspace"
       }
     }
   }

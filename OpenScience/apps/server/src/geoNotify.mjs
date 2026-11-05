@@ -3,6 +3,8 @@ import { mediaMarketConfigured } from "./mediaMarketClient.mjs";
 import { notificationEventId } from "./notificationService.mjs";
 import { geoSignalId } from "./geoSignals.mjs";
 
+const POTENTIAL_RISK_NOTICE = "严重度反映潜在临床风险；仅凭回答无法判断患者是否已用药或受伤。";
+
 /**
  * 「循证 GEO」's notices (build spec 2026-09-25 §5; plan §5.7): exactly five
  * kinds reach a person, and everything else a project does is only shown on
@@ -280,7 +282,7 @@ export function createGeoNotifier({ notifications, store, config = {}, now = () 
         if (compatible) notificationKey = compatible.keys[0];
       }
       return send(project, "signal_discovered", {
-        title: signal.kind === "error_observed" ? wrongOursTitle(project, signal.basis) : clip(signal.title, 100), body: signal.kind === "source_changed" ? "查看本次变化关联的结论和稿件版本，选择要处理的范围。" : "查看原始记录、当前状态和可执行的下一步。",
+        title: signal.kind === "error_observed" ? wrongOursTitle(project, signal.basis) : clip(signal.title, 100), body: signal.kind === "source_changed" ? "查看本次变化关联的结论和稿件版本，选择要处理的范围。" : signal.kind === "error_observed" ? `查看原始记录、当前状态和可执行的下一步。\n${POTENTIAL_RISK_NOTICE}` : "查看原始记录、当前状态和可执行的下一步。",
         severity: safety ? "safety" : "attention", source: source(project.id, "signals", row.id),
         idempotencyKey: notificationKey ?? `geo:${project.id}:signal:${row.id}`,
         ...(folded ? { groupKey: `geo-wrong:${project.id}:${dayIn(new Date(signal.detectedAt), timeZone)}` } : {}),
@@ -360,7 +362,7 @@ export function createGeoNotifier({ notifications, store, config = {}, now = () 
       const evidence = row.evidenceQuote ? `依据：“${clip(row.evidenceQuote, 200)}”` : "点开看这条回答和依据。";
       // The title shortens a long statement; the whole sentence is then the first line of the body.
       const whole = clip(row.statement, 200);
-      const body = [...whole.replace(/[。．.!！]+$/, "")].length > WRONG_OURS_TITLE_STATEMENT_MAX ? `${whole}\n${evidence}` : evidence;
+      const body = `${[...whole.replace(/[。．.!！]+$/, "")].length > WRONG_OURS_TITLE_STATEMENT_MAX ? `${whole}\n${evidence}` : evidence}\n${POTENTIAL_RISK_NOTICE}`;
       if (GEO_URGENT_SEVERITIES.includes(String(row.severity))) {
         return send(project, "wrong_or_safety", {
           title: wrongOursTitle(project, row), body, severity: "safety", source: target, idempotencyKey,

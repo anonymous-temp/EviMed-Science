@@ -1,7 +1,10 @@
+import { pendingRuntimeUiIntent, prepareRuntimeUiIntent, type RuntimeUiIntent } from "@/lib/runtimeUiNavigation";
+import { sessionOwner, WEB_SESSION_STARTED_EVENT } from "@/lib/sessionLifecycle";
 import { useLayoutEffect, useRef } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes, useLocation, useNavigate, useParams } from "react-router";
+import { createMemoryRouter, MemoryRouter, Route, Routes, useBlocker, useLocation, useNavigate, useParams } from "react-router";
+import { RouterProvider } from "react-router/dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RuntimeUiFrame } from "./RuntimeUiFrame";
 import { SessionFrameHost } from "../layout/SessionFrameHost";
@@ -103,9 +106,12 @@ function TaskPaneProbe() {
  * router (where `AppShell` puts it, so a route change cannot unmount it) and
  * the chat route, which is a placeholder beside it.
  */
-function mount(state: unknown = null, path = "/app/chat") {
+function mount(state: unknown = null, path = "/app/chat", prepared = false) {
   const [pathname, query] = path.split("?");
-  return render(<MemoryRouter initialEntries={[{ pathname, search: query ? `?${query}` : "", state }]}><PathProbe /><SessionFrameHost /><Routes>
+  const supplied = state as { runtimeUiIntent?: RuntimeUiIntent } | null;
+  const raw = supplied?.runtimeUiIntent;
+  const stamped = raw && !prepared ? { ...supplied, runtimeUiIntent: prepareRuntimeUiIntent({ ...raw, owner: raw.owner ?? sessionOwner() }) } : state;
+  return render(<MemoryRouter initialEntries={[{ pathname, search: query ? `?${query}` : "", state: stamped }]}><PathProbe /><SessionFrameHost /><Routes>
     <Route path="/app/home" element={<GlobalHomeRoute />} />
     <Route path="/app/chat/:sessionId?" element={<SessionRoute />} />
     <Route path="/app/account" element={<div>account and usage</div>} />
@@ -123,6 +129,7 @@ function emit(frame: HTMLIFrameElement, data: Record<string, unknown>, origin = 
     data: { version: 1, frameId: binding.frameId, projectId: "default", seq: 1, ...data } })));
 }
 beforeEach(() => {
+  window.dispatchEvent(new Event(WEB_SESSION_STARTED_EVENT));
   useProjectStore.setState({ currentId: "default", switching: null });
   geo.getGeoProject.mockReset(); geo.getGeoProject.mockRejectedValue(new Error("not a module project in this test"));
   window.localStorage.clear(); mocks.create.mockReset(); mocks.renew.mockReset(); mocks.release.mockReset(); mocks.release.mockResolvedValue(undefined); mocks.projectId = "default";
@@ -858,6 +865,20 @@ describe("native frame identity and readiness", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "重试" })).toHaveFocus());
     await userEvent.click(screen.getByRole("button", { name: "重试" }));
     await waitFor(() => expect(mocks.create).toHaveBeenCalledTimes(2));
+  });
+
+  it("replaces a frame whose scoped native initialization timed out when the person retries", async () => {
+    mocks.create.mockResolvedValueOnce(binding).mockResolvedValueOnce({ ...binding, frameId: "frame-b", frameUrl: "https://host.example:8443/__evimed/f/frame-b/" });
+    const { container } = mount(null, "/app/chat/session-a");
+    await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull());
+    const first = container.querySelector("iframe")!;
+    emit(first, { type: "evimed.runtime-ui.error", error: "NATIVE_NOT_READY" });
+    expect(await screen.findByRole("alert")).toHaveTextContent("对话没有完成初始化");
+    await userEvent.click(screen.getByRole("button", { name: "重试" }));
+    await waitFor(() => expect(container.querySelector("iframe")?.src).toContain("/f/frame-b/"));
+    expect(container.querySelector("iframe")).not.toBe(first);
+    expect(mocks.create).toHaveBeenCalledTimes(2);
+    expect(screen.getByTestId("path")).toHaveTextContent("/app/chat/session-a");
   });
 
   // Every frame refusal used to arrive as 「研究会话暂时无法连接」 with a retry
@@ -2396,7 +2417,7 @@ describe("the frame over a task's pane", () => {
     expect(box.contains(frame)).toBe(true);
     await waitFor(() => expect(box).toHaveStyle({ left: "300px", top: "60px", width: "700px", height: "500px" }));
     expect(box).not.toHaveClass("hidden");
-    expect(container.querySelector("[data-session-surface]")).toHaveClass("pointer-events-none");
+    expect(container.querySelector("[data-session-surface]")).toHaveClass("pointer-events-none", "overflow-hidden", "supports-[overflow:clip]:overflow-clip");
     expect(mocks.create).toHaveBeenCalledTimes(1); expect(mocks.release).not.toHaveBeenCalled();
     // The frame is asked for that execution's conversation, and the acknowledgement leaves the task's address where it is.
     await waitFor(() => expect(navigations(post)).toHaveLength(2));
@@ -2703,3 +2724,221 @@ describe("what the frame asks of the shell in a module conversation", () => {
   expect(nativeGeo.start).toHaveBeenCalledWith(scope);
   expect(mocks.start).not.toHaveBeenCalled();
  });
+
+it("does not replay an acknowledged history draft on remount of the same session", async () => {
+  const state = { runtimeUiIntent: { kind: "open", owner: sessionOwner(), projectId: "default", sessionId: "session-a", requestId: "private-history", draft: "unsent private draft" } };
+  const first = mount(state, "/app/chat/session-a");
+  await waitFor(() => expect(first.container.querySelector("iframe")).not.toBeNull());
+  const frame = first.container.querySelector("iframe")!;
+  const post = vi.spyOn(frame.contentWindow!, "postMessage");
+  emit(frame, { type: "evimed.runtime-ui.ready" });
+  await waitFor(() => expect(post).toHaveBeenCalled());
+  expect(post.mock.calls[0][0].intent.draft).toBe("unsent private draft");
+  expect(JSON.parse(screen.getByTestId("state").textContent ?? "{}").runtimeUiIntent).toEqual({ kind: "open", projectId: "default", sessionId: "session-a", requestId: "private-history" });
+  emit(frame, { type: "evimed.runtime-ui.ack", seq: 2, requestId: "private-history", ok: true, sessionId: "session-a" });
+  await waitFor(() => expect(screen.getByTestId("state")).not.toHaveTextContent("runtimeUiIntent"));
+  first.unmount();
+  const second = mount(state, "/app/chat/session-a");
+  await waitFor(() => expect(second.container.querySelector("iframe")).not.toBeNull());
+  const nextFrame = second.container.querySelector("iframe")!;
+  const nextPost = vi.spyOn(nextFrame.contentWindow!, "postMessage");
+  emit(nextFrame, { type: "evimed.runtime-ui.ready" });
+  await waitFor(() => expect(nextPost).toHaveBeenCalled());
+  expect(nextPost.mock.calls[0][0].intent).toMatchObject({ kind: "open", sessionId: "session-a" });
+  expect(nextPost.mock.calls[0][0].intent).not.toHaveProperty("draft");
+});
+
+it("keeps a committed intent while the frame is unavailable and a same-session navigation drops state", async () => {
+  const { pendingRuntimeUiIntent } = await import("@/lib/runtimeUiNavigation");
+  mocks.profile.uiOrigin = "";
+  let resolveMe: ((value: object) => void) | null = null;
+  mocks.me.mockImplementation(() => new Promise(resolve => { resolveMe = resolve; }));
+  const state = { runtimeUiIntent: { kind: "open", owner: sessionOwner(), projectId: "default", sessionId: "session-a", requestId: "pending-before-frame", draft: "keep this draft" } };
+  const view = mount(state, "/app/chat/session-a");
+  await waitFor(() => expect(pendingRuntimeUiIntent("default", "session-a")?.draft).toBe("keep this draft"));
+  expect(view.container.querySelector("iframe")).toBeNull();
+  act(() => testNavigate("/app/chat/session-a?from=result"));
+  expect(screen.getByTestId("state")).not.toHaveTextContent("runtimeUiIntent");
+  mocks.profile.uiOrigin = "https://host.example:8443";
+  await act(async () => { (resolveMe as unknown as (value: object) => void)({}); });
+  await waitFor(() => expect(view.container.querySelector("iframe")).not.toBeNull());
+  const frame = view.container.querySelector("iframe")!;
+  const post = vi.spyOn(frame.contentWindow!, "postMessage");
+  emit(frame, { type: "evimed.runtime-ui.ready" });
+  await waitFor(() => expect(post).toHaveBeenCalled());
+  expect(post.mock.calls[0][0].intent.draft).toBe("keep this draft");
+});
+
+it("does not send A's draft or revision to B for the same project and session", async () => {
+  const state = { runtimeUiIntent: prepareRuntimeUiIntent({ kind: "open", owner: sessionOwner(), projectId: "default", sessionId: "session-a", requestId: "old-account", draft: "account A private draft", resultRevision: { referenceId: `rr_${"a".repeat(64)}` } }) };
+  window.dispatchEvent(new StorageEvent("storage", { key: "open-science:web-session-sync", newValue: '{"kind":"started"}' }));
+  const view = mount(state, "/app/chat/session-a", true);
+  await waitFor(() => expect(view.container.querySelector("iframe")).not.toBeNull());
+  const frame = view.container.querySelector("iframe")!;
+  const post = vi.spyOn(frame.contentWindow!, "postMessage");
+  emit(frame, { type: "evimed.runtime-ui.ready" });
+  await waitFor(() => expect(post).toHaveBeenCalled());
+  expect(post.mock.calls[0][0].intent).toMatchObject({ kind: "open", sessionId: "session-a" });
+  expect(post.mock.calls[0][0].intent).not.toHaveProperty("draft");
+  expect(post.mock.calls[0][0].intent).not.toHaveProperty("resultRevision");
+});
+
+describe("native acknowledgement of overlapping same-session drafts", () => {
+  function draft(requestId: string, text: string) {
+    return { runtimeUiIntent: prepareRuntimeUiIntent({ kind: "open", owner: sessionOwner(), projectId: "default", sessionId: "session-a", requestId, draft: text }) };
+  }
+  async function openPair() {
+    const first = draft("request-a", "First draft");
+    const second = draft("request-b", "Second draft");
+    const view = mount(first, "/app/chat/session-a?result=first", true);
+    await waitFor(() => expect(view.container.querySelector("iframe")).not.toBeNull());
+    const frame = view.container.querySelector("iframe")!;
+    const post = vi.spyOn(frame.contentWindow!, "postMessage");
+    const sent = () => post.mock.calls.map(([message]) => message).filter(message => message.type === "evimed.runtime-ui.navigate");
+    emit(frame, { type: "evimed.runtime-ui.ready" });
+    await waitFor(() => expect(sent()).toHaveLength(1));
+    act(() => testNavigate("/app/chat/session-a?result=second", { state: second }));
+    await waitFor(() => expect(sent()).toHaveLength(2));
+    expect(sent().map(message => message.intent.draft)).toEqual(["First draft", "Second draft"]);
+    const ack = (requestId: string, seq: number, sessionId = "session-a", ok = true) =>
+      emit(frame, { type: "evimed.runtime-ui.ack", requestId, seq, sessionId, ok });
+    return { frame, sent, ack, view };
+  }
+
+  it.each([["request-a", "request-b"], ["request-b", "request-a"]])("retires both drafts when %s is acknowledged before %s", async (first, second) => {
+    const { sent, ack } = await openPair();
+    ack(first, 2);
+    if (first === "request-a") {
+      expect(JSON.parse(screen.getByTestId("state").textContent ?? "{}").runtimeUiIntent.requestId).toBe("request-b");
+      expect(screen.getByTestId("search")).toHaveTextContent("result=second");
+    }
+    ack(second, 3);
+    await waitFor(() => expect(screen.getByTestId("state")).not.toHaveTextContent("runtimeUiIntent"));
+    await userEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(screen.getByTestId("search")).toHaveTextContent("result=first");
+    expect(sent().map(message => message.intent.draft)).toEqual(["First draft", "Second draft"]);
+  });
+
+  it("ignores a forged acknowledgement and leaves an older failed draft eligible for retry", async () => {
+    const { frame, sent, ack } = await openPair();
+    emit(frame, { type: "evimed.runtime-ui.ack", requestId: "request-a", seq: 2, sessionId: "session-a", ok: true }, "https://elsewhere.example");
+    ack("forged-id", 3);
+    ack("request-a", 4, "other-session");
+    ack("request-a", 5, "session-a", false);
+    expect(JSON.parse(screen.getByTestId("state").textContent ?? "{}").runtimeUiIntent.requestId).toBe("request-b");
+    ack("request-b", 6);
+    await userEvent.click(screen.getByRole("button", { name: "Back" }));
+    await waitFor(() => expect(sent().map(message => message.intent.draft)).toEqual(["First draft", "Second draft", "First draft"]));
+  });
+
+  it("does not send the same pending draft twice if Back arrives before its acknowledgement", async () => {
+    const { sent, ack } = await openPair();
+    await userEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(screen.getByTestId("search")).toHaveTextContent("result=first");
+    expect(sent()).toHaveLength(2);
+    ack("request-a", 2);
+    await waitFor(() => expect(screen.getByTestId("state")).not.toHaveTextContent("runtimeUiIntent"));
+    ack("request-b", 3);
+    expect(sent()).toHaveLength(2);
+  });
+});
+
+
+it("does not activate or deliver a prepared draft until the guarded navigation commits", async () => {
+  function GuardedNative() {
+    const blocker = useBlocker(({ nextLocation }) => Boolean(nextLocation.state?.runtimeUiIntent));
+    return <>
+      <PathProbe />
+      <RuntimeUiFrame projectId="default" sessionId="session-a" origin={mocks.profile.uiOrigin} />
+      {blocker.state === "blocked" && <>
+        <button onClick={() => blocker.reset()}>Cancel opening</button>
+        <button onClick={() => blocker.proceed()}>Proceed with opening</button>
+      </>}
+    </>;
+  }
+  const NativeRequest = globalThis.Request;
+  vi.stubGlobal("Request", class extends NativeRequest {
+    constructor(input: RequestInfo | URL, init?: RequestInit) {
+      super(input, init ? { ...init, signal: undefined } : init);
+    }
+  });
+  try {
+    const router = createMemoryRouter([{ path: "/app/chat/:sessionId", element: <GuardedNative /> }], { initialEntries: ["/app/chat/session-a"] });
+    const view = render(<RouterProvider router={router} />);
+    await waitFor(() => expect(view.container.querySelector("iframe")).not.toBeNull());
+    const frame = view.container.querySelector("iframe")!;
+    const post = vi.spyOn(frame.contentWindow!, "postMessage");
+    const drafts = () => post.mock.calls.map(([command]) => command.intent?.draft).filter(Boolean);
+    emit(frame, { type: "evimed.runtime-ui.ready" });
+    await waitFor(() => expect(post).toHaveBeenCalled());
+    const intent = { kind: "open", projectId: "default", sessionId: "session-a", owner: sessionOwner(), requestId: "guarded-private", draft: "Protected pending draft" } as const;
+    const state = { runtimeUiIntent: prepareRuntimeUiIntent(intent) };
+    expect(JSON.stringify(state)).not.toContain(intent.draft);
+    await act(() => router.navigate("/app/chat/session-a?result=next", { state }));
+    await userEvent.click(screen.getByRole("button", { name: "Cancel opening" }));
+    expect(pendingRuntimeUiIntent("default", "session-a")).toBeNull();
+    expect(drafts()).toEqual([]);
+    await act(() => router.navigate("/app/chat/session-a?result=next", { state }));
+    await userEvent.click(screen.getByRole("button", { name: "Proceed with opening" }));
+    expect(router.state.location.state).toEqual(state);
+    await waitFor(() => expect(pendingRuntimeUiIntent("default", "session-a")).toEqual(intent));
+    const currentFrame = view.container.querySelector("iframe")!;
+    const currentPost = currentFrame === frame ? post : vi.spyOn(currentFrame.contentWindow!, "postMessage");
+    if (currentFrame !== frame) emit(currentFrame, { type: "evimed.runtime-ui.ready" });
+    await waitFor(() => expect(currentPost.mock.calls.map(([command]) => command.intent?.draft).filter(Boolean)).toEqual([intent.draft]));
+  } finally {
+    vi.stubGlobal("Request", NativeRequest);
+  }
+});
+
+it("warns without recovering content when a document has only the opaque history marker", async () => {
+  const marker = { kind: "open", projectId: "default", sessionId: "session-a", requestId: "from-before-reload" };
+  const view = mount({ runtimeUiIntent: marker }, "/app/chat/session-a", true);
+  await waitFor(() => expect(view.container.querySelector("iframe")).not.toBeNull());
+  const frame = view.container.querySelector("iframe")!;
+  const post = vi.spyOn(frame.contentWindow!, "postMessage");
+  emit(frame, { type: "evimed.runtime-ui.ready" });
+  await waitFor(() => expect(post).toHaveBeenCalled());
+  expect(post.mock.calls[0][0].intent).not.toHaveProperty("draft");
+  expect(mocks.toastError).toHaveBeenCalledWith("上次尚未完成的对话请求未恢复。若有尚未交给对话的草稿，请重新输入。");
+});
+
+it("retries a failed current native delivery in a new frame with the same prepared draft", async () => {
+  const intent = { kind: "open", projectId: "default", sessionId: "session-a", owner: sessionOwner(), requestId: "retry-native-failure", draft: "Retry the same draft" } as const;
+  const state = { runtimeUiIntent: prepareRuntimeUiIntent(intent) };
+  const view = mount(state, "/app/chat/session-a", true);
+  await waitFor(() => expect(view.container.querySelector("iframe")).not.toBeNull());
+  const firstFrame = view.container.querySelector("iframe")!;
+  const firstWindow = firstFrame.contentWindow!;
+  const firstPost = vi.spyOn(firstWindow, "postMessage");
+  emit(firstFrame, { type: "evimed.runtime-ui.ready" });
+  await waitFor(() => expect(firstPost.mock.calls[0]?.[0].intent.draft).toBe(intent.draft));
+  emit(firstFrame, { type: "evimed.runtime-ui.ack", seq: 2, requestId: intent.requestId, ok: false });
+  await userEvent.click(await screen.findByRole("button", { name: "重试" }));
+  await waitFor(() => expect(view.container.querySelector("iframe")).not.toBeNull());
+  const secondFrame = view.container.querySelector("iframe")!;
+  expect(secondFrame).not.toBe(firstFrame);
+  const secondPost = vi.spyOn(secondFrame.contentWindow!, "postMessage");
+  emit(secondFrame, { type: "evimed.runtime-ui.ready" });
+  await waitFor(() => expect(secondPost.mock.calls[0]?.[0]).toMatchObject({ requestId: intent.requestId, intent: { draft: intent.draft } }));
+  emit(secondFrame, { type: "evimed.runtime-ui.ack", seq: 2, requestId: intent.requestId, sessionId: intent.sessionId, ok: true }, mocks.profile.uiOrigin, firstWindow);
+  expect(screen.getByTestId("state")).toHaveTextContent(intent.requestId);
+  emit(secondFrame, { type: "evimed.runtime-ui.ack", seq: 3, requestId: intent.requestId, sessionId: intent.sessionId, ok: true });
+  await waitFor(() => expect(screen.getByTestId("state")).not.toHaveTextContent(intent.requestId));
+});
+
+it("replaces a visited legacy history entry with only its locator and keeps the rest of its Router state", async () => {
+  const marker = { kind: "open", projectId: "default", sessionId: "session-a", requestId: "legacy-back" };
+  const legacy = { runtimeUiIntent: { ...marker, owner: "old-document", draft: "Old inline draft", references: [{ id: "source", title: "Old reference" }] }, extra: "keep" };
+  render(<MemoryRouter initialEntries={[
+    { pathname: "/app/chat/session-a", search: "?result=old", state: legacy },
+    "/app/chat/session-a?result=current",
+  ]} initialIndex={1}><PathProbe /><SessionFrameHost /><Routes><Route path="/app/chat/:sessionId" element={<SessionRoute />} /></Routes></MemoryRouter>);
+  await userEvent.click(screen.getByRole("button", { name: "Back" }));
+  await waitFor(() => expect(JSON.parse(screen.getByTestId("state").textContent ?? "{}")).toMatchObject({ runtimeUiIntent: marker, extra: "keep" }));
+  expect(screen.getByTestId("search")).toHaveTextContent("result=old");
+  await userEvent.click(screen.getByRole("button", { name: "Forward" }));
+  expect(screen.getByTestId("search")).toHaveTextContent("result=current");
+  await userEvent.click(screen.getByRole("button", { name: "Back" }));
+  expect(JSON.parse(screen.getByTestId("state").textContent ?? "{}")).toMatchObject({ runtimeUiIntent: marker, extra: "keep" });
+});

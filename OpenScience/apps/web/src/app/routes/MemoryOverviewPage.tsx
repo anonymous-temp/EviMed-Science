@@ -1,5 +1,5 @@
-import { useCallback, useMemo, useState } from "react";
-import { Navigate, useNavigate } from "react-router";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { Link, Navigate, useNavigate } from "react-router";
 import { Brain, X } from "lucide-react";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
@@ -15,6 +15,7 @@ import { headerControls, MemoryHeaderDrawers, type HeaderDrawer } from "@/compon
 import { ChangeChart } from "@/components/memory/overview/ChangeChart";
 import { ChangesTable } from "@/components/memory/overview/ChangesTable";
 import { ExplorePanel } from "@/components/memory/overview/ExplorePanel";
+import { MemoryPreview } from "@/components/memory/overview/MemoryPreview";
 import {
   changeEvents, changeRows, chosenExplore, exploreViews, growthOf, knowledgeCount, lastChangeDay, lookTableRows, narrowChanges, needsLook,
   overviewHeadline, RANGE_OPTIONS, rangeFrom, rangeWords, readable, receivedCounts, recentCount, rememberedCount, withinRange,
@@ -37,6 +38,7 @@ import { listAllMethods } from "@/lib/methodsClient";
 import { measurement, type MetricReading } from "@/lib/measurement";
 import { useProjectLabels } from "@/lib/projectNames";
 import { toast } from "@/lib/toast";
+import { useContainerNarrow } from "@/lib/useContainerNarrow";
 import { useNarrow } from "@/lib/useMediaQuery";
 
 /** Where each number of the headline and each tile leads: the list it counts. */
@@ -45,10 +47,10 @@ const METHODS = memoryTabAddress("methods");
 const RECEIVED = memoryTabAddress("received");
 
 /**
- * 「总览」: the capsule as one data page (DESIGN.md template T4), where `/app/memory` lands, beside the memory frame's left column. In the band,
+ * 「总览」: the capsule as one data page (DESIGN.md template T4), where `/app/memory` lands. In the band,
  * one toolbar row — the range, only what needs a look, and the search — that narrows everything below it together; then one sentence whose numbers
- * each open the list they count; 「记忆星图」, the page's one brand moment, wherever a real GPU and a wide screen can hold it; four tiles that are each a door to a list (关于你, 做法, 收到的, and 知识 in the knowledge base); 「变化」, what the
- * capsule gained and lost over time; 「关系与主题」 when there is enough to see; and the table behind the charts, 「最近变化」, whose rows open the
+ * each open the list they count; 「记忆星图」, the page's one brand moment, wherever a real GPU and a wide screen can hold it; a selected mark's preview beside it where it fits; four entries that each open a list (关于你, 做法, 收到的, and 知识 in the knowledge base); 「最近变化」 and the chart of what the
+ * capsule gained and lost over time; and 「关系与主题」 when there is enough to see. The change rows open the
  * same drawers the marks do. There is no 项目 tile since 2026-10-28: a project is a label on a memory, and its memories are counted in 关于你.
  *
  * The map was a tab of its own until 2026-10-27: it was a dashboard, and a dashboard that is not the landing is a page nobody finds. Its relation
@@ -59,6 +61,16 @@ const RECEIVED = memoryTabAddress("received");
  * sources failed, so a number whose source failed says so instead of drawing zero), the learned methods and the packs received each have a read of
  * their own. The sentence names only what was read. An account with no memory and no learned method has no sentence, no chart and no table: one
  * recipe with one button, under the tiles.
+ *
+ * Anatomy: scope, summary, sky and preview, category links, change list and chart, relations.
+ * Variants: dynamic sky and the existing compact exploration fallback.
+ * States: each independently read area keeps its empty, loading, failure and retry behavior.
+ * Hit area: chart and list use their existing marks, row targets and shared controls.
+ * Keyboard: category links and change controls keep their native focus order.
+ * Long content: chart and list stay within their columns and retain their own detail targets.
+ * Theme: the page uses the existing semantic surfaces and sky palette.
+ * Responsive: the sky and preview share a row where the overview has room; compact marks open their detail drawer.
+ * Verification: MemoryOverviewPage.test.tsx and memoryOverviewComposition.test.tsx.
  */
 export function MemoryOverviewPage() {
   const feature = useMemoryMapFeature();
@@ -77,12 +89,14 @@ function reading(value: number | null, loading: boolean, failed: boolean, retry:
 
 function Overview() {
   const phone = useNarrow();
+  const layout = useRef<HTMLDivElement>(null);
+  const compact = useContainerNarrow(layout, 960);
   const starAllowed = useStarAllowed();
   const [starLost, setStarLost] = useState(false);
   const navigate = useNavigate();
   useMemoryWritePrompt();
   const labels = useProjectLabels();
-  const { selection, search, setExplore, narrow, clear, drawer } = useOverviewSelection();
+  const { selection, search, setExplore, narrow, clear, drawer, preview } = useOverviewSelection();
   const [header, setHeader] = useState<HeaderDrawer | null>(null);
   const map = useMemoryMap({ projectId: selection.project, range: "all", focus: null, depth: 1 }, MAP_INCLUDE_DASHBOARD);
   const received = useCapsuleData(fetchReceivedCapsules);
@@ -144,7 +158,7 @@ function Overview() {
     else if (target.kind === "forgotten") setHeader({ kind: "forgotten" });
     else navigate("/app/files");
   }, [drawer, navigate]);
-  const openNode = useCallback((node: MapNode) => {
+  const openNodeDirect = useCallback((node: MapNode) => {
     if (node.open?.kind === "record" || node.open?.kind === "entry" || node.open?.kind === "method") drawer.open(`${node.open.kind}:${node.open.id}`);
     else if (node.open?.kind === "page") navigate(node.open.href);
     else if (node.type === "entity" || node.type === "page") {
@@ -153,6 +167,10 @@ function Overview() {
     // A project's memories are the last group of 关于你.
     } else if (node.type === "project" || node.type === "cluster") navigate(SELF);
   }, [drawer, navigate, doc, selection.project]);
+  const openNode = useCallback((node: MapNode) => {
+    if (!compact && node.open) preview.open(node.id);
+    else openNodeDirect(node);
+  }, [compact, openNodeDirect, preview]);
   /** 「这条关联不对」: the line stays out of this person's map; the toast takes it back. */
   const hideEdge = useCallback(async (edge: MapEdge) => {
     if (!edge.id) return;
@@ -192,10 +210,14 @@ function Overview() {
     .filter((node) => node.state === "replaced" && node.open?.kind === "record" && node.open.id === recordId)
     .map((node) => ({ id: node.id.slice("memory:".length), text: node.label, until: node.until ?? null })), [doc]);
   // Any drawer a mark can open lights that mark: a memory, a note of the capsule's or a method.
+  const previewNodes = narrowed?.nodes ?? [];
+  const previewNode = preview.value
+    ? previewNodes.find((node) => node.id === preview.value) ?? null
+    : previewNodes.find((node) => (node.type === "memory" || node.type === "method") && node.state !== "replaced" && node.open) ?? null;
   const selectedMark = (() => {
     const [kind, ...rest] = (drawer.value ?? "").split(":");
     const id = rest.join(":");
-    if (!id || !["record", "entry", "method"].includes(kind)) return null;
+    if (!id || !["record", "entry", "method"].includes(kind)) return !compact ? previewNode?.id ?? null : null;
     return doc?.nodes.find((node) => node.open?.kind === kind && "id" in node.open && node.open.id === id && node.state !== "replaced")?.id ?? null;
   })();
   const partial = doc && doc.missing.length > 0 ? doc.missing : [];
@@ -208,22 +230,29 @@ function Overview() {
   const loadingMap = !doc && !map.failed;
   const retry = map.reload;
   const note = (value: number) => (value > 0 ? `近 30 天 +${value}` : undefined);
+  const unavailableLinks = [
+    ...((failed || (doc && !memoriesRead)) ? [{ label: "关于你", to: SELF }] : []),
+    ...(learned.failed && !learned.data ? [{ label: "做法", to: METHODS }] : []),
+    ...(received.failed && !received.data ? [{ label: "收到的", to: RECEIVED }] : []),
+    ...((failed || (doc && !knowledgeRead)) ? [{ label: "知识", to: "/app/files" }] : []),
+  ];
 
+  const tileLayout = "grid min-h-14 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 px-3 py-2 pr-8 [&>span:first-child]:pr-0 [&>span:first-child]:text-ui [&>span:nth-of-type(4)]:col-span-2 [&_[data-stat-value]]:m-0 [&_[data-stat-value]]:text-heading [&_[data-stat-value]]:font-normal";
   const tiles = (
-    <StatBand label="记忆胶囊的四个数字" columns={4} separate dense>
+    <StatBand label="记忆胶囊的四个数字" columns={4} dense className="[&>div]:rounded-none [&>div]:border-0 [&>div]:bg-transparent [&>div>*]:border-t-0">
       <StatTile
-        whole dense label="关于你" reading={reading(about, loadingMap, failed, retry)} to={SELF}
+        whole dense className={tileLayout} label="关于你" reading={reading(about, loadingMap, failed, retry)} to={SELF}
         note={about !== null && growthRead ? note(recent((event) => event.lane === "noted")) : undefined}
       />
       <StatTile
-        whole dense label="做法" reading={reading(methodCount, !learned.data && !learned.failed, learned.failed, learned.reload)} to={METHODS}
+        whole dense className={tileLayout} label="做法" reading={reading(methodCount, !learned.data && !learned.failed, learned.failed, learned.reload)} to={METHODS}
         note={methodCount !== null ? note(recent((event) => event.lane === "learned")) : undefined}
       />
       <StatTile
-        whole dense label="收到的" reading={reading(packs ? packs.enabled : null, !received.data && !received.failed, received.failed, received.reload)} to={RECEIVED}
+        whole dense className={tileLayout} label="收到的" reading={reading(packs ? packs.enabled : null, !received.data && !received.failed, received.failed, received.reload)} to={RECEIVED}
         note={packs ? `共 ${packs.all} 个` : undefined}
       />
-      <StatTile whole dense leaves label="知识" reading={reading(documents, loadingMap, failed, retry)} to="/app/files" />
+      <StatTile whole dense leaves className={tileLayout} label="知识" reading={reading(documents, loadingMap, failed, retry)} to="/app/files" />
     </StatBand>
   );
 
@@ -235,7 +264,7 @@ function Overview() {
       onChooseTopic={(topic) => narrow({ topic })} onHideEdge={hideEdge} onChanged={map.reload} onStarUnavailable={() => setStarLost(true)}
     />
   ) } : null;
-  const changes = doc && !empty && growthRead && growth ? { key: "changes", span: 2 as const, node: (
+  const changes = doc && !empty && growthRead && growth && (
     <ChangeChart
       state="content" growth={growth} events={shown} timeZone={timeZone} words={rangeWords(selection.range)} selectedWeek={selection.week}
       emptyText={events.length === 0 ? "还没有变化。" : "这个范围里没有变化。"} onRetry={reloadAll}
@@ -247,12 +276,10 @@ function Overview() {
       }}
       onSelectWeek={(start) => narrow({ week: selection.week === start ? null : start })}
     />
-  ) } : null;
+  );
   // The sky leads the page when there is one, above the tiles, wherever the reader has switched to, so the switch does not move the card under them. Else the page tells
   // what changed first and the picture stands under that, as it did before there was a sky.
   const leads = views.includes("star");
-  const gridRows = (leads ? [changes] : [changes, explorePanel]).filter((row) => row !== null);
-  const grid = doc && !empty && gridRows.length > 0 && <ChartGrid rows={gridRows.map((row) => [row])} />;
 
   const table = doc && !empty && growthRead && (
     rows.length > 0
@@ -273,20 +300,33 @@ function Overview() {
       controls={headerControls({ onChanged: reloadAll, onDrawer: setHeader })}
       headline={headline ? { parts: headline, id: "memory-overview-headline" } : undefined}
     >
-      <div className="space-y-6">
-        {failed && <LoadError message="暂时读不到记忆。" onRetry={map.reload} />}
-        {partial.length > 0 && <LoadError message="有一部分记忆没有读到，对应的数字先不显示。" onRetry={map.reload} />}
-        {leads && !empty && explorePanel && <ChartGrid rows={[[explorePanel]]} />}
-        {tiles}
-        {empty && (
-          <EmptyState
-            icon={Brain} title="还没有记下关于你的事。" description="在对话里说“记住…”，或把其他 AI 记住的内容搬过来。"
-            action={<Button variant="secondary" onClick={() => setHeader({ kind: "import" })}>从其他 AI 导入</Button>}
-          />
-        )}
-        {doc && !empty && !growthRead && <LoadError message="暂时读不到变化。" onRetry={reloadAll} />}
-        {grid}
-        {table}
+      <div ref={layout} className="min-w-0">
+        <div className={!compact && explorePanel && !empty ? "grid grid-cols-[minmax(0,1fr)_16rem] items-start gap-7" : undefined}>
+          <div className="min-w-0 space-y-6">
+            {failed && <LoadError message="暂时读不到记忆。" onRetry={map.reload} />}
+            {partial.length > 0 && <LoadError message="有一部分记忆没有读到，对应的数字先不显示。" onRetry={map.reload} />}
+            {unavailableLinks.length > 0 && <nav aria-label="查看未读到的分类" className="flex flex-wrap gap-x-4 gap-y-2 text-ui">
+              {unavailableLinks.map((item) => <Link key={item.to} to={item.to} className="rounded text-link underline">查看{item.label}</Link>)}
+            </nav>}
+            {(leads || !compact) && !empty && explorePanel && <ChartGrid rows={[[explorePanel]]} />}
+            {tiles}
+            {empty && (
+              <EmptyState
+                icon={Brain} title="还没有记下关于你的事。" description="在对话里说“记住…”，或把其他 AI 记住的内容搬过来。"
+                action={<Button variant="secondary" onClick={() => setHeader({ kind: "import" })}>从其他 AI 导入</Button>}
+              />
+            )}
+            {doc && !empty && !growthRead && <LoadError message="暂时读不到变化。" onRetry={reloadAll} />}
+            {leads || !compact ? <>{table}{changes}</> : <>
+              {changes}
+              {doc && !empty && explorePanel && <ChartGrid rows={[[explorePanel]]} />}
+              {table}
+            </>}
+          </div>
+          {!compact && explorePanel && !empty && (
+            <MemoryPreview node={previewNode} doc={doc} methods={learned.data} projectName={projectName} onSelect={(node) => preview.open(node.id)} onOpen={openNodeDirect} />
+          )}
+        </div>
       </div>
       {drawer.value && !pack && !drawer.value.startsWith("pack:") && (
         <MapDrawer

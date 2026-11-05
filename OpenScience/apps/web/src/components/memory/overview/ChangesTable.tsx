@@ -14,9 +14,18 @@ export const TABLE_FIRST = 12;
  * and each row says why. Documents added on one day are one row, and it leaves the section (↗) for the knowledge base, as a row of a list
  * that goes to a page of its own does.
  *
- * It is a card of the kind the charts are — a heading, the number of rows at its end, the rows under it — so the page stacks one kind of block and
- * the table reads as what stands behind the charts. It shares the chart's selection: a range, a week, a topic and the search narrow both, and
+ * It shares the chart's selection: a range, a week, a topic and the search narrow both, and
  * the rows are what a screen reader gets of the chart.
+ *
+ * Anatomy: heading, real change count, list and continuation control.
+ * Variants: all changes or the subset that needs a look.
+ * States: the caller supplies the actual rows and handles empty or failed reads.
+ * Hit area: shared ListRow targets and ShowMore control.
+ * Keyboard: row actions and continuation keep their native focus behavior.
+ * Long content: row text is excerpted and the full item opens from the row.
+ * Theme: page surface and semantic text roles.
+ * Responsive: rows fill the available reading column.
+ * Verification: MemoryOverviewPage tests and fixture walkthrough.
  */
 export function ChangesTable({ title, rows, label, onOpen }: {
   title: string;
@@ -26,7 +35,7 @@ export function ChangesTable({ title, rows, label, onOpen }: {
 }) {
   const { visible, remaining, more } = useShowMore(rows, { first: TABLE_FIRST, step: 12, resetKey: `${label}|${rows.length}|${rows[0]?.key ?? ""}` });
   return (
-    <ChartCard title={title} meta={rows.length}>
+    <ChartCard title={title} meta={rows.length} className="rounded-none border-0 bg-transparent p-0">
       <List label={label}>
         {visible.map((row) => (
           <ListRow

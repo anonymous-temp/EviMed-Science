@@ -123,3 +123,27 @@ test("a round that heard no answer is neither the spine's latest or baseline rou
   const dxy = sources.sources.find((/** @type {any} */ row) => row.domain === "dxy.cn");
   assert.deepEqual([dxy?.cited, dxy?.mentionsOurs], [{ deepseek: 1 }, 1], "the sources page counts the latest round with answers, not the empty week (all zero)");
 });
+
+test('monitoring distinguishes no net-effect row from an unversioned historical row', options, async () => {
+  const userId = `u-${randomUUID().slice(0, 8)}`;
+  const project = await store.createProject({ userId, projectId: 'p-net-state', engines: ['deepseek'], coverageDays: 90, product: {} });
+  const service = new GeoService({ store, config: CONFIG });
+  const empty = (await service.monitoring({ id: userId }, project.id)).arms.netEffect;
+  assert.equal(empty.status, 'absent');
+  assert.notEqual(empty.reason, 'judge_version_unrecorded');
+  await database.query(`INSERT INTO evimed_geo.metrics(id,user_id,geo_project_id,scope,metric_id,variant,status,value,data_type)
+    VALUES('net-history',$1,$2,'project','NET','M-19','ok',12,'derived')`, [userId,project.id]);
+  const old = (await service.monitoring({ id: userId }, project.id)).arms.netEffect;
+  assert.equal(old.status, 'not_measurable');
+  assert.equal(old.reason, 'judge_version_unrecorded');
+  assert.equal(old.value, null);
+  let spine = await service.spine.load(project);
+  assert.equal(spine.arms['all|M-19'].reason, 'judge_version_unrecorded');
+  for (const reason of ['no_follow_up', 'too_few_control_groups']) {
+    await database.query('UPDATE evimed_geo.metrics SET status=$1,reason=$2,value=NULL WHERE id=$3', ['not_measurable',reason,'net-history']);
+    const reading = (await service.monitoring({ id:userId },project.id)).arms.netEffect;
+    assert.equal(reading.reason,reason);
+    spine = await service.spine.load(project);
+    assert.equal(spine.arms['all|M-19'].reason,reason);
+  }
+});

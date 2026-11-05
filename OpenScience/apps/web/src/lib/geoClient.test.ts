@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const network = vi.hoisted(() => ({ productRequest: vi.fn() }));
 vi.mock("./productClient", () => ({ productRequest: network.productRequest }));
 
-import { exportGeo, getGeoProgrammeRuns, releaseGeoArticle, runGeoStep } from "./geoClient";
+import { exportGeo, getGeoArticleCatalog, getGeoProgrammeRuns, releaseGeoArticle, runGeoStep } from "./geoClient";
 
 beforeEach(() => network.productRequest.mockReset());
 
@@ -56,4 +56,17 @@ it("sends the observed immutable article version and digest with a release", asy
   const observed = { expectedResultVersionId: `rv_${"a".repeat(64)}`, expectedDigest: "a".repeat(64) };
   await releaseGeoArticle("geo_1", "article_1", observed);
   expect(network.productRequest).toHaveBeenCalledWith("/geo/projects/geo_1/articles/article_1/release", "POST", observed);
+});
+
+it("refuses a legacy or mismatched article page instead of presenting it as a complete catalogue", async () => {
+  const input = { search: "药品", status: "all", sort: "title", limit: 20, offset: 20, snapshot: "a".repeat(32) };
+  network.productRequest.mockResolvedValueOnce({ articles: [] });
+  await expect(getGeoArticleCatalog("geo_1", input)).rejects.toThrow(/catalogue is unavailable/);
+  network.productRequest.mockResolvedValueOnce({ articles: [], total: 23, limit: 20, offset: 20, snapshot: "b".repeat(32) });
+  await expect(getGeoArticleCatalog("geo_1", input)).rejects.toThrow(/catalogue is unavailable/);
+  network.productRequest.mockResolvedValueOnce({ articles: [], total: 23, limit: 20, offset: 20, snapshot: input.snapshot });
+  await expect(getGeoArticleCatalog("geo_1", input)).resolves.toMatchObject({ total: 23, snapshot: input.snapshot });
+  const url = new URL(network.productRequest.mock.calls.at(-1)?.[0], "https://example.test");
+  expect(url.searchParams.get("search")).toBe("药品");
+  expect(url.searchParams.get("snapshot")).toBe(input.snapshot);
 });

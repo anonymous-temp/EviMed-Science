@@ -1,12 +1,12 @@
 /** Exact engine and versioned group-engine buckets; domain owns metric arithmetic. */
 import { createHash } from 'node:crypto';
-import { documentExportDigest, geoMetricMembers, GEO_ENGINE_LABELS_ZH, GEO_METRIC_LABELS_ZH, GEO_METRIC_UNITS, GEO_POOL_LABELS_ZH } from '@evimed/domain';
+import { documentExportDigest, geoMetricDefinition, geoMetricMembers, GEO_ENGINE_LABELS_ZH, GEO_METRIC_LABELS_ZH, GEO_METRIC_UNITS, GEO_POOL_LABELS_ZH } from '@evimed/domain';
 /** A reader's name for a pool or an engine in a row label; the code stays in the row's dimensions. @param {string | null | undefined} code */
 const poolName = code => code ? GEO_POOL_LABELS_ZH[code] ?? code : code;
 /** @param {string | null | undefined} code */
 const engineName = code => code ? GEO_ENGINE_LABELS_ZH[code] ?? code : code;
 import { computeGeoSelection } from './geoReadScope.mjs';
-import { geoComparisonMembers } from './geoComparison.mjs';
+import { geoComparisonMembers, geoComparisonSurfaceKey } from './geoComparison.mjs';
 import { brandRegistry, registryKey, foldText } from './geoParse.mjs';
 import { HttpError } from './security.mjs';
 const hash = value => createHash('sha256').update(documentExportDigest(value)).digest('hex');
@@ -155,7 +155,7 @@ export function buildGeoMetricAnalysis(selected, view, context = {}) {
   ];
   return {
     definition: {
-      metricId: view.metricId, unit: generic ? 'answers' : 'metric_inputs', methodVersion: selected.selection.methodVersion, dataType: generic ? 'observed_generic_facts' : 'domain_metric', countingRule: generic ? `当前配置通用名：${entityKey}。按保留的历史实体提取统计；当前名称不代表历史登记，也不由品牌提及推断。` : 'Existing domain metric computed over the exact engine and versioned group intersection.', denominatorRule: generic ? 'Valid deduplicated answers; exact preserved entity extraction, unknown extraction and positive mentions are separate counts. An absent generic entry is unknown, not a measured negative.' : 'Existing domain eligibility and floors; engine inputs use the canonical deduplicated cohort.'
+      metricId: view.metricId, unit: generic ? 'answers' : 'metric_inputs', methodVersion: selected.selection.methodVersion, dataType: generic ? 'observed_generic_facts' : 'domain_metric', countingRule: generic ? `当前配置通用名：${entityKey}。按保留的历史实体提取统计；当前名称不代表历史登记，也不由品牌提及推断。` : (view.metricId === 'M-13' && geoMetricDefinition(view.metricId)?.note) || 'Existing domain metric computed over the exact engine and versioned group intersection.', denominatorRule: generic ? 'Valid deduplicated answers; exact preserved entity extraction, unknown extraction and positive mentions are separate counts. An absent generic entry is unknown, not a measured negative.' : 'Existing domain eligibility and floors; engine inputs use the canonical deduplicated cohort.'
     }, contextualBasis: [
       {
         kind: 'metric_entities_and_groups', id: 'project', version: null, digest: hash({
@@ -185,11 +185,12 @@ export function buildGeoComparisonAnalysis(selected, view, context = {}) {
     for (const entry of candidates) {
         if (entry.scope !== view.dimension || view.metricId && entry.metricId !== view.metricId || entry.variant || entry.rival || entry.arm)
             continue;
-        const dims = { scope: entry.scope, engine: entry.engine, groupId: entry.groupId, pool: entry.pool, groupName: (context.groups ?? []).find(group=>group.id===entry.groupId)?.name??null, comparisonMode: comparison?.mode ?? null, currentSelection: comparison?.currentSelection?.reference ?? selected.selection.reference, previousSelection: comparison?.previousSelection?.reference ?? null };
+        const entryCohorts = entry.cohorts ?? cohorts;
+        const dims = { scope: entry.scope, engine: entry.engine, groupId: entry.groupId, pool: entry.pool, groupName: (context.groups ?? []).find(group=>group.id===entry.groupId)?.name??null, comparisonMode: comparison?.mode ?? null, currentSelection: entryCohorts?.current?.selection.reference ?? comparison?.currentSelection?.reference ?? selected.selection.reference, previousSelection: entryCohorts?.previous?.selection.reference ?? comparison?.previousSelection?.reference ?? null };
         const row = { key: hash([entry.metricId, dims]), label: [GEO_METRIC_LABELS_ZH[entry.metricId], engineName(entry.engine), dims.groupName, poolName(entry.pool)].filter(Boolean).join(' · '), metricId: entry.metricId, dimensions: dims, values: {}, links: [] };
         const members = {};
         for (const period of ['previous', 'current']) {
-            const metric = entry[period], source = cohorts?.[period] ?? (period === 'current' ? selected : null);
+            const metric = entry[period], source = entryCohorts?.[period] ?? (period === 'current' ? selected : null);
             const selectedMembers = source ? geoComparisonMembers(source, metric) : { rows: [], unit: 'answers' };
             memberItems.set(`${row.key}:${period}`, selectedMembers.rows.map(item => memberItem(item, selectedMembers.unit)));
             members[period] = selectedMembers.rows.length;
@@ -210,7 +211,7 @@ export function buildGeoComparisonAnalysis(selected, view, context = {}) {
         if (row.values.delta.value !== null)
             row.values.rank = { ...row.values.rank, value: ++rank, state: 'known', reason: null };
     const columns = [['rank', '可比变化排序'], ['previous', '对照实测'], ['current', '所选实测'], ['delta', '变化（百分点或指标原尺度）'], ['previousEligible', '对照合资格成员'], ['currentEligible', '所选合资格成员'], ['previousExcluded', '对照范围排除回答'], ['currentExcluded', '所选范围排除回答']].map(([key, label]) => ({ key, label, type: 'number' }));
-    return { definition: { metricId: view.metricId, unit: 'metric', methodVersion: selected.selection.methodVersion, dataType: 'observational_comparison', countingRule: '只对相同问题、平台、采样方式、测量约定和指标合资格成员的可测读数排序。比例变化以百分点表示；综合指数还须保持组成指标与有效权重一致。', denominatorRule: '两期分别保留精确合资格成员与共同范围排除数；不可比或样本不足保留读数和原因，不参与排序。' }, contextualBasis: [], columns, rows, chart: { kind: 'comparison', labels: rows.map(row => row.label), series: [], cells: rows.map(row => ({ rowKey: row.key, columnKey: 'current', label: row.label, engine: row.dimensions.engine, pool: row.dimensions.pool, value: row.values.delta.value, state: row.values.delta.state, reason: row.values.delta.reason, unit: row.values.delta.unit })) }, memberItems, dependencies: [cohorts?.current?.selection, cohorts?.previous?.selection, cohorts?.current?.rows, cohorts?.previous?.rows], availability: { status: comparison ? 'ready' : 'partial', reasons: comparison ? [] : ['comparison_not_selected'], remedy: comparison ? null : 'choose_comparison' } };
+    return { definition: { metricId: view.metricId, unit: 'metric', methodVersion: selected.selection.methodVersion, dataType: 'observational_comparison', countingRule: `只对相同问题、平台、采样方式、测量约定和指标合资格成员的可测读数排序。比例变化以百分点表示；综合指数还须保持组成指标与有效权重一致。${view.metricId === 'M-13' ? geoMetricDefinition('M-13')?.note ?? '' : ''}`, denominatorRule: '两期分别保留精确合资格成员与共同范围排除数；不可比或样本不足保留读数和原因，不参与排序。' }, contextualBasis: [], columns, rows, chart: { kind: 'comparison', labels: rows.map(row => row.label), series: [], cells: rows.map(row => ({ rowKey: row.key, columnKey: 'current', label: row.label, engine: row.dimensions.engine, pool: row.dimensions.pool, value: row.values.delta.value, state: row.values.delta.state, reason: row.values.delta.reason, unit: row.values.delta.unit })) }, memberItems, dependencies: [cohorts?.current?.selection, cohorts?.previous?.selection, cohorts?.current?.rows, cohorts?.previous?.rows], availability: { status: comparison ? 'ready' : 'partial', reasons: comparison ? [] : ['comparison_not_selected'], remedy: comparison ? null : 'choose_comparison' } };
 }
 /** Stable project registration keys; never infer competitors from answer text. */
 export function geoRivalEntityKey(entity) { return String(entity.id ?? entity.key ?? entity.brandName ?? entity.genericName ?? ''); }
@@ -343,10 +344,22 @@ export function buildGeoRivalAnalysis(selected, view, context = {}) {
         ];
         return [cellOf(row, 'current', row.dimensions.own, row.dimensions.entityLabel)];
     });
+    let unknownRivalTrend = false;
     const series = selectedRows.flatMap(row => {
         if (row.dimensions.own && row.dimensions.entityKind === 'brand' && hasBrandRival) return [];
         const matching = points.filter(point => point.dimensions.entityKey === row.dimensions.entityKey && point.dimensions.pool === row.dimensions.pool);
         const paired = !row.dimensions.own && row.dimensions.entityKind === 'brand';
+        const relevant = selected.rows.filter(item => item.pool === row.dimensions.pool && item.surface?.mode !== 'inclusion' && (item.status === 'valid' || item.status === 'refusal'));
+        const versions = new Set(relevant.filter(item => item.status === 'valid' || item.facts).map(item => item.facts?.judgedAt && item.facts?.checks?.judgementCoverage?.status === 'complete' && item.facts?.judgeExtract?.rubricVersion || null));
+        const surfacesByEngine = new Map();
+        for (const item of relevant) {
+            const surfaces = surfacesByEngine.get(item.engine) ?? new Set();
+            surfaces.add(geoComparisonSurfaceKey(item.surface)); surfacesByEngine.set(item.engine, surfaces);
+        }
+        const comparable = relevant.length > 0 && versions.size <= 1 && !versions.has(null)
+            && [...surfacesByEngine.values()].every(surfaces => surfaces.size === 1);
+        if (!comparable && matching.length > 1) unknownRivalTrend = true;
+        for (const point of matching) point.dimensions.trendComparable = comparable;
         return (paired ? ['pairedOwn', 'current'] : ['current']).map(columnKey => ({
             key: hash([row.dimensions.entityKey, row.dimensions.pool, columnKey]),
             label: `${columnKey === 'pairedOwn' ? `${ownName}（同一合资格回答）` : row.dimensions.entityLabel} · ${poolName(row.dimensions.pool)}`,
@@ -354,17 +367,17 @@ export function buildGeoRivalAnalysis(selected, view, context = {}) {
             comparisonKey: paired ? comparisonKey(row) : null,
             comparisonLabel: paired ? `${row.dimensions.entityLabel} · ${row.dimensions.pool}` : null,
             unit: row.values[columnKey].unit,
-            values: matching.map(point => point.values[columnKey].state === 'known' ? point.values[columnKey].value : null),
+            values: matching.map(point => comparable && point.values[columnKey].state === 'known' ? point.values[columnKey].value : null),
         }));
     });
-    return { definition: { metricId: view.metricId, unit: 'percent', methodVersion: selected.selection.methodVersion, dataType: 'registered_competitor_metrics', countingRule: view.metricId === 'M-17' ? '所选回答与已登记品牌集合的相对提及声量份额；仅用于明确选择该指标并记录实体集合的测量，不代表市场份额。' : '各问句池分别计算已登记竞品的阳性提及回答 / 合资格回答，本品使用相同合资格回答；通用名独立观测，不汇总为整体竞品指标。', denominatorRule: '按原有领域指标的去重、平衡、适用性和样本要求计算。未保存登记依据的历史缺席保持未知；每个池、日期和实际轮次独立计算。' }, contextualBasis: [{ kind: 'registered_entities', id: 'project', version: null, digest: hash({ product, competitors, rounds: selected.rounds.map(round => [round.id, round.ref?.evaluationBasis, round.surface?.measurementContract]) }), temporalBasis: 'recorded_when_available_current_context_otherwise' }], columns: [{ key: 'current', label: view.metricId === 'M-17' ? '相对提及份额 / 通用名观测（回答）' : '提及率 / 通用名观测', type: 'number' }, { key: 'pairedOwn', label: '同一合资格回答中的本品', type: 'number' }, { key: 'mentioned', label: '阳性提及回答', type: 'number' }, { key: 'eligible', label: '登记依据完整的回答', type: 'number' }, { key: 'unknown', label: '历史依据未知的回答', type: 'number' }], rows, chart: { kind: 'rivals', labels, series, cells: chartCells }, memberItems, dependencies: [selected.rows, selected.metricOptions, selected.rounds], availability: { status: rows.length ? 'ready' : 'empty', reasons: rows.some(row => row.values.unknown.value > 0) ? ['rival_history_unknown'] : [], remedy: null } };
+    return { definition: { metricId: view.metricId, unit: 'percent', methodVersion: selected.selection.methodVersion, dataType: 'registered_competitor_metrics', countingRule: view.metricId === 'M-17' ? '所选回答与已登记品牌集合的相对提及声量份额；仅用于明确选择该指标并记录实体集合的测量，不代表市场份额。' : '各问句池分别计算已登记竞品的阳性提及回答 / 合资格回答，本品使用相同合资格回答；通用名独立观测，不汇总为整体竞品指标。', denominatorRule: '按原有领域指标的去重、平衡、适用性和样本要求计算。未保存登记依据的历史缺席保持未知；每个池、日期和实际轮次独立计算。' }, contextualBasis: [{ kind: 'registered_entities', id: 'project', version: null, digest: hash({ product, competitors, rounds: selected.rounds.map(round => [round.id, round.ref?.evaluationBasis, round.surface?.measurementContract]) }), temporalBasis: 'recorded_when_available_current_context_otherwise' }], columns: [{ key: 'current', label: view.metricId === 'M-17' ? '相对提及份额 / 通用名观测（回答）' : '提及率 / 通用名观测', type: 'number' }, { key: 'pairedOwn', label: '同一合资格回答中的本品', type: 'number' }, { key: 'mentioned', label: '阳性提及回答', type: 'number' }, { key: 'eligible', label: '登记依据完整的回答', type: 'number' }, { key: 'unknown', label: '历史依据未知的回答', type: 'number' }], rows, chart: { kind: 'rivals', labels, series, cells: chartCells }, memberItems, dependencies: [selected.rows, selected.metricOptions, selected.rounds], availability: { status: rows.length ? 'ready' : 'empty', reasons: [...(rows.some(row => row.values.unknown.value > 0) ? ['rival_history_unknown'] : []), ...(unknownRivalTrend ? ['judge_version_unknown_or_mixed'] : [])], remedy: null } };
 }
 /** Compatibility projection has no arithmetic: each own point is the rival's exact eligible-cohort domain reading. */
 export function geoRivalMonitoringRows(analysis) {
     const keys = [...new Set(analysis.rows.filter(row => !row.dimensions.own && row.dimensions.entityKind === 'brand').map(row => documentExportDigest([row.dimensions.entityKey, row.dimensions.pool])))];
     return keys.map(key => {
         const rows = analysis.rows.filter(row => documentExportDigest([row.dimensions.entityKey, row.dimensions.pool]) === key && row.dimensions.period === 'day'), summary = analysis.rows.find(row => documentExportDigest([row.dimensions.entityKey, row.dimensions.pool]) === key);
-        const point = (row, column) => { const value = row.values[column]; return { date: row.dimensions.date, value: value.state === 'known' ? value.value : null, n: value.metric?.denominator ?? null, k: value.metric?.numerator ?? null, coverage: documentExportDigest([row.dimensions.pool, row.dimensions.registryBasis]), status: value.state, analysisMembers: value.members ?? null }; };
+        const point = (row, column) => { const value = row.values[column]; return { date: row.dimensions.date, value: value.state === 'known' ? value.value : null, n: value.metric?.denominator ?? null, k: value.metric?.numerator ?? null, coverage: row.dimensions.trendComparable === false ? null : documentExportDigest([row.dimensions.pool, row.dimensions.registryBasis]), status: value.state, analysisMembers: value.members ?? null }; };
         return { name: summary.dimensions.entityName, label: `${summary.dimensions.entityLabel??summary.dimensions.entityName} · ${poolName(summary.dimensions.pool)}`, entityKey: summary.dimensions.entityKey, pool: summary.dimensions.pool, points: rows.map(row => point(row, 'current')), ownPoints: rows.map(row => point(row, 'pairedOwn')), unknownTimeCount: analysis.selection.timeCoverage?.unknownTime ?? 0 };
     });
 }

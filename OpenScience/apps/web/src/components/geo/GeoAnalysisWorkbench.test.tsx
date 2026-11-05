@@ -1,16 +1,19 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router';
+import userEvent from '@testing-library/user-event';
+import { MemoryRouter, useLocation, useNavigate } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { WorkspaceSplit } from '@/components/workspace/WorkspaceSplit';
 import { GeoAnalysisWorkbench } from './GeoAnalysisWorkbench';
 import { normalizeGeoAnalysisView } from '../../../../server/src/geoAnalysisRegistry.mjs';
 const read=vi.hoisted(()=>vi.fn());
 const memberRead=vi.hoisted(()=>vi.fn());
+const observations=vi.hoisted(()=>vi.fn());
 const navigation=vi.hoisted(()=>({open:vi.fn(),create:vi.fn(),current:vi.fn(),stage:vi.fn(),scope:vi.fn(),publication:vi.fn()}));
 vi.mock('@/lib/geoAnalysisClient',()=>({getGeoAnalysis:read,getGeoAnalysisMembers:memberRead}));
 vi.mock('./spine/useOpenPublication',()=>({useOpenPublication:()=>navigation.publication}));
 vi.mock('./useOpenGeoConversation',()=>({useOpenGeoConversation:()=>navigation.open}));
 vi.mock('@/lib/geoNativeClient',async original=>({...await original<typeof import('@/lib/geoNativeClient')>(),openGeoConversation:navigation.create}));
-vi.mock('@/lib/geoClient',async original=>({...await original<typeof import('@/lib/geoClient')>(),getGeoProject:navigation.current,stageGeoPlanContext:navigation.stage}));
+vi.mock('@/lib/geoClient',async original=>({...await original<typeof import('@/lib/geoClient')>(),getGeoProject:navigation.current,stageGeoPlanContext:navigation.stage,getGeoObservations:observations,readGeoArticleVersion:navigation.publication}));
 vi.mock('@/components/document/DocumentExportActions',()=>({DocumentExportActions:({source}:{source:unknown})=><div data-testid="export">{JSON.stringify(source)}</div>}));
 vi.mock('./geoFrame',async original=>({...await original<typeof import('./geoFrame')>(),useGeoReadScope:()=>({round:'old'}),useGeoFrame:()=>({openAnalysisScope:navigation.scope})}));
 const project={projectId:'control',sessionId:'session'};
@@ -166,6 +169,23 @@ it('identifies a renamed generic as current configuration while retaining unknow
  expect(screen.getByTestId('export').textContent).toContain('Renamed');
 });
 
+it('shows the M-13 ratio with its real precision and explains the two question pools',async()=>{
+ const view={viewId:'V04',metricId:'M-13',dimension:'engine'};
+ read.mockResolvedValue({view,selection:{reference:'gsel_ratio'},digest:'ratio-digest',columns:[{key:'current',label:'所选实测'}],rows:[{key:'ratio',label:'品牌问法与品类问法提及率比值 · DeepSeek',metricId:'M-13',dimensions:{engine:'deepseek'},values:{current:{value:1.75,state:'known',unit:'ratio',metric:{value:1.75,numerator:70,denominator:40,status:'ok'},members:null}}}],page:{total:1,shown:1,nextOffset:null},availability:{status:'ready'}});
+ render(<MemoryRouter><GeoAnalysisWorkbench geoId="geo" project={project as never} initialDescriptor={view as never} embedded/></MemoryRouter>);
+ expect(await screen.findByText(/不是用户转化率/)).toBeVisible();
+ expect(screen.getByText('1.75 倍')).toBeVisible();
+ expect(screen.getByText(/70%\s*\/\s*40%/)).toBeVisible();
+});
+
+it('does not offer a cross-pool ratio for an individual question group',async()=>{
+ const view={viewId:'V05',metricId:'M-01',dimension:'group'};
+ read.mockResolvedValue({view,selection:{reference:'gsel_groups'},digest:'group-digest',columns:[],rows:[],page:{total:0,shown:0,nextOffset:null},availability:{status:'ready'}});
+ render(<MemoryRouter><GeoAnalysisWorkbench geoId="geo" project={project as never} initialDescriptor={view as never} embedded/></MemoryRouter>);
+ fireEvent.click(await screen.findByRole('button',{name:'指标：品牌提及率'}));
+ expect(screen.queryByRole('menuitemradio',{name:'品牌问法与品类问法提及率比值'})).toBeNull();
+});
+
 it('V03 keeps a working comparison action and both exact period member requests',async()=>{
  const view={viewId:'V03',metricId:'M-01',dimension:'engine'},member=(columnKey:string)=>({selectionRef:'gsel_compare',view,rowKey:'compared',columnKey,expectedDigest:'compare-digest',unit:'answers',total:1,exact:true});
  read.mockResolvedValue({view,selection:{reference:'gsel_compare'},digest:'compare-digest',columns:[{key:'previous',label:'对照实测'},{key:'current',label:'所选实测'},{key:'delta',label:'变化'}],rows:[{key:'compared',label:'品牌提及率',metricId:'M-01',dimensions:{},values:{previous:{value:0,state:'known',unit:'percent',metric:null,members:member('previous')},current:{value:20,state:'known',unit:'percent',metric:null,members:member('current')},delta:{value:null,state:'unknown',reason:'comparison_not_selected',metric:null,members:null}}}],page:{total:1,shown:1,nextOffset:null},availability:{status:'partial',reasons:['comparison_not_selected']}});
@@ -193,7 +213,7 @@ it('keeps source type, actual URL search and cooccurrence filters in the exact s
  fireEvent.click(screen.getByText('所选数据分析'));
  fireEvent.click(await screen.findByRole('button',{name:'来源类型'}));fireEvent.click(screen.getByRole('menuitemradio',{name:'forum'}));
  await waitFor(()=>expect(read).toHaveBeenLastCalledWith('geo',{round:'old'},expect.objectContaining({viewId:'V18',sourceType:'forum'}),0,undefined));
- fireEvent.click(screen.getByRole('button',{name:'共同出现：全部引用回答'}));fireEvent.click(screen.getByRole('menuitemradio',{name:'共同出现我方错误'}));
+ fireEvent.click(screen.getByRole('button',{name:'共同出现'}));fireEvent.click(screen.getByRole('menuitemradio',{name:'共同出现我方错误'}));
  fireEvent.click(screen.getByRole('button',{name:'排名对象：域名'}));fireEvent.click(screen.getByRole('menuitemradio',{name:'页面'}));
  const search=screen.getByRole('searchbox',{name:'搜索引用来源'});
  fireEvent.change(search,{target:{value:'s?id=251'}});
@@ -240,7 +260,11 @@ it('V21 stages an unsent next-steps draft with exact row, metric and frozen gaps
  expect(navigation.open).toHaveBeenCalledWith(expect.objectContaining({geoPlanContext:{referenceId:'gpc_opportunity'}}),'Unsent exact group plan');
  expect(screen.getByRole('link',{name:'登记自有发布地址'})).toBeTruthy();
  expect(screen.getByRole('link',{name:'https://shared.example/a?id=1'})).toHaveAttribute('href','https://shared.example/a?id=1');
- fireEvent.click(screen.getByRole('button',{name:/稿件 1 · 查看发布版本/}));expect(navigation.publication).toHaveBeenCalledWith('001','a'.repeat(64));
+ navigation.publication.mockResolvedValue({text:'Preserved article'});
+ fireEvent.click(screen.getByRole('button',{name:/稿件 1 · 查看稿件版本/}));
+ await waitFor(()=>expect(navigation.publication).toHaveBeenCalledWith('geo','article-old','001','a'.repeat(64)));
+ expect(await screen.findByText('Preserved article')).toBeVisible();
+ fireEvent.click(screen.getByRole('button',{name:'关闭'}));
  fireEvent.click(screen.getByText('依据 1 · 第 1 版'));expect(screen.getByText('Preserved source quote')).toBeTruthy();
 });
 
@@ -303,6 +327,21 @@ it('keeps an exact historical plan descriptor for export and native explanation'
  await waitFor(()=>expect(navigation.stage).toHaveBeenCalledWith('geo',expect.objectContaining({view,mode:'analysis',selectionRef:'gsel_current',expectedDigest:'historical-digest'})));
  fireEvent.click(screen.getByRole('button',{name:'方案版本：方案版本 3'}));fireEvent.click(screen.getByRole('menuitemradio',{name:'所选范围最新方案'}));
  await waitFor(()=>expect(read).toHaveBeenCalledWith('geo',{round:'old'},{viewId:'V26',strategyVersion:undefined,targetVersion:undefined},0,undefined));
+});
+
+it('keeps ratio units on frozen-plan charts and their exact readings',async()=>{
+ const view={viewId:'V26'}, row={key:'ratio-plan',label:'品牌问法与品类问法提及率比值',metricId:'M-13',dimensions:{},values:{current:{value:1.75,state:'known',unit:'ratio',members:null}}};
+ read.mockResolvedValue({view,selection:{reference:'gsel_ratio_plan'},digest:'ratio-plan',columns:[{key:'current',label:'当前实测'}],rows:[row],chart:{kind:'frozen_plan_targets',cells:[{rowKey:'ratio-plan',columnKey:'current',label:row.label,value:1.75,state:'known',unit:'ratio'}]},page:{total:1,shown:1,nextOffset:null},availability:{status:'ready'}});
+ render(<MemoryRouter><GeoAnalysisWorkbench geoId="geo" project={project as never} initialView="V26" embedded/></MemoryRouter>);
+ expect(await screen.findByRole('button',{name:'当前实测：1.75 倍'})).toBeVisible();
+});
+
+it('does not reveal or chart an insufficient ratio or its underlying rates',async()=>{
+ const view={viewId:'V26'}, row={key:'thin-plan',label:'品牌问法与品类问法提及率比值',metricId:'M-13',dimensions:{},values:{current:{value:1.75,state:'insufficient',unit:'ratio',metric:{value:1.75,numerator:70,denominator:40,status:'insufficient'},members:null}}};
+ read.mockResolvedValue({view,selection:{reference:'gsel_thin'},digest:'thin',columns:[{key:'current',label:'当前实测'}],rows:[row],chart:{kind:'frozen_plan_targets',cells:[{rowKey:'thin-plan',columnKey:'current',label:row.label,value:1.75,state:'insufficient',unit:'ratio'}]},page:{total:1,shown:1,nextOffset:null},availability:{status:'ready'}});
+ render(<MemoryRouter><GeoAnalysisWorkbench geoId="geo" project={project as never} initialView="V26" embedded/></MemoryRouter>);
+ expect(await screen.findByRole('button',{name:'当前实测：样本不足'})).toBeVisible();
+ expect(screen.queryByText(/1\.75|70%|40%/)).toBeNull();
 });
 
 const ready = (extra: Record<string, unknown> = {}) => ({
@@ -415,4 +454,64 @@ describe('the workbench\'s own view switch', () => {
     await waitFor(() => expect(read).toHaveBeenLastCalledWith('geo', { round: 'old' }, { viewId: 'V04', dimension: 'engine' }, 0, undefined));
     expect(await screen.findByRole('button', { name: /^分析：平台指标比较/ })).toBeTruthy();
   });
+});
+
+
+function AnalysisWithConversation() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const params = new URLSearchParams(location.search);
+  return <>
+    <button onClick={() => { params.set('conversation', 'open'); void navigate({ search: params.toString() }); }}>Open AI</button>
+    <output aria-label="Analysis address">{location.search}</output>
+    <WorkspaceSplit open={params.get('conversation') === 'open'} retainResults splitOverride collapseTo="?session=analysis-session"
+      results={<GeoAnalysisWorkbench geoId="geo" project={project as never} initialView="V12" />}
+      conversation={<input aria-label="Analysis draft" />} />
+  </>;
+}
+
+it.each([
+  { unit: 'statements', selected: 0 },
+  { unit: 'statements', selected: 1 },
+  { unit: 'answers', selected: 0 },
+  { unit: 'answers', selected: 1 },
+] as const)('opens $unit row $selected while another detail is hidden by the wide conversation', async ({ unit, selected }) => {
+  const view = { viewId: 'V12', dimension: 'project' };
+  const selectionRef = 'gsel_clinical';
+  const columns = [{ key: 'current', label: '所选实测' }];
+  const rows = [21, 22].map((total, index) => {
+    const rowKey = `row-${index}`;
+    const members = unit === 'statements'
+      ? { selectionRef, view, rowKey, columnKey: 'current', expectedDigest: 'clinical-digest', unit, total, exact: true }
+      : { selectionRef, metric: { groupId: rowKey }, digest: 'clinical-digest', unit, total, exact: true };
+    return { key: rowKey, label: `Result ${index}`, metricId: null, dimensions: {}, values: { current: { value: total, state: 'known', unit, metric: null, members } } };
+  });
+  read.mockResolvedValue({ view, selection: { reference: selectionRef }, digest: 'clinical-digest', columns, rows, page: { total: 2, shown: 2, nextOffset: null }, availability: { status: 'ready' } });
+  memberRead.mockImplementation(async (_id, member) => ({
+    unit, total: 1, items: [{ id: member.rowKey, unit, statement: { text: `Member ${member.rowKey}`, verdict: 'wrong' } }], nextOffset: null,
+  }));
+  observations.mockImplementation(async (_id, _reference, metric) => ({
+    total: 1, items: [{ id: metric.groupId, question: `Member ${metric.groupId}`, engine: 'kimi' }], nextOffset: null,
+  }));
+  render(<MemoryRouter initialEntries={['/app/geo/geo/accuracy?session=analysis-session']}><AnalysisWithConversation /></MemoryRouter>);
+  const user = userEvent.setup();
+  await user.click(screen.getByText('所选数据分析'));
+  const first = await screen.findByRole('button', { name: /^21 / });
+  const second = screen.getByRole('button', { name: /^22 / });
+  await user.click(first);
+  await screen.findByText('Member row-0');
+  fireEvent.click(screen.getByRole('button', { name: 'Open AI' }));
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  const draft = screen.getByRole('textbox', { name: 'Analysis draft' });
+  await user.type(draft, 'Same session');
+  const trigger = selected === 0 ? first : second;
+  await user.click(trigger);
+  const details = await screen.findByRole('dialog');
+  expect(details).toBeVisible();
+  expect(details).toHaveFocus();
+  await screen.findByText(`Member row-${selected}`);
+  expect(draft).toHaveValue('Same session');
+  expect(screen.getByLabelText('Analysis address')).toHaveTextContent('session=analysis-session');
+  await user.keyboard('{Escape}');
+  expect(trigger).toHaveFocus();
 });

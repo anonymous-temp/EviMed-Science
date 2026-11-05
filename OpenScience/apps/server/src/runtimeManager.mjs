@@ -8162,6 +8162,29 @@ export class RuntimeManager {
   }
 
   /**
+   * LoopX's own goal state and its pause and start, through the door its bar in the kernel's page uses. Not a kernel wire method: the plugin
+   * answers it on the shared API with the payload as it is, without the `args` envelope `callKernel` writes. With no runtime up there is
+   * nobody to ask.
+   * @param {Record<string, any>} project @param {Record<string, any>} payload `loopx_goalbar_request_v2`
+   * @returns {Promise<any>} the bar's response, or `{ result: { kind: "fault", code } }`
+   */
+  async goalBar(project, payload) {
+    const runtime = this.runtimes.get(this.key(project));
+    if (!runtime) return { result: { kind: "fault", code: "runtime_not_running" } };
+    const response = await requestRuntime(runtime, new URL(`${runtime.url}/api/loopx.goalbar`), {
+      method: "POST",
+      headers: { ...(runtime.cookie ? { cookie: runtime.cookie } : {}), "content-type": "application/json" },
+      body: Buffer.from(JSON.stringify({ type: "client-request", rpcId: randomId("rpc_"), method: "loopx.goalbar", payload }), "utf8"),
+      signal: AbortSignal.timeout(60_000),
+    });
+    const bytes = await readRuntimeResponseBody(response.body, this.config.maxJsonBytes ?? 1_000_000);
+    let answer = null;
+    try { answer = JSON.parse(bytes.toString("utf8")); } catch { /* the fault below */ }
+    if (answer?.result?.ok === true) return answer.result.value;
+    return { result: { kind: "fault", code: typeof answer?.result?.error?.code === "string" ? answer.result.error.code : "goalbar_unreachable" } };
+  }
+
+  /**
    * One unary call into the DSH kernel over the project's control socket.
    * The allow-list is checked by the adapter that owns it; this is the carrier.
    * @param {Record<string, any>} runtime @param {Record<string, any>} project

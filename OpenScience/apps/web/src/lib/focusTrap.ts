@@ -2,9 +2,9 @@ import { tabbable, type FocusableElement } from "tabbable";
 
 const layers: HTMLElement[] = [];
 /** Register modal lifetime explicitly: portals and focus drift must not select a lower layer. */
-export function registerFocusLayer(container: HTMLElement | null): () => void {
+export function registerFocusLayer(container: HTMLElement | null, placeBelow?: (layer: HTMLElement) => boolean): () => void {
   if (!container) return () => {};
-  const child = layers.findIndex(layer => container.contains(layer));
+  const child = layers.findIndex(layer => container.contains(layer) || placeBelow?.(layer));
   if (child < 0) layers.push(container); else layers.splice(child, 0, container);
   return () => { const index = layers.lastIndexOf(container); if (index >= 0) layers.splice(index, 1); };
 }

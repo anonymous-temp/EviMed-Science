@@ -1,3 +1,4 @@
+import { sessionOwner } from "@/lib/sessionLifecycle";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { Loader2 } from "lucide-react";
@@ -14,7 +15,7 @@ import { PublishAsEvidenceCard, isClinicalPackage } from "@/components/frontier/
 import { parseTableFile } from "@/lib/csv";
 import { formatClock, formatDay } from "@/lib/format";
 import { getWebProjectId } from "@/lib/apiClient";
-import type { RuntimeUiIntent } from "@/lib/runtimeUiNavigation";
+import { prepareRuntimeUiIntent, type RuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { parseFailureMessage } from "@/lib/errorText";
 import { toast } from "@/lib/toast";
 import { assignResultAnchors, cancelResultReplay, directlyRelatedResults, exportResult, getResultReplay, getResultVersion, listRelatedResultVersions, listResultVersions, readResultBytes, replayEnvironmentLabel, replayErrorText, replayNumbersLabel, replayResult, requestResultRevision,
@@ -201,6 +202,7 @@ export function ResultVersionInspector({ path, runId, initialVersionId, onLegacy
   }, [version, reading]);
   const continueRevision = async () => {
     const generation = viewGeneration.current;
+    const owner = sessionOwner();
     if (!version || !anchor || anchor.versionId !== version.versionId || anchor.digest !== version.digest) return;
     const selected = { ...anchor.selection };
     setAction("revision"); setActionError(null);
@@ -208,13 +210,13 @@ export function ResultVersionInspector({ path, runId, initialVersionId, onLegacy
       const sessionId = version.producer.sessionId && /^[A-Za-z0-9_-]{1,160}$/.test(version.producer.sessionId)
         ? version.producer.sessionId : crypto.randomUUID();
       const prepared = await requestResultRevision(version, selected, sessionId);
-      if (generation !== viewGeneration.current) return;
+      if (generation !== viewGeneration.current || owner !== sessionOwner()) return;
       const targetSession = prepared.sessionId ?? sessionId;
       const intent: RuntimeUiIntent = {
-        kind: version.producer.sessionId ? "open" : "create", projectId: getWebProjectId(), requestId: crypto.randomUUID(),
+        kind: version.producer.sessionId ? "open" : "create", projectId: getWebProjectId(), requestId: crypto.randomUUID(), owner: sessionOwner(),
         sessionId: targetSession, draft: prepared.draft, resultRevision: { referenceId: prepared.referenceId },
       };
-      navigate(version.producer.sessionId ? `/app/chat/${targetSession}` : "/app/chat", { state: { runtimeUiIntent: intent } });
+      navigate(version.producer.sessionId ? `/app/chat/${targetSession}` : "/app/chat", { state: { runtimeUiIntent: prepareRuntimeUiIntent(intent) } });
     } catch (caught) { if (generation === viewGeneration.current) setActionError(parseFailureMessage(caught, "修改请求")); }
     finally { if (generation === viewGeneration.current) setAction(null); }
   };

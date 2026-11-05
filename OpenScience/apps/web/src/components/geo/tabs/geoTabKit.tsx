@@ -44,7 +44,7 @@ function Bar({ className }: { className: string }) {
 /** A tab's first paint: a filter row and rows shaped like the list to come. */
 export function TabSkeleton({ rows = 5 }: { rows?: number }) {
   return (
-    <PendingFeedback><div data-geo-tab-loading="" className="animate-pulse" aria-hidden="true">
+    <div data-geo-tab-pending="" aria-busy="true"><PendingFeedback><div data-geo-tab-loading="" className="animate-pulse" aria-hidden="true">
       <div className="flex h-sm items-center gap-2">
         <Bar className="h-sm w-16 rounded-full" />
         <Bar className="h-4 w-12" />
@@ -56,7 +56,7 @@ export function TabSkeleton({ rows = 5 }: { rows?: number }) {
           <Bar className="h-3 w-1/4" />
         </div>
       ))}
-    </div></PendingFeedback>
+    </div></PendingFeedback></div>
   );
 }
 

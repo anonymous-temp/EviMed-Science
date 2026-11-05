@@ -1102,6 +1102,8 @@ export const RUN_VERDICT_ERROR_CODES = Object.freeze([
   'runtime_turn_end_unknown',
   'runtime_deliverable_never_submitted',
   'runtime_monitor_stalled',
+  // The model answered nothing, and the run left no file. The provider's bad minutes, not a verdict on the work.
+  'model_empty_reply',
   'runtime_monitor_timeout',
   'runtime_monitor_failed',
   'runtime_prompt_rejected',
@@ -1816,6 +1818,13 @@ export const GEO_ROUTE_ERROR_CODES = Object.freeze([
   'geo_path_invalid',
   'geo_payload_invalid',
   'geo_project_not_found',
+  'geo_spine_incomplete',
+  'geo_source_preview_interrupted',
+  'geo_project_deleted',
+  'geo_project_create_key_conflict',
+  'geo_creation_pending',
+  'geo_conversation_list_timeout',
+  'geo_account_changed',
   'geo_brand_name_invalid',
   'geo_project_name_invalid',
   'geo_engines_invalid',
@@ -1837,6 +1846,7 @@ export const GEO_ROUTE_ERROR_CODES = Object.freeze([
   'geo_article_state_invalid',
   'geo_article_review_invalid',
   'geo_article_review_stale',
+  'geo_article_catalog_changed',
   'geo_article_version_changed',
   'geo_article_head_changed',
   'geo_article_bytes_changed',
@@ -1859,6 +1869,10 @@ export const GEO_ROUTE_ERROR_CODES = Object.freeze([
   'geo_project_paused',
   'geo_monitoring_scope_changed',
   'geo_monitoring_authorization_required',
+  'geo_confirmation_authorization_required',
+  'geo_confirmation_scope_changed',
+  'geo_confirmation_round_limit',
+  'geo_confirmation_legacy_unapproved',
   // One evidence chain (flywheel F21): the producer settings, and the product-zone cards made from the claims.
   'geo_producer_invalid',
   'geo_card_producer_required',
@@ -2277,6 +2291,10 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   tooluniverse_busy: '补充科研数据源正忙，请稍后再试或继续使用其他来源。',
   tooluniverse_rate_limited: '补充科研数据源请求过于频繁，请稍后再试。',
   geo_probe_disabled: '循证 GEO 没有对这个账号开放，可见度探测不可用；报告会写明这一点，不会把没测的当作没提到。',
+  geo_spine_incomplete: '项目关联记录超过当前完整读取上限，暂时无法计算相关行动；请联系管理员处理后再试。',
+  geo_source_preview_interrupted: '信源读取被中断，请重试；如反复发生，请联系管理员。',
+  geo_creation_pending: '新建对话的结果尚未确认，系统不会重复创建；请稍后核对，必要时联系管理员。',
+  geo_conversation_list_timeout: '对话列表读取超时，请重试；已有会话仍然保留。',
   geo_probe_gateway_rate_limited: '这个项目一分钟内的可见度探测太频繁了，稍后再试；被拒的这次不算测量，也不会记成没提到。',
   geo_order_in_flight: '这笔订单正在发给媒体，要等媒体收到之后才能撤；稍后再试。',
   geo_order_not_found_at_vendor: '媒介集市里没有查到这个订单号对应这家媒体的订单；核对订单号，别重复下单。',
@@ -2297,6 +2315,10 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   geo_project_paused: '这个项目已暂停，继续之后再让 AI 做。',
   geo_monitoring_scope_changed: '所选引擎超出了已保存的监测范围。请在原对话中调整并保存问题的测量范围，再开启持续监测。',
   geo_monitoring_authorization_required: '自动复核尚未获得当前范围的持续监测授权。已有回答和结果已保留；如需继续，请确认监测范围并开启持续监测。',
+  geo_confirmation_authorization_required: '错误复问需要当前范围的单独授权，请核对确认范围。',
+  geo_confirmation_scope_changed: '错误复问范围或观察时间已变化，请重新读取范围。已有结果已保留。',
+  geo_confirmation_round_limit: '这条错误已有进行中的确认或已达到该事件的复问上限。',
+  geo_confirmation_legacy_unapproved: '历史确认任务缺少明确授权，未发出新的请求。',
   geo_signal_not_found: '找不到这条线索，请刷新后查看当前记录。',
   geo_signal_conflict: '这条线索或处理请求已更新，请刷新后继续。',
   geo_plan_context_invalid: '方案选择不完整，请刷新方案页后重新选择。',
@@ -2333,6 +2355,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   geo_article_text_unavailable: '这篇稿件的正文现在读不到，暂时不能核对它引用的结论；稿件本身没有变化。',
   geo_article_review_invalid: '请重新打开稿件后再放行。',
   geo_article_review_stale: '稿件已有新版本，请重新查看后再放行。',
+  geo_article_catalog_changed: '稿件列表已变化，请从第一页重新读取。',
   geo_article_version_changed: '稿件版本已变化，请重新打开后再处理。',
   geo_article_head_changed: '稿件已有新版本，请重新打开后再处理。',
   geo_article_bytes_changed: '稿件内容已变化，请重新打开后再处理。',
@@ -2348,6 +2371,9 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   geo_action_not_found: '找不到这条行动，它可能已经完成或被新一版策略取代。',
   geo_action_choice_invalid: '这一步只能“跳过”或“换信源”，换信源要写明一个信源的网站域名。',
   geo_owned_link_invalid: '这个发布链接没有登记成功：需要一个具体页面的网址和发布平台，并且不能和已登记的重复。',
+  geo_project_create_key_conflict: '这个创建请求编号已经用于不同的项目请求，请核对后开启新的创建。',
+  geo_project_deleted: '这个创建请求对应的项目已删除，可以开始另一个项目。',
+  geo_account_changed: '账号已变化，请重新确认身份后再创建项目。',
   geo_request_key_conflict: '这个请求编号已经用在另一次请求上；新的开始或补测要换一个新的编号，只有重试同一次请求时才沿用原编号。',
   geo_recovery_exhausted: '这些单元格已经补测过，不能再补测；仍未测到的会按未测记入结果。',
   geo_recovery_acknowledgment_required: '这次补测涉及可能已经发出、甚至已经计费的请求，再补测可能重复计费；需要你确认接受后才能补测。',
@@ -2790,6 +2816,9 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   // single most damaging string in the product — the browser's own table
   // answered 「运行未通过核验。」 for a stall timer, a cancel and a supersede
   // alike — and the rule is what these entries exist to carry.
+  model_empty_reply:
+    '模型这一次没有给出回复，也没有留下文件，多半是模型服务繁忙。'
+    + '这不是质量问题；回到这个会话再发一次就好。',
   runtime_monitor_stalled:
     '运行连续很长时间没有产生新的消息或工具调用，已按“无进展”中断收尾。'
     + '这不是质量问题；已经写出的文件仍在工作区里，可以回到这个会话让它从中断处继续。',
@@ -3258,6 +3287,8 @@ export const RUN_OUTCOME_KINDS = Object.freeze([
  * @type {Readonly<Record<string, typeof RUN_OUTCOME_KINDS[number]>>}
  */
 const ERROR_CODE_OUTCOMES = Object.freeze({
+  // The provider's bad minutes, which ended a turn with nothing to read: the platform's trouble and not a verdict.
+  model_empty_reply: 'stopped',
   // `specialist_*` and `meta_*` are gate codes by prefix (below), but these
   // three name a downstream service or a subagent that did not answer, which is
   // the same fact as an unreachable source.

@@ -15,6 +15,8 @@ export function GeoFinanceMember({geoId,item,selectionRef}:{geoId:string;item:Ge
  for(const key of ['publication','action','order','step'])planQuery.delete(key);
  if(item.strategyVersion)planQuery.set('strategyVersion',String(item.strategyVersion));
  const ledger=['ledger_entries','ledger_balance_readings'].includes(item.unit);
+ const thinRatio=item.metricId==='M-13'&&item.status==='insufficient';
+ const rate=(value:number|null|undefined)=>value==null?'未知':`${value}%`;
  const kinds:Record<string,string>={budget_set:'预算设置',reserve:'预留',release:'释放预留',settle:'结算',refund:'退款'};
  return <article className="flex flex-col gap-2">
   <p className="text-ui">{ledger?kinds[item.kind??'']??'账目记录':item.unit==='target_rows'?'方案保存的规划目标':'方案冻结的实测读数'}</p>
@@ -26,7 +28,7 @@ export function GeoFinanceMember({geoId,item,selectionRef}:{geoId:string;item:Ge
    ...Object.entries(item.balance??{}).filter(([key])=>key!=='dailyCny').map(([key,value])=>({label:({budgetCny:'当时项目预算',reservedCny:'累计预留余额',settledCny:'累计结算',refundedCny:'累计退款',spentCny:'累计净支出',availableCny:'当时项目可用预算'} as Record<string,string>)[key]??key,value:value==null?'未知':`${value} 元`}))
   ]:[
    {label:'方案版本',value:item.strategyVersion??'未知'},{label:'冻结目标版本',value:item.targetVersion??'未知'},
-   ...(item.unit==='frozen_metric_readings'?[{label:'冻结读数',value:item.value??'未知'},{label:'分子 / 分母',value:`${item.numerator??'未知'} / ${item.denominator??'未知'}`},{label:'原有成员数',value:item.memberCount??'未知'}]:[
+   ...(item.unit==='frozen_metric_readings'?[{label:'冻结读数',value:thinRatio?'样本不足':item.metricId==='M-13'&&item.value!=null?`${item.value} 倍`:item.value??'未知'},{label:'分子 / 分母',value:thinRatio?'样本不足':item.metricId==='M-13'?`${rate(item.numerator)} / ${rate(item.denominator)}`:`${item.numerator??'未知'} / ${item.denominator??'未知'}`},{label:'原有成员数',value:item.memberCount??'未知'}]:[
     {label:'目标表登记基线',value:item.baseline??'未记录'},{label:'规划目标',value:item.target??'未记录'},{label:'规划费用',value:item.budgetCny==null?'未估':`${item.budgetCny} 元`},{label:'计划投放数',value:item.placements??'未估'},{label:'目标周期',value:item.horizonWeeks==null?'未估':`${item.horizonWeeks} 周`}
    ])
   ]}/>

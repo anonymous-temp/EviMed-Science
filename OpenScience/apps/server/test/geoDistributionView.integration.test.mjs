@@ -3,6 +3,8 @@ import { after, before, test } from 'node:test';
 import { ControlPlaneDatabase } from '../src/controlPlaneDatabase.mjs';
 import { GeoStore } from '../src/geoStore.mjs';
 import { GeoDistributionView } from '../src/geoDistributionView.mjs';
+import { GeoMarketStore } from '../src/geoMarketStore.mjs';
+import { recheckSelectedDomain } from '../src/geoMarket.mjs';
 import { createGeoTestDatabase } from './helpers/geoTestDatabase.mjs';
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? '';
@@ -77,4 +79,26 @@ test('execution reads retain immutable publication pins, real publication time a
   assert.doesNotMatch(JSON.stringify(earlier), /private-internal-marker|vendorOrderNid/);
   await assert.rejects(view.order(project, 'foreign-order'), { status: 404 });
   await assert.rejects(view.orders({ ...project, id: 'other-project' }, { cursor: first.nextCursor }), { code: 'geo_payload_invalid' });
+});
+
+
+test('planned order exposes current proof and clears it after a real recheck, without disclosing other projects', options, async () => {
+  const market=new GeoMarketStore(database);
+  await database.query(`INSERT INTO evimed_geo.media(media_type,resource_id,domain,case_link,available,price_cny,domain_verified,flags)
+    VALUES('website','proof-view','example.org','https://example.org/case',true,100,false,'{}')`);
+  await database.query(`INSERT INTO evimed_geo.orders(id,user_id,geo_project_id,state,media_type,resource_id)
+    VALUES('proof-plan',$1,$2,'planned','website','proof-view'),('proof-unknown',$1,$2,'unknown','website','proof-view')`,[project.userId,project.id]);
+  assert.equal((await view.order(project,'proof-plan')).order.sourceProofProblem,'missing');
+  assert.equal((await view.order(project,'proof-unknown')).order.sourceProofProblem,null);
+  await assert.rejects(view.order({...project,userId:'stranger'},'proof-plan'),{status:404});
+  const verdict=await recheckSelectedDomain({store:market,market:{configured:true},webReader:{read:async()=>({receipt:{finalUrl:'https://example.org/case'},text:''})}},'example.org');
+  assert.equal(verdict.verified,1);
+  assert.equal((await view.order(project,'proof-plan')).order.sourceProofProblem,null);
+  await database.query("UPDATE evimed_geo.media SET flags=flags || '{\"domainFinalHost\":\"elsewhere.org\"}'::jsonb WHERE resource_id='proof-view'");
+  assert.equal((await view.order(project,'proof-plan')).order.sourceProofProblem,'mismatch');
+  await database.query("UPDATE evimed_geo.media SET domain_verified=false,flags=flags || '{\"domainCheck\":\"left_domain\"}'::jsonb WHERE resource_id='proof-view'");
+  assert.equal((await view.order(project,'proof-plan')).order.sourceProofProblem,'mismatch');
+  await database.query("UPDATE evimed_geo.media SET flags=flags || '{\"domainCheck\":\"unreachable\"}'::jsonb WHERE resource_id='proof-view'");
+  assert.equal((await view.order(project,'proof-plan')).order.sourceProofProblem,'missing');
+  assert.equal((await database.query("SELECT state FROM evimed_geo.orders WHERE id='proof-plan'")).rows[0].state,'planned');
 });

@@ -105,7 +105,7 @@ import { personalSkillRuntimeIdentity } from "./personalSkillRuntimeIdentity.mjs
 import { removePrivateExtensionFiles } from "./extensionPrivateCleanup.mjs";
 import { createServer } from "node:http";
 import { spawnSync } from "node:child_process";
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { once } from "node:events";
 import fs from "node:fs";
 import fsp from "node:fs/promises";
@@ -271,6 +271,7 @@ import { createCapsuleRoutes } from "./capsuleRoutes.mjs";
 import { createVcrModelSources } from "./vcrModelSources.mjs";
 import { createVcrEvidenceSources } from "./vcrEvidenceSources.mjs";
 import { SourceService, projectSourceManifestRecord, sourceIndexDocument, sourceReadable } from "./sourceService.mjs";
+import { sourceDisplayOf } from "./sourceDisplay.mjs";
 import { createKnowledgeBaseEntries } from "./knowledgeBaseEntries.mjs";
 import { verifySourceMetadata } from "./sourceMetadata.mjs";
 // Knowledge-base search (2026-09-20): the index, its embedder and its gateway.
@@ -334,6 +335,9 @@ import { createAutopilotRoutes } from "./autopilotRoutes.mjs";
 import { researchDbCredentialsFromConfig } from "./researchDbCredentials.mjs";
 import { createResearchDbPublisher } from "./researchDbPublish.mjs";
 import { RESEARCH_GOAL_ROUTE, researchGoalBlock, researchGoalPrompt } from "./researchGoal.mjs";
+import { ResearchGoals } from "./researchGoalService.mjs";
+import { createResearchGoalRoutes } from "./researchGoalRoutes.mjs";
+import { researchGoalMetricFamilies } from "./researchGoalMetrics.mjs";
 import { researchDbMetricFamilies } from "./researchDbMetrics.mjs";
 import { createResearchDbRoutes } from "./researchDbRoutes.mjs";
 import { ResearchDbStaging } from "./researchDbStaging.mjs";
@@ -421,7 +425,7 @@ import { GeoMembers } from "./geoMembers.mjs";
 import { createGeoQuestionBank, questionBankSummary } from "./geoQuestionBank.mjs";
 import { createGeoValueUpkeep } from "./geoValueUpkeep.mjs";
 import { geoArticleGateBound, geoArticleGateOf } from "./geoWrites.mjs";
-import { GeoService, geoAudienceAllows, isGeoPlaceholderName, geoMetricFamilies, geoMetricsSnapshot, geoReadiness, oldestPersonalConversation } from "./geoService.mjs";
+import { GeoService, geoAccountGeneration, geoAudienceAllows, isGeoPlaceholderName, geoMetricFamilies, geoMetricsSnapshot, geoReadiness, oldestPersonalConversation } from "./geoService.mjs";
 import { createGeoRoutes, geoRoutePattern } from "./geoRoutes.mjs";
 import { GEO_GATEWAY_PATH, createGeoGatewayHandler, geoGatewayRoutePattern } from "./geoGateway.mjs";
 import { createSocialCrawlClient } from "./socialCrawlClient.mjs";
@@ -462,7 +466,7 @@ import { tickErrors as tickGeoErrors } from "./geoErrors.mjs";
 import { GeoMarketStore } from "./geoMarketStore.mjs";
 import { GeoMarketOperations } from "./geoMarketOperations.mjs";
 import { cancelOrder as cancelGeoOrder, clearStop as clearGeoMarketStop, confirmTopup as confirmGeoTopup, markOrderLost as markGeoOrderLost,
-  marketStatus as geoMarketStatus, noteCitation as noteGeoCitation, previewOutlets as previewGeoOutlets, resolveUnknownOrder as resolveGeoUnknownOrder,
+  marketStatus as geoMarketStatus, noteCitation as noteGeoCitation, previewOutlets as previewGeoOutlets, recheckSelectedDomain, resolveUnknownOrder as resolveGeoUnknownOrder,
   setBudget as setGeoBudget,
   tickCatalogue as tickGeoCatalogue, tickOrders as tickGeoOrders, tickPoll as tickGeoPoll, tickReconcile as tickGeoReconcile,
   tickTopups as tickGeoTopups, tickVerify as tickGeoVerify } from "./geoMarket.mjs";
@@ -2656,12 +2660,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
    * projects/, so it stays ASCII and is derived; a caller that still sends one
    * keeps it. Counted against the account's project limit before the create.
    * @param {any} user @param {{ id?: unknown, name?: unknown }} body
+   * @param {boolean} analysisOwned @param {"named" | "random" | undefined} reservation
    */
-  async function createResearcherProject(user, body, analysisOwned = false) {
+  async function createResearcherProject(user, body, analysisOwned = false, reservation = undefined) {
     const existing = (await store.listProjects(user)).filter((project) => !hiddenFor(user.id, project.id));
     if (body.id == null && body.name == null) throw new HttpError(400, "invalid_payload", "A project needs a name.");
-    const id = body.id == null
-      ? projectIdFromName(String(body.name), new Set(existing.map((project) => project.id)))
+    const takenIds = new Set(existing.map((project) => project.id));
+    let id = body.id == null
+      ? projectIdFromName(String(body.name), takenIds)
       : safeId(assertString(body.id, "id", { max: 64 }), "project id");
     // The ids the platform makes itself — the loop's, the knowledge base's, the frontier's and an
     // evaluation cell's — are internal by name for any owner, so they cannot be typed here. Not the
@@ -2691,7 +2697,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       !(analysisOwned && isDataAnalysisProject(id)) &&
       config.maxProjectsPerUser > 0 &&
       existing.length >= config.maxProjectsPerUser &&
-      !existing.some((project) => project.id === id)
+      (reservation || !takenIds.has(id))
     ) {
       throw new HttpError(
         409,
@@ -2699,13 +2705,32 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         `This account already holds ${existing.length} projects, which is its limit: each has its own storage and research runtime. Export and delete one to make another.`,
       );
     }
+    if (reservation) {
+      const defaultProject = await store.defaultProject(user);
+      const root = path.dirname(defaultProject.rootDir);
+      let reserved = false;
+      for (let attempt = 0; attempt < 16; attempt++) {
+        id = reservation === "random" ? `p-${randomBytes(16).toString("hex")}` : projectIdFromName(name, takenIds);
+        try { await fsp.mkdir(path.join(root, id), { mode: 0o700 }); }
+        catch (error) {
+          if (error?.code !== "EEXIST") throw error;
+          takenIds.add(id);
+          continue;
+        }
+        reserved = true;
+        break;
+      }
+      if (!reserved) throw new HttpError(503, "geo_unavailable", "Unable to reserve a project path.");
+      // An uncertain COMMIT can already own this directory. Record the path and leave it untouched.
+      productDatabase?.afterRollback(() => securityAudit(config, "geo.project.create", "filesystem_reservation_retained", { userId: user.id, detail: id }));
+    }
     const data = await store.createProject(user, id, name);
     const project = await store.requireProject(user, id);
     if (skillLibraryService && !existing.some(item => item.id === id)) {
       // Defaults snapshot only on actual creation. An optional method must never prevent ordinary research project creation.
       await skillLibraryService.initializeProject(user, project).catch(() => { process.stderr.write("new-project personal skill defaults snapshot failed\n"); });
     }
-    await audit({ config, user, project }, "project.create", "completed", { target: id });
+    if (!reservation) await audit({ config, user, project }, "project.create", "completed", { target: id });
     return data;
   }
 
@@ -2994,7 +3019,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     store, service: geo?.service ?? null, config, maxJsonBytes: config.maxJsonBytes,
     audit: (event, status, details) => securityAudit(config, event, status, details),
     projects: {
-      create: (user, name) => createResearcherProject(user, { name }),
+      create: (user, name, options) => createResearcherProject(user, { name }, false, options?.reservation),
       // Create the real primary only when the person explicitly opens it.
       bindSession: async () => ({ sessionId: null, bound: false }),
       // The project's own conversation: the native authority's primary (`geoNativeAuthority.primary`), the one a GEO frame is issued
@@ -3013,7 +3038,20 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         if (!run || run.status !== "running") return { root: "not-running" };
         return { root: (await stopRunForUser(project, run)).root };
       },
+      listConversations: async (user, geoId, options) => geoNativeAuthority.listConversations(user, geoId, options),
       openConversation: async (user, geoId, target) => geoNativeAuthority.descriptor(user, geoId, target),
+      readPublicationVersion: async (user, geoId, kind, recordId, versionId, digest, revision) => {
+        if (!geoNativeAuthority || !geoArticleResults) throw new HttpError(404, "geo_not_enabled", "The GEO article is unavailable.");
+        return geoArticleResults.readPublicationVersion(user, geoId, kind, recordId, versionId, digest, revision, geoNativeAuthority);
+      },
+      readArticleVersion: async (user, geoId, articleId, versionId, digest) => {
+        if (!geoNativeAuthority || !geoArticleResults) throw new HttpError(404, "geo_not_enabled", "The GEO article is unavailable.");
+        return geoArticleResults.readArticleVersion(user, geoId, articleId, versionId, digest, geoNativeAuthority);
+      },
+      stageArticleRevision: async (user, geoId, articleId, input) => {
+        if (!geoNativeAuthority || !geoArticleResults) throw new HttpError(404, "geo_not_enabled", "The GEO conversation is unavailable.");
+        return geoArticleResults.stageSelected(user, geoId, articleId, input, geoNativeAuthority);
+      },
       conversationRead: async (user, geoId, sessionId, action, body = undefined) => {
         const resolved = await geoNativeAuthority.resolve(user, { kind: "geo", geoProjectId: geoId, sessionId }, { ability: action === "start" || body ? "run" : "read" });
         const project = resolved.project;
@@ -3053,7 +3091,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             const items = []; let cursor = null;
             do {
               const page = await sourceService.list(project.userId, { projectId: project.id, state: "ready", limit: 100, cursor });
-              for (const item of page.items) if (!shared || await knowledge.acceptSource(item)) items.push({ id: item.id, title: item.title ?? item.name ?? item.id });
+              for (const item of page.items) if (!shared || await knowledge.acceptSource(item)) items.push({ id: item.id, title: sourceDisplayOf(item).title });
               cursor = page.nextCursor;
             } while (cursor);
             return { items };
@@ -4150,6 +4188,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
    * immediately before native forwarding, in its existing schedule mark. */
   async function recordGeoKnowledgeDispatch(project, geoId, run, request) {
     const policy = await sharedContextPolicies.forProject(project);
+    // A one-person GEO project is an owned project like any other (owner ruling 2026-10-25): its run reads its owner's knowledge the ordinary way and
+    // there is no shared context to prove. Until 2026-11-04 this refused it, so every programme step of a project with no member failed at dispatch.
+    if (policy.kind === "owned") return;
     const launched = await runtimeManager.launchedContextReceipt(project);
     const current = (await agentRuns.list(project)).find(item => item.id === run.id);
     const binding = await researchSessions.get(project, request.sessionId);
@@ -4394,6 +4435,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   /** @type {{ origins: EvidenceOrigins, publisher: EvidenceCardFromResult | null, continuation: EvidenceContinuation, authors: EvidenceAuthors,
    *   verification: ReturnType<typeof createEvidenceSourceVerification> } | null} */
   let evidencePublish = null;
+  /** 主动科研's long research goals (`researchGoalService.mjs`); composed further down, once what it acts through exists. @type {ResearchGoals | null} */
+  let researchGoals = null;
   agentRuns = new AgentRunStore(researchSessions, {
     authorizeReservation: (project, input) => {
       if (!isDataAnalysisProject(project)) return;
@@ -4743,6 +4786,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // an evaluation harness says so at dispatch (`automated`), and an
       // autopilot episode or its verification is known here — the episode's
       // digest is its result, and that is an ordinary notice.
+      // A goal's round: a person's stop, and the guard over rounds without progress and over the goal's spend. Never throws.
+      await researchGoals?.observeRound(project, run);
       if (notificationService && runFinishedReachesInbox(run, {
         internalProject: internalFor(project.userId, project.id),
         automated: automatedRun(run), autopilotOwned: autopilotOwned === true,
@@ -6116,6 +6161,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     geoParts.service.probeState = () => measureDeps.state;
     // The market's read-only ranking beside an action: the function the market places by, over the same rows (nothing is ordered by asking).
     geoParts.service.spine.placementPreview = (/** @type {any} */ input) => previewGeoOutlets(marketDeps, input);
+    geoParts.service.recheckActionSource = (domain, beforeRead, signal) => recheckSelectedDomain(marketDeps, domain, beforeRead, signal);
     // The platform's own medication-question bank (flywheel F22): composed only with its lever on, beside the module. It is the module's
     // own daily loop (below) and the topic selector's observed errors; with the lever off there is nothing of it.
     if (config.geoQuestionBankEnabled) {
@@ -7272,6 +7318,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (await personalLibraryRoutes(req, res)) return;
       if (await library.routes(req, res)) return;
       if (await researchDbRoutes(req, res)) return;
+      if (await researchGoalRoutes(req, res)) return;
       if (await autopilotRoutes(req, res)) return;
       if (await evidenceUpkeepRoutes(req, res)) return;
       if (await evidenceZoneRoutes(req, res)) return;
@@ -7601,6 +7648,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         sendJson(res, 200, {
           data: {
             user: { ...store.publicUser(user),
+              accountGeneration: geoAccountGeneration(user),
               ...(["local", "evimed", "oidc", "development"].includes(user.authType) ? { authType: user.authType } : {}) },
             tenant: { id: user.tenantId ?? user.id, model: "individual-account", role: "owner" },
             project: { id: project.id, name: project.name },
@@ -8260,6 +8308,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           await resident.delivered();
         });
         const run = pluginService ? await pluginService.withAdmission(ctx.project, dispatch) : await dispatch();
+        if (researchGoal) await researchGoals?.register(ctx.project, { sessionId: body.sessionId }).catch(() => {});
         sendJson(res, 202, { data: run });
         return;
       }
@@ -8564,6 +8613,15 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         await removeVcrArtifacts({ dataPlaneDir: config.vcrDataPlaneDir, artifacts: vcrArtifacts, engineRemove: vcr?.removeEngineJob ?? null,
           report: (code) => process.stderr.write(`vcr deletion cleanup: ${code}\n`) });
         taskManager.purgeUser(user);
+        // A job a specialist engine was running ends itself when it sees its directory gone, a heartbeat later, and may have written once more
+        // first (2026-11-03: a report written 34 seconds after the deletion put the account's directory back). So the directory is looked at
+        // again after the deletion. Not if the same name has registered since; a restart in between leaves it to the operator's audit.
+        for (const delay of [60_000, 300_000]) {
+          setTimeout(() => {
+            void store.userById(user.id).then((again) => (again ? null : fsp.rm(path.join(config.dataDir, "users", user.id), { recursive: true, force: true })))
+              .catch(() => process.stderr.write("account directory sweep failed\n"));
+          }, delay).unref();
+        }
         void memoryIndexWorker?.drainWithdrawals();
         clearSessionCookie(res, config.sessionCookieName);
         if (capsuleTransferService) await capsuleTransferService.finishAccountDeletion(user.id);
@@ -9063,6 +9121,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   }
   const geoNativeSelectionRequests = new WeakSet();
   const runtimeUi = createRuntimeUiServer({
+    onGoalBarAction: (project, sessionId, op) => researchGoals?.noteBarAction(project, sessionId, op) ?? Promise.resolve(),
     resolveDelegatedFrame: (user, delegation, options) => resolveGeoFrame(user, { kind: "geo", geoProjectId: delegation.geoProjectId, sessionId: delegation.rootSessionId }, delegation, options),
     createDelegatedPolicy: async ({ user, project, claims }) => new GeoNativeFramePolicy({ authority: geoNativeAuthority,
       runtimeManager, config, user, project, claims, acceptInput: null, nativeInputs: geoNativeInputs }),
@@ -9358,6 +9417,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
 
   const pauseRecurringWork = () => {
     recurringWorkStarted = false;
+    void researchGoals?.stop();
     evolution?.worker.stop();
     rsiOnline?.worker.stop();
     sourceSyncWorker?.pause();
@@ -9396,6 +9456,64 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   let officialPublishRun = false;
   let legacyMemoryRetired = false;
   let handbookArmRetired = false;
+  // A turn the control plane starts on a research goal: to take it up again, or to set it again. Automated (it teaches nothing and nobody is
+  // waiting on it), on the answer line the goal was set on, kept under the goal's first question like LoopX's own rounds. It is charged to the
+  // researcher, so the allowance is asked first: a refusal is the page's answer to 继续, and costs a taken-up goal one of its attempts.
+  /** @param {any} project @param {{ sessionId: string, text: string, route: string, question: string, system?: string }} turn */
+  async function dispatchResearchGoalTurn(project, turn) {
+    const user = await store.userById(project.userId);
+    const answerAgent = (await agentRegistry).get(OPEN_DOMAIN_ANSWER_AGENT_ID);
+    if (credits) await credits.service.assertBalanceForStart(project.userId, answerAgent?.id ?? null, { unattended: true });
+    const dispatch = () => agentRuns.dispatch(project, {
+      sessionId: turn.sessionId, dispatchId: randomId("goal_"), waitForRoom: true, automated: true, question: turn.question,
+      effectiveAgentId: answerAgent?.id ?? null, effectiveAgentVersion: answerAgent?.version ?? null,
+      effectiveRuntimeAgent: answerAgent?.runtimeAgent ?? null, effectiveRouteReason: turn.route,
+    }, async (/** @type {any} */ session, /** @type {any} */ dispatchedRun) => {
+      const resident = await residentProfiles.forDispatch(project.userId, { projectId: project.id, sessionId: session.sessionId, attended: false });
+      const prepared = await prepareOwnedResearchContext(project, session, { query: turn.text, resident, specialists: [], attended: false, routedSpecialist: null }, dispatchedRun);
+      await runtimeManager.startWhenRoom(project);
+      await runtimeManager.dispatchPrompt(project, session.sessionId, {
+        recordPromptActor: (/** @type {any} */ request) => recordExtensionPromptActor(user, project, request),
+        text: turn.text,
+        system: `${prepared.system}${turn.system ?? ""}`,
+        routedCapability: prepared.routedCapability,
+        memoryContext: prepared.memoryContext,
+        agent: session.runtimeAgent ?? answerAgent?.runtimeAgent ?? null,
+        model: `deepseek/${config.deepseekModel}`,
+        runId: dispatchedRun.id,
+        requestId: dispatchedRun.kernelRequestIds?.at(-1),
+        strictContext: true,
+        unattended: true,
+      });
+      await resident.delivered();
+    });
+    return pluginService ? pluginService.withAdmission(project, dispatch) : dispatch();
+  }
+  researchGoals = productDocuments && productDatabase && config.loopxEnabled !== false && config.researchGoalWatchEnabled !== false ? new ResearchGoals({
+    documents: productDocuments, database: productDatabase, agentRuns, runtimeManager, store,
+    dispatchTurn: dispatchResearchGoalTurn,
+    // A note to a round at work, by the road a person's correction takes. The round is LoopX's, so nobody is attending it, and the words are the
+    // platform's: under its own tag, so memory never reads them as the person's.
+    steerRound: async (project, run, text) => {
+      const requestId = randomId("req_");
+      await agentRuns.recordCorrection(project, run.id, requestId, text);
+      const user = await store.userById(project.userId);
+      await runtimeManager.dispatchPrompt(project, run.sessionId, {
+        recordPromptActor: (/** @type {any} */ request) => recordExtensionPromptActor(user, project, request),
+        text: `<evimed-research-goal>${text}</evimed-research-goal>`, runId: run.id, requestId, mode: "steer", strictContext: true, unattended: true,
+      });
+    },
+    // The next automatic round of a goal whose pause did not hold: stopped by the platform, so it is not charged to anyone's decision.
+    cancelRound: async (project, run) => {
+      await runtimeManager.cancelRuntimeSession(project, run.sessionId).catch(() => {});
+      return agentRuns.cancelRun(project, run.id, { by: "platform" });
+    },
+    notify: notificationService ? (userId, item) => notificationService.create(userId, item) : undefined,
+    claimingAllowed: () => !maintenanceService || maintenanceService.claimingAllowed(),
+    limits: config.researchGoalLimits,
+    log: (line) => process.stderr.write(`${line}\n`),
+  }) : null;
+  const researchGoalRoutes = createResearchGoalRoutes({ store, goals: researchGoals });
   const startRecurringWork = async () => {
     if (recurringWorkStarted || (maintenanceService && !maintenanceService.claimingAllowed())) return;
     recurringWorkStarted = true;
@@ -9409,6 +9527,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       hostedExtensions?.worker.start();
       memoryIndexWorker?.start();
       nativeMemoryWorker.start();
+      researchGoals?.start();
       openVikingEngine?.start();
       sourceWorker?.start();
       knowledgePagesWorker?.start();
@@ -9697,6 +9816,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (capsuleCleanupTimer) clearInterval(capsuleCleanupTimer);
       await capsuleCleanupRun;
       if (researchDbCleanupTimer) clearInterval(researchDbCleanupTimer);
+      await researchGoals?.stop();
       await researchDbCleanupRun;
       // The pass that publishes the official packs at start writes into the database and the data directory: let it end first.
       await officialPacks?.idle();
@@ -11188,6 +11308,13 @@ async function operatorMetricsText({ webVitals = null, judgeService = null, open
   // 循证 GEO: `open_science_geo_enabled 0` when off (geoService.mjs `geoMetricFamilies`).
   const geoSnapshot = geo ? await geoMetricsSnapshot(geo) : null;
   for (const family of geoMetricFamilies(Boolean(geo), geoSnapshot)) addMetric(lines, family.name, family.help, family.type, family.series);
+  // This scrape is protected by the operator metrics token; readiness keeps counts only.
+  const geoCapacity = geo?.worker?.marketCapacityDiagnostics?.();
+  if (geoCapacity) {
+    addMetric(lines, "open_science_geo_market_incomplete_project", "Projects whose latest market tick could not read a complete decision input.", "gauge",
+      geoCapacity.projectIds.map((/** @type {string} */ id) => ({ labels: { geo_project_id: id }, value: 1 })));
+    addMetric(lines, "open_science_geo_market_incomplete_projects_truncated", "Whether the project diagnostic list was truncated.", "gauge", [{ value: geoCapacity.truncated ? 1 : 0 }]);
+  }
   // 虚拟临床研究: `open_science_vcr_enabled 0` when off; queue gauges (queued,
   // running, awaiting_budget — the second human stop), studies, the service's
   // and the job queue's counters, the worker's loops (vcrComposition.mjs).
@@ -11234,6 +11361,8 @@ async function operatorMetricsText({ webVitals = null, judgeService = null, open
   for (const family of dataAnalysisMetricFamilies()) addMetric(lines, family.name, family.help, family.type, family.series);
   // The research-database connector's imports by outcome and its refusals and bitten limits by reason (researchDbMetrics.mjs).
   for (const family of researchDbMetricFamilies()) addMetric(lines, family.name, family.help, family.type, family.series);
+  // What the control plane did about long research goals, by event (researchGoalMetrics.mjs).
+  for (const family of researchGoalMetricFamilies()) addMetric(lines, family.name, family.help, family.type, family.series);
   // Model requests booked uncertain, by why (usageLedger.mjs): a burst is a
   // provider or a caller losing calls, and shows here while it happens.
   const uncertain = usageUncertainMetricFamily();

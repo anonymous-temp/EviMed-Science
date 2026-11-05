@@ -84,3 +84,9 @@ Data
   pinned in OpenScience/deps-version.json under `terminology`) is made from the NCI Thesaurus (CC BY 4.0), the Human Phenotype
   Ontology and its Chinese translation by the CHPO consortium (HPO licence: the consortium is acknowledged and the version is
   shown with every answer), HGNC (CC0) and CIViC (CC0), and from vocabularies the operator supplies.
+
+- OpenScience/packages/domain/src/vendor/tldts-6.1.86.mjs is derived from the official
+  tldts 6.1.86 ESM bundle, Copyright (c) 2017 Thomas Parisot, 2018 Rémi
+  Berson, MIT licensed; see its adjacent tldts-LICENSE.txt. It embeds a
+  snapshot derived from the Public Suffix List, available under MPL 2.0;
+  see the adjacent MPL-2.0.txt and README.md for the version-specific source.

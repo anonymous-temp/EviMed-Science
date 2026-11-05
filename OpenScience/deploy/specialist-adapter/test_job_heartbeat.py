@@ -195,3 +195,25 @@ def test_a_running_mr_job_advances_under_the_protected_store(tmp_path, monkeypat
     time.sleep(BEAT * 4)
     assert store.read(state_path) == terminal
     assert "heartbeat stopped" not in (state_path.with_suffix(".log").read_text() if state_path.with_suffix(".log").exists() else "")
+
+
+def test_a_job_whose_workspace_was_deleted_ends_itself_and_writes_nothing_back(tmp_path, monkeypatch) -> None:
+    """An account or project deleted under a running job: the job's process group ends, an isolated engine's first, and nothing comes back."""
+    import shutil
+    import signal
+
+    module, *_ = _load_service(tmp_path, monkeypatch)
+    monkeypatch.setattr(module, "_HEARTBEAT_SECONDS", BEAT)
+    jobs = tmp_path / "gone" / "meta-analysis-runs" / ".jobs"
+    jobs.mkdir(parents=True)
+    state_path = jobs / "meta-test.json"
+    state = {"status": "running", "workerPid": os.getpid()}
+    state_path.write_text(json.dumps(state), encoding="utf-8")
+    killed: list[tuple[int, int]] = []
+    monkeypatch.setattr(module.os, "killpg", lambda group, sig: killed.append((group, sig)))
+    monkeypatch.setattr(module.isolated_job, "RUNNING_GROUPS", {4242})
+    with module._heartbeat(state_path, state, read=module._read_json, write=module._atomic_json):
+        shutil.rmtree(tmp_path / "gone")
+        assert _wait_until(lambda: len(killed) >= 2)
+    assert killed == [(4242, signal.SIGKILL), (os.getpgrp(), signal.SIGKILL)]
+    assert not (tmp_path / "gone").exists()

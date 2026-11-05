@@ -1,9 +1,18 @@
 {
   "status": "warning",
-  "summary": "There is no 虚拟临床研究 study in this conversation, so there is no step to write.",
+  "summary": "Nothing was written to step: 1 issue(s).",
   "data": {
     "what": "step",
-    "code": "vcr_no_study",
+    "ok": false,
+    "ids": [],
+    "issues": [
+      {
+        "index": 0,
+        "field": "status",
+        "code": "vcr_write_field_forbidden",
+        "message": "status 不是这类写入的字段（可写：step、requested、note）。"
+      }
+    ],
     "provenance": {
       "tool": "vcr_write",
       "arguments": {
@@ -14,17 +23,17 @@
         }
       },
       "scope": {
-        "tenantId": "tool-probe-1cb73eaa",
-        "userId": "tool-probe-1cb73eaa",
-        "projectId": "tool-probe",
-        "workspaceDir": "/workspace/.audit-repo-20261012T071445Z/OpenScience/evals/capability-audit/tool-probe-workspace"
+        "tenantId": "ck-probe-14d43468",
+        "userId": "ck-probe-14d43468",
+        "projectId": "audit-tool-probe",
+        "workspaceDir": "/workspace/.audit-repo-20261104T131143Z/OpenScience/evals/capability-audit/tool-probe-workspace"
       }
     }
   },
   "warnings": [
-    "This conversation is not in a 虚拟临床研究 study; open the study's own conversation to read or write its data."
+    "item 0, status: status 不是这类写入的字段（可写：step、requested、note）。"
   ],
   "next_actions": [
-    "Go on without the platform's study data, or work in the study's own conversation."
+    "Correct the named items and write them again; nothing else changed."
   ]
 }

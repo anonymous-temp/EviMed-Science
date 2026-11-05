@@ -236,7 +236,7 @@ export const GEO_METRIC_NAMES: Readonly<Record<GeoOverviewMetricKey, string>> = 
 });
 
 /** A GVI is an index 0–100; the other three are percentages. */
-export type GeoUnit = "percent" | "index" | "count";
+export type GeoUnit = "percent" | "index" | "count" | "ratio";
 export const GEO_METRIC_UNITS: Readonly<Record<GeoOverviewMetricKey, GeoUnit>> = Object.freeze({
   gvi: geoMetricUnit("gvi"),
   mention: geoMetricUnit("mention"),

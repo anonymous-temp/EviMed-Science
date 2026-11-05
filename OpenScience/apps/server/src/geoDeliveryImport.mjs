@@ -324,28 +324,32 @@ function pagesOf(items, max) {
 const codeOf = (error, fallback) => (typeof /** @type {any} */ (error)?.code === "string" ? /** @type {any} */ (error).code : fallback);
 
 /** Discovery hints only; immutable producing-run snapshots supply every imported byte.
- * @param {any} run @param {any} context @returns {string[]} */
-export function geoStructuredRunPaths(run, context) {
+ * @param {any} run @param {any} context @returns {{paths:string[],total:number,complete:boolean}} */
+export function geoStructuredRunPathReceipt(run, context) {
   const capability = context?.mode === "strategy" ? "geo-strategy" : context?.mode === "content" ? "geo-content"
     : context?.mode === "signal" ? run.effectiveAgentId : null;
-  if (!["geo-strategy", "geo-content"].includes(capability)) return [];
+  if (!["geo-strategy", "geo-content"].includes(capability)) return { paths: [], total: 0, complete: true };
   const name = capability === "geo-strategy" ? "strategy.json" : "articles.json";
   const paths = ["outputFiles", "presentedFiles", "artifacts", "unverifiedArtifacts"]
     .flatMap(key => Array.isArray(run[key]) ? run[key].map(file => typeof file === "string" ? file : file?.path) : []);
   for (const item of run.deliverables ?? run.progress?.deliverables ?? []) {
     if (item && (!item.capability || item.capability === capability) && /^[A-Za-z0-9_-]{1,160}$/.test(item.id ?? "")) paths.push(`deliverables/${item.id}/${name}`);
   }
-  return [...new Set(paths.filter(file => typeof file === "string" && new RegExp(`^deliverables/[A-Za-z0-9_-]{1,160}/${name.replace(".", "\\.")}$`).test(file)))].slice(0, 64);
+  const unique = [...new Set(paths.filter(file => typeof file === "string" && new RegExp(`^deliverables/[A-Za-z0-9_-]{1,160}/${name.replace(".", "\\.")}$`).test(file)))];
+  return { paths: unique.slice(0, 64), total: unique.length, complete: unique.length <= 64 };
 }
+export function geoStructuredRunPaths(run, context) { return geoStructuredRunPathReceipt(run, context).paths; }
 
 /** Only an actually handed geo-value file of the run's supported capability participates in a bound signal import.
- * @param {any} run @param {any} context @returns {string[]} */
-export function geoSignalValueRunPaths(run, context) {
-  if (context?.mode !== "signal" || !geoValueCapabilitySupported(run.effectiveAgentId ?? run.capabilityId ?? run.agentId)) return [];
-  return [...new Set(["outputFiles", "presentedFiles", "artifacts", "unverifiedArtifacts"]
+ * @param {any} run @param {any} context @returns {{paths:string[],total:number,complete:boolean}} */
+export function geoSignalValueRunPathReceipt(run, context) {
+  if (context?.mode !== "signal" || !geoValueCapabilitySupported(run.effectiveAgentId ?? run.capabilityId ?? run.agentId)) return { paths: [], total: 0, complete: true };
+  const unique = [...new Set(["outputFiles", "presentedFiles", "artifacts", "unverifiedArtifacts"]
     .flatMap(key => Array.isArray(run[key]) ? run[key] : []).map(file => typeof file === "string" ? file : file?.path)
-    .filter(file => typeof file === "string" && /^deliverables\/[A-Za-z0-9_-]{1,160}\/geo-value\.json$/.test(file)))].slice(0, 20);
+    .filter(file => typeof file === "string" && /^deliverables\/[A-Za-z0-9_-]{1,160}\/geo-value\.json$/.test(file)))];
+  return { paths: unique.slice(0, 20), total: unique.length, complete: unique.length <= 20 };
 }
+export function geoSignalValueRunPaths(run, context) { return geoSignalValueRunPathReceipt(run, context).paths; }
 
 /** Keep only the explicit source-review result within its frozen target authorization. Successor and closure semantics stay in GeoSourceReviews.
  * @param {any} patch @param {any} context @returns {{data:any,refused:boolean}} */
@@ -426,9 +430,13 @@ export function createGeoDeliveryImport({ store, report = () => {}, audit = null
     const boundInput = planningContext ? await planningContext(geoProject, run) : null;
     // A selected request owns only its files; legacy project-wide reconciliation belongs to unbound runs.
     if (boundInput) {
+      const structuredReceipt = geoStructuredRunPathReceipt(run, boundInput);
+      const signalReceipt = geoSignalValueRunPathReceipt(run, boundInput);
+      let complete = structuredReceipt.complete && signalReceipt.complete && options.outputCompleteness?.enumerationComplete !== false;
+      if (!complete) { failed.push('geo_plan_output_unavailable'); report('geo_plan_output_unavailable'); }
       const valueFiles = { imported: 0, unavailable: /** @type {string[]} */ ([]) };
       const reader = options.readRunFile ?? readRunFile;
-      for (const relative of geoSignalValueRunPaths(run, boundInput)) {
+      for (const relative of signalReceipt.paths) {
         let wrote = false;
         try {
           if (!reader) throw new Error("No preserved run reader");
@@ -451,7 +459,7 @@ export function createGeoDeliveryImport({ store, report = () => {}, audit = null
           const code = codeOf(error, "geo_plan_output_unavailable"); failed.push(code); valueFiles.unavailable.push(relative); report(code);
         }
       }
-      const paths = geoStructuredRunPaths(run, boundInput);
+      const paths = structuredReceipt.paths;
       const capability = boundInput.mode === "strategy" ? "geo-strategy" : "geo-content";
       const deliverables = paths.map(file => ({ id: file.split("/")[1], capability }));
       const files = await importRunFiles({ project, run, geoProject, deliverables, failed, trustedContext: boundInput, reader });
@@ -462,7 +470,10 @@ export function createGeoDeliveryImport({ store, report = () => {}, audit = null
         || (paths.length && !files.strategies && !files.registered && !files.enriched && !files.existing)) {
         if (!failed.length) { failed.push("geo_plan_output_unavailable"); report("geo_plan_output_unavailable"); }
       }
-      return { imported: 0, issues: 0, located: 0, gated: 0, ...(paths.length ? { files } : {}), ...(valueFiles.imported || valueFiles.unavailable.length ? { valueFiles } : {}) };
+      if (options.outputCompleteness?.complete === false && !failed.includes('geo_plan_output_unavailable')) failed.push('geo_plan_output_unavailable');
+      if (failed.length) complete = false;
+      return { imported: 0, issues: 0, located: 0, gated: 0, completeness: { scope: 'business_import_candidates', recordedInventoryByteVerification: 'unknown', upstreamComplete: null, continuationAvailable: false, complete, structuredTotal: structuredReceipt.total, signalTotal: signalReceipt.total,
+        ...(options.outputCompleteness ? { preserved: options.outputCompleteness } : {}) }, ...(paths.length ? { files } : {}), ...(valueFiles.imported || valueFiles.unavailable.length ? { valueFiles } : {}) };
     }
     failed.push(...(await importGeoValue({ store, project, geoProject, run, readFile, report, capabilityOutputs })).failed);
     const deliverables = [.../** @type {any[]} */ (run.deliverables ?? run.progress?.deliverables ?? [])];

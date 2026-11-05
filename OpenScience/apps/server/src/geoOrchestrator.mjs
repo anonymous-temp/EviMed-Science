@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { withGeoSignalLease } from "./geoSignalProgress.mjs";
 import { createModuleEvolutionPolicies } from "./moduleEvolutionPolicies.mjs";
 import { geoWorkflowState, geoAutomationEnabled, GEO_RESEARCH_CAPABILITIES, GEO_ENGINE_LABELS_ZH, GEO_POOL_LABELS_ZH, GEO_STALE_PLACEMENT_WEEKS, GEO_STEP_LABELS_ZH, GEO_STEPS, allowanceWaitingNote, canonicalGeoUrl, geoGroupShort, geoPlacementStale, geoPoolTarget, geoValueActive, geoValueList, geoValueText, geoVisibleQuestion, stepWaitingFor } from "@evimed/domain";
@@ -544,6 +545,8 @@ export class GeoOrchestrator {
     this.config = config;
     this.notifier = notifier;
     this.dispatchRun = dispatchRun;
+    /** The project whose run this call chain is dispatching (`#dispatch`, `onRunFinished`). @type {AsyncLocalStorage<string>} */
+    this.dispatching = new AsyncLocalStorage();
     this.runStatus = runStatus;
     this.importRun = importRun;
     this.enqueueRound = enqueueRound;
@@ -808,6 +811,10 @@ export class GeoOrchestrator {
       WHERE p.user_id = $1 AND p.project_id = $2 AND p.deleted_at IS NULL AND m.kind = 'run' AND m.dispatch_id = $3`,
     [String(controlProject.userId), String(controlProject.id), String(run.dispatchId)])).rows[0];
     if (!row || ["done", "failed"].includes(row.state)) return false;
+    // A run refused while its dispatch is still in hand ends inside that dispatch, which holds this project's turn and is waiting for the answer:
+    // asking for the turn here would wait for itself, for good, and take the worker's whole pass with it (2026-11-04, every step of a
+    // one-person project on production). The dispatch folds the run from its own answer (`#dispatch`).
+    if (this.dispatching.getStore() === row.geo_project_id) return false;
     await this.#exclusive(row.geo_project_id, async () => {
       const project = await this.#project(row.geo_project_id);
       if (project) await this.#finishRun(project, { ...row, run_id: row.run_id ?? run.id }, String(run.status), run);
@@ -896,6 +903,16 @@ export class GeoOrchestrator {
       if (written > 0) current = await this.#step(current, "content", { status: "done", runId: mark.run_id ?? null });
       else if (!FINISHED.has(current.steps.content?.status)) current = await this.#step(current, "content", { status: "failed", runId: mark.run_id ?? null });
       else current = await this.#step(current, "content", { status: "done" });
+    }
+    // A person's stop is the end of this try, not a failure to try again: nothing starts by itself (a live run on production began two minutes after
+    // 停止, 2026-11-04), and a step it left with nothing is back where it was. Asking again gives it new tries (`runStep`, `#allowRetries`).
+    if (status === "canceled" && run?.canceledBy === "user") {
+      await this.#update(project.id, mark.key, { detail: { allowed: Number(mark.attempts ?? 0) } });
+      for (const [step, value] of Object.entries(current.steps)) {
+        if (/** @type {any} */ (value)?.status === "failed" && /** @type {any} */ (value)?.runId === (mark.run_id ?? null)) {
+          current = await this.#step(current, step, { status: "none", requested: false, runId: null });
+        }
+      }
     }
   }
 
@@ -1590,10 +1607,10 @@ export class GeoOrchestrator {
         return { deferred: 'policy_basis_changed' };
       }
       const brief = policyContext.supplements.length ? `${spec.brief}\n\nPlatform strategy supplements (${policyContext.revisionId}):\n${policyContext.supplements.join("\n")}` : spec.brief;
-      const out = await /** @type {NonNullable<GeoOrchestrator["dispatchRun"]>} */ (this.dispatchRun)({
+      const out = await this.dispatching.run(project.id, () => /** @type {NonNullable<GeoOrchestrator["dispatchRun"]>} */ (this.dispatchRun)({
         userId: project.userId, projectId: project.projectId, geoProjectId: project.id, capabilityId: spec.capabilityId,
         dispatchId: String(mark.dispatch_id), reason: spec.reason, brief, question: spec.question,
-      });
+      }));
       const running = await this.#update(project.id, spec.key, { state: "running", runId: String(out.runId), sessionId: out.sessionId ?? null,
         attempts: Number(mark.attempts ?? 0) + 1 }, ["claimed"]);
       for (const step of spec.steps) current = await this.#step(current, step, { status: "running", runId: String(out.runId), ...unwaiting(current, step) });

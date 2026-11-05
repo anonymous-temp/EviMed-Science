@@ -50,6 +50,13 @@ External publishing, account access and budgets retain their existing authorizat
 
 ## The method pack
 
+A private skill is installed at `<geo-private>/skills/<skill>`; its shared
+directory is `../../shared` from that skill base. Resolve `refs/x.md` to
+`../../shared/references/x.md` and `rules/x.yaml` to `../../shared/rules/x.yaml`.
+`$GEO_LIB` names that shared directory conceptually; it is not guaranteed to
+be an exported shell variable. Skill-local `references/` and `scripts/` stay
+under the skill base; `contracts/ownership.yaml` is under `shared/`.
+
 Load with the `skill` tool and follow; `$GEO_LIB` is the `shared/` directory of
 the `geo-private` root.
 

@@ -30,8 +30,10 @@ export function ErrorCharts({
   denominator,
   historical = false,
   selection,
+  emptyAssessment,
 }: {
   errors: readonly GeoErrorRow[];
+  emptyAssessment: { title: string; text: string };
   summary?: GeoErrorSummary;
   /** Answer-level composition, including partial, unknown and refused observations. */
   composition: readonly ShareSegment[];
@@ -57,14 +59,14 @@ export function ErrorCharts({
   // bar beside a five-row list is a card that is mostly white.
   const cells: Array<Pick<ChartGridCell, "key" | "node">> = (summary?.total ?? errors.length) > 0
     ? [
-      { key: "severity", node: <BySeverity errors={errors} summary={summary} selection={selection} /> },
+      { key: "severity", node: <BySeverity errors={errors} summary={summary} selection={selection} emptyAssessment={emptyAssessment} /> },
       { key: "type", node: <ByType errors={errors} summary={summary} selection={selection} /> },
       { key: "composition", node: composition_ },
       { key: "source", node: <BySource errors={errors} summary={summary} selection={selection} /> },
     ]
     : [
       { key: "composition", node: composition_ },
-      { key: "severity", node: <BySeverity errors={errors} summary={summary} selection={selection} /> },
+      { key: "severity", node: <BySeverity errors={errors} summary={summary} selection={selection} emptyAssessment={emptyAssessment} /> },
     ];
   const rows: ChartGridCell[][] = [];
   for (let at = 0; at < cells.length; at += 2) {
@@ -76,35 +78,39 @@ export function ErrorCharts({
 
 /* ------------------------------------------------------- severity × engine */
 
-function BySeverity({ errors, summary, selection }: { errors: readonly GeoErrorRow[]; summary?: GeoErrorSummary; selection: ErrorChartSelection }) {
+function BySeverity({ errors, summary, selection, emptyAssessment }: { errors: readonly GeoErrorRow[]; summary?: GeoErrorSummary; selection: ErrorChartSelection; emptyAssessment: { title: string; text: string } }) {
   const engines = summary ? Object.keys(summary.byEngine) : [...new Set(errors.map((error) => error.engine))];
   const rows = engines
     .map((engine) => {
       const mine = errors.filter((error) => error.engine === engine);
       const levels: SeverityLevel[] = ["S4", "S3", "S2", "S1", "S0"];
+      const unknown = summary ? summary.byEngineSeverity[`${engine}:unknown`] ?? 0 : mine.filter(error => error.severity === null || !levels.includes(error.severity)).length;
       return {
         engine,
         total: summary?.byEngine[engine] ?? mine.length,
         segments: levels.flatMap<ShareSegment>((level) => {
           const count = summary ? summary.byEngineSeverity[`${engine}:${level}`] ?? 0 : mine.filter((error) => error.severity === level).length;
           return count > 0 ? [{ key: `${engine}:${level}`, label: level, value: count, tone: SEVERITY_TONES[level] }] : [];
-        }).concat((summary?.byEngineSeverity[`${engine}:unknown`] ?? 0) > 0 ? [{ key: `${engine}:unknown`, label: "严重度未知", value: summary!.byEngineSeverity[`${engine}:unknown`], tone: "quiet" }] : []) as ShareSegment[],
+        }).concat(unknown > 0 ? [{ key: `${engine}:unknown`, label: "严重度未知", value: unknown, tone: "quiet" }] : []) as ShareSegment[],
       };
     })
     .sort((left, right) => right.total - left.total);
   const worst = rows[0] ?? null;
   return (
     <ChartCard
-      title={worst ? zh`${engineName(worst.engine)}讲错最多，${worst.total} 条` : "没有测到讲错"}
+      title={worst ? zh`${engineName(worst.engine)}讲错最多，${worst.total} 条` : emptyAssessment.title}
+      footnote="严重度描述 AI 回答可能造成的临床后果；仅凭回答无法判断患者是否已用药或受伤。"
       legend={(
         <>
+          <SeverityBadge level="S4" label />
           <SeverityBadge level="S3" label />
           <SeverityBadge level="S2" label />
           <SeverityBadge level="S1" label />
+          <SeverityBadge level="S0" label />
         </>
       )}
       state={rows.length === 0 ? "empty" : "content"}
-      emptyText="这一轮没有测到讲错我方的说法。"
+      emptyText={emptyAssessment.text}
       height={180}
     >
       <ul aria-label="各引擎讲错的条数，按严重度" className="flex flex-col gap-1">
@@ -123,6 +129,7 @@ function BySeverity({ errors, summary, selection }: { errors: readonly GeoErrorR
                 <span className="min-w-0 flex-1"><ShareBar label={`${engineName(row.engine)} 的讲错`} segments={row.segments} legend={false} /></span>
                 <span className="w-8 shrink-0 text-right text-ui tabular-nums text-text">{row.total}</span>
               </button>
+              <p className="px-2 text-caption text-text-3">{row.segments.map(segment => `${segment.label} ${segment.value} 条`).join(" · ")}</p>
             </li>
           );
         })}

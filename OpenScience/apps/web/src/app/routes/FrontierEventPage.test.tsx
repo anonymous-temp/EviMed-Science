@@ -1,3 +1,4 @@
+import { optionalOpaqueRuntimeUiIntent } from "@/test/runtimeUiIntentAssertions";
 import { fireEvent, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
@@ -22,7 +23,7 @@ const FIRST = "2026-09-22T10:01:00.000Z";
 
 function event(overrides: Partial<FrontierEvent> = {}): FrontierEvent {
   return {
-    id: "ev1",
+    id: "event0000001",
     title: "不饱和磷脂多层多囊脂质体实现亲水药物超缓释",
     digest: "DOPC 脂质体包封率约为饱和类似物的 3 倍，初始释放低 11 倍。",
     latest: { text: "缓释脂质体注射剂在大鼠中实现持续 2 至 3 周神经阻滞", at: ago(3) },
@@ -47,7 +48,7 @@ function event(overrides: Partial<FrontierEvent> = {}): FrontierEvent {
 
 function Probe() {
   const location = useLocation();
-  const intent = (location.state as { runtimeUiIntent?: { draft?: string; originReference?: { kind: string; id: string } } } | null)?.runtimeUiIntent;
+  const intent = optionalOpaqueRuntimeUiIntent(location.state);
   return <div data-testid="location" data-origin={intent?.originReference ? `${intent.originReference.kind}:${intent.originReference.id}` : undefined}>{location.pathname}{location.search}{intent?.draft ? `|${intent.draft}` : ""}</div>;
 }
 
@@ -61,7 +62,7 @@ function wide() {
   }) as unknown as MediaQueryList);
 }
 
-function renderEvent(id = "ev1", search = "") {
+function renderEvent(id = "event0000001", search = "") {
   return render(
     <MemoryRouter initialEntries={[`/app/frontier/events/${id}${search}`]}>
       <Routes>
@@ -263,7 +264,7 @@ describe("an event", () => {
     await screen.findByRole("button", { name: "让 AI 深入研究" });
     expect(screen.queryByRole("region", { name: "就此提问" })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "让 AI 深入研究" }));
-    expect(screen.getByTestId("location")).toHaveAttribute("data-origin", expect.stringMatching(/^frontier-event:ev1$/));
+    expect(screen.getByTestId("location")).toHaveAttribute("data-origin", expect.stringMatching(/^frontier-event:event0000001$/));
   });
 
   it("moves its own address to the surviving event when the old id was merged", async () => {
@@ -308,7 +309,7 @@ describe("where there is no event to show", () => {
 it("returns to the originating filtered feed rather than resetting its address", async () => {
   render(<MemoryRouter initialEntries={[
     "/app/frontier?view=all&lane=safety&q=lipid",
-    { pathname: "/app/frontier/events/ev1", state: { frontierOrigin: "/app/frontier?view=all&lane=safety&q=lipid" } },
+    { pathname: "/app/frontier/events/event0000001", state: { frontierOrigin: "/app/frontier?view=all&lane=safety&q=lipid" } },
   ]} initialIndex={1}><Routes>
     <Route path="/app/frontier/events/:eventId" element={<FrontierEventPage />} />
     <Route path="/app/frontier" element={<div>Originating feed</div>} />
@@ -388,20 +389,20 @@ describe("the order of the reports", () => {
     expect(within(order).getByRole("button", { name: "最新" })).toHaveAttribute("aria-pressed", "true");
     await userEvent.click(within(order).getByRole("button", { name: "最早" }));
     expect(reportTitles()).toEqual(["最早的报道", "中间的报道", "最新的报道"]);
-    expect(screen.getByTestId("location")).toHaveTextContent("/app/frontier/events/ev1?order=asc");
-    await waitFor(() => expect(client.fetchFrontierEvent).toHaveBeenLastCalledWith("ev1", "asc"));
+    expect(screen.getByTestId("location")).toHaveTextContent("/app/frontier/events/event0000001?order=asc");
+    await waitFor(() => expect(client.fetchFrontierEvent).toHaveBeenLastCalledWith("event0000001", "asc"));
     // The event stays on screen while it is read again.
     expect(screen.getByRole("heading", { level: 1 })).toBeInTheDocument();
     await userEvent.click(within(screen.getByRole("group", { name: "报道顺序" })).getByRole("button", { name: "最新" }));
     expect(reportTitles()).toEqual(["最新的报道", "中间的报道", "最早的报道"]);
-    expect(screen.getByTestId("location")).toHaveTextContent(/^\/app\/frontier\/events\/ev1$/);
+    expect(screen.getByTestId("location")).toHaveTextContent(/^\/app\/frontier\/events\/event0000001$/);
   });
 
   it("opens in the order its address names", async () => {
     client.fetchFrontierEvent.mockResolvedValue(event());
-    renderEvent("ev1", "?order=asc");
+    renderEvent("event0000001", "?order=asc");
     await screen.findByRole("heading", { level: 1 });
-    expect(client.fetchFrontierEvent).toHaveBeenCalledWith("ev1", "asc");
+    expect(client.fetchFrontierEvent).toHaveBeenCalledWith("event0000001", "asc");
     expect(within(screen.getByRole("group", { name: "报道顺序" })).getByRole("button", { name: "最早" })).toHaveAttribute("aria-pressed", "true");
   });
 });
@@ -451,7 +452,7 @@ describe("the timeline by Beijing day", () => {
 
   it("reads the oldest day first on 最早, the days and the rows inside them both", async () => {
     client.fetchFrontierEvent.mockResolvedValue(event({ items: reports(), hasPrimary: false, primary: null }));
-    renderEvent("ev1", "?order=asc");
+    renderEvent("event0000001", "?order=asc");
     await screen.findByRole("heading", { level: 2, name: "报道时间线" });
     expect(days()).toEqual([
       { heading: "3月14日 周六", rows: ["凌晨的报道", "上午的报道"] },

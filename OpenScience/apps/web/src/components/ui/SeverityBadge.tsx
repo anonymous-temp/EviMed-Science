@@ -5,7 +5,7 @@ import { Tooltip } from "@/components/ui/Tooltip";
  * How badly a wrong sentence about a medicine would land, as the one red on a
  * data page (DESIGN.md: red is for danger and unhandled work, nothing else).
  *
- * Five grades, after the medication-error scale: S4 and S3 are the deep red,
+ * Five grades for potential consequences: S4 and S3 are the deep red,
  * S2 the lighter one, S1 and S0 grey — a defect that changes nothing is not
  * an alarm. The grade is said three ways: the colour, the letter, and the
  * consequence in words, which is the badge's tooltip and its accessible name.
@@ -17,7 +17,7 @@ export type SeverityLevel = "S0" | "S1" | "S2" | "S3" | "S4";
 export const SEVERITY_WORDS: Readonly<Record<SeverityLevel, string>> = Object.freeze({
   S0: "几乎无影响",
   S1: "影响轻微",
-  S2: "需监测或干预",
+  S2: "可能需要监测或干预",
   S3: "可致暂时伤害",
   S4: "可致永久伤害或危及生命",
 });

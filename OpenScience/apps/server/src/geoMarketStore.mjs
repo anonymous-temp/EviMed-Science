@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { GEO_PLACEMENT_LABELS } from "@evimed/domain";
 import { GEO_ORDER_ARTICLE_LIVE_STATES, migrateGeo } from "./geoPersistence.mjs";
 import { HttpError } from "./security.mjs";
+import { dnsKey } from "./geoDomains.mjs";
 
 export { GEO_ORDER_ARTICLE_LIVE_STATES };
 
@@ -10,6 +11,8 @@ export const ARTICLE_LIVE_INDEX = "geo_orders_live_article_key";
 
 /** Amounts closer than a cent are equal. */
 export const EPSILON_CNY = 0.01;
+// A decision must either see the full order set or refuse new spending.
+export const GEO_MARKET_DECISION_ORDERS_MAX = 10_000;
 
 const round2 = (/** @type {number} */ value) => Math.round(value * 100) / 100;
 
@@ -518,10 +521,15 @@ export class GeoMarketStore {
         icp_owner text, fields jsonb, price_cny numeric, publish_rate numeric, publish_seconds int, remarks text, case_link text,
         flags jsonb, available boolean, blacklisted boolean, blacklist_reason text, price_history jsonb, synced_at timestamptz)
       ON CONFLICT (media_type, resource_id) DO UPDATE SET
-        name = EXCLUDED.name, domain = EXCLUDED.domain, domain_verified = EXCLUDED.domain_verified, icp_owner = EXCLUDED.icp_owner,
+        name = EXCLUDED.name, domain = EXCLUDED.domain,
+        domain_verified = CASE WHEN evimed_geo.media.domain IS DISTINCT FROM EXCLUDED.domain OR evimed_geo.media.case_link IS DISTINCT FROM EXCLUDED.case_link
+          THEN NULL ELSE evimed_geo.media.domain_verified END, icp_owner = EXCLUDED.icp_owner,
         fields = EXCLUDED.fields, price_cny = EXCLUDED.price_cny, publish_rate = EXCLUDED.publish_rate,
         publish_seconds = EXCLUDED.publish_seconds, remarks = EXCLUDED.remarks, case_link = EXCLUDED.case_link,
-        flags = coalesce(evimed_geo.media.flags, '{}'::jsonb) || coalesce(EXCLUDED.flags, '{}'::jsonb),
+        flags = (CASE WHEN evimed_geo.media.domain IS DISTINCT FROM EXCLUDED.domain OR evimed_geo.media.case_link IS DISTINCT FROM EXCLUDED.case_link
+          THEN coalesce(evimed_geo.media.flags, '{}'::jsonb) - ARRAY['domainCheckedAt','domainCheck','domainFinalHost','domainCheckError','manualDomainCheckToken','manualDomainCheckAt']
+          ELSE coalesce(evimed_geo.media.flags, '{}'::jsonb) END) ||
+          (coalesce(EXCLUDED.flags, '{}'::jsonb) - ARRAY['domainCheckedAt','domainCheck','domainFinalHost','domainCheckError','manualDomainCheckToken','manualDomainCheckAt']),
         available = EXCLUDED.available, blacklisted = EXCLUDED.blacklisted, blacklist_reason = EXCLUDED.blacklist_reason,
         price_history = EXCLUDED.price_history, synced_at = EXCLUDED.synced_at`, [JSON.stringify(payload)]);
     return rows.length;
@@ -542,6 +550,76 @@ export class GeoMarketStore {
       WHERE available AND NOT coalesce(blacklisted, false) AND price_cny IS NOT NULL AND price_cny <= $1
       ORDER BY media_type, resource_id LIMIT $2`, [assertAmount(maxPriceCny), limit]);
     return result.rows.map(mapMedia);
+  }
+
+  /** Select oldest eligible attempts across the catalogue; no first-page starvation. */
+  async listDueDomainChecks({ maxPriceCny, checkedBefore, attemptedBefore, limit }) {
+    assertLimit(limit, GEO_MARKET_STORE_LIMITS.candidatesMax);
+    const result = await this.#query(`SELECT * FROM evimed_geo.media WHERE available AND NOT coalesce(blacklisted,false)
+      AND price_cny IS NOT NULL AND price_cny <= $1 AND domain IS NOT NULL AND case_link IS NOT NULL
+      AND coalesce(flags->>'medicalRefused','false') <> 'true'
+      AND (domain_verified IS NULL OR coalesce(flags->>'domainCheckedAt','') = ''
+        OR flags->>'domainCheckedAt' !~ '^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$'
+        OR flags->>'domainCheckedAt' < $2)
+      AND coalesce(flags->>'manualDomainCheckAt','') < $3
+      ORDER BY coalesce(flags->>'manualDomainCheckAt',''),
+        CASE WHEN flags->>'medicalCategory'='true' THEN 0 ELSE 1 END,media_type,resource_id LIMIT $4`,
+    [assertAmount(maxPriceCny), assertAt(checkedBefore), assertAt(attemptedBefore), limit]);
+    return result.rows.map(mapMedia);
+  }
+
+  /** Complete bounded lookup of named media outside the ranking window. */
+  async listPreferredMedia({ names, maxPriceCny, includeUnavailable = false, includeUnverifiedHost = false }) {
+    const wanted=[...new Set(names.map(dnsKey))].filter(Boolean);
+    if(!wanted.length)return [];
+    if(wanted.length>GEO_MARKET_DECISION_ORDERS_MAX)throw new HttpError(422,'geo_spine_incomplete','The preferred media input exceeds its complete-read limit. Contact an administrator before retrying.');
+    let result;
+    try {
+      result=await this.#transaction(async client=>{
+        await client.query("SET LOCAL statement_timeout = '5s'");
+        return client.query(`SELECT * FROM evimed_geo.media WHERE ($2::boolean OR (available AND NOT coalesce(blacklisted,false)
+          AND price_cny IS NOT NULL AND price_cny <= $1)) ORDER BY media_type,resource_id LIMIT $3`,
+        [assertAmount(maxPriceCny), includeUnavailable, GEO_MARKET_DECISION_ORDERS_MAX+1]);
+      });
+    } catch(error) {
+      if(error?.code==='57014') {
+        const failure=/statement timeout/i.test(String(error.message ?? ''))
+          ? new HttpError(422,'geo_spine_incomplete','The preferred media read timed out. Contact an administrator before retrying.')
+          : new HttpError(503,'geo_source_preview_interrupted','The source preview read was interrupted. Please retry.');
+        failure.cause=error;
+        throw failure;
+      }
+      const failure = new HttpError(503, 'geo_source_preview_interrupted', 'The source preview read was interrupted. Please retry.');
+      failure.cause = error;
+      throw failure;
+    }
+    if(result.rows.length>GEO_MARKET_DECISION_ORDERS_MAX)throw new HttpError(422,'geo_spine_incomplete','The preferred media input exceeds its complete-read limit. Contact an administrator before retrying.');
+    const selected = new Set(wanted);
+    return result.rows.map(mapMedia).filter(media => {
+      if (selected.has(dnsKey(media.domain))) return true;
+      const host = dnsKey(media.flags?.host);
+      const checked = dnsKey(media.flags?.domainFinalHost);
+      return selected.has(host) && (includeUnverifiedHost || media.domainVerified === true
+        && media.flags?.domainCheck === 'ok' && host === checked);
+    });
+  }
+
+  /** Claim one exact catalogue record across workers; a crash leaves a short cooldown. */
+  async claimDomainRecheck(media, token, at, before) {
+    const result = await this.#query(`UPDATE evimed_geo.media SET
+      flags = coalesce(flags, '{}'::jsonb) || jsonb_build_object('manualDomainCheckToken', $5::text, 'manualDomainCheckAt', $6::text)
+      WHERE media_type=$1 AND resource_id=$2 AND domain=$3 AND case_link=$4
+        AND coalesce(flags->>'manualDomainCheckAt', '') < $7
+      RETURNING resource_id`, [media.mediaType, media.resourceId, media.domain, media.caseLink, token, at, before]);
+    return (result.rowCount ?? 0) === 1;
+  }
+
+  async finishDomainRecheck(media, token, verdict) {
+    const result = await this.#query(`UPDATE evimed_geo.media SET domain_verified=$6,
+      flags = coalesce(flags, '{}'::jsonb) || $7::jsonb
+      WHERE media_type=$1 AND resource_id=$2 AND domain=$3 AND case_link=$4 AND flags->>'manualDomainCheckToken'=$5`,
+    [media.mediaType, media.resourceId, media.domain, media.caseLink, token, verdict.domainVerified, JSON.stringify(verdict.flags)]);
+    return (result.rowCount ?? 0) === 1;
   }
 
   /**
@@ -701,6 +779,30 @@ export class GeoMarketStore {
       runId: version.run_id, onlineUpdateNeeded: false };
   }
 
+  /** Resolve a bounded batch against each order's own immutable pin. */
+  async getOrderArticles(orders) {
+    if (orders.length > GEO_MARKET_STORE_LIMITS.listMax) throw storeError("Too many articles in one lookup.");
+    if (!orders.length) return [];
+    const articles = new Map((await this.getArticles(orders.map(order => order.articleId).filter(Boolean))).map(article => [String(article.id), article]));
+    const pinned = orders.filter(order => order.articleId && order.articleResultVersionId);
+    const versions = pinned.length ? (await this.#query(`SELECT v.* FROM evimed_geo.article_versions v
+      JOIN unnest($1::text[],$2::text[],$3::text[]) AS wanted(geo_id,article_id,version_id)
+        ON v.geo_project_id=wanted.geo_id AND v.article_id=wanted.article_id AND v.result_version_id=wanted.version_id`,
+    [pinned.map(order => String(order.geoProjectId)), pinned.map(order => String(order.articleId)), pinned.map(order => String(order.articleResultVersionId))])).rows : [];
+    const key = (geo, article, version) => `${geo}\u0000${article}\u0000${version}`;
+    const byVersion = new Map(versions.map(row => [key(row.geo_project_id,row.article_id,row.result_version_id), row]));
+    return orders.map(order => {
+      const article=articles.get(String(order.articleId));
+      if (!article || article.geoProjectId !== order.geoProjectId) return null;
+      if (!order.articleResultVersionId) return article.currentResultVersionId ? null : article;
+      const version=byVersion.get(key(order.geoProjectId,order.articleId,order.articleResultVersionId));
+      if (!version || version.digest !== order.articleDigest) return null;
+      return { ...article, ...reviewOfVersion(article, version), id: article.id, isControl: article.isControl,
+        currentResultVersionId: version.result_version_id, contentSha256: version.digest, path: version.path,
+        runId: version.run_id, onlineUpdateNeeded: false };
+    });
+  }
+
   /**
    * Move an article forward (placed, published); never backward. A paid placement records its label (广告 or 商业合作) on the
    * article, and a later move keeps the one that is there.
@@ -717,12 +819,14 @@ export class GeoMarketStore {
 
   /** @param {string} geoProjectId @param {string[]} domains */
   async getSources(geoProjectId, domains) {
-    const unique = [...new Set(domains.map(String))];
+    const unique = [...new Set(domains.map(dnsKey))];
     if (unique.length > GEO_MARKET_STORE_LIMITS.mediaKeysMax) throw storeError("Too many domains in one lookup.");
     if (!unique.length) return [];
-    const result = await this.#query(`SELECT * FROM evimed_geo.sources WHERE geo_project_id = $1 AND domain = ANY($2::text[])`,
-      [String(geoProjectId), unique]);
-    return result.rows.map(mapSource);
+    // Normalize historical Unicode and ASCII keys with the exact same IDNA/PSL rules as the caller.
+    const result = await this.#query(`SELECT * FROM evimed_geo.sources WHERE geo_project_id = $1 LIMIT 10001`, [String(geoProjectId)]);
+    if (result.rows.length > 10000) throw new HttpError(422, 'geo_spine_incomplete', 'Source records exceed the complete-read limit.');
+    const wanted = new Set(unique);
+    return result.rows.map(mapSource).filter(source => wanted.has(dnsKey(source.domain)));
   }
 
   /**
@@ -974,6 +1078,28 @@ export class GeoMarketStore {
   async listOrders(filter) {
     const limit = assertLimit(filter.limit, GEO_MARKET_STORE_LIMITS.listMax);
     const offset = assertOffset(filter.offset ?? 0);
+    return this.#selectOrders(filter, limit, offset);
+  }
+
+  /** Complete, single-statement order input for a new placement decision. */
+  async listDecisionOrders(filter) {
+    const rows = await this.#selectOrders(filter, GEO_MARKET_DECISION_ORDERS_MAX + 1, 0);
+    if (rows.length > GEO_MARKET_DECISION_ORDERS_MAX) throw new HttpError(422, 'geo_spine_incomplete', 'The complete market order input exceeds its limit. Contact an administrator before retrying.');
+    return rows;
+  }
+
+  /** Select only due reserved orders, so recent reservations cannot starve recovery. */
+  async listRecoverableReserved({ sendingBefore, idleBefore, limit }) {
+    assertLimit(limit, GEO_MARKET_STORE_LIMITS.listMax);
+    const result=await this.#query(`SELECT * FROM (${ORDER_SELECT} WHERE o.state='reserved') candidate
+      WHERE (candidate.sent_at IS NOT NULL AND (candidate.state_at IS NULL OR candidate.sent_at >= candidate.state_at) AND candidate.sent_at < $1::timestamptz)
+        OR ((candidate.sent_at IS NULL OR (candidate.state_at IS NOT NULL AND candidate.sent_at < candidate.state_at)) AND candidate.state_at < $2::timestamptz)
+      ORDER BY coalesce(candidate.sent_at,candidate.state_at),candidate.id LIMIT $3`,[assertAt(sendingBefore),assertAt(idleBefore),limit]);
+    return result.rows.map(mapOrder);
+  }
+
+  /** @param {any} filter @param {number} limit @param {number} offset */
+  async #selectOrders(filter, limit, offset) {
     for (const state of filter.states ?? []) assertOneOf(state, ORDER_STATES, "order state");
     const where = [];
     const values = [];
@@ -1032,7 +1158,7 @@ export class GeoMarketStore {
    */
   async platformFlowsSince(since) {
     const at = assertAt(since);
-    const max = GEO_MARKET_STORE_LIMITS.flowsMax;
+    const max = GEO_MARKET_STORE_LIMITS.flowsMax + 1;
     const [charges, refunds, topups, adjustments] = await Promise.all([
       this.#query(`SELECT o.id, o.price_cny, e.at FROM evimed_geo.order_events e JOIN evimed_geo.orders o ON o.id = e.order_id
         WHERE e.to_state = 'submitted' AND e.from_state IS DISTINCT FROM 'submitted' AND e.at > $1 ORDER BY e.at LIMIT $2`, [at, max]),
@@ -1043,6 +1169,9 @@ export class GeoMarketStore {
       this.#query(`SELECT id, amount_cny, created_at FROM evimed_geo.ledger
         WHERE kind = 'adjustment' AND geo_project_id IS NULL AND order_id IS NULL AND created_at > $1 ORDER BY created_at LIMIT $2`, [at, max]),
     ]);
+    if ([charges, refunds, topups, adjustments].some(result => result.rows.length > GEO_MARKET_STORE_LIMITS.flowsMax)) {
+      throw new HttpError(422, 'geo_spine_incomplete', 'The complete market balance input exceeds its limit. Contact an administrator before retrying.');
+    }
     return {
       charges: charges.rows.map((row) => ({ orderId: row.id, amountCny: Number(row.price_cny ?? 0), at: iso(row.at) })),
       refunds: refunds.rows.map((row) => ({ orderId: row.order_id, amountCny: Number(row.detail?.amountCny ?? 0), at: iso(row.at) })),
@@ -1104,6 +1233,14 @@ export class GeoMarketStore {
     const result = await this.#query(`SELECT * FROM evimed_geo.topups WHERE ($1::text IS NULL OR status = $1)
       ORDER BY requested_at DESC, id LIMIT $2`, [status ?? null, limit]);
     return result.rows.map(mapTopup);
+  }
+
+  /** All pending top-ups needed to attribute a balance change, or an explicit refusal. */
+  async listDecisionTopups() {
+    const rows=(await this.#query(`SELECT * FROM evimed_geo.topups WHERE status='requested' ORDER BY requested_at DESC,id LIMIT $1`,
+      [GEO_MARKET_DECISION_ORDERS_MAX + 1])).rows;
+    if (rows.length > GEO_MARKET_DECISION_ORDERS_MAX) throw new HttpError(422, 'geo_spine_incomplete', 'The complete top-up input exceeds its limit. Contact an administrator before retrying.');
+    return rows.map(mapTopup);
   }
 
   /** @param {string} id */

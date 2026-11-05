@@ -1,6 +1,8 @@
+import { sessionOwner } from "@/lib/sessionLifecycle";
+import { prepareRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes, useLocation } from "react-router";
+import { MemoryRouter, parsePath, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { GeoProject } from "@/lib/geoClient";
 import { geoProject, journeyFilled } from "../__fixtures__/geoTabs";
@@ -38,13 +40,14 @@ function Probe() {
     <>
       <div data-testid="location">{location.pathname}</div>
       <div data-testid="search">{location.search}</div>
+      <div data-testid="question-navigation-state">{JSON.stringify(location.state)}</div>
     </>
   );
 }
 
-function renderTab(project: GeoProject = geoProject(), path = "/app/geo/geo_1/questions") {
+function renderTab(project: GeoProject = geoProject(), path = "/app/geo/geo_1/questions", state?: unknown) {
   return render(
-    <MemoryRouter initialEntries={[path]}>
+    <MemoryRouter initialEntries={[state ? { ...parsePath(path), state } : path]}>
       <Routes>
         <Route
           path="/app/geo/geo_1/questions"
@@ -333,7 +336,8 @@ describe("问题与回答: by journey", () => {
 });
 
 it('makes import a main-area mode and restores the browsing list without starting measurement', async () => {
-  renderTab(geoProject(), '/app/geo/geo_1/questions?view=all&session=s1&questionVersion=2');
+  const state = { runtimeUiIntent: prepareRuntimeUiIntent({ kind: 'open', projectId: 'prj_geo_1', sessionId: 's1', requestId: 'pending-question', draft: 'Pending question draft', owner: sessionOwner() }) };
+  renderTab(geoProject(), '/app/geo/geo_1/questions?view=all&conversation=open&session=s1&questionVersion=2', state);
   await screen.findByLabelText('搜索问题');
   expect(screen.queryByLabelText(/选择 Excel/)).toBeNull();
   await userEvent.click(screen.getByRole('button', {name:'导入问句'}));
@@ -342,10 +346,12 @@ it('makes import a main-area mode and restores the browsing list without startin
   expect(screen.getByTestId('search')).toHaveTextContent('questionMode=import');
   expect(screen.getByTestId('search')).toHaveTextContent('session=s1');
   expect(screen.getByTestId('search')).toHaveTextContent('questionVersion=2');
+  expect(JSON.parse(screen.getByTestId('question-navigation-state').textContent ?? '{}')).toEqual(state);
   expect(client.runGeoStep).not.toHaveBeenCalled();
   await userEvent.click(screen.getByRole('button', {name:'返回问题列表'}));
   expect(await screen.findByLabelText('搜索问题')).toBeVisible();
   expect(screen.getByTestId('search')).not.toHaveTextContent('questionMode=');
+  expect(JSON.parse(screen.getByTestId('question-navigation-state').textContent ?? '{}')).toEqual(state);
 });
 
 it('keeps every-question navigation and the selected scope when clearing a question-list query',async()=>{

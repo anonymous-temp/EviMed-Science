@@ -1,3 +1,4 @@
+import { expectOpaqueRuntimeUiIntent } from "@/test/runtimeUiIntentAssertions";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router";
@@ -107,8 +108,9 @@ describe("ProvenancePanel", () => {
     // version's own session; the bridge inside the kernel's page reads it.
     const state = JSON.parse(screen.getByTestId("nav-state").textContent || "null");
     expect(screen.getByTestId("location")).toHaveTextContent(`/app/chat/${records[records.length - 1].sessionId}`);
-    expect(state.runtimeUiIntent.kind).toBe("open");
-    const draft: string = state.runtimeUiIntent.draft;
+    const intent = expectOpaqueRuntimeUiIntent(state);
+    expect(intent.kind).toBe("open");
+    const draft = intent.draft;
     expect(draft).toContain("讨论 `fig/plot.py`（旧版记录 v2，未保存不可变文件内容）");
     expect(draft).toContain("Python 3.12.4");
     expect(draft).toContain("print(2)");

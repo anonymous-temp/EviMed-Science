@@ -1,5 +1,5 @@
 import { beforeEach, expect, it, vi } from "vitest";
-import { getResultLineage, listRelatedResultVersions, readResultBytes, type ResultVersion } from "./resultProvenance";
+import { getResultLineage, getResultVersion, requestResultRevision, listRelatedResultVersions, readResultBytes, type ResultVersion } from "./resultProvenance";
 const fetchAuth = vi.hoisted(() => vi.fn());
 vi.mock("./apiClient", () => ({ fetchWithWebAuth: fetchAuth, getWebProjectId: () => "p", webApiBase: "/api" }));
 const version = { versionId: "rv_old", digest: "a".repeat(64), size: 3 } as ResultVersion;
@@ -31,4 +31,12 @@ it("reads the numerical chain of exactly the selected immutable version, in the 
   fetchAuth.mockResolvedValue(new Response(JSON.stringify({ data: lineage })));
   await expect(getResultLineage("rv_old")).resolves.toEqual(lineage);
   expect(fetchAuth).toHaveBeenCalledWith("/api/results/rv_old/lineage?projectId=p", undefined);
+});
+
+it("uses the selected version project for reads and revision staging independently of the active project", async () => {
+  fetchAuth.mockImplementation(async () => new Response(JSON.stringify({ data: { referenceId: "rr", sessionId: "session" } })));
+  await getResultVersion("rv_old", "project-other");
+  expect(fetchAuth).toHaveBeenLastCalledWith("/api/results/rv_old?projectId=project-other", undefined);
+  await requestResultRevision({ ...version, projectId: "project-other" }, { kind: "file", elementId: "file", selectedText: "" }, "session");
+  expect(fetchAuth).toHaveBeenLastCalledWith("/api/results/rv_old/revisions?projectId=project-other", expect.objectContaining({ method: "POST" }));
 });

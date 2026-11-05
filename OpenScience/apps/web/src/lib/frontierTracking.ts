@@ -10,7 +10,8 @@ import {
   frontierInteraction,
   type FrontierInteraction,
 } from "@evimed/domain";
-import { getWebApiRequestHeaders, webApiBase, WEB_SESSION_ENDED_EVENT, WEB_SESSION_STARTED_EVENT } from "./apiClient";
+import { fetchWebMe, getVerifiedWebActor, getWebApiRequestHeaders, webApiBase, type VerifiedWebActor } from "./apiClient";
+import { sessionGeneration, subscribeSessionBoundary } from "./sessionLifecycle";
 
 /**
  * What a reader of 「前沿动态」 saw and did, reported to the control plane (ct-track, 2026-10-24). The owner: ranking and cold
@@ -30,13 +31,13 @@ import { getWebApiRequestHeaders, webApiBase, WEB_SESSION_ENDED_EVENT, WEB_SESSI
  *   (`FRONTIER_DWELL.idleMs` with no scroll, key, pointer or touch stops the clock) and reports it on `visibilitychange` to
  *   hidden (the last moment a browser reliably lets a page speak), on `pagehide`, and on leaving the page; a page restored from
  *   the back/forward cache (`pageshow` with `persisted`) starts again.
- * - **Delivery.** Events queue in memory and in this tab's `sessionStorage`, flush in batches of at most 50 a few seconds
+ * - **Delivery.** Events queue in memory, flush in batches of at most 50 a few seconds
  *   after the last one (`fetch(…, { keepalive: true })` with the CSRF header, its answer read), and on hide or page hide at
  *   once — with `navigator.sendBeacon` and a `text/plain` body carrying the token, or a kept-alive request where a beacon
  *   cannot be queued. The server is idempotent on each
- *   event's id, so a retry or a re-send after a reload never counts twice. A refused batch (other than 429 and 5xx) is
- *   dropped; a 429 waits for `Retry-After`; a failure backs off. Signing out empties the queue.
- * - **Nothing personal.** No URL, no query text, no free text: closed words, public ids, numbers, the layout class and a
+ *   event's id, so a retry never counts twice. Reloads restore this tab's queue only after its account and tenant are verified.
+ *   A refused batch (other than 429 and 5xx) is dropped; a 429 waits for `Retry-After`; a failure backs off. An account boundary clears the queue.
+ * - **Event fields.** No URL, no query text, no free text: closed words, public ids, numbers, the layout class and a
  *   random session id this tab rotates after 30 idle minutes (`FRONTIER_SESSION_IDLE_MS`). Every event passes the same
  *   validator the server uses before it is queued.
  *
@@ -78,8 +79,8 @@ let queue: FrontierInteraction[] = [];
 let timer: ReturnType<typeof setTimeout> | null = null;
 let retryMs = 0;
 let blockedUntil = 0;
-let sending = false;
-let restored = false;
+let activeSend: { controller: AbortController; ids: Set<string> } | null = null;
+let initialized = false;
 /** Counts the page keeps for its own tests and a curious developer: sent, dropped by reason. */
 export const frontierTrackingCounters = { queued: 0, sent: 0, dropped: 0, invalid: 0 };
 
@@ -98,19 +99,37 @@ function randomId(prefix: string): string {
   return `${prefix}_${Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
 }
 
-/** This tab's session id, rotated after 30 minutes with nothing reported. */
+type TimedSession = { id: string; at: number };
+type OpenHandoff = { item: string; view: string; at: number };
+type StoredTracking = {
+  version: 1;
+  tenantId: string;
+  userId: string;
+  events: FrontierInteraction[];
+  blockedUntil: number;
+  retryMs: number;
+  session: TimedSession | null;
+  open: OpenHandoff | null;
+};
+
+let verified: VerifiedWebActor | null = null;
+let identityRead: Promise<void> | null = null;
+let identityBlocked = false;
+let provisionalCsrf: string | undefined;
+let tabSession: TimedSession | null = null;
+let openHandoff: OpenHandoff | null = null;
+let restoreReaderOpen: ((stored: OpenHandoff) => boolean) | null = null;
+const offeredOnUnload = new Set<string>();
+
+function recentSession(value: TimedSession | null | undefined, now: number): value is TimedSession {
+  return Boolean(value && /^ses_[a-f0-9]{32}$/u.test(value.id) && Number.isSafeInteger(value.at)
+    && value.at <= now && now - value.at < FRONTIER_SESSION_IDLE_MS);
+}
+
+/** Before identity verification, a tab can collect events but cannot reuse a saved session or write them to disk. */
 function sessionId(now: number): string {
-  const store = storage();
-  try {
-    const current = JSON.parse(store?.getItem(SESSION_KEY) ?? "null") as { id?: unknown; at?: unknown } | null;
-    if (current && typeof current.id === "string" && typeof current.at === "number" && now - current.at < FRONTIER_SESSION_IDLE_MS) {
-      store?.setItem(SESSION_KEY, JSON.stringify({ id: current.id, at: now }));
-      return current.id;
-    }
-  } catch { /* a session that cannot be read is a new one */ }
-  const id = randomId("ses");
-  try { store?.setItem(SESSION_KEY, JSON.stringify({ id, at: now })); } catch { /* kept for this event only */ }
-  return id;
+  tabSession = { id: recentSession(tabSession, now) ? tabSession.id : randomId("ses"), at: now };
+  return tabSession.id;
 }
 
 function device(): "narrow" | "wide" {
@@ -118,28 +137,95 @@ function device(): "narrow" | "wide" {
 }
 
 function persist() {
-  try { storage()?.setItem(QUEUE_KEY, JSON.stringify(queue)); } catch { /* the queue stays in memory */ }
+  if (verified?.generation !== sessionGeneration()) return;
+  const { tenantId, userId } = verified;
+  const record: StoredTracking = { version: 1, tenantId, userId, events: queue, blockedUntil, retryMs, session: tabSession, open: openHandoff };
+  try { storage()?.setItem(QUEUE_KEY, JSON.stringify(record)); } catch { /* the queue stays in memory */ }
 }
 
-function restore() {
-  if (restored) return;
-  restored = true;
+function restoreOwned(owner: VerifiedWebActor) {
   try {
-    const stored = JSON.parse(storage()?.getItem(QUEUE_KEY) ?? "[]") as unknown[];
+    const store = storage();
+    store?.removeItem(OPEN_KEY);
+    store?.removeItem(SESSION_KEY);
+    const saved = JSON.parse(store?.getItem(QUEUE_KEY) ?? "null") as Partial<StoredTracking> | null;
+    if (saved?.version !== 1 || saved.tenantId !== owner.tenantId || saved.userId !== owner.userId || !Array.isArray(saved.events)) return;
     const now = Date.now();
-    const kept = Array.isArray(stored) ? stored.flatMap((raw) => { const result = frontierInteraction(raw, { now }); return result.ok ? [result.event] : []; }) : [];
-    const known = new Set(queue.map((event) => event.id));
-    queue = [...kept.filter((event) => !known.has(event.id)), ...queue].slice(-QUEUE_MAX);
-  } catch { /* nothing to restore */ }
-  if (typeof window !== "undefined") {
-    const clear = () => { queue = []; persist(); };
-    window.addEventListener(WEB_SESSION_ENDED_EVENT, clear);
-    // A new sign-in in this tab starts from nothing: nothing of another account's queue is sent under this one.
-    window.addEventListener(WEB_SESSION_STARTED_EVENT, clear);
-    window.addEventListener("pagehide", () => flushFrontierEvents("unload"));
-    document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") flushFrontierEvents("unload"); });
+    const restoredIds = new Set(queue.map(event => event.id));
+    const events = saved.events.slice(-QUEUE_MAX).flatMap(raw => {
+      const result = frontierInteraction(raw, { now });
+      if (!result.ok || restoredIds.has(result.event.id)) return [];
+      restoredIds.add(result.event.id);
+      return [result.event];
+    });
+    const savedSession = saved.session;
+    if (recentSession(savedSession, now)) {
+      const temporary = tabSession?.id;
+      queue = queue.map(event => event.session === temporary ? { ...event, session: savedSession.id } : event);
+      tabSession = { id: savedSession.id, at: tabSession?.at ?? savedSession.at };
+    }
+    if (saved.open && typeof saved.open.item === "string" && /^view_[a-f0-9]{32}$/u.test(saved.open.view)
+      && Number.isSafeInteger(saved.open.at) && saved.open.at <= now && now - saved.open.at < OPEN_HANDOFF_MS
+      && !openHandoff && !restoreReaderOpen?.(saved.open)) openHandoff = saved.open;
+    queue = [...events, ...queue].slice(-QUEUE_MAX);
+    retryMs = Math.min(RETRY_MAX_MS, Math.max(0, Number(saved.retryMs) || 0));
+    blockedUntil = Math.max(0, Math.min(now + 2_147_483_647, Number(saved.blockedUntil) || 0));
+  } catch { /* A malformed or unavailable record cannot replace the queue in memory. */ }
+}
+
+function adoptActor(actor: VerifiedWebActor) {
+  if (actor.generation !== sessionGeneration()) return;
+  if (queue.length && provisionalCsrf !== actor.csrf) {
+    // A credential changed before the corresponding boundary reached this document.
+    frontierTrackingCounters.dropped += queue.length;
+    queue = [];
+    tabSession = null;
+    openHandoff = null;
+    restoreReaderOpen = null;
+    if (provisionalCsrf) {
+      identityBlocked = true;
+      return;
+    }
   }
-  if (queue.length) schedule();
+  provisionalCsrf = undefined;
+  verified = actor;
+  retryMs = 0;
+  blockedUntil = 0;
+  restoreOwned(actor);
+  restoreReaderOpen = null;
+  persist();
+  if (queue.length && !timer) schedule(0);
+}
+
+function initialize() {
+  if (!initialized) {
+    initialized = true;
+    if (typeof window !== "undefined") {
+      subscribeSessionBoundary(resetSession);
+      window.addEventListener("pagehide", () => flushFrontierEvents("unload"));
+      window.addEventListener("online", () => flushFrontierEvents());
+      document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") flushFrontierEvents("unload"); });
+    }
+  }
+  if (verified || identityBlocked) return;
+  const actor = getVerifiedWebActor();
+  if (actor) {
+    identityRead = null;
+    adoptActor(actor);
+    return;
+  }
+  if (identityRead || Date.now() < blockedUntil) return;
+  const generation = sessionGeneration();
+  const request = fetchWebMe({ silentUnauthorized: true }).then(() => {
+    if (identityRead !== request || generation !== sessionGeneration()) return;
+    const actor = getVerifiedWebActor();
+    if (actor) adoptActor(actor);
+  }, () => {
+    if (identityRead === request && generation === sessionGeneration()) backoff();
+  }).finally(() => {
+    if (identityRead === request) identityRead = null;
+  });
+  identityRead = request;
 }
 
 /** An event as it travels: the fields it has, none of the empty ones (the server reads an absent field as none). */
@@ -163,14 +249,20 @@ function schedule(delay = queue.length >= FLUSH_AT ? 0 : FLUSH_DELAY_MS) {
  * refused is not sent), and a batch is scheduled.
  */
 export function trackFrontier(input: TrackInput): void {
-  restore();
+  initialize();
+  if (identityBlocked) return;
+  if (!verified && !queue.length) provisionalCsrf = getWebApiRequestHeaders()["X-Open-Science-CSRF"];
   const now = Date.now();
   const candidate = { ...input, id: randomId("evt"), at: now, session: sessionId(now), device: device() };
   const result = frontierInteraction(Object.fromEntries(Object.entries(candidate).filter(([, value]) => value !== undefined && value !== null)), { now });
   if (!result.ok) { frontierTrackingCounters.invalid += 1; return; }
   queue.push(result.event);
   frontierTrackingCounters.queued += 1;
-  if (queue.length > QUEUE_MAX) { frontierTrackingCounters.dropped += queue.length - QUEUE_MAX; queue = queue.slice(-QUEUE_MAX); }
+  if (queue.length > QUEUE_MAX) {
+    for (const event of queue.slice(0, -QUEUE_MAX)) offeredOnUnload.delete(event.id);
+    frontierTrackingCounters.dropped += queue.length - QUEUE_MAX;
+    queue = queue.slice(-QUEUE_MAX);
+  }
   persist();
   schedule();
 }
@@ -180,54 +272,70 @@ export function trackFrontier(input: TrackInput): void {
  * beacon), and expect no answer; `normal`: one batch, its answer read, the rest scheduled.
  */
 export function flushFrontierEvents(mode: "normal" | "unload" = "normal"): void {
-  restore();
-  if (!queue.length || (mode === "normal" && (sending || Date.now() < blockedUntil))) return;
+  initialize();
+  const owner = verified;
+  if (!owner || owner.generation !== sessionGeneration() || !queue.length || Date.now() < blockedUntil) return;
+  if (mode === "normal" && activeSend) return;
   if (timer) { clearTimeout(timer); timer = null; }
-  const headers = getWebApiRequestHeaders();
-  const csrf = headers["X-Open-Science-CSRF"];
+  const csrf = owner.csrf;
+  // The token verified with this owner fences cookies changed by another tab before its storage event is delivered.
+  const headers = { ...getWebApiRequestHeaders(), "X-Open-Science-CSRF": csrf };
   if (mode === "unload") {
-    // Everything, in batches, now: the page may not get another turn.
-    while (queue.length) {
-      const batch = queue.slice(0, FRONTIER_INTERACTION_BATCH.maxEvents);
+    const pending = queue.filter(event => !activeSend?.ids.has(event.id) && !offeredOnUnload.has(event.id));
+    for (let offset = 0; offset < pending.length; offset += FRONTIER_INTERACTION_BATCH.maxEvents) {
+      const batch = pending.slice(offset, offset + FRONTIER_INTERACTION_BATCH.maxEvents);
       if (!sendNow(batch, headers, csrf)) break;
-      queue = queue.slice(batch.length);
-      frontierTrackingCounters.sent += batch.length;
+      for (const event of batch) offeredOnUnload.add(event.id);
     }
+    // Beacon acceptance is only browser admission. Keep the same ids until the server acknowledges a normal send.
     persist();
+    schedule();
     return;
   }
   const batch = queue.slice(0, FRONTIER_INTERACTION_BATCH.maxEvents);
-  sending = true;
+  const controller = new AbortController();
+  const ids = new Set(batch.map(event => event.id));
+  const inFlight = { controller, ids };
+  activeSend = inFlight;
   let request: Promise<Response>;
   try {
-    request = fetch(eventsUrl(), { method: "POST", keepalive: true, credentials: "include", headers: { ...headers, "Content-Type": "application/json" },
+    request = fetch(eventsUrl(), { method: "POST", keepalive: true, credentials: "include", signal: controller.signal, headers: { ...headers, "Content-Type": "application/json" },
       body: JSON.stringify({ events: wire(batch) }) });
   } catch {
-    sending = false;
+    activeSend = null;
     backoff();
     return;
   }
   request.then((response) => {
-    sending = false;
-    const sent = new Set(batch.map((event) => event.id));
+    if (activeSend !== inFlight || owner !== verified || owner.generation !== sessionGeneration()) return;
+    activeSend = null;
     if (response.ok || (response.status >= 400 && response.status < 500 && response.status !== 429)) {
       // Kept, or refused for good (a malformed batch, no session): either way it is not sent again.
-      queue = queue.filter((event) => !sent.has(event.id));
+      queue = queue.filter((event) => !ids.has(event.id));
       if (response.ok) frontierTrackingCounters.sent += batch.length; else frontierTrackingCounters.dropped += batch.length;
       retryMs = 0;
+      blockedUntil = 0;
+      for (const event of batch) offeredOnUnload.delete(event.id);
       persist();
       if (queue.length) schedule(0);
       return;
     }
-    const retryAfter = Number(response.headers.get("Retry-After"));
-    if (response.status === 429 && Number.isFinite(retryAfter) && retryAfter > 0) { blockedUntil = Date.now() + retryAfter * 1000; schedule(); return; }
+    const retryHeader = response.headers.get("Retry-After");
+    const retrySeconds = Number(retryHeader);
+    const retryAfter = retryHeader && !Number.isFinite(retrySeconds) ? Date.parse(retryHeader) - Date.now() : retrySeconds * 1000;
+    if (response.status === 429 && Number.isFinite(retryAfter) && retryAfter > 0) { blockedUntil = Date.now() + Math.min(retryAfter, 2_147_483_647); persist(); schedule(); return; }
     backoff();
-  }, () => { sending = false; backoff(); });
+  }, () => {
+    if (activeSend !== inFlight || owner !== verified || owner.generation !== sessionGeneration()) return;
+    activeSend = null;
+    backoff();
+  });
 }
 
 function backoff() {
   retryMs = Math.min(RETRY_MAX_MS, retryMs ? retryMs * 2 : RETRY_BASE_MS);
   blockedUntil = Date.now() + retryMs;
+  persist();
   schedule();
 }
 
@@ -250,19 +358,32 @@ function sendNow(batch: FrontierInteraction[], headers: Record<string, string>, 
   }
 }
 
-/** Forget the queue and the registries (tests). */
+function resetSession() {
+  resetFrontierTracking();
+  try { storage()?.removeItem(QUEUE_KEY); storage()?.removeItem(OPEN_KEY); storage()?.removeItem(SESSION_KEY); } catch { /* nothing kept */ }
+}
+
+/** Forget this document's memory, as a reload would (tests). */
 export function resetFrontierTracking(): void {
+  verified = null;
+  identityRead = null;
+  identityBlocked = false;
+  provisionalCsrf = undefined;
+  tabSession = null;
+  openHandoff = null;
+  restoreReaderOpen = null;
+  offeredOnUnload.clear();
   queue = [];
+  activeSend?.controller.abort();
+  activeSend = null;
   if (timer) clearTimeout(timer);
   timer = null;
   retryMs = 0;
   blockedUntil = 0;
-  sending = false;
   served.clear();
   seen.clear();
   lastSurface.clear();
   reader = null;
-  try { storage()?.removeItem(QUEUE_KEY); storage()?.removeItem(OPEN_KEY); storage()?.removeItem(SESSION_KEY); } catch { /* nothing kept */ }
 }
 
 /** What is queued (tests). */
@@ -284,6 +405,7 @@ const lastSurface = new Map<string, FrontierTrackSurface>();
  */
 export function serveFrontierList(surface: FrontierTrackSurface, listId: string | null | undefined,
   entries: ReadonlyArray<{ id: string; kind?: "item" | "event"; slot?: FrontierTrackSlot | null }>, { offset = 0 }: { offset?: number } = {}): void {
+  initialize();
   const table = served.get(surface) ?? new Map<string, Served>();
   entries.forEach((entry, index) => {
     table.set(`${entry.kind ?? "item"}:${entry.id}`, { listId: listId ?? null, slot: entry.slot ?? null, rank: offset + index });
@@ -342,16 +464,15 @@ function listContext(container: Element, target: Target, position: number) {
 
 /** Hand an open's view id to the reading page it leads to. */
 function handOpen(item: string, view: string) {
-  try { storage()?.setItem(OPEN_KEY, JSON.stringify({ item, view, at: Date.now() })); } catch { /* the reading page makes its own */ }
+  openHandoff = { item, view, at: Date.now() };
+  persist();
 }
 
 function takeOpen(item: string): string | null {
-  try {
-    const stored = JSON.parse(storage()?.getItem(OPEN_KEY) ?? "null") as { item?: unknown; view?: unknown; at?: unknown } | null;
-    storage()?.removeItem(OPEN_KEY);
-    if (stored && stored.item === item && typeof stored.view === "string" && typeof stored.at === "number" && Date.now() - stored.at < OPEN_HANDOFF_MS) return stored.view;
-  } catch { /* none */ }
-  return null;
+  const handed = openHandoff;
+  openHandoff = null;
+  if (handed) persist();
+  return handed?.item === item && Date.now() - handed.at < OPEN_HANDOFF_MS ? handed.view : null;
 }
 
 /**
@@ -362,7 +483,10 @@ export function useFrontierListTracking(root: RefObject<HTMLElement | null>, dep
   useEffect(() => {
     const element = root.current;
     if (!element) return undefined;
+    initialize();
+    const owner = sessionGeneration();
     const open = (event: MouseEvent) => {
+      if (owner !== sessionGeneration()) return;
       if (event.type === "auxclick" && event.button !== 1) return;
       const anchor = (event.target as Element | null)?.closest?.("a[href]");
       const container = anchor?.closest("[data-frontier-list]");
@@ -384,6 +508,7 @@ export function useFrontierListTracking(root: RefObject<HTMLElement | null>, dep
   useEffect(() => {
     const element = root.current;
     if (!element || typeof IntersectionObserver === "undefined") return undefined;
+    const owner = sessionGeneration();
     const contexts = new Map<Element, { key: string; target: Target; context: ReturnType<typeof listContext> }>();
     for (const container of element.querySelectorAll("[data-frontier-list]")) {
       // `push` marks where an open came from (a notification's card), not a list a reader scrolls: nothing is seen on it.
@@ -404,6 +529,7 @@ export function useFrontierListTracking(root: RefObject<HTMLElement | null>, dep
         if (!visible.has(entry) || document.visibilityState !== "visible" || seen.has(known.key)) return;
         seen.add(known.key);
         if (seen.size > 5_000) seen.clear();
+        if (owner !== sessionGeneration()) return;
         trackFrontier({ type: "impression", ...known.context, value: FRONTIER_IMPRESSION.minMs,
           ...(known.target.kind === "item" ? { item: known.target.id } : { event: known.target.id }) });
       }, FRONTIER_IMPRESSION.minMs));
@@ -450,6 +576,7 @@ export function useFrontierReadTracking(itemId: string | null | undefined, { lan
   arrival?: "push" | null;
 } = {}): void {
   const viewRef = useRef<string | null>(null);
+  const viewOwner = useRef(sessionGeneration());
   const urlRef = useRef(url ?? null);
   urlRef.current = url ?? null;
   const arrivalRef = useRef(arrival ?? null);
@@ -457,12 +584,25 @@ export function useFrontierReadTracking(itemId: string | null | undefined, { lan
 
   useEffect(() => {
     if (!itemId) return undefined;
+    const owner = sessionGeneration();
+    viewOwner.current = owner;
+    initialize();
     const handed = takeOpen(itemId);
-    const view = handed ?? randomId("view");
+    let view = handed ?? randomId("view");
     viewRef.current = view;
     reader = { item: itemId, view };
     if (!handed) trackFrontier({ type: "open", surface: arrivalRef.current === "push" ? "push" : "direct", item: itemId, view });
     const base = { surface: "reader" as const, item: itemId, view };
+    const restoreOpen = (stored: OpenHandoff) => {
+      if (stored.item !== itemId || owner !== sessionGeneration()) return false;
+      queue = queue.flatMap(event => event.view !== view ? [event] : event.type === "open" ? [] : [{ ...event, view: stored.view }]);
+      view = stored.view;
+      base.view = view;
+      viewRef.current = view;
+      reader = { item: itemId, view };
+      return true;
+    };
+    if (!handed && !verified) restoreReaderOpen = restoreOpen;
     let visibleNow = typeof document === "undefined" || document.visibilityState === "visible";
     let lastTick = Date.now();
     let lastActivity = lastTick;
@@ -475,6 +615,7 @@ export function useFrontierReadTracking(itemId: string | null | undefined, { lan
       lastTick = at;
     };
     const report = (unload: boolean) => {
+      if (owner !== sessionGeneration()) return;
       account(Date.now());
       const value = Math.min(Math.round(engaged), FRONTIER_DWELL.maxReportMs);
       engaged = 0;
@@ -485,6 +626,7 @@ export function useFrontierReadTracking(itemId: string | null | undefined, { lan
     let ended = false;
     let frame = 0;
     const measure = () => {
+      if (owner !== sessionGeneration()) return;
       frame = 0;
       const body = readerRoot();
       if (!body || typeof window === "undefined") return;
@@ -507,6 +649,7 @@ export function useFrontierReadTracking(itemId: string | null | undefined, { lan
     const onPageHide = () => { report(true); visibleNow = false; };
     const onPageShow = (event: PageTransitionEvent) => { if (event.persisted) { visibleNow = true; lastTick = Date.now(); lastActivity = lastTick; } };
     const onClick = (event: MouseEvent) => {
+      if (owner !== sessionGeneration()) return;
       activity();
       if (event.type === "auxclick" && event.button !== 1) return;
       const anchor = (event.target as Element | null)?.closest?.("a[href]");
@@ -546,6 +689,7 @@ export function useFrontierReadTracking(itemId: string | null | undefined, { lan
       window.removeEventListener("pageshow", onPageShow);
       document.removeEventListener("click", onClick, true);
       document.removeEventListener("auxclick", onClick, true);
+      if (restoreReaderOpen === restoreOpen) restoreReaderOpen = null;
       if (reader?.view === view) reader = null;
       viewRef.current = null;
     };
@@ -557,7 +701,7 @@ export function useFrontierReadTracking(itemId: string | null | undefined, { lan
     const before = previous.current;
     previous.current = { language, expanded, starred: state?.starred, hidden: state?.hidden, item: itemId };
     const view = viewRef.current;
-    if (!itemId || !view || before.item !== itemId) return;
+    if (!itemId || !view || before.item !== itemId || viewOwner.current !== sessionGeneration()) return;
     const base = { surface: "reader" as const, item: itemId, view };
     if (language && before.language && language !== before.language && (language === "zh" || language === "original")) {
       trackFrontier({ type: "toggle-translation", ...base, detail: language });

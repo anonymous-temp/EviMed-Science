@@ -4,7 +4,7 @@ import { GEO_MEASUREMENT_METHOD_VERSION, validateGeoMeasurementContract } from '
 import { canonicalJson } from './geoStore.mjs';
 import { GEO_ROUND_ANSWERED } from './geoMeasureStore.mjs';
 import { withGeoReadTransaction, readGeoSelection } from './geoReadScope.mjs';
-import { geoComparisonKey, geoComparableAnswer, geoComparisonCellKey, geoComparisonMembers, compareGeoMetricCohorts, geoComparisonContractsMatch } from './geoComparison.mjs';
+import { GEO_SAMPLING_COMPARABILITY, geoComparisonKey, geoComparableAnswer, geoComparisonCellKey, geoComparisonMembers, compareGeoMetricCohorts, geoComparisonContractsMatch } from './geoComparison.mjs';
 import { geoMarketReadTimestamp } from './geoMarketOperations.mjs';
 import { packGeoGroupChange, readGeoGroupChangeMembers } from './geoSignalTargets.mjs';
 import { HttpError } from './security.mjs';
@@ -62,9 +62,10 @@ export async function readGeoRoundComparison(store, project, {previousRoundId, c
     const currentFull = await readGeoSelection(store, project, {round: currentRoundId});
     const old = new Set(previousFull.rows.filter(geoComparableAnswer).map(geoComparisonKey));
     const commonKeys = sorted(currentFull.rows.filter(geoComparableAnswer).map(geoComparisonKey).filter(key => old.has(key)));
-    const subset = { keys: commonKeys, eligibleOnly: true };
-    const previous = await readGeoSelection(store, project, {round: previousRoundId}, {subset});
-    const current = await readGeoSelection(store, project, {round: currentRoundId}, {subset});
+    const common = new Set(commonKeys);
+    const subsetFor = selected => ({ snapshotIds: selected.rows.filter(row => geoComparableAnswer(row) && common.has(geoComparisonKey(row))).map(row => row.snapshotId), eligibleOnly: true });
+    const previous = await readGeoSelection(store, project, {round: previousRoundId}, {subset: subsetFor(previousFull)});
+    const current = await readGeoSelection(store, project, {round: currentRoundId}, {subset: subsetFor(currentFull)});
     for (const selected of [previous,current]) selected.rounds[0].completed_at = ready.find(round=>round.id===selected.rounds[0].id).completed_at;
     // Preserve answer bytes and assessment material in this same repeatable-read generation.
     const groups = (await store.query('SELECT id,name FROM evimed_geo.question_groups WHERE geo_project_id=$1 AND user_id=$2', [project.id,project.userId])).rows;
@@ -160,7 +161,7 @@ export function groupChangeEvents({previous,current,commonKeys,excluded = null})
     }
     const descriptor=selected=>({id:selected.rounds[0].id,completedAt:selected.rounds[0].completed_at??(selected.rounds[0].finished_at==null?null:new Date(selected.rounds[0].finished_at).toISOString()),questionVersion:version});
     const label=current.questions.find(q=>q.group_id===group.groupId)?.group_name??null;
-    const basis={policy:GROUP_CHANGE_POLICY,basisObservation:'at_discovery',roundOrder:'finished_at,id',group:{id:group.groupId,label,pool:group.pool,questionVersion:version},
+    const basis={judgeComparability:'recorded-rubric-v1',samplingComparability:GEO_SAMPLING_COMPARABILITY,policy:GROUP_CHANGE_POLICY,basisObservation:'at_discovery',roundOrder:'finished_at,id',group:{id:group.groupId,label,pool:group.pool,questionVersion:version},
       previous:descriptor(previous),current:descriptor(current),methods:{before:beforeBasis,after:afterBasis},common:{count:commonKeys.length,digest:hash(commonKeys)},excluded,cells,sides};
     const sample=side=>sides[side].targets;
     const eventVersion=hash([GROUP_CHANGE_POLICY.policyVersion,basis.previous.id,basis.current.id,objectKey,basis.methods,sample('before'),sample('after'),cells]);

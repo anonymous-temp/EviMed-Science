@@ -1,8 +1,9 @@
+import { sessionOwner } from "@/lib/sessionLifecycle";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { webErrorMessage } from "@/lib/apiClient";
 import { useProjectStore } from "@/lib/projects";
-import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
+import { prepareRuntimeUiIntent, newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { toast } from "@/lib/toast";
 
 /**
@@ -13,8 +14,10 @@ export function useKnowledgeConversation(projectId: string) {
   const navigate = useNavigate();
   const select = useProjectStore((state) => state.select);
   return useCallback((draft: string, references: Array<{ id: string; title: string }>) => {
+    const owner = sessionOwner();
     void select(projectId, () => {
-      navigate("/app/chat", { flushSync: true, state: { runtimeUiIntent: { ...newRuntimeUiIntent(draft), references } } });
+      if (owner !== sessionOwner()) return;
+      navigate("/app/chat", { flushSync: true, state: { runtimeUiIntent: prepareRuntimeUiIntent({ ...newRuntimeUiIntent(draft), references }) } });
     }).catch((failure) => toast.error(webErrorMessage(failure)));
   }, [navigate, projectId, select]);
 }

@@ -5,6 +5,21 @@
     "source": "pubmed",
     "items": [
       {
+        "id": "33279517",
+        "title": "AGA Clinical Practice Update on Medical Management of Colonic Diverticulitis: Expert Review.",
+        "url": "https://www.ncbi.nlm.nih.gov/pubmed/33279517/",
+        "description": "AGA Clinical Practice Update on Medical Management of Colonic Diverticulitis: Expert Review.",
+        "publicationTypes": [
+          "Journal Article",
+          "Practice Guideline",
+          "Research Support, N.I.H., Extramural",
+          "Review"
+        ],
+        "hasAbstract": true,
+        "evidenceLevel": "metadata",
+        "sourceType": "guideline"
+      },
+      {
         "id": "30158069",
         "title": "Use of aspirin to reduce risk of initial vascular events in patients at moderate risk of cardiovascular disease (ARRIVE): a randomised, double-blind, placebo-controlled trial.",
         "url": "https://www.ncbi.nlm.nih.gov/pubmed/30158069/",
@@ -18,20 +33,6 @@
         "hasAbstract": true,
         "evidenceLevel": "metadata",
         "sourceType": "rct"
-      },
-      {
-        "id": "27341534",
-        "title": "Aspirin and cardiovascular primary prevention in non-endstage chronic kidney disease: A meta-analysis.",
-        "url": "https://www.ncbi.nlm.nih.gov/pubmed/27341534/",
-        "description": "Aspirin and cardiovascular primary prevention in non-endstage chronic kidney disease: A meta-analysis.",
-        "publicationTypes": [
-          "Journal Article",
-          "Meta-Analysis",
-          "Systematic Review"
-        ],
-        "hasAbstract": true,
-        "evidenceLevel": "metadata",
-        "sourceType": "meta-analysis"
       }
     ],
     "provenance": {
@@ -42,29 +43,29 @@
         "limit": 2
       },
       "scope": {
-        "tenantId": "tool-probe-1cb73eaa",
-        "userId": "tool-probe-1cb73eaa",
-        "projectId": "tool-probe",
-        "workspaceDir": "/workspace/.audit-repo-20261012T071445Z/OpenScience/evals/capability-audit/tool-probe-workspace"
+        "tenantId": "ck-probe-14d43468",
+        "userId": "ck-probe-14d43468",
+        "projectId": "audit-tool-probe",
+        "workspaceDir": "/workspace/.audit-repo-20261104T131143Z/OpenScience/evals/capability-audit/tool-probe-workspace"
       }
     }
   },
   "sources": [
     {
+      "id": "33279517",
+      "source": "pubmed",
+      "retrievedAt": "2026-11-04T13:12:15.669718Z",
+      "url": "https://www.ncbi.nlm.nih.gov/pubmed/33279517/",
+      "title": "AGA Clinical Practice Update on Medical Management of Colonic Diverticulitis: Expert Review.",
+      "sourceType": "guideline"
+    },
+    {
       "id": "30158069",
       "source": "pubmed",
-      "retrievedAt": "2026-10-12T07:15:01.050522Z",
+      "retrievedAt": "2026-11-04T13:12:15.669771Z",
       "url": "https://www.ncbi.nlm.nih.gov/pubmed/30158069/",
       "title": "Use of aspirin to reduce risk of initial vascular events in patients at moderate risk of cardiovascular disease (ARRIVE): a randomised, double-blind, placebo-controlled trial.",
       "sourceType": "rct"
-    },
-    {
-      "id": "27341534",
-      "source": "pubmed",
-      "retrievedAt": "2026-10-12T07:15:01.050563Z",
-      "url": "https://www.ncbi.nlm.nih.gov/pubmed/27341534/",
-      "title": "Aspirin and cardiovascular primary prevention in non-endstage chronic kidney disease: A meta-analysis.",
-      "sourceType": "meta-analysis"
     }
   ],
   "warnings": [

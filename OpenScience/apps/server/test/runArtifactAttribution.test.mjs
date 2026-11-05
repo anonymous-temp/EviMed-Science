@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import { foreignDeliverableIds } from '../src/runArtifactAttribution.mjs';
+import { foreignDeliverableIds, withoutOtherSessionsFiles } from '../src/runArtifactAttribution.mjs';
 import { workspaceChangedFiles } from '../src/runWorkspaceChanges.mjs';
 
 const started = '2026-11-01T10:00:00.000Z';
@@ -49,4 +49,13 @@ test('a witnessed accepted submission is ownership evidence without a surviving 
   assert.deepEqual([...foreignDeliverableIds(current, [peer])], ['adr']);
   assert.deepEqual([...foreignDeliverableIds({ ...current, nativeWorkflow: { ...current.nativeWorkflow,
     submissions: [{ id: 'adr', accepted: {} }] } }, [peer])], [], 'an ID witnessed by both runs remains ambiguous');
+});
+
+test('with another conversation at work, a changed file is the run\'s only when the run names it', () => {
+  const files = ['deliverables/sglt2/report.md', 'deliverables/glp1/table.md', 'charts/plot.png'];
+  const assistants = [{ parts: [{ type: 'tool', tool: 'bash', input: { command: 'cat > deliverables/sglt2/report.md' } }, { type: 'text', text: 'chart at plot.png' }] }];
+  assert.deepEqual(withoutOtherSessionsFiles(files, [{ id: 'other' }], assistants), ['deliverables/sglt2/report.md', 'charts/plot.png']);
+  assert.deepEqual(withoutOtherSessionsFiles(files, [], assistants), files, 'nobody else at work: every file is the run\'s and nothing is read');
+  assert.deepEqual(withoutOtherSessionsFiles([], [{ id: 'other' }], assistants), []);
+  assert.deepEqual(withoutOtherSessionsFiles(files, [{ id: 'other' }], [{ parts: [{ type: 'tool', input: { command: 'python3 build.py' } }] }]), files, 'a run that names none of them says nothing');
 });

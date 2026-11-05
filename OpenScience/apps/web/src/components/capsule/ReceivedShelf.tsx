@@ -1,3 +1,4 @@
+import { sessionOwner } from "@/lib/sessionLifecycle";
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { declineDelivery, importDelivery, listPendingDeliveries, openDelivery, type PendingDelivery } from "@/lib/capsuleShareClient";
@@ -8,7 +9,7 @@ import {
 } from "@/lib/memoryClient";
 import { formatDay } from "@/lib/format";
 import { productErrorMessage, type CapsuleRecord } from "@/lib/productClient";
-import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
+import { prepareRuntimeUiIntent, newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { toast } from "@/lib/toast";
 import { LoadError } from "@/components/cards/LoadError";
 import { Button } from "@/components/ui/Button";
@@ -165,7 +166,8 @@ function ReceivedPacks() {
     // before the frame opens it; the frame then creates it under that id.
     const intent = newRuntimeUiIntent();
     await startCapsuleTrial(pack.id, intent.sessionId);
-    navigate("/app/chat", { state: { runtimeUiIntent: intent } });
+    if (intent.owner !== sessionOwner()) return;
+    navigate("/app/chat", { state: { runtimeUiIntent: prepareRuntimeUiIntent(intent) } });
   });
 
   if (failed && data === null) return <LoadError message="暂时读不到收到的胶囊。" onRetry={reload} />;

@@ -1,7 +1,7 @@
 import { workStateLabel } from "@evimed/domain";
 import "./ResearchObservatory.css";
 
-export type QueueMode = "running" | "queued" | "done" | "failed" | "paused" | "waiting" | "ended" | "between";
+export type QueueMode = "running" | "queued" | "done" | "failed" | "paused" | "waiting" | "ended" | "between" | "interrupted" | "needs";
 export interface QueueEntry {
   key: string;
   title: string;
@@ -14,6 +14,8 @@ export interface QueueEntry {
 export const QUEUE_MODE_WORD: Record<QueueMode, string> = {
   running: workStateLabel("running"), queued: workStateLabel("queued"), done: workStateLabel("done"), failed: workStateLabel("failed"),
   paused: workStateLabel("paused"), waiting: workStateLabel("todo"), ended: workStateLabel("stopped"), between: "本轮完成",
+  // A goal that lost its next round to the platform, and one that has work left and is waiting for its person.
+  interrupted: "已中断", needs: "等你决定",
 };
 
 /**

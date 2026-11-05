@@ -3,6 +3,7 @@ import { after, before, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { GeoStore } from "../src/geoStore.mjs";
 import { GeoService } from "../src/geoService.mjs";
+import { authorizeGeoConfirmation, previewGeoConfirmationAuthorization } from "../src/geoConfirmationAuthorization.mjs";
 import { GeoMeasureStore } from "../src/geoMeasureStore.mjs";
 import { enqueueRound, geoMeasureState, tickProbe } from "../src/geoProbeQueue.mjs";
 import { geoRuntimeWrite } from "../src/geoWrites.mjs";
@@ -338,13 +339,27 @@ test("unmeasure refuses a stale base when an import commits after its source was
   assert.equal((await store.questionMap(p.id, 2))[0].questions[0].text, "Current imported question");
 });
 
+/** A recurring agreement alone is not permission: bind separate consent and a later preserved error. */
+async function authorizeErrorConfirmation(p, questionId) {
+  const preview = await previewGeoConfirmationAuthorization(store, owner.id, p.id);
+  await authorizeGeoConfirmation(store, owner.id, p.id, owner.id, preview.token, () => new Date("2026-01-01T00:00:00Z"));
+  const snapshotId = `confirmation-snapshot-${questionId}`;
+  const errorId = `confirmation-error-${questionId}`;
+  await database.query(`INSERT INTO evimed_geo.snapshots (id,user_id,geo_project_id,engine,question_id,asked_at,status)
+    VALUES ($1,$2,$3,'deepseek',$4,clock_timestamp(),'valid') ON CONFLICT (id) DO NOTHING`, [snapshotId, owner.id, p.id, questionId]);
+  await database.query(`INSERT INTO evimed_geo.errors (id,user_id,geo_project_id,fingerprint,engine,question_id,first_snapshot_id,status)
+    VALUES ($1,$2,$3,$1,'deepseek',$4,$5,'open') ON CONFLICT (id) DO NOTHING`, [errorId, owner.id, p.id, questionId, snapshotId]);
+  return { errorId, questionId, engine: "deepseek" };
+}
+
 test("automatic recurring confirmations honor the saved repeat agreement", options, async () => {
   const p = await project("recurring-confirm");
   await store.setStep(p.id, "monitoring", { automation: { state: "confirmed", actorId: owner.id,
     at: new Date().toISOString(), engines: p.engines, coverageDays: p.coverageDays } });
   await service.saveQuestions(owner, p.id, { ...input, contract: { ...contract, samplingMode: "recurring", repeats: 2 }, rows: [{ text: "Recurring question" }] });
   const questionId = (await store.questionMap(p.id, 1))[0].questions[0].id;
-  const started = await enqueueRound({ store: measure }, { geoProjectId: p.id, kind: "confirm", questionIds: [questionId], engines: ["deepseek"], repeat: 10 });
+  const ref = await authorizeErrorConfirmation(p, questionId);
+  const started = await enqueueRound({ store: measure }, { geoProjectId: p.id, kind: "confirm", questionIds: [questionId], engines: ["deepseek"], repeat: 10, ref });
   assert.equal(started.planned, 2);
   const progress = await service.diagnosisProgress(owner, p.id, started.roundId);
   assert.equal(progress.contract.repeats, 2);
@@ -461,6 +476,8 @@ test("automatic confirmation needs current engine consent while explicit diagnos
   const authorize = async (engines = p.engines) => store.setStep(p.id, "monitoring", { automation: { state: "confirmed", actorId: owner.id,
     at: new Date().toISOString(), engines, coverageDays: p.coverageDays } });
   await authorize();
+  await assert.rejects(start(), { code: "geo_confirmation_authorization_required" });
+  spec.ref = await authorizeErrorConfirmation(p, questionId);
   const accepted = await start();
   await store.setStep(p.id, "monitoring", { automation: { state: "declined", actorId: owner.id,
     at: new Date().toISOString(), engines: p.engines, coverageDays: p.coverageDays } });
@@ -491,6 +508,7 @@ test("confirmation acceptance rechecks withdrawal and scope changes after the in
     await store.updateProject(owner.id, p.id, { engines: ["deepseek"] });
     await store.setStep(p.id, "monitoring", { automation: { state: "confirmed", actorId: owner.id,
       at: new Date().toISOString(), engines: ["deepseek"], coverageDays: p.coverageDays } });
+    const ref = await authorizeErrorConfirmation(p, questionId);
     const raced = new Proxy(measure, {
       get(target, key) {
         if (key === "createRound") return async (round, jobs) => {
@@ -503,7 +521,7 @@ test("confirmation acceptance rechecks withdrawal and scope changes after the in
         return typeof value === "function" ? value.bind(target) : value;
       },
     });
-    await assert.rejects(enqueueRound({ store: raced }, { geoProjectId: p.id, kind: "confirm", questionIds: [questionId], engines: ["deepseek"] }),
+    await assert.rejects(enqueueRound({ store: raced }, { geoProjectId: p.id, kind: "confirm", questionIds: [questionId], engines: ["deepseek"], ref }),
       { code: "geo_monitoring_authorization_required" }, mutation);
     assert.equal((await store.query("SELECT id FROM evimed_geo.rounds WHERE geo_project_id=$1", [p.id])).rows.length, 0);
     assert.equal((await store.query("SELECT id FROM evimed_geo.probe_jobs WHERE geo_project_id=$1", [p.id])).rows.length, 0);

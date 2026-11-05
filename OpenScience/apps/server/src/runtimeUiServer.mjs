@@ -1,6 +1,7 @@
 import {withSessionPromptAdmission} from './runtimePromptAdmission.mjs';
 import { handleManagedBrowserRequest } from './managedBrowserRoutes.mjs';
 import { MODEL_REASONING_EFFORTS } from "./modelReasoningPolicy.mjs";
+import { CHAT_PRESENTATION } from "./dshProfilePatch.mjs";
 /** The native browser application on an isolated origin, with immutable per-frame project bindings. */
 import { createServer } from "node:http";
 import path from "node:path";
@@ -274,7 +275,7 @@ function assertNativeModelSelection(config, payload) {
 /**
  * `agentRuns` is the run ledger a message steered into a running turn is
  * counted on (`recordSteer`); `audit` reports a count that could not be written.
- * @param {{ config: Record<string, any>, store: any, runtimeManager: any, agentRegistry?: any, usageLedger?: any, balanceGate?:((project:any,payload:any)=>Promise<void>)|null, authorizePrompt?:(project:any,sessionId:string)=>Promise<void>, preparePrompt?:((project:any,request:any)=>Promise<any>)|null, recordPromptActor?:((user:any,project:any,request:any)=>Promise<any>)|null, recordPromptAttendance?:((user:any,project:any,request:any)=>Promise<any>)|null, bindResultRevision?:((user:any,project:any,request:any)=>Promise<any>)|null, bindVcrReference?:((user:any,project:any,request:any)=>Promise<any>)|null, bindGeoPlan?:((user:any,project:any,request:any)=>Promise<any>)|null, prepareGeoPlan?:((user:any,project:any,request:any)=>Promise<any>)|null, prepareSelections?:((user:any,project:any,request:any)=>Promise<any>)|null, authorizeMutation?:((operation:()=>Promise<any>)=>Promise<any>)|null,
+ * @param {{ config: Record<string, any>, store: any, runtimeManager: any, onGoalBarAction?: ((project: any, sessionId: string, op: "pause" | "start") => Promise<void>) | null, agentRegistry?: any, usageLedger?: any, balanceGate?:((project:any,payload:any)=>Promise<void>)|null, authorizePrompt?:(project:any,sessionId:string)=>Promise<void>, preparePrompt?:((project:any,request:any)=>Promise<any>)|null, recordPromptActor?:((user:any,project:any,request:any)=>Promise<any>)|null, recordPromptAttendance?:((user:any,project:any,request:any)=>Promise<any>)|null, bindResultRevision?:((user:any,project:any,request:any)=>Promise<any>)|null, bindVcrReference?:((user:any,project:any,request:any)=>Promise<any>)|null, bindGeoPlan?:((user:any,project:any,request:any)=>Promise<any>)|null, prepareGeoPlan?:((user:any,project:any,request:any)=>Promise<any>)|null, prepareSelections?:((user:any,project:any,request:any)=>Promise<any>)|null, authorizeMutation?:((operation:()=>Promise<any>)=>Promise<any>)|null,
  *   recordUploadSuccess?: ((project:any,upload:any)=>Promise<any>)|null,
  *   recordUploadAttempt?: ((project: any) => Promise<void>) | null, managedBrowser?: any, authorizeOpenSession?:((user:any,project:any,sessionId:string)=>Promise<void>)|null,
  *   resolveDelegatedFrame?:((user:any,delegation:any,options?:{recheck?:any})=>Promise<{project:any,principal:any}>)|null,
@@ -284,7 +285,7 @@ function assertNativeModelSelection(config, payload) {
  *   audit?: (event: string, detail: Record<string, any>) => Promise<void> }} deps
  * @returns {{ server: import('node:http').Server, releaseFrame: (frameId: string, userId: string) => Promise<number>, refreshFrameBinding: (renewed: any) => number, listen: (port?: number, host?: string) => Promise<any>, address: () => any, close: () => Promise<void> }}
  */
-export function createRuntimeUiServer({ config, store, runtimeManager, agentRegistry = null, usageLedger = null, balanceGate = null, authorizePrompt = null, preparePrompt = null, recordPromptActor = null, recordPromptAttendance = null, bindResultRevision = null, bindVcrReference = null, bindGeoPlan = null, prepareGeoPlan = null, prepareSelections = null, authorizeMutation = null,
+export function createRuntimeUiServer({ config, store, runtimeManager, onGoalBarAction = null, agentRegistry = null, usageLedger = null, balanceGate = null, authorizePrompt = null, preparePrompt = null, recordPromptActor = null, recordPromptAttendance = null, bindResultRevision = null, bindVcrReference = null, bindGeoPlan = null, prepareGeoPlan = null, prepareSelections = null, authorizeMutation = null,
   agentRuns = null, managedBrowser = null, authorizeOpenSession = null, recordUploadAttempt = null, recordUploadSuccess = null, noteFileRead = null, resolveDelegatedFrame = null, createDelegatedPolicy = null, audit = async () => {} }) {
   // The original bytes of a native upload are kept for the study's data intake beside the kernel's own copy. A failed
   // copy (the project's capacity, the ledger) is that copy's failure: the upload the kernel already stored stands.
@@ -385,6 +386,27 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
         detail: "runtime-ui",
       }).catch(() => {});
     }
+  }
+  /**
+   * A conversation opened on a cold kernel asks LoopX's bar before the kernel has taken the session up: the answer is `session_unavailable`,
+   * the bar's client does not ask again, and the conversation shows no bar until the page is reloaded (`deps-version.json` `loopx.notes`). So
+   * that one answer is asked again here while the kernel takes the session up, and the client reads whatever comes of it.
+   * Delete when the plugin retries its first read.
+   * @param {any} project @param {any} payload the bar's `read` request @param {Buffer} body what the kernel answered
+   */
+  async function goalBarReadOnceSessionOpens(project, payload, body) {
+    let answer;
+    try { answer = JSON.parse(body.toString("utf8")); } catch { return body; }
+    if (answer?.result?.value?.result?.code !== "session_unavailable") return body;
+    const deadline = Date.now() + Number(config.runtimeGoalBarReadWaitMs ?? 0);
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => { setTimeout(resolve, Math.min(1000, Math.max(1, deadline - Date.now()))); });
+      const value = await runtimeManager.goalBar(project, payload).catch(() => null);
+      if (value?.v === payload.v.replace("request", "response") && value.result?.code !== "session_unavailable") {
+        return Buffer.from(JSON.stringify({ ...answer, result: { ok: true, value } }), "utf8");
+      }
+    }
+    return body;
   }
   /** Freeze the route (and the methods) of an input before forwarding the native request, never changing it. A failure refuses nothing,
    * except a selected GEO request whose route could not be preserved (`definitivelyRejected`). */
@@ -720,6 +742,36 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
         Number(config.maxFileBytes), () => resolveFrame(snapshot, null));
       return;
     }
+    // A scoped frame needs only the platform's public presentation defaults.
+    // Do not forward the kernel's settings document or admit any settings write.
+    if (scoped && method === RUNTIME_UI_SETTINGS_READ) {
+      if (req.method !== "POST" || frame.suffix !== `/api/${RUNTIME_UI_SETTINGS_READ}`) { sendDenied(res, method); return; }
+      const snapshot = { url: req.url, headers: { cookie: req.headers.cookie } };
+      trackFrame(snapshot, claims, res);
+      const generation = runtimeManager.runtimeGeneration(project);
+      if (!generation) throw new HttpError(403, "runtime_ui_frame_invalid", "The runtime generation is unavailable.");
+      const raw = await readBody(req, Math.min(Number(config.maxJsonBytes), 16384));
+      /** @type {any} */ let call = null;
+      try { call = JSON.parse(raw.toString("utf8")); } catch { /* refused below */ }
+      if (!isRuntimeUiSettingsRead(call)) { sendDenied(res, method); return; }
+      const current = await resolveFrame(snapshot, null);
+      if (current.scoped !== scoped || runtimeManager.runtimeGeneration(project) !== generation)
+        throw new HttpError(403, "runtime_ui_frame_invalid", "The shared frame changed.");
+      const payload = JSON.stringify({ type: "server-response", rpcId: call.rpcId, result: { ok: true, value: {
+        writable: false, hasDocument: false, namespaces: [{ ns: "ui-chat", autoGenerate: false,
+          schema: { uid: 3, refs: { "1": { type: "string", meta: {} }, "2": { type: "string", meta: {} },
+            "3": { type: "object", meta: { default: {} }, dict: { transcriptView: 1, linkOpening: 2 } } } },
+          value: CHAT_PRESENTATION, applies: "live", secrets: [], revision: 0 }],
+      } } });
+      await scoped.withAuthority(() => {
+        if (res.destroyed || runtimeManager.runtimeGeneration(project) !== generation)
+          throw new HttpError(403, "runtime_ui_frame_invalid", "The shared frame changed.");
+        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Content-Length": String(Buffer.byteLength(payload)),
+          "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" });
+        res.end(payload);
+      });
+      return;
+    }
     // A denied method this surface answers itself (`RUNTIME_UI_ANSWERED_METHODS`
     // in `@evimed/domain`): the kernel's own reply for "nothing to do", so the
     // page is not told of a failure it did not have. Never forwarded; anything
@@ -860,8 +912,8 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
     // The one settings read a hosted page may make (`RUNTIME_UI_SETTINGS_READ` in `@evimed/domain`, 2026-10-28): the chat's
     // presentation, which the profile sets to the kernel's folded `standard` view. Forwarded only as the exact call, and
     // answered only with the projection `runtimeUiSettingsAnswer` returns; an answer it refuses is refused here, so the
-    // kernel's whole configuration document never reaches the page. A delegated frame is not given it: its own policy
-    // decides what it reads, as before. Everything else in `settings/*` falls through to the deny gate below.
+    // kernel's whole configuration document never reaches the page. Scoped frames receive the fixed presentation above,
+    // not this kernel document. Everything else in `settings/*` falls through to the deny gate below.
     if (method === RUNTIME_UI_SETTINGS_READ && !scoped) {
       if (req.method !== "POST") { sendDenied(res, method); return; }
       const raw = await nativeBody(Math.min(Number(config.maxJsonBytes), 16384));
@@ -930,12 +982,19 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
       // from the path every project shares; a file whose URL names its
       // content is kept by the browser, across sessions and projects.
       uiAssetPrefix: scoped ? null : SHARED_UI_ASSET_PREFIX,
-      ...(scoped ? { transformResponse: response => scopedCall ? scoped.httpResponse(scopedCall, response) : Promise.resolve(response.body) } : {}),
+      ...(scoped ? { transformResponse: response => scopedCall ? scoped.httpResponse(scopedCall, response) : Promise.resolve(response.body) }
+        : loopxBody?.payload.op === "read" ? { transformResponse: response => goalBarReadOnceSessionOpens(project, loopxBody.payload, response.body) } : {}),
       immutable: isImmutableRuntimeUiAsset(frame.suffix),
       // A composer attachment is a file, not an RPC: held to the deployment's
       // file ceiling rather than the JSON one, and forwarded as bytes.
       ...(method === RUNTIME_UI_UPLOAD_METHOD ? { fileBody: true } : {}),
       ...(req.method === "POST" && [RUNTIME_UI_UPLOAD_METHOD, "fileUploads/upload"].includes(method) && recordUploadAttempt ? { beforeForward: () => recordUploadAttempt(project) } : {}),
+      ...(onGoalBarAction && ["start", "pause"].includes(loopxBody?.payload.op) ? { observeResponse: async response => {
+        let answer = null;
+        try { answer = JSON.parse(response.body.toString("utf8")); } catch { /* said nothing */ }
+        const kind = answer?.result?.value?.result?.kind;
+        if (kind === "succeeded" || kind === "applied_with_warning") await onGoalBarAction(project, loopxBody.payload.sessionId, loopxBody.payload.op);
+      } } : {}),
       ...(originalUpload ? { observeResponse: async response => {
         if (response.status < 200 || response.status >= 300) return;
         let answer;
@@ -1002,7 +1061,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
           admissionSignal=signal;
           await recordNativeActor(current.user,current.project,{args:{request:{sessionId:loopxBody.payload.sessionId}}});
           if(loopxBody.payload.op==='pause')await recordStop(project,{args:{request:{sessionId:loopxBody.payload.sessionId}}});signal.throwIfAborted();return forward();
-        });
+        },{timeoutMs:config.runtimeGoalBarActionTimeoutMs});
       };
       const admitted = () => runtimeManager.pluginService
         ? runtimeManager.pluginService.withAdmission(project, start, { prompt: true }) : start();

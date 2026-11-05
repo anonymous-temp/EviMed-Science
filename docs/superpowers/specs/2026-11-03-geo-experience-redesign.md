@@ -1,0 +1,284 @@
+# 循证 GEO 体验重构 V2：以 Profound 新版为布局母版
+
+日期：2026-11-03。状态：实施中；尚未部署。
+
+本版按用户最新要求重写，替代本文件 V1。V1 保留八步主导航和项目列表预览，改动不足；V2 采用 **Profound 一家的产品页面结构**，只做 EviMed 业务、语言、平台宿主和数据能力必需的适配。V1 可从 Git 提交 `24e9ddd2e` 查阅，不能与本版同时作为实施规范。
+
+## 1. 已选定的方向
+
+选择 **Profound 当前新版 Answer Engine Insights（AEI）＋Projects＋AI Marketer** 为唯一界面母版。清蓝继续是中国市场功能对照对象，不将其营销页、Profound 分析页及其他 SaaS 的布局拼成新界面。
+
+这次的结构性改变有四项：
+
+1. 去掉所有结果页顶端常驻的八步进度导航。八步保留为后台执行流程及任务详情，按本次请求显示，不再决定用户从哪里浏览。
+2. 项目入口采用项目集合页，取消左边选中、右边再预览、随后还要选择打开项目或继续对话的结构。点击项目直接到其工作页。
+3. 项目工作页采用 Profound 的主工作区＋右侧项目资料；分析页采用 Profound 的页签＋统一筛选＋趋势与排名组合＋明细表。不同用途使用该竞品已有的不同模板，不强求每页都是三栏。
+4. 分析页通过右上角 AI 入口及图表/表格上的上下文操作打开原生 AI 侧栏，不在每个页面底部放一条全宽输入框。
+
+EviMed 已有的数据对象、八步算法、题库版本、采样记录、稿件版本、权限、费用边界和共享知识记忆继续使用。此次改变的是界面入口、组合和导航投影，不能在迁移中丢掉这些已有能力。
+
+## 2. 为什么选 Profound，以及证据边界
+
+### 2.1 选择依据
+
+Profound 的官方新版 AEI 文档明确提供分析页截图，能核对页签、时间比较、筛选、图表与排名并列、明细表及 AI 调查入口。其官方视频页特别标明视频展示的是旧版。因此本方案以新版文档为准，旧视频和早期文章只作历史资料。[新版分析页](https://docs.tryprofound.com/answer-engine-insights/interpret)、[旧版视频说明](https://docs.tryprofound.com/getting-started/platform-walkthrough)
+
+Projects 官方指南给出了项目集合、项目主页、右侧 Instructions/Context、会话和建议任务的页面图片；AI Marketer 文档明确展示分析页右上角 AI 入口，并描述从数据进入对话。[项目页面指南](https://docs.tryprofound.com/projects/getting-started)、[AI Marketer](https://docs.tryprofound.com/aim/about)
+
+清蓝 Mark 公开资料支持诊断、知识、内容、媒体规划与监测的能力主张。但本次未获得足够完整且可核验的登录后页面资料，其部分网页图片也受当前浏览环境限制，无法逐页作为布局母版。这里不推断清蓝界面不好，也不拿营销图臆测后台布局。[清蓝 Mark](https://www.pureblueai.com/mkter)
+
+### 2.2 本次看到了什么
+
+- 已直接查看 Profound 官方新版 AEI 筛选与指标区原图，以及项目集合页局部、项目主页与右侧资料原图、分析页右上角 AI 入口截图。
+- 其余页面按官方文档中的布局说明与图片条目建立对照；没有进入付费后台，不宣称已实际操作竞品的筛选、启动任务、导出或发布。
+- 参考图中的蓝框属于文档标注，不是实际产品控件样式。竞品示例的数值、名称、标志、营销文案和素材都不进入我们的业务数据。
+- 代码映射仍以此前核查的 main `45df9e9ba968f2b71a8ae1f6dc3e3cfabfd186fc` 为设计快照，开始实现前再对照最新合入代码。此前线上只读观察仍有效为当时记录，不代表此刻的完整生产版本。
+
+## 3. 哪些直接参照，哪些作必要适配
+
+| 界面部分 | Profound 母页／参考 | 我们的采用方式 | 必要适配 |
+|---|---|---|---|
+| 项目集合 | Projects / Your Projects | 标题和新建操作；项目卡片集合；点击直接进入 | 产品名、当前任务、最近活动；无数据不显示空指标和 0/8 |
+| 项目工作页 | Project page | 主区域交代目标并开展对话，右侧项目资料；任务/会话及成果可返回 | DSH 原生会话；产品资料、证据与当前工作范围；任务来源使用已有记录 |
+| AI 分析页 | 新版 AEI | 结果页签、其下一条筛选、主趋势与排名并列、下方明细 | 中文页签与现有测量指标；不照抄指标算法或虚构数据维度 |
+| 问句与回答 | Prompts / Prompt Analysis | 分组表格、搜索、列设置、点击进入一题的记录 | 保留原编号、客户分类、采样版本；管理问句与查看表现分开 |
+| 引用来源 | Citations / All Citations | 域名与页面视图、搜索、排名、点击页面明细 | 中文来源类别、说明书/学术等实际标签；仅展示真实采到的引用 |
+| 医学核查 | FactCheck | 从核查摘要进入主题/陈述、引用和依据，再采取动作 | 产品剂型、人群、医学适用性和判断不确定性；不能把品牌资料一致性当成医学正确性 |
+| 稿件与发布页面 | Documents / Pages | 对象表格及对象详情，内容和表现分开展示 | 原生文件预览和对话修订；已有订单、链接、发布版本放入发布记录 |
+| 产品资料 | Context Manager | 集中管理工作要用的材料和约定 | 复用平台知识库；产品、人群旅程、证据与表达偏好分开记录 |
+
+上述页面采用同一竞品的布局逻辑。全平台 Logo、语义色、基础字号及已有共享组件继续采用 EviMed；不复制竞品品牌素材，不额外发明一套 GEO 视觉语言。
+
+**重要的数据模型区别**：Profound 的分析 category 与工作 Project 并不是同一对象。此处借鉴布局，不把我们的 GEO 项目改名后硬当两者。当前 GEO 项目继续绑定其产品范围、测量和任务；顶端项目选择器始终约束数据读写，后台不为模仿导航新增组织级 category。
+
+## 4. 新导航：八步退出常驻导航
+
+The owner's November 4 navigation review supersedes the original module-only sidebar. The existing global destinations retain their order and remain reachable inside every GEO project. Only the active GEO project's work destinations expand beneath the GEO entry. There is one sidebar, with independently scrollable function and conversation areas; the account footer remains outside both. Selection may scroll into view but does not reorder the function directory.
+
+The page header contains the only selector of the entire GEO project. Switching projects retains a compatible destination but clears the former project's session, objects, saved selection, query and pending navigation intent. Reselecting the same project preserves its scope. The header states the destination; it does not repeat the project name as another large heading.
+
+The conversation area offers current-project and all-recent scopes. A history filter changes only that list; it never changes the page's project or creates a session. Resource pages show unified history, not a separate knowledge-base or memory conversation namespace. One real session is one entry, programme and verification runs remain execution records, and a cross-project history entry opens its proved project and module. A shared GEO conversation uses delegated module authority rather than the viewer's personal project header. Explicit project conversation creation uses a retained request identity and never replaces the primary conversation. Global New Conversation keeps its ordinary assistant scope. Project names are not repeated as inert strips above history, nor automatically suffixed with GEO.
+
+```text
+EviMed Science / New Conversation
+Global function directory (fixed order)
+  GEO
+    Project work
+    AI performance
+    Content and publication
+    Product and evidence
+Conversation history [This project / All recent]
+Account / Inbox / Settings
+
+Main header: GEO / [Current project selector]
+Page title: Current destination
+```
+
+All-projects access remains in the project selector. Native drafts and resident frames keep their original project/session identity while other pages are browsed; they are never transferred by a history filter.
+
+Implementation boundaries: `GET /api/geo/projects/:id/conversation/list?limit&cursor` checks current read authority and returns associated session summaries only; it does not start a runtime. Existing `conversation/open` accepts an explicit `{kind:"new",requestId}` under run+edit authority, reserves the request before kernel creation and rechecks the full authority before returning the descriptor. It never changes the primary pointer. An uncertain kernel outcome remains pending rather than being automatically resent; repeated requests can recover a retained successful result, while a genuinely unknown outcome may require operator reconciliation.
+
+History aggregates use bounded request concurrency and expose partial reads and continuation. Pagination does not freeze live activity, and each GEO page currently reads the existing canonical ledger once; a 15-second response timeout does not cancel an already running read. These performance and recovery boundaries are not claims of a new indexed conversation service. Owner-only ordinary history in a GEO control project remains distinct from the associated sessions a shared member may read. The native conversation pane and its draft ownership remain the existing platform implementation.
+
+
+AI 表现内使用 Profound AEI 的页签结构，经业务适配成为：
+
+```
+可见度  |  医学核查  |  引用来源  |  问题与回答
+```
+
+Profound 的 Sentiment 不直接翻译成医学正确性或推荐度。当前已具备的推荐表达分析放在可见度的相应视图；没有完整真实数据的情绪功能不以空页签上线。将来增加独立情绪分析需要独立数据契约，不能本轮凭版式补一个数字。
+
+项目设置负责产品允许修改的监测范围、频率、成员与权限；AI 表现右上角设置入口可以直达该项目的监测部分。持续监测的图表仍在 AI 表现，用日期、比较期及轮次回看，不另建复盘模块。
+
+## 5. 三个主页面的实质变化
+
+### 5.1 GEO 项目集合：改为直接打开的项目卡片
+
+母页：Profound Projects。
+
+保留一个新建项目操作与搜索/排序。项目以可比较的卡片排列，每张显示项目名称、产品或目标摘要、当前任务状态和最近活动；没有工作不显示“正在做”，没有采样不放空 KPI。卡片整体单击进入项目工作页，不再分为选中、预览、打开三段。
+
+新建尽量沿用自然语言入口：直接说明目标或附材料，保留已有创建幂等及失败恢复。需要命名时只用最小的命名信息，不在模仿竞品过程中增加一套大型品牌建档向导。未命名项目清楚标示待命名，恢复原项目不再次创建。
+
+### 5.2 项目工作：对话在主区域，资料在右侧
+
+母页：Profound Project page。
+
+左侧主区域是项目目标、原生对话，以及可切换的任务/成果记录；右侧是产品与适用范围、当前资料和项目约定。已有上下文不要求反复输入，用户能看到此次使用哪些资料。项目目标较长时折叠，不能挤占半个首屏。
+
+主对话复用现有 DSH 原生 frame。它占主工作区域，不能把内核输入框重新实现为 GEO 专用 textarea。这里不显示通用“今天想做点什么”的欢迎页，也不重复一排八步或所有未完成指标。任务和成果列表采用现有执行与文件记录，不伪造一个竞品同名对象。
+
+仅当确实有根据当前数据产生的建议时，在右侧资料下方显示少量建议。建议写清作用对象与原因，点开可以查看依据、准备草稿或明确执行；没有建议时整个区域不占位。
+
+### 5.3 AI 表现：按新版 AEI 组织整个结果面
+
+母页：Profound 新版 AEI。
+
+从上到下是三个稳定层次：页签；筛选；当前分析内容。主分析内容中，趋势图与排名/对比表并排；其后是相应明细表或矩阵。图表内部切指标、比较维度，页面顶部只负责分析范围，不再出现另一个 27 项总菜单。
+
+```
+项目选择 / AI 表现                       询问 AI  导出  设置
+可见度   医学核查   引用来源   问题与回答
+时间范围  对比期间  模型  问题群  更多筛选
+
+当前指标 / 比较维度
+┌──────────────────────────┬────────────────┐
+│ 当前指标与趋势             │ 同范围排名/比较  │
+│ 可点击时间点或区间          │ 可打开具体对象   │
+└──────────────────────────┴────────────────┘
+本视图的明细表 / 矩阵
+```
+
+这是把 Profound 的页面结构中文化、接入我们的数据，区别于 V1 的“八步＋列表＋详情＋聊天”通用工作台。页面仍有正常的垂直阅读顺序，但不把流程、待办、列表、设置、聊天全部堆成一长列。设置放到设置入口，执行详情放到任务入口。
+
+## 6. AI 对话的两个位置，仍是同一条工作链
+
+- **项目工作页**：完整原生对话在主区域，右边是项目资料。这是新项目和复杂任务的主入口。
+- **分析/稿件页面**：右上角“询问 AI”，或具体图表/表格上的“让 AI 分析/修订”，打开右侧原生对话。收起后把宽度归还结果，不留下全宽底部输入栏。
+
+Profound 当前文档支持从选中的数据点进入 AI Marketer 侧栏；我方采用其位置和上下文连续性。触发动作仍按平台已有规则区分准备草稿与立即执行，不能在仅查看页面时启动采样。[AI Marketer 入口](https://docs.tryprofound.com/aim/about)
+
+侧栏带入项目、对象、题库版本、轮次、当前范围和文件版本。用户在分析里开对话、回到项目工作、再切回分析时，沿用同一个目标 session；不会悄悄新建一段没有前文的对话。明确新任务或新会话时才按现有平台方式创建。
+
+同一时刻只装载/展示一个可输入的原生会话面。对象详情在主区域打开，不把详情抽屉、AI 侧栏和内核右侧面板全部挤在一起。较窄屏幕改成对话覆盖结果，并保留回到原对象的入口、筛选和草稿。
+
+## 7. 问题、引用、核查、内容的具体母版对应
+
+### 问题与回答
+
+使用 Prompts 的分组表格布局，行是问题或问题群。首次无题库时，原位显示导入或让 AI 整理的入口；有题库后默认展示版本、原题/客户分类及已有结果。管理问句进入完整编辑面，字段映射、批量修改和原题预览不硬塞入一个狭窄侧栏。
+
+测量动作就在此页面清楚显示，核对题库版本、平台、范围、重复次数与调用量后再开始。点击一个问题进入其完整回答、采样与判定，随后可继续查看医学核查和引用来源。不得因为从另一页进入而改变分母或重新采样。
+
+### 引用来源
+
+使用 Citations 的域名/页面切换和明细表。默认关注已采集到的引用；自有、竞品、学术、监管等类别以现有证据和标注为准。点击域名到其页面，点击页面到与之关联的问题和原回答，并可发起有对象的内容分析。
+
+“检索到但未引用”、爬虫访问、转化或来源衰减需要实际采集能力；没有数据的能力不因竞品界面里存在就展示模拟图或自动给零。
+
+### 医学核查
+
+使用 FactCheck 的核查摘要、主题/说法列表与依据详情思路。首屏允许核查变化与平台/错误类型比较并列，下面是需要核查的具体说法。用户可看原回答、说明书或文献依据、适用人群/剂型及处理记录，准备修订任务。[FactCheck 工作方式](https://docs.tryprofound.com/answer-engine-insights/factcheck/getting-started)
+
+我方的医学核查不等于与品牌资料一致。继续保留产品实体、人群、适应症、剂型、证据适用性和不确定性；未测、测过但无错误、证据不足、失败和筛选无匹配分别显示。此前发现的“未测”同时显示“没有测到讲错”必须在新页面状态验收中关闭。
+
+### 内容与发布
+
+使用 Documents / Pages 的对象集合与详情布局，页内为稿件和发布记录，主要区域是可搜索、筛选、排序的表格；选中稿件打开正文、版本、依据与关联问题。通过原生对话修订、下载文件，发布时选择明确版本。自有页面和外部渠道记录共享稿件关系，但发布状态与后续被 AI 引用分开显示。[Pages 布局与操作](https://docs.tryprofound.com/pages/getting-started)
+
+投放、订单、预算、结算和退款是我方现有业务的必要适配，进入单条发布记录或预算页面，不新建第二套全屏营销后台。方案和投入情景在项目工作里作为有类型的成果打开，数据仍由现有 PlanStrategy/targets/预算能力提供。
+
+## 8. 八步和 51 个技能放在哪里
+
+### 8.1 八步保留执行，结果按对象组织
+
+| 原执行步骤 | 新界面主要结果位置 | 执行流程查看方式 |
+|---|---|---|
+| 证据 | 产品与资料：产品、证据及依据 | 对应任务详情中的证据环节 |
+| 旅程 | 产品与资料：人群与旅程；关联问题表 | 对应任务详情中的旅程环节 |
+| 问题 | AI 表现 → 问题与回答 | 对应任务详情中的问题准备 |
+| 诊断 | AI 表现 → 可见度、医学核查、问题原回答 | 本轮测量与任务记录 |
+| 信源 | AI 表现 → 引用来源；项目工作中的方案成果 | 对应分析/方案任务 |
+| 内容 | 内容与发布 → 稿件 | 写稿或修订任务 |
+| 投放 | 内容与发布 → 发布记录 | 发布安排、订单与核验记录 |
+| 监测 | AI 表现的趋势与历史；项目设置中的监测安排 | 当前轮次与未来计划 |
+
+完整方案的任务详情可以展示八步；只改稿就显示当前请求及实际必要依赖，不把未请求工作列成欠账。过程节点可以打开相应结果；节点不是另一套全局导航。浏览不会发起工作，当前查看位置与后台运行状态始终分开。
+
+### 8.2 技能不成为菜单
+
+51 个技能是历史交付范围中的方法集合，其运行版本和工具权限仍归平台管理。本次改布局不增加 51 个前台入口，也不凭技能名字显示“已完成”。用户用自然语言或明确动作发起任务；实际用到的方法、材料和结果可在执行详情追溯。本次没有重新逐个验证全部线上技能，不能把方案更新写成技能验收完成。
+
+## 9. 27 个分析视图的完整迁移
+
+| 新位置 | 既有视图 |
+|---|---|
+| AI 表现 / 可见度 | V01 当前水平与目标；V02 指标趋势；V03 可比变化；V04 平台指标；V05 问题群与平台；V06 原分类与平台；V08 竞品；V09 推荐表达；V21 提及与自有引用；V27 事件与采样观察 |
+| AI 表现 / 医学核查 | V11 采集与判定覆盖；V12 正确性；V13 类型/严重度；V14 临床主题条件；V15 处理历史 |
+| AI 表现 / 引用来源 | V17 来源类型；V18 域名页面；V19 来源与平台/问题群；V20 已确认关系；V22 页面引用历史 |
+| AI 表现 / 问题与回答 | V07 逐题采集与判定 |
+| 产品与资料 | V10 旅程与需求覆盖；V16 结论条件与来源 |
+| 项目工作 / 方案成果 | V26 冻结实测与规划目标 |
+| 内容与发布 | V23 内容发布覆盖；V24 发布状态；V25 预算结算退款 |
+
+27 个视图均有归属，但不必保持为 27 个独立页面。相同数据对象下的视图可以成为图表切换、明细表或详情。每项仍沿用原注册表支持的指标、维度及权限，不因界面合并而混算。
+
+统一筛选是页面数据契约：时间、对比期间、平台、问题群等在兼容视图间继承；对不支持的条件明确说明并清除，不静默保留一个无效条件。读数、钻取和导出使用同一选择范围。对题库、平台或采样方式变化的历史比较明确说明可比性；估算和观察、内容修改和实际发布、变化和因果归因都保持区别。
+
+Profound 的保存视图、排序、列选择是可参考的交互。已有 URL 范围状态可以直接复用；若持久化命名视图尚未具备，须作为完整小功能做保存、读取、删除、权限和失效处理，未实现前不摆一个无效按钮。
+
+## 10. 路由和代码迁移
+
+### 10.1 历史位置的兼容
+
+以下是页面目的地映射，不要求一次改掉所有 API 地址：
+
+| 旧位置 | 新目的地 |
+|---|---|
+| GEO 列表及预览 | 项目卡片集合；原 project 选择参数定位相应卡片/项目 |
+| 项目根地址/overview | 项目工作；其原统计图归 AI 表现 |
+| visibility / monitoring | AI 表现 / 可见度；趋势锚点与时间范围保留 |
+| accuracy / diagnosis | AI 表现 / 医学核查；错误对象保留 |
+| questions | AI 表现 / 问题与回答；原 view=journey 到产品与资料中的旅程 |
+| sources | AI 表现 / 引用来源 |
+| actions / content | 内容与发布 / 稿件；delivery/budget 到对应发布记录或预算位置 |
+| plan | 项目工作中的方案成果；策略/目标版本保留 |
+| evidence | 产品与资料 / 证据 |
+| 原 chat 路由 | 保留 session 和当前结果；在项目工作显示主体对话，分析时显示侧栏 |
+
+必须保留当前打开对象、问题版本、轮次、范围、会话、文件版本和浏览器返回路径；非本项目的对象由既有权限拒绝，不自动切换到其它项目。
+
+### 10.2 复用实现
+
+- `GeoHomePage` / `GeoHomePreview`：替换列表预览呈现，保留查询、权限与项目创建恢复逻辑。
+- `GeoProjectPage` / `geoTabs`：从八步壳改为功能分区壳；维护旧地址兼容，公共状态继续来自同一投影。
+- `geoJourney` / domain 工作流投影：保留任务真实状态，将其呈现移动到项目工作和执行详情；不重建后台编排。
+- `GeoAnalysisWorkbench` / `geoAnalysisMode` / `geoReadScope`：复用注册视图与范围身份，按新版四类结果页组合。
+- `RuntimeUiFrame` / `GeoConversationPane` / `WorkspaceSplit`：复用一个驻留原生会话，改变宿主位置和开合入口；移除 GEO 的常驻全宽底部输入栏。
+- `EvidenceTab`、`QuestionsTab`、`AccuracyTab`、`SourcesTab`、`ActionsTab`、`PlanTab`、`VisibilityTab`：拆出已有业务内容并按母版放置；不要整页套壳后保留其重复标题、按钮和筛选。
+- `GeoMonitoringAutomation`、知识库、文件修订、通知、方法学习及运行记录：沿用现有服务，更新对象链接与展示位置。
+
+## 11. 与并行平台规范的关系
+
+最新用户要求允许改变 GEO 的页面结构；不能再用旧版“八步必须始终在顶部”和“必须底部 dock”把改版拉回 V1。正式实施时同步修改 GEO 产品规范及 DS15/DS23 的模块适配说明，明确仅 GEO 导航与对话入口采用本版，避免同时保留两个互相冲突的规则。
+
+继续保留：共享语义色/字体、一个原生 composer、统一权限与状态、草稿和会话恢复、结果自动更新、医学和数据真实性。24px 标题、已有侧栏宽度及用户保存值可以保留，它们不妨碍采用竞品结构。布局宽度以实际可用空间为准，不通过缩小正文把原生对话挤进不可读窄栏。
+
+不要求所有分析都并排到底：采用竞品自身的图表网格、表格与详情结构。默认只显示当前工作需要的区域；对话开启时结果仍可读，空间不足则保留对象身份转入单面显示。页面不增加新的常驻警示、审批墙或效果交付系统。
+
+## 12. 应当先做的样板和验收
+
+### 12.1 母版对照式样板
+
+下一次视觉交付采用“官方原图＋EviMed 对应样板＋必要改动说明”并列展示，而不是只交一张缺少参照的新设计。至少覆盖：
+
+1. 项目集合：用现有四项目规模和较多项目规模验证卡片、搜索与直接进入。
+2. 项目工作：未开始和已有任务，原生对话主区域及右侧产品资料。
+3. 可见度：统一筛选、趋势与排名组合、同范围明细。
+4. 医学核查：未测、有错误、已测为零三种状态；说法到原回答及依据。
+5. 引用来源和问题表：一个标准表格母版的两种业务应用，包含对象详情。
+6. 从选中数据打开 AI：显示原对象、对话侧栏、返回与草稿，不是模拟文本框。
+7. 内容与发布：稿件、版本及发布记录的一条完整样例。
+
+示例数据清楚标记；原图、样板和真实服务验收是不同证据。没有对应竞品原图或文档模式的新区域必须标注业务必要性，不能以“创新”名义自由扩张。
+
+### 12.2 必须测通的三条实际旅程
+
+- 新建/继续项目 → 提供资料 → 原题导入或 AI 整理 → 明确启动诊断 → 查看有效/失败样本 → 打开具体回答 → 从发现发起处理。
+- 已有稿件 → 同一原生对话提出修改 → 产生并打开新版本 → 返回内容列表看到版本关系 → 按明确授权进入发布记录。
+- AI 表现筛选周期 → 点击变化或错误 → 查看依据 → 对话分析/修改 → 产生新任务或成果 → 返回原范围继续观察。
+
+每条检查项目身份、题库/轮次/文件版本、返回、刷新、筛选、权限、失败恢复、幂等与费用。禁止把打开分析页当成自动开始测量，把关闭未来监测当成取消已受理任务，把无测量当作零错误。
+
+真实 DSH＋DeepSeek 的对话、附件、取消和结果回写需要独立验证。此前未闭合的 GEO producer 未派出、真实停止运行和部分初始化 403 要在实际测试环境重查；仅通过视觉样板不能关闭。使用独享测试环境，生产配置和数据不因设计核查被修改。
+
+## 13. 实施顺序和本轮交付边界
+
+1. 冻结本版母页清单与导航；将旧 V1 视为已替代，并同步后续规范修订点。
+2. 完成母版对照样板，检查桌面、普通笔记本、窄屏、深色及空/错/忙状态。
+3. 重构项目集合、模块壳、分析导航和原生对话宿主；复用现有数据服务与状态投影。
+4. 将 27 项分析与八步结果逐项迁移，验证旧链接、对象关系和所有操作；修复未测/错误等状态冲突。
+5. 按三条真实旅程验收，再进行代码审查、相应测试和 CI。提交、推送、合并、部署分别记录；部署仍需后续明确安排。
+
+实施以 Profound 为唯一母版，并在导航、项目入口、分析主区域与 AI 入口四处做结构变化。代码实现、本地测试、真实服务验收、提交推送及部署分别记录；本分支不部署。

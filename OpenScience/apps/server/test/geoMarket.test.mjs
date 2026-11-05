@@ -1,3 +1,4 @@
+import { dnsKey } from '../src/geoDomains.mjs';
 // The market's rules as pure functions, then the whole loop against the
 // in-memory store double and a fake vendor (the same scenarios run on
 // PostgreSQL in geoMarket.integration.test.mjs).
@@ -25,7 +26,8 @@ import { GeoMarketStoreDouble } from "./helpers/geoMarketStoreDouble.mjs";
 
 const admitted = {
   resourceId: "1", mediaType: "website", available: true, blacklisted: false, priceCny: 100, domain: "jksb.com.cn", domainVerified: true,
-  flags: { medicalCategory: true, newsSourceCategory: true },
+  caseLink: "https://www.jksb.com.cn/case",
+  flags: { medicalCategory: true, newsSourceCategory: true, domainCheck: "ok", domainFinalHost: "www.jksb.com.cn", domainCheckedAt: "2026-09-24T00:00:00.000Z" },
 };
 const article = { id: "a", status: "publishable", isControl: false, safety: "clear", gate: "passed", contentSha256: "a".repeat(64), layer: "popular" };
 
@@ -45,6 +47,15 @@ test("registrable domains follow the Chinese second-level suffixes", () => {
   assert.equal(registrableDomain("127.0.0.1"), null);
   assert.equal(registrableDomain("localhost"), null);
   assert.equal(registrableDomain("com.cn"), null);
+  assert.equal(registrableDomain("one.co.za"), "one.co.za");
+  assert.equal(registrableDomain("two.co.za"), "two.co.za");
+  assert.equal(registrableDomain("foo.invalid"), null);
+  assert.equal(registrableDomain("a.github.io"), "a.github.io");
+  assert.equal(registrableDomain("a.s3.amazonaws.com"), "a.s3.amazonaws.com");
+  assert.equal(registrableDomain("b.s3.amazonaws.com"), "b.s3.amazonaws.com");
+  assert.equal(registrableDomain("www.食狮.公司.cn"), "xn--85x722f.xn--55qx5d.cn");
+  assert.equal(registrableDomain("0x7f000001"), null);
+  assert.equal(registrableDomain("bad..example.org"), null);
 });
 
 test("the catalogue's own words: blacklist rules and remark flags", () => {
@@ -78,11 +89,11 @@ test("admission: the three conditions, the blacklist, the price and domain caps,
   assert.deepEqual(ok(admitted), []);
   assert.deepEqual(ok({ ...admitted, priceCny: 2000 }), [], "the cap itself is allowed");
   assert.deepEqual(ok({ ...admitted, priceCny: 2000.01 }), ["price_above_auto_cap"]);
-  assert.deepEqual(ok({ ...admitted, domainVerified: null }), ["domain_unverified"]);
+  assert.deepEqual(ok({ ...admitted, domainVerified: null }), ["domain_unverified", "domain_proof_invalid"]);
   // A condition nobody checked is not met: the vendor's category says only how the vendor files the outlet (G3).
   assert.deepEqual(outletProblems(admitted), ["icp_unchecked", "news_unchecked", "medical_unchecked"]);
   assert.deepEqual(outletProblems(admitted, { source: { newsIndexed: true, medicalVertical: true } }), ["icp_unchecked"]);
-  assert.deepEqual(outletProblems({ ...admitted, flags: {} }, { source: checked }), [], "the source table's check is what admits");
+  assert.deepEqual(outletProblems({ ...admitted, flags: {} }, { source: checked }), ["domain_proof_invalid"], "missing domain evidence cannot admit");
   assert.deepEqual(ok(admitted, { source: { ...checked, newsIndexed: false } }), ["not_news_indexed"], "our own check outranks the vendor's label");
   assert.deepEqual(ok(admitted, { source: { ...checked, icpMatches: false } }), ["icp_mismatch"]);
   assert.deepEqual(ok(admitted, { source: { ...checked, medicalVertical: false } }), ["not_medical"]);
@@ -237,3 +248,10 @@ async function doubleFixture() {
 
 defineGeoMarketScenarios(test, doubleFixture);
 defineGeoMarketMoneyPathScenarios(test, doubleFixture);
+
+test('DNS normalization is idempotent and retains the registrable www label', () => {
+  for (const value of ['WWW.WWW.Sub.Example.org.', 'www.com.cn', 'www.www.com.cn', 'www.食狮.公司.cn']) assert.equal(dnsKey(dnsKey(value)),dnsKey(value));
+  assert.equal(dnsKey('www.com.cn'),'www.com.cn');
+  assert.equal(dnsKey('www.www.com.cn'),'www.com.cn');
+  assert.equal(dnsKey('www.食狮.公司.cn'),'xn--85x722f.xn--55qx5d.cn');
+});

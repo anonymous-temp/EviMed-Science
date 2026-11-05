@@ -123,16 +123,18 @@ describe("总览 as a data page", () => {
     for (const link of within(text).getAllByRole("link")) expect(link).toHaveClass("underline");
   });
 
-  it("has the left column's four sections and no 地图 or 项目 among them, the numbers of the lists on the sections that have one, and 总览 in force", async () => {
+  it("puts the capsule controls in the overview header and uses the four numbers as the list entries", async () => {
     open();
     await ready();
-    const links = within(screen.getByRole("navigation", { name: "记忆" })).getAllByRole("link");
-    expect(links.map((link) => link.textContent)).toEqual(["总览", "关于你7", "做法2", "收到的1"]);
-    expect(links.map((link) => link.getAttribute("aria-current"))).toEqual(["page", null, null, null]);
+    expect(screen.queryByRole("navigation", { name: "记忆" })).toBeNull();
+    expect(within(band()).getAllByRole("link").map((link) => link.getAttribute("href"))).toEqual([
+      "/app/memory?tab=self", "/app/memory?tab=methods", "/app/memory?tab=received", "/app/files",
+    ]);
     expect(screen.queryByRole("link", { name: "地图" })).toBeNull();
-    // Links to places, not a tab list.
     expect(screen.queryByRole("tablist", { name: "记忆" })).toBeNull();
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("总览");
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("记忆胶囊");
+    expect(screen.getByRole("button", { name: "记住这一条" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "记忆设置" })).toBeInTheDocument();
   });
 
   it("draws the changes as a chart and, behind it, a table of the same changes whose rows open the drawer of what they are", async () => {
@@ -272,6 +274,15 @@ describe("the relations and topics", () => {
     expect(await screen.findByRole("list", { name: "主题排行" })).toBeInTheDocument();
   });
 
+  it("does not substitute a different memory when an addressed preview is absent", async () => {
+    reads.fetchMemoryMap.mockResolvedValue(manyMemories(12, 3));
+    open("?preview=memory%3Amissing");
+    await ready();
+    const preview = await screen.findByRole("complementary", { name: "记忆预览" });
+    expect(within(preview).getByText("选择星图中的内容。")).toBeInTheDocument();
+    expect(within(preview).queryByRole("button", { name: "查看详情" })).toBeNull();
+  });
+
   it("open on the topics when there are too few relations to draw and the model has grouped the memories", async () => {
     const grouped = manyMemories(12, 0);
     reads.fetchMemoryMap.mockResolvedValue({ ...grouped, facets: { ...grouped.facets, topics: [{ id: "t1", label: "写作习惯", weight: 6, trend: 1, members: [] }] } });
@@ -309,6 +320,8 @@ describe("a part that could not be read", () => {
     expect(await screen.findByText("暂时读不到记忆。")).toBeInTheDocument();
     await waitFor(() => expect(tileValue("收到的")).toBe("1"));
     expect(tileValue("做法")).toBe("2");
+    expect(screen.getByRole("link", { name: "查看关于你" })).toHaveAttribute("href", "/app/memory?tab=self");
+    expect(screen.getByRole("link", { name: "查看知识" })).toHaveAttribute("href", "/app/files");
     expect(document.querySelector("[data-headline]")).not.toBeNull();
     expect(await sentence()).toHaveTextContent("学会了 2 种做法");
   });

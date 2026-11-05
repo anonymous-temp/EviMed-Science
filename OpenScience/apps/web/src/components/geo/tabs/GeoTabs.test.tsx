@@ -1,3 +1,4 @@
+import { optionalOpaqueRuntimeUiIntent } from "@/test/runtimeUiIntentAssertions";
 import type { ReactElement } from "react";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -112,9 +113,12 @@ function renderTab(tab: ReactElement) {
 }
 
 function expectUnsentProjectDraft(text: string) {
-  expect(screen.getByTestId("location")).toHaveTextContent("/app/geo/geo_1/chat/ses_geo_1");
+  expect(screen.getByTestId("location")).toHaveTextContent("/app/geo/geo_1/");
+  const params = new URLSearchParams(screen.getByTestId("search").textContent ?? "");
+  expect(params.get("conversation")).toBe("open");
+  expect(params.get("session")).toBe("ses_geo_1");
   const state = JSON.parse(screen.getByTestId("state").textContent ?? "null");
-  expect(state.runtimeUiIntent).toMatchObject({
+  expect(optionalOpaqueRuntimeUiIntent(state)).toMatchObject({
     kind: "open", projectId: "prj_geo_1", sessionId: "ses_geo_1", draft: expect.stringContaining(text), scope: descriptor().scope,
   });
   expect(state.runtimeUiIntent).not.toHaveProperty("send");
@@ -479,10 +483,10 @@ describe("信源", () => {
     const dialog = await screen.findByRole("dialog", { name: "百度百科" });
     await within(dialog).findByRole("region", { name: "讲错的回答" });
     await userEvent.click(within(dialog).getByRole("button", { name: "让 AI 处理这个信源" }));
-    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app/geo/geo_1/chat/ses_geo_1"));
+    await waitFor(() => expect(screen.getByTestId("search")).toHaveTextContent("conversation=open"));
     // The draft waits in the composer: the intent carries it, and nothing asks the model.
     const state = JSON.parse(screen.getByTestId("state").textContent ?? "null") as { runtimeUiIntent?: { draft?: string } } | null;
-    const draft = state?.runtimeUiIntent?.draft ?? "";
+    const draft = optionalOpaqueRuntimeUiIntent(state)?.draft ?? "";
     expect(draft).toContain("baike.baidu.com");
     expect(draft).toContain("第 1 句讲错的话");
     expect(draft).toContain("1 个讲错了信尔美");
@@ -561,7 +565,8 @@ describe("信源", () => {
     expect(heads[2]).toHaveTextContent("测量范围有变化，不与前一轮比较");
     expect(section.querySelector("[data-geo-history-break]")).toHaveTextContent("竖线两侧的轮次测量范围不同，不互相比较。");
     // The latest round against the one before it — the same coverage — is compared, by the one reading.
-    expect(section.querySelector("[data-geo-history-note]")).toHaveTextContent("较上一轮（9月21日）：被引用多 3 个，讲错的回答少 4 个");
+    expect(section.querySelector("[data-geo-history-note]")).toHaveTextContent("较上一轮（9月21日）：被引用多 3 个。本视图未提供各轮的判定口径，讲错回答不比较变化。");
+    expect(within(table).getByText("已记录讲错的回答")).toBeVisible();
   });
 
   it("states that the latest round is not compared when the engine set changed in it, and never writes a change across it", async () => {
@@ -757,7 +762,7 @@ describe("总览", () => {
     expect(tile.querySelector("[data-delta='down']")).toHaveTextContent("2");
     const title = await screen.findByRole("heading", { name: "综合可见度指数 44，比上次低 2" });
     // The chart says which readings it compares and when the next is.
-    expect(title.parentElement).toHaveTextContent("上次 9月25日 · 下次 10月19日");
+    expect(title.parentElement).toHaveTextContent(/上次 9月25日 · (?:计划|计划已到期) 10月19日/);
     // The mention rate moved two points inside its measured band of ±3: flat, on its tile.
     expect(screen.getByRole("group", { name: "品类问题可见率" }).querySelector("[data-delta='flat']")).not.toBeNull();
     overview.unmount();
@@ -765,7 +770,7 @@ describe("总览", () => {
     renderTab(<VisibilityTab {...props(fallingProject())} />);
     const same = await screen.findByRole("heading", { name: /综合可见度指数 44，/ });
     expect(same).toHaveTextContent("综合可见度指数 44，比上次低 2");
-    expect(same.parentElement).toHaveTextContent("上次 9月25日 · 下次 10月19日");
+    expect(same.parentElement).toHaveTextContent(/上次 9月25日 · (?:计划|计划已到期) 10月19日/);
   });
 
   it("an engine-set change shows no ▲ or ▼ anywhere on 总览: not on a tile, not in the sentence, the chart or the band — one plain statement instead", async () => {
@@ -792,8 +797,8 @@ describe("总览", () => {
     renderTab(<VisibilityTab {...props(enginesChangedProject())} />);
     const title = await screen.findByRole("heading", { name: /综合可见度指数 44，/ });
     expect(title).toHaveTextContent(`综合可见度指数 44，${NOT_COMPARED}`);
-    expect(title.parentElement).toHaveTextContent("上次 9月25日 · 下次 10月19日");
-    await userEvent.click(screen.getByRole("button", { name: /^指标：/ }));
+    expect(title.parentElement).toHaveTextContent(/上次 9月25日 · (?:计划|计划已到期) 10月19日/);
+    await userEvent.click(screen.getByRole("button", { name: /^分析指标：/ }));
     await userEvent.click(await screen.findByRole("menuitemradio", { name: "品类问题可见率" }));
     expect(await screen.findByRole("heading", { name: `品类问题可见率 23%，${NOT_COMPARED}` })).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/[▲▼]/);
@@ -815,7 +820,7 @@ describe("总览", () => {
     client.getGeoMonitoring.mockResolvedValue(fallingMonitoring);
     renderTab(<VisibilityTab {...props(fallingProject())} />);
     await screen.findByRole("heading", { name: /综合可见度指数 44/ });
-    await userEvent.click(screen.getByRole("button", { name: /^指标：/ }));
+    await userEvent.click(screen.getByRole("button", { name: /^分析指标：/ }));
     await userEvent.click(await screen.findByRole("menuitemradio", { name: "品类问题可见率" }));
     expect(await screen.findByRole("heading", { name: "品类问题可见率 23%，与上次持平" })).toBeInTheDocument();
   });
@@ -870,7 +875,7 @@ describe("总览", () => {
     expect(heading.compareDocumentPosition(trend) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // The wrong statement carries its correction, with the sentence in the draft; the project's conversation is opened with it unsent.
     await userEvent.click(within(list).getByRole("button", { name: "让 AI 写纠错稿" }));
-    await waitFor(() => expect(screen.getByTestId("state")).toHaveTextContent("每天注射一次"));
+    await waitFor(() => expect(screen.getByTestId("state")).toHaveTextContent("runtimeUiIntent"));
     expectUnsentProjectDraft("每天注射一次");
   });
 
@@ -992,7 +997,9 @@ describe("可见度 when one of its reads failed", () => {
     renderTab(<VisibilityTab {...props()} />);
     expect(await screen.findByText(/^各引擎的读数没有读到：/)).toBeInTheDocument();
     expect(screen.getByText(/^按问句池的提及率没有读到：/)).toBeInTheDocument();
-    expect(screen.getByText(/^同类药的提及率没有读到：/)).toBeInTheDocument();
+    // The paired competitor card has its own scoped analysis read and does
+    // not infer that read's outcome from the separate diagnosis request.
+    expect(screen.getByRole("region", { name: "本品与竞品提及率" })).toBeInTheDocument();
     expect(screen.queryByText("还没有按问句池测过提及率。")).not.toBeInTheDocument();
     expect(document.querySelector("[data-heat-row]")).toBeNull();
   });
@@ -1032,6 +1039,19 @@ describe("可见度", () => {
     expect(risk).toHaveTextContent("风险监测问题里，风险问句被推荐率");
     expect(risk).toHaveTextContent("3%");
     expect(risk).toHaveTextContent("越低越好");
+  });
+
+  it("keeps pool rival observations but does not connect readings with unknown judge versions", async () => {
+    client.getGeoMonitoring.mockResolvedValue({ ...monitoringFilled, rivals: [{ name: "竞品甲", entityKey: "rival", pool: "P2", label: "竞品甲 · P2",
+      points: [{ date: "2026-09-22", value: 10, n: 40, coverage: null }, { date: "2026-10-13", value: 20, n: 40, coverage: null }],
+      ownPoints: [{ date: "2026-09-22", value: 30, n: 40, coverage: null }, { date: "2026-10-13", value: 40, n: 40, coverage: null }] }] });
+    client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled);
+    renderTab(<VisibilityTab {...props()} />);
+    expect(await screen.findByText("判定版本或测量范围未知或不一致，各期读数不连线比较。")).toBeInTheDocument();
+    const table = screen.getByRole("table", { name: /竞品甲.*同口径读数/ });
+    expect(within(table).getByText("10%")).toBeInTheDocument();
+    expect(within(table).getByText("20%")).toBeInTheDocument();
+    expect(screen.getByLabelText(/竞品甲.*同口径趋势/).closest('figure')).toHaveAttribute('data-chart-connected','false');
   });
 
   it("draws the rivals as grey lines on the mention trend, which is over their questions too (G15)", async () => {
@@ -1082,7 +1102,7 @@ describe("可见度", () => {
     client.getGeoMonitoring.mockResolvedValue({ ...monitoringFilled, series: [], byEngine: [] });
     client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled);
     renderTab(<VisibilityTab {...props()} />);
-    expect(await screen.findByText("还没有开始持续监测，第一次复测后这里会画出趋势。")).toBeInTheDocument();
+    expect(await screen.findByText("所选范围还没有可用的趋势记录。")).toBeInTheDocument();
   });
 });
 
@@ -1216,7 +1236,7 @@ describe("药品价值分析只在依据里", () => {
     expect(screen.getByRole("link", { name: "结论库" })).toHaveAttribute("href", "/app/geo/geo_1/evidence");
     expect(screen.getByText("得到 这个药的获益、风险、适用性、费用与可及性")).toBeInTheDocument();
     await userEvent.click(start[0]);
-    await waitFor(() => expect(screen.getByTestId("state")).toHaveTextContent("请结合现有资料开始药品价值分析"));
+    await waitFor(() => expect(screen.getByTestId("state")).toHaveTextContent("runtimeUiIntent"));
     expectUnsentProjectDraft("请结合现有资料开始药品价值分析");
     // Opened with the brief in the composer; nothing was sent.
     expect(screen.getByTestId("state")).not.toHaveTextContent("\"send\":true");
@@ -1282,4 +1302,36 @@ describe("a role that may not open the conversation", () => {
     await within(dialog).findByRole("region", { name: "讲错的回答" });
     expect(within(dialog).queryByRole("button", { name: "让 AI 处理这个信源" })).not.toBeInTheDocument();
   });
+});
+
+describe('判定口径未知的趋势', () => {
+  it.each([['总览', OverviewTab], ['可见度', VisibilityTab]])('%s 保留各期读数但不连线', async (_name, Tab) => {
+    client.getGeoMonitoring.mockResolvedValue({ ...monitoringFilled, series: [{ key: 'gvi', points: [
+      { date: '2026-09-22', value: 10, n: 40, coverage: null }, { date: '2026-10-13', value: 20, n: 40, coverage: null },
+    ] }] });
+    client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled);
+    renderTab(<Tab {...props()} />);
+    expect(await screen.findByText('判定版本或测量范围未知或不一致，各期读数不连线比较。')).toBeInTheDocument();
+    expect(screen.getByRole('img',{name:/趋势/}).closest('figure')).toHaveAttribute('data-chart-connected','false');
+    await userEvent.click(screen.getByText('查看各期读数'));
+    const history = screen.getByRole('list', { name: /历史读数/ });
+    expect(within(history).getByText(/2026-09-22：10/)).toBeInTheDocument();
+    expect(within(history).getByText(/2026-10-13：20/)).toBeInTheDocument();
+  });
+});
+
+it('keeps distinct same-day readings in the collapsed history without duplicate keys', async () => {
+  client.getGeoMonitoring.mockResolvedValue({ ...monitoringFilled, series: [{ key: 'gvi', points: [
+    { date: '2026-10-13', value: 10, n: 40, coverage: null }, { date: '2026-10-13', value: 20, n: 40, coverage: null },
+  ] }] });
+  client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled);
+  renderTab(<OverviewTab {...props()} />);
+  await screen.findByText('判定版本或测量范围未知或不一致，各期读数不连线比较。');
+  const details = screen.getByText('查看各期读数').closest('details');
+  expect(details).not.toHaveAttribute('open');
+  await userEvent.click(screen.getByText('查看各期读数'));
+  const history = screen.getByRole('list',{name:/历史读数/});
+  expect(within(history).getAllByRole('listitem')).toHaveLength(2);
+  expect(within(history).getByText(/2026-10-13：10/)).toBeInTheDocument();
+  expect(within(history).getByText(/2026-10-13：20/)).toBeInTheDocument();
 });

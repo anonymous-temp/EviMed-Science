@@ -1,11 +1,12 @@
 import { geoConversationCapability, geoConversationChecks, geoConversationRuns, geoConversationSources, geoConversationSourceScope, geoConversationStatus, startGeoConversation, stopGeoConversationRun, type GeoConversationScope } from "@/lib/geoNativeClient";
-import { geoChatPath, geoIdFromChatPath } from "@/lib/geoLocation";
+import { geoChatPath, geoConversationPane, geoIdFromChatPath, geoPanePath } from "@/lib/geoLocation";
 import { putConversationReference, recordWebVital, stageVcrConversationReference } from "@/lib/apiClient";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { errorCodeMessage, runtimeLockMessage, runtimeStartRecovery, SIMULATED_WALLET_PAGES } from "@evimed/domain";
 import { createWebRuntimeUiFrame, fetchWebRuntimeStatus, listWebAgentRuns, listWebResearchAgents, renewWebRuntimeUiFrame, releaseWebRuntimeUiFrame, startWebRuntime, webErrorMessage, WebApiError, type WebAgentRun, type WebRuntimeStartStatus, type WebRuntimeUiFrame } from "@/lib/apiClient";
-import { scopedConversationPath, conversationNavigationState, newRuntimeUiIntent, runtimeUiIntentFromState, type RuntimeUiIntent } from "@/lib/runtimeUiNavigation";
+import { sessionOwner, subscribeSessionBoundary } from "@/lib/sessionLifecycle";
+import { prepareRuntimeUiIntent, scopedConversationPath, conversationNavigationState, acknowledgeRuntimeUiIntent, pendingRuntimeUiIntent, registerPendingRuntimeUiIntent, newRuntimeUiIntent, runtimeUiIntentFromState, runtimeUiIntentMarkerFromState, runtimeUiIntentWasLost, type RuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { bindConversationCapability, conversationCapability } from "@/lib/dispatch";
 import { TASKS_PATH, taskPath } from "@/lib/taskLocation";
 import { saveToKnowledgeBase } from "@/lib/sourceClient";
@@ -300,6 +301,12 @@ export function FrameSkeleton({ title = null, line = "正在打开" }: { title?:
 const COVER_DRAFT_MAX_CHARS = 100_000;
 
 /** Only an opening that creates a plain new conversation with no brief of its own has a composer to fill. */
+const NATIVE_DELIVERY_LIMIT = 128; // The bridge bounds its own request table at the same size.
+type DeliveredRuntimeIntent = Pick<RuntimeUiIntent, "kind" | "projectId" | "requestId" | "sessionId" | "owner" | "scope"> & {
+  command: object;
+  generation: number;
+};
+
 function coverTakesText(intent: RuntimeUiIntent | null, scope: unknown): boolean {
   return intent?.kind === "create" && intent.draft === undefined && !scope;
 }
@@ -458,7 +465,7 @@ export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwne
   coverDraftRef.current = coverDraft;
   // What the frame was handed of it for this opening (`frameId:requestId`), and the follow-up draft sent at the acknowledgement.
   const coverHanded = useRef<{ key: string; text: string } | null>(null);
-  const coverFollowUp = useRef<string | null>(null);
+  const coverFollowUp = useRef<{ requestId: string; owner: string; sessionId: string; opening: string } | null>(null);
   // The runtime's settings are being applied, so the opening is tried again by
   // itself (`PREPARING_CODE`): said on the cover instead of an alert, until the
   // conversation opens or the tries run out.
@@ -484,27 +491,56 @@ export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwne
   // Conversation searches waiting for the frame's answer, by request id.
   const searches = useRef(new Map<string, (result: FrameSessionSearchResult) => void>());
   const currentRequest = useRef<RuntimeUiIntent | null>(null);
+  const deliveredRequests = useRef(new Map<string, DeliveredRuntimeIntent>());
   const lastSent = useRef("");
   const releaseBinding = useRef<(() => void) | null>(null);
   const currentBinding = useRef<WebRuntimeUiFrame | null>(null);
+  const bindingOwner = useRef<string | null>(null);
   const renewBinding = useRef<(() => void) | null>(null);
   const recoveryAttempted = useRef(false);
   const nativeReady = useRef(false);
   currentBinding.current = binding;
   const frameId = binding?.frameId;
+  useEffect(() => subscribeSessionBoundary(() => {
+    bindingOwner.current = null;
+    deliveredRequests.current.clear();
+    currentRequest.current = null;
+    lastSent.current = "";
+    coverHanded.current = null;
+    coverFollowUp.current = null;
+    setCoverDraft("");
+  }), []);
   const intent = useMemo(() => {
     // A frame the reader is not looking at holds its document and its lease
     // and commands nothing: two cached projects must not both open a session.
     if (!active || suspended) return null;
     const explicit = runtimeUiIntentFromState(location.state, projectId);
-    if (explicit) return !scope || explicit.scope?.geoProjectId === scope.geoProjectId && explicit.scope.sessionId === scope.sessionId ? explicit : null;
+    if (explicit) return (!sessionId || explicit.sessionId === sessionId) && (scope ? explicit.scope?.geoProjectId === scope.geoProjectId && explicit.scope.sessionId === scope.sessionId : !explicit.scope) ? explicit : null;
     if (scope && sessionId !== scope.sessionId) return null;
+    const pending = runtimeUiIntentMarkerFromState(location.state, projectId) ? null : pendingRuntimeUiIntent(projectId, sessionId, scope);
+    if (pending) return pending;
     // URL updates acknowledged by the native application do not command it
     // to open itself again. Browser back/forward still yields a fresh intent.
     if (sessionId && mirroredSession.current?.sessionId === sessionId && mirroredSession.current?.attempt === attempt) return null;
-    return { kind: sessionId ? "open" : "create", projectId, requestId: crypto.randomUUID(),
+    return { kind: sessionId ? "open" : "create", projectId, requestId: crypto.randomUUID(), owner: sessionOwner(),
       sessionId: sessionId ?? crypto.randomUUID(), ...(scope ? {scope} : {}) } satisfies RuntimeUiIntent;
   }, [active, suspended, location.state, projectId, sessionId, attempt, scope]);
+
+  useEffect(() => {
+    const explicit = runtimeUiIntentFromState(location.state, projectId);
+    if (!active || suspended || !explicit) return;
+    if (scope && (explicit.scope?.geoProjectId !== scope.geoProjectId || explicit.scope.sessionId !== scope.sessionId)) return;
+    if (!scope && explicit.scope) return;
+    if (sessionId && explicit.sessionId !== sessionId) return;
+    registerPendingRuntimeUiIntent(explicit);
+  }, [active, suspended, location.state, projectId, scope, sessionId]);
+
+  const warnedStaleIntent = useRef<string | null>(null);
+  useEffect(() => {
+    if (!active || warnedStaleIntent.current === location.key || !runtimeUiIntentWasLost(location.state, projectId)) return;
+    warnedStaleIntent.current = location.key;
+    toast.error("上次尚未完成的对话请求未恢复。若有尚未交给对话的草稿，请重新输入。");
+  }, [active, location.key, location.state, projectId]);
 
   // Another project is another opening: nothing of the last one's preparing carries over.
   useEffect(() => {
@@ -581,6 +617,8 @@ export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwne
 
   useEffect(() => {
     let live = true;
+    const owner = sessionOwner();
+    bindingOwner.current = null;
     let frameId: string | null = null;
     const released = new Set<string>();
     releaseBinding.current = null;
@@ -601,18 +639,20 @@ export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwne
     recoveryAttempted.current = false;
     nativeReady.current = false;
     incoming.current = 0; outgoing.current = 0; lastSent.current = ""; currentRequest.current = null;
+    deliveredRequests.current.clear();
     coverHanded.current = null; coverFollowUp.current = null;
     void (scope ? createWebRuntimeUiFrame(projectId, scope) : createWebRuntimeUiFrame(projectId)).then(value => {
-      if (!live) { release(value.frameId); return; }
+      if (!live || !owner || owner !== sessionOwner()) { release(value.frameId); return; }
       frameId = value.frameId;
       releaseBinding.current = () => release(value.frameId);
       const url = new URL(value.frameUrl);
       if (url.origin !== origin || url.pathname !== `/__evimed/f/${value.frameId}/` || url.search || url.hash
         || !Number.isFinite(value.expiresAt) || value.expiresAt <= Date.now()
         || typeof value.renewalToken !== "string" || !value.renewalToken) throw new Error("Invalid frame binding");
+      bindingOwner.current = owner;
       setBinding(value);
     }).catch((cause: unknown) => {
-      if (!live) return;
+      if (!live || owner !== sessionOwner()) return;
       // A binding refused for a cleanup that has not finished is the same wait as the start's.
       const wait = startRefusal(cause);
       if (wait) waitToStart(wait, cause instanceof WebApiError ? cause.retryAfterSeconds : null);
@@ -766,7 +806,7 @@ export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwne
 
   /** One message to the frame's bridge, in the envelope and sequence it checks. */
   const postToFrame = useCallback((type: string, fields: object) => {
-    if (!frameId) return;
+    if (!frameId || !bindingOwner.current || bindingOwner.current !== sessionOwner()) return;
     iframe.current?.contentWindow?.postMessage({
       ...fields, type: `evimed.runtime-ui.${type}`, version: 1, frameId, projectId, seq: ++outgoing.current,
     }, origin);
@@ -775,7 +815,7 @@ export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwne
   useLayoutEffect(() => {
     if (!binding) return;
     const onMessage = (event: MessageEvent) => {
-      if (event.origin !== origin || event.source !== iframe.current?.contentWindow) return;
+      if (!bindingOwner.current || bindingOwner.current !== sessionOwner() || event.origin !== origin || event.source !== iframe.current?.contentWindow) return;
       const message = event.data;
       // A notice page carries no frame claims and no sequence: it is served
       // INSTEAD of the kernel's application, so the bridge that owns those
@@ -885,7 +925,7 @@ export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwne
         const draft = typeof message.draft === "string" && message.draft && message.draft.length <= 100_000
           ? message.draft : undefined;
         incoming.current = message.seq;
-        navigate(to, to === "/app/chat" ? { state: { runtimeUiIntent: newRuntimeUiIntent(draft) } } : undefined);
+        navigate(to, to === "/app/chat" ? { state: { runtimeUiIntent: prepareRuntimeUiIntent(newRuntimeUiIntent(draft)) } } : undefined);
       } else if (message.type === "evimed.runtime-ui.shell-shortcut") {
         // A shell shortcut pressed while focus was inside the frame (U8). The
         // same closed set the bridge forwards; anything else is dropped.
@@ -1019,10 +1059,12 @@ export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwne
         const agent = capabilityId ? capabilityAgents.current.get(capabilityId) ?? null : null;
         if (capabilityId && !agent) return;
         const from = typeof message.sessionId === "string" && SESSION_ID.test(message.sessionId) ? message.sessionId : null;
+        const owner = sessionOwner();
         void bindConversationCapability(from, agent)
           .then((bound) => {
+            if (owner !== sessionOwner() || currentBinding.current?.frameId !== binding.frameId) return;
             if (!bound.rebound) { postToFrame("capability", { capabilityId, sessionId: bound.sessionId }); return; }
-            navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent(draft || undefined, bound.sessionId), capabilityId } });
+            navigate("/app/chat", { state: { runtimeUiIntent: prepareRuntimeUiIntent(newRuntimeUiIntent(draft || undefined, bound.sessionId)), capabilityId } });
           })
           .catch(() => { postToFrame("capability", { capabilityId: null, sessionId: from }); });
       } else if (message.type === "evimed.runtime-ui.geo-options") {
@@ -1037,17 +1079,26 @@ export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwne
         vcrOptionsHandler.current?.({ sessionId: message.sessionId, start: message.start, intendedUse: message.intendedUse });
       } else if (message.type === "evimed.runtime-ui.ack") {
         // The answer to the cover's follow-up draft: the text is in the composer, or the reader is told it is not.
-        if (coverFollowUp.current && message.requestId === coverFollowUp.current) {
-          incoming.current = message.seq; coverFollowUp.current = null;
+        const followUp = coverFollowUp.current;
+        if (followUp && message.requestId === followUp.requestId) {
+          if (followUp.owner !== sessionOwner() || typeof message.ok !== "boolean" || (message.ok && message.sessionId !== followUp.sessionId)) return;
+          incoming.current = message.seq;
+          coverFollowUp.current = null;
+          if (followUp.opening !== lastSent.current || !roomHold.current.active || roomHold.current.suspended) return;
           if (message.ok === true) setCoverDraft("");
           else toast.error("刚输入的内容没能带进输入框，请重新输入。");
           return;
         }
-        const request = currentRequest.current;
-        if (!request || message.requestId !== request.requestId || typeof message.ok !== "boolean"
-          || (message.ok && (typeof message.sessionId !== "string" || !/^[A-Za-z0-9_-]{1,160}$/.test(message.sessionId)
-            || (request.kind === "open" && message.sessionId !== request.sessionId)))) return;
+        const delivery = typeof message.requestId === "string" ? deliveredRequests.current.get(message.requestId) : undefined;
+        if (!delivery || delivery.owner !== sessionOwner() || delivery.projectId !== projectId || typeof message.ok !== "boolean"
+          || (message.ok && (typeof message.sessionId !== "string" || !SESSION_ID.test(message.sessionId)
+            || (delivery.kind === "open" && message.sessionId !== delivery.sessionId)))) return;
         incoming.current = message.seq;
+        deliveredRequests.current.delete(delivery.requestId);
+        if (message.ok) acknowledgeRuntimeUiIntent(delivery);
+        // A superseded delivery may retire its history entry. It never owns the newer visible operation.
+        const request = currentRequest.current;
+        if (request?.requestId !== delivery.requestId || intent?.requestId !== delivery.requestId) return;
         if (!message.ok) { setError({ ...frameFailure("这条对话暂时无法打开"), newTask: !scope && request.kind === "open" }); return; }
         if (request.restoreDraft && message.draftRestored === false) toast.error("输入框已有内容或暂不能确认草稿状态，旧草稿仍已保留。可先查看当前输入，再返回恢复。");
         currentRequest.current = null; setPending(false); setNavigated(true);
@@ -1058,7 +1109,7 @@ export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwne
           const text = coverDraftRef.current.trim() ? coverDraftRef.current : "";
           if (text !== handed.text) {
             const followUp = crypto.randomUUID();
-            coverFollowUp.current = followUp;
+            coverFollowUp.current = { requestId: followUp, owner: request.owner, sessionId: message.sessionId, opening: lastSent.current };
             postToFrame("navigate", { requestId: followUp, intent: { kind: "open", sessionId: message.sessionId, draft: text } });
           }
         }
@@ -1067,10 +1118,10 @@ export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwne
         if (!mirrorAddress && roomHold.current.active && !roomHold.current.suspended) onPaneAcknowledgedRef.current?.(request.requestId, message.sessionId);
         // Remove only this acknowledged request. A later navigation intent
         // must survive an acknowledgement from the previous operation.
-        if (roomHold.current.active && !roomHold.current.suspended && (mirrorAddress || geoIdFromChatPath(location.pathname)) && intent?.requestId === request.requestId) {
+        if (roomHold.current.active && !roomHold.current.suspended && (mirrorAddress || geoIdFromChatPath(location.pathname) || geoConversationPane(location.pathname, location.search)) && intent?.requestId === request.requestId) {
           const nextState = conversationNavigationState(location.state, projectId);
           const geoId = geoIdFromChatPath(location.pathname);
-          navigate(geoId ? `${geoChatPath(geoId, message.sessionId)}${location.search}` : scopedConversationPath(`/app/chat/${encodeURIComponent(message.sessionId)}`, projectId), { replace: true, state: nextState });
+          navigate(geoId ? `${geoChatPath(geoId, message.sessionId)}${location.search}${location.hash}` : geoConversationPane(location.pathname, location.search) ? geoPanePath(location.pathname, location.search, location.hash, message.sessionId) : scopedConversationPath(`/app/chat/${encodeURIComponent(message.sessionId)}`, projectId), { replace: true, state: nextState });
         }
       } else if (message.type === "evimed.runtime-ui.session" && message.subagent === true
         && typeof message.sessionId === "string" && SESSION_ID.test(message.sessionId)
@@ -1092,14 +1143,16 @@ export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwne
         // deliberate new task, and says so, so the route does not go looking
         // for a recent task to resume instead.
         const geoId = geoIdFromChatPath(location.pathname);
+        const queryPane = geoConversationPane(location.pathname, location.search);
+        if (!mirrorAddress && !geoId && !queryPane) return;
         if (message.sessionId === null) {
           const next = newRuntimeUiIntent();
-          navigate(geoId ? `${geoChatPath(geoId, next.sessionId)}${location.search}` : scopedConversationPath("/app/chat", projectId), { state: { ...conversationNavigationState(location.state, projectId), runtimeUiIntent: next } });
+          navigate(geoId ? `${geoChatPath(geoId, next.sessionId)}${location.search}${location.hash}` : queryPane ? geoPanePath(location.pathname, location.search, location.hash, next.sessionId) : scopedConversationPath("/app/chat", projectId), { state: { ...conversationNavigationState(location.state, projectId), runtimeUiIntent: prepareRuntimeUiIntent(next) } });
         }
         // A branch of a finished turn (`session/fork`) is a task of its own —
         // the control plane takes it into the ledger — and says where it came
         // from, for whatever renders the task.
-        else navigate(geoId ? `${geoChatPath(geoId, message.sessionId)}${location.search}` : scopedConversationPath(`/app/chat/${encodeURIComponent(message.sessionId)}`, projectId), {
+        else navigate(geoId ? `${geoChatPath(geoId, message.sessionId)}${location.search}${location.hash}` : queryPane ? geoPanePath(location.pathname, location.search, location.hash, message.sessionId) : scopedConversationPath(`/app/chat/${encodeURIComponent(message.sessionId)}`, projectId), {
           state: { ...conversationNavigationState(location.state, projectId), ...(typeof message.forkedFrom === "string" && SESSION_ID.test(message.forkedFrom) ? { forkedFrom: message.forkedFrom } : {}) },
         });
       }
@@ -1111,15 +1164,30 @@ export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwne
   useEffect(() => {
     if (!ready || error || !binding || !intent || !iframe.current?.contentWindow) return;
     if (!/^[A-Za-z0-9_-]{1,160}$/.test(intent.sessionId)) { setError(frameFailure("这条对话暂时无法打开")); return; }
+    const deliveries = deliveredRequests.current;
     const key = `${binding.frameId}:${intent.requestId}`;
-    if (lastSent.current === key) return;
+    if (intent.owner !== sessionOwner() || lastSent.current === key) return;
     lastSent.current = key; currentRequest.current = intent; setPending(true);
+    const alreadyDelivered = deliveries.get(intent.requestId);
+    if (alreadyDelivered) {
+      // Reconnect can ask again, but the bridge only accepts the exact same command for this id.
+      if (alreadyDelivered.generation !== readyGeneration) {
+        postToFrame("navigate", alreadyDelivered.command);
+        alreadyDelivered.generation = readyGeneration;
+      }
+      return;
+    }
+    if (deliveries.size >= NATIVE_DELIVERY_LIMIT) {
+      setError(frameFailure("等待打开的对话过多，请重试"));
+      return;
+    }
     let alive = true;
     void (async () => {
       if (scope && (intent.scope?.geoProjectId !== scope.geoProjectId || intent.sessionId !== scope.sessionId || intent.kind !== "open" || intent.originReference)) throw new Error("Conversation scope changed");
       if (intent.originReference) await putConversationReference(intent.sessionId, projectId, intent.originReference);
       const stagedReference = intent.vcrReference ? await stageVcrConversationReference(intent.sessionId, projectId, intent.vcrReference) : undefined;
-      if (!alive) return;
+      const frame = iframe.current?.contentWindow;
+      if (!alive || !frame || intent.owner !== sessionOwner() || bindingOwner.current !== intent.owner || currentBinding.current?.frameId !== binding.frameId) return;
       // What the reader typed while this was opening travels as the composer's draft. The frame takes one draft per request, so the
       // first hand-over of an opening is the one recorded and re-sent; text typed after it travels at the acknowledgement.
       if (coverTakesText(intent, scope) && coverHanded.current?.key !== key) {
@@ -1127,15 +1195,22 @@ export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwne
       }
       const typed = coverTakesText(intent, scope) && coverHanded.current?.text ? coverHanded.current.text : undefined;
       const draft = intent.draft ?? typed;
-      iframe.current?.contentWindow?.postMessage({
-      type: "evimed.runtime-ui.navigate", version: 1, frameId: binding.frameId, projectId,
-      requestId: intent.requestId, seq: ++outgoing.current,
-      intent: { kind: intent.kind, sessionId: intent.sessionId, ...(draft === undefined ? {} : { draft }), ...(intent.restoreDraft ? { restoreDraft: true } : {}), ...(intent.resultRevision ? { resultRevision: intent.resultRevision } : {}), ...(stagedReference ? { vcrReference: stagedReference } : {}), ...(intent.geoPlanContext ? { geoPlanContext: intent.geoPlanContext } : {}), ...(intent.references ? { references: intent.references } : {}) },
-    }, origin);
-    })().catch(() => { if (alive) setError(frameFailure("无法保存引用，请重试")); });
-    return () => { alive = false; };
+      const { kind, sessionId, owner, requestId, scope: deliveredScope } = intent;
+      const command = { requestId,
+        intent: { kind, sessionId, ...(draft === undefined ? {} : { draft }), ...(intent.restoreDraft ? { restoreDraft: true } : {}), ...(intent.resultRevision ? { resultRevision: intent.resultRevision } : {}), ...(stagedReference ? { vcrReference: stagedReference } : {}), ...(intent.geoPlanContext ? { geoPlanContext: intent.geoPlanContext } : {}), ...(intent.references ? { references: intent.references } : {}) },
+      };
+      postToFrame("navigate", command);
+      deliveries.set(requestId, { kind, projectId, sessionId, owner, requestId, scope: deliveredScope, command, generation: readyGeneration });
+    })().catch(() => { if (alive && intent.owner === sessionOwner()) setError(frameFailure("无法保存引用，请重试")); });
+    return () => {
+      alive = false;
+      if (lastSent.current === key && !deliveries.has(intent.requestId) && currentRequest.current?.requestId === intent.requestId) {
+        lastSent.current = "";
+        currentRequest.current = null;
+      }
+    };
 
-  }, [ready, readyGeneration, error, binding, intent, projectId, origin, scope]);
+  }, [ready, readyGeneration, error, binding, intent, projectId, scope, postToFrame]);
 
   // The shell's light/dark/system choice, in the frame (C9 `theme`). The
   // kernel's page has no channel of its own for it — no parameter, no storage
@@ -1345,7 +1420,7 @@ export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwne
             <div role="alert" className="flex flex-col items-center justify-center gap-3 px-6 py-6 text-center text-ui text-error">
               <p>{error.text}</p>
               {error.retryable && <Button ref={retryButton} variant="ghost" onClick={retry}>重试</Button>}
-              {error.newTask && <Button variant="ghost" onClick={() => navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent() } })}>新建对话</Button>}
+              {error.newTask && <Button variant="ghost" onClick={() => navigate("/app/chat", { state: { runtimeUiIntent: prepareRuntimeUiIntent(newRuntimeUiIntent()) } })}>新建对话</Button>}
               {/* A cleanup that outlasted the wait: what the project already holds needs no runtime. */}
               {error.recovery === "wait" && <Button variant="ghost" onClick={() => { void openExistingResults(); }}>查看已有成果</Button>}
               {error.recovery === "autopilot" && <Button variant="ghost" onClick={() => navigate("/app/autopilot")}>查看定时任务</Button>}
