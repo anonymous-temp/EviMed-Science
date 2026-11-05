@@ -24,13 +24,13 @@ const CHOICES: ReadonlyArray<{ label: string; format: "csv" | "json"; kind: "pai
  *    judgments cite, and the server asks for both again.
  *  - The file is fetched and handed over when it has come; a refusal is said in words and nothing is saved under the file's name.
  */
-export function MatchingExport({ studyId, where, abilities }: { studyId: string; where: Where; abilities: readonly string[] }) {
+export function MatchingExport({ studyId, where, abilities, source }: { studyId: string; where: Where; abilities: readonly string[]; source?: "rules" }) {
   const [busy, setBusy] = useState(false);
   if (!abilities.includes("export") || !abilities.includes("read_patient_level")) return null;
   const save = (choice: (typeof CHOICES)[number]) => {
     if (busy) return;
     setBusy(true);
-    const request: VcrMatchExport = { ...where, format: choice.format, kind: choice.kind };
+    const request: VcrMatchExport = { ...where, ...(source ? { source } : {}), format: choice.format, kind: choice.kind };
     void downloadVcrMatching(studyId, request)
       .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "文件暂时无法导出，请稍后重试。" })))
       .finally(() => setBusy(false));

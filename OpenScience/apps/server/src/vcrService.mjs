@@ -52,6 +52,9 @@ import { HttpError } from "./security.mjs";
 import { VCR_DEFAULT_STUDY_NAME, vcrObjectNode, vcrStudyNameFrom } from "./vcrStore.mjs";
 import { vcrSealState } from "./vcrSeal.mjs";
 import { VCR_SCHEMA } from "./vcrPersistence.mjs";
+
+/** The people of a table screened by rules, a page at a time: the same 25 the judged page shows, at most 100. */
+const RULE_PAGE = Object.freeze({ default: 25, most: 100 });
 import {
   presentConversationStudy, presentExport, presentModels, presentPrecedents, presentReviewNotes, presentStudy, presentSummary, resultNode, useCeilingOf, intakeNeedsOf,
   vcrCurrentNodes, vcrReviewIsCurrent,
@@ -1272,20 +1275,39 @@ export class VcrService {
     const criteria = protocol ? await matchStore.listCriteria({ studyId: study.id, protocolVersionId: protocol.id }).catch(() => []) : [];
     const latest = `SELECT DISTINCT ON (subject_key) * FROM ${VCR_SCHEMA}.matching_assessments
       WHERE study_id = $1 AND ($2::text IS NULL OR protocol_version_id=$2) ORDER BY subject_key, as_of DESC, created_at DESC`;
-    const [tallyRows, subjectRows, gapRows] = await Promise.all([
+    // The people are a server-cut page, like the judged page's: a verdict to narrow to, a page of 25 (at most 100), the counts the whole table's.
+    const verdictSummaries = /** @type {Record<string, string[]>} */ ({ eligible: ["eligible"], insufficient: ["insufficient_evidence", "pending"], ineligible: ["ineligible"] });
+    if (query.verdict && !verdictSummaries[String(query.verdict)]) throw new HttpError(400, "vcr_payload_invalid", "verdict is eligible, insufficient or ineligible.");
+    const narrowedTo = query.verdict ? String(query.verdict) : null;
+    const wholeNumber = (/** @type {unknown} */ value, /** @type {number} */ fallback, /** @type {number} */ most) => {
+      if (value === undefined || value === "") return fallback;
+      const number = Number(value);
+      if (!Number.isInteger(number) || number < 0 || number > most) throw new HttpError(400, "vcr_payload_invalid", `offset and limit are whole numbers from 0 to ${most}.`);
+      return number;
+    };
+    const pageSize = Math.max(1, wholeNumber(query.limit, RULE_PAGE.default, RULE_PAGE.most));
+    const pageStart = wholeNumber(query.offset, 0, 1_000_000);
+    const narrowing = narrowedTo ? "WHERE summary = ANY($3::text[])" : "";
+    const narrowArgs = narrowedTo ? [verdictSummaries[narrowedTo]] : [];
+    const [tallyRows, subjectRows, gapRows, pageTotal] = await Promise.all([
       // A subject whose consent was withdrawn is listed with their evaluation, as withdrawn, and is not counted among the candidates.
       matchStore.rows(`SELECT summary, count(*)::int AS total FROM (${latest}) l
         WHERE NOT EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.subject_withdrawals w WHERE w.study_id = $1 AND w.subject_key = l.subject_key) GROUP BY summary`, matchingArgs).catch(() => []),
       // Everyone who has been assessed is a person on the page, the ones judged not eligible too: their rule-by-rule judgement is what
-      // says which rule failed and on what evidence. Those still in play come first, so the cap cuts the not-eligible ones.
-      matchStore.rows(`SELECT * FROM (${latest}) l ORDER BY CASE summary WHEN 'eligible' THEN 0 WHEN 'insufficient_evidence' THEN 1
-        WHEN 'pending' THEN 2 ELSE 3 END, subject_key LIMIT 200`, matchingArgs).catch(() => []),
+      // says which rule failed and on what evidence. Those still in play come first, so the last pages hold the not-eligible ones.
+      matchStore.rows(`SELECT l.* FROM (SELECT x.*, EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.subject_withdrawals w WHERE w.study_id = $1 AND w.subject_key = x.subject_key) AS withdrawn
+        FROM (${latest}) x) l ${narrowing}
+        ORDER BY l.withdrawn, CASE l.summary WHEN 'eligible' THEN 0 WHEN 'insufficient_evidence' THEN 1 WHEN 'pending' THEN 2 ELSE 3 END,
+          COALESCE((l.counts ->> 'unknown')::int, 0), l.subject_key COLLATE "C" LIMIT ${pageSize} OFFSET ${pageStart}`, [...matchingArgs, ...narrowArgs]).catch(() => []),
       matchStore.rows(`SELECT j.criterion_id, count(*)::int AS unknown FROM ${VCR_SCHEMA}.criterion_judgments j
         WHERE j.assessment_id IN (SELECT id FROM (${latest}) l) AND j.applicable AND j.state = 'unknown' GROUP BY 1`, matchingArgs).catch(() => []),
+      matchStore.rows(`SELECT count(*)::int AS total FROM (${latest}) l ${narrowing}`, [...matchingArgs, ...narrowArgs]).catch(() => []),
     ]);
-    // A person asked for by name who the cap left out is still read: the page opens whoever it is told to, not the first 200.
+    const listedTotal = Number(pageTotal[0]?.total ?? subjectRows.length);
+    // A person asked for by name who the page left out is still read: the page opens whoever it is told to, not the first 25.
     if (query.candidate && !subjectRows.some((row) => String(row.subject_key) === query.candidate)) {
-      subjectRows.push(...await matchStore.rows(`SELECT * FROM (${latest}) l WHERE subject_key = $3`, [...matchingArgs, query.candidate]).catch(() => []));
+      subjectRows.push(...await matchStore.rows(`SELECT l.*, EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.subject_withdrawals w WHERE w.study_id = $1 AND w.subject_key = l.subject_key) AS withdrawn
+        FROM (${latest}) l WHERE subject_key = $3`, [...matchingArgs, query.candidate]).catch(() => []));
     }
     // What the evaluation rested on, when that has since changed (a document, a projection, a permission) or was withdrawn: a plain
     // state beside the subject, and the evaluation that already exists offered again. Nothing is blocked and nothing re-runs.
@@ -1350,6 +1372,7 @@ export class VcrService {
       ...(records ? { hasRecords: records.length > 0 } : {}),
       documentNames,
       ...(patientTrials ? { patientTrials } : {}),
+      people: { total: listedTotal, offset: pageStart, limit: pageSize, verdict: narrowedTo },
       protocols, candidateRoster, comparisons, timeline: clinicalTimeline,
       protocol, criteria, subjects, selected, openByAssessment,
       tallies: Object.fromEntries(tallyRows.map((row) => [String(row.summary), Number(row.total)])),
@@ -1842,7 +1865,7 @@ export class VcrService {
         const judged = filter.protocolVersionId && filter.kind !== "contract" && this.packages.matchJudgments?.forProtocol
           ? { ...await this.packages.matchJudgments.forProtocol(study, String(filter.protocolVersionId), { subjectKey: filter.subjectKey ? String(filter.subjectKey) : null, limit, offset: Number(filter.offset ?? 0) }),
             clauses: await this.packages.matchJudgments.protocolClauses(study, String(filter.protocolVersionId)) } : null;
-        if (judged) Object.assign(answer, judged.ranking.length || judged.failedPairs ? judged : { clauses: judged.clauses });
+        if (judged) Object.assign(answer, judged.ranking.length || judged.failedPairs || judged.total ? judged : { clauses: judged.clauses });
         // The study-level read also says which concept names the pack uses for the variables the criteria
         // name and which dataset columns realise them — the names a fact is written under.
         const guide = filter.subjectKey || filter.kind ? null : await this.#matchingGuide(study);
@@ -1870,7 +1893,7 @@ export class VcrService {
         // A patient the model has judged trials for reads those judgments; a study with none answers as it always did.
         if (filter.subjectKey && !filter.id && !filter.registryId && this.packages.matchJudgments?.forSubject) {
           const judged = await this.packages.matchJudgments.forSubject(study, String(filter.subjectKey), { limit, offset: Number(filter.offset ?? 0) });
-          if (judged.ranking.length || judged.failedPairs) return { subjectKey: String(filter.subjectKey), ...judged };
+          if (judged.ranking.length || judged.failedPairs || judged.total) return { subjectKey: String(filter.subjectKey), ...judged };
         }
         return trials.runtimeRead(study, { ...filter, limit });
       }

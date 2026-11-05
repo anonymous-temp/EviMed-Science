@@ -62,6 +62,7 @@ import {
   VCR_ASSUMPTION_SOURCE_KINDS, VCR_CRITERION_STATES, VCR_DATA_TIERS, VCR_EXPORT_KINDS, VCR_INTENDED_USES, VCR_JOB_KINDS,
   VCR_JOB_METHODS, VCR_MATCH_EXPORT_FORMATS, VCR_MATCH_EXPORT_KINDS, VCR_MEMBER_ROLES, VCR_RETIRED_MEMBER_ROLE_LABELS_ZH, VCR_REVIEW_KINDS, VCR_STEPS, VCR_TABS, VCR_USER_STUDY_STATUSES, VCR_VALUE_SOURCES, capabilityTitle, roleAllows } from "@evimed/domain";
 import { MATCH_PAGE } from "./vcrMatchResults.mjs";
+import { rulesExporter } from "./vcrMatchRulesExport.mjs";
 
 import { createReadStream } from "node:fs";
 
@@ -872,7 +873,11 @@ export function createVcrRoutes(dependencies) {
         if (!VCR_MATCH_EXPORT_FORMATS.includes(/** @type {any} */ (format))) throw new HttpError(400, "vcr_export_kind_invalid", `format is one of ${VCR_MATCH_EXPORT_FORMATS.join(", ")}.`);
         if (!VCR_MATCH_EXPORT_KINDS.includes(/** @type {any} */ (kind))) throw new HttpError(400, "vcr_export_kind_invalid", `kind is one of ${VCR_MATCH_EXPORT_KINDS.join(", ")}.`);
         const scope = await scopeOf(study, query);
-        const file = await reader.exporter(study, { format: /** @type {'csv' | 'json'} */ (format), kind: /** @type {'pairs' | 'clauses'} */ (kind), direction: /** @type {'patient_to_trial' | 'trial_to_patient'} */ (scope.direction),
+        // A table screened by its rules has its own file: the same route, the same columns' style, `source=rules`.
+        const matchStore = service.packages?.matchStore;
+        const file = query.source === "rules" && scope.direction === "trial_to_patient" && matchStore?.rows
+          ? await rulesExporter(matchStore, study, { format: /** @type {'csv' | 'json'} */ (format), kind: /** @type {'pairs' | 'clauses'} */ (kind), protocolVersionId: scope.protocolVersionId })
+          : await reader.exporter(study, { format: /** @type {'csv' | 'json'} */ (format), kind: /** @type {'pairs' | 'clauses'} */ (kind), direction: /** @type {'patient_to_trial' | 'trial_to_patient'} */ (scope.direction),
           subjectKey: scope.subjectKey, protocolVersionId: scope.protocolVersionId, viewer: user });
         res.writeHead(200, { "Content-Type": file.contentType, "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff", "Content-Disposition": `attachment; filename="${file.filename}"` });
         // Written a few pairs at a time with the response's own back-pressure, so five thousand people are never one string in memory.

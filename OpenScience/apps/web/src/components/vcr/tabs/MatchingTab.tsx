@@ -3,7 +3,7 @@ import { ClinicalTimeline, CriterionTable, useMatchingControls } from "../Clinic
 import { VcrCorrectionCasesActions } from "../VcrCorrectionCasesActions";
 import { useState, useEffect, useRef } from "react";
 import { useSearchParams } from "react-router";
-import { CircleCheck, PenLine, TriangleAlert } from "lucide-react";
+import { ChevronLeft, ChevronRight, CircleCheck, PenLine, TriangleAlert } from "lucide-react";
 import { VCR_TRIAL_VERDICT_LABELS_ZH } from "@evimed/domain";
 import {
   getVcrJudged,
@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { DataTable } from "@/components/ui/DataTable";
 import { Headline } from "@/components/ui/Headline";
+import { IconButton } from "@/components/ui/IconButton";
 import { List, ListRow } from "@/components/ui/ListRow";
 import { Section } from "@/components/ui/Section";
 import { measurement } from "@/lib/measurement";
@@ -36,6 +37,7 @@ import { VcrToolbarActions } from "../VcrToolbarActions";
 import { PatientTrials } from "./PatientTrials";
 import { PatientTrialsLegacy } from "./PatientTrialsLegacy";
 import { MatchingPeople } from "./MatchingPeople";
+import { MatchingExport } from "./MatchingExport";
 import { useVcrToolbar } from "../studyFrameContext";
 import { useVcrLoad, VcrTabError } from "../vcrTabKit";
 import { criterionStateLabel, NO_VALUE, numberText, VCR_MATCHING_EMPTY_T0 } from "../vcrText";
@@ -57,6 +59,12 @@ function timelineOwner(page: MatchingPage): string | null {
 
 /** People on one page of the protocol's table. */
 const PAGE = 25;
+
+/** The verdicts a table screened by rules is narrowed to, on the funnel's own keys. */
+type RuleVerdict = "eligible" | "insufficient" | "ineligible";
+const RULE_VERDICTS: ReadonlyArray<{ key: RuleVerdict; label: string }> = Object.freeze([
+  { key: "eligible", label: "符合" }, { key: "insufficient", label: "可能符合 · 待补证" }, { key: "ineligible", label: "不符合" },
+]);
 
 const DIRECTIONS: ReadonlyArray<{ value: Direction; label: string }> = Object.freeze([
   { value: "trial_to_patient", label: "给试验找患者" },
@@ -83,6 +91,9 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
   const [verdict, setVerdict] = useState<VcrVerdict | null>(null);
   const [offset, setOffset] = useState(0);
   const [person, setPerson] = useState<string | null>(null);
+  // The rule path pages on the server too: the verdict its table is narrowed to and the page of it.
+  const [ruleVerdict, setRuleVerdict] = useState<RuleVerdict | null>(null);
+  const [ruleOffset, setRuleOffset] = useState(0);
   const frame = useStudyFrame();
   // The reader has chosen something themselves (a direction, a protocol, a patient): where the newest work is no longer decides what opens.
   const touched = useRef(false);
@@ -91,6 +102,7 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
     const askedTrial = view === "matching" && direction === "patient_to_trial" && askedFor && trial ? trial : null;
     return getVcrMatching(studyId, {
       view, direction, ...(protocolVersionId ? { protocolVersionId } : {}), ...(askedFor ? { candidate: askedFor } : {}),
+      ...(direction === "trial_to_patient" && ruleVerdict ? { verdict: ruleVerdict } : {}), ...(direction === "trial_to_patient" && ruleOffset > 0 ? { offset: String(ruleOffset) } : {}),
       ...(askedTrial ? { trial: askedTrial } : {}),
     }).then((page): MatchingPage => ({ ...page, askedFor }));
   });
@@ -119,8 +131,10 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
   const narrowTo = (next: VcrVerdict | null) => { setVerdict(next); setOffset(0); judgedLoad.reload(); };
   const pickPerson = (key: string | null) => { setPerson(key); judgedLoad.reload(); };
   const pageTo = (next: number) => { setOffset(next); judgedLoad.reload(); };
+  const narrowRules = (next: RuleVerdict | null) => { setRuleVerdict(next); setRuleOffset(0); reload(); };
+  const pageRules = (next: number) => { setRuleOffset(next); reload(); };
 
-  const switchDirection = (next: Direction) => { touched.current = true; setDirection(next); setCandidate(null); setTrial(null); setVerdict(null); setOffset(0); setPerson(null); };
+  const switchDirection = (next: Direction) => { touched.current = true; setDirection(next); setCandidate(null); setTrial(null); setVerdict(null); setOffset(0); setPerson(null); setRuleVerdict(null); setRuleOffset(0); };
 
   // Once per visit: a study with a patient and no protocol opens on that patient. A later click on the other direction stays there.
   const opened = useRef(false);
@@ -154,7 +168,7 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
   const judged = judgedLoad.state.kind === "ready" ? judgedLoad.state.data : null;
   const judgedAnswered = judged && judged.held && judged.direction === direction ? judged : null;
   // The rule assessments stand beside what the model judged, one chip away: judging one person does not hide what the rules said of everyone. A study with no record to read opens on them.
-  const hasRuleRows = state.kind === "ready" && state.data.available !== false && (state.data.candidates?.length ?? 0) > 0;
+  const hasRuleRows = state.kind === "ready" && state.data.available !== false && ((state.data.candidates?.length ?? 0) > 0 || Boolean(state.data.people?.verdict));
   const onRules = hasRuleRows && (source === "rules" || (source === null && state.kind === "ready" && state.data.available !== false && state.data.evaluateBy === "rules"));
   const judgedHere = onRules ? null : judgedAnswered;
   // The job writes pairs while the page is open: the note's n of m follows it.
@@ -181,7 +195,7 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
     canRun,
     judged: judgedHere !== null,
     onRules,
-    onProtocol: (id) => { touched.current = true; setProtocolVersionId(id); setVerdict(null); setOffset(0); setPerson(null); },
+    onProtocol: (id) => { touched.current = true; setProtocolVersionId(id); setVerdict(null); setOffset(0); setPerson(null); setRuleVerdict(null); setRuleOffset(0); },
     onCandidate: pick,
     onReload: reloadAll,
   });
@@ -194,6 +208,15 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
     ...(controls?.filters ?? []),
     ...(hasRuleRows && judgedAnswered ? [{ kind: "chips" as const, label: "结果来自", neutral: "judged", value: onRules ? "rules" : "judged",
       onChange: (next: string) => setSource(next as "judged" | "rules"), options: [{ value: "judged", label: "模型判定" }, { value: "rules", label: "规则筛选" }] }] : []),
+    // The rule path's table, narrowed to one verdict the same way; its counts are the whole table's, whatever page is in view.
+    ...(onRules && state.kind === "ready" && state.data.available !== false ? [{
+      kind: "chips" as const, label: "结论", neutral: "all", value: ruleVerdict ?? "all",
+      onChange: (next: string) => narrowRules(next === "all" ? null : next as RuleVerdict),
+      options: [
+        { value: "all", label: "全部", ...(state.data.funnel.find((step) => step.key === "candidates")?.count != null ? { count: state.data.funnel.find((step) => step.key === "candidates")!.count as number } : {}) },
+        ...RULE_VERDICTS.map((entry) => ({ value: entry.key, label: entry.label, ...(state.data.funnel.find((step) => step.key === entry.key)?.count != null ? { count: state.data.funnel.find((step) => step.key === entry.key)!.count as number } : {}) })),
+      ],
+    }] : []),
     // The protocol's people, narrowed to one verdict: the band carries the filter, the table the page.
     ...(judgedHere?.direction === "trial_to_patient" ? [{
       kind: "chips" as const, label: "结论", neutral: "all", value: verdict ?? "all",
@@ -325,6 +348,8 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
           picked={candidate}
           onPick={pick}
           onDone={reload}
+          onPage={pageRules}
+          onClearVerdict={() => narrowRules(null)}
         />
       )}
       {view === "matching" && <ClinicalTimeline studyId={studyId} data={data} subject={timelineOwner(data)} mayReadOriginal={study.abilities.includes("read_patient_level")} />}
@@ -358,7 +383,7 @@ function partnerLine(data: MatchingData): string {
   ].filter(Boolean).join(" · ");
 }
 
-function MatchingView({ studyId, data, abilities, picked, onPick, onDone }: {
+function MatchingView({ studyId, data, abilities, picked, onPick, onDone, onPage, onClearVerdict }: {
   studyId: string;
   data: MatchingPage;
   abilities: readonly string[];
@@ -366,6 +391,8 @@ function MatchingView({ studyId, data, abilities, picked, onPick, onDone }: {
   picked: string | null;
   onPick: (id: string) => void;
   onDone: () => void;
+  onPage: (offset: number) => void;
+  onClearVerdict: () => void;
 }) {
   const [judging, setJudging] = useState<VcrCriterionJudgement | null>(null);
   const selected = data.selected;
@@ -399,15 +426,34 @@ function MatchingView({ studyId, data, abilities, picked, onPick, onDone }: {
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]">
         <div className="flex min-w-0 flex-col gap-4">
-          {data.candidates.length > 0 && (
-            <Section title="患者" count={data.candidates.length}>
+          {(data.candidates.length > 0 || data.people?.verdict) && (
+            <Section
+              title="患者"
+              count={data.people ? data.people.total : data.candidates.length}
+              toolbar={<MatchingExport studyId={studyId} where={{ direction: "trial_to_patient", protocolVersionId: data.protocolVersionId }} abilities={abilities} source="rules" />}
+            >
               {/* A section holds one shape of body: the table beside it is a div, and so is the list. */}
               <div>
-                <List label="患者名单">
-                  {data.candidates.map((candidate) => (
-                    <CandidateRow key={candidate.id} candidate={candidate} current={current === candidate.id} onPick={() => onPick(candidate.id)} />
-                  ))}
-                </List>
+                {data.candidates.length > 0
+                  ? (
+                    <>
+                      <List label="患者名单">
+                        {data.candidates.map((candidate) => (
+                          <CandidateRow key={candidate.id} candidate={candidate} current={current === candidate.id} onPick={() => onPick(candidate.id)} />
+                        ))}
+                      </List>
+                      {data.people && data.people.total > data.candidates.length && (
+                        <div className="mt-3 flex items-center justify-between gap-3">
+                          <span className="text-caption tabular-nums text-text-3">{`第 ${data.people.offset + 1}–${data.people.offset + data.candidates.length} 位，共 ${data.people.total} 位`}</span>
+                          <span className="flex items-center gap-1">
+                            <IconButton icon={ChevronLeft} label="上一页" size="sm" disabled={data.people.offset === 0} onClick={() => onPage(Math.max(0, data.people!.offset - data.people!.limit))} />
+                            <IconButton icon={ChevronRight} label="下一页" size="sm" disabled={!data.people.more} onClick={() => onPage(data.people!.offset + data.people!.limit)} />
+                          </span>
+                        </div>
+                      )}
+                    </>
+                  )
+                  : <EmptyState title="没有这个结论的患者" action={<Button variant="secondary" onClick={onClearVerdict}>看全部</Button>} />}
               </div>
             </Section>
           )}

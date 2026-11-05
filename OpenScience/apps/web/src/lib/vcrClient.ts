@@ -1369,6 +1369,8 @@ export interface VcrMatchingTab {
   patientTrials?: VcrPatientTrials | null;
   funnel: Array<{ key: string; label: string; count: number | null; note?: string | null; tone?: "attention" | "accent" | "neutral" }>;
   candidates: VcrCandidate[];
+  /** The table's size and the page of it in view (the rule path pages on the server like the judged one); `verdict` is the narrowing it was cut under. */
+  people?: { total: number; offset: number; limit: number; more: boolean; verdict: "eligible" | "insufficient" | "ineligible" | null };
   /** The candidate the detail panel is about. */
   selected: {
     candidate: VcrCandidate;
@@ -2744,7 +2746,7 @@ export async function rejudgeVcrPatient(studyId: string, body: { subjectKey: str
 }
 
 /** The files of the judged rows: all of them, a row for each pair or for each clause of each pair, in the formats a sheet or a script reads. */
-export type VcrMatchExport = { format: "csv" | "json"; kind: "pairs" | "clauses" } & (
+export type VcrMatchExport = { format: "csv" | "json"; kind: "pairs" | "clauses"; /** The rule assessments of a table study, not the model's judgments. */ source?: "rules" } & (
   | { direction: "patient_to_trial"; subjectKey: string }
   | { direction: "trial_to_patient"; protocolVersionId?: string | null });
 
@@ -2752,6 +2754,7 @@ export type VcrMatchExport = { format: "csv" | "json"; kind: "pairs" | "clauses"
 export async function downloadVcrMatching(studyId: string, request: VcrMatchExport): Promise<void> {
   const root = webApiBase.endsWith("/api") ? webApiBase : `${webApiBase}/api`;
   const params = new URLSearchParams({ direction: request.direction, format: request.format, kind: request.kind });
+  if (request.source) params.set("source", request.source);
   if (request.direction === "patient_to_trial") params.set("subjectKey", request.subjectKey);
   else if (request.protocolVersionId) params.set("protocolVersionId", request.protocolVersionId);
   const response = await fetchWithWebAuth(`${root}${study(studyId)}/matching/export?${params}`);

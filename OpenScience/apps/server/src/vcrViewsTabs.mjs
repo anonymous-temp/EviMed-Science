@@ -1419,7 +1419,6 @@ function forecastView(forecast, now) {
 
 // --- 患者匹配 -----------------------------------------------------------------------------------------------------------------------
 
-const SUMMARY_ORDER = Object.freeze(["eligible", "insufficient_evidence", "pending", "ineligible"]);
 
 /**
  * The words under a citation for what it did not print: a unit read by the domain's table (`unitBasis`), a date taken from another
@@ -1588,11 +1587,8 @@ export function presentMatchingTab(bundle, query = {}) {
     { key: "eligible", label: "符合", count: count("eligible") ?? 0, note: null, tone: "accent" },
     { key: "ineligible", label: "不符合", count: count("ineligible") ?? 0, note: null, tone: "neutral" },
   ] : [];
-  // Everyone assessed is listed, the not-eligible after the rest: their judgement is as readable as anyone's.
-  const ordered = [...subjects].sort((a, b) =>
-    Number(a.basis === "withdrawn") - Number(b.basis === "withdrawn")
-      || SUMMARY_ORDER.indexOf(a.summary) - SUMMARY_ORDER.indexOf(b.summary) || Number(a.counts?.unknown ?? 0) - Number(b.counts?.unknown ?? 0)
-      || String(a.subjectKey).localeCompare(String(b.subjectKey)));
+  // Everyone assessed is listed, a server-cut page at a time (in the order the page was cut in: the not-eligible after the rest, their judgement as readable as anyone's).
+  const ordered = subjects;
   const candidateOf = (/** @type {any} */ row) => {
     const counts = object(row.counts);
     const judged = openByAssessment.get(row.id) ?? [];
@@ -1612,11 +1608,8 @@ export function presentMatchingTab(bundle, query = {}) {
         ? { failed: judged.filter((/** @type {any} */ open) => open.state === "not_satisfied").map((/** @type {any} */ open) => ({ code: criterionCode(open.criterionId), state: open.state })) } : {}),
     };
   };
-  const candidates = ordered.slice(0, 50).map(candidateOf);
-  // The person asked for by name is on the page even when 50 others rank before them.
-  const askedFor = query.candidate && !candidates.some((candidate) => candidate.id === query.candidate)
-    ? ordered.find((row) => String(row.subjectKey) === query.candidate) : null;
-  if (askedFor) candidates.push(candidateOf(askedFor));
+  const candidates = ordered.map(candidateOf);
+  const people = match.people ?? { total: candidates.length, offset: 0, limit: candidates.length, verdict: null };
   const chosen = candidates.find((candidate) => candidate.id === query.candidate) ?? candidates[0] ?? null;
   const selectedAssessment = match.selected ?? null;
   const selected = chosen && selectedAssessment && selectedAssessment.subjectKey === chosen.id ? (() => {
@@ -1684,6 +1677,8 @@ export function presentMatchingTab(bundle, query = {}) {
     ...(match.patientTrials ? { patientTrials: presentPatientTrials(bundle, match.patientTrials) } : {}),
     funnel,
     candidates,
+    // The table's size and the page in view; `verdict` is the narrowing the page was cut under.
+    people: { total: people.total, offset: people.offset, limit: people.limit, more: people.offset + people.limit < people.total, verdict: people.verdict },
     // The people whose evaluation rested on a basis that has since changed, for the one action the page offers: evaluate them again.
     ...(subjects.some(evaluatedAgain)
       ? { basisUpdated: { count: subjects.filter(evaluatedAgain).length, subjects: subjects.filter(evaluatedAgain).slice(0, 50).map((row) => String(row.subjectKey)) } } : {}),

@@ -39,9 +39,13 @@ test("everyone assessed is listed even when nobody is eligible, and the funnel i
   assert.match(page.candidates[0].summary, /1 条不满足/);
 });
 
-test("the people still in play come first and the not-eligible ones follow", () => {
-  const rows = [subject("A", "ineligible", {}), subject("B", "eligible", { satisfied: 2 }), subject("C", "insufficient_evidence", { unknown: 1 })];
-  assert.deepEqual(presentMatchingTab(bundle(rows)).candidates.map((row) => row.id), ["B", "C", "A"]);
+test("the page lists the people in the order the server cut it, and says how big the table is", () => {
+  // The order (those still in play first, the not-eligible after) is the query's, held by vcrMatchRulesPage.integration.test.mjs.
+  const rows = [subject("B", "eligible", { satisfied: 2 }), subject("C", "insufficient_evidence", { unknown: 1 }), subject("A", "ineligible", {})];
+  const page = presentMatchingTab(bundle(rows, { people: { total: 80, offset: 25, limit: 25, verdict: "ineligible" } }));
+  assert.deepEqual(page.candidates.map((row) => row.id), ["B", "C", "A"]);
+  assert.deepEqual(page.people, { total: 80, offset: 25, limit: 25, more: true, verdict: "ineligible" });
+  assert.deepEqual(presentMatchingTab(bundle(rows)).people, { total: 3, offset: 0, limit: 3, more: false, verdict: null });
 });
 
 test("a not-eligible person asked for by name is opened to the rules they fail, with the reason as a sentence", () => {
@@ -54,17 +58,6 @@ test("a not-eligible person asked for by name is opened to the rules they fail, 
   assert.deepEqual(page.selected.criteria.map((row) => [row.code, row.state]), [["I1", "satisfied"], ["E1", "not_satisfied"]]);
   assert.equal(page.selected.criteria[1].evidence.quote, "既往确诊活动性脑转移");
   assert.equal(page.selected.verdict.text, "不符合：E1 不满足");
-});
-
-test("a person asked for by name is on the page even when fifty others rank before them", () => {
-  const rows = Array.from({ length: 60 }, (_, index) => subject(`P-${String(index).padStart(3, "0")}`, "eligible", { satisfied: 2 }));
-  rows.push(subject("Z-LAST", "ineligible", { not_satisfied: 1 }));
-  const without = presentMatchingTab(bundle(rows));
-  assert.equal(without.candidates.length, 50);
-  assert.equal(without.candidates.some((row) => row.id === "Z-LAST"), false);
-  const asked = presentMatchingTab(bundle(rows, { selected: { ...rows[60], judgments: [judgment("crt_1", "not_satisfied")] } }), { candidate: "Z-LAST" });
-  assert.ok(asked.candidates.some((row) => row.id === "Z-LAST"));
-  assert.equal(asked.selected.candidate.id, "Z-LAST");
 });
 
 test("a study with no records screens by its rules, and an assessment by an earlier set of rules says so and is offered again", () => {
