@@ -9,8 +9,6 @@ import {
   getVcrJudged,
   getVcrJudgedLatest,
   getVcrMatching,
-  recordVcrDecision,
-  reviewVcrAssessment,
   VCR_VERDICTS,
   type VcrCandidate,
   type VcrCriterionJudgement,
@@ -19,8 +17,6 @@ import {
   type VcrStudy,
   type VcrVerdict,
 } from "@/lib/vcrClient";
-import { webErrorMessage } from "@/lib/apiClient";
-import { toast } from "@/lib/toast";
 import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -363,12 +359,6 @@ function partnerLine(data: MatchingData): string {
   ].filter(Boolean).join(" · ");
 }
 
-/** The rules a request for evidence is about: what is unknown, and what waits on a named document. */
-function evidenceNeeds(criteria: readonly VcrCriterionJudgement[]): VcrCriterionJudgement[] {
-  return criteria.filter((row) => row.applicable !== false
-    && (row.state === "unknown" || (row.state === "pending_recheck" && Boolean(row.request))));
-}
-
 function MatchingView({ studyId, data, abilities, picked, onPick, onDone }: {
   studyId: string;
   data: MatchingPage;
@@ -379,48 +369,15 @@ function MatchingView({ studyId, data, abilities, picked, onPick, onDone }: {
   onDone: () => void;
 }) {
   const [judging, setJudging] = useState<VcrCriterionJudgement | null>(null);
-  const [busy, setBusy] = useState<"evidence" | "review" | null>(null);
   const selected = data.selected;
   const current = picked ?? selected?.candidate.id ?? null;
   // The rules of the panel are tagged from the facts of the panel's person: with another person's timeline under it, from none.
   const caveatFacts = selected && timelineOwner(data) === selected.candidate.id ? data.timeline : undefined;
-  const needs = selected ? evidenceNeeds(selected.criteria) : [];
   const applicable = selected ? selected.criteria.filter((row) => row.applicable !== false) : [];
   const allMet = applicable.length > 0 && applicable.every((row) => row.state === "satisfied");
   const assessmentId = selected?.assessmentId ?? null;
   const mayJudge = Boolean(assessmentId)
     && (abilities.includes("review_clinical") || abilities.includes("review_any"));
-  const mayReview = Boolean(assessmentId) && (abilities.includes("review_clinical") || abilities.includes("review_any")) && !selected?.reviewedBy;
-  const mayAskEvidence = needs.length > 0 && abilities.includes("write");
-
-  /** One write at a time (CW-18): every control that writes is disabled while one is in flight. */
-  const once = (key: "evidence" | "review", work: () => Promise<unknown>) => {
-    if (busy !== null) return;
-    setBusy(key);
-    void work().finally(() => setBusy(null));
-  };
-
-  const review = () => {
-    if (!assessmentId || busy !== null) return;
-    once("review", () => reviewVcrAssessment(studyId, assessmentId)
-      .then(() => { toast.success("已记录复核。"); onDone(); })
-      .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "复核暂时无法记录，请稍后重试。" }))));
-  };
-
-  const requestEvidence = () => {
-    if (!selected || needs.length === 0) return;
-    const subject = selected.candidate.id;
-    const requests = needs.map((row) => `${row.code} ${row.request ?? criterionStateLabel(row.state)}${row.requestNote ? `（${row.requestNote}）` : ""}`).join("；");
-    const failure = "补证请求暂时无法记录，请稍后重试。";
-    const done = () => { toast.success("已记录补证请求。"); onDone(); };
-    once("evidence", () => recordVcrDecision(studyId, {
-      question: `请求补证 ${subject}：${requests}`.slice(0, 500),
-      chosen: { kind: "evidence_request", subject, assessmentId, criteria: needs.map((row) => row.code), criterionIds: needs.flatMap(row => row.criterionId ? [row.criterionId] : []) },
-      rationale: requests,
-    })
-      .then(done)
-      .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: failure }))));
-  };
 
   return (
     <>
@@ -516,7 +473,7 @@ function MatchingView({ studyId, data, abilities, picked, onPick, onDone }: {
                 width: "w-20",
                 isEmpty: (row: VcrCriterionJudgement) => !row.criterionId,
                 cell: (row: VcrCriterionJudgement) => row.criterionId ? (
-                  <Button size="sm" variant="secondary" disabled={busy !== null} onClick={() => setJudging(row)}>改判</Button>
+                  <Button size="sm" variant="secondary" onClick={() => setJudging(row)}>改判</Button>
                 ) : null,
               }] : []}
             />
@@ -530,22 +487,7 @@ function MatchingView({ studyId, data, abilities, picked, onPick, onDone }: {
                   {selected.verdict.note && <span className="text-text-3">{selected.verdict.note}</span>}
                 </p>
               )}
-              {mayReview && (
-                <Button actionKind="set" variant="secondary" loading={busy === "review"} disabled={busy !== null} onClick={review}>复核这份评估</Button>
-              )}
               {selected.reviewedBy && <span data-vcr-reviewed-by=""><Tag>{`已复核 · ${selected.reviewedByName ?? NO_VALUE}`}</Tag></span>}
-              {/* A person with nothing open has nothing to ask for: the button is not drawn grey, it is not drawn. */}
-              {(needs.length > 0) && (
-                <Button
-                  variant="secondary"
-                  actionKind="set"
-                  loading={busy === "evidence"}
-                  disabled={!mayAskEvidence || busy !== null}
-                  onClick={requestEvidence}
-                >
-                  记录待补证项
-                </Button>
-              )}
             </div>
           </Card>
         )}

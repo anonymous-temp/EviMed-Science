@@ -3,7 +3,7 @@ import {
   queueVcrJob, saveVcrMethodConfiguration, getVcrMethodResult, getVcrMethodConfiguration, cancelVcrJob, confirmVcrBudget, exportVcrStudy, getVcrComparator, getVcrData, getVcrHome, getVcrMatching, getVcrModels,
   getVcrPatients, getVcrPopulation, getVcrPrecedents, getVcrStudy, getVcrTrial, patchVcrStudy, readVcrCounts, readVcrValue, recordVcrDecision,
   saveVcrAssumption, signVcrReview, getVcrMembers, readVcrMembers, removeVcrMember, setVcrMembers,
-  adoptVcrModel, overrideVcrJudgment, reviewVcrAssessment,
+  adoptVcrModel, overrideVcrJudgment,
   readVcrComparator, readVcrData, readVcrHome, readVcrMatching, readVcrModels, readVcrPatients, readVcrPopulation, readVcrStudy, readVcrTrial,
   runVcrTrialSearch,
 } from "./vcrClient";
@@ -267,12 +267,10 @@ describe("study membership", () => {
     expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/members/u_stat`, "DELETE");
   });
 
-  it("re-judges one rule and countersigns one assessment by the ids in the path, and adopts a model through the library route", async () => {
+  it("re-judges one rule by the ids in the path, and adopts a model through the library route", async () => {
     await overrideVcrJudgment(STUDY_ID, "asm_1", "crt/2", { state: "not_satisfied", note: " 依据 " });
-    await reviewVcrAssessment(STUDY_ID, "asm_1");
     await adoptVcrModel({ name: "m", sources: ["NCT02296125"] });
     expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/assessments/asm_1/judgments/crt%2F2/override`, "POST", { state: "not_satisfied", note: "依据" });
-    expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/assessments/asm_1/review`, "POST", {});
     expect(network.productRequest).toHaveBeenCalledWith("/vcr/models", "POST", { name: "m", sources: ["NCT02296125"] });
   });
 

@@ -581,22 +581,6 @@ export class VcrMatchStore extends VcrStoreBase {
     return (await this.one("SELECT detail->'manifest' AS manifest FROM evimed_vcr.audit WHERE study_id=$1 AND action='vcr.evaluation.dataset' AND object=$2 ORDER BY id LIMIT 1", [studyId,datasetId]))?.manifest ?? null;
   }
 
-  /**
-   * Countersign an assessment of this study (plan §10.2: a signature, not a gate).
-   * @param {{ id: string, reviewedBy: string, userId: string, studyId: string }} input
-   */
-  async reviewAssessment({ id, reviewedBy, userId, studyId }) {
-    if (!studyId) throw new TypeError("An assessment is reviewed inside its study: studyId is required.");
-    return this.transaction(async (client) => {
-      const result = await client.query(
-        `UPDATE ${VCR_SCHEMA}.matching_assessments SET reviewed_by = $2, reviewed_at = now() WHERE id = $1 AND study_id = $3 RETURNING *`,
-        [id, reviewedBy, studyId]);
-      if (!result.rowCount) return null;
-      await this.audit({ client, studyId, userId, actor: reviewedBy, action: "vcr.assessment.review", object: id });
-      return assessmentOf(result.rows[0]);
-    });
-  }
-
   /** Every judgment a human changed, with the platform's own answer beside it — the evaluation set. */
   async overriddenJudgments({ studyId, limit = 500 }) {
     const rows = await this.rows(

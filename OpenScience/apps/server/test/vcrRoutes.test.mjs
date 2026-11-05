@@ -151,15 +151,11 @@ function fixture({ who = OWNER, roles = {}, overrides = {}, operators = [], sett
     store: /** @type {any} */ (platformStore({ calls, who: () => current })),
     vcrStore, service, config: { ...config, ...settings }, maxJsonBytes: 65_536,
     audit: async (event, status, details) => { audits.push([event, status, details.code ?? null]); auditLines.push({ event, status, ...details }); },
-    // The matching seam's two person-only acts, keyed to the session's account.
+    // The matching seam's person-only act, keyed to the session's account.
     assessments: {
       async overrideJudgment(/** @type {any} */ user, /** @type {any} */ found, /** @type {any} */ input) {
         calls.push(["assessment.override", String(user.id), found.id, input.criterionId, input.state]);
         return { assessmentId: input.assessmentId, criterionId: input.criterionId, overrideState: input.state, overriddenBy: String(user.id) };
-      },
-      async reviewAssessment(/** @type {any} */ user, /** @type {any} */ found, /** @type {any} */ input) {
-        calls.push(["assessment.review", String(user.id), found.id, input.assessmentId]);
-        return { id: input.assessmentId, reviewedBy: String(user.id) };
       },
     },
     ...overrides,
@@ -167,7 +163,7 @@ function fixture({ who = OWNER, roles = {}, overrides = {}, operators = [], sett
   return { calls, audits, auditLines, service, vcrStore, routes, as(/** @type {string} */ id) { current = id; } };
 }
 
-test("a person re-judges a criterion and countersigns an assessment as themselves; a state outside the vocabulary is refused by name", async () => {
+test("a person re-judges a criterion as themselves; a state outside the vocabulary is refused by name", async () => {
   const { calls, routes } = fixture();
   const overridden = response();
   await routes(request("POST", "/api/vcr/studies/std_1/assessments/asm_1/judgments/crt_2/override", { state: "not_satisfied", note: "病历写明曾用过该药" }), overridden);
@@ -175,10 +171,6 @@ test("a person re-judges a criterion and countersigns an assessment as themselve
   assert.deepEqual(calls.find((call) => call[0] === "assessment.override")?.slice(1), [OWNER, "std_1", "crt_2", "not_satisfied"]);
   await assert.rejects(routes(request("POST", "/api/vcr/studies/std_1/assessments/asm_1/judgments/crt_2/override", { state: "maybe" }), response()),
     { status: 400, code: "vcr_criterion_state_invalid" });
-  const reviewed = response();
-  await routes(request("POST", "/api/vcr/studies/std_1/assessments/asm_1/review", {}), reviewed);
-  assert.equal(reviewed.status, 201);
-  assert.deepEqual(calls.find((call) => call[0] === "assessment.review")?.slice(1), [OWNER, "std_1", "asm_1"]);
 });
 
 test("a cancel holds the programme before it stops the run — the run's end advances the programme — then stops every open job, and says what it did", async () => {
@@ -523,7 +515,6 @@ const REQUESTS = {
   "POST /studies/:id/members": ["POST", "/api/vcr/studies/std_1/members", { userId: "newcomer", role: "viewer" }],
   "DELETE /studies/:id/members/:user": ["DELETE", "/api/vcr/studies/std_1/members/newcomer", undefined],
   "POST /studies/:id/assessments/:assessment/judgments/:criterion/override": ["POST", "/api/vcr/studies/std_1/assessments/asm_1/judgments/crt_1/override", { state: "not_satisfied" }],
-  "POST /studies/:id/assessments/:assessment/review": ["POST", "/api/vcr/studies/std_1/assessments/asm_1/review", {}],
   "POST /studies/:id/pack": ["POST", "/api/vcr/studies/std_1/pack", { use: "nsclc" }],
   "POST /studies/:id/pack/promote": ["POST", "/api/vcr/studies/std_1/pack/promote", {}],
   "POST /studies/:id/pack/platform": ["POST", "/api/vcr/studies/std_1/pack/platform", {}],

@@ -33,7 +33,7 @@
  * - **The write-side actions that belong to other packages are hooks**:
  *   `orchestrator.runStep` (「让 AI 做」) and `requestExport`, `jobs.enqueue`
  *   and `cancel` and `confirmBudget`, `members`, and `matching`
- *   (scientific matching and assessment review). A hook that is not composed answers 503
+ *   (scientific matching and a person's correction of one judgment). A hook that is not composed answers 503
  *   `vcr_unavailable` — the route exists, the worker does not yet. Hooks are
  *   read at request time, so a package composed after the routes attaches to
  *   the same object and is found.
@@ -223,7 +223,6 @@ export const VCR_ROUTE_ABILITIES = Object.freeze({
   "POST /studies/:id/members": ["manage_members"],
   "DELETE /studies/:id/members/:user": ["manage_members"],
   "POST /studies/:id/assessments/:assessment/judgments/:criterion/override": ["review_clinical", "review_any"],
-  "POST /studies/:id/assessments/:assessment/review": ["review_clinical", "review_any"],
   "POST /models (with a study)": ["write"],
   "POST /studies/:id/pack": ["write"],
   "POST /studies/:id/pack/promote": ["manage_study"],
@@ -1780,14 +1779,6 @@ export function createVcrRoutes(dependencies) {
           () => hooks.assessments.overrideJudgment(user, study, {
             assessmentId: parts[3], criterionId: parts[5], state, note: body.note === undefined ? "" : String(body.note).slice(0, 1_000),
           })), 201);
-      }
-      if (parts.length === 5 && parts[4] === "review" && method === "POST") {
-        if (!ID.test(parts[3])) throw new HttpError(400, "vcr_path_invalid", "Invalid assessment id.");
-        await bodyOf(req, maxJsonBytes, []);
-        const { study } = await authorize(id, VCR_ROUTE_ABILITIES["POST /studies/:id/assessments/:assessment/review"]);
-        if (!hooks.assessments?.reviewAssessment) throw UNAVAILABLE();
-        return reply(await audited("vcr.assessment.review", () => ({ code: parts[3] }), { code: parts[3] },
-          () => hooks.assessments.reviewAssessment(user, study, { assessmentId: parts[3] })), 201);
       }
       throw new HttpError(404, "not_found", "虚拟临床研究 route not found.");
     }

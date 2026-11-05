@@ -41,7 +41,7 @@ import { fetchWebMe, fetchWithWebAuth, WebApiError, webApiBase, type WebMe } fro
 import { productRequest } from "./productClient";
 import { programmeRunState, type ProgrammeRun } from "./programmeRuns";
 import {
-  assessmentBody, assessmentReviewBody, assumptionBody, budgetBody, cancelBody, decisionBody, definitionCompareBody, definitionSaveBody,
+  assessmentBody, assumptionBody, budgetBody, cancelBody, decisionBody, definitionCompareBody, definitionSaveBody,
   definitionUseBody, exportBody, jobBody, judgmentBody, memberBody, modelBody, packBindBody, regulatoryContactBody, reviewBody, runBody,
   studyPatchBody, trialSearchBody,
   type VcrAssessmentBody, type VcrAssumptionBody, type VcrBudgetBody, type VcrDecisionBody, type VcrDefinitionCompareBody,
@@ -3254,11 +3254,6 @@ export function removeVcrMember(studyId: string, userId: string, role?: VcrStore
 export function overrideVcrJudgment(studyId: string, assessmentId: string, criterionId: string, input: VcrJudgmentBody) {
   return productRequest<unknown>(
     `${study(studyId)}/assessments/${id(assessmentId)}/judgments/${id(criterionId)}/override`, "POST", judgmentBody(input));
-}
-
-/** A reviewer's countersignature on one assessment: a signature, never a gate. */
-export function reviewVcrAssessment(studyId: string, assessmentId: string) {
-  return productRequest<unknown>(`${study(studyId)}/assessments/${id(assessmentId)}/review`, "POST", assessmentReviewBody());
 }
 
 /**

@@ -257,11 +257,6 @@ export function judgmentBody(input: VcrJudgmentBody) {
   return said({ state: input.state, note: input.note?.trim() || undefined });
 }
 
-/** A countersignature on an assessment carries nothing but the assessment named in the path. */
-export function assessmentReviewBody() {
-  return {};
-}
-
 /** Save one of the study's population definitions into the account's library: a new entry, or the next version of `definitionId`. */
 export interface VcrDefinitionSaveBody {
   populationId: string;

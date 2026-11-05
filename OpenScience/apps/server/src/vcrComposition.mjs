@@ -1033,16 +1033,6 @@ export function vcrMatchingSeam({ matchStore, store, documents = null, subjectTa
     },
 
     /**
-     * Countersign an assessment, by the session's account (a signature, not a gate).
-     * @param {{ id: string | number }} user @param {any} study @param {{ assessmentId: string }} input
-     */
-    async reviewAssessment(user, study, input) {
-      const assessment = await matchStore.reviewAssessment({ id: String(input.assessmentId), reviewedBy: String(user.id), userId: study.userId, studyId: study.id });
-      if (!assessment) throw new HttpError(404, "vcr_assessment_not_found", "这个评估不属于本研究。");
-      return assessment;
-    },
-
-    /**
      * An accrual result read back with its probability table, when the table was
      * kept in the data plane.
      * @param {any} result a `results` row of an accrual forecast

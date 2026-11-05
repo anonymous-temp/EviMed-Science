@@ -244,7 +244,6 @@ function requests(target, ids) {
     // A person's hand on an assessment: allowed roles reach the seam, which
     // answers 404 for an assessment this study does not have.
     "POST /studies/:id/assessments/:assessment/judgments/:criterion/override": async () => ["POST", `${S}/assessments/asm_none/judgments/crt_none/override`, { state: "not_satisfied", note: "病历写明曾用过该药" }],
-    "POST /studies/:id/assessments/:assessment/review": async () => ["POST", `${S}/assessments/asm_none/review`, {}],
     // The study's pack and the library's definitions: allowed roles reach the package, which answers 404 for what the account does not have.
     "POST /studies/:id/pack": async () => ["POST", `${S}/pack`, { use: "no_such_pack" }],
     "POST /studies/:id/pack/promote": async () => ["POST", `${S}/pack/promote`, {}],
