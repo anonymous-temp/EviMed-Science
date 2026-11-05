@@ -46,3 +46,15 @@ test('explicit malformed seed metadata is not replaced with an unseeded assertio
     assert.equal(collectedRunScope(input.run, input.sessions).scope.available, false);
   }
 });
+
+test('a page-bounded native read cannot assert the absence of a fork seed', async () => {
+  const { collectedRunScope } = await load(), input = fixture();
+  input.sessions[0].transcript.exhausted = false;
+  const unknown = collectedRunScope(input.run, input.sessions);
+  assert.equal(unknown.scope.available, false);
+  assert.equal(unknown.metadata.get('root').seedEndSeq, undefined);
+  input.sessions[0].transcript.seedEndSeq = 3;
+  const known = collectedRunScope(input.run, input.sessions);
+  assert.equal(known.scope.available, true);
+  assert.equal(known.scope.partial, true);
+});

@@ -73,3 +73,11 @@ test('a continued child needs exact owned turns and a live transcript cannot be 
   const { sessionId: _sourceSession, ...unqualified } = user(1, 0, 'current');
   assert.equal(scopeRunTranscript({ sessionId: 'foreign', messages: [unqualified] }, run).runScope.available, false);
 });
+
+test('live page bounds never establish an unseeded source', async () => {
+  const { scopeRunTranscript } = await import('../src/runTurnScope.mjs');
+  const run = { id: 'run', sessionId: 'root', kernelRequestIds: ['current'] };
+  const live = { sessionId: 'root', exhausted: false, messages: [{ role: 'user', source: 'user', sourceRequestId: 'current', seq: 11, turnStartSeq: 10, parts: [] }] };
+  assert.equal(scopeRunTranscript(live, run).runScope.available, false);
+  assert.equal(scopeRunTranscript({ ...live, seedEndSeq: 3 }, run).runScope.partial, true);
+});
