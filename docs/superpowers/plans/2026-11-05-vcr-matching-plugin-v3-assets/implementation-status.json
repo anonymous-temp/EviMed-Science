@@ -1,0 +1,15 @@
+{
+  "baseline": "d5f690b15866c2891ffde593ca5321259b4d6297",
+  "reasoningModel": "deepseek-flash",
+  "proEscalation": false,
+  "milestones": {
+    "M0": "in_progress",
+    "M1": "pending",
+    "M2": "pending",
+    "M3": "pending",
+    "M4": "pending",
+    "M5": "pending"
+  },
+  "publication": "not_started",
+  "deployment": "not_authorized"
+}

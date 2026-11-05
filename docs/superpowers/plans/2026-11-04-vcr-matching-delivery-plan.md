@@ -1,5 +1,9 @@
 # 患者匹配交付方案：整改、完善、修订、测试、打榜横评
 
+> 2026-11-05 follow-up: [Results diagnosis and next-phase plan](2026-11-05-vcr-matching-next-phase.md) supersedes the comparison interpretation and future evaluation scope below. The original results remain a historical record. English SIGIR continues; translated SIGIR is retired from future runs. The branch has since been pushed at `d5f690b15`; the earlier pause/push status below is historical.
+
+> Current architecture: [V3 — independent professional plugin for DSH + DeepSeek](2026-11-05-vcr-matching-plugin-v3.md), following the [V2 integration plan](2026-11-05-vcr-matching-next-phase-v2.md). The later design retains bounded verification and uses current provider profiles.
+
 日期：2026-11-04。状态：业主已确认决定（第 14 节）。打榜已完成，结果见第 16 节。2026-11-05 业主要求暂停：分支没有推送、没有合入、没有部署，还差的事见第 16 节末尾。
 
 本方案基于 `github/main` 51c1424b8、分支 `codex/vcr-platform-benchmark-20261103` 6e1841609。

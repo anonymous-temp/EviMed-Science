@@ -166,6 +166,8 @@ majority baseline learnt from the patients outside the split, completion and cos
 
 ### G: Chinese robustness
 
+Historical instrument only. On 2026-11-05 the owner retained English SIGIR and removed translated SIGIR from future evaluations. Keep the recorded scores for reproducibility; do not schedule new board-G translation or scoring. Real Chinese intake/search is evaluated separately through product workflows. See the [V3 plugin architecture](../../../docs/superpowers/plans/2026-11-05-vcr-matching-plugin-v3.md).
+
 `prepare_zh.mjs` translates the SIGIR notes and the TREC 2021 and 2022 development-topic notes once, on `deepseek-flash` with thinking off, through the
 control plane's gateway call (so the usage ledger books it), under the same guards and a stage budget (default CNY 2). The instruction forbids adding,
 omitting, explaining and inferring, and leaves numbers, units and dates as written; code checks the numbers (a multiset, asked again once, counted when
