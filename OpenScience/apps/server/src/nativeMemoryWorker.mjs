@@ -152,7 +152,7 @@ export class NativeMemoryWorker {
    *   `rejectionJudge` says whether a line near one the person removed repeats it (`nativeMemoryRejections.mjs`); absent, only a verbatim
    *   repeat and a line that contains a removed one are met.
    */
-  constructor({ config, memorySettings, sessions, overlay, nativeMemory = null, projectOfSession = null, memoryContexts = null, rejectionJudge = null, now = () => new Date(), report = () => {} }) {
+  constructor({ config, memorySettings, sessions, overlay, nativeMemory = null, projectOfSession = null, memoryContexts = null, rejectionJudge = null, now = null, report = () => {} }) {
     this.config = config ?? {};
     this.memorySettings = memorySettings;
     this.sessions = sessions;
@@ -172,7 +172,10 @@ export class NativeMemoryWorker {
       ? new NativeMemoryObservations({ overlay, sessions, memorySettings, keepRepeatedChoice: (userId, choice) => nativeMemory.keepRepeatedChoice(userId, choice), report }) : null;
     /** When each account's type allowlist was last checked against the deployment's (`#syncPolicy`). @type {Map<string, number>} */
     this.policyChecked = new Map();
-    this.now = now;
+    this.now = now ?? (() => new Date());
+    // Due times are written by PostgreSQL. Its own clock decides readiness by
+    // default; an explicitly injected evaluation clock remains authoritative.
+    this.commitClock = now;
     this.report = report;
     this.replayAttempts = Math.max(0, Math.trunc(Number(this.config.nativeMemoryReplayAttempts ?? 5)));
     /** @type {ReturnType<typeof setInterval> | null} */
@@ -476,7 +479,7 @@ export class NativeMemoryWorker {
    */
   async processCommits({ userId = null, limit = 50 } = {}) {
     let settled = 0;
-    for (const commit of await this.overlay.openCommits({ userId, limit, now: this.now() })) {
+    for (const commit of await this.overlay.openCommits({ userId, limit, now: this.commitClock ? this.commitClock() : null })) {
       try {
         if (commit.state === "pending") settled += await this.#settle(commit) ? 1 : 0;
         else if (commit.state === "failed") settled += await this.#replay(commit) ? 1 : 0;
