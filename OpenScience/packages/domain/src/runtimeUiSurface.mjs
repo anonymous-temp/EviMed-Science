@@ -598,9 +598,42 @@ export function runtimeUiMethodFromPath(pathname) {
   const clean = String(pathname ?? "").split("?")[0];
   if (!clean.startsWith("/api/")) return null;
   const method = clean.slice("/api/".length).replace(/\/+$/, "");
-  // The pinned LoopX native bundle registers this one dotted HTTP endpoint.
-  if (method !== "loopx.goalbar" && !ENDPOINT_NAME.test(method)) return null;
+  // The pinned LoopX native bundle registers this one dotted HTTP endpoint; the deliverables client reads two more.
+  if (method !== "loopx.goalbar" && !RUNTIME_UI_READ_ROUTES.includes(method) && !ENDPOINT_NAME.test(method)) return null;
   return method;
+}
+
+/**
+ * The two dotted GET routes of the kernel's changed-files card (`ui-deliverables`), the one a turn that wrote files ends with:
+ * `changes.summary?sessionId&seq` (which files the turn changed, with line counts) and `changes.diff?sessionId&seq&index` (one of
+ * them, the file at turn start and at turn end). They are the kernel's own record of what its workspace changed during the
+ * turn, read while the session lives; neither names a path. Not `<namespace>/<method>`, so the gate answered 400 to both and the
+ * card never drew (2026-11-05). `changes.open` and `present.open` stay refused: they launch an application on the serving host.
+ */
+export const RUNTIME_UI_READ_ROUTES = Object.freeze(["changes.summary", "changes.diff"]);
+
+const READ_ROUTE_QUERY = Object.freeze({
+  "changes.summary": ["sessionId", "seq"],
+  "changes.diff": ["sessionId", "seq", "index"],
+});
+
+/**
+ * Why a read route must not be forwarded, or `null` when it may: GET, exactly its own query parameters, a session id and
+ * non-negative integers, nothing else.
+ * @param {string | null | undefined} method
+ * @param {string} httpMethod
+ * @param {URLSearchParams} query
+ * @returns {string | null}
+ */
+export function runtimeUiReadRouteRefusal(method, httpMethod, query) {
+  if (!method || !RUNTIME_UI_READ_ROUTES.includes(method)) return null;
+  if (String(httpMethod).toUpperCase() !== "GET") return "this route is read-only";
+  const allowed = READ_ROUTE_QUERY[/** @type {keyof typeof READ_ROUTE_QUERY} */ (method)];
+  const keys = [...query.keys()];
+  if (keys.length !== allowed.length || new Set(keys).size !== keys.length || !allowed.every((key) => keys.includes(key))) return "the query is not the route's own";
+  if (!/^[A-Za-z0-9_-]{1,160}$/.test(query.get("sessionId") ?? "")) return "a session id is required";
+  for (const key of allowed.slice(1)) if (!/^\d{1,12}$/.test(query.get(key) ?? "")) return `${key} must be a non-negative integer`;
+  return null;
 }
 
 /**

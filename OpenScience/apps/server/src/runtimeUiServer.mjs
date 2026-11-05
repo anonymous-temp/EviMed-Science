@@ -8,7 +8,7 @@ import { createServer } from "node:http";
 import path from "node:path";
 import { SEAMS } from "@evimed/harness-port";
 
-import { CAPABILITY_DISPLAY, capabilityBrief, capabilityListed, errorCodeMessage, isDeniedRuntimeUiHostRoute, isDeniedRuntimeUiMethod, isRuntimeUiSettingsRead, RUNTIME_UI_ANSWERED_HOST_ROUTES, RUNTIME_UI_ANSWERED_METHODS, RUNTIME_UI_SETTINGS_READ, RUNTIME_UI_WORKSPACE_PATH_METHODS, runtimeUiMethodFromPath, runtimeUiScheduleRefusal, runtimeUiSettingsAnswer, runtimeUiWorkspacePathRefusal } from "@evimed/domain";
+import { CAPABILITY_DISPLAY, capabilityBrief, capabilityListed, errorCodeMessage, isDeniedRuntimeUiHostRoute, isDeniedRuntimeUiMethod, isRuntimeUiSettingsRead, RUNTIME_UI_ANSWERED_HOST_ROUTES, RUNTIME_UI_ANSWERED_METHODS, RUNTIME_UI_SETTINGS_READ, RUNTIME_UI_WORKSPACE_PATH_METHODS, runtimeUiMethodFromPath, RUNTIME_UI_READ_ROUTES, runtimeUiReadRouteRefusal, runtimeUiScheduleRefusal, runtimeUiSettingsAnswer, runtimeUiWorkspacePathRefusal } from "@evimed/domain";
 import { assertSpendWithinLimits } from "./usageMetering.mjs";
 
 import { assertNoSymlinkPath, HttpError, mimeFor, openScopedFileNoFollow, readBody, readStableFileHandle } from "./security.mjs";
@@ -822,6 +822,11 @@ export function createRuntimeUiServer({ config, store, runtimeManager, onGoalBar
     let admissionSignal=null;
     let modelBody = null;
     let loopxBody = null;
+    if (method && RUNTIME_UI_READ_ROUTES.includes(method)) {
+      // The changed-files card's two reads: GET, their own query, and a session of this project's runtime.
+      if (runtimeUiReadRouteRefusal(method, req.method, runtimeUrl.searchParams) !== null) { sendDenied(res, method); return; }
+      await authorizePromptSession(project, { args: { request: { sessionId: runtimeUrl.searchParams.get("sessionId") } } });
+    }
     if (method === "loopx.goalbar") {
       if (req.method !== "POST" || config.loopxEnabled === false) { sendDenied(res, method); return; }
       const raw = await nativeBody(Math.min(Number(config.maxJsonBytes), 16384));

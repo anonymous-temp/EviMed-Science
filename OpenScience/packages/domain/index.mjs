@@ -742,6 +742,8 @@ export {
   isDeniedRuntimeUiHostRoute,
   isDeniedRuntimeUiMethod,
   runtimeUiMethodFromPath,
+  RUNTIME_UI_READ_ROUTES,
+  runtimeUiReadRouteRefusal,
   RUNTIME_UI_WORKSPACE_PATH_METHODS,
   isRuntimeUiWorkspacePath,
   runtimeUiWorkspacePathRefusal,

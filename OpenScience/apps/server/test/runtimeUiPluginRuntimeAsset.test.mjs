@@ -109,3 +109,22 @@ test("a plugin's lazy chunk is served by exact shape: one scoped package, one cl
     "/plugins/@a/b/c/client.pdf.js?rev=3f6d9445651f",
   ]) assert.equal(PLUGIN_CHUNK_ASSET.test(other), false, other);
 });
+
+test("the changed-files card's two reads are GET routes with their own query, and nothing else of the dotted kind opens", async () => {
+  const { RUNTIME_UI_READ_ROUTES, runtimeUiMethodFromPath, runtimeUiReadRouteRefusal, isDeniedRuntimeUiMethod } = await import("@evimed/domain");
+  assert.deepEqual([...RUNTIME_UI_READ_ROUTES], ["changes.summary", "changes.diff"]);
+  assert.equal(runtimeUiMethodFromPath("/api/changes.summary"), "changes.summary");
+  assert.equal(runtimeUiMethodFromPath("/api/changes.diff"), "changes.diff");
+  for (const refused of ["/api/changes.open", "/api/present.open", "/api/changes.summary.x", "/api/changes"]) assert.equal(runtimeUiMethodFromPath(refused), null, refused);
+  assert.equal(isDeniedRuntimeUiMethod("changes.summary"), false);
+  const q = (/** @type {string} */ text) => new URLSearchParams(text);
+  assert.equal(runtimeUiReadRouteRefusal("changes.summary", "GET", q("sessionId=abc-1&seq=33")), null);
+  assert.equal(runtimeUiReadRouteRefusal("changes.diff", "GET", q("sessionId=abc-1&seq=33&index=0")), null);
+  assert.ok(runtimeUiReadRouteRefusal("changes.summary", "POST", q("sessionId=abc-1&seq=33")));
+  assert.ok(runtimeUiReadRouteRefusal("changes.summary", "GET", q("sessionId=abc-1&seq=33&path=/etc/passwd")), "no extra parameter");
+  assert.ok(runtimeUiReadRouteRefusal("changes.summary", "GET", q("sessionId=abc-1")), "every parameter is required");
+  assert.ok(runtimeUiReadRouteRefusal("changes.summary", "GET", q("sessionId=../x&seq=1")));
+  assert.ok(runtimeUiReadRouteRefusal("changes.diff", "GET", q("sessionId=abc&seq=1&index=-1")));
+  assert.ok(runtimeUiReadRouteRefusal("changes.diff", "GET", q("sessionId=abc&seq=1&seq=2&index=0")));
+  assert.equal(runtimeUiReadRouteRefusal("session/page", "GET", q("")), null, "other methods are not this function's");
+});
