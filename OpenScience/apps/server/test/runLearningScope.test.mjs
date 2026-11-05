@@ -90,3 +90,18 @@ test('private typed sources stop distillation, candidate writes and script recur
   const ordinary = buildDistillationInput({ run: { id: 'ordinary' }, trigger: 'routine', transcript: null, peerRuns: [{ runId: run.id, run, transcript: { messages: [] } }] });
   assert.equal(ordinary.peerRuns[0].trajectory, null);
 });
+
+test('extra shared correction sources and routine peers are checked before observation', async () => {
+  const { MethodDistillationRuns } = await import('../src/methodDistillationRuns.mjs');
+  for (const [trigger, extra] of [['correction', { sourceRunIds: ['private'] }], ['routine', { peers: [{ runId: 'private', projectId: 'p' }] }]]) {
+    const observed = [];
+    const privateRun = { id: 'private', originalSources: [{ nativeType: 'people' }] };
+    const distiller = new MethodDistillationRuns({ learning: {}, dispatch: async () => { throw new Error('must not dispatch'); }, readResult: async () => null,
+      resolveRun: async () => privateRun,
+      contextProvenance: { policyFor: async () => ({ kind: 'geo-project', controlProjectId: 'p' }), scopedMethods: async () => [], resolveSourceRun: async () => privateRun,
+        observeRun: async (_project, run) => { observed.push(run.id); return { runId: run.id, humanText: 'Ordinary input', humanMessages: [] }; } } });
+    await assert.rejects(() => distiller.execute({ project: { id: 'p', userId: 'u', rootDir: '/nonexistent', metaDir: '/nonexistent' }, run: { id: 'ordinary' },
+      job: { userId: 'u', projectId: 'p', payload: { trigger, ...extra } } }), { code: 'distillation_run_unavailable' });
+    assert.deepEqual(observed, ['ordinary']);
+  }
+});

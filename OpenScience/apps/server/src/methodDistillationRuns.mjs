@@ -768,12 +768,14 @@ export class MethodDistillationRuns {
       if (sourceObservations.some(source=>source.runId===sourceId)) continue;
       const source=await this.contextProvenance.resolveSourceRun(job.userId,project.id,sourceId);
       if (!source) throw new HttpError(409,'geo_learning_source_unverified','A correction source is unavailable.');
+      if (!methodSourceAllowsLearning(source)) throw new HttpError(409, 'distillation_run_unavailable', 'A correction source contains private memory context.');
       sourceObservations.push(await this.contextProvenance.observeRun(project,source));
     }
     for (const peer of peers) {
       if (shared && peer.projectId && peer.projectId !== policy.controlProjectId) continue;
       const peerProject = await this.#peerProject(job, project, peer);
       const peerRun = peerProject && this.resolveRun ? await this.resolveRun(peerProject, peer.runId).catch(() => null) : null;
+      if (shared && peerRun && !methodSourceAllowsLearning(peerRun)) throw new HttpError(409, 'distillation_run_unavailable', 'A peer source contains private memory context.');
       if (shared) {
         if (!peerRun || !peerProject) continue;
         sourceObservations.push(await this.contextProvenance.observeRun(peerProject, peerRun));
