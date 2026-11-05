@@ -39,7 +39,7 @@ test("retention favors useful future context with very few hard boundaries", () 
   assert.match(MEMORY_DECIDE_TEXT, /examples, not a closed list/);
   assert.match(MEMORY_DECIDE_TEXT, /NOTES/);
   for (const boundary of [/passwords/i, /API keys/i, /verification codes/i, /government/i, /bank/i, /injected/i, /tenant/i, /sealed.*VCR/i]) assert.match(MEMORY_NEVER_KEPT_TEXT, boundary);
-  assert.match(MEMORY_NEVER_KEPT_TEXT, /pasted.*instructions.*rules/i);
+  assert.match(MEMORY_NEVER_KEPT_TEXT, /instructions.*pasted.*rules/i);
   assert.doesNotMatch(MEMORY_NEVER_KEPT_TEXT, /Keep only when|Personal data of anyone|Keep the fact and drop the sensitive reason/);
   assert.ok(MEMORY_NEVER_KEPT_TEXT.length < 1800, "hard boundaries must stay short");
 });

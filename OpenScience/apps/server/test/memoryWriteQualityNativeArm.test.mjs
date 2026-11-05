@@ -31,11 +31,11 @@ test("the work-order corpus holds every case of research G section 6, each with 
   const ids = workOrder.map((item) => item.id.split("-")[0]);
   for (let number = 1; number <= 23; number += 1) assert.ok(ids.includes(`c${String(number).padStart(2, "0")}`), `case C${number} is in the corpus`);
   assert.ok(ids.includes("c24a") && ids.includes("c24b") && ids.includes("u01"), "the platform-tag pair and the upgrade");
-  assert.ok(workOrder.every((item) => item.decidable === true && item.expect), "each is decided by code; a reading is a judge question beside it");
+  assert.ok(workOrder.every((item) => (item.decidable === true && item.expect) || (item.decidable === false && item.judge)), "code checks stay decidable and attribution questions explicitly require reading");
   // The keep side and the refuse side are both there: the corpus that was blind to the owner's account asked only for refusals and statements.
   const keeps = workOrder.filter((item) => item.expect.requireAnyKind || item.expect.requireTextContains?.length);
   const refuses = workOrder.filter((item) => item.expect.atMostRecords === 0 || item.expect.noRecordOfKinds);
-  assert.ok(keeps.length >= 10 && refuses.length >= 12, `${keeps.length} keep cases, ${refuses.length} refuse cases`);
+  assert.ok(keeps.length >= 10 && refuses.length >= 6, `${keeps.length} keep cases, ${refuses.length} refuse cases`);
   // A case that starts from a memory has the engine write it: C17 (the recall echo), C22 (a choice shown in two conversations), the
   // upgrade, and the repetition that is no repetition (two different choices).
   assert.deepEqual(workOrder.filter((item) => item.replay.seed).map((item) => item.id.split("-")[0]).sort(), ["c17", "c22", "e3c", "u01"]);
@@ -222,4 +222,17 @@ test("a case held in a named project is replayed with the platform's project lin
   assert.equal(CASE_PROJECT_NAMES["orders-service"], "订单服务重构");
   assert.equal(parseArguments(["--offline"]).projectLine, true);
   assert.equal(parseArguments(["--offline", "--no-project-line"]).projectLine, false);
+});
+
+test("development policy cases preserve health and people while keeping hard identifiers out", async () => {
+  const cases = (await Promise.all(NATIVE_CASE_DIRECTORIES.map(load))).flat();
+  for (const name of ["2026-10-12-own-health", "2026-10-12-own-health-in-passing", "2026-10-12-patient-identifiers", "g07-teacher-student-details", "g08-lawyer-client-case", "c14-childs-details", "s02-one-off-case-detail-not-a-trait"]) {
+    const item = cases.find((entry) => entry.id === name);
+    assert.ok(item.expect.requireTextContains?.length > 0, `${name}: useful details are required`);
+    assert.equal(item.policyRevision, "2026-11-04");
+    assert.equal(item.evaluationSplit, "development");
+  }
+  const written = kindsOf({ "people/张某.md": "# 张某\n- INR 2.4", "notes/hypothesis.md": "- User believes X" });
+  assert.deepEqual(written.person, ["people/张某.md"]);
+  assert.deepEqual(written.note, ["notes/hypothesis.md"]);
 });

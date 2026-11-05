@@ -3,6 +3,7 @@
 // viking:// roots, and that no account's identity reaches a path or a provider.
 import assert from "node:assert/strict";
 import test from "node:test";
+import { MEMORY_SEGMENT_OF_TYPE, PROJECT_MEMORY_TYPES } from "../src/openVikingSessions.mjs";
 import { memoryUri, openVikingPeerId as clientPeerId, openVikingUserId as clientUserId, userMemoryRoot } from "../src/openVikingClient.mjs";
 import {
   OPENVIKING_MEMORY_TYPES, OPENVIKING_SKILLS_ROOT, OPENVIKING_SKILL_NAMES, libraryResourcesUri, nativeMemoryRoot, openVikingKnowledgeModelKey,
@@ -67,4 +68,11 @@ test("the Compile agent's bearer is derived from the service key, differs from i
 test("the extraction registry enables people and an open notes fallback", () => {
   assert.ok(OPENVIKING_MEMORY_TYPES.includes("people"));
   assert.ok(OPENVIKING_MEMORY_TYPES.includes("notes"));
+});
+
+test("people and notes are native files with project labels, while observations stay private", () => {
+  assert.equal(MEMORY_SEGMENT_OF_TYPE.people, "people");
+  assert.equal(MEMORY_SEGMENT_OF_TYPE.notes, "notes");
+  for (const type of ["people", "notes"]) assert.ok(PROJECT_MEMORY_TYPES.includes(type));
+  assert.equal(MEMORY_SEGMENT_OF_TYPE.observations, undefined);
 });
