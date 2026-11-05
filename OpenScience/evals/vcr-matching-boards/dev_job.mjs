@@ -55,7 +55,7 @@ const OPTIONS = {
   thinking: { type: 'string', default: 'high' }, 'thinking-criteria': { type: 'string' }, definitions: { type: 'boolean', default: false }, 'top-k': { type: 'string' }, concurrency: { type: 'string', default: '8' },
   'limit-patients': { type: 'string' }, out: { type: 'string' }, 'cap-cny': { type: 'string', default: String(DEFAULT_CAP_CNY) },
   'floor-cny': { type: 'string', default: String(DEFAULT_FLOOR_CNY) }, 'allow-peak': { type: 'boolean', default: false },
-  'plan-only': { type: 'boolean', default: false }, score: { type: 'string', default: 'auto' },
+  'plan-only': { type: 'boolean', default: false }, 'worker-batches': { type: 'boolean', default: false }, score: { type: 'string', default: 'auto' },
   'data-dir': { type: 'string' }, boards: { type: 'string' }, 'key-file': { type: 'string' }, 'base-url': { type: 'string', default: 'https://api.deepseek.com' },
   model: { type: 'string', default: 'deepseek-flash' }, 'db-url': { type: 'string' }, 'db-name': { type: 'string', default: DEFAULT_DB_NAME },
   tg2: { type: 'string' }, tg1: { type: 'string' }, labels: { type: 'string' }, 'eval-python': { type: 'string' },
@@ -111,7 +111,7 @@ export function parseOptions(argv, env = process.env) {
   return {
     help: false, board, split, arm: values.arm, unseal: Boolean(values.unseal), n2c2Boards: n2c2Boards ? path.resolve(n2c2Boards) : null, zhBoards: zhBoards ? path.resolve(zhBoards) : null,
     n2c2Labels: values['n2c2-labels'] ?? env.VCR_BOARDS_N2C2_LABELS ?? null, n2c2Root: values['n2c2-root'] ?? env.EVIMED_N2C2_ROOT ?? null, mode, thinking: String(values.thinking), thinkingCriteria: String(values['thinking-criteria'] ?? values.thinking), definitions: Boolean(values.definitions), topK,
-    concurrency: whole(values.concurrency, '--concurrency', 1, 64),
+    concurrency: whole(values.concurrency, '--concurrency', 1, 64), workerBatches: values['worker-batches'] === true,
     limitPatients: values['limit-patients'] == null ? null : whole(values['limit-patients'], '--limit-patients', 1, 100_000),
     out: values.out ? path.resolve(values.out) : null, capCny: Number(values['cap-cny']), floorCny: Number(values['floor-cny']),
     allowPeak: Boolean(values['allow-peak']), planOnly, score,
@@ -439,11 +439,25 @@ export async function runDevJob(o, deps = {}) {
           await new Promise((resolve) => { setTimeout(resolve, 300 * (again + 1)); });
           claimed = await vcr.jobs.claim({ lane: 'slow' });
         }
-        const job = claimed.find((/** @type {any} */ row) => String(row.id) === String(started.jobId));
+        let job = claimed.find((/** @type {any} */ row) => String(row.id) === String(started.jobId));
         if (!job) throw fail(`The job ${started.jobId} was not claimable (${claimed.length} other job(s) claimed).`, 'job_not_claimed');
-        currentJob = { studyId: study.id, id: String(job.id) };
-        await vcr.jobs.advance(job);
-        currentJob = null;
+        // Production's worker advances with `mayYield`: a long job gives its turn back between batches and is claimed again. By default one `advance` runs the job through, as the frozen boards did.
+        let batches = 1;
+        for (;;) {
+          currentJob = { studyId: study.id, id: String(job.id) };
+          const step = await vcr.jobs.advance(job, o.workerBatches ? { mayYield: true } : undefined);
+          currentJob = null;
+          if (!o.workerBatches || step?.action !== 'yielded' || stopSignal) break;
+          let again = null;
+          for (let wait = 0; wait < 200 && !again && !stopSignal; wait += 1) {
+            again = (await vcr.jobs.claim({ lane: 'slow' })).find((/** @type {any} */ row) => String(row.id) === String(started.jobId)) ?? null;
+            if (!again) await new Promise((resolve) => { setTimeout(resolve, 250); });
+          }
+          if (!again) break;
+          job = again;
+          batches += 1;
+        }
+        if (o.workerBatches) log(`[dev_job] job ${started.jobId} took ${batches} worker batch(es)`);
         const cost = (await costOf([String(started.jobId)])).get(String(started.jobId));
         spendLedger.append({ kind: 'job', arm: o.arm, board: o.board, jobId: String(started.jobId), costCny: cost?.cny ?? 0, calls: cost?.calls ?? 0 });
         // A job that ended is read for how it ended: the pairs it wrote are in the ledger either way, but a job that failed did not finish its stages.

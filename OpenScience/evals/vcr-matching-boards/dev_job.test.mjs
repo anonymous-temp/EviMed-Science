@@ -32,6 +32,8 @@ describe('options', () => {
   const base = ['--board', 'sigir', '--arm', 'a1', '--data-dir', '/tmp/d', '--boards', '/tmp/b', '--key-file', '/tmp/k'];
   test('a run needs a board, an arm, the private directories and a key file, and says which is missing', () => {
     assert.equal(parseOptions(base, {}).arm, 'a1');
+    assert.equal(parseOptions(base, {}).workerBatches, false, 'the frozen boards ran without the worker\'s batches, so the default stays');
+    assert.equal(parseOptions([...base, '--worker-batches'], {}).workerBatches, true);
     assert.throws(() => parseOptions(['--arm', 'a1'], {}), { code: 'option_invalid' });
     assert.throws(() => parseOptions(['--board', 'sigir', '--arm', 'No Good'], {}), { code: 'option_invalid' });
     assert.throws(() => parseOptions(['--board', 'sigir', '--arm', 'a1'], {}), { code: 'option_missing' });
@@ -286,6 +288,17 @@ describe('the loop on a synthetic board', { skip: !SERVER_URL && 'OPEN_SCIENCE_T
     const result = await runDevJob(parseOptions(argv(extra, url, arm, flags), {}), { log: out.log, signals: false, ...deps });
     return { ...result, lines: out.lines };
   };
+
+  test('--worker-batches advances the way production\'s worker does (mayYield, claimed again) and judges the same pairs once', async () => {
+    const provider = await startFakeProvider({ expectThinking: 'high', expectKey: 'not-a-real-key' });
+    try {
+      const batched = await run(['--concurrency', '3', '--worker-batches'], provider.url, {}, 'batched');
+      assert.equal(batched.exitCode, EXIT.finished, batched.lines.join('\n'));
+      assert.equal(provider.requests.length, board.pairs, 'one trial-level call per pair, the same as one long advance');
+      assert.equal(batched.summary.patientStatus.complete, 5);
+      assert.equal(batched.lines.some((line) => /took \d+ worker batch\(es\)/u.test(line)), true);
+    } finally { await provider.close(); }
+  });
 
   test('a plan sends nothing; a run judges every pair once, writes the shape to_official.py reads, and the official converter accepts it', async () => {
     const provider = await startFakeProvider({ expectThinking: 'high', expectKey: 'not-a-real-key' });

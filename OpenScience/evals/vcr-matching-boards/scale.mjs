@@ -80,7 +80,7 @@ export async function main(argv = process.argv.slice(2)) {
   const provider = await startFakeProvider({ latencyMs: Number(values['latency-ms']) });
   const started = Date.now();
   let peak = 0;
-  const child = spawn(process.execPath, ['dev_job.mjs', ...shape, '--arm', name, '--concurrency', String(values.concurrency), '--score', 'no', '--allow-peak', '--cap-cny', '100000', '--floor-cny', '0',
+  const child = spawn(process.execPath, ['dev_job.mjs', ...shape, '--arm', name, '--concurrency', String(values.concurrency), '--worker-batches', '--score', 'no', '--allow-peak', '--cap-cny', '100000', '--floor-cny', '0',
     '--base-url', provider.url, '--key-file', keyFile, '--db-name', String(values['db-name']), '--data-dir', path.join(dir, 'data'), '--out', path.join(dir, 'out')], { cwd: HERE, stdio: ['ignore', 'inherit', 'inherit'] });
   const sampler = setInterval(() => { peak = Math.max(peak, residentMb(Number(child.pid)) ?? 0); }, 2000);
   const code = await new Promise((resolve) => { child.once('close', (status) => resolve(status ?? 1)); });
