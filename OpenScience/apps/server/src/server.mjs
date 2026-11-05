@@ -1,3 +1,4 @@
+import { finished } from 'node:stream/promises';
 import { createPersonalLibraryRoutes, createPersonalLibraryWriter } from "./personalLibraryIntake.mjs";
 import {RuntimePromptStops} from './runtimePromptStops.mjs';
 import {withSessionPromptAdmission} from './runtimePromptAdmission.mjs';
@@ -8650,6 +8651,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         assertNotPlatformAccount(user);
         const exportProjects = new Map();
         await withAccountExportSnapshot(productDatabase, user, config, async snapshot => {
+          if(sourceDeletion) {
+            if(snapshot)await snapshot.withDatabaseSnapshot(()=>sourceDeletion.assertAccountExportSafe(user.id));
+            else await sourceDeletion.assertAccountExportSafe(user.id);
+          }
           const projects = snapshot?.projects ?? await store.listProjects(user);
           // Written as `memory/memory.json`, from the store itself rather than
           // from the account-state snapshot: the export is the researcher's own
@@ -8846,8 +8851,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           const user = await store.ensureUser(req, res);
           const project = await store.requireProject(user, projectId);
           await audit({ config, user, project }, "project.export", "completed", { target: project.id });
-          const entries = await collectProjectArchiveEntries(project, config);
-          await sendProjectArchive(res, project, entries);
+          const send=async()=>{const entries=await collectProjectArchiveEntries(project,config);await sendProjectArchive(res,project,entries);};
+          if(sourceDeletion)await sourceDeletion.withProjectExport(project,send);else await send();
           return;
         }
         if (!action && req.method === "DELETE") {
@@ -9930,6 +9935,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           process.stderr.write(`review migration failed: ${typeof error?.code === "string" ? error.code : error?.name ?? "review_migration_failed"}\n`);
         });
       }
+      await sourceDeletionLedger?.migrate();
       await connectorCredentials?.migrate();
       await maintenanceService?.initialize();
       if (researchDbStaging) {
@@ -10089,12 +10095,16 @@ async function sendProjectArchive(res, project, entries = null, config = null) {
   gzip.on("error", () => {
     if (!res.destroyed) res.destroy();
   });
+  const completion=finished(res,{cleanup:true});
+  void completion.catch(()=>{gzip.destroy();});
   gzip.pipe(res);
   try {
     await writeTarArchive(gzip, archiveEntries, project.rootDir);
     gzip.end();
+    await completion;
   } catch (err) {
     gzip.destroy(err);
+    await completion.catch(()=>{});
     throw err;
   }
 }
@@ -10111,12 +10121,16 @@ async function sendUserArchive(res, user, entries = null, config = null) {
   gzip.on("error", () => {
     if (!res.destroyed) res.destroy();
   });
+  const completion=finished(res,{cleanup:true});
+  void completion.catch(()=>{gzip.destroy();});
   gzip.pipe(res);
   try {
     await writeTarArchive(gzip, archiveEntries, user.rootDir);
     gzip.end();
+    await completion;
   } catch (err) {
     gzip.destroy(err);
+    await completion.catch(()=>{});
     throw err;
   }
 }

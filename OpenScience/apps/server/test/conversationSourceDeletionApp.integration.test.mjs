@@ -151,3 +151,13 @@ test('source acknowledgment waits for an already-admitted RR account export thro
   assert.equal(duringPack,null,'the source fence cannot commit inside the old export snapshot');assert.equal(duringHandoff,null,'the old export must finish handing off bytes before deletion is accepted');
   assert.ok(order.indexOf('export-handoff')<order.indexOf('delete-ack'));
 });
+
+test('new account and project archives refuse a pending source even without a native pack to collect',options,async t=>{
+  const {app,base,headers}=await fixture(t);
+  app.runtimeManager.captureConversationSource=async()=>({root:{id:'a',createdAt:1,cwd:'/workspace',isSeeded:false},sessions:[{id:'a'}]});
+  app.runtimeManager.purgeConversationSource=async()=>({sourceRemoved:false,reason:'runtime_busy'});
+  assert.equal((await fetch(`${base}/api/projects/default/conversations/a/source`,{method:'DELETE',headers})).status,202);
+  for(const path of ['/api/account/export','/api/projects/default/export']) {
+    const response=await fetch(base+path,{headers});assert.equal(response.status,409);const body=await response.json();assert.equal(body.code,'source_deletion_pending');
+  }
+});

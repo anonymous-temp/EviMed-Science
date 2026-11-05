@@ -77,8 +77,10 @@ export class ConversationSourceDeletionService {
       return !prints?.size||independent?shown:{...shown,value:this.redactText(revision.value,prints)};
     }))};}));
   }
-  knownDeleted(project,sessionId) { return this.knownFences.get(JSON.stringify([project.userId,project.id]))?.has(sessionId)===true; }
-  rememberFence(project,sessionIds) { const key=JSON.stringify([project.userId,project.id]),known=this.knownFences.get(key)??new Set();for(const id of sessionIds)known.add(id);this.knownFences.set(key,known); }
+  scopeKey(project) { const owner=project.sourceOwnerCreatedAt??project.accountCreatedAt,created=project.sourceProjectCreatedAt;
+    return typeof owner==='string'&&typeof created==='string'?JSON.stringify([project.userId,project.id,owner,created]):null; }
+  knownDeleted(project,sessionId) { const key=this.scopeKey(project);return key!==null&&this.knownFences.get(key)?.has(sessionId)===true; }
+  rememberFence(project,sessionIds) { const key=this.scopeKey(project);if(key===null)return;const known=this.knownFences.get(key)??new Set();for(const id of sessionIds)known.add(id);this.knownFences.set(key,known); }
   async assertSnapshotSourcesAvailable(userId,entries) {
     if(!entries?.some(entry=>entry.nativeSource))return;
     const uris=await this.ledger.quarantinedUris(userId);if(!uris.length)return;
@@ -86,35 +88,43 @@ export class ConversationSourceDeletionService {
     const ids=uris.map(this.recordIdForUri);
     if(entries.some(entry=>ids.some(id=>entry.id===id||String(entry.id).startsWith(`${id}_`))))throw new HttpError(409,'memory_source_lineage_unverified','Native source lineage is still being resolved.');
   }
+  async assertAccountExportSafe(userId) { if((await this.ledger.recordsForOwner(userId,{pendingOnly:true})).length)throw new HttpError(409,'source_deletion_pending','A source conversation is still being removed.'); }
+  async withProjectExport(project,operation) { return this.ledger.withProjectDisclosure(project,async()=>{
+    if(await this.ledger.pendingCleanupForProject(project))throw new HttpError(409,'source_deletion_pending','A source conversation is still being removed.');
+    return operation();
+  }); }
   async assertNativeExportSafe(userId) { if((await this.ledger.recordsForOwner(userId,{pendingOnly:true})).length)throw new HttpError(409,'memory_source_cleanup_busy','A source deletion is still being cleaned up.'); }
   version(userId) { return this.ledger.version(userId); }
   hiddenMemoryUris(userId) { return this.ledger.hiddenMemoryUris(userId); }
   async refreshClosure(project) {
     if (!this.ledger.pendingForProject) return;
-    const key=JSON.stringify([project.userId,project.id]);
+    const rows=await this.ledger.pendingForProject(project);if(!rows.length)return;
+    const key=JSON.stringify([project.userId,project.id,rows[0].accountCreatedAt,rows[0].projectCreatedAt]);
     if (this.refreshing.has(key)) return this.refreshing.get(key);
     const task=(async()=>{
-      for (const row of await this.ledger.pendingForProject(project)) {
+      for (const row of rows) {
         const current=await this.runtime.captureConversationSource({...project,sourceOwnerCreatedAt:row.accountCreatedAt,sourceProjectCreatedAt:row.projectCreatedAt},row.rootSessionId);
         const identity=value=>JSON.stringify([value?.id,value?.createdAt,value?.cwd,value?.isSeeded,value?.absent===true]);
         if (identity(current.root)!==identity(row.frozen.root)) throw new HttpError(503,'source_deletion_identity_changed','The deleted source identity cannot be verified.');
-        const ids=await this.ledger.extendSessions(row,current.sessions.map(session=>session.id));this.rememberFence(project,ids);
+        const ids=await this.ledger.extendSessions(row,current.sessions.map(session=>session.id));this.rememberFence({...project,sourceOwnerCreatedAt:row.accountCreatedAt,sourceProjectCreatedAt:row.projectCreatedAt},ids);
       }
     })();
     this.refreshing.set(key,task);
     try { await task; } finally { if(this.refreshing.get(key)===task)this.refreshing.delete(key); }
   }
-  async assertAvailable(project, sessionId) { if(this.knownDeleted(project,sessionId))throw unavailable(); await this.refreshClosure(project); const row=await this.ledger.get(project, sessionId); if(row){this.rememberFence(project,row.sessionIds);throw unavailable();} }
+  async assertAvailable(project,sessionId) { if(this.knownDeleted(project,sessionId))throw unavailable();
+    if(await this.ledger.get(project,sessionId))throw unavailable();await this.refreshClosure(project);if(await this.ledger.get(project,sessionId))throw unavailable(); }
   async authorize(project, method, payload) {
     const ids=conversationIdsInRequest(method,payload);
     if(ids.some(id=>this.knownDeleted(project,id)))throw unavailable();
+    for(const id of ids)if(await this.ledger.get(project,id))throw unavailable();
     await this.refreshClosure(project);
     for (const id of ids) if(await this.ledger.get(project,id)) throw unavailable();
   }
   async projectValue(project, method, payload, value) {
     if(method==='$events') {
       const session=value?.agentId ?? (value?.type==='emit'&&String(value.event).startsWith('api-session/') ? value.args?.[0]?.sessionId??value.args?.[0] : null);
-      if(typeof session==='string'&&this.knownDeleted(project,session))return {forward:false};
+      if(typeof session==='string'&&(this.knownDeleted(project,session)||await this.ledger.get(project,session)))return {forward:false};
     }
     await this.authorize(project, method, payload);
     const deleted = new Set(await this.ledger.deletedIds(project));
@@ -153,7 +163,7 @@ export class ConversationSourceDeletionService {
     const row = await this.ledger.put({ id: randomUUID(), userId: project.userId, projectId: project.id, ...identity,
       rootSessionId: sessionId, sessionIds: [...new Set(frozen.sessions.map(session => session.id))], frozen,
       memoryUserRoot: nativeRoots[0]??currentRoot,nativeRoots, cleanup: 'pending', sourceRemoved: false, createdAt: new Date().toISOString(), reason: null });
-    this.rememberFence(project,row.sessionIds);
+    this.rememberFence({...project,sourceOwnerCreatedAt:identity.accountCreatedAt,sourceProjectCreatedAt:identity.projectCreatedAt},row.sessionIds);
     discloseFence?.();
     // An index failure cannot erase the already durable source fence. The worker repeats it.
     try { await this.removeHistory(project, row); } catch { /* Cleanup remains owed. */ }

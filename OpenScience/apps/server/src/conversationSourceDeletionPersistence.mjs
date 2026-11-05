@@ -59,6 +59,21 @@ export class ConversationSourceDeletionLedger {
       WHERE id=$1`,[row.id,contribution.uri,contribution.prints]);
     }
   }
+  async pendingCleanupForProject(project) {
+    await this.migrate();const scope=await this.scope(project);
+    const result=await this.database.query(`SELECT 1 FROM evimed_source_deletion.conversations WHERE user_id=$1 AND account_created_at=$2
+      AND project_id=$3 AND project_created_at=$4 AND cleanup='pending' LIMIT 1`,[project.userId,scope.accountCreatedAt,project.id,scope.projectCreatedAt]);
+    return result.rows.length>0;
+  }
+  async withProjectDisclosure(project,operation) {
+    const scope=await this.scope(project);
+    return this.database.transaction(async client=>{
+      const owner=await client.query('SELECT id FROM evimed_control.users WHERE id=$1 AND created_at=$2::timestamptz FOR SHARE',[project.userId,scope.accountCreatedAt]);
+      const present=await client.query('SELECT id FROM evimed_control.projects WHERE user_id=$1 AND id=$2 AND created_at=$3::timestamptz FOR SHARE',[project.userId,project.id,scope.projectCreatedAt]);
+      if(!owner.rows.length||!present.rows.length)throw new HttpError(404,'project_not_found','Project not found.');
+      return this.database.withTransactionClient(client,operation);
+    });
+  }
   async pendingForProject(project) {
     await this.migrate(); const scope=await this.scope(project);
     const rows=await this.database.query(`SELECT ${identityColumns} FROM evimed_source_deletion.conversations WHERE user_id=$1 AND account_created_at=$2
@@ -111,12 +126,16 @@ export class ConversationSourceDeletionLedger {
   }
   async put(row) {
     await this.migrate();
-    const result = await this.database.query(`INSERT INTO evimed_source_deletion.conversations
+    return this.database.transaction(async client=>{
+    // Account exports hold this owner tuple FOR SHARE through response handoff. A version touch also rejects a stale RR snapshot that started while waiting.
+    await client.query('UPDATE evimed_control.users SET updated_at=updated_at WHERE id=$1 AND created_at=$2::timestamptz',[row.userId,row.accountCreatedAt]);
+    const result = await client.query(`INSERT INTO evimed_source_deletion.conversations
       (id,user_id,account_created_at,project_id,project_created_at,root_session_id,session_ids,frozen,memory_user_root,native_roots)
       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT(user_id,account_created_at,project_id,project_created_at,root_session_id)
       DO UPDATE SET updated_at=evimed_source_deletion.conversations.updated_at RETURNING ${identityColumns}`,
     [row.id, row.userId, row.accountCreatedAt, row.projectId, row.projectCreatedAt, row.rootSessionId, JSON.stringify(row.sessionIds), JSON.stringify(row.frozen), row.memoryUserRoot ?? null,JSON.stringify(row.nativeRoots??(row.memoryUserRoot?[row.memoryUserRoot]:[]))]);
     return rowOf(result.rows[0]);
+    });
   }
   async pending() { await this.migrate(); return (await this.database.query(`SELECT ${identityColumns} FROM evimed_source_deletion.conversations WHERE cleanup='pending' OR updated_at < clock_timestamp()-interval '60 seconds' ORDER BY updated_at LIMIT 30`)).rows.map(rowOf); }
   /** Only the privileged maintenance result may extend the deleted managed-child closure. */
