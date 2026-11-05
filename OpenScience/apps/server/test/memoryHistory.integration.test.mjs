@@ -274,7 +274,9 @@ test('REST and MCP sanitize current/legacy title metadata and forget title-only 
   f.service.resolveSource = async (...args) => ({ ...await resolve(...args), conversationTitle: 'Password: ordinary-fake-P4ssword! trial discussion' });
   await f.service.ingestArchive(f.commit,f.context); const call = await gateway(t,f);
   for (const mcp of [false,true]) assert.doesNotMatch((await call(mcp)).text,/ordinary-fake-P4ssword/);
-  f.service.resolveSource = async (...args) => ({ ...await resolve(...args), conversationTitle: 'Legacy title says 青霉素过敏 only' });
+  f.service.resolveSource = async (...args) => ({ ...await resolve(...args), conversationTitle: 'Clean title', projectTitle: 'Password: fake-only-project-secret!' });
+  for (const mcp of [false,true]) assert.doesNotMatch((await call(mcp)).text,/fake-only-project-secret/);
+  f.service.resolveSource = async (...args) => ({ ...await resolve(...args), conversationTitle: 'Legacy title says 青霉素过敏 only', projectTitle: 'Legacy project label says 青霉素过敏' });
   await f.overlay.reject(f.userId,'notes',`${f.root}/notes/title.md`,['青霉素过敏']);
   for (const mcp of [false,true]) { const text = (await call(mcp)).text; assert.doesNotMatch(text,/青霉素过敏/); assert.match(text,/trial tables/); }
 });
@@ -319,4 +321,24 @@ test('default searches owned ordinary project history while named projects keep 
   assert.deepEqual(named.map(h=>h.projectId),['a']);
   stamps.b = '2027-01-01T00:00:00Z'; assert.deepEqual((await search(f)).map(h=>h.projectId),['a']);
   delete stamps.a; assert.deepEqual(await search(f),[]);
+});
+
+test('pausing learning does not disable recall or change an original message provenance index', options, async t => {
+  const f = await setup(t);
+  const record = await f.commitConversation('admission',[
+    {role:'user',text:'Old message withheld at capture.'},
+    {role:'user',text:'Keep the retained trial result.'},
+    {role:'assistant',text:'Assistant proposed a weekly summary.'},
+  ],{projectId:'default'});
+  f.service.admitMessage = async (_ctx,_source,message)=>!String(message.parts?.[0]?.text??message.content).startsWith('Old');
+  await f.service.ingestArchive({...f.commit,engineSession:record.session,archiveUri:record.archive_uri},f.context);
+  f.service.admitMessage = async ()=>false;
+  const hits=await search(f); assert.equal(hits.length,1);
+  assert.deepEqual(hits[0].messages.map(m=>m.index),[1,2]); assert.deepEqual(hits[0].messages.map(m=>m.sourceRole),['user','assistant']);
+});
+
+test('unavailable rejection metadata never returns an unfiltered raw hit', options, async t => {
+  const f=await setup(t); await f.service.ingestArchive(f.commit,f.context);
+  f.ledger.rejected=async()=>{throw new Error('privacy metadata unavailable');};
+  await assert.rejects(search(f),/privacy metadata unavailable/);
 });
