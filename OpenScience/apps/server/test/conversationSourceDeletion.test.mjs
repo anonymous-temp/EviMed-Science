@@ -114,6 +114,9 @@ test('source cleanup erases target ledger words and preserved transcripts while 
   await assert.rejects(readFile(path.join(project.metaDir,'transcripts',a.id+'.jsonl')),{code:'ENOENT'});
   assert.equal(await readFile(path.join(project.metaDir,'transcripts',b.id+'.jsonl'),'utf8'),'Independent B transcript');
   assert.equal(await readFile(path.join(project.workspaceDir,'report.txt'),'utf8'),'Useful deliverable');
+  const once=await readFile(ledger,'utf8');
+  await store.removeConversationSource(project,['a']);
+  assert.equal(await readFile(ledger,'utf8'),once,'periodic source cleanup is byte idempotent');
   const list=await store.list(project);assert.equal(list.find(run=>run.id===b.id).question,'Independent B question');
   assert.deepEqual(list.find(run=>run.id===a.id).outputFiles,['report.txt']);
 });
