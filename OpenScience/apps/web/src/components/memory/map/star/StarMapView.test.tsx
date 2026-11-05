@@ -102,3 +102,19 @@ describe("the star map's card", () => {
     quiet.mockRestore();
   });
 });
+
+
+it("people and notes keep separate legend labels and open their own record from the keyboard", async () => {
+  const person = memory("person-a", { subtype: "person", label: "人物甲", weight: 0.9 });
+  const note = memory("note-a", { subtype: "note", label: "其他记忆甲" });
+  const { onOpen } = draw([person, note]);
+  await screen.findByRole("img", { name: /记忆星图/ });
+  const legend=screen.getByRole("group",{name:/图例/});
+  expect(within(legend).getByRole("button",{name:/人物 1/})).toBeInTheDocument();
+  expect(within(legend).getByRole("button",{name:/其他记忆 1/})).toBeInTheDocument();
+  screen.getByRole("listbox",{name:/星图里的记忆/}).focus();
+  await userEvent.keyboard("{ArrowDown}{Enter}");
+  expect(onOpen).toHaveBeenLastCalledWith(expect.objectContaining({subtype:"person",open:{kind:"record",id:"person-a"}}));
+  await userEvent.keyboard("{ArrowDown}{Enter}");
+  expect(onOpen).toHaveBeenLastCalledWith(expect.objectContaining({subtype:"note",open:{kind:"record",id:"note-a"}}));
+});

@@ -154,7 +154,7 @@ it("signs the file, the update and the deliveries and links with the 署名 type
   await userEvent.click(await screen.findByRole("button",{name:"更新"}));
   await userEvent.type(screen.getAllByLabelText("文件密码")[1],"test-only-update");
   await userEvent.click(screen.getByRole("button",{name:"更新并下载"}));
-  await waitFor(()=>expect(api.exportCapsule).toHaveBeenLastCalledWith(capsule.id,{password:"test-only-update",scopes:["workstyle","+profile"],supersedes:"snap-1",card:{author:"心内科 王医生"}}));
+  await waitFor(()=>expect(api.exportCapsule).toHaveBeenLastCalledWith(capsule.id,{password:"test-only-update",scopes:["workstyle"],supersedes:"snap-1",card:{author:"心内科 王医生"}}));
   // Typing the name the account has already, or nothing, asks for no signature of its own.
   await userEvent.clear(field);
   expect(sharePanel.props?.card).toBeUndefined();
@@ -176,7 +176,7 @@ it("updates a version from a password typed beside its own button, which no fiel
   expect(field.closest("div.flex")).toBe(go.closest("div.flex"));
   await userEvent.type(field,"test-only-passphrase");
   await userEvent.click(go);
-  await waitFor(()=>expect(api.exportCapsule).toHaveBeenCalledWith(capsule.id,{password:"test-only-passphrase",scopes:["workstyle","+profile"],supersedes:"snap-1"}));
+  await waitFor(()=>expect(api.exportCapsule).toHaveBeenCalledWith(capsule.id,{password:"test-only-passphrase",scopes:["workstyle"],supersedes:"snap-1"}));
   expect(await screen.findByText("已下载")).toBeInTheDocument();
 });
 
@@ -393,7 +393,7 @@ it("lets an update say in the sender's words what changed",async()=>{
   await userEvent.type(screen.getByLabelText("更新说明"),"加了一条关于附录的规矩");
   await userEvent.type(screen.getAllByLabelText("文件密码")[1],"test-only-update");
   await userEvent.click(screen.getByRole("button",{name:"更新并下载"}));
-  await waitFor(()=>expect(api.exportCapsule).toHaveBeenCalledWith(capsule.id,{password:"test-only-update",scopes:["workstyle","+profile"],supersedes:"snap-1",card:{changelog:"加了一条关于附录的规矩"}}));
+  await waitFor(()=>expect(api.exportCapsule).toHaveBeenCalledWith(capsule.id,{password:"test-only-update",scopes:["workstyle"],supersedes:"snap-1",card:{changelog:"加了一条关于附录的规矩"}}));
 });
 
 // The method pack hands nothing to anyone on this platform: it is a download of the account's own methods, so it is the export tab's

@@ -2765,3 +2765,5 @@ export { GEO_STEP_DEPENDENCIES, geoWorkflowState, geoAutomationEnabled } from '.
 export { WORK_STATES, WORK_STATE_LABEL, WORK_NEED_KINDS, WORK_NEED_LABEL, WORK_ACTION_KINDS, workStateLabel } from './src/workState.mjs'
 
 export { dnsKey, registrableDomain } from './src/geoDomains.mjs'
+
+export { privateByDefault } from "./src/memoryPrivacy.mjs";

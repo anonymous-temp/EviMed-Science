@@ -149,7 +149,7 @@ export function createCapsuleRoutes({ store, service, transferService = null, ma
       const { sharing: sharedWith, links: ownLinks } = shares();
       if (parts[1] === "deliveries" && parts.length === 2) {
         if (method === "POST") {
-          const body = await bodyOf(req, 16 * 1024, ["recipients", "scopes", "card", "excludeEntryIds"]);
+          const body = await bodyOf(req, 16 * 1024, ["recipients", "scopes", "card", "excludeEntryIds", "includePrivateEntries"]);
           const result = await sharedWith.deliver(user.id, parts[0], body, await shareContext());
           await audit(user, "capsule.share.deliver", { capsuleId: parts[0], delivered: result.delivered, notDelivered: result.notDelivered, snapshotId: result.snapshot?.id ?? null });
           return reply(result, 201);
@@ -158,7 +158,7 @@ export function createCapsuleRoutes({ store, service, transferService = null, ma
       }
       if (parts[1] === "links" && ownLinks) {
         if (parts.length === 2 && method === "POST") {
-          const body = await bodyOf(req, 16 * 1024, ["scopes", "card", "ttlDays", "maxUses", "excludeEntryIds"]);
+          const body = await bodyOf(req, 16 * 1024, ["scopes", "card", "ttlDays", "maxUses", "excludeEntryIds", "includePrivateEntries"]);
           const made = await sharedWith.createLink(user.id, parts[0], body, await shareContext());
           await audit(user, "capsule.share.link.create", { capsuleId: parts[0], linkId: made.link.id, snapshotId: made.snapshot?.id ?? null });
           return reply(made, 201);
@@ -218,7 +218,7 @@ export function createCapsuleRoutes({ store, service, transferService = null, ma
         if (method === "GET") return reply(await transferService.history(user.id, parts[0], { cursor: url.searchParams.get("cursor") }));
         if (method === "POST") {
           const result = await transferService.export(user.id, parts[0],
-            await bodyOf(req, 16 * 1024, ["password", "scopes", "supersedes", "recipients", "recipientNames", "card", "excludeEntryIds"]), accountContext);
+            await bodyOf(req, 16 * 1024, ["password", "scopes", "supersedes", "recipients", "recipientNames", "card", "excludeEntryIds", "includePrivateEntries"]), accountContext);
           await audit(user, "capsule.pack.export", {
             capsuleId: parts[0], snapshotId: result.snapshot?.id ?? null, entries: result.snapshot?.entryCount ?? null, scopes: result.snapshot?.scopes ?? null,
             recipients: result.snapshot?.recipientCount ?? 0, supersedes: result.snapshot?.supersedes ?? null,
@@ -230,7 +230,7 @@ export function createCapsuleRoutes({ store, service, transferService = null, ma
       // password is chosen — and, for an account with nothing to share yet,
       // that state rather than a refused export.
       if (parts[1] === "exports" && parts.length === 3 && parts[2] === "preview" && method === "POST") {
-        return reply(await transferService.exportPreview(user.id, parts[0], await bodyOf(req, 16 * 1024, ["scopes", "supersedes", "card", "excludeEntryIds"])));
+        return reply(await transferService.exportPreview(user.id, parts[0], await bodyOf(req, 16 * 1024, ["scopes", "supersedes", "card", "excludeEntryIds", "includePrivateEntries"])));
       }
       if (parts[1] === "exports" && parts.length === 3) {
         if (method === "DELETE") {

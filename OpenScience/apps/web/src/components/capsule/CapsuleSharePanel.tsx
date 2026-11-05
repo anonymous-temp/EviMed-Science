@@ -1,3 +1,4 @@
+import type { PrivateMemorySelection } from "@/lib/productClient";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -30,8 +31,18 @@ export { recipientsOf };
  * is what the sender signs these shares with (the 署名, and a title and summary if they wrote them, of the dialog it sits in);
  * without one the shares are signed as the account always was. `excludeEntryIds` are the entries the sender unticked in the preview.
  * The method pack (a folder of methods for other tools) is not a share between accounts and is the export tab's own.
+ *
+ * Anatomy: recipient input, delivery action, sent list, link action and link list.
+ * Variants: delivery to named accounts or an authenticated share link, using the export preview's exact scopes and selections.
+ * States: idle, busy, success, recoverable error and revocation confirmation.
+ * Hit area: shared Button and Input controls own their targets.
+ * Keyboard: standard input, button and confirmation-dialog keyboard behavior.
+ * Long content: lists and recipient text wrap within their parent drawer.
+ * Theme: semantic text, action and error tokens support both schemes.
+ * Responsive: one column with wrapping actions.
+ * Verification: CapsuleSharePanel tests cover both channels and the per-share consent reset callback.
  */
-export function CapsuleSharePanel({ capsuleId, card, excludeEntryIds }: { capsuleId: string | null; card?: CapsuleCard; excludeEntryIds?: string[] }) {
+export function CapsuleSharePanel({ capsuleId, card, scopes, excludeEntryIds, includePrivateEntries, onShared }: { capsuleId: string | null; card?: CapsuleCard; scopes?: string[]; excludeEntryIds?: string[]; includePrivateEntries?: PrivateMemorySelection[]; onShared?: () => void }) {
   const [names, setNames] = useState("");
   const [sent, setSent] = useState<SentDelivery[]>([]);
   const [links, setLinks] = useState<ShareLink[]>([]);
@@ -85,8 +96,9 @@ export function CapsuleSharePanel({ capsuleId, card, excludeEntryIds }: { capsul
         onChange={(event) => setNames(event.target.value)} maxLength={2000} />
       <Button disabled={busy || !capsuleId || recipients.length === 0} onClick={() => void perform(async () => {
         if (!capsuleId) return;
-        const result = await deliverCapsule(capsuleId, { recipients, ...(card ? { card } : {}), ...(excludeEntryIds?.length ? { excludeEntryIds } : {}) });
+        const result = await deliverCapsule(capsuleId, { recipients, ...(card ? { card } : {}), ...(excludeEntryIds?.length ? { excludeEntryIds } : {}), ...(scopes ? { scopes } : {}), ...(includePrivateEntries?.length ? { includePrivateEntries } : {}) });
         if (!mounted.current) return;
+        if (result.delivered > 0) onShared?.();
         setNames(""); setRefresh((value) => value + 1);
         setNotice(result.delivered === 0 ? "没有送达任何人：名字没有对上，或对方现在不能接收。"
           : result.notDelivered > 0 ? `已发给 ${result.delivered} 位；其余 ${result.notDelivered} 位没有送达（名字没有对上，或对方不能接收）。` : `已发给 ${result.delivered} 位。`);
@@ -102,9 +114,9 @@ export function CapsuleSharePanel({ capsuleId, card, excludeEntryIds }: { capsul
     <div className="space-y-2">
       <Button variant="secondary" disabled={busy || !capsuleId} onClick={() => void perform(async () => {
         if (!capsuleId) return;
-        const options = { ...(card ? { card } : {}), ...(excludeEntryIds?.length ? { excludeEntryIds } : {}) };
+        const options = { ...(card ? { card } : {}), ...(excludeEntryIds?.length ? { excludeEntryIds } : {}), ...(scopes ? { scopes } : {}), ...(includePrivateEntries?.length ? { includePrivateEntries } : {}) };
         const made = await (Object.keys(options).length ? createShareLink(capsuleId, options) : createShareLink(capsuleId));
-        if (mounted.current) { setCreated(`${window.location.origin}${made.path}`); setRefresh((value) => value + 1); }
+        if (mounted.current) { onShared?.(); setCreated(`${window.location.origin}${made.path}`); setRefresh((value) => value + 1); }
       })}>创建分享链接</Button>
       {created && <div className="space-y-1">
         <p className="text-ui text-text">链接只显示这一次，请现在复制：</p>

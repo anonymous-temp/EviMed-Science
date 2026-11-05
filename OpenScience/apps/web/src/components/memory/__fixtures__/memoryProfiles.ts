@@ -47,7 +47,7 @@ export function nativeProfileLine(line: string, patch: Partial<WebStructuredMemo
   } as WebStructuredMemory;
 }
 
-const empty = { profile: [], preference: [], behavior: [], project_fact: [], analysis: [], decision: [], correction: [], follow_up: [], run_summary: [] };
+const empty = { person: [], note: [], profile: [], preference: [], behavior: [], project_fact: [], analysis: [], decision: [], correction: [], follow_up: [], run_summary: [] };
 
 /** A person's memory: a profile document of three lines, files for the other kinds. */
 export const nativeProfile: WebMemoryProfile = {

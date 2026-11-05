@@ -14,7 +14,7 @@ const StarCanvas = lazy(() => import("./StarCanvas"));
 
 /** Literal, so the stylesheet's scan finds each colour. */
 const FAMILY_DOT: Readonly<Record<StarFamily, string>> = {
-  about: "bg-star-about", preference: "bg-star-preference", correction: "bg-star-correction", fact: "bg-star-fact",
+  person: "bg-star-entity", note: "bg-star-document", about: "bg-star-about", preference: "bg-star-preference", correction: "bg-star-correction", fact: "bg-star-fact",
   decision: "bg-star-decision", method: "bg-star-method", document: "bg-star-document", entity: "bg-star-entity",
 };
 

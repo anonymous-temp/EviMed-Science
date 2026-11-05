@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { CAPSULE_FACT_KINDS } from "@evimed/domain";
+import { CAPSULE_FACT_KINDS, privateByDefault } from "@evimed/domain";
 import { AGENT_RECALL_MAX_CAPSULES, AGENT_RECALL_METHOD_MODES, nativeRecallSource, recallForAgent } from "./agentMemoryRecall.mjs";
 import { memoryBoard, methodAction, methodDetail, noteAction, recordAction } from "./agentMemoryBoard.mjs";
 import { OBSERVATION_FIELDS, readObservation } from "./agentMemoryObservations.mjs";
@@ -307,7 +307,7 @@ export function createAgentMemoryRoutes({
     if (action === "records" && method === "GET") {
       requireScope("memory.read");
       const allowedScopes = new Set(["user", "project", "session", "organization"]);
-      const allowedKinds = new Set(["profile", "preference", "behavior", "project_fact", "analysis", "decision", "correction", "follow_up", "run_summary"]);
+      const allowedKinds = new Set(["profile", "person", "note", "preference", "behavior", "project_fact", "analysis", "decision", "correction", "follow_up", "run_summary"]);
       const allowedStatuses = new Set(["active", "pending", "superseded", "archived"]);
       const filters = (/** @type {string} */ name, /** @type {Set<string>} */ allowed) => url.searchParams.getAll(name)
         .flatMap((value) => value.split(","))
@@ -323,9 +323,10 @@ export function createAgentMemoryRoutes({
       const found = statuses.length && !statuses.includes("active") ? [] : await native.listRecords(user.id, {
         scopes: filters("scope", allowedScopes), kinds: filters("kind", allowedKinds), scopeId,
         query: url.searchParams.get("query") ?? "",
+        allowRecord: (record) => !privateByDefault(record),
         pageSize: Math.max(1, Math.min(200, Number(url.searchParams.get("pageSize") ?? 50))),
       });
-      sendJson(res, 200, { data: found });
+      sendJson(res, 200, { data: found.filter((record) => !privateByDefault(record)).slice(0, Math.max(1, Math.min(200, Number(url.searchParams.get("pageSize") ?? 50)))) });
       return true;
     }
 
@@ -418,6 +419,7 @@ export function createAgentMemoryRoutes({
       const native = await nativeFor(user);
       if (identity.projectId) {
         const existing = await /** @type {any} */ (native).getRecord(user.id, record.id);
+        if (privateByDefault(existing)) throw new HttpError(404, "memory_not_found", "No such memory.");
         if (existing.scope !== "project" || existing.scopeId !== identity.projectId) throw new HttpError(403, "agent_key_project_denied", "This memory belongs to a different scope.");
       }
       const outcome = await recordAction({ nativeMemory: native }, user, record.id, act, body);
@@ -451,6 +453,7 @@ export function createAgentMemoryRoutes({
       if (!user) throw new HttpError(404, "note_not_found", "No such proposed note.");
       if (identity.projectId) {
         const existing = await capsules.documents.get(user.id, "fact", note.id);
+        if (privateByDefault(existing)) throw new HttpError(404, "note_not_found", "No such proposed note.");
         if (!existing || existing.projectId !== identity.projectId) throw new HttpError(403, "agent_key_project_denied", "This note belongs to a different project.");
       }
       const changed = await noteAction({ capsules, memorySettings, nativeMemory }, user, note.id, note.act, body);

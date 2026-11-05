@@ -1,3 +1,4 @@
+import { privateByDefault } from "@evimed/domain";
 import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -24,7 +25,7 @@ const MAX_ENTRIES = 100;
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 const WORKSTYLE = ["method_preference", "writing_style", "preference", "tooling"];
 const PROFILE = ["profile", "behavior", "expertise"];
-const KNOWLEDGE = ["project_fact", "analysis", "decision", "stance", "tension", "correction", "follow_up"];
+const KNOWLEDGE = ["project_fact", "analysis", "decision", "stance", "tension", "correction", "follow_up", "note"];
 const digest = value => createHash("sha256").update(value).digest("hex");
 const invalid = () => new HttpError(400, "capsule_transfer_invalid", "The capsule transfer is invalid or unsupported.");
 function fields(value, allowed) {
@@ -40,12 +41,23 @@ function scopesOf(value = ["workstyle"]) {
     || value.some(scope => !["workstyle", "+profile", "+knowledge"].includes(scope))) throw invalid();
   return value;
 }
-function kindsFor(scopes) { return [...WORKSTYLE, ...(scopes.includes("+profile") ? PROFILE : []), ...(scopes.includes("+knowledge") ? KNOWLEDGE : [])]; }
-/**
- * Entries the sender unticked, by the ids the preview gave them (`fact:`, `method:` or `native:` and the source's own id).
- * An id that matches nothing any more is not an error: what is left out is what the sender looked at, and the pack changes under them.
- * @param {unknown} value @returns {Set<string>}
- */
+function kindsFor(scopes) { return ["person", ...WORKSTYLE, ...(scopes.includes("+profile") ? PROFILE : []), ...(scopes.includes("+knowledge") ? KNOWLEDGE : [])]; }
+/** Per-share consent binds an owned native entry to its complete source bytes.
+ * @param {unknown} value @returns {Map<string, string>} */
+function privateSelections(value) {
+  if (value == null) return new Map();
+  if (!Array.isArray(value) || value.length > 100) throw invalid();
+  const selected = new Map();
+  for (const entry of value) {
+    fields(entry, ["id", "sha256"]);
+    if (typeof entry.id !== "string" || !/^native:nm_[a-f0-9]{24}$/.test(entry.id)
+      || typeof entry.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(entry.sha256) || selected.has(entry.id)) throw invalid();
+    selected.set(entry.id, entry.sha256);
+  }
+  return selected;
+}
+
+/** @param {unknown} value @returns {Set<string>} */
 function excludedIds(value) {
   if (value == null) return new Set();
   if (!Array.isArray(value) || value.length > 500 || value.some((id) => typeof id !== "string" || id.length > 100 || !/^(?:fact|method|native):\S+$/.test(id))) throw invalid();
@@ -55,9 +67,10 @@ function excludedIds(value) {
 /**
  * Why a kind of entry is not in the pack, said to the sender in one plain sentence each (no back-office words: what the platform
  * calls an entry's origin is not what a person calls it). The sentence carries its count.
- * @type {Record<"inferred" | "document" | "sensitive" | "received" | "paused", (count: number) => string>}
+ * @type {Record<"inferred" | "document" | "sensitive" | "received" | "paused" | "private", (count: number) => string>}
  */
 const EXCLUDED_TEXT = Object.freeze({
+  private: (count) => `关于其他人的 ${count} 条记忆没有放进来；逐条勾选才会分享。`,
   inferred: (count) => `助手替你记下、你还没有确认或改过的 ${count} 条内容没有放进来。`,
   document: (count) => `从你上传的资料里整理出来的 ${count} 条内容没有放进来。`,
   sensitive: (count) => `你标为敏感的 ${count} 条内容没有放进来。`,
@@ -185,7 +198,7 @@ const CARD_LIMITS = Object.freeze({ title: 150, author: 150, summary: 500, chang
 /** What each kind is called on a card. */
 const CARD_KIND_LABELS = Object.freeze({
   method_preference: "做法", writing_style: "写作偏好", preference: "工作偏好", tooling: "工具习惯",
-  profile: "个人背景", behavior: "工作习惯", expertise: "背景知识",
+  person: "人物", note: "其他记忆", profile: "个人背景", behavior: "工作习惯", expertise: "背景知识",
   project_fact: "项目事实", analysis: "分析", decision: "决定", stance: "立场", tension: "分歧", correction: "经验教训", follow_up: "待办",
 });
 
@@ -361,9 +374,9 @@ export class CapsuleTransferService {
    * (`exclude`) is the same entry at export as it was in the preview. `tally` also counts what the rules keep out, by reason, for
    * the sender's preview: the sentence that says why a thing they remember saying is not in the pack.
    * @param {string} userId @param {string} capsuleId @param {readonly string[]} kinds
-   * @param {{ tally?: boolean, exclude?: ReadonlySet<string> }} [options]
+   * @param {{ tally?: boolean, exclude?: ReadonlySet<string>, includePrivate?: ReadonlyMap<string, string> }} [options]
    */
-  async #assemble(userId, capsuleId, kinds, { tally = false, exclude = new Set() } = {}) {
+  async #assemble(userId, capsuleId, kinds, { tally = false, exclude = new Set(), includePrivate = new Map() } = {}) {
     // Native bytes are hydrated before the database snapshot. These are two stores, not a cross-engine atomic read.
     // Engine failures must remain failures: the account's memory is the engine's, and a pack made while it cannot be read would
     // silently leave the person's own words out. A deployment without the engine has no memory file to carry.
@@ -376,7 +389,7 @@ export class CapsuleTransferService {
       const capsule = await client.query("SELECT revision FROM evimed_product.documents WHERE user_id=$1 AND kind='capsule' AND id=$2 AND deleted_at IS NULL", [productId(userId), productId(capsuleId)]);
       if (!capsule.rows[0]) throw new HttpError(404, "capsule_not_found", "The capsule is unavailable.");
       /** What the rules keep out, by reason (counted only when `tally`). */
-      const held = { inferred: 0, document: 0, sensitive: snapshot?.sensitive ?? 0, received: 0, paused: 0 };
+      const held = { private: 0, inferred: 0, document: 0, sensitive: snapshot?.sensitive ?? 0, received: 0, paused: 0 };
       // A note a run wrote takes effect without anyone approving it, and the
       // researcher who never acted on it has not adopted it: the export promises
       // 「只分享已采用的研究方法与工作偏好 … 运行记录不会随包导出」. So an
@@ -420,22 +433,31 @@ export class CapsuleTransferService {
         for (const row of nativeFacts) {
           if (!kinds.includes(row.payload.factKind)) continue;
           const knowledgeOfProject = row.scope !== "user";
-          if (knowledgeOfProject && !(KNOWLEDGE.includes(row.payload.factKind) && owned.has(row.scopeId) && !isInternalProject(row.scopeId))) continue;
+          if (knowledgeOfProject && !((KNOWLEDGE.includes(row.payload.factKind) || privateByDefault(row.payload)) && owned.has(row.scopeId) && !isInternalProject(row.scopeId))) continue;
           if (knowledgeOfProject && paused.has(row.scopeId)) { held.paused += 1; continue; }
           selectedNative.push(row);
         }
       }
       if (tally) await this.#tallyHeld(client, userId, kinds, held);
       const workstyle = [
-        ...facts.rows.map((row) => ({ ...row, entryId: `fact:${row.id}` })),
+        ...facts.rows.filter((row) => !privateByDefault(row.payload) && row.payload.sensitive !== true).map((row) => ({ ...row, entryId: `fact:${row.id}` })),
         ...methods.rows.map((row) => ({ id: row.id, entryId: `method:${row.id}`, revision: row.revision, payload: {
           factKind: "method_preference", origin: "system", content: learnedMethodText(row.payload) } })),
         ...selectedNative.filter((row) => !KNOWLEDGE.includes(row.payload.factKind)).map((row) => ({ ...row, entryId: `native:${row.id}` })),
       ];
       const knowledge = selectedNative.filter((row) => KNOWLEDGE.includes(row.payload.factKind)).map((row) => ({ ...row, entryId: `native:${row.id}` }));
+      const candidates = [...workstyle, ...knowledge].filter((fact) => privateByDefault(fact.payload));
+      for (const [id, hash] of includePrivate) {
+        const candidate = candidates.find((fact) => fact.entryId === id);
+        if (!candidate || candidate.nativeSource?.sha256 !== hash) {
+          throw new HttpError(409, "capsule_private_selection_changed", "A selected private memory is unavailable or changed. Preview and choose it again.");
+        }
+      }
+      const privateUnticked = candidates.filter((fact) => !includePrivate.has(fact.entryId) || exclude.has(fact.entryId));
+      held.private = privateUnticked.length;
       // What the sender unticked is out before the bound is read: leaving entries out is how a pack that is too big gets small.
-      const unticked = [...workstyle, ...knowledge].filter((fact) => exclude.has(fact.entryId));
-      const ticked = (/** @type {any[]} */ list) => list.filter((fact) => !exclude.has(fact.entryId));
+      const unticked = [...workstyle, ...knowledge].filter((fact) => exclude.has(fact.entryId) || privateUnticked.includes(fact));
+      const ticked = (/** @type {any[]} */ list) => list.filter((fact) => !exclude.has(fact.entryId) && !privateUnticked.includes(fact));
       const kept = ticked(workstyle);
       const room = ticked(knowledge).slice(0, Math.max(0, MAX_ENTRIES + 1 - kept.length));
       return { revision: capsule.rows[0].revision, facts: [...kept, ...room], unticked, held };
@@ -495,7 +517,7 @@ export class CapsuleTransferService {
     const histories = await this.nativeMemory.overlay.revisionsOfMany(userId, files.map((file) => file.uri));
     // A correction lives under `preferences/corrections/` and is a `correction` here (its own kind, in the knowledge scope), never
     // a `preference` for sharing its directory's name.
-    const eligible = records.filter((row) => (!PROJECT_MEMORY_TYPES.includes(row.nativeType) || (row.scope === "project" && Boolean(row.scopeId)))
+    const eligible = records.filter((row) => (["people", "notes"].includes(row.nativeType) || !PROJECT_MEMORY_TYPES.includes(row.nativeType) || (row.scope === "project" && Boolean(row.scopeId)))
       && kinds.includes(row.kind) && row.status === "active" && !row.share
       && ["explicit", "manual"].includes(row.origin) && ["user", "project"].includes(row.scope)
       && row.kind === PAGE_KIND_OF_TYPE[row.nativeType] && row.version === versionOfHash(row.contentHash));
@@ -626,16 +648,16 @@ export class CapsuleTransferService {
    * @param {string} userId @param {string} capsuleId @param {any} input
    */
   async exportPreview(userId, capsuleId, input = {}) {
-    fields(input, ["scopes", "supersedes", "card", "excludeEntryIds"]);
+    fields(input, ["scopes", "supersedes", "card", "excludeEntryIds", "includePrivateEntries"]);
     const scopes = scopesOf(input.scopes ?? undefined);
     const exclude = excludedIds(input.excludeEntryIds);
     await this.assertOwnCapsule(userId, capsuleId);
     const previous = input.supersedes != null ? await this.snapshot(userId, capsuleId, input.supersedes) : null;
-    const source = await this.#assemble(userId, capsuleId, kindsFor(scopes), { tally: true, exclude });
+    const source = await this.#assemble(userId, capsuleId, kindsFor(scopes), { tally: true, exclude, includePrivate: privateSelections(input.includePrivateEntries) });
     /** @param {any} fact @param {boolean} included */
     const entryOf = (fact, included) => {
       const content = String(fact.payload.content ?? "");
-      return { id: fact.entryId, included, factKind: fact.payload.factKind, layer: location(fact.payload.factKind).layer, content, sha256: digest(content),
+      return { id: fact.entryId, included, ...(privateByDefault(fact.payload) ? { requiresSelection: true } : {}), factKind: fact.payload.factKind, layer: location(fact.payload.factKind).layer, content, sha256: privateByDefault(fact.payload) ? fact.nativeSource.sha256 : digest(content),
         origin: CAPSULE_FACT_ORIGINS.includes(fact.payload.origin) ? fact.payload.origin : "inferred" };
     };
     const included = source.facts.slice(0, MAX_ENTRIES).map((fact) => entryOf(fact, true));
@@ -646,7 +668,7 @@ export class CapsuleTransferService {
     return {
       scopes, empty: included.length === 0 && source.unticked.length === 0, tooMany: source.facts.length > MAX_ENTRIES,
       card: included.length ? await this.#card(userId, included, previous, input.card) : null,
-      entries: listed.map(({ sha256: _sha256, ...entry }) => entry),
+      entries: listed.map(({ sha256, ...entry }) => ({ ...entry, ...(entry.requiresSelection ? { sha256 } : {}) })),
       excluded,
     };
   }
@@ -669,7 +691,7 @@ export class CapsuleTransferService {
    * @param {{ accountCreatedAt?: string | null, channel?: "file" | "delivery" | "link" }} [options]
    */
   async export(userId, capsuleId, input, options = {}) {
-    fields(input, ["password", "scopes", "supersedes", "recipients", "recipientNames", "card", "excludeEntryIds"]);
+    fields(input, ["password", "scopes", "supersedes", "recipients", "recipientNames", "card", "excludeEntryIds", "includePrivateEntries"]);
     if (input.password !== undefined) checkedText(input.password, 1024);
     const accountCreatedAt = await this.withAccount(userId, options.accountCreatedAt ?? null);
     const previous = input.supersedes != null ? await this.snapshot(userId, capsuleId, input.supersedes) : null;
@@ -687,7 +709,7 @@ export class CapsuleTransferService {
       if (named.requested > 0) throw new HttpError(400, "capsule_recipient_unknown", "A named recipient is not an account on this deployment.");
       throw invalid();
     }
-    const source = await this.#assemble(userId, capsuleId, kinds, { exclude });
+    const source = await this.#assemble(userId, capsuleId, kinds, { exclude, includePrivate: privateSelections(input.includePrivateEntries) });
     if (!source.facts.length) throw new HttpError(409, "capsule_export_empty", "No approved entries are eligible for these share scopes.");
     if (source.facts.length > MAX_ENTRIES) throw new HttpError(413, "capsule_transfer_too_large", "A snapshot supports at most 100 approved entries.");
     return this.#seal({ userId, accountCreatedAt, capsuleId, scopes, channel, input, previous, source, recipientIds, named });
@@ -702,6 +724,8 @@ export class CapsuleTransferService {
    *   source: { revision: number, facts: any[] }, recipientIds: string[], named: { requested: number, ids: string[] } }} seal
    */
   async #seal({ userId, accountCreatedAt, capsuleId, scopes, channel, input, previous, source, recipientIds, named }) {
+    // Explicit person selection admits only those entries; declare their existing knowledge wire path without adding bulk knowledge.
+    if (source.facts.some((fact) => privateByDefault(fact.payload)) && !scopes.includes("+knowledge")) scopes = [...scopes, "+knowledge"];
     const snapshotId = randomUUID();
     const entries = source.facts.map(fact => {
       const id = randomUUID(); const place = location(fact.payload.factKind); const content = checkedText(fact.payload.content);

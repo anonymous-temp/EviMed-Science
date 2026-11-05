@@ -108,6 +108,8 @@ test("the map reads an account's memory files, what they rest on and how they ch
   await overlay.setSources(user.id, cited, [{ type: "doi", id: DOI }, { type: "knowledge_source", id: SOURCE }]);
   await overlay.markSource(user.id, cited, { type: "doi", id: DOI }, "retracted");
   const habit = seed("preferences/answers.md", "short answers first", { type: "preferences" });
+  const person = seed("people/patient-a.md", "Patient A penicillin allergy", { type: "people" });
+  const note = seed("notes/scheduling.md", "Ordinary appointment note", { type: "notes" });
   const secret = seed("project_facts/secret.md", "never draw this", { type: "project_facts", tags: ["project=default"] });
   await overlay.upsertFile({ userId: user.id, uri: secret, memoryType: "project_facts", sensitive: true, body: "never draw this" });
   seedOther("project_facts/theirs.md", "their private memory", { type: "project_facts" });
@@ -120,6 +122,10 @@ test("the map reads an account's memory files, what they rest on and how they ch
   assert.equal(status, 200);
   const map = body.data;
   const idOf = async (uri) => (await recordOf(base, headers, uri))?.id;
+  for (const [uri, subtype] of [[person, "person"], [note, "note"]]) {
+    const id = await idOf(uri);
+    assert.ok(map.nodes.some(node => node.subtype === subtype && node.open?.kind === "record" && node.open.id === id), "owner map marks open their own people/note record");
+  }
   assert.ok(!map.nodes.some((node) => node.label === "never draw this"), "a sensitive memory is not a mark");
   assert.ok(!JSON.stringify(map).includes("never draw this"));
   assert.ok(!JSON.stringify(map).includes("their private memory"), "another account's memory is not reachable");
@@ -133,7 +139,7 @@ test("the map reads an account's memory files, what they rest on and how they ch
   assert.equal(node(plainId).state, "current");
   assert.deepEqual(node(citedId).open, { kind: "record", id: citedId });
   assert.equal(map.summary.needsLook, 1);
-  assert.equal(map.summary.memories, 3, "the three files that may be drawn");
+  assert.equal(map.summary.memories, 5, "ordinary files, the person and the note may all be drawn for the owner");
 
   const edge = (from, to, type) => map.edges.find((entry) => entry.from === from && entry.to === to && entry.type === type);
   assert.equal(edge(`memory:${citedId}`, `reference:doi:${DOI}`, "rests-on")?.state, "retracted");

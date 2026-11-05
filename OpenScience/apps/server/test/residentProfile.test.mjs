@@ -366,3 +366,8 @@ test("a dispatch does not wait on a card the engine is slow to give: past the de
   assert.equal(cardOutcome("read"), 1);
 });
 
+
+test("other people cannot become the owner's opening profile", () => {
+ const rendered = renderResidentProfile({capsuleFacts:[fact({factKind:"person",content:"Patient A allergy"}),fact({factKind:"note",content:"Ordinary separate note"}),fact({factKind:"profile",content:"Owner profession"})]});
+ assert.ok(!rendered.profile.includes("Patient A")); assert.ok(!rendered.profile.includes("Ordinary separate")); assert.ok(rendered.profile.includes("Owner profession"));
+});

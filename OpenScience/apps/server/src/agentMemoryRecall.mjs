@@ -42,7 +42,7 @@
 import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 
-import { cleanMethodDisplay } from "@evimed/domain";
+import { cleanMethodDisplay, privateByDefault } from "@evimed/domain";
 
 import { MAX_MOUNTED_CAPSULE_METHODS, MAX_MOUNTED_CAPSULE_METHOD_BYTES, selectCapsuleMethods } from "./capsuleMethods.mjs";
 import { MAX_MOUNTED_LEARNED_METHODS, selectLearnedMethods } from "./learnedMethodMount.mjs";
@@ -78,7 +78,7 @@ export function nativeRecallSource(nativeMemory, { recallEnabled = true } = {}) 
     async recall(userId, query, { projectId = null } = {}) {
       const found = await nativeMemory.search(userId, query);
       return (found.items ?? [])
-        .filter((record) => record.sensitive !== true && record.status === "active"
+        .filter((record) => !privateByDefault(record) && record.sensitive !== true && record.status === "active"
           && (record.scope === "user" || (record.scope === "project" && projectId != null && record.scopeId === projectId)))
         .slice(0, NATIVE_RECALL_READ)
         .map((record) => ({
@@ -210,11 +210,17 @@ export async function recallForAgent({ capsules, memory = null, learning = null 
   const named = ids ? await namedCapsules(capsules, user, institution, ids) : null;
   const titles = new Map((named ?? []).map((capsule) => [capsule.id, capsule.title]));
 
+  const externalCapsules = capsules ? {
+    async recall(...args) {
+      const found = await capsules.recall(...args);
+      return { ...found, items: (found.items ?? []).filter((item) => !privateByDefault(item) && item.sensitive !== true) };
+    },
+  } : null;
   /** @type {{ items: any[], mode: string, contextOnly: true, sources: { memory: number, capsule: number } }} */
   let recalled;
   if (!named) {
     recalled = user
-      ? /** @type {any} */ (await recallAcrossMemory({ capsules, memory }, user, { ...input, limit }))
+      ? /** @type {any} */ (await recallAcrossMemory({ capsules: externalCapsules, memory }, user, { ...input, limit }))
       : { items: [], mode: "none", contextOnly: true, sources: { memory: 0, capsule: 0 } };
   } else {
     const scope = input.scope ?? "all";
@@ -239,7 +245,7 @@ export async function recallForAgent({ capsules, memory = null, learning = null 
           selection: named.filter((capsule) => capsule.ownerId === ownerId).map((capsule) => ({ capsuleId: capsule.id, mode: "named" })),
         });
         mode = typeof found?.mode === "string" ? found.mode : mode;
-        capsuleItems.push(...(found?.items ?? []).map((/** @type {any} */ item) => ({ ...item, source: "capsule", contextOnly: true })));
+        capsuleItems.push(...(found?.items ?? []).filter((item) => !privateByDefault(item) && item.sensitive !== true).map((/** @type {any} */ item) => ({ ...item, source: "capsule", contextOnly: true })));
       }
     }
     recalled = {
