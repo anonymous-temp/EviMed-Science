@@ -269,6 +269,22 @@ export class OpenVikingEngine {
         state = "installed-now";
       }
       if (installed == null) { skills[name] = { state: "missing" }; ok = false; code ||= "openviking_skill_missing"; continue; }
+      // A pin move leaves the previous pin's bytes in the engine (2026-11-05: v0.5.1.1's llm-wiki stayed after the move to
+      // v0.5.3, and knowledge read degraded until it was replaced by hand). Bytes a former pin installed are ours to replace;
+      // anything else that differs is someone's edit and is reported, not overwritten.
+      const replaces = this.pin.skills?.[name]?.replacesInstalledSha256;
+      if (installed !== pinned && Array.isArray(replaces) && replaces.includes(installed)) {
+        const text = await this.readSkill(name);
+        if (sha256(text) === String(this.pin.skills?.[name]?.upstreamSha256 ?? "")) {
+          await this.client.request({
+            method: "PUT", path: `/api/v1/skills/${encodeURIComponent(name)}`, openVikingUser: OPENVIKING_ENGINE_USER,
+            body: { data: text, target_uri: OPENVIKING_SKILLS_ROOT, wait: true }, timeoutMs: 60_000,
+          });
+          this.counters.skillInstalls += 1;
+          installed = await this.#installedSkillDigest(name);
+          state = "updated-now";
+        }
+      }
       if (installed !== pinned) { skills[name] = { state: "drifted", sha256: installed }; ok = false; code ||= "openviking_skill_drifted"; continue; }
       skills[name] = { state, sha256: installed };
     }

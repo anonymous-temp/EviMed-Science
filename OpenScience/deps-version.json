@@ -115,7 +115,10 @@
         "source": "openviking/system_assets/compile/example-skills/llm-wiki/SKILL.md",
         "gitBlob": "d44f09c8257e14dbc822de0dc960464a6fdac4ca",
         "upstreamSha256": "cec88d07fcd6fa397a6b9736e83259093d503eecdd711fd7317e406e11ec9d79",
-        "installedSha256": "e87a04c9342776810460946396a6f752704fc73d597c1c96e53e998f0be327c3"
+        "installedSha256": "e87a04c9342776810460946396a6f752704fc73d597c1c96e53e998f0be327c3",
+        "replacesInstalledSha256": [
+          "159f1fcb688c5f256e9827fc43b8301186d083e090aa359de9db20f3b74543c5"
+        ]
       },
       "knowledge-graph": {
         "source": "examples/compile/ov-compile-skills/knowledge-graph/SKILL.md",

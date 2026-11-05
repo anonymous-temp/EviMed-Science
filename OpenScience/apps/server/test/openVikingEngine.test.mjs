@@ -304,6 +304,27 @@ test("the compile identity is proven once per engine version: a full run of the 
   assert.ok(!second.seen.some((request) => String(request.path ?? request.url ?? request).includes("/api/v1/compile")));
 });
 
+test("a former pin's skill bytes are replaced with the pinned ones; nothing else is", async () => {
+  // 2026-11-05: v0.5.1.1's llm-wiki stayed in the engine after the move to v0.5.3 and the knowledge feature read degraded.
+  const old = Buffer.from("---\nname: llm-wiki\ndescription: the previous pin's bytes\n---\nold\n");
+  const { fetchImpl, seen } = await replay("engine-check-ready");
+  let replaced = false;
+  const serving = async (url, init) => {
+    const target = new URL(url);
+    if (init.method === "PUT" && target.pathname === "/api/v1/skills/llm-wiki") { replaced = true; return new Response(JSON.stringify({ status: "ok", result: { status: "success" } }), { status: 200 }); }
+    if (!replaced && target.pathname === "/api/v1/content/download" && String(target.searchParams.get("uri")).endsWith("/llm-wiki/SKILL.md")) return new Response(old, { status: 200 });
+    return fetchImpl(url, init);
+  };
+  const formerPin = { ...pin, skills: { ...pin.skills, "llm-wiki": { ...pin.skills["llm-wiki"], replacesInstalledSha256: [createHash("sha256").update(old).digest("hex")] } } };
+  const client = new OpenVikingClient({ openVikingUrl: "http://engine.recorded", openVikingApiKey: "root-key-stand-in", openVikingAccount: "evimed", openVikingRequestTimeoutMs: 5_000 }, { fetchImpl: serving });
+  const engine = new OpenVikingEngine({ client, config: { openVikingModelKey: "a-service-key-of-credential-length-0123" }, pin: formerPin, now: () => new Date("2026-10-13T02:00:00.000Z"), wait: async () => {} });
+  const status = await engine.check();
+  assert.equal(replaced, true, "the former pin's bytes were left in place");
+  assert.equal(status.facts.skills.skills["llm-wiki"].state, "updated-now");
+  assert.equal(status.facts.skills.skills["llm-wiki"].sha256, pin.skills["llm-wiki"].installedSha256);
+  assert.ok(!seen.some((request) => request.method === "POST" && request.path === "/api/v1/skills"), "a replacement is not an install");
+});
+
 test("a skill whose stored bytes are not the pinned ones is reported and left alone", async () => {
   // Somebody put it there. Replacing it is an operator's decision; compiling with it is nobody's.
   let served = 0;
