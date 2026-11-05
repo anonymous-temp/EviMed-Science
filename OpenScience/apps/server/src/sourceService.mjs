@@ -1198,16 +1198,21 @@ export class SourceService {
   }
 
   async consumeRunCancellation(job, cancel) {
-    return this.withSourceLease(job, async (source, client) => {
-      const run = (source.payload.pendingRunCancellations ?? []).find(item => item.id === job.payload.run?.id
-        && item.sessionId === job.payload.run?.sessionId && item.dispatchId === job.payload.run?.dispatchId);
-      if (!run) return { sourceId: source.id, canceled: false, reason: "already_canceled" };
+    const matches = (/** @type {any} */ source) => (source.payload.pendingRunCancellations ?? []).find((/** @type {any} */ item) => item.id === job.payload.run?.id
+      && item.sessionId === job.payload.run?.sessionId && item.dispatchId === job.payload.run?.dispatchId);
+    // The runtime is told outside any lease transaction; the pending entry is removed in a second lease that checks again.
+    const run = await this.withSourceLease(job, async source => matches(source) ?? null);
+    if (run) {
       await cancel({ userId: job.userId, projectId: job.projectId, runId: run.id, sessionId: run.sessionId, dispatchId: run.dispatchId,
         workspaceName: run.workspaceName, artifactDirectory: run.artifactDirectory });
+    }
+    return this.withSourceLease(job, async (source, client) => {
+      const pending = matches(source);
+      if (!pending) return run ? { sourceId: source.id, canceled: true, runId: run.id } : { sourceId: source.id, canceled: false, reason: "already_canceled" };
       await this.documents.put(job.userId, "source", source.id, { ...source.payload,
-        pendingRunCancellations: source.payload.pendingRunCancellations.filter(item => item.sessionId !== run.sessionId || item.dispatchId !== run.dispatchId) },
+        pendingRunCancellations: source.payload.pendingRunCancellations.filter((/** @type {any} */ item) => item.sessionId !== pending.sessionId || item.dispatchId !== pending.dispatchId) },
       { expectedRevision: source.revision, projectId: source.projectId, transactionClient: client });
-      return { sourceId: source.id, canceled: true, runId: run.id };
+      return { sourceId: source.id, canceled: true, runId: pending.id };
     }, false, true);
   }
 
@@ -2286,12 +2291,21 @@ export class SourceService {
   }
 
   /** Under the job's lease, while the source is being read or its understanding is still to come.
+   * The lease is checked in a short transaction before and again after `operation`; the operation itself runs with no
+   * transaction open. It reserves runtimes, dispatches prompts and writes files, which take registration locks, pool
+   * connections and the project's storage mutex: held inside the lease transaction (the job and source rows) those waits
+   * formed a cycle PostgreSQL cannot see, with a registration that holds the lock and waits for the rows (2026-11-05).
+   * A deletion or replacement that lands meanwhile fails the check after, and the worker's attempt cleanup owns the leftovers.
    * @param {any} job @param {()=>Promise<any>} operation */
   async withIngestionLease(job, operation) {
-    return this.withSourceLease(job, source => {
+    const check = () => this.withSourceLease(job, source => {
       if (source.payload.status !== "parsing" && !understandingPending(source.payload)) throw new HttpError(409, "source_state_conflict", "The source is no longer being parsed.");
-      return operation();
+      return null;
     });
+    await check();
+    const result = await operation();
+    await check();
+    return result;
   }
 
   /** The worker's metadata and bytes share the same durable authority boundary.
@@ -2319,7 +2333,7 @@ export class SourceService {
    * @param {any} job @param {()=>Promise<any>} operation */
   async withAttemptCleanup(job, operation) {
     if (typeof job.leaseToken !== "string" || !job.leaseToken || job.payload?.action != null) throw new HttpError(400, "source_job_invalid", "Invalid source cleanup attempt.");
-    return this.documents.database.transaction(async client => {
+    await this.documents.database.transaction(async client => {
       const account = await client.query("SELECT created_at::text AS generation FROM evimed_control.users WHERE id=$1 FOR SHARE", [job.userId]);
       const generation = account.rows[0]?.generation;
       if (!generation || (job.payload.accountCreatedAt && job.payload.accountCreatedAt !== generation)) throw new HttpError(409, "source_account_changed", "The source cleanup account changed.");
@@ -2328,8 +2342,10 @@ export class SourceService {
       if (!owned.rowCount) throw new HttpError(409, "product_job_lease_lost", "The source cleanup job is no longer owned.");
       const source = await client.query("SELECT 1 FROM evimed_product.documents WHERE user_id=$1 AND kind='source' AND id=$2 AND project_id=$3 FOR SHARE", [job.userId, job.payload.sourceId, job.projectId]);
       if (!source.rowCount) throw new HttpError(409, "source_generation_stale", "The source cleanup target no longer exists.");
-      return operation();
+      return null;
     });
+    // Outside the transaction (the share locks above are released): the operation may end runtimes and take other locks.
+    return operation();
   }
 
   /** @param {any} job @param {(job:any,source:any,jobIds:string[])=>Promise<void>} cleanup */
@@ -2338,10 +2354,15 @@ export class SourceService {
       || !job.payload.accountCreatedAt || !Number.isSafeInteger(job.payload.sourceGeneration) || !Number.isSafeInteger(job.payload.deletionRevision)) {
       throw new HttpError(400, "source_job_invalid", "Source deletion requires a complete owned job identity.");
     }
-    return this.withSourceLease(job, async (source, client) => {
+    // Read what the cleanup needs in one short lease, run it (it cancels runs and removes files) with nothing held, then
+    // record the completion in a second lease that checks everything again.
+    const owned = await this.withSourceLease(job, async (source, client) => {
       const associated = await client.query(`SELECT id FROM evimed_product.jobs WHERE user_id=$1 AND project_id=$2 AND kind='ingest'
         AND payload->>'sourceId'=$3 AND payload->>'action' IS DISTINCT FROM 'source-delete' ORDER BY id`, [job.userId, job.projectId, source.id]);
-      await cleanup(job, source, associated.rows.map(row => row.id));
+      return { source, ids: associated.rows.map(row => row.id) };
+    }, true);
+    await cleanup(job, owned.source, owned.ids);
+    return this.withSourceLease(job, async (source, client) => {
       const payload = { ...source.payload, deletion: { ...source.payload.deletion, status: "complete", error: null, completedAt: this.now().toISOString() } };
       const updated = await client.query(`UPDATE evimed_product.documents SET payload=$3::jsonb,revision=revision+1,updated_at=clock_timestamp()
         WHERE user_id=$1 AND kind='source' AND id=$2 RETURNING *`, [job.userId, source.id, JSON.stringify(payload)]);
