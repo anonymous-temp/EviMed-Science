@@ -8005,10 +8005,10 @@ export class RuntimeManager {
    * loopback for exactly this reason — out of reach of a remote caller.
    *
    * @param {Record<string, any>} project
-   * @param {{opening?: boolean}} [options] explicit module opens may yield idle connected runtimes
+   * @param {{opening?: boolean, sessionId?: string}} [options] explicit module opens may yield idle connected runtimes; `sessionId` asks the kernel for that id (idempotent for the same workspace)
    * @returns {Promise<{ id: string, kernel: string }>}
    */
-  async createRuntimeSession(project, { opening = false } = {}) {
+  async createRuntimeSession(project, { opening = false, sessionId = undefined } = {}) {
     this.assertInteractiveRuntimeAvailable(project);
     const runtime = await this.start(project, { opening });
     if (runtime.modelGatewayScope) this.assertInteractiveRuntimeAvailable(project);
@@ -8021,7 +8021,7 @@ export class RuntimeManager {
           // directory still makes the session, by cwd as before: the partial result stands.
           const workspaceId = await this.kernelWorkspaceId(runtime, project, cwd, signal);
           return this.callKernel(runtime, project, "session/create", {
-            request: { ...(workspaceId ? { workspaceId } : { cwd }), agentPreset: EVIMED_AGENT_PRESET },
+            request: { ...(workspaceId ? { workspaceId } : { cwd }), agentPreset: EVIMED_AGENT_PRESET, ...(sessionId ? { sessionId } : {}) },
           }, signal);
         },
         "runtime_session_create_failed",

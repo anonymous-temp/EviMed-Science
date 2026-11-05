@@ -3117,7 +3117,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     report: code => process.stderr.write(`geo article results: ${code}\n`) });
   if (productDocuments && sharedContextPolicies) geoNativeAuthority = new GeoNativeAuthority({ store: geo?.store ?? new GeoStore({database:productDatabase}), accounts: store, service: geo?.service ?? null, documents: productDocuments,
       results: null, runs: async project => { const owner = await store.userById(project.userId); return owner ? agentRuns.list(await store.requireProject(owner, project.projectId)) : []; },
-      createSession: project => runtimeManager.createRuntimeSession(project, { opening: true }),
+      createSession: (project, options = {}) => runtimeManager.createRuntimeSession(project, { opening: true, ...options }),
       adoptSession: (/** @type {any} */ identity) => existingGeoConversation(identity),
       // A read never starts a runtime: a session is listed only by the runtime already running, and any failure reads as "not now".
       sessionListed: async (project, sessionId) => authorizeOwnedNativeSession(await store.userById(project.userId), project, sessionId).then(() => true, () => false),
