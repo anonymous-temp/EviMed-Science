@@ -7,7 +7,7 @@ import { ownTurnStarts, rootSessionOf } from './runTurnIdentity.mjs';
 /** Select only the exact run's native turns and receipt-owned child work.
  * Missing ownership or fork-seed metadata is absence of learning evidence,
  * never permission to read every earlier turn. No timestamp heuristic.
- * @param {{header?:any,messages?:readonly any[],seedEndSeq?:number,sessionId?:string}|null|undefined} transcript
+ * @param {{header?:any,messages?:readonly any[],seedEndSeq?:number,sessionId?:string,exhausted?:boolean}|null|undefined} transcript
  * @param {any} run @returns {ScopedRunTranscript} */
 export function scopeRunTranscript(transcript, run) {
   const { sessionId, messages: rawRoot } = rootSessionOf(transcript, run);
@@ -18,7 +18,8 @@ export function scopeRunTranscript(transcript, run) {
   /** @type {RunTurnScope} */
   const runScope = { schema: 'run-turn-scope/1', runId: typeof run?.id === 'string' ? run.id : null,
     rootSessionId: sessionId, available: false, reason: 'turn_identity_unavailable', rootTurnStarts: /** @type {number[]} */ ([]),
-    childSessionIds: /** @type {string[]} */ ([]), unverifiedChildSessionIds: /** @type {string[]} */ ([]), partial: false };
+    childSessionIds: /** @type {string[]} */ ([]), unverifiedChildSessionIds: /** @type {string[]} */ ([]),
+    partial: transcript?.header?.completeness === 'partial' || transcript?.exhausted === false };
   /** @param {string} reason @returns {ScopedRunTranscript} */
   const empty = reason => ({ ...transcript, messages: [], runScope: { ...runScope, reason } });
   if (!sessionId || records.length > 64) return empty('session_scope_unavailable');
@@ -28,6 +29,7 @@ export function scopeRunTranscript(transcript, run) {
   if (typeof transcript?.header?.runId === 'string' && run?.id && transcript.header.runId !== run.id) return empty('captured_run_mismatch');
   const liveSeed = transcript?.seedEndSeq;
   if (transcript && Object.hasOwn(transcript, 'seedEndSeq') && (typeof liveSeed !== 'number' || !Number.isSafeInteger(liveSeed) || liveSeed < -1)) return empty('root_seed_scope_unavailable');
+  if (!transcript?.header && transcript?.exhausted === false && liveSeed === undefined) return empty('root_seed_scope_unavailable');
   const rootSeed = rootRecord?.seedEndSeq ?? (typeof liveSeed === 'number' && Number.isSafeInteger(liveSeed) ? liveSeed : -1);
   const root = rawRoot.filter(row => row?.seeded !== true && (rootSeed < 0 || Number.isSafeInteger(row?.seq) && row.seq > rootSeed));
   /** @type {any[]} */
@@ -68,5 +70,5 @@ export function scopeRunTranscript(transcript, run) {
   });
   return { ...transcript, messages, runScope: { ...runScope, available: true, reason: null,
     rootTurnStarts: [...turns].sort((a, b) => a - b), childSessionIds: [...children.keys()].sort(),
-    partial: runScope.unverifiedChildSessionIds.length > 0 || transcript?.header?.completeness === 'partial' } };
+    partial: runScope.unverifiedChildSessionIds.length > 0 || transcript?.header?.completeness === 'partial' || transcript?.exhausted === false } };
 }

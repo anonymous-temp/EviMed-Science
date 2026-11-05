@@ -422,7 +422,7 @@ test("a script lesson is shown the program that recurred, with how often and the
     dispatch: async (request) => { dispatched.push(request); return { runId: "lr_1", sessionId: "ls_1", dispatchId: request.dispatchId }; },
     readResult: async () => ({ status: "running" }),
   });
-  const payload = { runId: stored.id, trigger: "script", scope: "conversation", scriptHash: "a".repeat(32), runs: 3, conversations: 2, dispatchKey: "a".repeat(32) };
+  const payload = { runId: stored.id, trigger: "script", scriptEvidenceGeneration: "scoped-v1", scope: "conversation", scriptHash: "a".repeat(32), runs: 3, conversations: 2, dispatchKey: "a".repeat(32) };
   await make(scripts.exemplars).execute({ project, run: stored, job: { userId: "u1", projectId: "p", payload } });
   assert.equal(dispatched[0].input.scripts.exemplars.length, 2);
   assert.match(dispatched[0].question, /Distil at most one reusable method/);
@@ -455,7 +455,7 @@ test('a queued script lesson rechecks proven recurrence rather than trusting old
     scriptUses: { lesson: async () => ({ runs: 1, conversations: 1, exemplars: [{ runId: 'r', source: 'print(1)' }] }) },
     dispatch: async () => { dispatched++; return { runId: 'generated', sessionId: 'generated' }; }, readResult: async () => ({ status: 'running' }) });
   await assert.rejects(() => distiller.execute({ project: { id: 'p', userId: 'u', rootDir: '/nonexistent', metaDir: '/nonexistent' },
-    run: { id: 'r' }, job: { userId: 'u', projectId: 'p', payload: { trigger: 'script', scriptHash: 'a'.repeat(32), runs: 50, conversations: 20 } } }), { code: 'distillation_run_unavailable' });
+    run: { id: 'r' }, job: { userId: 'u', projectId: 'p', payload: { trigger: 'script', scriptEvidenceGeneration: 'scoped-v1', scriptHash: 'a'.repeat(32), runs: 50, conversations: 20 } } }), { code: 'distillation_run_unavailable' });
   assert.equal(dispatched, 0);
 });
 

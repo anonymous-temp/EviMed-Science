@@ -6,7 +6,8 @@ import { scopeRunTranscript } from '@evimed/domain';
 /** @param {any} run @param {readonly any[]} sessions
  * @param {{ownedChildSessionIds?:string[],childTurnOwnership?:readonly any[]}} [options] */
 export function collectedRunScope(run, sessions, { ownedChildSessionIds = [], childTurnOwnership = [] } = {}) {
-  const metadata = new Map(), records = [], claimed = new Set(ownedChildSessionIds), malformed = new Set();
+  const metadata = new Map(), records = [], claimed = new Set([...ownedChildSessionIds,
+    ...sessions.filter(session => session.parentSessionId != null).map(session => session.sessionId)]), malformed = new Set();
   const accepted = childTurnOwnership.filter(row => row?.schema === 'child-run-turns/1' && row.runId === run.id
     && row.rootSessionId === run.sessionId && typeof row.sessionId === 'string' && Array.isArray(row.turnStartSeqs)
     && row.turnStartSeqs.length <= 4096 && row.turnStartSeqs.every(seq => Number.isSafeInteger(seq) && seq >= 0));
@@ -17,7 +18,7 @@ export function collectedRunScope(run, sessions, { ownedChildSessionIds = [], ch
       || sourceMessages.some(message => typeof message?.sessionId === 'string' && message.sessionId !== session.sessionId);
     if (wrongScope) malformed.add(session.sessionId);
     const knownSeed = !wrongScope && Number.isSafeInteger(transcript?.seedEndSeq) && transcript.seedEndSeq >= -1
-      ? transcript.seedEndSeq : !wrongScope && transcript && !Object.hasOwn(transcript, 'seedEndSeq') && !transcript.truncated && !session.error ? -1 : undefined;
+      ? transcript.seedEndSeq : !wrongScope && transcript && !Object.hasOwn(transcript, 'seedEndSeq') && transcript.exhausted !== false && !transcript.truncated && !session.error ? -1 : undefined;
     /** @type {{seedEndSeq?:number,runTurnOwnership?:{schema:string,runId:string,turnStartSeqs:number[]}}} */
     const extra = { ...(knownSeed === undefined ? {} : { seedEndSeq: knownSeed }) };
     const receipts = session.sessionId === run.sessionId ? [] : accepted.filter(row => row.sessionId === session.sessionId);
@@ -36,7 +37,7 @@ export function collectedRunScope(run, sessions, { ownedChildSessionIds = [], ch
   const root = sessions.find(session => session.sessionId === run.sessionId);
   const selected = scopeRunTranscript({ sessionId: root?.transcript?.sessionId ?? run.sessionId,
     header: { runId: run.id, sessions: records, runChildSessionIds: [...claimed],
-      completeness: sessions.some(session => session.error || session.transcript?.truncated) ? 'partial' : 'complete' }, messages }, run);
+      completeness: sessions.some(session => session.error || session.transcript?.truncated || session.transcript?.exhausted === false) ? 'partial' : 'complete' }, messages }, run);
   const bySession = new Map();
   for (const message of selected.messages) { const rows = bySession.get(message.sessionId) ?? []; rows.push(message); bySession.set(message.sessionId, rows); }
   return { scope: selected.runScope, metadata, ownedChildSessionIds: [...claimed],

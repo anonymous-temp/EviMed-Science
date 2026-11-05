@@ -159,6 +159,7 @@ function toolSequence(calls) {
  * @property {string[]} tools
  * @property {{ status: string, repaired: boolean }} outcome
  * @property {{ sensitive: number }} dropped
+ * @property {import('./runTurnScope.mjs').RunTurnScope} runScope
  */
 
 /**
@@ -273,5 +274,6 @@ export function trajectoryDigest(transcript, run, options = {}) {
     tools,
     outcome: { status: String(run?.status ?? 'unknown'), repaired: rounds > 0 || (Number(options.attempts) || 0) > 1 || (Number(run?.attempts) || 0) > 1 },
     dropped: { sensitive },
+    runScope: scoped.runScope,
   }
 }

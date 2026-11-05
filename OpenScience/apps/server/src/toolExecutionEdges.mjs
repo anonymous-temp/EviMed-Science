@@ -314,9 +314,11 @@ export function tracePath(project, runId) {
 export async function persistToolTraces({ project, run, sessions, childTurnOwnership = [] }) {
   const selected = collectedRunScope(run, sessions, { childTurnOwnership });
   const traces = toolTraces({ runId: run.id, sessions: selected.sessions });
+  const turnScopes = selected.sessions.map(session => ({ sessionId: session.sessionId,
+    turnStartSeqs: [...new Set(session.transcript.messages.map(message => message.turnStartSeq))] }));
   const absolute = tracePath(project, run.id);
   const text = `${JSON.stringify({ schemaVersion: TOOL_TRACE_SCHEMA, runId: run.id, scope: selected.scope,
-    observedCalls: sessions.reduce((n, s) => n + completedToolCalls(s).length, 0), traces })}\n`;
+    observedCalls: sessions.reduce((n, s) => n + completedToolCalls(s).length, 0), turnScopes, traces })}\n`;
   await withProjectStorageMutation(project, async () => {
     await writeFileAtomicNoFollow(project.rootDir, absolute, text, { encoding: "utf8", mode: 0o600 });
   });
@@ -341,12 +343,20 @@ export async function readToolTraces(project, runId) {
     if (!text) return [];
     const parsed = JSON.parse(text);
     if (parsed?.schemaVersion !== TOOL_TRACE_SCHEMA || parsed.runId !== runId || !Array.isArray(parsed.traces)
-      || parsed.scope?.schema !== 'run-turn-scope/1' || parsed.scope.runId !== runId || !parsed.scope.available) return [];
-    return parsed.traces.filter((/** @type {any} */ trace) => trace?.runId === runId && Array.isArray(trace?.steps)).map((/** @type {any} */ trace) => ({
+      || parsed.scope?.schema !== 'run-turn-scope/1' || parsed.scope.runId !== runId || !parsed.scope.available
+      || !Array.isArray(parsed.turnScopes) || parsed.turnScopes.length > 64) return [];
+    const scopes = new Map(parsed.turnScopes.filter((/** @type {any} */ row) => typeof row?.sessionId === 'string'
+      && Array.isArray(row.turnStartSeqs) && row.turnStartSeqs.length <= 4096 && row.turnStartSeqs.every((/** @type {any} */ seq) => Number.isSafeInteger(seq) && seq >= 0))
+      .map((/** @type {any} */ row) => [row.sessionId, new Set(row.turnStartSeqs)]));
+    const rootTurns = new Set(Array.isArray(parsed.scope.rootTurnStarts) ? parsed.scope.rootTurnStarts : []);
+    const children = new Set(Array.isArray(parsed.scope.childSessionIds) ? parsed.scope.childSessionIds : []);
+    return parsed.traces.filter((/** @type {any} */ trace) => trace?.runId === runId && Array.isArray(trace?.steps)
+      && scopes.has(trace.sessionId) && (trace.sessionId === parsed.scope.rootSessionId || children.has(trace.sessionId))).map((/** @type {any} */ trace) => ({
       capability: typeof trace.capability === "string" && trace.capability ? trace.capability : null,
       sessionId: String(trace.sessionId ?? ""),
       runId,
-      steps: trace.steps.filter((/** @type {any} */ step) => typeof step?.tool === "string" && step.tool && Number.isSafeInteger(step.turnStartSeq) && step.turnStartSeq >= 0)
+      steps: trace.steps.filter((/** @type {any} */ step) => typeof step?.tool === "string" && step.tool && Number.isSafeInteger(step.turnStartSeq) && step.turnStartSeq >= 0
+        && scopes.get(trace.sessionId).has(step.turnStartSeq) && (trace.sessionId !== parsed.scope.rootSessionId || rootTurns.has(step.turnStartSeq)))
         .map((/** @type {any} */ step) => ({ turn: Number(step.turn) || 0, tool: step.tool, turnStartSeq: step.turnStartSeq })),
     }));
   } catch {

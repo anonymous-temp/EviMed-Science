@@ -112,3 +112,22 @@ test('stored malformed scope proofs never qualify as script evidence', options, 
     assert.deepEqual(await uses.exemplars(owner, hash), []);
   }
 });
+
+test('counts and sources share one snapshot and valid scoped evidence has a fresh job generation', options, async () => {
+  const { ProductJobs } = await import('../src/productJobs.mjs');
+  const { scriptLessonFor } = await import('../src/scriptLessons.mjs');
+  const hash = '8'.repeat(32), jobs = new ProductJobs(database);
+  for (const [id, sessionId] of [['new1', 'a'], ['new2', 'a'], ['new3', 'b']]) {
+    await uses.record(owner, run(id, sessionId, 'p_one', 0, [{ hash, source: `print('${id}')` }]));
+  }
+  const evidence = await uses.lesson(owner, hash);
+  assert.deepEqual([evidence.runs, evidence.conversations, evidence.exemplars.length], [3, 2, 3]);
+  const old = await jobs.enqueue(owner, 'distill', { trigger: 'script', runId: 'old', scriptHash: hash }, { idempotencyKey: `distill:script:${hash}`, projectId: 'p_one' });
+  await database.query("UPDATE evimed_product.jobs SET status='failed' WHERE user_id=$1 AND id=$2", [owner, old.id]);
+  const lesson = scriptLessonFor({ hash, run: { id: 'new3' }, recurrence: await uses.recurrence(owner, hash) });
+  const fresh = await jobs.enqueue(owner, 'distill', { trigger: 'script', runId: 'new3', ...lesson.payload }, { idempotencyKey: lesson.idempotencyKey, projectId: 'p_one' });
+  assert.notEqual(fresh.id, old.id); assert.equal(fresh.status, 'queued');
+  await database.query("DELETE FROM evimed_learning.script_uses WHERE user_id=$1 AND script_hash=$2 AND session_id='b'", [owner, hash]);
+  const afterDelete = await uses.lesson(owner, hash);
+  assert.deepEqual([afterDelete.runs, afterDelete.conversations, afterDelete.exemplars.length], [2, 1, 2]);
+});

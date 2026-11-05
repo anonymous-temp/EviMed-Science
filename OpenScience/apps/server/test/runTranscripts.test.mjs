@@ -965,3 +965,17 @@ test("an excerpt drops a message by the shape of a credential or an identifier, 
   assert.deepEqual(excerpt.messages.map((entry) => entry.seq), [1, 3], "a sentence that mentions passwords and a file called secret-santa are language and names");
   assert.deepEqual(excerpt.dropped, { sensitive: 2, bounded: 0 }, "a secret assigned to a name inside a tool call, and a phone number, are shapes");
 });
+
+test('a partial capture does not mint a fork-seed proof on its persisted round trip', async () => {
+  await withProject(async project => {
+    const run = { id: 'partial_run', sessionId: 'root', kernelRequestIds: ['input'] };
+    const live = transcript('root', [{ role: 'user', source: 'user', sourceRequestId: 'input', seq: 11, turnStartSeq: 10, parts: [{ type: 'text', text: 'Current request' }] }]);
+    live.exhausted = false;
+    await persistRunTranscript({ project, run, sessions: [{ sessionId: 'root', parentSessionId: null, label: 'root', capability: null, error: null, transcript: live }] });
+    const saved = await readRunTranscript(project, run.id);
+    assert.equal(saved.header.completeness, 'partial');
+    assert.equal(saved.header.sessions[0].seedEndSeq, undefined);
+    assert.equal(scopeRunTranscript(saved, run).runScope.available, false);
+    assert.equal(saved.messages.length, 1);
+  });
+});
