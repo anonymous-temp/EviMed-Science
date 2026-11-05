@@ -55,6 +55,7 @@
  * @module officialPromotion
  */
 import { createHash } from "node:crypto";
+import { promotionAccountIdentities, promotionActivationAuthority } from './officialPromotionAuthority.mjs';
 import path from "node:path";
 import { cleanMethodDisplay } from "@evimed/domain";
 import { OFFICIAL_METHOD_LIMITS, buildOfficialMethod } from "./officialPackSources.mjs";
@@ -212,6 +213,8 @@ export function createOfficialPromotion({ documents, officialPacks, facts, judge
   perDay = PROMOTION_DEFAULT_PER_DAY, now = () => new Date(), report = null, audit = null }) {
   /** @param {string[]} userIds @returns {Promise<Map<string, boolean>>} */
   const standingOf = async (userIds) => (standing ? standing(userIds) : new Map(userIds.map((id) => [id, true])));
+  const identitiesOf = ids => promotionAccountIdentities(documents, ids);
+  const activationAuthority = promotionActivationAuthority(documents);
   /** The author an undecided record still names (a decided one names none). @param {any} row */
   const authorOf = (row) => String(row?.payload?.derivedFrom?.userId ?? "");
   const publisher = () => String(officialPacks?.publisherId ?? "");
@@ -229,8 +232,8 @@ export function createOfficialPromotion({ documents, officialPacks, facts, judge
   /** @param {string} reason */
   const rejectedFor = (reason) => { counters.rejectedBy[reason] = (counters.rejectedBy[reason] ?? 0) + 1; };
 
-  /** @param {string} userId @param {string} methodId @param {string} digest */
-  const recordId = (userId, methodId, digest) => `official-promoted-${sha([userId, methodId, digest]).slice(0, 32)}`;
+  /** @param {string} userId @param {string} methodId @param {string} digest @param {string} accountCreatedAt */
+  const recordId = (userId, methodId, digest, accountCreatedAt) => `official-promoted-${sha([userId, accountCreatedAt, methodId, digest]).slice(0, 32)}`;
   /** The one-way key that says two methods came from different accounts without saying which. @param {string} userId */
   const contributorKey = (userId) => sha(`promotion-contributor\0${userId}`).slice(0, 24);
 
@@ -249,7 +252,7 @@ export function createOfficialPromotion({ documents, officialPacks, facts, judge
   /** @param {string} id */
   const get = (id) => documents.get(publisher(), "preferences", id);
   /** @param {any} row @param {Record<string, any>} patch @param {{strictRevision?:boolean}} [options] @returns {Promise<any>} */
-  async function update(row, patch, { strictRevision = false } = {}) {
+  async function update(row, patch, { strictRevision = patch.status !== undefined } = {}) {
     // A rejected method keeps no text and names no account, whichever gate refused it: nothing about what was refused stays outside the
     // account for longer than the decision (the account's own deletion and reset never reach the publisher's records).
     const forgotten = patch.status === "rejected" ? { text: null, derivedFrom: null } : {};
@@ -281,7 +284,7 @@ export function createOfficialPromotion({ documents, officialPacks, facts, judge
    * The accounts whose same procedure, scope and class passed the first two gates beside this one, both authors in standing: empty when the method
    * is not corroborated. The accounts are kept on the record (until its decision) so that the re-check can ask whether they are still in standing.
    * @param {any} row
-   * @returns {Promise<string[]>}
+   * @returns {Promise<{userId:string,createdAt:string,recordId:string}[]>}
    */
   async function corroborators(row) {
     const own = row.payload.contributor;
@@ -294,31 +297,41 @@ export function createOfficialPromotion({ documents, officialPacks, facts, judge
     // were, the first promotion of a scope and class would let every later method of that pair through on the model's word alone.
     if (!peers.length) return [];
     // Each a voice: two accounts registered minutes apart are one harness, not two people.
-    const known = await standingOf([authorOf(row), ...peers.map(authorOf)].filter(Boolean));
-    if (known.get(authorOf(row)) !== true) return [];
-    return [...new Set(peers.map(authorOf).filter((id) => id && known.get(id) === true))];
+    const ids = [authorOf(row), ...peers.map(authorOf)].filter(Boolean);
+    const known = await standingOf(ids), identities = await identitiesOf(ids);
+    if (known.get(authorOf(row)) !== true || identities.get(authorOf(row)) !== row.payload.derivedFrom?.accountCreatedAt) return [];
+    return [...new Map(peers.filter(peer => known.get(authorOf(peer)) === true && identities.get(authorOf(peer)) === peer.payload.derivedFrom?.accountCreatedAt)
+      .map(peer => [authorOf(peer), { userId: authorOf(peer), createdAt: peer.payload.derivedFrom.accountCreatedAt, recordId: peer.id }])).values()];
   }
-  /** The record's internal account list with the voices that corroborated it. @param {any} row @param {string[]} voices */
-  const withVoices = (row, voices) => ({ derivedFrom: { ...row.payload.derivedFrom, corroboratedBy: voices, corroborationProcedure: procedureIdentity(row.payload.text) } });
+  /** The record's internal account list with the voices that corroborated it. @param {any} row @param {{userId:string,createdAt:string,recordId:string}[]} voices */
+  const withVoices = (row, voices) => ({ derivedFrom: { ...row.payload.derivedFrom, corroboratedBy: voices.map(voice => voice.userId),
+    corroboratedAccounts: voices.map(voice => ({ id: voice.userId, createdAt: voice.createdAt, recordId: voice.recordId })), corroborationProcedure: procedureIdentity(row.payload.text) } });
 
   /** A previously named voice must still vouch for this exact procedure. An
    * already active peer may finish the original pair, but never creates a new
    * vote: only the initial waiting/candidate collection can name a witness.
    * @param {any} row */
-  async function currentVote(row) {
+  async function currentVoteProof(row) {
     const payload = row.payload;
     const voices = Array.isArray(payload.derivedFrom?.corroboratedBy) ? payload.derivedFrom.corroboratedBy.map(String) : [];
     const procedure = procedureIdentity(payload.text);
-    if (!procedure || payload.derivedFrom?.corroborationProcedure !== procedure) return false;
-    const heard = await standingOf(voices), peers = await all();
-    return voices.some(id => heard.get(id) === true && peers.some(peer => peer.id !== row.id && peer.payload.contributor === contributorKey(id)
-      && peer.payload.scopeId === payload.scopeId && peer.payload.lessonClass === payload.lessonClass
-      && ['awaiting_corroboration', 'candidate', 'active'].includes(peer.payload.status)
-      && (peer.payload.status === 'active' ? peer.payload.procedureDigest : procedureIdentity(peer.payload.text)) === procedure));
+    if (!procedure || payload.derivedFrom?.corroborationProcedure !== procedure) return null;
+    const heard = await standingOf(voices), identities = await identitiesOf(voices), peers = await all();
+    for (const id of voices.sort()) {
+      const account = payload.derivedFrom?.corroboratedAccounts?.find(pin => pin.id === id);
+      if (!account || heard.get(id) !== true || identities.get(id) !== account.createdAt) continue;
+      const peer = peers.find(entry => entry.id !== row.id && entry.id === account.recordId && entry.payload.contributor === contributorKey(id)
+      && entry.payload.scopeId === payload.scopeId && entry.payload.lessonClass === payload.lessonClass
+      && ['awaiting_corroboration', 'candidate', 'active'].includes(entry.payload.status)
+      && (entry.payload.status === 'active' ? entry.payload.procedureDigest : procedureIdentity(entry.payload.text)) === procedure
+      && (entry.payload.status === 'active' ? entry.payload.contributorEpoch === sha([id, account.createdAt]) : entry.payload.derivedFrom?.accountCreatedAt === account.createdAt));
+      if (peer) return { witnesses: [{ id: peer.id, revision: peer.revision }], accounts: [{ id: account.id, createdAt: account.createdAt }] };
+    }
+    return null;
   }
   /** @param {any} row */
   const waitForVote = row => update(row, { status: counted('awaiting_corroboration'), promotedBy: null,
-    derivedFrom: { ...row.payload.derivedFrom, corroboratedBy: [], corroborationProcedure: null } });
+    derivedFrom: { ...row.payload.derivedFrom, corroboratedBy: [], corroboratedAccounts: [], corroborationProcedure: null } }, { strictRevision: true });
 
   /** After a method passed the first two gates: promote it, and any waiting method it corroborates. @param {any} row */
   async function settleAuthor(row) {
@@ -445,8 +458,10 @@ export function createOfficialPromotion({ documents, officialPacks, facts, judge
       counters.considered += 1;
       const scopeId = typeof payload?.provenance?.scope === "string" ? payload.provenance.scope : "";
       if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(scopeId)) return { state: "skipped", reason: ["input_invalid"] };
+      const accountCreatedAt = (await identitiesOf([userId])).get(userId);
+      if (!accountCreatedAt) return { state: 'skipped', reason: ['author_identity_unavailable'] };
       const digest = String(payload.contentDigest ?? sha(payload.body ?? ""));
-      const id = recordId(userId, method.id, digest);
+      const id = recordId(userId, method.id, digest, accountCreatedAt);
       if (await get(id)) return { state: "known" };
       const sourceProjectId = typeof payload.provenance?.sourceProjectId === "string" ? payload.provenance.sourceProjectId : null;
       const runId = typeof payload.provenance?.runId === "string" ? payload.provenance.runId : null;
@@ -454,7 +469,7 @@ export function createOfficialPromotion({ documents, officialPacks, facts, judge
       const base = {
         recordType: OFFICIAL_PROMOTED_RECORD, schemaVersion: 1, scopeId, text: checked.text, textDigest: `sha256:${sha(checked.text)}`, contributor: contributorKey(userId),
         // Internal, and only until the decision: what the re-check needs to read the method against the account's facts as they are then.
-        derivedFrom: { userId, methodId: method.id, methodDigest: digest, sourceProjectId, runId, at: now().toISOString() },
+        derivedFrom: { userId, accountCreatedAt, methodId: method.id, methodDigest: digest, sourceProjectId, runId, at: now().toISOString() },
         createdAt: now().toISOString(), judgeAttempts: 0,
         // The order a pack is cut to its limit by: the oldest in the pack goes first.
         activatedAt: null,
@@ -497,7 +512,11 @@ export function createOfficialPromotion({ documents, officialPacks, facts, judge
     // The author is still an account, and — for a method that came in on another account's word — still in standing: a harness that deletes its
     // accounts at the end of a run leaves nothing behind that the platform repeats to everyone.
     const author = authorOf(row);
-    const known = await standingOf(author ? [author] : []);
+    const known = await standingOf(author ? [author] : []), identities = await identitiesOf(author ? [author] : []);
+    if (!payload.derivedFrom?.accountCreatedAt || identities.get(author) !== payload.derivedFrom.accountCreatedAt) {
+      rejectedFor('author_identity_changed');
+      return update(row, { status: counted('rejected'), reason: ['author_identity_changed'], derivedFrom: null }, { strictRevision: true });
+    }
     if (!known.has(author) || (payload.promotedBy !== "established_author" && known.get(author) !== true)) {
       const reason = known.has(author) ? "author_not_in_standing" : "author_gone";
       rejectedFor(reason);
@@ -507,7 +526,7 @@ export function createOfficialPromotion({ documents, officialPacks, facts, judge
     // none left (deleted, or not a voice any more) it is not refused — it did nothing wrong — but waits again for a voice, as it did before. A legacy record
     // that names no content-bound witness waits for a fresh vote.
     if (payload.promotedBy === "corroborated") {
-      if (!await currentVote(row)) return waitForVote(row);
+      if (!await currentVoteProof(row)) return waitForVote(row);
     }
     const answer = await review({ text: shown(payload.text), scopeId: payload.scopeId });
     const independent = answer?.independent === true;
@@ -530,12 +549,27 @@ export function createOfficialPromotion({ documents, officialPacks, facts, judge
       const reason = finalStanding.has(author) ? 'author_not_in_standing' : 'author_gone'; rejectedFor(reason);
       return update(row, { status: counted('rejected'), reason: [reason], derivedFrom: null });
     }
-    if (payload.promotedBy === 'corroborated' && !await currentVote(row)) return waitForVote(row);
+    const vote = payload.promotedBy === 'corroborated' ? await currentVoteProof(row) : { witnesses: [], accounts: [] };
+    if (!vote) return waitForVote(row);
+    if (!activationAuthority) { report?.('official_promotion_authority_unavailable'); return null; }
     const text = payload.text;
     const methodId = `${String(text.name).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 28) || "method"}-${sha(payload.textDigest).slice(0, 8)}`;
     const method = buildOfficialMethod(SHARED_PRACTICES_PACK_ID, methodId, {
       scope: [payload.scopeId], title: clip(text.title || text.name, OFFICIAL_METHOD_LIMITS.title), whenToUse: clip(text.whenToUse || text.description || text.title, OFFICIAL_METHOD_LIMITS.whenToUse), body: text.body });
-    const activated = await update(row, { status: counted("active"), rechecked, method, procedureDigest: procedureIdentity(text), activatedAt: now().toISOString(), text: null, derivedFrom: null }, { strictRevision: true });
+    const proof = { publisherId: publisher(), candidate: { id: row.id, revision: row.revision }, witnesses: vote.witnesses,
+      accounts: [{ id: author, createdAt: payload.derivedFrom.accountCreatedAt }, ...vote.accounts] };
+    const activated = await activationAuthority(proof, async () => {
+      const lockedCandidate = await get(row.id);
+      if (!lockedCandidate || lockedCandidate.revision !== row.revision || lockedCandidate.payload.status !== 'candidate') return null;
+      const lockedStanding = await standingOf(proof.accounts.map(pin => pin.id));
+      if (!lockedStanding.has(author) || payload.promotedBy !== 'established_author' && lockedStanding.get(author) !== true) return null;
+      if (payload.promotedBy === 'corroborated') {
+        const currentVote = await currentVoteProof(row);
+        if (!currentVote || sha(currentVote) !== sha(vote)) return null;
+      }
+      return update(row, { status: counted("active"), rechecked, method, procedureDigest: procedureIdentity(text), contributorEpoch: sha([author, payload.derivedFrom.accountCreatedAt]), activatedAt: now().toISOString(), text: null, derivedFrom: null }, { strictRevision: true });
+    });
+    if (!activated) return null;
     counters.activated += 1;
     await makeRoom(activated.id);
     await officialPacks?.publishAll();
@@ -558,12 +592,14 @@ export function createOfficialPromotion({ documents, officialPacks, facts, judge
   async function voidGoneAuthors() {
     const holding = (await all()).filter((row) => HOLDING_STATUSES.includes(row.payload.status));
     if (!holding.length) return 0;
-    const known = await standingOf([...new Set(holding.map(authorOf).filter(Boolean))]);
+    const ids = [...new Set(holding.map(authorOf).filter(Boolean))];
+    const known = await standingOf(ids), identities = await identitiesOf(ids);
     let voided = 0;
     for (const row of holding) {
-      if (known.has(authorOf(row))) continue;
-      rejectedFor("author_gone");
-      await update(row, { status: counted("rejected"), reason: ["author_gone"] });
+      if (known.has(authorOf(row)) && row.payload.derivedFrom?.accountCreatedAt && identities.get(authorOf(row)) === row.payload.derivedFrom.accountCreatedAt) continue;
+      const reason = known.has(authorOf(row)) ? 'author_identity_changed' : 'author_gone';
+      rejectedFor(reason);
+      await update(row, { status: counted("rejected"), reason: [reason] });
       voided += 1;
     }
     return voided;
