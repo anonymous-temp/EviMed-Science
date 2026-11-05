@@ -1496,3 +1496,27 @@ test("source model versions have distinct job identities even when numeric scena
   assert.equal(again.job.id, first.job.id);
   assert.deepEqual((await jobs.configuration(study.id, second.job.id)).sourceModel, { id: "mdl_b", version: "2" });
 });
+
+test("a retired kind is refused when it is validated or queued, and a job of it left open ends cancelled with its reason, once, without touching a finished one", options, async () => {
+  const study = await makeStudy("retired");
+  const jobs = new VcrJobs({ store, config, engine: engineDouble() });
+  await assert.rejects(jobs.validate({ studyId: study.id, userId: study.userId, kind: "match_extract", scenario: {} }), { code: "vcr_job_kind_invalid" });
+  await assert.rejects(jobs.enqueue({ studyId: study.id, userId: study.userId, kind: "match_extract", scenario: {}, internal: true }), { code: "vcr_job_kind_invalid" });
+
+  // Rows a deployment of the old code left behind: one open, one finished.
+  const open = await jobs.enqueue({ studyId: study.id, userId: study.userId, kind: "design_simulation", scenario, inputs: [], idempotencyKey: `vcr:${study.id}:retired:a` });
+  const done = await jobs.enqueue({ studyId: study.id, userId: study.userId, kind: "design_simulation", scenario: { ...scenario, truth: { hazardRatio: 0.6, controlMedian: 6 } }, inputs: [], idempotencyKey: `vcr:${study.id}:retired:b` });
+  await store.query("UPDATE evimed_vcr.jobs SET kind='match_extract', method='matching.extract' WHERE id = ANY($1::text[])", [[open.job.id, done.job.id]]);
+  await store.query("UPDATE evimed_vcr.jobs SET state='succeeded', finished_at=now() WHERE id = $1", [done.job.id]);
+
+  const retired = await jobs.retireRetiredKinds();
+  assert.deepEqual(retired.map((job) => job.id), [open.job.id]);
+  const row = await store.one("SELECT state, error FROM evimed_vcr.jobs WHERE id = $1", [open.job.id]);
+  assert.equal(row.state, "canceled");
+  assert.equal(row.error.code, "vcr_job_kind_retired");
+  assert.match(row.error.message, /已停用/);
+  assert.equal((await store.one("SELECT state FROM evimed_vcr.jobs WHERE id = $1", [done.job.id])).state, "succeeded");
+  assert.deepEqual(await jobs.retireRetiredKinds(), [], "a second sweep finds nothing");
+  // The list still reads both rows.
+  assert.equal((await jobs.listForStudy(study.id)).filter((job) => job.kind === "match_extract").length, 2);
+});

@@ -286,6 +286,8 @@ export function createVcrWorkerLoops({ jobs, orchestrator, store, matching = nul
     }
   };
   const jobLoop = lane => jobs ? async () => {
+    // A job of a kind that is no longer run ends as cancelled with its reason, once.
+    if (lane === "local") await jobs.retireRetiredKinds?.().catch((/** @type {any} */ error) => { jobs.report?.(error?.code ?? "vcr_job_retire_failed"); });
     const claimed = await jobs.claim({ limit: lane !== "engine" ? Number(jobs.config?.vcrLocalConcurrency ?? 2) : Math.max(1,Number(jobs.maxConcurrent ?? 1)), lane });
     const methods = Object.keys(jobs.localExecutors ?? {});
     const laneOf = (/** @type {string} */ method) => (VCR_SLOW_LOCAL_METHODS.includes(method) && methods.includes(method) ? "slow" : methods.includes(method) ? "local" : "engine");

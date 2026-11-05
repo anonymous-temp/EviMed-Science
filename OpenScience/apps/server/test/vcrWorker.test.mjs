@@ -111,7 +111,7 @@ test("P2-9 the slow lane starts a batch and does not wait for it: another accoun
   /** @type {string[]} */ const finishedHooks = [];
   const queue = [[{ id: "job_a" }], [{ id: "job_b" }], [], []];
   const jobs = {
-    owner: "me", config: { vcrLocalConcurrency: 2 }, localExecutors: { "matching.extract": () => null },
+    owner: "me", config: { vcrLocalConcurrency: 2 }, localExecutors: { "matching.judge": () => null },
     async claim() { return queue.shift() ?? []; },
     advance(/** @type {{ id: string }} */ job) {
       advanced.push(job.id);
@@ -120,7 +120,7 @@ test("P2-9 the slow lane starts a batch and does not wait for it: another accoun
     takeReaped() { return []; },
   };
   // the store reports what this process holds as running, as the database does while a batch is out
-  const store = { async rows() { return [...release.keys()].map((id) => ({ id, method: "matching.extract", kind: "match_extract" })); } };
+  const store = { async rows() { return [...release.keys()].map((id) => ({ id, method: "matching.judge", kind: "match_judge" })); } };
   const orchestrator = { async onJobFinished(/** @type {{ job: { id: string } }} */ outcome) { finishedHooks.push(outcome.job.id); } };
   const loops = createVcrWorkerLoops({ jobs, orchestrator, store });
   const slow = /** @type {() => Promise<any>} */ (loops.slowJobs);
@@ -178,4 +178,23 @@ test("the worker's slow lane lets a long job give its turn back, and no other la
   await loops.localJobs();
   await new Promise((resolve) => { setTimeout(resolve, 5); });
   assert.deepEqual(asked.sort(), [["job_short", false], ["job_slow", true]]);
+});
+
+test("the short local lane sweeps jobs of a retired kind before it claims, and a sweep that fails is reported and does not stop the lane", async () => {
+  /** @type {string[]} */ const order = [];
+  /** @type {string[]} */ const reported = [];
+  const jobs = {
+    owner: "me", config: {}, localExecutors: {},
+    async retireRetiredKinds() { order.push("retire"); return []; },
+    async claim() { order.push("claim"); return []; },
+    takeReaped() { return []; },
+    report(/** @type {string} */ code) { reported.push(code); },
+  };
+  const store = { async rows() { return []; } };
+  await createVcrWorkerLoops({ jobs, orchestrator: null, store }).localJobs();
+  assert.deepEqual(order, ["retire", "claim"]);
+  order.length = 0;
+  jobs.retireRetiredKinds = async () => { throw Object.assign(new Error("down"), { code: "db_down" }); };
+  await createVcrWorkerLoops({ jobs, orchestrator: null, store }).localJobs();
+  assert.deepEqual([order, reported], [["claim"], ["db_down"]]);
 });

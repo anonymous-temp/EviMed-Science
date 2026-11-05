@@ -1557,6 +1557,27 @@ export class VcrJobs {
   }
 
   /**
+   * A job of a kind that is no longer run (`VCR_RETIRED_JOB_KINDS`) that was queued or running when it was retired ends here as cancelled, with
+   * the reason on it, so that nothing waits on it for ever. A finished row is not touched, and a second call finds nothing.
+   * @returns {Promise<Array<ReturnType<typeof jobSummaryFromRow>>>}
+   */
+  async retireRetiredKinds() {
+    const rows = await this.store.rows(`UPDATE ${VCR_SCHEMA}.jobs
+      SET state = 'canceled', cancel_requested = true, finished_at = now(), updated_at = now(), lease_owner = NULL, lease_until = NULL,
+          error = COALESCE(error, '{}'::jsonb) || jsonb_build_object('code', 'vcr_job_kind_retired', 'message', '这类作业已停用，没有继续做。')
+      WHERE kind = ANY($1::text[]) AND state = ANY($2::text[]) RETURNING *`, [[...VCR_RETIRED_JOB_KINDS], [...VCR_JOB_OPEN_STATES]]);
+    const jobs = [];
+    for (const row of rows) {
+      this.counters.canceled += 1;
+      await this.store.audit({ studyId: String(row.study_id), userId: String(row.user_id), actor: "control-plane", action: "vcr.job.retired", object: String(row.id), detail: { kind: String(row.kind) } });
+      const job = jobSummaryFromRow(row);
+      await this.deliverFinishHooks(String(row.id), { action: "finished", state: "canceled", job, result: null, canceled: true });
+      jobs.push(job);
+    }
+    return jobs;
+  }
+
+  /**
    * The second human stop, cleared: the confirmed CPU-seconds are added to the
    * study's budget and every job waiting on it is released in one go — a
    * person confirms a study's compute once, not once per job (plan §10.1).
