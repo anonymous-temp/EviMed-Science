@@ -372,9 +372,9 @@ const RESIDENT_ID = /(?<![0-9A-Za-z])[1-9]\d{5}(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?
 const CARD = /(?<![0-9])(?:\d[ -]?){15,18}\d(?![0-9])/g
 const KEY_FORMAT = /\b(?:sk|pk|rk)-[A-Za-z0-9_-]{16,}|\bAKIA[0-9A-Z]{16}\b|\bgh[pousr]_[A-Za-z0-9]{30,}|\bBearer\s+[A-Za-z0-9._~+/-]{20,}/g
 // One captured assignment grammar is used for detection and masking, so a value accepted by one cannot leak through the
-// other. Values include Unicode and punctuation-only passwords. Common sentence separators end an unquoted value; explicit
-// quotes can enclose whitespace. A placeholder is already masked and must not become a fresh secret on a later read.
-const KEY_ASSIGNMENT_VALUE = /((?:api[ _-]?key|access[ _-]?token|secret|password|passwd|密码|口令|密钥|令牌|verification[ _-]?code|one[ -]?time[ _-]?(?:password|code)|OTP|验证码|校验码|动态口令)\s*(?:(?:is|为|是)\s*(?:[:=：]\s*)?|[:=：]\s*))(?!(?:[:=：]\s*)?\[已省略\])(?:"[^"\n]+"|'[^'\n]+'|“[^”\n]+”|‘[^’\n]+’|[^\s,，。；;]+|[,;])/gi
+// other. Values include Unicode and punctuation-only passwords. ASCII punctuation inside an unquoted token belongs to
+// the secret; explicit quotes can enclose whitespace. A placeholder is already masked and is not a fresh secret on reread.
+const KEY_ASSIGNMENT_VALUE = /((?:api[ _-]?key|access[ _-]?token|secret|password|passwd|密码|口令|密钥|令牌|verification[ _-]?code|one[ -]?time[ _-]?(?:password|code)|OTP|验证码|校验码|动态口令)\s*(?:(?:is|为|是)\s*(?:[:=：]\s*)?|[:=：]\s*))(?!(?:[:=：]\s*)?\[已省略\](?=$|[\s,，。；;]))("[^"\n]+"|'[^'\n]+'|“[^”\n]+”|‘[^’\n]+’|[^\s，。；]+)/gi
 // Verification codes also occur directly after their label, without an assignment separator ("OTP 843021"). Explicit
 // alphanumeric assignments use the same grammar above; this numeric form does not reinterpret ordinary prose as a code.
 const VERIFICATION_CODE = /((?:verification[ _-]?code|one[ -]?time[ _-]?(?:password|code)|OTP|验证码|校验码|动态口令)\s*)\d{4,8}(?!\d)/gi
@@ -470,6 +470,12 @@ export function maskIdentifiers(text) {
     .replace(KEY_FORMAT, masked)
     .replace(KEY_FORMAT_MORE, masked)
     .replace(VERIFICATION_CODE, (_match, label) => `${label}${masked}`)
-    .replace(KEY_ASSIGNMENT_VALUE, (_match, label) => `${label}${masked}`)
+    .replace(KEY_ASSIGNMENT_VALUE, (match, label, secret, offset, input) => {
+      // Only a final prose comma/semicolon followed by whitespace sits outside the token. An internal separator, or
+      // punctuation inside quotes, is part of the value and must never leave a password suffix behind.
+      const proseSuffix = !/^["'“‘]/.test(secret) && secret.length > 1 && /[,;]$/.test(secret)
+        && /\s/.test(input.charAt(offset + match.length)) ? secret.slice(-1) : ''
+      return `${label}${masked}${proseSuffix}`
+    })
     .replace(LONG_TOKEN, (run) => (isTokenShaped(run) ? masked : run))
 }
