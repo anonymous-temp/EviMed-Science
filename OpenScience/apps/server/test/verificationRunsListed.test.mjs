@@ -9,7 +9,7 @@ import path from "node:path";
 import test from "node:test";
 import { EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON } from "@evimed/domain";
 import { isResearcherRun } from "../src/agentRuns.mjs";
-import { VERIFICATION_ROUTE_REASON } from "../src/autopilotService.mjs";
+import { AUTOPILOT_VERIFICATION_ROUTE_REASON as VERIFICATION_ROUTE_REASON } from "@evimed/domain";
 import { createWebApiApp } from "../src/server.mjs";
 
 const HEADERS = { "X-Open-Science-Project": "default" };

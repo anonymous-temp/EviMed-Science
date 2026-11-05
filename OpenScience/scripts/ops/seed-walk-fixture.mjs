@@ -181,7 +181,7 @@ async function main() {
   const app = createWebApiApp({
     dataDir: options.dataDir, stateStore: "postgres", databaseUrl: options.databaseUrl, runtimeMode: "mock", authMode: "local", devAuth: false,
     bootstrapUser: "", bootstrapPassword: "", staticDir: options.staticDir, port: options.port, host: "127.0.0.1",
-    frontierEnabled: true, geoEnabled: true, geoAudience: "all", vcrEnabled: true, vcrAudience: "all", autopilotEnabled: true, memoryMapEnabled: true,
+    frontierEnabled: true, geoEnabled: true, geoAudience: "all", vcrEnabled: true, vcrAudience: "all", memoryMapEnabled: true,
     // Today's issue is due from midnight: at the default 07:30 a fixture started between midnight and 07:30 in Beijing wrote yesterday's issue
     // and the walk, which opens today's, found the 日报 empty (r19-guards3: the first walk after 16:00 UTC).
     frontierDailyTime: "00:00",

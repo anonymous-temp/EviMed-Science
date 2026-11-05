@@ -8,13 +8,11 @@ import { computeRsiDependencyClosure } from './rsiDependencyClosure.mjs'
 import { validateModuleEvolutionPolicy } from './moduleEvolutionPolicies.mjs'
 import { frontierSelectThreshold } from './frontierPipeline.mjs'
 import { frontierMixSelect, PLATFORM_PUBLISHER_USER_ID } from '@evimed/domain'
-import { AUTOPILOT_PLANNER_INSTRUCTIONS } from './autopilotNextAction.mjs'
 
 const components = Object.freeze({
   'frontier-selection': ['frontier', 'selectionThreshold'],
   'frontier-screen': ['frontier', 'screenInstructions'],
   'frontier-edit': ['frontier', 'editInstructions'],
-  'autopilot-planner': ['autopilot', 'plannerInstructions'],
   'geo-supplements': ['geo', 'supplements'],
 })
 /** @param {string} code */
@@ -22,7 +20,7 @@ function refuse(code) { throw new HttpError(409, code, 'Campaign serving adapter
 /** The code defaults of a module's policy: what serves while no module-policy row is active. @param {string} moduleId @param {any} config */
 export function rsiPolicyDefaults(moduleId, config) {
   return moduleId === 'frontier' ? { selectionThreshold: frontierSelectThreshold(config) }
-    : moduleId === 'autopilot' ? { plannerInstructions: AUTOPILOT_PLANNER_INSTRUCTIONS } : { supplements: [] }
+    : { supplements: [] }
 }
 /**
  * The incumbent of a module as the serving layer names it: an active, valid module-policy row (`evolution-module-policy-<module>:<revision>`),

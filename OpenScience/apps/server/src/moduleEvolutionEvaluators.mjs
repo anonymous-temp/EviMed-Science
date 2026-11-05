@@ -4,7 +4,6 @@ import { quantityTokens } from "./geoJudge.mjs";
 import { geoSpecifiedInfoAccuracy, FRONTIER_LANES } from "@evimed/domain";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { AutopilotPlanner, buildPlannerContext, eligibleTaskTypes, plannerInstructions } from "./autopilotNextAction.mjs";
 
 const expandVariants = (cases) => cases.flatMap((item) => [{...item,groupId:item.id}, ...(item.equivalentVariant ? [{...item,...item.equivalentVariant,id:`${item.id}:equivalent`,sourceHash:item.sourceHash,groupId:item.id,equivalentVariant:null}] : [])]);
 const digest = (value) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
@@ -12,36 +11,10 @@ const digest = (value) => createHash("sha256").update(JSON.stringify(value)).dig
 /** Executable wrappers use the same production classes as the existing CLI harnesses.
  * Injected model instances must carry the evolution metering identity; this never reads keys.
  * Historical cases are development only. Fresh confirmation batches must be supplied explicitly.
- * @param {{planner?: any, editor?: any, judgeFrontier?: any, geoJudge?: any, generateGeo?: any, geo?: any, sources?: any, evidence?: any, memory?: any, runtime?: any, tools?: any}} dependencies */
-export function createModuleEvolutionEvaluators({ planner, editor, judgeFrontier, geoJudge, generateGeo, ...delegates } = {}) {
+ * @param {{editor?: any, judgeFrontier?: any, geoJudge?: any, generateGeo?: any, geo?: any, sources?: any, evidence?: any, memory?: any, runtime?: any, tools?: any}} dependencies */
+export function createModuleEvolutionEvaluators({ editor, judgeFrontier, geoJudge, generateGeo, ...delegates } = {}) {
   /** @type {Record<string, any>} */
   const runners = { ...delegates };
-  if (planner) runners.autopilot = async (input) => {
-    const revision = input.arm === "baseline" ? (input.baseline ?? input.candidate) : input.candidate;
-    const activePlanner = revision?.policy ? new AutopilotPlanner(planner.config, { usageLedger: planner.usageLedger,
-      callModel: planner.callModel, fetchImpl: planner.fetchImpl, now: planner.now,
-      policies: createModuleEvolutionPolicies({readPolicy: async () => ({revisionId: revision.revisionId ?? revision.id, policy: revision.policy})}) }) : planner;
-    const cases = input.batch ?? JSON.parse(await readFile(new URL("../../../evals/autopilot-next-action/cases.json", import.meta.url), "utf8")).cases;
-    const units = [];
-    for (const item of expandVariants(cases)) {
-      const runUnit = async () => {
-      const agenda = { id: "agenda-evolution-eval", projectId: input.projectId, payload: { ...item.agenda, taskTypeState: {} } };
-      const eligible = eligibleTaskTypes(agenda.payload);
-      const context = buildPlannerContext({ agenda, progress: item.progress, eligible, date: item.date ?? "2026-10-04",
-        trigger: item.trigger ?? "scheduled", note: item.note ?? null, reducedPriority: false,
-        stopAllowed: item.stopAllowed, pauseAllowed: item.pauseAllowed === true });
-      const decision = await activePlanner.decide({ userId: input.userId, projectId: input.projectId, episodeId: `${input.missionId}:${item.id}`,
-        context, eligible, stopAllowed: item.stopAllowed, pauseAllowed: item.pauseAllowed === true, purpose: "evolution" });
-      const score = item.expect.some((expected) => Object.entries(expected).every(([key, value]) => decision[key] === value)) ? 1 : 0;
-      return { id: item.id, groupId: item.groupId ?? item.id, score, sourceHash: item.sourceHash ?? digest({ agenda: item.agenda, progress: item.progress }), executionInputHash:digest(context),
-        policyRevisionId: decision.policyRevisionId, contextBytes: Buffer.byteLength(JSON.stringify(context))+Buffer.byteLength(plannerInstructions(context,revision?.policy?.plannerInstructions)), decision };
-      };
-      units.push(await (input.checkpointUnit ? input.checkpointUnit(item.id, runUnit) : runUnit()));
-    }
-    // The planner's decisions are checked against the closed actions each case expects: a written checklist, not a model's grade, so no judge is calibrated and the
-    // score is the share of expected actions met (review D-E19).
-    return { pool: input.batch ? input.pool : "development", units, evaluatorVersion: "autopilot-checklist-v1", evidenceTier:"checklist", checkScope: "closed-expected-actions", policyHash: revision?.policy ? digest(revision.policy) : null, model: planner.model };
-  };
   if (editor) runners.frontier = async (input) => {
     if (["confirmation","audit"].includes(input.pool) && !judgeFrontier) return {pool:"confirmation",units:[],reason:"source_fidelity_judge_unavailable"};
     const revision = input.arm === "baseline" ? (input.baseline ?? input.candidate) : input.candidate;

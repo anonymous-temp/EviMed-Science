@@ -142,7 +142,7 @@ test('V3 counts the papers a tool failed beside the ones it reproduced', async (
 });
 
 test('shared leads discard researcher prose and tenant events retain owner/project', async () => {
-  const f = fixture(); const lead = await f.service.addLead({ track: 'U', source: 'autopilot', gapCode: 'connector', code: 'private patient narrative', method: 'private secret' });
+  const f = fixture(); const lead = await f.service.addLead({ track: 'U', source: 'runtime-failure', gapCode: 'connector', code: 'private patient narrative', method: 'private secret' });
   assert.equal(lead.payload.code, 'connector'); assert.equal(lead.payload.method, undefined);
   const event = await f.service.ingestEvent({ id: 'e', type: 'dataset-ready', userId: 'alice', projectId: 'a' });
   assert.equal(event.projectId, 'a'); assert.equal(await f.service.get(event.id), null);
@@ -179,16 +179,6 @@ test('expiry rejects same-family review and resource ask appears once in digest'
   assert.equal(waiting.payload.status, 'pending'); assert.equal(waiting.payload.expiry.state, 'review-unavailable'); assert.equal(waiting.payload.expiry.code, 'evolution_review_invalid');
   await d.propose(proposal('resource', { resourceOnly: true })); await d.digest(); f.advance(86400000); const next = await d.digest(); assert.equal(next.payload.resources.length, 0);
   assert.equal((await f.service.list('decision')).filter(row => row.payload.decisionClass === 'D').length, 0, 'a wait for material never became a class D decision');
-});
-
-test('waiters require matching project and idempotent registration', async () => {
-  const f = fixture(); let woke = 0; f.service.callbacks.wakeAgenda = async () => { woke++; }; f.service.callbacks.waiterOwners = async () => ['alice'];
-  const input = { userId: 'alice', projectId: 'a', agendaId: 'agenda', toolId: 't', requirementId: 'r', dataRequirements: { schema: { fields: [] } } };
-  await f.service.registerTool({id:'t',track:'M',artifactDigest:'d'}); await f.service.waitFor(input); await f.service.waitFor(input);
-  await f.service.resolveWaiters({ type: 'dataset-ready', userId: 'alice', projectId: 'b', dataset: { semanticsChecksPassed: true } }); assert.equal(woke, 0);
-  await f.service.resolveWaiters({ type: 'dataset-ready', id: 'data', userId: 'alice', projectId: 'a', dataset: { semanticsChecksPassed: true } }); assert.equal(woke, 0);
-  const check=f.jobs.find(job=>job.kind==='evolution-self-check'); assert.equal(check.payload.projectId,'a');
-  await f.service.completeSelfCheck(check.payload,{id:'check',payload:{status:'passed'}}); assert.equal(woke,1);
 });
 
 test('actual sequential harm retires with retained version; merge needs every source case', async () => {
@@ -291,15 +281,14 @@ test('per-call execution failures remain distinct from accepted run feedback', a
   assert.equal((await feedback.observeFeedback({...adopted,id:'foreign',projectId:'other'})).observed,0);
 });
 
-test('staged V2 tools cannot be discovered or wake agendas until activation', async () => {
-  const f=fixture();let woke=0;f.service.callbacks.waiterOwners=async()=>['alice'];f.service.callbacks.wakeAgenda=async()=>{woke++;};
+test('staged V2 tools cannot be discovered until activation', async () => {
+  const f=fixture();
   await f.service.registerTool({id:'staged-tool',track:'M',status:'staged',artifactDigest:'staged-pin'});
-  await f.service.waitFor({userId:'alice',projectId:'research',agendaId:'agenda',kind:'tool',toolId:'staged-tool'});
   for (const id of ['a','b']) await f.service.recordAssessment('staged-tool',{id,caseId:id,kind:'published-case',independent:true,passed:true,exposed:false,retracted:false});
-  assert.equal(woke,0);assert.equal((await f.service.availableTools()).length,0);
+  assert.equal((await f.service.availableTools()).length,0);
   assert.equal((await f.service.registerTool({id:'staged-tool',track:'M',status:'staged',artifactDigest:'staged-pin'})).payload.validationLevel,'V2');
   const row=await f.service.get('staged-tool');await f.service.save('tool',row.id,{...row.payload,status:'active'},row);
-  await f.service.resolveWaiters({type:'tool-ready',toolId:'staged-tool'});assert.equal(woke,1);assert.equal((await f.service.availableTools()).length,1);
+  assert.equal((await f.service.availableTools()).length,1);
 });
 
 test('a concluded harm test is not restarted: later corrections are counted and do not retire', async () => {
@@ -336,30 +325,6 @@ test('compute-only self-check claims retain budget and concurrency without requi
   assert.equal((await worker.tick({kinds:['evolution-self-check']})).status,'done');
   assert.deepEqual(scopes,[['evolution-self-check']]);
   await assert.rejects(worker.tick({kinds:['unknown']}),/Unknown evolution job subset/);
-});
-
-test('measured failed self-check is a label; incomplete execution never authorizes wake', async () => {
-  const input={waiterId:'waiter',userId:'owner',projectId:'project',datasetId:'dataset',toolId:'tool',sourceEventId:'source'};
-  let wakes=0,saved;
-  const service={get:async()=>({id:'waiter',projectId:'project',payload:{status:'waiting',projectId:'project'}}),callbacks:{wakeAgenda:async({event})=>{wakes++;assert.equal(event.selfCheckStatus,'failed');return{resumed:true};}},save:async(...args)=>{saved=args;},now:()=>new Date(),wakeWait:EvolutionService.prototype.wakeWait};
-  const complete=(payload)=>EvolutionService.prototype.completeSelfCheck.call(service,input,{id:'check',payload});
-  assert.equal((await complete({status:'failed'})).resumed,false);
-  assert.equal((await complete({status:'pending',measurementCompleted:true})).resumed,false);
-  assert.equal(wakes,0);
-  assert.equal((await complete({status:'failed',measurementCompleted:true})).resumed,true);
-  assert.equal(wakes,1);assert.equal(saved[2].status,'resolved');
-  service.callbacks.wakeAgenda=async()=>({resumed:false});
-  assert.equal((await complete({status:'failed',measurementCompleted:true})).resumed,false);
-});
-
-test('stable method wait survives unknown future artifact identity and ignores unrelated tools in the same capability',async()=>{
-  const f=fixture();let wakes=0;f.service.callbacks.wakeAgenda=async()=>{wakes++;return{resumed:true};};
-  const wait=await f.service.waitFor({userId:'researcher',projectId:'project',agendaId:'agenda',kind:'tool',methodId:'missing-method',capabilityId:'statistics'});
-  await f.service.save('tool','unrelated',{status:'active',validationLevel:'V2',methodId:'other',capabilityIds:['statistics']});
-  await f.service.resolveWaiters({type:'tool-ready',toolId:'unrelated',userId:'researcher',projectId:'project'});assert.equal(wakes,0);
-  await f.service.save('tool','future-pin',{status:'active',validationLevel:'V2',methodId:'missing-method',capabilityIds:['statistics']});
-  await f.service.resolveWaiters({type:'tool-ready',toolId:'future-pin',userId:'researcher',projectId:'project'});assert.equal(wakes,1);
-  assert.equal((await f.service.get(wait.id,'researcher')).payload.status,'resolved');
 });
 
 test('public boundary maintenance repairs expose only executed public failed case identities and preserve the original',async()=>{
@@ -471,51 +436,6 @@ test('J12 is advisory until its site is calibrated: an uncalibrated decision nei
   for (const id of ['one', 'two']) await f.service.registerTool({ id, track: 'M', artifactDigest: id, name: 'Cohort model', description: 'Cohort model', holdoutCases: [{ id: 'reference', sha256: 'immutable' }] });
   f.advance(31 * 86400000);
   assert.deepEqual((await maintenance.monthly()).payload.judgeAdvisory, []);
-});
-
-test('one failing wake is recorded on its own wait and never stops the waits behind it', async () => {
-  const f=fixture();f.service.callbacks.waiterOwners=async()=>['alice','bob'];
-  const seen=[];
-  f.service.callbacks.wakeAgenda=async({agendaId})=>{
-    seen.push(agendaId);
-    if(agendaId==='deleted')throw Object.assign(new Error('Research agenda is unavailable.'),{status:404,code:'autopilot_agenda_not_found'});
-    if(agendaId==='broken')throw Object.assign(new Error('provider said: secret prose'),{code:'Some Provider Text'});
-    return {resumed:true};
-  };
-  await f.service.save('tool','new-tool',{status:'active',validationLevel:'V2',methodId:'m',capabilityIds:['statistics']});
-  for(const [userId,agendaId] of [['alice','deleted'],['alice','broken'],['alice','fine'],['bob','fine-too']])
-    await f.service.waitFor({userId,projectId:'p',agendaId,kind:'tool',methodId:'m',capabilityId:'statistics'});
-  const resolved=await f.service.resolveWaiters({type:'tool-ready',toolId:'new-tool'});
-  assert.deepEqual(seen.sort(),['broken','deleted','fine','fine-too']);
-  assert.equal(resolved.length,2,'the waits behind a failing one are woken');
-  const state=async(userId,agendaId)=>(await f.service.list('waiter',userId)).find(row=>row.payload.agendaId===agendaId).payload;
-  const broken=await state('alice','broken');
-  assert.equal(broken.status,'waiting');assert.equal(broken.wakeFailure.code,'evolution_wake_failed','only a closed code is kept, never the error text');
-  assert.equal(JSON.stringify(broken).includes('secret prose'),false);
-  const deleted=await state('alice','deleted');
-  assert.equal(deleted.status,'closed');assert.equal(deleted.closedReason,'autopilot_agenda_not_found');
-});
-
-test('a wake that waits for budget resolves its wait, and one the researcher holds back keeps it', async () => {
-  const f=fixture();f.service.callbacks.waiterOwners=async()=>['alice'];
-  const answers={deferred:{resumed:true,deferred:'autopilot_daily_budget_spent'},held:{resumed:false,held:'pause-thread'},gone:{resumed:false,closed:'autopilot_agenda_gone'}};
-  f.service.callbacks.wakeAgenda=async({agendaId})=>answers[agendaId];
-  await f.service.save('tool','new-tool',{status:'active',validationLevel:'V2',methodId:'m',capabilityIds:['statistics']});
-  for(const agendaId of Object.keys(answers))await f.service.waitFor({userId:'alice',projectId:'p',agendaId,kind:'tool',methodId:'m',capabilityId:'statistics'});
-  await f.service.resolveWaiters({type:'tool-ready',toolId:'new-tool'});
-  const state=async agendaId=>(await f.service.list('waiter','alice')).find(row=>row.payload.agendaId===agendaId).payload;
-  assert.equal((await state('deferred')).status,'resolved');assert.equal((await state('deferred')).wakeDeferred,'autopilot_daily_budget_spent');
-  assert.equal((await state('held')).status,'waiting');
-  assert.equal((await state('gone')).status,'closed');
-});
-
-test('a failing wake after a measured self-check does not fail the check', async () => {
-  const f=fixture();
-  const wait=await f.service.waitFor({userId:'alice',projectId:'p',agendaId:'agenda',kind:'data',toolId:'tool'});
-  f.service.callbacks.wakeAgenda=async()=>{throw Object.assign(new Error('x'),{status:402,code:'usage_budget_exceeded'});};
-  const done=await f.service.completeSelfCheck({waiterId:wait.id,userId:'alice',projectId:'p',datasetId:'d',toolId:'tool',sourceEventId:'e'},{id:'check',payload:{status:'passed'}});
-  assert.equal(done.resumed,false);
-  assert.equal((await f.service.get(wait.id,'alice')).payload.status,'waiting');
 });
 
 test('a retirement notice names the tool and the reason in words, never the identifier or the code', async () => {

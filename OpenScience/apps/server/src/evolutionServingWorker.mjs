@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { HttpError } from './security.mjs';
-export const EVOLUTION_SERVING_EVENT_TYPES = Object.freeze(['researcher-feedback','runtime-gap','autopilot-gap','dataset-ready','tool-ready','evaluation-gap']);
+export const EVOLUTION_SERVING_EVENT_TYPES = Object.freeze(['researcher-feedback','runtime-gap','dataset-ready','tool-ready','evaluation-gap']);
 /** The serving continuation of published state: events, decision expiries, the operators' digest, a retirement's completion and the
  * metrics-only month; and a self-check, an already published tool run in the isolated executor on a researcher's dataset. */
 export const EVOLUTION_SERVING_LIGHT_KINDS = Object.freeze(['evolution-event','evolution-decision','evolution-digest','evolution-maintain']);
@@ -75,8 +75,7 @@ export function createEvolutionServingWorker({service,integration,decisions=null
   }
   if(job.kind===EVOLUTION_SERVING_SELF_CHECK_KIND){
    const result=await selfCheck.run(p);
-   const completed=await service.completeSelfCheck(p,result);
-   return {selfCheckId:result?.id??null,status:result?.payload?.status??null,resumed:completed?.resumed===true};
+   return {selfCheckId:result?.id??null,status:result?.payload?.status??null};
   }
   const row=await service.get(p.eventId,p.eventOwnerId);
   if(!row||['processed','closed'].includes(row.payload.status))return {eventId:p.eventId};
@@ -87,7 +86,6 @@ export function createEvolutionServingWorker({service,integration,decisions=null
    return {eventId:p.eventId,status:'closed',closedReason:'retired-to-lab'};
   }
   await integration.consume(row.payload);
-  if (!['dataset-ready', 'tool-ready'].includes(row.payload.type)) await service.resolveWaiters(row.payload);
   await service.save('event',row.id,{...row.payload,status:'processed'},row,p.eventOwnerId);
   counters.processed++;
   return {eventId:p.eventId};

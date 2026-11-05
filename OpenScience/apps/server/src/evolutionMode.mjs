@@ -13,6 +13,6 @@ export function composeEvolution(dependencies, { createFull = createEvolution, c
   if (dependencies.config.evolutionServingOnly === true) return createServing(dependencies);
   const full = createFull(dependencies);
   if (!full) return null;
-  const { signals, policyBasis, observe, recordResumedResearchCompleted } = full.loops;
-  return { ...full, signals, policyBasis, observe, recordResumedResearchCompleted };
+  const { signals, policyBasis, observe } = full.loops;
+  return { ...full, signals, policyBasis, observe };
 }

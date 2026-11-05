@@ -154,8 +154,8 @@ export const WEB_DOCKERFILE = "deploy/web/Dockerfile";
 // evidence content copies. This digest is calculated from the resolved recipe;
 // independent merge review and complete production image acceptance remain pending.
 // The hosted extension adapters and measured source closure now ship in the Web image.
-// 2026-10-07: three added lines — 循证进化's module loops read evals/frontier-editing,
-// evals/autopilot-next-action and evals/geo-judge-cards cases.json at run time and the
+// 2026-10-07: three added lines — 循证进化's module loops read evals/frontier-editing
+// and evals/geo-judge-cards cases.json at run time and the
 // image did not carry them (deploy.test.mjs now derives every literal evals/ read).
 // 2026-10-07 (R10): one added line — the 插件与技能 page reads the community skills' text
 // (dsh-ppt, deep-structural-analysis) from the control plane's own copy, as it does the others.

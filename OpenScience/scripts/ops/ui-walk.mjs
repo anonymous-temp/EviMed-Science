@@ -256,7 +256,7 @@ const WALK_TABLES = {
       {"pattern":"/app/home","template":"kernel","why":"the global entry opens the default project conversation; OPEN_SCIENCE_WALK_CHAT=1 walks this entry and verifies its final project"},
       {"pattern":"/app/chat/:sessionId?","template":"kernel","why":"the conversation is the kernel's own frame; OPEN_SCIENCE_WALK_CHAT=1 opens it"},
       {"pattern":"/app/handoff","template":"screen","why":"opens only with a hand-off in the address; without one it returns to the conversation"},
-      {"pattern":"/app/autopilot/:taskId?","template":"kernel","why":"a redirect to the conversation, where the kernel's own 定时任务 page is drawn in its frame; OPEN_SCIENCE_WALK_CHAT=1 opens the address and reads the frame (`chat-schedules`)"},
+      {"pattern":"/app/autopilot","template":"kernel","why":"a redirect to the conversation, where the kernel's own 定时任务 page is drawn in its frame; OPEN_SCIENCE_WALK_CHAT=1 opens the address and reads the frame (`chat-schedules`)"},
       {"pattern":"/app/runs","template":"screen","why":"a redirect to the newest run's conversation, decided at run time"},
       {"pattern":"/app/files/open","template":"screen","why":"a compiled file named by its place: it reads the file and goes to the document's page, which `files-reader` walks"},
       {"pattern":"/app/memory/map","template":"screen","why":"a redirect to 总览 (2026-10-27: the map's relation graph and topics are a panel of it): it carries over what it can and is decided by the address, and the router test holds each case"},

@@ -28,7 +28,7 @@ export function createEvolutionPairedAudit({service,taskPool,adapters}){
       const candidate=archive?.payload.candidate??mission?.payload.candidate,baseline=mission?.payload.baseline;
       const unavailable=reason=>records.push({verdictId:verdict.id,moduleId:p.moduleId,missionId:p.missionId,status:'unmeasured',reason,developmentGain:null,auditGain:null,overfitGap:null});
       if(!adapter?.enabled||!candidate||!baseline||digest(candidate)!==p.candidateHash){unavailable('immutable-pair-unavailable');continue;}
-      if(new Set(batch.map(item=>item.studyFamilyId??item.sourceRoot)).size<({frontier:30,geo:30,autopilot:20,runtime:10}[p.moduleId]??2)||batch.some(item=>item.pool!=='audit'||item.feedbackCount||!['public','generated'].includes(item.scope))){unavailable('independent-heldout-groups-unavailable');continue;}
+      if(new Set(batch.map(item=>item.studyFamilyId??item.sourceRoot)).size<({frontier:30,geo:30,runtime:10}[p.moduleId]??2)||batch.some(item=>item.pool!=='audit'||item.feedbackCount||!['public','generated'].includes(item.scope))){unavailable('independent-heldout-groups-unavailable');continue;}
       const receipt={id};
       const input={moduleId:p.moduleId,missionId,pool:'audit',epoch,batch,userId:await service.owner(),projectId:EVOLUTION_PROJECT_ID};
       const measurements={};

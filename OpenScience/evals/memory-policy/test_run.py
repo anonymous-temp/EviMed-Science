@@ -48,11 +48,8 @@ class CaseFile(unittest.TestCase):
         self.assertTrue({"程序员", "教师", "产品经理", "研究者"} <= personas)
         # the named incidents
         text = json.dumps(cases, ensure_ascii=False)
-        for needle in ("记住我对青霉素过敏", "我对青霉素过敏，术后抗生素怎么选？", "更正", "忘掉", "每个工作日早上汇总", "患者张某", "身份证号"):
+        for needle in ("记住我对青霉素过敏", "我对青霉素过敏，术后抗生素怎么选？", "更正", "忘掉", "患者张某", "身份证号"):
             self.assertIn(needle, text)
-        tasks = by_family["task"]
-        self.assertEqual({case["task"]["taskType"] for case in tasks}, {"routine", "literature-sentinel"})
-        self.assertTrue(all(case["task"]["runs"] >= 2 for case in tasks), "run it twice")
         self.assertTrue(any(case.get("group") == "B" for case in cases), "the literal allergy pair needs a second account")
 
     def test_a_broken_file_is_named(self):
@@ -235,8 +232,6 @@ class FakeServer:
             return {"data": {"records": self.records}}
         if path.endswith("/overview"):
             return {"data": {"card": []}}
-        if path == "/api/autopilot/agendas":
-            return {"error": "404 scheduled tasks are not deployed here"} if tolerate else (_ for _ in ()).throw(RuntimeError("404"))
         raise AssertionError(f"unexpected route {method} {route}")
 
 
@@ -246,14 +241,13 @@ class WholeRun(unittest.TestCase):
         run.Api, run.time.sleep = FakeServer, lambda seconds: None
         try:
             with tempfile.TemporaryDirectory() as out:
-                args = run.parse(["--base-url", "http://fake", "--out-dir", out, "--only", "K01", "N01", "T01", "--min-settle", "0", "--settle", "60", "--poll", "1", "--stable-polls", "1"])
+                args = run.parse(["--base-url", "http://fake", "--out-dir", out, "--only", "K01", "N01", "--min-settle", "0", "--settle", "60", "--poll", "1", "--stable-polls", "1"])
                 lines = []
                 report = run.run(args, log=lines.append)
                 server = FakeServer.last
                 rows = {row["id"]: row for row in report["cases"]}
                 self.assertEqual(rows["K01-programmer-code-style"]["result"], "pass")
                 self.assertEqual(rows["N01-secret-in-passing"]["result"], "pass")
-                self.assertEqual(rows["T01-routine-task-instruction"]["result"], "skipped", "a deployment without scheduled tasks skips them, it does not fail them")
                 self.assertEqual((report["scored"], report["passed"]), (2, 2))
                 self.assertEqual(report["engine"], "native")
                 self.assertEqual(report["settle"]["reason"], "settled")
@@ -301,47 +295,3 @@ class WholeRun(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
-
-class ReservedRuntime(unittest.TestCase):
-    """A project runtime reserved by the case's own scheduled research is waited for, not a reason to skip (R19.1 production run)."""
-
-    def _api(self, answers, wait=60):
-        import io
-        import urllib.error
-        api = run.Api("https://example.invalid", reserved_wait=wait, poll=5, sleep=lambda seconds: clock.append(clock[-1] + seconds), clock=lambda: clock[-1])
-        clock = [0]
-        calls = []
-
-        class Opener:
-            def open(self, request, timeout=None):
-                calls.append(request.full_url)
-                answer = answers.pop(0)
-                if isinstance(answer, int):
-                    body = b'{"code":"runtime_reserved_for_autopilot"}' if answer == 423 else b'{"code":"other"}'
-                    raise urllib.error.HTTPError(request.full_url, answer, "x", {}, io.BytesIO(body))
-
-                class Response(io.BytesIO):
-                    def __enter__(self):
-                        return self
-
-                    def __exit__(self, *rest):
-                        return False
-                return Response(json.dumps(answer).encode())
-        api.opener = Opener()
-        return api, calls, clock
-
-    def test_it_waits_for_the_reservation_to_end(self):
-        api, calls, _ = self._api([423, 423, {"data": {"id": "s1"}}])
-        self.assertEqual(api.call("/api/runtime/sessions", {})["data"]["id"], "s1")
-        self.assertEqual(len(calls), 3)
-
-    def test_it_gives_up_after_its_wait_and_other_refusals_are_not_retried(self):
-        api, calls, _ = self._api([423] * 30, wait=20)
-        with self.assertRaises(RuntimeError):
-            api.call("/api/runtime/sessions", {})
-        self.assertLessEqual(len(calls), 6)
-        api, calls, _ = self._api([409])
-        self.assertIn("error", api.call("/api/runtime/sessions", {}, tolerate=True))
-        self.assertEqual(len(calls), 1)
-

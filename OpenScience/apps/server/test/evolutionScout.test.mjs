@@ -65,7 +65,6 @@ test("an already completed scout can recover missing structural fields once with
   assert.equal(executions, 2); assert.equal(normalizations, 1);
   const dossier = rows.get(first.dossierId).payload;
   assert.equal(dossier.eligibility.eligible, true); assert.equal(dossier.rankingFeatures.literature24Months, 12);
-  assert.deepEqual(dossier.waitingAgendaIds, []);
 });
 
 test('J11 semantic coverage recognizes an existing method without allowing invented inventory IDs', async () => {

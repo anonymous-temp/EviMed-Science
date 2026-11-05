@@ -33,7 +33,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 
 // This context is set by the trusted worker, never by an agent's tool arguments.
 const context = new AsyncLocalStorage();
-export const EVOLUTION_MODULE_IDS = Object.freeze(['tools', 'frontier', 'geo', 'autopilot', 'sources', 'evidence', 'memory', 'runtime']);
+export const EVOLUTION_MODULE_IDS = Object.freeze(['tools', 'frontier', 'geo', 'sources', 'evidence', 'memory', 'runtime']);
 
 /** @param {{missionId:string,moduleId:string}} value @param {()=>any} operation */
 export function withEvolutionUsage(value, operation) {

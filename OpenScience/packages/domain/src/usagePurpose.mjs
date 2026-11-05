@@ -205,11 +205,11 @@ export function isChargeableResearchRun(run) {
  */
 export function isResearcherOwnedWork(run) {
   if (!run || usagePurposeOfRun(run) !== 'kernel') return false
-  // The independent re-check of a scheduled task's claim is the platform's own work on the researcher's behalf, paid from the
-  // task's budget but never something they asked or did: it teaches nothing and is no interest of theirs.
+  // The independent re-check of a claim, which the retired scheduler ran, was the platform's own work on the researcher's behalf:
+  // never something they asked or did, it teaches nothing and is no interest of theirs.
   if (isVerificationRun(run)) return false
   const route = String(run.effectiveRouteReason ?? '')
-  const managedResearch = route.startsWith('geo:') || route.startsWith('autopilot:') || route.startsWith('vcr:')
+  const managedResearch = route.startsWith('geo:') || route.startsWith('vcr:')
   return run.automated !== true || managedResearch
 }
 

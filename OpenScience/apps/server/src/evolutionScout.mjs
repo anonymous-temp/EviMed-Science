@@ -11,7 +11,7 @@ export function evolutionPriorityBreakdown(features = {}, weights = {}) {
   // A single authorized researcher incident counts; an operator may retain its independently configured operational floor.
   const demandFloor = Math.min(5, Math.max(1, Math.trunc(Number(features.demandFloor)) || EVOLUTION_DEMAND_MIN_ACCOUNTS));
   return { literature: 3 * Math.log1p(count("literature24Months")), failure: 4 * Math.log1p(count("runtimeFailures")),
-    waiting: 5 * Math.log1p(count("waitingAgendas")), reference: 2 * Number(features.referenceCode === true),
+    reference: 2 * Number(features.referenceCode === true),
     data: 2 * Number(features.reachableData === true), examples: Math.min(count("publishedExamples"), 5),
     coverage: 3 * Number(features.coverageGap === true), dependencies: -3 * count("unresolvedDependencies"),
     demand: count("distinctAccounts") >= demandFloor ? w.demand * Math.log1p(count("distinctAccounts")) : 0,
@@ -148,14 +148,13 @@ export function createEvolutionScout({ config, service, runs, registry, decision
       const covered = semanticCovered || Object.hasOwn(METHOD_RECORDS, methodId) || tools.some(row => row.payload.methodId === methodId && row.payload.status !== "retired");
       const rankingFeatures = { literature24Months: demand.verified ? demand.count : 0, literatureQuery: demand.query,
         runtimeFailures: failures.filter(row => row.payload.methodId === methodId).length,
-        waitingAgendas: await service.callbacks?.waitingAgendaCount?.(card.capabilityIds ?? []) ?? 0,
         referenceCode: reference.independentImplementation === true, reachableData: reference.ok === true && reference.publicInputCount >= 2,
         publishedExamples: reference.publishedReferenceCount ?? 0, coverageGap: parents.length >= 2 || !covered && card.feasibility?.implementationMissing === true,
         unresolvedDependencies: (card.dependencies ?? []).filter(dependency => !config.evolutionDependencyAllowlist.some(item => item.id === dependency.id)).length };
       const papers = (card.papers ?? card.sourcePapers ?? []).filter(paper => paper.doi || paper.pmid || paper.url);
       const eligibility = evolutionResearchEligibility({ card, features: rankingFeatures, reference,
         firstTool: !tools.some(row => ["active", "alias", "retired"].includes(row.payload.status)) });
-      const data = { ...card, methodId, id, papers, waitingAgendaIds: [], parentToolIds: parents.map(row => row.id), maintenanceReviewId: payload.maintenanceReviewId ?? null, rankingFeatures, measurements: { demand, reference, ...(judgeCoverage ? { judgeCoverage } : {}) },
+      const data = { ...card, methodId, id, papers, parentToolIds: parents.map(row => row.id), maintenanceReviewId: payload.maintenanceReviewId ?? null, rankingFeatures, measurements: { demand, reference, ...(judgeCoverage ? { judgeCoverage } : {}) },
         score: evolutionPriority(rankingFeatures), developmentRunId: run.id,
         eligibility };
       if (payload.decisionActionId && previous?.payload.decisionActionId !== payload.decisionActionId) Object.assign(data, { decisionActionId: payload.decisionActionId, buildAttempts: 0,

@@ -132,10 +132,9 @@ COPY --from=build /app/evals/paper-gold/development-contract.json /app/evals/pap
 COPY --from=build /app/evals/tool-graph/*.json ./evals/tool-graph/
 COPY --from=build /app/evals/method-quality ./evals/method-quality
 # 循证进化's module loops read their development cases at run time (moduleEvolutionPreparation,
-# moduleEvolutionEvaluators, moduleEvolutionCalibration): without them every 前沿动态, 循证 GEO and
-# 主动科研 mission stopped on a missing file before its first smoke.
+# moduleEvolutionEvaluators, moduleEvolutionCalibration): without them every 前沿动态 and 循证 GEO
+# mission stopped on a missing file before its first smoke.
 COPY --from=build /app/evals/frontier-editing/cases.json ./evals/frontier-editing/cases.json
-COPY --from=build /app/evals/autopilot-next-action/cases.json ./evals/autopilot-next-action/cases.json
 COPY --from=build /app/evals/geo-judge-cards/cases.json ./evals/geo-judge-cards/cases.json
 COPY --from=build /app/evals/evidence-appraisal/briefs.json ./evals/evidence-appraisal/briefs.json
 COPY --from=build /app/evals/evidence-appraisal/hidden ./evals/evidence-appraisal/hidden

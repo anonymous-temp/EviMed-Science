@@ -152,7 +152,6 @@ const dispatchFields = new Set([
   "sessionId",
   "dispatchId",
   "dispatchFingerprint",
-  "agendaId",
   "automated",
   // A person is waiting on this dispatch (an interactive route, a messaging channel): waking the
   // runtime waits for a free slot instead of refusing. Read by `dispatch` itself, not recorded.
@@ -456,7 +455,6 @@ function normalizeDispatchInput(input) {
     sessionId: safeId(input.sessionId, "research session id"),
     dispatchId: safeId(input.dispatchId, "agent run dispatch id"),
     dispatchFingerprint: input.dispatchFingerprint == null ? null : normalizeDispatchFingerprint(input.dispatchFingerprint),
-    agendaId: input.agendaId == null ? null : safeId(input.agendaId, "research agenda id"),
     // Started by a harness rather than a person; read by the inbox, which
     // records such a run's completion without notifying anyone (C1).
     automated: input.automated === true,
@@ -613,7 +611,6 @@ function foldEvents(events) {
         dispatchId,
         ...(event.dispatchFingerprint != null ? { dispatchFingerprint: normalizeDispatchFingerprint(event.dispatchFingerprint) } : {}),
         dispatchStatus,
-        ...(event.agendaId ? { agendaId: safeStoredId(event.agendaId, "agendaId") } : {}),
         ...(Object.hasOwn(event, "baselineCursor") ? { baselineCursor: event.baselineCursor } : {}),
         ...(event.nativeTurn ? { nativeTurn: validateNativeTurn(event.nativeTurn) } : {}),
         ...(event.kernelRequestIds ? { kernelRequestIds: event.kernelRequestIds.map(storedKernelRequestId) } : {}),
@@ -4426,14 +4423,15 @@ function runSideActivitySignature(projection) {
 
 /**
  * Whether a run is a researcher's own turn rather than work a machine started
- * — an evaluation, an autopilot episode, a lesson or a source being read.
+ * — an evaluation, a lesson or a source being read.
  * What "last open" reopens (`lastSessionId`) and what 与我相关 reads a
  * researcher's questions from (`frontierProfiles.mjs`) are both this.
  * @param {Record<string, any> | null | undefined} run @returns {boolean}
  */
 export function isResearcherRun(run) {
+  // A run the retired scheduler wrote before 2026-11 is told by its route reason alone.
   if (!run || run.automated === true || String(run.effectiveRouteReason ?? "").startsWith("autopilot:")) return false;
-  // The independent re-check of a scheduled execution's claim is not an `autopilot:` reason and carries no `automated`, so it used to
+  // The independent re-check of a scheduled execution's claim carries no `automated`, so it used to
   // be the researcher's "last open" conversation and a question of theirs.
   if (isVerificationRun(run)) return false;
   return usagePurposeOfRun(run) === "kernel";
@@ -4750,7 +4748,7 @@ export class AgentRunStore {
    * The conversation a researcher last worked in, in this project (C4 "me"
    * `lastSessionId`): the session of the run that moved most recently, so the
    * shell can reopen it instead of a blank page. Work a machine started —
-   * an evaluation, an autopilot episode, a lesson or a source being read — is
+   * an evaluation, a lesson or a source being read — is
    * not "last open": on 2026-09-21 the chat page opened a method distillation
    * that had run in the researcher's own project that morning, titled
    * 「<evimed-budget-scope>e…」 and full of the loop's English working.
@@ -5068,7 +5066,6 @@ export class AgentRunStore {
     baselineCursor,
     dispatchId = null,
     dispatchFingerprint = null,
-    agendaId = null,
     automated = false,
     estimatedMinutes = null,
     forkedFrom = null,
@@ -5166,7 +5163,6 @@ export class AgentRunStore {
         dispatchId,
         ...(dispatchFingerprint != null ? { dispatchFingerprint } : {}),
         dispatchStatus: dispatchId ? "dispatching" : "accepted",
-        ...(agendaId ? { agendaId } : {}),
         ...(nativeTurn ? { nativeTurn } : {}),
         kernelRequestIds: kernelRequestIds ?? (dispatchId ? [randomId("req_")] : []),
         sessionId: session.sessionId,
@@ -5243,7 +5239,6 @@ export class AgentRunStore {
       dispatchId,
       dispatchFingerprint,
       automated,
-      agendaId,
       estimatedMinutes,
       question,
       briefText,
@@ -5284,7 +5279,7 @@ export class AgentRunStore {
     const pinned = routedOverBinding && session.mode === "specialist"
       ? { ...session, agentId: selected.effectiveAgentId, agentVersion: selected.effectiveAgentVersion, runtimeAgent: selected.effectiveRuntimeAgent }
       : session;
-    const reservation = await this.reserveRun(project, pinned, { baselineCursor, dispatchId, dispatchFingerprint, agendaId, automated, estimatedMinutes, question, ...selected, effectiveProducts,beforeReserve });
+    const reservation = await this.reserveRun(project, pinned, { baselineCursor, dispatchId, dispatchFingerprint, automated, estimatedMinutes, question, ...selected, effectiveProducts,beforeReserve });
     const record = reservation.run;
     if (!reservation.owner) return this.existingDispatch(project, record);
     this.projects.set(`${project.userId}:${project.id}`, project);
@@ -6110,13 +6105,10 @@ export class AgentRunStore {
     //
     // A separate field, not `artifacts`.
     //
-    // `artifacts` means "the gate accepted these", and five modules rely on
-    // exactly that: `server.mjs` picks the autopilot's verification result out
-    // of it, `autopilotService` reads `agenda-delta.json` out of it, and
-    // `learningRuntime` and `sourceUnderstandingRuntime` read a bounded run's
+    // `artifacts` means "the gate accepted these", and two modules rely on
+    // exactly that: `learningRuntime` and `sourceUnderstandingRuntime` read a bounded run's
     // output out of it. Widening it would have made an ungraded file readable
-    // as a verified result — the same defect class as an autopilot verification
-    // that was never sound — so the fix would have bought the researcher their
+    // as a verified result, so the fix would have bought the researcher their
     // files at the price of the guarantee that makes those files worth having.
     //
     // So the verdict is untouched, `artifacts` keeps its meaning, and what the

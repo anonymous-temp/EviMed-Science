@@ -277,8 +277,6 @@ const FALLBACK_RULES = {
   OPEN_SCIENCE_GATE_REPAIR_ROUNDS: ["eq", "gateRepairRounds", "0 since the 2026-09-17 ruling"],
   OPEN_SCIENCE_LLM_ROUTING_CONFIDENCE_THRESHOLD: ["eq", "llmRoutingConfidenceThreshold", "classifier policy"],
   // Cadences: how often and how long a worker holds work.
-  OPEN_SCIENCE_AUTOPILOT_POLL_MS: ["eq", "autopilotPollMs", "cadence"],
-  OPEN_SCIENCE_AUTOPILOT_LEASE_MS: ["eq", "autopilotLeaseMs", "lease"],
   OPEN_SCIENCE_RUNTIME_CONTROLLER_POLL_MS: ["eq", "runtimeControllerPollMs", "cadence"],
   OPEN_SCIENCE_RUNTIME_QUOTA_CHECK_INTERVAL_MS: ["eq", "runtimeQuotaCheckIntervalMs", "cadence"],
   OPEN_SCIENCE_RUNTIME_IDLE_TIMEOUT_MS: ["eq", "runtimeIdleTimeoutMs", "how long an idle runtime stays warm; twelve hours is product policy"],
@@ -305,7 +303,6 @@ const FALLBACK_RULES = {
   // The official starter packs are published for the web app's people; the API-only stack serves an institution's subjects and publishes none.
   OPEN_SCIENCE_OFFICIAL_PACKS_ENABLED: ["deployment", "switch"],
   OPEN_SCIENCE_LEARNING_ENABLED: ["deployment", "switch"],
-  OPEN_SCIENCE_AUTOPILOT_ENABLED: ["deployment", "switch"],
   OPEN_SCIENCE_RUNTIME_WARM_ON_SIGN_IN: ["deployment", "switch"],
   OPEN_SCIENCE_PUBLIC_URL: ["deployment", "url"],
   OPEN_SCIENCE_OPENVIKING_URL: ["deployment", "url"],
@@ -535,27 +532,6 @@ test("the routing classifier has its own total deadline, not the gateway's strea
   } finally {
     if (saved == null) delete process.env.OPEN_SCIENCE_LLM_ROUTING_TIMEOUT_MS;
     else process.env.OPEN_SCIENCE_LLM_ROUTING_TIMEOUT_MS = saved;
-  }
-});
-
-test("the proactive-research planner is on by default, one lever turns it off, and its deadline is short", () => {
-  // It sits on the scheduler's path, which walks every due agenda in one loop,
-  // so a provider that hangs must cost each agenda seconds and not minutes; and
-  // an off switch that does not arrive is a model call nobody can stop.
-  const saved = process.env.OPEN_SCIENCE_AUTOPILOT_PLANNER_ENABLED;
-  delete process.env.OPEN_SCIENCE_AUTOPILOT_PLANNER_ENABLED;
-  try {
-    const config = loadConfig({ rootDir: repoRoot });
-    assert.equal(config.autopilotPlannerEnabled, true);
-    assert.ok(config.autopilotPlannerTimeoutMs <= 30_000);
-    process.env.OPEN_SCIENCE_AUTOPILOT_PLANNER_ENABLED = "false";
-    assert.equal(loadConfig({ rootDir: repoRoot }).autopilotPlannerEnabled, false);
-    process.env.OPEN_SCIENCE_AUTOPILOT_PLANNER_ENABLED = "";
-    assert.equal(loadConfig({ rootDir: repoRoot }).autopilotPlannerEnabled, true, "empty reads as unset");
-    assert.equal(loadConfig({ rootDir: repoRoot, autopilotPlannerEnabled: false }).autopilotPlannerEnabled, false);
-  } finally {
-    if (saved == null) delete process.env.OPEN_SCIENCE_AUTOPILOT_PLANNER_ENABLED;
-    else process.env.OPEN_SCIENCE_AUTOPILOT_PLANNER_ENABLED = saved;
   }
 });
 

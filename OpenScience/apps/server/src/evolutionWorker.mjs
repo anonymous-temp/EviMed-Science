@@ -310,9 +310,8 @@ export class EvolutionWorker {
     if (job.kind === 'evolution-event') {
       const row = await this.service.get(p.eventId, p.eventOwnerId);
       if (!row || row.payload.status === 'processed') return {};
-      if (paused && !['researcher-feedback', 'runtime-gap', 'autopilot-gap', 'dataset-ready', 'tool-ready', 'source-facts-scan', 'evaluation-gap'].includes(row.payload.type)) return evolutionDeferred();
+      if (paused && !['researcher-feedback', 'runtime-gap', 'dataset-ready', 'tool-ready', 'source-facts-scan', 'evaluation-gap'].includes(row.payload.type)) return evolutionDeferred();
       await this.callbacks.onEvent?.(row.payload, this.service);
-      await this.service.resolveWaiters(row.payload);
       await this.service.save('event', row.id, { ...row.payload, status: 'processed' }, row, p.eventOwnerId);
       return { eventId: row.id };
     }
@@ -321,7 +320,6 @@ export class EvolutionWorker {
     const callback = this.callbacks[name === 'self-check' ? 'selfCheck' : name];
     if (!callback) throw new Error(`Missing evolution ${name} worker implementation.`);
     const result = await callback(p, { service: this.service, job, purpose: 'evolution', signal: this.abortController?.signal });
-    if (name === 'self-check') await this.service.completeSelfCheck(p, result);
     for (const failure of await this.service.list('failure')) if (failure.payload.workerStage === name && failure.payload.status === 'waiting' && failure.payload.dependencyKey === String(p.dependencyId ?? p.dossierId ?? p.missionId ?? job.id)) {
       await this.service.save('failure', failure.id, { ...failure.payload, status: 'resolved', resolvedAt: this.service.now().toISOString() }, failure);
     }

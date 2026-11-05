@@ -9,9 +9,9 @@ const stub = (patch = {}) => ({ owner: async () => 'u', now: () => new Date('202
   enqueue: async () => ({}), ...patch });
 test('serving worker claims only serving work and completes feedback continuation',async()=>{
  const calls=[]; const row={id:'event',payload:{type:'researcher-feedback',status:'pending'}};
- const service=stub({get:async(id)=>id==='event'?row:null,save:async(...args)=>calls.push(['save',...args]),resolveWaiters:async()=>calls.push(['wake']),jobs:{claim:async kinds=>{assert.deepEqual(kinds,['evolution-event','evolution-decision','evolution-digest','evolution-maintain']);return {id:'job',kind:'evolution-event',userId:'u',leaseToken:'lease',payload:{eventId:'event'}}},finish:async()=>calls.push(['finish']),fail:async()=>assert.fail('unexpected failure'),renew:async()=>true}});
+ const service=stub({get:async(id)=>id==='event'?row:null,save:async(...args)=>calls.push(['save',...args]),jobs:{claim:async kinds=>{assert.deepEqual(kinds,['evolution-event','evolution-decision','evolution-digest','evolution-maintain']);return {id:'job',kind:'evolution-event',userId:'u',leaseToken:'lease',payload:{eventId:'event'}}},finish:async()=>calls.push(['finish']),fail:async()=>assert.fail('unexpected failure'),renew:async()=>true}});
  const worker=createEvolutionServingWorker({service,config:{evolutionEnabled:true},logger:quiet,integration:{consume:async()=>calls.push(['consume'])}});
- await worker.tick(); assert.deepEqual(calls.map(c=>c[0]),['consume','wake','save','finish']);assert.equal(worker.status().experimentScheduling,false);await worker.close();
+ await worker.tick(); assert.deepEqual(calls.map(c=>c[0]),['consume','save','finish']);assert.equal(worker.status().experimentScheduling,false);await worker.close();
 });
 test('an experiment\'s event is closed once as retired to the lab, kept whole, and its job finishes',async()=>{
  let saved,finished; const row={id:'event',payload:{type:'frontier-publication',status:'queued',paper:'kept'}};

@@ -19,9 +19,8 @@ export function createModuleEvolutionPreparation({service,taskPool,policies,prov
   if(!runner)return {status:'waiting',reason:'module_evaluator_unavailable'};
   if(input.phase==='development'){
    let cases=await deps.readDevelopmentTasks?.(input);
-   if(!cases&&['frontier','autopilot'].includes(input.moduleId)){
-    const file=input.moduleId==='frontier'?'../../../evals/frontier-editing/cases.json':'../../../evals/autopilot-next-action/cases.json';
-    const data=JSON.parse(await readFile(new URL(file,import.meta.url),'utf8'));cases=input.moduleId==='frontier'?data.lane:data.cases;
+   if(!cases&&input.moduleId==='frontier'){
+    const data=JSON.parse(await readFile(new URL('../../../evals/frontier-editing/cases.json',import.meta.url),'utf8'));cases=data.lane;
    }
    if(!cases&&input.moduleId==='geo'){
     cases=await readGeoCalibrationCases();

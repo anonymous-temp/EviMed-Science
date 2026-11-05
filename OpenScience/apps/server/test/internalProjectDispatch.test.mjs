@@ -4,14 +4,11 @@
 // `evimed-evidence` in an ordinary one, so a researcher who named either in a request header ran research the platform paid for.
 // Driven through the composed app, the way a browser reaches it.
 import assert from "node:assert/strict";
-import { createServer } from "node:http";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { EVIDENCE_PROJECT_ID, FRONTIER_PROJECT_ID, LEARNING_PROJECT_ID, SOURCES_PROJECT_ID } from "../src/internalProjects.mjs";
-import { createAutopilotRoutes } from "../src/autopilotRoutes.mjs";
-import { sendError } from "../src/security.mjs";
 import { createWebApiApp } from "../src/server.mjs";
 
 const SERVER_MADE = [LEARNING_PROJECT_ID, SOURCES_PROJECT_ID, FRONTIER_PROJECT_ID, EVIDENCE_PROJECT_ID, `methodeval-${"ab".repeat(12)}`];
@@ -19,7 +16,7 @@ const SERVER_MADE = [LEARNING_PROJECT_ID, SOURCES_PROJECT_ID, FRONTIER_PROJECT_I
 /** @param {(context: { app: any, base: string, user: any }) => Promise<void>} run @param {Record<string, any>} [overrides] */
 async function withApp(run, overrides = {}) {
   const dataDir = await mkdtemp(path.join(tmpdir(), "os-internal-dispatch-"));
-  const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: true, runTitlesEnabled: false, autopilotEnabled: true, ...overrides });
+  const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: true, runTitlesEnabled: false, ...overrides });
   const address = await app.listen(0, "127.0.0.1");
   const base = `http://127.0.0.1:${address.port}`;
   try {
@@ -71,26 +68,3 @@ test("an ordinary account cannot start work in a project the platform made for i
   });
 });
 
-test("a proactive agenda is refused in a platform-made project the same way, before anything is made", async () => {
-  /** @type {string[]} */
-  const created = [];
-  const routes = createAutopilotRoutes({
-    store: { ensureSessionUser: async () => ({ user: { id: "u1" } }), assertCsrf: async () => {}, requireProject: async () => ({}) },
-    service: { create: async (/** @type {string} */ _user, /** @type {any} */ body) => { created.push(body.projectId); return {}; }, projectAgenda: () => ({}) },
-    maxJsonBytes: 65_536,
-  });
-  const server = createServer((req, res) => { routes(req, res).then((handled) => { if (!handled) res.end("{}"); }, (error) => sendError(res, error, {})); });
-  await new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve(undefined)));
-  try {
-    const base = `http://127.0.0.1:${/** @type {any} */ (server.address()).port}`;
-    for (const id of SERVER_MADE) {
-      const answered = await fetch(`${base}/api/autopilot/agendas`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ projectId: id, title: "Watch" }) });
-      assert.equal(answered.status, 404, id);
-      assert.equal((await answered.json()).code, "project_not_found", id);
-    }
-    assert.deepEqual(created, [], "no agenda was made in a project the platform keeps for itself");
-    const own = await fetch(`${base}/api/autopilot/agendas`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ projectId: "default", title: "Watch" }) });
-    assert.equal(own.status, 201);
-    assert.deepEqual(created, ["default"]);
-  } finally { await new Promise((resolve) => server.close(resolve)); }
-});

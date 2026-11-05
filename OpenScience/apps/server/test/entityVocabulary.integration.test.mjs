@@ -1,8 +1,8 @@
 // The shared entity vocabulary against a real PostgreSQL (plan §4.2, B3): the
 // frontier pipeline stores the keys it always did while sharing the
 // vocabulary's glossary, `frontierItemsMatching` finds published items by
-// identifier before entity and never an unpublished one, and an autopilot
-// agenda, a GEO project and a VCR study are tagged when written, again when
+// identifier before entity and never an unpublished one, and a GEO
+// project and a VCR study are tagged when written, again when
 // edited, and once when they were made before the vocabulary could tag —
 // each row read and written through its own account.
 //
@@ -11,14 +11,12 @@
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
-import { AutopilotService } from "../src/autopilotService.mjs";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { createEntityVocabulary, frontierItemsMatching } from "../src/entityVocabulary.mjs";
 import { FRONTIER_EDITOR_VERSION, buildModelInput, sha256 } from "../src/frontierEditor.mjs";
 import { migrateFrontier } from "../src/frontierPersistence.mjs";
 import { FrontierPipeline } from "../src/frontierPipeline.mjs";
 import { GeoStore } from "../src/geoStore.mjs";
-import { ProductDocuments, ProductJobs } from "../src/productStore.mjs";
 import { migrateUsageLedger } from "../src/usagePersistence.mjs";
 import { VcrStore } from "../src/vcrStore.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
@@ -237,78 +235,6 @@ test("D-05: frontierItemsMatching never returns the platform's own echoed card, 
   assert.deepEqual(await titles({ identifierKeys: ["reg:NCT01234567"], entityKeys: ["drug:foo"] }), []);
   // The vocabulary's own method, which the programme, the planner and the VCR events call, is the same lookup.
   assert.deepEqual(await vocabulary().frontierItemsMatching({ entityKeys: ["drug:foo"], identifierKeys: ["reg:NCT01234567"] }), []);
-});
-
-// --- autopilot agendas -------------------------------------------------------------------------
-
-const agendaInput = { title: "Question", topics: ["research"], taskTypes: ["evidence-update"], dailyBudgetCny: 20, weeklyBudgetCny: 80, maxEpisodeCny: 8, scheduleHour: 1, timeZone: "UTC" };
-
-test("an agenda is tagged when it is made and again when its title or prompt is edited, not when something else is", options, async () => {
-  const documents = new ProductDocuments(database);
-  const service = new AutopilotService({ documents, jobs: new ProductJobs(database), entityVocabulary: vocabulary() });
-  const made = await service.create(alice, { ...agendaInput, projectId: "one", title: "Semaglutide in heart failure", topics: ["semaglutide", "heart failure NCT01234567"], prompt: "Watch the SELECT trial and PMID: 37952131" });
-  assert.deepEqual(made.payload.entityKeys, ["disease:heart failure", "drug:semaglutide", "trial:select", "pmid:37952131", "reg:NCT01234567"]);
-  assert.deepEqual(service.projectAgenda(made).payload.entityKeys, made.payload.entityKeys, "the existing view carries them");
-  const budget = await service.update(alice, made.id, { expectedRevision: made.revision, dailyBudgetCny: 30 });
-  assert.deepEqual(budget.payload.entityKeys, made.payload.entityKeys, "an unrelated edit leaves them");
-  const retitled = await service.update(alice, made.id, { expectedRevision: budget.revision, title: "Metformin in Alzheimer's disease" });
-  assert.deepEqual(retitled.payload.entityKeys, ["disease:alzheimer's disease", "disease:heart failure", "drug:metformin", "drug:semaglutide", "trial:select", "pmid:37952131", "reg:NCT01234567"],
-    "the topics and the prompt still name what they named");
-  const reprompted = await service.update(alice, made.id, { expectedRevision: retitled.revision, prompt: "Only metformin" });
-  assert.deepEqual(reprompted.payload.entityKeys, ["disease:alzheimer's disease", "disease:heart failure", "drug:metformin", "drug:semaglutide", "reg:NCT01234567"]);
-  const stored = await documents.get(alice, "agenda", made.id);
-  assert.deepEqual(stored.payload.entityKeys, reprompted.payload.entityKeys, "and what is stored is what the edit returned");
-});
-
-test("agendas made before the vocabulary could tag are tagged once; another account's agendas are neither read nor written", options, async () => {
-  const documents = new ProductDocuments(database);
-  const jobs = new ProductJobs(database);
-  const legacy = new AutopilotService({ documents, jobs });
-  const mine = await legacy.create(alice, { ...agendaInput, projectId: "two", title: "Metformin and the SELECT trial" });
-  const mineArchived = await legacy.create(alice, { ...agendaInput, projectId: "two", title: "Archived semaglutide question" });
-  await legacy.archive(alice, mineArchived.id, { expectedRevision: mineArchived.revision });
-  const theirs = await legacy.create(bob, { ...agendaInput, projectId: "one", title: "Semaglutide for Bob" });
-  assert.equal("entityKeys" in mine.payload, false, "no vocabulary, no keys");
-  assert.deepEqual(legacy.projectAgenda(mine).payload.entityKeys, [], "and the view says none");
-  const before = await documents.get(bob, "agenda", theirs.id);
-
-  const service = new AutopilotService({ documents, jobs, entityVocabulary: vocabulary() });
-  const spy = spyOnDatabase(database);
-  const pass = await service.backfillEntityKeys(database, { userId: alice, limit: 100 });
-  assert.ok(pass.tagged >= 1);
-  assert.deepEqual([...spy.accounts].filter((id) => id.startsWith("ent_")), [alice], "the pass read one account's rows and no other's");
-  assert.deepEqual((await documents.get(alice, "agenda", mine.id)).payload.entityKeys, ["drug:metformin", "trial:select"]);
-  assert.equal("entityKeys" in (await documents.get(alice, "agenda", mineArchived.id)).payload, false, "an archived agenda is left alone");
-  const untouched = await documents.get(bob, "agenda", theirs.id);
-  assert.deepEqual([untouched.revision, "entityKeys" in untouched.payload], [before.revision, false], "the other account's agenda is as it was");
-
-  // Once: a second pass tags nothing, and only the keys were added to the payload.
-  const tagged = await documents.get(alice, "agenda", mine.id);
-  assert.equal((await service.backfillEntityKeys(database, { userId: alice })).tagged, 0);
-  assert.equal((await documents.get(alice, "agenda", mine.id)).revision, tagged.revision);
-  const { entityKeys, ...rest } = tagged.payload;
-  assert.deepEqual(rest, mine.payload, "nothing else of the agenda moved");
-  assert.deepEqual(entityKeys, ["drug:metformin", "trial:select"]);
-  // The pass with no account named reaches Bob's, through Bob's own document.
-  await service.backfillEntityKeys(database, { limit: 100 });
-  assert.deepEqual((await documents.get(bob, "agenda", theirs.id)).payload.entityKeys, ["drug:semaglutide"]);
-});
-
-test("an agenda made while the glossary is empty carries no keys, and is tagged when the glossary arrives", options, async () => {
-  const documents = new ProductDocuments(database);
-  const rows = (await database.query("SELECT kind, term_en, term_zh, keep_original, origin FROM evimed_frontier.glossary")).rows;
-  await database.query("TRUNCATE evimed_frontier.glossary");
-  const vocab = vocabulary();
-  const service = new AutopilotService({ documents, jobs: new ProductJobs(database), entityVocabulary: vocab });
-  const made = await service.create(alice, { ...agendaInput, projectId: "one", title: "Late semaglutide question" });
-  assert.equal("entityKeys" in made.payload, false, "an empty [] must not stand for a glossary that was not there");
-  for (const row of rows) {
-    await database.query("INSERT INTO evimed_frontier.glossary (kind, term_en, term_zh, keep_original, origin) VALUES ($1,$2,$3,$4,$5)", [row.kind, row.term_en, row.term_zh, row.keep_original, row.origin]);
-  }
-  vocab.registerBackfill("autopilot", ({ limit }) => service.backfillEntityKeys(database, { limit }));
-  assert.equal((await vocab.refresh()).entries, rows.length);
-  await vocab.backfill();
-  assert.deepEqual((await documents.get(alice, "agenda", made.id)).payload.entityKeys, ["drug:semaglutide"]);
 });
 
 // --- GEO projects --------------------------------------------------------------------------------

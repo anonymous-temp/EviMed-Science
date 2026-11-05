@@ -81,12 +81,14 @@ export const PLATFORM_CONTEXT_TAGS = Object.freeze([
     legacy: 'the knowledge-base excerpts every dispatch used to carry, retired 2026-09-20 when kb_search became a tool the model chooses; transcripts from before still carry it',
   },
   { tag: 'evimed-specialist', role: 'injected', emitters: ['apps/server/src/researchContext.mjs'] },
-  // A scheduled execution's brief, in its run context (`episodeContextBlock`): the platform's words to the model, never the researcher's.
-  { tag: 'evimed-autopilot-brief', role: 'injected', emitters: ['apps/server/src/autopilotEpisodeScope.mjs'] },
-  // A bounded execution's tag, written into the run context beside the signed budget scope (`episodeContextBlock`), no longer
-  // into the message the researcher sees (2026-10-08): the first message of a scheduled execution is their own instruction.
-  { tag: 'evimed-autopilot-episode', role: 'injected', emitters: ['apps/server/src/autopilotEpisodeScope.mjs'] },
-  { tag: 'evimed-autopilot-verification', role: 'injected', emitters: ['apps/server/src/server.mjs'] },
+  // The retired scheduler's three tags (2026-11-05): its execution brief, its episode tag and its verification tag. Nothing writes them now, and the
+  // transcripts of the conversations it ran still carry them as machine text.
+  { tag: 'evimed-autopilot-brief', role: 'injected', emitters: [], legacy: 'a scheduled execution\'s brief in its run context, retired 2026-11-05 with the scheduler; transcripts from before still carry it' },
+  { tag: 'evimed-autopilot-episode', role: 'injected', emitters: [], legacy: 'a bounded execution\'s tag beside the signed budget scope, retired 2026-11-05 with the scheduler; transcripts from before still carry it' },
+  { tag: 'evimed-autopilot-verification', role: 'injected', emitters: [], legacy: 'an independent verification\'s tag, retired 2026-11-05 with the scheduler; transcripts from before still carry it' },
+  { tag: 'evimed-claim', role: 'injected', emitters: [], legacy: 'a claim handed to an independent verification, retired 2026-11-05 with the scheduler; transcripts from before still carry it' },
+  { tag: 'evimed-claim-source', role: 'injected', emitters: [], legacy: 'a source of that claim, retired 2026-11-05 with the scheduler; transcripts from before still carry it' },
+  { tag: 'evimed-claim-effect', role: 'injected', emitters: [], legacy: 'the effect of that claim, retired 2026-11-05 with the scheduler; transcripts from before still carry it' },
   // A platform dispatch's own tag, written whether or not a budget marker
   // rides along (2026-09-26 audit, M-2: a GEO brief sent into a runtime that
   // happened to be open carried no marker and was stored as the researcher's
@@ -114,9 +116,6 @@ export const PLATFORM_CONTEXT_TAGS = Object.freeze([
   // is handed, so a question about the step is answered from the study and not from the stopped turn's history.
   { tag: 'evimed-vcr-stopped', role: 'injected', emitters: ['apps/server/src/vcrOrchestrator.mjs'] },
   { tag: 'evimed-budget-scope', role: 'injected', emitters: ['apps/server/src/modelGateway.mjs'] },
-  { tag: 'evimed-claim', role: 'injected', emitters: ['apps/server/src/autopilotService.mjs'] },
-  { tag: 'evimed-claim-source', role: 'injected', emitters: ['apps/server/src/autopilotService.mjs'] },
-  { tag: 'evimed-claim-effect', role: 'injected', emitters: ['apps/server/src/autopilotService.mjs'] },
   { tag: 'evimed-correction', role: 'user-wrapper', emitters: ['apps/server/src/server.mjs'] },
   // A learning step's brief — a distillation or a relations pass — as the
   // loop dispatches it into the account's learning project (2026-09-27).

@@ -124,7 +124,7 @@ export function createEvolutionMissions({ service, policy, map, taskPool, signal
    * (`evolutionModuleLoopBudgetShare`) that a job of the platform cannot borrow while the loops have not taken it; scouting runs of every origin together hold at most
    * their share (`evolutionScoutBudgetShare`); everything else draws on what is left, and the loops themselves on all of it. Live (2026-10-06 to 12) every job mission
    * borrowed whatever the policy's category shares had not used: 99% of 109 CNY went to 37 scouting runs that all ended waiting for material, and the loops of
-   * 前沿动态, 循证 GEO and autopilot together spent 0.38. A mission not yet counted today (a new one, or one funded for a new day) asks before it is counted.
+   * 前沿动态 and 循证 GEO (and the scheduled planner, since retired) together spent 0.38. A mission not yet counted today (a new one, or one funded for a new day) asks before it is counted.
    * @param {any[]} all every mission @param {string} day
    * @param {{job:boolean,scout:boolean}} asking
    */
@@ -528,7 +528,7 @@ export function createEvolutionMissions({ service, policy, map, taskPool, signal
       if(tasksPrepared&&tasksPrepared.status!=='ready')return update(mission,{status:'waiting_confirmation',reason:tasksPrepared.reason??'confirmation-task-preparation'});
     }
     const evaluatorCompatibility=digest([mission.payload.moduleId,mission.payload.taskFamily??null,mission.payload.epoch,adapter.evaluatorVersion??'unversioned',mission.payload.successConditions]);
-    const minimum = { frontier: 30, geo: 30, autopilot: 20, runtime: 10 }[mission.payload.moduleId] ?? 2;
+    const minimum = { frontier: 30, geo: 30, runtime: 10 }[mission.payload.moduleId] ?? 2;
     batch ??= await taskPool.assemble({ candidateId: candidate.id, lineageId: candidate.lineageId ?? mission.id, moduleId: mission.payload.moduleId,
       frozenAt: candidate.frozenAt, modelReleasedAt: mission.payload.modelReleasedAt, epoch: mission.payload.epoch, minimum, slices: mission.payload.successConditions.slices ?? [] });
     if (!batch.id) return update(mission, { status: 'waiting_confirmation', waiting: batch.payload });

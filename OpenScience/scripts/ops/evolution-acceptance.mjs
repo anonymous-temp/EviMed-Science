@@ -215,45 +215,7 @@ try {
         ] }, researchRules: { requiredSemanticsChecks: ["drift"] },
           description: "Anonymous observed outcomes and numeric covariates for self-check. Confusion counts for the callable must be derived from a declared classifier and threshold; no model is fitted by this tool." },
       } : { capabilityIds: ["statistical-analysis"], form: "rewrite", publicationKind: "isolated-tool", toolKind: "calculation" };
-      const additional = await buildMethod(card.methodId, card, metadata);
-      if (card.methodId === "decision-net-benefit" && input.publicDataDir && !completed("actual-autopilot-computation")) {
-        const { runEvolutionUploadAcceptance, uploadedComputationReceipts } = await import("./evolution-upload-acceptance.mjs");
-        const result = completed("actual-upload-and-wake")?.result ?? await runEvolutionUploadAcceptance(app, { toolId: additional.id,
-          csvBytes: await fs.readFile(path.join(input.publicDataDir, "pima-training.csv")),
-          sourceEvidence: JSON.parse(await fs.readFile(path.join(input.publicDataDir, "provenance.json"), "utf8")),
-        });
-        if (!completed("actual-upload-and-wake")) { report.stages.push({ stage: "actual-upload-and-wake", result }); await save(); }
-        const researcher = await app.store.userById(result.userId), uploadedProject = await app.store.requireProject(researcher, result.projectId);
-        const deadline = Date.now() + config.evolutionEvaluationTimeoutMs;
-        let episode, episodeRun;
-        do {
-          const queued = await app.evolution.service.documents.database.query("SELECT payload FROM evimed_product.jobs WHERE id=$1", [result.episodeJobId]);
-          const episodeId = queued.rows[0]?.payload?.episodeId;
-          episode = episodeId ? await app.evolution.service.documents.get(result.userId, "episode", episodeId) : null;
-          const runId = episode?.payload.runId;
-          if (runId) episodeRun = (await app.agentRuns.list(uploadedProject)).find(row => row.id === runId);
-          if (episodeRun && !["queued", "dispatching", "running"].includes(episodeRun.status)) break;
-          await delay(3000);
-        } while (Date.now() < deadline);
-        if (episodeRun?.status !== "succeeded") throw new Error("The resumed real research episode did not complete.");
-        const observed = uploadedComputationReceipts(await app.evolution.service.list("use", result.userId), { result, run: episodeRun, tool: additional });
-        if (!observed.length) throw new Error("The resumed agenda needs a substantive pinned execution on the actual uploaded data counts.");
-        const { waitForEvolutionTranscript, evolutionTranscriptHash } = await import("./evolution-transcript-wait.mjs");
-        const transcript = await waitForEvolutionTranscript(uploadedProject, episodeRun.id);
-        report.stages.push({ stage: "actual-autopilot-computation", runId: episodeRun.id, episodeId: episode.id,
-          toolId: additional.id, calls: observed.length, aggregateInput: result.aggregateInput,
-          receiptIds: observed.map(row => row.id), csvSha256: result.csvSha256, transcriptHash: evolutionTranscriptHash(transcript),
-          artifacts: episodeRun.artifacts, verification: episodeRun.verification }); await save();
-        await app.runtimeManager.stop(uploadedProject);
-      }
-      if (card.methodId === "decision-net-benefit" && !completed("actual-tool-publication-wake")) {
-        const { runEvolutionToolWakeAcceptance } = await import("./evolution-tool-wake-acceptance.mjs");
-        const contract = JSON.parse(await fs.readFile(new URL("../../evals/paper-gold/decision-net-benefit-development.json", import.meta.url), "utf8"));
-        const result = await runEvolutionToolWakeAcceptance({ app, sourceToolId: additional.id, ownerId,
-          publicInput: contract.cases[0].input, execute: true });
-        report.stages.push({ stage: "actual-tool-publication-wake", result }); await save();
-        await app.runtimeManager.stop(await app.store.requireProject(await app.store.userById(ownerId), result.projectId));
-      }
+      await buildMethod(card.methodId, card, metadata);
     }
   }
   report.passed = true;

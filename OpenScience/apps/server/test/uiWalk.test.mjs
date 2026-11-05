@@ -84,8 +84,7 @@ test("every page the router serves at a fixed address is walked, or says why it 
   // written by hand and nothing compared it with the router.
   const router = await readFile(path.join(repoRoot, "apps/web/src/app/router.tsx"), "utf8");
   const app = router.slice(router.indexOf('path: "/app"'), router.indexOf('{ path: "*", element: <NotFound /> }'));
-  // One route with an optional last parameter serves the fixed page in front of it too: `autopilot/:taskId?` is /app/autopilot (the list)
-  // and /app/autopilot/<id> (one task), and the router redirects it to the conversation. An address with any other parameter, or a
+  // One route with an optional last parameter serves the fixed page in front of it too (`files/:sourceId?` is /app/files and a document). An address with any other parameter, or a
   // splat, is not a fixed page: its pages are found from the deployment's lists (`discoverRoutes`).
   const pages = [...new Set([...app.matchAll(/\{ path: "([^"]+)", element: <(\w+)/g)]
     .filter(([, , element]) => element !== "Navigate")

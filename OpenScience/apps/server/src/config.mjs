@@ -3115,19 +3115,6 @@ export function loadConfig(overrides = {}) {
     // entries that apply to it (`libraryService.mjs`), so the library costs the disk once per project: a project whose
     // directory does not exist yet and whose copy would pass this gets none, and its runtime starts without /workspace/library.
     libraryViewMaxBytes: Number(overrides.libraryViewMaxBytes ?? process.env.OPEN_SCIENCE_LIBRARY_VIEW_MAX_BYTES ?? 512 * 1024 * 1024),
-    autopilotEnabled: overrides.autopilotEnabled ?? boolEnv("OPEN_SCIENCE_AUTOPILOT_ENABLED", production),
-    autopilotPollMs: Number(overrides.autopilotPollMs ?? process.env.OPEN_SCIENCE_AUTOPILOT_POLL_MS ?? 1_000),
-    autopilotLeaseMs: Number(overrides.autopilotLeaseMs ?? process.env.OPEN_SCIENCE_AUTOPILOT_LEASE_MS ?? 300_000),
-    // The one model decision before each proactive episode (N10, 2026-10-04):
-    // which task type to run, from the agenda's progress, or whether to stop.
-    // Off, or with the provider off, the date rotation chooses and each episode
-    // says so (`selection.fallbackReason`). The decision's own deadline sits on
-    // the scheduler's path — it walks every due agenda in one loop — so it is
-    // short, and three failures in a row rest the planner for five minutes. Its
-    // budget is the agenda's own daily and weekly caps with the account's,
-    // through the gateway's reserve-then-settle under purpose `autopilot`.
-    autopilotPlannerEnabled: overrides.autopilotPlannerEnabled ?? boolEnv("OPEN_SCIENCE_AUTOPILOT_PLANNER_ENABLED", true),
-    autopilotPlannerTimeoutMs: Number(overrides.autopilotPlannerTimeoutMs ?? 20_000),
     // --- frontier: 「前沿动态」 and the knowledge-source plugin (2026-09-22) ---
     ...frontierSettings(overrides),
     ...evidenceSettings(overrides),

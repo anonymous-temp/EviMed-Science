@@ -119,11 +119,10 @@ export function runFileLink(config, runId, filePath) {
 export function noticeLink(config, item) {
   const source = item?.source;
   if (source?.type === "run") return runLink(config, source.id);
-  // A digest is an autopilot briefing, or the 「前沿动态」 daily of a day, which
+  // A digest is the 「前沿动态」 daily of a day, which
   // names itself `frontier-daily:<YYYY-MM-DD>` — the key it is pushed under.
   const frontierHref = frontierNoticeHref(source);
   if (frontierHref) return appLink(config, frontierHref);
-  if (source?.type === "digest") return appLink(config, `/app/autopilot?digest=${encodeURIComponent(source.id)}`);
   if (source?.type === "memory") return appLink(config, `/app/memory?record=${encodeURIComponent(source.id)}`);
   // A share (flywheel F17): the page the in-app notice opens, so a message on Feishu lands where the inbox row does and not on the bare inbox.
   const sharePath = shareNoticeHref(source);

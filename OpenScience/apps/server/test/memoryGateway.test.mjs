@@ -7,7 +7,7 @@ import { createServer } from "node:http";
 import test from "node:test";
 
 import { EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON, PLATFORM_CONTEXT_TAGS, carriesPlatformContext, evidenceProgrammeRouteReason } from "@evimed/domain";
-import { VERIFICATION_ROUTE_REASON } from "../src/autopilotService.mjs";
+import { AUTOPILOT_VERIFICATION_ROUTE_REASON as VERIFICATION_ROUTE_REASON } from "@evimed/domain";
 import { createNativeCapsuleSearch } from "../src/capsuleGateway.mjs";
 import { createMemoryAdmission, isPlatformStartedRun } from "../src/memoryAdmission.mjs";
 import {

@@ -18,7 +18,7 @@ import { saveEvolutionEvaluation } from './evolutionEvaluationGaps.mjs';
 import fs from "node:fs/promises";
 import path from "node:path";
 import { createHash } from "node:crypto";
-import { AGENDA_DEFAULT_BUDGETS, canonicalJson } from "@evimed/domain";
+import { canonicalJson } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
 import { EVOLUTION_PROJECT_ID, isInternalProject } from "./internalProjects.mjs";
 import { createEvolutionToolAdmission } from "./evolutionToolAdmission.mjs";
@@ -84,7 +84,7 @@ export function createEvolutionDecisionModel({ config, usageLedger, fetchImpl, o
 /** Compose the optional platform loop using the same ledger, runtime and inbox as research.
  * @param {any} dependencies */
 export function createEvolution({ config, store, documents, jobs, database, usageLedger, notifications, registry, runtimeManager,
-  researchSessions, agentRuns, evaluationIsolation, sourceService, autopilot, dataSemantics, controller, canRun, resolvePositiveEvidence = null, judgeService = null, report = () => {}, fetchImpl = fetch, webReader = null }) {
+  researchSessions, agentRuns, evaluationIsolation, sourceService, dataSemantics, controller, canRun, resolvePositiveEvidence = null, judgeService = null, report = () => {}, fetchImpl = fetch, webReader = null }) {
   if (!config.evolutionEnabled || !database || !documents || !jobs || !usageLedger) return null;
   const settingsIssues = validateEvolutionConfiguration(config);
   // A module whose settings are wrong stays off with the reason reported; it never stops the platform (`loadConfig` refuses first).
@@ -95,17 +95,13 @@ export function createEvolution({ config, store, documents, jobs, database, usag
     await store.projectFor(user, EVOLUTION_PROJECT_ID, "EviMed 循证进化");
     return owner;
   };
-  const service = createEvolutionService({ documents, jobs, config, notifications, ensureOwner, callbacks: {
-    waiterOwners: async () => (await database.query("SELECT DISTINCT user_id FROM evimed_product.documents WHERE kind='knowledge' AND payload->>'recordType'='evolution-waiter' AND deleted_at IS NULL")).rows.map(row => row.user_id),
-    waitingAgendaCount: async capabilityIds => Number((await database.query("SELECT count(*)::integer AS count FROM evimed_product.documents WHERE kind='knowledge' AND payload->>'recordType'='evolution-waiter' AND payload->>'status'='waiting' AND payload->>'capabilityId'=ANY($1::text[]) AND deleted_at IS NULL", [capabilityIds])).rows[0]?.count ?? 0),
-    wakeAgenda: input => integration.wakeAgenda(input),
-  } });
-  const integration = new EvolutionIntegration({ service, autopilot, judgeService, report });
+  const service = createEvolutionService({ documents, jobs, config, notifications, ensureOwner, callbacks: {} });
+  const integration = new EvolutionIntegration({ service, judgeService, report });
   service.callbacks.adjudicationOpportunity = async input => {
     const userId=await service.owner(), user=await store.userById(userId);
     const project=await store.projectFor(user,'evolution-research-opportunities','循证进化研究机会');
     return service.addOpportunity({id:`evolution-disagreement-${evolutionKey(input)}`,userId,projectId:project.id,status:'available',origin:'platform-inference',
-      title:'核对复现分析中的证据分歧',prompt:`${input.publicPaperId ? `独立核查公开论文 ${input.publicPaperId}。` : ''}平台的独立复现和跨家族复核发现值得进一步核对的证据分歧。请开展独立文献核查，保留来源并区分已发表结论与平台推断；不将平台裁定作为新的实证证据。`,taskTypes:['evidence-update'],basis:{kind:'adjudicated-platform-inference',...input}});
+      title:'核对复现分析中的证据分歧',prompt:`${input.publicPaperId ? `独立核查公开论文 ${input.publicPaperId}。` : ''}平台的独立复现和跨家族复核发现值得进一步核对的证据分歧。请开展独立文献核查，保留来源并区分已发表结论与平台推断；不将平台裁定作为新的实证证据。`,basis:{kind:'adjudicated-platform-inference',...input}});
   };
   const executionEvidence = createProspectiveExecutionEvidence(config);
   const evidenceRegistration = createEvolutionEvidenceRegistration({ service, integration, store, agentRuns, runtimeManager, sourceService, executionEvidence });
@@ -548,16 +544,7 @@ export function createEvolution({ config, store, documents, jobs, database, usag
   const routes = createEvolutionRoutes({ store, service, decisions, worker, config, evidenceRegistration, capabilityMap: async () => (await service.get('evolution-capability-map'))?.payload ?? null, isOperator: user => config.operatorUsers.includes(user.id),
     registerEvaluationPolicy: async (user, { projectId, policy }) => { await store.requireProject(user, projectId); return evaluationIsolation.registerPending({ userId: user.id, projectId }, policy); },
     evaluationAudit: async (user, { projectId }) => { const project = await store.requireProject(user, projectId); return Promise.all((await agentRuns.list(project)).map(run => evaluationIsolation.audit(run.id))); },
-    adoptOpportunity: async (user, { opportunityId, projectId }) => {
-      const opportunity = await service.get(opportunityId, user.id);
-      if (!opportunity || opportunity.projectId !== projectId || opportunity.payload.recordType !== "evolution-opportunity") throw new HttpError(404, "evolution_opportunity_missing", "The research opportunity is unavailable.");
-      if (opportunity.payload.agendaId) return autopilot.get(user.id, opportunity.payload.agendaId);
-      const agenda = await autopilot.create(user.id, { projectId, title: opportunity.payload.title, prompt: opportunity.payload.prompt ?? opportunity.payload.title,
-        taskTypes: opportunity.payload.taskTypes ?? ["literature-sentinel"], ...AGENDA_DEFAULT_BUDGETS,
-        schedule: { kind: "daily", timeZone: "Asia/Shanghai", time: "08:00" } });
-      await service.save("opportunity", opportunity.id, { ...opportunity.payload, agendaId: agenda.id }, opportunity, user.id);
-      return agenda;
-    }, maxJsonBytes: config.maxJsonBytes });
+    maxJsonBytes: config.maxJsonBytes });
   const scientificUseScope = async event => {
     const user=await store.userById(event.userId), project=await store.requireProject(user,event.projectId);
     const run=(await agentRuns.list(project)).find(row=>row.id===event.runId);

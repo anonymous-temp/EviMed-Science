@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { autopilotEpisodeCapability, evolutionDataMatch } from "@evimed/domain";
+import { evolutionDataMatch } from "@evimed/domain";
 import { isInternalProject } from "./internalProjects.mjs";
 
 /** @param {any} value */
@@ -42,9 +42,9 @@ export function evolutionRunGap(run) {
 
 /** The other modules publish observations through the durable evolution queue. */
 export class EvolutionIntegration {
-  /** @param {{service:any,autopilot:any,judgeService?:any,report?:(code:string)=>void}} input */
-  constructor({ service, autopilot, judgeService = null, report = () => {} }) {
-    this.service = service; this.autopilot = autopilot; this.report = report; this.judgeService = judgeService;
+  /** @param {{service:any,judgeService?:any,report?:(code:string)=>void}} input */
+  constructor({ service, judgeService = null, report = () => {} }) {
+    this.service = service; this.report = report; this.judgeService = judgeService;
     this.counters = { published: 0, failed: 0, scoutsQueued: 0, scoutsSkipped: 0 };
   }
 
@@ -53,22 +53,6 @@ export class EvolutionIntegration {
   async publish(event, options = {}) {
     try { const saved = await this.service.ingestEvent(event, options); this.counters.published++; return saved; }
     catch (error) { this.counters.failed++; this.report(error?.code ?? "evolution_event_unavailable"); return null; }
-  }
-
-  /** @param {any} agenda */
-  async availableTools(agenda) {
-    const capabilities = (agenda.payload?.taskTypes ?? []).map(autopilotEpisodeCapability).filter(Boolean);
-    const tools = await this.service.availableTools();
-    return tools.filter((tool) => !tool.capabilityIds?.length || tool.capabilityIds.some((id) => capabilities.includes(id)));
-  }
-
-  /** No researcher prose is copied into a shared lead. @param {any} input */
-  async plannerStopped(input) {
-    if (isInternalProject(input.projectId)) return;
-    return this.publish({ id: `autopilot:${input.agendaId}:${input.episodeId}`, type: "autopilot-gap", userId: input.userId,
-      projectId: input.projectId, agendaId: input.agendaId, sourceEpisodeId: input.episodeId,
-      gapCode: input.resourceNeed.kind === "tool" ? "method-missing" : "connector", waiting: input.resourceNeed,
-      origin: "platform-inference" });
   }
 
   /** @param {any} input */
@@ -97,18 +81,8 @@ export class EvolutionIntegration {
       return this.service.callbacks.scanLeadSources?.();
     } else if (event.type === "source-facts-scan") {
       return this.observeSourceFacts();
-    } else if (event.type === "autopilot-gap") {
-      const need = event.waiting;
-      if (!need || !["tool", "data"].includes(need.kind)) return;
-      const matchedTool = need.toolId ? await this.service.get(need.toolId) : null;
-      await this.service.waitFor({ userId: event.userId, projectId: event.projectId, agendaId: event.agendaId,
-        sourceEpisodeId: event.sourceEpisodeId, kind: need.kind, capabilityId: need.capabilityId, methodId: need.methodId,
-        toolId: need.toolId, requirementId: need.requirementId, dataRequirements: matchedTool?.payload?.dataRequirements ?? null });
-      await this.service.addLead({ source: "autopilot", track: need.kind === "data" ? "U" : "M",
-        gapCode: event.gapCode, code: need.capabilityId ?? event.gapCode, userId: event.userId, projectId: event.projectId, sourceEventId: event.id });
     } else if (event.type === "dataset-ready") {
-      await this.datasetOpportunities(event);
-      return this.service.resolveWaiters(event);
+      return this.datasetOpportunities(event);
     } else if (event.type === "tool-ready") {
       const owners = event.userId ? [event.userId] : await this.observationOwners();
       for (const owner of owners) {
@@ -119,9 +93,9 @@ export class EvolutionIntegration {
           const key = `${item.projectId}:${item.datasetId}`;
           if (!latest.has(key) || item.createdAt > latest.get(key).createdAt) latest.set(key, item);
         }
-        for (const item of latest.values()) { await this.datasetOpportunities(item); await this.service.resolveWaiters(item); }
+        for (const item of latest.values()) await this.datasetOpportunities(item);
       }
-      return this.service.resolveWaiters(event);
+      return;
     } else if (event.type === "prospective-target-scan") {
       return this.service.callbacks.pollProspectiveTargets?.();
     } else if (event.type === "prospective-target-result") {
@@ -249,7 +223,7 @@ export class EvolutionIntegration {
   /** Discover tenant owners by record type, without selecting their source or dataset content. */
   async observationOwners() {
     const database = this.service.documents.database;
-    if (!database?.query) return await this.service.callbacks.waiterOwners?.() ?? [];
+    if (!database?.query) return [];
     const result = await database.query("SELECT DISTINCT user_id FROM evimed_product.documents WHERE kind='knowledge' AND deleted_at IS NULL AND (payload->>'recordType'='source-understanding' OR (payload->>'recordType'='evolution-event' AND payload->>'type'='dataset-ready'))");
     return result.rows.map(row => row.user_id);
   }
@@ -270,7 +244,7 @@ export class EvolutionIntegration {
       kind: "meta-update-candidate", status: "waiting", origin: "platform-inference",
       reason: "Preserved source identities, search cutoff, exact question correspondence, or public provenance are incomplete." }, null, event.userId);
     return this.service.addOpportunity({ id, userId: event.userId, projectId: event.projectId,
-      status: "available", title: "核对新增研究是否需要更新已有荟萃分析", taskTypes: ["evidence-update"],
+      status: "available", title: "核对新增研究是否需要更新已有荟萃分析",
       prompt: `保留原始荟萃分析 ${original.sourceId}（${original.sha256}）不变，检视新增研究 ${incoming.sourceId}（${incoming.sha256}）。先核对问题、纳入条件和重复发表，再判断是否值得开展独立的更新分析。新增文献不自动证明原结论失效。`,
       basis: { kind: "post-cutoff-preserved-evidence", originalSourceId: original.sourceId,
         originalSha256: original.sha256, searchCutoff: original.searchCutoff,
@@ -360,18 +334,13 @@ export class EvolutionIntegration {
       }
       results.push(await this.service.addOpportunity({ id, userId: event.userId, projectId: event.projectId,
         datasetId: event.datasetId, toolId: tool.id, toolVersion: tool.artifactDigest, status: "available",
-        title: `使用 ${tool.name ?? tool.id} 检查已有数据的研究可行性`, taskTypes: ["data-prospecting"],
+        title: `使用 ${tool.name ?? tool.id} 检查已有数据的研究可行性`,
         prompt: `先核对数据 ${event.datasetId} 的版本和语义，再使用工具 ${tool.id}（版本 ${tool.artifactDigest ?? "unknown"}）进行自检。元数据匹配仅说明输入要求可满足，不能视为科研结果；未知或不符合要求时停止并说明需要补充的信息。`,
         basis: { kind: "metadata-contract-match", sourceEventId: event.id, sourceVersions: event.dataset.sourceVersions ?? [] },
       }));
     }
     return results;
   }
-
-  /** @param {any} input */
-  wakeAgenda(input) { return this.autopilot.wakeForEvolution(input); }
-  /** Account-local completion only; shared reports use thresholded counts. @param {any} input */
-  recordResumedResearchCompleted(input) { return this.service.callbacks.recordResumedResearchCompleted?.(input); }
 }
 
 /** The furthest back the feed's changes are read when the module has not looked for longer than this. */

@@ -172,7 +172,7 @@ test("a digest over the inbox's limit is cut with a count and still delivered, a
   assert.match(notice.body, /今日新工具/);
   assert.doesNotMatch(notice.body, /早已上线的工具/);
   assert.doesNotMatch(notice.body, /worker-resource|任务类型|缺口类别|资源等待|等待资料/);
-  assert.deepEqual(notice.source, { type: "system", id: digest.id }, "an evolution digest is not an autopilot digest and links to the inbox");
+  assert.deepEqual(notice.source, { type: "system", id: digest.id }, "an evolution digest links to the inbox");
   assert.ok(JSON.stringify(digest.payload).length < 100_000, "the snapshot holds what the text says, not the documents it was read from");
   // No wait is carried by a decision, so there is none left to report tomorrow.
   assert.equal((await service.list("decision")).filter((row) => row.payload.decisionClass === "D").length, 0);

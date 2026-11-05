@@ -98,12 +98,12 @@ test("only the platform's own processed events of the closed types are folded; a
 test("a pass takes at most the batch, oldest first, and the next pass takes the rest", options, async () => {
   const { service, retention } = engine({ evolutionRetentionBatchRows: 3 });
   const run = randomUUID().slice(0, 8), ids = [];
-  for (let index = 0; index < 7; index++) ids.push((await service.save("module-observation", `evolution-module-observation-${run}-b${index}`, { moduleId: "autopilot", kind: "screened-out", counts: {} })).id);
+  for (let index = 0; index < 7; index++) ids.push((await service.save("module-observation", `evolution-module-observation-${run}-b${index}`, { moduleId: "geo", kind: "screened-out", counts: {} })).id);
   assert.equal((await retention.compact()).observations, 3);
   assert.equal((await retention.compact()).observations, 3);
   assert.equal((await retention.compact()).observations, 1);
   assert.equal((await retention.compact()).observations, 0);
-  const total = (await service.list("module-observation-daily")).filter((row) => row.payload.moduleId === "autopilot").reduce((sum, row) => sum + row.payload.rows, 0);
+  const total = (await service.list("module-observation-daily")).filter((row) => row.payload.moduleId === "geo").reduce((sum, row) => sum + row.payload.rows, 0);
   assert.equal(total, 7, "the days' counts add up to what was folded, across the passes");
 });
 
