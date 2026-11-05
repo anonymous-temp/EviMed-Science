@@ -39,7 +39,7 @@ export function filterDeletedConversationValue(value, deleted) {
 export class ConversationSourceDeletionService {
   constructor({ ledger, runtime, resolveProject, removeHistory, removeDerived, memoryRootFor = async (_project) => null, prepareFence = async(_project,_sessionIds)=>null, contributionsFor=async(_row)=>[], nativeRootsFor=async(_project,_frozen,_identity)=>null, recordIdForUri=null, revisionSource=async(_userId,_row)=>null }) {
     this.contributionsFor=contributionsFor; this.nativeRootsFor=nativeRootsFor; this.recordIdForUri=recordIdForUri; this.revisionSource=revisionSource;
-    this.memoryRootFor = memoryRootFor; this.prepareFence=prepareFence; this.knownFences=new Map();
+    this.memoryRootFor = memoryRootFor; this.prepareFence=prepareFence; this.knownFences=new Map();this.epochComparisons=new Map();
     this.ledger = ledger; this.runtime = runtime; this.resolveProject = resolveProject;
     this.removeHistory = removeHistory; this.removeDerived = removeDerived;
     this.running = null; this.timer = null; this.refreshing = new Map();
@@ -53,12 +53,26 @@ export class ConversationSourceDeletionService {
     return result;
   }
   redactText(text,prints) { return text===null?null:String(text??'').split('\n').filter(line=>!prints.has(lineFingerprint(line.trim().replace(/^(?:[-*+]|\d+[.)])\s+/,'')))).join('\n'); }
+  async sameEpoch(left,right) {
+    if(left===right)return true;const key=JSON.stringify([left,right]);
+    if(!this.epochComparisons.has(key)){if(this.epochComparisons.size>=1000)this.epochComparisons.clear();this.epochComparisons.set(key,this.ledger.sameEpoch(left,right));}
+    return this.epochComparisons.get(key);
+  }
   async independentRevision(userId,row,fences) {
     const affected=fences.filter(fence=>Object.hasOwn(fence.historyPrints??{},row.uri));
-    if(!affected.length||affected.some(fence=>fence.cleanedRevisionId==null))return false;
+    if(!affected.length)return false;
+    const source=await this.revisionSource(userId,row);
+    if(source?.projectCreatedAt) {
+      let same=false;for(const fence of affected)if(fence.projectId===source.projectId&&await this.sameEpoch(fence.projectCreatedAt,source.projectCreatedAt))same=true;
+      if(!same) {
+        const privatePrints=new Set(affected.flatMap(fence=>fence.historyPrints?.[row.uri]??[]));
+        const carriesOld=String(row.actor??'')!=='user'&&String(row.before??'').split('\n').some(line=>privatePrints.has(lineFingerprint(line.trim().replace(/^(?:[-*+]|\d+[.)])\s+/,''))));
+        if(!carriesOld)return true;
+      }
+    }
+    if(affected.some(fence=>fence.cleanedRevisionId==null))return false;
     const watermark=affected.reduce((value,fence)=>BigInt(fence.cleanedRevisionId)>value?BigInt(fence.cleanedRevisionId):value,0n);
     if(!/^\d+$/.test(String(row.id))||BigInt(row.id)<=watermark)return false;
-    const source=await this.revisionSource(userId,row);
     return !source||!affected.some(fence=>fence.projectId===source.projectId&&fence.sessionIds.includes(source.sessionId));
   }
   async redactRevisions(userId,rows) {
@@ -72,8 +86,8 @@ export class ConversationSourceDeletionService {
   async redactRecords(userId,rows) {
     const byUri=await this.historyFingerprints(userId),fences=await this.ledger.recordsForOwner(userId);
     return Promise.all(rows.map(async row=>{const prints=byUri.get(row.uri);return {...row,revisions:await Promise.all((row.revisions??[]).map(async revision=>{
-      const {sourceRevisionId,sourceEngineSession,sourceArchiveUri,sourceProjectId,...shown}=revision;
-      const independent=await this.independentRevision(userId,{id:sourceRevisionId,uri:row.uri,engineSession:sourceEngineSession,archiveUri:sourceArchiveUri,projectId:sourceProjectId},fences);
+      const {sourceRevisionId,sourceEngineSession,sourceArchiveUri,sourceProjectId,sourceProjectCreatedAt,sourceActor,...shown}=revision;
+      const independent=await this.independentRevision(userId,{id:sourceRevisionId,uri:row.uri,engineSession:sourceEngineSession,archiveUri:sourceArchiveUri,projectId:sourceProjectId,sourceProjectId,sourceProjectCreatedAt,actor:sourceActor,before:shown.value},fences);
       return !prints?.size||independent?shown:{...shown,value:this.redactText(revision.value,prints)};
     }))};}));
   }

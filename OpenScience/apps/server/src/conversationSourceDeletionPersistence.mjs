@@ -43,6 +43,16 @@ export class ConversationSourceDeletionLedger {
       AND project_id=$3 AND project_created_at=$4 AND session_ids ? $5`, [project.userId, scope.accountCreatedAt, project.id, scope.projectCreatedAt, sessionId]);
     return rowOf(rows.rows[0]);
   }
+  /** Native archives retain their captured incarnation even after the current project row changes. Unknown scope only proves a deferral. */
+  async nativeSource(userId,projectId,projectCreatedAt,sessionId,userRoot) {
+    await this.migrate();
+    const result=await this.database.query(`SELECT d.*,d.account_created_at::text AS account_created_at,d.project_created_at::text AS project_created_at
+      FROM evimed_source_deletion.conversations d JOIN evimed_control.users u ON u.id=d.user_id AND u.created_at=d.account_created_at
+      WHERE d.user_id=$1 AND d.project_id=$2 AND ($3::timestamptz IS NULL OR d.project_created_at=$3::timestamptz) AND d.session_ids ? $4
+        AND (d.native_roots ? $5 OR jsonb_array_length(d.native_roots)=0 AND d.memory_user_root=$5) LIMIT 1`,[userId,projectId,projectCreatedAt,sessionId,userRoot]);
+    return rowOf(result.rows[0]);
+  }
+  async sameEpoch(left,right) { return (await this.database.query('SELECT $1::timestamptz=$2::timestamptz AS same',[left,right])).rows[0].same===true; }
   async recordsForOwner(userId,{pendingOnly=false}={}) {
     await this.migrate();
     const result=await this.database.query(`SELECT d.*,d.account_created_at::text AS account_created_at,d.project_created_at::text AS project_created_at
@@ -90,18 +100,20 @@ export class ConversationSourceDeletionLedger {
   async hiddenMemoryUris(userId) {
     await this.migrate();
     const result = await this.database.query(`WITH RECURSIVE deleted AS (
-      SELECT d.*,jsonb_array_elements_text(CASE WHEN jsonb_array_length(d.native_roots)>0 THEN d.native_roots ELSE jsonb_build_array(d.memory_user_root) END) AS native_root FROM evimed_source_deletion.conversations d JOIN evimed_control.users u ON u.id=d.user_id AND u.created_at=d.account_created_at
+      SELECT d.*,current_project.created_at AS current_project_created_at,jsonb_array_elements_text(CASE WHEN jsonb_array_length(d.native_roots)>0 THEN d.native_roots ELSE jsonb_build_array(d.memory_user_root) END) AS native_root FROM evimed_source_deletion.conversations d JOIN evimed_control.users u ON u.id=d.user_id AND u.created_at=d.account_created_at
+      LEFT JOIN evimed_control.projects current_project ON current_project.user_id=d.user_id AND current_project.id=d.project_id
       WHERE d.user_id=$1 AND d.memory_user_root IS NOT NULL
     ), sources AS (
       SELECT c.archive_uri,c.engine_session,c.replayed_as,c.native_ingested_at,c.ingested_at,c.state,d.id AS deletion_id FROM evimed_memory.native_commits c JOIN deleted d
       ON c.user_id=d.user_id AND c.project_id=d.project_id AND left(c.engine_session,4)='dsh-' AND d.session_ids ? substring(c.engine_session from 5)
-      AND left(c.archive_uri,length(d.native_root)+10)=d.native_root||'/sessions/'
+      AND left(c.archive_uri,length(d.native_root)+10)=d.native_root||'/sessions/' AND (c.project_created_at::timestamptz=d.project_created_at OR c.project_created_at IS NULL AND c.created_at>=d.project_created_at AND (d.current_project_created_at IS NULL OR d.current_project_created_at<=d.project_created_at OR c.created_at<d.current_project_created_at))
       UNION SELECT c.archive_uri,c.engine_session,c.replayed_as,c.native_ingested_at,c.ingested_at,c.state,d.id FROM evimed_memory.native_commits c JOIN sources s ON c.archive_uri=s.replayed_as
       JOIN deleted d ON d.id=s.deletion_id WHERE c.user_id=d.user_id AND c.project_id=d.project_id
-        AND left(c.archive_uri,length(d.native_root)+10)=d.native_root||'/sessions/'
+        AND left(c.archive_uri,length(d.native_root)+10)=d.native_root||'/sessions/' AND (c.project_created_at::timestamptz=d.project_created_at OR c.project_created_at IS NULL AND c.created_at>=d.project_created_at AND (d.current_project_created_at IS NULL OR d.current_project_created_at<=d.project_created_at OR c.created_at<d.current_project_created_at))
     ) SELECT DISTINCT o.uri FROM evimed_memory.native_line_origins o LEFT JOIN evimed_memory.native_commits original ON original.user_id=o.user_id AND original.archive_uri=o.archive_uri AND original.engine_session=o.engine_session
       JOIN deleted d ON d.user_id=o.user_id AND d.project_id=COALESCE(o.project_id,original.project_id)
       AND left(o.uri,length(d.native_root)+1)=d.native_root||'/'
+      AND (COALESCE(o.project_created_at,CASE WHEN original.created_at<=o.added_at THEN original.project_created_at END)::timestamptz=d.project_created_at OR COALESCE(o.project_created_at,CASE WHEN original.created_at<=o.added_at THEN original.project_created_at END) IS NULL AND LEAST(o.added_at,original.created_at)>=d.project_created_at AND (d.current_project_created_at IS NULL OR d.current_project_created_at<=d.project_created_at OR LEAST(o.added_at,original.created_at)<d.current_project_created_at))
       WHERE (left(o.engine_session,4)='dsh-' AND d.session_ids ? substring(o.engine_session from 5)) OR EXISTS (
         SELECT 1 FROM sources s WHERE s.deletion_id=d.id AND s.archive_uri=o.archive_uri AND s.engine_session=o.engine_session)
       UNION SELECT d.native_root AS uri FROM sources s JOIN deleted d ON s.deletion_id=d.id
@@ -135,6 +147,12 @@ export class ConversationSourceDeletionLedger {
     return this.database.transaction(async client=>{
     // Account exports hold this owner tuple FOR SHARE through response handoff. A version touch also rejects a stale RR snapshot that started while waiting.
     await client.query('UPDATE evimed_control.users SET updated_at=updated_at WHERE id=$1 AND created_at=$2::timestamptz',[row.userId,row.accountCreatedAt]);
+    await client.query(`UPDATE evimed_memory.native_line_origins o SET project_created_at=$4,project_id=COALESCE(o.project_id,$3)
+      WHERE o.user_id=$1 AND o.project_created_at IS NULL AND o.engine_session=ANY($5::text[]) AND (o.project_id=$3 OR o.project_id IS NULL AND EXISTS(SELECT 1 FROM evimed_memory.native_commits c WHERE c.user_id=o.user_id AND c.archive_uri=o.archive_uri AND c.engine_session=o.engine_session AND c.project_id=$3))
+      AND EXISTS(SELECT 1 FROM evimed_control.projects p JOIN evimed_control.users u ON u.id=p.user_id WHERE p.user_id=$1 AND p.id=$3 AND p.created_at=$4::timestamptz AND u.created_at=$2::timestamptz)
+      AND EXISTS(SELECT 1 FROM evimed_memory.native_commits c WHERE c.user_id=o.user_id AND c.archive_uri=o.archive_uri AND c.engine_session=o.engine_session AND c.project_id=$3 AND c.project_created_at::timestamptz=$4::timestamptz)
+      AND EXISTS(SELECT 1 FROM unnest($6::text[]) root WHERE left(o.uri,length(root)+1)=root||'/')`,
+      [row.userId,row.accountCreatedAt,row.projectId,row.projectCreatedAt,row.sessionIds.map(id=>`dsh-${id}`),row.nativeRoots??(row.memoryUserRoot?[row.memoryUserRoot]:[])]);
     const result = await client.query(`INSERT INTO evimed_source_deletion.conversations
       (id,user_id,account_created_at,project_id,project_created_at,root_session_id,session_ids,frozen,memory_user_root,native_roots)
       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT(user_id,account_created_at,project_id,project_created_at,root_session_id)

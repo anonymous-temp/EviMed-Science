@@ -1,3 +1,4 @@
+import { withNativeMemoryWrite } from './nativeMemoryWriteFence.mjs';
 import { historySearchText } from './memoryHistory.mjs';
 import { carriesPlatformContext, maskIdentifiers, projectContextLine, unwrapUserWrappers } from "@evimed/domain";
 import { withoutResearchGoalGesture } from "./researchGoal.mjs";
@@ -432,17 +433,16 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
     } catch { /* the worker registers what the gateway could not */ }
   }
 
-  /** Conversations whose project this process has already put in the overlay's ledger. @type {Set<string>} */
-  const noted = new Set();
-  /** @param {string} userId @param {string} sessionId @param {string} projectId */
-  async function noteSession(userId, sessionId, projectId) {
-    const key = `${userId}\u0000${sessionId}`;
-    if (noted.has(key) || !overlay?.configured) return;
-    try {
-      await overlay.noteSession(userId, sessionId, projectId);
-      if (noted.size > 5_000) noted.clear();
-      noted.add(key);
-    } catch { recordLedgerFailure(); }
+  /** Every native mutation revalidates its durable scope; reset may remove an earlier binding without changing project identity.
+   * @param {string} userId @param {string} sessionId @param {string} projectId */
+  async function noteSession(userId,sessionId,projectId,projectCreatedAt=undefined) {
+    if(!overlay?.configured)return;
+    try { await overlay.noteSession(userId,sessionId,projectId,projectCreatedAt); }
+    catch(error) {
+      recordLedgerFailure();
+      if(error?.code==='memory_scope_denied')throw error;
+      throw new HttpError(503,'memory_scope_denied','The native session binding cannot be verified.');
+    }
   }
 
   /**
@@ -636,6 +636,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
     let answer;
     try {
       if (context?.kind === 'geo-project') await ensureRegistered(user.id, view, context);
+      else await noteSession(user.id,sessionId,project.id,context?.projectCreatedAt??project.projectCreatedAt);
       answer = await /** @type {any} */ (view).commit(user.id, sessionId, { keepRecentCount });
     } catch (error) {
       if (/** @type {any} */ (error)?.code === "memory_index_not_found") { recordGatewayCommit("nothing_pending"); return { ...nothing, outcome: "local", commit: "nothing_pending" }; }
@@ -652,7 +653,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       }
       recordGatewayCommit("accepted");
       try {
-        await overlay?.recordCommit({ userId: user.id, archiveUri: result.archive_uri, engineSession: sessionId, projectId: project.id, origin: "gateway", taskId: typeof result.task_id === "string" ? result.task_id : null });
+        await overlay?.recordCommit({ userId: user.id, archiveUri: result.archive_uri, engineSession: sessionId, projectId: project.id,...(context?.projectCreatedAt??project.projectCreatedAt?{projectCreatedAt:context?.projectCreatedAt??project.projectCreatedAt}:{}), origin: "gateway", taskId: typeof result.task_id === "string" ? result.task_id : null });
       } catch { recordLedgerFailure(); }
       return { status: 200, json: answer, outcome: "forwarded", commit: "accepted" };
     }
@@ -683,17 +684,19 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         return { status: 200, json: local, outcome: "withheld" };
       }
       await ctx.ensureRegistered();
+      if(!ctx.shared)await noteSession(ctx.user.id,sessionId,ctx.project.id,ctx.memoryContext?.projectCreatedAt??ctx.project.projectCreatedAt);
       const created = await ctx.sessions.createSession(ctx.user.id, sessionId);
       return { status: 200, json: created, outcome: "forwarded" };
     },
     async sessionRead(ctx) {
       const sessionId = ctx.match[1];
       const admitted = await ctx.admit(sessionId);
-      if (admitted.learnReason === "memory_off" || admitted.learnReason === 'unproven_session') {
+      if (admitted.learnReason === "memory_off" || admitted.learnReason === 'unproven_session' || admitted.learnReason === 'source_deleted') {
         recordGatewayWithheld(admitted.learnReason);
         return { status: 200, json: ok({ session_id: sessionId, message_count: 0, commit_count: 0, pending_tokens: 0 }), outcome: "withheld" };
       }
       if (ctx.shared) await ctx.ensureRegistered();
+      else if(overlay?.configured)await overlay.assertSessionScope(ctx.user.id,sessionId,ctx.project.id,ctx.memoryContext?.projectCreatedAt??ctx.project.projectCreatedAt);
       return { status: 200, json: await ctx.sessions.readSession(ctx.user.id, sessionId), outcome: "forwarded" };
     },
     async messageWrite(ctx) {
@@ -717,6 +720,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       }
       if (decision.masked) recordGatewayMasked();
       await ctx.ensureRegistered();
+      if (!ctx.shared) await noteSession(ctx.user.id, sessionId, ctx.project.id,ctx.memoryContext?.projectCreatedAt??ctx.project.projectCreatedAt);
       // Only a person's words open a batch with the project line; an assistant message that arrives first leaves the batch without it.
       const spokenByPerson = decision.forward.role === "user";
       if (spokenByPerson) await noteProjectContext(ctx, sessionId);
@@ -731,8 +735,6 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         answer = await ctx.sessions.addMessage(ctx.user.id, sessionId, decision.forward);
       }
       recordGatewayMessage("forwarded");
-      // Which project this conversation is held in, noted once: the engine's own idle commits never pass the gateway.
-      if (!ctx.shared) await noteSession(ctx.user.id, sessionId, ctx.project.id);
       return { status: 200, json: answer, outcome: "forwarded" };
     },
     async commit(ctx) {
@@ -982,7 +984,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
             if (!found) return;
             recordGatewayCommit("accepted");
             try {
-              await overlay?.recordCommit({ userId: ctx.user.id, archiveUri: `${ctx.userRoot}/sessions/${found[1]}/history/archive_001`, engineSession: found[1], projectId: ctx.project.id, origin: "tool", taskId: found[2] });
+              await overlay?.recordCommit({ userId: ctx.user.id, archiveUri: `${ctx.userRoot}/sessions/${found[1]}/history/archive_001`, engineSession: found[1], projectId: ctx.project.id,...(ctx.memoryContext?.projectCreatedAt??ctx.project.projectCreatedAt?{projectCreatedAt:ctx.memoryContext?.projectCreatedAt??ctx.project.projectCreatedAt}:{}), origin: "tool", taskId: found[2] });
             } catch { recordLedgerFailure(); }
           });
           continue;
@@ -1164,7 +1166,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         },
       };
       const deletionVersion = sourceDeletion ? await sourceDeletion.version(user.id) : null;
-      const answer = await handlers[route](ctx);
+      const answer = await withNativeMemoryWrite(overlay?.database,user.id,()=>handlers[route](ctx));
       if (sourceDeletion && await sourceDeletion.version(user.id) !== deletionVersion) throw new HttpError(503, 'memory_gateway_source_changed', 'The source privacy state changed during this request.');
       recordGatewayRequest(route, answer.outcome);
       send(answer);
@@ -1204,9 +1206,11 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
   const commitSession = async ({ user, project, engineSessionId, admitted = null, keepRecentCount = 0, context = null }) => {
     if (!enabled) return { status: 404, json: null, outcome: "refused", commit: /** @type {const} */ ("not_learning") };
     if (!new RegExp(`^${SESSION}$`).test(String(engineSessionId))) throw new HttpError(400, "memory_gateway_body_invalid", "A session id is required.");
-    const resolved = await resolveContext(user, project, context);
-    const decision = await scopedAdmission(user, project, engineSessionId, null, resolved, admitted);
-    return commitEngineSession({ user, project, sessionId: engineSessionId, admitted: decision, keepRecentCount, context: resolved });
+    return withNativeMemoryWrite(overlay?.database,user.id,async()=>{
+      const resolved = await resolveContext(user, project, context);
+      const decision = await scopedAdmission(user, project, engineSessionId, null, resolved, admitted);
+      return commitEngineSession({ user, project, sessionId: engineSessionId, admitted: decision, keepRecentCount, context: resolved });
+    });
   };
 
   return Object.assign(handle, { commitSession });

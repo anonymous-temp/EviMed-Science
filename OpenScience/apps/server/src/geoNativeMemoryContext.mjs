@@ -35,11 +35,11 @@ export class GeoNativeMemoryContext {
     this.sessions = sessions; this.proveCapture = proveCapture; this.settingsForOwner = settingsForOwner;
   }
 
-  view(ownerId, ownerCreatedAt, policy = null, projectId = null) {
+  view(ownerId, ownerCreatedAt, policy = null, projectId = null, projectCreatedAt = null) {
     const sessions = policy ? this.sessions.forNamespace(policy.namespace) : this.sessions;
     return Object.freeze({ kind: policy ? 'geo-project' : 'owned', ownerId, ownerCreatedAt,
       namespaceId: sessions.engineUser(ownerId), policyRef: policy?.referenceId ?? null,
-      projectId: policy?.controlProjectId ?? projectId, userRoot: sessions.userRoot(ownerId), sessions, policy });
+      projectId: policy?.controlProjectId ?? projectId, projectCreatedAt:policy?.projectCreatedAt??projectCreatedAt, userRoot: sessions.userRoot(ownerId), sessions, policy });
   }
 
   async withOwner(ownerId, operation) {
@@ -51,9 +51,11 @@ export class GeoNativeMemoryContext {
   }
 
   async forProject(project) {
-    return this.withOwner(project?.userId, async created => {
+    return this.withOwner(project?.userId, async (created,client) => {
+      const row=(await client.query('SELECT created_at::text AS created FROM evimed_control.projects WHERE user_id=$1 AND id=$2 FOR SHARE',[project.userId,project.id])).rows[0];
+      if(!row)throw refused();
       const policy = await this.policies.forProject(project);
-      return this.view(project.userId, created, policy.kind === 'geo-project' ? policy : null, project.id);
+      return this.view(project.userId, created, policy.kind === 'geo-project' ? policy : null, project.id,row.created);
     });
   }
 
@@ -116,7 +118,7 @@ export class GeoNativeMemoryContext {
       if (live) {
         if (!context.projectId) throw refused();
         const current = await this.forProject({ userId: context.ownerId, id: context.projectId });
-        if (current.namespaceId !== context.namespaceId || current.policyRef !== context.policyRef) throw refused();
+        if (!context.projectCreatedAt || current.projectCreatedAt !== context.projectCreatedAt || current.namespaceId !== context.namespaceId || current.policyRef !== context.policyRef) throw refused();
       }
       return context;
     });

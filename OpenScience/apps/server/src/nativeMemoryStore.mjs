@@ -731,7 +731,7 @@ export class NativeMemoryStore {
       evidence,
       // What the file said before each change, oldest first, as the page's 「以前的版本」 reads them.
       revisions: forgotten === null ? [] : history.filter((revision) => revision.before !== null).map((revision, index) => ({
-        ...(this.sourceDeletion?{sourceRevisionId:revision.id,sourceEngineSession:revision.engineSession,sourceArchiveUri:revision.archiveUri,sourceProjectId:revision.projectId}:{}),
+        ...(this.sourceDeletion?{sourceRevisionId:revision.id,sourceEngineSession:revision.engineSession,sourceArchiveUri:revision.archiveUri,sourceProjectId:revision.sourceProjectId??revision.projectId,sourceProjectCreatedAt:revision.sourceProjectCreatedAt,sourceActor:revision.actor}:{}),
         version: index + 1, value: forgotten.length && !FORGET_REASON.test(String(revision.reason ?? "")) ? withoutForgottenLines(String(revision.before ?? ""), forgotten) : String(revision.before ?? ""),
         summary: "", status: "active", changedAt: revision.changedAt,
         reason: revision.reason, by: revision.actor === "engine" ? "extraction" : revision.actor === "platform" ? "system" : "user",
@@ -1103,6 +1103,15 @@ export class NativeMemoryStore {
       .catch(() => this.getRecord(userId, nativeFileId(file.uri)));
   }
 
+  /** A user forget/undo preserves the scope of its before-image; a file label never reassigns another incarnation's lines. */
+  async #bodySource(userId,file) {
+    const origins=(await this.overlay.originsOf(userId,[file.uri])).get(file.uri),lines=memoryLines(file.body).filter(line=>!/^#/.test(line));
+    const refs=lines.map(line=>origins?.get(lineFingerprint(line)));
+    if(!refs.length||refs.some(ref=>!ref?.projectId||!ref?.projectCreatedAt))return {sourceProjectId:null,sourceProjectCreatedAt:null};
+    const first=refs[0];if(refs.some(ref=>ref.projectId!==first.projectId||ref.projectCreatedAt!==first.projectCreatedAt))return {sourceProjectId:null,sourceProjectCreatedAt:null};
+    return {sourceProjectId:first.projectId,sourceProjectCreatedAt:first.projectCreatedAt};
+  }
+
   /**
    * Replace a file's text as `actor`, keep what it said before as a revision, and keep the rejection list in step: lines the
    * person removed are rejected (the engine writing them back verbatim removes them again), lines the person wrote are theirs.
@@ -1130,7 +1139,7 @@ export class NativeMemoryStore {
       await this.overlay.reject(userId, rejectionType, file.uri, before.filter((text) => !kept.has(lineFingerprint(text))), { origin });
       await this.overlay.unreject(userId, rejectionType, after);
     }
-    await this.overlay.addRevision({ userId, uri: file.uri, memoryType: file.type, change, actor, reason, before: file.body, after: next, projectId: file.projectId });
+    await this.overlay.addRevision({ userId, uri: file.uri, memoryType: file.type, change, actor, reason, before: file.body, after: next, projectId: file.projectId,...await this.#bodySource(userId,file) });
     await this.overlay.upsertFile({ userId, uri: file.uri, memoryType: file.type, body: next, projectId: file.projectId });
     await this.overlay.setSources(userId, file.uri, sourcesNamedIn(next));
     // A line the person took out leaves the index of origins with it; one they wrote names no conversation.
@@ -1139,8 +1148,8 @@ export class NativeMemoryStore {
   }
 
   /** Source history is derived from exact archive/session authority even when no current file or origin remains. */
-  async sourceHistoryContributions(userId,projectId,sessionIds,userRoot) {
-    const rows=await this.overlay.sourceRevisions(userId,projectId,sessionIds,userRoot),byUri=new Map();
+  async sourceHistoryContributions(userId,projectId,sessionIds,userRoot,projectCreatedAt=null) {
+    const rows=await this.overlay.sourceRevisions(userId,projectId,sessionIds,userRoot,projectCreatedAt),byUri=new Map();
     for(const row of rows){const before=new Set(memoryLines(row.before??'').map(lineFingerprint)),prior=byUri.get(row.uri)??[];
       byUri.set(row.uri,[...new Set([...prior,...memoryLines(row.after??'').filter(line=>!/^#{1,6}\s/.test(line)&&!before.has(lineFingerprint(line)))])]);}
     const contributions=[...byUri].filter(([,lines])=>lines.length).map(([uri,lines])=>({uri,lines,unverifiedRoot:null,prints:lines.map(lineFingerprint),recordIds:[nativeFileId(uri),...lines.map(line=>`${nativeFileId(uri)}_${lineFingerprint(line).slice(0,12)}`)]}));
@@ -1154,16 +1163,23 @@ export class NativeMemoryStore {
   }
 
   /** Remove only lines whose durable first-party origin names the deleted source, preserving every other line and file.
-   * @param {string} userId @param {string} projectId @param {string[]} sessionIds @param {{userRoot?:string|null,cleanedRevisionId?:string|null}} [options] */
-  async removeConversationSource(userId, projectId, sessionIds, { userRoot = null,cleanedRevisionId=null } = {}) {
+   * @param {string} userId @param {string} projectId @param {string[]} sessionIds @param {{userRoot?:string|null,cleanedRevisionId?:string|null,projectCreatedAt?:string|null}} [options] */
+  async removeConversationSource(userId, projectId, sessionIds, { userRoot = null,cleanedRevisionId=null,projectCreatedAt=null } = {}) {
     const context = userRoot && this.memoryContexts ? await this.memoryContexts.forUri(userId, `${userRoot}/memories/profile.md`) : await this.#projectContext(userId, projectId);
     if (userRoot && context.userRoot && context.userRoot !== userRoot || context.kind === 'geo-project' && context.projectId !== projectId) throw new HttpError(403, 'memory_scope_denied', 'The frozen source namespace changed.');
-    const contributions=await this.sourceHistoryContributions(userId,projectId,sessionIds,context.userRoot??context.sessions.userRoot(userId));
+    const sourceScope=projectCreatedAt?await this.overlay.conversationSourceScope(userId,projectId,sessionIds,context.userRoot??context.sessions.userRoot(userId),projectCreatedAt):null;
+    if(sourceScope)for(const sessionId of sessionIds){
+      const engineSession=`dsh-${sessionId}`;if(sourceScope.engineSessions.includes(engineSession))continue;
+      let active=true;try{await context.sessions.readSession(userId,engineSession);}catch(error){if(error?.code==='memory_index_not_found')active=false;else throw error;}
+      const retained=await context.sessions.tree(userId,context.sessions.sessionUri(userId,engineSession),{showHidden:true});
+      if(active||retained.length)throw new HttpError(409,'memory_source_lineage_unverified','Native source bytes exist without an exact incarnation receipt.');
+    }
+    const contributions=await this.sourceHistoryContributions(userId,projectId,sessionIds,context.userRoot??context.sessions.userRoot(userId),projectCreatedAt);
     if(contributions.some(item=>item.unverifiedRoot))throw new HttpError(409,'memory_source_lineage_unverified','The native consolidation no longer proves which text came only from this source.');
     const files = await this.rawFiles(userId, { context: this.memoryContexts ? context : null });
     const origins = await this.overlay.originsOf(userId, files.map(file => file.uri));
     const deleted = new Set(sessionIds), affected = [];
-    const historical = await this.overlay.sourceRevisions(userId,projectId,sessionIds,context.userRoot ?? context.sessions.userRoot(userId));
+    const historical = await this.overlay.sourceRevisions(userId,projectId,sessionIds,context.userRoot ?? context.sessions.userRoot(userId),projectCreatedAt);
     const historyLines = new Map();
     for (const revision of historical) {
       const before = new Set(memoryLines(revision.before ?? '').map(lineFingerprint));
@@ -1183,7 +1199,7 @@ export class NativeMemoryStore {
         for(const print of historicalPrints.get(file.uri)??[])if(!origins.get(file.uri)?.get(print)?.engineSession)prints.add(print);
       }
       for (const [print, origin] of origins.get(file.uri) ?? []) {
-        if (origin.projectId !== projectId) continue;
+        if (origin.projectId !== projectId || projectCreatedAt&&origin.projectCreatedAt&&origin.projectCreatedAt!==projectCreatedAt) continue;
         const source = await this.overlay.conversationOf(userId, origin.engineSession, origin.archiveUri);
         if (deleted.has(source)) prints.add(print);
       }
@@ -1207,9 +1223,9 @@ export class NativeMemoryStore {
     for (const sessionId of sessionIds) {
       const engineSession = `dsh-${sessionId}`;
       const knownProject = await this.overlay.projectOfSession(userId, engineSession, { userRoot: context.userRoot ?? context.sessions.userRoot(userId) });
-      if (knownProject === projectId) await context.sessions.deleteSession(userId, engineSession);
+      if (knownProject === projectId && (!sourceScope||sourceScope.engineSessions.includes(engineSession))) await context.sessions.deleteSession(userId, engineSession);
     }
-    const withdrawnSessions = await this.overlay.withdrawConversationSource(userId, projectId, sessionIds, context.userRoot ?? context.sessions.userRoot(userId));
+    const withdrawnSessions = await this.overlay.withdrawConversationSource(userId, projectId, sessionIds, context.userRoot ?? context.sessions.userRoot(userId),projectCreatedAt);
     for (const session of withdrawnSessions) await context.sessions.deleteSession(userId, session);
     this.#touch(userId);
     return affected;
@@ -1345,7 +1361,7 @@ export class NativeMemoryStore {
     const removed = await this.#engine(() => context.sessions.remove(userId, file.uri));
     await this.overlay.reject(userId, this.#rejectionType(context, file.type), file.uri, statements(file.body));
     await this.overlay.addRevision({ userId, uri: file.uri, memoryType: file.type, change: "deleted", actor: /** @type {any} */ (actor),
-      reason: reason || (keepText ? "forgotten on the memory page" : "deleted"), before: keepText ? file.body : null, after: null, projectId: file.projectId });
+      reason: reason || (keepText ? "forgotten on the memory page" : "deleted"), before: keepText ? file.body : null, after: null, projectId: file.projectId,...await this.#bodySource(userId,file) });
     if (!keepText) await this.overlay.forgetText(userId, file.uri);
     await this.overlay.removeFile(userId, file.uri);
     this.#touch(userId);
@@ -1425,7 +1441,7 @@ export class NativeMemoryStore {
     await this.overlay.reject(userId, rejectionType, uri, statements(live.body).filter((text) => !had.has(lineFingerprint(text))));
     await this.overlay.unreject(userId, rejectionType, statements(before));
     await this.#engine(() => context.sessions.replace(userId, uri, before));
-    await this.overlay.addRevision({ userId, uri, memoryType, change: "updated", actor: "user", reason: "undo", before: live.body, after: before, projectId: live.projectId });
+    await this.overlay.addRevision({ userId, uri, memoryType, change: "updated", actor: "user", reason: "undo", before: live.body, after: before, projectId: live.projectId,sourceProjectId:last.sourceProjectId??last.projectId,sourceProjectCreatedAt:last.sourceProjectCreatedAt??null });
     await this.overlay.upsertFile({ userId, uri, memoryType, body: before, projectId });
     await this.overlay.syncOrigins(userId, uri, { after: before });
     await this.overlay.markUndone(userId, last.id);
@@ -1452,7 +1468,8 @@ export class NativeMemoryStore {
     await this.overlay.unreject(userId, this.#rejectionType(context, memoryType), statements(text));
     await this.overlay.upsertFile({ userId, uri, memoryType, body: text, projectId: projectId ?? undefined });
     if (projectId) await this.#engine(() => context.sessions.setTags(userId, uri, [`project=${projectId}`])).catch(() => {});
-    await this.overlay.addRevision({ userId, uri, memoryType, change: "restored", actor: "user", reason, before: null, after: text, projectId });
+    const sourceRevision=await this.overlay.revision(userId,revisionId);
+    await this.overlay.addRevision({ userId, uri, memoryType, change: "restored", actor: "user", reason, before: null, after: text, projectId,sourceProjectId:sourceRevision?.sourceProjectId??sourceRevision?.projectId??null,sourceProjectCreatedAt:sourceRevision?.sourceProjectCreatedAt??null });
     await this.overlay.markUndone(userId, revisionId);
   }
 
@@ -1765,7 +1782,7 @@ export class NativeMemoryStore {
     if (!archive || archive.rest || archive.archiveUri !== result.archive_uri || archive.userRoot !== context.userRoot || archive.session !== session) {
       throw new HttpError(403, 'memory_scope_denied', 'The memory archive does not match its request.');
     }
-    return this.overlay.recordCommit({ userId, archiveUri: result.archive_uri, engineSession: session, projectId, origin,
+    return this.overlay.recordCommit({ userId, archiveUri: result.archive_uri, engineSession: session, projectId,projectCreatedAt:context.projectCreatedAt??context.policy?.projectCreatedAt??null, origin,
       taskId: typeof result.task_id === "string" ? result.task_id : null, pendingText });
   }
 

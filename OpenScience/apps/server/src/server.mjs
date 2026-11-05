@@ -5838,9 +5838,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     recordIdForUri:nativeFileId,
     revisionSource:async(userId,revision)=>{
       const sessionId=await nativeMemoryOverlay.conversationOf(userId,revision.engineSession,revision.archiveUri);
-      if(!sessionId)return null;
+      if(!sessionId)return revision.sourceProjectCreatedAt?{sessionId:null,projectId:revision.sourceProjectId??revision.projectId,projectCreatedAt:revision.sourceProjectCreatedAt}:null;
       const commit=revision.archiveUri?await nativeMemoryOverlay.commit(userId,revision.archiveUri):null;
-      return {sessionId,projectId:commit?.projectId??revision.projectId};
+      return {sessionId,projectId:revision.sourceProjectId??commit?.projectId??revision.projectId,projectCreatedAt:revision.sourceProjectCreatedAt??commit?.projectCreatedAt??null};
     },
     nativeRootsFor: async (project,frozen,identity)=>{
       if(!Array.isArray(frozen.copies))return null;
@@ -5853,8 +5853,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       return [...new Set(roots)];
     },
     contributionsFor: async row=>(await Promise.all((row.nativeRoots?.length?row.nativeRoots:row.memoryUserRoot?[row.memoryUserRoot]:[])
-      .map(root=>nativeMemory.sourceHistoryContributions(row.userId,row.projectId,row.sessionIds,root)))).flat(),
+      .map(root=>nativeMemory.sourceHistoryContributions(row.userId,row.projectId,row.sessionIds,root,row.projectCreatedAt)))).flat(),
     prepareFence: async (project,sessionIds)=>{
+      await nativeMemoryOverlay.migrate();
       const runs=(await agentRuns.list(project)).filter(run=>sessionIds.includes(run.sessionId));
       return ()=>{for(const run of runs)runEvents.revoke(run.id);};
     },
@@ -5919,7 +5920,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           }
           if(commit.replayedAs){const replay=await nativeMemoryOverlay.commit(project.userId,commit.replayedAs);if(replay)commits.push(replay);}
         }
-        await nativeMemory.removeConversationSource(project.userId, project.id, row.sessionIds, { userRoot: nativeRoot,cleanedRevisionId:row.cleanedRevisionId });
+        await nativeMemory.removeConversationSource(project.userId, project.id, row.sessionIds, { userRoot: nativeRoot,cleanedRevisionId:row.cleanedRevisionId,projectCreatedAt:row.projectCreatedAt });
         }
       },{exclusive:true});
       const removedRuns = await agentRuns.removeConversationSource(project, row.sessionIds);

@@ -458,7 +458,8 @@ export class NativeMemoryWorker {
     for (const [archiveUri, entry] of archives) {
       if (known.has(archiveUri)) continue;
       const projectId = context.kind === 'geo-project' ? context.projectId : await this.#projectOf(userId, entry.session);
-      const recorded = await this.overlay.recordCommit({ userId, archiveUri, engineSession: entry.session, projectId, origin: "scan",
+      const projectCreatedAt=context.kind==='geo-project'?context.projectCreatedAt??context.policy.projectCreatedAt:await this.overlay.projectEpochOfSession(userId,entry.session,{userRoot:context.userRoot});
+      const recorded = await this.overlay.recordCommit({ userId, archiveUri, engineSession: entry.session, projectId,projectCreatedAt, origin: "scan",
         state: entry.failed && !entry.finished ? "failed" : "pending", error: entry.failed ? "found failed by the archive scan" : "" });
       if (recorded.inserted) { entered += 1; recordNativeCommit("found_by_scan"); }
     }
@@ -491,17 +492,38 @@ export class NativeMemoryWorker {
     return settled;
   }
 
+  /** Native source authority is frozen on the archive, independent from whichever project now owns its public id. */
+  async #sourceAuthorized(commit,context,{abandon=true}={}) {
+    if(!this.overlay.sourceDeletion||!commit.projectId)return true;
+    const source=await this.overlay.conversationOf(commit.userId,commit.engineSession,commit.archiveUri);
+    if(!source)return true;
+    const ledger=this.overlay.sourceDeletion.ledger;
+    const fence=typeof ledger.nativeSource==='function'?await ledger.nativeSource(commit.userId,commit.projectId,commit.projectCreatedAt??null,source,context.userRoot):await ledger.get({userId:commit.userId,id:commit.projectId},source);
+    if(!fence||fence.memoryUserRoot&&!(fence.nativeRoots??[fence.memoryUserRoot]).includes(context.userRoot))return true;
+    if(typeof ledger.nativeSource==='function'&&!commit.projectCreatedAt)throw new HttpError(409,'memory_source_lineage_unverified','The archive source incarnation is unknown.');
+    if(abandon)await this.overlay.abandonCommit(commit.userId,commit.archiveUri,'source_conversation_deleted');return false;
+  }
+
   /** A pending commit: its diff ingested, its failure noted, or left to finish. @param {any} commit */
   async #settle(commit) {
     const resolved = await this.#commitContext(commit);
     commit = resolved.commit;
     const context = resolved.context, sessions = context.sessions;
+    const sourceAllowed=await this.#sourceAuthorized(commit,context,{abandon:false});
     const diffText = await sessions.read(commit.userId, `${commit.archiveUri}/memory_diff.json`);
     if (diffText !== null) {
       let diff;
       try { diff = JSON.parse(diffText); } catch { diff = null; }
       if (diff && typeof diff === "object") {
         this.#assertDiffContext(commit, diff, context);
+        if(!sourceAllowed) {
+          const task=commit.taskId?await sessions.task(commit.userId,commit.taskId):null;
+          if(task&&task.status!=='completed')return false;
+          // Keep the exact typed effects as cleanup authority; no deleted source is judged, recalled or promoted as learning.
+          await this.ingest(commit,diff,{context,sourceDeleted:true});
+          await this.overlay.noteNativeIngested(commit.userId,commit.archiveUri);
+          await this.overlay.abandonCommit(commit.userId,commit.archiveUri,'source_conversation_deleted');return true;
+        }
         // An extraction the engine had accepted before the account reset its memory finishes after it: its files are what the
         // person asked to forget, and they are taken out again instead of being read into the overlay as new memories. A reset
         // that found this very archive running wrote it down, and then no message needs to be readable to know.
@@ -529,6 +551,7 @@ export class NativeMemoryWorker {
         return true;
       }
     }
+    if(!sourceAllowed)return false;
     const failed = await sessions.read(commit.userId, `${commit.archiveUri}/.failed.json`);
     let reason = failed !== null ? "the extraction failed" : "";
     // Why, as far as the engine's own marker says (v0.5.2 fails an extraction whose output ran out of room as `budget_exhausted` and does not retry it).
@@ -590,14 +613,7 @@ export class NativeMemoryWorker {
     const userId = commit.userId;
     const external = typeof this.overlay.admissionOfCommit === "function" ? await this.overlay.admissionOfCommit(userId, commit) : null;
     const authorized = async () => {
-      if (this.overlay.sourceDeletion && commit.projectId) {
-        const source = await this.overlay.conversationOf(userId, commit.engineSession, commit.archiveUri);
-        const sourceFence = source ? await this.overlay.sourceDeletion.ledger.get({ userId, id: commit.projectId }, source) : null;
-        if (sourceFence && (!sourceFence.memoryUserRoot || (sourceFence.nativeRoots??[sourceFence.memoryUserRoot]).includes(context.userRoot))) {
-          await this.overlay.abandonCommit(userId, commit.archiveUri, 'source_conversation_deleted');
-          return false;
-        }
-      }
+      if(!await this.#sourceAuthorized(commit,context))return false;
       if (!external) return true;
       const policy = await this.overlay.admissionAuthority(userId, external);
       if (policy.allowed) return true;
@@ -656,7 +672,7 @@ export class NativeMemoryWorker {
       if (!archive || archive.userRoot !== context.userRoot || archive.session !== session || archive.rest || archive.archiveUri !== result.archive_uri) {
         throw new HttpError(403, 'memory_scope_denied', 'The replay archive does not match its original namespace.');
       }
-      await this.overlay.recordCommit({ userId, archiveUri: result.archive_uri, engineSession: session, projectId: commit.projectId, origin: "replay",
+      await this.overlay.recordCommit({ userId, archiveUri: result.archive_uri, engineSession: session, projectId: commit.projectId,projectCreatedAt:commit.projectCreatedAt??null, origin: "replay",
         taskId: typeof result.task_id === "string" ? result.task_id : null, pendingText: commit.pendingText, attempts: commit.attempts + 1 });
       await this.overlay.markReplayed(userId, commit.archiveUri, result.archive_uri);
       recordNativeCommit("replayed");
@@ -691,20 +707,28 @@ export class NativeMemoryWorker {
 
   /**
    * One commit's diff into the overlay, with the checks after the fact. Idempotent: a diff read twice writes each revision once.
-   * @param {any} commit @param {any} diff @param {{context?:any}} [options] @returns {Promise<number>} operations read
+   * @param {any} commit @param {any} diff @param {{context?:any,sourceDeleted?:boolean}} [options] @returns {Promise<number>} operations read
    */
-  async ingest(commit, diff, { context = null } = {}) {
+  async ingest(commit, diff, { context = null,sourceDeleted=false } = {}) {
     const resolved = await this.#commitContext(commit, context);
     commit = resolved.commit; context = resolved.context;
     const userId = commit.userId;
     const root = context.sessions.memoryRoot(userId);
     const operations = diff?.operations ?? {};
     this.#assertDiffContext(commit, diff, context);
+    if(sourceDeleted){
+      const entries=['adds','updates','deletes'];
+      if(diff?.archive_uri!==commit.archiveUri||entries.some(key=>!Array.isArray(operations[key]))||entries.reduce((count,key)=>count+operations[key].length,0)>20000)throw new HttpError(409,'memory_source_lineage_unverified','The native source has no complete typed cleanup receipt.');
+      for(const key of entries)for(const operation of operations[key]){
+        const file=nativeMemoryFile(operation?.uri,root)??observationFile(operation?.uri,root);
+        if(!file||operation.memory_type!==file.type||key!=='deletes'&&typeof operation.after!=='string'||key==='updates'&&typeof operation.before!=='string'||key==='deletes'&&typeof(operation.deleted_content??operation.before)!=='string')throw new HttpError(409,'memory_source_lineage_unverified','A native source effect cannot be verified for cleanup.');
+      }
+    }
     const counts = { added: 0, updated: 0, deleted: 0 };
     const changedAt = typeof diff?.extracted_at === "string" && Number.isFinite(Date.parse(diff.extracted_at)) ? new Date(diff.extracted_at).toISOString() : null;
-    const base = { userId, archiveUri: commit.archiveUri, engineSession: commit.engineSession, changedAt };
+    const base = { userId, archiveUri: commit.archiveUri, engineSession: commit.engineSession, changedAt,sourceProjectId:commit.projectId??null,sourceProjectCreatedAt:commit.projectCreatedAt??null };
     // What the commit brought that repeats, in other words, a line the person removed: decided once for the whole commit.
-    const rewordings = await this.#rewordings(commit, operations, context).catch((error) => {
+    const rewordings = sourceDeleted?new Map():await this.#rewordings(commit, operations, context).catch((error) => {
       // Never a reason to lose the commit: the lines are kept, as they were before the rewording was looked for. But said.
       this.report(`native memory rewordings: ${String(/** @type {any} */ (error)?.code ?? /** @type {any} */ (error)?.message ?? error).slice(0, 120)}`);
       return new Map();
@@ -719,16 +743,23 @@ export class NativeMemoryWorker {
         const projectId = context.kind === 'geo-project' ? context.projectId : PROJECT_MEMORY_TYPES.includes(file.type) ? commit.projectId ?? null : null;
         if (change === "deleted") {
           await this.overlay.addRevision({ ...base, uri, memoryType: file.type, change, actor: "engine", reason: "", before: operation?.deleted_content ?? operation?.before ?? null, after: null, projectId });
-          await this.overlay.removeFile(userId, uri);
+          if(!sourceDeleted)await this.overlay.removeFile(userId, uri);
           continue;
         }
         const after = String(operation?.after ?? "");
         const recorded = await this.overlay.addRevision({ ...base, uri, memoryType: file.type, change, actor: "engine", reason: "",
           before: change === "updated" ? String(operation?.before ?? "") : null, after, projectId });
-        const body = await this.#afterWrite(userId, uri, file.type, { projectId, diffAfter: after, diffBefore: change === "updated" ? String(operation?.before ?? "") : "", fresh: recorded !== null, archiveUri: commit.archiveUri, memoryContext: context, rewordings });
+        const body = sourceDeleted?await context.sessions.read(userId,uri):await this.#afterWrite(userId, uri, file.type, { projectId, diffAfter: after, diffBefore: change === "updated" ? String(operation?.before ?? "") : "", fresh: recorded !== null, archiveUri: commit.archiveUri, memoryContext: context, rewordings });
         // The lines this commit brought are recorded as its own, beyond the revisions a file keeps (what the checks took out is not).
-        if (body !== null) await this.overlay.syncOrigins(userId, uri, { after: body, before: change === "updated" ? String(operation?.before ?? "") : "",
-          origin: { revisionId: recorded?.id ?? null, engineSession: commit.engineSession, archiveUri: commit.archiveUri, projectId: commit.projectId ?? projectId, at: changedAt } });
+        if (body !== null) {
+          // A later extraction may already have changed this shared file. Never attribute its unrelated lines to this diff.
+          const written=new Set(memoryLines(after).map(lineFingerprint));
+          const live=new Set(memoryLines(body).map(lineFingerprint)),prior=new Set(memoryLines(operation?.before??'').map(lineFingerprint));
+          if(sourceDeleted&&[...written].some(print=>!prior.has(print)&&!live.has(print)))throw new HttpError(409,'memory_source_lineage_unverified','The completed native source text was rewritten without verifiable lineage.');
+          const otherLines=memoryLines(body).filter(line=>!written.has(lineFingerprint(line)));
+          await this.overlay.syncOrigins(userId, uri, { after: body, before: [change==='updated'?String(operation?.before??''):'',...otherLines].join('\n'),
+            origin: { revisionId: recorded?.id ?? null, engineSession: commit.engineSession, archiveUri: commit.archiveUri, projectId: commit.projectId ?? projectId,projectCreatedAt:commit.projectCreatedAt??null, at: changedAt } });
+        }
       }
     }
     recordNativeOperations(counts);

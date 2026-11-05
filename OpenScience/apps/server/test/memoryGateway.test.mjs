@@ -171,7 +171,7 @@ test("a captured revision selection cannot teach the memory engine platform inst
 
 test("a commit the engine accepts is written to the ledger with its archive and task; nothing pending is said as such", async (t) => {
   const recorded = [];
-  const overlay = { configured: true, account: async () => ({ registeredAt: "2026-10-13T00:00:00.000Z" }), noteRegistered: async () => {},
+  const overlay = { configured: true, account: async () => ({ registeredAt: "2026-10-13T00:00:00.000Z" }), noteRegistered: async () => {}, noteSession:async()=>{},
     recordCommit: async (commit) => { recorded.push(commit); }, sensitiveUris: async () => [] };
   const { stub, call } = await fixture(t, { overlay });
   await call("POST", "/api/v1/sessions", { session_id: SESSION });
