@@ -79,3 +79,10 @@ test('physical purge requires every independent idle proof and a confirmed provi
   pending=false; stop=false; await purge(); assert.deepEqual(calls,['stop']);
   stop=true; assert.equal((await purge()).sourceRemoved,true); assert.deepEqual(calls,['stop','stop','files']);
 });
+
+test('session control maps and native added events remove complete deleted records rather than leaving anonymous content', () => {
+  const gone=new Set(['a']);
+  assert.deepEqual(filterDeletedConversationValue({type:'baseline',value:{projections:{a:{values:{answer:'secret'}},b:{values:{answer:'kept'}}}}},gone),
+    {type:'baseline',value:{projections:{b:{values:{answer:'kept'}}}}});
+  assert.equal(filterDeletedConversationValue({type:'emit',event:'api-session/added',args:[{sessionId:'a',title:'secret'}]},gone),null);
+});
