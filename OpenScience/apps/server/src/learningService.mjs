@@ -425,8 +425,8 @@ export class LearningService {
   /**
    * Replace a method's body, which resets everything measured about the old one.
    *
-   * A revised method goes back to `candidate` even if it was effective, and its
-   * counters go to zero. That is the whole point of keying counts to
+   * A revised method is judged immediately under the same promotion rule as a
+   * new one, while a recorded stop stays stopped. Its counters go to zero. That is the point of keying counts to
    * `(method, contentDigest)`: the alternative is EvoDS's, where a rewrite
    * inherits its predecessor's confidence and the authors left a comment saying
    * they knew.
@@ -458,7 +458,7 @@ export class LearningService {
       sourceProjectIds: [...methodSourceProjects(current.payload.provenance), ...methodSourceProjects(input.provenance)] });
     const payload = {
       ...current.payload,
-      status: bodyChanged ? "candidate" : current.payload.status,
+      status: bodyChanged && current.payload.status !== 'retired' ? "candidate" : current.payload.status,
       frontmatter: input.frontmatter,
       body: input.body,
       ...(input.files ? { files: input.files } : { files: undefined }),
@@ -483,6 +483,13 @@ export class LearningService {
       updatedAt: at,
     };
     if (payload.files === undefined) delete payload.files;
+    if (bodyChanged && current.payload.status !== 'retired') {
+      const verdict = promotionVerdict(methodRecordFrom({ id: methodId, payload }), { isApproved: await this.#inForce(userId, payload) });
+      payload.status = verdict.status;
+      if (verdict.status === 'approved') payload.statusReason = effectiveStatusReason(payload);
+      else delete payload.statusReason;
+      payload.statusChangedAt = at;
+    }
     await (this.contextProvenance ? this.contextProvenance.write.bind(this.contextProvenance) : this.documents.put.bind(this.documents))(userId, "method", methodId, payload, { expectedRevision: input.expectedRevision });
     this.#mountChanged(userId, methodId);
     return this.getMethod(userId, methodId);

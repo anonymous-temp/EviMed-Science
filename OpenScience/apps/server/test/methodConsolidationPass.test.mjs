@@ -281,7 +281,8 @@ test("a subset builds only its wider method, and a supersedes builds nothing and
   assert.equal(result.builds, 1);
   assert.match((await h.learning.getMethod("u1", w.id)).payload.body, /Never invent a span/, "the wider method was amended");
   assert.doesNotMatch((await h.learning.getMethod("u1", n.id)).payload.body, /Never invent a span/, "the narrower one was not touched at all");
-  assert.deepEqual(result.promoted, [w.id], "the amended body is a new candidate, approved by the same pass once the record allows it");
+  assert.equal((await h.learning.getMethod("u1", w.id)).payload.status, "approved", "the eligible amended body takes effect at the amendment");
+  assert.deepEqual(result.promoted, [], "no separate hourly approval was needed");
 
   // A group that holds only a supersedes is recorded and never sent to the builder.
   const s = harness({ decide: (input) => ({ assignments: [{ ASSIGNMENT: "A1", SKILLS: idsOf(input), RELATION_TYPE: "supersedes", REPLACES: idsOf(input)[0], REASON: "the fuller treatment" }] }) });
