@@ -228,6 +228,23 @@ test('a body amendment never reverses a recorded stop', async () => {
   assert.equal((await learning.approvedMethods('u1')).some(row => row.id === amended.id), false);
 });
 
+test('concurrent amendments of conflicting methods cannot both take effect across service instances', async () => {
+  const { learning, documents } = realisticService();
+  const other = new LearningService({ documents });
+  const left = await create(learning, { frontmatter: frontmatter({ name: 'left' }) });
+  const right = await create(other, { frontmatter: frontmatter({ name: 'right' }) });
+  await learning.recordRelations('u1', left.id, [{ type: 'conflicts_with', target: right.id, evidence: 'Opposite instructions.', proposedBy: 'consolidate:test' }], () => true);
+  await other.recordRelations('u1', right.id, [{ type: 'conflicts_with', target: left.id, evidence: 'Opposite instructions.', proposedBy: 'consolidate:test' }], () => true);
+  for (let round = 0; round < 2; round++) {
+    const [a, b] = await Promise.all([learning.getMethod('u1', left.id), other.getMethod('u1', right.id)]);
+    const amended = await Promise.all([
+      learning.amendMethod('u1', a.id, { expectedRevision: a.revision, frontmatter: a.payload.frontmatter, body: `${BODY}\n\nLeft refinement ${round}.` }),
+      other.amendMethod('u1', b.id, { expectedRevision: b.revision, frontmatter: b.payload.frontmatter, body: `${BODY}\n\nRight refinement ${round}.` }),
+    ]);
+    assert.ok(amended.filter(row => row.payload.status === 'approved').length <= 1, 'one conflict authority covers both status snapshots and writes');
+  }
+});
+
 test("rollback saves an earlier revision forward and never deletes the one it replaces", async () => {
   const { learning } = service();
   const created = await create(learning);
