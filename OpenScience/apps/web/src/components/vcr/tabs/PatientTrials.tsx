@@ -107,6 +107,7 @@ export function PatientTrials({ studyId, study, judged, picked, onPick, onChange
       )}
     >
       <div className="flex flex-col gap-4">
+        {judged.search && <p data-vcr-search-line="" className="text-caption text-text-3">{judged.search}</p>}
         {judged.stale && (
           <div data-vcr-stale={judged.stale.count} className="flex flex-wrap items-center gap-3 rounded-card border border-border bg-surface-2 px-3 py-2">
             <p className="min-w-0 flex-1 text-ui text-text-2">{judged.stale.label}（{judged.stale.count} 个试验）；原来的判定保留为历史。</p>

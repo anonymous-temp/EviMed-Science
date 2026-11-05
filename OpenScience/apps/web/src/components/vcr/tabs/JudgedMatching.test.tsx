@@ -265,6 +265,23 @@ describe("给患者找试验 — every state", () => {
     expect(screen.queryByText(/还没有为/)).toBeNull();
   });
 
+  it("one line says what was searched for this person and which registry did not answer", async () => {
+    await patientPage({ [JUDGED]: judged((page) => { page.search = "上次检索（2026-11-04）：共找到 12 个试验；CTIS 没查到（登记库暂时没有回答）。"; return page; }) });
+    expect(document.querySelector("[data-vcr-search-line]")).toHaveTextContent("CTIS 没查到（登记库暂时没有回答）");
+  });
+
+  it("what a row says of what its verdict did not read, and that the list was cut, reach the page", async () => {
+    await patientPage({ [JUDGED]: judged((page) => {
+      (page as any).cutNote = "这里的对数超过一次能读的上限。";
+      (page.trials[0] as any).clausesNote = "重新判定没有完成，这里仍是上一次的结论";
+      (page.trials[0] as any).recordGap = "这条结论没有读全：1 份病历没能读取。";
+      return page;
+    }) });
+    expect(document.querySelector("[data-vcr-judged-cut]")).toHaveTextContent("超过一次能读的上限");
+    expect(screen.getByText("重新判定没有完成，这里仍是上一次的结论")).toBeInTheDocument();
+    expect(screen.getByText("这条结论没有读全：1 份病历没能读取。")).toBeInTheDocument();
+  });
+
   it("all done with the cost said once", async () => {
     await patientPage({ [JUDGED]: judged((page) => { page.progress = { ...page.progress, state: "done", total: 5, finished: 5, failed: 0, waiting: 0 }; page.failed = { count: 0, reasons: [], listed: [] }; return page; }) });
     expect(document.querySelector("[data-vcr-judged-progress='done']")).toHaveTextContent("已全部判完：5 个试验，用了 0.13 灵豆。");

@@ -265,6 +265,29 @@ function clausesNoteOf(pair) {
   return null;
 }
 
+/** Why a registry gave nothing, in words, for the one line the page says of the last search. */
+const SEARCH_FAILURE_WORDS_ZH = Object.freeze(/** @type {Record<string, string>} */ ({
+  search_deadline: "没来得及查", registry_not_configured: "本部署没有接入", registry_unavailable: "登记库暂时没有回答", registry_rate_limited: "登记库限制了查询次数", registry_timeout: "登记库回答超时",
+}));
+
+/**
+ * What was searched for this person and which registries answered, from the newest saved search, in one line; a registry that failed is named with the reason.
+ * @param {{ createdAt: string | null, found: number, registries: any[] } | null} receipt
+ */
+function searchLineOf(receipt) {
+  if (!receipt) return null;
+  const parts = list(receipt.registries).map((entry) => {
+    const name = String(entry?.name ?? entry?.registry ?? "登记库");
+    if (entry?.state === "searched") return `${name} 已查`;
+    if (entry?.state === "partial") return `${name} 只查到一部分检索词`;
+    if (entry?.state === "not_configured") return `${name} 本部署没有接入`;
+    const reasons = [...new Set(list(entry?.failed).map((failure) => SEARCH_FAILURE_WORDS_ZH[String(object(failure).reason)] ?? "登记库没有回答"))];
+    return `${name} 没查到（${reasons.join("、") || "登记库没有回答"}）`;
+  });
+  if (!parts.length) return null;
+  return `上次检索${receipt.createdAt ? `（${receipt.createdAt.slice(0, 10)}）` : ""}：共找到 ${receipt.found} 个试验；${parts.join("，")}。`;
+}
+
 /** What a page and a file say when a scope is larger than one read holds. @param {number} most */
 const CUT_NOTE_ZH = (most) => `这里的对数超过一次能读的上限，只算到前 ${Number(most).toLocaleString("en-US")} 对左右；分批选人可以看全。`;
 
@@ -298,15 +321,16 @@ const NOT_WITHDRAWN = `NOT EXISTS (SELECT 1 FROM ${S}.subject_withdrawals w WHER
  */
 export class VcrMatchResults extends VcrStoreBase {
   /**
-   * @param {{ database: any, judgments: any, documents?: any, matchStore?: any, minCell?: number, statementTimeoutMs?: number, mostPairs?: number }} deps
+   * @param {{ database: any, judgments: any, documents?: any, matchStore?: any, searches?: any, minCell?: number, statementTimeoutMs?: number, mostPairs?: number }} deps
    * `judgments` is the judgment store (whole rows by id), `documents` the seam that re-reads a sentence and judges a read under the viewer's grant.
    */
-  constructor({ database, judgments, documents = null, matchStore = null, minCell = VCR_MIN_CELL_SIZE, statementTimeoutMs = READ_TIMEOUT_MS, mostPairs = MOST_PAIRS }) {
+  constructor({ database, judgments, documents = null, matchStore = null, searches = null, minCell = VCR_MIN_CELL_SIZE, statementTimeoutMs = READ_TIMEOUT_MS, mostPairs = MOST_PAIRS }) {
     super({ database, statementTimeoutMs });
     this.mostPairs = mostPairs;
     this.judgments = judgments;
     this.documents = documents;
     this.matchStore = matchStore;
+    this.searches = searches;
     this.minCell = minCell;
   }
 
@@ -525,11 +549,13 @@ export class VcrMatchResults extends VcrStoreBase {
     await this.#judgeReaders(study, viewer, ranked);
     const trials = ranked.map((pair, index) => ({ rank: index + 1, ...this.#listed(pair) }));
     const failures = this.#failures(pairs);
+    const search = searchLineOf(await this.searches?.latest?.(study, { subjectKey }).catch(() => null) ?? null);
     const chosen = ranked.find((pair) => pair.targetId === target) ?? ranked[0] ?? null;
     // The trials whose verdict rests on a registry record that has changed since: the page offers to judge those again, and says so in words.
     const stale = ranked.filter((pair) => pair.basisChanged?.kind === REGISTRY_RECORD_BASIS).map((pair) => String(pair.targetId));
     return {
       direction: "patient_to_trial", subjectKey, label: pairs.done[0]?.label ?? pairs.failed[0]?.label ?? vcrSubjectLabel(subjectKey), ...(pairs.cut ? { cutNote: CUT_NOTE_ZH(this.mostPairs) } : {}),
+      ...(search ? { search } : {}),
       ...(stale.length ? { stale: { label: REGISTRY_STALE_LABEL_ZH, count: stale.length, registryIds: stale.slice(0, 50) } } : {}),
       held: pairs.done.length > 0 || pairs.failed.length > 0 || progress.total > 0, progress,
       trials, failed: this.#failureSummary(failures), selected: chosen ? await this.#open(study, chosen, viewer) : null,

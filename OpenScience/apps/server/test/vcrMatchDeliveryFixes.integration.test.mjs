@@ -149,3 +149,15 @@ test("every failure code a pair can carry has words that say what the person can
     assert.ok(!/vcr_|_/.test(words), `${code} reads as a code`);
   }
 });
+
+test("the patient page carries one line from the newest search for this person: what was searched and which registry did not answer", options, async () => {
+  const { subjectKey } = await intake(conv(), { messageSeq: say("男性，70 岁。前列腺癌。") }, origin);
+  assert.equal((await vcr.matchResults.forPatient(study, subjectKey, { viewer })).search, undefined, "no search, no line");
+  await vcr.candidateSearches.save(study, { subjectKey, request: { condition: "prostate cancer", terms: [] }, found: 12, items: [], rerank: null,
+    registries: [{ registry: "clinicaltrials.gov", name: "ClinicalTrials.gov", state: "searched", failed: [] }, { registry: "ctis", name: "CTIS", state: "failed", failed: [{ query: "q", reason: "registry_unavailable" }] }] });
+  const page = await vcr.matchResults.forPatient(study, subjectKey, { viewer });
+  assert.match(page.search, /共找到 12 个试验/u);
+  assert.match(page.search, /ClinicalTrials\.gov 已查/u);
+  assert.match(page.search, /CTIS 没查到（登记库暂时没有回答）/u);
+  assert.ok(!/registry_|_/.test(page.search), "no code in the line");
+});

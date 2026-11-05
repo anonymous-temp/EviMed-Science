@@ -1316,7 +1316,7 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
     platform: { enabled: Boolean(config.vcrPlatformPacksEnabled), publisherId: PLATFORM_PUBLISHER_USER_ID, sourceChanges, entityVocabulary, officialZoneForKeys,
       people: (ids) => store.personNames(ids) } });
   // The matching page's reader of the saved judgments, and the start of the judging job from the page.
-  const matchResults = new VcrMatchResults({ database: productDatabase, judgments: matchJudgments, documents, matchStore, minCell: matchBatchMinCell(config) });
+  const matchResults = new VcrMatchResults({ database: productDatabase, judgments: matchJudgments, documents, matchStore, searches: candidateSearches, minCell: matchBatchMinCell(config) });
   service.attach({ corrections, knowledge, engineProbe, erasure, matchJudgments: matchJudgmentReads, matchJudge, matchResults, subjectKnown });
   // The study's project carries the study's name: the first definition names a draft, and the sidebar lists projects. A project the
   // researcher renamed since is left alone, like GEO's — the old name is the study's own, or one nobody gave.

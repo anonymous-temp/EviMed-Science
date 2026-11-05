@@ -2568,6 +2568,8 @@ export interface VcrJudgedPatient {
   direction: "patient_to_trial";
   subjectKey: string;
   label: string;
+  /** What the newest saved search for this person looked in and which registries answered, in one line. */
+  search?: string;
   /** Trials whose verdict rests on a registry record that changed since: one action judges them again. */
   stale?: { label: string; count: number; registryIds: string[] };
   /** Whether anything was judged, failed or asked for: false is the page saying nothing has been judged for this scope. */
@@ -2627,7 +2629,8 @@ function readJudgedPair(raw: Loose): VcrJudgedPair {
     confidence: num(raw.confidence), confidenceLabel: text(raw.confidenceLabel), why: String(raw.why ?? ""),
     counts: Object.keys(counts).length ? { support: num(counts.support) ?? 0, against: num(counts.against) ?? 0, silent: num(counts.silent) ?? 0, open: num(counts.open) ?? 0, notApplicable: num(counts.notApplicable) ?? 0 } : null,
     judgedAt: text(raw.judgedAt), producer: raw.producer === "conversation" ? "conversation" : "job", ...(readBasisMark(raw.basisChanged) ? { basisChanged: readBasisMark(raw.basisChanged)! } : {}),
-    ...(text(raw.eligibilityNote) ? { eligibilityNote: String(raw.eligibilityNote) } : {}), ...(num(raw.rank) !== null ? { rank: num(raw.rank)! } : {}),
+    ...(text(raw.eligibilityNote) ? { eligibilityNote: String(raw.eligibilityNote) } : {}), ...(text(raw.recordGap) ? { recordGap: String(raw.recordGap) } : {}), ...(text(raw.clausesNote) ? { clausesNote: String(raw.clausesNote) } : {}),
+    ...(num(raw.rank) !== null ? { rank: num(raw.rank)! } : {}),
   };
 }
 
@@ -2675,11 +2678,12 @@ function readJudgedFailures(raw: unknown): VcrJudgedFailures {
 /** The judged page of either direction, total over what the server might send: a missing list is an empty one, a missing count is null and never zero. */
 export function readVcrJudged(raw: unknown): VcrJudged {
   const value = obj(raw);
-  const common = { held: value.held === true, progress: readJudgedProgress(value.progress), failed: readJudgedFailures(value.failed), selected: readJudgedOpen(value.selected) };
+  const common = { held: value.held === true, progress: readJudgedProgress(value.progress), failed: readJudgedFailures(value.failed), selected: readJudgedOpen(value.selected), ...(text(value.cutNote) ? { cutNote: String(value.cutNote) } : {}) };
   if (value.direction === "patient_to_trial") {
     const stale = obj(value.stale);
     const subjectKey = String(value.subjectKey ?? "");
     return { direction: "patient_to_trial", subjectKey, label: String(value.label ?? vcrSubjectLabel(subjectKey)), ...common, trials: arr(value.trials).map(readJudgedPair),
+      ...(text(value.search) ? { search: String(value.search) } : {}),
       ...(Object.keys(stale).length ? { stale: { label: String(stale.label ?? "登记记录已更新，可重新判定"), count: num(stale.count) ?? 0, registryIds: strings(stale.registryIds) } } : {}) };
   }
   const tallies = obj(value.tallies);
