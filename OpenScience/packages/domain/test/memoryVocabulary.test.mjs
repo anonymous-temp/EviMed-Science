@@ -133,7 +133,7 @@ test("an identifier has the shape of one whether or not its check digit adds up,
   // The value after the label goes; the sentence around it stays, in either language.
   assert.equal(maskIdentifiers("我的数据库密码是 Xk9#mPq2Lz，帮我写一个连接脚本"), "我的数据库密码是 [已省略]，帮我写一个连接脚本");
   assert.equal(maskIdentifiers("the password: hunter2hunter, then run it"), "the password: [已省略], then run it");
-  assert.equal(maskIdentifiers("密码是abc"), "密码是abc", "too short to be one");
+  assert.equal(maskIdentifiers("密码是abc"), "密码是[已省略]", "short passwords are secrets too");
   assert.deepEqual(identifierShapesIn("我的数据库密码是 Xk9#mPq2Lz，帮我写"), ["credential"]);
 });
 
@@ -229,4 +229,26 @@ test("the kernel's own reminder envelope is machine text like the platform's, so
   assert.ok(entry && entry.role === "injected" && entry.upstream && entry.emitters.length === 0, "named, injected, upstream");
   assert.equal(carriesPlatformContext("<system-reminder>\nA skill is a reusable set of task-specific instructions.\n</system-reminder>"), true);
   assert.equal(stripPlatformTags("<system-reminder>目录</system-reminder>你好"), "目录你好", "the envelope goes, as for any other tag");
+});
+
+test("contact details are useful context while identifiers and credentials stay masked in the same sentence", () => {
+  for (const text of ["我的电话 13800138000，邮箱 anna@example.com", "给李医生发 anna.wang+lab@example.com，电话 +86 13800138000"]) {
+    assert.deepEqual(identifierShapesIn(text), []);
+    assert.equal(maskIdentifiers(text), text);
+  }
+  const text = "李医生 13800138000 anna@example.com 身份证110101199001011234 银行卡4111111111111111 password: secret123";
+  assert.deepEqual(identifierShapesIn(text), ["resident_id", "card", "credential"]);
+  assert.equal(maskIdentifiers(text), "李医生 13800138000 anna@example.com 身份证[已省略] 银行卡[已省略] password: [已省略]");
+  for (const text of ["HbA1c 8.2%，2026-11-04 起二甲双胍 500 mg 每日两次", "eGFR 38 mL/min/1.73m²；复查 2026-12-01"]) {
+    assert.deepEqual(identifierShapesIn(text), []);
+    assert.equal(maskIdentifiers(text), text);
+  }
+});
+
+test("verification codes and short passwords remain hard boundaries without masking clinical numbers", () => {
+  for (const text of ["验证码是 123456", "OTP: 843021", "password: abc", "密码是abc"]) {
+    assert.ok(identifierShapesIn(text).includes("credential"), text);
+    assert.match(maskIdentifiers(text), /已省略/, text);
+  }
+  for (const text of ["空腹血糖 6.2", "2026-11-04 复查", "二甲双胍 500 mg", "电话 13800138000"]) assert.equal(maskIdentifiers(text), text);
 });
