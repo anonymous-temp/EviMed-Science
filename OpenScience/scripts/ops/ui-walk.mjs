@@ -283,6 +283,7 @@ const WALK_TABLES = {
       {"view":"files@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk signs in as a throwaway account it registers and deletes (2026-10-25), so the account holds none of this page's data: no row, mark or object is there to open (the fixture walk reads the page with data); data, not a defect"},
       {"view":"knowledge-graph@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk signs in as a throwaway account it registers and deletes (2026-10-25), so the account holds none of this page's data: no row, mark or object is there to open (the fixture walk reads the page with data); data, not a defect"},
       {"view":"knowledge-pages@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk signs in as a throwaway account it registers and deletes (2026-10-25), so the account holds none of this page's data: no row, mark or object is there to open (the fixture walk reads the page with data); data, not a defect"},
+      {"view":"inbox@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk signs in as a throwaway account it registers and deletes (2026-10-25), so the account holds none of this page's data: no row, mark or object is there to open (the fixture walk reads the page with data); data, not a defect"},
       {"view":"memory@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk signs in as a throwaway account it registers and deletes (2026-10-25), so the account holds none of this page's data: no row, mark or object is there to open (the fixture walk reads the page with data); data, not a defect"},
       {"view":"memory-methods@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk signs in as a throwaway account it registers and deletes (2026-10-25), so the account holds none of this page's data: no row, mark or object is there to open (the fixture walk reads the page with data); data, not a defect"},
       {"view":"memory-overview@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk signs in as a throwaway account it registers and deletes (2026-10-25), so the account holds none of this page's data: no row, mark or object is there to open (the fixture walk reads the page with data); data, not a defect"},
@@ -5310,7 +5311,11 @@ export async function nativeSurfaceProbe() {
     const view = (body?.result?.value?.namespaces ?? []).find((/** @type {any} */ entry) => entry?.ns === "ui-settings");
     read.developerTools = view ? view.value?.enabled === true : false;
   } catch { /* stays null: not observable */ }
-  const seat = [...document.querySelectorAll("button[aria-label]")].map((el) => el.getAttribute("aria-label") ?? "").find((label) => label.includes("思考强度") || /model|模型/i.test(label));
+  // The composer's controls mount after the frame's first paint; a read before that found nothing on production (2026-11-05)
+  // while the control was there ("思考强度，当前：高"). Wait for it, bounded, inside the page.
+  const findSeat = () => [...document.querySelectorAll("button[aria-label]")].map((el) => el.getAttribute("aria-label") ?? "").find((label) => label.includes("思考强度") || /model|模型/i.test(label));
+  let seat = findSeat();
+  for (let waited = 0; !seat && waited < 15_000; waited += 500) { await new Promise((resolve) => setTimeout(resolve, 500)); seat = findSeat(); }
   read.effort = seat ?? null;
   try {
     const entry = /** @type {any} */ (globalThis).__DSH_BOOT__?.entries?.find((/** @type {any} */ item) => item?.id === "@deepseek-ai/dsh-client-ui-sidebar-documentpreview");
