@@ -1207,13 +1207,14 @@ test("the chat's presentation reaches the page through the one settings read, an
   const answer = JSON.parse(text);
   assert.deepEqual(answer, {
     type: "server-response", rpcId: "r1",
-    result: { ok: true, value: { writable: false, hasDocument: false, namespaces: ["ui-chat", "ui-settings"].map((ns) => views.find((view) => view.ns === ns)) } },
+    result: { ok: true, value: { writable: false, hasDocument: false, namespaces: views.filter((view) => ["ui-chat", "ui-settings"].includes(view.ns)) } },
   });
   // `ui-settings` is the developer-tools boolean the page reads for the trajectory tab: absent, the page reads false.
-  assert.deepEqual(answer.result.value.namespaces[1].value, { enabled: true });
+  assert.deepEqual(answer.result.value.namespaces.find((/** @type {any} */ view) => view.ns === "ui-settings").value, { enabled: true });
   // What the chat adopts is `value`, and it is the profile's.
+  const chatView = answer.result.value.namespaces.find((/** @type {any} */ view) => view.ns === "ui-chat");
   assert.deepEqual(
-    { transcriptView: answer.result.value.namespaces[0].value.transcriptView, linkOpening: answer.result.value.namespaces[0].value.linkOpening },
+    { transcriptView: chatView.value.transcriptView, linkOpening: chatView.value.linkOpening },
     CHAT_PRESENTATION,
   );
   for (const leaked of ["llm-deepseek", "bash-sandbox", "permission", "api.deepseek.com", "DEEPSEEK_API_KEY"]) {
