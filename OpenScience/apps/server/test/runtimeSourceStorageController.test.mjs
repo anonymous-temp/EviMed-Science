@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { prepareContextGeneration } from '../src/runtimeContextGeneration.mjs';
 
 const load = () => import('../src/runtimeSourceStorageController.mjs');
 async function fixture(t) {
@@ -49,5 +50,49 @@ test('image mismatch and arbitrary context/path fields never reach a storage hel
   const service = createSourceStorageController(f.config, { inspectImage: async () => ({ imageId: 'sha256:x', kernelVersion: 'different' }), runtimeStatus: async () => ({ state: 'missing' }), execute: async () => { calls++; } });
   await assert.rejects(service.capture(f.project, { sessionId: 'a', incarnation, contextReference: null }), { code: 'runtime_source_kernel_mismatch' });
   await assert.rejects(service.capture(f.project, { sessionId: 'a', incarnation, contextReference: { path: '/tmp/foreign' } }));
+  assert.equal(calls, 0);
+});
+
+async function shared(f, revision = 1, createdAt = incarnation.ownerCreatedAt) {
+  const policy = { kind: 'geo-project', ownerId: f.project.userId, controlProjectId: f.project.id, ownerCreatedAt: createdAt,
+    projectCreatedAt: incarnation.projectCreatedAt, policyVersion: 1, revision, referenceId: `policy-${revision}`, namespace: { id: `namespace-${revision}` } };
+  const generation = await prepareContextGeneration(f.config, f.project, policy, async () => ({ identities: [] }));
+  await fs.mkdir(path.join(generation.stateDirectory, 'dsh-home/sessions'), { recursive: true });
+  await fs.mkdir(path.join(generation.stateDirectory, 'dsh-home/storages'));
+  return generation;
+}
+
+test('a copy materialized after capture keeps its original identity and late IDs after an interrupted purge', async t => {
+  const { createSourceStorageController } = await load(), f = await fixture(t), generation = await shared(f);
+  let ordinaryPresent = true, sharedPresent = false, interrupted = false;
+  const late = { ...root, id: 'late', origin: 'subagent', parentSession: root.id };
+  const service = createSourceStorageController(f.config, {
+    inspectImage: async () => ({ imageId: 'sha256:pinned', kernelVersion: 'test-pin', kernel: 'dsh' }), runtimeStatus: async () => ({ state: 'missing' }),
+    execute: async input => {
+      const historical = input.paths.sessions?.startsWith(generation.stateDirectory);
+      if (input.operation === 'capture') return historical ? sharedPresent ? { root, sessions: [root, late] } : { root: { id: 'a', absent: true }, sessions: [{ id: 'a', absent: true }] }
+        : ordinaryPresent ? { root, sessions: [root] } : { root: { id: 'a', absent: true }, sessions: [{ id: 'a', absent: true }] };
+      assert.equal(input.frozen.root.absent, undefined);
+      if (!historical) { ordinaryPresent = false; return { sourceRemoved: true, removedSessionIds: ['a'] }; }
+      sharedPresent = false;
+      if (!interrupted) { interrupted = true; throw new Error('injected half-cache failure'); }
+      return { sourceRemoved: true, removedSessionIds: ['a', 'late'] };
+    },
+  });
+  const frozen = await service.capture(f.project, { sessionId: 'a', contextReference: null, incarnation });
+  assert.equal(frozen.sessions.find(row => row.id === 'a').absent, undefined);
+  assert.equal(frozen.copies.find(copy => copy.contextReference)?.memoryNamespaceId, 'namespace-1');
+  sharedPresent = true;
+  await assert.rejects(service.purge(f.project, frozen), /injected/);
+  assert.deepEqual((await service.purge(f.project, frozen)).removedSessionIds, ['a', 'late']);
+  await fs.rm(generation.directory, { recursive: true });
+  await assert.rejects(service.purge(f.project, frozen), { code: 'runtime_context_unverified' });
+});
+
+test('a supplied context from another owner incarnation is refused at microsecond precision', async t => {
+  const { createSourceStorageController } = await load(), f = await fixture(t);
+  const generation = await shared(f, 1, '2026-11-05 00:00:00.123457+00'); let calls = 0;
+  const service = createSourceStorageController(f.config, { inspectImage: async () => ({ imageId: 'sha256:pinned', kernelVersion: 'test-pin' }), runtimeStatus: async () => ({ state: 'missing' }), execute: async () => { calls++; return { root, sessions: [root] }; } });
+  await assert.rejects(service.capture(f.project, { sessionId: 'a', contextReference: generation.reference, incarnation }), { code: 'runtime_source_identity_changed' });
   assert.equal(calls, 0);
 });
