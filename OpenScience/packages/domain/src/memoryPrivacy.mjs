@@ -19,7 +19,7 @@ export function sourcePrivacyOf(source) {
     const declared=privacy?.schemaVersion===1&&['private','unclassified','ordinary'].includes(privacy.classification)?privacy.classification:'unclassified';
     const own={schemaVersion:/** @type {const} */(1),classification:/** @type {MemorySourcePrivacy['classification']} */(person?'private':declared),reasons:person?['person-context']:Array.isArray(privacy?.reasons)?privacy.reasons.filter((/** @type {unknown} */ value)=>typeof value==='string').slice(0,32):[declared==='ordinary'?'ordinary-source':'source-unclassified']};
     const children=[...(Array.isArray(item.originalSources)?item.originalSources:[]),...(Array.isArray(item.sources)?item.sources:[])].map(child=>visit(child,depth+1));
-    const proofs=[own,...children];
+    const proofs=children.length&&!privacy&&!person?children:[own,...children];
     return {schemaVersion:1,classification:proofs.some(proof=>proof.classification==='private')?'private':proofs.some(proof=>proof.classification==='unclassified')?'unclassified':'ordinary',reasons:[...new Set(proofs.flatMap(proof=>proof.reasons))].slice(0,32)};
   };
   return visit(source,0);

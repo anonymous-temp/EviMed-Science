@@ -519,7 +519,7 @@ export class CapsuleTransferService {
     // a `preference` for sharing its directory's name.
     const eligible = records.filter((row) => (["people", "notes"].includes(row.nativeType) || !PROJECT_MEMORY_TYPES.includes(row.nativeType) || (row.scope === "project" && Boolean(row.scopeId)))
       && kinds.includes(row.kind) && row.status === "active" && !row.share
-      && ["explicit", "manual"].includes(row.origin) && ["user", "project"].includes(row.scope)
+      && CAPSULE_FACT_ORIGINS.includes(row.origin) && ["user", "project"].includes(row.scope)
       && row.kind === PAGE_KIND_OF_TYPE[row.nativeType] && row.version === versionOfHash(row.contentHash));
     const facts = eligible.filter((row) => !row.sensitive)
       .map((row) => {
@@ -540,7 +540,7 @@ export class CapsuleTransferService {
           // How many conversations of the person's wrote this line (a profile line's own commit).
           conversations: Array.isArray(row.evidence) ? row.evidence.length : 0,
           nativeSource: { engine: "native", sha256: file.hash, version: row.version },
-          payload: { factKind: row.kind, origin: "explicit", content: checkedText(row.value) } };
+          payload: { factKind: row.kind, origin: row.origin, content: checkedText(row.value),attribution:row.attribution,sourcePrivacy:row.sourcePrivacy } };
       });
     return { facts, sensitive: eligible.length - facts.length };
   }
@@ -658,7 +658,7 @@ export class CapsuleTransferService {
     const entryOf = (fact, included) => {
       const content = String(fact.payload.content ?? "");
       return { id: fact.entryId, included, ...(privateByDefault(fact.payload) ? { requiresSelection: true } : {}), factKind: fact.payload.factKind, layer: location(fact.payload.factKind).layer, content, sha256: privateByDefault(fact.payload) ? fact.nativeSource.sha256 : digest(content),
-        origin: CAPSULE_FACT_ORIGINS.includes(fact.payload.origin) ? fact.payload.origin : "inferred" };
+        origin: CAPSULE_FACT_ORIGINS.includes(fact.payload.origin) ? fact.payload.origin : "unknown",attribution:fact.payload.attribution,sourcePrivacy:fact.payload.sourcePrivacy };
     };
     const included = source.facts.slice(0, MAX_ENTRIES).map((fact) => entryOf(fact, true));
     const listed = [...included, ...source.unticked.map((fact) => entryOf(fact, false))];
