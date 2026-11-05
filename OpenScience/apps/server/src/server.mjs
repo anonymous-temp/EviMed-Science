@@ -5840,12 +5840,20 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (capsuleTransferService) {
         const uris = await sourceDeletionLedger.hiddenMemoryUris(project.userId);
         const origins = await nativeMemoryOverlay.originsOf(project.userId, uris);
-        const ids = uris.flatMap(uri => [nativeFileId(uri), ...[...(origins.get(uri)?.keys() ?? [])].map(print => `${nativeFileId(uri)}_${print.slice(0, 12)}`)]);
+        const ids = [];
+        for (const uri of uris) {
+          ids.push(nativeFileId(uri));
+          for (const [print, origin] of origins.get(uri) ?? []) {
+            if (origin.projectId !== project.id) continue;
+            const source = await nativeMemoryOverlay.conversationOf(project.userId, origin.engineSession, origin.archiveUri);
+            if (row.sessionIds.includes(source)) ids.push(`${nativeFileId(uri)}_${print.slice(0, 12)}`);
+          }
+        }
         await capsuleTransferService.revokeSourceRecords(project.userId, ids);
       }
     },
     removeDerived: async (project, row) => {
-      if (nativeMemory.configured) await nativeMemory.removeConversationSource(project.userId, project.id, row.sessionIds);
+      if (nativeMemory.configured) await nativeMemory.removeConversationSource(project.userId, project.id, row.sessionIds, { userRoot: row.memoryUserRoot });
       const removedRuns = await agentRuns.removeConversationSource(project, row.sessionIds);
       for (const runId of removedRuns) preStopTranscripts.take(runId);
     },

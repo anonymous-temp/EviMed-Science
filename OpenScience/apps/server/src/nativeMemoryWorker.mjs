@@ -590,7 +590,8 @@ export class NativeMemoryWorker {
     const authorized = async () => {
       if (this.overlay.sourceDeletion && commit.projectId) {
         const source = await this.overlay.conversationOf(userId, commit.engineSession, commit.archiveUri);
-        if (source && await this.overlay.sourceDeletion.ledger.get({ userId, id: commit.projectId }, source)) {
+        const sourceFence = source ? await this.overlay.sourceDeletion.ledger.get({ userId, id: commit.projectId }, source) : null;
+        if (sourceFence && (!sourceFence.memoryUserRoot || sourceFence.memoryUserRoot === context.userRoot)) {
           await this.overlay.abandonCommit(userId, commit.archiveUri, 'source_conversation_deleted');
           return false;
         }

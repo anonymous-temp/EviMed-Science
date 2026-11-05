@@ -51,6 +51,24 @@ export class ConversationSourceDeletionService {
   async projectValue(project, method, payload, value) {
     await this.authorize(project, method, payload);
     const deleted = new Set(await this.ledger.deletedIds(project));
+    const hidden = item => deleted.has(item?.sessionId ?? item?.id) || item?.origin === 'subagent' && deleted.has(item.parentSession);
+    if (method === 'session/list') {
+      if (Array.isArray(value)) return { forward: true, value: value.filter(item => !hidden(item)) };
+      if (Array.isArray(value?.items)) return { forward: true, value: { ...value, items: value.items.filter(item => !hidden(item)) } };
+    }
+    if (method === 'session/control') {
+      if (value?.type === 'baseline' && value.value?.projections && typeof value.value.projections === 'object') {
+        return { forward: true, value: { ...value, value: { ...value.value, projections: Object.fromEntries(Object.entries(value.value.projections).filter(([id]) => !deleted.has(id))) } } };
+      }
+      return { forward: !hidden(value), value };
+    }
+    if (method === '$events') {
+      const source = typeof value?.agentId === 'string' ? value.agentId
+        : value?.type === 'emit' && String(value.event).startsWith('api-session/') ? value.args?.[0]?.sessionId ?? value.args?.[0] : null;
+      return { forward: !deleted.has(source), value };
+    }
+    // A bound transcript/projection belongs to the already checked request. Its literal content is never interpreted as authority.
+    if (method.startsWith('session/') && conversationIdsInRequest(method, payload).length) return { forward: !hidden(value), value };
     const filtered = filterDeletedConversationValue(value, deleted);
     return { forward: filtered !== null, value: filtered };
   }

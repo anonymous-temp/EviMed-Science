@@ -1126,9 +1126,10 @@ export class NativeMemoryStore {
   }
 
   /** Remove only lines whose durable first-party origin names the deleted source, preserving every other line and file.
-   * @param {string} userId @param {string} projectId @param {string[]} sessionIds */
-  async removeConversationSource(userId, projectId, sessionIds) {
-    const context = await this.#projectContext(userId, projectId);
+   * @param {string} userId @param {string} projectId @param {string[]} sessionIds @param {{userRoot?:string|null}} [options] */
+  async removeConversationSource(userId, projectId, sessionIds, { userRoot = null } = {}) {
+    const context = userRoot && this.memoryContexts ? await this.memoryContexts.forUri(userId, `${userRoot}/memories/profile.md`) : await this.#projectContext(userId, projectId);
+    if (userRoot && context.userRoot && context.userRoot !== userRoot || context.kind === 'geo-project' && context.projectId !== projectId) throw new HttpError(403, 'memory_scope_denied', 'The frozen source namespace changed.');
     const files = await this.rawFiles(userId, { context: this.memoryContexts ? context : null });
     const origins = await this.overlay.originsOf(userId, files.map(file => file.uri));
     const deleted = new Set(sessionIds), affected = [];
