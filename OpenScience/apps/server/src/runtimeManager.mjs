@@ -3649,6 +3649,8 @@ export class RuntimeManager {
   } = {}) {
     assertExtensionAssessmentAuthority(assessmentAuthority);this.#assessmentAuthority=assessmentAuthority;
     this.config = config;
+    /** @type {any} */ this.sourceDeletion = null;
+    this.sourceMaintenance = new Set();
     this.runtimeCreationMutation = runtimeCreationMutation;
     this.recordRuntimeEgressDispatch = recordRuntimeEgressDispatch;
     this.readRuntimeEgressRun = readRuntimeEgressRun;
@@ -4846,6 +4848,7 @@ export class RuntimeManager {
   async startAdmittedPrepared(project, { opening = false, speculative = false, dispatch = false, boundedScope = null, replaceRuntime = null, modelGatewayProfile = "" }, withPluginAdmission, attempt) {
     const key = this.key(project);
     const contextPolicy = await this.contextPolicyFor(project);
+    if (this.sourceMaintenance.has(key)) throw new HttpError(409, "runtime_busy", "Source cleanup is in progress.");
     if (this.runtimeStops.has(key) || this.runtimeQuotaStops.has(key)) throw new HttpError(409, "runtime_busy", "The runtime is stopping; retry shortly.");
     if (this.failedRuntimeStops.has(key)) throw this.cleanupRequired();
     this.assertBoundedStartOwnership(project, boundedScope);
@@ -7177,6 +7180,45 @@ export class RuntimeManager {
     return [...this.runtimeKeys()].filter(counted).length;
   }
 
+  /** Read-only source identity from the privileged storage boundary, never a fabricated session/delete RPC. */
+  async captureConversationSource(project, sessionId) {
+    if (this.config.runtimeProvider === 'agentbay' || !this.runtimeController?.captureConversationSource) {
+      throw new HttpError(503, 'source_deletion_unavailable', 'Source deletion is unavailable for this runtime provider.');
+    }
+    const runtime = this.runtimes.get(this.key(project));
+    const generation = this.runtimeGeneration(project);
+    const frozen = await this.runtimeController.captureConversationSource(project, sessionId, runtime?.contextGeneration?.reference ?? null);
+    if (this.runtimeGeneration(project) !== generation) throw new HttpError(409, 'runtime_busy', 'The runtime changed while resolving its source.');
+    return { ...frozen, generation };
+  }
+
+  /** Caller owns the project's exclusive plugin admission; starts also observe the local generation freeze. */
+  async purgeConversationSource(project, frozen, guard) {
+    const pending = reason => ({ sourceRemoved: false, reason });
+    if (this.config.runtimeProvider === 'agentbay' || !this.runtimeController?.purgeConversationSource) return pending('provider_unavailable');
+    const key = this.key(project);
+    if (this.sourceMaintenance.has(key)) return pending('runtime_busy');
+    this.sourceMaintenance.add(key);
+    try {
+      const runtime = this.runtimes.get(key), generation = this.runtimeGeneration(project);
+      const idle = async (stopping = false) => {
+        await guard();
+        if (this.runtimes.get(key) !== runtime || this.runtimeGeneration(project) !== generation
+          || this.starts.has(key) || this.failedRuntimeStops.has(key)
+          || await this.idleVerdict(project) !== 'idle' || await this.hasRunningRuns(project) !== false
+          || (!stopping && await this.pluginRuntimeBusy(project) !== false)
+          || !this.pluginService || await this.pluginService.hasPendingPrompts(project) !== false) return false;
+        return true;
+      };
+      if (this.runtimeStops.has(key) || !await idle()) return pending('runtime_busy');
+      // stopIdleRuntime performs no idle check of its own. The proof above and its final guard are both required.
+      if (runtime && !await this.stopIdleRuntime(project, { event: 'source_conversation_deleted', evenIfConnected: true, guard: () => idle(true) })) return pending('stop_unconfirmed');
+      await guard();
+      if (this.runtimes.has(key) || this.starts.has(key) || this.runtimeStops.has(key) || this.failedRuntimeStops.has(key)) return pending('stop_unconfirmed');
+      return this.runtimeController.purgeConversationSource(project, frozen);
+    } finally { this.sourceMaintenance.delete(key); }
+  }
+
   async pluginRuntimeBusy(project) {
     if (this.starts.has(this.key(project)) || this.runtimeStops.has(this.key(project)) || this.failedRuntimeStops.has(this.key(project)) || this.boundedRuntimeScope(project)) return true;
     const runtime = this.runtimes.get(this.key(project));
@@ -8184,6 +8226,7 @@ export class RuntimeManager {
     if (!isAllowedWireMethod(method) && !(workspaceBind === true && method === WORKSPACE_BIND_METHOD)) {
       throw new HttpError(403, "runtime_method_forbidden", `Kernel method ${method} is not on the allow-list.`);
     }
+    await this.sourceDeletion?.authorize(project, method, { args: payload });
     const target = new URL(`${runtime.url}/api/${method}`);
     const rpcId = randomId("rpc_");
     // The envelope belongs to the carrier, not to the caller: 0.1.2 requires
@@ -8214,7 +8257,12 @@ export class RuntimeManager {
       throw wireRefusal(502, { code: "runtime_wire_protocol_mismatch", message: `Kernel answer for ${method} is not JSON.` }, method, "not_json");
     }
     const result = envelope?.result;
-    if (result?.ok) return result.value;
+    if (result?.ok) {
+      if (!this.sourceDeletion) return result.value;
+      const projected = await this.sourceDeletion.projectValue(project, method, { args: payload }, result.value);
+      if (!projected.forward) throw new HttpError(404, "runtime_session_not_found", "Conversation not found.");
+      return projected.value;
+    }
     throw wireRefusal(502, mapWireError(result?.error ?? {}), method, result?.error?.code);
   }
 
