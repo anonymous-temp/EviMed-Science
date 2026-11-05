@@ -189,3 +189,8 @@ describe("a line of the profile, opened from its row", () => {
     expect(api.updateStructuredMemory.mock.calls[0][1].value).toBe("临床药师，关注抗栓治疗。");
   });
 });
+
+it('shows unverified source context without presenting it as a confirmed human fact',()=>{
+  const file=nativeFile('来源记录','Assistant suggested an option.');Object.assign(file,{origin:'unknown',confidence:null,lastConfirmedAt:null,attribution:{schemaVersion:1,origins:['unknown'],confirmed:false}});
+  show(file);expect(screen.getByText('来源尚未核实')).toBeInTheDocument();expect(screen.queryByText('已确认')).not.toBeInTheDocument();
+});
