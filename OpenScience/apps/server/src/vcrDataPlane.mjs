@@ -2002,12 +2002,15 @@ export class VcrDataPlane {
    */
   documentUpload() {
     const converter = Boolean(this.extractor?.available);
+    // The in-house parser reads what the container cannot (a scan, a picture) and takes a PDF or Word file when there is no container: with it, pictures are taken too.
+    const scans = Boolean(this.scanReader?.available);
     const configured = Number(this.config.vcrIntakeMaxBytes);
     return {
-      formats: converter ? Object.keys(VCR_UPLOAD_FORMATS.document) : Object.keys(VCR_UPLOAD_FORMATS.document).filter((format) => !CONVERTED_DOCUMENT_FORMATS.includes(format)),
+      formats: converter || scans ? Object.keys(VCR_UPLOAD_FORMATS.document) : Object.keys(VCR_UPLOAD_FORMATS.document).filter((format) => !CONVERTED_DOCUMENT_FORMATS.includes(format)),
       textMaxBytes: Math.min(this.maxBytes, VCR_UPLOAD_ROLE_CAPS.document),
-      convertedMaxBytes: converter ? Math.min(this.maxBytes, configured > 0 ? configured : 25 * 1024 * 1024) : null,
+      convertedMaxBytes: converter || scans ? Math.min(this.maxBytes, configured > 0 ? configured : 25 * 1024 * 1024) : null,
       converter,
+      scans,
     };
   }
 

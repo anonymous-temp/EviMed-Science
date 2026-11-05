@@ -95,6 +95,7 @@ function UploadForm({ studyId, source, onChanged }: { studyId: string; source: V
   const [subject, setSubject] = useState("");
   const [visibleAt, setVisibleAt] = useState("");
   const [busy, setBusy] = useState(false);
+  const [reading, setReading] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const [report, setReport] = useState<VcrImportResult | null>(null);
   const input = useRef<HTMLInputElement>(null);
@@ -115,7 +116,7 @@ function UploadForm({ studyId, source, onChanged }: { studyId: string; source: V
       importVcrSource(studyId, source.id, file, { name: file.name, format })
         .then((answer) => { setReport(answer); toast.success("已导入，请核对字段映射。"); onChanged(); })
         .catch((error: unknown) => { const message = intakeErrorMessage(error, "文件暂时无法导入，请稍后重试。"); setProblem(message); toast.error(message); })
-        .finally(() => { holding.current = false; setBusy(false); if (input.current) input.current.value = ""; });
+        .finally(() => { holding.current = false; setBusy(false); setReading(false); if (input.current) input.current.value = ""; });
       return;
     }
     const kind = role;
@@ -125,12 +126,14 @@ function UploadForm({ studyId, source, onChanged }: { studyId: string; source: V
     if (refusal) return;
     holding.current = true;
     setBusy(true);
+    // A PDF, a Word file or a picture is read into text before it is stored: say so while it is read, so a wait is not mistaken for a stall.
+    setReading(kind === "document" && !/\.(txt|md)$/iu.test(file.name));
     uploadVcrFile(studyId, source.id, file, {
       name: file.name, role: kind, ...(kind === "document" ? { subject: subject.trim(), ...(visibleAt ? { visibleAt } : {}) } : {}),
     })
       .then((answer) => { toast.success(answer.created ? `已上传 ${file.name}。` : `${file.name} 已在这个数据源里。`); onChanged(); })
       .catch((error: unknown) => { const message = intakeErrorMessage(error, "文件暂时无法上传，请稍后重试。"); setProblem(message); toast.error(message); })
-      .finally(() => { holding.current = false; setBusy(false); if (input.current) input.current.value = ""; });
+      .finally(() => { holding.current = false; setBusy(false); setReading(false); if (input.current) input.current.value = ""; });
   };
 
   return (
@@ -154,7 +157,7 @@ function UploadForm({ studyId, source, onChanged }: { studyId: string; source: V
               : source.upload.formats.map((entry) => `.${entry}`).join(",") || undefined}
           onChange={(event) => send(event.target.files)} className="text-ui text-text-2"
         />
-        {busy && <span className="text-caption text-text-3">{role === "import" ? "正在转换" : "正在上传"}</span>}
+        {busy && <span className="text-caption text-text-3">{role === "import" ? "正在转换" : reading ? "正在读取文字，请稍候" : "正在上传"}</span>}
       </div>
       {role === "document" && (
         <div className="grid gap-2 sm:grid-cols-2">
@@ -164,8 +167,8 @@ function UploadForm({ studyId, source, onChanged }: { studyId: string; source: V
       )}
       <p className="text-caption text-text-3">
         {role === "document"
-          ? source.upload.documents.converter
-            ? "病历文件（.txt、.md、PDF、.docx）只用于匹配：PDF 和 Word 在平台内转成文字，不会发给外部服务；扫描件和图片没有文字，请提供文字版。平台按研究派生的假名编号存放，模型只在判断入选条件时按份读取。"
+          ? source.upload.documents.converter || source.upload.documents.scans
+            ? `病历文件（.txt、.md、PDF、.docx${source.upload.documents.scans ? "、图片" : ""}）只用于匹配：有文字的 PDF 和 Word 在平台内转成文字，不会发给外部服务；${source.upload.documents.scans ? "扫描件和图片由文档解析服务读出文字，文件会发到平台之外（受“病历云端处理”的设置约束），读不出时会说明，请改传文字版。" : "扫描件和图片没有文字，请提供文字版。"}平台按研究派生的假名编号存放，模型只在判断入选条件时按份读取。`
             : "病历文本（.txt、.md）只用于匹配：平台按研究派生的假名编号存放，模型只在判断入选条件时按份读取。"
           : role === "import"
             ? `${IMPORT_FORMATS.find((entry) => entry.value === format)?.hint ?? ""}在平台内转成数据表，不会发给外部服务；每张表、每一列的含义和值的来源（观察或计算）会写进字段映射和数据字典，没有导入的部分会一一列出。${imports.maxText ? `单个文件不超过 ${imports.maxText}。` : ""}`

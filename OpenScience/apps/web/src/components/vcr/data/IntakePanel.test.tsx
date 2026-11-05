@@ -215,7 +215,7 @@ describe("数据接入 — what the page sends", () => {
     cleanup();
 
     load("data-sealed.json", (raw) => {
-      raw.intake.sources[0].upload.documents = { formats: ["txt", "md", "pdf", "docx"], maxBytes: 25 * 1024 * 1024, maxText: "25 MB", converter: true };
+      raw.intake.sources[0].upload.documents = { formats: ["txt", "md", "pdf", "docx"], maxBytes: 25 * 1024 * 1024, maxText: "25 MB", converter: true, scans: false };
     });
     drawTab();
     const chooser = (await screen.findAllByLabelText("选择要上传的文件"))[0] as HTMLInputElement;
@@ -245,6 +245,26 @@ describe("数据接入 — what the page sends", () => {
     await person().upload(chooser, new File(["%PDF-1.4 scan"], "scan.pdf"));
     expect(await screen.findAllByText(/没有可提取的文字（多半是扫描件或图片）。请提供文字版/)).not.toHaveLength(0);
     expect(toasts.error).toHaveBeenCalled();
+  });
+
+  it("sends a picture of a record to be read where the in-house parser is reachable, says so, and says what is being done while it waits", async () => {
+    load("data-sealed.json", (raw) => {
+      raw.intake.sources[0].upload.documents = { formats: ["txt", "md", "pdf", "docx"], maxBytes: 25 * 1024 * 1024, maxText: "25 MB", converter: false, scans: true };
+    });
+    drawTab();
+    const chooser = (await screen.findAllByLabelText("选择要上传的文件"))[0] as HTMLInputElement;
+    await person().selectOptions(screen.getAllByLabelText("文件类型")[0], "document");
+    expect(chooser.accept).toContain(".png");
+    expect(document.body.textContent).toContain("扫描件和图片由文档解析服务读出文字");
+    expect(document.body.textContent).not.toContain("扫描件和图片没有文字");
+    await person().type(screen.getAllByLabelText("文档所属受试者编号")[0], "HZ-30001");
+    let finish: (value: Response) => void = () => undefined;
+    upload.fetchWithWebAuth.mockReturnValue(new Promise<Response>((resolve) => { finish = resolve; }));
+    await person().upload(chooser, new File(["x"], "chest-note.png"));
+    expect(await screen.findByText("正在读取文字，请稍候")).toBeInTheDocument();
+    finish(new Response(JSON.stringify({ data: { file: { id: "sfl_8", name: "document-ab12cd34.txt" }, created: true } }), { status: 201 }));
+    await waitFor(() => expect(screen.queryByText("正在读取文字，请稍候")).not.toBeInTheDocument());
+    expect(new URL(String(upload.fetchWithWebAuth.mock.calls[0][0]), "http://x").searchParams.get("name")).toBe("chest-note.png");
   });
 
   it("offers a FHIR, OMOP or ADaM import only where the deployment converts them, and sends the file with its standard", async () => {

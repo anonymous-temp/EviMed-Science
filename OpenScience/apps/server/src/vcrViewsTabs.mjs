@@ -2030,6 +2030,7 @@ export function presentIntake(bundle) {
           maxBytes: numeric(object(upload.documents).convertedMaxBytes),
           maxText: byteText(numeric(object(upload.documents).convertedMaxBytes)),
           converter: object(upload.documents).converter === true,
+          scans: object(upload.documents).scans === true,
         },
         // A source held in FHIR, OMOP or ADaM: what this deployment converts, and what each is uploaded as.
         imports: {

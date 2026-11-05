@@ -179,6 +179,18 @@ test('an old .doc says what to save it as, and an unknown extension lists what a
   assert.throws(() => safeUploadName('x.docx', 'dictionary'), { code: 'vcr_data_format_unsupported' });
 });
 
+test('the intake page is told whether pictures are taken: only where the in-house parser is reachable', async t => {
+  const none = await world(t, { extractor: null });
+  assert.equal(none.plane.documentUpload().scans, false);
+  assert.deepEqual(none.plane.documentUpload().formats, ['txt', 'md']);
+  const parser = { configured: true, async parseBytes() { return { text: '' }; } };
+  const reading = await world(t, { extractor: null, scanReader: createVcrScanReader({ parser }) });
+  assert.equal(reading.plane.documentUpload().scans, true);
+  assert.deepEqual(reading.plane.documentUpload().formats, ['txt', 'md', 'pdf', 'docx']);
+  const unreachable = await world(t, { extractor: null, scanReader: createVcrScanReader({ parser: { configured: false } }) });
+  assert.equal(unreachable.plane.documentUpload().scans, false);
+});
+
 test('a deployment without a converter refuses PDF and Word by name and still takes plain text', async t => {
   const w = await world(t, { extractor: null });
   await assert.rejects(w.upload('lab.pdf', Buffer.from('%PDF-1.4')), { status: 503, code: 'vcr_document_converter_unavailable' });

@@ -3402,7 +3402,7 @@ export interface VcrIntakeSource {
     cloudDestinationNotes?: Record<string, string>;
     formats: string[]; maxBytes: number | null; maxText: string | null;
     /** A patient record: text, and PDF or Word where the deployment converts them (the page offers only what would be taken). */
-    documents: { formats: string[]; maxBytes: number | null; maxText: string | null; converter: boolean };
+    documents: { formats: string[]; maxBytes: number | null; maxText: string | null; converter: boolean; scans: boolean };
     /** A source held in FHIR, OMOP or ADaM: what this deployment converts, and what each standard is uploaded as. */
     imports: { available: boolean; formats: Array<{ value: VcrImportFormat; extensions: string[] }>; maxBytes: number | null; maxText: string | null };
   };
@@ -3529,7 +3529,7 @@ function readIntakeSource(raw: Loose): VcrIntakeSource {
       formats: strings(upload.formats), maxBytes: finite(upload.maxBytes), maxText: text(upload.maxText),
       documents: {
         formats: strings(obj(upload.documents).formats), maxBytes: finite(obj(upload.documents).maxBytes),
-        maxText: text(obj(upload.documents).maxText), converter: obj(upload.documents).converter === true,
+        maxText: text(obj(upload.documents).maxText), converter: obj(upload.documents).converter === true, scans: obj(upload.documents).scans === true,
       },
       imports: {
         available: obj(upload.imports).available === true,
