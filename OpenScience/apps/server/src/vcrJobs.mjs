@@ -1247,6 +1247,8 @@ export class VcrJobs {
           studyId, snapshotId: String(entry.id), principal, purpose: VCR_JOB_PURPOSE, kind, method,
           endpointType: object(scenario.endpoint).type ?? null, ...(fields.length ? { fields } : {}),
           ...(typeof (scenario.parameterCode ?? object(scenario.endpoint).parameterCode) === "string" && (scenario.parameterCode ?? object(scenario.endpoint).parameterCode) ? { parameterCode: scenario.parameterCode ?? object(scenario.endpoint).parameterCode } : {}),
+          // a target trial names the parameter it takes as the outcome: that parameter's source column is an outcome to the seal
+          ...(method === "comparator.target_trial" ? { outcomeParameter: String(object(scenario.parameters).outcome ?? "outcome") } : {}),
           ...(["model.prognostic_apply", "model.survival_fit"].includes(method) && typeof scenario.inputId === "string" && scenario.inputId.startsWith(`${entry.id}:`)
             ? { include: [scenario.inputId.slice(String(entry.id).length + 1)].every(shape => ["subject", "events", "longitudinal"].includes(shape))
               ? [scenario.inputId.slice(String(entry.id).length + 1)] : ["files"] } : {}),

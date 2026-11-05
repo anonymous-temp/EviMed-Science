@@ -197,7 +197,9 @@ vcr_bias_probabilistic <- function(inp, spec, n, seed, batch = VCR_BIAS_BATCH) {
     out <- vcr_with_stream(streams[[b]], function(.) {
       adj <- if (identical(model, "bias")) {
         draw <- .vcr_bias_draw(spec$bias, m)
-        inp$theta - inp$sigma * (if (inp$ratio) log(draw) else draw)
+        # a normal bias on a ratio scale is already a log-ratio (the help's wording); every other family draws the ratio itself
+        on_log <- !inp$ratio || identical(as.character(spec$bias$family %||% ""), "normal")
+        inp$theta - inp$sigma * (if (on_log) draw else log(draw))
       } else {
         p1 <- .vcr_bias_draw(cf$exposedPrevalence, m); p0 <- .vcr_bias_draw(cf$unexposedPrevalence, m); g <- .vcr_bias_draw(cf$association, m)
         inp$theta - (if (inp$ratio) log((g * p1 + 1 - p1) / (g * p0 + 1 - p0)) else g * (p1 - p0))

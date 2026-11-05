@@ -622,6 +622,10 @@ vcr_pattern_match <- function(pattern, x) {
       v <- unlist(items)
       if (any(!(v[-1L] > v[-length(v)]))) raise("scenario_value_invalid", path, "The values must strictly increase.")
     }
+    if (isTRUE(node$nondecreasing) && length(items) > 1L) {
+      v <- unlist(items)
+      if (any(!(v[-1L] >= v[-length(v)]))) raise("scenario_value_invalid", path, "The values must not decrease from one dose to the next.")
+    }
     if (!is.null(node$last) && length(items) && !identical(as.numeric(items[[length(items)]]), as.numeric(node$last))) {
       raise("scenario_value_invalid", path, "The last value is fixed.")
     }

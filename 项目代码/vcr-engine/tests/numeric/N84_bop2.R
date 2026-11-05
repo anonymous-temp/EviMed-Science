@@ -142,3 +142,18 @@ vcr_case("N84e", c("AC-30", "AC-29"), function() {
        detail = sprintf("%d (lambda, gamma) pairs on a grid the search did not use: none with type I <= %.2f beats the returned power %.4f (best %.4f); the fewest-patients objective returns power %.4f >= %.2f with %.2f expected patients under the null (the best on that grid %.2f; the max-power design has %.2f)",
                         nrow(grid), alpha, mp, best_power, sp, target, se0, min(en0[reach]), .n84_op(by_power, "null")$cells$expected_sample_size$value))
 })
+
+vcr_case("N84j", c("AC-30"), function() {
+  # The Simon baseline is searched on its own, not cut at the Bayesian design's maxN. 0.1 against 0.3 with a design of at most 26 patients: Simon's
+  # optimal design is still 1/10 then 5/29 (Simon 1989, expected size 15.0 under the null), computed here by hand from the binomial; a baseline cut at 26
+  # patients gave 16.77, overstating the saving by 1.76. The result says the design's own maximum beside the baseline's size.
+  r <- .n84_job(list(kind = "bop2", maxN = 26, lookEvery = 10), analysis = list(alpha = 0.05, power = 0.8))
+  simon <- .n84_b(r)$baselines$simon
+  by_hand <- 10 + (1 - stats::pbinom(1, 10, 0.1)) * (29 - 10)
+  en0 <- .n84_op(r, "null")$cells$expected_sample_size$value
+  saving <- vcr_measure_value(r, "expected_sample_size_saving_null")
+  list(pass = !is.null(simon$optimal) && simon$optimal$n == 29 && simon$optimal$n1 == 10 && simon$optimal$r1 == 1 && simon$optimal$r == 5 &&
+         abs(simon$optimal$expectedN0 - by_hand) < 1e-12 && abs(saving - (by_hand - en0)) < 1e-12 && identical(simon$designMaxN, 26L),
+       detail = sprintf("maxN 26: Simon optimal n %s expected size %.4f (by hand %.4f; Simon 1989: 15.0), saving %.4f against a design of expected size %.4f; design maximum %s",
+                        simon$optimal$n, simon$optimal$expectedN0, by_hand, saving, en0, format(simon$designMaxN)))
+})

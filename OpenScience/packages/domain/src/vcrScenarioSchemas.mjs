@@ -40,7 +40,7 @@
  *   integer  { min, max, unit, default }
  *   boolean
  *   string   { values | valuesBy, maxLength, pattern, ref: 'input', badValueCode, default }
- *   array    { items, min, max, increasing, last, unique }
+ *   array    { items, min, max, increasing, nondecreasing, last, unique }
  *   object   { fields, exactlyOne, atLeastOne, requires, lengthRules }
  *   variant  { on, variants: { <value>: object-fields }, default }   discriminated object
  *   map      { values, keysFrom, min, max }             keys are column names
@@ -485,7 +485,7 @@ const DOSE_SCHEMA = object({
       eliminationCutoff: number({ gt: 0.5, lt: 1, default: 0.95 }),
     }), DOSE_SIMULATED),
     crm: gated(object({
-      skeleton: array(number({ gt: 0, lt: 1 }), { min: 2, max: 10 }),
+      skeleton: array(number({ gt: 0, lt: 1 }), { min: 2, max: 10, increasing: true }),
       halfwidth: number({ gt: 0, max: 0.2, default: 0.05 }),
       priorVariance: number({ gt: 0, max: 20, default: 1.34 }),
       restrictEscalation: boolean({ default: true }),
@@ -497,7 +497,7 @@ const DOSE_SCHEMA = object({
     targetProbability: gated(number({ gt: 0, lt: 1, default: 0.9 }), DOSE_SELECTION),
   })),
   truth: req(object({
-    toxicity: req(gated(array(number({ gt: 0, lt: 1 }), { min: 2, max: 10 }), DOSE_SIMULATED)),
+    toxicity: req(gated(array(number({ gt: 0, lt: 1 }), { min: 2, max: 10, nondecreasing: true }), DOSE_SIMULATED)),
     responseScenarios: req(gated(array(array(number({ gt: 0, lt: 1 }), { min: 2, max: 3 }), { min: 1, max: 6 }), DOSE_SELECTION)),
   })),
 })
@@ -1930,6 +1930,7 @@ function checkValue(node, value, path, ctx) {
       value.forEach((item, i) => checkValue(node.items, item, atIndex(path, i), ctx))
       if (ctx.issues.length > before) return
       if (node.increasing && value.some((item, i) => i > 0 && !(item > value[i - 1]))) raise(ctx, 'scenario_value_invalid', path, 'The values must strictly increase.')
+      if (node.nondecreasing && value.some((item, i) => i > 0 && !(item >= value[i - 1]))) raise(ctx, 'scenario_value_invalid', path, 'The values must not decrease from one dose to the next.')
       if (node.last !== undefined && value.length && value[value.length - 1] !== node.last) raise(ctx, 'scenario_value_invalid', path, `The last value must be ${node.last}.`)
       if (node.unique && new Set(value).size !== value.length) raise(ctx, 'scenario_value_invalid', path, 'The values must be distinct.')
       return

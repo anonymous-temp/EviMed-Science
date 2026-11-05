@@ -135,7 +135,10 @@
 #' with a stronger ridge, so a draw is never an infinite coefficient.
 .vcr_impute_logreg <- function(y, ry, X) {
   Z <- .vcr_impute_design(X)
-  zo <- Z[ry, , drop = FALSE]; yo <- y[ry]
+  zo <- Z[ry, , drop = FALSE]
+  # the two levels may be coded anything (1/2, 2/3, -1/1): the fit is on "is the higher level", and the draw is mapped back to the levels
+  lv <- sort(unique(y[ry]))
+  yo <- as.numeric(y[ry] == lv[2L])
   fit <- .vcr_logit_fit(zo, yo)
   if (isTRUE(fit$separated) || is.null(fit$cov)) fit <- .vcr_logit_fit(zo, yo, ridge = 1)
   beta <- fit$beta
@@ -144,7 +147,7 @@
     if (!is.null(L)) beta <- beta + as.vector(crossprod(L, stats::rnorm(length(beta))))
   }
   p <- stats::plogis(as.vector(Z[!ry, , drop = FALSE] %*% beta))
-  as.numeric(stats::runif(length(p)) < p)
+  lv[1L + as.integer(stats::runif(length(p)) < p)]
 }
 
 #' A multinomial draw for a categorical column through `nnet::multinom`: the coefficients are drawn from the normal approximation
