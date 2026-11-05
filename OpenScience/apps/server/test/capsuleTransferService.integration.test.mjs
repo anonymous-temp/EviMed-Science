@@ -519,3 +519,10 @@ test('an export overlapping source deletion revokes its new snapshot before retu
   assert.equal(snapshots.items.length,1);assert.equal(snapshots.items[0].payload.status,'revoked');
   await assert.rejects(transfers.download(owner,capsule.id,snapshots.items[0].id),{code:'capsule_snapshot_revoked'});
 });
+
+test('live snapshotArchive rechecks revocation after its buffered archive read',options,async()=>{
+  const capsule=await source(), exported=await transfers.export(owner,capsule.id,{password});
+  const get=documents.get.bind(documents);let first=true;
+  documents.get=async(...args)=>{const row=await get(...args);if(first&&args[1]==='preferences'&&args[2]===exported.snapshot.id){first=false;await documents.put(owner,'preferences',row.id,{...row.payload,status:'revoked'},{expectedRevision:row.revision});}return row;};
+  try{await assert.rejects(transfers.snapshotArchive(owner,exported.snapshot.id),{code:'capsule_snapshot_revoked'});}finally{documents.get=get;}
+});
