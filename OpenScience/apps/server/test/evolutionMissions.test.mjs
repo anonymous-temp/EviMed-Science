@@ -312,3 +312,13 @@ test('the weekly plan pays each module out of the loops\' reserve in equal parts
  const rows=await Promise.all(planned.missions.map(id=>f.service.get(id)));
  assert.ok(rows.every(row=>Math.abs(row.payload.budget.reservedCny-50/7)<1e-6),'a half of 100 CNY over seven modules is 50/7 each');
 });
+test('a stored mission of the retired autopilot module is skipped by name, left as it is and counted',async()=>{
+ const {schedulerRetirementMetricFamilies,resetSchedulerRetirementMetrics}=await import('../src/schedulerRetirementMetrics.mjs');
+ resetSchedulerRetirementMetrics();
+ const fixture=await make();
+ await fixture.f.service.save('mission','old-autopilot',{moduleId:'autopilot',status:'ready',dependencies:[]});
+ const row=await fixture.missions.run({missionId:'old-autopilot'});
+ assert.equal(row.payload.status,'ready');assert.equal(row.payload.moduleId,'autopilot');
+ const count=schedulerRetirementMetricFamilies()[0].series.find(series=>series.labels.outcome==='mission_skipped').value;
+ assert.equal(count,1);
+});

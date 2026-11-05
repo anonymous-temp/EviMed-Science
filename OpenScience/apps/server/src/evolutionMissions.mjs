@@ -6,7 +6,8 @@ import { canonicalJson, selectEvolutionCandidate, evolutionNoiseBand, evolutionP
 import { evolutionKey, evolutionToolArchiveId } from './evolutionService.mjs';
 import { evolutionRecordPin } from './evolutionRecordPins.mjs';
 import { evolutionPriorityBreakdown } from './evolutionScout.mjs';
-import { EVOLUTION_MODULE_IDS } from './evolutionUsage.mjs';
+import { EVOLUTION_MODULE_IDS, RETIRED_EVOLUTION_MODULE_IDS } from './evolutionUsage.mjs';
+import { recordSchedulerRetirement } from './schedulerRetirementMetrics.mjs';
 import { validateModuleEvolutionPolicy } from './moduleEvolutionPolicies.mjs';
 import { evolutionAccountFloors } from './evolutionAccountClasses.mjs';
 import { EVOLUTION_CONFIG_SCHEMA } from './evolutionConfiguration.mjs';
@@ -369,6 +370,8 @@ export function createEvolutionMissions({ service, policy, map, taskPool, signal
   async function run({ missionId }, context = {}) {
     let mission = await service.get(missionId);
     if (!mission || TERMINAL.has(mission.payload.status)) return mission;
+    // A stored mission of a module whose adapter was deleted (the scheduler's `autopilot`) has nothing to run: left as it is, counted.
+    if (RETIRED_EVOLUTION_MODULE_IDS.includes(mission.payload.moduleId)) { recordSchedulerRetirement('mission_skipped'); return mission; }
     const triggerDossier = mission.payload.opportunityId ? await service.get(mission.payload.opportunityId) : null;
     const triggerBasis = { ...triggerDossier?.payload, ...(mission.payload.triggerRefs?.length ? { triggerRefs: mission.payload.triggerRefs } : {}) };
     if (!await evolutionTriggersCurrent(service, triggerBasis)) {

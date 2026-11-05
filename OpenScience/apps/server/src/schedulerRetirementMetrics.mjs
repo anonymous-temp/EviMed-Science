@@ -5,8 +5,9 @@
 //       checks_narrowed                    the kind CHECKs rebuilt without the retired kinds
 //       nothing_left                       the ledger held none of it and the CHECKs were already narrow
 //       failed                             the retirement could not run; the next start asks again
+//       mission_skipped                    a stored evolution mission of the retired `autopilot` module was met and left as it is
 
-export const SCHEDULER_RETIREMENT_OUTCOMES = Object.freeze(["documents_deleted", "jobs_deleted", "checks_narrowed", "nothing_left", "failed"]);
+export const SCHEDULER_RETIREMENT_OUTCOMES = Object.freeze(["documents_deleted", "jobs_deleted", "checks_narrowed", "nothing_left", "failed", "mission_skipped"]);
 
 const counts = new Map(SCHEDULER_RETIREMENT_OUTCOMES.map((outcome) => [outcome, 0]));
 
@@ -22,7 +23,7 @@ export function resetSchedulerRetirementMetrics() {
 export function schedulerRetirementMetricFamilies() {
   return [{
     name: "open_science_scheduler_retirement_total",
-    help: "What the start-up retirement of the platform's own scheduler did since this process started: rows of the retired document and job kinds deleted, the kind CHECKs narrowed, nothing left to do, or failed.",
+    help: "What the start-up retirement of the platform's own scheduler did since this process started: rows of the retired document and job kinds deleted, the kind CHECKs narrowed, nothing left to do, failed, or met a stored evolution mission of the retired autopilot module and skipped it (mission_skipped).",
     type: "counter",
     series: [...counts].map(([outcome, value]) => ({ labels: { outcome }, value })),
   }];

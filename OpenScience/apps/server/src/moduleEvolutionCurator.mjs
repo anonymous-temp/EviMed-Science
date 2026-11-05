@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 // The extractor describes a task; only the evaluator controls its evidence and holdout status.
 const EXTRACTED_FIELDS = ['id', 'sourceQuotes', 'taskFamily', 'screen', 'edit', 'expect', 'question', 'claims', 'competitors', 'careFlags',
-  'agenda', 'progress', 'stopAllowed', 'equivalentVariant', 'abstentionExpected', 'curatorReview'];
+  'equivalentVariant', 'abstentionExpected', 'curatorReview'];
 
 /** Frozen public snapshots come from the preservation gateway; extraction has a separate identity from proposal.
  * Missing preservation or source-root/date proofs produce no confirmation task.
