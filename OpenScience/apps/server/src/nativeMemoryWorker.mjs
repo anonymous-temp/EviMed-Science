@@ -726,7 +726,7 @@ export class NativeMemoryWorker {
         const body = await this.#afterWrite(userId, uri, file.type, { projectId, diffAfter: after, diffBefore: change === "updated" ? String(operation?.before ?? "") : "", fresh: recorded !== null, archiveUri: commit.archiveUri, memoryContext: context, rewordings });
         // The lines this commit brought are recorded as its own, beyond the revisions a file keeps (what the checks took out is not).
         if (body !== null) await this.overlay.syncOrigins(userId, uri, { after: body, before: change === "updated" ? String(operation?.before ?? "") : "",
-          origin: { revisionId: recorded?.id ?? null, engineSession: commit.engineSession, archiveUri: commit.archiveUri, projectId, at: changedAt } });
+          origin: { revisionId: recorded?.id ?? null, engineSession: commit.engineSession, archiveUri: commit.archiveUri, projectId: commit.projectId ?? projectId, at: changedAt } });
       }
     }
     recordNativeOperations(counts);

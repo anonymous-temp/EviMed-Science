@@ -57,7 +57,8 @@ export class ConversationSourceDeletionLedger {
       UNION SELECT c.archive_uri,c.engine_session,c.replayed_as,d.id FROM evimed_memory.native_commits c JOIN sources s ON c.archive_uri=s.replayed_as
       JOIN deleted d ON d.id=s.deletion_id WHERE c.user_id=d.user_id AND c.project_id=d.project_id
         AND left(c.archive_uri,length(d.memory_user_root)+10)=d.memory_user_root||'/sessions/'
-    ) SELECT DISTINCT o.uri FROM evimed_memory.native_line_origins o JOIN deleted d ON d.user_id=o.user_id AND d.project_id=o.project_id
+    ) SELECT DISTINCT o.uri FROM evimed_memory.native_line_origins o LEFT JOIN evimed_memory.native_commits original ON original.user_id=o.user_id AND original.archive_uri=o.archive_uri AND original.engine_session=o.engine_session
+      JOIN deleted d ON d.user_id=o.user_id AND d.project_id=COALESCE(o.project_id,original.project_id)
       AND left(o.uri,length(d.memory_user_root)+1)=d.memory_user_root||'/'
       WHERE (left(o.engine_session,4)='dsh-' AND d.session_ids ? substring(o.engine_session from 5)) OR EXISTS (
         SELECT 1 FROM sources s WHERE s.deletion_id=d.id AND s.archive_uri=o.archive_uri AND s.engine_session=o.engine_session)`, [userId]);

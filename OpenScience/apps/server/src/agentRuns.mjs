@@ -4873,17 +4873,20 @@ export class AgentRunStore {
         'model','accountCreatedAt','automated','kernelRequestIds','requestIds','nativeTurn','kind','messages','toolCalls','lastProgressAt',
         'artifacts','unverifiedArtifacts','outputFiles','presentedFiles','errorCode','errorSubCode','canceledBy','verification','usage',
         'transcriptSha256','inventorySha256']);
-      const cleaned = events.filter(event => !ids.has(event.id) || event.event !== 'native-workflow').map(event => !ids.has(event.id) ? event
+      const cleaned = events.filter(event => !ids.has(event.id) || !['native-workflow','notice'].includes(event.event)).map(event => !ids.has(event.id) ? event
         : Object.fromEntries(Object.entries(event).filter(([key]) => keep.has(key))));
       for (const run of targets) {
         const file = transcriptPath(project, run.id);
         await assertNoSymlinkPath(project.rootDir, file, { allowMissingTail: true });
         await rm(file, { force: true });
         this.dispatchedBriefs.delete(run.id); this.progressTrackers.delete(run.id);
-        cleaned.push({ event: 'notice', id: run.id, at: this.now().toISOString(), qualityNotices: [], deleted: true });
+        const previous = events.find(event => event.id === run.id && event.event === 'notice' && event.deleted === true);
+        cleaned.push({ event: 'notice', id: run.id, at: previous?.at ?? this.now().toISOString(), qualityNotices: [], deleted: true });
       }
       foldEvents(cleaned); // Validate the rewritten ledger before replacing its bytes.
-      await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), cleaned.map(event => JSON.stringify(event)).join('\n') + (cleaned.length ? '\n' : ''), { encoding: 'utf8', mode: 0o600 });
+      const text = cleaned.map(event => JSON.stringify(event)).join('\n') + (cleaned.length ? '\n' : '');
+      if (Buffer.byteLength(text) > this.maxBytes) throw new HttpError(413, 'agent_runs_too_large', 'The source ledger exceeds its size limit.');
+      await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), text, { encoding: 'utf8', mode: 0o600 });
       return [...ids];
     });
   }

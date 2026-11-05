@@ -671,6 +671,24 @@ export class NativeMemoryOverlay {
     return [...new Set(removed.rows.map(row => row.engine_session))];
   }
 
+  /** Source-bound historical revisions remain relevant after their current origin or file was removed.
+   * @param {string} userId @param {string} projectId @param {string[]} sessionIds @param {string} userRoot */
+  async sourceRevisions(userId, projectId, sessionIds, userRoot) {
+    scopedRoot(userRoot);
+    const result = await this.#query(`WITH RECURSIVE sources AS (
+      SELECT archive_uri,engine_session,replayed_as FROM evimed_memory.native_commits WHERE user_id=$1 AND project_id=$2
+        AND engine_session=ANY($3::text[]) AND left(archive_uri,length($4)+10)=$4||'/sessions/'
+      UNION SELECT c.archive_uri,c.engine_session,c.replayed_as FROM evimed_memory.native_commits c JOIN sources s ON c.archive_uri=s.replayed_as
+        WHERE c.user_id=$1 AND c.project_id=$2 AND left(c.archive_uri,length($4)+10)=$4||'/sessions/'
+    ) SELECT r.* FROM evimed_memory.native_revisions r LEFT JOIN evimed_memory.native_commits c
+      ON c.user_id=r.user_id AND c.archive_uri=r.archive_uri AND c.engine_session=r.engine_session
+      WHERE r.user_id=$1 AND left(r.uri,length($4)+1)=$4||'/' AND (
+        r.engine_session=ANY($3::text[]) AND COALESCE(r.project_id,c.project_id)=$2
+        OR EXISTS(SELECT 1 FROM sources s WHERE s.archive_uri=r.archive_uri AND s.engine_session=r.engine_session)) ORDER BY r.id`,
+    [owner(userId),projectId,sessionIds.map(id=>`dsh-${id}`),userRoot]);
+    return result.rows.map(publicRevision);
+  }
+
   // ------------------------------------------------------------ line origins
 
   /**
@@ -703,7 +721,7 @@ export class NativeMemoryOverlay {
     /** @type {Map<string, Map<string, any>>} */
     const byUri = new Map();
     if (!uris.length) return byUri;
-    const result = await this.#query("SELECT * FROM evimed_memory.native_line_origins WHERE user_id=$1 AND uri = ANY($2::text[])", [owner(userId), [...uris]]);
+    const result = await this.#query("SELECT o.*,COALESCE(o.project_id,c.project_id) AS project_id FROM evimed_memory.native_line_origins o LEFT JOIN evimed_memory.native_commits c ON c.user_id=o.user_id AND c.archive_uri=o.archive_uri AND c.engine_session=o.engine_session WHERE o.user_id=$1 AND o.uri = ANY($2::text[])", [owner(userId), [...uris]]);
     for (const row of result.rows) {
       const lines = byUri.get(String(row.uri)) ?? new Map();
       lines.set(String(row.fingerprint), { revisionId: row.revision_id == null ? null : String(row.revision_id), engineSession: row.engine_session ?? null,

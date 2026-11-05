@@ -1133,6 +1133,18 @@ export class NativeMemoryStore {
     const files = await this.rawFiles(userId, { context: this.memoryContexts ? context : null });
     const origins = await this.overlay.originsOf(userId, files.map(file => file.uri));
     const deleted = new Set(sessionIds), affected = [];
+    const historical = await this.overlay.sourceRevisions(userId,projectId,sessionIds,context.userRoot ?? context.sessions.userRoot(userId));
+    const historyLines = new Map();
+    for (const revision of historical) {
+      const before = new Set(memoryLines(revision.before ?? '').map(lineFingerprint));
+      const brought = memoryLines(revision.after ?? '').filter(line => !before.has(lineFingerprint(line)));
+      const prior = historyLines.get(revision.uri) ?? [];
+      historyLines.set(revision.uri,[...new Set([...prior,...brought])]);
+    }
+    for (const [uri, lines] of historyLines) {
+      await this.overlay.scrubLines(userId,uri,lines);
+      affected.push({uri,id:nativeFileId(uri),hash:null,recordIds:[nativeFileId(uri),...lines.map(line=>`${nativeFileId(uri)}_${lineFingerprint(line).slice(0,12)}`)]});
+    }
     for (const file of files) {
       const prints = new Set();
       for (const [print, origin] of origins.get(file.uri) ?? []) {
