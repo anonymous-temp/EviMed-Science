@@ -830,7 +830,7 @@ export class MethodConsolidation {
     if (done.decidedNothing) noop.push("decided_nothing");
     if (done.deferredBuilds) noop.push('build_deferred');
     if (done.refusals.length) noop.push("merge_refused");
-    for (const reason of noop) this.#noop(reason);
+    for (const reason of noop) if (reason !== 'build_deferred') this.#noop(reason);
     return { action: "integrate", methodId, neighbours: group.length - 1, relations: done.relations, relationTypes: done.relationTypes, builds: done.builds,
       deferredBuilds: done.deferredBuilds, refusals: done.refusals, noop };
   }
