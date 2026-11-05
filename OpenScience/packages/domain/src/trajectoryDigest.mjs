@@ -43,6 +43,7 @@ import { cleanArtifactShapes } from './artifactShape.mjs'
 import { fileFormatOf } from './fileDeliverable.mjs'
 import { PLATFORM_CONTEXT_TAGS, carriesPlatformContext, stripPlatformTags, unwrapUserWrappers } from './memoryVocabulary.mjs'
 import { methodSourceIdentifierShapesIn } from './methodSourcePrivacy.mjs'
+import { scopeRunTranscript } from './runTurnScope.mjs'
 import { isMcpToolName, isPlatformChoreographyTool, mcpToolBaseName } from './toolNames.mjs'
 
 /** Bounds on what a digest holds: the size of a model's input, not a policy. */
@@ -172,6 +173,8 @@ function toolSequence(calls) {
  * @returns {TrajectoryDigest}
  */
 export function trajectoryDigest(transcript, run, options = {}) {
+  const scoped = scopeRunTranscript(transcript, run)
+  transcript = scoped
   const limits = TRAJECTORY_DIGEST_LIMITS
   const { messages: root } = rootSessionOf(transcript, run)
   const turns = ownTurnStarts(root, run)
@@ -246,7 +249,7 @@ export function trajectoryDigest(transcript, run, options = {}) {
     if (artifacts.length >= limits.artifacts) break
   }
 
-  const executed = (options.toolTraces ?? []).flatMap((trace) => (Array.isArray(trace?.steps) ? trace.steps : []).map((step) => String(step?.tool ?? '')))
+  const executed = (scoped.runScope.available ? options.toolTraces ?? [] : []).flatMap((trace) => (Array.isArray(trace?.steps) ? trace.steps : []).map((step) => String(step?.tool ?? '')))
   const tools = toolSequence(executed.length
     ? executed
     : (transcript?.messages ?? []).flatMap((message) => (message?.parts ?? []).filter((/** @type {any} */ part) => part?.type === 'tool').map((/** @type {any} */ part) => String(part.tool ?? ''))))

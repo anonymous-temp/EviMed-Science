@@ -28,7 +28,7 @@ test('tool fallback excludes older root turns and children with no exact turn re
 
 test("the digest keeps the first request of the run's turn and the intervention, with its place, in the person's own words", () => {
   const transcript = {
-    header: { sessions: [{ sessionId: ROOT, parentSessionId: null }] },
+    header: { sessions: [{ sessionId: ROOT, parentSessionId: null, seedEndSeq: -1 }] },
     messages: [
       user(2, "帮我把本周的随访数据整理成周报，按科室分三节"),
       call(3, "read"),
@@ -46,6 +46,8 @@ test("the platform's choreography is removed from the tool order in code, the wo
   const names = ["evimed_plan", "evimed_delegate", "read", "read", "mcp__evimed__literature_search", "evimed_await", "bash", "evimed_submit_deliverable",
     "evimed_package_check", "evimed_revise_deliverable", "evimed_render_report", "present", "todo_write", "ask_user_question", "subagent", "write"];
   const transcript = {
+    header: { sessions: [{ sessionId: ROOT, parentSessionId: null, seedEndSeq: -1 },
+      { sessionId: CHILD, parentSessionId: ROOT, seedEndSeq: -1, runTurnOwnership: { schema: "child-run-turns/1", runId: run.id, turnStartSeqs: [1] } }], runChildSessionIds: [CHILD] },
     messages: [user(1, "run it"), ...names.map((name, index) => call(10 + index, name, index % 2 ? CHILD : ROOT))],
   };
   assert.deepEqual(trajectoryDigest(transcript, run).tools, ["read", "literature_search", "bash", "write"]);
@@ -72,7 +74,7 @@ test("the tool order is read from the run's executed trace when there is one: th
   assert.equal(trajectoryDigest(transcript, run, { toolTraces: long }).tools.length, TRAJECTORY_DIGEST_LIMITS.tools);
 });
 
-test("a run that is not a native turn reads every turn; the turns another run owns are not its own", () => {
+test("a legacy run with no input identity does not learn from every turn; other runs stay separate", () => {
   const messages = [
     user(1, "earlier question", { turnStartSeq: 1, sourceRequestId: "req_0" }),
     user(20, "this run's question", { turnStartSeq: 20, sourceRequestId: "req_1" }),
@@ -82,7 +84,9 @@ test("a run that is not a native turn reads every turn; the turns another run ow
   assert.deepEqual(own.requests.map((entry) => entry.text), ["this run's question"]);
   assert.deepEqual(own.interventions.map((entry) => entry.text), ["and another thing"]);
   const legacy = trajectoryDigest({ messages }, { id: "run_old", sessionId: ROOT, status: "succeeded" });
-  assert.deepEqual(legacy.requests.map((entry) => entry.text), ["earlier question", "this run's question"]);
+  assert.deepEqual(legacy.requests, []);
+  assert.deepEqual(legacy.interventions, []);
+  assert.deepEqual(legacy.tools, []);
 });
 
 test("platform envelopes are not what the person typed, and a message with a credential is dropped and counted", () => {
