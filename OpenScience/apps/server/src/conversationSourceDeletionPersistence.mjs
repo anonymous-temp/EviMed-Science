@@ -64,7 +64,7 @@ export class ConversationSourceDeletionLedger {
     [row.id, row.userId, row.accountCreatedAt, row.projectId, row.projectCreatedAt, row.rootSessionId, JSON.stringify(row.sessionIds), JSON.stringify(row.frozen), row.memoryUserRoot ?? null]);
     return rowOf(result.rows[0]);
   }
-  async pending() { await this.migrate(); return (await this.database.query(`SELECT ${identityColumns} FROM evimed_source_deletion.conversations WHERE cleanup='pending' ORDER BY created_at LIMIT 30`)).rows.map(rowOf); }
+  async pending() { await this.migrate(); return (await this.database.query(`SELECT ${identityColumns} FROM evimed_source_deletion.conversations WHERE cleanup='pending' OR updated_at < clock_timestamp()-interval '60 seconds' ORDER BY updated_at LIMIT 30`)).rows.map(rowOf); }
   async update(row, change) {
     const result = await this.database.query(`UPDATE evimed_source_deletion.conversations SET cleanup=$2,source_removed=$3,reason=$4,updated_at=clock_timestamp() WHERE id=$1 RETURNING ${identityColumns}`,
       [row.id, change.cleanup ?? row.cleanup, change.sourceRemoved ?? row.sourceRemoved, change.reason ?? null]); return rowOf(result.rows[0]);

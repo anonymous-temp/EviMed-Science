@@ -5824,6 +5824,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (nativeMemoryContexts && memoryHistory) {
         const deletionContext = await nativeMemoryContexts.forProject(project);
         for (const sessionId of row.sessionIds) await memoryHistory.removeConversation({ ...deletionContext, projectId: project.id, projectCreatedAt: row.projectCreatedAt }, sessionId);
+        await memoryHistory.drainDeletes();
       }
       // Revoke private export bindings immediately, before the background cleanup can wait for an active project.
       if (capsuleTransferService) {

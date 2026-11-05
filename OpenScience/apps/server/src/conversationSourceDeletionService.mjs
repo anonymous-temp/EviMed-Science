@@ -80,7 +80,7 @@ export class ConversationSourceDeletionService {
         await this.ledger.exclusive(project, async () => {
           const guard = () => this.ledger.assertIdentity(row);
           await guard(); await this.removeHistory(project, row);
-          const result = await this.runtime.purgeConversationSource(project, row.frozen, guard);
+          const result = row.sourceRemoved === true ? { sourceRemoved: true } : await this.runtime.purgeConversationSource(project, row.frozen, guard);
           if (result?.sourceRemoved !== true) { await this.ledger.update(row, { cleanup: 'pending', reason: result?.reason ?? 'runtime_busy' }); return; }
           await guard(); await this.removeDerived(project, row);
           await this.ledger.update(row, { sourceRemoved: true, cleanup: 'complete', reason: null });
