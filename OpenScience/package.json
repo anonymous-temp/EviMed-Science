@@ -136,7 +136,7 @@
     "eval:routing:classifier": "node evals/routing/classifier.mjs",
     "test:judge-sites": "node --test evals/judge-sites/*.test.mjs",
     "test:memory-policy": "python3 -m unittest discover -s evals/memory-policy -p 'test_*.py'",
-    "test:memory-evals": "python3 -m unittest discover -s evals/capsule-longitudinal/tests -p 'test_*.py' && python3 -m unittest discover -s evals/remembered-format/tests -p 'test_*.py' && node --test --test-concurrency=1 evals/follow-up-judge/tests/*.test.mjs",
+    "test:memory-evals": "python3 -m unittest discover -s evals/capsule-longitudinal/tests -p 'test_*.py' && python3 -m unittest discover -s evals/remembered-format/tests -p 'test_*.py' && node --test --test-concurrency=1 evals/follow-up-judge/tests/*.test.mjs && node --import ./scripts/test/localhostProbeGuard.mjs --test evals/capsule-proving/tests/*.test.mjs",
     "test:general-tasks": "python3 -m unittest discover -s evals/general-tasks/tests -p 'test_*.py' && node --test evals/general-tasks/tests/*.test.mjs",
     "test:knowledge-product": "node --test evals/knowledge-product/test/*.test.mjs",
     "test:statistical-analysis": "python3 -m pytest evals/statistical-analysis -q && node --test evals/statistical-analysis/live/driver.test.mjs",

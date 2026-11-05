@@ -1,0 +1,516 @@
+{
+  "schema": "capsule-proving-sources/1",
+  "longmemeval": {
+    "revision": "98d7416c24c778c2fee6e6f3006e7a073259d48f",
+    "url": "https://huggingface.co/datasets/xiaowu0162/longmemeval-cleaned/resolve/98d7416c24c778c2fee6e6f3006e7a073259d48f/longmemeval_s_cleaned.json",
+    "sha256": "d6f21ea9d60a0d56f34a05b609c79c88a451d2ae03597821ea3d5a9678c3a442",
+    "bytes": 277383467,
+    "declaredLicense": "MIT"
+  },
+  "medical": {
+    "repository": "https://github.com/AQ-MedAI/MedMemoryBench",
+    "revision": "d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4",
+    "declaredLicense": "CC-BY-4.0",
+    "files": [
+      {
+        "path": "data/MedMemoryBench/persona_1/eval/generated_dialogues.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench/persona_1/eval/generated_dialogues.json",
+        "sha256": "07132fc5ae1834afa38cd88d4f0273031aae371ae0eab7f73f999d5edc972e1d",
+        "bytes": 7938615
+      },
+      {
+        "path": "data/MedMemoryBench/persona_1/eval/generated_queries.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench/persona_1/eval/generated_queries.json",
+        "sha256": "45aefe69cb555186e9387691a635372b6172c454c64b5ff52fd6da757c208d54",
+        "bytes": 289257
+      },
+      {
+        "path": "data/MedMemoryBench/persona_2/eval/generated_dialogues.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench/persona_2/eval/generated_dialogues.json",
+        "sha256": "f643f0d9162da03572958942785076b5174d73efc0c0e84d819aaa6e26613c07",
+        "bytes": 6867678
+      },
+      {
+        "path": "data/MedMemoryBench/persona_2/eval/generated_queries.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench/persona_2/eval/generated_queries.json",
+        "sha256": "106144303441f150366c87bd4eba10531a2ac36edb17db817ea697674dfe519c",
+        "bytes": 291976
+      },
+      {
+        "path": "data/MedMemoryBench/persona_3/eval/generated_dialogues.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench/persona_3/eval/generated_dialogues.json",
+        "sha256": "8f4cf4aa1a453d631073bf7fc39d7667339b78aa1fbb2a386624b6e52579cb39",
+        "bytes": 7803712
+      },
+      {
+        "path": "data/MedMemoryBench/persona_3/eval/generated_queries.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench/persona_3/eval/generated_queries.json",
+        "sha256": "bd5ca767707441d2a0bc9b515672c60839fb0e84f01b1152127643b46a23240f",
+        "bytes": 292493
+      },
+      {
+        "path": "data/MedMemoryBench/persona_4/eval/generated_dialogues.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench/persona_4/eval/generated_dialogues.json",
+        "sha256": "73ecd5f519b39f3b72ac61167f5a3147fd29121da312359790d50776f36056b7",
+        "bytes": 6762254
+      },
+      {
+        "path": "data/MedMemoryBench/persona_4/eval/generated_queries.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench/persona_4/eval/generated_queries.json",
+        "sha256": "68718d275b1c6fdd1bfc137445cac145d37e0173bf8bed8332c0053aaab588e1",
+        "bytes": 283511
+      },
+      {
+        "path": "data/MedMemoryBench/persona_5/eval/generated_dialogues.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench/persona_5/eval/generated_dialogues.json",
+        "sha256": "4f826d20e9056ab62124ff01388ccd2569e33b072d5218186eb581bd788ad392",
+        "bytes": 7154231
+      },
+      {
+        "path": "data/MedMemoryBench/persona_5/eval/generated_queries.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench/persona_5/eval/generated_queries.json",
+        "sha256": "83b96dae4f6720a6ca3992669f6482e1168a2a1bb5f21f2c05bdb39352a865c3",
+        "bytes": 288835
+      },
+      {
+        "path": "data/MedMemoryBench/persona_6/eval/generated_dialogues.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench/persona_6/eval/generated_dialogues.json",
+        "sha256": "aed05506093e6d05b2fd0eb762da5fddab6b4ba93aefff4c8f7169c103ab8660",
+        "bytes": 7738414
+      },
+      {
+        "path": "data/MedMemoryBench/persona_6/eval/generated_queries.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench/persona_6/eval/generated_queries.json",
+        "sha256": "81e868a11e80ef39c84b694de9c84d77cda0886fa3ce561c23f7a1e986c30dbb",
+        "bytes": 307148
+      },
+      {
+        "path": "data/MedMemoryBench/persona_7/eval/generated_dialogues.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench/persona_7/eval/generated_dialogues.json",
+        "sha256": "1e3242f66b3b3d21afb45f274524aa4b032785434d056c702116f0fb0d65a183",
+        "bytes": 8041416
+      },
+      {
+        "path": "data/MedMemoryBench/persona_7/eval/generated_queries.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench/persona_7/eval/generated_queries.json",
+        "sha256": "f11f3d0aaf62039ceb91f8ab302eaafb3e72f4ed1c0109afe5c313e1fbac0392",
+        "bytes": 276094
+      },
+      {
+        "path": "data/MedMemoryBench/persona_8/eval/generated_dialogues.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench/persona_8/eval/generated_dialogues.json",
+        "sha256": "be7aeb19903c550d335a20d09865f337c75d4ef7a3e9171ff62770d61fc94c48",
+        "bytes": 7274213
+      },
+      {
+        "path": "data/MedMemoryBench/persona_8/eval/generated_queries.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench/persona_8/eval/generated_queries.json",
+        "sha256": "98ed3e6dcdd251dfc0135089b83f0a6370523634e1b5f1abc0fc297d1d91e917",
+        "bytes": 286569
+      },
+      {
+        "path": "data/MedMemoryBench/persona_9/eval/generated_dialogues.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench/persona_9/eval/generated_dialogues.json",
+        "sha256": "c48914ed63a0b8aba2e4fea9c622ac520d44371dca6e60d54723acde593d9b0c",
+        "bytes": 6380597
+      },
+      {
+        "path": "data/MedMemoryBench/persona_9/eval/generated_queries.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench/persona_9/eval/generated_queries.json",
+        "sha256": "0ff80e856b1b43681f4594d41fe7a03166d9db82c34965d1acbe11d4ca393b96",
+        "bytes": 282434
+      },
+      {
+        "path": "data/MedMemoryBench/persona_10/eval/generated_dialogues.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench/persona_10/eval/generated_dialogues.json",
+        "sha256": "ff949319f0472ecdd0ea1676603e26559c198a64c9657169288fccc5f140c8f9",
+        "bytes": 6300626
+      },
+      {
+        "path": "data/MedMemoryBench/persona_10/eval/generated_queries.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench/persona_10/eval/generated_queries.json",
+        "sha256": "9d000a8e453c0c65ee9843a1e34283a3f41597bd1b69f61038c9db6e2427ec01",
+        "bytes": 278919
+      },
+      {
+        "path": "data/MedMemoryBench/persona_11/eval/generated_dialogues.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench/persona_11/eval/generated_dialogues.json",
+        "sha256": "05aa96910eab36bc0d1c2f253e448315ff467ab78be266188edf819fcf271818",
+        "bytes": 6771803
+      },
+      {
+        "path": "data/MedMemoryBench/persona_11/eval/generated_queries.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench/persona_11/eval/generated_queries.json",
+        "sha256": "0b0390cf993c8b54e9d815f2b326b7c7cbc848056a742c1dd17d8184e590b3ee",
+        "bytes": 311041
+      },
+      {
+        "path": "data/MedMemoryBench/persona_12/eval/generated_dialogues.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench/persona_12/eval/generated_dialogues.json",
+        "sha256": "f9a2ee54626339232b39325bb5e348cf517559709567ec1d94c176a71fd7dccc",
+        "bytes": 7110805
+      },
+      {
+        "path": "data/MedMemoryBench/persona_12/eval/generated_queries.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench/persona_12/eval/generated_queries.json",
+        "sha256": "99a568b32fb94f8a8a1ba78d45fc1e554e7294ba5db735bb7a90678b37bcaf2a",
+        "bytes": 283972
+      },
+      {
+        "path": "data/MedMemoryBench/persona_13/eval/generated_dialogues.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench/persona_13/eval/generated_dialogues.json",
+        "sha256": "343c6aacc40cf421eea374bed1fb6d5c3033274f44cec270af15a687e02e414b",
+        "bytes": 7251455
+      },
+      {
+        "path": "data/MedMemoryBench/persona_13/eval/generated_queries.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench/persona_13/eval/generated_queries.json",
+        "sha256": "7d0ed5ddbf274ab6cbb9e1295e6f40f797bfff1944ed28b8137aab6daa657bb8",
+        "bytes": 289572
+      },
+      {
+        "path": "data/MedMemoryBench/persona_14/eval/generated_dialogues.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench/persona_14/eval/generated_dialogues.json",
+        "sha256": "870c07293d8d8a90f89a69173f32ae4e8ce9418c5bea8d0f29296817f371b216",
+        "bytes": 7824497
+      },
+      {
+        "path": "data/MedMemoryBench/persona_14/eval/generated_queries.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench/persona_14/eval/generated_queries.json",
+        "sha256": "4dfc571cd76399485b449b25ae4af7ff2efafa41522cf13f96e3086bba673267",
+        "bytes": 286550
+      },
+      {
+        "path": "data/MedMemoryBench/persona_15/eval/generated_dialogues.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench/persona_15/eval/generated_dialogues.json",
+        "sha256": "05ed4c46a92701d177865adbcdacc390d3e04f795759a1263bbbfa491605118d",
+        "bytes": 7982947
+      },
+      {
+        "path": "data/MedMemoryBench/persona_15/eval/generated_queries.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench/persona_15/eval/generated_queries.json",
+        "sha256": "2a0559a6ac843e213ea25bb733891cb12b14e40b70aff493787322e5aac6c475",
+        "bytes": 309506
+      },
+      {
+        "path": "data/MedMemoryBench/persona_16/eval/generated_dialogues.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench/persona_16/eval/generated_dialogues.json",
+        "sha256": "1bb2a13145261adedcee5e28cb63d043feb2f2fb9bf0af0ffaf9eb3e5fed4167",
+        "bytes": 8007643
+      },
+      {
+        "path": "data/MedMemoryBench/persona_16/eval/generated_queries.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench/persona_16/eval/generated_queries.json",
+        "sha256": "00562761b6ec1c02538f05d4daa884199b7f59c2d98862b5ca1873f54cedf1b1",
+        "bytes": 307816
+      },
+      {
+        "path": "data/MedMemoryBench/persona_17/eval/generated_dialogues.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench/persona_17/eval/generated_dialogues.json",
+        "sha256": "5af06e2407949eb69188d0a2a02fc333242321b2cf18850b37f3cfe2f30826f4",
+        "bytes": 8113393
+      },
+      {
+        "path": "data/MedMemoryBench/persona_17/eval/generated_queries.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench/persona_17/eval/generated_queries.json",
+        "sha256": "dba948b24d11238e0a1575614d6f95fe26856133a39753fe5b2d556ab4d58755",
+        "bytes": 283510
+      },
+      {
+        "path": "data/MedMemoryBench/persona_18/eval/generated_dialogues.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench/persona_18/eval/generated_dialogues.json",
+        "sha256": "6968483c4b072dc5d8cb772e4e9686aafdfcbfa4f7ed9221022544b8d73a8c61",
+        "bytes": 6114365
+      },
+      {
+        "path": "data/MedMemoryBench/persona_18/eval/generated_queries.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench/persona_18/eval/generated_queries.json",
+        "sha256": "91e00234f5010a2220a9aed74ae665907a1b34edaa3b8415ea2646c6a8b98c7e",
+        "bytes": 276948
+      },
+      {
+        "path": "data/MedMemoryBench/persona_19/eval/generated_dialogues.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench/persona_19/eval/generated_dialogues.json",
+        "sha256": "53c751d6ba3d494e15feea00dc59c1ed8defca5b075e6e6d63b9229cbdf360c9",
+        "bytes": 7813652
+      },
+      {
+        "path": "data/MedMemoryBench/persona_19/eval/generated_queries.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench/persona_19/eval/generated_queries.json",
+        "sha256": "656ab2bbbaaf89538228258882b883196aab2403cad918fffe0ecd424292d7a0",
+        "bytes": 311748
+      },
+      {
+        "path": "data/MedMemoryBench/persona_20/eval/generated_dialogues.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench/persona_20/eval/generated_dialogues.json",
+        "sha256": "700b2b2e45619f5072824134e12a5d6e83ac517265fed478bb62e4b8d56e35f6",
+        "bytes": 8022099
+      },
+      {
+        "path": "data/MedMemoryBench/persona_20/eval/generated_queries.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench/persona_20/eval/generated_queries.json",
+        "sha256": "63e798d522ed70b673856504c7a7a90fd3b284aca29b0328564aea11eaa89625",
+        "bytes": 301884
+      },
+      {
+        "path": "data/MedMemoryBench_EN/persona_1/eval/generated_dialogues.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench_EN/persona_1/eval/generated_dialogues.json",
+        "sha256": "fd06d4e17fd9525c292f21d4f96adbdd823f54dbb56dedf07be0d45e05c63ed8",
+        "bytes": 9838192
+      },
+      {
+        "path": "data/MedMemoryBench_EN/persona_1/eval/generated_queries.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench_EN/persona_1/eval/generated_queries.json",
+        "sha256": "c562ea444baef06069419f5a4b175c3696c5da027ca6c94427f646f274ae4fb5",
+        "bytes": 355615
+      },
+      {
+        "path": "data/MedMemoryBench_EN/persona_2/eval/generated_dialogues.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench_EN/persona_2/eval/generated_dialogues.json",
+        "sha256": "29ba8e3a0721f1b39f1f5ce6154bfeeed9c42c1103a981bc4092f4bedf470f90",
+        "bytes": 8489899
+      },
+      {
+        "path": "data/MedMemoryBench_EN/persona_2/eval/generated_queries.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench_EN/persona_2/eval/generated_queries.json",
+        "sha256": "2b9814c57268e9cc10f8b797e7a7dc3c721655c9711e74d638512ea3dd3db908",
+        "bytes": 357332
+      },
+      {
+        "path": "data/MedMemoryBench_EN/persona_3/eval/generated_dialogues.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench_EN/persona_3/eval/generated_dialogues.json",
+        "sha256": "5d51897d71614f9bd9de4f69d4f98cbd8ec19da069dfc9be80b530e246b98e35",
+        "bytes": 9678326
+      },
+      {
+        "path": "data/MedMemoryBench_EN/persona_3/eval/generated_queries.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench_EN/persona_3/eval/generated_queries.json",
+        "sha256": "ae50194f6f826bd6b8475e8ec273afd6a8e7c8311f7c4aae2800e71c05420f79",
+        "bytes": 357843
+      },
+      {
+        "path": "data/MedMemoryBench_EN/persona_4/eval/generated_dialogues.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench_EN/persona_4/eval/generated_dialogues.json",
+        "sha256": "26f047a7c73864450d5cd44fe39e3c079f2f68557fc8e0d9a98296bdf797de76",
+        "bytes": 8504086
+      },
+      {
+        "path": "data/MedMemoryBench_EN/persona_4/eval/generated_queries.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench_EN/persona_4/eval/generated_queries.json",
+        "sha256": "528c4b9e289cdf0d1935ece89d3d28f0bfa2894e1fe181a13d8fd65461720ddf",
+        "bytes": 349774
+      },
+      {
+        "path": "data/MedMemoryBench_EN/persona_5/eval/generated_dialogues.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench_EN/persona_5/eval/generated_dialogues.json",
+        "sha256": "2e0c52c6e75f01ccfbabc0e011ae500852c7058142781ef3f429402ce7627e62",
+        "bytes": 9166692
+      },
+      {
+        "path": "data/MedMemoryBench_EN/persona_5/eval/generated_queries.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench_EN/persona_5/eval/generated_queries.json",
+        "sha256": "5a9057d43fb90d1e6c19e2273f2ccd6b27afb06c6a5cf9a8471099ff12042621",
+        "bytes": 357731
+      },
+      {
+        "path": "data/MedMemoryBench_EN/persona_6/eval/generated_dialogues.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench_EN/persona_6/eval/generated_dialogues.json",
+        "sha256": "8f5d757edac0ed5c44b5a70d517f680b32c6474b3d27bd8afd76e9cfbff3c1c3",
+        "bytes": 9639004
+      },
+      {
+        "path": "data/MedMemoryBench_EN/persona_6/eval/generated_queries.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench_EN/persona_6/eval/generated_queries.json",
+        "sha256": "85b5043fc955f36977fdb87555ae14423575d72fd8876e07f3d5cff79986a9df",
+        "bytes": 375914
+      },
+      {
+        "path": "data/MedMemoryBench_EN/persona_7/eval/generated_dialogues.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench_EN/persona_7/eval/generated_dialogues.json",
+        "sha256": "85ac26a198dc8969873af69bc71c82b149e1185d8376ca1c146f062b4a8a64b6",
+        "bytes": 10036683
+      },
+      {
+        "path": "data/MedMemoryBench_EN/persona_7/eval/generated_queries.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench_EN/persona_7/eval/generated_queries.json",
+        "sha256": "498e5ae5a9a387c41f327738021d112f2fa15c3e011bfcf05e24afef3c90812e",
+        "bytes": 341450
+      },
+      {
+        "path": "data/MedMemoryBench_EN/persona_8/eval/generated_dialogues.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench_EN/persona_8/eval/generated_dialogues.json",
+        "sha256": "9ee57894e059fd6d1dbd23cf419fed92916b9a4cdbbd2c7d75310b1f96f9c6cc",
+        "bytes": 8994188
+      },
+      {
+        "path": "data/MedMemoryBench_EN/persona_8/eval/generated_queries.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench_EN/persona_8/eval/generated_queries.json",
+        "sha256": "cbbfb20827935c40144be429679d7b324014c34d3f86513efc354c7feb66188f",
+        "bytes": 351458
+      },
+      {
+        "path": "data/MedMemoryBench_EN/persona_9/eval/generated_dialogues.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench_EN/persona_9/eval/generated_dialogues.json",
+        "sha256": "d31888b36d8036a1b98dad9f57b850d13e871d943e72dcd4e55fbf8d8715ea1e",
+        "bytes": 7845506
+      },
+      {
+        "path": "data/MedMemoryBench_EN/persona_9/eval/generated_queries.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench_EN/persona_9/eval/generated_queries.json",
+        "sha256": "26d7ccccc4af6d9f79902211f563b3b16e021d1650de1c567aa61b8213d5a3a6",
+        "bytes": 346150
+      },
+      {
+        "path": "data/MedMemoryBench_EN/persona_10/eval/generated_dialogues.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench_EN/persona_10/eval/generated_dialogues.json",
+        "sha256": "0ec4e739a09c9604909706f65e39414dee15ce909c50edca47d48cdea46ad664",
+        "bytes": 7866232
+      },
+      {
+        "path": "data/MedMemoryBench_EN/persona_10/eval/generated_queries.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench_EN/persona_10/eval/generated_queries.json",
+        "sha256": "831416d4cc5d3a381d82cb1e849348fff15bcead7786bccbeffffda5aa0f0209",
+        "bytes": 342637
+      },
+      {
+        "path": "data/MedMemoryBench_EN/persona_11/eval/generated_dialogues.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench_EN/persona_11/eval/generated_dialogues.json",
+        "sha256": "0abcb336b819ac0327ae835f26ae127bfd97cd6c260678747f50513b8c72e12c",
+        "bytes": 8355891
+      },
+      {
+        "path": "data/MedMemoryBench_EN/persona_11/eval/generated_queries.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench_EN/persona_11/eval/generated_queries.json",
+        "sha256": "8dfe3909ef9e407950e2b49fcdd395dd7fd8e0f8d66f10401546669b20053f7c",
+        "bytes": 376954
+      },
+      {
+        "path": "data/MedMemoryBench_EN/persona_12/eval/generated_dialogues.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench_EN/persona_12/eval/generated_dialogues.json",
+        "sha256": "daa83cb7561b98e2d293b9fe28b4ae42ce3f91864c8a5ef289e8b7802cc9b4fd",
+        "bytes": 8770921
+      },
+      {
+        "path": "data/MedMemoryBench_EN/persona_12/eval/generated_queries.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench_EN/persona_12/eval/generated_queries.json",
+        "sha256": "a598b556871f02ceb357f8b948ae460201ddeee1a986677911ed339b51e3a667",
+        "bytes": 347201
+      },
+      {
+        "path": "data/MedMemoryBench_EN/persona_13/eval/generated_dialogues.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench_EN/persona_13/eval/generated_dialogues.json",
+        "sha256": "78eeb650eabdd75b23f4eaba61d26b7f3dea064d74f386effda4f00ed25f2ac4",
+        "bytes": 8916761
+      },
+      {
+        "path": "data/MedMemoryBench_EN/persona_13/eval/generated_queries.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench_EN/persona_13/eval/generated_queries.json",
+        "sha256": "b8f0f87b3805bd04216552d7c2a62901ec199aa062b13c91816e8b57d41c9a3b",
+        "bytes": 352627
+      },
+      {
+        "path": "data/MedMemoryBench_EN/persona_14/eval/generated_dialogues.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench_EN/persona_14/eval/generated_dialogues.json",
+        "sha256": "60cdbcf93a64259bbc30b898849dfc42cc82efa541897923ba1c7ea4b0338a72",
+        "bytes": 9651159
+      },
+      {
+        "path": "data/MedMemoryBench_EN/persona_14/eval/generated_queries.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench_EN/persona_14/eval/generated_queries.json",
+        "sha256": "b7377eb8d0cd343b8bdfe897dee890cf4c80ee6c9efc34cc9236c5cc85abd9b6",
+        "bytes": 353016
+      },
+      {
+        "path": "data/MedMemoryBench_EN/persona_15/eval/generated_dialogues.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench_EN/persona_15/eval/generated_dialogues.json",
+        "sha256": "6ab797153342233b683c2f8285a065eb594ba9e01340cfa459e8d90652573d38",
+        "bytes": 9861604
+      },
+      {
+        "path": "data/MedMemoryBench_EN/persona_15/eval/generated_queries.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench_EN/persona_15/eval/generated_queries.json",
+        "sha256": "de57cfc125d8b121f5accc8b0261b92c47c0fdad6e8ef0283c3484c321dca7f7",
+        "bytes": 375073
+      },
+      {
+        "path": "data/MedMemoryBench_EN/persona_16/eval/generated_dialogues.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench_EN/persona_16/eval/generated_dialogues.json",
+        "sha256": "5f0e812575dcee3f62d18692729c4d137450112a9dd20ae557739b9de0489261",
+        "bytes": 9951325
+      },
+      {
+        "path": "data/MedMemoryBench_EN/persona_16/eval/generated_queries.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench_EN/persona_16/eval/generated_queries.json",
+        "sha256": "702d2a23b444ea0ae4b9e3a8a2a3d78e3971501a303e82b83040c2a76447e924",
+        "bytes": 380574
+      },
+      {
+        "path": "data/MedMemoryBench_EN/persona_17/eval/generated_dialogues.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench_EN/persona_17/eval/generated_dialogues.json",
+        "sha256": "f801dddd3c824ff237aa053a2cdad5f0ad506c9a5d78d4ac1617d79588c5daf7",
+        "bytes": 10173487
+      },
+      {
+        "path": "data/MedMemoryBench_EN/persona_17/eval/generated_queries.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench_EN/persona_17/eval/generated_queries.json",
+        "sha256": "b866914c45b2ec42be0ee1ea65eb6fb29fb407034102b251a45da6bc9da07fb1",
+        "bytes": 349124
+      },
+      {
+        "path": "data/MedMemoryBench_EN/persona_18/eval/generated_dialogues.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench_EN/persona_18/eval/generated_dialogues.json",
+        "sha256": "489cfbfe2f798d83dfbeb9b22eb355e88a520aa3ce6c4a3f9606da34160e46c6",
+        "bytes": 7545972
+      },
+      {
+        "path": "data/MedMemoryBench_EN/persona_18/eval/generated_queries.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench_EN/persona_18/eval/generated_queries.json",
+        "sha256": "b6ba3371820ff035f8b357a4bfacb737a260619cf6f164333e62e9fe204f6fe6",
+        "bytes": 337445
+      },
+      {
+        "path": "data/MedMemoryBench_EN/persona_19/eval/generated_dialogues.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench_EN/persona_19/eval/generated_dialogues.json",
+        "sha256": "4b1590fb1535bc3748050098acf985a945b2192dd1b0a4bb478cc7b4c88dcf57",
+        "bytes": 9580864
+      },
+      {
+        "path": "data/MedMemoryBench_EN/persona_19/eval/generated_queries.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench_EN/persona_19/eval/generated_queries.json",
+        "sha256": "ca8a7cf4d8537ba5a5060146b4cc6d852f1385f926317ea0132a12e3b412ae3f",
+        "bytes": 374729
+      },
+      {
+        "path": "data/MedMemoryBench_EN/persona_20/eval/generated_dialogues.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench_EN/persona_20/eval/generated_dialogues.json",
+        "sha256": "1277890c6d3f97cb8a0576989bb071f04eb05ab31e750b19a3e2560ecfe6115d",
+        "bytes": 9941652
+      },
+      {
+        "path": "data/MedMemoryBench_EN/persona_20/eval/generated_queries.json",
+        "url": "https://media.githubusercontent.com/media/AQ-MedAI/MedMemoryBench/d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4/data/MedMemoryBench_EN/persona_20/eval/generated_queries.json",
+        "sha256": "6e2472f04cb4ab12b3f42e523008cc5be5164c8de491e5776c32e23bcefdf704",
+        "bytes": 370745
+      }
+    ]
+  },
+  "actualCounts": {
+    "LongMemEval-S": {
+      "questions": 500
+    },
+    "MedMemoryBench": {
+      "language": "zh",
+      "personas": 20,
+      "questions": 1986,
+      "sessions": 2020,
+      "messages": 31976
+    },
+    "MedMemoryBench_EN": {
+      "language": "en",
+      "personas": 20,
+      "questions": 1986,
+      "sessions": 2020,
+      "messages": 31976
+    }
+  }
+}
