@@ -922,9 +922,6 @@ const VALIDATORS = Object.freeze({
   'vcr-cohort-snapshot': (input) => withFindings(validateReportShaped(input, proseFilesOf(input)), vcrCohortFindings(input)),
   'vcr-matching-assessment': (input) => withFindings(validateReportShaped(input, proseFilesOf(input)), vcrMatchingFindings(input)),
   'clinical-decision-brief': (input) => validateReportShaped(input, proseFilesOf(input)),
-  'episode-plan': (input) => validateJsonShaped(input, { file: 'episode-plan.json', check: checkEpisodePlan }),
-  'analysis-plan': (input) => validateJsonShaped(input, { file: 'analysis-plan.json', check: checkAnalysisPlan }),
-  'reproducibility-pack': (input) => validateJsonShaped(input, { file: 'reproducibility-pack.json', check: checkReproducibilityPack }),
   'surveillance-diff': (input) => validateJsonShaped(input, { file: 'surveillance-diff.json', check: checkSurveillanceDiff }),
   'hypothesis-set': (input) => validateJsonShaped(input, { file: 'hypothesis-set.json', check: checkHypothesisSet }),
   'method-candidate': validateMethodCandidatePackage,
@@ -1026,45 +1023,6 @@ function citedSourceIssues(input) {
     ...audit.unretrieved.slice(0, UNRECORDED_LIMIT).map((entry) => issue('cited_source_unretrieved', unretrievedCitationMessage(entry),
       { severity: 'advisory', path: entry.path, line: entry.line, check: 'cited-sources-recorded' })),
   ]
-}
-
-/** @param {any} value @returns {string[]} */
-function checkEpisodePlan(value) {
-  const errors = []
-  if (!isRecord(value)) return ['must be an object.']
-  const tasks = Array.isArray(value.tasks) ? value.tasks : null
-  if (!tasks || !tasks.length) errors.push('tasks[] must be a non-empty array.')
-  for (const task of tasks ?? []) {
-    if (!isRecord(task)) { errors.push('each task must be an object.'); continue }
-    if (!task.type) errors.push('each task needs a type.')
-    if (!task.costClass) errors.push('each task needs a costClass.')
-    if (!Array.isArray(task.inputs)) errors.push('each task needs inputs[].')
-  }
-  return errors
-}
-
-/** @param {any} value @returns {string[]} */
-function checkAnalysisPlan(value) {
-  const errors = []
-  if (!isRecord(value)) return ['must be an object.']
-  if (!value.hypothesis_id) errors.push('needs hypothesis_id.')
-  if (!Array.isArray(value.variables) || !value.variables.length) errors.push('needs variables[].')
-  if (!value.model) errors.push('needs a model.')
-  if (!value.multiplicity) errors.push('needs a multiplicity correction.')
-  if (!value.stopping) errors.push('needs a stopping rule.')
-  if (!value.primary_endpoint) errors.push('needs exactly one primary_endpoint.')
-  return errors
-}
-
-/** @param {any} value @returns {string[]} */
-function checkReproducibilityPack(value) {
-  const errors = []
-  if (!isRecord(value)) return ['must be an object.']
-  for (const field of ['code_path', 'image_digest', 'dataset_partition_id', 'random_seed', 'run_id']) {
-    if (!value[field]) errors.push(`needs ${field}.`)
-  }
-  if (!Array.isArray(value.results) || !value.results.length) errors.push('needs results[].')
-  return errors
 }
 
 /** @param {any} value @returns {string[]} */

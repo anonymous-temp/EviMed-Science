@@ -29,9 +29,6 @@ const JSON_SHAPED = new Set([
   // Frozen-source understanding checks exact character anchors and typed slots;
   // it does not certify a literature report or infer an omission percentage.
   'source-understanding',
-  "episode-plan",
-  "analysis-plan",
-  "reproducibility-pack",
   "surveillance-diff",
   "hypothesis-set",
   // The two learning contracts. A method proposal cites the run it was induced

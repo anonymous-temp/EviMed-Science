@@ -219,7 +219,7 @@ export function stripPlatformTags(text) {
  * because those are the ones no researcher writes as research. A bare English
  * word the platform also happens to use is language and stays with the model:
  * `health` is an MCP tool and a word in half the questions this product is
- * asked, `analysis-plan` is a contract kind and a phrase, `deliverable` and
+ * asked, `analysis-plan` is a phrase in half the protocols, `deliverable` and
  * `gate` are how anyone would describe the machinery in prose.
  */
 const PLATFORM_IDENTIFIERS = Object.freeze([...new Set([
