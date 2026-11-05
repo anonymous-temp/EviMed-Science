@@ -160,10 +160,16 @@ test('an old exact-epoch failed native archive remains source-deleted after its 
 test('a completed native diff arriving behind its source fence records cleanup lineage without replay or normal learning',options,async t=>{
   const f=await fixture(t,{extract:({user})=>({adds:[{uri:`viking://user/${user}/memories/preferences/source.md`,memory_type:'preferences',after:'Private source A.'}]})}),source=await f.commitConversation('a',[{role:'user',text:'Private source A.'}],{projectId:'default'}),ledger=new ConversationSourceDeletionLedger(f.database);
   const owner=(await f.database.query('SELECT created_at::text AS stamp FROM evimed_control.users WHERE id=$1',[f.userId])).rows[0].stamp;
-  await ledger.put({id:crypto.randomUUID(),userId:f.userId,projectId:'default',accountCreatedAt:owner,projectCreatedAt:f.projectCreatedAt,rootSessionId:'session_a',sessionIds:['session_a'],frozen:{root:{id:'session_a'}},memoryUserRoot:f.sessions.userRoot(f.userId)});f.overlay.sourceDeletion={ledger};
+  await ledger.put({id:crypto.randomUUID(),userId:f.userId,projectId:'default',accountCreatedAt:owner,projectCreatedAt:f.projectCreatedAt,rootSessionId:'session_a',sessionIds:['session_a'],frozen:{root:{id:'session_a'}},memoryUserRoot:f.sessions.userRoot(f.userId)});f.overlay.sourceDeletion={ledger,redactRevisions:async(_user,rows)=>rows};
   f.worker.observations={promote:async()=>assert.fail('deleted sources cannot promote learning')};f.worker.history={ingestArchive:async()=>assert.fail('deleted source cannot reindex history')};
   await f.worker.processCommits({userId:f.userId});const settled=await f.overlay.commit(f.userId,source.archive_uri);
   assert.equal(settled.state,'abandoned');assert.ok(settled.nativeIngestedAt);assert.equal(await f.overlay.hasUnprovenNativeWrites(f.userId),false);
   await f.store.removeConversationSource(f.userId,'default',['session_a'],{projectCreatedAt:f.projectCreatedAt});
   assert.equal(await f.sessions.read(f.userId,`${f.root}/preferences/source.md`),null);
+});
+
+test('empty SQL receipts do not prove an uncommitted native source session absent',options,async t=>{
+  const f=await fixture(t);await f.sessions.createSession(f.userId,'dsh-unrecorded');await f.sessions.addMessage(f.userId,'dsh-unrecorded',{role:'user',content:'Uncommitted private source.'});
+  await assert.rejects(f.store.removeConversationSource(f.userId,'default',['unrecorded'],{projectCreatedAt:f.projectCreatedAt}),{code:'memory_source_lineage_unverified'});
+  assert.ok(f.stub.sessions.has(`${f.engineUser}/dsh-unrecorded`));
 });
