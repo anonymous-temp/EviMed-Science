@@ -1,0 +1,31 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { nativeAppIntegration } from './helpers/nativeAppFixture.mjs';
+const { options, fixture } = nativeAppIntegration();
+
+test('owned source DELETE is wired through durable state, source privacy, metadata admission and pending status', options, async t => {
+  const {app,base,headers,user,stub,engineUser}=await fixture(t);
+  const project=await app.store.requireProject(await app.store.userById(user.id),'default');
+  await app.researchSessions.put(project,'source_a',{mode:'open-domain'});
+  await app.researchSessions.put(project,'independent_b',{mode:'open-domain'});
+  const uri=stub.seedMemory(engineUser,'profile.md','# Profile\n- Private source A.\n- Independent B.',{type:'profile'});
+  const overlay=app.nativeMemory.overlay;
+  await overlay.upsertFile({userId:user.id,uri,memoryType:'profile',body:'# Profile\n- Private source A.\n- Independent B.'});
+  await overlay.syncOrigins(user.id,uri,{before:'',after:'# Profile\n- Private source A.',origin:{engineSession:'dsh-source_a',projectId:'default'}});
+  app.runtimeManager.captureConversationSource=async()=>({root:{id:'source_a',createdAt:1,cwd:'/workspace',isSeeded:false},sessions:[{id:'source_a'}],generation:'synthetic-fixture'});
+  let physical=false;
+  app.runtimeManager.purgeConversationSource=async()=>({sourceRemoved:physical,reason:physical?null:'runtime_busy'});
+  const target=`${base}/api/projects/default/conversations/source_a/source`;
+  const removed=await fetch(target,{method:'DELETE',headers});
+  assert.equal(removed.status,202); const result=(await removed.json()).data;
+  assert.equal(result.sourceRemoved,false); assert.equal(result.cleanup,'pending');
+  assert.deepEqual((await app.researchSessions.list(project)).map(row=>row.sessionId),['independent_b']);
+  await assert.rejects(app.researchSessions.put(project,'source_a',{mode:'open-domain'}),{status:404});
+  assert.deepEqual(await app.nativeMemory.files(user.id),[],'source-bearing native file is hidden while cleanup waits');
+  assert.ok((await overlay.sensitiveUris(user.id)).includes(uri),'native recall uses the same immediate source privacy fence');
+  assert.equal((await fetch(`${base}/api/projects/unknown/conversations/source_a/source`,{method:'DELETE',headers})).status,404);
+  await app.sourceDeletion.drain(); assert.equal((await (await fetch(target,{headers})).json()).data.cleanup,'pending');
+  physical=true; await app.sourceDeletion.drain();
+  assert.equal((await (await fetch(target,{headers})).json()).data.sourceRemoved,true);
+  const kept=await app.nativeMemory.files(user.id);assert.equal(kept.length,1);assert.equal(kept[0].body,'# Profile\n- Independent B.');
+});
