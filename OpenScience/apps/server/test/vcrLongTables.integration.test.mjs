@@ -176,9 +176,16 @@ test("a FHIR export started from the conversation: converted, mapped and frozen 
   assert.ok(ranking.ranking[0].criteria[0].evidence.length >= 1, "evidence read from a long line comes back");
   assert.equal(ranking.ranking[0].criteria[0].evidenceWithheld, undefined);
   assert.ok(ranking.ranking[0].criteria[0].evidence[0].source.long);
-  const sentences = await vcr.service.runtimeRead(context, "subject_document", { subjectKey: keys[0], kind: "sentences" });
-  assert.ok(sentences.sentences.length > 0);
-  assert.ok(sentences.sentences.some((row) => row.fromTable), "the coded lines are read beside the notes the export carries");
+  // The export's notes come first, so the coded lines may be on a later page of the same reading.
+  const sentences = [];
+  for (let offset = 0, more = true; more;) {
+    const page = await vcr.service.runtimeRead(context, "subject_document", { subjectKey: keys[0], kind: "sentences", offset });
+    sentences.push(...page.sentences);
+    more = Boolean(page.more);
+    offset = page.nextOffset ?? 0;
+  }
+  assert.ok(sentences.length > 0);
+  assert.ok(sentences.some((row) => row.fromTable), "the coded lines are read beside the notes the export carries");
   // A second start of the same selection reads the same words and pays for nothing, and does not ask again.
   const calls = asked.length;
   await vcr.matchJudge.start(context, { subjectKey: keys[0], registryIds: ["NCT00000001"], topK: 1 });
