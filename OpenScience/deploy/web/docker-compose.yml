@@ -559,6 +559,8 @@ services:
       OPEN_SCIENCE_AUTH_SESSION_PURGE_BATCH:
       OPEN_SCIENCE_DATABASE_POOL_MAX:
       OPEN_SCIENCE_DATABASE_CONNECTION_TIMEOUT_MS:
+      # How long a control-plane connection may sit idle inside a transaction before PostgreSQL ends it (0 = no bound).
+      OPEN_SCIENCE_DATABASE_IDLE_IN_TRANSACTION_MS:
       # Which component ranks a recall. `openviking` is what this stack starts;
       # `builtin` is the term matcher, which needs nothing deployed and is what
       # a recall falls back to when the index is unreachable.
