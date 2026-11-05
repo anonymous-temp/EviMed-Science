@@ -307,6 +307,7 @@ const FALLBACK_RULES = {
   OPEN_SCIENCE_PUBLIC_URL: ["deployment", "url"],
   OPEN_SCIENCE_OPENVIKING_URL: ["deployment", "url"],
   OPEN_SCIENCE_DOCUMENT_PARSER_URL: ["deployment", "url"],
+  OPEN_SCIENCE_DOCUMENT_PARSER_ENGINE: ["deployment", "mode"],
   // docker-compose.knowledge.yml points the control plane at the plugin's
   // compose service; the code's default is no plugin.
   OPEN_SCIENCE_KNOWLEDGE_PLUGIN_URL: ["deployment", "url"],
