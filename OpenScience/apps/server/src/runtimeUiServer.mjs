@@ -815,10 +815,12 @@ export function createRuntimeUiServer({ config, store, runtimeManager, onGoalBar
       }
       await sourceDeletion.authorize(project, method, sourceCall.payload);
     }
-    if (sourceDeletion && method === RUNTIME_UI_UPLOAD_METHOD) {
-      const uploadSession = runtimeUrl.searchParams.get('sessionId');
-      if (uploadSession) await sourceDeletion.assertAvailable(project, uploadSession);
-    }
+    const sourceUploadSession = sourceDeletion && method === RUNTIME_UI_UPLOAD_METHOD ? runtimeUrl.searchParams.get('sessionId') : null;
+    const assertSourceAvailable = async () => {
+      if (sourceCall) await sourceDeletion?.authorize(project, method, sourceCall.payload);
+      if (sourceUploadSession) await sourceDeletion.assertAvailable(project, sourceUploadSession);
+    };
+    await assertSourceAvailable();
     if (scoped && !method && (!['GET', 'HEAD'].includes(req.method)
       || !['/', '/__evimed_bootstrap.js'].includes(pathname) && !isImmutableRuntimeUiAsset(frame.suffix))) { sendDenied(res, pathname); return; }
     const nativeBody = limit => {
@@ -985,12 +987,12 @@ export function createRuntimeUiServer({ config, store, runtimeManager, onGoalBar
       }
     }
     const forward = async () => {
-      if (sourceCall) await sourceDeletion?.authorize(project, method, sourceCall.payload);
+      await assertSourceAvailable();
       return runtimeManager.proxy(req, res, project, frame.suffix, {
       surface: "ui",
       admissionSignal,
       uiBasePath: frame.prefix,
-      revalidate: async () => { await revalidate(); if (sourceCall) await sourceDeletion?.authorize(project, method, sourceCall.payload); },
+      revalidate: async () => { await revalidate(); await assertSourceAvailable(); },
       ...(scoped?.nativeInputs && nativeInputRequest ? {
         beforeForward: () => scoped.beforeInputForward(nativeInputRequest),
         observeResponse: response => scoped.observeHttpInput(nativeInputRequest, promptBody?.rpcId ?? scopedCall?.rpcId, response),
@@ -1019,7 +1021,12 @@ export function createRuntimeUiServer({ config, store, runtimeManager, onGoalBar
         const value = answer?.ok === true ? answer.value : null;
         if (typeof value?.receiptId !== 'string' || !value.receiptId || typeof value.file?.attachmentId !== 'string'
           || value.file.bytes !== originalUpload.bytes.length || typeof value.file.name !== 'string') return;
+        await assertSourceAvailable();
         await keepUploadOriginal(project, { ...originalUpload, name: originalUpload.name ?? value.file.name });
+      } } : {}),
+      ...(sourceUploadSession ? { beforeForward: async () => {
+        await assertSourceAvailable();
+        if (recordUploadAttempt) await recordUploadAttempt(project);
       } } : {}),
       ...(sourceDeletion && sourceCall ? { transformResponse: async response => {
         let body = scoped ? await scoped.httpResponse(sourceCall, response)
