@@ -481,6 +481,14 @@ Verify **T/W**, AT65. The end of a conversation's turn refreshes the page beside
 
 Verify **T/W/M**, AT66. Work is described to its person in three tiers: **自动** (runs unasked: dependencies, queues, recovery), **授权后自动** (agreed once, then recurring: weekly measurement, placing within a budget) and **每次要人** (budget, release, a choice that is theirs). Automatic work that spends the person's allowance is visible with its next run and can be stopped. A promise of automatic work is made only when the agreement behind it stands. Notifications are sent when the person is the blocker, or when long work ends and they are elsewhere. Say what happens, in the reader's words; workers and queues stay off the page.
 
+### Memory capsule person information (owner plan, 2026-11-04)
+
+The memory capsule retains its existing overview, animated sky, lists and record drawers. Account-level person files appear under 人物 and notes under 其他记忆; project-labelled entries remain in 项目记忆 with their project label. Person and note marks retain their own record destination, and a person is never presented as the account owner's identity. Use existing entity/document colours and geometry; this change creates no token or layout-budget exception.
+
+Default-private sharing is distinct from the existing user action that suppresses a memory from recall. A person's own records remain readable and usable to them. Sharing lists private person entries unchecked, with a separate explicit choice for each entry. File export, delivery and link use the same current preview and selection. Changing the source, opening an update, changing capsules or completing a share requires a new selection; a historical version never supplies permission or silently broadens the current preview. Do not expose source hashes or protocol fields as product controls.
+
+Apply AT52, AT56 and AT58 to the share preview, entry selection, reset and error states, including narrow widths and keyboard use. Component tests and a source review are scoped evidence; real-engine, real-GPU and assistive-technology acceptance remain separate recorded checks.
+
 ## Minimum acceptance scenarios (existing and new; not a pass list)
 
 | ID | Scenario | Required result |
