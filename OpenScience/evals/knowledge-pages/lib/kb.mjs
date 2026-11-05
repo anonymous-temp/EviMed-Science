@@ -1,4 +1,5 @@
 // The knowledge base a question is asked of: which documents, and for arm C which compiled pages, are in the search index.
+import { createBrowseStore } from './browse.mjs'
 import { ARMS, ARM_B_REMOVED } from './prompts.mjs'
 import { buildIndex } from './retrieval.mjs'
 import { treeForRep, upstreamPageRecords } from './upstream.mjs'
@@ -36,6 +37,7 @@ export function treesFor({ scope, topic, corpus, trees, rep }) {
 export function buildKnowledgeBase({ scope, arm, topic, corpus, trees = new Map(), rep }) {
   if (!ARMS[arm]?.runnable) throw new Error(arm === 'B' ? ARM_B_REMOVED : `unknown arm ${arm}`)
   const members = scope === 'pooled' ? corpus : [topic]
+  if (ARMS[arm].browse) return createBrowseStore(members.flatMap((member) => member.documents))
   const records = members.flatMap(documentRecords)
   if (ARMS[arm].pages) {
     const chosen = treesFor({ scope, topic, corpus, trees, rep })

@@ -16,6 +16,18 @@ export const ANSWER_SYSTEM = [
   'Some search results are knowledge pages: sentences written earlier about the documents, each followed by its own evimed-source comments. A page is an index into the documents, never evidence in its own right. When you use a statement from a page, cite the document its comment names with the quotation that comment carries, and never cite the page itself.',
 ].join('\n\n')
 
+/**
+ * Arm G's variant of the answering prompt: the same text with the sentences that name `kb_search` as the way to read the
+ * knowledge base replaced by ones that name the three browsing tools, and the call allowance (twelve, because a model that
+ * browses needs more calls than one that searches). `ANSWER_SYSTEM` itself is untouched, so the recorded runs' hash holds.
+ */
+const SEARCH_SENTENCE = 'The only way to read it is the tool kb_search, which returns the best-matching passages for a query.'
+const ALLOWANCE_SENTENCE = 'You may call kb_search at most 6 times in total.'
+export const BROWSE_MAX_CALLS = 12
+export const ANSWER_SYSTEM_BROWSE = ANSWER_SYSTEM
+  .replace(SEARCH_SENTENCE, 'The only way to read it is with three tools: kb_list lists every document with its id and title, kb_grep finds the lines that contain a piece of text (matched as written, ignoring case), and kb_read reads a document by numbered lines.')
+  .replace(ALLOWANCE_SENTENCE, `You may call these tools at most ${BROWSE_MAX_CALLS} times in total, all three together.`)
+
 /** The one sentence arm A′ adds. */
 export const DECOMPOSITION_GUIDANCE = 'When a question spans several documents, first split it into sub-questions, search for each one separately, and then combine what you found into one answer.'
 
@@ -29,6 +41,7 @@ export const ARMS = Object.freeze({
   Aprime: Object.freeze({ id: 'Aprime', label: 'kb_search + decomposition guidance', systemSuffix: `\n\n${DECOMPOSITION_GUIDANCE}`, pages: false, runnable: true }),
   B: Object.freeze({ id: 'B', label: 'knowledge pages + kb_search', systemSuffix: '', pages: true, runnable: false }),
   C: Object.freeze({ id: 'C', label: 'upstream knowledge pages + kb_search', systemSuffix: '', pages: true, runnable: true }),
+  G: Object.freeze({ id: 'G', label: 'browse only: list, grep, read; no kb_search', systemSuffix: '', pages: false, browse: true, runnable: true }),
 })
 
 /** What `--arms B` is answered with. */
