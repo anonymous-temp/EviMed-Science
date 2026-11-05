@@ -116,7 +116,7 @@ per-project workspace + JSONL provenance.
 - **Reuse upstream with the narrowest adapter.** Before building a piece, find the one that already does it
   (a DSH row or plugin, an official skill, a mature library, OpenViking's native engine); a mismatch with a
   boundary we drew is an adapter, a shim or a template with a stated date of deletion, not a rebuild.
-- **OpenViking is an engine, not only an index** (v0.5.1.1, `packages/contracts/openviking/README.md` is the
+- **OpenViking is an engine, not only an index** (v0.5.3, `packages/contracts/openviking/README.md` is the
   division of labour; the identity shim of v0.5.0 is deleted, and a write-back to a knowledge page is a checked write). Every account's memory is the engine's own: it extracts, merges and recalls; the runtime's official
   plugin reaches it through a loopback bridge and the control plane's memory gateway; PostgreSQL keeps a thin
   overlay. Without OpenViking memory is off as a status, never a fallback (the control plane's own records engine was

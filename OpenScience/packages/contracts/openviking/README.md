@@ -6,16 +6,25 @@ deployment uses of OpenViking and why.
 Run: `pnpm test:contracts` (this directory), and in `apps/server`: `openVikingEngine`, `openVikingModelCaller`,
 `openVikingClient`, `openVikingResources`, `openVikingDeploy`, `openVikingBackup`.
 
-## Pinned: v0.5.1.1 (2026-10-23; v0.5.0 from 2026-10-13)
+## Pinned: v0.5.3 (2026-11-05; v0.5.1.1 from 2026-10-23, v0.5.0 from 2026-10-13)
 
-`ghcr.io/volcengine/openviking:v0.5.1.1`, index digest `sha256:551b1ae0…5b23217`, linux/amd64 `sha256:c8bc3cb8…2a334e4e`.
-v0.5.1 itself is excluded: its second and later commits of one session wrote memories that `find` did not see (fixed in
-v0.5.1.1, PR #6331), and `nativeTurnCommit` commits one long session once per attended turn. The release the pin moved from
-was v0.5.0. Beside the engine in the pin: the official DSH memory plugin `@openviking/dsh-memory-plugin` (the version, tarball and sha256 are `openviking.plugin` in
-`deps-version.json`; 0.5.26, which is what the v0.5.1 and v0.5.1.1 tags ship — read at the tag's source, like the engine) and the
-two official Compile skills `llm-wiki` and `knowledge-graph` (upstream sha256, and the sha256 the server stores after it
-re-wraps the frontmatter — the one the control plane compares). The server is AGPL-3.0 and runs unmodified as its own
-service; the plugin, the skills and the examples are Apache-2.0.
+`ghcr.io/volcengine/openviking:v0.5.3`, index digest `sha256:57d3fd88…aa104d`, linux/amd64 `sha256:8548dd28…3b382f2`.
+The pin moved over v0.5.2 and v0.5.2.1, which are not candidates of their own (v0.5.3 contains the hotfixes of the 0.5.2.1
+branch). The tags' source was read for the move, not their docs site; what the move changed here, and what only a live
+engine can settle, is in the move's report (`PROGRESS.md`) and the fixtures list below. v0.5.1 itself stays excluded: its second and
+later commits of one session wrote memories that `find` did not see (fixed in v0.5.1.1, PR #6331), and `nativeTurnCommit` commits
+one long session once per attended turn. Beside the engine in the pin: the official DSH memory plugin
+`@openviking/dsh-memory-plugin` (the version, tarball and sha256 are `openviking.plugin` in `deps-version.json`; 0.5.31, which is
+what the v0.5.3 tag ships) and the two official Compile skills `llm-wiki` and `knowledge-graph` (upstream sha256, and the sha256 the
+server stores after it re-wraps the frontmatter, which is computed from the upstream file and not read off an engine — the one the
+control plane compares). `llm-wiki` is a system asset of the engine from v0.5.3 (`openviking/system_assets/compile/example-skills/`);
+`knowledge-graph` is still under `examples/compile/ov-compile-skills/`. The server is AGPL-3.0 and runs unmodified as its own service;
+the plugin, the skills and the examples are Apache-2.0.
+
+The fixtures below were recorded on v0.5.1.1 and are history until `record.mjs` replaces them on a v0.5.3 engine. Known to differ at
+v0.5.3 and not yet re-recorded: `content-batch-write-checked*` (the operation model forbids `expected_sha256`: the stale, missing and
+busy cases no longer come from the engine), `health` (the `version` string), the compile task fixtures (a compile is incremental by
+default and the renderer no longer rebuilds index navigation) and the skill listings.
 
 ## Candidate rehearsal (2026-10-23; not admitted)
 
@@ -138,7 +147,7 @@ bytes) and the same account once registered. What the lab cannot show — a serv
 Compile runtime that is not configured — is recorded where it was (`engine-check-no-templates.json`, v0.5.0) or authored in
 the test, and the test says which.
 
-## Limits at v0.5.1.1
+## Limits measured at v0.5.1.1 (not yet re-measured at v0.5.3)
 
 Measured on the lab of 2026-10-23 unless a line says it is read from upstream's source or kept from the v0.5.0 lab.
 
@@ -154,6 +163,12 @@ Measured on the lab of 2026-10-23 unless a line says it is read from upstream's 
   "Partial output" line in `result.warnings` (reported as `warnings` on the task and on the round). And a compile of the same
   three short documents wrote only `index.md`, with no error and no warning, on 2 of 9 runs (4 to 6 pages on the others, and the recorder asks again until a run writes the pages the other fixtures are read against);
   `result.page_count` is 0 even on a good run, so `created` is the only count that says what was written.
+- **At v0.5.3 the engine has no such precondition** (read at the tag: `BatchWriteOperation` forbids unknown keys and `expected_sha256`
+  was removed by PR #6615, which keeps manual edits of Compile outputs as versions instead). The control plane keeps its contract
+  (`OpenVikingResources.writePage`): it downloads the page, compares the digest with the one the caller read, answers
+  `knowledge_page_engine_changed` itself, and writes without the key. The window between the read and the write is not closed by the
+  engine; the page worker keeps a save and a compile on one target apart (a save is queued while a round runs).
+  The next bullet is the v0.5.1.1 measurement.
 - **A write-back is a checked write.** `content/write` has no version precondition; `content/batch-write` has one per operation
   (`expected_sha256`, the digest of the bytes `content/download` returns). A changed page is a 409 `CONFLICT` "Content revision
   changed" (a missing one "Expected content no longer exists"; with `skip_conflicts` a 200 whose `result.conflicts` lists them),
@@ -180,7 +195,7 @@ Measured on the lab of 2026-10-23 unless a line says it is read from upstream's 
 - A v0.5.1.1 volume is not readable by v0.5.0, nor a v0.5.0 volume by v0.4.x: the way back is a restore of an older copy, never a
   downgrade in place. The task store has no migration code, so the switch is made with no task in flight.
 
-## Ten memory types, and v0.5.2 readiness (2026-10-25; the pin stays v0.5.1.1)
+## Ten memory types, and v0.5.2 readiness (2026-10-25; the pin was v0.5.1.1)
 
 **Two types more, and an account's stored allowlist.** `observations` (a choice made in a request and never called a rule, kept as a note the
 control plane counts across conversations and never reads back) and `recent_work` (what a project was last worked on, three lines) join the eight:
