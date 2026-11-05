@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { historyChunks, historySearchText } from '../src/memoryHistory.mjs';
+import { historyChunks, historySearchText, MemoryHistoryLimitError } from '../src/memoryHistory.mjs';
 
 test('history keeps only sanitized user and assistant text with source dates, roles and adjacent turns', () => {
   const chunks = historyChunks([
@@ -31,4 +31,13 @@ test('history prose names dates, speaker, link and historical context; unknown t
   const text = historySearchText([{ conversationTitle: 'Kidney trial', conversationUrl: '/app/projects/p?session=session_a', messages: [{ sourceRole: 'assistant', date: null, text: 'Maybe use a crossover design.', contextOnly: true, confirmed: false }] }]);
   assert.match(text, /Kidney trial/); assert.match(text, /assistant/); assert.match(text, /unknown/); assert.match(text, /\/app\/projects/);
   assert.match(text, /context|历史/);
+});
+
+
+test('source-count, fragment and chunk capacity failures have a dedicated local error type', () => {
+  const isLimit = limit => error => error instanceof MemoryHistoryLimitError && error.limit === limit;
+  assert.throws(() => historyChunks(Array.from({length:1001},()=>({role:'user',content:'A normal message.'}))),isLimit('source_messages'));
+  assert.throws(() => historyChunks([{role:'user',content:'界'.repeat(1_800_001)}]),isLimit('fragments'));
+  assert.throws(() => historyChunks(Array.from({length:1000},(_,index)=>({role:index%2?'assistant':'user',content:'A normal message.'}))),isLimit('chunks'));
+  assert.ok(!(new Error('memory_history_archive_too_large') instanceof MemoryHistoryLimitError));
 });
