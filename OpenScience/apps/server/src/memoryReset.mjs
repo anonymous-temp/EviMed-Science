@@ -1,3 +1,4 @@
+import { withLearnedLibrary } from './learnedLibraryAuthority.mjs';
 import { DOCUMENT_MEMORY_LAYER } from "./derivedMemory.mjs";
 import { LEARNED_METHOD_RECORD_TYPE } from "./learningService.mjs";
 import { migrateProductStore } from "./productPersistence.mjs";
@@ -50,7 +51,7 @@ const LEARNING_JOB_KINDS = Object.freeze(["distill", "consolidate", "learning-ev
 export async function resetLearnedMemory(database, userId) {
   await migrateProductStore(database);
   await migrateScriptUses(database);
-  return database.transaction(async (/** @type {any} */ client) => {
+  return withLearnedLibrary({ database }, userId, () => database.transaction(async (/** @type {any} */ client) => {
     const removed = await client.query(`WITH doomed AS (
         SELECT kind, id, payload->>'recordType' AS record_type FROM evimed_product.documents
         WHERE user_id=$1 AND (
@@ -80,5 +81,5 @@ export async function resetLearnedMemory(database, userId) {
       jobs: Number(jobs.rowCount ?? 0),
       feedback: Number(feedback.rowCount ?? 0),
     };
-  });
+  }));
 }

@@ -1,3 +1,4 @@
+import { withLearnedLibrary } from './learnedLibraryAuthority.mjs';
 /** Server-owned derivation receipts. Accepted input, launch and producer bytes
  * remain independent facts; no model output can manufacture any of them. */
 import { createHash } from 'node:crypto';
@@ -237,6 +238,9 @@ export class GeoContextProvenance {
     if(!await this.documents.matchesSnapshots(policy.ownerId,[...traversal.snapshots.values()],{fields:CONTEXT_ITEM_FIELDS})||!await this.contextItems.currentPolicy(policy))throw fail('geo_learning_compound_invalid');
   }
   async applyCompound(userId,policy,binding,apply) {
+    return withLearnedLibrary(this.documents, userId, () => this.#applyCompound(userId,policy,binding,apply));
+  }
+  async #applyCompound(userId,policy,binding,apply) {
     const result=await this.documents.database.transaction(client=>this.documents.database.withTransactionClient(client,async()=>{
       const generation=await this.generationInput(userId,policy,binding.generationInputRef);
       if(generation.dispatchId!==binding.dispatchId||binding.groupIdentity!==this.compoundGroupIdentity(generation.parents)
@@ -430,6 +434,12 @@ export class GeoContextProvenance {
     return options.transactionClient?operation(options.transactionClient):this.documents.database.transaction(client=>this.documents.database.withTransactionClient(client,()=>operation(client)));
   }
   async retireMerged(userId, source, target, {proposedBy,reason}) {
+    return withLearnedLibrary(this.documents, userId, () => this.#retireMerged(userId, source, target, {proposedBy,reason}));
+  }
+  async #retireMerged(userId, source, target, {proposedBy,reason}) {
+    const liveSource = await this.documents.get(userId, 'method', source.id), liveTarget = await this.documents.get(userId, 'method', target.id);
+    if (!liveSource || !liveTarget || liveSource.revision !== source.revision || liveTarget.revision !== target.revision) throw fail();
+    source = liveSource; target = liveTarget;
     const projectId=originOf(target.payload),policy=await this.policyFor({userId,id:projectId});
     if(policy.kind!=='geo-project'||source.payload.status!=='approved'||target.payload.status!=='approved'
       ||!await this.authorize(policy,'method',source)||!await this.authorize(policy,'method',target))throw fail();
