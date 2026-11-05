@@ -133,7 +133,7 @@ test("the lesson is one per script: three runs of two conversations, and nothing
   assert.equal(scriptLessonFor({ hash: "a".repeat(32), run, recurrence: recurrence(5, SCRIPT_CONVERSATIONS - 1) }), null, "three runs of one conversation are one conversation's habit");
   const lesson = scriptLessonFor({ hash: "a".repeat(32), run, recurrence: recurrence(SCRIPT_RUNS, SCRIPT_CONVERSATIONS) });
   assert.equal(lesson?.trigger, "script");
-  assert.equal(lesson?.idempotencyKey, `distill:script:${"a".repeat(32)}`, "keyed on the script, so a fourth sighting queues nothing new");
+  assert.equal(lesson?.idempotencyKey, `distill:script:scoped-v1:${"a".repeat(32)}`, "keyed on the script, so a fourth sighting queues nothing new");
   assert.deepEqual([lesson?.payload.scope, lesson?.payload.capabilityId, lesson?.payload.scriptHash, lesson?.payload.runs, lesson?.payload.conversations], ["conversation", null, "a".repeat(32), 3, 2]);
   assert.equal(scriptLessonFor({ hash: "a".repeat(32), run: null, recurrence: recurrence(9, 9) }), null);
   assert.equal(scriptLessonFor({ hash: "a".repeat(32), run, recurrence: { ...recurrence(3, 2), scope: "meta-analysis" } })?.payload.capabilityId, "meta-analysis");
