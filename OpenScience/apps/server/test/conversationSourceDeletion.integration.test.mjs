@@ -26,3 +26,19 @@ test('durable deletion intents have no owner cascade and cannot delete a reused 
   assert.ok((await ledger.pending()).some(r=>r.id===row.id));
   await assert.rejects(ledger.assertIdentity(row),{status:404});
 });
+
+test('a replay of the deleted source retains its source fence and cannot leave source lines or replay work behind', options, async t => {
+  const f=await fixture(t), original=await f.commitConversation('a',[{role:'user',text:'Private source.'}],{projectId:'default'});
+  const replay=await f.commitConversation('replay',[{role:'user',text:'Private source.'}],{projectId:'default',engineSession:'evimed-replay-source'});
+  await f.overlay.markReplayed(f.userId,original.archive_uri,replay.archive_uri);
+  const uri=f.seed('profile.md','# Profile\n- Private replay preference.',{type:'profile'});
+  await f.overlay.upsertFile({userId:f.userId,uri,memoryType:'profile',body:'# Profile\n- Private replay preference.'});
+  await f.overlay.syncOrigins(f.userId,uri,{before:'',after:'# Profile\n- Private replay preference.',origin:{engineSession:replay.session,archiveUri:replay.archive_uri,projectId:'default'}});
+  const ledger=new ConversationSourceDeletionLedger(f.database);
+  const ownerStamp=(await f.database.query('SELECT created_at::text AS stamp FROM evimed_control.users WHERE id=$1',[f.userId])).rows[0].stamp;
+  await ledger.put({id:crypto.randomUUID(),userId:f.userId,projectId:'default',accountCreatedAt:ownerStamp,projectCreatedAt:ownerStamp,rootSessionId:'session_a',sessionIds:['session_a'],frozen:{root:{id:'session_a'}},memoryUserRoot:f.sessions.userRoot(f.userId)});
+  assert.ok((await ledger.hiddenMemoryUris(f.userId)).includes(uri));
+  await f.store.removeConversationSource(f.userId,'default',['session_a']);
+  assert.equal(await f.sessions.read(f.userId,uri),null);
+  assert.equal((await f.overlay.commit(f.userId,replay.archive_uri)).state,'abandoned');
+});
