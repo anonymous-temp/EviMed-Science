@@ -319,6 +319,7 @@ export class VcrMatchResults extends VcrStoreBase {
     const { patientLevel, permitted } = this.documents?.judgeReads ? await this.documents.judgeReads(study, viewer, pairs.map((pair) => pair.record)) : { patientLevel: false, permitted: pairs.map(() => false) };
     pairs.forEach((pair, index) => {
       pair.readable = permitted[index] === true;
+      pair.patientLevel = patientLevel === true;
       if (!pair.readable) pair.withheldNote = patientLevel ? READER_GRANT_NOTE_ZH : READER_ROLE_NOTE_ZH;
     });
   }
@@ -558,12 +559,17 @@ export class VcrMatchResults extends VcrStoreBase {
     const shownTallies = exact ? tallies : hideSmall(tallies, VERDICTS, this.minCell);
     // Someone with no patient-level access sees the verdicts of groups large enough to show.
     let inList = ordered;
+    let opened = chosen;
     if (!exact && this.documents?.judgeReads) {
       const { patientLevel } = await this.documents.judgeReads(study, viewer, []);
-      if (!patientLevel) inList = ordered.filter((pair) => /** @type {any} */ (shownTallies)[pair.verdict] !== null);
+      if (!patientLevel) {
+        inList = ordered.filter((pair) => /** @type {any} */ (shownTallies)[pair.verdict] !== null);
+        // Asking for a person by key is not a way round the rule: a person in a group too small to show is not opened.
+        if (opened && /** @type {any} */ (shownTallies)[opened.verdict] === null) opened = null;
+      }
     }
     const page = inList.slice(start, start + size);
-    await this.#judgeReaders(study, viewer, chosen && !page.includes(chosen) ? [...page, chosen] : page);
+    await this.#judgeReaders(study, viewer, opened && !page.includes(opened) ? [...page, opened] : page);
     const funnel = await this.#funnel(study.id, protocolVersionId);
     const failedSummary = this.#failureSummary(failures);
     return {
@@ -574,7 +580,7 @@ export class VcrMatchResults extends VcrStoreBase {
       clauses: exact ? funnel : { judgedPeople: hideAlone(funnel.judgedPeople, this.minCell), rows: funnel.rows.map((row) => hideSmall(row, ["support", "against", "silent", "open", "notApplicable"], this.minCell)) },
       failed: exact ? failedSummary : { ...failedSummary, count: hideAlone(failedSummary.count, this.minCell), reasons: failedSummary.reasons.map((entry) => ({ ...entry, count: hideAlone(entry.count, this.minCell) })), listed: [] },
       changed: exact ? pairs.done.filter((pair) => pair.basisChanged).length : hideAlone(pairs.done.filter((pair) => pair.basisChanged).length, this.minCell),
-      selected: chosen ? await this.#open(study, chosen, viewer) : null,
+      selected: opened ? await this.#open(study, opened, viewer) : null,
     };
   }
 
@@ -628,6 +634,8 @@ export class VcrMatchResults extends VcrStoreBase {
     const rows = await this.judgments.byIds(study.id, ids);
     const fit = rows.find((/** @type {any} */ row) => row.id === pair.fitRowId) ?? null, criteria = rows.find((/** @type {any} */ row) => row.id === pair.criteriaRowId) ?? null;
     if (!fit && !criteria) return null;
+    // A reader with no patient-level access gets the verdict of the pair and no clause of it: a clause row states a fact about one person, and the list gives such a reader groups, not people.
+    if (pair.readable === false && pair.patientLevel === false) return { ...this.#listed(pair), subjectKey: pair.subjectKey, groups: {}, summary: null, clauses: [], withheld: 0 };
     if (pair.readable === false) {
       const clauses = clauseRows(withoutWords(presentJudgment(fit, criteria)));
       return { ...this.#listed(pair), subjectKey: pair.subjectKey, groups: {}, summary: null, clauses, withheld: clauses.reduce((sum, clause) => sum + Number(/** @type {any} */ (clause).evidenceHidden ?? 0), 0) };

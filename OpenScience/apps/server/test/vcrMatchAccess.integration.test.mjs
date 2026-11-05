@@ -69,7 +69,7 @@ test("B5: a viewer reads verdicts, not reasons, groups, summaries or sentences",
   assert.ok(!person.text.includes(SENTENCE));
   assert.equal(data.selected.summary, null);
   assert.deepEqual(data.selected.groups, {});
-  assert.ok(data.selected.clauses.every((clause) => clause.reason === "" && clause.evidence.length === 0));
+  assert.deepEqual(data.selected.clauses, [], "a clause row is a fact about one person: a viewer has the verdict and no clause");
   assert.match(data.selected.reasonsWithheld, /角色/u);
   for (const row of data.trials) assert.ok(!/确诊|岁|ECOG/u.test(String(row.why)), row.why);
 });
@@ -123,6 +123,23 @@ test("B5: a member with the grant reads the reasons and the sentences; exact sma
   }
   const viewer = await judged("viewer", route);
   assert.ok(viewer.body.data.people.every((row) => owner.body.data.tallies[row.verdict] >= 5), "a viewer's list leaves out the groups too small to show");
+});
+
+test("asking for a person by key does not open one in a group too small to show, and what is opened for a viewer has no clause", options, async () => {
+  const route = `direction=trial_to_patient&protocolVersionId=${seeded.protocolId}&limit=100`;
+  const owner = await judged("owner", route);
+  const smallVerdict = Object.entries(owner.body.data.tallies).find(([, value]) => value >= 1 && value < 5)[0];
+  const largeVerdict = Object.entries(owner.body.data.tallies).find(([, value]) => value >= 10)?.[0];
+  const small = owner.body.data.people.find((row) => row.verdict === smallVerdict);
+  const hidden = await judged("viewer", `${route}&subjectKey=${small.subjectKey}`);
+  assert.equal(hidden.body.data.selected, null, "a person in a small group is not opened by key");
+  assert.ok(!hidden.text.includes(small.subjectKey) || hidden.body.data.people.every((row) => row.subjectKey !== small.subjectKey));
+  if (largeVerdict) {
+    const large = owner.body.data.people.find((row) => row.verdict === largeVerdict);
+    const shown = await judged("viewer", `${route}&subjectKey=${large.subjectKey}`);
+    assert.equal(shown.body.data.selected.verdict, largeVerdict);
+    assert.deepEqual(shown.body.data.selected.clauses, []);
+  }
 });
 
 test("minor: the sentence that starts a job prints small counts only to the owner", options, async () => {
