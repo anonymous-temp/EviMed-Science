@@ -12,3 +12,13 @@ test('unclassified native notes retain privacy across generic restatement and ex
   assert.equal(privateByDefault({nativeType:'notes',kind:'note',origin:'explicit',sourcePrivacy:{schemaVersion:1,classification:'unclassified'}}),true);
   assert.equal(privateByDefault({nativeType:'preferences',kind:'preference',sourcePrivacy:{schemaVersion:1,classification:'private'},value:'Review constraints before acting.'}),true);
 });
+
+test('original private or unknown evidence cannot be made public by generic body text or share consent for another purpose',async()=>{
+  const api=await import('../src/memoryPrivacy.mjs');assert.equal(typeof api.sourceAllowsEgress,'function');
+  const original={sourcePrivacy:{schemaVersion:1,classification:'private'},content:'Patient refused blood for religious reasons.'},generic={sourcePrivacy:{schemaVersion:1,classification:'ordinary'},content:'Check requirements.',originalSources:[original]};
+  assert.equal(api.sourceAllowsEgress(generic,{purpose:'method'}),false);
+  assert.equal(api.sourceAllowsEgress(generic,{purpose:'share',contentDigest:'a'.repeat(64),consentDigest:'a'.repeat(64)}),true);
+  assert.equal(api.sourceAllowsEgress(generic,{purpose:'global-method',contentDigest:'a'.repeat(64),consentDigest:'a'.repeat(64)}),false);
+  assert.equal(api.sourceAllowsEgress({nativeType:'notes'},{purpose:'external-api'}),false);
+  assert.equal(api.sourceAllowsEgress({sourcePrivacy:{schemaVersion:1,classification:'ordinary'}},{purpose:'method'}),true);
+});
