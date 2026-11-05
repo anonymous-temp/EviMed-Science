@@ -108,3 +108,13 @@ test('a source version restored by an earlier ordinary undo is still removed aft
   await f.store.removeConversationSource(f.userId,'default',['session_a']);
   assert.equal(await f.sessions.read(f.userId,uri),null);
 });
+
+test('a consolidation that rewrites source text without lineage defers native cleanup instead of claiming semantic erasure',options,async t=>{
+  const f=await fixture(t,{extract:({user})=>({adds:[{uri:`viking://user/${user}/memories/preferences/source.md`,memory_type:'preferences',after:'Original private A fact.'}]})});
+  await f.commitConversation('a',[{role:'user',text:'Original private A fact.'}],{projectId:'default'});await f.worker.processCommits({userId:f.userId});
+  const uri=`${f.root}/preferences/source.md`;
+  await f.sessions.replace(f.userId,uri,'A reworded private fact with independent B.');
+  await f.worker.ingestConsolidation(f.userId,{taskId:'synthetic-consolidation-task',updates:[uri]});
+  await assert.rejects(f.store.removeConversationSource(f.userId,'default',['session_a']),{code:'memory_source_lineage_unverified'});
+  assert.equal(await f.sessions.read(f.userId,uri),'A reworded private fact with independent B.');
+});
