@@ -7,6 +7,7 @@
 // assert that the input carries the join, that the candidate's scope and the pair of result versions it was learnt from
 // reach the store, and that a deployment without the join says it does not know instead of saying "none".
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import test from "node:test";
 
 import { METHOD_SKILL_SCHEMA } from "@evimed/domain";
@@ -132,4 +133,9 @@ test("a lesson with no correction in it names no result versions, and a candidat
   await distiller(odd).applyCandidate({ userId: "u1", projectId: "p1", payload: { trigger: "correction", feedback: [{ trigger: "result-corrected", detail: { original: { versionId: "rv_short" } } }, { trigger: "deliverable-edited" }] } },
     { id: "run_1" }, { candidate: { operation: "create" }, skill: SKILL });
   assert.equal("results" in odd.calls.created[0].provenance, false);
+});
+
+test('scoped inputs never adopt a dispatch generated under whole-session extractor v9', () => {
+  const old = createHash('sha256').update(['run_1', 'correction', '9'].join('\0')).digest('hex').slice(0, 32);
+  assert.notEqual(distillationDispatchId('run_1', 'correction'), `method-distillation-${old}`);
 });
