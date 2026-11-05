@@ -127,3 +127,41 @@ test('changed project incarnation gets a distinct root and an old project fence 
   await f.service.ingestArchive(f.commit, f.context); await f.service.drainDeletes();
   assert.equal((await search(f)).length, 1);
 });
+
+test('previously completed retained archives become searchable without another extraction or duplicate resources', options, async t => {
+  const f = await setup(t); await f.worker.processCommits({ userId: f.userId });
+  const extractions = f.stub.sent('POST', '/api/v1/sessions/dsh-session_a/commit').length;
+  f.service.contexts.forUri = async () => f.context;
+  assert.deepEqual(await search(f), []);
+  await f.service.backfill(); assert.equal((await search(f)).length, 1);
+  const writes = f.calls.filter(c => c[0] === 'write').length;
+  await f.service.backfill(); assert.equal(f.calls.filter(c => c[0] === 'write').length, writes);
+  assert.equal(f.stub.sent('POST', '/api/v1/sessions/dsh-session_a/commit').length, extractions);
+  const coverage = await f.service.coverage(f.userId); assert.equal(coverage.complete, 1); assert.equal(coverage.unavailable, 0);
+});
+
+test('backfill persists retry/source digest and recovers after a failed write and service restart', options, async t => {
+  const f = await setup(t); await f.worker.processCommits({ userId: f.userId }); f.service.contexts.forUri = async () => f.context;
+  f.failWrites(true); await f.service.backfill(); assert.equal((await f.service.coverage(f.userId)).unavailable, 1);
+  const before = (await f.database.query('SELECT source_hash FROM evimed_memory.history_archives WHERE owner_id=$1', [f.userId])).rows[0].source_hash;
+  assert.match(before, /^[a-f0-9]{64}$/);
+  const restarted = Object.assign(Object.create(Object.getPrototypeOf(f.service)), f.service);
+  await f.database.query("UPDATE evimed_memory.history_archives SET next_attempt_at=clock_timestamp()-interval '1 second',lease_until=NULL WHERE owner_id=$1", [f.userId]);
+  f.failWrites(false); await restarted.backfill(); assert.equal((await search(f)).length, 1); assert.equal((await restarted.coverage(f.userId)).complete, 1);
+});
+
+test('backfill honors prior reset fences and excluded conversations without reviving history', options, async t => {
+  const f = await setup(t); await f.worker.processCommits({ userId: f.userId }); f.service.contexts.forUri = async () => f.context;
+  await f.service.reset(f.userId); await f.service.backfill(); assert.equal(f.files.size, 0); assert.deepEqual(await search(f), []);
+  assert.equal((await f.service.coverage(f.userId)).withdrawn, 1);
+  const g = await setup(t); await g.worker.processCommits({ userId: g.userId }); g.service.contexts.forUri = async () => g.context; g.service.eligible = async () => false;
+  await g.service.backfill(); assert.equal(g.files.size, 0); assert.equal((await g.service.coverage(g.userId)).excluded, 1);
+});
+
+test('backfill reports oversized/unavailable archives honestly rather than calling empty coverage complete', options, async t => {
+  const f = await setup(t); await f.worker.processCommits({ userId: f.userId }); f.service.contexts.forUri = async () => f.context;
+  const read = f.context.sessions.read.bind(f.context.sessions);
+  f.context.sessions.read = async (owner, uri, options) => uri.endsWith('/messages.jsonl') ? 'x'.repeat(2_000_001) : read(owner, uri, options);
+  await f.service.backfill(); const coverage = await f.service.coverage(f.userId);
+  assert.equal(coverage.partial, 1); assert.equal(coverage.complete, 0); assert.equal(f.files.size, 0);
+});
