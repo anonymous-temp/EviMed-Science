@@ -26,7 +26,7 @@ The detailed evidence and remaining limits are in the [acceptance record](2026-1
 | --- | --- | --- |
 | P00/P01 | Source and ownership matrix retained; four method-domain packages, shared runtime/contracts and compatibility routes implemented | Matching remains separately owned. No indiscriminate matching-branch merge or production data removal |
 | P02/P07 | Four independently installed bundles exercised through native tools plus the existing R engine; four hosted domain-exclusive projects also passed describe/start/read/report | First candidate release; a two-public-version upgrade is not established |
-| P03 | R10: all 20 frozen ordinary-language runs ended completed; four concurrent-domain and four exclusive-domain chains succeeded. R11 retested the two interpretation defects and frozen request read-back | Completion is not correctness. Some cases still did unnecessary hypothetical work or imposed optional age bounds |
+| P03 | R10: all 20 frozen ordinary-language runs ended completed; four native chains with multiple domains installed and four exclusive-domain chains succeeded. R11 retested the two interpretation defects and frozen request read-back | Completion is not correctness. Some cases still did unnecessary hypothetical work or imposed optional age bounds |
 | P04 | Meaning-bound source assertions, original-message quotation checks, frozen scenarios, result versions, report sources and seed/replicate metadata implemented and tested | Quotation membership does not certify clinical semantics; historical records preserve their original provenance |
 | P05 | Terminal observation/deduplication, cancellation, persisted results and saved-result fallback verified | A stop/start plus cold baseline rebase can fence an AI continuation. The tested three results remained reachable, but two were delivered as saved-result notices, not successful automatic explanations |
 | P06 | Existing literature/knowledge/evidence tools remain independently callable; parameter/source and assessment projections are preserved | Actual configured twenty-paper parser/table-selection benchmark cannot run without its service URL/token. Existing KM/precedent evidence remains scoped; no clinical parser score is claimed |
@@ -35,6 +35,14 @@ The detailed evidence and remaining limits are in the [acceptance record](2026-1
 | P10 | All 12,000 PhysioNet stays profiled, 6,557 age-selected; full five-copy 20,000-row generation; all applicable B/C HR predictions; all 2,139 ACTG participants. Independent replay attempted 35 retained synthetic scenarios | Synthesis fidelity remains red, with some quality checks unavailable. No external-control transportability or individual treatment-counterfactual validation |
 | P11 | Optional suite discovers only actually installed tools, supports arbitrary subsets and adds no sibling installation or mandatory sequence | Composition does not grant data permission or supply an unvalidated disease model |
 | P12 | Versioned packages, compatibility receipts, offline archive builder/installer, standalone installation and hosted activation implemented; integrated source committed/pushed for CI | Public registry publication, operator production admission, main merge and deployment are separate actions and not performed |
+
+Final code qualification: `63a6a6c5ac2adadee69e5b3b53f1c8f68baa9ded` passed
+[the complete integrated workflow](https://github.com/anonymous-temp/EviMed-Science/actions/runs/42106771189),
+including 499/499 numerical cases, full Web/frontend/database checks and the
+actual image/hosted runtime boundary checks. Production E2E and publication
+were skipped. The [final acceptance](2026-11-06-vcr-plugin-final-acceptance.md)
+records outstanding scientific, parser-service and later release boundaries.
+No code or numerical source changed in the closing documentation update.
 
 The original review inventory and matching checklist below remain historical/parallel-owner evidence. They must not be read as freshly retested matching results.
 
@@ -372,7 +380,7 @@ scientific code or enforcing a mandatory cohort-to-trial chain.
 
 - [x] Give each package its own version, dependency lock, compatibility matrix,
       release artifacts, scientific scope, test evidence and migration notes.
-- [ ] Reuse engine method references, rerun affected numerical cases, and run
+- [x] Reuse engine method references, rerun affected numerical cases, and run
       final full CI on the integrated release candidate. Validate standalone
       installation and hosted activation separately.
 - [ ] Publish the actual package/install instructions and tested example. A Git

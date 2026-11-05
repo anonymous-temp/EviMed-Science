@@ -6,6 +6,19 @@ execution, data quality and publication. The branch is
 branch at `da2d191b4`. No production deployment, production database migration,
 main merge or registry publication is part of this delivery.
 
+## Final code qualification
+
+Code revision `63a6a6c5ac2adadee69e5b3b53f1c8f68baa9ded` passed the complete
+[Web/runtime CI](https://github.com/anonymous-temp/EviMed-Science/actions/runs/42106771189)
+and [knowledge-plugin CI](https://github.com/anonymous-temp/EviMed-Science/actions/runs/42106770921).
+The numerical suite passed 499/499 with none skipped; the full Docker build,
+isolated VCR qualification, confirmatory design, signed replay, real hosted
+runtime boundaries and cleanup all succeeded. Production E2E and image
+publication were skipped. The CI stack ran only on a disposable runner.
+The [final acceptance and remaining list](2026-11-06-vcr-plugin-final-acceptance.md)
+supersedes earlier pending-CI wording; historical failures below retain their
+original revision and scope. No production deployment or main merge occurred.
+
 ## Implemented boundaries
 
 - Four separately packaged DSH bundles: virtual cohort, virtual patient,
