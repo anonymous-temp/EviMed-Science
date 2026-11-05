@@ -115,6 +115,8 @@ function fixture({ who = OWNER, roles = {}, overrides = {}, operators = [], sett
       longitudinal: overrides.longitudinal,
       matchStore: { async candidateSubjects() { return ["P-0192"]; } },
       matchJudgments: { async staleTargets() { return ["NCT00000001"]; } },
+      // Whoever the study holds (a document, a table row or a judgment says so), as the composition attaches it.
+      async subjectKnown(/** @type {any} */ _study, /** @type {string} */ subjectKey) { return subjectKey === "P-0192"; },
       patientTrials: { counters: { searches: 0 }, async evaluate(/** @type {any} */ _study, /** @type {any} */ input) { calls.push(["patientTrials.evaluate", ...input.subjectKeys]); return { evaluated: [{}, {}], unavailable: [], notes: [] }; } },
     },
     allows: (/** @type {any} */ user) => vcrAudienceAllows(config, user),
