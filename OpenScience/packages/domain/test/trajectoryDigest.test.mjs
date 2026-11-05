@@ -19,6 +19,13 @@ const call = (seq, tool, sessionId = ROOT) => ({
 });
 const run = { id: "run_1", sessionId: ROOT, kernelRequestIds: ["req_1"], status: "succeeded", artifacts: ["report/weekly.docx"], unverifiedArtifacts: [], outputFiles: [] };
 
+test('tool fallback excludes older root turns and children with no exact turn receipt', () => {
+  const transcript = { header: { sessions: [{ sessionId: ROOT, parentSessionId: null, seedEndSeq: -1 }, { sessionId: CHILD, parentSessionId: ROOT, seedEndSeq: -1 }], runChildSessionIds: [CHILD] },
+    messages: [user(2, 'Earlier request', { turnStartSeq: 0, sourceRequestId: 'old' }), { ...call(3, 'old_tool'), turnStartSeq: 0 },
+      user(11, 'Current request', { turnStartSeq: 10 }), { ...call(12, 'current_tool'), turnStartSeq: 10 }, call(2, 'old_child_tool', CHILD)] };
+  assert.deepEqual(trajectoryDigest(transcript, run).tools, ['current_tool']);
+});
+
 test("the digest keeps the first request of the run's turn and the intervention, with its place, in the person's own words", () => {
   const transcript = {
     header: { sessions: [{ sessionId: ROOT, parentSessionId: null }] },
