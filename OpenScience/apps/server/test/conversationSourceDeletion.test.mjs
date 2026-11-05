@@ -57,3 +57,25 @@ test('projection filtering suppresses deleted transcripts, events and workspace 
   assert.deepEqual(conversationIdsInRequest('session/fork',{args:{request:{sessionId:'a',id:'new'}}}), ['a','new']);
   assert.deepEqual(conversationIdsInRequest('fileUploads/upload',{args:{agentId:'a',request:{name:'file'}}}), ['a']);
 });
+
+import { RuntimeManager } from '../src/runtimeManager.mjs';
+
+test('physical purge requires every independent idle proof and a confirmed provider stop', async () => {
+  const calls = [], project = {userId:'u',id:'p'};
+  let verdict = 'unknown', kernelBusy = false, pending = false, stop = true;
+  const captured = { root:{id:'a'},generation:'g1' }, runtime = {};
+  const manager = Object.assign(Object.create(RuntimeManager.prototype), {
+    config:{runtimeProvider:'docker'},runtimes:new Map([['u:p',runtime]]),starts:new Map(),runtimeStops:new Map(),failedRuntimeStops:new Map(),
+    sourceMaintenance:new Set(),key:()=> 'u:p',runtimeGeneration:()=> 'g1',
+    pluginService:{hasPendingPrompts:async()=>pending},hasRunningRuns:async()=>false,
+    idleVerdict:async()=>verdict,pluginRuntimeBusy:async()=>kernelBusy,
+    stopIdleRuntime:async(_p,options)=>{calls.push('stop'); if(stop&&await options.guard()){manager.runtimes.clear();return true;}return false;},
+    runtimeController:{purgeConversationSource:async()=>{calls.push('files');return {sourceRemoved:true};}},
+  });
+  const purge = () => manager.purgeConversationSource(project,captured,async()=>true);
+  assert.equal((await purge()).sourceRemoved,false); assert.deepEqual(calls,[]);
+  verdict='idle'; kernelBusy=true; await purge(); assert.deepEqual(calls,[]);
+  kernelBusy=false; pending=true; await purge(); assert.deepEqual(calls,[]);
+  pending=false; stop=false; await purge(); assert.deepEqual(calls,['stop']);
+  stop=true; assert.equal((await purge()).sourceRemoved,true); assert.deepEqual(calls,['stop','stop','files']);
+});
