@@ -58,3 +58,11 @@ test('a page-bounded native read cannot assert the absence of a fork seed', asyn
   assert.equal(known.scope.available, true);
   assert.equal(known.scope.partial, true);
 });
+
+test('collected descendants with no ownership receipts are reported as excluded work', async () => {
+  const { collectedRunScope } = await load(), input = fixture();
+  const selected = collectedRunScope(input.run, input.sessions);
+  assert.deepEqual(selected.scope.unverifiedChildSessionIds, ['child']);
+  assert.equal(selected.scope.partial, true);
+  assert.deepEqual(selected.sessions.map(session => session.sessionId), ['root']);
+});
