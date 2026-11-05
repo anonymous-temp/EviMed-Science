@@ -911,6 +911,13 @@ export class CapsuleTransferService {
    * be the bytes it was sealed as; a revoked or taken-down one answers the same refusal a download of it does.
    * @param {string} ownerId @param {string} snapshotId
    */
+  /** A live share must still have the exact active snapshot after asynchronous reading/decryption. */
+  async assertSnapshotActive(ownerId,snapshotId,expectedRevision) {
+    const current=await this.documents.get(ownerId,'preferences',snapshotId);
+    if (!current || current.payload.recordType!=='capsule-snapshot' || current.payload.status==='revoked' || current.revision!==expectedRevision) throw new HttpError(409,'capsule_snapshot_revoked','This hosted snapshot changed while it was read.');
+    return current;
+  }
+
   async snapshotArchive(ownerId, snapshotId) {
     const record = await this.documents.get(ownerId, "preferences", snapshotId);
     if (!record || record.payload.recordType !== "capsule-snapshot") throw new HttpError(404, "capsule_snapshot_not_found", "The snapshot is unavailable.");
@@ -919,6 +926,7 @@ export class CapsuleTransferService {
     const archive = await readProtectedCapsuleFile(directory, `${capsuleAccountHash(ownerId)}-${record.id}.evimedcap`, CAPSULE_TRANSFER_MAX_BYTES)
       ?? await readProtectedCapsuleFile(directory, `${record.id}.evimedcap`, CAPSULE_TRANSFER_MAX_BYTES);
     if (!archive || digest(archive) !== record.payload.archiveSha256) throw new HttpError(503, "capsule_snapshot_unavailable", "The snapshot file is unavailable.");
+    await this.assertSnapshotActive(ownerId,snapshotId,record.revision);
     return { archive, record };
   }
 
