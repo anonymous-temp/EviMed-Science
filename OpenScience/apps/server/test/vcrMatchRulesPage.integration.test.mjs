@@ -17,9 +17,6 @@ import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL;
 const options = { skip: !url && "An isolated PostgreSQL is required", timeout: 60_000 };
 let isolated, database, directory, vcr, semantics;
-/** @type {any[]} */
-const asked = [];
-
 const PEOPLE = 60;
 const COHORT = ["ID,AGE,DIABETES", ...Array.from({ length: PEOPLE }, (_, index) => `S${String(index + 1).padStart(3, "0")},${index % 10 === 0 ? 12 : 50 + (index % 7)},${index % 3 === 0 ? 1 : 0}`)].join("\n");
 const MAP = [
