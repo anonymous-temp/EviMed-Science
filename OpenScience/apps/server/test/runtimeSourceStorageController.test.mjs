@@ -96,3 +96,18 @@ test('a supplied context from another owner incarnation is refused at microsecon
   await assert.rejects(service.capture(f.project, { sessionId: 'a', contextReference: generation.reference, incarnation }), { code: 'runtime_source_identity_changed' });
   assert.equal(calls, 0);
 });
+
+test('raw sources without a cache directory receive a durable receipt mount before purge', async t => {
+  const { createSourceStorageController } = await load(), f = await fixture(t);
+  const storages = path.join(f.project.runtimeDir, 'container-runtime/dsh-home/storages'); await fs.rmdir(storages);
+  let purged = false;
+  const service = createSourceStorageController(f.config, { inspectImage: async () => ({ imageId: 'sha256:pinned', kernelVersion: 'test-pin' }), runtimeStatus: async () => ({ state: 'missing' }),
+    execute: async input => {
+      if (input.operation === 'capture') return { root, sessions: [root] };
+      assert.equal(input.paths.storages, storages);
+      assert.ok((await fs.stat(input.paths.storages)).isDirectory()); purged = true;
+      return { sourceRemoved: true, removedSessionIds: ['a'] };
+    } });
+  const frozen = await service.capture(f.project, { sessionId: 'a', contextReference: null, incarnation });
+  await service.purge(f.project, frozen); assert.equal(purged, true);
+});
