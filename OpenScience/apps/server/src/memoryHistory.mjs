@@ -13,6 +13,19 @@ const MAX_TEXT = 1800;
 const MAX_CHUNK = 6000;
 const dateOf = value => typeof value === 'string' && Number.isFinite(Date.parse(value)) ? new Date(value).toISOString() : null;
 
+/** Only locally proven deterministic capacity limits are terminal for history.
+ * Provider, authorization and source-integrity errors must never imitate them
+ * merely by returning the same message or code. */
+export class MemoryHistoryLimitError extends Error {
+  /** @param {'archive_bytes' | 'source_messages' | 'fragments' | 'chunks'} limit */
+  constructor(limit) {
+    super('memory_history_archive_too_large');
+    this.name = 'MemoryHistoryLimitError';
+    this.code = 'memory_history_archive_too_large';
+    this.limit = limit;
+  }
+}
+
 /** Metadata uses the same boundary as message text, before any clipping. */
 export function historyTitle(value, fallback = 'Conversation') {
   const decision = filterCapturedMessage({ role: 'user', content: String(value ?? '') });
@@ -48,7 +61,8 @@ export function historyChunks(input, { sourceIndices = null } = {}) {
   const messages = [];
   for (const [position, body] of input.entries()) {
     const index = sourceIndices ? sourceIndices[position] : position;
-    if (!Number.isSafeInteger(index) || index < 0 || index >= MAX_MESSAGES) throw new Error('memory_history_archive_too_large');
+    if (!Number.isSafeInteger(index) || index < 0) throw new Error('memory_history_source_invalid');
+    if (index >= MAX_MESSAGES) throw new MemoryHistoryLimitError('source_messages');
     const decision = filterCapturedMessage(body);
     if (!('forward' in decision)) continue;
     const text = decision.forward.parts.map(part => part.text).join('\n');
@@ -60,7 +74,7 @@ export function historyChunks(input, { sourceIndices = null } = {}) {
       if (end < text.length && paragraph > offset + MAX_TEXT / 2) end = paragraph;
       messages.push({ index, sourceRole: decision.forward.role, date: dateOf(decision.forward.created_at), text: text.slice(offset, end).trim(), contextOnly: true, confirmed: false });
       offset = end;
-      if (messages.length > MAX_MESSAGES) throw new Error('memory_history_archive_too_large');
+      if (messages.length > MAX_MESSAGES) throw new MemoryHistoryLimitError('fragments');
     }
   }
   const chunks = []; let group = [];
@@ -74,7 +88,7 @@ export function historyChunks(input, { sourceIndices = null } = {}) {
     group.push(message);
   }
   flush();
-  if (chunks.length > MAX_CHUNKS) throw new Error('memory_history_archive_too_large');
+  if (chunks.length > MAX_CHUNKS) throw new MemoryHistoryLimitError('chunks');
   return chunks;
 }
 
@@ -112,7 +126,11 @@ export class MemoryHistory {
     } catch (error) {
       const code = String(error?.code ?? error?.message ?? '');
       const reason = /^memory_history_[a-z_]+$/.test(code) ? code : 'memory_history_index_unavailable';
-      await this.ledger.finishArchive(commit, context, reason === 'memory_history_archive_too_large' ? 'partial' : 'unavailable', { reason });
+      const capacity = error instanceof MemoryHistoryLimitError;
+      await this.ledger.finishArchive(commit, context, capacity ? 'partial' : 'unavailable', { reason });
+      // The native extraction succeeded independently. Keep honest partial
+      // history coverage without holding its completed commit in the queue.
+      if (capacity) return { state: 'partial', reason, limit: error.limit };
       throw error;
     }
   }
@@ -131,17 +149,17 @@ export class MemoryHistory {
     if (raw === null) throw new Error('memory_history_archive_unavailable');
     const bytes = Buffer.byteLength(raw);
     if (!await this.ledger.bindArchive(commit, context, source, hash(raw), bytes)) throw new Error('memory_history_source_changed');
-    if (bytes > MAX_ARCHIVE_BYTES) throw new Error('memory_history_archive_too_large');
+    if (bytes > MAX_ARCHIVE_BYTES) throw new MemoryHistoryLimitError('archive_bytes');
     const messages = [], sourceIndices = [];
     const sourceLines = raw.split('\n').filter(line=>line.trim());
-    if (sourceLines.length > MAX_MESSAGES) throw new Error('memory_history_archive_too_large');
+    if (sourceLines.length > MAX_MESSAGES) throw new MemoryHistoryLimitError('source_messages');
     for (const [sourceIndex,line] of sourceLines.entries()) {
       if (!line.trim()) continue;
       let message; try { message = JSON.parse(line); } catch { throw new Error('memory_history_archive_invalid'); }
       // An unknown timestamp cannot distinguish human and automated turns in a
       // mixed conversation. eligible() excludes any such automated conversation.
       if (await this.admitMessage(context, source, message)) { messages.push(message); sourceIndices.push(sourceIndex); }
-      if (messages.length > MAX_MESSAGES) throw new Error('memory_history_archive_too_large');
+      if (messages.length > MAX_MESSAGES) throw new MemoryHistoryLimitError('source_messages');
     }
     const resources = this.resourcesFor(context), root = this.root(context, source);
     const removedIndices = new Set();
