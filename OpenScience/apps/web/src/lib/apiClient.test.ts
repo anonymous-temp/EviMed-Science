@@ -483,6 +483,28 @@ describe("apiClient", () => {
     expect(client.getWebOidcStartUrl()).toBe("https://science.example/api/auth/oidc/start?returnTo=%2Fapp%2Fchat");
   });
 
+  it("reads the sign-in methods through a first visit's /me answering 401 while their body arrives", async () => {
+    // A first-time visitor's page asks both at once, and a 401 ends the session it finds: the methods describe the deployment,
+    // not a session, so that end must not turn a good answer into 「登录服务暂时不可用」 (about one first visit in ten, 2026-11-05).
+    const methods = { mode: "evimed", evimed: { sessionUrl: "/api/auth/evimed/session", logoutUrl: "/api/auth/evimed/logout" } };
+    const answer = responseJson(methods);
+    let arrive: () => void = () => {};
+    const arrived = new Promise<void>((resolve) => { arrive = resolve; });
+    let reading: () => void = () => {};
+    const readStarted = new Promise<void>((resolve) => { reading = resolve; });
+    vi.spyOn(answer, "json").mockImplementation(async () => { reading(); await arrived; return { data: methods }; });
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => (
+      String(input).endsWith("/auth/methods") ? answer : responseJson({ error: "Unauthorized" }, { status: 401 })
+    ));
+    const client = await loadClient("https://science.example/api");
+
+    const pending = client.fetchWebAuthMethods();
+    await readStarted;
+    await expect(client.fetchWebMe()).resolves.toBeNull();
+    arrive();
+    await expect(pending).resolves.toEqual(methods);
+  });
+
   it("discovers the EviMed session and logout routes", async () => {
     const methods = {
       mode: "evimed",

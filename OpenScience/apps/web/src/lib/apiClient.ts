@@ -1293,14 +1293,14 @@ function apiUrl(path: string): string {
   return `${apiRoot}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
-async function parseApiResponse<T>(res: Response): Promise<T> {
+async function parseApiResponse<T>(res: Response, { sessionBound = true }: { sessionBound?: boolean } = {}): Promise<T> {
   const owner = responseOwners.get(res) ?? sessionGeneration();
   const contentType = res.headers.get("content-type") ?? "";
   const body = contentType.includes("application/json")
     ? await res.json()
     : await res.text();
 
-  assertSessionGeneration(owner);
+  if (sessionBound) assertSessionGeneration(owner);
   if (!res.ok) {
     const envelope = body && typeof body === "object" ? body as Record<string, unknown> : null;
     const message = envelope && typeof envelope.error === "string"
@@ -1498,7 +1498,10 @@ export async function fetchWebAuthMethods(): Promise<WebAuthMethods> {
   const res = await fetch(apiUrl("/auth/methods"), {
     credentials: "include",
   });
-  return parseApiResponse<WebAuthMethods>(res);
+  // The methods describe the deployment, not a session. A first visit asks for them beside `/me`, whose 401 ends the session it
+  // finds: fenced like a session's answer, the body still being read became a rejection, and the page said the sign-in service
+  // was unavailable (about one first visit in ten, 2026-11-05).
+  return parseApiResponse<WebAuthMethods>(res, { sessionBound: false });
 }
 
 /**
