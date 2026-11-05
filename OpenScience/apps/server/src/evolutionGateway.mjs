@@ -4,7 +4,7 @@ import {HttpError,readJson,sendJson,sendError} from './security.mjs';
 import {evolutionResultEvidence} from './evolutionUsage.mjs';
 export const EVOLUTION_GATEWAY_PATH='/internal/evolution/v1';
 /** Authenticated execution of a published immutable tool, never client-supplied code.
- * resolveRun reads the active accepted run ledger; admit holds shared heavy-work + budget ownership.
+ * resolveRun reads the active accepted run ledger; admit answers host capacity and the project's own limits.
  * @param {{config:any,authenticateWorkload:any,resolveRun:any,runtimeManager:any,controller:any,supply:any,admit:any,onExecution?:any}} dependencies */
 export function createEvolutionGatewayHandler({config,authenticateWorkload,resolveRun,runtimeManager,controller,supply,admit,onExecution=async()=>{}}){
   /** @param {any} req @param {any} res @param {((failure:{code:string,status:number})=>void)|null} [onFailure] the server's failure funnel, so a failure here leaves the error record and the metric label every other gateway's does */

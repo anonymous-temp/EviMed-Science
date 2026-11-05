@@ -8,7 +8,6 @@ import { NewTaskPane } from "./NewTaskPane";
 const mocks = vi.hoisted(() => ({ createAgenda: vi.fn(), startAgenda: vi.fn(), updateAgenda: vi.fn(), getAgenda: vi.fn() }));
 vi.mock("@/lib/autopilotClient", () => mocks);
 vi.mock("@/lib/sourceList", () => ({ listAllSources: vi.fn() }));
-vi.mock("@/lib/evolutionClient", () => ({ useEvolutionAccess: () => ({ enabled: false }), listEvolutionOpportunities: vi.fn(), adoptEvolutionOpportunity: vi.fn() }));
 
 const NativeRequest = globalThis.Request;
 beforeAll(() => {
@@ -22,7 +21,7 @@ const noop = () => {};
 /** The page's own wiring in miniature: the form at /new, 取消 going to the list the way `leaveDraft` does, the shell's route guard mounted beside it. */
 function Page() {
   const navigate = useNavigate();
-  return <><UnsavedRouteGuard /><NewTaskPane projectId="project-one" onChooseExample={noop} onDraftChange={noop} onRecorded={noop} onSaved={noop} onAdopted={noop}
+  return <><UnsavedRouteGuard /><NewTaskPane projectId="project-one" onChooseExample={noop} onDraftChange={noop} onRecorded={noop} onSaved={noop}
     onCancel={() => void navigate("/list", { replace: true })} /></>;
 }
 const routed = () => createMemoryRouter([{ path: "/new", element: <Page /> }, { path: "/list", element: <h1>Tasks</h1> }, { path: "/other", element: <h1>Other</h1> }], { initialEntries: ["/new"] });

@@ -1,4 +1,4 @@
-import { assertEvolutionExperimentalPublication, evolutionDeferred } from './evolutionServingPolicy.mjs';
+import { EVOLUTION_OFFLINE_ONLY } from './evolutionServingPolicy.mjs';
 import { methodHarmTest, EVOLUTION_TOOL_HARM_TEST, canonicalJson } from '@evimed/domain';
 import { setTimeout as delay } from 'node:timers/promises';
 import { HttpError } from './security.mjs';
@@ -25,7 +25,7 @@ import { EVOLUTION_PROJECT_ID } from './internalProjects.mjs';
  *    stops one account's ordinary corrections from retiring a tool for everyone (security finding S3);
  *  - the scientific axis's numbers (`EVOLUTION_TOOL_HARM_TEST`): a correction is ordinary work;
  *  - one test per revision, at most 40 trials. Once it reads `clear` or `harm` it is over. A tool that
- *    cleared and later drifts is the release replay's and the monthly review's to catch, and a repaired
+ *    cleared and later drifts is the offline lab's to catch, and a repaired
  *    revision starts its own test; continuous monitoring would need an alpha-spending boundary and its
  *    own control simulation before it could retire anything (principles 4 and 11).
  *
@@ -120,53 +120,10 @@ function foldHarmTrial(current, observation) {
   const read = methodHarmTest(/** @type {any} */ ({ observations: trials.map(trial => ({ runId: trial.runId, family: trial.runId, outcome: trial.outcome, invoked: true, at: trial.at })) }), EVOLUTION_TOOL_HARM_TEST);
   return { ...current, axis: 'researcher-correction', trials, state: read.state, reason: read.reason, runs: read.runs, bad: read.bad, llr: read.llr };
 }
-/**
- * What a failed replay of a released tool means.
- *
- * A sandbox that could not run the tool is a resource and says nothing about the tool. A tool whose own
- * code started and then failed on every replicate of a hidden case is something else: it is broken for
- * every researcher who calls it, and dependency and environment drift is exactly what the replay after
- * each release exists to find (plan section 7.4). That used to be read as `resource` with "wait"
- * recommended, so a released tool that crashed on every case stayed active.
- * @param {any} result
- */
-export function evolutionReplayDisposition(result) {
-  if (result.ok === true) return 'passed';
-  if (result.status === 'waiting_resource' || result.resourceCode) return 'resource';
-  const scored = (result.assessments ?? []).filter(row => row.independent === true && row.passed === false && row.exposed === false && row.retracted === false);
-  if (scored.some(row => row.reason === 'outside_reference_tolerance' || (row.kind === 'simulation' && row.preRegistered === true && row.monteCarloError
-    && Object.values(row.monteCarloError).every(Number.isFinite)))) return 'method-regression';
-  // Two independent executions of the same case, both started, both failed in the tool's own code.
-  const crashes = new Map();
-  for (const row of scored) if (row.reason === 'candidate_execution_failed' && row.candidateStarted === true) crashes.set(row.caseId, (crashes.get(row.caseId) ?? 0) + 1);
-  return [...crashes.values()].some(count => count >= 2) ? 'execution-regression' : 'resource';
-}
-
-/** Reference identities remain opaque; gold values never enter retrieval tasks. @param {any[]} tools */
-export function evolutionRetrievalBenchmark(tools) {
-  const cases = new Map();
-  for (const row of tools.filter(item => item.payload.status === 'active')) for (const item of row.payload.holdoutCases ?? []) {
-    const key = `${item.id}:${item.sha256}`;
-    if (!cases.has(key)) cases.set(key, { id: key, referenceId: item.id, referenceHash: item.sha256,
-      task: row.payload.whenToUse ?? row.payload.description ?? row.payload.name ?? null,
-      capabilityIds: row.payload.capabilityIds ?? [], track: row.payload.track, acceptableToolIds: [] });
-    cases.get(key).acceptableToolIds.push(row.id);
-  }
-  return [...cases.values()];
-}
-
-/** An absent selector is never perfect performance. @param {any[]} cases @param {any[]} selections */
-export function evolutionRetrievalScore(cases, selections) {
-  const measured = cases.filter(item => item.task && selections.some(selection => selection.caseId === item.id));
-  const correct = measured.filter(item => selections.some(selection => selection.caseId === item.id && item.acceptableToolIds.includes(selection.toolId))).length;
-  return { observation: measured.length ? 'observed' : 'not-observed', totalCases: cases.length,
-    measuredCases: measured.length, correct, selectionAccuracy: measured.length ? correct / measured.length : null };
-}
-
 /** Maintenance uses actual invocation outcomes, not reads of a skill file. */
 export class EvolutionMaintenance {
   /** @param {any} dependencies */
-  constructor({ service, callbacks = {}, judgeService = null }) { this.service = service; this.callbacks = callbacks; this.judgeService = judgeService; }
+  constructor({ service, callbacks = {} }) { this.service = service; this.callbacks = callbacks; }
   /** A strict optimistic write: a revision conflict is thrown to the retry loop, never absorbed.
    * `telemetry` is the ledger's own kind of write for counters derived from a record rather than a change of it
    * (`ProductDocuments.put`): the revision still moves, no history row is kept and `updated_at` stays, which is how
@@ -219,7 +176,7 @@ export class EvolutionMaintenance {
   async observationOf(id, runId) {
     const tool = await this.service.get(id);
     if (!tool) return null;
-    return (await this.service.get(this.observationId(tool, runId)))?.payload ?? tool.payload.observations?.find((/** @type {any} */ item) => item.runId === runId) ?? null;
+    return (await this.service.get(this.observationId(tool, runId)))?.payload ?? null;
   }
   /**
    * Record what one run did with a tool.
@@ -238,9 +195,8 @@ export class EvolutionMaintenance {
     // one-time schema preparation never happens inside a transaction that may roll back.
     if (!await this.service.get(id)) throw new HttpError(404, 'evolution_tool_missing', 'Tool not found.');
     const saved = await this.atomically(id, async () => {
-      let tool = await this.service.get(id);
+      const tool = await this.service.get(id);
       if (!tool) throw new HttpError(404, 'evolution_tool_missing', 'Tool not found.');
-      if (Array.isArray(tool.payload.observations) && tool.payload.observations.length) tool = await this.migrateObservations(tool);
       const observationId = this.observationId(tool, observation.runId);
       const folded = await this.retried(async () => {
         const row = await this.service.get(observationId);
@@ -262,10 +218,8 @@ export class EvolutionMaintenance {
         usage.executionCount = usage.invoked;
         usage.harm = foldHarmTrial(usage.harm, folded.state);
         usage.harmState = usage.harm.overriddenAt ? 'overridden' : usage.harm.state;
-        delete usage.harmEpochs;
-        const { observations: _migrated, ...payload } = current.payload;
-        const countersOnly = said(usage.harm) === said(current.payload.usage?.harm) && usage.harmState === (current.payload.usage?.harmState ?? usage.harmState)
-          && current.payload.observations === undefined && current.payload.usage?.harmEpochs === undefined;
+        const payload = current.payload;
+        const countersOnly = said(usage.harm) === said(current.payload.usage?.harm) && usage.harmState === (current.payload.usage?.harmState ?? usage.harmState);
         const validationLevel=payload.validationLevel==='V4'&&(usage.harmState!=='clear'||usage.attributablePositiveResults<1)?'V3':payload.validationLevel;
         return this.write('tool', id, { ...payload, usage, validationLevel }, current, { telemetry: countersOnly&&validationLevel===payload.validationLevel });
       });
@@ -295,22 +249,7 @@ export class EvolutionMaintenance {
         if(!current.payload.labels?.includes('two-recent-alarms'))await this.service.save('tool',row.id,{...current.payload,labels:[...(current.payload.labels??[]),'two-recent-alarms']},current);
       }
       if(!await this.service.get(reviewId))await this.service.save('maintenance-review',reviewId,{kind:'lineage-harm',lineageId,parentToolIds:[...new Set(alerts.map(item=>item.toolId))],alerts,status:'pending'});
-      await this.callbacks.proposeReview?.({category:'lineage-harm',subjectId:reviewId,directional:true,attemptedPaths:['revision-harm-review','ninety-day-lineage-review'],title:'复核近期两次报警的工具谱系',body:'同一谱系在 90 天内两次报警，已标记并保留现有服务。复核关联原因和修复方向。',options:[{id:'keep',label:'保留并继续观察',operation:'keep'},{id:'repair',label:'研发修复版本',operation:'maintenance-repair'}],recommended:'keep',conservative:'keep'});
-    });
-  }
-  /** One-time move of a record written before runs had their own: each legacy observation becomes its
-   * own record, already counted. They carry no account, so none of them is a harm trial. @param {any} tool */
-  async migrateObservations(tool) {
-    for (const legacy of tool.payload.observations) {
-      if (!legacy?.runId) continue;
-      const observationId = this.observationId(tool, legacy.runId);
-      if (!await this.service.get(observationId)) await this.service.save('observation', observationId, { toolId: tool.id, ...legacy, accountKey: null, migrated: true });
-    }
-    return this.retried(async () => {
-      const current = await this.service.get(tool.id);
-      const { observations: _legacy, ...payload } = current.payload;
-      const { harmEpochs: _epochs, ...usage } = payload.usage ?? {};
-      return this.write('tool', tool.id, { ...payload, usage }, current);
+      await this.callbacks.proposeReview?.({category:'lineage-harm',subjectId:reviewId,directional:true,attemptedPaths:['revision-harm-review','ninety-day-lineage-review'],title:'复核近期两次报警的工具谱系',body:'同一谱系在 90 天内两次报警，已标记并保留现有服务。复核关联原因和修复方向。',options:[{id:'keep',label:'保留并继续观察',operation:'keep'}],recommended:'keep',conservative:'keep'});
     });
   }
   /** The harm verdict becomes a review and a decision an operator sees; it is never the retirement itself. @param {any} tool */
@@ -326,10 +265,8 @@ export class EvolutionMaintenance {
     await this.callbacks.proposeReview?.({ category: 'tool-retire', subjectId: reviewId, materialVersion: tool.payload.artifactDigest ?? 1, directional: true,
       attemptedPaths: ['sequential-harm-test', 'distinct-account-evidence'], title: '复核被多位研究者纠正的科研工具',
       body: `${harm.runs} 位研究者首次使用该工具得到的结果中，有 ${harm.bad} 位作了纠正，高于平常的纠正水平。这是关联，不说明问题由工具造成。软退役后新研究不再使用它，历史结果和版本都保留，之后可以恢复。`,
-      // Under the serving cutover the conservative option of a harm alarm is the protective one: a soft retirement the same decision reverses
-      // (`restoreReview`). Without it the card names `keep`, as it always did.
-      options: [{ id: 'retire', label: '软退役并保留历史', operation: 'maintenance-retire' }, { id: 'keep', label: '保留现有工具', operation: 'keep' }], recommended: 'retire',
-      conservative: this.service.config.evolutionServingOnly === true ? 'retire' : 'keep' });
+      // The conservative option of a harm alarm is the protective one: a soft retirement the same decision reverses (`restoreReview`).
+      options: [{ id: 'retire', label: '软退役并保留历史', operation: 'maintenance-retire' }, { id: 'keep', label: '保留现有工具', operation: 'keep' }], recommended: 'retire', conservative: 'retire' });
     return this.retried(async () => {
       const current = await this.service.get(tool.id);
       if (current.payload.usage?.harm?.reviewId === reviewId) return current;
@@ -358,65 +295,6 @@ export class EvolutionMaintenance {
       return this.service.save('tool', row.id, { ...current.payload, retirement: { ...current.payload.retirement,
         state: 'complete', completedAt: this.service.now().toISOString() } }, current);
     }, {preserveProgress:true});
-  }
-  /** Reuse immutable build generations and all-parent replay, without exposing evaluator numbers.
-   * @param {any} tool @param {any} result @param {string} releaseId */
-  async releaseReplay(tool, result, releaseId) {
-    const disposition = evolutionReplayDisposition(result);
-    if (disposition === 'passed') return { disposition };
-    const id = `evolution-release-review-${evolutionKey([tool.id, tool.payload.artifactDigest, releaseId])}`;
-    if (disposition === 'resource') {
-      await this.callbacks.proposeReview?.({ category: 'release-replay-resource', subjectId: id, resourceOnly: true,
-        title: '科研工具回放等待资源', body: '独立参考、执行环境或依赖尚不可用；这不证明计算方法错误。',
-        options: [{ id: 'wait', label: '等待资源', operation: 'wait' }, { id: 'keep', label: '保留现有版本', operation: 'keep' }], recommended: 'wait', conservative: 'wait', alternative: 'wait' });
-      return { disposition, reviewId: id };
-    }
-    const tools = await this.service.tools();
-    const unique = (tool.payload.holdoutCases ?? []).some(item => !tools.some(other => other.id !== tool.id && other.payload.status === 'active'
-      && (other.payload.holdoutCases ?? []).some(reference => reference.id === item.id && reference.sha256 === item.sha256)));
-    let current = await this.service.get(tool.id);
-    const crashed = disposition === 'execution-regression';
-    if (current.payload.maintenanceState !== 'deprecating') current = await this.service.save('tool', tool.id, { ...current.payload, maintenanceState: 'deprecating',
-      regression: { kind: disposition, releaseId, at: this.service.now().toISOString(), failedCaseIds: result.failedCaseIds, evaluatorHash: result.evaluatorHash, protectedCoverage: unique } }, current);
-    if (!unique) await this.retire(current, 'published-replay-regression');
-    const prior = await this.service.get(id);
-    const review = prior ?? await this.service.save('maintenance-review', id, { kind: 'release-regression', regression: disposition, parentToolIds: [tool.id],
-      status: 'pending', releaseId, protectedCoverage: unique, failedCaseIds: result.failedCaseIds });
-    await this.callbacks.proposeReview?.({ category: 'tool-repair', subjectId: id, materialVersion: releaseId, directional: true,
-      attemptedPaths: ['independent-published-case-replay', 'alternate-reference-coverage-check'], title: crashed ? '修复发布后无法运行的科研工具' : '修复科研工具的回放偏差',
-      body: crashed ? (unique ? '发布后回放时，这个工具在独立算例上已无法运行；它提供唯一算例覆盖，保留并标记待修复。新版本须通过全部原算例。' : '发布后回放时，这个工具在独立算例上已无法运行，旧版本已软退役。可研发修复版本，并通过全部原算例后替换。')
-        : unique ? '实际独立算例发现数值偏差；此工具提供唯一算例覆盖，保留并标记待修复。新版本须通过全部原算例。' : '实际独立算例发现数值偏差，旧版本已软退役。可研发修复版本，并通过全部原算例后替换。',
-      options: [{ id: 'repair', label: '研发修复版本', operation: 'maintenance-repair' }, { id: 'retire', label: unique ? '保留唯一覆盖并复核' : '保留退役状态', operation: 'maintenance-retire' }],
-      recommended: 'repair', conservative: 'repair' });
-    return { disposition, reviewId: review.id, protectedCoverage: unique };
-  }
-  /** A merged version must independently replay every case of every parent. @param {string[]} ids @param {any} candidate */
-  async verifyMerge(ids, candidate) {
-    const parents = await Promise.all(ids.map((id) => this.service.get(id)));
-    if (parents.some((row) => !row)) throw new HttpError(404, 'evolution_tool_missing', 'A merge parent is missing.');
-    const originalCases = parents.flatMap((row) => row.payload.holdoutCases ?? []);
-    if (originalCases.some((/** @type {any} */ item) => originalCases.some((/** @type {any} */ other) => item.id === other.id && item.sha256 !== other.sha256))) throw new HttpError(409, 'evolution_merge_case_conflict', 'Source cases changed identity.');
-    const cases = [...new Map(parents.flatMap((row) => row.payload.holdoutCases ?? []).map((/** @type {any} */ item) => [item.id, item])).values()];
-    const replay = await this.callbacks.replayCases?.({ candidate, cases });
-    if (!replay?.independent || !cases.every((item) => replay.passedCaseIds?.includes(item.id))) throw new HttpError(409, 'evolution_merge_unverified', 'The merged tool must pass every parent case.');
-    return { parents, cases };
-  }
-  /** @param {string[]} ids @param {any} candidate */
-  async merge(ids, candidate) {
-    assertEvolutionExperimentalPublication(this.service.config);
-    const { parents, cases } = await this.verifyMerge(ids, candidate);
-    const registered = await this.service.registerTool({ ...candidate, status: 'active', holdoutCases: cases, lineage: { ...candidate.lineage, parents: ids } });
-    const merged = await this.service.save('tool', registered.id, { ...registered.payload, holdoutCases: cases,
-      lineage: { ...registered.payload.lineage, parents: ids } }, registered);
-    for (const parent of parents) {
-      if (parent.id === merged.id || (parent.payload.status === 'alias' && parent.payload.replacedBy === merged.id)) continue;
-      await this.service.withLock(`tool-lifecycle:${parent.id}`,async()=>{
-        const current=await this.service.get(parent.id);
-        if(current.payload.replacedBy && current.payload.replacedBy!==merged.id) throw new HttpError(409,'evolution_evaluation_invalid','A newer parent branch cannot be overwritten.');
-        await this.service.save('tool',parent.id,{...current.payload,status:'alias',replacedBy:merged.id,aliasSince:this.service.now().toISOString()},current);
-      }, {preserveProgress:true});
-    }
-    return merged;
   }
   /** Restore only the exact branch governed by this review; historical pins remain immutable. @param {any} review @param {any} action */
   async restoreReview(review,action) {
@@ -462,9 +340,9 @@ export class EvolutionMaintenance {
       return {state:'restored',toolIds:parents.map(row=>row.id),reversedReplacementId:replacement?.id??null};
     }, {preserveProgress:true});
   }
-  /** Only a direction is approved here; actual merged publication still requires merge() replay. @param {any} action */
+  /** What serving carries out of a review: keeping or retiring; a repair or a merge is the offline lab's. @param {any} action */
   async executeReview(action) {
-    if (this.service.config.evolutionSearchPaused === true && !['keep', 'retire'].includes(action.option)) return evolutionDeferred();
+    if (!['keep', 'retire'].includes(action.option)) return EVOLUTION_OFFLINE_ONLY;
     const review = await this.service.get(action.subjectId);
     if (!review || review.payload.recordType !== 'evolution-maintenance-review') throw new HttpError(404, 'evolution_tool_missing', 'Maintenance review unavailable.');
     const ids = review.payload.parentToolIds;
@@ -472,17 +350,6 @@ export class EvolutionMaintenance {
       // An override silences the harm alarm for good, so only a person's explicit answer records one; a keep nobody chose leaves the verdict standing.
       if(review.payload.kind==='sequential-harm' && action.source==='user') await this.recordHarmOverride(ids[0],action);
       return this.restoreReview(review,action);
-    }
-    if (action.option === 'repair') {
-      const tool = await this.service.get(ids[0]);
-      const original = (await this.service.dossiers()).find(row => row.id === tool.payload.dossierId || row.payload.toolId === tool.id);
-      if (!original) throw new HttpError(409, 'evolution_evaluation_invalid', 'The preserved original research card is required for a faithful repair.');
-      const id = `evolution-repair-${evolutionKey([review.id, action.actionId])}`;
-      const dossier = await this.service.get(id) ?? await this.service.save('dossier', id, { ...original.payload, id, status: 'planned', buildAttempts: 0,
-        toolId: null, parentToolIds: [tool.id], repairOf: { toolId: tool.id, artifactDigest: tool.payload.artifactDigest }, decisionActionId: action.actionId,
-        goal: `${original.payload.goal}. ${review.payload.kind === 'public-boundary-regression' ? 'Repair the observed public input-boundary regression, preserve the method, and pass every public development and original reference case.' : 'Repair the observed published-reference regression, preserve the method, and pass every original reference case.'}`,
-        ...(review.payload.kind === 'public-boundary-regression' ? {feedback:{passed:false,failedCaseIds:(review.payload.executions??[]).filter(row=>row.executed===true && row.passed===false).map(row=>row.caseId),issueCodes:['public_development_case_failed']}} : {}), createdAt: this.service.now().toISOString() });
-      return this.service.enqueue('build', { dossierId: dossier.id, decisionActionId: action.actionId }, action.actionId);
     }
     if (action.option === 'retire') {
       const tools = await this.service.tools();
@@ -495,82 +362,21 @@ export class EvolutionMaintenance {
       if (unique) return { state: 'protected-coverage' };
       return this.retire(row, 'monthly-direction-review');
     }
-    if (action.option === 'merge') return this.service.enqueue('scout', { maintenanceReviewId: review.id, parentToolIds: ids }, action.actionId);
     return { state: 'kept' };
   }
-  /** @param {string} kind @param {string[]} ids @param {string} month @param {string} title @param {string} body */
-  async proposeMaintenance(kind, ids, month, title, body) {
-    const id = `evolution-maintenance-review-${evolutionKey([kind, ids, month])}`;
-    const previous = await this.service.get(id);
-    const review = previous ?? await this.service.save('maintenance-review', id, { month, kind, parentToolIds: ids, status: 'pending' });
-    await this.callbacks.proposeReview?.({ category: `tool-${kind}`, subjectId: id, materialVersion: month,
-      title, body, directional: true, attemptedPaths: ['retain-current-version', 'compare-reference-coverage'], recommended: 'keep', conservative: 'keep',
-      options: [{ id: 'keep', label: '保留现有工具', operation: 'keep' }, { id: kind === 'merge' ? 'merge' : 'retire',
-        label: kind === 'merge' ? '研发合并版本并复测' : '软退役并保留历史', operation: kind === 'merge' ? 'maintenance-merge' : 'maintenance-retire' }] });
-    return review;
-  }
-  /** @param {any} [input] */
+  /** The operators' monthly figures of a completed month: reads of the ledger, written once. @param {any} [input] */
   async monthly(input = {}) {
     const currentMonth = this.service.now().toISOString().slice(0, 7);
-    const month = input.month ?? currentMonth;
     const metricsMonth = input.metricsMonth ?? new Date(Date.UTC(this.service.now().getUTCFullYear(), this.service.now().getUTCMonth() - 1, 1)).toISOString().slice(0, 7);
-    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month) || !/^\d{4}-(0[1-9]|1[0-2])$/.test(metricsMonth) || metricsMonth >= currentMonth) throw new Error('Monthly metrics require a completed calendar month.');
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(metricsMonth) || metricsMonth >= currentMonth) throw new Error('Monthly metrics require a completed calendar month.');
     const metricsId = `evolution-monthly-metrics-${metricsMonth}`;
-    let metricsRecord = await this.service.get(metricsId);
-    if (!metricsRecord) {
-      const date = new Date(`${metricsMonth}-01T00:00:00Z`);
-      date.setUTCMonth(date.getUTCMonth() - 1);
-      const previous = await this.service.get(`evolution-monthly-metrics-${date.toISOString().slice(0, 7)}`);
-      const metrics = await this.callbacks.monthlyMetrics?.(metricsMonth, { previous: previous?.payload.metrics ?? null }) ?? {};
-      metricsRecord = await this.service.save('monthly-metrics', metricsId, { month: metricsMonth, metrics, observedAt: this.service.now().toISOString() });
-    }
-    if (input.metricsOnly || this.service.config.evolutionSearchPaused === true) return metricsRecord;
-    const tools = await this.service.tools();
-    for (const row of tools) if (row.payload.status === 'alias' && row.payload.aliasSince && this.service.now().getTime() - Date.parse(row.payload.aliasSince) >= 30 * 86400000) await this.retire(row, 'alias-quiet-period');
-    const covered = new Map();
-    for (const row of tools.filter((/** @type {any} */ r) => r.payload.status === 'active')) for (const item of row.payload.holdoutCases ?? []) covered.set(`${item.id}:${item.sha256}`, (covered.get(`${item.id}:${item.sha256}`) ?? 0) + 1);
-    const rows = tools.map((/** @type {any} */ row) => {
-      const u = row.payload.usage;
-      const protectedCoverage = (row.payload.holdoutCases ?? []).some((/** @type {any} */ item) => covered.get(`${item.id}:${item.sha256}`) === 1);
-      return { id: row.id, maintenanceScore: (u.invoked ? u.succeeded / u.invoked : 0) + Math.log1p(u.invoked) + (u.retrieved ? u.invoked / u.retrieved : 0), protectedCoverage };
-    }).sort((/** @type {any} */ a, /** @type {any} */ b) => a.maintenanceScore - b.maintenanceScore);
-    const reviews = [];
-    /** What J12 said about each pair it was asked about, labelled as the judge's (plan 2026-10-06 §4.5). @type {any[]} */
-    const judgeAdvisory = [];
-    const active = tools.filter(row => row.payload.status === 'active' && row.createdAt
-      && this.service.now().getTime() - Date.parse(row.createdAt) >= 30 * 86400000);
-    const lowest = rows.find(row => !row.protectedCoverage && active.some(tool => tool.id === row.id));
-    if (lowest && active.length > 1) reviews.push(await this.proposeMaintenance('retirement', [lowest.id], month,
-      '复核使用收益最低的科研工具', '维护分综合真实调用成功率、调用量和检索转调用率；唯一算例覆盖受到保护。'));
-    for (let left = 0; left < active.length; left++) for (let right = left + 1; right < active.length; right++) {
-      const a = active[left], b = active[right];
-      const overlap = (a.payload.holdoutCases ?? []).some(item => (b.payload.holdoutCases ?? []).some(other => item.id === other.id && item.sha256 === other.sha256));
-      const words = value => new Set(String(value ?? '').toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []);
-      const aWords = words(a.payload.description ?? a.payload.name), bWords = words(b.payload.description ?? b.payload.name);
-      let similar = aWords.size > 0 && [...aWords].filter(word => bWords.has(word)).length / new Set([...aWords, ...bWords]).size >= 0.5;
-      if (overlap && a.payload.track === b.payload.track && this.judgeService) {
-        try {
-          const result = await this.judgeService.judge("J12", { left: { name: a.payload.name, description: a.payload.description }, right: { name: b.payload.name, description: b.payload.description } }, { userId: await this.service.owner(), projectId: "evimed-evolution", module: "evolution" });
-          if (['settled', 'escalated'].includes(result?.outcome) && ['same', 'related', 'different'].includes(result.value?.relation)) {
-            // Advisory until the site is calibrated (review J-7): which merge reviews are proposed is the lexical rule's until the judge's
-            // "same / related / different" has been measured. A decision from a calibrated site decides; any other is recorded and read by nothing.
-            const applied = result.calibration === 'calibrated';
-            judgeAdvisory.push({ source: 'judge', site: 'J12', tools: [a.id, b.id], relation: result.value.relation, calibration: result.calibration ?? 'uncalibrated', appliedToReview: applied });
-            if (applied) similar = result.value.relation === "same";
-          }
-        } catch { /* Keep the existing lexical fallback; case overlap is still required. */ }
-      }
-      if (overlap && similar && a.payload.track === b.payload.track) reviews.push(await this.proposeMaintenance('merge', [a.id, b.id], month,
-        '复核相似且算例重叠的科研工具', '这里只提合并研发方向；新版本必须独立通过全部来源算例，原版本先保留为别名。'));
-    }
-    const benchmark = evolutionRetrievalBenchmark(tools);
-    const benchmarkId = `evolution-retrieval-${month}`;
-    if (!await this.service.get(benchmarkId)) await this.service.save('retrieval-benchmark', benchmarkId, { month, cases: benchmark, status: 'pending', score: evolutionRetrievalScore(benchmark, []) });
-    if (benchmark.length) await this.service.enqueue('evaluate', { action: 'retrieval-selection', benchmarkId }, `retrieval:${month}`);
-    const report = { month, metricsMonth, tools: rows, reviews: reviews.map(row => row.id), judgeAdvisory, retrievalBenchmarkId: benchmarkId, coverage: covered.size, activeBytes: tools.filter((/** @type {any} */ row) => row.payload.status === 'active').reduce((/** @type {number} */ sum, /** @type {any} */ row) => sum + Number(row.payload.artifactBytes ?? 0), 0), metrics: metricsRecord.payload.metrics };
-    const id = `evolution-maintenance-${month}`;
-    const previous = await this.service.get(id);
-    return this.service.save('maintenance', id, report, previous);
+    const known = await this.service.get(metricsId);
+    if (known) return known;
+    const date = new Date(`${metricsMonth}-01T00:00:00Z`);
+    date.setUTCMonth(date.getUTCMonth() - 1);
+    const previous = await this.service.get(`evolution-monthly-metrics-${date.toISOString().slice(0, 7)}`);
+    const metrics = await this.callbacks.monthlyMetrics?.(metricsMonth, { previous: previous?.payload.metrics ?? null }) ?? {};
+    return this.service.save('monthly-metrics', metricsId, { month: metricsMonth, metrics, observedAt: this.service.now().toISOString() });
   }
 }
 /** @param {any} dependencies */

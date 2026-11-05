@@ -3,7 +3,7 @@ import { contextGenerationPaths, prepareContextGeneration, verifyContextGenerati
 import { contextPolicyIdentity, sameContextPolicy } from './geoContextItems.mjs';
 import { PLATFORM_SKILLS_RUNTIME_DIR, platformSkillGenerationRoot, verifyPlatformSkillGeneration } from "./platformSkillSupply.mjs";
 import {assertExtensionAssessmentAuthority} from './extensionAssessmentAuthority.mjs';
-import { RUNTIME_YIELDED_CODE, backgroundRuntimeLimit, isInternalProjectOf, isEvolutionProject, isDataAnalysisProject } from "./internalProjects.mjs";
+import { RUNTIME_YIELDED_CODE, backgroundRuntimeLimit, isInternalProjectOf, isDataAnalysisProject } from "./internalProjects.mjs";
 import { projectLibraryViewDir } from "./libraryScope.mjs";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { Buffer } from "node:buffer";
@@ -2692,9 +2692,7 @@ export function buildRuntimeLaunchPlan(config, project, port, {
     if (transport !== "unix") {
       throw new HttpError(400, "invalid_runtime_transport", "Unsupported runtime transport.");
     }
-    const evaluationNetwork = config.evolutionEnabled === true && isEvolutionProject(project.id)
-      ? String(config.evolutionEvaluationNetwork ?? "").trim() : "";
-    const networkMode = evaluationNetwork || String(config.runtimeNetworkMode ?? "").trim();
+    const networkMode = String(config.runtimeNetworkMode ?? "").trim();
     if (!config.allowRuntimeHostNetwork && runtimeNetworkUsesHostOrContainer(networkMode)) {
       throw new HttpError(
         403,
@@ -3633,8 +3631,6 @@ export class RuntimeManager {
   constructor(config, {
     assessmentAuthority = null,
     agentRegistry = null,
-    recordRuntimeEgressDispatch = null,
-    readRuntimeEgressRun = null,
     workloadTokenWriter = refreshEviMedWorkloadToken,
     setWorkloadTimer = setTimeout,
     clearWorkloadTimer = clearTimeout,
@@ -3650,8 +3646,6 @@ export class RuntimeManager {
     assertExtensionAssessmentAuthority(assessmentAuthority);this.#assessmentAuthority=assessmentAuthority;
     this.config = config;
     this.runtimeCreationMutation = runtimeCreationMutation;
-    this.recordRuntimeEgressDispatch = recordRuntimeEgressDispatch;
-    this.readRuntimeEgressRun = readRuntimeEgressRun;
     /** @type {any} */ this.pluginService = null;
     /** @type {any} Server-owned database for the short per-session prompt fence. */ this.promptAdmissionDatabase=null;
     /** @type {any} Immutable personal methods, assigned only by the composition root. */
@@ -6110,22 +6104,6 @@ export class RuntimeManager {
    * caller from the same decision its research context gets (`attended`); a person-initiated path says `false`.
    * @returns {Promise<void>}
    */
-  /** Control-only observed proof; unsupported providers and failed probes never block delivery. @param {any} input */
-  async captureRunEgressProof({project,runId,phase,signal}) {
-    if(this.config.evolutionEnabled!==true||!isEvolutionProject(project.id)||String(this.config.runtimeProvider??'docker')!=='docker'||!this.runtimeController)return{nativeCoverageVerified:false,reason:'provider_unsupported'};
-    try{return await this.runtimeController.captureRunEgressProof(project,runId,phase,{signal});}catch{return{nativeCoverageVerified:false,reason:'proof_probe_unavailable'};}
-  }
-  /** Read the controller-authenticated pair after a complete durable run, never transcript self-certification. @param {any} input */
-  async verifyRunEgressCoverage({project,run,signal}) {
-    if(!run?.id||!this.readRuntimeEgressRun)return{nativeCoverageVerified:false,reason:'proof_binding_invalid'};
-    let authoritative;
-    try{authoritative=await this.readRuntimeEgressRun(project,run.id);}catch{return{nativeCoverageVerified:false,reason:'proof_binding_invalid'};}
-    if(!authoritative||authoritative.id!==run.id||!authoritative.finishedAt||!authoritative.promptDispatchStartedAt||authoritative.finishedAt!==run.finishedAt||authoritative.promptDispatchStartedAt!==run.promptDispatchStartedAt)return{nativeCoverageVerified:false,reason:'proof_binding_invalid'};
-    const end=await this.captureRunEgressProof({project,runId:run.id,phase:'end',signal});
-    if(end.nativeCoverageVerified!==true)return end;
-    try{return await this.runtimeController.verifyRunEgressProof(project,run.id,{signal,promptDispatchStartedAt:authoritative.promptDispatchStartedAt,completedAt:authoritative.finishedAt});}catch{return{nativeCoverageVerified:false,reason:'proof_verification_unavailable'};}
-  }
-
   async dispatchPrompt(project, sessionId, input) {
     try {
       const context = await this.ensureContextPolicyGeneration(project);
@@ -6212,7 +6190,6 @@ export class RuntimeManager {
     }
     await this.writePromptAttendance(project, { sessionId, requestId, content: [{ type: "text", text }] }, { runId, unattended: dispatchedUnattended, origin: "dispatch" });
     await this.enforceProjectQuota(project);
-    if(runId&&this.config.evolutionEnabled===true&&isEvolutionProject(project.id))await this.captureRunEgressProof({project,runId,phase:'start'});
     this.beginProxy(project);
     try {
       await this.withRuntimeDeadline(
@@ -6242,10 +6219,6 @@ export class RuntimeManager {
         await withSessionPromptAdmission(this,project,sessionId,async signal=>{
           // Bind the authenticated actor under the same fence as native input.
           if(recordPromptActor) await recordPromptActor(promptRequest);
-          if(runId && this.config.evolutionEnabled===true && isEvolutionProject(project.id)) {
-            try {await this.recordRuntimeEgressDispatch?.(project,runId,new Date().toISOString());}
-            catch {/* Without a durable dispatch cutoff exposure remains unknown. */}
-          }
           signal.throwIfAborted();
           await withProjectStorageMutation(project,async()=>{
             signal.throwIfAborted();
@@ -6757,9 +6730,6 @@ export class RuntimeManager {
       throw new HttpError(429, "runtime_limit_exceeded", `Too many running runtimes for this user; limit is ${maxPerUser}.`, {
         retryAfterSeconds: 5,
       });
-    }
-    if(this.config.evolutionEnabled===true&&isEvolutionProject(project.id)&&maxGlobal!=null&&this.runtimeCount()-own>=maxGlobal-1){
-      throw this.roomFull(project,'Evolution waits to preserve the final research runtime slot.',60);
     }
     if (maxGlobal != null && this.runtimeCount() - own >= maxGlobal) {
       throw this.roomFull(project, `Every runtime slot of the server is taken; limit is ${maxGlobal}.`, ROOM_RETRY_AFTER_SECONDS);

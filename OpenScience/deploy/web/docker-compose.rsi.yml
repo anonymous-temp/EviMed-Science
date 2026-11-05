@@ -1,6 +1,8 @@
-# Opt-in serving transport only. The owner binds this directory after provisioning;
-# it contains online.json, public trust records, agreement and production OSS identity.
-# No lab signing key or lab credential is mounted in production.
+# Opt-in RSI import layer only. The owner binds this directory after provisioning. A directory deployment (no cloud,
+# `rsi-lab-install.sh production` writes it: /var/lib/evimed-rsi/online) holds online.json, the public trust records and
+# bundles/, which the pull timer fills; an OSS deployment holds online.json, public trust records, agreement and production
+# OSS identity. No lab signing key or lab credential is mounted in production, and the mount is read-only: this container
+# reads bundles and never writes them.
 services:
   open-science-web:
     environment:

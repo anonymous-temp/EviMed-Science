@@ -172,6 +172,9 @@ CREATE TABLE IF NOT EXISTS evimed_product.revisions (
 CREATE INDEX IF NOT EXISTS product_result_replay_unrecorded_completion_idx ON evimed_product.documents (updated_at,user_id) WHERE kind='result-replay' AND deleted_at IS NULL AND payload->>'completionOutboxResultKey' IS DISTINCT FROM COALESCE(payload->>'outputVersionId','none');
 CREATE INDEX IF NOT EXISTS product_result_replay_completion_idx ON evimed_product.documents (updated_at,user_id)
   WHERE kind='result-replay' AND deleted_at IS NULL;
+-- What serving dated for retention (evolutionRetention.mjs). Rows that carry no date, every row written before the date existed included, are not in it.
+CREATE INDEX IF NOT EXISTS product_documents_retain_until_idx ON evimed_product.documents ((payload->>'retainUntil'))
+  WHERE kind='knowledge' AND deleted_at IS NULL AND payload->>'retainUntil' IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS evimed_product.prompt_stop_intents (
  user_id text NOT NULL,project_id text NOT NULL,session_id text NOT NULL,run_id text NOT NULL,

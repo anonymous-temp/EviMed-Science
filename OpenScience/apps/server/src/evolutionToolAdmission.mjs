@@ -5,7 +5,7 @@ import { HttpError } from "./security.mjs";
  *
  * Two questions, answered before the container exists, and neither is held while it runs.
  *
- * Host capacity and the module's own budget are decided in a short transaction: the heavy-work
+ * Host capacity is decided in a short transaction: the heavy-work
  * lock is taken, looked at and released with it. It used to be held for the whole execution —
  * `work()` ran inside `database.transaction` — so while one tenant's call ran (up to the 75 s
  * client timeout) every document export, result replay, VCR compute and extension claim on the
@@ -19,11 +19,10 @@ import { HttpError } from "./security.mjs";
  * calls in a minute (`evolutionToolCallsPerMinute`). A refusal is a 429 with a named code; the
  * counters say how often each question refused.
  *
- * @param {{ config: any, database: any, canRun: () => Promise<boolean>, heavyWorkAdmission: (client: any, kind: string) => Promise<boolean>,
- *   isInternalProject: (projectId: string) => boolean, dailyCost: (client: any) => Promise<number>, now?: () => number }} dependencies
+ * @param {{ config: any, database: any, canRun: () => Promise<boolean>, heavyWorkAdmission: (client: any, kind: string) => Promise<boolean>, now?: () => number }} dependencies
  */
-export function createEvolutionToolAdmission({ config, database, canRun, heavyWorkAdmission, isInternalProject, dailyCost, now = Date.now }) {
-  const counters = { admitted: 0, refusedHostCapacity: 0, refusedBudget: 0, refusedProjectConcurrency: 0, refusedProjectRate: 0, refusedBusy: 0 };
+export function createEvolutionToolAdmission({ config, database, canRun, heavyWorkAdmission, now = Date.now }) {
+  const counters = { admitted: 0, refusedHostCapacity: 0, refusedProjectConcurrency: 0, refusedProjectRate: 0, refusedBusy: 0 };
   /** @type {Map<string, number>} */
   const inFlight = new Map();
   /** @type {Map<string, { until: number, count: number }>} */
@@ -60,10 +59,6 @@ export function createEvolutionToolAdmission({ config, database, canRun, heavyWo
           if (!await canRun() || !await heavyWorkAdmission(client, "compute")) {
             counters.refusedHostCapacity += 1;
             throw new HttpError(503, "evolution_temporarily_unavailable", "Execution waits for host capacity.");
-          }
-          if (isInternalProject(scope.project.id) && await dailyCost(client) >= config.evolutionDailyBudgetCny) {
-            counters.refusedBudget += 1;
-            throw new HttpError(402, "usage_budget_exceeded", "Evolution reached its own daily budget.");
           }
         });
         counters.admitted += 1;

@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
-import { EVOLUTION_EXECUTABLE_OPERATIONS, EVOLUTION_ONE_WAY_OPERATIONS, evolutionDecisionClass } from "@evimed/domain";
+import { EVOLUTION_EXECUTABLE_OPERATIONS } from "@evimed/domain";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { ProductDocuments, ProductJobs } from "../src/productStore.mjs";
 import { NotificationService } from "../src/notificationService.mjs";
@@ -42,34 +42,28 @@ function engine(callbacks = {}, config = {}) {
     execute: async (action) => { executed.push(action); return { option: action.option }; }, ...callbacks } });
   return { service, decisions };
 }
-const direction = (id, extra = {}) => ({ subjectId: id, category: "implementation", title: `选择方向 ${id}`, body: "已尝试两条路径。", directional: true, attemptedPaths: ["initial", "repair"],
-  options: [{ id: "go", label: "继续研发", operation: "build" }, { id: "hold", label: "保留结果并等待", operation: "wait" }], recommended: "go", conservative: "hold", ...extra });
+/** A card as the harm review writes one: saved pending, delivered when the digest or the proposer delivers it. */
+let cards = 0;
+const pending = (id, extra = {}) => { cards += 1; const service = new EvolutionService({ documents, jobs, notifications, ownerId: owner, now: () => clock });
+  return service.save("decision", `card-${id}-${cards}`, { subjectId: `subject-${id}`, category: "tool-retire", decisionClass: "B", status: "pending", history: [], overridden: false, title: `选择方向 ${id}`, body: "已尝试两条路径。",
+    options: [{ id: "go", label: "保留", operation: "keep" }, { id: "hold", label: "保留结果并等待", operation: "wait" }], recommended: "go", conservative: "hold", createdAt: clock.toISOString(), ...extra }); };
 const day = () => { clock = new Date(clock.getTime() + 86_400_000); };
-const reviews = { refresh: async () => ({ family: "deepseek", recommended: "go" }), review: async () => ({ independent: true, family: "qwen", recommended: "go" }) };
 
-test("choosing the option that is not recommended is an override, and decisions nobody saw are not agreement (F13)", options, async () => {
+test("choosing the option that is not recommended is an override, and the latest answer is the one that counts (F13)", options, async () => {
   const { decisions } = engine();
-  for (let index = 0; index < 10; index++) {
-    day();
-    const card = await decisions.deliver(await decisions.propose(direction(`overruled-${index}`)));
-    const answered = await decisions.resolve(card.id, { expectedRevision: card.revision, option: "hold" });
-    assert.equal(answered.payload.overridden, true, "an answer that is not the recommendation overrules it, on time or not");
-  }
   day();
-  const eleventh = await decisions.propose(direction("overruled-10"));
-  assert.equal(eleventh.payload.status, "pending", "ten overruled cards in a row do not earn the engine its own decisions");
-  assert.equal(eleventh.payload.decisionClass, "B");
-  // Ten decisions the engine took itself (class A, the operator saw none of them) are not ten agreements either.
-  for (let index = 0; index < 10; index++) await decisions.propose(direction(`unseen-${index}`, { category: "tool-repair", directional: false }));
-  const next = await decisions.propose(direction("unseen-next", { category: "tool-repair" }));
-  assert.equal(next.payload.status, "pending");
-  assert.equal(next.payload.decisionClass, "B");
+  const card = await decisions.deliver(await pending("overruled"));
+  const answered = await decisions.resolve(card.id, { expectedRevision: card.revision, option: "hold" });
+  assert.equal(answered.payload.overridden, true, "an answer that is not the recommendation overrules it, on time or not");
+  const again = await decisions.resolve(card.id, { expectedRevision: answered.revision, option: "go" });
+  assert.equal(again.payload.overridden, false);
+  assert.equal(again.payload.history.length, 2);
 });
 
 test("a card is delivered as one inbox item that marks its recommendation, and the item closes when the decision is made (F19)", options, async () => {
-  const { decisions, service } = engine(reviews);
+  const { decisions, service } = engine();
   day();
-  const card = await decisions.deliver(await decisions.propose(direction("closing")));
+  const card = await decisions.deliver(await pending("closing"));
   const item = await notifications.get(owner, card.payload.notificationId);
   assert.deepEqual(item.actions.map((action) => [action.id, action.style]), [["go", "primary"], ["hold", "neutral"]]);
   assert.equal(item.resolvedAt, null);
@@ -79,116 +73,76 @@ test("a card is delivered as one inbox item that marks its recommendation, and t
   assert.deepEqual(closed.resolution, { actionId: "hold", source: "user" });
   // The same when the card expires instead of being answered: closed as a default, never as the operator's own answer.
   day();
-  const lapsing = await decisions.deliver(await decisions.propose(direction("lapsing")));
+  const lapsing = await decisions.deliver(await pending("lapsing"));
   clock = new Date(Date.parse(lapsing.payload.dueAt) + 1000);
   await decisions.expire(lapsing.id);
   const lapsed = await notifications.get(owner, lapsing.payload.notificationId);
-  assert.deepEqual(lapsed.resolution, { actionId: "go", source: "default" });
+  assert.deepEqual(lapsed.resolution, { actionId: "hold", source: "default" });
   assert.equal((await service.get(lapsing.id)).payload.status, "executed");
 });
 
-test("a one-way door is class C, takes its conservative option at expiry without any review, and nothing outside the executor's list can run (F14)", options, async () => {
-  const review = { refresh: async () => { throw new Error("a one-way door is not refreshed"); }, review: async () => { throw new Error("nor reviewed"); } };
-  const { decisions, service } = engine(review);
+test("an unanswered card takes its conservative option, never the recommendation, and nothing outside the executor's list can run (F14)", options, async () => {
+  const { decisions, service } = engine();
   day();
-  const proposed = await decisions.propose(direction("one-way", { category: "data", options: [{ id: "delete", label: "删除原始数据", operation: "delete-data" }, { id: "keep", label: "保留", operation: "keep" }], recommended: "delete", conservative: "keep" }));
-  assert.equal(proposed.payload.decisionClass, "C");
-  const card = await decisions.deliver(proposed);
+  const card = await decisions.deliver(await pending("one-way", { decisionClass: "C", options: [{ id: "keep", label: "保留", operation: "keep" }, { id: "wait", label: "等待", operation: "wait" }], recommended: "wait", conservative: "keep" }));
   clock = new Date(Date.parse(card.payload.dueAt) + 1000);
   const expired = await decisions.expire(card.id);
   assert.equal(expired.payload.selected, "keep");
-  assert.equal(expired.payload.source, "default");
+  assert.equal(expired.payload.source, "conservative");
   assert.deepEqual(executed.map((action) => action.option), ["keep"]);
   assert.equal((await service.get(card.id)).payload.decisionClass, "C");
-  // The class comes from what an option can do, and the executor refuses what is not on its list, whoever chose it.
-  for (const operation of EVOLUTION_ONE_WAY_OPERATIONS) {
-    assert.equal(evolutionDecisionClass({ options: [{ id: "x", operation }, { id: "y" }] }), "C");
-    assert.throws(() => evolutionExecutableOperation({ options: [{ id: "x", operation }], option: "x" }), { code: "evolution_action_unsupported" });
-    assert.ok(!EVOLUTION_EXECUTABLE_OPERATIONS.includes(operation));
-  }
+  // The executor refuses what is not on its list, whoever chose it.
+  assert.throws(() => evolutionExecutableOperation({ options: [{ id: "x", operation: "delete-data" }], option: "x" }), { code: "evolution_action_unsupported" });
   for (const operation of EVOLUTION_EXECUTABLE_OPERATIONS) assert.equal(evolutionExecutableOperation({ options: [{ id: "x", operation }], option: "x" }), operation);
   assert.throws(() => evolutionExecutableOperation({ options: [{ id: "x" }], option: "x" }), { code: "evolution_action_unsupported" });
 });
 
-test("an expiry whose review cannot be had is said on the card, tried again, and then takes the conservative option (F14)", options, async () => {
-  const { decisions, service } = engine({ refresh: async () => { throw Object.assign(new Error("crossref down"), { code: "evolution_refresh_unavailable" }); }, review: async () => null });
-  day();
-  const card = await decisions.deliver(await decisions.propose(direction("review-down")));
-  clock = new Date(Date.parse(card.payload.dueAt) + 1000);
-  const first = await decisions.expire(card.id);
-  assert.equal(first.payload.status, "pending");
-  assert.deepEqual([first.payload.expiry.state, first.payload.expiry.attempts, first.payload.expiry.code], ["review-unavailable", 1, "evolution_refresh_unavailable"]);
-  const retry = await database.query("SELECT run_after FROM evimed_product.jobs WHERE user_id=$1 AND idempotency_key=$2", [owner, `evolution:expire:${card.id}:retry:1`]);
-  assert.equal(retry.rows.length, 1);
-  assert.ok(new Date(retry.rows[0].run_after) > clock, "asked again later, not at once");
-  clock = new Date(clock.getTime() + 3_600_000 + 1000);
-  assert.equal((await decisions.expire(card.id)).payload.expiry.attempts, 2);
-  clock = new Date(clock.getTime() + 3_600_000 + 1000);
-  const last = await decisions.expire(card.id);
-  assert.equal(last.payload.status, "executed");
-  assert.equal(last.payload.selected, "hold", "never the unreviewed recommendation");
-  assert.equal(last.payload.source, "conservative");
-  assert.equal(last.payload.evidence.reviewUnavailable.attempts, 3);
-  assert.equal((await service.get(card.id)).payload.expiry.state, "conservative-taken");
-  assert.equal((await notifications.get(owner, card.payload.notificationId)).resolution.source, "default");
-});
-
 test("an answer that arrives while the expiry is carrying out another option does not borrow its action (F14)", options, async () => {
   let failOnce = true;
-  const { decisions, service } = engine({ ...reviews, execute: async (action) => {
+  const { decisions, service } = engine({ execute: async (action) => {
     if (failOnce) { failOnce = false; throw Object.assign(new Error("executor unavailable"), { status: 503 }); }
     executed.push(action); return { option: action.option };
   } });
   day();
-  const card = await decisions.deliver(await decisions.propose(direction("racing")));
+  const card = await decisions.deliver(await pending("racing"));
   clock = new Date(Date.parse(card.payload.dueAt) + 1000);
   await assert.rejects(decisions.expire(card.id), { status: 503 });
   const inFlight = await service.get(card.id);
   assert.equal(inFlight.payload.status, "executing");
-  await assert.rejects(decisions.resolve(card.id, { expectedRevision: inFlight.revision, option: "hold" }), { code: "evolution_decision_executing" });
+  await assert.rejects(decisions.resolve(card.id, { expectedRevision: inFlight.revision, option: "go" }), { code: "evolution_decision_executing" });
   const done = await decisions.expire(card.id);
-  assert.equal(done.payload.selected, "go");
-  assert.deepEqual(executed.map((action) => action.option), ["go"]);
+  assert.equal(done.payload.selected, "hold");
+  assert.deepEqual(executed.map((action) => action.option), ["hold"]);
 });
 
-test("a digest over the inbox's limit is cut with a count and still delivered, and lists what was achieved, not what was used (F15)", options, async () => {
+test("a digest with more than it can list says so and still delivers, and lists what was achieved, not what was used (F15)", options, async () => {
   const { decisions, service } = engine();
   day();
-  // A hundred and twenty waits for material leave no decision and no line (owner ruling of 2026-10-12); what overflows the digest is the day's evaluations.
-  for (let index = 0; index < 120; index++) {
-    await decisions.propose({ category: index % 2 ? "resource" : "worker-resource", subjectId: `wait-${index}`, resourceOnly: true, title: index % 2 ? "研发线索等待资料" : "进化任务等待资源",
-      body: `${"需要新的公开数据。".repeat(30)}${index}`, options: [{ id: "wait", label: "等待", operation: "wait" }, { id: "rescout", label: "重新检索", operation: "rescout" }], recommended: "wait", conservative: "wait" });
-  }
-  assert.equal((await service.list("decision")).filter((row) => row.payload.decisionClass === "D").length, 0);
-  for (let index = 0; index < 20; index++) await service.save("evaluation", `evolution-evaluation-overflow-${index}`, { at: new Date(clock.getTime() + 3600_000 - 60_000).toISOString(), units: [{ capabilityId: `capability-${index}`, type: "method", allStagesValid: true }] });
-  await service.registerTool({ id: "new-today", track: "M", status: "active", name: "今日新工具", artifactDigest: "d1", toolKind: "workflow", smokePassed: true });
-  const old = await service.registerTool({ id: "used-today", track: "M", status: "active", name: "早已上线的工具", artifactDigest: "d2", toolKind: "workflow", smokePassed: true });
+  const publishedAt = new Date(clock.getTime() + 3600_000 - 60_000).toISOString();
+  for (let index = 0; index < 12; index++) await service.save("tool", `new-today-${index}`, { track: "M", status: "active", name: `今日新工具${index}`, artifactDigest: `d${index}`, toolKind: "workflow", smokePassed: true, createdAt: publishedAt });
+  await service.save("tool", "used-today", { track: "M", status: "active", name: "早已上线的工具", artifactDigest: "old", toolKind: "workflow", smokePassed: true, createdAt: "2026-09-01T00:00:00.000Z", usage: { invoked: 9 } });
   clock = new Date(clock.getTime() + 3600_000);
-  await service.save("tool", old.id, { ...old.payload, createdAt: "2026-09-01T00:00:00.000Z", usage: { invoked: 9 } }, old);
   const digest = await decisions.digest(clock.toISOString().slice(0, 10));
   const notice = await notifications.get(owner, digest.payload.notificationId);
   assert.ok(notice.body.length <= 8000);
-  assert.match(notice.body, /另有 \d+ 项未列出/);
-  assert.match(notice.body, /今日新工具/);
+  assert.match(notice.body, /另有 2 项未列出/);
+  assert.match(notice.body, /今日新工具\d+/);
   assert.doesNotMatch(notice.body, /早已上线的工具/);
-  assert.doesNotMatch(notice.body, /worker-resource|任务类型|缺口类别|资源等待|等待资料/);
   assert.deepEqual(notice.source, { type: "system", id: digest.id }, "an evolution digest is not an autopilot digest and links to the inbox");
   assert.ok(JSON.stringify(digest.payload).length < 100_000, "the snapshot holds what the text says, not the documents it was read from");
-  // No wait is carried by a decision, so there is none left to report tomorrow.
-  assert.equal((await service.list("decision")).filter((row) => row.payload.decisionClass === "D").length, 0);
 });
 
 test("whatever a snapshot holds, the text of a digest fits the inbox and says what it left out (F15)", () => {
   const long = "很长的一行。".repeat(400);
-  const snapshot = { decisions: [{ title: long }, { title: long }, { title: long }], autonomous: [], resources: [], achievements: [], evaluationSummaries: [{ capabilityIds: [], lines: Array.from({ length: 30 }, () => long) }] };
+  const snapshot = { decisions: [{ title: long }, { title: long }, { title: long }], autonomous: [], resources: [], achievements: Array.from({ length: 30 }, () => ({ name: long, level: "V2" })) };
   const body = renderEvolutionDigest(snapshot);
   assert.ok(body.length <= 8000);
   assert.match(body, /日报过长，另有 \d+ 行未显示/);
-  assert.match(renderEvolutionDigest({ decisions: [], autonomous: [], resources: [], achievements: [], evaluationSummaries: [] }), /^今天平台进步了什么\n尚无已确认的新进展。[\s\S]*待你裁决\n暂无/);
+  assert.match(renderEvolutionDigest({ decisions: [], autonomous: [], resources: [], achievements: [] }), /^待你裁决\n暂无/);
 });
 
 test("a retirement's progress survives a failure after its pin changed: the decision's action no longer holds it in one transaction (review 2026-10-26)", options, async () => {
-  const service = new EvolutionService({ documents, jobs, notifications, ownerId: owner, now: () => clock, config: { evolutionSearchPaused: true, evolutionServingOnly: true } });
+  const service = new EvolutionService({ documents, jobs, notifications, ownerId: owner, now: () => clock });
   const pins = [];
   let inboxDown = true;
   const maintenance = new EvolutionMaintenance({ service, callbacks: { notifyAffected: async ({ toolId }) => {
@@ -212,4 +166,56 @@ test("a retirement's progress survives a failure after its pin changed: the deci
   assert.equal(settled.payload.status, "executed");
   assert.equal((await service.get(id)).payload.retirement.state, "complete");
   assert.deepEqual(pins, [id, id]);
+});
+
+const experimentOptions = [{ id: "repair", label: "研发修复版本", operation: "maintenance-repair" }, { id: "merge", label: "研发合并版本", operation: "maintenance-merge" }];
+
+test("the digest delivers only what serving can carry out: a card of experiments closes and takes no slot", options, async () => {
+  const { decisions, service } = engine({}, { evolutionMaxDecisionCards: 1 });
+  day();
+  const experiment = await pending("only-experiments", { options: experimentOptions, recommended: "repair", conservative: "repair", impact: 9 });
+  const servable = await pending("carried-out", { impact: 1 });
+  await decisions.digest(clock.toISOString().slice(0, 10));
+  const closed = await service.get(experiment.id), delivered = await service.get(servable.id);
+  assert.equal(closed.payload.status, "closed");
+  assert.equal(closed.payload.notificationId, undefined, "no inbox item for it");
+  assert.ok(delivered.payload.deliveredAt, "the one slot went to the card serving can carry out");
+});
+
+test("closing a delivered card closes its inbox item, as a default and never as the operator's answer", options, async () => {
+  const { decisions } = engine();
+  day();
+  const card = await decisions.deliver(await pending("close-notice", { options: experimentOptions, recommended: "repair", conservative: "repair" }));
+  clock = new Date(Date.parse(card.payload.dueAt) + 1000);
+  assert.equal((await decisions.expire(card.id)).payload.status, "closed");
+  const item = await notifications.get(owner, card.payload.notificationId);
+  assert.ok(item.resolvedAt);
+  assert.equal(item.resolution.source, "default");
+});
+
+test("a stranded execution with nothing serving can carry out closes on an answer instead of answering `executing` for ever", options, async () => {
+  const { decisions, service } = engine();
+  day();
+  const card = await pending("stranded", { options: experimentOptions, recommended: "repair", conservative: "repair", status: "executing", execution: { actionId: "stranded:1:repair", option: "repair", source: "default", evidence: {} } });
+  const answered = await decisions.resolve(card.id, { expectedRevision: card.revision, option: "repair" });
+  assert.equal(answered.payload.status, "closed");
+  assert.equal(answered.payload.closedReason, "retired-to-lab");
+  assert.equal((await service.get(card.id)).payload.execution, undefined, "kept in the history, no longer holding the card");
+  // One serving can carry out still supersedes it, as before.
+  const second = await pending("stranded-servable", { status: "executing", execution: { actionId: "stranded:2:repair", option: "repair", source: "default", evidence: {} }, options: [...experimentOptions, { id: "keep", label: "保留", operation: "keep" }], conservative: "keep" });
+  assert.equal((await decisions.resolve(second.id, { expectedRevision: second.revision, option: "keep" })).payload.status, "executed");
+});
+
+test("what a card becomes at its due date is what expiry will do, from what the server knows", options, async () => {
+  const { decisions, service } = engine();
+  day();
+  const review = await service.save("maintenance-review", `review-due-${randomUUID()}`, { kind: "sequential-harm", parentToolIds: ["t"], status: "pending" });
+  const harmOptions = [{ id: "retire", label: "软退役并保留历史", operation: "maintenance-retire" }, { id: "keep", label: "保留现有工具", operation: "keep" }];
+  const harm = await decisions.deliver(await pending("due-harm", { subjectId: review.id, decisionClass: "C", options: harmOptions, recommended: "retire", conservative: "keep" }));
+  assert.deepEqual(await decisions.dueOutcome(harm), { kind: "option", option: "retire", label: "软退役并保留历史" }, "a card written before 2026-10-26 stored `keep`; expiry retires, so the card says so");
+  const ordinary = await decisions.deliver(await pending("due-ordinary"));
+  assert.deepEqual(await decisions.dueOutcome(ordinary), { kind: "option", option: "hold", label: "保留结果并等待" });
+  const experiment = await decisions.deliver(await pending("due-experiment", { options: [...experimentOptions, { id: "keep", label: "保留", operation: "keep" }], recommended: "keep", conservative: "repair" }));
+  assert.deepEqual(await decisions.dueOutcome(experiment), { kind: "close" });
+  assert.equal(await decisions.dueOutcome(await service.save("decision", `card-executed-${randomUUID()}`, { ...ordinary.payload, status: "executed" })), null, "nothing is due on a decided card");
 });

@@ -3,7 +3,7 @@ import { cn } from "@/lib/cn";
 
 /**
  * One group of the scheduled-tasks list: its name in grey over the rows
- * (「待开始」, 「研究机会」, 「推荐」). The groups are parts of one list, so a
+ * (「待开始」, 「推荐」). The groups are parts of one list, so a
  * group with nothing in it is not drawn by whoever has the rows — an empty
  * heading is a promise the page cannot keep (plan 2026-10-07 §10).
  *

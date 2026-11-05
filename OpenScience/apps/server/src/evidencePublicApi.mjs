@@ -12,8 +12,7 @@
 //   cards/:id               ?view=clinical|public          one card; a withdrawn card answers 410 with its reason and date
 //   authors/:handle                                        an author's public record, by the author's public handle (`au_…`), never an account id
 //   metrics                                                the monthly figures for the last twelve months that have data, and — where
-//                                                          the deployment has them — `questionBank` (the medication-question bank's latest
-//                                                          month) and `predictionCalibration` (or how many predictions are scored so far)
+//                                                          the deployment has it — `questionBank` (the medication-question bank's latest month)
 //
 // Every answer is `{ data, meta: { generatedAt, next? } }`: `next` is the cursor (or, for the change log, the `before`) of the page after
 // this one. The shape is versioned by the path (`v1`): a change that is not additive is `v2`. `Cache-Control: public, max-age=300` and
@@ -59,10 +58,9 @@ export function createEvidencePublicApi({ reads, metrics, config }) {
     const [resource, id, sub] = parts;
     if (resource === "metrics" && parts.length === 1) {
       const months = (await metrics.months()).map(({ month, data, figures }) => ({ month, hasData: data, figures }));
-      // The two optional sections are there only where the deployment composed them and they have something to say (additive: `v1` readers ignore them).
+      // The optional section is there only where the deployment composed it and it has something to say (additive: `v1` readers ignore it).
       const questionBank = await metrics.questionBank?.() ?? null;
-      const predictionCalibration = await metrics.predictionCalibration?.() ?? null;
-      return { data: { months, ...(questionBank ? { questionBank } : {}), ...(predictionCalibration ? { predictionCalibration } : {}) } };
+      return { data: { months, ...(questionBank ? { questionBank } : {}) } };
     }
     if (resource === "zones" && parts.length === 1) {
       const kind = query.get("kind");

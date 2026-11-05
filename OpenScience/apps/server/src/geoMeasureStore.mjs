@@ -4,7 +4,6 @@ import { GEO_JOB_MAX_ATTEMPTS } from "./geoConfirmationPolicy.mjs";
 import { createHash } from "node:crypto";
 import { geoValueCanonical, geoAutomationEnabled } from "@evimed/domain";
 import { createModuleEvolutionPolicies } from "./moduleEvolutionPolicies.mjs";
-import { geoInterventionIdentity } from "./moduleEvolutionAdapters.mjs";
 import { GEO_MEASUREMENT_METHOD_VERSION, geoValueJudged } from "@evimed/domain";
 import { migrateProductStore } from "./productPersistence.mjs";
 import { preserveGeoAssessment, geoAssessmentId } from "./geoLearningSignals.mjs";
@@ -50,6 +49,20 @@ import { geoOwnedLinkKey } from "./geoStore.mjs";
 import { GEO_UNDELIVERED_FAILURE_CODES } from "./geoProbeGateway.mjs";
 import { HttpError, randomId } from "./security.mjs";
 import { OPEN_COST_VALUE } from "./usageLedger.mjs";
+
+/** The complete interference identity of a round, in its existing JSON surface.
+ * Unknown engine versions are explicit strata, never guessed from an assistant's name.
+ * @param {any} surface @param {string[]} engines */
+export function geoInterventionIdentity(surface, engines) {
+  const input = surface?.intervention ?? {};
+  return {
+    policyRevisionId: input.policyRevisionId ?? null, contentRevision: input.contentRevision ?? null, strategyRevision: input.strategyRevision ?? null,
+    questionSetVersion: input.questionSetVersion ?? null,
+    engines: engines.map((engine) => ({ engine, observedVersion: input.engineVersions?.[engine] ?? "unknown" })),
+    placements: Array.isArray(input.placements) ? input.placements : [], channels: Array.isArray(input.channels) ? input.channels : [],
+    sourceRevision: input.sourceRevision ?? null,
+  };
+}
 
 /** The advisory lock key text; `hashtext` of it is the lock. */
 export const GEO_PROBE_LOCK_KEY = "evimed_geo_probe";

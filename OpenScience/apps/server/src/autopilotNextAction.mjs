@@ -362,9 +362,9 @@ export class AutopilotPlanner {
    *
    * The decision is booked under purpose `autopilot`, a researcher's own.
    * @param {{userId: string, projectId: string, episodeId: string, context: any, eligible: string[], stopAllowed: boolean,
-   *   pauseAllowed?: boolean, envelopeCny?: number, purpose?: "autopilot" | "evolution"}} input
+   *   pauseAllowed?: boolean, envelopeCny?: number}} input
    */
-  async decide({ userId, projectId, episodeId, context, eligible, stopAllowed, pauseAllowed = false, envelopeCny = 0, purpose = "autopilot" }) {
+  async decide({ userId, projectId, episodeId, context, eligible, stopAllowed, pauseAllowed = false, envelopeCny = 0 }) {
     if (!this.available) throw plannerError("autopilot_planner_unavailable", "The next-action planner is not available.");
     if (this.now() < this.openUntil) {
       this.counters.circuitOpen += 1;
@@ -376,7 +376,7 @@ export class AutopilotPlanner {
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
       const body = await this.callModel({ config: this.config, usageLedger: this.usageLedger, fetchImpl: this.fetchImpl }, {
-        userId, projectId, runId: episodeId, purpose,
+        userId, projectId, runId: episodeId, purpose: "autopilot",
         limits: {
           daily: Number(this.config.userDailySpendLimit) || 0,
           weekly: Number(this.config.userWeeklySpendLimit) || 0,

@@ -7,20 +7,19 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createEvolutionToolAdmission } from '../src/evolutionToolAdmission.mjs';
 
-const config = { evolutionToolMaxConcurrentPerProject: 2, evolutionToolCallsPerMinute: 4, evolutionDailyBudgetCny: 50 };
+const config = { evolutionToolMaxConcurrentPerProject: 2, evolutionToolCallsPerMinute: 4 };
 const scope = (projectId, userId = 'owner') => ({ project: { id: projectId, userId } });
 const deferred = () => { /** @type {any} */ let resolve; const promise = new Promise((done) => { resolve = done; }); return { promise, resolve }; };
 
 /** A database whose transaction count is observable, and whose pool is as small as production's matters here: one. */
 function fixture(overrides = {}) {
-  const state = { open: 0, maxOpen: 0, transactions: 0, locks: 0, hostFree: true, cost: 0, clock: 1_000_000 };
+  const state = { open: 0, maxOpen: 0, transactions: 0, locks: 0, hostFree: true, clock: 1_000_000 };
   const database = { async transaction(/** @type {any} */ run) {
     state.open += 1; state.maxOpen = Math.max(state.maxOpen, state.open); state.transactions += 1;
     try { return await run({}); } finally { state.open -= 1; }
   } };
   const admission = createEvolutionToolAdmission({ config: { ...config, ...overrides }, database, canRun: async () => true,
-    heavyWorkAdmission: async () => { state.locks += 1; return state.hostFree; }, isInternalProject: (id) => id.startsWith('eval-paper-'),
-    dailyCost: async () => state.cost, now: () => state.clock });
+    heavyWorkAdmission: async () => { state.locks += 1; return state.hostFree; }, now: () => state.clock });
   return { state, admission };
 }
 
@@ -65,13 +64,11 @@ test('calls in a minute are bounded per project, and the window moves on', async
   assert.equal(admission.counters.refusedProjectRate, 1);
 });
 
-test('host capacity and the module budget still refuse, by name, and a refusal frees its place', async () => {
+test('host capacity still refuses, by name, and a refusal frees its place', async () => {
   const { state, admission } = fixture({ evolutionToolMaxConcurrentPerProject: 1 });
   state.hostFree = false;
   await assert.rejects(admission.admit(scope('p'), async () => 'never'), (error) => error.status === 503 && error.code === 'evolution_temporarily_unavailable');
   state.hostFree = true;
-  state.cost = 50;
-  await assert.rejects(admission.admit(scope('eval-paper-x'), async () => 'never'), (error) => error.status === 402 && error.code === 'usage_budget_exceeded');
-  assert.equal(await admission.admit(scope('p'), async () => 'a researcher project is not held to the module budget'), 'a researcher project is not held to the module budget');
-  assert.deepEqual({ ...admission.counters }, { admitted: 1, refusedHostCapacity: 1, refusedBudget: 1, refusedProjectConcurrency: 0, refusedProjectRate: 0, refusedBusy: 0 });
+  assert.equal(await admission.admit(scope('p'), async () => 'served'), 'served', 'the refused call did not keep its place');
+  assert.deepEqual({ ...admission.counters }, { admitted: 1, refusedHostCapacity: 1, refusedProjectConcurrency: 0, refusedProjectRate: 0, refusedBusy: 0 });
 });

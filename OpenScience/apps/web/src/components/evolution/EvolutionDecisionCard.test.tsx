@@ -23,10 +23,34 @@ describe('the decision card', () => {
     await waitFor(() => expect(mocks.resolve).toHaveBeenCalledWith('evolution-decision-1', { option: 'rescout', expectedRevision: 3 }));
     expect(await screen.findByText(/当前选择：重新寻找实现路径/)).toBeInTheDocument();
   });
-  it('tells the operator when the review that decides an expired card could not be had', async () => {
-    mocks.get.mockResolvedValue(card({ expiry: { state: 'review-unavailable', attempts: 1, of: 3 } }));
+  it('offers the options only: no free-text answer and no standing delegation', async () => {
     render(<EvolutionDecisionCard id="evolution-decision-1" />);
-    expect(await screen.findByText('到期时的复核暂时没有完成，稍后会再试；你现在答复同样有效。')).toBeInTheDocument();
+    await screen.findByRole('button', { name: '按推荐继续：重新寻找实现路径' });
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /调整方向|以后这类你定/ })).not.toBeInTheDocument();
+  });
+  it('says what the server says happens at the due date, by the option it takes', async () => {
+    mocks.get.mockResolvedValue({ ...card({ decisionClass: 'C', status: 'pending' }), dueOutcome: { kind: 'option', option: 'retire', label: '软退役并保留历史' } });
+    render(<EvolutionDecisionCard id="evolution-decision-1" />);
+    expect(await screen.findByText(/前未答复，将按“软退役并保留历史”处理。/)).toBeInTheDocument();
+    expect(screen.queryByText(/保留当前方案|复核后的推荐/)).not.toBeInTheDocument();
+  });
+  it('says the card will close when nothing it could take can be carried out', async () => {
+    mocks.get.mockResolvedValue({ ...card(), dueOutcome: { kind: 'close' } });
+    render(<EvolutionDecisionCard id="evolution-decision-1" />);
+    expect(await screen.findByText(/前未答复，这条裁决会关闭。/)).toBeInTheDocument();
+  });
+  it('promises nothing at a due date the server says nothing about', async () => {
+    mocks.get.mockResolvedValue({ ...card({ status: 'executed', selected: 'wait' }), dueOutcome: null });
+    render(<EvolutionDecisionCard id="evolution-decision-1" />);
+    expect(await screen.findByText(/当前选择：保留结果并等待新资料/)).toBeInTheDocument();
+    expect(screen.queryByText(/前未答复/)).not.toBeInTheDocument();
+  });
+  it('says a closed card is closed, and nothing about trying again', async () => {
+    mocks.get.mockResolvedValue({ ...card({ status: 'closed', closedReason: 'retired-to-lab' }), dueOutcome: null });
+    render(<EvolutionDecisionCard id="evolution-decision-1" />);
+    expect(await screen.findByText('这条裁决已关闭，它要做的工作不再在线上进行。')).toBeInTheDocument();
+    expect(screen.queryByText(/稍后会再试|已完成的工作会保留/)).not.toBeInTheDocument();
   });
   it('is absent and silent unless the module is on and the reader is an operator', async () => {
     mocks.access = {enabled: true, operator: false};

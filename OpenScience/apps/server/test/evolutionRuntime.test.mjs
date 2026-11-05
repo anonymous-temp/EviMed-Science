@@ -9,7 +9,6 @@ import {createEvolutionVerificationController,verificationRequest} from '../src/
 import {EVOLUTION_STATIC_CHECK} from '../src/evolutionVerification.mjs';
 import {createRuntimeController} from '../src/runtimeControllerServer.mjs';
 import {RuntimeControllerClient,RUNTIME_CONTROLLER_PROTOCOL_VERSION} from '../src/runtimeControllerClient.mjs';
-import {createEvolutionBuilder} from '../src/evolutionBuild.mjs';
 import {createPlatformSkillSupply,verifyPlatformSkillGeneration,platformSkillGenerationRoot} from '../src/platformSkillSupply.mjs';
 
 const image='docker.m.daocloud.io/library/python:3.12-slim-bookworm';
@@ -32,19 +31,6 @@ test('immutable skill generations preserve exact old revisions and detect change
     candidate.files['SKILL.md']+='\nVersion three.';assert.equal((await publishConfirmed(supply,candidate,opts)).revision,3);
     await assert.rejects(()=>publishConfirmed(supply,{...candidate,capabilityIds:['another-scope']},opts));
   }finally{await fs.rm(dataDir,{recursive:true,force:true});}
-});
-test('builder never promotes self tests and returns evaluator IDs without hidden answers',async()=>{
-  let published=false,seen;
-  const builder=createEvolutionBuilder({dispatch:async card=>{seen=card;return{id:'new-tool',publicationKind:'skill',files:{'SKILL.md':'candidate'}};},verification:{verify:async()=>({ok:true})},evaluator:{evaluate:async()=>({ok:false,failedCaseIds:['case-opaque'],expected:42,scoringRules:'hidden'})},publisher:{publish:async()=>{published=true;}}});
-  const result=await builder.build({id:'card',hiddenCases:[42],holdoutCases:[{answer:42}],scoringRules:'secret',measurements:{reference:{expected:42}},sourcePapers:[{reportedResults:42}],arbitraryScoutingField:{answer:42}});
-  assert.equal(published,false);assert.deepEqual(seen,{id:'card'});assert.equal(result.feedback.passed,false);assert.equal(result.feedback.failedCaseIds.length,1);assert.match(result.feedback.failedCaseIds[0],/^case-[a-f0-9]{16}$/);assert.notEqual(result.feedback.failedCaseIds[0],'case-opaque');assert.deepEqual(Object.keys(result.feedback),['passed','failedCaseIds']);assert.equal(JSON.stringify(result).includes('42'),false);
-});
-test('builder preserves faithful impossibility and stages engine review without publishing',async()=>{
-  let failure,published=false;
-  const dependencies={verification:{verify:async()=>({ok:true})},evaluator:{},publisher:{publish:async()=>{published=true;}},recordFailure:async value=>{failure=value;}};
-  const impossible=createEvolutionBuilder({...dependencies,dispatch:async()=>({status:'impossible',reason:'Specification is incomplete.'})});
-  assert.equal((await impossible.build({id:'card'})).status,'impossible');assert.equal(failure.reason,'Specification is incomplete.');
-  const review=createEvolutionBuilder({...dependencies,dispatch:async()=>({publicationKind:'engine-pr',files:{}}),writeEnginePrInput:async value=>({cardId:value.card.id})});assert.equal((await review.build({id:'card'})).status,'review');assert.equal(published,false);
 });
 test('disposable executor enforces no-network/read-only input and scans cheating AST', {skip:!dockerAvailable},async()=>{
   const dataDir=await fs.mkdtemp(path.join(os.tmpdir(),'evolution-executor-'));

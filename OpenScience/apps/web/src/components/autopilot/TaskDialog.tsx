@@ -5,8 +5,7 @@ import { TaskForm } from "./TaskForm";
 
 /**
  * 「编辑任务」: a short dialog over the page — what to keep doing, and how often — for a task that is already there. Making a task is
- * the page's own main area (`NewTaskPane`, `/app/autopilot/new`), not a dialog: the dialog it began as kept its templates and the
- * platform's research opportunities under the form, and they went with the creation.
+ * the page's own main area (`NewTaskPane`, `/app/autopilot/new`), not a dialog: the dialog it began as kept its templates under the form, and they went with the creation.
  */
 export function TaskDialog({ projectId, available = true, agenda, showBudgets, saving, onBusyChange, onClose, onRecorded, onSaved }: {
   projectId: string;

@@ -377,17 +377,17 @@ async function bailianSearch(config, request, fetcher, signal, onDispatch = () =
  * A reservation the caps refuse leaves Bailian out of this search — the other
  * engines still answer.
  *
- * @param {{ config: any, request: any, fetcher: typeof fetch, signal: AbortSignal, usageLedger: any, caller: any, attributeRun: any, runPurpose: any, runScope?: any }} options
+ * @param {{ config: any, request: any, fetcher: typeof fetch, signal: AbortSignal, usageLedger: any, caller: any, attributeRun: any, runScope?: any }} options
  * @returns {Promise<any[]>}
  */
-async function meteredBailianSearch({ config, request, fetcher, signal, usageLedger, caller, attributeRun, runPurpose, runScope = null }) {
+async function meteredBailianSearch({ config, request, fetcher, signal, usageLedger, caller, attributeRun, runScope = null }) {
   const model = String(config.webSearchBailianModel ?? "").trim() || "qwen-plus";
   const at = new Date();
   const peak = isPeak(at);
   const estimate = priceUsage({ resourceType: "model", model, cacheMiss: bailianReservedPromptTokens, output: bailianMaxTokens, peak });
   let reservation;
   try {
-    reservation = await reserveGatewaySpend({ config, usageLedger, caller, attributeRun, runPurpose, runScope, model, estimatedCost: estimate.cost,
+    reservation = await reserveGatewaySpend({ config, usageLedger, caller, attributeRun, runScope, model, estimatedCost: estimate.cost,
       fingerprint: { model, query: request.query, strategy: "turbo" }, at });
   } catch (error) {
     if (!(error instanceof GatewaySpendRefusal)) throw error;
@@ -473,15 +473,15 @@ function deepseekSearchError(error) {
  * way the door does and holds the gateway's own deadline. Both answer the door's `{ data, warnings }` or throw its named
  * errors.
  * @param {any} config
- * @param {{ fetchImpl?: typeof fetch, edge?: ReturnType<typeof import("./edgeProxy.mjs").edgeProxyFromConfig>, edgeFetchImpl?: typeof fetch | null, usageLedger?: any, evaluationIsolation?: any, runPurpose?: any, attributeRun?: ((input: { userId: string, projectId: string, sessionId: string | null }) => Promise<string | null>) | null, runScope?: ((request: { userId: string, projectId: string, runId: string }) => Promise<{ usageRunId: string, runLimit: number } | null>) | null, deepseekTools?: ReturnType<typeof createDeepSeekTools> | null }} [options]
+ * @param {{ fetchImpl?: typeof fetch, edge?: ReturnType<typeof import("./edgeProxy.mjs").edgeProxyFromConfig>, edgeFetchImpl?: typeof fetch | null, usageLedger?: any, attributeRun?: ((input: { userId: string, projectId: string, sessionId: string | null }) => Promise<string | null>) | null, runScope?: ((request: { userId: string, projectId: string, runId: string }) => Promise<{ usageRunId: string, runLimit: number } | null>) | null, deepseekTools?: ReturnType<typeof createDeepSeekTools> | null }} [options]
  *   `usageLedger` / `attributeRun`: what the paid engines' calls are booked in
  *   and which run they are charged to, as for the model gateway.
  *   `deepseekTools`: the process's one DeepSeek tools client (its pacer is the
  *   account's rate); without one, a client of this handler's own is made.
  */
-export function createWebSearch(config, { fetchImpl = fetch, edge = null, edgeFetchImpl = null, usageLedger = null, attributeRun = null, evaluationIsolation = null, runPurpose = null, runScope = null, deepseekTools = null } = {}) {
+export function createWebSearch(config, { fetchImpl = fetch, edge = null, edgeFetchImpl = null, usageLedger = null, attributeRun = null, runScope = null, deepseekTools = null } = {}) {
   const throughEdge = edgeFetchImpl ?? ((url, init) => edgeFetch(/** @type {any} */ (edge), /** @type {URL} */ (url), /** @type {any} */ (init)));
-  const deepseek = deepseekTools ?? createDeepSeekTools(config, { fetchImpl, usageLedger, attributeRun, runPurpose, runScope });
+  const deepseek = deepseekTools ?? createDeepSeekTools(config, { fetchImpl, usageLedger, attributeRun, runScope });
   /**
    * @param {{ query: string, limit: number, categories: string[], language: string | null, timeRange: string | null }} request
    * @param {any} caller @param {AbortController} controller
@@ -517,7 +517,7 @@ export function createWebSearch(config, { fetchImpl = fetch, edge = null, edgeFe
       return searxngSearch(searchEndpoint(localUrl), request, fetchImpl, controller.signal);
     })() : Promise.resolve(null);
     const bailian = bailianOn
-      ? meteredBailianSearch({ config, request, fetcher: fetchImpl, signal: controller.signal, usageLedger, caller, attributeRun, runPurpose, runScope })
+      ? meteredBailianSearch({ config, request, fetcher: fetchImpl, signal: controller.signal, usageLedger, caller, attributeRun, runScope })
       : Promise.resolve(null);
     const deepseekSearch = deepseekAsked ? deepseek.search(request, { caller, signal: controller.signal }) : Promise.resolve(null);
     const [searxOutcome, bailianOutcome, deepseekOutcome] = await Promise.allSettled([searx, bailian, deepseekSearch]);
@@ -537,11 +537,10 @@ export function createWebSearch(config, { fetchImpl = fetch, edge = null, edgeFe
     if (!payload && !bailianAnswered && deepseekOutcome.status === "rejected") throw deepseekSearchError(deepseekOutcome.reason);
     const bailianRows = bailianAnswered ? bailianOutcome.value ?? [] : [];
     const deepseekRows = deepseekAnswered ? deepseekOutcome.value ?? [] : [];
-    let results = mergedResults([deepseekRows, Array.isArray(payload?.results) ? payload.results : [], bailianRows], request.limit);
+    const results = mergedResults([deepseekRows, Array.isArray(payload?.results) ? payload.results : [], bailianRows], request.limit);
     // Which engines actually answered is part of the finding, not
     // diagnostics: a result set assembled from one engine that happened to be
     // up is a different claim about the web than one assembled from four.
-    if (evaluationIsolation) results = await evaluationIsolation.filter(caller, "web-search", results);
     const engines = [...new Set(results.map((row) => row.engine).filter(Boolean))].sort();
     const unresponsiveEngines = [...new Set([
       ...unresponsiveEnginesOf(payload),

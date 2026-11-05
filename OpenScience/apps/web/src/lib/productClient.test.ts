@@ -1,6 +1,6 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { WebApiError } from "./apiClient";
-import { productRequest } from "./productClient";
+import { productErrorMessage, productRequest } from "./productClient";
 
 const mocks = vi.hoisted(() => ({ fetch: vi.fn() }));
 vi.mock("./apiClient", async (importOriginal) => ({
@@ -62,4 +62,8 @@ it("rejects an old account's delayed response body after a session boundary", as
   window.dispatchEvent(new StorageEvent("storage", { key: "open-science:web-session-sync", newValue: "changed" }));
   (finish as unknown as (value: unknown) => void)({ data: { name: "old private project" } });
   await expect(pending).rejects.toMatchObject({ name: "StaleSessionError" });
+});
+
+it("words an option only an experiment could carry out as that, not as a stale revision", () => {
+  expect(productErrorMessage(new WebApiError("refused", { status: 409, code: "evolution_offline_only" }))).toBe("这个选项要做的工作不再在线上进行，请选择其他选项。");
 });

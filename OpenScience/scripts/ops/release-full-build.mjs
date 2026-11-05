@@ -175,7 +175,9 @@ export const WEB_DOCKERFILE = "deploy/web/Dockerfile";
 // 2026-10-31 (merge of the Gitee main e9c9f96f6): two added COPY lines in the build stage's manifest layer — packages/design-tokens/package.json
 // and packages/search-topics/package.json, so the frozen-lockfile install sees every workspace package the lockfile names (the server and the web app
 // link the first, only the server the second). Stages, commands, secrets and build arguments are unchanged.
-export const WEB_DOCKERFILE_SHA256 = "sha256:5eab4a2b33860a0dd8cc9248a3d026f6d555200afa85babd07c3e20b31c81a20";
+// 2026-11-04 (online cut of 循证进化): the final stage's COPY lines for evals/paper-gold and for the four case files the deleted module loops read at run time are gone,
+// with their comments. Stages, commands, secrets and build arguments are unchanged.
+export const WEB_DOCKERFILE_SHA256 = "sha256:023dbc9ee6dcfba80699c7cb101c2ca5c8b1deb774bb8c43031b98232c1672aa";
 export const WEB_INPUTS = Object.freeze([
   "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "deps-version.json",
   "apps/web/package.json", "apps/server/package.json", "packages/shared/package.json",

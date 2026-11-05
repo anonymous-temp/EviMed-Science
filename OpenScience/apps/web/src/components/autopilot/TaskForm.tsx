@@ -15,12 +15,11 @@ import { cancellationPending, CONVERSATION_HELD_EACH_RUN, inLingdou, lingdou, re
  * of 2026-09-19 and 2026-09-20), so the form does not ask for them — except when a budget is what stopped the task (`showBudgets`),
  * where the one decision that is the researcher's to make is made in place. Any amount shown is in 灵豆.
  */
-export function TaskForm({ projectId, agenda, recommendation, showBudgets = false, disabled = false, schedulingAvailable = true, onSaved, onRecorded, onBusyChange, onCancel, onDirtyChange }: {
+export function TaskForm({ projectId, agenda, recommendation, showBudgets = false, schedulingAvailable = true, onSaved, onRecorded, onBusyChange, onCancel, onDirtyChange }: {
   onDirtyChange?: (dirty: boolean) => void;
   projectId: string; agenda?: AgendaRecord; recommendation?: Recommendation;
   /** A budget stopped this task (`budgetBlocks`): the caps are offered, in 灵豆, under 高级设置. */
   showBudgets?: boolean;
-  disabled?: boolean;
   schedulingAvailable?: boolean;
   onSaved: (record: AgendaRecord) => void; onRecorded: (record: AgendaRecord) => void; onBusyChange: (busy: boolean) => void;
   /** Where 取消 goes; a form with nowhere to go back to has no 取消. */
@@ -67,7 +66,7 @@ export function TaskForm({ projectId, agenda, recommendation, showBudgets = fals
     && (schedule.kind !== "weekly" || (previous.weekdays ?? []).join() === (schedule.weekdays ?? []).join());
   const recovering = agenda ? cancellationPending(agenda) : false;
   const canSchedule = schedulingAvailable && agenda?.payload.schedulingAvailable !== false && !recovering;
-  const blocked = disabled || (!agenda && !canSchedule);
+  const blocked = !agenda && !canSchedule;
   const alreadyCompleted = sameSchedule && agenda?.payload.scheduleState === "completed";
   let nextRun: string | null = null;
   let scheduleValid = true;
@@ -157,7 +156,7 @@ export function TaskForm({ projectId, agenda, recommendation, showBudgets = fals
     {/* What pressing the button will do, in one sentence that follows the fields: where the task runs, how often and when it starts. The zone is
         said once, by its own field above. The sentence is the buttons' own (`Note`), so it stands beside them and not as a line by itself. */}
     <Note className="gap-y-3 sm:flex-nowrap sm:justify-between" action={<span className="ml-auto flex shrink-0 gap-2">
-      {onCancel && <Button variant="secondary" disabled={saving || disabled} onClick={onCancel}>{conflict ? "关闭编辑" : "取消"}</Button>}
+      {onCancel && <Button variant="secondary" disabled={saving} onClick={onCancel}>{conflict ? "关闭编辑" : "取消"}</Button>}
       <Button type="submit" loading={saving} actionKind={agenda ? "set" : "start"} disabled={blocked || !valid || !scheduleValid || conflict}>{agenda ? "保存修改" : created ? "重试启用" : "创建并启用"}</Button>
     </span>}>
       <span aria-live="polite">{projectName ? `在“${projectName}”运行` : "在当前项目运行"} · <span className="whitespace-nowrap">{schedule.kind === "weekly" && (schedule.weekdays?.length ?? 0) === 0 ? "请选择星期" : recurrence(schedule)}</span>{firstRun ? <> · {firstRun}</> : null}<span className="block">{CONVERSATION_HELD_EACH_RUN}</span></span>

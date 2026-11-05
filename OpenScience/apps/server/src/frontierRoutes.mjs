@@ -1,5 +1,4 @@
 import { FRONTIER_HIDE_REASONS, FRONTIER_INTERACTION_BATCH } from "@evimed/domain";
-import { recordFrontierExposure } from "./frontierEvolution.mjs";
 import { FRONTIER_EVENTS_PATH } from "./frontierInteractions.mjs";
 import { HttpError, readJson, sendJson } from "./security.mjs";
 
@@ -139,11 +138,6 @@ export function createFrontierRoutes({ store, service, config, maxJsonBytes, aud
     if (parts.length === 1 && parts[0] === "prefs") {
       if (method === "GET") return reply(await service.prefs(user));
       if (method === "PUT") return reply(await service.savePrefs(user, await bodyOf(req, maxJsonBytes, ["role", "specialties", "interests", "done", "skipped"])));
-    }
-    if (parts[0] === "exposures" && parts.length === 1 && method === "POST") {
-      const body = await bodyOf(req, maxJsonBytes, ["token", "items"]);
-      await service.ready();
-      return reply(await recordFrontierExposure(service.database, user.id, body));
     }
     const requireOperator = () => {
       if (!service.isOperator(user)) throw new HttpError(403, "frontier_operator_required", "Only an operator may change what the feed shows.");

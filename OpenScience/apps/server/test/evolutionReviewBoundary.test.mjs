@@ -8,7 +8,7 @@ import {canonicalJson} from '@evimed/domain';
 import {ExtensionToolController} from '../src/extensionToolController.mjs';
 import {spawnSync} from 'node:child_process';
 import {createEvolutionDependencyPreparer} from '../src/evolutionDependencyPreparation.mjs';
-import {createEvolution} from '../src/evolutionComposition.mjs';
+import {createEvolutionServing} from '../src/evolutionServing.mjs';
 import {EVOLUTION_CONFIG_SCHEMA} from '../src/evolutionConfiguration.mjs';
 
 test('dependency downloader rejects private DNS answers and connects to its validated address',async()=>{
@@ -23,12 +23,12 @@ test('dependency downloader rejects private DNS answers and connects to its vali
   }finally{await fs.rm(dataDir,{recursive:true,force:true});}
 });
 test('the optional composition is absent by default and enabled wiring supplies all real lifecycle handlers',()=>{
-  assert.equal(createEvolution({config:{evolutionEnabled:false}}),null);
-  assert.equal(createEvolution({config:{evolutionEnabled:true}}),null);
+  assert.equal(createEvolutionServing({config:{evolutionEnabled:false}}),null);
+  assert.equal(createEvolutionServing({config:{evolutionEnabled:true}}),null);
   const config={...Object.fromEntries(Object.entries(EVOLUTION_CONFIG_SCHEMA).map(([key,field])=>[key,field.default])),evolutionEnabled:true,dataDir:os.tmpdir(),operatorUsers:[],frontierEnabled:false,evolutionDependencyAllowlist:[]};
-  const module=createEvolution({config,database:{},documents:{},jobs:{},usageLedger:{},store:{},runtimeManager:{},registry:Promise.resolve({}),controller:{},agentRuns:{},evaluationIsolation:{},autopilot:{},dataSemantics:{}});
+  const module=createEvolutionServing({config,database:{},documents:{},jobs:{},store:{},runtimeManager:{},registry:Promise.resolve({}),controller:{},agentRuns:{},autopilot:{},dataSemantics:{}});
   for(const key of ['gateway','routes','finishRun'])assert.equal(typeof module[key],'function');
-  for(const key of ['supply','worker','runs','candidateEvaluator','paperGold'])assert.ok(module[key]);
+  for(const key of ['supply','worker'])assert.ok(module[key]);
   assert.equal(module.worker.status().enabled,true);
 });
 

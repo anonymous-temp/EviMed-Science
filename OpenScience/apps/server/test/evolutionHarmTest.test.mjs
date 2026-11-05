@@ -3,14 +3,14 @@ import assert from 'node:assert/strict';
 import { METHOD_HARM_TEST, EVOLUTION_TOOL_HARM_TEST, METHOD_SCIENTIFIC_HARM_TEST, methodHarmTest } from '@evimed/domain';
 import { EvolutionMaintenance, harmTestOperatingCharacteristics } from '../src/evolutionMaintenance.mjs';
 import { createEvolutionFeedback } from '../src/evolutionFeedback.mjs';
-import { evolutionServiceFixture } from './helpers/evolutionServiceFixture.mjs';
+import { evolutionServiceFixture, seedTool } from './helpers/evolutionServiceFixture.mjs';
 
 /** Seeded generator: every rate below is reproducible. @param {number} seed */
 function mulberry32(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 
 async function tool(f, callbacks = {}) {
   const maintenance = new EvolutionMaintenance({ service: f.service, callbacks });
-  await f.service.registerTool({ id: 'tool', track: 'M', artifactDigest: 'digest-1', holdoutCases: [{ id: 'case', sha256: 'hash' }] });
+  await seedTool(f.service, { id: 'tool', track: 'M', artifactDigest: 'digest-1', holdoutCases: [{ id: 'case', sha256: 'hash' }] });
   return maintenance;
 }
 /** One account's run of the tool with the researcher's verdict on it. */
@@ -109,7 +109,7 @@ test('one account cannot retire a tool for everyone; distinct accounts raise a d
   assert.equal(proposals.length, 1);
   const [proposal] = proposals;
   assert.deepEqual({ category: proposal.category, recommended: proposal.recommended, conservative: proposal.conservative, directional: proposal.directional, paths: proposal.attemptedPaths.length },
-    { category: 'tool-retire', recommended: 'retire', conservative: 'keep', directional: true, paths: 2 }, 'without the serving cutover the card keeps the conservative option it always named');
+    { category: 'tool-retire', recommended: 'retire', conservative: 'retire', directional: true, paths: 2 }, 'unanswered, a harm alarm takes the protective retirement the same decision reverses');
   assert.doesNotMatch(proposal.title + proposal.body, /one-account|account|llr|harm|digest/i, 'the card speaks to a reader, not in internal state');
   const review = await f.service.get(proposal.subjectId);
   assert.equal(review.payload.kind, 'sequential-harm');
@@ -190,32 +190,4 @@ test('every run keeps its own record: the tool record stays small and concurrent
   const looping = await maintenance.observationOf('tool', 'looping-run');
   assert.deepEqual({ remembered: looping.callIds.length, overflow: looping.callOverflow }, { remembered: 500, overflow: 20 });
   assert.equal((await f.service.get('tool')).payload.usage.invoked, 1543 + 520);
-});
-
-test('a record written before runs had their own is moved once, and its unattributed runs are not trials', async () => {
-  const f = evolutionServiceFixture(), maintenance = await tool(f);
-  const legacy = await f.service.get('tool');
-  await f.service.save('tool', 'tool', { ...legacy.payload, usage: { ...legacy.payload.usage, invoked: 3, runs: 3, corrected: 3, harmState: 'watching', harmEpochs: [{ index: 0, runIds: ['old-1', 'old-2'], state: 'watching' }] },
-    observations: [1, 2, 3].map(index => ({ runId: `old-${index}`, invoked: true, outcome: 'rejected', corrected: true, callIds: [`old-call-${index}`], callOutcomes: {}, retrievalIds: [], at: `2026-10-0${index}T00:00:00.000Z` })) }, legacy);
-  await maintenance.observe('tool', { runId: 'new-run', userId: 'a', callId: 'new-call', invoked: true, executionOk: true, outcome: 'pending' });
-  const row = await f.service.get('tool');
-  assert.equal(row.payload.observations, undefined);
-  assert.equal(row.payload.usage.harmEpochs, undefined);
-  assert.equal(row.payload.usage.invoked, 4, 'legacy runs stay counted, once');
-  assert.equal(row.payload.usage.harm.trials.length, 0);
-  assert.equal(row.payload.status, 'active');
-  assert.equal((await maintenance.observationOf('tool', 'old-2')).outcome, 'rejected');
-});
-
-test('under the serving cutover an unanswered harm alarm names the protective retirement; without it the stored option stands', async () => {
-  const conservativeOf = async serving => {
-    const f = evolutionServiceFixture(), proposals = [];
-    if (serving) f.service.config = { ...f.service.config, evolutionServingOnly: true };
-    const maintenance = await tool(f, { proposeReview: async input => proposals.push(input) });
-    for (const account of ['a', 'b', 'c', 'd']) await use(f, maintenance, account, `first-${account}`, 'rejected');
-    assert.equal(proposals.length, 1);
-    return proposals[0].conservative;
-  };
-  assert.equal(await conservativeOf(true), 'retire');
-  assert.equal(await conservativeOf(false), 'keep');
 });

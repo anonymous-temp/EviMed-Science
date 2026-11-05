@@ -13,19 +13,6 @@ export function createEvolutionFeedback({ service, maintenance, resolvePositiveE
       for(const row of uses){
         const use=row.payload,observation=await maintenance.observationOf(use.toolId,run.id);
         if(observation?.invoked!==true)continue;
-        const tool=await service.get(use.toolId);
-        const negative=await resolvePositiveEvidence.resolveNegativeEvidence?.(run,{...use,invoked:true,artifactDigest:use.artifactDigest??tool?.payload.artifactDigest});
-        if(negative?.verified===true&&negative.kind==='trusted-replay-regression'&&tool?.payload.artifactDigest===negative.artifactDigest){
-          const verdict=(await service.list('candidate-verdict')).find(item=>item.payload.toolId===use.toolId&&item.payload.artifactDigest===negative.artifactDigest&&item.payload.missionId&&item.payload.receiptValid);
-          if(verdict)await service.withLock(`mission-regression:${verdict.payload.missionId}`,async()=>{
-            const mission=await service.get(verdict.payload.missionId);if(!mission)return;
-            const evidenceKey=evolutionKey([negative.replayId,negative.resultId,use.toolId,negative.artifactDigest,run.id]);
-            const observations=mission.payload.regressionObservations??[];
-            if(observations.some(item=>item.evidenceKey===evidenceKey))return;
-            const merged=[...observations,{evidenceKey,verdictId:verdict.id,regressed:true,outcome:'trusted-replay-regression',at:negative.at}];
-            await service.save('mission',mission.id,{...mission.payload,regressionObservations:merged,regressions:merged.filter(item=>item.regressed).length,regressionBasis:'independent-verdicts-and-bound-engine-replays'},mission);
-          });
-        }
         if(observation.corrected===true)continue;
         const proof=await resolvePositiveEvidence(run,{...use,invoked:true});if(proof?.verified!==true)continue;
         const id=`evolution-feedback-${evolutionKey([proof.evidenceId,use.toolId,run.id])}`;

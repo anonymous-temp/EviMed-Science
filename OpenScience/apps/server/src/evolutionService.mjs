@@ -1,19 +1,15 @@
-import { evolutionServingAction, evolutionServingJob, evolutionDeferred, assertEvolutionExperimentalPublication } from './evolutionServingPolicy.mjs';
 import { trustedEvolutionNativeName } from './evolutionToolRouting.mjs';
-import { createHash, randomUUID } from 'node:crypto';
-import { canonicalJson, EVOLUTION_TRACKS, EVOLUTION_TOOL_STATES, EVOLUTION_DATA_LEVELS, EVOLUTION_GAP_CODES, EVOLUTION_LEAD_SOURCES, evolutionMethodFields, evolutionValidationLevel, evolutionToolVisible, evolutionDataMatch, validateEvolutionDataRequirements } from '@evimed/domain';
+import { createHash } from 'node:crypto';
+import { EVOLUTION_TRACKS, EVOLUTION_GAP_CODES, evolutionToolVisible, evolutionDataMatch } from '@evimed/domain';
 import { HttpError } from './security.mjs';
 import { EVOLUTION_PROJECT_ID } from './internalProjects.mjs';
-import { MODULE_LEAD_SOURCES, moduleLeadPayload } from './evolutionLeadSources.mjs';
 import { evolutionAccountFloors } from './evolutionAccountClasses.mjs';
+import { evolutionRetainUntil } from './evolutionRetention.mjs';
 
 /** @param {any} value */
 export function evolutionKey(value) { return createHash('sha256').update(JSON.stringify(value)).digest('hex').slice(0, 32); }
-/** Archives and serving tools share a ledger, so their record identities must be distinct. @param {any} candidate */
-export function evolutionToolArchiveId(candidate) {
-  const hash = createHash('sha256').update(canonicalJson(candidate)).digest('hex');
-  return `evolution-tool-archive-${evolutionKey([candidate.id, hash])}`;
-}
+/** Event types read again after they are processed (`EvolutionIntegration.consume` for `tool-ready`). */
+const EVOLUTION_LATER_READ_EVENT_TYPES = Object.freeze(['dataset-ready', 'tool-ready']);
 /** The record id of a lead: its content, so the same lead from anywhere is one. @param {any} payload */
 export function evolutionLeadId(payload) { return `evolution-lead-${evolutionKey(payload)}`; }
 /** Public paper identities only; candidate URLs and private provenance never cross this projection. @param {any} papers */
@@ -74,8 +70,6 @@ export class EvolutionService {
   }
   /** @param {string} action @param {any} payload @param {string} key @param {Date} runAfter */
   async enqueue(action, payload, key, runAfter = this.now()) {
-    if (this.config.evolutionServingOnly === true) { if (!evolutionServingAction(action, payload)) return evolutionDeferred('evolution_offline_only', 'Experimental work is retained for an offline campaign.'); }
-    else if (this.config.evolutionSearchPaused === true && !evolutionServingJob(`evolution-${action}`, payload)) return evolutionDeferred();
     return this.jobs.enqueue(await this.owner(), `evolution-${action}`, payload, { idempotencyKey: `evolution:${key}`, projectId: EVOLUTION_PROJECT_ID,
       maxAttempts: Math.max(1, Math.min(10, this.config.evolutionMaxJobAttempts ?? 3)), runAfter });
   }
@@ -102,110 +96,82 @@ export class EvolutionService {
       return run();
     }));
   }
-  /** The record id a lead with this payload has. @param {any} payload */
-  leadId(payload) { return evolutionLeadId(payload); }
-  /** Only closed operational codes cross the researcher's tenant boundary. @param {any} input */
+  /**
+   * What a researcher's run could not do, kept for the offline lab (`scripts/ops/rsi-signals-export.mjs`): a closed code, never their prose. One lead per code, read by the lab as
+   * its occurrences in a window: one row per lead, account and event, dated for retention (`evolutionRetention.mjs`). How often a lead recurs is a counter on it, written without
+   * a revision (`telemetry`): a repeat is use, not a new version of the lead.
+   * @param {any} input
+   */
   async addLead(input) {
-    if (!EVOLUTION_TRACKS.includes(input.track) || !EVOLUTION_LEAD_SOURCES.includes(input.source) || !EVOLUTION_GAP_CODES.includes(input.gapCode)) throw new HttpError(400, 'evolution_lead_invalid', 'Unknown evolution lead vocabulary.');
-    const privateSource = ['runtime-failure', 'autopilot', 'dataset'].includes(input.source);
-    // The platform's own modules (flywheel F20): a closed code and closed entity keys, chosen from lists `evolutionLeadSources.mjs` owns.
-    const payload = MODULE_LEAD_SOURCES.includes(input.source) ? moduleLeadPayload(input) : privateSource ? { track: input.track, source: input.source, gapCode: input.gapCode, code: EVOLUTION_GAP_CODES.includes(input.code) ? input.code : input.gapCode }
-      : { track: input.track, source: input.source, gapCode: input.gapCode, method: input.method, papers: input.papers ?? [], features: input.features ?? {}, origin: input.origin ?? 'literature' };
+    if (!EVOLUTION_TRACKS.includes(input.track) || !['runtime-failure', 'autopilot'].includes(input.source) || !EVOLUTION_GAP_CODES.includes(input.gapCode)) throw new HttpError(400, 'evolution_lead_invalid', 'Unknown evolution lead vocabulary.');
+    const payload = { track: input.track, source: input.source, gapCode: input.gapCode, code: EVOLUTION_GAP_CODES.includes(input.code) ? input.code : input.gapCode };
     const id = evolutionLeadId(payload);
-    const result=await this.withLock(`lead:${id}`, async () => {
-      const eventId = input.sourceEventId ?? input.eventId ?? evolutionKey([payload, input.evidenceVersion ?? null]);
-      const occurrenceId = `evolution-lead-occurrence-${evolutionKey([id, input.userId ?? 'platform', eventId])}`;
-      const occurrenceOwner = input.userId ?? await this.owner();
-      const seen = await this.get(occurrenceId, occurrenceOwner);
+    return this.withLock(`lead:${id}`, async () => {
+      const occurrenceId = `evolution-lead-occurrence-${evolutionKey([id, input.userId, input.sourceEventId])}`;
+      const seen = await this.get(occurrenceId, input.userId);
       const prior = await this.get(id);
       if (seen && prior) return prior;
-      if (!seen) await this.save('lead-occurrence', occurrenceId, { leadId: id, eventId, projectId: input.projectId ?? EVOLUTION_PROJECT_ID,
-        at: this.now().toISOString(), scope: input.userId ? 'owner' : 'platform' }, null, occurrenceOwner);
-      let distinctAccounts = prior?.payload.distinctAccounts ?? 0;
+      if (!seen) await this.save('lead-occurrence', occurrenceId, { leadId: id, eventId: input.sourceEventId, projectId: input.projectId ?? EVOLUTION_PROJECT_ID,
+        at: this.now().toISOString(), scope: 'owner', retainUntil: evolutionRetainUntil(this.config, this.now()) }, null, input.userId);
       // Researchers and operators are counted apart, each against its own floor (`evolutionAccountClasses.mjs`).
       const operators = [...new Set((this.config.operatorUsers ?? []).map(String).filter(Boolean))];
-      let userAccounts = prior?.payload.userAccounts ?? distinctAccounts, operatorAccounts = prior?.payload.operatorAccounts ?? 0;
-      if (input.userId && this.documents.database) {
+      let distinctAccounts, operatorAccounts;
+      if (this.documents.database) {
         const aggregate = await this.documents.database.query("SELECT count(DISTINCT user_id)::integer AS accounts, count(DISTINCT user_id) FILTER (WHERE user_id=ANY($2::text[]))::integer AS operators FROM evimed_product.documents WHERE kind='knowledge' AND deleted_at IS NULL AND payload->>'recordType'='evolution-lead-occurrence' AND payload->>'scope'='owner' AND payload->>'leadId'=$1", [id, operators]);
         distinctAccounts = Number(aggregate.rows[0]?.accounts ?? 0);
         operatorAccounts = Number(aggregate.rows[0]?.operators ?? 0);
-        userAccounts = distinctAccounts - operatorAccounts;
-      } else if (input.userId) {
+      } else {
         // The in-memory test store may supply a metadata-only count reader.
-        distinctAccounts = await this.callbacks.leadAccountCount?.(id) ?? Math.max(distinctAccounts, 1);
+        distinctAccounts = await this.callbacks.leadAccountCount?.(id) ?? Math.max(Number(prior?.payload.distinctAccounts ?? 0), 1);
         operatorAccounts = operators.includes(String(input.userId)) ? Math.min(1, distinctAccounts) : 0;
-        userAccounts = distinctAccounts - operatorAccounts;
       }
-      const occurrences = Number(prior?.payload.occurrences ?? 0) + Number(!seen);
-      const queueKey = `${id}:${occurrences}`;
+      const userAccounts = distinctAccounts - operatorAccounts;
       const floors = evolutionAccountFloors(this.config);
-      const ready = !input.userId || userAccounts >= floors.user || operatorAccounts >= floors.operator;
-      const saved = await this.save('lead', id, { ...payload, createdAt: prior?.payload.createdAt ?? this.now().toISOString(),
-        firstSeenAt: prior?.payload.firstSeenAt ?? this.now().toISOString(), lastSeenAt: this.now().toISOString(),
-        occurrences, distinctAccounts, ...(operatorAccounts ? { operatorAccounts, userAccounts } : {}), queueKey, status: ready ? 'queued' : 'accumulating' }, prior);
-      return saved;
+      const next = { ...payload, createdAt: prior?.payload.createdAt ?? this.now().toISOString(), firstSeenAt: prior?.payload.firstSeenAt ?? this.now().toISOString(), lastSeenAt: this.now().toISOString(),
+        occurrences: Number(prior?.payload.occurrences ?? 0) + Number(!seen), distinctAccounts, ...(operatorAccounts ? { operatorAccounts, userAccounts } : {}),
+        status: userAccounts >= floors.user || operatorAccounts >= floors.operator ? 'queued' : 'accumulating', recordType: 'evolution-lead' };
+      const reached = !prior || next.distinctAccounts !== prior.payload.distinctAccounts || next.status !== prior.payload.status;
+      return this.documents.put(await this.owner(), 'knowledge', id, next, { expectedRevision: prior?.revision ?? 0, projectId: EVOLUTION_PROJECT_ID, ...(reached ? {} : { telemetry: true }) });
     });
-    if(result.payload.status==='queued'&&!this.config.evolutionSearchPaused)await this.enqueue('scout',{leadId:id,leadVersion:result.payload.occurrences},result.payload.queueKey??id);
-    return result;
   }
 
   /** @param {any} event @param {{runAfter?:Date}} [options] */
   async ingestEvent(event, { runAfter = this.now() } = {}) {
     if (!event.id || !event.type) throw new HttpError(400, 'evolution_event_invalid', 'An event needs its identity and type.');
     // Tenant payloads stay in tenant-owned event records; the shared lead is separately reduced to closed codes.
+    // An event of a type nothing reads again carries when it may go (`evolutionRetention.mjs`); a `dataset-ready` is read until a newer revision of its dataset replaces it.
     const id = `evolution-event-${evolutionKey([event.id, event.type, event.userId ?? null])}`;
     const owner = event.userId ?? await this.owner();
     const saved=await this.withLock(`event:${owner}:${id}`,async()=>{
       const prior=await this.get(id,owner);
-      return prior??this.save('event',id,{...event,createdAt:this.now().toISOString(),status:'queued'},null,owner);
+      return prior??this.save('event',id,{...event,createdAt:this.now().toISOString(),status:'queued',...(EVOLUTION_LATER_READ_EVENT_TYPES.includes(event.type)?{}:{retainUntil:evolutionRetainUntil(this.config,this.now())})},null,owner);
     });
     if(saved.payload.status==='queued')await this.enqueue('event',{eventId:id,eventOwnerId:owner},id,runAfter);
     return saved;
   }
-  /** Recover a persisted lead/event whose enqueue was interrupted, without reading tenant prose. */
+  /** Recover a persisted event whose enqueue was interrupted, without reading tenant prose. */
   async reconcileQueued() {
     if (!this.documents.database) return { recovered: 0 };
     const owner = await this.owner();
-    const missing = await this.documents.database.query("SELECT id,user_id,payload->>'recordType' AS record_type,coalesce(payload->>'queueKey',id) AS queue_key FROM evimed_product.documents d WHERE kind='knowledge' AND deleted_at IS NULL AND payload->>'status'='queued' AND payload->>'recordType'=ANY($1::text[]) AND NOT EXISTS(SELECT 1 FROM evimed_product.jobs j WHERE j.user_id=$2 AND j.idempotency_key='evolution:'||coalesce(d.payload->>'queueKey',d.id)) ORDER BY created_at,id LIMIT 100", [['evolution-lead','evolution-event'], owner]);
-    for (const row of missing.rows) {
-      if (row.record_type === 'evolution-lead' && this.config.evolutionSearchPaused) continue;
-      await this.enqueue(row.record_type === 'evolution-lead' ? 'scout' : 'event', row.record_type === 'evolution-lead' ? { leadId: row.id } : { eventId: row.id, eventOwnerId: row.user_id }, row.queue_key ?? row.id);
-    }
+    const missing = await this.documents.database.query("SELECT id,user_id FROM evimed_product.documents d WHERE kind='knowledge' AND deleted_at IS NULL AND payload->>'status'='queued' AND payload->>'recordType'='evolution-event' AND NOT EXISTS(SELECT 1 FROM evimed_product.jobs j WHERE j.user_id=$1 AND j.idempotency_key='evolution:'||d.id) ORDER BY created_at,id LIMIT 100", [owner]);
+    for (const row of missing.rows) await this.enqueue('event', { eventId: row.id, eventOwnerId: row.user_id }, row.id);
     return { recovered: missing.rows.length };
-  }
-  /** @param {any} input */
-  async addDossier(input) { const id = input.id ?? `evolution-dossier-${randomUUID()}`; return this.save('dossier', id, { ...input, status: 'planned', createdAt: this.now().toISOString() }); }
-  /** @param {string} id */
-  async queueBuild(id) { const dossier = await this.get(id); if (!dossier) throw new HttpError(404, 'evolution_dossier_missing', 'Dossier not found.'); return this.enqueue('build', { dossierId: id }, `build:${id}:${dossier.revision}`); }
-  /** @param {any} input */
-  async registerTool(input) {
-    assertEvolutionExperimentalPublication(this.config);
-    if (!input.id || !EVOLUTION_TRACKS.includes(input.track) || !EVOLUTION_TOOL_STATES.includes(input.status ?? 'active') || !EVOLUTION_DATA_LEVELS.includes(input.dataLevel ?? 'D0')) throw new HttpError(400, 'evolution_tool_invalid', 'Invalid tool identity or track.');
-    if (input.dataRequirements && validateEvolutionDataRequirements(input.dataRequirements).length) throw new HttpError(400, 'evolution_requirements_invalid', 'Invalid data requirements.');
-    const existing = await this.get(input.id);
-    assertEvolutionExperimentalPublication(this.config);
-    if (existing) { if (canonicalJson([existing.payload.artifactDigest ?? null, existing.payload.entrypoint ?? null, existing.payload.publicationKind ?? null, existing.payload.dataRequirements ?? null, existing.payload.capabilityIds ?? null, existing.payload.track]) !== canonicalJson([input.artifactDigest ?? null, input.entrypoint ?? null, input.publicationKind ?? null, input.dataRequirements ?? null, input.capabilityIds ?? null, input.track])) throw new HttpError(409, 'evolution_version_immutable', 'A published version is immutable.'); return existing; }
-    return this.save('tool', input.id, { ...input, ...evolutionMethodFields({ ...input, validationLevel: 'V0' }), assessments: [], createdAt: this.now().toISOString() });
-  }
-  /** Called only by the independently composed evaluator, never by public routes. @param {string} id @param {any} assessment */
-  async recordAssessment(id, assessment) {
-    const tool = await this.get(id);
-    if (!tool || tool.payload.recordType !== 'evolution-tool') throw new HttpError(404, 'evolution_tool_missing', 'Tool not found.');
-    if (assessment.independent !== true || !assessment.id) throw new HttpError(400, 'evolution_assessment_invalid', 'An independent assessment identity is required.');
-    assessment = Object.fromEntries(['id', 'caseId', 'kind', 'papers', 'preRegistered', 'monteCarloError', 'passed', 'independent', 'exposed', 'retracted', 'crossImplementationPassed', 'failureIds', 'cycleId', 'at'].filter((key) => assessment[key] !== undefined).map((key) => [key, assessment[key]]));
-    const assessments = [...tool.payload.assessments.filter((/** @type {any} */ a) => a.id !== assessment.id), assessment];
-    const validationLevel = evolutionValidationLevel(assessments, tool.payload.usage);
-    const saved = await this.save('tool', id, { ...tool.payload, assessments, validationLevel }, tool);
-    if (tool.payload.validationLevel !== validationLevel) await this.resolveWaiters({ type: 'tool-ready', toolId: id });
-    return saved;
   }
   async dossiers() { return this.list('dossier'); }
   async tools() { return this.list('tool'); }
-  /** @param {string} userId */
-  async opportunities(userId) { return this.list('opportunity', userId); }
   /** @param {any} agenda @returns {Promise<any[]>} */
   async availableTools(agenda = {}) { return (await this.tools()).filter((row) => evolutionToolVisible(row.payload) && (!agenda.track || row.payload.track === agenda.track)
     && (!agenda.capabilityId || row.payload.capabilityIds?.includes(agenda.capabilityId))).map((row) => ({ id: row.id, ...(trustedEvolutionNativeName(row.payload) ? {nativeName:trustedEvolutionNativeName(row.payload)} : {}), papers: evolutionPublicPapers(row.payload.lineage?.papers ?? row.payload.papers), ...Object.fromEntries(['name', 'description', 'track', 'capabilityIds', 'toolKind', 'validationLevel', 'dataLevel', 'dataRequirements', 'status', 'maintenanceState', 'entrypoint', 'publicationKind', 'artifactDigest', 'usage', 'whenToUse'].filter((key) => row.payload[key] !== undefined).map((key) => [key, row.payload[key]])) })); }
+  /**
+   * Only the latest `dataset-ready` of a dataset is read again (`tool-ready`, by `createdAt`): the ones it replaces are dated for retention, and only those, whichever order
+   * their jobs finish in. One whose job has not finished may be dated too: the pass deletes only what is processed. @param {any} event
+   */
+  async retireEarlierDatasetEvents(event) {
+    for (const row of await this.list('event', event.userId, { type: 'dataset-ready', datasetId: event.datasetId })) {
+      if (row.payload.projectId !== event.projectId || row.payload.retainUntil || !(String(row.payload.createdAt) < String(event.createdAt))) continue;
+      await this.save('event', row.id, { ...row.payload, retainUntil: evolutionRetainUntil(this.config, this.now()) }, row, event.userId);
+    }
+  }
   /** @param {any} input */
   async waitFor(input) {
     const id = `evolution-waiter-${evolutionKey([input.userId, input.projectId, input.agendaId, input.sourceEpisodeId, input.capabilityId, input.methodId, input.toolId, input.requirementId])}`;
@@ -230,10 +196,9 @@ export class EvolutionService {
           && evolutionDataMatch(item.payload.dataRequirements, event.dataset).matched);
         const matched = available.find(Boolean);
         if (!matched) continue;
-        // Serving runs it (an already published tool on the researcher's own dataset); a legacy pause keeps the event to queue it once after the pause.
-        const queued = await this.enqueue('self-check', { userId: owner, projectId: wait.projectId, agendaId: wait.agendaId,
+        // An already published tool on the researcher's own dataset; the wait is resolved when it completes.
+        await this.enqueue('self-check', { userId: owner, projectId: wait.projectId, agendaId: wait.agendaId,
           waiterId: row.id, sourceEventId: event.id, toolId: matched.id, datasetId: event.datasetId }, `check:${row.id}:${event.id}:${matched.id}`);
-        if (queued?.status === 'deferred') throw new HttpError(409, queued.code, queued.reason);
         continue;
       }
       const woke = await this.wakeWait(row, owner, wait, event);
@@ -279,15 +244,6 @@ export class EvolutionService {
       ...(woke.deferred ? { wakeDeferred: woke.deferred } : {}) }, row, input.userId);
     return { resumed: true };
   }
-  /** Failed approaches are immutable and wake only on new resources or methods. @param {any} input */
-  async recordFailure(input) {
-    if (!EVOLUTION_GAP_CODES.includes(input.gapCode)) throw new HttpError(400, 'evolution_failure_invalid', 'Unknown failure category.');
-    const id = `evolution-failure-${evolutionKey([input.dossierId, input.version, input.gapCode, input.attemptedPaths])}`;
-    const previous = await this.get(id);
-    return previous ?? this.save('failure', id, { ...input, origin: 'tool-result', createdAt: this.now().toISOString(), status: 'waiting', wakeConditions: input.wakeConditions ?? ['new-method', 'new-data', 'new-tool', 'new-model'] });
-  }
-  /** @param {any} input */
-  async addOpportunity(input) { return this.save('opportunity', input.id ?? `evolution-opportunity-${randomUUID()}`, { ...input, origin: 'platform-inference', createdAt: this.now().toISOString() }, null, input.userId); }
 }
 /** @param {any} dependencies */
 export function createEvolutionService(dependencies) { return new EvolutionService(dependencies); }

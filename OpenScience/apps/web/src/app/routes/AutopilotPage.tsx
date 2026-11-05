@@ -447,8 +447,7 @@ function ProjectAutopilotPage({ projectId }: { projectId: string }) {
   const detail = ({ split }: MasterDetailState) => creating
     ? <NewTaskPane key={`${example?.id ?? "blank"}:${fresh}`} projectId={projectId} available={available} recommendation={example} intro={none} examples={!none || !split} backTo={split ? undefined : taskPath(null, { search })}
       onChooseExample={openDraft} onCancel={none ? undefined : leaveDraft} onDraftChange={setDraft} onRecorded={record}
-      onSaved={value => { record(value); navigate(taskPath(value.id, { search: searchNow.current }), { replace: true }); }}
-      onAdopted={id => { void load(); navigate(taskPath(id, { search: searchNow.current }), { replace: true }); }} />
+      onSaved={value => { record(value); navigate(taskPath(value.id, { search: searchNow.current }), { replace: true }); }} />
     : !selectedId
       // A bare address beside the list is never an empty pane: it is the list's first task, or the form for the first one. A briefing's
       // address is read first (`digestId`), and it says where it goes.

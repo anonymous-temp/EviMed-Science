@@ -1,28 +1,28 @@
 import { randomUUID } from 'node:crypto';
 import { HttpError } from './security.mjs';
-export const EVOLUTION_SERVING_EVENT_TYPES = Object.freeze(['researcher-feedback','runtime-gap','autopilot-gap','dataset-ready','tool-ready','evaluation-gap']);
+export const EVOLUTION_SERVING_EVENT_TYPES = Object.freeze(['researcher-feedback','runtime-gap','autopilot-gap','dataset-ready','tool-ready']);
 /** The serving continuation of published state: events, decision expiries, the operators' digest, a retirement's completion and the
  * metrics-only month; and a self-check, an already published tool run in the isolated executor on a researcher's dataset. */
 export const EVOLUTION_SERVING_LIGHT_KINDS = Object.freeze(['evolution-event','evolution-decision','evolution-digest','evolution-maintain']);
 export const EVOLUTION_SERVING_SELF_CHECK_KIND = 'evolution-self-check';
-/** A request a retry cannot change (main's classification): the job fails at once. */
+/** A request a retry cannot change: the job fails at once. */
 const TERMINAL_STATUSES = Object.freeze([400, 401, 403, 404, 422]);
 const MINUTE = 60_000, HOUR = 3_600_000, DAY = 86_400_000;
-/** Deterministic continuation of already published product operations. No experimental job is claimed.
- * @param {{service:any,integration:any,decisions?:any,maintenance?:any,selfCheck?:any,config?:any,logger?:any,quarantine?:(admission:(client?:any)=>Promise<boolean>|boolean)=>Promise<any>,canRun?:(client?:any)=>Promise<boolean>|boolean}} dependencies */
-export function createEvolutionServingWorker({service,integration,decisions=null,maintenance=null,selfCheck=null,config={},logger=console,canRun=async()=>true,quarantine=async()=>0}) {
+/** Deterministic continuation of already published product operations. It calls no model.
+ * @param {{service:any,integration:any,decisions?:any,maintenance?:any,selfCheck?:any,config?:any,logger?:any,quarantine?:(admission:(client?:any)=>Promise<boolean>|boolean)=>Promise<any>,compact?:(admission:(client?:any)=>Promise<boolean>|boolean)=>Promise<any>,canRun?:(client?:any)=>Promise<boolean>|boolean}} dependencies */
+export function createEvolutionServingWorker({service,integration,decisions=null,maintenance=null,selfCheck=null,config={},logger=console,canRun=async()=>true,quarantine=async()=>0,compact=async()=>0}) {
  const workerId=`evolution-serving-${randomUUID()}`;
  /** @type {ReturnType<typeof setInterval>|null} */ let timer=null;
  /** @type {Promise<any>|null} */ let active=null;
  let closed=false;
- const counters={processed:0,closed:0,failed:0,terminal:0,quarantined:0,housekeepingFailed:0};
+ const counters={processed:0,closed:0,failed:0,terminal:0,quarantined:0,housekeepingFailed:0,recordsDeleted:0};
  const kinds=Object.freeze([...EVOLUTION_SERVING_LIGHT_KINDS,...(selfCheck?[EVOLUTION_SERVING_SELF_CHECK_KIND]:[])]);
  const leaseMs=()=>config.evolutionLeaseMs??120000;
  /** @type {Map<string,{at:number,key:string|null}>} */ const blockRuns=new Map();
  /** A block runs when it never ran, its key changed or its interval passed, and is marked done only after it succeeded.
   * @param {string} name @param {{ms:number,key?:string|null}} schedule @param {()=>Promise<any>} work */
  const every=async(name,{ms,key=null},work)=>{const at=service.now().getTime(),last=blockRuns.get(name);if(last&&last.key===key&&at-last.at<ms)return;await work();blockRuns.set(name,{at,key});};
- /** The recovery and reporting paths of published state (main's housekeeping, without any experiment): each idempotent, keyed. */
+ /** The recovery and reporting paths of published state: each idempotent, keyed. */
  async function housekeeping() {
   const now=service.now(),local=new Date(now.getTime()+8*HOUR),day=local.toISOString().slice(0,10),month=now.toISOString().slice(0,7);
   const previousMonth=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth()-1,1)).toISOString().slice(0,7);
@@ -38,6 +38,12 @@ export function createEvolutionServingWorker({service,integration,decisions=null
   await every('digest',{ms:MINUTE},async()=>{
    const preferences=await service.notifications?.preferences?.(await service.owner());
    if(local.toISOString().slice(11,16)>=(preferences?.digestTime??'08:00'))await every('digest-queued',{ms:DAY,key:day},()=>service.enqueue('digest',{day},`daily-digest:${day}`));
+  });
+  // What serving wrote and nothing reads again, past its date (`evolutionRetention.mjs`). At most daily whether it succeeded or not: a pass that timed out
+  // is not asked again at every poll, and its failure holds no block after it. The rows wait for tomorrow's pass.
+  await every('retention',{ms:DAY,key:day},async()=>{
+   try{counters.recordsDeleted+=Number(await compact(canRun)??0);}
+   catch(error){counters.housekeepingFailed++;logger.error('Evolution serving retention failed',{code:error?.code??'evolution_serving_retention_failed'});}
   });
   // The month's funnel figures, metrics-only, under a key of serving's own: a cancelled `monthly-v2:`/`monthly-metrics:` row cannot hold it.
   await every('monthly',{ms:DAY,key:month},async()=>{
@@ -59,7 +65,7 @@ export function createEvolutionServingWorker({service,integration,decisions=null
   const p=job.payload;
   if(job.kind==='evolution-decision'){
    const result=await decisions.expire(p.decisionId);
-   // Serving closes what it cannot carry out; a deferral reaching here is a defect, failed once rather than retried for ever.
+   // Expiry closes what it cannot carry out; a deferral reaching here is a defect, failed once rather than retried for ever.
    if(result?.status==='deferred')throw new HttpError(422,result.code,'The decision cannot be carried out by serving.');
    return {decisionId:p.decisionId,status:result?.payload?.status??null};
   }
@@ -71,7 +77,7 @@ export function createEvolutionServingWorker({service,integration,decisions=null
     return {toolId:p.toolId,retirement:retired?.payload.retirement?.state??null};
    }
    // A monthly pass queued before cutover keeps its identity and runs as serving does: the figures only.
-   return {metricsId:(await maintenance.monthly({...p,metricsOnly:true}))?.id??null};
+   return {metricsId:(await maintenance.monthly(p))?.id??null};
   }
   if(job.kind===EVOLUTION_SERVING_SELF_CHECK_KIND){
    const result=await selfCheck.run(p);
@@ -87,7 +93,6 @@ export function createEvolutionServingWorker({service,integration,decisions=null
    return {eventId:p.eventId,status:'closed',closedReason:'retired-to-lab'};
   }
   await integration.consume(row.payload);
-  if (!['dataset-ready', 'tool-ready'].includes(row.payload.type)) await service.resolveWaiters(row.payload);
   await service.save('event',row.id,{...row.payload,status:'processed'},row,p.eventOwnerId);
   counters.processed++;
   return {eventId:p.eventId};
@@ -108,7 +113,7 @@ export function createEvolutionServingWorker({service,integration,decisions=null
    return await service.jobs.finish(job.userId,job.id,job.leaseToken,result??{});
   }catch(error){
    counters.failed++;
-   // Main's classification: a request a retry cannot change fails at once, anything else is tried again until the attempts are spent.
+   // A request a retry cannot change fails at once, anything else is tried again until the attempts are spent.
    const terminal=Number(job.attempts??1)>=Math.min(job.maxAttempts??10,config.evolutionMaxJobAttempts??3)||TERMINAL_STATUSES.includes(error?.status??error?.statusCode);
    if(terminal)counters.terminal++;
    const code=typeof error?.code==='string'&&/^[a-z0-9_]{1,64}$/.test(error.code)?error.code:'evolution_serving_failed';
@@ -119,5 +124,5 @@ export function createEvolutionServingWorker({service,integration,decisions=null
  const tick=()=>{if(!active)active=perform().finally(()=>{active=null;});return active;};
  const stop=()=>{if(timer)clearInterval(timer);timer=null;};
  return {kinds,counters,tick,start(){if(!closed&&!timer)timer=setInterval(()=>{tick().catch(error=>logger.error('Evolution serving worker failed',{code:error?.code??'evolution_serving_failed'}));},config.evolutionPollMs??15000);},stop,
-  async close(){closed=true;stop();await active;},status:()=>({enabled:config.evolutionEnabled===true,experimentScheduling:false,running:active!==null,serving:true})};
+  async close(){closed=true;stop();await active;},status:()=>({enabled:config.evolutionEnabled===true,running:active!==null})};
 }

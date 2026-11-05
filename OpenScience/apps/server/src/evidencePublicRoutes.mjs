@@ -85,16 +85,14 @@ function matches(header, etag) {
  *   now?: () => Date,
  *   metrics?: ReturnType<typeof createEvidencePublicMetrics>,
  *   questionBank?: ((query: { month: string }) => Promise<any>) | null,
- *   predictionCalibration?: (() => Promise<any>) | null,
  *   receiptsFor?: ((card: any) => Promise<Map<string, any>>) | null,
  *   report?: (code: string) => void,
  * }} options
  *   `simulations` is the 「模拟研究」 column's reader (another package publishes into it); absent, the column says it is empty.
- *   `limiter` throws a 429 `HttpError` when an address is over its minute; absent, none. `metrics` is for a test's figures. `questionBank` and
- *   `predictionCalibration` are the readers of the monthly page's two optional sections (the question bank's month, the prediction registry's
- *   calibration), composed only where those modules are; absent, the section is not rendered.
+ *   `limiter` throws a 429 `HttpError` when an address is over its minute; absent, none. `metrics` is for a test's figures. `questionBank` is the reader of the monthly
+ *   page's optional section (the question bank's month), composed only where that module is; absent, the section is not rendered.
  */
-export function createEvidencePublicRoutes({ config, database, simulations = null, limiter = null, now = () => new Date(), metrics, questionBank = null, predictionCalibration = null, receiptsFor = null, report = () => {} }) {
+export function createEvidencePublicRoutes({ config, database, simulations = null, limiter = null, now = () => new Date(), metrics, questionBank = null, receiptsFor = null, report = () => {} }) {
   const enabled = config.evidencePublicWebEnabled === true && Boolean(database);
   const counters = {
     pages: 0, api: 0, assets: 0, sitemap: 0, robots: 0, feeds: 0, notFound: 0, withdrawn: 0, rateLimited: 0, notModified: 0, errors: 0,
@@ -103,7 +101,7 @@ export function createEvidencePublicRoutes({ config, database, simulations = nul
   const reads = enabled ? createEvidencePublicReads({ database, now, receiptsFor }) : null;
   const topics = enabled ? createEvidencePublicTopicReads({ database, now }) : null;
   const indexing = reads ? createEvidencePublicIndexing({ config, reads }) : null;
-  const figures = enabled ? (metrics ?? createEvidencePublicMetrics({ database, now, questionBank, predictionCalibration, report })) : null;
+  const figures = enabled ? (metrics ?? createEvidencePublicMetrics({ database, now, questionBank, report })) : null;
   const api = reads && figures ? createEvidencePublicApi({ reads, metrics: figures, config }) : null;
 
   /** @param {any} res @param {number} status @param {Record<string, string>} headers @param {string | Buffer} body @param {boolean} head */
@@ -154,8 +152,7 @@ export function createEvidencePublicRoutes({ config, database, simulations = nul
     if (section === "metrics" && parts.length === 1) {
       const months = await /** @type {NonNullable<typeof figures>} */ (figures).months();
       const questionBankMonth = await figures?.questionBank?.() ?? null;
-      const calibration = await figures?.predictionCalibration?.() ?? null;
-      return sendPage(res, head, 200, metricsPage({ months, questionBank: questionBankMonth, calibration }), { path: evidencePublicPath("/metrics"), noindex: await noindexFor({ kind: "site" }), active: "metrics" });
+      return sendPage(res, head, 200, metricsPage({ months, questionBank: questionBankMonth }), { path: evidencePublicPath("/metrics"), noindex: await noindexFor({ kind: "site" }), active: "metrics" });
     }
     if (section === "simulations" && parts.length <= 2) {
       if (parts.length === 1) {

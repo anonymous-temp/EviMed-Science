@@ -64,22 +64,6 @@ test("the outcome consumer's two levers: off and 25 by default, read from the en
   assert.match(apiOnly, /OPEN_SCIENCE_LEARNING_EVIDENCE_OUTCOMES_ENABLED: \$\{OPEN_SCIENCE_LEARNING_EVIDENCE_OUTCOMES_ENABLED:-false\}/);
 });
 
-test("the module-leads levers: off and five a day by default, read from the environment, a count outside 1 to 50 stops the start by its name, carried by .env.example and compose", async () => {
-  const defaults = configUnder({});
-  assert.deepEqual([defaults.evolutionModuleLeadsEnabled, defaults.evolutionModuleLeadsPerDay], [false, 5]);
-  const set = configUnder({ OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_ENABLED: "true", OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_PER_DAY: "9" });
-  assert.deepEqual([set.evolutionModuleLeadsEnabled, set.evolutionModuleLeadsPerDay], [true, 9]);
-  assert.equal(configUnder({ OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_PER_DAY: "" }).evolutionModuleLeadsPerDay, 5);
-  for (const value of ["0", "51", "2.5", "lots"]) assert.throws(() => configUnder({ OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_PER_DAY: value }), /OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_PER_DAY/, value);
-  const example = await readFile(path.join(repoRoot, "deploy/web/.env.example"), "utf8");
-  const compose = await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8");
-  const apiOnly = await readFile(path.join(repoRoot, "deploy/web/docker-compose.api-only.yml"), "utf8");
-  for (const [name, value] of [["OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_ENABLED", "false"], ["OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_PER_DAY", "5"]]) {
-    assert.deepEqual([...example.matchAll(new RegExp(`^${name}=(.*)$`, "gm"))].map((line) => line[1]), [value], name);
-    assert.match(compose, new RegExp(`^\\s+${name}:\\s*$`, "m"), name);
-  }
-  assert.match(apiOnly, /OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_ENABLED: \$\{OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_ENABLED:-false\}/);
-});
 
 test("the official-promotion levers: on and three a day by default, read from the environment, a count outside 1 to 30 stops the start by its name, carried by .env.example and compose", async () => {
   const defaults = configUnder({});

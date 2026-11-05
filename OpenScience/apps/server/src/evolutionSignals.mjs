@@ -3,25 +3,16 @@ import { GEO_ERROR_TYPES, GEO_STATEMENT_TOPICS } from '@evimed/domain';
 import { evolutionKey } from './evolutionService.mjs';
 import { EVOLUTION_MODULE_IDS } from './evolutionUsage.mjs';
 import { isInternalProject } from './internalProjects.mjs';
-import { EVOLUTION_ACCOUNT_CLASSES, EVOLUTION_DEMAND_MIN_ACCOUNTS, evolutionAccountClass, evolutionAccountFloors } from './evolutionAccountClasses.mjs';
+import { evolutionAccountFloors } from './evolutionAccountClasses.mjs';
+import { evolutionRetainUntil } from './evolutionRetention.mjs';
 
-export { EVOLUTION_ACCOUNT_CLASSES, EVOLUTION_DEMAND_MIN_ACCOUNTS, evolutionAccountClass, evolutionAccountFloors };
 export const EVOLUTION_OPERATIONS = Object.freeze(['answer', 'search', 'synthesize', 'extract', 'transform', 'classify', 'route', 'plan', 'recall', 'edit', 'rank', 'simulate', 'compare-groups', 'paired-analysis', 'longitudinal-analysis', 'survival-analysis', 'competing-risk', 'meta-analysis', 'causal-inference', 'network-analysis', 'unknown']);
 export const EVOLUTION_DATA_SHAPES = Object.freeze(['none', 'text', 'table', 'paired', 'longitudinal', 'time-to-event', 'competing-events', 'expression-matrix', 'network', 'image', 'mixed', 'unknown']);
 export const EVOLUTION_DEMAND_REASONS = Object.freeze(['unsupported', 'refusal', 'missing-data', 'missing-tool']);
 export const EVOLUTION_SIGNAL_KINDS = Object.freeze(['unmet-demand', 'route-override', 'classifier-failure', 'planner-fallback', 'source-omission', 'semantics-contested', 'semantics-correction', 'availability', 'workflow-success', 'memory-accepted', 'memory-modified', 'memory-rejected', 'review-accepted', 'review-rejected', 'programme-outcome', 'result-correction', 'citation-rejected', 'question-rephrased', 'geo-misconception']);
 
-/** Project metadata is reduced to a closed shape; no names, categories, values or identifiers escape. @param {any} dataset */
-export function evolutionDataShape(dataset) {
-  const shape = dataset?.shapeCode;
-  if (EVOLUTION_DATA_SHAPES.includes(shape)) return shape;
-  const unit = dataset?.rowRepresents;
-  if (unit === 'repeated-observation') return 'longitudinal';
-  if (Array.isArray(dataset?.fields) && dataset.fields.length) return 'table';
-  return 'unknown';
-}
-
-/** All user signals stay owner scoped. Aggregate counts and closed codes remain separate from the authorized incident export path. `operatorIds` names the
+/** All user signals stay owner scoped, closed codes only, for the offline lab; they stay for the retention period (`evolutionRetention.mjs`) unless versioned.
+ * `aggregate` is GEO's outbox's (`geoLearningSignals.mjs`): the summaries of the signals in force, reconciled in the commit that withdraws one. `operatorIds` names the
  * accounts of the operator class and `floors` the number of different accounts each class needs (`evolutionAccountFloors`).
  * @param {{service:any,capabilityIds:()=>Promise<string[]>,operatorIds?:()=>string[],floors?:{user:number,operator:number}}} dependencies */
 export function createEvolutionSignals({ service, capabilityIds, operatorIds = () => [], floors = evolutionAccountFloors() }) {
@@ -51,7 +42,7 @@ export function createEvolutionSignals({ service, capabilityIds, operatorIds = (
       sourceEventId: input.eventId, sourceVersion: String(input.version ?? '').slice(0, 128),
       ...(versioned(input) ? { sourceRevision: input.sourceRevision, state: 'active',
         ...(typeof input.provenanceRef === 'string' ? { provenanceRef: input.provenanceRef } : {}),
-        ...(previous ? { supersedesVersion: previous.payload.sourceVersion } : {}) } : {}),
+        ...(previous ? { supersedesVersion: previous.payload.sourceVersion } : {}) } : { retainUntil: evolutionRetainUntil(service.config ?? {}, service.now()) }),
       ...(input.kind === 'route-override' ? { fromCapability: allowed.includes(input.fromCapability) ? input.fromCapability : 'unknown' } : {}),
       firstSeenAt: previous?.payload.firstSeenAt ?? service.now().toISOString(), count: 1, scope: 'owner' };
     return service.save('signal', id, payload, previous, input.userId);

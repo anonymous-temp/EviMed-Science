@@ -521,7 +521,7 @@ describe("scheduled tasks", () => {
         expect(within(header).getByText("波立维 · 9月29日")).toBeInTheDocument();
       } finally { useProjectStore.setState({ projects: [] }); }
     });
-    it("groups the tasks as 待开始 / 已暂停 / 已完成 and draws only the groups that have rows, with no templates or opportunities on the page", async () => {
+    it("groups the tasks as 待开始 / 已暂停 / 已完成 and draws only the groups that have rows, with no templates on the page", async () => {
       const done = { ...agenda, id: "done", payload: { ...agenda.payload, title: "做完的任务", scheduleState: "completed", nextRunAt: null, schedule: { kind: "once", date: "2026-09-29", time: "07:30", timeZone: "Asia/Shanghai" } } };
       mocks.listAgendas.mockResolvedValue({ items: [done, paused({ title: "已停的任务" }, "paused"), agenda] });
       render("/app/autopilot");
@@ -531,7 +531,7 @@ describe("scheduled tasks", () => {
       expect(within(screen.getByRole("region", { name: "已完成" })).getByRole("link", { name: "做完的任务" })).toBeInTheDocument();
       expect([...list().querySelectorAll("section h2")].map(each => each.textContent)).toEqual(["待开始", "已暂停", "已完成"]);
       // The list holds tasks and nothing else (page structure rule 1): the starting points are in the new-task dialog.
-      expect(screen.queryByRole("region", { name: "推荐" })).not.toBeInTheDocument(); expect(screen.queryByRole("region", { name: "研究机会" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("region", { name: "推荐" })).not.toBeInTheDocument();
       cleanup(); mocks.listAgendas.mockResolvedValue({ items: [agenda] }); render("/app/autopilot");
       await screen.findByRole("region", { name: "待开始" });
       expect(screen.queryByRole("region", { name: "已暂停" })).not.toBeInTheDocument(); expect(screen.queryByRole("region", { name: "已完成" })).not.toBeInTheDocument();

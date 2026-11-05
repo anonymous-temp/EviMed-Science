@@ -76,6 +76,6 @@ test('the controller reports what its executor did through the admission endpoin
     const answer = await client.evolutionAdmissionAvailable();
     assert.equal(answer.executor.ok, 2);
     assert.deepEqual(Object.keys(answer.executor).sort(), ['canceled', 'candidateFailed', 'dependenciesPrepared', 'dependencyPreparationFailed', 'errored', 'ok', 'timedOut', 'unavailable']);
-    assert.equal(typeof answer.available, 'boolean', 'the answer the worker reads is unchanged');
+    assert.deepEqual(Object.keys(answer), ['executor'], 'the answer carries the executor counters and no capacity verdict: no experiment waits for a slot any more');
   } finally { await server.close(); await fs.rm(dataDir, { recursive: true, force: true }); }
 });

@@ -28,14 +28,14 @@ export function minimumPositive(...values) {
  * answer is `null`, unless the ledger is required, when the call must not be made at all: a spend nobody records is the
  * defect metering exists for.
  *
- * @param {{ config: any, usageLedger: any, caller: any, attributeRun?: any, runPurpose?: any, runScope?: any,
+ * @param {{ config: any, usageLedger: any, caller: any, attributeRun?: any, runScope?: any,
  *   model: string, estimatedCost: number, fingerprint: unknown, at?: Date }} input
  *   `model` is what the row names — a model id, or a tool such as `deepseek-search`; `fingerprint` is hashed into the
  *   row's request fingerprint
  * @returns {Promise<{ id: string } | null>}
  * @throws {GatewaySpendRefusal}
  */
-export async function reserveGatewaySpend({ config, usageLedger, caller, attributeRun = null, runPurpose = null, runScope = null, model, estimatedCost, fingerprint, at = new Date() }) {
+export async function reserveGatewaySpend({ config, usageLedger, caller, attributeRun = null, runScope = null, model, estimatedCost, fingerprint, at = new Date() }) {
   if (!usageLedger) {
     if (config.requireDurableUsageLedger === true) throw new GatewaySpendRefusal("unrecordable", "its spend cannot be recorded right now.");
     return null;
@@ -70,18 +70,15 @@ export async function reserveGatewaySpend({ config, usageLedger, caller, attribu
     });
     if (scope) { runId = scope.usageRunId; runLimit = Number(scope.runLimit) || 0; }
   }
-  // Asking can fail (the run ledger is a file): the model gateway books `kernel` then rather
-  // than costing the call, and so does this one — a call is never lost for a column it writes.
-  const purpose = runPurpose && await runPurpose({ userId: caller.userId, projectId: caller.projectId, runId }).catch(() => "kernel") === "evolution" ? "evolution" : "web-search";
   try {
     return await usageLedger.reserveModel({
-      id: randomUUID(), userId: caller.userId, projectId: caller.projectId, runId, purpose, model,
+      id: randomUUID(), userId: caller.userId, projectId: caller.projectId, runId, purpose: "web-search", model,
       priceVersion: REFERENCE_PRICE_LIST.version, currency: "CNY",
       requestFingerprint: createHash("sha256").update(JSON.stringify(fingerprint)).digest("hex"),
       estimatedCost,
-      dailyLimit: purpose === "evolution" ? Number(config.evolutionDailyBudgetCny) || 0 : minimumPositive(caller.dailyLimit, config.userDailySpendLimit),
-      weeklyLimit: purpose === "evolution" ? 0 : minimumPositive(caller.weeklyLimit, config.userWeeklySpendLimit),
-      runLimit: purpose === "evolution" ? 0 : runLimit,
+      dailyLimit: minimumPositive(caller.dailyLimit, config.userDailySpendLimit),
+      weeklyLimit: minimumPositive(caller.weeklyLimit, config.userWeeklySpendLimit),
+      runLimit,
       now: at,
     });
   } catch (error) {

@@ -54,8 +54,6 @@ Local development helpers.
 - `build-tool-graph.mjs` and `collect-executed-edges.mjs` build the evaluation corpus's
   per-capability tool graph and merge the executed edges of finished runs into it
   (`pnpm check:tool-graph`, `pnpm collect:tool-edges`).
-- `open-evolution-pr.mjs` is run by an operator: it turns a staged proposal into a branch, a
-  commit and a pull-request body, and refuses one that touches more than it owns.
 - `test_domain_check.py`, `test_large_file_probe.py`, `test_pdf_extract.py` and
   `test_stats_integrity.py` are standard-library `unittest` files for the core skills under
   `runtime/skills/core/`; run each directly with `python`. They are not wired into a
@@ -88,8 +86,8 @@ Operations, release and acceptance tooling for hosted deployments, by purpose.
   `rebuild-frontier-index.mjs`, and one-off corrections for memory, sources and the GEO
   module, most of which report first and change data only when given `--apply`.
 - Acceptance and walks: `capability-acceptance.mjs`, `hosted-production-e2e.mjs`,
-  `ui-walk.mjs`, `gallery-shot.mjs`, `session-stream-acceptance.mjs`, the `evolution-*`
-  and `extension-saas-acceptance*` families, `gate-health.mjs` and
+  `ui-walk.mjs`, `gallery-shot.mjs`, `session-stream-acceptance.mjs`, the
+  `extension-saas-acceptance*` family, `gate-health.mjs` and
   `replay-clinical-gate.mjs`.
 - `test/` holds the unit tests of these scripts (`pnpm test:ops`), `fixtures/` the inputs of
   the extension acceptance campaign, and `native-ui-local/` a disposable local fixture of the

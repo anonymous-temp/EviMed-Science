@@ -4459,7 +4459,6 @@ export class AgentRunStore {
     this.runtimeGeneration = options.runtimeGeneration ?? (async () => null);
     this.runtimePersonalSkills = options.runtimePersonalSkills ?? (() => null);
     this.runtimePlatformSkills = options.runtimePlatformSkills ?? (() => null);
-    this.captureRuntimeEgressProof = options.captureRuntimeEgressProof ?? null;
     // The evidence card a research session was started from (flywheel F06, `evidenceOrigins.mjs`): asked when a run is
     // reserved, so both roads that start one — the dispatch route and an adopted native turn — record it the same way,
     // and told once the run exists so the card's citations can be counted. Absent, no run carries one.
@@ -5287,7 +5286,6 @@ export class AgentRunStore {
       // `failed` through the catch below, which is what releases the hold. A hold that could not be placed never
       // stops research.
       try { await this.onRunReserved(project, record); } catch { /* billing failing never stops a run */ }
-      try{await this.captureRuntimeEgressProof?.(project,record);}catch{/* Missing observed proof is unknown exposure, never a delivery gate. */}
       const result = await sendPrompt(session, record);
       if (result?.accepted === false) {
         throw new HttpError(502, "runtime_prompt_rejected", "Runtime rejected the prompt before accepting it.");
@@ -5482,21 +5480,8 @@ export class AgentRunStore {
    * reason a run fails.
    * @param {any} project
    * @param {string} rawRunId
-   * @param {{platformSkillGeneration?: any, personalSkillGeneration?: any, transcript?: any, methodsLoaded?: any[], methodsInvoked?: any[], mountedSkills?: string[], recalledMemories?: {id: string, kind?: string, scope?: string}[], appendRecalledMemories?: {id: string, kind?: string, scope?: string}[], repairRounds?: {content?: number, structural?: number}, compaction?: any[], appendCompaction?: any, pagesRead?: any[], pagesReadTotal?: number}} patch
+   * @param {{inputAttribution?: any, platformSkillGeneration?: any, personalSkillGeneration?: any, transcript?: any, methodsLoaded?: any[], methodsInvoked?: any[], mountedSkills?: string[], recalledMemories?: {id: string, kind?: string, scope?: string}[], appendRecalledMemories?: {id: string, kind?: string, scope?: string}[], repairRounds?: {content?: number, structural?: number}, compaction?: any[], appendCompaction?: any, pagesRead?: any[], pagesReadTotal?: number}} patch
    */
-  /** Recorded by the trusted manager immediately before its first native prompt; never retroactive. @param {any} project @param {string} runId @param {string} at */
-  async recordRuntimeEgressDispatch(project,runId,at){
-    return withProjectStorageMutation(project,async()=>{
-      const events=parseEvents(await readLedgerText(project,this.maxBytes)),current=foldEvents(events).get(safeId(runId,'agent run id'));
-      if(!current||current.status!=='running'||current.dispatchStatus!=='dispatching'||current.promptDispatchStartedAt)return null;
-      if(!Number.isFinite(Date.parse(at)))return null;
-      const previous=events.findLast(event=>event.event==='learning'&&event.id===runId);
-      const event={...previous,event:'learning',id:runId,at,promptDispatchStartedAt:at};
-      await writeFileAtomicNoFollow(project.rootDir,ledgerFile(project),serializeNext(events,event,this.maxBytes),{encoding:'utf8',mode:0o600});
-      return at;
-    });
-  }
-
   async recordLearning(project, rawRunId, patch) {
     const runId = safeId(rawRunId, "agent run id");
     return withProjectStorageMutation(project, async () => {

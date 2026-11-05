@@ -3,7 +3,6 @@ import { ChevronLeft } from "lucide-react";
 import { Link } from "react-router";
 import type { AgendaRecord } from "@/lib/autopilotClient";
 import { useUnsavedGuard } from "@/lib/useUnsavedGuard";
-import { EvolutionOpportunities } from "@/components/evolution/EvolutionOpportunities";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -22,15 +21,14 @@ export interface NewTaskDraft { dirty: boolean; locked: boolean }
  * the same fields, 「创建并启用」 and 「取消」, and nothing is created until the researcher presses it.
  *
  * The starting points are the page's `examples`: in the list column while the project has no task (`TaskExamples`), and as the
- * buttons over the form once the column holds tasks (`examples`). Where the evolution module is on, the platform's research
- * opportunities follow the form: an opportunity is adopted into a task of its own and the page moves to it. A form with an edit
+ * buttons over the form once the column holds tasks (`examples`). A form with an edit
  * asks 「放弃未保存的修改？」 before 取消 and, through the shell's route guard, before the researcher leaves the page; the page asks
  * the same before an example replaces it (`onDraftChange`).
  *
  * Beside the list the heading is the pane's own; where the form is the whole page (`backTo`), it is the page's standard header with the
  * way back over it, as a task's is (`TaskBar`).
  */
-export function NewTaskPane({ projectId, available = true, recommendation, intro = false, examples = false, backTo, onChooseExample, onCancel, onDraftChange, onRecorded, onSaved, onAdopted }: {
+export function NewTaskPane({ projectId, available = true, recommendation, intro = false, examples = false, backTo, onChooseExample, onCancel, onDraftChange, onRecorded, onSaved }: {
   projectId: string;
   available?: boolean;
   /** The example the form starts from. */
@@ -47,15 +45,12 @@ export function NewTaskPane({ projectId, available = true, recommendation, intro
   onDraftChange: (draft: NewTaskDraft) => void;
   onRecorded: (record: AgendaRecord) => void;
   onSaved: (record: AgendaRecord) => void;
-  /** An opportunity was adopted: the id of the task it became. */
-  onAdopted: (id: string) => void;
 }) {
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [recorded, setRecorded] = useState(false);
-  const [adopting, setAdopting] = useState(false);
-  const locked = saving || adopting || recorded;
-  const guard = useUnsavedGuard(dirty, () => onCancel?.(), saving || adopting);
+  const locked = saving || recorded;
+  const guard = useUnsavedGuard(dirty, () => onCancel?.(), saving);
   useEffect(() => { onDraftChange({ dirty, locked }); }, [dirty, locked, onDraftChange]);
   useEffect(() => () => onDraftChange({ dirty: false, locked: false }), [onDraftChange]);
   const heading = "新建定时任务";
@@ -78,12 +73,9 @@ export function NewTaskPane({ projectId, available = true, recommendation, intro
             <div className="flex flex-wrap gap-2">{RECOMMENDATIONS.map(item => <Button key={item.id} variant="secondary" size="sm" onClick={() => onChooseExample(item)}>{item.title}</Button>)}</div>
           </fieldset>
         </section>}
-        <TaskForm projectId={projectId} recommendation={recommendation} showBudgets={false} schedulingAvailable={available} disabled={adopting}
+        <TaskForm projectId={projectId} recommendation={recommendation} showBudgets={false} schedulingAvailable={available}
           onRecorded={record => { guard.markSaved(); setRecorded(true); onRecorded(record); }} onBusyChange={setSaving} onDirtyChange={setDirty}
           onCancel={onCancel ? guard.requestClose : undefined} onSaved={record => { guard.markSaved(); onSaved(record); }} />
-        <fieldset disabled={locked || dirty || !available} className="-mx-2 min-w-0">
-          <EvolutionOpportunities projectId={projectId} onAdopted={onAdopted} onBusyChange={setAdopting} />
-        </fieldset>
       </div>
     </div>
     {guard.confirming && <ConfirmDialog title="放弃未保存的修改？" subject={heading} consequences="未保存的修改将丢失。" recovery="返回编辑可继续保留修改。" confirmLabel="放弃修改"

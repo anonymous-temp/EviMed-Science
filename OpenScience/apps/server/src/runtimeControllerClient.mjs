@@ -257,8 +257,6 @@ export class RuntimeControllerClient {
 
   execVerify(body, { signal = undefined } = {}) { return this.request("POST", "/v1/runtime/exec-verify", body, { signal, timeoutMs: 75000, maxResponseBytes: 128 * 1024 }); }
 
-  captureRunEgressProof(project,runId,phase,{signal=undefined}={}) { return this.request('POST','/v1/runtime/egress-proof',{userId:project.userId,projectId:project.id,activeWorkspace:project.activeWorkspace??'',runId,phase},{signal}); }
-  verifyRunEgressProof(project,runId,{signal=undefined,promptDispatchStartedAt=undefined,completedAt=undefined}={}) { return this.request('POST','/v1/runtime/egress-proof-verify',{userId:project.userId,projectId:project.id,activeWorkspace:project.activeWorkspace??'',runId,promptDispatchStartedAt,completedAt},{signal}); }
 
   evolutionAdmissionAvailable() { return this.request("POST", "/v1/runtime/evolution-admission", {}); }
 

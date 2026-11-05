@@ -6,32 +6,15 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { evolutionServiceFixture } from './helpers/evolutionServiceFixture.mjs';
+import { evolutionJobQueue, evolutionServiceFixture } from './helpers/evolutionServiceFixture.mjs';
 import { createEvolutionServingWorker } from '../src/evolutionServingWorker.mjs';
 import { createEvolutionServing } from '../src/evolutionServing.mjs';
 import { EvolutionIntegration } from '../src/evolutionIntegration.mjs';
 import { EvolutionDecisions } from '../src/evolutionDecisions.mjs';
 import { EvolutionMaintenance } from '../src/evolutionMaintenance.mjs';
 
-const SERVING = { evolutionEnabled: true, evolutionSearchPaused: true, evolutionServingOnly: true, evolutionMaxJobAttempts: 3 };
-/** The fixture's keyed queue with the lease operations a worker uses; a job is due at its `runAfter`. @param {any} f */
-function queue(f, now = () => f.service.now()) {
-  const enqueue = f.service.jobs.enqueue.bind(f.service.jobs);
-  let sequence = 0;
-  const jobs = {
-    enqueue: async (/** @type {any[]} */ ...args) => { const job = await enqueue(...args); job.runAfter ??= args[3]?.runAfter ?? null; job.state ??= 'queued'; return job; },
-    claim: async (/** @type {string[]} */ kinds) => {
-      const job = f.jobs.find((/** @type {any} */ item) => kinds.includes(item.kind) && (item.state ?? 'queued') === 'queued' && (!item.runAfter || new Date(item.runAfter) <= now()));
-      if (!job) return null;
-      job.state = 'running'; job.attempts = (job.attempts ?? 0) + 1; job.id ??= `job-${++sequence}`;
-      return { ...job, userId: job.owner, leaseToken: 'lease', maxAttempts: 3 };
-    },
-    renew: async () => true,
-    finish: async (/** @type {string} */ _owner, /** @type {string} */ id, /** @type {string} */ _lease, /** @type {any} */ result) => { const job = f.jobs.find((/** @type {any} */ item) => item.id === id); Object.assign(job, { state: 'succeeded', result }); return job; },
-    fail: async (/** @type {string} */ _owner, /** @type {string} */ id, /** @type {string} */ _lease, /** @type {any} */ error, /** @type {any} */ options) => { const job = f.jobs.find((/** @type {any} */ item) => item.id === id); Object.assign(job, { state: options.retry ? 'queued' : 'failed', error, options }); return job; },
-  };
-  return jobs;
-}
+const SERVING = { evolutionEnabled: true, evolutionMaxJobAttempts: 3 };
+const queue = evolutionJobQueue;
 /** Tick until nothing is claimed. @param {any} worker */
 async function drain(worker, limit = 30) { for (let index = 0; index < limit; index++) if (!await worker.tick()) return index; throw new Error('the queue did not drain'); }
 
@@ -61,7 +44,7 @@ test('serving housekeeping keeps the digest, retirement completion and metrics-o
   f.service.reconcileQueued = async () => { reconciled++; return { recovered: 0 }; };
   await f.service.save('tool', 'leaving', { track: 'M', status: 'retired', retirement: { reason: 'sequential-harm', state: 'pending' } });
   const retired = [];
-  const maintenance = new EvolutionMaintenance({ service: f.service, judgeService: { judge: () => { throw new Error('serving called the judge'); } },
+  const maintenance = new EvolutionMaintenance({ service: f.service,
     callbacks: { notifyAffected: async (/** @type {any} */ input) => { retired.push(input.toolId); }, monthlyMetrics: async () => ({ funnel: 1 }) } });
   const worker = createEvolutionServingWorker({ service: f.service, integration: {}, decisions: new EvolutionDecisions({ service: f.service }), maintenance, config: f.service.config,
     quarantine: async (admission) => { quarantined++; admitted = admission; return 0; } });
@@ -79,15 +62,18 @@ test('serving housekeeping keeps the digest, retirement completion and metrics-o
   await worker.close();
 });
 
-test('a monthly pass queued before cutover keeps its identity and runs metrics-only', async () => {
+test('a monthly pass queued before cutover keeps its identity and writes the metrics-only month', async () => {
   const f = evolutionServiceFixture(); Object.assign(f.service.config, SERVING); f.service.jobs = queue(f);
-  const received = [];
+  const months = [];
   await f.service.jobs.enqueue('operator', 'evolution-maintain', { month: '2026-10', metricsMonth: '2026-09' }, { idempotencyKey: 'evolution:monthly-v2:2026-10' });
-  const worker = createEvolutionServingWorker({ service: f.service, integration: {}, decisions: new EvolutionDecisions({ service: f.service }),
-    maintenance: { monthly: async (/** @type {any} */ input) => { received.push(input); return { id: `metrics-${received.length}` }; }, retire: async () => null }, config: f.service.config });
+  // The real maintenance: its only monthly pass reads the ledger through the figures callback, so nothing but the month's record can come of the old payload.
+  const maintenance = new EvolutionMaintenance({ service: f.service, callbacks: { monthlyMetrics: async (/** @type {string} */ month) => { months.push(month); return { funnel: 1 }; } } });
+  const worker = createEvolutionServingWorker({ service: f.service, integration: {}, decisions: new EvolutionDecisions({ service: f.service }), maintenance, config: f.service.config });
   await drain(worker);
-  assert.ok(received.length >= 1); assert.ok(received.every(input => input.metricsOnly === true));
   assert.equal(f.jobs.find(job => job.key === 'evolution:monthly-v2:2026-10').state, 'succeeded');
+  assert.deepEqual(months, ['2026-09'], 'the month it names, once: serving\'s own catch-up of that month finds the record');
+  assert.deepEqual((await f.service.get('evolution-monthly-metrics-2026-09')).payload.metrics, { funnel: 1 });
+  assert.deepEqual(f.jobs.filter(job => /^evolution-(scout|build|evaluate|mission)/.test(job.kind)), []);
   await worker.close();
 });
 

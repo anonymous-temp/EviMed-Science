@@ -25,7 +25,7 @@ import { Section } from "@/components/ui/Section";
  *
  * 「运维」 in 设置: the deployment's console, offered only to an operator
  * account — the runtime's state, the configuration check, the three operations ledgers, 前沿动态's tag tree, and
- * 「循证进化」, the evolution engine's tools and plans (it sat under the
+ * 「循证进化」, the published tools (it sat under the
  * research-tool grid until 2026-10-07: an operator's panel beneath a
  * researcher's page, and it had no business there). The project plugins that
  * were here are on 插件与技能 now, where the one switch a researcher has lives.

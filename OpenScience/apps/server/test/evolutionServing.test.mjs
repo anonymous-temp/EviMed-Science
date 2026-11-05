@@ -14,20 +14,20 @@ function fixture(extra={}){
 }
 test('actual serving composition constructs no experimental engine and processes account feedback',async()=>{
  const f=fixture(),s=f.facade;
- assert.equal(s.loops,undefined);assert.equal(s.model,undefined);assert.equal(s.runs,undefined);assert.equal(s.worker.status().experimentScheduling,false);
+ assert.equal(s.loops,undefined);assert.equal(s.model,undefined);assert.equal(s.runs,undefined);assert.deepEqual(Object.keys(s.worker.status()).sort(),['enabled','running']);
  await s.integration.publish({id:'feedback',type:'researcher-feedback',userId:'operator',projectId:'p',runId:'r',sourceFeedbackId:'feedback',trigger:'corrected',correctionKind:'result'});
  const job=f.jobs.find(item=>item.kind==='evolution-event');assert.ok(job);f.queue({...job,id:'job',userId:'operator',leaseToken:'lease'});
  await s.worker.tick();const row=await s.service.get(job.payload.eventId,'operator');assert.equal(row.payload.status,'processed');assert.equal(f.jobs.some(item=>/mission|build|scout/.test(item.kind)),false);await s.worker.close();
 });
-test('serving routes preserve historical reads and reject experiment writes before queueing',async()=>{
- const {facade}=fixture();
+test('serving routes preserve historical reads, and an experiment write is an unknown operation that queues nothing',async()=>{
+ const {facade,jobs}=fixture();
  const invoke=async(method,url)=>{let result;const req=Object.assign(Readable.from([]),{method,url,headers:{}}),res={setHeader(){},writeHead(){},end(text){result=JSON.parse(text);}};await facade.routes(req,res);return result;};
- assert.equal((await invoke('GET','/api/evolution/status')).data.experimentScheduling,false);
+ assert.equal((await invoke('GET','/api/evolution/status')).data.enabled,true);
  assert.deepEqual((await invoke('GET','/api/evolution/missions')).data,[]);
- await assert.rejects(invoke('POST','/api/evolution/prospective/register'),error=>error.status===409&&error.code==='evolution_offline_only');await facade.worker.close();
+ await assert.rejects(invoke('POST','/api/evolution/prospective/register'),error=>error.status===404&&error.code==='evolution_route_missing');assert.deepEqual(jobs,[]);await facade.worker.close();
 });
 test('serving import closure cannot reach experimental constructors',async()=>{
- const visited=new Set();const forbidden=/\/(?:evolutionComposition|evolutionLoops|evolutionRuns|evolutionScout|evolutionBuild|evolutionPolicyTrial|evolutionMissions)\.mjs$/;
+ const visited=new Set();const forbidden=/\/(?:evolutionWorker|evolutionComposition|evolutionLoops|evolutionRuns|evolutionScout|evolutionBuild|evolutionPolicyTrial|evolutionMissions)\.mjs$/;
  async function visit(url){if(visited.has(url.href))return;visited.add(url.href);assert.equal(forbidden.test(url.pathname),false,url.pathname);const text=await readFile(url,'utf8');for(const match of text.matchAll(/(?:from\s*|import\s*)['"](\.\.?\/[^'"]+\.mjs)['"]/g))await visit(new URL(match[1],url));}
  await visit(new URL('../src/evolutionServing.mjs',import.meta.url));
 });
@@ -39,6 +39,6 @@ test('dataset continuation queues the published tool\'s self-check, which the se
  await s.resolveWaiters({type:'dataset-ready',id:'data-event',userId:'operator',projectId:'p',datasetId:'data',dataset:{semanticsChecksPassed:true}});
  const current=await s.get(waiter.id,'operator');assert.equal(current.payload.status,'waiting');assert.equal(current.payload.selfCheckIntent,undefined);
  assert.deepEqual(jobs.filter(job=>job.kind==='evolution-self-check').map(job=>[job.payload.waiterId,job.payload.toolId,job.payload.datasetId]),[[waiter.id,'existing-tool','data']]);
- assert.equal((await s.enqueue('build',{dossierId:'d'},'build')).code,'evolution_offline_only','an experiment is still refused');
+ for(const kind of ['evolution-scout','evolution-build','evolution-evaluate','evolution-mission'])assert.equal(facade.worker.kinds.includes(kind),false,`${kind} is never claimed`);
  await facade.worker.close();
 });

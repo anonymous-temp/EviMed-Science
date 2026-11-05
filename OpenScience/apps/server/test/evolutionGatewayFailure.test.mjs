@@ -1,15 +1,10 @@
 // The evolution gateway's failures reach the server's failure funnel like every other gateway's
 // (review of 「循证进化」, 2026-10-05, N4): the router handed it no recorder, so a refusal left no
-// error record and no metric label. And the isolation module's operator route answers a named 4xx
-// for a wrong project or a malformed policy instead of a 500 from a plain Error (N5).
+// error record and no metric label.
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import os from 'node:os';
-import path from 'node:path';
-import fs from 'node:fs/promises';
 import test from 'node:test';
 import { createEvolutionGatewayHandler } from '../src/evolutionGateway.mjs';
-import { createEvaluationIsolation } from '../src/evaluationIsolation.mjs';
 import { HttpError } from '../src/security.mjs';
 
 async function serve(t, { config = { evolutionEnabled: true }, admit = async (_scope, work) => work() } = {}) {
@@ -40,17 +35,4 @@ test('a refusal at the gateway is handed to the failure funnel with its code and
   const served = await serve(t);
   assert.equal((await served.post()).status, 200);
   assert.deepEqual(served.failures, [], 'a success records nothing');
-});
-
-test('the isolation module refuses a wrong project or a malformed policy by name, not as a plain Error', async () => {
-  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'evaluation-errors-'));
-  try {
-    const isolation = createEvaluationIsolation({ dataDir });
-    await assert.rejects(isolation.registerPending({ userId: 'op', projectId: 'customer' }, { aliases: [], titles: [] }), { status: 400, code: 'evolution_evaluation_invalid', message: /dedicated/ });
-    await assert.rejects(isolation.register('run', { aliases: 'x', titles: [] }), { status: 400, code: 'evolution_evaluation_invalid' });
-    await assert.rejects(isolation.register('run', { aliases: [], titles: [], cutoff: 'not a date' }), { status: 400, code: 'evolution_evaluation_invalid' });
-    await isolation.register('run', { aliases: ['a'], titles: [] });
-    await assert.rejects(isolation.register('run', { aliases: ['b'], titles: [] }), { status: 409, code: 'evolution_evaluation_invalid', message: /immutable/ });
-    await assert.rejects(isolation.bindRun({ userId: 'op', projectId: 'eval-paper-none' }, 'run'), { status: 409, code: 'evolution_evaluation_invalid' });
-  } finally { await fs.rm(dataDir, { recursive: true, force: true }); }
 });

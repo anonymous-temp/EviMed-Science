@@ -1,15 +1,10 @@
-import { evolutionDeferred, evolutionServingDecision } from './evolutionServingPolicy.mjs';
-import { renderEvolutionProgress } from './evolutionProgress.mjs';
-import { EVOLUTION_EXECUTABLE_OPERATIONS, evolutionDecisionClass, evolutionAdaptiveClass } from '@evimed/domain';
-import { evolutionKey } from './evolutionService.mjs';
+import { EVOLUTION_OFFLINE_ONLY, evolutionServingDecision } from './evolutionServingPolicy.mjs';
+import { EVOLUTION_EXECUTABLE_OPERATIONS } from '@evimed/domain';
 import { HttpError } from './security.mjs';
 import { shanghaiDay } from './notificationService.mjs';
 
 /** The inbox refuses a body over 8,000 characters, a title over 150 and an action label over 80; the digest and a card are cut to fit them. */
 export const EVOLUTION_NOTICE_LIMITS = Object.freeze({ body: 8000, title: 150, label: 80 });
-/** A card whose expiry review cannot be had is asked again this many times, an hour apart, and then takes its conservative option. */
-export const EVOLUTION_EXPIRY_REVIEW_ATTEMPTS = 3;
-export const EVOLUTION_EXPIRY_REVIEW_RETRY_MS = 3_600_000;
 /** What a decision category is called to the operator; a category this does not name is 其他事项, never its identifier. */
 export const EVOLUTION_CATEGORY_LABELS = Object.freeze({
   implementation: '工具研发方向', 'tool-repair': '工具修复', 'tool-merge': '工具合并', 'tool-retire': '工具退役',
@@ -43,90 +38,18 @@ export function evolutionExecutableOperation(action) {
   if (!EVOLUTION_EXECUTABLE_OPERATIONS.includes(operation)) throw new HttpError(400, 'evolution_action_unsupported', 'This action requires a separately authorized implementation.');
   return operation;
 }
-/**
- * The record of a candidate that passed nothing more it can pass and waits on validation: one per branch of its dossier.
- *
- * A decision is identified by (category, subject, materialVersion). Proposed for the dossier alone, the wait of a second
- * branch was answered with the first branch's record — already executed, by the very `rescout` that opened the second
- * branch — so nothing was pending and the operator had no card to answer (live acceptance, 2026-10-05: two waits on one
- * dossier, one decision). The first branch keeps version 1, which is the id already stored. A resource wait is class D:
- * never delivered, never executed by expiry, so one per branch re-arms nothing by itself.
- * @param {{ dossierId: string, decisionActionId?: string | null, goal: string }} wait
- */
-export function evolutionValidationWait({ dossierId, decisionActionId = null, goal }) {
-  return { category: 'validation-resource', subjectId: dossierId, materialVersion: decisionActionId ?? 1, resourceOnly: true,
-    title: '工具等待独立验证资料', body: goal, options: [{ id: 'wait', label: '等待验证资料' }, { id: 'rescout', label: '重查公开实例' }], recommended: 'wait', conservative: 'wait' };
-}
-/** A configured model name is not a provider receipt. @param {any} config @param {any} result */
-export function evolutionDecisionReviewProof(config,result) {
- const family=/^qwen/i.test(result.model??'')?'qwen':'unknown';
- return {independent:config.reviewProvider==='dashscope' && result.modelReported===true && family==='qwen',family,model:result.model??null};
-}
 /** Delivery, expiry, and overrides retain every branch decision in the revision ledger. */
 export class EvolutionDecisions {
   /** @param {any} dependencies */
   constructor({ service, notifications = service.notifications, callbacks = {}, now = service.now, config = service.config }) {
     this.service = service; this.notifications = notifications; this.callbacks = callbacks; this.now = now; this.config = config;
-    /** Waits recorded on their subject without a card, by decision category, and the annotations that could not be written; the ops metrics read it. */
-    this.counters = { resourceWaits: /** @type {Record<string, number>} */ ({}), resourceWaitFailed: 0 };
-  }
-  /** @param {any} input */
-  async propose(input) { return input?.resourceOnly === true ? this.recordResourceWait(input) : this.service.withLock('decisions', () => this.proposeLocked(input)); }
-  /**
-   * A wait on something only an outside party can bring (a dataset, an independent reference, a dependency, a model release) is a state of what waits and not a
-   * question for anyone: it writes no decision, no card and no line in the digest, and the platform picks the work up again by itself when the resource arrives
-   * (the opportunity's wake conditions, `EvolutionMissions.wake`). Until 2026-10-12 each one became a class D decision that the daily report listed and that
-   * expired into the same `wait` it recommended: 37 in six days, every one a request for material the owner had ruled not to ask for again (2026-09-29).
-   * The subject (the dossier, the failure record) carries the state the operators read in the ops view; the annotation is best effort, because a wait that
-   * could not be written down must not fail the job that found it.
-   * @param {any} input
-   */
-  async recordResourceWait(input) {
-    const category = String(input.category ?? 'resource');
-    const count = () => { this.counters.resourceWaits[category] = (this.counters.resourceWaits[category] ?? 0) + 1; };
-    try {
-      const subject = typeof input.subjectId === 'string' ? await this.service.get(input.subjectId) : null;
-      const kind = /** @type {Record<string, string>} */ ({ 'evolution-dossier': 'dossier', 'evolution-failure': 'failure' })[subject?.payload?.recordType];
-      // A wait with no record of its own to carry it (a release's replay) is counted and nothing more.
-      if (!subject || !kind) { count(); return null; }
-      const branch = input.materialVersion ?? 1, known = subject.payload.resourceWait;
-      if (known?.category === category && known.branch === branch) return subject;
-      count();
-      return await this.service.save(kind, subject.id, { ...subject.payload, resourceWait: { category, branch, goal: clip(input.body, 300), since: this.now().toISOString() } }, subject);
-    } catch { this.counters.resourceWaitFailed++; return null; }
-  }
-  /** @param {any} input */
-  async proposeLocked(input) {
-    const id = `evolution-decision-${evolutionKey([input.category, input.subjectId, input.materialVersion ?? 1])}`;
-    const existing = await this.service.get(id);
-    if (existing) return existing;
-    if (!Array.isArray(input.options) || input.options.length < 2 || input.options.length > 3 || !input.options.some((/** @type {any} */ o) => o.id === input.recommended) || !input.options.some((/** @type {any} */ o) => o.id === input.conservative)) throw new HttpError(400, 'evolution_decision_invalid', 'A decision requires two or three explicit options.');
-    let decisionClass = evolutionDecisionClass(input);
-    const all = await this.service.list('decision');
-    // What the operator's rate of overruling is measured over: the cards they were shown and the answers they gave.
-    // A decision the engine took by itself (the day's cards were used up, or it was class A to begin with) was seen by
-    // no one, and is not agreement.
-    const history = all.filter((/** @type {any} */ row) => row.payload.category === input.category && row.payload.status === 'executed'
-      && (row.payload.deliveredAt || row.payload.source === 'user')).map((/** @type {any} */ row) => row.payload).sort((/** @type {any} */ a, /** @type {any} */ b) => a.decidedAt.localeCompare(b.decidedAt));
-    if (decisionClass === 'B' && (history.some((/** @type {any} */ h) => h.delegate === true) || input.delegate === true || evolutionAdaptiveClass(history) === 'A')) decisionClass = 'A';
-    const day = shanghaiDay(this.now());
-    const cards = all.filter((/** @type {any} */ row) => row.payload.cardDay === day && row.payload.deliveredAt).length;
-    if (cards >= (this.config.evolutionMaxDecisionCards ?? 3) && decisionClass === 'B') decisionClass = 'A';
-    const saved = await this.service.save('decision', id, { ...input, decisionClass, status: 'pending', createdAt: this.now().toISOString(), history: [], overridden: false });
-    if (decisionClass === 'A') return this.execute(saved, input.recommended, 'autonomous');
-    if (decisionClass === 'D') return saved;
-    if (cards >= (this.config.evolutionMaxDecisionCards ?? 3)) return this.execute(saved, await this.unansweredOption(saved), 'conservative');
-    return saved;
   }
   /**
-   * What a card nobody answered takes: its conservative option. Under the serving cutover a harm review's is instead its protective
-   * option, the soft retirement the same decision reverses, whatever was stored as conservative: cards written before 2026-10-26 named
-   * `keep`, and keeping a tool the harm test flagged silenced its alarm with nobody having decided it. Without the cutover a card
-   * keeps what it stored, as it always has; the retirement of a tool is the cutover's, not a default of the platform.
+   * What a card nobody answered takes: its conservative option, except that a harm review's is its protective one, the soft retirement the same decision reverses,
+   * whatever was stored as conservative: cards written before 2026-10-26 named `keep`, and keeping a tool the harm test flagged silenced its alarm with nobody having decided it.
    * @param {any} row
    */
   async unansweredOption(row) {
-    if (this.config.evolutionServingOnly !== true) return row.payload.conservative;
     const subject = typeof row.payload.subjectId === 'string' ? await this.service.get(row.payload.subjectId) : null;
     if (subject?.payload?.recordType === 'evolution-maintenance-review' && subject.payload.kind === 'sequential-harm') {
       const protective = row.payload.options.find((/** @type {any} */ item) => (item.operation ?? item.id) === 'maintenance-retire');
@@ -134,7 +57,7 @@ export class EvolutionDecisions {
     }
     return row.payload.conservative;
   }
-  /** Whether serving (and a pause) can carry out this option of the card. @param {any} row @param {string} option */
+  /** Whether serving can carry out this option of the card. @param {any} row @param {string} option */
   servable(row, option) {
     try { return Boolean(option) && evolutionServingDecision(evolutionExecutableOperation({ ...row.payload, option })); } catch { return false; }
   }
@@ -146,9 +69,22 @@ export class EvolutionDecisions {
   async closeToLab(row, source) {
     const { execution, ...payload } = row.payload;
     const at = this.now().toISOString();
-    return this.service.save('decision', row.id, { ...payload, status: 'closed', closedReason: 'retired-to-lab', closedAt: at,
+    const saved = await this.service.save('decision', row.id, { ...payload, status: 'closed', closedReason: 'retired-to-lab', closedAt: at,
       history: [...(payload.history ?? []), { actionId: execution?.actionId ?? null, previous: payload.selected ?? null, selected: null,
         option: execution?.option ?? null, source, closed: 'retired-to-lab', at }] }, row);
+    // Its inbox item closes with it, as a default: nobody chose the option the item records, and the card itself says it closed.
+    await this.closeNotice(saved, execution?.option ?? payload.conservative, 'serving');
+    return saved;
+  }
+  /**
+   * What this card becomes at its due date, as `expire` will decide it: the option it takes, or closing. Null when nothing is due on it.
+   * @param {any} row @returns {Promise<{kind:'option',option:string,label:string}|{kind:'close'}|null>}
+   */
+  async dueOutcome(row) {
+    if (row.payload.status !== 'pending' || !row.payload.dueAt) return null;
+    const option = await this.unansweredOption(row);
+    const chosen = row.payload.options.find((/** @type {any} */ item) => item.id === option);
+    return chosen && this.servable(row, option) ? { kind: 'option', option, label: chosen.label } : { kind: 'close' };
   }
   /** Clock starts when delivery succeeds, not when the proposal is stored. @param {any} row */
   async deliver(row) {
@@ -166,57 +102,21 @@ export class EvolutionDecisions {
     return saved;
   }
   /**
-   * What a card that was not answered in time becomes. A resource wait takes its alternative; a one-way door takes its
-   * conservative option at once, because no review can change that; a directional choice is refreshed against new
-   * literature and reviewed by a second model family, and takes the reviewed recommendation. When that review cannot be
-   * had it is asked again (three times, an hour apart; the card says so), and then the choice takes its conservative
-   * option rather than waiting for ever or acting on an unreviewed recommendation. Whatever was taken, a later answer of
-   * the operator's supersedes it.
-   * @param {string} id
+   * What a card that was not answered in time becomes: the option it takes when serving can carry that out, and otherwise it closes once, its execution kept for the offline lab.
+   * Whatever was taken, a later answer of the operator's supersedes it. @param {string} id
    */
   async expire(id) {
     const row = await this.service.get(id);
-    if (row && this.config.evolutionSearchPaused === true) {
-      if (row.payload.status !== 'executing' && (row.payload.status !== 'pending' || !row.payload.deliveredAt || Date.parse(row.payload.dueAt) > this.now().getTime())) return row;
-      const option = row.payload.status === 'executing' ? row.payload.execution.option : await this.unansweredOption(row);
-      if (option && this.servable(row, option)) return this.execute(row, option, row.payload.status === 'executing' ? row.payload.execution.source : 'conservative', row.payload.execution?.evidence);
-      // Serving cannot carry out an experiment and never will: the card closes once, its execution kept for the offline lab. A pause defers.
-      return this.config.evolutionServingOnly === true ? this.closeToLab(row, 'serving') : evolutionDeferred();
-    }
-    if (row?.payload.status === 'executing') return this.execute(row, row.payload.execution.option, row.payload.execution.source, row.payload.execution.evidence);
-    if (!row || row.payload.status !== 'pending' || !row.payload.deliveredAt || Date.parse(row.payload.dueAt) > this.now().getTime()) return row;
-    if (row.payload.decisionClass === 'D') return this.execute(row, row.payload.alternative ?? row.payload.conservative, 'resource-alternative');
-    if (row.payload.decisionClass === 'C') return this.execute(row, await this.unansweredOption(row), 'default', { oneWayDoor: true });
-    let refreshed, reviewed;
-    try {
-      if (!this.callbacks.refresh || !this.callbacks.review) throw new HttpError(503, 'evolution_review_unavailable', 'Expiry requires fresh evidence and independent review.');
-      refreshed = await this.callbacks.refresh(row.payload);
-      if (this.config.evolutionSearchPaused === true) return evolutionDeferred();
-      reviewed = await this.callbacks.review({ decision: row.payload, refreshed });
-      if (!reviewed || reviewed.independent !== true || reviewed.family === refreshed?.family) throw new HttpError(503, 'evolution_review_invalid', 'A cross-family review is required.');
-    } catch (error) { return this.deferExpiry(row, error); }
-    return this.execute(row, reviewed.recommended ?? refreshed.recommended ?? row.payload.recommended, 'default', { refreshed, reviewed });
-  }
-  /** A review that could not be had: say so on the card, ask again later, and when the attempts are spent take the conservative option. @param {any} row @param {any} error */
-  async deferExpiry(row, error) {
-    const code = typeof error?.code === 'string' && /^[a-z0-9_]{1,64}$/.test(error.code) ? error.code : 'evolution_review_unavailable';
-    const attempts = Number(row.payload.expiry?.attempts ?? 0) + 1;
-    const at = this.now().toISOString();
-    const expiry = { state: 'review-unavailable', attempts, of: EVOLUTION_EXPIRY_REVIEW_ATTEMPTS, code, at };
-    if (attempts >= EVOLUTION_EXPIRY_REVIEW_ATTEMPTS) {
-      const noted = await this.service.save('decision', row.id, { ...row.payload, expiry: { ...expiry, state: 'conservative-taken' } }, row);
-      return this.execute(noted, await this.unansweredOption(row), 'conservative', { reviewUnavailable: { code, attempts } });
-    }
-    const saved = await this.service.save('decision', row.id, { ...row.payload, expiry }, row);
-    await this.service.enqueue('decision', { decisionId: row.id }, `expire:${row.id}:retry:${attempts}`,
-      new Date(this.now().getTime() + (this.config.evolutionDecisionReviewRetryMs ?? EVOLUTION_EXPIRY_REVIEW_RETRY_MS)));
-    return saved;
+    if (!row) return row;
+    const executing = row.payload.status === 'executing';
+    if (!executing && (row.payload.status !== 'pending' || !row.payload.deliveredAt || Date.parse(row.payload.dueAt) > this.now().getTime())) return row;
+    const option = executing ? row.payload.execution.option : await this.unansweredOption(row);
+    if (option && this.servable(row, option)) return this.execute(row, option, executing ? row.payload.execution.source : 'conservative', row.payload.execution?.evidence);
+    return this.closeToLab(row, 'serving');
   }
   /** @param {any} row @param {string} option @param {string} source @param {any} evidence */
   async execute(row, option, source, evidence = {}) {
-    if (this.config.evolutionSearchPaused === true && !evolutionServingDecision(evolutionExecutableOperation({ ...row.payload, option }))) {
-      return this.config.evolutionServingOnly === true ? evolutionDeferred('evolution_offline_only', 'Platform experiments run only in offline campaigns.') : evolutionDeferred();
-    }
+    if (!evolutionServingDecision(evolutionExecutableOperation({ ...row.payload, option }))) return EVOLUTION_OFFLINE_ONLY;
     if (!row.payload.options.some((/** @type {any} */ item) => item.id === option)) throw new HttpError(400, 'evolution_option_invalid', 'Unknown decision option.');
     const actionId = row.payload.status === 'executing' ? row.payload.execution.actionId : `${row.id}:${row.revision}:${option}`;
     if (row.payload.status !== 'executing') row = await this.service.save('decision', row.id, { ...row.payload, status: 'executing', execution: { actionId, option, source, evidence } }, row);
@@ -247,34 +147,30 @@ export class EvolutionDecisions {
     let row = await this.service.get(id);
     if (!row || row.payload.recordType !== 'evolution-decision') throw new HttpError(404, 'evolution_decision_missing', 'Decision not found.');
     if (input.expectedRevision !== row.revision) throw new HttpError(409, 'product_revision_conflict', 'Decision changed; reload before choosing.');
-    // Serving: the operator closes a card whose work moved to the offline lab, a stranded execution included.
+    // The operator closes a card whose work moved to the offline lab, a stranded execution included.
     if (input.close !== undefined) {
-      if (input.close !== 'retired-to-lab' || this.config.evolutionServingOnly !== true) throw new HttpError(400, 'evolution_close_invalid', 'Only serving closes a card, as retired to the offline lab.');
+      if (input.close !== 'retired-to-lab') throw new HttpError(400, 'evolution_close_invalid', 'A card closes only as retired to the offline lab.');
       if (row.payload.status === 'closed') return row;
       if (row.payload.status === 'executed') throw new HttpError(409, 'evolution_decision_decided', 'The decision was carried out; answer it with an option instead.');
       if (row.payload.status === 'executing' && this.servable(row, row.payload.execution.option)) throw new HttpError(409, 'evolution_decision_executing', 'The decision is being carried out; reload and answer again.');
       return this.closeToLab(row, 'user');
     }
-    let option = input.option ?? row.payload.recommended;
-    if (input.text && this.config.evolutionSearchPaused === true) throw new HttpError(409, 'evolution_search_paused', 'Decision interpretation waits while evolution search is paused.');
-    if (input.text) {
-      if (!this.callbacks.interpretOverride) throw new HttpError(503, 'evolution_override_unavailable', 'Text overrides need an interpretation callback.');
-      option = await this.callbacks.interpretOverride(row.payload, input.text);
-    }
+    // An answer in words needed a model to read it; refused, so that it is never carried out as the recommendation it did not choose.
+    if (input.text) throw new HttpError(400, 'evolution_answer_invalid', 'Answer with one of the options.');
+    const option = input.option ?? row.payload.recommended;
     // An answer that arrives while the expiry (or another answer) is carrying out a different option must not borrow its
     // action identity: the record would then say the person's option was chosen while the other was executed.
     if (row.payload.status === 'executing' && (row.payload.execution.source !== 'user' || row.payload.execution.option !== option)) {
       // An execution serving can never carry out (an experiment, moved to the offline lab) does not hold the card: an answer serving can
       // carry out supersedes it, and the stranded execution stays in the card's history.
-      const stranded = this.config.evolutionServingOnly === true && !this.servable(row, row.payload.execution.option) && this.servable(row, option);
-      if (!stranded) throw new HttpError(409, 'evolution_decision_executing', 'The decision is being carried out; reload and answer again.');
+      // An answer on a card with nothing serving can carry out is the way out of it: the card closes rather than saying `executing` to every click.
+      const servableOption = row.payload.options.some((/** @type {any} */ item) => this.servable(row, item.id));
+      if (this.servable(row, row.payload.execution.option) || (servableOption && !this.servable(row, option))) throw new HttpError(409, 'evolution_decision_executing', 'The decision is being carried out; reload and answer again.');
       row = await this.closeToLab(row, 'user');
+      if (!servableOption) return row;
     }
     const saved = await this.execute(row, option, 'user');
     if (saved?.status === 'deferred') throw new HttpError(409, saved.code, saved.reason);
-    if (input.delegate === true && saved.payload.decisionClass !== 'C') {
-      return this.service.save('decision', id, { ...saved.payload, delegate: true }, saved);
-    }
     return saved;
   }
   /** @param {string} day */
@@ -293,17 +189,18 @@ export class EvolutionDecisions {
       const pending = all.filter(row => row.payload.status === 'pending' && ['B', 'C'].includes(row.payload.decisionClass) && !row.payload.deliveredAt).sort((a,b) => Number(b.payload.impact ?? 0) - Number(a.payload.impact ?? 0));
       let slots = (this.config.evolutionMaxDecisionCards ?? 3) - all.filter(row => row.payload.cardDay === day).length;
       for (const row of pending) {
+        // A card with nothing serving can carry out reaches nobody and takes no slot.
+        if (!row.payload.options.some((/** @type {any} */ item) => this.servable(row, item.id))) { await this.closeToLab(row, 'serving'); continue; }
         if (slots-- > 0) await this.deliver(row);
         else {
           const [option, source] = row.payload.decisionClass === 'C' ? [await this.unansweredOption(row), 'conservative'] : [row.payload.recommended, 'autonomous'];
-          // Serving closes a card whose default is an experiment instead of deferring it at every digest.
-          if (this.config.evolutionServingOnly === true && !this.servable(row, option)) await this.closeToLab(row, 'serving');
+          // A card whose default is an experiment closes instead of waiting at every digest.
+          if (!this.servable(row, option)) await this.closeToLab(row, 'serving');
           else await this.execute(row, option, source);
         }
       }
       all = await this.service.list('decision');
       const today = all.filter(row => inWindow(row.payload.decidedAt ?? row.createdAt));
-      const evaluations = (await this.service.list('evaluation')).filter(row => inWindow(row.payload.at ?? row.updatedAt));
       const label = (/** @type {any} */ row) => row.payload.options.find((/** @type {any} */ option) => option.id === row.payload.selected)?.label ?? row.payload.selected;
       // The snapshot keeps what the notice will say, not the documents it was read from: a day's worth of whole rows (a
       // tool drags every observation it has ever had) outgrew the record limit, and the text only ever uses these fields.
@@ -319,8 +216,6 @@ export class EvolutionDecisions {
         // New tools that went live in the window. A tool's `updatedAt` moves on every call anyone makes of it, which is use and not an achievement.
         achievements: (await this.service.tools()).filter(row => inWindow(row.payload.createdAt) && ['active', 'alias'].includes(row.payload.status)).slice(0, 100)
           .map(row => ({ id: row.id, name: clip(row.payload.name ?? row.payload.description ?? row.id, 100), level: row.payload.validationLevel ?? 'V0' })),
-        evaluationSummaries: evaluations.map(evolutionEvaluationDigest).slice(0, 20),
-        progress: await this.service.callbacks.evolutionProgress?.(day) ?? null,
       });
     }
     const snapshot = saved.payload;
@@ -352,15 +247,10 @@ export function renderEvolutionDigest(snapshot, limit = EVOLUTION_NOTICE_LIMITS.
   const counts = new Map();
   for (const row of autonomous) { const label = EVOLUTION_CATEGORY_LABELS[/** @type {keyof typeof EVOLUTION_CATEGORY_LABELS} */ (row.category)] ?? '其他事项'; counts.set(label, (counts.get(label) ?? 0) + 1); }
   const autonomousLines = [...counts].sort(([left], [right]) => left.localeCompare(right, 'zh')).map(([label, count]) => `${label}：${count} 项`);
-  const summaries = snapshot.evaluationSummaries ?? [];
-  const engineNames = [['meta-analysis', 'Meta'], ['adr-analysis', '药物警戒'], ['mendelian-randomization', '孟德尔随机化']];
-  const assessmentLines = bounded(summaries.flatMap((/** @type {any} */ summary) => summary.lines), 12);
-  const healthLines = engineNames.map(([capabilityId, name]) => `${name}体检：${summaries.some((/** @type {any} */ summary) => summary.capabilityIds.includes(capabilityId)) ? '当日实际评测见上方分项' : '当日未运行，分数未知'}`);
   const sections = [
-    renderEvolutionProgress(snapshot.progress),
     `待你裁决\n${(snapshot.decisions ?? []).map((/** @type {any} */ row) => row.title).join('\n') || '暂无'}`,
     `已自主处理\n${bounded(autonomousLines, 10).join('\n') || '暂无'}\n${autonomous.slice(0, 3).map((/** @type {any} */ row) => `${row.title}：${row.selected}`).join('\n') || '暂无'}`,
-    `当日成果\n${bounded((snapshot.achievements ?? []).map((/** @type {any} */ row) => `${row.name} ${row.level}`), 10).join('\n') || '暂无新工具'}\n${assessmentLines.join('\n') || '评测：当日未运行，分数未知'}\n${healthLines.join('\n')}`,
+    `当日成果\n${bounded((snapshot.achievements ?? []).map((/** @type {any} */ row) => `${row.name} ${row.level}`), 10).join('\n') || '暂无新工具'}`,
   ];
   const body = sections.join('\n\n');
   if (body.length <= limit) return body;
@@ -369,24 +259,6 @@ export function renderEvolutionDigest(snapshot, limit = EVOLUTION_NOTICE_LIMITS.
   let used = 0;
   for (const line of lines) { if (used + line.length + 1 > limit - 40) break; kept.push(line); used += line.length + 1; }
   return `${kept.join('\n')}\n（日报过长，另有 ${lines.length - kept.length} 行未显示）`;
-}
-
-/** Actual evaluation scope and denominator remain explicit; missing-input responses are not research success. @param {any} row */
-export function evolutionEvaluationDigest(row) {
-  const units = row.payload.units ?? [];
-  const groups = new Map();
-  for (const unit of units) {
-    const key = `${unit.capabilityId ?? unit.engineId ?? unit.track ?? 'unknown'}:${unit.type ?? 'unknown'}`;
-    if (!groups.has(key)) groups.set(key,[]);
-    groups.get(key).push(unit);
-  }
-  const lines = [...groups].map(([key,items]) => {
-    const eligible = items.filter(unit => typeof (unit.type === 'research' ? unit.fullResearchReproductionValid : unit.allStagesValid) === 'boolean');
-    const valid = eligible.filter(unit => unit.type === 'research' ? unit.fullResearchReproductionValid : unit.allStagesValid).length;
-    const scope = items[0].type === 'research' ? '完整研究复现' : items[0].type === 'method' ? '方法算例' : '问题驱动';
-    return `${key.split(':')[0]} ${scope}：${eligible.length ? `${valid}/${eligible.length} 有效` : '分数未知'}`;
-  });
-  return { evaluationId:row.id,capabilityIds:[...new Set(units.map(unit=>unit.capabilityId).filter(Boolean))],lines:lines.length ? lines : ['评测资料待补齐，尚未评分'] };
 }
 
 /** @param {any} dependencies */

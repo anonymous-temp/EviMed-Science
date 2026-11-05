@@ -8,10 +8,9 @@ import { RECOMMENDATIONS } from "./taskPresentation";
 const mocks = vi.hoisted(() => ({ createAgenda: vi.fn(), startAgenda: vi.fn(), updateAgenda: vi.fn(), getAgenda: vi.fn() }));
 vi.mock("@/lib/autopilotClient", () => mocks);
 vi.mock("@/lib/sourceList", () => ({ listAllSources: vi.fn() }));
-vi.mock("@/lib/evolutionClient", () => ({ useEvolutionAccess: () => ({ enabled: false }), listEvolutionOpportunities: vi.fn(), adoptEvolutionOpportunity: vi.fn() }));
 
 const noop = () => {};
-const pane = (props: Partial<Parameters<typeof NewTaskPane>[0]> = {}) => <MemoryRouter><NewTaskPane projectId="project-one" onChooseExample={noop} onDraftChange={noop} onRecorded={noop} onSaved={noop} onAdopted={noop} {...props} /></MemoryRouter>;
+const pane = (props: Partial<Parameters<typeof NewTaskPane>[0]> = {}) => <MemoryRouter><NewTaskPane projectId="project-one" onChooseExample={noop} onDraftChange={noop} onRecorded={noop} onSaved={noop} {...props} /></MemoryRouter>;
 
 describe("the new-task pane", () => {
   it("is a heading and the form, and says what a scheduled task is only at first use", () => {

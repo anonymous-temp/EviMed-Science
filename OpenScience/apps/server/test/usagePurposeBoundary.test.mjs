@@ -43,14 +43,14 @@ test("a run the dispatch route records is the kernel's whatever dispatch id or f
       assert.equal(isChargeableResearchRun(run), true, `${run.dispatchId} is still the researcher's to pay`);
     }
     // Nor can the public route name a capability whose runs are the platform's: an internal capability is no line a caller may choose.
-    for (const [index, line] of ["tool-builder", "evolution-scout", "method-distillation", "method-relations", "source-understanding"].entries()) {
+    for (const [index, line] of ["method-distillation", "method-relations", "source-understanding"].entries()) {
       const session = `ses_internal_${index}`;
       assert.equal((await fetch(`${base}/api/research-sessions/${session}`, { method: "PUT", headers, body: JSON.stringify({ mode: "open-domain" }) })).status, 200);
       const refused = await fetch(`${base}/api/agent-runs/dispatch`, { method: "POST", headers, body: JSON.stringify({ sessionId: session, dispatchId: `internal_${index}`, text: "x", line }) });
       assert.equal(refused.status, 400, `line ${line}`);
     }
     // A conversation bound to one of them is refused too, wherever the refusal falls: binding it, or the dispatch.
-    for (const agentId of ["tool-builder", "method-distillation", "source-understanding"]) {
+    for (const agentId of ["method-distillation", "source-understanding"]) {
       const session = `ses_bound_${agentId}`;
       const bound = await fetch(`${base}/api/research-sessions/${session}`, { method: "PUT", headers, body: JSON.stringify({ mode: "specialist", agentId }) });
       if (bound.status < 400) {
