@@ -15,14 +15,17 @@ import { HttpError } from "../src/security.mjs";
 import { PluginService } from "../src/pluginService.mjs";
 
 /** A database whose shared project lock is refused for the first `busyFor` asks. */
-function lockedDatabase(busyFor) {
-  const state = { asked: 0, transactions: 0, inserted: 0 };
+function lockedDatabase(busyFor,nativeBusyFor=0) {
+  const state = { asked: 0, nativeAsked:0, transactions: 0, inserted: 0 };
   const database = {
     state,
     async transaction(work) {
       state.transactions += 1;
       return work({
-        async query(sql) {
+        async query(sql,values=[]) {
+          if (/pg_try_advisory_xact_lock_shared/.test(sql) && String(values[0]).startsWith('native-memory-writer:')) {
+            state.nativeAsked++;return {rows:[{acquired:state.nativeAsked>nativeBusyFor}],rowCount:1};
+          }
           if (/pg_try_advisory_xact_lock_shared/.test(sql)) {
             state.asked += 1;
             return { rows: [{ acquired: state.asked > busyFor }], rowCount: 1 };
@@ -107,4 +110,11 @@ test("a waiter holds no connection while it waits: each ask is its own short tra
   // The apply needs pool connections to finish; four waiters inside one long
   // transaction each would have starved it.
   assert.ok(database.state.transactions >= 4);
+});
+
+
+test('a normal prompt waits for account-native source maintenance without duplicating its acceptance receipt',async()=>{
+  const database=lockedDatabase(0,2);let ran=0;
+  await serviceOn(database,5000).withAdmission(project,async()=>{ran++;},{prompt:true});
+  assert.equal(database.state.nativeAsked,3);assert.equal(database.state.inserted,1);assert.equal(ran,1);
 });

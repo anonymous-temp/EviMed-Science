@@ -132,6 +132,7 @@ CREATE TABLE IF NOT EXISTS evimed_memory.native_commits (
   PRIMARY KEY (user_id, archive_uri)
 );
 -- A ledger made before the page's 「记住这一条」 existed gains the column without being rebuilt.
+ALTER TABLE evimed_memory.native_commits ADD COLUMN IF NOT EXISTS native_ingested_at timestamptz(3);
 ALTER TABLE evimed_memory.native_commits ADD COLUMN IF NOT EXISTS pending_text text CHECK (pending_text IS NULL OR char_length(pending_text) <= 2000);
 -- A ledger made before 2026-10-23 gains what the extraction said about itself (a commit that wrote nothing is told apart: the
 -- model proposed nothing, or the engine refused what it proposed).

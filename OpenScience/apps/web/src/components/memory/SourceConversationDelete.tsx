@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { productErrorMessage } from '@/lib/productClient';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { conversationSourceStatus, deleteConversationSource, type ConversationSourceDeletionStatus } from '@/lib/conversationSourceDeletionClient';
@@ -19,20 +20,21 @@ export function SourceConversationDelete({ projectId, sessionId, onChanged }: { 
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<ConversationSourceDeletionStatus | null>(null);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<string|null>(null);
   async function act(remove: boolean) {
-    setBusy(true); setError(false);
+    setBusy(true); setError(null);
     try {
       const next = await (remove ? deleteConversationSource(projectId, sessionId) : conversationSourceStatus(projectId, sessionId));
       setStatus(next); setConfirming(false); onChanged();
-    } catch { setError(true); }
+    } catch(failure) { setError(productErrorMessage(failure,{fallback:'删除未完成，请重试。'})); }
     finally { setBusy(false); }
   }
+  const pendingText=status?.sourceRemoved?'对话原文已删除，相关记忆尚未清除。':status?.reason==='cleanup_unavailable'?'已隐藏来源对话，清除尚未完成，可稍后查看进度。':'已隐藏来源对话，等待当前工作结束后清除。';
   return <div className="flex flex-wrap items-center gap-2">
     {!status && <Button size="sm" variant="text" destructive disabled={busy} onClick={() => setConfirming(true)}>删除来源对话</Button>}
-    {status && <span role="status" className="text-ui text-text-2">{status.sourceRemoved && status.cleanup === 'complete' ? '来源对话已删除' : '已隐藏来源对话，等待当前工作结束后清除。'}</span>}
+    {status && <span role="status" className="text-ui text-text-2">{status.sourceRemoved && status.cleanup === 'complete' ? '来源对话已删除' : pendingText}</span>}
     {status?.cleanup === 'pending' && <Button size="sm" variant="text" loading={busy} onClick={() => void act(false)}>查看删除进度</Button>}
-    {error && <span role="alert" className="text-ui text-danger">删除未完成，请重试。</span>}
-    {confirming && <ConfirmDialog title="删除来源对话？" consequences="这会永久删除这段对话及其子任务的原文、仅来自它的记忆。已生成的文件保留，当前工作结束后完成清除。" recovery="删除后无法恢复。" confirmLabel="永久删除" busy={busy} onCancel={() => { setConfirming(false); setError(false); }} onConfirm={() => void act(true)} />}
+    {error && <span role="alert" className="text-ui text-danger">{error}</span>}
+    {confirming && <ConfirmDialog title="删除来源对话？" consequences="这会永久删除这段对话及其子任务的原文、仅来自它的记忆。已生成的文件保留，当前工作结束后完成清除。" recovery="删除后无法恢复。" confirmLabel="永久删除" busy={busy} onCancel={() => { setConfirming(false); setError(null); }} onConfirm={() => void act(true)} />}
   </div>;
 }

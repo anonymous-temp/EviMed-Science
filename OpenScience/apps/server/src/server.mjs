@@ -4528,6 +4528,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // because from a user's point of view they are one story: "it is running",
     // "the second deliverable came back with three fixes", "it finished".
     onRunStateChanged: (project, run) => {
+      if(sourceDeletion?.knownDeleted(project,run.sessionId))runEvents.revoke(run.id);
       runEvents.publish(run.id, "run/state", {
         state: run.status,
         artifactRoles: run.artifactRoles ?? {}, stepActions: run.stepActions ?? {}, availableActions: run.availableActions ?? [], stalled: run.stalled === true,
@@ -5833,19 +5834,47 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   nativeMemoryWorker.history = memoryHistory;
   const sourceDeletionLedger = productDatabase ? new ConversationSourceDeletionLedger(productDatabase) : null;
   const sourceDeletion = sourceDeletionLedger ? new ConversationSourceDeletionService({ ledger: sourceDeletionLedger, runtime: runtimeManager,
+    recordIdForUri:nativeFileId,
+    revisionSource:async(userId,revision)=>{
+      const sessionId=await nativeMemoryOverlay.conversationOf(userId,revision.engineSession,revision.archiveUri);
+      if(!sessionId)return null;
+      const commit=revision.archiveUri?await nativeMemoryOverlay.commit(userId,revision.archiveUri):null;
+      return {sessionId,projectId:commit?.projectId??revision.projectId};
+    },
+    nativeRootsFor: async (project,frozen,identity)=>{
+      if(!Array.isArray(frozen.copies))return null;
+      const views=await nativeMemoryContexts.all(project.userId),roots=[];
+      for(const copy of frozen.copies) {
+        const view=copy.contextReference===null?views.find(item=>item.kind==='owned'):views.find(item=>item.namespaceId===copy.memoryNamespaceId);
+        if(!view || view.ownerCreatedAt!==identity.accountCreatedAt || view.kind==='geo-project'&&(view.projectId!==project.id||view.policy.projectCreatedAt!==identity.projectCreatedAt))throw new HttpError(409,'memory_scope_denied','A proven source namespace cannot be resolved.');
+        await nativeMemoryContexts.assertKnown(view);roots.push(view.userRoot);
+      }
+      return [...new Set(roots)];
+    },
+    contributionsFor: async row=>(await Promise.all((row.nativeRoots?.length?row.nativeRoots:row.memoryUserRoot?[row.memoryUserRoot]:[])
+      .map(root=>nativeMemory.sourceHistoryContributions(row.userId,row.projectId,row.sessionIds,root)))).flat(),
+    prepareFence: async (project,sessionIds)=>{
+      const runs=(await agentRuns.list(project)).filter(run=>sessionIds.includes(run.sessionId));
+      return ()=>{for(const run of runs)runEvents.revoke(run.id);};
+    },
     memoryRootFor: async project => nativeMemoryContexts ? (await nativeMemoryContexts.forProject(project)).userRoot : openVikingSessions.userRoot(project.userId),
     resolveProject: async row => store.requireProject(await store.userById(row.userId), row.projectId),
     removeHistory: async (project, row) => {
+      sourceDeletion?.rememberFence(project,row.sessionIds);
+      for(const run of await agentRuns.list(project))if(row.sessionIds.includes(run.sessionId))runEvents.revoke(run.id);
       if (nativeMemoryContexts && memoryHistory) {
         const deletionContext = await nativeMemoryContexts.forProject(project);
         for (const sessionId of row.sessionIds) await memoryHistory.removeConversation({ ...deletionContext, projectId: project.id, projectCreatedAt: row.projectCreatedAt }, sessionId);
         await memoryHistory.drainDeletes();
       }
+      const history=await sourceDeletion.contributionsFor(row);
+      await sourceDeletionLedger.rememberHistory(row,history);
+      for(const contribution of history)await nativeMemoryOverlay.scrubLines(project.userId,contribution.uri,contribution.lines,{sourceDeleted:true});
       // Revoke private export bindings immediately, before the background cleanup can wait for an active project.
       if (capsuleTransferService) {
         const uris = await sourceDeletionLedger.hiddenMemoryUris(project.userId);
         const origins = await nativeMemoryOverlay.originsOf(project.userId, uris);
-        const ids = [];
+        const ids = history.flatMap(contribution=>contribution.recordIds);
         for (const uri of uris) {
           ids.push(nativeFileId(uri));
           for (const [print, origin] of origins.get(uri) ?? []) {
@@ -5858,6 +5887,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       }
     },
     removeDerived: async (project, row) => {
+      if(!nativeMemory.configured)throw new HttpError(503,'memory_source_cleanup_unavailable','Native memory cleanup cannot be proved while the engine is unavailable.');
       if (nativeMemory.configured) await withNativeMemoryWrite(productDatabase,project.userId,async()=>{
         const owner=await store.userById(project.userId);
         if(!owner)throw new HttpError(409,'memory_source_cleanup_busy','The source owner cannot be verified.');
@@ -5868,22 +5898,28 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         }
         const views=await nativeMemoryContexts.all(project.userId);
         for(const view of views)await nativeMemoryWorker.scanArchives(project.userId,{context:view});
+        if((await productDatabase.query("SELECT 1 FROM evimed_memory.native_reset_tombstones WHERE user_id=$1 AND state IN ('open','unknown') LIMIT 1",[project.userId])).rows.length)throw new HttpError(409,'memory_source_cleanup_busy','A prior native reset has no terminal write proof.');
         if((await nativeMemoryOverlay.consolidationState(project.userId)).task)throw new HttpError(409,'memory_source_cleanup_busy','A native consolidation is still active or unknown.');
-        if((await nativeMemoryOverlay.openCommits({userId:project.userId,limit:1})).length)throw new HttpError(409,'memory_source_cleanup_busy','A native extraction is still active or unknown.');
-        const sourceView=views.find(view=>view.userRoot===row.memoryUserRoot);
+        if(await nativeMemoryOverlay.hasUnprovenNativeWrites(project.userId))throw new HttpError(409,'memory_source_cleanup_busy','A native extraction is still active or unknown.');
+        const currentSource=await sourceDeletionLedger.get(project,row.rootSessionId);
+        if(currentSource?.lineageRoots?.length)throw new HttpError(409,'memory_source_lineage_unverified','Native consolidation source lineage is unverified.');
+        for(const nativeRoot of row.nativeRoots?.length?row.nativeRoots:row.memoryUserRoot?[row.memoryUserRoot]:[]) {
+        const sourceView=views.find(view=>view.userRoot===nativeRoot);
         if(!sourceView)throw new HttpError(409,'memory_source_cleanup_busy','The frozen native namespace cannot be verified.');
         const commits=[];
-        for(const sessionId of row.sessionIds)commits.push(...await nativeMemoryOverlay.commitsOfSession(project.userId,`dsh-${sessionId}`,{userRoot:row.memoryUserRoot}));
+        for(const sessionId of row.sessionIds)commits.push(...await nativeMemoryOverlay.commitsOfSession(project.userId,`dsh-${sessionId}`,{userRoot:nativeRoot}));
         const visited=new Set();
         for(let index=0;index<commits.length;index++) {
           const commit=commits[index];if(visited.has(commit.archiveUri))continue;visited.add(commit.archiveUri);
-          if(commit.state!=='completed') {
+          if(commit.state!=='completed'&&!commit.nativeIngestedAt&&!commit.ingestedAt) {
             const task=commit.taskId?await sourceView.sessions.task(project.userId,commit.taskId):null;
             if(!task || !['completed','failed','cancelled','canceled'].includes(String(task.status).toLowerCase()))throw new HttpError(409,'memory_source_cleanup_busy','The source extraction has no terminal native proof.');
+            throw new HttpError(409,'memory_source_lineage_unverified','The source extraction has no completed native ingestion receipt.');
           }
           if(commit.replayedAs){const replay=await nativeMemoryOverlay.commit(project.userId,commit.replayedAs);if(replay)commits.push(replay);}
         }
-        await nativeMemory.removeConversationSource(project.userId, project.id, row.sessionIds, { userRoot: row.memoryUserRoot });
+        await nativeMemory.removeConversationSource(project.userId, project.id, row.sessionIds, { userRoot: nativeRoot,cleanedRevisionId:row.cleanedRevisionId });
+        }
       },{exclusive:true});
       const removedRuns = await agentRuns.removeConversationSource(project, row.sessionIds);
       for (const runId of removedRuns) preStopTranscripts.take(runId);
@@ -9091,6 +9127,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         const runs = await agentRuns.list(ctx.project);
         const run = runs.find((candidate) => candidate.id === runId);
         if (!run) throw new HttpError(404, "agent_run_not_found", "Agent run not found.");
+        await sourceDeletion?.assertAvailable(ctx.project,run.sessionId);
         const channel = runEvents.channel(runId);
         // The current state goes out before anything else, so a tab that
         // attaches to a finished run sees its outcome rather than an empty

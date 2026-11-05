@@ -915,6 +915,7 @@ export class CapsuleTransferService {
   async assertSnapshotActive(ownerId,snapshotId,expectedRevision) {
     const current=await this.documents.get(ownerId,'preferences',snapshotId);
     if (!current || current.payload.recordType!=='capsule-snapshot' || current.payload.status==='revoked' || current.revision!==expectedRevision) throw new HttpError(409,'capsule_snapshot_revoked','This hosted snapshot changed while it was read.');
+    await this.nativeMemory?.sourceDeletion?.assertSnapshotSourcesAvailable(ownerId,current.payload.sourceEntries);
     return current;
   }
 
@@ -972,8 +973,7 @@ export class CapsuleTransferService {
     const archive = await readProtectedCapsuleFile(directory, `${capsuleAccountHash(userId)}-${record.id}.evimedcap`, CAPSULE_TRANSFER_MAX_BYTES)
       ?? await readProtectedCapsuleFile(directory, `${record.id}.evimedcap`, CAPSULE_TRANSFER_MAX_BYTES);
     if (!archive || digest(archive) !== record.payload.archiveSha256) throw new HttpError(503, "capsule_snapshot_unavailable", "The snapshot file is unavailable.");
-    const current = await this.snapshot(userId, capsuleId, snapshotId);
-    if (current.payload.status === 'revoked' || current.revision !== record.revision) throw new HttpError(409, 'capsule_snapshot_revoked', 'This hosted snapshot changed while it was read.');
+    await this.assertSnapshotActive(userId,snapshotId,record.revision);
     return { archive, filename: `capsule-${record.id}.evimedcap` };
   }
 

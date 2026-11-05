@@ -462,7 +462,7 @@ export class NativeMemoryStore {
     const files = await this.rawFiles(userId, options);
     if (!this.sourceDeletion) return files;
     const hidden = new Set(await this.sourceDeletion.hiddenMemoryUris(userId));
-    return files.filter(file => !hidden.has(file.uri));
+    return files.filter(file => ![...hidden].some(prefix=>file.uri===prefix||file.uri.startsWith(`${prefix}/`)));
   }
 
   /** Trusted cleanup reads the source-bearing body before removing its attributed lines.
@@ -570,7 +570,9 @@ export class NativeMemoryStore {
       }
     }
     const withdrawn = new Set(this.sourceDeletion ? await this.sourceDeletion.hiddenMemoryUris(userId) : []);
-    return records.filter(record => !withdrawn.has(record.uri)).sort((left, right) => String(right.updatedAt ?? "").localeCompare(String(left.updatedAt ?? "")));
+    const visible=records.filter(record=>![...withdrawn].some(prefix=>record.uri===prefix||record.uri.startsWith(`${prefix}/`)));
+    const protectedRecords=this.sourceDeletion?await this.sourceDeletion.redactRecords(userId,visible):visible;
+    return protectedRecords.sort((left, right) => String(right.updatedAt ?? "").localeCompare(String(left.updatedAt ?? "")));
   }
 
   /**
@@ -729,6 +731,7 @@ export class NativeMemoryStore {
       evidence,
       // What the file said before each change, oldest first, as the page's 「以前的版本」 reads them.
       revisions: forgotten === null ? [] : history.filter((revision) => revision.before !== null).map((revision, index) => ({
+        ...(this.sourceDeletion?{sourceRevisionId:revision.id,sourceEngineSession:revision.engineSession,sourceArchiveUri:revision.archiveUri,sourceProjectId:revision.projectId}:{}),
         version: index + 1, value: forgotten.length && !FORGET_REASON.test(String(revision.reason ?? "")) ? withoutForgottenLines(String(revision.before ?? ""), forgotten) : String(revision.before ?? ""),
         summary: "", status: "active", changedAt: revision.changedAt,
         reason: revision.reason, by: revision.actor === "engine" ? "extraction" : revision.actor === "platform" ? "system" : "user",
@@ -1135,11 +1138,28 @@ export class NativeMemoryStore {
     this.#touch(userId);
   }
 
+  /** Source history is derived from exact archive/session authority even when no current file or origin remains. */
+  async sourceHistoryContributions(userId,projectId,sessionIds,userRoot) {
+    const rows=await this.overlay.sourceRevisions(userId,projectId,sessionIds,userRoot),byUri=new Map();
+    for(const row of rows){const before=new Set(memoryLines(row.before??'').map(lineFingerprint)),prior=byUri.get(row.uri)??[];
+      byUri.set(row.uri,[...new Set([...prior,...memoryLines(row.after??'').filter(line=>!/^#{1,6}\s/.test(line)&&!before.has(lineFingerprint(line)))])]);}
+    const contributions=[...byUri].filter(([,lines])=>lines.length).map(([uri,lines])=>({uri,lines,unverifiedRoot:null,prints:lines.map(lineFingerprint),recordIds:[nativeFileId(uri),...lines.map(line=>`${nativeFileId(uri)}_${lineFingerprint(line).slice(0,12)}`)]}));
+    const prints=new Set(contributions.flatMap(item=>item.prints));
+    if(this.sourceDeletion)for(const fence of await this.sourceDeletion.ledger.recordsForOwner(userId))if(fence.projectId===projectId&&(fence.nativeRoots??[fence.memoryUserRoot]).includes(userRoot))for(const values of Object.values(fence.historyPrints??{}))for(const print of values)prints.add(print);
+    const ambiguous=(await this.overlay.consolidationRevisions(userId,userRoot)).some(revision=>{
+      const after=new Set(memoryLines(revision.after??'').map(lineFingerprint));
+      return memoryLines(revision.before??'').some(line=>prints.has(lineFingerprint(line))&&!after.has(lineFingerprint(line)));
+    });
+    return ambiguous?[...contributions,{uri:userRoot,lines:[],prints:[],recordIds:[],unverifiedRoot:userRoot}]:contributions;
+  }
+
   /** Remove only lines whose durable first-party origin names the deleted source, preserving every other line and file.
-   * @param {string} userId @param {string} projectId @param {string[]} sessionIds @param {{userRoot?:string|null}} [options] */
-  async removeConversationSource(userId, projectId, sessionIds, { userRoot = null } = {}) {
+   * @param {string} userId @param {string} projectId @param {string[]} sessionIds @param {{userRoot?:string|null,cleanedRevisionId?:string|null}} [options] */
+  async removeConversationSource(userId, projectId, sessionIds, { userRoot = null,cleanedRevisionId=null } = {}) {
     const context = userRoot && this.memoryContexts ? await this.memoryContexts.forUri(userId, `${userRoot}/memories/profile.md`) : await this.#projectContext(userId, projectId);
     if (userRoot && context.userRoot && context.userRoot !== userRoot || context.kind === 'geo-project' && context.projectId !== projectId) throw new HttpError(403, 'memory_scope_denied', 'The frozen source namespace changed.');
+    const contributions=await this.sourceHistoryContributions(userId,projectId,sessionIds,context.userRoot??context.sessions.userRoot(userId));
+    if(contributions.some(item=>item.unverifiedRoot))throw new HttpError(409,'memory_source_lineage_unverified','The native consolidation no longer proves which text came only from this source.');
     const files = await this.rawFiles(userId, { context: this.memoryContexts ? context : null });
     const origins = await this.overlay.originsOf(userId, files.map(file => file.uri));
     const deleted = new Set(sessionIds), affected = [];
@@ -1147,16 +1167,21 @@ export class NativeMemoryStore {
     const historyLines = new Map();
     for (const revision of historical) {
       const before = new Set(memoryLines(revision.before ?? '').map(lineFingerprint));
-      const brought = memoryLines(revision.after ?? '').filter(line => !before.has(lineFingerprint(line)));
+      const brought = memoryLines(revision.after ?? '').filter(line => !/^#{1,6}\s/.test(line) && !before.has(lineFingerprint(line)));
       const prior = historyLines.get(revision.uri) ?? [];
       historyLines.set(revision.uri,[...new Set([...prior,...brought])]);
     }
     for (const [uri, lines] of historyLines) {
-      await this.overlay.scrubLines(userId,uri,lines);
+      await this.overlay.scrubLines(userId,uri,lines,{sourceDeleted:true});
       affected.push({uri,id:nativeFileId(uri),hash:null,recordIds:[nativeFileId(uri),...lines.map(line=>`${nativeFileId(uri)}_${lineFingerprint(line).slice(0,12)}`)]});
     }
+    const historicalPrints=this.sourceDeletion?await this.sourceDeletion.historyFingerprints(userId):new Map([...historyLines].map(([uri,lines])=>[uri,new Set(lines.map(lineFingerprint))]));
     for (const file of files) {
       const prints = new Set();
+      const latest=(await this.overlay.revisionsOf(userId,file.uri,{limit:1}))[0];
+      if(latest?.actor==='user'&&(!cleanedRevisionId||BigInt(latest.id)<=BigInt(cleanedRevisionId))&&(String(latest.reason).split(' ')[0]==='undo'||String(latest.reason).startsWith('undo:'))) {
+        for(const print of historicalPrints.get(file.uri)??[])if(!origins.get(file.uri)?.get(print)?.engineSession)prints.add(print);
+      }
       for (const [print, origin] of origins.get(file.uri) ?? []) {
         if (origin.projectId !== projectId) continue;
         const source = await this.overlay.conversationOf(userId, origin.engineSession, origin.archiveUri);
@@ -1175,7 +1200,7 @@ export class NativeMemoryStore {
       // Engine reads and overlay undo/export reads must lose the same source text.
       if (memoryLines(next).some(line => !/^#/.test(line))) await this.#write(userId, file, next, { actor: 'platform', reason: 'source conversation deleted' });
       else await this.forgetFile(userId, file, { keepText: false, actor: 'platform', reason: 'source conversation deleted' });
-      await this.overlay.scrubLines(userId, file.uri, removed);
+      await this.overlay.scrubLines(userId, file.uri, removed,{sourceDeleted:true});
       affected.push({ uri: file.uri, id: nativeFileId(file.uri), hash: file.hash, recordIds: [nativeFileId(file.uri), ...[...prints].map(print => `${nativeFileId(file.uri)}_${print.slice(0, 12)}`)] });
     }
     // The engine's raw archives are a second source copy. Delete only sessions whose overlay provenance matches this project.
@@ -1376,6 +1401,7 @@ export class NativeMemoryStore {
     const context = await this.#fileContext(userId, uri);
     const last = (await this.overlay.revisionsOf(userId, uri, { limit: 20 })).find((revision) => !revision.undoneAt);
     if (!last) throw new HttpError(409, "memory_conflict", "There is no change of this memory to undo.");
+    if(last.sourceDeletedText||String(last.reason).includes('[source-deleted]'))throw new HttpError(409,'memory_source_deleted','The source for this memory version was deleted.');
     const memoryType = last.memoryType;
     const rejectionType = this.#rejectionType(context, memoryType);
     const projectId = context.kind === 'geo-project' ? context.projectId : last.projectId;

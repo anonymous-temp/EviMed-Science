@@ -514,6 +514,7 @@ export class NativeMemoryWorker {
           return true;
         }
         const operations = await this.ingest(commit, diff, { context });
+        await this.overlay.noteNativeIngested(commit.userId,commit.archiveUri);
         // A note of the observations type may have just been written by a second conversation. The account's own namespace only: a shared
         // GEO project's keeps no observations (`OPENVIKING_PROJECT_MEMORY_TYPES`) and no preferences to promote them to.
         if (this.observations && context.kind !== 'geo-project' && touchesObservations(diff, sessions.memoryRoot(commit.userId))) await this.observations.promote(commit.userId);
@@ -592,7 +593,7 @@ export class NativeMemoryWorker {
       if (this.overlay.sourceDeletion && commit.projectId) {
         const source = await this.overlay.conversationOf(userId, commit.engineSession, commit.archiveUri);
         const sourceFence = source ? await this.overlay.sourceDeletion.ledger.get({ userId, id: commit.projectId }, source) : null;
-        if (sourceFence && (!sourceFence.memoryUserRoot || sourceFence.memoryUserRoot === context.userRoot)) {
+        if (sourceFence && (!sourceFence.memoryUserRoot || (sourceFence.nativeRoots??[sourceFence.memoryUserRoot]).includes(context.userRoot))) {
           await this.overlay.abandonCommit(userId, commit.archiveUri, 'source_conversation_deleted');
           return false;
         }

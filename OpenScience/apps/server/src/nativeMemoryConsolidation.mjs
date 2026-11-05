@@ -124,6 +124,7 @@ export class NativeMemoryConsolidation {
     if (state.checkedAt && at - Date.parse(state.checkedAt) < CHECK_EVERY_MS) return "not_due";
     const settings = await this.memorySettings.settings(userId);
     if (settings.learningPaused) return "held_back";
+    if(this.overlay.sourceDeletion&&(await this.overlay.sourceDeletion.ledger.recordsForOwner(userId,{pendingOnly:true})).length)return "held_back";
     const open = await this.overlay.openCommits({ userId, limit: 1, now: this.now() });
     const latest = (await this.overlay.commitsOf(userId, { limit: 1 }))[0];
     if (open.length || (latest && at - Date.parse(latest.createdAt ?? "") < QUIET_AFTER_COMMIT_MS)) return "held_back";

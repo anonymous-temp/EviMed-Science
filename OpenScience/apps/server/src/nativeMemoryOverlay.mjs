@@ -100,7 +100,7 @@ function publicCommit(row) {
     operations: Number(row.operations) || 0, error: String(row.error ?? ""), attempts: Number(row.attempts) || 0,
     nextAttemptAt: instant(row.next_attempt_at), replayedAs: row.replayed_as ?? null, pendingText: row.pending_text ?? null,
     extraction: row.extraction && typeof row.extraction === "object" && !Array.isArray(row.extraction) ? row.extraction : {},
-    createdAt: instant(row.created_at), updatedAt: instant(row.updated_at), ingestedAt: instant(row.ingested_at),
+    createdAt: instant(row.created_at), updatedAt: instant(row.updated_at), ingestedAt: instant(row.ingested_at), nativeIngestedAt: instant(row.native_ingested_at),
   };
 }
 
@@ -423,6 +423,15 @@ export class NativeMemoryOverlay {
     return result.rows.map(publicCommit);
   }
 
+  /** Complete coverage: an unbounded outbox cannot be declared quiet from its first page. */
+  async hasUnprovenNativeWrites(userId) {
+    const result=await this.#query("SELECT 1 FROM evimed_memory.native_commits WHERE user_id=$1 AND state<>'completed' AND native_ingested_at IS NULL AND ingested_at IS NULL LIMIT 1",[owner(userId)]);
+    return result.rows.length>0;
+  }
+  /** Native extraction ingestion is separate from the optional raw-history indexing outbox. */
+  async noteNativeIngested(userId,archiveUri) {
+    await this.#query('UPDATE evimed_memory.native_commits SET native_ingested_at=COALESCE(native_ingested_at,clock_timestamp()) WHERE user_id=$1 AND archive_uri=$2',[owner(userId),archiveUri]);
+  }
   /** The extraction failed: a replay is owed at `nextAttemptAt`. @param {string} userId @param {string} archiveUri @param {{ error?: string, nextAttemptAt?: Date | null }} failure */
   async failCommit(userId, archiveUri, { error = "", nextAttemptAt = null } = {}) {
     await this.#query(`UPDATE evimed_memory.native_commits SET state='failed', error=$3, next_attempt_at=COALESCE($4::timestamptz, clock_timestamp()),
@@ -480,11 +489,12 @@ export class NativeMemoryOverlay {
     return result.rows[0] ? publicRevision(result.rows[0]) : null;
   }
 
+  async protectRevisions(userId,rows) { return this.sourceDeletion ? this.sourceDeletion.redactRevisions(userId,rows) : rows; }
   /** @param {string} userId @param {string} uri @param {{ limit?: number }} [options] newest first */
   async revisionsOf(userId, uri, { limit = 32 } = {}) {
     const result = await this.#query("SELECT * FROM evimed_memory.native_revisions WHERE user_id=$1 AND uri=$2 ORDER BY id DESC LIMIT $3",
       [owner(userId), String(uri), Math.max(1, Math.min(200, Math.trunc(Number(limit)) || 32))]);
-    return result.rows.map(publicRevision);
+    return this.protectRevisions(userId,result.rows.map(publicRevision));
   }
 
   /**
@@ -498,7 +508,7 @@ export class NativeMemoryOverlay {
       WHERE user_id=$1 AND undone_at IS NULL AND actor IN ('user', 'conversation') AND before IS NOT NULL
         AND ((change = 'deleted') OR (change = 'updated' AND after IS NOT NULL AND reason LIKE 'forgotten on the memory page%'))
       ORDER BY id DESC LIMIT $2`, [owner(userId), Math.max(1, Math.min(1_000, Math.trunc(Number(limit)) || 300))]);
-    return result.rows.map(publicRevision);
+    return this.protectRevisions(userId,result.rows.map(publicRevision));
   }
 
   /** The revisions of many files in one read, newest first per file. @param {string} userId @param {readonly string[]} uris */
@@ -509,9 +519,9 @@ export class NativeMemoryOverlay {
     const result = await this.#query(`SELECT * FROM (SELECT r.*, row_number() OVER (PARTITION BY uri ORDER BY id DESC) AS position
       FROM evimed_memory.native_revisions r WHERE user_id=$1 AND uri = ANY($2::text[])) ranked WHERE position <= $3 ORDER BY uri, id DESC`,
     [owner(userId), [...uris], Math.max(1, Math.min(200, perFile))]);
-    for (const row of result.rows) {
+    for (const row of await this.protectRevisions(userId,result.rows.map(publicRevision))) {
       const list = byUri.get(String(row.uri)) ?? [];
-      list.push(publicRevision(row));
+      list.push(row);
       byUri.set(String(row.uri), list);
     }
     return byUri;
@@ -526,14 +536,14 @@ export class NativeMemoryOverlay {
       WHERE user_id=$1 AND ($2::timestamptz IS NULL OR changed_at > $2) AND ($3::text IS NULL OR engine_session = $3) AND actor = ANY($4::text[])
         AND undone_at IS NULL AND ($6::text IS NULL OR uri LIKE $6 || '/%')
       ORDER BY id DESC LIMIT $5`, [owner(userId), since, engineSession, actors, Math.max(1, Math.min(100, Math.trunc(Number(limit)) || 20)), root]);
-    return result.rows.map(publicRevision);
+    return this.protectRevisions(userId,result.rows.map(publicRevision));
   }
 
   /** Exact admission lineage is not the dashboard's bounded recent-changes list.
    * @param {string} userId @param {string} archiveUri */
   async admissionRevisions(userId, archiveUri) {
     const result = await this.#query("SELECT * FROM evimed_memory.native_revisions WHERE user_id=$1 AND archive_uri=$2 ORDER BY id", [owner(userId), archiveUri]);
-    return result.rows.map(publicRevision);
+    return this.protectRevisions(userId,result.rows.map(publicRevision));
   }
 
   /** Every revision of an account inside a range, oldest first: the timeline and the map's events. */
@@ -541,14 +551,14 @@ export class NativeMemoryOverlay {
     const result = await this.#query(`SELECT * FROM evimed_memory.native_revisions WHERE user_id=$1
       AND ($2::timestamptz IS NULL OR changed_at >= $2) AND ($3::timestamptz IS NULL OR changed_at <= $3) ORDER BY id LIMIT $4`,
     [owner(userId), from, to, Math.max(1, Math.min(20_000, limit))]);
-    return result.rows.map(publicRevision);
+    return this.protectRevisions(userId,result.rows.map(publicRevision));
   }
 
   /** @param {string} userId @param {string} id */
   async revision(userId, id) {
     if (!/^\d{1,18}$/.test(String(id))) return null;
     const result = await this.#query("SELECT * FROM evimed_memory.native_revisions WHERE user_id=$1 AND id=$2", [owner(userId), String(id)]);
-    return result.rows[0] ? publicRevision(result.rows[0]) : null;
+    return result.rows[0] ? (await this.protectRevisions(userId,[publicRevision(result.rows[0])]))[0] : null;
   }
 
   /** @param {string} userId @param {string} id */
@@ -566,7 +576,7 @@ export class NativeMemoryOverlay {
    * the history holds, the rest of each text stays.
    * @param {string} userId @param {string} uri @param {readonly string[]} lines
    */
-  async scrubLines(userId, uri, lines) {
+  async scrubLines(userId, uri, lines, {sourceDeleted=false}={}) {
     const prints = new Set(lines.map(lineFingerprint));
     if (!prints.size) return 0;
     const scrub = (/** @type {string | null} */ text) => (text === null ? null
@@ -577,7 +587,7 @@ export class NativeMemoryOverlay {
       const before = scrub(row.before);
       const after = scrub(row.after);
       if (before === row.before && after === row.after) continue;
-      await this.#query("UPDATE evimed_memory.native_revisions SET before=$3, after=$4 WHERE user_id=$1 AND id=$2", [owner(userId), String(row.id), before, after]);
+      await this.#query("UPDATE evimed_memory.native_revisions SET before=$3, after=$4,reason=CASE WHEN $5 THEN reason||' [source-deleted]' ELSE reason END WHERE user_id=$1 AND id=$2", [owner(userId), String(row.id), before, after,sourceDeleted]);
       changed += 1;
     }
     return changed;
@@ -664,13 +674,19 @@ export class NativeMemoryOverlay {
         AND left(archive_uri,length($4)+10)=$4||'/sessions/'
       UNION SELECT c.archive_uri,c.replayed_as FROM evimed_memory.native_commits c JOIN sources s ON c.archive_uri=s.replayed_as
         WHERE c.user_id=$1 AND c.project_id=$2 AND left(c.archive_uri,length($4)+10)=$4||'/sessions/'
-    ) UPDATE evimed_memory.native_commits SET state='abandoned',pending_text=NULL,error='source_conversation_deleted',updated_at=clock_timestamp()
+    ) UPDATE evimed_memory.native_commits SET native_ingested_at=CASE WHEN state='completed' THEN COALESCE(native_ingested_at,ingested_at,clock_timestamp()) ELSE native_ingested_at END,state='abandoned',pending_text=NULL,error='source_conversation_deleted',updated_at=clock_timestamp()
       WHERE user_id=$1 AND archive_uri IN (SELECT archive_uri FROM sources) RETURNING engine_session`, [owner(userId), projectId, sessions, userRoot]);
     if (userRoot === userRootUri(userId)) await this.#query(`UPDATE evimed_memory.native_admissions SET state='cancelled',pending_text=NULL,error='source_conversation_deleted',
       updated_at=clock_timestamp() WHERE user_id=$1 AND project_id=$2 AND engine_session=ANY($3::text[])`, [owner(userId), projectId, sessions]);
     return [...new Set(removed.rows.map(row => row.engine_session))];
   }
 
+  /** Raw consolidation receipts are inspected before source scrubbing can remove their inputs. */
+  async consolidationRevisions(userId,userRoot) {
+    scopedRoot(userRoot);
+    const rows=await this.#query("SELECT * FROM evimed_memory.native_revisions WHERE user_id=$1 AND left(uri,length($2)+1)=$2||'/' AND reason LIKE 'consolidation%' ORDER BY id",[owner(userId),userRoot]);
+    return rows.rows.map(publicRevision);
+  }
   /** Source-bound historical revisions remain relevant after their current origin or file was removed.
    * @param {string} userId @param {string} projectId @param {string[]} sessionIds @param {string} userRoot */
   async sourceRevisions(userId, projectId, sessionIds, userRoot) {
@@ -747,7 +763,7 @@ export class NativeMemoryOverlay {
   async revisionsForIndex(userId, { afterId = "0", limit = 500 } = {}) {
     const result = await this.#query("SELECT * FROM evimed_memory.native_revisions WHERE user_id=$1 AND id > $2::bigint AND undone_at IS NULL ORDER BY id LIMIT $3",
       [owner(userId), /^\d{1,18}$/.test(String(afterId)) ? String(afterId) : "0", Math.max(1, Math.min(2_000, limit))]);
-    return result.rows.map(publicRevision);
+    return this.protectRevisions(userId,result.rows.map(publicRevision));
   }
 
   // ------------------------------------------------------------ last recalled
