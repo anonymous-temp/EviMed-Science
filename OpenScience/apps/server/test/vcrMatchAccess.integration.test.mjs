@@ -192,7 +192,7 @@ test("the page's 开始评估 reaches the matching package (it answered 503 vcr_
   assert.notEqual(started.body?.code, "vcr_unavailable");
   const file = await call("owner", "GET", `/api/vcr/studies/${seeded.study.id}/matching/export?direction=trial_to_patient&source=rules&kind=pairs&format=csv`);
   assert.equal(file.status, 200, file.text);
-  assert.match(file.text, /^﻿?患者,结论,满足,不满足,未知,待复评,评估时间,判定方式/u);
+  assert.match(file.text, /^\uFEFF?患者,结论,满足,不满足,未知,待复评,评估时间,判定方式/u);
   const viewer = await call("viewer", "GET", `/api/vcr/studies/${seeded.study.id}/matching/export?direction=trial_to_patient&source=rules&kind=pairs&format=csv`);
   assert.equal(viewer.status, 403, "the same ability check as the judged file");
 });
