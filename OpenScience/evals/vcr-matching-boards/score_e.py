@@ -306,7 +306,7 @@ def main(argv=None):
         report, keys = score_retrieval(args), KEYS
     else:
         report = score_end2end(args)
-        keys = ["ndcg10", "p10", "j10"] + (["retrievalOrderNdcg10", "retrievalOrderP10"] if args.retrieved else [])
+        keys = ["ndcg10", "p10", "j10", "ndcg10Judged", "p10Judged"] + (["retrievalOrderNdcg10", "retrievalOrderP10"] if args.retrieved else [])
     (out / f"board-e-{args.command}.json").write_text(json.dumps(report, indent=2) + "\n")
     years = [int(y) for y in (args.years.split(",") if args.command == "retrieval" else [item.split("=", 1)[0] for item in args.judgments])]
     text = markdown(report, keys) + "\n" + reference_markdown(years)
