@@ -8,7 +8,7 @@ test('history keeps only sanitized user and assistant text with source dates, ro
     { role: 'user', content: 'Kidney project: reach Alice at alice@example.org, token sk-abcdefghijklmnopqrstuvwxyz123456', created_at: '2026-11-01T10:00:00Z' },
     { role: 'tool', content: 'secret tool result' },
     { role: 'assistant', parts: [{ type: 'text', text: 'I suggest checking the trial design.' }, { type: 'tool_call', text: 'do not keep' }] },
-    { role: 'user', content: '<platform-context>injected context</platform-context>' },
+    { role: 'user', content: '<evimed-brief>injected context</evimed-brief>' },
   ]);
   assert.equal(chunks.length, 1);
   assert.deepEqual(chunks[0].messages.map(m => m.sourceRole), ['user', 'assistant']);

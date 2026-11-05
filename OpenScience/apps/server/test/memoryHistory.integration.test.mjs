@@ -13,10 +13,12 @@ async function setup(t) {
     async readHistory(_owner, uri) { calls.push(['read', uri]); return files.get(uri) ?? null; },
     async removeSource(_owner, uri) { if (failRemove) throw new Error('delete unavailable'); files.delete(uri); },
   };
-  const context = { kind: 'owned', ownerId: f.userId, ownerCreatedAt: '2026-01-01T00:00:00Z', namespaceId: f.engineUser, userRoot: f.sessions.userRoot(f.userId), projectId: 'default', sessions: f.sessions };
+  const stamp = (await f.database.query('SELECT created_at::text AS stamp FROM evimed_control.users WHERE id=$1', [f.userId])).rows[0].stamp;
+  const context = { kind: 'owned', ownerId: f.userId, ownerCreatedAt: stamp, namespaceId: f.engineUser, userRoot: f.sessions.userRoot(f.userId), projectId: 'default', sessions: f.sessions };
   const ledger = new MemoryHistoryLedger({ database: f.database, overlay: f.overlay });
+  ledger.removeResource = row => resources.removeSource(row.owner_id, row.uri);
   const service = new MemoryHistory({ config: { memoryHistorySearchEnabled: true }, ledger, contexts: { async forProject(p) { return { ...context, projectId: p.id }; } },
-    resourcesFor: () => resources, resolveSource: async (c, ctx) => ({ projectId: c.projectId, projectCreatedAt: '2026-01-01T00:00:00Z', sessionId: c.engineSession.slice(4), conversationTitle: 'Kidney trial', conversationUrl: '/app/projects/default?session=session_a' }),
+    resourcesFor: () => resources, resolveSource: async (c, _ctx) => ({ projectId: c.projectId, projectCreatedAt: '2026-01-01T00:00:00Z', sessionId: c.engineSession?.slice(4), conversationTitle: 'Kidney trial', conversationUrl: '/app/projects/default?session=session_a' }),
     eligible: async () => true, admitMessage: async () => true,
   });
   const archive = await f.commitConversation('a', [{ role: 'user', text: 'I prefer trial tables.', at: new Date(Date.now() + 1000).toISOString() }, { role: 'assistant', text: 'I suggest weekly analyses.' }], { projectId: 'default' });
@@ -50,7 +52,7 @@ test('scope deletion persists before physical deletion and a raced writer cannot
 });
 
 test('index failure leaves the native commit pending and is recoverable on a later settle', options, async t => {
-  const f = await setup(t); f.worker.history = f.service; f.failWrites(true);
+  const f = await setup(t); f.worker.history = f.service; f.worker.memoryContexts = { forUri: async () => f.context, assertKnown: async () => {} }; f.failWrites(true);
   await f.worker.processCommits({ userId: f.userId }); assert.equal((await f.overlay.openCommits({ userId: f.userId }))[0].state, 'pending');
   f.failWrites(false); await f.worker.processCommits({ userId: f.userId }); assert.equal((await search(f)).length, 1);
   assert.equal((await f.overlay.openCommits({ userId: f.userId })).length, 0);
@@ -65,6 +67,6 @@ test('native reset and project deletion fence indexed history before touching en
 test('cleanup obligations survive owner deletion and recreated accounts use disjoint history roots', options, async t => {
   const f = await setup(t); await f.service.ingestArchive(f.commit, f.context); f.failDeletes(true);
   await f.service.eraseAccount(f.userId); await f.database.query('DELETE FROM evimed_control.users WHERE id=$1', [f.userId]);
-  assert.ok((await f.ledger.pendingDeletes()).length > 0);
+  assert.ok((await f.database.query("SELECT uri FROM evimed_memory.history_chunks WHERE owner_id=$1 AND state='withdrawn' AND cleaned_at IS NULL", [f.userId])).rows.length > 0);
   f.failDeletes(false); await f.service.drainDeletes(); assert.equal(f.files.size, 0);
 });

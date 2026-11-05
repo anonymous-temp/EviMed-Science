@@ -481,6 +481,7 @@ import { OpenVikingSessions } from "./openVikingSessions.mjs";
 import { NativeMemoryOverlay } from "./nativeMemoryOverlay.mjs";
 import { NativeMemoryStore, nativeConversationTitleKey } from "./nativeMemoryStore.mjs";
 import { NativeMemoryImport } from "./nativeMemoryImport.mjs";
+import { MemoryHistory, MemoryHistoryLedger } from './memoryHistory.mjs';
 import { NativeMemoryWorker } from "./nativeMemoryWorker.mjs";
 import { NativeTurnCommit } from "./nativeTurnCommit.mjs";
 import { createRejectionJudge } from "./nativeMemoryRejections.mjs";
@@ -5760,12 +5761,61 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     internalAgent: async (agentId) => (await agentRegistry)?.get?.(agentId)?.visibility === "internal",
     clinicalContext: vcrPrivacyStore ? (userId, projectId, runs) => vcrPrivacyStore.hasClinicalContext(userId, projectId, runs) : null,
   });
+  // The same memory-search tool may append dated original conversation context.
+  // Its registry is metadata only; raw text stays in a private engine Resource
+  // root, separate from KB sources/compilation and every capsule egress surface.
+  const historyLedger = productDatabase ? new MemoryHistoryLedger({ database: productDatabase, overlay: nativeMemoryOverlay, client: openVikingClient }) : null;
+  const memoryHistory = historyLedger && nativeMemoryContexts ? new MemoryHistory({ config, ledger: historyLedger, contexts: nativeMemoryContexts,
+    resolveSource: async (commit, memoryContext) => {
+      const user = await store.userById(memoryContext.ownerId);
+      if (!user) return null;
+      const projectId = commit.projectId ?? memoryContext.projectId;
+      if (!projectId || memoryContext.kind === 'geo-project' && projectId !== memoryContext.projectId) return null;
+      const project = await store.requireProject(user, projectId);
+      if (project.userId !== memoryContext.ownerId) return null;
+      await nativeMemoryContexts.assertLive({ ...memoryContext, projectId });
+      const row = (await productDatabase.query('SELECT created_at::text AS stamp FROM evimed_control.projects WHERE user_id=$1 AND id=$2', [memoryContext.ownerId, projectId])).rows[0];
+      if (!row) return null;
+      const base = { projectId, projectCreatedAt: row.stamp, project };
+      if (!commit.engineSession) return base;
+      const sessionId = platformSessionOf(commit.engineSession);
+      if (!sessionId) return null;
+      if (memoryContext.kind === 'geo-project') {
+        const bound = await nativeMemoryContexts.session(memoryContext, commit.engineSession);
+        if (!bound || bound.payload.source.kind !== 'dsh' || bound.payload.source.childAddress || bound.payload.source.rootSessionId !== sessionId) return null;
+      } else if (await nativeMemoryOverlay.projectOfSession(memoryContext.ownerId, commit.engineSession) !== projectId) return null;
+      const runs = await agentRuns.conversationRuns(project, sessionId);
+      if (!runs.length || runs.every(run => run.deleted === true)) return null;
+      const named = runs.find(run => typeof run.title === 'string' && run.title.trim());
+      return { ...base, sessionId, runs, conversationTitle: String(named?.title ?? runs.at(-1)?.question ?? 'Conversation').slice(0, 120),
+        conversationUrl: `/app/chat/${encodeURIComponent(sessionId)}` };
+    },
+    eligible: async (memoryContext, source) => {
+      if (isInternalProjectOf(config, memoryContext.ownerId, source.projectId)) return false;
+      const state = await memorySettings.sessionState(memoryContext.ownerId, source.projectId, source.sessionId);
+      if (state.trialCapsuleId) return false;
+      // Raw archives cannot reliably date an undated message into a mixed
+      // automated conversation, so exclude that entire conversation here.
+      for (const run of source.runs) {
+        if (run.deleted || isPlatformStartedRun(run) || (await agentRegistry)?.get?.(run.effectiveAgentId ?? run.agentId)?.visibility === 'internal') return false;
+      }
+      if (vcrPrivacyStore && await vcrPrivacyStore.hasClinicalContext(memoryContext.ownerId, source.projectId,
+        source.runs.map(run => ({ sessionId: source.sessionId, runId: run.id })))) return false;
+      return true;
+    },
+    admitMessage: async (memoryContext, source, message) => (await memoryAdmission.admit({ user: { id: memoryContext.ownerId }, project: source.project,
+      engineSessionId: `dsh-${source.sessionId}`, at: Number.isFinite(Date.parse(message.created_at ?? '')) ? Date.parse(message.created_at) : null })).learn,
+  }) : null;
+  // Keep lifecycle fences active even when new history search is switched off.
+  nativeMemory.history = memoryHistory;
+  nativeMemoryWorker.history = memoryHistory;
   // A runtime's recall of a subscribed zone is the frontier's too: an account outside its audience is offered nothing, as every zone route answers it.
   const recallSubscriptions = zoneSubscriptions?.enabled && frontier
     ? subscriptionsForAudience({ subscriptions: zoneSubscriptions, userById: userId => store.userById(userId), allows: user => frontier.service.allows(user) }) : null;
   const memoryGatewayHandler = createMemoryGatewayHandler({
     config, runtimeManager, store, sessions: openVikingSessions, admission: memoryAdmission,
     memoryContexts: nativeMemoryContexts, rememberJournal: nativeRememberJournal,
+    historySearch: memoryHistory ? request => memoryHistory.search(request) : null,
     overlay: nativeMemoryOverlay.configured ? nativeMemoryOverlay : null,
     // The capsule's half of a search (`memoryGateway.mjs`, item 9): the notes kept for the project, the packs in force, the zones it follows.
     capsuleSearch: capsuleService ? createNativeCapsuleSearch({ service: capsuleService, subscriptions: recallSubscriptions, contextItems }) : null,
@@ -9640,6 +9690,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     memoryIndexWorker,
     nativeMemory,
     nativeMemoryWorker,
+    memoryHistory,
     nativeTurnCommit,
     sharedContextPolicies, nativeMemoryContexts, nativeRememberJournal, geoNativeAuthority, geoNativeInputs, geoNativeSelections, contextItems, contextProvenance,
     sourceService,

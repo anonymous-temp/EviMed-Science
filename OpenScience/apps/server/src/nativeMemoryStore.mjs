@@ -396,6 +396,8 @@ export class NativeMemoryStore {
     this.settleExtractionsMs = settleExtractionsMs;
     this.overlay = overlay;
     this.memoryContexts = memoryContexts;
+    /** Durable raw-history lifecycle fences, set by the composition root. */
+    this.history = null;
     this.now = now;
     this.conversationTitles = conversationTitles;
     this.rejectionJudge = rejectionJudge;
@@ -1683,6 +1685,7 @@ export class NativeMemoryStore {
    */
   async reset(userId) {
     this.#assertConfigured();
+    if (this.history) await this.history.reset(userId);
     this.#touch(userId);
     const views = await this.#contexts(userId);
     if (this.memoryContexts) for (const context of views) await this.memoryContexts.assertKnown(context);
@@ -1749,6 +1752,7 @@ export class NativeMemoryStore {
    */
   async deleteProject(userId, projectId) {
     this.#assertConfigured();
+    if (this.history) await this.history.deleteProject(userId, projectId);
     this.#touch(userId);
     // Snapshot all exact registered incarnations whose policy rows will cascade
     // with this control project. Never discover them after the project delete.
@@ -1785,6 +1789,7 @@ export class NativeMemoryStore {
    */
   async eraseAccount(userId) {
     this.#assertConfigured();
+    if (this.history) await this.history.eraseAccount(userId);
     this.#touch(userId);
     const views = await this.#contexts(userId);
     await this.#settleExtractions(userId, views);

@@ -141,6 +141,52 @@ export class OpenVikingResources {
     return [project, library].some((root) => value === root || value.startsWith(`${root}/`));
   }
 
+  /** Private, non-compiled history resource roots. These are never source ids,
+   * library entries, knowledge inputs or arbitrary filesystem addresses. */
+  historyAddress(uri, { file = false } = {}) {
+    const root = /^viking:\/\/user\/(?:u|gp)-[a-f0-9]{24}\/resources\/history\/[a-f0-9]{24}\/[a-f0-9]{24}$/;
+    const leaf = /^viking:\/\/user\/(?:u|gp)-[a-f0-9]{24}\/resources\/history\/[a-f0-9]{24}\/[a-f0-9]{24}\/[a-f0-9]{24}\/[a-f0-9]{24}-[0-9]{1,3}\.md$/;
+    if (!(file ? leaf : root).test(uri)) throw new HttpError(403, 'memory_history_scope_denied', 'The history resource address is invalid.');
+    return uri;
+  }
+
+  async writeHistory(userId, uri, content) {
+    this.historyAddress(uri, { file: true });
+    return this.client.request({ method: 'POST', path: '/api/v1/content/write', userId, timeoutMs: WRITE_TIMEOUT_MS,
+      body: { uri, content, mode: 'replace', wait: true, processing_mode: 'vectors_only', tags: ['private=history'], tag_mode: 'replace' } });
+  }
+
+  async readHistory(userId, uri) {
+    this.historyAddress(uri, { file: true });
+    const text = await this.read(userId, uri);
+    return typeof text === 'string' ? text : null;
+  }
+
+  /** Vector and literal keyword recall over this one proven root. Model text
+   * never chooses a namespace. The ledger hydrates only registered exact URIs. */
+  async searchHistory(userId, root, query, { limit = 40 } = {}) {
+    this.historyAddress(root);
+    const bound = Math.max(1, Math.min(40, Number(limit) || 40));
+    const pattern = String(query).split(/\s+/).filter(Boolean).slice(0, 8).map(word => word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+    const results = await Promise.allSettled([
+      this.client.request({ method: 'POST', path: '/api/v1/search/find', userId, timeoutMs: READ_TIMEOUT_MS,
+        body: { query: String(query), target_uri: root, limit: bound } }),
+      this.grep(userId, root, pattern, { limit: bound, caseInsensitive: true }),
+    ]);
+    if (results.every(result => result.status === 'rejected')) throw /** @type {PromiseRejectedResult} */ (results[0]).reason;
+    const found = new Map();
+    const semantic = results[0].status === 'fulfilled' ? results[0].value?.result : null;
+    const vector = Array.isArray(semantic?.resources) ? semantic.resources : [];
+    const words = results[1].status === 'fulfilled' ? results[1].value.matches : [];
+    // Reciprocal-rank fusion keeps either channel's first candidate near the
+    // front; keyword matches are not buried by a full vector candidate page.
+    for (const channel of [vector, words]) for (const [rank, hit] of channel.entries()) {
+      if (typeof hit?.uri !== 'string' || !hit.uri.startsWith(`${root}/`)) continue;
+      found.set(hit.uri, (found.get(hit.uri) ?? 0) + 1 / (60 + rank));
+    }
+    return [...found].sort((a, b) => b[1] - a[1]).slice(0, bound * 2).map(([uri, score]) => ({ uri, score }));
+  }
+
   // -------------------------------------------------------------------------------------------------------------------
   // Sources
 

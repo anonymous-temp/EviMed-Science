@@ -1,3 +1,4 @@
+import { historySearchText } from './memoryHistory.mjs';
 import { carriesPlatformContext, maskIdentifiers, projectContextLine, unwrapUserWrappers } from "@evimed/domain";
 import { withoutResearchGoalGesture } from "./researchGoal.mjs";
 
@@ -349,6 +350,7 @@ const rpcError = (/** @type {unknown} */ id, /** @type {number} */ code, /** @ty
  *   overlay?: import("./nativeMemoryOverlay.mjs").NativeMemoryOverlay | null,
  *   memoryTool?: { forget: (user: any, project: any, uri: string, options?: any) => Promise<{ removed: boolean }> } | null,
  *   capsuleSearch?: ((request: { user: any, project: any, query: string, limit: number, contextPolicy?:any }) => Promise<Record<string, any>[]>) | null,
+ *   historySearch?: ((request: any) => Promise<any[]>) | null,
  *   now?: () => number,
  * }} dependencies
  *   `memoryTool.forget` is the memory page's own deletion (the file, its revision, the rejection that keeps it from coming
@@ -357,7 +359,7 @@ const rpcError = (/** @type {unknown} */ id, /** @type {number} */ code, /** @ty
  * @returns {((req: any, res: any, onFailure?: (failure: any) => void) => Promise<void>) & { commitSession: MemoryGatewayCommitSession }}
  *   the request handler, with the one function the control plane commits a conversation by (`nativeTurnCommit.mjs`)
  */
-export function createMemoryGatewayHandler({ config, runtimeManager, store, sessions, admission, overlay = null, memoryTool = null, memoryContexts = null, rememberJournal = null, capsuleSearch = null, now = () => Date.now() }) {
+export function createMemoryGatewayHandler({ config, runtimeManager, store, sessions, admission, overlay = null, memoryTool = null, memoryContexts = null, rememberJournal = null, capsuleSearch = null, historySearch = null, now = () => Date.now() }) {
   const enabled = config.memoryEngineEnabled === true && config.memoryEnabled !== false && Boolean(sessions?.configured);
   const maxBodyBytes = Math.max(1_024, Number(config.memoryGatewayMaxBodyBytes) || 1_048_576);
   const ratePerMinute = Math.max(0, Number(config.memoryGatewayRatePerMinute ?? 600) || 0);
@@ -382,6 +384,19 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
     const files = /** @type {string[]} */ ([...new Set(uris.filter((uri) => typeof uri === "string" && Boolean(nativeMemoryFile(/** @type {string} */ (uri), root))))]);
     if (!files.length) return;
     void Promise.resolve().then(() => overlay.noteRecalled(userId, files)).then(() => recordRecallNote("noted"), () => recordRecallNote("failed"));
+  }
+
+  async function rawHistory(ctx, given) {
+    // Context mode is what opens a profile: original history never enters it.
+    const target = given.target_uri ? absolute(given.target_uri, ctx.userRoot) : `${ctx.userRoot}/memories`;
+    if (!historySearch || config.memoryHistorySearchEnabled !== true || given.mode === 'context' || target !== `${ctx.userRoot}/memories` || !String(given.query ?? '').trim()) return [];
+    let timer;
+    try {
+      return await Promise.race([
+        Promise.resolve().then(() => historySearch({ user: ctx.user, project: ctx.project, query: String(given.query).slice(0, 2000), limit: given.limit })).catch(() => []),
+        new Promise(resolve => { timer = setTimeout(() => resolve([]), capsuleWaitMs); }),
+      ]);
+    } finally { clearTimeout(timer); }
   }
 
   /** @param {Map<string, { until: number, count: number }>} windows @param {string} key @param {number} span @param {number} limit */
@@ -744,7 +759,8 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         const listed = await scopedListSearch(ctx.sessions, ctx, given);
         const found = ctx.shared ? await sharedProjectSearch(ctx, listed, false, given) : listed;
         noteRecalled(ctx, (/** @type {any} */ (found).result?.memories ?? []).map((/** @type {any} */ hit) => hit?.uri));
-        return { status: 200, json: found, outcome: "forwarded" };
+        const history = await rawHistory(ctx, given);
+        return { status: 200, json: history.length ? { ...found, result: { .../** @type {any} */ (found.result), history } } : found, outcome: "forwarded" };
       }
       if (given.target_uri !== undefined) throw new HttpError(400, "memory_gateway_body_invalid", "Context search does not accept a target URI.");
       const { purpose: _purpose, quotas: _quotas, peer_scope: _peerScope, ...rest } = given;
@@ -927,6 +943,8 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
               const text = capsuleSearchText(/** @type {any} */ (items));
               if (text) content.push({ type: "text", text });
             }
+            const original = historySearchText(await rawHistory(ctx, args));
+            if (original) content.push({ type: "text", text: original });
             local.push({ jsonrpc: "2.0", id: message.id, result: { content } });
           }
           continue;

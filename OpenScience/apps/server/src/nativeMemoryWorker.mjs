@@ -158,6 +158,8 @@ export class NativeMemoryWorker {
     this.sessions = sessions;
     this.overlay = overlay;
     this.nativeMemory = nativeMemory;
+    /** Private history indexing; composed after the authoritative run ledger. */
+    this.history = null;
     this.projectOfSession = projectOfSession;
     this.memoryContexts = memoryContexts;
     /** Namespace scans rotate independently of pending commits. @type {Map<string, string>} */
@@ -213,6 +215,7 @@ export class NativeMemoryWorker {
   async #pass() {
     let commits = 0;
     let accounts = 0;
+    if (this.history) await this.history.drainDeletes();
     try {
       // The offers of the page's import that nobody saved are not kept past their hour (a saved one a day: what was saved is the engine's).
       await this.overlay.deleteExpiredImports().catch(() => 0);
@@ -514,6 +517,7 @@ export class NativeMemoryWorker {
         // what it refused. A task that is gone (the engine keeps them a day) or unreadable leaves the diff's own account.
         const task = operations === 0 && commit.taskId ? await sessions.task(commit.userId, commit.taskId).catch(() => null) : null;
         const extraction = extractionFacts(diff, task);
+        if (this.history) await this.history.ingestArchive(commit, context);
         await this.overlay.completeCommit(commit.userId, commit.archiveUri, { operations, extraction });
         recordNativeCommit(operations ? "ingested" : "empty");
         recordNativeExtraction(operations, extraction);
