@@ -418,7 +418,7 @@ test("a script lesson is shown the program that recurred, with how often and the
   /** @type {any[]} */ const dispatched = [];
   const make = (/** @type {any[]} */ exemplars) => new MethodDistillationRuns({
     learning: { async listMethods() { return { items: [] }; } },
-    scriptUses: { exemplars: async () => exemplars },
+    scriptUses: { lesson: async () => ({ runs: 3, conversations: 2, exemplars }) },
     dispatch: async (request) => { dispatched.push(request); return { runId: "lr_1", sessionId: "ls_1", dispatchId: request.dispatchId }; },
     readResult: async () => ({ status: "running" }),
   });
@@ -452,9 +452,19 @@ test('distillation exposes excluded child work and unavailable turn identity as 
 test('a queued script lesson rechecks proven recurrence rather than trusting old payload counts', async () => {
   let dispatched = 0;
   const distiller = new MethodDistillationRuns({ learning: { listMethods: async () => ({ items: [] }) },
-    scriptUses: { recurrence: async () => ({ runs: 1, conversations: 1 }), exemplars: async () => [{ runId: 'r', source: 'print(1)' }] },
+    scriptUses: { lesson: async () => ({ runs: 1, conversations: 1, exemplars: [{ runId: 'r', source: 'print(1)' }] }) },
     dispatch: async () => { dispatched++; return { runId: 'generated', sessionId: 'generated' }; }, readResult: async () => ({ status: 'running' }) });
   await assert.rejects(() => distiller.execute({ project: { id: 'p', userId: 'u', rootDir: '/nonexistent', metaDir: '/nonexistent' },
     run: { id: 'r' }, job: { userId: 'u', projectId: 'p', payload: { trigger: 'script', scriptHash: 'a'.repeat(32), runs: 50, conversations: 20 } } }), { code: 'distillation_run_unavailable' });
+  assert.equal(dispatched, 0);
+});
+
+test('pre-generation script jobs cannot adopt newer proven occurrences of the same hash', async () => {
+  let dispatched = 0;
+  const distiller = new MethodDistillationRuns({ learning: { listMethods: async () => ({ items: [] }) },
+    scriptUses: { lesson: async () => ({ runs: 3, conversations: 2, exemplars: [{ runId: 'new', source: 'print(1)' }] }) },
+    dispatch: async () => { dispatched++; return { runId: 'generated', sessionId: 'generated' }; }, readResult: async () => ({ status: 'running' }) });
+  await assert.rejects(() => distiller.execute({ project: { id: 'p', userId: 'u', rootDir: '/nonexistent', metaDir: '/nonexistent' },
+    run: { id: 'old' }, job: { userId: 'u', projectId: 'p', payload: { trigger: 'script', runId: 'old', scriptHash: 'a'.repeat(32), runs: 3, conversations: 2 } } }), { code: 'distillation_run_unavailable' });
   assert.equal(dispatched, 0);
 });
