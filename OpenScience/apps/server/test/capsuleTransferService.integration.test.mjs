@@ -510,3 +510,12 @@ test("people are selectable per share by full-body digest, survive import as per
   assert.ok(!(await nativeMemory.forgotten(owner)).some(row => row.id === edited.id), "hard delete retains no restorable person body");
 
 });
+
+test('an export overlapping source deletion revokes its new snapshot before returning any archive',options,async()=>{
+  const capsule=await source();let version=0;
+  const guarded=new CapsuleTransferService({documents,capsules,identities,dataDir:directory,nativeMemory:{configured:false,sourceDeletion:{version:async()=>String(++version)}}});
+  await assert.rejects(guarded.export(owner,capsule.id,{password}),{code:'capsule_snapshot_revoked'});
+  const snapshots=await documents.list(owner,'preferences',{filter:{recordType:'capsule-snapshot',capsuleId:capsule.id}});
+  assert.equal(snapshots.items.length,1);assert.equal(snapshots.items[0].payload.status,'revoked');
+  await assert.rejects(transfers.download(owner,capsule.id,snapshots.items[0].id),{code:'capsule_snapshot_revoked'});
+});

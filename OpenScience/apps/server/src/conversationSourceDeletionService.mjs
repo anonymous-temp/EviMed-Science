@@ -22,6 +22,7 @@ export function conversationIdsInRequest(method, payload) {
 export function filterDeletedConversationValue(value, deleted) {
   if (!value || typeof value !== 'object') return value;
   if (Array.isArray(value)) return value.map(item => filterDeletedConversationValue(item, deleted)).filter(item => item !== null);
+  if (value.origin === 'subagent' && deleted.has(value.parentSession)) return null;
   if ([value.sessionId, value.rootSessionId, value.agentId, value.id].some(id => typeof id === 'string' && deleted.has(id))) return null;
   if (typeof value.event === 'string' && value.event.startsWith('api-session/') && Array.isArray(value.args) && (deleted.has(value.args[0]) || deleted.has(value.args[0]?.sessionId))) return null;
   const next = {};
@@ -35,12 +36,13 @@ export function filterDeletedConversationValue(value, deleted) {
 
 /** Durable intent precedes source cleanup. Physical removal is an idle-only maintenance operation, never a kernel RPC. */
 export class ConversationSourceDeletionService {
-  constructor({ ledger, runtime, resolveProject, removeHistory, removeDerived, memoryRootFor = async () => null }) {
+  constructor({ ledger, runtime, resolveProject, removeHistory, removeDerived, memoryRootFor = async (_project) => null }) {
     this.memoryRootFor = memoryRootFor;
     this.ledger = ledger; this.runtime = runtime; this.resolveProject = resolveProject;
     this.removeHistory = removeHistory; this.removeDerived = removeDerived;
     this.running = null; this.timer = null;
   }
+  version(userId) { return this.ledger.version(userId); }
   hiddenMemoryUris(userId) { return this.ledger.hiddenMemoryUris(userId); }
   async assertAvailable(project, sessionId) { if (await this.ledger.get(project, sessionId)) throw unavailable(); }
   async authorize(project, method, payload) {
@@ -57,7 +59,7 @@ export class ConversationSourceDeletionService {
     const existing = await this.ledger.get(project, sessionId);
     if (existing) return this.publicStatus(existing);
     const identity = await this.ledger.scope(project);
-    const frozen = await this.runtime.captureConversationSource(project, sessionId);
+    const frozen = await this.runtime.captureConversationSource({ ...project, sourceProjectCreatedAt: identity.projectCreatedAt, sourceOwnerCreatedAt: identity.accountCreatedAt }, sessionId);
     if (!frozen?.root || frozen.root.id !== sessionId || !Array.isArray(frozen.sessions) || !frozen.sessions.some(row => row.id === sessionId)) throw unavailable();
     const row = await this.ledger.put({ id: randomUUID(), userId: project.userId, projectId: project.id, ...identity,
       rootSessionId: sessionId, sessionIds: [...new Set(frozen.sessions.map(session => session.id))], frozen,
@@ -76,12 +78,16 @@ export class ConversationSourceDeletionService {
   async drainOnce() {
     for (const row of await this.ledger.pending()) {
       try {
-        const project = await this.resolveProject(row);
+        const resolved = await this.resolveProject(row);
+        const project = { ...resolved, sourceProjectCreatedAt: row.projectCreatedAt, sourceOwnerCreatedAt: row.accountCreatedAt };
         await this.ledger.exclusive(project, async () => {
           const guard = () => this.ledger.assertIdentity(row);
           await guard(); await this.removeHistory(project, row);
           const result = row.sourceRemoved === true ? { sourceRemoved: true } : await this.runtime.purgeConversationSource(project, row.frozen, guard);
           if (result?.sourceRemoved !== true) { await this.ledger.update(row, { cleanup: 'pending', reason: result?.reason ?? 'runtime_busy' }); return; }
+          if (Array.isArray(result.removedSessionIds) && this.ledger.extendSessions) {
+            row.sessionIds = await this.ledger.extendSessions(row, result.removedSessionIds);
+          }
           await guard(); await this.removeDerived(project, row);
           await this.ledger.update(row, { sourceRemoved: true, cleanup: 'complete', reason: null });
         });

@@ -1,4 +1,4 @@
-import { HttpError } from './security.mjs';
+import { HttpError, safeId } from './security.mjs';
 
 const migrations = new WeakMap();
 const sql = `CREATE SCHEMA IF NOT EXISTS evimed_source_deletion;
@@ -47,13 +47,29 @@ export class ConversationSourceDeletionLedger {
   /** Whole affected files are temporarily excluded until their deleted lines have been physically removed. */
   async hiddenMemoryUris(userId) {
     await this.migrate();
-    const result = await this.database.query(`SELECT DISTINCT o.uri FROM evimed_memory.native_line_origins o
-      JOIN evimed_source_deletion.conversations d ON d.user_id=o.user_id AND d.project_id=o.project_id
-        AND d.session_ids ? substring(o.engine_session from 5)
-        AND d.memory_user_root IS NOT NULL AND left(o.uri,length(d.memory_user_root)+1)=d.memory_user_root||'/'
-      JOIN evimed_control.users u ON u.id=d.user_id AND u.created_at=d.account_created_at
-      WHERE d.user_id=$1`, [userId]);
+    const result = await this.database.query(`WITH RECURSIVE deleted AS (
+      SELECT d.* FROM evimed_source_deletion.conversations d JOIN evimed_control.users u ON u.id=d.user_id AND u.created_at=d.account_created_at
+      WHERE d.user_id=$1 AND d.memory_user_root IS NOT NULL
+    ), sources AS (
+      SELECT c.archive_uri,c.engine_session,c.replayed_as,d.id AS deletion_id FROM evimed_memory.native_commits c JOIN deleted d
+      ON c.user_id=d.user_id AND c.project_id=d.project_id AND left(c.engine_session,4)='dsh-' AND d.session_ids ? substring(c.engine_session from 5)
+      AND left(c.archive_uri,length(d.memory_user_root)+10)=d.memory_user_root||'/sessions/'
+      UNION SELECT c.archive_uri,c.engine_session,c.replayed_as,d.id FROM evimed_memory.native_commits c JOIN sources s ON c.archive_uri=s.replayed_as
+      JOIN deleted d ON d.id=s.deletion_id WHERE c.user_id=d.user_id AND c.project_id=d.project_id
+        AND left(c.archive_uri,length(d.memory_user_root)+10)=d.memory_user_root||'/sessions/'
+    ) SELECT DISTINCT o.uri FROM evimed_memory.native_line_origins o JOIN deleted d ON d.user_id=o.user_id AND d.project_id=o.project_id
+      AND left(o.uri,length(d.memory_user_root)+1)=d.memory_user_root||'/'
+      WHERE (left(o.engine_session,4)='dsh-' AND d.session_ids ? substring(o.engine_session from 5)) OR EXISTS (
+        SELECT 1 FROM sources s WHERE s.deletion_id=d.id AND s.archive_uri=o.archive_uri AND s.engine_session=o.engine_session)`, [userId]);
     return result.rows.map(row => row.uri);
+  }
+  /** A request-local disclosure guard; never infer stability from a cached list of source exclusions. */
+  async version(userId) {
+    await this.migrate();
+    const result = await this.database.query(`SELECT count(*)::text AS count,max(d.created_at)::text AS latest
+      FROM evimed_source_deletion.conversations d JOIN evimed_control.users u ON u.id=d.user_id AND u.created_at=d.account_created_at
+      WHERE d.user_id=$1`, [userId]);
+    return JSON.stringify(result.rows[0]);
   }
   async put(row) {
     await this.migrate();
@@ -65,6 +81,13 @@ export class ConversationSourceDeletionLedger {
     return rowOf(result.rows[0]);
   }
   async pending() { await this.migrate(); return (await this.database.query(`SELECT ${identityColumns} FROM evimed_source_deletion.conversations WHERE cleanup='pending' OR updated_at < clock_timestamp()-interval '60 seconds' ORDER BY updated_at LIMIT 30`)).rows.map(rowOf); }
+  /** Only the privileged maintenance result may extend the deleted managed-child closure. */
+  async extendSessions(row, ids) {
+    const sessionIds = [...new Set([...row.sessionIds, ...ids.map(id => safeId(id, 'managed source session'))])];
+    if (sessionIds.length > 10000) throw new HttpError(409, 'source_deletion_limit', 'The source closure is too large.');
+    await this.database.query('UPDATE evimed_source_deletion.conversations SET session_ids=$2,updated_at=clock_timestamp() WHERE id=$1', [row.id, JSON.stringify(sessionIds)]);
+    return sessionIds;
+  }
   async update(row, change) {
     const result = await this.database.query(`UPDATE evimed_source_deletion.conversations SET cleanup=$2,source_removed=$3,reason=$4,updated_at=clock_timestamp() WHERE id=$1 RETURNING ${identityColumns}`,
       [row.id, change.cleanup ?? row.cleanup, change.sourceRemoved ?? row.sourceRemoved, change.reason ?? null]); return rowOf(result.rows[0]);

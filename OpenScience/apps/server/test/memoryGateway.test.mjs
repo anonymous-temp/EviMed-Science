@@ -32,7 +32,7 @@ function fixedAdmission(answer = {}) {
   return { asked, admit: async (caller) => { asked.push(caller.engineSessionId ?? null); return { ...base, ...(typeof answer === "function" ? answer(caller) : answer) }; } };
 }
 
-async function fixture(t, { admission = fixedAdmission(), config = {}, overlay = null, stubOptions = {}, memoryTool = null, capsuleSearch = null, historySearch = null, timeoutMs = 4_000, project = {} } = {}) {
+async function fixture(t, { admission = fixedAdmission(), config = {}, overlay = null, stubOptions = {}, memoryTool = null, capsuleSearch = null, historySearch = null, sourceDeletion = null, timeoutMs = 4_000, project = {} } = {}) {
   resetNativeMemoryMetrics();
   const stub = await startOpenVikingStub(t, stubOptions);
   const client = new OpenVikingClient({ openVikingUrl: stub.url, openVikingApiKey: stub.apiKey, openVikingAccount: "evimed" });
@@ -42,7 +42,7 @@ async function fixture(t, { admission = fixedAdmission(), config = {}, overlay =
     config: { memoryEngineEnabled: true, memoryEnabled: true, ...config },
     runtimeManager: { assertActiveEviMedWorkloadToken: async (token) => { if (token === TOKEN) return { userId: USER, projectId: "p1" }; throw new Error("no"); } },
     store: { userById: async (id) => (id === USER ? { id } : null), requireProject: async (_user, id) => ({ id, userId: USER, ...project }) },
-    sessions, admission, overlay, memoryTool, capsuleSearch, historySearch,
+    sessions, admission, overlay, memoryTool, capsuleSearch, historySearch, sourceDeletion,
   });
   const server = createServer((req, res) => { void handler(req, res, (failure) => failures.push(failure)); });
   server.listen(0, "127.0.0.1");
@@ -956,4 +956,23 @@ test('history search failure, feature off and recall refusal preserve existing m
   let asked = false;
   const { call } = await fixture(t, { config: { memoryHistorySearchEnabled: true }, admission: fixedAdmission({ recall: false }), historySearch: async () => { asked = true; return []; } });
   await call('POST', '/api/v1/search/search', { query: 'anything' }); assert.equal(asked, false);
+});
+
+
+test('a source deletion during a native read refuses its buffered response before text can escape', async t => {
+  let checks=0;
+  const {call}=await fixture(t,{sourceDeletion:{version:async()=>String(++checks)}});
+  const response=await call('POST','/api/v1/search/search',{query:'source detail',limit:5});
+  assert.equal(response.status,503);assert.equal(response.json.error.code,'memory_gateway_source_changed');
+  assert.doesNotMatch(response.text,/memories|rendered|source detail/);
+});
+
+test('native admission rejects deleted originals and source-bound replay sessions before reading or learning',async()=>{
+  const asked=[];
+  const admission=createMemoryAdmission({config:{memoryEnabled:true},memorySettings:memoryDouble(),sourceDeleted:async(_project,id,engine)=>{asked.push([id,engine]);return true;}});
+  for(const engineSessionId of ['dsh-source','evimed-replay-source']){
+    const result=await admission.admit({user:{id:USER},project:{id:'p1'},engineSessionId});
+    assert.deepEqual([result.learn,result.recall,result.learnReason],[false,false,'source_deleted']);
+  }
+  assert.deepEqual(asked,[['source','dsh-source'],[null,'evimed-replay-source']]);
 });

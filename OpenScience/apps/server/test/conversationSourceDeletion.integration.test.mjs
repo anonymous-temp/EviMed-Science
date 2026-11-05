@@ -42,3 +42,13 @@ test('a replay of the deleted source retains its source fence and cannot leave s
   assert.equal(await f.sessions.read(f.userId,uri),null);
   assert.equal((await f.overlay.commit(f.userId,replay.archive_uri)).state,'abandoned');
 });
+
+test('the native worker checks a source tombstone before recreating a failed archive as a replay', options, async t => {
+  const f=await fixture(t), archive=await f.commitConversation('a',[{role:'user',text:'Private old source.'}],{projectId:'default'});
+  await f.overlay.failCommit(f.userId,archive.archive_uri,{error:'synthetic failure',nextAttemptAt:f.now()});
+  f.overlay.sourceDeletion={ledger:{get:async(_project,sessionId)=>sessionId==='session_a'?{cleanup:'pending'}:null}};
+  const before=f.stub.sessions.size;
+  await f.worker.processCommits({userId:f.userId});
+  assert.equal((await f.overlay.commit(f.userId,archive.archive_uri)).state,'abandoned');
+  assert.equal(f.stub.sessions.size,before);
+});

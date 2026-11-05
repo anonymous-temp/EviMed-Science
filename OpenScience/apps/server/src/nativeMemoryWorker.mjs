@@ -588,6 +588,13 @@ export class NativeMemoryWorker {
     const userId = commit.userId;
     const external = typeof this.overlay.admissionOfCommit === "function" ? await this.overlay.admissionOfCommit(userId, commit) : null;
     const authorized = async () => {
+      if (this.overlay.sourceDeletion && commit.projectId) {
+        const source = await this.overlay.conversationOf(userId, commit.engineSession, commit.archiveUri);
+        if (source && await this.overlay.sourceDeletion.ledger.get({ userId, id: commit.projectId }, source)) {
+          await this.overlay.abandonCommit(userId, commit.archiveUri, 'source_conversation_deleted');
+          return false;
+        }
+      }
       if (!external) return true;
       const policy = await this.overlay.admissionAuthority(userId, external);
       if (policy.allowed) return true;

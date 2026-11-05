@@ -659,11 +659,16 @@ export class NativeMemoryOverlay {
   async withdrawConversationSource(userId, projectId, sessionIds, userRoot) {
     scopedRoot(userRoot);
     const sessions = sessionIds.map(id => `dsh-${id}`);
-    await this.#query(`UPDATE evimed_memory.native_commits SET state='abandoned',pending_text=NULL,error='source_conversation_deleted',
-      updated_at=clock_timestamp() WHERE user_id=$1 AND project_id=$2 AND engine_session=ANY($3::text[])
-      AND left(archive_uri,length($4)+10)=$4||'/sessions/'`, [owner(userId), projectId, sessions, userRoot]);
+    const removed = await this.#query(`WITH RECURSIVE sources AS (
+      SELECT archive_uri,replayed_as FROM evimed_memory.native_commits WHERE user_id=$1 AND project_id=$2 AND engine_session=ANY($3::text[])
+        AND left(archive_uri,length($4)+10)=$4||'/sessions/'
+      UNION SELECT c.archive_uri,c.replayed_as FROM evimed_memory.native_commits c JOIN sources s ON c.archive_uri=s.replayed_as
+        WHERE c.user_id=$1 AND c.project_id=$2 AND left(c.archive_uri,length($4)+10)=$4||'/sessions/'
+    ) UPDATE evimed_memory.native_commits SET state='abandoned',pending_text=NULL,error='source_conversation_deleted',updated_at=clock_timestamp()
+      WHERE user_id=$1 AND archive_uri IN (SELECT archive_uri FROM sources) RETURNING engine_session`, [owner(userId), projectId, sessions, userRoot]);
     if (userRoot === userRootUri(userId)) await this.#query(`UPDATE evimed_memory.native_admissions SET state='cancelled',pending_text=NULL,error='source_conversation_deleted',
       updated_at=clock_timestamp() WHERE user_id=$1 AND project_id=$2 AND engine_session=ANY($3::text[])`, [owner(userId), projectId, sessions]);
+    return [...new Set(removed.rows.map(row => row.engine_session))];
   }
 
   // ------------------------------------------------------------ line origins

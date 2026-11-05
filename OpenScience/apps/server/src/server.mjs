@@ -5758,7 +5758,17 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // through here. Who is learned from and read for is one decision (`memoryAdmission.mjs`), asked per request.
   const memoryAdmission = createMemoryAdmission({
     config, memorySettings,
-    sourceDeleted: (project, sessionId) => sourceDeletion ? sourceDeletion.ledger.get(project, sessionId).then(Boolean) : Promise.resolve(false),
+    sourceDeleted: async (project, sessionId, engineSessionId) => {
+      if (!sourceDeletion) return false;
+      if (sessionId) return Boolean(await sourceDeletion.ledger.get(project, sessionId));
+      if (!engineSessionId?.startsWith('evimed-replay-')) return false;
+      const replayContext = await nativeMemoryContexts.forProject(project);
+      for (const commit of await nativeMemoryOverlay.commitsOfSession(project.userId, engineSessionId, { userRoot: replayContext.userRoot })) {
+        const source = await nativeMemoryOverlay.conversationOf(project.userId, engineSessionId, commit.archiveUri);
+        if (source && await sourceDeletion.ledger.get(project, source)) return true;
+      }
+      return false;
+    },
     engineReady: openVikingEngine ? () => openVikingEngine.ready("nativeMemory") : null,
     conversations: {
       running: (project) => agentRuns.activeRuns(project),
@@ -5854,6 +5864,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     config, runtimeManager, store, sessions: openVikingSessions, admission: memoryAdmission,
     memoryContexts: nativeMemoryContexts, rememberJournal: nativeRememberJournal,
     historySearch: memoryHistory ? request => memoryHistory.search(request) : null,
+    sourceDeletion,
     overlay: nativeMemoryOverlay.configured ? nativeMemoryOverlay : null,
     // The capsule's half of a search (`memoryGateway.mjs`, item 9): the notes kept for the project, the packs in force, the zones it follows.
     capsuleSearch: capsuleService ? createNativeCapsuleSearch({ service: capsuleService, subscriptions: recallSubscriptions, contextItems }) : null,

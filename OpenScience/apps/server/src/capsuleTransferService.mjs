@@ -691,6 +691,8 @@ export class CapsuleTransferService {
    * @param {{ accountCreatedAt?: string | null, channel?: "file" | "delivery" | "link" }} [options]
    */
   async export(userId, capsuleId, input, options = {}) {
+    const sourceDeletion = this.nativeMemory?.sourceDeletion;
+    const deletionVersion = sourceDeletion ? await sourceDeletion.version(userId) : null;
     fields(input, ["password", "scopes", "supersedes", "recipients", "recipientNames", "card", "excludeEntryIds", "includePrivateEntries"]);
     if (input.password !== undefined) checkedText(input.password, 1024);
     const accountCreatedAt = await this.withAccount(userId, options.accountCreatedAt ?? null);
@@ -712,7 +714,13 @@ export class CapsuleTransferService {
     const source = await this.#assemble(userId, capsuleId, kinds, { exclude, includePrivate: privateSelections(input.includePrivateEntries) });
     if (!source.facts.length) throw new HttpError(409, "capsule_export_empty", "No approved entries are eligible for these share scopes.");
     if (source.facts.length > MAX_ENTRIES) throw new HttpError(413, "capsule_transfer_too_large", "A snapshot supports at most 100 approved entries.");
-    return this.#seal({ userId, accountCreatedAt, capsuleId, scopes, channel, input, previous, source, recipientIds, named });
+    const result = await this.#seal({ userId, accountCreatedAt, capsuleId, scopes, channel, input, previous, source, recipientIds, named });
+    if (sourceDeletion && await sourceDeletion.version(userId) !== deletionVersion) {
+      const current = await this.snapshot(userId, capsuleId, result.snapshot.id);
+      if (current.payload.status !== 'revoked') await this.revoke(userId, capsuleId, current.id, current.revision);
+      throw new HttpError(409, 'capsule_snapshot_revoked', 'A source changed while the snapshot was prepared.');
+    }
+    return result;
   }
 
   /**
@@ -956,6 +964,8 @@ export class CapsuleTransferService {
     const archive = await readProtectedCapsuleFile(directory, `${capsuleAccountHash(userId)}-${record.id}.evimedcap`, CAPSULE_TRANSFER_MAX_BYTES)
       ?? await readProtectedCapsuleFile(directory, `${record.id}.evimedcap`, CAPSULE_TRANSFER_MAX_BYTES);
     if (!archive || digest(archive) !== record.payload.archiveSha256) throw new HttpError(503, "capsule_snapshot_unavailable", "The snapshot file is unavailable.");
+    const current = await this.snapshot(userId, capsuleId, snapshotId);
+    if (current.payload.status === 'revoked' || current.revision !== record.revision) throw new HttpError(409, 'capsule_snapshot_revoked', 'This hosted snapshot changed while it was read.');
     return { archive, filename: `capsule-${record.id}.evimedcap` };
   }
 

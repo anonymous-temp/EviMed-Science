@@ -347,6 +347,7 @@ const rpcError = (/** @type {unknown} */ id, /** @type {number} */ code, /** @ty
  *   memoryContexts?: import("./geoNativeMemoryContext.mjs").GeoNativeMemoryContext | null,
  *   rememberJournal?: import("./geoNativeMemoryRemember.mjs").GeoNativeMemoryRemember | null,
  *   admission: { admit: (caller: { user: any, project: any, engineSessionId?: string | null, at?: number | null }) => Promise<import("./memoryAdmission.mjs").MemoryAdmission> },
+ *   sourceDeletion?: any,
  *   overlay?: import("./nativeMemoryOverlay.mjs").NativeMemoryOverlay | null,
  *   memoryTool?: { forget: (user: any, project: any, uri: string, options?: any) => Promise<{ removed: boolean }> } | null,
  *   capsuleSearch?: ((request: { user: any, project: any, query: string, limit: number, contextPolicy?:any }) => Promise<Record<string, any>[]>) | null,
@@ -359,7 +360,7 @@ const rpcError = (/** @type {unknown} */ id, /** @type {number} */ code, /** @ty
  * @returns {((req: any, res: any, onFailure?: (failure: any) => void) => Promise<void>) & { commitSession: MemoryGatewayCommitSession }}
  *   the request handler, with the one function the control plane commits a conversation by (`nativeTurnCommit.mjs`)
  */
-export function createMemoryGatewayHandler({ config, runtimeManager, store, sessions, admission, overlay = null, memoryTool = null, memoryContexts = null, rememberJournal = null, capsuleSearch = null, historySearch = null, now = () => Date.now() }) {
+export function createMemoryGatewayHandler({ config, runtimeManager, store, sessions, admission, sourceDeletion = null, overlay = null, memoryTool = null, memoryContexts = null, rememberJournal = null, capsuleSearch = null, historySearch = null, now = () => Date.now() }) {
   const enabled = config.memoryEngineEnabled === true && config.memoryEnabled !== false && Boolean(sessions?.configured);
   const maxBodyBytes = Math.max(1_024, Number(config.memoryGatewayMaxBodyBytes) || 1_048_576);
   const ratePerMinute = Math.max(0, Number(config.memoryGatewayRatePerMinute ?? 600) || 0);
@@ -1162,7 +1163,9 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
           return exclusions.slice(0, 200);
         },
       };
+      const deletionVersion = sourceDeletion ? await sourceDeletion.version(user.id) : null;
       const answer = await handlers[route](ctx);
+      if (sourceDeletion && await sourceDeletion.version(user.id) !== deletionVersion) throw new HttpError(503, 'memory_gateway_source_changed', 'The source privacy state changed during this request.');
       recordGatewayRequest(route, answer.outcome);
       send(answer);
     } catch (error) {

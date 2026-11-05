@@ -568,7 +568,8 @@ export class NativeMemoryStore {
         });
       }
     }
-    return records.sort((left, right) => String(right.updatedAt ?? "").localeCompare(String(left.updatedAt ?? "")));
+    const withdrawn = new Set(this.sourceDeletion ? await this.sourceDeletion.hiddenMemoryUris(userId) : []);
+    return records.filter(record => !withdrawn.has(record.uri)).sort((left, right) => String(right.updatedAt ?? "").localeCompare(String(left.updatedAt ?? "")));
   }
 
   /**
@@ -1158,7 +1159,8 @@ export class NativeMemoryStore {
       const knownProject = await this.overlay.projectOfSession(userId, engineSession, { userRoot: context.userRoot ?? context.sessions.userRoot(userId) });
       if (knownProject === projectId) await context.sessions.deleteSession(userId, engineSession);
     }
-    await this.overlay.withdrawConversationSource(userId, projectId, sessionIds, context.userRoot ?? context.sessions.userRoot(userId));
+    const withdrawnSessions = await this.overlay.withdrawConversationSource(userId, projectId, sessionIds, context.userRoot ?? context.sessions.userRoot(userId));
+    for (const session of withdrawnSessions) await context.sessions.deleteSession(userId, session);
     this.#touch(userId);
     return affected;
   }
