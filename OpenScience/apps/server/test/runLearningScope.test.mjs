@@ -66,3 +66,13 @@ test('collected descendants with no ownership receipts are reported as excluded 
   assert.equal(selected.scope.partial, true);
   assert.deepEqual(selected.sessions.map(session => session.sessionId), ['root']);
 });
+
+test('original person lineage cannot become reusable through generic text or share consent', async () => {
+  const { methodSourceAllowsLearning } = await load();
+  assert.equal(methodSourceAllowsLearning({ id: 'ordinary-raw-task' }), true);
+  const ordinary = { sourcePrivacy: { schemaVersion: 1, classification: 'ordinary', reasons: [] } };
+  assert.equal(methodSourceAllowsLearning(ordinary), true);
+  const rewritten = { ...ordinary, question: 'A generic workflow', originalSources: [{ nativeType: 'people', contentDigest: 'a'.repeat(64) }], consentDigest: 'a'.repeat(64) };
+  assert.equal(methodSourceAllowsLearning(rewritten), false);
+  assert.equal(methodSourceAllowsLearning({ originalSources: [{ nativeType: 'notes' }] }), false);
+});
