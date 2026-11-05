@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-analysis",
-  "version": "sha256:a74d7c58ef581ade05567f9a79f3c8fd2565dd82a7aea8f26e30a4770f7e6c3b",
+  "version": "sha256:b9a373d1fc0916ec24688a395e3e4d827a57d127d4554b6c602476016ada3870",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 34,
@@ -1455,7 +1455,7 @@
     {
       "name": "mcp__evimed__vcr_simulate",
       "source": "mcp",
-      "description": "A human trial's sample size, power or events, comparing designs, a synthetic population from a paper's baseline, an external control: calculate here, not in a script of your own. No study needed; the first start opens a result page. action=shape with kind gives exact fields; do not guess keys. One patient against trials, or a list of patients against a protocol: kind match_judge, not a script of your own, so the verdicts are saved for the page, the export and follow-ups. Long jobs resume here if they outlive this turn. modelId requires modelVersion.",
+      "description": "A human trial's sample size, power or events, comparing designs, a synthetic population from a paper's baseline, an external control: calculate here, not in a script of your own. No study needed; the first start opens a result page. action=shape with kind gives exact fields. Patients against trials or a protocol: kind match_judge. Long jobs resume here if they outlive this turn. modelId requires modelVersion.",
       "inputSchema": {
         "type": "object",
         "properties": {
