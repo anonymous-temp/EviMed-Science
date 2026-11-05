@@ -10,4 +10,5 @@ test('only a trusted source resolver can retain an ordinary classification in a 
 test('bounded source references never silently drop privacy on overflow',()=>{
   const state=sourceReceiptState(Array.from({length:41},(_,i)=>ref(String(i))),{trusted:true});
   assert.equal(state.originalSources.length,40);assert.equal(state.sourcePrivacy.classification,'unclassified');
+  assert.equal(sourceReceiptState(state.originalSources,{trusted:true,inheritedPrivacy:state.sourcePrivacy}).sourcePrivacy.classification,'unclassified');
 });
