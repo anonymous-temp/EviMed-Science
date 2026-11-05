@@ -1,7 +1,7 @@
 import { withNativeMemoryWrite } from './nativeMemoryWriteFence.mjs';
 import { createHash, randomUUID } from "node:crypto";
 import { zipSync } from 'fflate';
-import { carriesPlatformContext, identifierShapesIn, maskIdentifiers, platformIdentifiersIn, projectContextLine } from "@evimed/domain";
+import { carriesPlatformContext, identifierShapesIn, maskIdentifiers, platformIdentifiersIn, projectContextLine, sourcePrivacyOf } from "@evimed/domain";
 import { actOf, duplicatesOf, withoutJudged } from "./nativeMemoryForgetEverywhere.mjs";
 import { recordForgetDuplicates, recordMapReplaced } from "./nativeMemoryMetrics.mjs";
 import { freshnessOf } from "./memoryMapSources/common.mjs";
@@ -539,7 +539,9 @@ export class NativeMemoryStore {
     const revisions = await this.overlay.revisionsOfMany(userId, held.map((file) => file.uri));
     const sources = await this.overlay.sources(userId, held.map((file) => file.uri));
     // The first commit that brought each line of the profile, kept beyond the revisions a file holds: an old line still names its source.
-    const origins = await Promise.resolve().then(() => this.overlay.originsOf(userId, held.filter((file) => file.type === "profile").map((file) => file.uri))).catch(() => new Map());
+    const origins = await Promise.resolve().then(() => this.overlay.originsOf(userId, held.map((file) => file.uri))).catch(() => new Map());
+    const archives=[...new Set([...revisions.values()].flatMap(rows=>rows.map(row=>row.archiveUri)).concat([...origins.values()].flatMap(lines=>[...lines.values()].map(origin=>origin.archiveUri))).filter(Boolean))];
+    const attributionCommits=await this.overlay.attributionCommits(userId,archives);
     // The conversations the engine wrote these files in: its revisions name the engine session, the ledger names the project.
     const sessionProjects = await this.#sessionProjects(userId, revisions);
     // The lines the person forgot or deleted, which no earlier version of any file in their namespace may show.
@@ -551,10 +553,9 @@ export class NativeMemoryStore {
       const history = (revisions.get(file.uri) ?? []).slice().reverse();
       const changed = sources.filter((source) => source.uri === file.uri && ["retracted", "changed", "expired", "removed"].includes(source.state));
       const base = this.#fileRecord(file, history, changed, conversationEvidence(history, sessionProjects), forgotten.has(file.namespaceId ?? null) ? forgotten.get(file.namespaceId ?? null) : []);
-      if (file.type !== "profile") { records.push(base); continue; }
+      if (file.type !== "profile") { records.push({...base,...this.#attribution(file,history,origins.get(file.uri),attributionCommits)}); continue; }
       // The profile is one document; its lines are the items the page lists.
       for (const line of statements(file.body)) {
-        const asOf = AS_OF.exec(line)?.[1] ?? null;
         // A line's own conversation is the one whose commit brought it, not every conversation that touched the file: from the index of
         // origins when it has the line, else from the revisions the overlay still holds (a line already there when the oldest of them was
         // written, and unknown to the index, names nothing rather than a guess).
@@ -564,7 +565,8 @@ export class NativeMemoryStore {
         const evidence = fromIndex ? [fromIndex] : conversationEvidence(history, sessionProjects, { line });
         records.push({
           ...base, id: `${base.id}_${lineFingerprint(line).slice(0, 12)}`, key: `profile.md#${lineFingerprint(line).slice(0, 12)}`,
-          value: line.replace(AS_OF, "").trim(), summary: "", lastConfirmedAt: asOf ? `${asOf}T00:00:00.000Z` : base.lastConfirmedAt,
+          ...this.#attribution(file,history,origins.get(file.uri),attributionCommits,line),
+          value: line.replace(AS_OF, "").trim(), summary: "",
           document: { id: base.id, uri: file.uri }, revisions: [], evidence, evidenceCount: evidence.length,
         });
       }
@@ -573,6 +575,28 @@ export class NativeMemoryStore {
     const visible=records.filter(record=>![...withdrawn].some(prefix=>record.uri===prefix||record.uri.startsWith(`${prefix}/`)));
     const protectedRecords=this.sourceDeletion?await this.sourceDeletion.redactRecords(userId,visible):visible;
     return protectedRecords.sort((left, right) => String(right.updatedAt ?? "").localeCompare(String(left.updatedAt ?? "")));
+  }
+
+  /** Producer evidence is per statement. Editing one statement and restoring a version never confirm its neighbours. */
+  #attribution(file,history,origins,commits,line=null) {
+    const producer=(archive,actor)=>{
+      const kind=archive?commits.get(archive):null;
+      if(['import','migration'].includes(kind))return 'imported';
+      return actor==='engine'||kind?'engine':'unknown';
+    };
+    const kinds=(line?[line]:statements(file.body)).map(text=>{
+      const print=lineFingerprint(text),indexed=origins?.get(print);
+      if(indexed?.archiveUri||indexed?.engineSession)return producer(indexed.archiveUri,'engine');
+      for(const revision of [...history].reverse()) {
+        if(!statements(revision.after??'').some(value=>lineFingerprint(value)===print)||statements(revision.before??'').some(value=>lineFingerprint(value)===print))continue;
+        if(revision.actor==='user'&&revision.change==='updated'&&!String(revision.reason).startsWith('undo'))return 'manual';
+        if(revision.actor==='engine')return producer(revision.archiveUri,revision.actor);
+      }
+      return 'unknown';
+    });
+    const distinct=[...new Set(kinds.length?kinds:['unknown'])];
+    return {origin:distinct.length===1?distinct[0]:'mixed',confidence:null,lastConfirmedAt:null,
+      attribution:{schemaVersion:1,origins:distinct,confirmed:false},sourcePrivacy:sourcePrivacyOf({nativeType:file.type,sourcePrivacy:file.sourcePrivacy})};
   }
 
   /**
@@ -713,17 +737,19 @@ export class NativeMemoryStore {
       key: file.relPath,
       value: file.body,
       summary: titleOf(file.type, file.relPath, file.body),
-      // Whose words: the engine keeps only what the person stated (its templates' rule), and the page's own edit is theirs.
-      origin: last?.actor === "user" ? "manual" : "explicit",
+      // Raw files lack a statement attestation; records enrich this with exact retained producer receipts.
+      origin: "unknown",
+      attribution:{schemaVersion:1,origins:["unknown"],confirmed:false},
+      sourcePrivacy:sourcePrivacyOf({nativeType:file.type,sourcePrivacy:file.sourcePrivacy}),
       status: "active",
-      confidence: 1,
+      confidence: null,
       importance: 0.5,
       sensitive: file.sensitive,
       evidenceCount: evidence.length,
       version: versionOfHash(file.hash),
       createdAt: first?.changedAt ?? file.modTime ?? null,
       updatedAt,
-      lastConfirmedAt: updatedAt,
+      lastConfirmedAt: null,
       expiresAt: null,
       supersededBy: null,
       invalidSince: null,
@@ -1496,7 +1522,7 @@ export class NativeMemoryStore {
       const base = { revision, place, scope: projectId ? "project" : "user", scopeId: projectId ?? "" };
       const kind = /** @type {Record<string, string>} */ (PAGE_KIND_OF_TYPE)[place.type] ?? "project_fact";
       const record = (/** @type {Record<string, any>} */ over) => ({
-        scope: base.scope, scopeId: base.scopeId, kind, origin: "explicit", status: "archived", confidence: 1, importance: 0.5, sensitive: false, evidenceCount: 0,
+        scope: base.scope, scopeId: base.scopeId, kind, origin: "unknown", status: "archived", confidence: null, importance: 0.5, sensitive: false, evidenceCount: 0,
         createdAt: revision.changedAt, updatedAt: revision.changedAt, lastConfirmedAt: revision.changedAt, expiresAt: null, supersededBy: null, invalidSince: null, validFrom: null,
         evidence: [], revisions: [], nativeType: place.type, uri: revision.uri, forgottenRevision: revision.id, ...(actOf(revision.reason) ? { act: actOf(revision.reason) } : {}), ...over,
       });

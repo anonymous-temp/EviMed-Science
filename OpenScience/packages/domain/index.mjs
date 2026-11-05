@@ -2768,4 +2768,4 @@ export { WORK_STATES, WORK_STATE_LABEL, WORK_NEED_KINDS, WORK_NEED_LABEL, WORK_A
 
 export { dnsKey, registrableDomain } from './src/geoDomains.mjs'
 
-export { privateByDefault } from "./src/memoryPrivacy.mjs";
+export { privateByDefault, sourcePrivacyOf, sourceAllowsEgress } from "./src/memoryPrivacy.mjs";

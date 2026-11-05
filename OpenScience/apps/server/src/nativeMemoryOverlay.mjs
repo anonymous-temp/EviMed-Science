@@ -364,6 +364,13 @@ export class NativeMemoryOverlay {
     return result.rows.map(publicCommit);
   }
 
+  /** Exact retained archive receipts identify producers, never truth or human authorship. */
+  async attributionCommits(userId,archiveUris) {
+    if(!archiveUris.length)return new Map();
+    const result=await this.#query('SELECT archive_uri,origin FROM evimed_memory.native_commits WHERE user_id=$1 AND archive_uri=ANY($2::text[])',[owner(userId),archiveUris]);
+    return new Map(result.rows.map(row=>[String(row.archive_uri),String(row.origin)]));
+  }
+
   /** The archives of one account the ledger already holds. @param {string} userId @returns {Promise<Set<string>>} */
   async knownArchives(userId, { userRoot = null } = {}) {
     const result = await this.#query("SELECT archive_uri FROM evimed_memory.native_commits WHERE user_id=$1 AND ($2::text IS NULL OR archive_uri LIKE $2 || '/sessions/%')",
