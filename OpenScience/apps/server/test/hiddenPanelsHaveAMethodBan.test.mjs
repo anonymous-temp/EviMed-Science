@@ -62,9 +62,6 @@ const WHAT_STOPS_IT = {
   // 0.2.0: a general-settings item over the `session-log-deepseek` configuration form, which the generic settings
   // form service reads and writes through the `settings` namespace.
   "ui-settings-session-log": { namespace: "settings" },
-  // 0.2.1: the automation-tasks page, its right-sidebar tab and the header clock, all over `schedule/*` (its recorded
-  // client reaches that namespace and no other); the `schedule` row that serves it is disabled in the bundle too.
-  "ui-schedule": { namespace: "schedule" },
   // 0.2.1-rc.4: the "More" menus (browse plugins, create a plugin). The recorded client reaches no host namespace; its two
   // items open the plugin manager's page (hidden with its service) and a session on the plugin-writing preset, which the
   // composition does not declare (`preset-cordis` is disabled), so the registry answers `agent-preset/not-found`.
@@ -133,6 +130,7 @@ const hostRoutes = new Set(RUNTIME_UI_DENIED_HOST_ROUTES);
  */
 const SHARED_NAMESPACES = Object.freeze({
   session: "the conversation's own namespace: no page can open, read or prompt a session without it",
+  workspaceFiles: "the conversation's file panel reads through it, and the proxy holds each of its paths to the workspace (`runtimeUiWorkspacePathRefusal`)",
 });
 
 const recorded = JSON.parse(await readFile(new URL("../../../packages/contracts/dsh/panel-remotes.json", import.meta.url), "utf8"));

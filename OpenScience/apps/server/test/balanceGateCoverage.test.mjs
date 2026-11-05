@@ -72,8 +72,9 @@ test("a run nobody is watching asks for its P90, and a person's run for its P50"
   const server = await readFile(path.join(SRC, "server.mjs"), "utf8");
   const sites = [...server.matchAll(/assertBalanceForStart\(([^)]*)\)/g)].map((match) => match[1]);
   const unattended = sites.filter((call) => /unattended: true/.test(call));
-  // Two programme steps, the autopilot's episode and verification (one shared check), and a research goal's turn.
-  assert.equal(unattended.length, 4, `${unattended.length} unattended gates: ${sites.join(" | ")}`);
+  // Two programme steps, the autopilot's episode and verification (one shared check), a research goal's turn, and starting a stopped
+  // runtime for a scheduled task (`ScheduleWakes`, whose delivered turn then spends through the model gateway's own check).
+  assert.equal(unattended.length, 5, `${unattended.length} unattended gates: ${sites.join(" | ")}`);
   for (const holder of UNATTENDED) {
     const start = server.indexOf(`async function ${holder}`);
     assert.ok(start > 0, holder);

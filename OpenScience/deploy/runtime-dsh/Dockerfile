@@ -133,7 +133,7 @@ RUN bash /usr/local/lib/evimed/install-runtime.sh analysis
 ARG NPM_REGISTRY=https://registry.npmjs.org
 ARG DSH_VERSION=0.2.2-rc.1
 ARG DSH_CORDIS_VERSION=4.1.0
-ARG DSH_PUBLISHED_BEFORE=2026-10-29T14:24:35.397Z
+ARG DSH_PUBLISHED_BEFORE=2026-11-04T09:23:20.561Z
 COPY --from=install-phases /phases/kernel.sh /usr/local/lib/evimed/install-runtime.sh
 RUN bash /usr/local/lib/evimed/install-runtime.sh kernel
 

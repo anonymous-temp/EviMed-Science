@@ -8192,7 +8192,7 @@ export class AgentRunStore {
         const selected = binding?.mode === "specialist" && !requestLocal ? {
           ...routed,
           effectiveAgentId: binding.agentId, effectiveAgentVersion: binding.agentVersion,
-          effectiveRuntimeAgent: binding.runtimeAgent, effectiveRouteReason: continuation || reply ? routed.effectiveRouteReason : "session-binding",
+          effectiveRuntimeAgent: binding.runtimeAgent, effectiveRouteReason: continuation || reply || scheduled ? routed.effectiveRouteReason : "session-binding",
         } : routed;
         const pinned = requestLocal && binding?.mode === "specialist" ? { ...binding,
           agentId: selected.effectiveAgentId, agentVersion: selected.effectiveAgentVersion, runtimeAgent: selected.effectiveRuntimeAgent,

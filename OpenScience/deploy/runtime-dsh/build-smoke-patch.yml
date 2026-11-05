@@ -198,8 +198,6 @@
   disabled: true
 - id: ui-settings-session-log
   disabled: true
-- id: ui-schedule
-  disabled: true
 - id: entry-customization
   disabled: true
 - id: ui-permission
