@@ -349,6 +349,7 @@ const rpcError = (/** @type {unknown} */ id, /** @type {number} */ code, /** @ty
  *   rememberJournal?: import("./geoNativeMemoryRemember.mjs").GeoNativeMemoryRemember | null,
  *   admission: { admit: (caller: { user: any, project: any, engineSessionId?: string | null, at?: number | null }) => Promise<import("./memoryAdmission.mjs").MemoryAdmission> },
  *   sourceDeletion?: any,
+ *   sourceReceipt?: ((request:any)=>Promise<void>) | null,
  *   overlay?: import("./nativeMemoryOverlay.mjs").NativeMemoryOverlay | null,
  *   memoryTool?: { forget: (user: any, project: any, uri: string, options?: any) => Promise<{ removed: boolean }> } | null,
  *   capsuleSearch?: ((request: { user: any, project: any, query: string, limit: number, contextPolicy?:any }) => Promise<Record<string, any>[]>) | null,
@@ -361,7 +362,7 @@ const rpcError = (/** @type {unknown} */ id, /** @type {number} */ code, /** @ty
  * @returns {((req: any, res: any, onFailure?: (failure: any) => void) => Promise<void>) & { commitSession: MemoryGatewayCommitSession }}
  *   the request handler, with the one function the control plane commits a conversation by (`nativeTurnCommit.mjs`)
  */
-export function createMemoryGatewayHandler({ config, runtimeManager, store, sessions, admission, sourceDeletion = null, overlay = null, memoryTool = null, memoryContexts = null, rememberJournal = null, capsuleSearch = null, historySearch = null, now = () => Date.now() }) {
+export function createMemoryGatewayHandler({ config, runtimeManager, store, sessions, admission, sourceDeletion = null, sourceReceipt = null, overlay = null, memoryTool = null, memoryContexts = null, rememberJournal = null, capsuleSearch = null, historySearch = null, now = () => Date.now() }) {
   const enabled = config.memoryEngineEnabled === true && config.memoryEnabled !== false && Boolean(sessions?.configured);
   const maxBodyBytes = Math.max(1_024, Number(config.memoryGatewayMaxBodyBytes) || 1_048_576);
   const ratePerMinute = Math.max(0, Number(config.memoryGatewayRatePerMinute ?? 600) || 0);
@@ -377,14 +378,15 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
   /**
    * The memory files a search or a read returned, noted in the overlay. Fire and forget: a recall never waits on, or fails by, this.
    * `ctx` is the request's: its account, and the root of the namespace it read (the account's own, or a shared GEO project's).
-   * @param {{ user: { id: string }, userRoot: string }} ctx @param {readonly unknown[]} uris
+   * @param {any} ctx @param {readonly unknown[]} uris
    */
-  function noteRecalled(ctx, uris) {
+  async function noteRecalled(ctx, uris) {
     if (!overlay?.configured) return;
     const userId = ctx.user.id;
     const root = `${ctx.userRoot}/memories`;
     const files = /** @type {string[]} */ ([...new Set(uris.filter((uri) => typeof uri === "string" && Boolean(nativeMemoryFile(/** @type {string} */ (uri), root))))]);
     if (!files.length) return;
+    if(sourceReceipt){const admitted=await ctx.admit(null);try{await sourceReceipt({user:ctx.user,project:ctx.project,sessionId:admitted.sessionId,uris:files,context:ctx.memoryContext});}catch{throw new HttpError(503,"memory_scope_denied","The memory source receipt could not be stored.");}}
     void Promise.resolve().then(() => overlay.noteRecalled(userId, files)).then(() => recordRecallNote("noted"), () => recordRecallNote("failed"));
   }
 
@@ -761,7 +763,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         if (ctx.shared) await ctx.ensureRegistered();
         const listed = await scopedListSearch(ctx.sessions, ctx, given);
         const found = ctx.shared ? await sharedProjectSearch(ctx, listed, false, given) : listed;
-        noteRecalled(ctx, (/** @type {any} */ (found).result?.memories ?? []).map((/** @type {any} */ hit) => hit?.uri));
+        await noteRecalled(ctx, (/** @type {any} */ (found).result?.memories ?? []).map((/** @type {any} */ hit) => hit?.uri));
         const history = await rawHistory(ctx, given);
         return { status: 200, json: history.length ? { ...found, result: { .../** @type {any} */ (found.result), history } } : found, outcome: "forwarded" };
       }
@@ -776,7 +778,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         await ctx.ensureRegistered();
         answered = await sharedProjectSearch(ctx, await ctx.sessions.search(ctx.user.id, body), true, body);
       }
-      noteRecalled(ctx, [...(answered?.result?.entries ?? []), ...(answered?.result?.memories ?? [])].map((/** @type {any} */ hit) => hit?.uri));
+      await noteRecalled(ctx, [...(answered?.result?.entries ?? []), ...(answered?.result?.memories ?? [])].map((/** @type {any} */ hit) => hit?.uri));
       return { status: 200, json: answered, outcome: "forwarded" };
     },
     async read(ctx) {
@@ -790,7 +792,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       if (ctx.shared) await ctx.ensureRegistered();
       const text = await ctx.sessions.read(ctx.user.id, uri, { timeoutMs: ctx.sessions.fastTimeoutMs * 2 });
       if (text === null) return { ...missing, outcome: "forwarded" };
-      noteRecalled(ctx, [absolute(uri, ctx.userRoot)]);
+      await noteRecalled(ctx, [absolute(uri, ctx.userRoot)]);
       return { status: 200, json: ok(text), outcome: "forwarded" };
     },
     async list(ctx) {
@@ -901,7 +903,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
             const uris = (Array.isArray(args.uris) ? args.uris : [args.uris]).filter((/** @type {unknown} */ uri) => typeof uri === "string" && uri && nativeMemoryFile(absolute(uri, ctx.userRoot), `${ctx.userRoot}/memories`) && !isHidden(uri)).slice(0, 10).map(uri => absolute(uri, ctx.userRoot));
             if (!uris.length) { local.push(toolText(message.id, "没有可读取的记忆文件。")); continue; }
             forward.push({ ...message, params: { ...message.params, arguments: { uris } } });
-            afterCall.set(message.id, async (answer) => { if (!answer?.error) noteRecalled(ctx, uris.map((/** @type {string} */ uri) => absolute(uri, ctx.userRoot))); });
+            afterCall.set(message.id, async (answer) => { if (!answer?.error) await noteRecalled(ctx, uris.map((/** @type {string} */ uri) => absolute(uri, ctx.userRoot))); });
           } else if (name === "list") {
             const uri = typeof args.uri === "string" && args.uri ? absolute(args.uri, ctx.userRoot) : `${ctx.userRoot}/memories`;
             if (isHidden(uri, true)) { local.push(toolText(message.id, "（空）")); continue; }
@@ -929,7 +931,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
             }
             // The engine's list mode is answered from its structured REST rows, filtered here (`scopedListSearch`).
             const result = await scopedListSearch(ctx.sessions, ctx, args);
-            noteRecalled(ctx, (/** @type {any} */ (result).result?.memories ?? []).map((/** @type {any} */ hit) => hit?.uri));
+            await noteRecalled(ctx, (/** @type {any} */ (result).result?.memories ?? []).map((/** @type {any} */ hit) => hit?.uri));
             const content = [ { type: "text", text: JSON.stringify(result.result) } ];
             const target = typeof args.target_uri === "string" && args.target_uri ? absolute(args.target_uri, ctx.userRoot) : `${ctx.userRoot}/memories`;
             // The capsule's half (item 9 above): for a search over the whole of the person's memories and not for one that names a
@@ -1032,7 +1034,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
             .map((/** @type {any} */ tool) => ({ name: tool.name, ...(ctx.shared ? PROJECT_MEMORY_TOOLS : MEMORY_GATEWAY_TOOLS)[/** @type {keyof typeof MEMORY_GATEWAY_TOOLS} */ (tool.name)] }));
         }
         const after = afterCall.get(message?.id);
-        if (after) await after(message).catch(() => {});
+        if (after) await after(message).catch(error => {if(error instanceof HttpError&&error.code==="memory_scope_denied")throw error;});
       }
       const all = [...messages, ...local];
       if (!all.length) return { status: answer.status, text: answer.text, contentType: answer.contentType || "application/json", outcome: "forwarded" };

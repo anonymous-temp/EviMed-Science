@@ -64,9 +64,9 @@ export function memorySource(record: WebStructuredMemory): { sessionId: string; 
  * with it — 编辑 in place and 忘记.
  *
  * Under the title: since when, and the project when it is a project's fact. Whose
- * words a memory is, is not said anywhere on the page (owner ruling of
- * 2026-10-10): the platform keeps it for the model and the operator, and the
- * researcher sees the memory, its date and what they can do with it. 「来源对话」
+ * words a memory is follows its retained source attribution (G7): an uncertain
+ * source is never displayed as a confirmed human fact. The researcher sees
+ * the content, its date, source context and available actions. 「来源对话」
  * is a link in here and nowhere else, because opening a conversation can start
  * that project's runtime and a click on a row must never do that.
  *
@@ -79,6 +79,18 @@ export function memorySource(record: WebStructuredMemory): { sessionId: string; 
 /** What a memory used to say and no longer does, as the map draws it in grey. */
 export interface FormerStatement { id: string; text: string; until: string | null }
 
+/**
+ * Component: FactDrawer; owner: memory; rules: DS21, DESIGN.md.
+ * Anatomy: memory text, edits, source context, versions and existing actions.
+ * Variants: native record, capsule entry and proposed note.
+ * States: reading, editing, saving, conflict and retryable error.
+ * Hit area: shared Button and Menu controls.
+ * Keyboard: Drawer focus, native controls and existing unsaved guard.
+ * Long content: wraps and scrolls within the existing drawer.
+ * Theme: semantic text, surfaces and controls.
+ * Responsive: existing bounded drawer width.
+ * Verification: FactDrawer tests; live native path acceptance is separate.
+ */
 export function FactDrawer({ item, formerly = [], projectName, conversations, siblings = [], onClose, onChanged, onOpenRecord, canOpenRecord }: {
   /** Its old statements, which are the person's to have gone: where the map opened the drawer, it knows them. */
   formerly?: readonly FormerStatement[];
@@ -309,8 +321,9 @@ export function FactDrawer({ item, formerly = [], projectName, conversations, si
             </div>
           )}
 
-          {record && (record.evidence.length > 0 || source || materials.length > 0) && (
+          {record && (record.attribution || record.evidence.length > 0 || source || materials.length > 0) && (
             <DrawerSection label="出处">
+              {record.attribution && <p className="text-ui text-text-2">{({engine:"整理出的内容，尚未核实",unknown:"来源尚未核实",imported:"从其他来源导入",manual:"你编辑过的内容",mixed:"由多处内容整理",assistant:"助手曾提出的建议",document:"资料中的说法",opinion:"本人表达的看法"} as Record<string,string>)[record.origin] ?? "来源尚未核实"}</p>}
               {/* What the platform wrote from the person's own act has no conversation to open: it says what it was (an import, a choice made twice). */}
               {record.evidence.filter((evidence) => evidence.label).slice(0, 1).map((evidence) => (
                 <p key={evidence.fingerprint || evidence.sourceRef} className="text-ui text-text-2">

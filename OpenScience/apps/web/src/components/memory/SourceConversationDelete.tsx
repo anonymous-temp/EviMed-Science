@@ -26,7 +26,7 @@ export function SourceConversationDelete({ projectId, sessionId, onChanged }: { 
     try {
       const next = await (remove ? deleteConversationSource(projectId, sessionId) : conversationSourceStatus(projectId, sessionId));
       setStatus(next); setConfirming(false); onChanged();
-    } catch(failure) { setError(productErrorMessage(failure,{fallback:'删除未完成，请重试。'})); }
+    } catch(failure) { setError(productErrorMessage(failure)); }
     finally { setBusy(false); }
   }
   const pendingText=status?.sourceRemoved?'对话原文已删除，相关记忆尚未清除。':status?.reason==='cleanup_unavailable'?'已隐藏来源对话，清除尚未完成，可稍后查看进度。':'已隐藏来源对话，等待当前工作结束后清除。';

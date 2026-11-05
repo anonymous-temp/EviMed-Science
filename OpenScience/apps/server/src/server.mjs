@@ -5940,6 +5940,16 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     memoryContexts: nativeMemoryContexts, rememberJournal: nativeRememberJournal,
     historySearch: memoryHistory ? request => memoryHistory.search(request) : null,
     sourceDeletion,
+    sourceReceipt:async({user,project,sessionId,uris,context:sourceContext})=>{
+      // Unbound/concurrent native reads remain an acceptance gap; never guess the latest run.
+      if(!sessionId)return;
+      const active=(await agentRuns.list(project)).filter(run=>run.sessionId===sessionId&&run.status==='running');
+      if(active.length!==1)return;
+      const files=await nativeMemory.files(user.id,{context:sourceContext,uris});
+      const records=await nativeMemory.records(user.id,{files});
+      const originalSources=records.map(record=>({id:record.id,contentDigest:record.contentHash,sourcePrivacy:record.sourcePrivacy,attribution:record.attribution}));
+      if(originalSources.length)await agentRuns.recordLearning(project,active[0].id,{originalSources});
+    },
     overlay: nativeMemoryOverlay.configured ? nativeMemoryOverlay : null,
     // The capsule's half of a search (`memoryGateway.mjs`, item 9): the notes kept for the project, the packs in force, the zones it follows.
     capsuleSearch: capsuleService ? createNativeCapsuleSearch({ service: capsuleService, subscriptions: recallSubscriptions, contextItems }) : null,

@@ -1334,7 +1334,7 @@ export class CapsuleTransferService {
         for (const entry of preview.entries.filter((/** @type {any} */ item) => kept.has(item.id))) {
           await this.documents.put(userId, "fact", randomUUID(), {
             capsuleId: upgrade.capsule.id, factKind: entry.factKind, layer: entry.layer, content: entry.content,
-            origin: 'imported', attribution:receivedAttribution(entry),sourcePrivacy:receivedSourcePrivacy(entry,preview), status: "approved", contextOnly: true,
+            origin: share.channel==='official'?'system':'imported', attribution:receivedAttribution(entry,share.channel==='official'),sourcePrivacy:share.channel==='official'?{schemaVersion:1,classification:'ordinary',reasons:['official-method']}:receivedSourcePrivacy(entry,preview), status: "approved", contextOnly: true,
             ...(unchecked.has(entry.id) ? { unscanned: true } : {}), ...(held.has(entry.id) ? { safetyHold: true } : {}),
             provenance: [{ type: "import", id: `${preview.snapshotId}:${entry.id}` }], share,
             transfer: { version: entry.version, sha256: entry.sha256, path: entry.path, snapshotId: preview.snapshotId, issuerTrust: preview.issuerTrust },

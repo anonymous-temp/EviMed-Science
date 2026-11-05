@@ -1,3 +1,5 @@
+import { sourcePrivacyOf } from '@evimed/domain';
+import { sourceReceiptState } from './memorySourceReceipts.mjs';
 import {RuntimePromptStops} from './runtimePromptStops.mjs';
 import { mergeInputAttribution } from "./geoNativeInputs.mjs";
 import { PLATFORM_SKILL_GENERATION_MAX_PINS } from './platformSkillLimits.mjs';
@@ -854,6 +856,7 @@ function foldEvents(events) {
         ...(event.platformSkillGeneration ? { platformSkillGeneration: normalizePlatformSkillGeneration(event.platformSkillGeneration) } : {}),
         ...(event.personalSkillGeneration ? { personalSkillGeneration: normalizePersonalSkillGeneration(event.personalSkillGeneration) } : {}),
         ...(event.recalledMemories ? { recalledMemories: normalizeRecalledMemories(event.recalledMemories) } : {}),
+        ...(event.originalSources?sourceReceiptState(event.originalSources,{trusted:true,inheritedPrivacy:event.sourcePrivacy}):{}),
         // The web pages the run read (contract X5), and how many in all when
         // the list was capped (webReadPages.mjs).
         ...(event.pagesRead ? { pagesRead: normalizePagesRead(event.pagesRead) } : {}),
@@ -1061,7 +1064,7 @@ function normalizePersonalSkillGeneration(value) {
  * store, where deleting it deletes it. What a reader needs here is "three
  * things you told us were used", with a link to go read them.
  */
-function normalizeRecalledMemories(value) {
+function normalizeRecalledMemories(value, trusted=false) {
   if (!Array.isArray(value)) return undefined;
   const rows = [];
   for (const item of value) {
@@ -1072,6 +1075,7 @@ function normalizeRecalledMemories(value) {
       id,
       kind: typeof item.kind === "string" ? item.kind.trim().slice(0, 48) : "note",
       scope: typeof item.scope === "string" ? item.scope.trim().slice(0, 16) : "user",
+      ...(Array.isArray(item.originalSources)?sourceReceiptState(item.originalSources,{trusted,inheritedPrivacy:item.sourcePrivacy}):{}),
     }));
   }
   // 40, not the 16 a dispatch's recall alone fits in: the recall tool adds to
@@ -5520,7 +5524,7 @@ export class AgentRunStore {
    * reason a run fails.
    * @param {any} project
    * @param {string} rawRunId
-   * @param {{platformSkillGeneration?: any, personalSkillGeneration?: any, transcript?: any, methodsLoaded?: any[], methodsInvoked?: any[], mountedSkills?: string[], recalledMemories?: {id: string, kind?: string, scope?: string}[], appendRecalledMemories?: {id: string, kind?: string, scope?: string}[], repairRounds?: {content?: number, structural?: number}, compaction?: any[], appendCompaction?: any, pagesRead?: any[], pagesReadTotal?: number}} patch
+   * @param {{platformSkillGeneration?: any, personalSkillGeneration?: any, transcript?: any, methodsLoaded?: any[], methodsInvoked?: any[], mountedSkills?: string[], originalSources?:any[], recalledMemories?: {id: string, kind?: string, scope?: string,originalSources?:any[]}[], appendRecalledMemories?: {id: string, kind?: string, scope?: string}[], repairRounds?: {content?: number, structural?: number}, compaction?: any[], appendCompaction?: any, pagesRead?: any[], pagesReadTotal?: number}} patch
    */
   /** Recorded by the trusted manager immediately before its first native prompt; never retroactive. @param {any} project @param {string} runId @param {string} at */
   async recordRuntimeEgressDispatch(project,runId,at){
@@ -5552,8 +5556,11 @@ export class AgentRunStore {
         ? [...(current.recalledMemories ?? []), ...patch.appendRecalledMemories]
           .filter((item, index, all) => all.findIndex((other) => other?.id === item?.id) === index)
         : patch.recalledMemories;
+      const original=[...(current.originalSources??[]),...(patch.originalSources??[]),...(recalled??[]).flatMap(item=>item.originalSources??[])];
+      const aggregates=[...(current.sourcePrivacy?[{sourcePrivacy:current.sourcePrivacy}]:[]),...(recalled??[]).filter(item=>item.sourcePrivacy).map(item=>({sourcePrivacy:item.sourcePrivacy}))];
       const event = {
         event: "learning",
+        ...(original.length?sourceReceiptState(original,{trusted:true,inheritedPrivacy:aggregates.length?sourcePrivacyOf({originalSources:aggregates}):null}):{}),
         id: runId,
         at: this.now().toISOString(),
         ...(current.promptDispatchStartedAt ? { promptDispatchStartedAt: current.promptDispatchStartedAt } : {}),
@@ -5583,7 +5590,7 @@ export class AgentRunStore {
         // would put their values in a file in the project workspace, where
         // deleting the memory would not delete them.
         ...(recalled
-          ? { recalledMemories: normalizeRecalledMemories(recalled) ?? [] }
+          ? { recalledMemories: normalizeRecalledMemories(recalled,true) ?? [] }
           : current.recalledMemories ? { recalledMemories: current.recalledMemories } : {}),
         ...(patch.repairRounds
           ? { repairRounds: { content: patch.repairRounds.content ?? 0, structural: patch.repairRounds.structural ?? 0 } }

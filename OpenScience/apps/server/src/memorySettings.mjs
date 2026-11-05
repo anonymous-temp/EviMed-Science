@@ -1,3 +1,4 @@
+import { sourceReceiptState } from './memorySourceReceipts.mjs';
 import { HttpError } from "./security.mjs";
 import { MEMORY_PAUSED_PROJECT_LIMIT, migrateMemorySettings } from "./memorySettingsPersistence.mjs";
 
@@ -386,7 +387,7 @@ export class MemorySettingsStore {
    */
   async noteResidentDelivered(userId, projectId, sessionId, digest, memos = []) {
     if (!/^[a-f0-9]{64}$/.test(String(digest))) throw invalid("digest");
-    const held = memos.slice(0, 40).map((memo) => ({ id: String(memo.id).slice(0, 200), ...(memo.kind ? { kind: String(memo.kind).slice(0, 60) } : {}), ...(memo.scope ? { scope: String(memo.scope).slice(0, 60) } : {}) }));
+    const held = memos.slice(0, 40).map((memo) => ({ id: String(memo.id).slice(0, 200), ...(memo.kind ? { kind: String(memo.kind).slice(0, 60) } : {}), ...(memo.scope ? { scope: String(memo.scope).slice(0, 60) } : {}),...(Array.isArray(/** @type {any} */(memo).originalSources)?sourceReceiptState(/** @type {any} */(memo).originalSources,{trusted:true,inheritedPrivacy:/** @type {any} */(memo).sourcePrivacy}):{}) }));
     await this.#query(`INSERT INTO evimed_memory.sessions AS s (user_id, project_id, session_id, resident_digest, resident_delivered_at, resident_memos)
       VALUES ($1, $2, $3, $4, clock_timestamp(), $5::jsonb)
       ON CONFLICT (user_id, project_id, session_id) DO UPDATE SET resident_digest = $4, resident_delivered_at = clock_timestamp(), resident_memos = $5::jsonb,

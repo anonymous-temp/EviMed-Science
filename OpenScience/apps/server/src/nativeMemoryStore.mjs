@@ -456,7 +456,7 @@ export class NativeMemoryStore {
 
   /**
    * Every memory file of the account, with its body, type, project and what the overlay knows of it.
-   * @param {string} userId @param {{ context?: any }} [options]
+   * @param {string} userId @param {{ context?: any,uris?:string[]|null }} [options]
    */
   async files(userId, options = {}) {
     const files = await this.rawFiles(userId, options);
@@ -466,15 +466,16 @@ export class NativeMemoryStore {
   }
 
   /** Trusted cleanup reads the source-bearing body before removing its attributed lines.
-   * @param {string} userId @param {{context?:any}} [options] */
-  async rawFiles(userId, { context = null } = {}) {
+   * @param {string} userId @param {{context?:any,uris?:string[]|null}} [options] */
+  async rawFiles(userId, { context = null,uris=null } = {}) {
     this.#assertConfigured();
     if (context) {
       if (!this.memoryContexts || context.ownerId !== userId) throw new HttpError(403, 'memory_scope_denied', 'The memory context is unavailable.');
       await this.memoryContexts.assertKnown(context);
-      return this.#readFiles(userId, this.#epochs.get(userId) ?? 0, [context]);
+      return this.#readFiles(userId, this.#epochs.get(userId) ?? 0, [context],uris);
     }
     const epoch = this.#epochs.get(userId) ?? 0;
+    if(uris)return this.#readFiles(userId,epoch,null,uris);
     const running = this.#reading.get(userId);
     if (running && running.epoch === epoch) return running.promise;
     const promise = this.#readFiles(userId, epoch);
@@ -485,14 +486,14 @@ export class NativeMemoryStore {
     return promise;
   }
 
-  /** @param {string} userId @param {number} epoch @param {any[] | null} scoped */
-  async #readFiles(userId, epoch, scoped = null) {
+  /** @param {string} userId @param {number} epoch @param {any[] | null} scoped @param {string[]|null} uris */
+  async #readFiles(userId, epoch, scoped = null,uris=null) {
     const contexts = scoped ?? await this.#contexts(userId);
     const listings = await mapLimit(contexts, 4, async context => {
       if (context.kind === 'geo-project') await this.#engine(() => this.memoryContexts.configure(context));
       const root = context.sessions.memoryRoot(userId);
       const nodes = await this.#engine(() => context.sessions.tree(userId, root, { levelLimit: 8 }));
-      return nodes.filter(node => !node.isDir).map(node => {
+      return nodes.filter(node => !node.isDir&&(!uris||uris.includes(node.uri))).map(node => {
         if (this.memoryContexts) this.memoryContexts.assertUri(context, node.uri);
         const file = nativeMemoryFile(node.uri, root);
         return { context, node, file: file && (context.kind !== 'geo-project' || context.sessions.memoryTypes.includes(file.type)) ? file : null };
@@ -518,7 +519,7 @@ export class NativeMemoryStore {
       };
     });
     // Only what is still true: a write since this read began has made these bodies old, and the listing is the engine's, not the cache's.
-    if (!scoped && (this.#epochs.get(userId) ?? 0) === epoch) {
+    if (!scoped && !uris && (this.#epochs.get(userId) ?? 0) === epoch) {
       const present = new Set(listed.map(({ node }) => node.uri));
       for (const uri of kept.keys()) if (!present.has(uri)) kept.delete(uri);
       while (kept.size > BODIES_PER_ACCOUNT) kept.delete(/** @type {string} */ (kept.keys().next().value));
@@ -899,7 +900,7 @@ export class NativeMemoryStore {
    */
   async residentCard(userId, projectId) {
     const everything = await this.#projectRecords(userId, projectId);
-    return [...projectCardRows(everything, projectId, { sections: true }), ...projectExtraRows(everything, projectId)];
+    return [...projectCardRows(everything, projectId, { sections: true }), ...projectExtraRows(everything, projectId)].map(row=>({...row,originalSources:everything.filter(record=>record.id===row.recordId||record.nativeType===row.slot).map(record=>({id:record.id,contentDigest:record.contentHash,sourcePrivacy:record.sourcePrivacy,attribution:record.attribution}))}));
   }
 
   /** The records a project's card is read from: a shared GEO project's namespace, or the account's own memories. @param {string} userId @param {string} projectId */
@@ -1397,7 +1398,7 @@ export class NativeMemoryStore {
   /**
    * The conversation's `forget` tool, through the memory gateway (`memoryTool.forget`): the same forget as the page's, by URI,
    * with its undo — what the person asked a conversation to forget they can bring back from the page.
-   * @param {any} user @param {any} project @param {string} uri @param {{ context?: any }} [options]
+   * @param {any} user @param {any} project @param {string} uri @param {{ context?: any,uris?:string[]|null }} [options]
    */
   async forget(user, project, uri, { context = null } = {}) {
     const actual = await this.#fileContext(String(user.id), uri);
