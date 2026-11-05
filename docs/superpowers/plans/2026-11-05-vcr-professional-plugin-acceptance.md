@@ -180,6 +180,30 @@ deterministic after three actual imputations without removing the independent
 real CPU-budget checks. The two affected numerical tests passed on R 4.3.3.
 These focused passes do not substitute for the integrated revision's workflow.
 
+The next candidate `0c5a7fea6` passed its real-engine control-plane seam. Its
+web job exposed a Linux-only test-toolchain defect: older Corepack points the
+lifecycle `npm_execpath` at a non-executable `pnpm.cjs`. Forcing that actual
+0644 script reproduced the same three immediate `EACCES` installation failures.
+The fixture now validates the pinned pnpm package and executes its declared
+`bin.pnpm` instead. Normal Linux, the forced older entrypoint with direct pnpm
+9.4 on PATH, and macOS each passed all five real-manager tests. Production
+installation logic, timeouts and cancellation assertions were unchanged.
+
+Final local archives were independently installed in clean DSH profiles. The
+native ToolRuntime executed trial design, network synthesis, cohort generation,
+binary patients and E-value calculations against the pinned R engine. This
+outside-kernel probe explicitly linked SDK modules supplied by the CLI; it is
+not a standalone live-model conversation. The suite alone exposed no domain
+tools; adding trial made trial tools discoverable. Uninstalling each domain
+preserved all its existing job/result/report files. The manifest records a
+clean source revision, DSH pin, scientific method versions and every archive's
+SHA-256. Public publication remains separate.
+
+The real browser fixture's account, runtime, containers, private volume and
+networks were removed after evidence export; temporary credentials were
+removed, and port 59273 no longer listened. Only private evidence and the
+non-sensitive screenshots remain.
+
 Current source evidence is the revision-specific [web workflow receipt](https://github.com/anonymous-temp/EviMed-Science/actions/workflows/web.yml?query=branch%3Acodex%2Fvcr-professional-plugins-20261105).
 Do not borrow the algorithm baseline's 492/492 as the new revision's result, or
 interpret skipped production E2E as successful production qualification.

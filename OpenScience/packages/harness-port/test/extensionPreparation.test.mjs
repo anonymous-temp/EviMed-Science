@@ -27,7 +27,10 @@ const nativePnpm = await (async () => {
     const manifest = JSON.parse(await readFile(path.join(path.dirname(executable), '..', 'package.json'), 'utf8'))
     assert.equal(manifest.name, 'pnpm')
     assert.equal(manifest.version, SEAMS.pnpm)
-    return executable
+    assert.equal(typeof manifest.bin.pnpm, 'string')
+    // Older Corepack exposes a non-executable compatibility shim as npm_execpath.
+    // Spawn the validated package's declared CLI, not that lifecycle entrypoint.
+    return realpath(path.resolve(path.dirname(executable), '..', manifest.bin.pnpm))
   } finally { await rm(root, { recursive: true, force: true }) }
 })()
 
