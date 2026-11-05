@@ -958,3 +958,9 @@ test("the selection file says which learned method is there for which reason, an
     await rm(project.rootDir, { recursive: true, force: true });
   }
 });
+
+test('import approval and sharing consent do not turn unknown or private original sources into mounted methods',async()=>{
+  const make=(id,classification)=>entry(id,{origin:'imported',transfer:{snapshotId:'source-snapshot'},sourcePrivacy:{schemaVersion:1,classification,reasons:[]},attribution:{schemaVersion:1,origins:['imported','engine'],confirmed:false},content:`Method ${id}`});
+  const capsules=fakeCapsules({accountItems:[{capsuleId:'capsule-a',mode:'guest'}],byCapsule:{'capsule-a':[make('unknown','unclassified'),make('private','private'),make('ordinary','ordinary')]}});
+  const found=await selectCapsuleMethods(capsules,{userId:'alice',projectId:'paper1'});assert.deepEqual(found.map(row=>row.id),['ordinary']);
+});
