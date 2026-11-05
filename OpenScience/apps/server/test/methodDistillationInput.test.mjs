@@ -338,7 +338,7 @@ test("the related methods are the nearest to what the lesson is about, the files
   assert.ok(queries[0].includes("每节不要超过三行，数字都带单位") && queries[0].includes("帮我把本周随访数据整理成周报"), "what the person said and first asked");
   assert.ok(queries[0].includes("总览") && queries[0].includes("md"), "and the shape of what was left");
   assert.deepEqual(dispatched[0].input.trajectory.artifacts[0].shape?.labels, ["周报", "总览", "下周计划"], "the digest says what kind of thing the run left");
-  assert.equal(dispatched[0].input.extractorVersion, "9");
+  assert.equal(dispatched[0].input.extractorVersion, "10");
 
   await make({ similarity: { nearest: async () => { throw new Error("embedder down"); } } }).execute({ project, run, job: lesson });
   assert.deepEqual(dispatched[1].input.relatedMethods.map((entry) => entry.id), library.slice(0, 8).map((entry) => entry.id), "the most recently written, as before");
@@ -447,4 +447,14 @@ test('distillation exposes excluded child work and unavailable turn identity as 
   const unknown = buildDistillationInput({ run: { ...run, kernelRequestIds: [] }, trigger: 'routine', transcript });
   assert.equal(unknown.transcriptCompleteness, 'unavailable');
   assert.equal(unknown.trajectory.runScope.available, false);
+});
+
+test('a queued script lesson rechecks proven recurrence rather than trusting old payload counts', async () => {
+  let dispatched = 0;
+  const distiller = new MethodDistillationRuns({ learning: { listMethods: async () => ({ items: [] }) },
+    scriptUses: { recurrence: async () => ({ runs: 1, conversations: 1 }), exemplars: async () => [{ runId: 'r', source: 'print(1)' }] },
+    dispatch: async () => { dispatched++; return { runId: 'generated', sessionId: 'generated' }; }, readResult: async () => ({ status: 'running' }) });
+  await assert.rejects(() => distiller.execute({ project: { id: 'p', userId: 'u', rootDir: '/nonexistent', metaDir: '/nonexistent' },
+    run: { id: 'r' }, job: { userId: 'u', projectId: 'p', payload: { trigger: 'script', scriptHash: 'a'.repeat(32), runs: 50, conversations: 20 } } }), { code: 'distillation_run_unavailable' });
+  assert.equal(dispatched, 0);
 });

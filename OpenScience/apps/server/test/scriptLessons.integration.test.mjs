@@ -89,3 +89,13 @@ test("a project's deletion takes its occurrences, a memory reset takes the accou
   assert.equal((await uses.recurrence(stranger, HASH)).runs, 0);
   await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Script uses','development')", [stranger]);
 });
+
+test('legacy whole-session occurrences remain stored but teach nothing without a current-run proof', options, async () => {
+  const hash = 'f'.repeat(32);
+  await database.query(`INSERT INTO evimed_learning.script_uses(user_id,script_hash,run_id,session_id,project_id,scope,occurred_at,source)
+    VALUES ($1,$2,'legacy','s_old','p_one','conversation',$3,'print("old whole-session program")')`, [owner, hash, NOW.toISOString()]);
+  assert.equal((await uses.recurrence(owner, hash)).runs, 0);
+  assert.deepEqual(await uses.exemplars(owner, hash), []);
+  assert.equal(await uses.record(owner, run('unproved', 's_now', 'p_one', 0, [{ hash, source: 'print("unproved")' }])), 0);
+  assert.equal((await database.query("SELECT source FROM evimed_learning.script_uses WHERE user_id=$1 AND run_id='legacy'", [owner])).rowCount, 1);
+});
