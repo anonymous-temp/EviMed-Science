@@ -9,12 +9,13 @@ const conflict = () => new HttpError(409, 'product_revision_conflict', 'The lear
 const ownerOf = documents => documents.database ?? documents;
 
 async function runFrame(operation) {
-  const frame = { serial: Promise.resolve() };
+  const frame = { open: true, serial: Promise.resolve() };
   try { return await frames.run(frame, operation); }
-  finally { await frame.serial; }
+  finally { frame.open = false; await frame.serial; }
 }
 function nested(scope, operation) {
   const holder = frames.getStore() ?? scope;
+  if (!holder.open) throw conflict();
   const pending = holder.serial.catch(() => {}).then(() => runFrame(operation));
   holder.serial = pending.then(() => undefined, () => undefined);
   return pending;
@@ -70,6 +71,8 @@ export async function withLearnedLibrary(documents, userId, operation, { transac
 
 /** @param {any} documents @param {string} userId @param {()=>unknown} observer */
 export function deferLearnedLibraryObserver(documents, userId, observer) {
+  const frame = frames.getStore();
+  if (frame && !frame.open) throw conflict();
   if (documents.database?.afterCommit?.(observer)) return true;
   const scope = owners.getStore();
   if (!scope?.open || scope.key !== ownerOf(documents) || scope.userId !== userId) return false;

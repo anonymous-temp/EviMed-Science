@@ -314,7 +314,7 @@ export class ControlPlaneDatabase {
       const enclosing = this.atomicTransactions.getStore();
       const run = async () => {
         const name = `evimed_scoped_${++this.savepointSequence}`;
-        const atomic = { scope: scoped, open: true, serial: Promise.resolve() };
+        const atomic = { scope: scoped, parent: enclosing ?? null, open: true, serial: Promise.resolve() };
         // A module that bounds its own statements (`SET LOCAL statement_timeout`, a `lock_timeout`) does so for "its"
         // transaction, and here that is a savepoint: PostgreSQL keeps a SET LOCAL made after a savepoint through RELEASE
         // SAVEPOINT, so the enclosing transaction went on under the nested one's bound. 2026-10-29: a runtime start (which
@@ -324,14 +324,20 @@ export class ControlPlaneDatabase {
           "SELECT current_setting('statement_timeout') AS statement_timeout, current_setting('lock_timeout') AS lock_timeout",
         ))?.rows?.[0];
         await scoped.client.query(`SAVEPOINT ${name}`);
-        const commitStart = scoped.outcome?.commitHooks.length ?? 0;
+        const discardObservers = () => {
+          if (!scoped.outcome) return;
+          scoped.outcome.commitHooks = scoped.outcome.commitHooks.filter(observer => {
+            for (let owner = observer.atomic; owner; owner = owner.parent) if (owner === atomic) return false;
+            return true;
+          });
+        };
         try {
           const result = await this.atomicTransactions.run(atomic, () => operation(scoped.client));
           atomic.open = false;
           await atomic.serial;
           if (rollbackOnly) {
             await scoped.client.query(`ROLLBACK TO SAVEPOINT ${name}`);
-            scoped.outcome?.commitHooks.splice(commitStart);
+            discardObservers();
           }
           await scoped.client.query(`RELEASE SAVEPOINT ${name}`);
           if (typeof bounds?.statement_timeout === "string" && typeof bounds?.lock_timeout === "string") {
@@ -340,7 +346,7 @@ export class ControlPlaneDatabase {
           }
           return result;
         } catch (error) {
-          scoped.outcome?.commitHooks.splice(commitStart);
+          discardObservers();
           atomic.open = false;
           await atomic.serial;
           await scoped.client.query(`ROLLBACK TO SAVEPOINT ${name}`).catch(() => {});
@@ -353,7 +359,7 @@ export class ControlPlaneDatabase {
       return this.enqueueScoped(scoped, enclosing ?? scoped, run);
     }
     await this.migrate();
-    /** @type {{ hooks: Array<(error: unknown) => unknown>, commitHooks: Array<()=>unknown>, settled: boolean }} */
+    /** @type {{ hooks: Array<(error: unknown) => unknown>, commitHooks: Array<{hook:()=>unknown,atomic:any}>, settled: boolean }} */
     const outcome = { hooks: [], commitHooks: [], settled: false };
     let committed = false, failure = null, result;
     try {
@@ -383,8 +389,8 @@ export class ControlPlaneDatabase {
         try { await this.withoutTransactionClient(() => hook(failure?.error ?? null)); } catch { /* recorded by the hook */ }
       }
     } else {
-      for (const hook of outcome.commitHooks) {
-        try { await this.withoutTransactionClient(hook); } catch { /* an observer never reverses a committed transaction */ }
+      for (const observer of outcome.commitHooks) {
+        try { await this.withoutTransactionClient(observer.hook); } catch { /* an observer never reverses a committed transaction */ }
       }
     }
     if (failure) throw failure.error;
@@ -395,9 +401,11 @@ export class ControlPlaneDatabase {
    * savepoint's observers; outer rollback drops all. Runs after client release,
    * outside the owned scope. @param {()=>unknown} hook */
   afterCommit(hook) {
-    const outcome = this.transactionClients.getStore()?.outcome;
+    let scoped;
+    try { scoped = this.transactionScope(); } catch { return false; }
+    const outcome = scoped?.outcome;
     if (!outcome || outcome.settled) return false;
-    outcome.commitHooks.push(hook);
+    outcome.commitHooks.push({ hook, atomic: this.atomicTransactions.getStore() ?? null });
     return true;
   }
 
