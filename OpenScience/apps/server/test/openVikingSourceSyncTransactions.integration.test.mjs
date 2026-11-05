@@ -90,3 +90,38 @@ test("a control-plane session left idle inside a transaction is ended by Postgre
     assert.equal(free.rows[0].got, true);
   } finally { await database.close(); }
 });
+
+// 2026-11-05, with the engine sync off: ingestion's `withIngestionLease` ran its operation (the understanding run's
+// runtime reservation and prompt, file writes under the project's storage mutex) inside the lease transaction, which holds
+// the job row and the source row. A runtime start takes the account's registration locks and pool connections; a
+// registration holding those locks waits for the very rows the lease holds. PostgreSQL sees one waiter and one idle
+// transaction and no cycle, because the other edge is a JavaScript promise.
+test("a lease's operation may wait for a registration lock that a registration holds while it waits for the lease's rows", { skip, timeout: 60000 }, async () => {
+  // PostgreSQL ends a stuck session after 3 s, so a regression fails below rather than hanging the suite.
+  const context = await signedIn({ databasePoolMax: 4, databaseIdleInTransactionMs: 3000 });
+  try {
+    const { app, user, base, headers } = context;
+    const upload = await fetch(`${base}/api/files/upload`, { method: "POST", headers, body: JSON.stringify({
+      root: "base", path: "knowledge-base/lease.pdf", data: Buffer.from("%PDF-1.4\nlease\n").toString("base64"), encoding: "base64" }) });
+    assert.equal(upload.status, 200);
+    const sourceId = (await upload.json()).data.source.id;
+    const job = await app.sourceWorker.jobs.claim(["ingest"], "lease-test-worker", { leaseMs: 60000, ownerId: user.id });
+    assert.equal(job?.payload.sourceId, sourceId);
+    const sources = app.sourceService;
+    await sources.beginIngestion(user.id, sourceId, { generation: job.payload.sourceGeneration, job });
+    const library = `library:${user.id}`;
+    // What a runtime start does: the account's registration lock, and a connection of its own.
+    const lease = sources.withIngestionLease(job, async () => {
+      await sleep(500);
+      await sources.withRegistrationLocks([library], async () => {});
+      await app.store.database.pool.query("SELECT 1");
+      return "ran";
+    });
+    // A registration: the lock first, then the source's rows.
+    await sleep(150);
+    const registration = sources.withRegistrationLocks([library], async () => { await sources.lockSourceMutation(user.id, sourceId); return "locked"; });
+    const settled = await Promise.race([Promise.allSettled([lease, registration]), sleep(8000).then(() => "stuck")]);
+    assert.notEqual(settled, "stuck");
+    assert.deepEqual(settled.map(entry => entry.status === "fulfilled" ? entry.value : entry.reason?.message), ["ran", "locked"]);
+  } finally { await context.close(); }
+});
