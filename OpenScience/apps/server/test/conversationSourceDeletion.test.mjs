@@ -147,3 +147,12 @@ test('source stream revocation clears replay, closes current readers and suppres
   const late=[];hub.channel('a').subscribe({write:value=>late.push(value),close:()=>closed++});
   assert.deepEqual(late,[]);assert.equal(closed,2);assert.equal(hub.channel('b').buffer.length,1);
 });
+
+test('source fence caches never reject a recreated owner or project incarnation without a restart',async()=>{
+  const old={userId:'u',id:'p',sourceOwnerCreatedAt:'owner-v1',sourceProjectCreatedAt:'project-v1'};
+  const service=new ConversationSourceDeletionService({ledger:{get:async()=>null,pendingForProject:async()=>[]},runtime:{},resolveProject:async()=>{},removeHistory:async()=>{},removeDerived:async()=>{}});
+  service.rememberFence(old,['a']);assert.equal(service.knownDeleted(old,'a'),true);
+  for(const current of [{...old,sourceProjectCreatedAt:'project-v2'},{...old,sourceOwnerCreatedAt:'owner-v2'},{userId:'u',id:'p'}]) {
+    assert.equal(service.knownDeleted(current,'a'),false);await service.assertAvailable(current,'a');
+  }
+});
