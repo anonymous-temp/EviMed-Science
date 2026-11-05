@@ -1262,21 +1262,21 @@ test("P1-5 on the programme path a design whose hazard ratio changes over time q
   assert.match(trial.designs[0].note, /没有解析结果/);
 });
 
-test("P2-10 a batch reading and a population check that a conversation asked for end in the inbox as well as in the conversation", options, async () => {
+test("P2-10 a judging job and a population check that a conversation asked for end in the inbox as well as in the conversation", options, async () => {
   const module = compose({ dispatch: false });
   const study = await makeStudy("noticekinds");
   const finished = (/** @type {string} */ kind, /** @type {string} */ method, /** @type {Record<string, any>} */ result, /** @type {Record<string, any>} */ checkpoint = {}) =>
     module.orchestrator.onJobFinished({ job: { id: `job_${kind}`, studyId: study.id, kind, method, state: "succeeded", checkpoint: { origin: "runtime", resultKind: kind, ...checkpoint } },
       result: { id: `res_${kind}`, kind, ...result } });
-  await finished("match_extract", "matching.extract", { conclusion: "estimable", measures: [{ name: "records_read", value: 25 }], diagnostics: { remaining: 0 } });
+  await finished("match_judge", "matching.judge", { conclusion: "estimable", measures: [{ name: "pairs_finished", value: 25 }, { name: "pairs_total", value: 25 }] });
   await finished("population_check", "population.check", { conclusion: "estimable", measures: [{ name: "variables_compared", value: 4 }, { name: "variables_apart", value: 1 }] });
   const titles = notices_of(module).map((notice) => notice.title);
-  assert.ok(titles.includes("病历阅读完成：读完 25 份病历"), titles.join(" | "));
+  assert.ok(titles.includes("患者与试验判定完成：判定了 25/25 对"), titles.join(" | "));
   assert.ok(titles.includes("人群核对完成：比较了 4 个变量，1 个有差异"), titles.join(" | "));
   // a computation nobody in a conversation asked for stays quiet, as the programme's own stages do
   const before = notices_of(module).length;
-  await module.orchestrator.onJobFinished({ job: { id: "job_quiet", studyId: study.id, kind: "match_extract", method: "matching.extract", state: "succeeded", checkpoint: { resultKind: "match_extract" } },
-    result: { id: "res_quiet", kind: "match_extract", measures: [{ name: "records_read", value: 5 }] } });
+  await module.orchestrator.onJobFinished({ job: { id: "job_quiet", studyId: study.id, kind: "match_judge", method: "matching.judge", state: "succeeded", checkpoint: { resultKind: "match_judge" } },
+    result: { id: "res_quiet", kind: "match_judge", measures: [{ name: "pairs_finished", value: 5 }, { name: "pairs_total", value: 5 }] } });
   assert.equal(notices_of(module).length, before);
 });
 

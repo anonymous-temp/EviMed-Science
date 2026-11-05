@@ -128,7 +128,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 import {
-  VCR_CHECK_STAGES, VCR_ENGINE_METHODS, VCR_ENGINE_PROTOCOL_VERSION, VCR_JOB_KINDS, VCR_JOB_METHODS, VCR_JOB_STATES, VCR_ROBUSTNESS_STAGES,
+  VCR_CHECK_STAGES, VCR_ENGINE_METHODS, VCR_ENGINE_PROTOCOL_VERSION, VCR_JOB_KINDS, VCR_JOB_METHODS, VCR_JOB_STATES, VCR_RETIRED_JOB_KINDS, VCR_ROBUSTNESS_STAGES,
   canonicalScenarioJson, errorCodeMessage, knownErrorCodeMessage, validateCallerInputs, validateEngineJob, vcrAppliedDefaults, vcrLocationIsValid, vcrNormalizeScenarioKeys, vcrNullReplicateFloor, vcrReplicatePlanFor, vcrResultOutputPayload, vcrScenarioRows,
 } from "@evimed/domain";
 
@@ -353,7 +353,7 @@ const SIZED_KINDS = new Set(["design_simulation", "design_grid", "map_prior"]);
  * that is validated: a literature population (its baseline bindings are verified and removed), a reconstruction (its curve receipt),
  * a matched time-to-event comparison (its reconstruction), a model's equation, and the pooled and matched scenarios the platform builds.
  */
-const PLATFORM_BOUND_KINDS = new Set(["literature_population", "population_check", "reconstruct_km", "maic_time_to_event_comparator", "apply_prognostic_model", "pool_evidence", "match_criteria", "match_extract", "match_judge"]);
+const PLATFORM_BOUND_KINDS = new Set(["literature_population", "population_check", "reconstruct_km", "maic_time_to_event_comparator", "apply_prognostic_model", "pool_evidence", "match_criteria", "match_judge"]);
 
 /**
  * What set a simulation's replicate count, in a sentence: the floor of its case, the study's intended use, a borrowing design, the
@@ -541,8 +541,6 @@ export function vcrResultKindFor(kind) {
   if (["design_analytic", "design_simulation", "assurance"].includes(kind)) return "trial_scenario";
   if (kind === "design_grid") return "design_grid";
   if (kind === "match_criteria") return "matching";
-  // The batch reading of patient records leaves a record of what was read, not a matching: its own kind, read by nothing that lists matchings.
-  if (kind === "match_extract") return "match_extract";
   // A judging job's result is the record of what it did; the judgments themselves are `match_judgments`, read by nothing that lists matchings.
   if (kind === "match_judge") return "match_judge";
   if (kind === "accrual_forecast") return "accrual_forecast";
@@ -875,7 +873,7 @@ export class VcrJobs {
    */
   async validate(input) {
     const kind = String(input.kind);
-    if (!VCR_JOB_KINDS.includes(kind)) throw new HttpError(400, "vcr_job_kind_invalid", `kind must be one of: ${VCR_JOB_KINDS.join(", ")}.`);
+    if (!VCR_JOB_KINDS.includes(kind) || VCR_RETIRED_JOB_KINDS.includes(kind)) throw new HttpError(400, "vcr_job_kind_invalid", `kind must be one of: ${VCR_JOB_KINDS.filter((entry) => !VCR_RETIRED_JOB_KINDS.includes(entry)).join(", ")}.`);
     const method = /** @type {Record<string, string>} */ (VCR_JOB_METHODS)[kind];
     if (PLATFORM_BOUND_KINDS.has(kind) || Object.hasOwn(VCR_LONGITUDINAL_JOBS, kind) || Object.hasOwn(VCR_MATCH_BATCH_JOBS, kind)) {
       return { action: "validate", kind, queued: false, checked: false,
@@ -935,8 +933,8 @@ export class VcrJobs {
    */
   async enqueue(input) {
     const kind = String(input.kind);
-    if (!VCR_JOB_KINDS.includes(kind)) {
-      throw new HttpError(400, "vcr_job_kind_invalid", `kind must be one of: ${VCR_JOB_KINDS.join(", ")}.`);
+    if (!VCR_JOB_KINDS.includes(kind) || VCR_RETIRED_JOB_KINDS.includes(kind)) {
+      throw new HttpError(400, "vcr_job_kind_invalid", `kind must be one of: ${VCR_JOB_KINDS.filter((entry) => !VCR_RETIRED_JOB_KINDS.includes(entry)).join(", ")}.`);
     }
     const studyId = String(input.studyId);
     const method = /** @type {Record<string, string>} */ ({...VCR_JOB_METHODS,...VCR_LONGITUDINAL_JOBS})[kind];

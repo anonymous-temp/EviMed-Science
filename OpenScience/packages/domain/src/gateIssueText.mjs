@@ -161,7 +161,6 @@ export const GATE_CHECK_TITLES_ZH = Object.freeze({
   'vcr-interval-named': '区间没有写明是哪一种',
   'vcr-assumption-source': '假设卡缺少带原文位置的来源',
   'vcr-simulation-report-shape': '模拟报告缺少必需的章节或蒙特卡洛误差',
-  'vcr-matching-state-shape': '匹配判定缺少原文证据',
   'vcr-criteria-shape': '入排条件的结构不可判定或缺原文出处',
   'vcr-package-cover': '封面缺复核状态或结局封存时间戳',
   'geo-claim-schema': '结论库要素不完整',

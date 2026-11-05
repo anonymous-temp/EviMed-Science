@@ -3206,7 +3206,7 @@ export class VcrOrchestrator {
     if (!conversation && named.asked !== true) return;
     if (named.recompute === true) return;
     const resultKind = String(named.resultKind || vcrResultKindFor(String(job.kind)));
-    if (!VCR_SUBJECT_KINDS.includes(resultKind) && !["accrual_forecast", "matching", "match_extract", "match_judge", "records_import", "population_check"].includes(resultKind)) return;
+    if (!VCR_SUBJECT_KINDS.includes(resultKind) && !["accrual_forecast", "matching", "match_judge", "records_import", "population_check"].includes(resultKind)) return;
     const stage = named.stage ? String(named.stage) : null;
     // The check that follows a result is not the object's last stage: the researcher is told when the result has landed, and the
     // check says how it went on the page, beside the figure it is for.

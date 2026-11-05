@@ -24,8 +24,7 @@ import { presentVcrReview } from "./vcrViewsKit.mjs";
  *   subtracts nothing.
  * - **Nothing here ranks patients or designs.** Candidates are listed in the
  *   deterministic order of their eligibility summary, a design is `chosen`
- *   only when a decision row says so, and a clinical priority is carried with
- *   its own label 「不是获益概率」.
+ *   only when a decision row says so.
  *
  * @module vcrViewsTabs
  */

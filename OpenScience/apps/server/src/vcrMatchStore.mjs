@@ -22,7 +22,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { correctionHash, correctionPartition } from "./vcrCorrectionCases.mjs";
 import { publicMatchingProvenance, matchingInputDigest } from "./vcrMatching.mjs";
 import { languageCriteriaByKey, languageCriterionHash, languageInput, readCriterionEvaluation, storedCriterionEvaluation, verifyMatchingSnapshot } from "./vcrMatchingSnapshot.mjs";
-import { VCR_CRITERION_STATES, clinicalFactIssues, clinicalFactPolarity, matchBatchUnitKey } from "@evimed/domain";
+import { VCR_CRITERION_STATES, clinicalFactIssues, clinicalFactPolarity } from "@evimed/domain";
 
 import { HttpError } from "./security.mjs";
 import { VCR_SCHEMA, matchingManifestDigestSql } from "./vcrPersistence.mjs";
@@ -88,7 +88,6 @@ const assessmentOf = (row) => (row ? {
   summary: row.summary,
   counts: row.counts ?? {},
   provenance: publicMatchingProvenance(row.provenance ?? {}),
-  priority: row.priority ?? null,
   evidenceGaps: row.evidence_gaps ?? [],
   reviewedBy: row.reviewed_by ?? null,
   reviewedAt: row.reviewed_at ?? null,
@@ -293,20 +292,19 @@ export class VcrMatchStore extends VcrStoreBase {
       const id = assessment?.id ?? vcrId("assessment");
       const saved = await client.query(
         `INSERT INTO ${VCR_SCHEMA}.matching_assessments
-           (id, study_id, protocol_version_id, user_id, subject_key, direction, as_of, summary, counts, priority, evidence_gaps, provenance, input_snapshot_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11::jsonb, $12::jsonb, $13)
+           (id, study_id, protocol_version_id, user_id, subject_key, direction, as_of, summary, counts, evidence_gaps, provenance, input_snapshot_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11::jsonb, $12)
          ON CONFLICT (study_id, protocol_version_id, subject_key, as_of, input_snapshot_id) DO UPDATE SET
            reviewed_by = CASE WHEN ${VCR_SCHEMA}.matching_assessments.summary = EXCLUDED.summary
              THEN ${VCR_SCHEMA}.matching_assessments.reviewed_by END,
            reviewed_at = CASE WHEN ${VCR_SCHEMA}.matching_assessments.summary = EXCLUDED.summary
              THEN ${VCR_SCHEMA}.matching_assessments.reviewed_at END,
            summary = EXCLUDED.summary, counts = EXCLUDED.counts,
-           priority = EXCLUDED.priority, evidence_gaps = EXCLUDED.evidence_gaps, provenance = EXCLUDED.provenance
+           evidence_gaps = EXCLUDED.evidence_gaps, provenance = EXCLUDED.provenance
          RETURNING *`,
         [id, assessment.studyId, assessment.protocolVersionId ?? null, userId, assessment.subjectKey,
           assessment.direction ?? "trial_to_patient", assessment.asOf, assessment.summary,
           JSON.stringify(assessment.counts ?? {}),
-          assessment.priority ? JSON.stringify(assessment.priority) : null,
           JSON.stringify(assessment.evidenceGaps ?? []), JSON.stringify(assessment.provenance ?? {}), assessment.provenance?.inputSnapshotId ?? "legacy"],
       );
       const row = saved.rows[0];
@@ -768,29 +766,6 @@ export class VcrMatchStore extends VcrStoreBase {
    * @param {string} studyId @returns {Promise<Set<string>>} */
   async withdrawnSubjects(studyId) {
     return new Set((await this.rows(`SELECT subject_key FROM ${VCR_SCHEMA}.subject_withdrawals WHERE study_id=$1`, [studyId])).map(row => String(row.subject_key)));
-  }
-
-  /**
-   * The records already read for one set of questions (D4): the keys the batch planner skips. Hashes and counts only.
-   * @param {string} studyId @param {string} variablesDigest
-   * @returns {Promise<Set<string>>} `matchBatchUnitKey`s
-   */
-  async extractionsRead(studyId, variablesDigest) {
-    const rows = await this.rows(`SELECT subject_key,document_id FROM ${VCR_SCHEMA}.matching_extractions WHERE study_id=$1 AND variables_digest=$2`, [studyId, variablesDigest]);
-    return new Set(rows.map(row => matchBatchUnitKey(String(row.subject_key), String(row.document_id))));
-  }
-
-  /**
-   * One record read (D4). Idempotent: a record read twice by two workers is one row.
-   * @param {{ studyId: string, subjectKey: string, documentId: string, variablesDigest: string, documentHash?: string|null, facts?: number, rejected?: number,
-   *   inputTokens?: number|null, outputTokens?: number|null, model?: string|null, jobId?: string|null }} entry
-   */
-  async recordExtraction(entry) {
-    await this.rows(`INSERT INTO ${VCR_SCHEMA}.matching_extractions
-      (study_id,subject_key,document_id,variables_digest,document_hash,facts,rejected,input_tokens,output_tokens,model,job_id)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT DO NOTHING`,
-    [entry.studyId, entry.subjectKey, entry.documentId, entry.variablesDigest, entry.documentHash ?? null, Math.max(0, Math.floor(entry.facts ?? 0)),
-      Math.max(0, Math.floor(entry.rejected ?? 0)), entry.inputTokens ?? null, entry.outputTokens ?? null, entry.model ?? null, entry.jobId ?? null]);
   }
 
   /** @param {{id:string,payload:any}} snapshot */

@@ -110,7 +110,7 @@ import {
   VCR_MATCHING_VOCABULARY_VERSION, VCR_MATCHING_EVALUATOR_VERSION, matchingInputDigest, assessSubject, eligibilityCounts, frozenAsOf, criterionLanguageKeys, requiresLanguageJudgment,
 } from "./vcrMatching.mjs";
 import { VCR_JOB_PURPOSE } from "./vcrJobs.mjs";
-import { createFactExtractor, createMatchBatch, createMatchBatchCounters, createMatchExtractExecutor, matchBatchMinCell } from "./vcrMatchBatch.mjs";
+import { matchBatchMinCell } from "./vcrMatchBatch.mjs";
 import { createRecordsImport, createRecordsImportExecutor } from "./vcrRecordsImport.mjs";
 import { createPatientDocumentRead } from "./vcrPatientContext.mjs";
 import { createLongTableReader } from "./vcrLongTables.mjs";
@@ -122,7 +122,6 @@ import { VcrMatchJudgmentStore } from "./vcrMatchJudgmentStore.mjs";
 import { VcrRegistryPageStore, createRegistryPageCounters, createRegistryPages } from "./vcrRegistryPages.mjs";
 import { createRegistryWatch, createRegistryWatchCounters } from "./vcrRegistryWatch.mjs";
 import { VcrMatchResults } from "./vcrMatchResults.mjs";
-import { vcrRuntimeWrite } from "./vcrGateway.mjs";
 import { MATCHING_SNAPSHOT_PREFIX, freezeMatchingInputs, hydrateMatchingInputs, languageCriteriaByKey, matchingSelection, verifyMatchingSnapshot } from "./vcrMatchingSnapshot.mjs";
 
 /**
@@ -974,7 +973,7 @@ export function vcrMatchingSeam({ matchStore, store, documents = null, subjectTa
             assessment: {
               studyId: study.id, protocolVersionId: assessment.protocolVersionId ?? diagnostics.protocolVersionId ?? null,
               subjectKey: assessment.subjectKey, direction: assessment.direction, asOf: assessment.asOf, summary: assessment.summary,
-              counts: assessment.counts, priority: null, evidenceGaps: assessment.evidenceGaps, judgments: assessment.judgments, provenance: assessment.provenance,
+              counts: assessment.counts, evidenceGaps: assessment.evidenceGaps, judgments: assessment.judgments, provenance: assessment.provenance,
             },
           }));
         } catch (error) {
@@ -1276,17 +1275,6 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
     service.attach({longitudinal});
   }
 
-  // Batch matching (D4): the patient records of a roster read for the criteria's facts, a record at a time, in a job on the slow local
-  // lane. The model is the control plane's own client (purpose `vcr` in the usage ledger); a fact it proposes is written by the same
-  // writer a conversation's facts go through.
-  const matchBatchCounters = createMatchBatchCounters();
-  jobs.localExecutors["matching.extract"] = createMatchExtractExecutor({
-    store, matchStore, documents, config, report, counters: matchBatchCounters,
-    extractor: createFactExtractor({ config, usageLedger, fetchImpl: call }),
-    writeFacts: ({ study, items, documents: held, caller }) => vcrRuntimeWrite({ store, service: null, orchestrator: null, study, what: "fact", items, data: null, matchStore, documents: held, report, caller }),
-  });
-  const matchBatch = createMatchBatch({ jobs, matchStore, documents, subjectTable, config, counters: matchBatchCounters });
-
   // Judging patients against trials (owner decisions 2026-11-04): one job and one record for both directions; a conversation writes the same record through `trial_judgment`.
   const matchJudgments = new VcrMatchJudgmentStore({ database: productDatabase });
   const matchJudgeCounters = createMatchJudgeCounters();
@@ -1373,7 +1361,7 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   service.attach({ records });
   composed = {
     publications, simulations, frontierEvents, predictions, records,
-    store, dataStore, matchStore, erasure, candidateStore, candidateSearches, candidateReranker, clauseDefinitionCounters, patientTrials, evidenceStore, corrections, knowledge, knowledgeStore, longitudinal, matchBatch, matchBatchCounters, matchJudge, matchJudgeCounters, matchJudgments, matchJudgmentReads, matchResults, registryWatch, registryWatchCounters, registryPages, registryPageCounters, subjectKnown, recordsImport, recordsOriginals, patientDocuments,
+    store, dataStore, matchStore, erasure, candidateStore, candidateSearches, candidateReranker, clauseDefinitionCounters, patientTrials, evidenceStore, corrections, knowledge, knowledgeStore, longitudinal, matchJudge, matchJudgeCounters, matchJudgments, matchJudgmentReads, matchResults, registryWatch, registryWatchCounters, registryPages, registryPageCounters, subjectKnown, recordsImport, recordsOriginals, patientDocuments,
     access, members, dataPlane, dataPlaneSeam, documents, engine, engineProbe, engineStatus, removeEngineJob, jobs, seal, evidence, matching, registry, service,
     intake: { counters: intakeCounters, extractor, importer, digitizer },
     // Composed later, beside the other modules' workers (server.mjs).
@@ -1495,7 +1483,6 @@ export async function vcrMetricsSnapshot(vcr) {
     patientTrials: vcr.patientTrials?.counters ? { ...vcr.patientTrials.counters } : null,
     candidateRerank: vcr.candidateReranker ? vcr.candidateReranker.counts() : null,
     clauseDefinitions: vcr.clauseDefinitionCounters ? { ...vcr.clauseDefinitionCounters } : null,
-    matchBatch: vcr.matchBatchCounters ? { ...vcr.matchBatchCounters } : null,
     matchJudge: vcr.matchJudgeCounters ? { ...vcr.matchJudgeCounters } : null,
     registryWatch: vcr.registryWatch ? { ...vcr.registryWatchCounters } : null,
     registryPages: vcr.registryPages ? { ...vcr.registryPageCounters } : null,
@@ -1599,10 +1586,6 @@ export function vcrMetricFamilies(enabled, snapshot) {
   if (snapshot.clauseDefinitions) {
     add("clause_definitions_total", "What the definition cards of a trial's clauses did since this process started (built, off until measured): cards written by a model call, cards read from the cache, calls that failed (the pair is then read without a card), and clauses that got a card.", "counter",
       Object.entries(snapshot.clauseDefinitions).map(([kind, value]) => ({ labels: { kind }, value: Number(value) })));
-  }
-  if (snapshot.matchBatch) {
-    add("match_batch_total", "What the batch reading of patient records did since this process started: batches started, records read, facts kept and facts the writer or the closed vocabulary refused, records that failed or could not be read (and are read again by the next start), and batches canceled.", "counter",
-      Object.entries(snapshot.matchBatch).map(([kind, value]) => ({ labels: { kind }, value: Number(value) })));
   }
   if (snapshot.matchJudge) {
     add("match_judge_total", "What judging patients against trials did since this process started: jobs started, pairs judged and failed, model calls retried, jobs stopped by a budget, a ceiling or a run of upstream failures, jobs canceled, and records that changed under a job.", "counter",

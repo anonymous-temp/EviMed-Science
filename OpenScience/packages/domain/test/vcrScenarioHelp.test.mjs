@@ -8,6 +8,7 @@ import {
   VCR_DESIGN_SUPPORT,
   VCR_ENGINE_METHOD_IDS,
   VCR_JOB_KINDS,
+  VCR_RETIRED_JOB_KINDS,
   VCR_JOB_METHODS,
   VCR_MINIMAL_TEMPLATES,
   VCR_RUN_SCENARIO_FIELDS,
@@ -31,7 +32,7 @@ const clone = (value) => JSON.parse(JSON.stringify(value));
 const INVENTED = ["months", "dropoutRate", "dropout", "isNull", "notes", "extra", "accrualMonths", "enrolment", "sampleSize"];
 
 test("the help covers every kind and every method, and the walk proves it walked", () => {
-  assert.deepEqual(Object.keys(help.kinds), [...VCR_JOB_KINDS]);
+  assert.deepEqual(Object.keys(help.kinds), VCR_JOB_KINDS.filter((kind) => !VCR_RETIRED_JOB_KINDS.includes(kind)), "every kind a run can start, and no retired one");
   assert.deepEqual(Object.keys(help.methods), [...VCR_ENGINE_METHOD_IDS]);
   for (const [kind, entry] of Object.entries(help.kinds)) assert.equal(/** @type {any} */ (entry).method, /** @type {any} */ (VCR_JOB_METHODS)[kind], kind);
   const rows = Object.values(help.methods).reduce((total, method) => total + /** @type {any} */ (method).rows.length, 0);
@@ -269,7 +270,7 @@ test("the keys read inside a node answer a refusal, and a gate that does not hol
 });
 
 test("the kinds the platform builds name the keys a run states, and the gateway's refusal uses the same list", () => {
-  assert.deepEqual(Object.keys(VCR_RUN_SCENARIO_FIELDS).sort(), ["match_criteria", "match_extract", "match_judge", "pool_evidence", "records_import"]);
+  assert.deepEqual(Object.keys(VCR_RUN_SCENARIO_FIELDS).sort(), ["match_criteria", "match_judge", "pool_evidence", "records_import"]);
   for (const [kind, fields] of Object.entries(VCR_RUN_SCENARIO_FIELDS)) {
     assert.deepEqual(help.kinds[kind].platformBuilt, [...fields], kind);
   }

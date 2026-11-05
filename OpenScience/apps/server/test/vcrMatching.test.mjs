@@ -15,13 +15,13 @@ import YAML from "yaml";
 import {
   SATISFIED, NOT_SATISFIED, UNKNOWN, PENDING_RECHECK, VCR_MATCHING_STATES,
   admissibleFacts, ambiguousCriterionLanguageKeys, applicabilityConfusion, assessSubject, blockingExclusionUnknowns,
-  criterionConfusion, criterionFunnel, criterionLanguageKeys, decidedShare, dueRechecks, eligibilityCounts, errorLayer, evaluateCriterion,
+  criterionConfusion, criterionFunnel, criterionLanguageKeys, decidedShare, eligibilityCounts, errorLayer, evaluateCriterion,
   evaluateRequirement, evidenceGaps, factsVisibleAt, frozenAsOf, interRaterAgreement, kleeneAnd, kleeneNot, kleeneOr,
-  labelClinicalPriority, matchingAssessmentDocument, matchingEvaluationReport, matchingReportDiff, patientMatchingMetrics,
+  matchingEvaluationReport, patientMatchingMetrics,
   requiresLanguageJudgment, runMatchingEvaluation,
   storedExclusion, summarizeEligibility, verifyFactEvidence, settleFactEvidence, windowStart, withinWindow, VCR_FACT_VOID_REASONS,
 } from "../src/vcrMatching.mjs";
-import { clinicalFactView, validateCapabilityManifest, vcrMatchingFindings } from "@evimed/domain";
+import { clinicalFactView, validateCapabilityManifest } from "@evimed/domain";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const AS_OF = "2026-09-28T00:00:00Z";
@@ -204,9 +204,6 @@ test("a failed conditional exclusion stays unknown until its applicability is es
   assert.deepEqual(decidedShare(unresolved.counts), { decided: 0, applicable: 1, percent: 0 });
   assert.deepEqual(unresolved.blockingExclusionUnknowns, ["conditional"]);
   assert.equal(criterionFunnel([unresolved])[0].not_satisfied, 0);
-  const exported = matchingAssessmentDocument(unresolved).judgments[0];
-  assert.equal(exported.requirementState, NOT_SATISFIED);
-  assert.deepEqual(exported.applicabilityMissing, judgment.applicabilityMissing);
 
   const applicable = evaluate([infection, subtype]);
   assert.equal(applicable.summary, "ineligible");
@@ -280,21 +277,6 @@ test("a shared legacy answer cannot establish a different criterion's applicabil
   assert.deepEqual([...ambiguousCriterionLanguageKeys([first, sameQuestion])], []);
   assert.equal(evaluate([first, sameQuestion]).summary, "ineligible");
   assert.deepEqual([...ambiguousCriterionLanguageKeys([first, { ...second, applicability: { op: "language", key } }])], [key]);
-});
-
-test("rechecks keep both axis dates when the displayed eligibility is unknown or satisfied", () => {
-  const asOf = "2026-09-28T00:00:00.000Z";
-  const fact = { id: "treatment", variable: "treatment", occurredAt: "2026-09-20", extractedBy: "structured" };
-  const base = { id: "conditional", kind: "inclusion", requirement: { op: "elapsed_since", variable: "treatment", days: 28 } };
-  const unknownPremise = { ...base, applicability: { op: "present", variable: "qualifying_diagnosis" } };
-  const pendingPremise = { ...base, applicability: { ...base.requirement, days: 14 } };
-  const evaluate = criterion => assessSubject({ subjectKey: "P", asOf, criteria: [criterion], facts: [fact] }).judgments;
-  assert.deepEqual(dueRechecks(evaluate(unknownPremise), "2026-10-18"), [{ criterionId: "conditional", recheckAt: "2026-10-18T00:00:00.000Z" }]);
-  assert.deepEqual(dueRechecks(evaluate(pendingPremise), "2026-10-04"), [{ criterionId: "conditional", recheckAt: "2026-10-04T00:00:00.000Z" }]);
-  assert.deepEqual(dueRechecks(evaluate(pendingPremise), "2026-10-03"), []);
-  const pendingSatisfied = evaluate({ ...pendingPremise, requirement: { op: "present", variable: "treatment" } });
-  assert.equal(pendingSatisfied[0].state, SATISFIED);
-  assert.equal(dueRechecks(pendingSatisfied, "2026-10-04").length, 1);
 });
 
 // --------------------------------------------------------------- C2-17
@@ -436,8 +418,6 @@ test("AC-14 a washout that ends on a known date is deferred, not satisfied early
   assert.equal(judged.state, PENDING_RECHECK);
   assert.notEqual(judged.state, SATISFIED);
   assert.equal(judged.recheckAt, "2026-10-18T00:00:00.000Z");
-  assert.deepEqual(dueRechecks([judged], "2026-10-01T00:00:00Z"), []);
-  assert.deepEqual(dueRechecks([judged], "2026-10-18T00:00:00Z"), [{ criterionId: "crt-washout", recheckAt: "2026-10-18T00:00:00.000Z" }]);
   // On the day it comes due, the same code decides it.
   assert.equal(evaluateCriterion(criterion, { facts: [fact], asOf: Date.parse("2026-10-18T00:00:00Z") }).state, SATISFIED);
   // And the summary is 「待复评」, distinct from both 「符合」 and 「证据不足」.
@@ -608,16 +588,6 @@ test("a criterion only language can decide is answered by the model, and only wi
   assert.equal(evaluateCriterion({ id: "crt-consent", requirement: node }, { ...base, modelJudgments: { "crt-consent": anchored } }).decidedBy, "model");
 });
 
-test("the model's clinical priority is carried, labelled, and never merged into the counts", () => {
-  const priority = labelClinicalPriority({ score: 0.81, rationale: "病理分型与方案一致" });
-  assert.equal(priority.isBenefitProbability, false);
-  assert.equal(priority.decidedBy, "model");
-  assert.match(priority.label, /不是获益概率/);
-  assert.equal(labelClinicalPriority(null), null);
-  const counts = eligibilityCounts([{ applicable: true, state: SATISFIED }]);
-  assert.equal(Object.keys(counts).includes("score"), false, "the priority never enters the deterministic summary");
-});
-
 // ----------------------------------------------------- the whole assessment
 
 test("AC-14 a full assessment keeps the gaps, the void facts and the blocking exclusions on the record", () => {
@@ -643,13 +613,6 @@ test("AC-14 a full assessment keeps the gaps, the void facts and the blocking ex
   ]);
   assert.deepEqual(assessment.blockingExclusionUnknowns, [CRITERION_MI.id, "crt-washout"]);
   assert.equal(assessment.asOf, "2026-09-28T00:00:00.000Z");
-
-  // The structured companion the deliverable ships passes the domain contract.
-  const document = matchingAssessmentDocument(assessment);
-  const findings = vcrMatchingFindings({ files: new Map([["matching.json", JSON.stringify(document)]]) });
-  assert.deepEqual(findings.issues, [], "every decided judgment carries a quote and a locator");
-  assert.equal(findings.metrics.vcrJudgments, 3);
-  assert.equal(findings.metrics.vcrJudgmentsUnanchored, 0);
 });
 
 test("the criterion funnel says which single line is costing the trial its patients", () => {
@@ -822,30 +785,13 @@ test("C2-16 a recorded denial of ever having had the drug satisfies a washout; s
   assert.equal(evaluateCriterion(strict, { facts: [denied], asOf: Date.parse(AS_OF) }).state, UNKNOWN);
 });
 
-test("C2-20 the difference between two evaluation runs is reported and never gated", () => {
-  const diff = matchingReportDiff(
-    { provenance: { modelId: "m-1", promptVersion: "p-3" }, criterion: { agreement: 0.90, unknownRate: 0.2, unknownReadAsSatisfied: 0, satisfiedReadAsNotSatisfied: 2 }, subject: { eligibleRecall: 0.6, falseExclusionRate: 0.4, numberNeededToScreen: 2 } },
-    { provenance: { modelId: "m-2", promptVersion: "p-4" }, criterion: { agreement: 0.95, unknownRate: 0.1, unknownReadAsSatisfied: 1, satisfiedReadAsNotSatisfied: 1 }, subject: { eligibleRecall: 0.8, falseExclusionRate: 0.2, numberNeededToScreen: null } },
-  );
-  assert.equal(diff.versions.previous.modelId, "m-1");
-  assert.equal(diff.versions.current.promptVersion, "p-4");
-  assert.ok(Math.abs(diff.criterionAgreement.change - 0.05) < 1e-9);
-  assert.equal(diff.unknownReadAsSatisfied.change, 1, "a direction that got worse is shown, not hidden");
-  assert.equal(diff.numberNeededToScreen.change, null, "a missing number is null, not zero");
-  assert.equal(diff.gated, false);
-  assert.match(diff.note, /不门控/);
-  const changedDefinition = matchingReportDiff({ subject: { falseExclusionRate: 0.4 } }, { subject: { metricVersion: 2, falseExclusionRate: 0.2 } });
-  assert.equal(changedDefinition.falseExclusionRate.change, null, 'legacy and corrected exclusion rates have different definitions');
-  assert.equal(changedDefinition.falseExclusionRate.definitionChanged, true);
-});
-
 test("an assessment carries which model and prompt produced its language judgments", () => {
   const assessment = assessSubject({
     subjectKey: "S1", asOf: AS_OF, criteria: [], facts: [],
     provenance: { modelId: "deepseek-v4", promptVersion: "vcr-matching@1.0.0", criteriaVersion: "prt-1@2" },
   });
   assert.equal(assessment.provenance.modelId, "deepseek-v4");
-  assert.equal(matchingAssessmentDocument(assessment).provenance.criteriaVersion, "prt-1@2");
+  assert.equal(assessment.provenance.criteriaVersion, "prt-1@2");
   assert.equal(assessSubject({ subjectKey: "S1", asOf: AS_OF, criteria: [], facts: [] }).provenance.vocabularyVersion, "evimed-internal-sex-1");
 });
 
@@ -892,47 +838,6 @@ test("the skill is short, starts the job, judges silence by the model, and repor
   assert.match(authored, /A registry that failed is reported and the rest goes on/);
   assert.match(authored, /Read it back/);
   for (const gone of ["matching.json", "traceability-review", "manuscript-humanize", "evimed_submit_deliverable", "dateQuote", "Age alone does not establish"]) assert.ok(!authored.includes(gone), gone);
-});
-
-test("AC-14 the contract refuses a package whose own judgments do not produce its summary", async () => {
-  // This was a run-side `preflight.py` until the platform's rule caught up
-  // with it: a checker that restates delivery rules is the copy that drifts
-  // (clinicalEvidenceSingleImplementation.test.mjs). The same two properties
-  // now live once, in `@evimed/domain`'s vcr contract, and the gate returns
-  // them to the run — where a package built from this package's own evaluator
-  // is the passing case, so it cannot drift from what the code produces.
-  const { vcrMatchingFindings } = await import("@evimed/domain");
-  const source = chart("男，67 岁。否认心梗史。");
-  const assessment = assessSubject({
-    subjectKey: "S1", asOf: AS_OF, documents: source.documents,
-    criteria: [CRITERION_MI, {
-      id: "crt-washout", kind: "exclusion", criterionType: "prior_treatment",
-      requirement: { op: "elapsed_since", variable: "docetaxel", days: 28 },
-    }],
-    facts: [source.fact("否认心梗史", { variable: "myocardial_infarction", polarity: "negated" })],
-  });
-  const document = matchingAssessmentDocument(assessment);
-  assert.equal(document.summary, "insufficient_evidence");
-
-  const of = (/** @type {any} */ value) => vcrMatchingFindings({ files: new Map([["matching.json", JSON.stringify(value)]]) });
-  const clean = of(document);
-  assert.deepEqual(clean.issues.filter((issue) => issue.code === "vcr_summary_contradicted"), []);
-  assert.equal(clean.metrics.vcrMatchingSummary, "insufficient_evidence");
-
-  // The same package claiming 「符合」 over an unknown exclusion criterion.
-  const contradicted = of({ ...document, summary: "eligible" });
-  assert.ok(contradicted.issues.some((issue) => issue.code === "vcr_summary_contradicted"),
-    "an unknown exclusion criterion never leaves a subject eligible");
-  assert.ok(contradicted.issues.every((issue) => issue.severity === "advisory"),
-    "the finding is returned to the run, never used to withhold the package");
-
-  // And 「不适用」 written as a fifth state rather than as the field beside it.
-  const fifthState = of({
-    ...document, summary: "insufficient_evidence",
-    judgments: [{ criterionId: "crt-x", state: "not_applicable", applicable: true, evidence: [] }],
-  });
-  assert.ok(fifthState.issues.some((issue) => issue.code === "vcr_judgment_state_unknown"));
-  assert.equal(fifthState.metrics.vcrJudgmentsBadState, 1);
 });
 
 test("the eval pack carries real briefs, and every one of them names the input the manifest requires", async () => {

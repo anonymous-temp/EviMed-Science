@@ -37,7 +37,6 @@
     "prognostic_adjustment_comparator": {"method":"comparator.prognostic_adjustment"},
     "generate_patients_longitudinal": {"method":"patients.longitudinal"},
     "population_check": {"method":"population.check"},
-    "match_extract": {"method":"matching.extract","platformBuilt":[]},
     "match_judge": {"method":"matching.judge","platformBuilt":[]},
     "records_import": {"method":"matching.import_records","platformBuilt":[]},
     "forecast_trajectories": {"method":"forecast.trajectories"},

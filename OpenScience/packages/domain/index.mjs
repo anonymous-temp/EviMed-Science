@@ -1868,6 +1868,7 @@ export {
   VCR_INTERVAL_KINDS,
   VCR_INTERVAL_KIND_LABELS_ZH,
   VCR_JOB_KINDS,
+  VCR_RETIRED_JOB_KINDS,
   VCR_JOB_STATES,
   VCR_JOB_STATE_LABELS_ZH,
   VCR_JOB_WAIT_LABELS_ZH,
@@ -2330,7 +2331,6 @@ export {
   VCR_BACKSTAGE_FILES,
   VCR_CHECK_IDS,
   VCR_CRITERIA_FILE,
-  VCR_MATCHING_FILE,
   VCR_PACKAGE_FILE,
   VCR_RESULTS_FILE,
   VCR_SIMULATION_FILE,
@@ -2338,7 +2338,6 @@ export {
   resultNumbers,
   vcrCohortFindings,
   vcrComparatorFindings,
-  vcrMatchingFindings,
   vcrSimulationReportFindings,
   vcrStudyPackageFindings,
 } from './src/vcrContracts.mjs'
@@ -2748,19 +2747,13 @@ export {
 } from './src/clinicalUnits.mjs'
 
 export {
-  VCR_MATCH_BATCH_SCHEMA,
   VCR_MATCH_BATCH_METHODS,
   VCR_MATCH_BATCH_JOBS,
   VCR_SLOW_LOCAL_METHODS,
-  VCR_MATCH_BATCH_LIMITS,
   VCR_MATCH_JUDGE_LIMITS,
   VCR_RECORDS_IMPORT_INPUTS,
   VCR_MATCH_BATCH_DEFAULT_MODEL,
   validateMatchBatchScenario,
-  matchBatchUnitKey,
-  planMatchExtraction,
-  matchBatchStatement,
-  acceptExtractedFacts,
 } from './src/vcrMatchBatch.mjs'
 
 export {

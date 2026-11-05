@@ -7,11 +7,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { Readable, Writable } from "node:stream";
 import test from "node:test";
-import { VCR_MEMBER_ROLES, matchBatchStatement, planMatchExtraction, roleAllows } from "@evimed/domain";
+import { VCR_MEMBER_ROLES, roleAllows } from "@evimed/domain";
 import { VcrDataPlane } from "../src/vcrDataPlane.mjs";
 import { createVcrGatewayHandler } from "../src/vcrGateway.mjs";
 import { presentLongitudinal } from "../src/vcrLongitudinalPresentation.mjs";
-import { createMatchBatch } from "../src/vcrMatchBatch.mjs";
 import { createVcrRoutes } from "../src/vcrRoutes.mjs";
 import { VcrService } from "../src/vcrService.mjs";
 
@@ -122,40 +121,6 @@ test("the data plane's profile for a model: a table of eight people has its row 
 });
 
 // ---------------------------------------------------------------------------
-// The sentence a batch reading starts with
-// ---------------------------------------------------------------------------
-
-const CRITERIA = [
-  { id: "c1", kind: "inclusion", criterionType: "demographic", sourceText: "Age >= 18 years", requirement: { op: "compare", variable: "age", comparator: "gte", value: 18, unit: "year" } },
-  { id: "c2", kind: "exclusion", criterionType: "comorbidity", sourceText: "Active brain metastases", requirement: { op: "present", variable: "brain_metastasis" } },
-];
-const ROSTER = Array.from({ length: 8 }, (_, at) => ({ id: `d${at + 1}`, subjectKey: `P-00${at + 1}`, chars: 60 }));
-
-test("matchBatchStatement: eight people to read are printed for the owner and not otherwise", () => {
-  const plan = planMatchExtraction({ roster: ROSTER.map((row) => ({ subjectKey: row.subjectKey, documents: [{ id: row.id, chars: row.chars }] })), limit: 300 });
-  const exact = matchBatchStatement(plan, { exact: true });
-  assert.match(exact, /这一批要读 8 位病人的 8 份病历/);
-  assert.doesNotMatch(exact, /人数不显示|小样本规则/);
-  for (const hidden of [matchBatchStatement(plan), matchBatchStatement(plan, { exact: false })]) {
-    assert.match(hidden, /这一批要读的病历（人数不显示）/);
-    assert.doesNotMatch(hidden, /8 位|8 份/);
-  }
-});
-
-test("starting a batch reading: the owner's answer says 8 people, a member's says that the number is not shown", async () => {
-  const matchStore = { async latestProtocol() { return { id: "pv_1" }; }, async listCriteria() { return CRITERIA; }, async withdrawnSubjects() { return new Set(); },
-    async extractionsRead() { return new Set(); } };
-  const jobs = { async enqueue() { return { job: { id: "job_9", state: "queued" }, created: true }; } };
-  const batch = createMatchBatch({ jobs, matchStore, documents: { roster: async () => ROSTER }, config: { vcrMatchBatchMaxSubjects: 300, deepseekModel: "deepseek-flash" } });
-  const owner = await batch.start({ id: "std_1", userId: OWNER, projectId: "prj_1" }, {}, { ownerView: true });
-  assert.match(owner.statement, /这一批要读 8 位病人的 8 份病历/);
-  assert.deepEqual(owner.plan, { toRead: 8, alreadyRead: 0, prefiltered: 0, noDocuments: 0, deferred: 0 });
-  const other = await batch.start({ id: "std_1", userId: OWNER, projectId: "prj_1" }, {});
-  assert.match(other.statement, /这一批要读的病历（人数不显示）/);
-  assert.doesNotMatch(other.statement, /8 位|8 份/);
-});
-
-// ---------------------------------------------------------------------------
 // The gateway: who is asking
 // ---------------------------------------------------------------------------
 
@@ -171,9 +136,9 @@ function gatewayResponse() {
 /**
  * The gateway for one caller. `who` is the account the runtime token names; `native` is a verified conversation (with the study's own
  * session) or none, which is a programme run on the study's exclusive dispatch.
- * @param {{ who: string, native: boolean, matchBatch?: any, jobs?: any }} options
+ * @param {{ who: string, native: boolean, jobs?: any }} options
  */
-function gatewayFor({ who, native, matchBatch = null, jobs = null }) {
+function gatewayFor({ who, native, jobs = null }) {
   const runtimeManager = { boundedRuntimeScope: () => ({ runId: "dispatch_1" }),
     assertActiveModelGatewayToken: () => ({ userId: who, projectId: "prj_1" }) };
   const store = {
@@ -185,7 +150,7 @@ function gatewayFor({ who, native, matchBatch = null, jobs = null }) {
   };
   const defaultJobs = { async get() { return { id: "job_1", state: "succeeded", method: "design.simulate", progress: {}, cpuSecondsUsed: 1, error: null }; } };
   const handler = createVcrGatewayHandler(config, runtimeManager, {
-    vcr: { service: service(), store, jobs: jobs ?? defaultJobs, matchBatch },
+    vcr: { service: service(), store, jobs: jobs ?? defaultJobs },
     resolveInvocation: async () => ({ userId: who, projectId: "prj_1", runId: "run_1", rootSessionId: "sess_1", callId: "call_1" }),
   });
   return async (/** @type {string} */ operation, /** @type {any} */ body) => {
@@ -215,24 +180,6 @@ test("the gateway: a job's status answer prints its counts for the owner's conve
   assert.equal(member.result.counts.realPatients, null);
   const programme = await gatewayFor({ who: OWNER, native: false })("simulate", status);
   assert.equal(programme.result.counts.realPatients, null);
-});
-
-test("the gateway: the start of a batch reading tells the owner's conversation 8 people; a member's conversation is told the number is not shown", async () => {
-  const matchStore = { async latestProtocol() { return { id: "pv_1" }; }, async listCriteria() { return CRITERIA; }, async withdrawnSubjects() { return new Set(); },
-    async extractionsRead() { return new Set(); } };
-  const jobs = { async enqueue() { return { job: { id: "job_9", state: "queued" }, created: true }; } };
-  const matchBatch = createMatchBatch({ jobs, matchStore, documents: { roster: async () => ROSTER }, config: { vcrMatchBatchMaxSubjects: 300, deepseekModel: "deepseek-flash" } });
-  const start = { action: "start", kind: "match_extract" };
-  const owner = await gatewayFor({ who: OWNER, native: true, matchBatch, jobs })("simulate", start);
-  assert.match(owner.statement, /这一批要读 8 位病人的 8 份病历/);
-  assert.deepEqual(owner.plan, { toRead: 8, alreadyRead: 0, prefiltered: 0, noDocuments: 0, deferred: 0 });
-  assert.deepEqual(owner.estimate.people, 8);
-  const member = await gatewayFor({ who: MEMBER, native: true, matchBatch, jobs })("simulate", start);
-  assert.match(member.statement, /这一批要读的病历（人数不显示）/);
-  assert.equal(member.plan.toRead, null);
-  assert.equal(member.estimate.people, null);
-  const programme = await gatewayFor({ who: OWNER, native: false, matchBatch, jobs })("simulate", start);
-  assert.match(programme.statement, /人数不显示/);
 });
 
 // ---------------------------------------------------------------------------

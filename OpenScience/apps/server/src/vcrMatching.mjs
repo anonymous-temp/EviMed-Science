@@ -1250,39 +1250,6 @@ export function evidenceGaps(judgments) {
   return [...gaps.values()];
 }
 
-/** Deferrals that have come due and must be re-evaluated (plan §7.1 point 4). */
-export function dueRechecks(judgments, now) {
-  const at = instant(now) ?? Date.now();
-  return (judgments ?? []).flatMap(judgment => {
-    if (!judgment || judgment.applicable === false) return [];
-    const recheckAt = earliest([
-      (judgment.requirementState ?? judgment.state) === PENDING_RECHECK ? judgment.recheckAt : null,
-      judgment.applicabilityState === PENDING_RECHECK ? judgment.applicabilityRecheckAt : null,
-    ]);
-    return recheckAt !== null && /** @type {number} */ (instant(recheckAt)) <= at ? [{ criterionId: judgment.criterionId, recheckAt }] : [];
-  });
-}
-
-/**
- * The model's clinical priority, carried but never merged.
- *
- * It is a ranking hint and the interface says so in as many words. It is not a
- * probability of benefit, it is not multiplied into the counts, and a subject
- * never changes eligibility because of it.
- * @param {any} priority
- */
-export function labelClinicalPriority(priority) {
-  if (priority == null) return null;
-  const score = Number(priority.score);
-  return {
-    score: Number.isFinite(score) ? score : null,
-    rationale: String(priority.rationale ?? ""),
-    decidedBy: "model",
-    isBenefitProbability: false,
-    label: "临床优先级（不是获益概率）",
-  };
-}
-
 // ---------------------------------------------------------------------------
 // One assessment
 // ---------------------------------------------------------------------------
@@ -1309,7 +1276,7 @@ export function frozenAsOf(value) {
  *
  * @param {{ studyId?: string, protocolVersionId?: string|null, subjectKey: string,
  *   direction?: string, criteria: readonly any[], facts: readonly any[],
- *   documents?: any, modelJudgments?: Record<string, any>, priority?: any,
+ *   documents?: any, modelJudgments?: Record<string, any>,
  *   provenance?: { modelId?: string, promptVersion?: string, criteriaVersion?: string, vocabularyVersion?: string, inputSnapshotId?:string } | null,
  *   asOf: number|string|Date, unitConverter?: (value: number, from: string, to: string) => number|null }} input
  */
@@ -1357,8 +1324,7 @@ export function assessSubject(input) {
     // Which model, which prompt and which criteria produced the language
     // judgments (plan §7.1; attachment A2 §4.3). It is carried, never used in
     // the verdict: when any of the three changes the old assessment is
-    // superseded rather than overwritten, and `matchingReportDiff` needs the
-    // three to say what changed between two measurements.
+    // superseded rather than overwritten.
     clinicalHistory: { superseded: longitudinal.superseded, conflicts: longitudinal.conflicts },
     provenance: { ...(input.provenance ?? {}), matchingEvaluatorVersion: VCR_MATCHING_EVALUATOR_VERSION,
       vocabularyVersion: input.provenance?.vocabularyVersion ?? VCR_MATCHING_VOCABULARY_VERSION,
@@ -1377,46 +1343,11 @@ export function assessSubject(input) {
     summary: VCR_ELIGIBILITY_SUMMARIES.includes(summary) ? summary : "pending",
     counts,
     judgments,
-    priority: labelClinicalPriority(input.priority),
     evidenceGaps: evidenceGaps(judgments),
     blockingExclusionUnknowns: blockingExclusionUnknowns(judgments),
     voidedFacts: voided,
     factsWithheldAsFuture: notYetVisible,
     modelDecidedCount: judgments.filter((judgment) => judgment.decidedBy === "model").length,
-  };
-}
-
-/**
- * The structured companion a `vcr-matching-assessment` deliverable ships
- * (`matching.json`; the domain's `vcrMatchingFindings` reads exactly this).
- * @param {ReturnType<typeof assessSubject>} assessment
- */
-export function matchingAssessmentDocument(assessment) {
-  return {
-    subjectKey: assessment.subjectKey,
-    asOf: assessment.asOf,
-    provenance: publicMatchingProvenance(assessment.provenance),
-    summary: assessment.summary,
-    counts: assessment.counts,
-    priority: assessment.priority,
-    evidenceGaps: assessment.evidenceGaps,
-    voidedFacts: assessment.voidedFacts,
-    judgments: assessment.judgments.map((judgment) => ({
-      criterionId: judgment.criterionId,
-      kind: judgment.kind,
-      criterionType: judgment.criterionType,
-      state: judgment.state,
-      applicable: judgment.applicable,
-      requirementState: judgment.requirementState,
-      applicabilityState: judgment.applicabilityState,
-      applicabilityEvidence: (judgment.applicabilityEvidence ?? []).map((item) => ({ quote: item.quote, locator: item.locator })),
-      applicabilityMissing: judgment.applicabilityMissing,
-      applicabilityRecheckAt: judgment.applicabilityRecheckAt,
-      requirementMissing: judgment.requirementMissing,
-      decidedBy: judgment.decidedBy,
-      recheckAt: judgment.recheckAt,
-      evidence: judgment.evidence.map((item) => ({ quote: item.quote, locator: item.locator })),
-    })),
   };
 }
 
@@ -1720,44 +1651,5 @@ export function runMatchingEvaluation(dataset) {
       criterionPairs, subjectPairs, applicabilityPairs, raterA, raterB,
     }),
     matchingEvaluatorVersion: VCR_MATCHING_EVALUATOR_VERSION,
-  };
-}
-
-/**
- * What changed between two evaluation runs (C2-20's last line).
- *
- * Reported, never gated. A model version, a prompt version or a criteria
- * revision moves these numbers, and the only useful thing to say about the
- * movement is its size and its direction on each metric that matters — plus
- * which criteria flipped, because that is where the cause is. Declaring a
- * regression from one run of a 42-pair set would be arithmetic theatre; the
- * interval on the difference is wider than most of the differences.
- *
- * @param {any} previous @param {any} current
- */
-export function matchingReportDiff(previous, current) {
-  const delta = (path) => {
-    const before = path.split('.').reduce((value, key) => value?.[key], previous);
-    const after = path.split('.').reduce((value, key) => value?.[key], current);
-    if (!Number.isFinite(before) || !Number.isFinite(after)) return { before: before ?? null, after: after ?? null, change: null };
-    return { before, after, change: after - before };
-  };
-  const falseExclusionRate = delta("subject.falseExclusionRate");
-  if ((previous?.subject?.metricVersion ?? 1) !== (current?.subject?.metricVersion ?? 1)) {
-    falseExclusionRate.change = null;
-  }
-  return {
-    versions: { previous: previous?.provenance ?? previous?.label ?? null, current: current?.provenance ?? current?.label ?? null },
-    criterionAgreement: delta("criterion.agreement"),
-    unknownRate: delta("criterion.unknownRate"),
-    unknownReadAsSatisfied: delta("criterion.unknownReadAsSatisfied"),
-    satisfiedReadAsNotSatisfied: delta("criterion.satisfiedReadAsNotSatisfied"),
-    eligibleRecall: delta("subject.eligibleRecall"),
-    falseExclusionRate: { ...falseExclusionRate, definitionChanged: (previous?.subject?.metricVersion ?? 1) !== (current?.subject?.metricVersion ?? 1) },
-    missedEligibleIncludingUnknown: delta("subject.missedEligibleIncludingUnknown"),
-    unknownEligibleRate: delta("subject.unknownEligibleRate"),
-    numberNeededToScreen: delta("subject.numberNeededToScreen"),
-    gated: false,
-    note: "版本间差异只报告，不门控；一次评测集上的差值不足以宣布回归。",
   };
 }

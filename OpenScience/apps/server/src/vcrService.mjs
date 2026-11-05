@@ -1292,7 +1292,7 @@ export class VcrService {
     const marks = await this.packages.erasure?.assessmentMarks?.(study.id, subjectRows.map((row) => String(row.id))).catch(() => new Map()) ?? new Map();
     const subjects = subjectRows.map((row) => ({
       id: String(row.id), subjectKey: String(row.subject_key), summary: String(row.summary), counts: row.counts ?? {},
-      priority: row.priority ?? null, direction: String(row.direction ?? "trial_to_patient"), asOf: row.as_of, reviewedBy: row.reviewed_by ?? null,
+      direction: String(row.direction ?? "trial_to_patient"), asOf: row.as_of, reviewedBy: row.reviewed_by ?? null,
       basis: marks.get(String(row.id))?.cause === "withdrawn" ? "withdrawn" : marks.has(String(row.id)) ? "updated" : null,
       // Made by an earlier set of rules: it stands, and says so. (vcr-eligibility-2 read a filled 0 as affirmed.)
       evaluatorOlder: object(row.provenance).matchingEvaluatorVersion !== VCR_MATCHING_EVALUATOR_VERSION,

@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-package",
-  "version": "sha256:3008e970ce15c9facf1919aae50fd28471943225923e867f5b8f6fc54816f5ee",
+  "version": "sha256:89e9e7f0e2afae50b548f64aec8d196583d8571c3479221d52c1363b632f7751",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 27,
@@ -907,7 +907,7 @@
     {
       "name": "mcp__evimed__vcr_write",
       "source": "mcp",
-      "description": "Save research objects, never calculated results. data_intake imports/maps/freezes uploads (read contracts). patient_context takes data={sourceId,generation,sha256} from uploads, {sourceId} for a knowledge-base original, or {messageSeq} for a human case; add subjectKey for a patient already here; their trials are re-judged. task_context opens a task. A fact for structured screening states only what its quote says: what the text does not mention is unknown, never negated. trial_judgment saves your judgment of a patient against a trial or protocol, with sentence ids as evidence. A candidate_trial's criteria are that one trial's own eligibility lines. For object contracts use the workflow skill (read /opt/evimed/capability-skills/vcr-matching/SKILL.md before matching trials; vcr-protocol, vcr-evidence, vcr-analysis and vcr-package sit beside it; none is in the catalogue) and vcr_simulate action=shape for numerical inputs.",
+      "description": "Save research objects, never calculated results. data_intake imports/maps/freezes uploads (read contracts). patient_context takes data={sourceId,generation,sha256} from uploads, {sourceId} for a knowledge-base original, or {messageSeq} for a human case; add subjectKey for a patient already here; their trials are re-judged. task_context opens a task. A fact for structured screening states only what its quote says: what the text does not mention is unknown, never negated. trial_judgment saves your judgment of a patient against a trial or protocol, with sentence ids as evidence. For object contracts use the workflow skill (read /opt/evimed/capability-skills/vcr-matching/SKILL.md before matching trials; vcr-protocol, vcr-evidence, vcr-analysis and vcr-package sit beside it; none is in the catalogue) and vcr_simulate action=shape for numerical inputs.",
       "inputSchema": {
         "type": "object",
         "properties": {

@@ -109,8 +109,6 @@ JOB_KINDS = ("fit_survival_model", "apply_prognostic_model",
     "generate_patients_longitudinal",
     # a generated population against a second baseline table (2026-11-01)
     "population_check",
-    # the batch reading of patient records for the criteria's facts (2026-11-01)
-    "match_extract",
     # patient and trial judged by the model, pair by pair (2026-11-04)
     "match_judge",
     # many patients' records taken in as a job (2026-11-04)
@@ -334,9 +332,6 @@ def _detailed_tool_definitions():
                 "How to read the results is in the vcr-analysis skill."
                 "For matching, selection names one protocolVersionId or up to ten protocolVersionIds, subjectKeys "
                 "and direction; continue a frozen batch with snapshotId and offset. "
-                "match_extract reads the study's patient records for the facts the criteria ask about, one record at a time, in a "
-                "job of its own: selection takes protocolVersionId, subjectKeys, asOf and prefilter, and no scenario. The answer "
-                "states what will be read and its cost before the work begins; a canceled or repeated start does not read a record twice. "
                 "match_judge has the model judge patients against trials, pair by pair, in a job of its own: selection takes subjectKey and registryIds "
                 "(one patient, a list of trials, with collection and collectionRevision for a frozen set) or a searchId from candidates "
                 "(the platform takes the trials from that saved list, best first; candidateLimit keeps the first N of either), or protocolVersionId and subjectKeys (one protocol, a roster); "
@@ -1152,18 +1147,6 @@ def shape(arguments: dict) -> dict:
             "warnings": [],
             "next_actions": ["Use vcr_write what=data_intake (read contracts first); the import job is queued for you."],
         }
-    if kind == "match_extract":
-        # Not an engine method and not a stored-record scenario: the platform plans the reading from the study and takes a selection only.
-        return {
-            "status": "success",
-            "summary": "match_extract is built by the platform from the study; you state nothing in a scenario, only a selection.",
-            "data": {"kind": kind, "method": "matching.extract", "builtByPlatform": True, "runStates": [], "keys": [],
-                     "notes": ["selection takes protocolVersionId, subjectKeys, asOf and prefilter (false reads people whose table values already decide the protocol against them). "
-                               "The answer states how many records will be read and the most they can cost before the work begins. "
-                               "It is read once: a canceled or repeated start reads only what was not read. When it finishes, start match_criteria for the same people."]},
-            "warnings": [],
-            "next_actions": ["Start it with vcr_simulate action start, kind match_extract and no scenario."],
-        }
     entry, method_id, method = _method_of(kind)
     if method is None:
         raise VcrPlatformError("vcr_scenario_help_unavailable", "This build's scenario help has no entry for %s." % kind)
@@ -1474,7 +1457,7 @@ def _with_entry(answer: dict, data: dict) -> dict:
     return {**answer, "next_actions": [*answer.get("next_actions", []), line]}
 
 
-MATCH_BATCH_KINDS = ("match_extract", "match_judge", "records_import")
+MATCH_BATCH_KINDS = ("match_judge", "records_import")
 
 
 def _job_read_back(data: dict) -> str:

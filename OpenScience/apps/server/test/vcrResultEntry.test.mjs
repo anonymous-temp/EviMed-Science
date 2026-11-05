@@ -85,15 +85,7 @@ test("a matching write carries the entry to 匹配; a write that wrote nothing, 
   for (const what of VCR_MATCHING_WRITE_WHATS) assert.ok(VCR_WRITE_WHATS.includes(what), what);
 });
 
-test("P2-10 the two computations whose completion only the conversation heard have inbox words of their own: a reading of records and a check of a population", () => {
-  const read = vcrJobNoticeText({ resultKind: "match_extract", state: "succeeded", result: { measures: [{ name: "records_read", value: 312 }], diagnostics: { remaining: 0 } } });
-  assert.deepEqual([read?.title, read?.tab], ["病历阅读完成：读完 312 份病历", "matching"]);
-  assert.match(String(read?.body), /匹配/);
-  const stopped = vcrJobNoticeText({ resultKind: "match_extract", state: "succeeded", result: { measures: [{ name: "records_read", value: 40 }], diagnostics: { remaining: 272, canceled: true } } });
-  assert.equal(stopped?.title, "病历阅读完成：读了 40 份病历，中途停下，还有 272 份没读");
-  assert.equal(vcrJobNoticeText({ resultKind: "match_extract", state: "succeeded", result: { measures: [{ name: "records_read", value: 0 }] } })?.title, "病历阅读完成");
-  const partly = vcrJobNoticeText({ resultKind: "match_extract", state: "succeeded", result: { measures: [{ name: "records_read", value: 40 }, { name: "records_failed", value: 2 }], diagnostics: { remaining: 0 } } });
-  assert.equal(partly?.title, "病历阅读完成：读完 40 份病历，2 份没读成", "failures are said in the title, not left for the page");
+test("P2-10 the computations whose completion only the conversation heard have inbox words of their own: a judging of pairs and a check of a population", () => {
   const judged = vcrJobNoticeText({ resultKind: "match_judge", state: "succeeded", result: { measures: [{ name: "pairs_finished", value: 18 }, { name: "pairs_total", value: 20 }, { name: "pairs_failed", value: 2 }] } });
   assert.deepEqual([judged?.title, judged?.tab], ["患者与试验判定完成：判定了 18/20 对，2 对没判成", "matching"]);
   // A job that stopped reads as stopped, in the title: every pair scored and no clause read, or a budget gone, is no 「完成」.
@@ -104,12 +96,9 @@ test("P2-10 the two computations whose completion only the conversation heard ha
   assert.equal(whole?.title, "患者与试验判定完成：判定了 3/3 对");
   const halted = vcrJobNoticeText({ resultKind: "match_judge", state: "succeeded", result: { conclusion: "limited", diagnostics: { changes: { sentence: "重算后 1 个试验结论变化。" } }, measures: [{ name: "pairs_finished", value: 1 }, { name: "pairs_total", value: 3 }] } });
   assert.equal(halted?.title, "患者与试验判定没有做完：判定了 1/3 对", "a comparison over part of the pairs is no headline");
-  assert.equal(vcrJobNoticeText({ resultKind: "match_extract", state: "succeeded", result: { conclusion: "limited", measures: [{ name: "records_read", value: 40 }], diagnostics: { remaining: 272 } } })?.title, "病历阅读没有做完：读了 40 份病历，中途停下，还有 272 份没读");
   assert.equal(vcrJobNoticeText({ resultKind: "comparator", state: "succeeded", result: { conclusion: "limited", measures: [] } })?.title, "对照分析完成：有限制地估计", "a limited estimate of an engine job is a finished result");
   const nothing = vcrJobNoticeText({ resultKind: "match_judge", state: "failed", error: { code: "insufficient_quota", message: "20 对都没有判定成" } });
   assert.match(String(nothing?.title), /^患者与试验判定没有算完/);
-  const failed = vcrJobNoticeText({ resultKind: "match_extract", state: "failed", error: { code: "usage_budget_exceeded" } });
-  assert.match(String(failed?.title), /^病历阅读没有算完/);
   const check = vcrJobNoticeText({ resultKind: "population_check", state: "succeeded", result: { measures: [{ name: "variables_compared", value: 6 }, { name: "variables_apart", value: 2 }] } });
   assert.deepEqual([check?.title, check?.tab], ["人群核对完成：比较了 6 个变量，2 个有差异", "population"]);
   assert.equal(vcrJobNoticeText({ resultKind: "population_check", state: "succeeded", result: { measures: [{ name: "variables_compared", value: 6 }, { name: "variables_apart", value: 0 }] } })?.title, "人群核对完成：比较了 6 个变量，都接近");

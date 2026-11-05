@@ -93,7 +93,7 @@ export function vcrJobNoticeText({ resultKind, stage = null, label = null, state
   const what = resultKind === "trial_scenario"
     ? (/** @type {Record<string, string>} */ ({ analytic: "方案计算", simulation: "方案模拟", assurance: "成功把握计算" })[String(stage)] ?? "方案模拟")
     : (/** @type {Record<string, string>} */ ({ population: "人群生成", patient_set: "虚拟患者生成", comparator: "对照分析", design_grid: "设计网格",
-      accrual_forecast: "入组预测", matching: "匹配评估", match_extract: "病历阅读", match_judge: "患者与试验判定", records_import: "导入病历", population_check: "人群核对" })[resultKind] ?? "计算");
+      accrual_forecast: "入组预测", matching: "匹配评估", match_judge: "患者与试验判定", records_import: "导入病历", population_check: "人群核对" })[resultKind] ?? "计算");
   const name = clip(String(label ?? "").replace(/^[A-Z]\d*\s+/, ""), 24);
   if (state === "failed") {
     const code = typeof error?.code === "string" ? error.code : "";
@@ -108,7 +108,7 @@ export function vcrJobNoticeText({ resultKind, stage = null, label = null, state
   const measure = (/** @type {string} */ wanted) => list(result?.measures).map((entry) => /** @type {any} */ (entry))
     .find((entry) => entry && entry.name === wanted && finiteNumber(entry.value) !== null);
   // A job that reads record by record or pair by pair ends `limited` when it stopped before the end, which a reader must hear; an engine's limited estimate is a finished result.
-  const stopped = result?.conclusion === "limited" && ["match_extract", "match_judge", "records_import"].includes(resultKind);
+  const stopped = result?.conclusion === "limited" && ["match_judge", "records_import"].includes(resultKind);
   /** @type {string | null} */
   let headline = null;
   if (resultKind === "trial_scenario") {
@@ -126,14 +126,6 @@ export function vcrJobNoticeText({ resultKind, stage = null, label = null, state
     const generated = finiteNumber(result?.counts?.generatedRecords);
     const real = finiteNumber(result?.counts?.realPatients);
     headline = generated !== null && generated > 0 ? `${count(generated)} 条生成记录` : real !== null && real > 0 ? `${count(real)} 人` : null;
-  } else if (resultKind === "match_extract") {
-    // The reading of patient records is the one computation that takes hours: the person is told it is over, and how much of it was read.
-    // A record that could not be read is said here too: 「完成」 over a reading with failures in it is the wrong sentence.
-    const read = measure("records_read");
-    const failed = measure("records_failed");
-    const left = finiteNumber(result?.diagnostics?.remaining) ?? 0;
-    const failedWords = failed && failed.value > 0 ? `，${count(failed.value)} 份没读成` : "";
-    headline = read && read.value > 0 ? (left > 0 ? `读了 ${count(read.value)} 份病历，中途停下，还有 ${count(left)} 份没读${failedWords}` : `读完 ${count(read.value)} 份病历${failedWords}`) : null;
   } else if (resultKind === "match_judge") {
     const finished = measure("pairs_finished");
     const total = measure("pairs_total");

@@ -11,7 +11,6 @@ import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { DataSemanticsService } from "../src/dataSemanticsService.mjs";
 import { ProductDocuments } from "../src/productStore.mjs";
 import { vcrSubjectTableSeam } from "../src/vcrComposition.mjs";
-import { planBatch } from "../src/vcrMatchBatch.mjs";
 import { assessSubject, storedExclusion } from "../src/vcrMatching.mjs";
 import { subjectTableFacts } from "../src/vcrMatchingTable.mjs";
 import {
@@ -21,7 +20,7 @@ import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
 import { productDocumentsDouble } from "./helpers/productDocumentsDouble.mjs";
 
 const STUDY = { id: "std_1", userId: "u1", projectId: "p1" };
-const config = { deepseekModel: "deepseek-flash", vcrMatchBatchMaxSubjects: 300 };
+const config = { deepseekModel: "deepseek-flash" };
 const PEOPLE = Array.from({ length: 12 }, (_, index) => `P${String(index + 1).padStart(3, "0")}`);
 /** Two people have diabetes (P003 and P007); the others do not. */
 const DIABETES = (/** @type {string} */ key) => (key === "P003" || key === "P007" ? "1" : "0");
@@ -275,11 +274,6 @@ const CRITERIA = [
   // a variable no column holds: the record is read for it, which is what makes a prefilter worth having
   { id: "bm", kind: "exclusion", criterionType: "comorbidity", sourceText: "Active brain metastases", requirement: storedExclusion({ op: "present", variable: "brain_metastasis" }) },
 ];
-const ROSTER = PEOPLE.map((subjectKey, index) => ({ id: `d${index}`, subjectKey, chars: 400 }));
-const storeDouble = () => ({
-  async latestProtocol() { return { id: "pv_1" }; }, async listCriteria() { return CRITERIA; }, async withdrawnSubjects() { return new Set(); },
-  async extractionsRead() { return new Set(); },
-});
 /** The seam over a plane double that serves the fixture table and records its cloud authorizations. */
 function seamOn(/** @type {any} */ double, /** @type {any} */ semantics = semanticsOn(), /** @type {any} */ source = table()) {
   /** @type {any[]} */ const authorized = [];
@@ -289,36 +283,6 @@ function seamOn(/** @type {any} */ double, /** @type {any} */ semantics = semant
   };
   return { seam: vcrSubjectTableSeam({ dataPlane: /** @type {any} */ (dataPlane), semantics: () => semantics, config, callModel: double.callModel }), authorized };
 }
-
-test("the plan's prefilter leaves unread the people the table decides against: DIABETES = 1 under the model's map, and not DIABETES = 0", async () => {
-  const double = model();
-  const { seam, authorized } = seamOn(double);
-  const built = await planBatch({ study: STUDY, matchStore: /** @type {any} */ (storeDouble()), documents: { roster: async () => ROSTER }, subjectTable: seam, config });
-  assert.equal(built.ok, true);
-  // P003 and P007 have diabetes (1); P002, P005, P008 and P011 have EGFR_STATUS Negative, which the model placed under egfr_mutation and
-  // read as absent. Everyone else, the 0s of DIABETES included, is not decided by the table and their record is read.
-  assert.deepEqual(built.ok && built.plan.prefiltered.sort(), ["P002", "P003", "P005", "P007", "P008", "P011"]);
-  assert.deepEqual(built.ok && built.plan.toRead.map((entry) => entry.subjectKey).sort(), ["P001", "P004", "P006", "P009", "P010", "P012"]);
-  assert.deepEqual(built.ok && built.variables, ["brain_metastasis"], "the table answers every variable but the one no column holds");
-  assert.deepEqual(built.ok && built.plan.answeredByTable, ["age", "diabetes", "egfr_mutation"]);
-  assert.equal(double.calls.length, 1);
-  assert.equal(authorized.length, 1, "the codes were authorized for the cloud before they were sent");
-  assert.equal(authorized[0].snapshotId, "snp_Table/1");
-  assert.equal(authorized[0].principal, "u1");
-  // the second start reads what is recorded
-  await planBatch({ study: STUDY, matchStore: /** @type {any} */ (storeDouble()), documents: { roster: async () => ROSTER }, subjectTable: seam, config });
-  assert.equal(double.calls.length, 1);
-});
-
-test("with no meaning (the model is down) nobody is prefiltered out and the record is still asked about the variable the table cannot read", async () => {
-  const double = model(Object.assign(new Error("down"), { code: "upstream_unavailable" }));
-  const { seam } = seamOn(double);
-  const built = await planBatch({ study: STUDY, matchStore: /** @type {any} */ (storeDouble()), documents: { roster: async () => ROSTER }, subjectTable: seam, config });
-  assert.equal(built.ok, true);
-  assert.deepEqual(built.ok && built.plan.prefiltered, [], "an unread code excludes nobody");
-  assert.equal(built.ok && built.plan.toRead.length, 12);
-  assert.deepEqual(built.ok && built.variables, ["brain_metastasis", "diabetes", "egfr_mutation"], "age is compared by its value and stays with the table; the codes it cannot read go to the record, and so does the column it cannot place");
-});
 
 test("the seam reads the meaning with the table when asked the variables, and a running job reads it without asking", async () => {
   const double = model();

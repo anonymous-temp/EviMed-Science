@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-protocol",
-  "version": "sha256:59c6048b646dbc9d4454bffd102e5b0824ae638e944718b84fb6430d3f634ca6",
+  "version": "sha256:2e6024400b082c672aa7b14ef0e93375cb31bac8681a3e103e88e5dc0ecbc5bf",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 34,
@@ -1379,7 +1379,6 @@
               "prognostic_adjustment_comparator",
               "generate_patients_longitudinal",
               "population_check",
-              "match_extract",
               "match_judge",
               "records_import",
               "forecast_trajectories",
@@ -1492,7 +1491,7 @@
     {
       "name": "mcp__evimed__vcr_write",
       "source": "mcp",
-      "description": "Save research objects, never calculated results. data_intake imports/maps/freezes uploads (read contracts). patient_context takes data={sourceId,generation,sha256} from uploads, {sourceId} for a knowledge-base original, or {messageSeq} for a human case; add subjectKey for a patient already here; their trials are re-judged. task_context opens a task. A fact for structured screening states only what its quote says: what the text does not mention is unknown, never negated. trial_judgment saves your judgment of a patient against a trial or protocol, with sentence ids as evidence. A candidate_trial's criteria are that one trial's own eligibility lines. For object contracts use the workflow skill (read /opt/evimed/capability-skills/vcr-matching/SKILL.md before matching trials; vcr-protocol, vcr-evidence, vcr-analysis and vcr-package sit beside it; none is in the catalogue) and vcr_simulate action=shape for numerical inputs.",
+      "description": "Save research objects, never calculated results. data_intake imports/maps/freezes uploads (read contracts). patient_context takes data={sourceId,generation,sha256} from uploads, {sourceId} for a knowledge-base original, or {messageSeq} for a human case; add subjectKey for a patient already here; their trials are re-judged. task_context opens a task. A fact for structured screening states only what its quote says: what the text does not mention is unknown, never negated. trial_judgment saves your judgment of a patient against a trial or protocol, with sentence ids as evidence. For object contracts use the workflow skill (read /opt/evimed/capability-skills/vcr-matching/SKILL.md before matching trials; vcr-protocol, vcr-evidence, vcr-analysis and vcr-package sit beside it; none is in the catalogue) and vcr_simulate action=shape for numerical inputs.",
       "inputSchema": {
         "type": "object",
         "properties": {

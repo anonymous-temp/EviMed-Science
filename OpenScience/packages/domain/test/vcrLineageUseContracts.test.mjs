@@ -32,7 +32,6 @@ import {
   resultNumbers,
   reviewStateFor,
   validateRequirement,
-  vcrMatchingFindings,
   vcrStudyPackageFindings,
 } from "@evimed/domain";
 
@@ -308,10 +307,4 @@ test("a not-estimable package says exactly which field is missing", () => {
   assert.match(notice.message, /entropy_balance_infeasible/, "and what the field may hold");
   const wrong = vcrStudyPackageFindings(pkg({ conclusion: "not_estimable", notEstimableRule: "because", counts: { realPatients: 0, events: 0, effectiveSampleSize: null, generatedRecords: 0 } }));
   assert.match(wrong.issues.find((issue) => issue.code === "vcr_not_estimable_rule_missing")?.message ?? "", /「because」/);
-});
-
-test("the matching contract is untouched: unanchored judgments and a contradicted summary are still noticed", () => {
-  const files = new Map([["matching.json", JSON.stringify({ summary: "eligible", judgments: [{ criterionId: "c", kind: "exclusion", state: "unknown" }] })]]);
-  const found = vcrMatchingFindings({ files });
-  assert.ok(found.issues.some((issue) => issue.code === "vcr_summary_contradicted"));
 });

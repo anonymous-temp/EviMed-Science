@@ -856,7 +856,7 @@ export const VCR_JOB_KINDS = frozen([
   // --- end longitudinal ---
   // --- appended (2026-11-01): a generated population against a second baseline table (remediation plan D2) ---
   'population_check',
-  // --- appended (2026-11-01): the batch reading of patient records for the criteria's facts (remediation plan D4) ---
+  // --- appended (2026-11-01): the batch reading of patient records for the criteria's facts (remediation plan D4); retired, see VCR_RETIRED_JOB_KINDS ---
   'match_extract',
   // --- appended (2026-11-04): patient and trial judged by the model, pair by pair (owner decisions 2026-11-04) ---
   'match_judge',
@@ -864,6 +864,9 @@ export const VCR_JOB_KINDS = frozen([
   'records_import',
   'forecast_trajectories', 'evaluate_forecast', 'compare_forecasts', 'benchmark_trial_effect',
 ])
+
+/** Kinds that rows already stored carry and that nothing starts any more: they stay in `VCR_JOB_KINDS` so those rows keep reading. */
+export const VCR_RETIRED_JOB_KINDS = frozen(['match_extract'])
 /**
  * Which of the seven steps an engine job belongs to, by its kind: the step bar's dot and the activity strip say "the patients are
  * being generated", not "generate_patients_continuous". A kind with no step of its own (a forecast, a benchmark, an E-value that a
