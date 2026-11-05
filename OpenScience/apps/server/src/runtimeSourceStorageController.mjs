@@ -34,7 +34,10 @@ async function storageRoots(config, project, incarnation, contextReference) {
   const roots = [{ contextReference: null, memoryNamespaceId: null, home: ordinary }];
   const contextRoot = contextGenerationRoot(config, project), generations = path.join(contextRoot, 'generations');
   await assertNoSymlinkPath(config.dataDir, generations, { allowMissingTail: true });
-  if (contextReference !== null && contextReference !== undefined) await verifyContextGeneration(config, project, contextReference);
+  if (contextReference !== null && contextReference !== undefined) {
+    const current = await verifyContextGeneration(config, project, contextReference);
+    if (instant(current.manifest.policy.ownerCreatedAt) !== owner || instant(current.manifest.policy.projectCreatedAt) !== created) throw fail();
+  }
   const entries = await fs.readdir(generations, { withFileTypes: true }).catch(error => { if (error.code === 'ENOENT') return []; throw error; });
   if (entries.length > 1000) throw fail('runtime_source_inventory_limit', 503);
   const policies = new Set();
