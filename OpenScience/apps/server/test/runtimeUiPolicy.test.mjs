@@ -42,7 +42,7 @@ async function eventually(predicate) {
   assert.ok(predicate(), "condition did not become true within 500ms");
 }
 
-async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = null, preparePrompt = null, recordPromptActor = null, recordPromptAttendance = null, agentRuns = null, audit = undefined, managedBrowser = null, balanceGate = null, recordUploadAttempt = null, recordUploadSuccess = null, noteFileRead = null, beforeDataCleanup = null, shared = null } = {}) {
+async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = null, preparePrompt = null, recordPromptActor = null, recordPromptAttendance = null, agentRuns = null, audit = undefined, managedBrowser = null, balanceGate = null, recordUploadAttempt = null, recordUploadSuccess = null, noteFileRead = null, beforeDataCleanup = null, shared = null, sourceDeletion = null } = {}) {
   const dataDir = await mkdtemp(path.join(os.tmpdir(), "evimed-ui-policy-"));
   const peers = new Set(), clients = new Set();
   let upstream, wss, ui;
@@ -118,7 +118,7 @@ async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = n
     return { project, principal };
   } : null;
   if (shared) { manager.subagentCatalogue = async () => shared.children ?? []; manager.runtimeGeneration = () => 'generation'; }
-  ui = createRuntimeUiServer({ config, store, runtimeManager: manager, authorizePrompt, preparePrompt, recordPromptActor, recordPromptAttendance, agentRuns, audit, managedBrowser, balanceGate, recordUploadAttempt, recordUploadSuccess, noteFileRead,
+  ui = createRuntimeUiServer({ config, store, runtimeManager: manager, sourceDeletion, authorizePrompt, preparePrompt, recordPromptActor, recordPromptAttendance, agentRuns, audit, managedBrowser, balanceGate, recordUploadAttempt, recordUploadSuccess, noteFileRead,
     resolveDelegatedFrame,
     createDelegatedPolicy: shared ? async identity => new GeoNativeFramePolicy({ ...identity, config, runtimeManager: manager,
       authority: { withFrame: async (actor, claims, operation) => {
@@ -2614,4 +2614,31 @@ test('native Remote file-upload fallback retains only upstream-confirmed origina
     value: { receiptId: 'native-receipt', file: { attachmentId: 'native-attachment', name: 'cases.csv', bytes: bytes.length } } }));
   await c.next();
   assert.equal(successes.length, 1); assert.deepEqual(successes[0].bytes, bytes); assert.equal(successes[0].sessionId, 's1');
+});
+
+
+test('ordinary native HTTP and mux fence deleted identities and recheck in-flight output', { timeout: 10000 }, async t => {
+  const deleted = new Set();
+  const sourceDeletion = {
+    async authorize(_project, _method, payload) { if (deleted.has(payload?.args?.sessionId)) throw new HttpError(404, 'runtime_session_not_found', 'Conversation not found.'); },
+    async projectValue(project, method, payload, value) {
+      await this.authorize(project,method,payload);
+      return {forward:true,value:Array.isArray(value)?value.filter(row=>!deleted.has(row.sessionId)):value};
+    },
+  };
+  const f=await fixture(t, {}, {}, {sourceDeletion});
+  f.manager.proxy=RuntimeManager.prototype.proxy.bind(f.manager);
+  f.upstream.on('request',(req,res)=>{ const chunks=[];req.on('data',part=>chunks.push(part));req.on('end',()=>{
+    const call=JSON.parse(Buffer.concat(chunks).toString());
+    if(call.method==='session/list') deleted.add('gone');
+    res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({type:'server-response',rpcId:call.rpcId,result:{ok:true,value:[{sessionId:'gone',title:'private'},{sessionId:'keep'}]}}));
+  });});
+  const rpc=(method,args)=>fetch(`${f.base}/api/${method}`,{method:'POST',headers:{cookie:f.cookie,Origin:UI_ORIGIN,'content-type':'application/json'},body:JSON.stringify({type:'client-request',rpcId:'r',method,payload:{args}})});
+  const list=await (await rpc('session/list',{_request:{}})).json();
+  assert.deepEqual(list.result.value,[{sessionId:'keep'}]);
+  assert.equal((await rpc('session/page',{sessionId:'gone'})).status,404);
+  const c=f.connect();assert.equal(await c.opened,101);
+  c.send(open('deleted-read','session/page',{sessionId:'gone'}));
+  assert.equal((await c.next()).type,'error');
+  assert.equal(f.received.some(frame=>frame.streamId==='deleted-read'),false);
 });
