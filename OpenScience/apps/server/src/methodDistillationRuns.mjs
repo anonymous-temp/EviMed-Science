@@ -42,13 +42,14 @@ import { createHash } from "node:crypto";
 
 import {
   METHOD_EVIDENCE_QUOTE_LENGTH, METHOD_OPERATIONS, TRAJECTORY_ANCHOR_RADIUS, isMcpToolName, isPlatformChoreographyTool, mcpToolBaseName, methodScientific,
-  parseSkillFrontmatter, projectMethodResultLinks, rootSessionOf, scopeRunTranscript, SKILL_AUTHORING_LIMITS, steeredMessages, trajectoryDigest, transcriptMessageText, unwrapUserWrappers,
+  parseSkillFrontmatter, projectMethodResultLinks, rootSessionOf, scopeRunTranscript, sourcePrivacyOf, SKILL_AUTHORING_LIMITS, steeredMessages, trajectoryDigest, transcriptMessageText, unwrapUserWrappers,
 } from "@evimed/domain";
 import { readArtifactShapes } from "./artifactShapes.mjs";
 import { LEARNING_PROJECT_ID, isInternalProject } from "./internalProjects.mjs";
 import { readRunTranscript, transcriptExcerpt } from "./runTranscripts.mjs";
 import { readToolTraces } from "./toolExecutionEdges.mjs";
 import { SCRIPT_CONVERSATIONS, SCRIPT_EVIDENCE_GENERATION, SCRIPT_RUNS } from "./scriptLessons.mjs";
+import { methodSourceAllowsLearning } from './runLearningScope.mjs';
 import { learnedMethodId, methodScopeOf, methodSourceProjects } from "./learningService.mjs";
 import { learningScopeOf, lessonPeers } from "./learningTriggers.mjs";
 import { recordSkippedBeforeReset } from "./memoryMetrics.mjs";
@@ -354,6 +355,7 @@ function anchoredExcerpts({ runId, trigger, messages, interventions, rootSession
  *   `scripts`: for a `script` lesson, the program that recurred — how often, and the source of up to three of its occurrences, so the variants are seen.
  */
 export function buildDistillationInput(input) {
+  if (!methodSourceAllowsLearning(input.run)) throw new HttpError(409, 'distillation_run_unavailable', 'Original private memory sources cannot teach a reusable method.');
   if (!DISTILLATION_TRIGGERS.includes(input.trigger)) {
     throw new HttpError(400, "distillation_trigger_invalid", "Unknown distillation trigger.");
   }
@@ -442,6 +444,7 @@ export function buildDistillationInput(input) {
     // The other clean runs of the same kind a `routine` induction compares against: each by its digest — what it was asked, what it
     // left, the order of its tools — and no raw lines. Empty for every other trigger.
     peerRuns: (input.peerRuns ?? []).slice(0, MAX_PEER_RUNS).map(peer => {
+      if (!methodSourceAllowsLearning(peer.run)) return { runId: peer.runId, trajectory: null, transcriptCompleteness: 'unavailable', sourcePrivacy: sourcePrivacyOf(peer.run) };
       const peerTrajectory = peer.transcript ? digestOf(peer.run ?? { id: peer.runId }, peer.transcript, peer.shapes, [], peer.toolTraces) : null;
       return { runId: peer.runId, trajectory: peerTrajectory,
         transcriptCompleteness: peerTrajectory?.runScope.available
@@ -733,6 +736,7 @@ export class MethodDistillationRuns {
    * @returns {Promise<{state: string, runId?: string, sessionId?: string, methodId?: string, operation?: string}>}
    */
   async execute({ job, project, run, feedback = [] }) {
+    if (!methodSourceAllowsLearning(run)) throw new HttpError(409, 'distillation_run_unavailable', 'Original private memory sources cannot teach a reusable method.');
     const trigger = String(job.payload?.trigger ?? "");
     // A shared GEO project's lesson reads only what a person's attributed input said (`GeoContextProvenance.observeRun`): the user turns of
     // the transcript are replaced by the observed human text, and nothing outside the project is shown.
@@ -856,6 +860,7 @@ export class MethodDistillationRuns {
       throw new HttpError(422, "method_candidate_invalid", `Unknown operation ${JSON.stringify(operation)}.`);
     }
     if (operation === "no_change") return { operation, methodId: undefined };
+    if (!methodSourceAllowsLearning(run)) throw new HttpError(409, 'distillation_run_unavailable', 'Original private memory sources cannot teach a reusable method.');
     // The conversation this lesson comes from was over before the account reset its memory: what the reset deleted is not
     // written back by a lesson that was already on its way (review M-11).
     if (this.resetInstant && endedBeforeReset(run, await this.resetInstant(job.userId).catch(() => null))) {
@@ -922,6 +927,8 @@ export class MethodDistillationRuns {
     if (context.evidence) this.onEvidence?.({ kept: verified.kept.length, dropped: verified.dropped });
     const provenance = {
       origin: "inferred",
+      ...(Object.hasOwn(run, 'sourcePrivacy') || Object.hasOwn(run, 'originalSources')
+        ? { sourcePrivacy: sourcePrivacyOf(run), originalSources: run.originalSources ?? [] } : {}),
       runId: run.id,
       feedbackEventIds: job.payload?.feedbackEventIds ?? [],
       ...(resultLinks.length ? { results: resultLinks } : {}),

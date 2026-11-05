@@ -76,3 +76,17 @@ test('original person lineage cannot become reusable through generic text or sha
   assert.equal(methodSourceAllowsLearning(rewritten), false);
   assert.equal(methodSourceAllowsLearning({ originalSources: [{ nativeType: 'notes' }] }), false);
 });
+
+test('private typed sources stop distillation, candidate writes and script recurrence before genericization', async () => {
+  const { buildDistillationInput, MethodDistillationRuns } = await import('../src/methodDistillationRuns.mjs');
+  const { ScriptLessons } = await import('../src/scriptLessons.mjs');
+  const run = { id: 'private', originalSources: [{ nativeType: 'people' }] };
+  assert.throws(() => buildDistillationInput({ run, trigger: 'routine', transcript: null }), { code: 'distillation_run_unavailable' });
+  const distiller = new MethodDistillationRuns({ learning: {}, dispatch: async () => { throw new Error('must not dispatch'); }, readResult: async () => null });
+  await assert.rejects(() => distiller.execute({ job: { payload: { trigger: 'routine' } }, project: {}, run }), { code: 'distillation_run_unavailable' });
+  await assert.rejects(() => distiller.applyCandidate({ payload: {} }, run, { candidate: { operation: 'create' } }), { code: 'distillation_run_unavailable' });
+  const scripts = new ScriptLessons({ uses: {}, execute: async () => { throw new Error('must not execute'); }, readTranscript: async () => { throw new Error('must not read'); } });
+  assert.deepEqual(await scripts.afterSettle({ userId: 'u' }, run), { recorded: 0, queued: [] });
+  const ordinary = buildDistillationInput({ run: { id: 'ordinary' }, trigger: 'routine', transcript: null, peerRuns: [{ runId: run.id, run, transcript: { messages: [] } }] });
+  assert.equal(ordinary.peerRuns[0].trajectory, null);
+});

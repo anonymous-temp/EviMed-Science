@@ -24,3 +24,11 @@ test('missing, duplicate, malformed, truncated or substituted judgements cannot 
     await assert.rejects(() => judgeBatch([{ id: 'a' }], { key: 'test-only', fetchImpl: async () => ({ ok: true, headers: new Headers(), json: async () => ({ model: patch.model ?? 'qwen3.8-max', choices: [{ finish_reason: patch.finish_reason ?? 'stop', message: { content: patch.content ?? '{"judgements":[{"id":"a","verdict":"pass","reason":"ok"}]}' } }] }) }) }));
   }
 });
+
+test('an unmet seed prerequisite is unknown even when extraction completes', async () => {
+  const { incompletePacket } = await import('../offlineJudge.mjs');
+  const base = { taskStatus: 'completed', expected: 'Keep the update', question: 'Correct?', source: { replay: { seed: [{ role: 'user', text: 'Old choice' }] } }, seedFiles: { 'profile.md': 'old' }, failures: [] };
+  assert.equal(incompletePacket(base), false);
+  assert.equal(incompletePacket({ ...base, failures: ['the seed did not store "Vancouver", so the replay starts from nothing'] }), true);
+  assert.equal(incompletePacket({ ...base, seedFiles: {} }), true);
+});

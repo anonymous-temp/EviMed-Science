@@ -441,7 +441,7 @@
 
 **对比线：** 每项要明显高于无记忆和简单检索，否则算没通过。
 
-**可信度：** 冻结版本，开发集和确认集分开（`register_pools.py`），确认集只跑一次；每个分数附模型、判分方式、题集和原始答案；能用代码判就不用模型；和外界比用官方判分，内部用 Claude（业主 11-03），抽 200 条交叉判分；分母不减。样本量：120 题约 ±7 个百分点，500 题约 ±3.5；300 次全过只能说失败率低于约 1%，3000 次低于 0.1%。全部在实验环境，关掉跨账号晋升；运行标 `automated`，用一次性账号，步骤写 `STATUS`，可断点续跑。
+**可信度：** 冻结版本，开发集和确认集分开（`register_pools.py`），确认集只跑一次；每个分数附模型、判分方式、题集和原始答案；能用代码判就不用模型；和外界比用官方判分，内部用百炼 `qwen3.8-max`（业主 11-05 替代 Claude），抽 200 条交叉判分；分母不减。样本量：120 题约 ±7 个百分点，500 题约 ±3.5；300 次全过只能说失败率低于约 1%，3000 次低于 0.1%。全部在实验环境，关掉跨账号晋升；运行标 `automated`，用一次性账号，步骤写 `STATUS`，可断点续跑。
 
 ## 10. 流程和机器
 
@@ -542,3 +542,12 @@ Run-evidence review through `f7e87241b`: raw captures remain complete while ever
 The second people-only development revision `2383cf918` has 33/39 mechanical passes on fresh engine data. The religious treatment-refusal case remains 0/3 in people; two of three source claims were instead retained in notes with attribution. The new nonnumeric unnamed-person case is 0/3 in people; its nonperson-topic counterexample is 3/3 negative. These source/type discrepancies remain failures under the frozen machine expectations. No Claude judgement, product benchmark or confirmation score is inferred from this replay.
 
 G4 product review completed through `bc1119a22`, including source tombstones, admitted-writer drainage, exact account/project incarnations, buffered output, revisions/undo and export lifetime fencing. Native semantic lineage that cannot be verified remains explicitly quarantined/pending; AgentBay capture returns503. The full deletion red-line count and remaining derived-artifact sweep are still pending. G7 is now addressing native-file attribution, original-source privacy and trusted run recall receipts before genericization.
+
+
+### Owner-directed closeout scope (2026-11-05)
+
+The owner replaced offline Claude judging with Bailian `qwen3.8-max` and requested prompt commit/push without further development expansion or repeated testing of one point. This supersedes the earlier Claude-pending exception. The operator-only judge now runs automatically on saved replay artifacts and resumes under source/packet/prompt hashes; its raw responses, requested/returned model, request IDs, usage and unknowns are retained privately. Code and JS/TS review accepted the judge and the typed original-source guards before embedding, distillation, script recurrence and candidate writes.
+
+The development semantic comparison is baseline **28 pass / 26 fail / 0 unknown, denominator54**, candidate **30 pass / 19 fail / 5 unknown, denominator54**. Five baseline source-infrastructure retries replace only their already-recorded failed originals; no quality failure was rerun. A failed candidate seed is classified unknown with its earlier judge verdict and raw response retained for audit. Mechanical results remain separate:160/195 and181/195. These modest development results do not establish the plan's comparison line or full product acceptance. `OpenScience/evals/capsule-proving/results/2026-11-05-development-judge-summary.json` records hashes, identities and counts; the model service returned an alias, not an immutable weights digest.
+
+Remaining work is explicit: authenticated child-turn receipt production and live product trajectory proof; personal retention preferences; remaining learning defects5–9,11–14,16 and their prescribed comparisons; official pyramid/training camp/code skills, tool worlds and public-product benchmark transport; engine0.5.3 rehearsal; frozen confirmation, full G/M red-line counts and leaderboard acceptance. G7 cross-turn inherited context and unbound/concurrent native source receipts also remain pending. This branch is a reviewed implementation checkpoint, not a claim that the complete proving plan has passed. No merge or deployment is authorized by this closeout.

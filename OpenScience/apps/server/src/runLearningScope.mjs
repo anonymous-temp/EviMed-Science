@@ -1,7 +1,15 @@
 /** Shared, nonmutating learning view of a captured session graph. Raw history
  * stays complete for its owner. A participating child is not automatically an
  * owned child turn: only producer-authenticated turn receipts establish that. */
-import { scopeRunTranscript } from '@evimed/domain';
+import { scopeRunTranscript, sourceAllowsEgress } from '@evimed/domain';
+
+/** Raw ordinary work retains its existing admission policy. Once trusted typed
+ * memory sources exist, their original privacy survives genericization.
+ * @param {any} run */
+export function methodSourceAllowsLearning(run) {
+  return !run || !Object.hasOwn(run, 'sourcePrivacy') && !Object.hasOwn(run, 'originalSources')
+    || sourceAllowsEgress(run, { purpose: 'method' });
+}
 
 /** @param {any} run @param {readonly any[]} sessions
  * @param {{ownedChildSessionIds?:string[],childTurnOwnership?:readonly any[]}} [options] */

@@ -39,6 +39,7 @@ import { methodSourceIdentifierShapesIn, scopeRunTranscript } from "@evimed/doma
 
 import { CONVERSATION_SCOPE, learningScopeOf } from "./learningTriggers.mjs";
 import { readRunTranscript } from "./runTranscripts.mjs";
+import { methodSourceAllowsLearning } from './runLearningScope.mjs';
 
 /** The three runs of two conversations, within ninety days, that make a script recur; the weight of a script worth proposing; what one run may contribute. */
 export const SCRIPT_RUNS = 3;
@@ -435,7 +436,7 @@ export class ScriptLessons {
   async afterSettle(project, run) {
     const none = { recorded: 0, queued: /** @type {string[]} */ ([]) };
     try {
-      if (!this.execute) return none;
+      if (!this.execute || !methodSourceAllowsLearning(run)) return none;
       const transcript = await this.readTranscript(project, run.id).catch(() => null);
       if (!transcript) { this.#count("no_transcript"); return none; }
       const scoped = scopeRunTranscript(transcript, run);
