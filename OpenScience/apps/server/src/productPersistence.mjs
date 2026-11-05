@@ -211,9 +211,9 @@ CREATE INDEX IF NOT EXISTS product_jobs_queued_time_idx ON evimed_product.jobs(k
 CREATE INDEX IF NOT EXISTS product_jobs_running_lease_idx ON evimed_product.jobs(kind,lease_expires_at,id) WHERE status='running';
 DO $scheduler_jobs_retired$
 BEGIN
-  -- The same, for the scheduler's job kinds (episode, verify, digest), on a database that has not yet had the programme's retirement.
+  -- The same, for the scheduler's job kinds (episode, verify, digest, evolution-self-check), on a database that has not yet had the programme's retirement.
   IF NOT EXISTS (SELECT 1 FROM evimed_product.schema_migrations WHERE name='2026-10-29-evidence-programme-retired-v1') THEN
-    DELETE FROM evimed_product.jobs WHERE kind IN ('episode','verify','digest');
+    DELETE FROM evimed_product.jobs WHERE kind IN ('episode','verify','digest','evolution-self-check');
   END IF;
 END $scheduler_jobs_retired$;
 DO $programme_retired$

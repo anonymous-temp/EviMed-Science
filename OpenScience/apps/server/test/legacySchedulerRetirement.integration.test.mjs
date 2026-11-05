@@ -27,20 +27,20 @@ test("the retired scheduler's rows go, the kind CHECKs are narrowed after, and a
       ALTER TABLE evimed_product.documents DROP CONSTRAINT product_documents_kind_check;
       ALTER TABLE evimed_product.documents ADD CONSTRAINT product_documents_kind_check CHECK (kind IN (${list([...PRODUCT_KINDS, "agenda", "episode", "digest"])}));
       ALTER TABLE evimed_product.jobs DROP CONSTRAINT product_jobs_kind_check;
-      ALTER TABLE evimed_product.jobs ADD CONSTRAINT product_jobs_kind_check CHECK (kind IN (${list([...PRODUCT_JOB_KINDS, "episode", "verify", "digest"])}));
+      ALTER TABLE evimed_product.jobs ADD CONSTRAINT product_jobs_kind_check CHECK (kind IN (${list([...PRODUCT_JOB_KINDS, "episode", "verify", "digest", "evolution-self-check"])}));
       INSERT INTO evimed_product.documents(user_id,kind,id,project_id,payload) VALUES
         ('alice','agenda','a1','p1','{"enabled":true}'), ('alice','episode','e1','p1','{"agendaId":"a1"}'),
         ('alice','digest','d1','p1','{}'), ('alice','notification','n1','p1','{}'), ('alice','method','m1','p1','{}');
       UPDATE evimed_product.documents SET revision = 2, payload = '{"enabled":false}' WHERE id='a1';
       INSERT INTO evimed_product.jobs(id,user_id,project_id,kind,idempotency_key,payload) VALUES
         ('j-episode','alice','p1','episode','episode:e1','{}'), ('j-verify','alice','p1','verify','verify:e1','{}'),
-        ('j-digest','alice','p1','digest','digest:d1','{}'), ('j-notify','alice','p1','notify','notify:n1','{}');`);
+        ('j-digest','alice','p1','digest','digest:d1','{}'), ('j-check','alice','p1','evolution-self-check','check:1','{}'), ('j-notify','alice','p1','notify','notify:n1','{}');`);
     const revisionsBefore = (await database.query("SELECT count(*)::int AS n FROM evimed_product.revisions WHERE kind='agenda'")).rows[0].n;
 
     const lines = /** @type {string[]} */ ([]);
     const first = await retireLegacyScheduler({ database, report: (line) => lines.push(line) });
     assert.equal(first.failed, undefined);
-    assert.deepEqual({ documents: first.documents, jobs: first.jobs, narrowed: first.narrowed }, { documents: 3, jobs: 3, narrowed: true });
+    assert.deepEqual({ documents: first.documents, jobs: first.jobs, narrowed: first.narrowed }, { documents: 3, jobs: 4, narrowed: true });
     assert.ok(first.revisions >= revisionsBefore);
     assert.equal(lines.length, 1);
 
@@ -50,7 +50,7 @@ test("the retired scheduler's rows go, the kind CHECKs are narrowed after, and a
     assert.deepEqual((await database.query("SELECT id FROM evimed_product.jobs ORDER BY id")).rows.map((/** @type {any} */ row) => row.id), ["j-notify"]);
     for (const [table, constraint] of [["documents", "product_documents_kind_check"], ["jobs", "product_jobs_kind_check"]]) {
       const definition = (await database.query("SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint WHERE conrelid=$1::regclass AND conname=$2", [`evimed_product.${table}`, constraint])).rows[0].def;
-      assert.doesNotMatch(definition, /'(agenda|episode|digest|verify)'/, `${constraint} no longer names the retired kinds`);
+      assert.doesNotMatch(definition, /'(agenda|episode|digest|verify|evolution-self-check)'/, `${constraint} no longer names the retired kinds`);
     }
     await assert.rejects(database.query("INSERT INTO evimed_product.documents(user_id,kind,id,project_id,payload) VALUES ('alice','agenda','a2','p1','{}')"), /check/i);
 
@@ -61,7 +61,7 @@ test("the retired scheduler's rows go, the kind CHECKs are narrowed after, and a
     await migrateProductStore(database);
 
     assert.equal(outcome("documents_deleted"), 3);
-    assert.equal(outcome("jobs_deleted"), 3);
+    assert.equal(outcome("jobs_deleted"), 4);
     assert.equal(outcome("checks_narrowed"), 1);
     assert.equal(outcome("nothing_left"), 1);
     assert.equal(outcome("failed"), 0);

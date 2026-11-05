@@ -116,31 +116,6 @@ test('daily source-fact producer observes preserved syntheses without inventing 
   assert.equal((await service.list('observation',researcher)).filter(row=>row.payload.sourceId==='meta-control-source').length,1);
 });
 
-test('matched upload performs preserved known-effect checks', options, async () => {
-  const fs=await import('node:fs/promises'),os=await import('node:os'),path=await import('node:path');
-  const {createEvolutionSelfCheck}=await import('../src/evolutionSelfCheck.mjs');
-  const {EvolutionWorker}=await import('../src/evolutionWorker.mjs');
-  const root=await fs.mkdtemp(path.join(os.tmpdir(),'evolution-self-check-'));
-  try {
-    const bytes=Buffer.from(`age\n${Array.from({length:30},(_,index)=>index+20).join('\n')}\n`); await fs.writeFile(path.join(root,'cohort.csv'),bytes);
-    const hash=createHash('sha256').update(bytes).digest('hex');
-    await service.registerTool({id:'uploaded-check-tool',track:'U',artifactDigest:'plasmode-pin',toolKind:'workflow',smokePassed:true,
-      dataRequirements:{schema:{fields:[{name:'age',type:'number',unit:'a'}]}},selfCheck:{kind:'linear-effect',covariates:['age'],knownEffect:2,tolerance:0.01,negativeControl:true}});
-    const asset={bindings:[{path:'cohort.csv',sha256:hash,bytes:bytes.length,rows:30,columns:[{name:'age'}]}]};
-    await documents.put(researcher,'knowledge','uploaded-semantics',{recordType:'dataset-semantics',asset},{expectedRevision:0,projectId:'research'});
-    const input={userId:researcher,projectId:'research',datasetId:'cohort',toolId:'uploaded-check-tool',sourceEventId:'uploaded-version'};
-    let calculations=0;
-    const checker=createEvolutionSelfCheck({service,dataSemantics:{get:async(userId,projectId)=>{assert.equal(userId,researcher);assert.equal(projectId,'research');const row=await documents.get(userId,'knowledge','uploaded-semantics');return{revision:row.revision,asset:row.payload.asset};}},
-      store:{userById:async id=>({id}),requireProject:async(user,id)=>({id,userId:user.id,workspaceDir:root})},controller:{execVerify:async()=>{throw new Error('Unexpected executor branch');}},
-      supply:{prepareForRuntime:async()=>({pins:[{id:'uploaded-check-tool',digest:'plasmode-pin',revision:1,publicationKind:'isolated-tool'}]}),executeIsolated:async(project,{args})=>{calculations++;const residuals=args.rows.map(row=>({exposure:row.__evolution_exposure,residual:row.__evolution_outcome-row.age/100}));const average=group=>group.reduce((sum,row)=>sum+row.residual,0)/group.length;return{estimate:average(residuals.filter(row=>row.exposure===1))-average(residuals.filter(row=>row.exposure===0))};}}});
-    const worker=new EvolutionWorker({service,decisions:{},maintenance:{},callbacks:{selfCheck:payload=>checker.run(payload)}});
-    const result=await worker.perform({kind:'evolution-self-check',payload:input}); assert.equal(result.payload.status,'passed');assert.equal(calculations,2)
-    await worker.perform({kind:'evolution-self-check',payload:input});assert.equal(calculations,2)
-    assert.equal(await service.get(result.id,owner),null);
-    assert.ok(!JSON.stringify(result.payload).includes('__evolution_outcome'));assert.equal(result.payload.empiricalEvidence,false);
-  } finally {await fs.rm(root,{recursive:true,force:true});}
-});
-
 test('existing durable feedback events settle only actual tenant tool use and replay once', options, async () => {
   const {FeedbackEvents}=await import('../src/feedbackEvents.mjs');const {createEvolutionFeedback}=await import('../src/evolutionFeedback.mjs');const {EvolutionMaintenance}=await import('../src/evolutionMaintenance.mjs');
   const maintenance=new EvolutionMaintenance({service});const consumer=createEvolutionFeedback({service,maintenance});service.callbacks.observeFeedback=event=>consumer.observeFeedback(event);

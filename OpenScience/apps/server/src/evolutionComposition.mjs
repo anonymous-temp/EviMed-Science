@@ -43,7 +43,6 @@ import { createFrontierEvolutionDiscovery } from "./frontierEvolution.mjs";
 import { createPlatformSkillSupply } from "./platformSkillSupply.mjs";
 import { createPaperGoldEvaluator } from "./paperGoldEvaluator.mjs";
 import { createEvolutionGatewayHandler } from "./evolutionGateway.mjs";
-import { createEvolutionSelfCheck } from "./evolutionSelfCheck.mjs";
 import { createEvolutionFeedback } from "./evolutionFeedback.mjs";
 import { createEvolutionEvidenceRegistration } from "./evolutionEvidenceRegistration.mjs";
 import { createProspectiveExecutionEvidence, createProspectiveStageAssessment } from "./evolutionProspectiveEvidence.mjs";
@@ -84,7 +83,7 @@ export function createEvolutionDecisionModel({ config, usageLedger, fetchImpl, o
 /** Compose the optional platform loop using the same ledger, runtime and inbox as research.
  * @param {any} dependencies */
 export function createEvolution({ config, store, documents, jobs, database, usageLedger, notifications, registry, runtimeManager,
-  researchSessions, agentRuns, evaluationIsolation, sourceService, dataSemantics, controller, canRun, resolvePositiveEvidence = null, judgeService = null, report = () => {}, fetchImpl = fetch, webReader = null }) {
+  researchSessions, agentRuns, evaluationIsolation, sourceService, controller, canRun, resolvePositiveEvidence = null, judgeService = null, report = () => {}, fetchImpl = fetch, webReader = null }) {
   if (!config.evolutionEnabled || !database || !documents || !jobs || !usageLedger) return null;
   const settingsIssues = validateEvolutionConfiguration(config);
   // A module whose settings are wrong stays off with the reason reported; it never stops the platform (`loadConfig` refuses first).
@@ -468,7 +467,6 @@ export function createEvolution({ config, store, documents, jobs, database, usag
     readEvidence:createEvolutionScorerEvidence({service,store,agentRuns,runtimeManager}),
     reviewerFamilies:scorerAuditReviewerFamilies(config),
     review:createScorerAuditReview({config,usageLedger,fetchImpl,owner:()=>service.owner(),projectId:EVOLUTION_PROJECT_ID,limits})});
-  const selfCheck = createEvolutionSelfCheck({ service, dataSemantics, store, controller, supply, config });
   const dailyCost = async client => Number((await client.query(`SELECT coalesce(sum(CASE WHEN status='settled' THEN actual_cost WHEN ${openCostPredicate("24 hours", "$1")} THEN ${OPEN_COST_VALUE} ELSE 0 END),0) AS cost FROM evimed_usage.model_requests WHERE purpose='evolution' AND created_at>=$1::timestamptz-interval '24 hours'`, [new Date().toISOString()])).rows[0]?.cost ?? 0);
   const worker = createEvolutionWorker({ service, decisions, maintenance, config, canRun, callbacks: {
     ensureMission: job => ['evolution-event','evolution-digest','evolution-plan'].includes(job.kind) ? null : loops.missions.ensureJob(job),
@@ -539,7 +537,6 @@ export function createEvolution({ config, store, documents, jobs, database, usag
       const id = `evolution-evaluation-${cycleId}`, prior = await service.get(id);
       return saveEvolutionEvaluation(service, id, { ...result, at: service.now().toISOString() }, prior);
     },
-    selfCheck: payload => selfCheck.run(payload),
   } });
   const routes = createEvolutionRoutes({ store, service, decisions, worker, config, evidenceRegistration, capabilityMap: async () => (await service.get('evolution-capability-map'))?.payload ?? null, isOperator: user => config.operatorUsers.includes(user.id),
     registerEvaluationPolicy: async (user, { projectId, policy }) => { await store.requireProject(user, projectId); return evaluationIsolation.registerPending({ userId: user.id, projectId }, policy); },

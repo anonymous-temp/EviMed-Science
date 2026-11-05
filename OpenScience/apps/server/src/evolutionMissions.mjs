@@ -266,7 +266,7 @@ export function createEvolutionMissions({ service, policy, map, taskPool, signal
   async function ensureJob(job) {
     if(['evolution-event','evolution-digest','evolution-plan'].includes(job.kind))return null;
     if (job.payload.missionId) return fund(await service.get(job.payload.missionId));
-    const categories = { scout: 'exploration', build: 'research', evaluate: 'confirmation', audit:'confirmation', 'self-check': 'confirmation', decision: 'maintenance', maintain: 'maintenance', meta: 'meta', research: 'exploration', plan: 'maintenance' };
+    const categories = { scout: 'exploration', build: 'research', evaluate: 'confirmation', audit:'confirmation', decision: 'maintenance', maintain: 'maintenance', meta: 'meta', research: 'exploration', plan: 'maintenance' };
     const kind = job.kind.replace('evolution-', '');
     const dossier = job.payload.dossierId ? await service.get(job.payload.dossierId) : null;
     if (dossier?.payload.missionId) return fund(await service.get(dossier.payload.missionId));

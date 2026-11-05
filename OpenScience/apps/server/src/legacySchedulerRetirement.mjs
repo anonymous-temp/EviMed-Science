@@ -10,7 +10,7 @@ import { recordSchedulerRetirement } from "./schedulerRetirementMetrics.mjs";
  * nothing to a conversation or a run:
  *
  *  - **The documents of the three retired kinds are deleted** (`agenda`, `episode`, `digest`), their revisions with them (the foreign key
- *    cascades), and **the jobs of the three retired kinds** (`episode`, `verify`, `digest`): nothing claims them any more.
+ *    cascades), and **the jobs of the four retired kinds** (`episode`, `verify`, `digest`, and the evolution `evolution-self-check` its waiters queued): nothing claims them any more.
  *  - **Only then are the two kind CHECKs narrowed** to the current lists. Rebuilding a CHECK over a row of a kind it refuses stops the
  *    migration and with it the start, so the rows go first, in the same transaction, under an advisory lock.
  *  - A database that never held the constraint in its old form finds nothing to delete and nothing to narrow.
@@ -29,8 +29,8 @@ import { recordSchedulerRetirement } from "./schedulerRetirementMetrics.mjs";
 /** The document kinds only the retired scheduler wrote. */
 export const RETIRED_SCHEDULER_DOCUMENT_KINDS = Object.freeze(["agenda", "episode", "digest"]);
 
-/** The job kinds only the retired scheduler queued. */
-export const RETIRED_SCHEDULER_JOB_KINDS = Object.freeze(["episode", "verify", "digest"]);
+/** The job kinds only the retired scheduler queued, and the evolution self-check its waiters queued. */
+export const RETIRED_SCHEDULER_JOB_KINDS = Object.freeze(["episode", "verify", "digest", "evolution-self-check"]);
 
 const list = (/** @type {readonly string[]} */ values) => values.map((value) => `'${value}'`).join(",");
 

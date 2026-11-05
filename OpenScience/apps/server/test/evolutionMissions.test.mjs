@@ -240,9 +240,6 @@ test('a mission opened for a job ends with the job whatever kind the job has, an
  assert.equal((await missions.recordJob(scout,{status:'complete'})).payload.status,'complete','the kinds that always ended with their job still do');
  const budgeted=await missions.ensureJob({id:'job-audit',kind:'evolution-audit',payload:{moduleId:'tools'}});
  assert.equal((await missions.recordJob(budgeted,{status:'waiting_resource'})).payload.status,'ready','a job that reports it is waiting leaves its mission open');
- // A measurement that came out `failed` is a result of a job that succeeded (a self-check's verdict), not a failed job.
- const check=await missions.ensureJob({id:'job-check',kind:'evolution-self-check',payload:{moduleId:'tools'}});
- assert.equal((await missions.recordJob(check,{payload:{status:'failed'}})).payload.status,'complete');
  const broken=await missions.ensureJob({id:'job-meta',kind:'evolution-meta',payload:{}});
  const failed=await missions.recordJob(broken,{jobFailed:true,code:'evolution_job_failed'});
  assert.deepEqual([failed.payload.status,failed.payload.reason,failed.payload.completed],['failed','evolution_job_failed',undefined]);

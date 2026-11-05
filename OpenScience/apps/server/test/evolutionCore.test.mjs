@@ -316,17 +316,6 @@ test('worker resource failures are bounded and deduplicated while unrelated dail
   assert.ok(!JSON.stringify(await f.service.list('failure')).includes('private narrative'));assert.equal(f.jobs.filter(job=>job.kind==='evolution-scout').length,1);
   assert.equal(f.jobs.filter(job=>job.payload.action==='release-replay').length,1);
 });
-test('compute-only self-check claims retain budget and concurrency without requiring a new DSH slot', async () => {
-  const scopes=[];
-  const client={query:async query=>({rows:query.includes('count(*)')?[{count:0}]:[]})};
-  const service={list:async()=>[],jobs:{claim:async(kinds,_worker,{admission,candidateAdmission})=>{scopes.push(kinds);const candidate={userId:'owner',id:'check',kind:'evolution-self-check',payload:{},leaseToken:'lease'};return await admission(client)&&await candidateAdmission(client,candidate)?candidate:null;},renew:async()=>true,finish:async()=>({status:'done'})},completeSelfCheck:async()=>{}};
-  const worker=new EvolutionWorker({service,config:{evolutionEnabled:true},callbacks:{dailyCost:async()=>1,admitRuntime:async(_client,{kinds})=>kinds.every(kind=>kind==='evolution-self-check'),selfCheck:async()=>({payload:{status:'passed'}})}});
-  worker.housekeeping=async()=>{};
-  assert.equal((await worker.tick({kinds:['evolution-self-check']})).status,'done');
-  assert.deepEqual(scopes,[['evolution-self-check']]);
-  await assert.rejects(worker.tick({kinds:['unknown']}),/Unknown evolution job subset/);
-});
-
 test('public boundary maintenance repairs expose only executed public failed case identities and preserve the original',async()=>{
   const f=fixture();await f.service.addDossier({id:'original',goal:'Original method',feedback:{passed:true}});
   await f.service.save('tool','published',{dossierId:'original',artifactDigest:'immutable'});

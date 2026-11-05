@@ -46,7 +46,7 @@ test('the setting is read from the environment with the night as its default',()
 test('the jobs that wait for the window are the module\'s model-intensive ones, and the light ones are not among them',()=>{
  for(const kind of EVOLUTION_HEAVY_WINDOW_KINDS)assert.ok(EVOLUTION_JOB_KINDS.includes(kind),kind);
  for(const kind of ['evolution-research','evolution-audit','evolution-mission','evolution-mission-heavy','evolution-evaluate','evolution-scout','evolution-build','evolution-meta'])assert.ok(EVOLUTION_HEAVY_WINDOW_KINDS.includes(kind),`${kind} waits for the night`);
- for(const kind of ['evolution-event','evolution-decision','evolution-digest','evolution-maintain','evolution-plan','evolution-self-check'])assert.ok(!EVOLUTION_HEAVY_WINDOW_KINDS.includes(kind),`${kind} runs at any hour`);
+ for(const kind of ['evolution-event','evolution-decision','evolution-digest','evolution-maintain','evolution-plan'])assert.ok(!EVOLUTION_HEAVY_WINDOW_KINDS.includes(kind),`${kind} runs at any hour`);
 });
 
 // The polling worker, with a clock the test moves.
@@ -65,7 +65,7 @@ test('by day the polling worker offers the light jobs only; by night it offers t
  const day=harness([]);
  await day.worker.tick();
  for(const kind of EVOLUTION_HEAVY_WINDOW_KINDS)assert.ok(!day.offered.has(kind),`${kind} is not claimed by day`);
- for(const kind of ['evolution-event','evolution-decision','evolution-digest','evolution-maintain','evolution-plan','evolution-self-check'])assert.ok(day.offered.has(kind),`${kind} is claimed by day`);
+ for(const kind of ['evolution-event','evolution-decision','evolution-digest','evolution-maintain','evolution-plan'])assert.ok(day.offered.has(kind),`${kind} is claimed by day`);
  assert.equal(day.worker.status().heavyWindowOpen,false);
  const night=harness([]);night.at('2026-10-12T16:00:00Z');
  await night.worker.tick();

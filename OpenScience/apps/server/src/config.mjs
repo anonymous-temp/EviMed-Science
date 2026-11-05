@@ -3167,7 +3167,7 @@ export function loadConfig(overrides = {}) {
     evolutionLightConcurrency: Number(overrides.evolutionLightConcurrency ?? process.env.OPEN_SCIENCE_EVOLUTION_LIGHT_CONCURRENCY ?? 2),
     evolutionSearchPaused: overrides.evolutionSearchPaused ?? boolEnv("OPEN_SCIENCE_EVOLUTION_SEARCH_PAUSED", false),
     // The serving cutover (2026-10-26, the offline RSI lab): on, the control plane composes only what serves published state (events, decision
-    // expiries, the operators' digest, a retirement's completion, a published tool's self-check) and nothing experimental runs online. It is a
+    // expiries, the operators' digest, a retirement's completion) and nothing experimental runs online. It is a
     // one-way cutover of queued experimental work: at the first worker poll the nine experimental job kinds that are queued or lease-expired are
     // cancelled as `evolution_offline_only`, queued events of any other type are closed as `retired-to-lab`, pending decision cards whose default
     // is an experiment are closed, an unanswered harm review takes the protective retirement, the experimental POST /api/evolution routes answer
@@ -3208,9 +3208,6 @@ export function loadConfig(overrides = {}) {
     evolutionMaxBuildAttempts: Number(overrides.evolutionMaxBuildAttempts ?? process.env.OPEN_SCIENCE_EVOLUTION_MAX_BUILD_ATTEMPTS ?? 3),
     evolutionMaxJobAttempts: Number(overrides.evolutionMaxJobAttempts ?? process.env.OPEN_SCIENCE_EVOLUTION_MAX_JOB_ATTEMPTS ?? 3),
     evolutionMaxArtifactBytes: Number(overrides.evolutionMaxArtifactBytes ?? process.env.OPEN_SCIENCE_EVOLUTION_MAX_ARTIFACT_BYTES ?? 2_000_000),
-    evolutionSelfCheckMaxBytes: Number(overrides.evolutionSelfCheckMaxBytes ?? process.env.OPEN_SCIENCE_EVOLUTION_SELF_CHECK_MAX_BYTES ?? 4 * 1024 * 1024),
-    evolutionSelfCheckMaxRows: Number(overrides.evolutionSelfCheckMaxRows ?? process.env.OPEN_SCIENCE_EVOLUTION_SELF_CHECK_MAX_ROWS ?? 10_000),
-    evolutionSelfCheckSampleRows: Number(overrides.evolutionSelfCheckSampleRows ?? process.env.OPEN_SCIENCE_EVOLUTION_SELF_CHECK_SAMPLE_ROWS ?? 256),
     // Candidate execution has its own controller instance, slots and timeout (`evolutionVerificationController.mjs`):
     // static checks, self tests, hidden-case replicates and every tenant call of a published tool are one disposable
     // container each, hundreds per build cycle, and they must never share a slot, an admission lock or the

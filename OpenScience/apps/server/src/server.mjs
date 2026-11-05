@@ -5923,7 +5923,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // One decision, `OPEN_SCIENCE_EVOLUTION_SERVING_ONLY` (evolutionMode.mjs): the full composition as it ran before the offline lab, or serving.
   evolution = composeEvolution({ judgeService, config, store, documents: productDocuments, jobs: productJobs, database: productDatabase,
     usageLedger, notifications: notificationService, registry: agentRegistry, runtimeManager, researchSessions, agentRuns,
-    evaluationIsolation, sourceService, dataSemantics, resolvePositiveEvidence, sourceChanges,
+    evaluationIsolation, sourceService, resolvePositiveEvidence, sourceChanges,
     controller: overrides.evolutionController ?? new RuntimeControllerClient(config),
     canRun: () => maintenanceService ? maintenanceService.claimingAllowed() : !productDatabase, webReader,
     report: code => process.stderr.write(`evolution: ${code}\n`) });

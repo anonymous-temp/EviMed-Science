@@ -42,12 +42,3 @@ test('maintenance prevents a claim and the serving owner fences the SQL queue',a
  await worker.tick();assert.equal(claims,0);
  permitted=true;await worker.tick();assert.equal(claims,1);await worker.close();
 });
-test('a self-check is claimed after the light work, under its own concurrency admission',async()=>{
- const claimed=[];let admitted;
- const client={query:async(text)=>/count/.test(text)?{rows:[{count:1}]}:{rows:[]}};
- const service=stub({jobs:{claim:async(kinds,_worker,options)=>{claimed.push(kinds);if(kinds.includes('evolution-self-check'))admitted=await options.admission(client);return null;}}});
- const worker=createEvolutionServingWorker({service,integration:{},selfCheck:{run:async()=>null},config:{evolutionEnabled:true,evolutionMaxConcurrency:1},logger:quiet});
- await worker.tick();
- assert.deepEqual(claimed,[['evolution-event','evolution-decision','evolution-digest','evolution-maintain'],['evolution-self-check']]);
- assert.equal(admitted,false,'one self-check already holds the isolated executor');await worker.close();
-});

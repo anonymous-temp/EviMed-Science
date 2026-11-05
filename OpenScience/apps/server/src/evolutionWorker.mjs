@@ -80,11 +80,9 @@ export class EvolutionWorker {
         && !(this.config.evolutionSearchPaused && SEARCH_KINDS.has(kind))
         && (heavyAllowed || !EVOLUTION_HEAVY_WINDOW_KINDS.includes(kind)));
       const lightweight = LIGHT_KINDS.filter(kind => allowed.includes(kind));
-      const runtimeKinds = allowed.filter(kind => !lightweight.includes(kind) && kind !== 'evolution-self-check');
-      const computeKinds = allowed.filter(kind => kind === 'evolution-self-check');
+      const runtimeKinds = allowed.filter(kind => !lightweight.includes(kind));
       const job = (lightweight.length ? await claim(lightweight, false) : null)
-        ?? (runtimeKinds.length ? await claim(runtimeKinds, true) : null)
-        ?? (computeKinds.length ? await claim(computeKinds, true) : null);
+        ?? (runtimeKinds.length ? await claim(runtimeKinds, true) : null);
       if (!job) return null;
       if (EVOLUTION_HEAVY_WINDOW_KINDS.includes(job.kind)) this.counters.heavyStarted[this.heavyWindowOpen() ? 'inside' : 'outside']++;
       this.abortController = new AbortController();
@@ -317,7 +315,7 @@ export class EvolutionWorker {
     }
     const rawName = job.kind.slice('evolution-'.length);
     const name = rawName === 'mission-heavy' ? 'mission' : rawName;
-    const callback = this.callbacks[name === 'self-check' ? 'selfCheck' : name];
+    const callback = this.callbacks[name];
     if (!callback) throw new Error(`Missing evolution ${name} worker implementation.`);
     const result = await callback(p, { service: this.service, job, purpose: 'evolution', signal: this.abortController?.signal });
     for (const failure of await this.service.list('failure')) if (failure.payload.workerStage === name && failure.payload.status === 'waiting' && failure.payload.dependencyKey === String(p.dependencyId ?? p.dossierId ?? p.missionId ?? job.id)) {

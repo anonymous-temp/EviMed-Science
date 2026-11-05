@@ -20,13 +20,12 @@ import { evolutionScientificUse } from './evolutionScientificUse.mjs';
 import { evolutionCompletedResult } from './evolutionUsage.mjs';
 import { readRunTranscript } from './runTranscripts.mjs';
 import { quarantineRetiredEvolutionJobs } from './evolutionRetiredJobs.mjs';
-import { createEvolutionSelfCheck } from './evolutionSelfCheck.mjs';
 import { evolutionMonthlyMetrics } from './evolutionMetrics.mjs';
 
 /** Published tools, account-local feedback and existing product continuation only.
  * Experimental composition is reachable exclusively from the offline campaign entry.
  * @param {any} dependencies */
-export function createEvolutionServing({config,store,documents,jobs,database,notifications,registry,runtimeManager,agentRuns,controller,evaluationIsolation,dataSemantics=null,sourceChanges=null,canRun=async()=>true,resolvePositiveEvidence=null,report=()=>{}}) {
+export function createEvolutionServing({config,store,documents,jobs,database,notifications,registry,runtimeManager,agentRuns,controller,evaluationIsolation,sourceChanges=null,canRun=async()=>true,resolvePositiveEvidence=null,report=()=>{}}) {
  if(!config.evolutionEnabled||!database||!documents||!jobs)return null;
  // Serving mode is a composition role, independent of the historical search pause switch.
  const servingConfig={...config,evolutionSearchPaused:true,evolutionServingOnly:true};
@@ -63,9 +62,7 @@ export function createEvolutionServing({config,store,documents,jobs,database,not
  }});
  const feedback=createEvolutionFeedback({service,maintenance,resolvePositiveEvidence});
  service.callbacks.observeFeedback=feedback.observeFeedback;
- // A published tool on a researcher's own dataset, in the isolated executor.
- const selfCheck=dataSemantics?createEvolutionSelfCheck({service,dataSemantics,store,controller,supply,config}):null;
- const worker=createEvolutionServingWorker({service,integration,decisions,maintenance,selfCheck,config:servingConfig,canRun,
+ const worker=createEvolutionServingWorker({service,integration,decisions,maintenance,config:servingConfig,canRun,
   quarantine:admission=>quarantineRetiredEvolutionJobs(database,config.operatorUsers[0],{admission})});
   const routes = createEvolutionRoutes({ store, service, decisions, worker, config: servingConfig, evidenceRegistration: null, capabilityMap: async () => (await service.get('evolution-capability-map'))?.payload ?? null, isOperator: user => config.operatorUsers.includes(user.id),
     registerEvaluationPolicy: async (user, { projectId, policy }) => { await store.requireProject(user, projectId); return evaluationIsolation.registerPending({ userId: user.id, projectId }, policy); },
