@@ -75,7 +75,7 @@ test('a late managed child remains in the durable removal closure after a half-c
   try {
     const paths = { sessions: path.join(root, 'sessions'), storages: path.join(root, 'storages') };
     const rows = [header('a'), header('child', { origin: 'subagent', parentSession: 'a' })];
-    const add = async row => { const dir = path.join(paths.sessions, sourceSessionRelativePath(row)); await fs.mkdir(dir, { recursive: true }); await fs.writeFile(path.join(dir, 'session.v4.jsonl.zstd'), 'synthetic'); };
+    const add = async (/** @type {any} */ row) => { const dir = path.join(paths.sessions, sourceSessionRelativePath(row)); await fs.mkdir(dir, { recursive: true }); await fs.writeFile(path.join(dir, 'session.v4.jsonl.zstd'), 'synthetic'); };
     for (const row of rows) await add(row);
     const cache = new Map(rows.map(row => [row.id, row.id])); let failOnce = true;
     const native = { headers: async () => { const found = []; for (const row of rows) if (await fs.stat(path.join(paths.sessions, sourceSessionRelativePath(row))).catch(() => null)) found.push(row); return found; },

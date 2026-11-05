@@ -121,7 +121,8 @@ export function createSourceStorageController(config, hooks) {
       await cleanup(project);
       const sessionId = safeId(payload.sessionId, 'conversation id'), inspected = await image();
       const seen = await observe(project, sessionId, payload.incarnation, payload.contextReference ?? null, inspected);
-      const sessions = [...new Map(seen.copies.flatMap(copy => copy.sessions).map(row => [row.id, row])).values()];
+      const sessions = seen.root.absent === true ? [seen.root]
+        : [...new Map(seen.copies.filter(copy => copy.root.absent !== true).flatMap(copy => copy.sessions).map(row => [row.id, row])).values()];
       const body = { schema: 'native-source-storage/1', kernelVersion: inspected.kernelVersion, incarnation: payload.incarnation,
         contextReference: payload.contextReference ?? null, root: seen.root, sessions, copies: seen.copies };
       return { ...body, storageIdentity: digest(body) };
@@ -132,6 +133,9 @@ export function createSourceStorageController(config, hooks) {
       const { storageIdentity, generation: _generation, ...body } = frozen ?? {};
       if (body.schema !== 'native-source-storage/1' || storageIdentity !== digest(body) || !Array.isArray(body.copies) || body.copies.length > 1001) throw fail();
       const inspected = await image(); if (body.kernelVersion !== inspected.kernelVersion) throw fail('runtime_source_kernel_mismatch', 503);
+      // A disappeared generation is not evidence that its state was erased.
+      // Retain the cleanup debt instead of silently dropping a frozen copy.
+      for (const copy of body.copies) if (copy.contextReference) await verifyContextGeneration(config, project, copy.contextReference);
       const seen = await observe(project, safeId(body.root?.id, 'conversation id'), body.incarnation, body.contextReference, inspected);
       if (seen.root.absent !== true && (body.root.absent === true || headerIdentity(body.root) !== headerIdentity(seen.root))) throw fail();
       const ids = new Set(body.sessions.map(row => row.id));
@@ -139,7 +143,8 @@ export function createSourceStorageController(config, hooks) {
         const row = seen.roots[i], current = seen.copies[i];
         const old = body.copies.find(copy => canonicalJson(copy.contextReference) === canonicalJson(row.contextReference));
         if (current.root.absent !== true && headerIdentity(current.root) !== headerIdentity(body.root)) throw fail();
-        const snapshot = old ?? (current.root.absent === true ? current : { ...current, root: body.root });
+        const snapshot = old && old.root.absent !== true ? old : current.root.absent !== true ? current
+          : body.root.absent === true ? current : { root: body.root, sessions: [body.root] };
         const result = await execute({ operation: 'purge', project, image: inspected, paths: row.paths, frozen: snapshot });
         if (result.sourceRemoved !== true) throw fail('runtime_source_helper_unavailable', 503);
         for (const id of result.removedSessionIds ?? []) ids.add(id);

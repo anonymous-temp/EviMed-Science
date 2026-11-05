@@ -32,6 +32,13 @@ await fs.copyFile('/tmp/storages/workspace.json','/tmp/storages/workspace.json.b
 const bFile='/tmp/sessions/'+sourceSessionRelativePath(headers[2])+'/session.v4.jsonl.zstd', before=await fs.readFile(bFile);
 const frozen=await captureSourceStorage(paths,'source_a');assert.deepEqual(frozen.sessions.map(h=>h.id).sort(),['managed_child','source_a']);
 await seed([{version:4,id:'late_grandchild',createdAt:2,cwd:'/workspace',delegationDepth:2,isSeeded:true,origin:'subagent',parentSession:'managed_child'}]);
+backend=new JsonStorageBackend(paths.storages);u=await backend.kv.open(descriptorOf(projectionCacheDomainSpec));await u.putRecord('sessions','late_grandchild',{title:'synthetic late private source'});await u.close();
+u=await backend.kv.open(descriptorOf(workspaceDomainSpec));let lateState=await u.loadAll();await u.putRecord('workspaces','w',{...lateState.tables.workspaces.w,sessionIds:[...lateState.tables.workspaces.w.sessionIds,'late_grandchild']});await u.close();await backend.close();
+await assert.rejects(purgeSourceStorage(paths,frozen,{
+headers:async()=>{const ctx=new Context();try{await ctx.plugin(jsonl,{root:paths.sessions,compression:'zstd'}).await();return(await ctx.get('sessionPersistence').list()).map(row=>row.header);}finally{await ctx.fiber.dispose();}},
+scrubReferences:async ids=>{const b=new JsonStorageBackend(paths.storages),c=await b.kv.open(descriptorOf(projectionCacheDomainSpec));try{await c.deleteRecord('sessions',[...ids][0]);}finally{await c.close();await b.close();}throw new Error('injected actual KV half-cache failure');}
+}),/injected actual KV/);
+assert.equal((await captureSourceStorage(paths,'late_grandchild')).root.absent,true);
 await fs.writeFile('/tmp/storages/session_projcache.json.bak.synthetic.source-cleanup-1','{partial');
 const result=await purgeSourceStorage(paths,frozen);assert.deepEqual(result.removedSessionIds,['late_grandchild','managed_child','source_a']);
 assert.deepEqual((await purgeSourceStorage(paths,frozen)).removedSessionIds,['late_grandchild','managed_child','source_a']);
@@ -39,13 +46,13 @@ assert.deepEqual(await fs.readFile(bFile),before);
 assert.equal((await captureSourceStorage(paths,'source_a')).root.absent,true);
 assert.equal((await captureSourceStorage(paths,'source_b')).root.id,'source_b');
 assert.equal((await captureSourceStorage(paths,'independent_fork')).root.id,'independent_fork');
-backend=new JsonStorageBackend(paths.storages);u=await backend.kv.open(descriptorOf(projectionCacheDomainSpec));let state=await u.loadAll();assert.equal(state.tables.sessions.source_a,undefined);assert.equal(state.tables.sessions.managed_child,undefined);assert.equal(state.tables.sessions.source_b.title,'source_b');await u.close();
+backend=new JsonStorageBackend(paths.storages);u=await backend.kv.open(descriptorOf(projectionCacheDomainSpec));let state=await u.loadAll();assert.equal(state.tables.sessions.source_a,undefined);assert.equal(state.tables.sessions.managed_child,undefined);assert.equal(state.tables.sessions.late_grandchild,undefined);assert.equal(state.tables.sessions.source_b.title,'source_b');await u.close();
 u=await backend.kv.open(descriptorOf(workspaceDomainSpec));state=await u.loadAll();assert.deepEqual(state.tables.workspaces.w.sessionIds,['source_b','independent_fork']);assert.deepEqual(state.global.archivedSessionIds,['source_b']);assert.deepEqual(state.global.pinnedSessionIds,['independent_fork']);await u.close();await backend.close();
 assert.equal(await fs.readFile('/tmp/storages/session_projcache/sessions/source_b.json.bak.synthetic','utf8'),'synthetic B backup');
 await assert.rejects(fs.stat('/tmp/storages/session_projcache/sessions/source_a.json.bak.synthetic'),{code:'ENOENT'});
 const legacyBackup=JSON.parse(await fs.readFile('/tmp/storages/session_projcache.json.bak.synthetic','utf8'));assert.equal(legacyBackup.tables.sessions.source_a,undefined);assert.ok(legacyBackup.tables.sessions.source_b);
 const workspaceBackup=JSON.parse(await fs.readFile('/tmp/storages/workspace.json.bak.synthetic','utf8'));assert.deepEqual(workspaceBackup.tables.workspaces.w.sessionIds,['source_b','independent_fork']);
-console.log(JSON.stringify({schema:'native-source-storage-probe/1',passed:true,managedSourcesRemoved:3,independentSourcesPreserved:2,sourceBBytesUnchanged:true,legacyAndCurrentCachesChecked:true,workspaceAndBackupReferencesChecked:true}));
+console.log(JSON.stringify({schema:'native-source-storage-probe/1',passed:true,managedSourcesRemoved:3,independentSourcesPreserved:2,sourceBBytesUnchanged:true,legacyAndCurrentCachesChecked:true,workspaceAndBackupReferencesChecked:true,halfCacheFailureRecovered:true,partialBackupStageRecovered:true}));
 `;
 const args = ['run', '--rm', '--network=none', '--read-only', '--cap-drop=ALL', '--security-opt=no-new-privileges',
   '--user=10001:10001', '--memory=256m', '--cpus=0.5', '--pids-limit=64', '--tmpfs=/tmp:rw,nosuid,nodev,size=32m,uid=10001,gid=10001', '-i', '--entrypoint=node', image, '--input-type=module'];
