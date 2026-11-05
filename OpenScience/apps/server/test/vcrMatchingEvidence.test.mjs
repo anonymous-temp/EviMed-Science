@@ -70,12 +70,11 @@ test("current runtime details keep both judgment axes and recheck premise eviden
   assert.deepEqual(revoked.assessment.judgments[0].applicabilityEvidence, []);
   assert.deepEqual(revoked.assessment.evidenceCoverage, { supplied: 2, shared: 0, withheld: 2 });
 });
-test("a withdrawn patient has no runtime candidate assessment, evidence or work requests", async () => {
+test("a withdrawn patient has no runtime candidate assessment or evidence", async () => {
   const f = fixture(); f.setWithdrawn(true);
   const result = await f.patientTrials.runtimeRead(STUDY, { id: "t1", subjectKey: "P1" });
   assert.equal(result.withdrawn, true);
   assert.equal(result.assessment, null);
-  assert.deepEqual(result.requests, []);
   assert.equal(f.reads.length, 0);
 });
 test("selected source-bound table evidence is reconstructed under its current grant, source permission and snapshot", async () => {

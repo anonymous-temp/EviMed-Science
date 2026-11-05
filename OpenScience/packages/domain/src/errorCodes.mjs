@@ -1672,7 +1672,8 @@ export const VCR_MODULE_ERROR_CODES = Object.freeze([
   // a source held in FHIR, OMOP or ADaM, converted to the module's tables in the same container (vcrImport.mjs)
   'vcr_import_not_this_format', 'vcr_import_nothing_to_import', 'vcr_import_unreadable', 'vcr_import_version_unsupported',
   'vcr_rejudge_failed', 'vcr_import_columns_unknown', 'vcr_import_entry_failed', 'vcr_import_failed', 'vcr_import_original_gone', 'vcr_import_proposal_failed', 'vcr_import_some_skipped',
-  'vcr_import_converter_unavailable',
+  'vcr_import_converter_unavailable', 'vcr_import_cell_too_long', 'vcr_import_original_changed', 'vcr_import_person_too_many_documents', 'vcr_import_person_too_much_text',
+  'vcr_import_row_too_long', 'vcr_import_too_many_bytes', 'vcr_import_too_many_entries', 'vcr_import_zip_too_large', 'vcr_import_zip_too_many_entries',
   // evidence and matching
   'vcr_asof_invalid', 'vcr_assessment_not_found', 'vcr_candidate_trial_not_found', 'vcr_criteria_missing', 'vcr_pool_endpoint_key_required',
   'vcr_precedent_not_in_study', 'vcr_protocol_version_not_found',
@@ -1681,11 +1682,11 @@ export const VCR_MODULE_ERROR_CODES = Object.freeze([
   'vcr_extract_failed', 'vcr_extract_incomplete', 'vcr_extract_timeout', 'vcr_extract_unreadable', 'vcr_extract_context_too_large', 'vcr_extract_questions_invalid', 'vcr_extract_replan_required', 'vcr_result_not_found',
   // judging patients against trials (vcrMatchJudge.mjs)
   'vcr_match_answer_unreadable', 'vcr_match_judge_cut_off', 'vcr_match_judge_failed', 'vcr_match_judge_incomplete', 'vcr_match_judge_network', 'vcr_match_judge_nothing_to_read', 'vcr_match_judge_nothing_to_resume', 'vcr_match_judge_timeout',
-  'vcr_match_no_patient_text', 'vcr_match_note_changed', 'vcr_match_nothing_finished', 'vcr_match_stopped_early',
+  'vcr_match_no_patient_text', 'vcr_match_note_changed', 'vcr_match_nothing_finished', 'vcr_match_stopped_early', 'vcr_match_job_ceiling', 'vcr_match_record_changed',
   // the reordering of a patient's candidate trials (vcrCandidateRerank.mjs) and the definition cards of a judging job (vcrClauseDefinitions.mjs): both fail open
   'vcr_rerank_unconfigured', 'vcr_rerank_timeout', 'vcr_rerank_unavailable', 'vcr_rerank_auth_failed', 'vcr_rerank_upstream_error', 'vcr_rerank_response_invalid', 'vcr_definitions_failed',
   // jobs, derived tables and the orchestrator's step notes
-  'vcr_derived_table_missing', 'vcr_population_profile_missing', 'vcr_derived_table_unsupported', 'vcr_engine_table_invalid', 'vcr_job_attempts_exhausted',
+  'vcr_job_kind_retired', 'vcr_job_retire_failed', 'vcr_derived_table_missing', 'vcr_population_profile_missing', 'vcr_derived_table_unsupported', 'vcr_engine_table_invalid', 'vcr_job_attempts_exhausted',
   'vcr_object_unknown', 'vcr_scenario_endpoint_missing', 'vcr_scenario_grid_empty', 'vcr_scenario_unknown_fields',
   'vcr_model_not_applicable', 'vcr_model_not_found', 'vcr_model_interface_not_hosted',
   // a computation that is not about the population it is filed under, and one the engine's budget cannot finish (vcrSnapshotBinding.mjs, vcrSynthesisLimits.mjs)
@@ -2614,6 +2615,15 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   registry_page_unreadable: '登记记录的页面读不出入排标准；这一对按标题和适应症判定。',
   registry_watch_timeout: '登记平台没有及时回答；下一轮会再查这条记录。',
   vcr_rejudge_failed: '这次没能开始重新判定；已有结论保留，可以再试一次。',
+  vcr_import_cell_too_long: '这一格太长，这一行没有收下，其他照常；把这一格拆短再导入即可。',
+  vcr_import_original_changed: '要导入的文件和上传时不一样了，这一份没有收下；重新上传再导入。',
+  vcr_import_person_too_many_documents: '这位患者的病历份数超过一次导入的上限，多出的没有收下；分批再导入即可。',
+  vcr_import_person_too_much_text: '这位患者的病历总量超过一次导入的上限，多出的没有收下；分批再导入即可。',
+  vcr_import_row_too_long: '这一行太长，没有收下，其他照常；把这一行拆短再导入即可。',
+  vcr_import_too_many_bytes: '这次导入超过了总量上限，多出的没有收下；分批再导入即可。',
+  vcr_import_too_many_entries: '这次导入的人数或文件数超过了上限，多出的没有收下；分批再导入即可。',
+  vcr_import_zip_too_large: '压缩包解开后超过了大小上限，多出的没有收下；分成几个压缩包再导入即可。',
+  vcr_import_zip_too_many_entries: '压缩包里的文件数超过了上限，多出的没有收下；分成几个压缩包再导入即可。',
   vcr_import_columns_unknown: '没能判断哪一列是患者、哪一列是病历。指明这两列再导入一次即可。',
   vcr_import_entry_failed: '这一份没有收下，其他照常；再启动同样的导入只取没收下的。',
   vcr_import_failed: '这次导入没有做成，已收下的保留；可以再启动一次。',
@@ -2652,6 +2662,10 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_match_judge_failed: '这一对没有判成；已判完的保留，再启动同样的选择会再判它。',
   vcr_match_judge_incomplete: '模型没有把回答写完，这一对没有判成；再启动同样的选择会再判它。',
   vcr_match_judge_network: '连不上模型服务，这一对没有判成；再启动同样的选择会再判它。',
+  vcr_match_job_ceiling: '这个作业用到了费用上限，先停在这里，判完的都保留；再启动同样的选择会接着判。',
+  vcr_match_record_changed: '判定时病历有更新，这一对会按新病历再判一次。',
+  vcr_job_kind_retired: '这类作业已停用，没有继续做。',
+  vcr_job_retire_failed: '停用旧作业时没有成功，下次启动会再试一次。',
   vcr_match_judge_nothing_to_read: '没有可判定的内容：先写入病历或入排条件，再判定。',
   vcr_match_judge_nothing_to_resume: '没有需要继续判定的了：已经判完，或剩下的不用再试。',
   vcr_match_judge_timeout: '模型回答超时，这一对没有判成；再启动同样的选择会再判它。',

@@ -1131,10 +1131,6 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.matching_producers (
   created_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY(study_id,target_id,producer_hash)
 );
--- Retired 2026-11-05: the batch reading's ledger of records read (one row per record and set of questions) and the per-account cache of a registry trial's
--- structuring. Nothing reads or writes them any more; a ledger row holds a pseudonym, a document id and counts and a cache row a public record's parse, so
--- dropping them loses nothing a person put in.
-DROP TABLE IF EXISTS evimed_vcr.matching_extractions;
 -- One record of a model's judgment of a patient against a trial or a protocol version (owner decisions 2026-11-04). A job and a conversation
 -- write the same shape and the same readers read it. The key is a pair for given inputs: the words of the record and of the trial by hash, the
 -- prompt and the settings; a pair judged once under those is not paid for again, and a failed row is replaced when it is tried again. The
@@ -1370,8 +1366,6 @@ ALTER TABLE evimed_vcr.candidate_trial_assessments ADD COLUMN IF NOT EXISTS supe
 
 -- The answer to a language criterion of a candidate trial is bound to the trial, not to a protocol version.
 
-DROP TABLE IF EXISTS evimed_vcr.parsed_trial_criteria;
-DROP TABLE IF EXISTS evimed_vcr.parsed_trial_criteria_versions;
 ALTER TABLE evimed_vcr.language_judgments ADD COLUMN IF NOT EXISTS candidate_trial_id text;
 CREATE INDEX IF NOT EXISTS vcr_language_candidate_idx ON evimed_vcr.language_judgments
   (study_id, candidate_trial_id, subject_key, criterion_key, created_at DESC) WHERE candidate_trial_id IS NOT NULL;
