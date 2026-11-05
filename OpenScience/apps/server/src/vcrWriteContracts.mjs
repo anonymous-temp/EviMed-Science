@@ -39,13 +39,6 @@ export const VCR_WRITE_FIELDS = Object.freeze({
     "line",
     "biomarker"
   ],
-  "candidate_trial": [
-    "collection",
-    "collectionRevision",
-    "registry",
-    "registryId",
-    "subjectKeys"
-  ],
   "trial_judgment": [
     "subjectKey",
     "registry",
@@ -236,9 +229,6 @@ export const VCR_WRITE_FIELDS = Object.freeze({
     "subjectKey",
     "criterionKey",
     "protocolVersionId",
-    "candidateTrialId",
-    "expectedRecordHash",
-    "expectedCriterionHash",
     "state",
     "evidence"
   ],
@@ -321,7 +311,6 @@ export const VCR_WRITE_EXAMPLES = Object.freeze({
     criteria: [{ number: 1, reason: '病历写 62 岁', sentenceIds: [0], label: 'included' }, { number: 5, reason: '病历未提脑转移；好的病历通常会写', sentenceIds: [], label: 'not excluded' }],
     documentHash: '<from the sentences read>',
   }),
-  candidate_trial: Object.freeze({ registry: 'clinicaltrials.gov', registryId: 'NCT06927986' }),
 });
 
 /** Detailed nested matching shapes use the existing matching contract; numerical shapes use action=shape. */
@@ -350,8 +339,6 @@ export function vcrWriteContracts(kind = null) {
     population: { ...contracts.population, kind: VCR_POPULATION_KINDS, real: 'snapshotId from freeze and definition rules, or fromProtocol=true with snapshotId' },
     protocol: { fields: ['title', 'sourceRef', 'usdm', 'criteria'], criteria: 'Read matching filter.kind=contract for exact criterion/applicability structure' },
     criteria: { fields: ['kind', 'criterionType', 'requirement', 'applicability', 'sourceText', 'sourceLocator', 'evidenceNeeded'], words: wordsOf('criterion'), requirement: VCR_REQUIREMENT_CONTRACT, applicability: 'Same grammar as requirement; do not infer eligibility when applicability is unknown', sourceLocator: 'optional object; never a string or invented quotation' },
-    language_judgment: { ...contracts.language_judgment,
-      candidateVersion: 'For candidateTrialId pass both expectedRecordHash (string or null) and expectedCriterionHash from the matching request. The write rejects a changed source or criterion. Both absent is a legacy unfenced write.' },
     // The closed words of each field with what each means, and one copyable example. A spelling that has exactly one meaning here is read
     // as that word and the answer says so; any other word is refused with this list.
     evidence_item: { ...contracts.evidence_item, words: wordsOf('evidence_item'), example: VCR_WRITE_EXAMPLES.evidence_item,
@@ -363,7 +350,6 @@ export function vcrWriteContracts(kind = null) {
       rule: 'then vcr_simulate start kind=design_analytic|design_simulation|assurance with subjectId = the id and no scenario: the platform builds it from this object. A number of the configuration you read in a paper: sources [{ field: \'truth.controlMedian\', publication: \'PMID 37676259\', quote: \'<the sentence that prints it>\' }]' },
     design_grid: { ...contracts.design_grid, example: VCR_WRITE_EXAMPLES.design_grid, rule: 'labels are for the page; start kind=design_grid with subjectId = the id and no scenario' },
     plan: { ...contracts.plan, example: VCR_WRITE_EXAMPLES.plan, rule: 'analysis and sensitivity are objects; a list or a sentence is kept as it was written (under items or text)' },
-    candidate_trial: { ...contracts.candidate_trial, example: VCR_WRITE_EXAMPLES.candidate_trial },
     trial_judgment: { ...contracts.trial_judgment, example: VCR_WRITE_EXAMPLES.trial_judgment,
       target: 'registryId for a registry trial or protocolVersionId for a protocol version of this study, one of them',
       criteria: 'number is the clause number trial_registry_record or matching gives; sentenceIds are ids from vcr_read what:subject_document filter.kind=sentences; label is one of included, not included, excluded, not excluded, not applicable, not enough information',

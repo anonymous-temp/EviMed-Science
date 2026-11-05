@@ -30,76 +30,16 @@
 
 import { candidateCriteriaHash } from "./vcrCandidateTrialStore.mjs";
 import { HttpError } from "./security.mjs";
-import { CTGOV_STUDY_URL, CTIS_STUDY_URL } from "./trialRegistryClient.mjs";
 import { VCR_MATCHING_GAP_REASON_LABELS_ZH } from "@evimed/domain";
 import { VCR_MATCHING_EVALUATOR_VERSION, VCR_MATCHING_VOCABULARY_VERSION, assessSubject, criterionLanguageKeys, eligibilityCounts, summarizeEligibility, decidedShare, frozenAsOf, matchingInputDigest, statedRequirement } from "./vcrMatching.mjs";
 import { matchingVariablesOf, subjectTableFacts } from "./vcrMatchingTable.mjs";
 import { matchingAssessmentEvidence } from "./vcrMatchingEvidence.mjs";
 import { languageCriteriaByKey, languageCriterionHash } from "./vcrMatchingSnapshot.mjs";
 
-/**
- * Sites kept on a candidate trial. A registry record can list hundreds; a patient's reader needs where
- * the trial runs and whether it is recruiting there, and the record's own total stays beside the list.
- */
-export const CANDIDATE_TRIAL_LOCATIONS_MAX = 100;
-
-/** The longest eligibility text kept with a trial (the registry client's own ceiling on a record). */
-export const CANDIDATE_TRIAL_ELIGIBILITY_MAX = 100_000;
-
 /** @param {unknown} value */
 const text = (value) => String(value ?? "").trim();
 /** @param {unknown} value */
 const list = (value) => (Array.isArray(value) ? value : []);
-
-/**
- * The page of a trial on its registry, for a link a reader can open. Only an https address is a link:
- * what a registry sends in a `url` field is data from outside, and a `javascript:` address in an
- * anchor is not a link.
- * @param {string} registry @param {string} registryId @param {string} given what the registry's record said
- */
-export function candidateTrialUrl(registry, registryId, given = "") {
-  const id = text(registryId);
-  if (registry === "clinicaltrials.gov" && id) return `${CTGOV_STUDY_URL}${encodeURIComponent(id)}`;
-  if (registry === "ctis" && id) return `${CTIS_STUDY_URL}${encodeURIComponent(id)}`;
-  const own = text(given);
-  return /^https:\/\/[^\s]+$/i.test(own) ? own : "";
-}
-
-/**
- * A candidate trial's identity, from the record the registry client fetched (`{ precedent, record }`,
- * the registry client's own answer for ClinicalTrials.gov, ChiCTR and CTIS alike).
- * @param {{ precedent: any, record?: any }} built
- */
-export function candidateTrialFromRecord({ precedent, record = null }) {
-  const registry = text(precedent?.registry);
-  const registryId = text(precedent?.registryId);
-  const design = precedent?.design ?? {};
-  const source = list(precedent?.sources)[0] ?? {};
-  const raw = list(record?.reduced?.protocolSection?.contactsLocationsModule?.locations);
-  const total = Number.isFinite(Number(precedent?.sites?.count)) && precedent?.sites?.count !== null ? Number(precedent.sites.count) : (raw.length || null);
-  const eligibilityText = text(precedent?.eligibilityText).slice(0, CANDIDATE_TRIAL_ELIGIBILITY_MAX);
-  return {
-    registry,
-    registryId,
-    title: text(precedent?.title) || registryId,
-    phase: list(design.phases).map(text).filter(Boolean).join("/"),
-    status: text(design.overallStatus),
-    conditions: list(precedent?.pico?.conditions).map(text).filter(Boolean).slice(0, 20),
-    locations: {
-      total,
-      countries: list(precedent?.sites?.countries).map(text).filter(Boolean),
-      // Where and whether recruiting; the contacts a record lists beside each site are never copied.
-      sites: raw.slice(0, CANDIDATE_TRIAL_LOCATIONS_MAX).map((site) => ({
-        facility: text(site?.facility), city: text(site?.city), state: text(site?.state), country: text(site?.country), status: text(site?.status),
-      })),
-    },
-    url: candidateTrialUrl(registry, registryId, text(record?.url) || text(source.url)),
-    collection: record?.collection ?? null,
-    recordHash: text(record?.hash) || text(source.recordHash) || null,
-    retrievedAt: text(precedent?.fetchedAt) || text(source.retrievedAt) || null,
-    eligibilityText,
-  };
-}
 
 /** Spellings of one character that the comparison of a quotation with its record treats as the same (each maps to its first key). */
 const DASHES = /[\u2010-\u2015\u2212\uFE58\uFE63\uFF0D]/u;
@@ -411,14 +351,12 @@ function listed(about, assessment) {
  *
  * @param {{ candidateStore: import("./vcrCandidateTrialStore.mjs").VcrCandidateTrialStore, matchStore?: any,
  *   documents?: { read: (study: any, input: { subjectKey: string, documentId: string }) => Promise<{ text: string } | null> } | null,
- *   subjectTable?: { read: (study: any, options?: { variables?: readonly string[] | null, propose?: boolean }) => Promise<any> } | null, config?: Record<string, any>, report?: (code: string) => void,
+ *   subjectTable?: { read: (study: any, options?: { variables?: readonly string[] | null, propose?: boolean }) => Promise<any> } | null, report?: (code: string) => void,
  *   now?: () => Date }} parts
  */
-export function createPatientTrials({ candidateStore, matchStore = null, documents = null, subjectTable = null, config = {}, report = () => {}, now = () => new Date() }) {
+export function createPatientTrials({ candidateStore, matchStore = null, documents = null, subjectTable = null, report = () => {}, now = () => new Date() }) {
   /** What the seam did since this process started (`open_science_vcr_patient_trials_total`). */
-  const counters = { written: 0, updated: 0, refused: 0, capReached: 0, evaluated: 0, evaluationFailed: 0, searches: 0 };
-  /** The most candidate trials one study holds: each costs an evaluation per patient. */
-  const max = () => (Number(config.vcrCandidateTrialsMax) > 0 ? Number(config.vcrCandidateTrialsMax) : 60);
+  const counters = { evaluated: 0, evaluationFailed: 0, searches: 0 };
 
   /**
    * The table of the study's patients, once for a whole evaluation. A table that cannot be read is a note on the answer and nothing else:
@@ -442,11 +380,6 @@ export function createPatientTrials({ candidateStore, matchStore = null, documen
 
   const self = {
     counters,
-
-    /** Whether the study already holds this trial, by its registry and registry id or by its own id. @param {any} study @param {{ id?: string, registry?: string, registryId?: string }} key */
-    async holds(study, { id, registry, registryId }) {
-      return Boolean(await candidateStore.getCandidateTrial({ studyId: study.id, ...(id ? { id } : { registry: registry ?? null, registryId: registryId ?? null }) }));
-    },
 
     /**
      * Judge patients against the study's candidate trials (every one, or the `trialIds` named) as of one instant. A pair that cannot be
@@ -564,46 +497,9 @@ export function createPatientTrials({ candidateStore, matchStore = null, documen
       return { evaluated, unavailable, notes };
     },
 
-    /**
-     * Write one candidate trial with its criteria (`criteria: null` keeps what it has) and judge the patients named — and, when the criteria
-     * changed, every patient who had a verdict about the old ones, whose verdicts the store has just removed.
-     * @param {any} study @param {{ trial: Record<string, any>, criteria: readonly any[] | null, subjectKeys?: readonly string[] }} input
-     */
-    async writeTrial(study, { trial, criteria, subjectKeys = [] }) {
-      let saved;
-      try {
-        saved = await candidateStore.saveCandidateTrial({ studyId: study.id, userId: study.userId, trial, criteria, max: max() });
-      } catch (error) {
-        counters.refused += 1;
-        if (error instanceof HttpError && error.status === 409) counters.capReached += 1;
-        else report(String(/** @type {any} */ (error)?.code ?? "vcr_write_refused"));
-        throw error;
-      }
-      if (saved.created) counters.written += 1; else counters.updated += 1;
-      const who = [...new Set([...subjectKeys, ...(saved.criteriaChanged ? saved.reassess : [])])];
-      const evaluation = who.length ? await self.evaluate(study, { subjectKeys: who, trialIds: [saved.trial.id] }) : { evaluated: [], unavailable: [], notes: [] };
-      return { ...saved, evaluation };
-    },
-
     /** A criterion of one of the study's candidate trials, by id (the words a long record is searched for it with, M4). @param {any} study @param {string} id */
     async criterionById(study, id) {
       return candidateStore.getCriterion({ studyId: study.id, id });
-    },
-
-    /** The language keys of a candidate trial's criteria. @param {any} study @param {string} candidateTrialId */
-    async languageKeys(study, candidateTrialId) {
-      const trial = await candidateStore.getCandidateTrial({ studyId: study.id, id: candidateTrialId });
-      if (!trial) return [];
-      const criteria = await candidateStore.listCriteria(trial.id);
-      return [...languageCriteriaByKey(criteria).keys()];
-    },
-
-    /**
-     * A run's answer to one language criterion of a candidate trial.
-     * @param {any} study @param {{ subjectKey: string, candidateTrialId: string, criterionKey: string, state: string, evidence: readonly any[], provenance?: any }} input
-     */
-    async saveLanguageJudgment(study, input) {
-      return candidateStore.saveLanguageJudgment({ studyId: study.id, userId: study.userId, ...input });
     },
 
     /**

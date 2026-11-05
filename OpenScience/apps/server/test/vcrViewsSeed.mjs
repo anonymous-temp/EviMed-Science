@@ -18,6 +18,7 @@ import path from "node:path";
 import { lineageNode } from "@evimed/domain";
 
 import { assessSubject } from "../src/vcrMatching.mjs";
+import { seedWrittenTrial } from "./helpers/vcrCandidateSeed.mjs";
 import { assumptionFromPooling, readPoolResult } from "../src/vcrEvidence.mjs";
 import { vcrReportModel } from "../src/vcrRender.mjs";
 import { seedVcrCatalogue } from "../src/vcrService.mjs";
@@ -565,7 +566,7 @@ export async function seedEv201({ store, matchStore, evidenceStore, plane = "", 
   for (const subject of subjects) {
     const assessment = assessSubject({
       studyId, protocolVersionId: protocol.id, subjectKey: subject.key, direction: "trial_to_patient", criteria: criterionRows,
-      facts: factsFor(subject), asOf, priority: subject.key === "P-0192" ? { score: 0.8, rationale: "ECOG 1，一线含铂后进展" } : undefined,
+      facts: factsFor(subject), asOf,
     });
     assessments[subject.key] = await matchStore.saveAssessment({ assessment, userId });
   }
@@ -615,9 +616,9 @@ export async function seedEv201({ store, matchStore, evidenceStore, plane = "", 
  * her — and a second patient nobody has found anything for. Another account's, so the owner's home list and every fixture written
  * before this one stay as they were.
  *
- * @param {{ store: any, matchStore: any, patientTrials: any }} parts
+ * @param {{ store: any, matchStore: any, patientTrials: any, candidateStore: any }} parts
  */
-export async function seedPatientTrials({ store, matchStore, patientTrials }) {
+export async function seedPatientTrials({ store, matchStore, patientTrials, candidateStore }) {
   const userId = "u_trials";
   const study = await store.createStudy({
     userId, projectId: "prj_trials", name: "EV-201 患者找试验", question: "晚期肺腺癌患者 P-0192 现在有哪些试验可以去问？", dataTier: "T1", intendedUse: "exploratory",
@@ -653,11 +654,11 @@ export async function seedPatientTrials({ store, matchStore, patientTrials }) {
     locations: { total: sites, countries: ["China"], sites: [{ facility: "Beijing Cancer Hospital", city: "Beijing", state: "", country: "China", status: "RECRUITING" }] },
     url: `https://clinicaltrials.gov/study/${registryId}`, recordHash: createHash("sha256").update(registryId).digest("hex"), retrievedAt: "2026-09-28T08:00:00.000Z", eligibilityText: sourceCriteria.map(entry => entry.sourceText).join("\n"),
   });
-  const first = await patientTrials.writeTrial(study, { trial: trial("NCT05000001", "EV-201 plus docetaxel versus docetaxel in previously treated NSCLC", "PHASE3", "RECRUITING", 14, [age, ecog, brain]),
+  const first = await seedWrittenTrial(patientTrials, candidateStore, study, { trial: trial("NCT05000001", "EV-201 plus docetaxel versus docetaxel in previously treated NSCLC", "PHASE3", "RECRUITING", 14, [age, ecog, brain]),
     criteria: [age, ecog, brain], subjectKeys: ["P-0192"] });
-  const second = await patientTrials.writeTrial(study, { trial: trial("NCT05000002", "A phase 2 study of EV-201 in EGFR-mutant NSCLC after osimertinib", "PHASE2", "NOT_YET_RECRUITING", 3, [age, egfr, brain]),
+  const second = await seedWrittenTrial(patientTrials, candidateStore, study, { trial: trial("NCT05000002", "A phase 2 study of EV-201 in EGFR-mutant NSCLC after osimertinib", "PHASE2", "NOT_YET_RECRUITING", 3, [age, egfr, brain]),
     criteria: [age, egfr, brain], subjectKeys: ["P-0192"] });
-  const third = await patientTrials.writeTrial(study, { trial: trial("NCT05000003", "EV-201 in elderly patients with advanced NSCLC", "PHASE2", "RECRUITING", 5, [elderly, ecog]),
+  const third = await seedWrittenTrial(patientTrials, candidateStore, study, { trial: trial("NCT05000003", "EV-201 in elderly patients with advanced NSCLC", "PHASE2", "RECRUITING", 5, [elderly, ecog]),
     criteria: [elderly, ecog], subjectKeys: ["P-0192"] });
   // The study's own protocol has judged her too.
   const ownCriteria = await matchStore.listCriteria({ studyId: study.id, protocolVersionId: protocol.id });

@@ -110,7 +110,6 @@ import { rerankCandidates } from "./vcrCandidateRerank.mjs";
 import { retrieveCandidates } from "./vcrCandidateRetrieve.mjs";
 import { summaryStamp } from "./vcrCandidateSearchStore.mjs";
 import { EVIDENCE_ARM_ROLES } from "./vcrEvidenceStore.mjs";
-import { candidateTrialFromRecord } from "./vcrPatientTrials.mjs";
 import { verifyLiteratureBaseline } from "./vcrEvidenceSources.mjs";
 import { bindEvidenceTrialIdentity, independentTrialItems } from "./vcrTrialIdentity.mjs";
 import { paperAddress } from "./vcrPublicationSources.mjs";
@@ -1688,24 +1687,6 @@ export function createVcrEvidencePipeline({ store, registry = null, trialCorpus 
         logger?.warn?.("vcr.evidence.registry_read_failed", { registryId, reason });
         return registryFailure({ status: REGISTRY_UNAVAILABLE, reason }, registryName, String(registryId ?? ""), fetchedAt);
       }
-    },
-
-    /**
-     * A registry trial as a candidate for one patient (「给患者找试验」): the record is fetched like any registry read and what
-     * identifies the trial is read out of it in code (`candidateTrialFromRecord`) — the run names a registry and an id, never a
-     * status or a site. Nothing is written: a candidate is a lead, not evidence a card may cite, so the precedent library is
-     * left alone. A registry that cannot answer is named, and is not a trial that does not exist.
-     * @param {{ userId?: string, registry?: string, registryId: string, collection?: string | null, collectionRevision?: string | null, signal?: AbortSignal }} input
-     */
-    async candidateRecord({ userId = "", registry: registryName = "clinicaltrials.gov", registryId, collection = null, collectionRevision = null, signal }) {
-      const { built, failure } = await fetchRecord(registryName, String(registryId ?? ""), userId, { collection, collectionRevision, signal });
-      if (!built) {
-        const notFound = failure?.status === REGISTRY_NOT_FOUND;
-        return { status: notFound ? REGISTRY_NOT_FOUND : (failure?.status ?? REGISTRY_UNAVAILABLE), reason: failure?.reason ?? "registry_record_unreadable", registryId };
-      }
-      const provenance = collection ? built.precedent.sources?.[0]?.collection : null;
-      return { status: "ok", trial: { ...candidateTrialFromRecord(built), ...(provenance ? { collection: provenance } : {}) },
-        ...(provenance ? { collection: provenance } : {}) };
     },
 
     /**

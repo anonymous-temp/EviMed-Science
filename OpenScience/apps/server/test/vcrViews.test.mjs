@@ -810,7 +810,7 @@ test("a study with nothing in it gives every tab its empty state, and none of th
 /** A matching bundle with one person, one referral and the moves made on it. @param {any} events @param {{ reviewedBy?: string | null, people?: Map<string, string> | null }} [options] */
 function matchingBundle(events, { reviewedBy = null, people } = {}) {
   const criteria = [{ id: "crit_1", kind: "inclusion", ordinal: 1, sourceText: "ECOG 0–1", criterionType: "performance_status" }];
-  const subject = { id: "asm_1", subjectKey: "P-0192", summary: "insufficient_evidence", counts: { satisfied: 0, unknown: 1, pending_recheck: 0 }, priority: null, direction: "trial_to_patient", asOf: "2026-09-28T01:00:00.000Z", reviewedBy };
+  const subject = { id: "asm_1", subjectKey: "P-0192", summary: "insufficient_evidence", counts: { satisfied: 0, unknown: 1, pending_recheck: 0 }, direction: "trial_to_patient", asOf: "2026-09-28T01:00:00.000Z", reviewedBy };
   return {
     study: { dataTier: "T2" }, now: NOW, roles: ["lead"], ...(people === undefined ? {} : { people }),
     match: {

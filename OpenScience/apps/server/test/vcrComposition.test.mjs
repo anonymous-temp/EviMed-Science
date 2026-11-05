@@ -121,7 +121,6 @@ function matchStoreDouble(overrides = {}) {
       return { id: "mas_1", summary: "insufficient_evidence", asOf: AS_OF, protocolVersionId: "prt_1", reviewedBy: "coordinator-li@hospital",
         counts: { satisfied: 1, not_satisfied: 0, unknown: 1, pending_recheck: 0, notApplicable: 0, total: 2 },
         evidenceGaps: [{ variable: "myocardial_infarction", reason: "not_recorded", criterionIds: ["crt_mi"] }],
-        priority: { score: 0.9, rationale: "患者 3 月前在我院行 PCI，家属要求尽快入组" },
         judgments: [{ criterionId: "crt_mi", state: "unknown", applicable: true, decidedBy: "code", recheckAt: null, evidence: [],
           overrideState: "satisfied", overriddenBy: "coordinator-li@hospital", overrideNote: "电话核实，无心梗" }] };
     },

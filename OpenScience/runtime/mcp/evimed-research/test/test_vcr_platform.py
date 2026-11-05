@@ -697,33 +697,19 @@ class VcrReadWriteTests(_GatewayCase):
         self.assertTrue({"searchId", "candidateLimit"} <= set(selection_keys))
         self.assertEqual(vcr_platform.CANDIDATES_TIMEOUT_SECONDS > vcr_platform.TIMEOUT_SECONDS, True, "a search that pages many registries is given the time its server-side deadline needs")
 
-    def test_the_trials_found_for_a_patient_are_a_write_and_a_read_of_their_own(self):
-        # 「给患者找试验」: a run writes the registry trial, and reads the trials found for a patient back.
-        self.assertIn("candidate_trial", vcr_platform.WRITE_WHATS)
+    def test_the_trials_found_for_a_patient_are_a_read_of_their_own_and_no_write(self):
+        # 「给患者找试验」: the trials judged for a patient are read back; the run saves its judgment of one with trial_judgment.
+        self.assertNotIn("candidate_trial", vcr_platform.WRITE_WHATS)
+        self.assertIn("trial_judgment", vcr_platform.WRITE_WHATS)
         self.assertIn("candidate_trials", vcr_platform.READ_WHATS)
         definitions = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}
         self.assertIn("candidate_trials", definitions["vcr_read"]["description"])
-        item = {"registryId": "NCT05000001", "subjectKeys": ["P-0192"]}
-        _Gateway.answers["write"] = (200, {"data": {"what": "candidate_trial", "ok": True, "ids": ["ctr_1"], "issues": [], "results": [
-            {"index": 0, "id": "ctr_1", "registryId": "NCT05000001", "created": True, "criteria": 0,
-             "evaluated": [{"subjectKey": "P-0192", "summary": "eligible"}]}]}})
-        written = self.server.call_tool("vcr_write", {"what": "candidate_trial", "items": [item]})
-        self.assertEqual(written["status"], "success")
-        self.assertIn("Wrote candidate_trial: 1 written", written["summary"])
-        self.assertEqual(written["data"]["results"][0]["evaluated"][0]["summary"], "eligible")
-        self.assertEqual(_Gateway.seen[0]["body"], {"what": "candidate_trial", "items": [item]})
-
+        self.assertNotIn("candidate_trial ", definitions["vcr_write"]["description"])
+        self.assertNotIn("candidateTrialId", definitions["vcr_write"]["description"])
         _Gateway.answers["read"] = (200, {"data": {"what": "candidate_trials", "trials": [{"id": "ctr_1", "registryId": "NCT05000001", "criteria": 1}], "more": False}})
         read = self.server.call_tool("vcr_read", {"what": "candidate_trials", "filter": {"registryId": "NCT05000001"}})
         self.assertEqual(read["status"], "success")
-        self.assertEqual(_Gateway.seen[1]["body"], {"what": "candidate_trials", "filter": {"registryId": "NCT05000001"}})
-
-        # A trial the registry does not have is named on its item and the call goes on.
-        _Gateway.answers["write"] = (200, {"data": {"what": "candidate_trial", "ok": False, "ids": [], "issues": [
-            {"index": 0, "field": "registryId", "code": "registry_not_found", "message": "登记平台没有这个登记号的记录。"}]}})
-        refused = self.server.call_tool("vcr_write", {"what": "candidate_trial", "items": [{"registryId": "NCT00000000"}]})
-        self.assertEqual(refused["status"], "warning")
-        self.assertEqual(refused["warnings"], ["item 0, registryId: 登记平台没有这个登记号的记录。"])
+        self.assertEqual(_Gateway.seen[0]["body"], {"what": "candidate_trials", "filter": {"registryId": "NCT05000001"}})
 
     def test_an_answer_over_the_cap_is_refused_by_name(self):
         _Gateway.answers["read"] = (200, b'{"data": {"pad": "' + b"x" * (vcr_platform.MAX_RESPONSE_BYTES + 10) + b'"}}')

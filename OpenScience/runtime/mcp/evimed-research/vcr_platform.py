@@ -90,7 +90,7 @@ WRITE_WHATS = ("data_intake", "task_context", "patient_context",
     "definition", "protocol", "criteria", "assumption", "evidence_item", "precedent", "population", "patient_set",
     "comparator", "trial_scenario", "design_grid", "decision", "report", "model", "forecast", "step", "plan",
     "fact", "language_judgment", "field_map", "pack", "model_assessment", "history", "forecast_design", "trial_benchmark",
-    "candidate_trial", "trial_judgment", "soa", "regulatory_contact", "result_record",
+    "trial_judgment", "soa", "regulatory_contact", "result_record",
 )
 # The engine's job kinds, in the domain's order (`VCR_JOB_KINDS` in
 # `packages/domain/src/vcrVocabulary.mjs`): the 24 of the first release, then the
@@ -292,9 +292,6 @@ def _detailed_tool_definitions():
                 "visit schedule) for a patient set; generate_population for a "
                 "population; the comparator kind for a comparator) and write those keys and no others. Items are checked "
                 "one by one; refused items come back in issues and the rest are written."
-                " what: candidate_trial writes a registry trial found for a patient: items [{registryId, subjectKeys}] -- the platform "
-                "reads the trial's title, phase, status and sites from the registry and judges the named patients against the criteria the trial "
-                "already holds; a language criterion of a trial is answered with what: language_judgment and candidateTrialId."
                 " what: trial_benchmark imports an existing external trial-effect JSON via data {predictionsFile: workspace-relative path}; "
                 "actual effects are read from preserved evidence. Never generate the file's predictions yourself."
             ),

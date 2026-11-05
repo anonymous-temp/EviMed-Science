@@ -1,213 +1,39 @@
-// `vcr_write what: "candidate_trial"` — the run hands the platform a registry id; the platform reads the trial's identity out of the
-// registry's record, saves it and judges the patients named against the criteria the trial already holds, item by item.
+// `vcr_write` of the study's own criteria and language answers: an exclusion is written as the registry states it and stored as the
+// requirement that keeps the patient in, and a language answer about the protocol is kept exactly as written.
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { HttpError } from "../src/security.mjs";
 import { vcrRuntimeWrite } from "../src/vcrGateway.mjs";
 import { statedRequirement, storedExclusion } from "../src/vcrMatching.mjs";
-import { VCR_READ_WHATS, VCR_WRITE_WHATS } from "../src/vcrService.mjs";
+import { VCR_WRITE_WHATS } from "../src/vcrService.mjs";
 
 const study = { id: "std_1", userId: "u1", projectId: "prj_1", dataTier: "T1" };
-const HASH = "c".repeat(64);
-const ELIGIBILITY = "Inclusion Criteria:\n* Age >= 18 years\n* Histologically confirmed NSCLC\nExclusion Criteria:\n* Active brain metastases";
-
-const record = (registryId = "NCT05000001") => ({
-  status: "ok",
-  trial: { registry: "clinicaltrials.gov", registryId, title: `Trial ${registryId}`, phase: "PHASE2", status: "RECRUITING", conditions: ["NSCLC"],
-    locations: { total: 1, countries: ["China"], sites: [] }, url: `https://clinicaltrials.gov/study/${registryId}`, recordHash: HASH,
-    retrievedAt: "2026-10-10T08:00:00.000Z", eligibilityText: ELIGIBILITY },
-});
-
 const AGE = { kind: "inclusion", criterionType: "demographic", sourceText: "Age >= 18 years",
   requirement: { op: "compare", variable: "age", comparator: "gte", value: 18, unit: "year" } };
 
-/** The seams a write meets, as doubles that record what they were asked. @param {Record<string, any>} [options] */
-function seams(options = {}) {
-  /** @type {any[]} */
-  const written = [];
-  /** @type {any[]} */
-  const fetched = [];
-  const evidence = {
-    async candidateRecord(input) { fetched.push(input); return options.record ? options.record(input) : record(input.registryId); },
-  };
-  const patientTrials = options.patientTrials === null ? null : {
-    async writeTrial(target, input) {
-      written.push({ studyId: target.id, ...input });
-      if (options.refuse) throw new HttpError(409, "vcr_write_refused", options.refuse);
-      return { trial: { id: "ctr_1", ...input.trial }, criteria: input.criteria?.map((criterion, index) => ({ id: `ctc_${index + 1}`, ...criterion })) ?? [],
-        created: true, criteriaChanged: input.criteria !== null, evaluation: { evaluated: input.subjectKeys.map((subjectKey) => ({ subjectKey, summary: "eligible", counts: { satisfied: 3 } })), unavailable: [] } };
-    },
-  };
-  const matchStore = { async candidateSubjects() { return options.roster ?? ["P-0192", "P-0201"]; }, async holdsSubject() { return false; } };
-  return { written, fetched, deps: { store: {}, service: {}, orchestrator: null, study, evidence, matchStore, patientTrials, documents: null } };
-}
-
-/** @param {ReturnType<typeof seams>} seam @param {any[]} items */
-const write = (seam, items) => vcrRuntimeWrite({ ...seam.deps, what: "candidate_trial", items, data: null });
-
-test("candidate_trial is a word the run can write and candidate_trials one it can read", () => {
-  assert.ok(VCR_WRITE_WHATS.includes("candidate_trial"));
-  assert.ok(VCR_READ_WHATS.includes("candidate_trials"));
-});
-
-test("a candidate write asks for the specified frozen collection", async () => {
-  const seam = seams();
-  const item = { registryId: "NCT05000001", collection: "snapshot-1", collectionRevision: "a".repeat(64) };
-  assert.equal((await write(seam, [item])).ok, true);
-  assert.deepEqual(seam.fetched, [{ userId: "u1", registry: "clinicaltrials.gov", registryId: "NCT05000001", collection: "snapshot-1", collectionRevision: "a".repeat(64) }]);
-  assert.equal((await write(seam, [{ ...item, collection: "" }])).ok, false);
-  assert.equal((await write(seam, [{ ...item, collectionRevision: undefined }])).ok, false);
-  assert.equal(seam.fetched.length, 1);
-});
-
-test("an aborted frozen write skips mutation and queued candidate records", async () => {
-  const caller = new AbortController();
-  const seam = seams({ record(input) {
-    assert.equal(input.signal, caller.signal);
-    caller.abort();
-    return record(input.registryId);
-  } });
-  const item = { registryId: "NCT05000001", collection: "snapshot-1", collectionRevision: "a".repeat(64) };
-  const answer = await vcrRuntimeWrite({ ...seam.deps, what: "candidate_trial", items: [item, item], data: null, signal: caller.signal });
-  assert.equal(answer.ok, false);
-  assert.equal(seam.fetched.length, 1);
-  assert.equal(seam.written.length, 0);
-});
-
-test("a trial is written from its registry record: identity from the record, the patients named judged", async () => {
-  const seam = seams();
-  const outcome = await write(seam, [{ registryId: "NCT05000001", subjectKeys: ["P-0192"] }]);
-  assert.deepEqual(outcome.issues, []);
-  assert.equal(outcome.ok, true);
-  assert.deepEqual(outcome.ids, ["ctr_1"]);
-  assert.deepEqual(seam.fetched, [{ userId: "u1", registry: "clinicaltrials.gov", registryId: "NCT05000001" }]);
-  const [call] = seam.written;
-  assert.equal(call.trial.title, "Trial NCT05000001", "the title is the record's, not the run's");
-  assert.equal(call.trial.status, "RECRUITING");
-  assert.deepEqual(call.subjectKeys, ["P-0192"]);
-  assert.equal(call.criteria, null, "a candidate write carries no criteria");
-  assert.deepEqual(outcome.results[0], { index: 0, id: "ctr_1", registryId: "NCT05000001", created: true, criteria: 0,
-    evaluated: [{ subjectKey: "P-0192", summary: "eligible", counts: { satisfied: 3 } }] });
-});
-
-test("the identity of a trial is not the run's to type, and criteria are not a field of the write", async () => {
-  const seam = seams();
-  const typed = await write(seam, [{ registryId: "NCT05000001", title: "Typed", phase: "PHASE3", recordHash: "z" }]);
-  assert.equal(typed.ok, false);
-  assert.ok(typed.issues.some((entry) => entry.code === "vcr_write_field_forbidden" || entry.code === "vcr_write_value_invalid"));
-  const criteria = await write(seam, [{ registryId: "NCT05000001", criteria: [AGE] }]);
-  assert.equal(criteria.ok, false);
-  assert.equal(seam.written.length, 0);
-});
-
-test("a registry that has no such record, or cannot be asked, is named and writes nothing", async () => {
-  const absent = seams({ record: () => ({ status: "registry_not_found", reason: "registry_not_found", registryId: "NCT00000000" }) });
-  const missing = await write(absent, [{ registryId: "NCT00000000" }]);
-  assert.deepEqual(missing.issues.map((entry) => [entry.field, entry.code]), [["registryId", "registry_not_found"]]);
-  const offline = seams({ record: () => ({ status: "registry_unavailable", reason: "ENOTFOUND", registryId: "NCT05000001" }) });
-  const down = await write(offline, [{ registryId: "NCT05000001" }]);
-  assert.deepEqual(down.issues.map((entry) => [entry.field, entry.code]), [["registryId", "registry_unavailable"]]);
-  assert.equal(absent.written.length + offline.written.length, 0);
-});
-
-test("a patient the study does not hold is a warning, and the trial is still written for those it does", async () => {
-  const seam = seams();
-  const outcome = await write(seam, [{ registryId: "NCT05000001", subjectKeys: ["P-0192", "P-9999"] }]);
-  assert.deepEqual(outcome.issues, []);
-  assert.deepEqual(seam.written[0].subjectKeys, ["P-0192"]);
-  assert.deepEqual(outcome.results[0].warnings.map((warning) => [warning.field, warning.code]), [["subjectKeys[1]", "vcr_subject_not_found"]]);
-});
-
-test("the study's cap on candidate trials refuses that trial with the reason, and nothing else", async () => {
-  const seam = seams({ refuse: "本研究最多保存 3 个候选试验，已满" });
-  const outcome = await write(seam, [{ registryId: "NCT05000001" }]);
-  assert.equal(outcome.ok, false);
-  assert.deepEqual(outcome.issues.map((entry) => [entry.index, entry.code]), [[0, "vcr_write_refused"]]);
-  assert.match(outcome.issues[0].message, /3 个候选试验/);
-});
-
-test("a deployment that has not composed the trials says so by item, not by failing the call", async () => {
-  const seam = seams({ patientTrials: null });
-  const outcome = await write(seam, [{ registryId: "NCT05000001" }]);
-  assert.deepEqual(outcome.issues.map((entry) => entry.code), ["vcr_write_refused"]);
-});
-
-// ---------------------------------------------------------------------------
-// The answer to a criterion only language can decide, about a candidate trial
-// ---------------------------------------------------------------------------
-
 const CHART = "患者本人可理解研究内容并签署知情同意。";
 
-/** The seams a language answer meets. @param {Record<string, any>} [options] */
-function languageSeams(options = {}) {
-  /** @type {any[]} */
-  const saved = [];
-  /** @type {any[]} */
-  const evaluated = [];
-  const patientTrials = {
-    async holds(_study, { id }) { return id === "ctr_1"; },
-    async languageKeys(_study, id) { return id === "ctr_1" ? ["consent"] : []; },
-    async saveLanguageJudgment(_study, input) { saved.push(input); return { id: "jdg_1" }; },
-    async evaluate(_study, input) {
-      evaluated.push(input);
-      return { evaluated: [{ trialId: "ctr_1", registryId: "NCT05000001", subjectKey: input.subjectKeys[0], summary: options.summary ?? "eligible", counts: { satisfied: 2 } }], unavailable: [], notes: [] };
-    },
-  };
-  const matchStore = { async holdsSubject() { return true; }, async saveLanguageJudgment() { throw new Error("a trial's answer is not a protocol's"); } };
-  // The cloud-approved reader the writers verify a quotation through (`vcrDocumentsSeam.runtimeRead`).
-  const documents = { async runtimeRead(_study, { documentId }) { return documentId === "doc_1" ? { id: "doc_1", text: CHART, visibleAt: "2026-09-01T00:00:00.000Z" } : null; } };
-  const matching = { async languageKeys() { throw new Error("a trial's key is not a protocol's"); } };
-  return { saved, evaluated, deps: { store: {}, service: {}, orchestrator: null, study, matchStore, matching, patientTrials, documents } };
-}
-
-const answer = (extra = {}) => ({
-  subjectKey: "P-0192", candidateTrialId: "ctr_1", criterionKey: "consent", state: "satisfied",
-  evidence: [{ documentId: "doc_1", quote: CHART }], ...extra,
+test("candidate_trial is no word of the write any more, and candidate_trials is still one the run can read", () => {
+  assert.ok(!VCR_WRITE_WHATS.includes("candidate_trial"));
+  assert.ok(VCR_WRITE_WHATS.includes("language_judgment"));
 });
 
-test("an answer about a candidate trial's language criterion is checked against the patient's own words, kept for that trial, and the verdict is made again once", async () => {
-  const seam = languageSeams();
-  const outcome = await vcrRuntimeWrite({ ...seam.deps, what: "language_judgment", items: [answer(), answer({ criterionKey: "consent", state: "unknown", evidence: [] })], data: null });
-  assert.deepEqual(outcome.issues, []);
-  assert.deepEqual(outcome.ids, ["jdg_1", "jdg_1"]);
-  assert.equal(seam.saved.length, 2);
-  assert.deepEqual([seam.saved[0].candidateTrialId, seam.saved[0].subjectKey, seam.saved[0].criterionKey, seam.saved[0].state], ["ctr_1", "P-0192", "consent", "satisfied"]);
-  assert.deepEqual(seam.saved[0].evidence, [{ documentId: "doc_1", start: 0, end: CHART.length, quote: CHART, visibleAt: "2026-09-01T00:00:00.000Z" }],
-    "the platform found where the sentence stands, in the patient's own document");
-  assert.deepEqual(seam.evaluated, [{ subjectKeys: ["P-0192"], trialIds: ["ctr_1"] }], "two answers about one pair are one new verdict");
-  const verdict = outcome.results.find((row) => row.candidateTrialId === "ctr_1");
-  assert.deepEqual(verdict, { candidateTrialId: "ctr_1", subjectKey: "P-0192", evaluated: [{ subjectKey: "P-0192", summary: "eligible", counts: { satisfied: 2 } }] });
-});
-
-test("a language answer names a protocol version or a candidate trial, not both; a trial or a key the study does not have is refused with the keys it has", async () => {
-  const seam = languageSeams();
-  const both = await vcrRuntimeWrite({ ...seam.deps, what: "language_judgment", items: [answer({ protocolVersionId: "prt_1" })], data: null });
-  assert.deepEqual(both.issues.map((entry) => [entry.field, entry.code]), [["candidateTrialId", "vcr_write_value_invalid"]]);
-  const noTrial = await vcrRuntimeWrite({ ...seam.deps, what: "language_judgment", items: [answer({ candidateTrialId: "ctr_9" })], data: null });
-  assert.equal(noTrial.issues[0].field, "candidateTrialId");
-  assert.match(noTrial.issues[0].message, /候选试验/);
-  const noKey = await vcrRuntimeWrite({ ...seam.deps, what: "language_judgment", items: [answer({ criterionKey: "pregnancy" })], data: null });
-  assert.equal(noKey.issues[0].field, "criterionKey");
-  assert.match(noKey.issues[0].message, /候选试验.*consent/);
-  assert.equal(seam.saved.length + seam.evaluated.length, 0, "nothing was kept, and nothing was judged again");
-
-  const forged = await vcrRuntimeWrite({ ...seam.deps, what: "language_judgment", items: [answer({ evidence: [{ documentId: "doc_1", quote: "患者拒绝签署知情同意" }] })], data: null });
-  assert.equal(forged.ok, false, "a quotation that is not in the patient's chart is not evidence");
-  assert.equal(seam.saved.length, 0);
-});
-
-test("a language answer about the study's own protocol is written exactly as it was, and judges no candidate", async () => {
-  const seam = languageSeams();
+test("a language answer about the study's own protocol is written exactly as it was, and a candidate trial is no target of it", async () => {
   /** @type {any[]} */
   const kept = [];
-  seam.deps.matching = { async languageKeys() { return ["consent"]; } };
-  seam.deps.matchStore = { async holdsSubject() { return true; }, async saveLanguageJudgment(input) { kept.push(input); return { id: "jdg_9" }; } };
-  const outcome = await vcrRuntimeWrite({ ...seam.deps, what: "language_judgment", items: [{ ...answer({ protocolVersionId: "prt_1" }), candidateTrialId: undefined }], data: null });
+  const documents = { async runtimeRead(_study, { documentId }) { return documentId === "doc_1" ? { id: "doc_1", text: CHART, visibleAt: "2026-09-01T00:00:00.000Z" } : null; } };
+  const deps = { store: {}, service: {}, orchestrator: null, study, documents,
+    matching: { async languageKeys() { return ["consent"]; } },
+    matchStore: { async holdsSubject() { return true; }, async saveLanguageJudgment(input) { kept.push(input); return { id: "jdg_9" }; } } };
+  const item = { subjectKey: "P-0192", criterionKey: "consent", state: "satisfied", evidence: [{ documentId: "doc_1", quote: CHART }], protocolVersionId: "prt_1" };
+  const outcome = await vcrRuntimeWrite({ ...deps, what: "language_judgment", items: [item], data: null });
   assert.deepEqual(outcome.issues, []);
   assert.deepEqual(outcome.ids, ["jdg_9"]);
   assert.equal(kept[0].protocolVersionId, "prt_1");
-  assert.equal(seam.saved.length + seam.evaluated.length, 0);
+  const aimed = await vcrRuntimeWrite({ ...deps, what: "language_judgment", items: [{ ...item, protocolVersionId: undefined, candidateTrialId: "ctr_1" }], data: null });
+  assert.equal(aimed.ok, false);
+  assert.deepEqual(aimed.issues.map((entry) => entry.code), ["vcr_write_field_forbidden"]);
+  assert.equal(kept.length, 1);
 });
 
 // Two live 给患者找试验 runs (real DSH + DeepSeek, 2026-10-11) wrote all twelve of their structured exclusions as the registry states

@@ -14,6 +14,7 @@ import { storedExclusion } from "../src/vcrMatching.mjs";
 import { locateSourceText } from "../src/vcrPatientTrials.mjs";
 import { createWebApiApp } from "../src/server.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
+import { seedWrittenTrial } from "./helpers/vcrCandidateSeed.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (databaseUrl) {
@@ -62,8 +63,6 @@ let context = null;
 let isolated = null;
 /** @type {any[]} */
 const dispatches = [];
-/** @type {string[]} */
-const registryReads = [];
 
 before(async () => {
   if (!databaseUrl) return;
@@ -75,14 +74,13 @@ before(async () => {
     dataDir, port: 0, runtimeMode: "mock", devAuth: false, authMode: "local", bootstrapUser: "", bootstrapPassword: "",
     stateStore: "postgres", requireSharedStateStore: true, databaseUrl: isolated.url, operatorMetricsToken: "test-only-metrics-token",
     rateLimitMaxRequests: 100_000, authRateLimitMaxRequests: 1_000,
-    vcrEnabled: true, vcrAudience: "all", vcrPollMs: 3_600_000, vcrDataPlaneDir: plane, vcrCandidateTrialsMax: 5,
+    vcrEnabled: true, vcrAudience: "all", vcrPollMs: 3_600_000, vcrDataPlaneDir: plane,
     vcrEngineUrl: "http://engine.test:8080", vcrEngineToken: "t".repeat(40), vcrEngineReceiptKey: "r".repeat(40),
     // The registry and the engine are one double: ClinicalTrials.gov's API answers the two records, the engine its health.
     vcrFetch: async (/** @type {any} */ url) => {
       const target = new URL(String(url));
       if (target.hostname === "clinicaltrials.gov") {
         const id = target.pathname.split("/").pop() ?? "";
-        registryReads.push(id);
         return id in REGISTRY ? new Response(JSON.stringify(recordOf(id)), { status: 200, headers: { "content-type": "application/json" } })
           : new Response("{}", { status: 404 });
       }
@@ -143,9 +141,8 @@ async function furnishedStudy() {
 }
 
 /**
- * Trials held in the study with the criteria a test names, written the way the trials are kept: the record read from the registry,
- * each wording located in it, an exclusion stored as the negation of what is written, the patients named judged. The retired
- * `candidate_trial` write used to do this for a run; a test seeds the same rows through the composed module's own seams.
+ * Trials held in the study with the criteria a test names, as the rows the retired write left: the identity of the registry record, each
+ * wording located in it, an exclusion stored as the negation of what is written, the patients named judged.
  * @param {any} study @param {any[]} items
  */
 async function runWrites(study, items) {
@@ -153,15 +150,18 @@ async function runWrites(study, items) {
   /** @type {any[]} */
   const results = [];
   for (const item of items) {
-    const fetched = await vcr.evidence.candidateRecord({ userId: study.userId, registry: "clinicaltrials.gov", registryId: item.registryId });
-    const trial = fetched.trial;
+    const record = /** @type {Record<string, any>} */ (REGISTRY)[item.registryId];
+    const trial = { registry: "clinicaltrials.gov", registryId: item.registryId, title: record.title, phase: record.phases.join("/"), status: record.status,
+      conditions: ["Non-small Cell Lung Cancer"],
+      locations: { total: record.sites, countries: ["China"], sites: Array.from({ length: record.sites }, (_, index) => ({ facility: `Site ${index + 1}`, city: "Beijing", state: "", country: "China", status: "RECRUITING" })) },
+      url: `https://clinicaltrials.gov/study/${item.registryId}`, recordHash: "a".repeat(64), retrievedAt: "2026-10-10T08:00:00.000Z", eligibilityText: record.eligibility };
     const criteria = item.criteria.map((/** @type {any} */ criterion) => {
       const found = locateSourceText(criterion.sourceText, trial.eligibilityText);
       return { ...criterion, reviewState: "ai_set", applicability: null, evidenceNeeded: criterion.evidenceNeeded ?? [],
         requirement: criterion.kind === "exclusion" ? storedExclusion(criterion.requirement) : criterion.requirement,
         sourceLocator: found ? { recordHash: trial.recordHash, ...found } : { recordHash: trial.recordHash, located: false } };
     });
-    const saved = await vcr.patientTrials.writeTrial(study, { trial, criteria, subjectKeys: item.subjectKeys ?? [] });
+    const saved = await seedWrittenTrial(vcr.patientTrials, vcr.candidateStore, study, { trial, criteria, subjectKeys: item.subjectKeys ?? [] });
     results.push({ registryId: item.registryId, id: saved.trial.id, evaluated: saved.evaluation.evaluated,
       located: criteria.filter((/** @type {any} */ criterion) => criterion.sourceLocator.start !== undefined).length });
   }
@@ -187,7 +187,6 @@ test("two registry trials are held for a patient, the platform judges her agains
   assert.equal(wrote.ids.length, 2);
   assert.deepEqual(wrote.results.map((row) => [row.registryId, row.evaluated[0].summary, row.located]), [["NCT07000002", "insufficient_evidence", 3], ["NCT07000001", "eligible", 3]],
     "the registry's record gave each its identity, the platform found each wording in it, and judged the patient at once");
-  assert.deepEqual(registryReads.sort(), ["NCT07000001", "NCT07000002"]);
 
   // The page's read: the patient chosen, her trials in order, the first trial's criteria.
   const asked = await call("owner", "GET", `${S}/matching?view=matching&direction=patient_to_trial&candidate=P-0192`);
@@ -267,19 +266,4 @@ test("the page's action dispatches a run of the matching capability for the pati
   assert.deepEqual([(await call("owner", "POST", `${S}/trial-search`, { subjectKey: "P-9999" })).body.code], ["vcr_subject_not_found"]);
   assert.equal((await call("owner", "POST", `${S}/trial-search`, { subjectKey: "P-0192", extra: 1 })).status, 400);
   assert.equal(dispatches.length, sentBefore);
-});
-
-test("a study holds only as many candidate trials as the deployment allows, and says so by item", options, async () => {
-  const study = await furnishedStudy();
-  const vcr = context.app.vcr;
-  // The deployment's cap is five: five trials fit and the sixth is refused with the reason, the first five unharmed.
-  for (let at = 1; at <= 5; at += 1) {
-    const stored = await vcr.candidateStore.saveCandidateTrial({ studyId: study.id, userId: study.userId, max: 5, criteria: [AGE],
-      trial: { registry: "clinicaltrials.gov", registryId: `NCT0800000${at}`, title: `Filler ${at}`, phase: "", status: "", conditions: [], locations: {}, url: "", recordHash: null, retrievedAt: null, eligibilityText: "" } });
-    assert.ok(stored.created);
-  }
-  await assert.rejects(runWrites(study, [{ registryId: "NCT07000001", criteria: [AGE, ECOG, BRAIN], subjectKeys: ["P-0192"] }]),
-    (/** @type {any} */ error) => error.code === "vcr_write_refused" && /5 个候选试验/.test(error.message));
-  assert.equal(vcr.patientTrials.counters.capReached >= 1, true, "and the counter says so");
-  assert.equal((await vcr.candidateStore.listCandidateTrials({ studyId: study.id })).length, 5);
 });

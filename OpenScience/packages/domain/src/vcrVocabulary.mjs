@@ -529,7 +529,7 @@ export const VCR_RESULT_KIND_TABS = Object.freeze({
  * The writes that put a patient's matching on the matching tab. A matching is judged at the write -- there is no job to finish -- so
  * the answer to each carries the entry to the tab (a job's answer carries the tab of its result's kind).
  */
-export const VCR_MATCHING_WRITE_WHATS = frozen(['patient_context', 'protocol', 'criteria', 'fact', 'language_judgment', 'candidate_trial', 'trial_judgment'])
+export const VCR_MATCHING_WRITE_WHATS = frozen(['patient_context', 'protocol', 'criteria', 'fact', 'language_judgment', 'trial_judgment'])
 
 /**
  * What each step's run is called to a person: one verb and one object. The button that starts the step says it, the run's own

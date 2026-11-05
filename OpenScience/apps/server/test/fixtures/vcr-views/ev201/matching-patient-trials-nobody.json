@@ -1,6 +1,7 @@
 {
   "view": "matching",
   "available": true,
+  "evaluateBy": "model",
   "protocols": [
     {
       "id": "prt_2",

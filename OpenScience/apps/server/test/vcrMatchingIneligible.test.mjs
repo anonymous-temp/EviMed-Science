@@ -11,7 +11,7 @@ const criteria = [
   { id: "crt_1", kind: "inclusion", ordinal: 1, sourceText: "年龄 ≥ 18 岁", criterionType: "demographic" },
   { id: "crt_2", kind: "exclusion", ordinal: 2, sourceText: "活动性脑转移", criterionType: "comorbidity" },
 ];
-const subject = (key, summary, counts) => ({ id: `asm_${key}`, subjectKey: key, summary, counts, priority: null, direction: "trial_to_patient", asOf: "2026-10-01T00:00:00.000Z", reviewedBy: null });
+const subject = (key, summary, counts) => ({ id: `asm_${key}`, subjectKey: key, summary, counts, direction: "trial_to_patient", asOf: "2026-10-01T00:00:00.000Z", reviewedBy: null });
 const judgment = (criterionId, state, evidence = []) => ({ criterionId, state, applicable: true, evidence, decidedBy: "code" });
 
 /** @param {any[]} subjects @param {Record<string, any>} [extra] */

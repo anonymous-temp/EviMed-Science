@@ -136,7 +136,7 @@ export const VCR_WRITE_WHATS = Object.freeze([
   "task_context", "patient_context", "definition", "protocol", "criteria", "assumption", "evidence_item", "precedent", "population", "patient_set",
   "comparator", "trial_scenario", "design_grid", "decision", "report", "model", "forecast", "step", "plan",
   "fact", "language_judgment", "field_map", "pack", "model_assessment", "history", "forecast_design", "trial_benchmark",
-  "candidate_trial", "trial_judgment", "soa", "regulatory_contact", "result_record",
+  "trial_judgment", "soa", "regulatory_contact", "result_record",
 ]);
 
 /** @param {unknown} value */

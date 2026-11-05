@@ -80,12 +80,13 @@ before(async () => {
   plane = mkdtempSync(join(tmpdir(), "vcr-views-plane-"));
   chmodSync(plane, 0o700);
   seeded = await seedEv201({ store, matchStore, evidenceStore, plane });
-  const patientTrials = createPatientTrials({ candidateStore: new VcrCandidateTrialStore({ database }), matchStore, config: { vcrCandidateTrialsMax: 20 }, now: () => SEED_NOW });
+  const candidateStore = new VcrCandidateTrialStore({ database });
+  const patientTrials = createPatientTrials({ candidateStore, matchStore, now: () => SEED_NOW });
   service = new VcrService({ store, config, jobs, matchStore, evidenceStore, patientTrials, now: () => SEED_NOW });
   service.attach({ records: createVcrRecords({ store, config: { vcrDataPlaneDir: plane } }) });
   number(seeded.study.id);
   number(seeded.empty.id);
-  trialsStudy = await seedPatientTrials({ store, matchStore, patientTrials });
+  trialsStudy = await seedPatientTrials({ store, matchStore, patientTrials, candidateStore });
 });
 
 after(async () => {

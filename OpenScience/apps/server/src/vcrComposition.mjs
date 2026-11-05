@@ -1254,7 +1254,7 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   jobs.addFinishHook((done) => matching.onJobFinished(done),'matching');
   const dataPlaneSeam = dataPlane ? vcrDataPlaneSeam({ dataPlane, dataStore, access }) : null;
 
-  const patientTrials = createPatientTrials({ candidateStore, matchStore, documents, subjectTable, config, report });
+  const patientTrials = createPatientTrials({ candidateStore, matchStore, documents, subjectTable, report });
   const service = new VcrService({
     store, config, engine, access, dataPlane: dataPlaneSeam, evidence, matching, jobs, seal, matchStore, evidenceStore, documents, patientTrials,
   });
@@ -1564,7 +1564,7 @@ export function vcrMetricFamilies(enabled, snapshot) {
       Object.entries(snapshot.predictions).map(([outcome, value]) => ({ labels: { outcome }, value: Number(value) })));
   }
   if (snapshot.patientTrials) {
-    add("patient_trials_total", "What 「给患者找试验」 did since this process started: candidate trials written and updated, writes refused, and writes refused because the study already holds the most it may (OPEN_SCIENCE_VCR_CANDIDATE_TRIALS_MAX); patients evaluated against a trial, evaluations that could not be made, the searches the page asked for.", "counter",
+    add("patient_trials_total", "What 「给患者找试验」 did since this process started: patients evaluated against a trial, evaluations that could not be made, the searches the page asked for.", "counter",
       Object.entries(snapshot.patientTrials).map(([kind, value]) => ({ labels: { kind }, value: Number(value) })));
   }
   if (snapshot.candidateRerank) {

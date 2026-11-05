@@ -1678,25 +1678,6 @@ test("protocol writes reject cross-criterion key collisions as a whole set", asy
   assert.equal((await call({ what: "protocol", data: { title: "t", criteria: same } })).ok, true);
 });
 
-test("candidate language judgment forwards both observed hashes or reports an unfenced legacy write", async () => {
-  const saved = [];
-  const made = fixture({ matchStore: { holdsSubject: async () => true },
-    patientTrials: { languageKeys: async () => ["consent"], saveLanguageJudgment: async (_study, input) => { saved.push(input); return { id: "j1" }; } } });
-  const call = async (extra) => { const res = response(); await made.handler(request("/internal/vcr/v1/write", { what: "language_judgment", items: [{ subjectKey: "P-1", candidateTrialId: "trial_1", criterionKey: "consent", state: "unknown", ...extra }] }), res); return res.json().data; };
-  const hash = "a".repeat(64);
-  const bound = await call({ expectedRecordHash: null, expectedCriterionHash: hash });
-  assert.equal(bound.ok, true, JSON.stringify(bound));
-  assert.equal(bound.results[0].versionBinding, "checked");
-  assert.equal(saved[0].expectedRecordHash, null);
-  assert.equal(saved[0].expectedCriterionHash, hash);
-  assert.equal((await call({})).results[0].versionBinding, "unfenced");
-  assert.equal(Object.hasOwn(saved[1], "expectedRecordHash"), false);
-  for (const extra of [{ expectedCriterionHash: hash }, { expectedRecordHash: null }, { expectedRecordHash: "bad", expectedCriterionHash: hash }]) {
-    assert.equal((await call(extra)).ok, false);
-  }
-  assert.equal(saved.length, 2);
-});
-
 test("a write that will be refused on its shape alone opens no scope; one that can be written still does", async () => {
   const probe = nativeProbe();
   const criterion = { kind: "inclusion", criterionType: "demographic", sourceText: "Age >= 18", requirement: { op: "compare", variable: "age", comparator: "gte", value: 18, unit: "year" } };

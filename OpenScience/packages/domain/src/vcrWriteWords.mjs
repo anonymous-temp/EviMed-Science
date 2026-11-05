@@ -234,8 +234,6 @@ export function vcrNormalizeWriteRow(what, row) {
         out = { ...out, valueSource: taken }
       }
     }
-  } else if (what === 'candidate_trial') {
-    out = read(out, 'registry', 'registry', 'registry')
   } else if (what === 'protocol' || what === 'criteria') {
     const { at, list } = criteriaOf(what, out)
     let changed = false

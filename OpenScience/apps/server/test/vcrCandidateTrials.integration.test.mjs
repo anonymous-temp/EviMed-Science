@@ -12,6 +12,7 @@ import { assessSubject, VCR_MATCHING_EVALUATOR_VERSION } from "../src/vcrMatchin
 import { languageCriterionHash } from "../src/vcrMatchingSnapshot.mjs";
 import { VcrStoreBase, deleteVcrStudyRows, vcrId } from "../src/vcrStoreBase.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
+import { seedCandidateLanguage, seedCandidateTrial } from "./helpers/vcrCandidateSeed.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 const options = { skip: !databaseUrl && "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured" };
@@ -77,7 +78,7 @@ test("both matching stores round-trip applicability language answers and indepen
   const studyId = await seedStudy();
   const criterion = { ...AGE, applicability: { op: "language", key: "subgroup", text: "Does this screening apply to the patient's subgroup?" } };
   const protocol = await matching.saveProtocolVersion({ studyId, userId: USER, criteria: [criterion] });
-  const registry = await trials.saveCandidateTrial({ studyId, userId: USER, trial: trial("NCT05000099"), criteria: [criterion], max: 10 });
+  const registry = await seedCandidateTrial(trials, { studyId, userId: USER, trial: trial("NCT05000099"), criteria: [criterion] });
   const candidateTrialId = registry.trial.id;
   const subjectKey = "P-applicability";
   const asOf = "2026-10-11T00:00:00.000Z";
@@ -86,7 +87,7 @@ test("both matching stores round-trip applicability language answers and indepen
   const evidence = [{ documentId: "record", quote, start: 0, end: quote.length, visibleAt: "2026-10-10T00:00:00.000Z" }];
   const input = { studyId, userId: USER, subjectKey, criterionKey: "subgroup", state: "satisfied", evidence };
   const protocolAnswer = await matching.saveLanguageJudgment({ ...input, protocolVersionId: protocol.id });
-  const candidateAnswer = await trials.saveLanguageJudgment({ ...input, candidateTrialId });
+  const candidateAnswer = await seedCandidateLanguage(trials, { ...input, candidateTrialId });
   const protocolAnswers = (await matching.latestLanguageJudgments({ studyId, protocolVersionId: protocol.id, visibleBy: asOf })).get(subjectKey);
   const candidateAnswers = await trials.latestLanguageJudgments({ studyId, candidateTrialId, subjectKey, visibleBy: asOf });
   assert.equal(protocolAnswers.subgroup.id, protocolAnswer.id);
@@ -114,7 +115,7 @@ test("both matching stores round-trip applicability language answers and indepen
   assert.deepEqual((await trials.languageAnswersForTrials(studyId, subjectKey, [candidateTrialId], new Map([[candidateTrialId, registry.criteria]]))).get(candidateTrialId), new Set());
 });
 
-test("both stores refuse to reuse a persisted answer across conflicting criteria", options, async () => {
+test("a protocol refuses to reuse a persisted answer across conflicting criteria, and an old candidate trial reads such an answer as none", options, async () => {
   const studyId = await seedStudy();
   const criterionKey = "shared";
   const requirements = [
@@ -122,7 +123,7 @@ test("both stores refuse to reuse a persisted answer across conflicting criteria
     { ...BRAIN, applicability: { op: "language", key: criterionKey, text: "Has HIV?" } },
   ];
   const protocol = await matching.saveProtocolVersion({ studyId, userId: USER, criteria: requirements });
-  const registry = await trials.saveCandidateTrial({ studyId, userId: USER, trial: trial("NCT05000098"), criteria: requirements, max: 10 });
+  const registry = await seedCandidateTrial(trials, { studyId, userId: USER, trial: trial("NCT05000098"), criteria: requirements });
   const candidateTrialId = registry.trial.id;
   const subjectKey = "P-legacy-collision";
   const input = { studyId, userId: USER, subjectKey, criterionKey, state: "satisfied", evidence: [] };
@@ -132,35 +133,9 @@ test("both stores refuse to reuse a persisted answer across conflicting criteria
     [vcrId("judgment"), studyId, USER, subjectKey, criterionKey, protocolId, trialId, languageCriterionHash(/** @type {any[]} */ (criteria), criterionKey)]);
   }
   await assert.rejects(matching.saveLanguageJudgment({ ...input, protocolVersionId: protocol.id }), { code: "vcr_criterion_malformed" });
-  await assert.rejects(trials.saveLanguageJudgment({ ...input, candidateTrialId }), { code: "vcr_criterion_malformed" });
   assert.equal((await matching.latestLanguageJudgments({ studyId, protocolVersionId: protocol.id })).get(subjectKey), undefined);
   assert.deepEqual(await trials.latestLanguageJudgments({ studyId, candidateTrialId, subjectKey }), {});
   assert.deepEqual((await trials.languageAnswersForTrials(studyId, subjectKey, [candidateTrialId], new Map([[candidateTrialId, registry.criteria]]))).get(candidateTrialId), new Set());
-});
-
-test("an observed candidate language answer is fenced by record and criterion revision", options, async () => {
-  const studyId = await seedStudy();
-  const criterionKey = "answer";
-  const candidate = await trials.saveCandidateTrial({ studyId, userId: USER, trial: trial("NCT05000097"), criteria: [
-    { ...AGE, requirement: { op: "language", key: criterionKey, text: "Is the age requirement documented?" } },
-  ], max: 10 });
-  const candidateTrialId = candidate.trial.id;
-  const expectedCriterionHash = languageCriterionHash(candidate.criteria, criterionKey);
-  const expectedRecordHash = candidate.trial.recordHash;
-  const input = { studyId, userId: USER, candidateTrialId, subjectKey: "P-observed", criterionKey, state: "unknown", evidence: [] };
-  await assert.rejects(trials.saveLanguageJudgment({ ...input, expectedCriterionHash }), { code: "vcr_write_refused" });
-  await assert.rejects(trials.saveLanguageJudgment({ ...input, expectedRecordHash, expectedCriterionHash: "a".repeat(64) }), { code: "vcr_write_refused" });
-  const stored = await trials.saveLanguageJudgment({ ...input, expectedRecordHash, expectedCriterionHash });
-  const nextHash = "c".repeat(64);
-  let stale;
-  await database.transaction(async client => {
-    await client.query("SELECT id FROM evimed_vcr.candidate_trials WHERE id=$1 FOR UPDATE", [candidateTrialId]);
-    stale = assert.rejects(trials.saveLanguageJudgment({ ...input, expectedRecordHash, expectedCriterionHash }), { code: "vcr_write_refused" });
-    await client.query("UPDATE evimed_vcr.candidate_trials SET record_hash=$2 WHERE id=$1", [candidateTrialId, nextHash]);
-  });
-  await stale;
-  assert.deepEqual((await q("SELECT id FROM evimed_vcr.language_judgments WHERE candidate_trial_id=$1", [candidateTrialId])).map(row => row.id), [stored.id]);
-  assert.ok((await trials.saveLanguageJudgment({ ...input, expectedRecordHash: nextHash, expectedCriterionHash })).id);
 });
 
 test("persisted scheduler honors each axis date while respecting inapplicability", options, async () => {
@@ -186,91 +161,19 @@ test("persisted scheduler honors each axis date while respecting inapplicability
     [["P-premise-date", "2026-10-04T00:00:00.000Z"], ["P-requirement-date", "2026-10-18T00:00:00.000Z"]]);
 });
 
-test("a trial is saved with its criteria in order, original wording kept, and is no version of the study's protocol", options, async () => {
-  const studyId = await seedStudy();
-  const saved = await trials.saveCandidateTrial({ studyId, userId: USER, trial: trial("NCT05000001"), criteria: [AGE, BRAIN], max: 10 });
-  assert.match(saved.trial.id, /^ctr_[a-f0-9]{22}$/);
-  assert.equal(saved.created, true);
-  assert.equal(saved.criteriaChanged, true);
-  assert.deepEqual(saved.criteria.map((row) => [row.ordinal, row.kind, row.sourceText]), [[1, "inclusion", "Age >= 18"], [2, "exclusion", "Active brain metastases"]]);
-  assert.match(saved.criteria[0].id, /^ctc_[a-f0-9]{22}$/);
-  assert.deepEqual(saved.criteria[1].evidenceNeeded, ["head MRI within 4 weeks"]);
-
-  const read = await trials.getCandidateTrial({ studyId, registry: "clinicaltrials.gov", registryId: "NCT05000001" });
-  assert.equal(read.id, saved.trial.id);
-  assert.equal(read.title, "Trial NCT05000001");
-  assert.equal(read.phase, "PHASE2");
-  assert.equal(read.status, "RECRUITING");
-  assert.deepEqual(read.conditions, ["NSCLC"]);
-  assert.equal(read.locations.sites[0].city, "Beijing");
-  assert.equal(read.recordHash, "b".repeat(64));
-  assert.match(read.eligibilityText, /Active brain metastases/);
-
-  // The study's own sequence of protocol versions, its criteria and its matching ledger do not hold it.
-  assert.equal((await q("SELECT count(*)::int AS n FROM evimed_vcr.protocol_versions WHERE study_id = $1", [studyId]))[0].n, 0);
-  assert.equal((await q("SELECT count(*)::int AS n FROM evimed_vcr.criteria WHERE study_id = $1", [studyId]))[0].n, 0);
-  assert.deepEqual(await matching.protocols(studyId), []);
-  assert.equal((await q("SELECT count(*)::int AS n FROM evimed_vcr.matching_assessments WHERE study_id = $1", [studyId]))[0].n, 0);
-});
-
-test("a trial is one row per registry id: writing it again updates it, and criteria that did not change are not a change", options, async () => {
-  const studyId = await seedStudy();
-  const first = await trials.saveCandidateTrial({ studyId, userId: USER, trial: trial("NCT05000002"), criteria: [AGE, BRAIN], max: 10 });
-  const again = await trials.saveCandidateTrial({ studyId, userId: USER, trial: trial("NCT05000002", { status: "ACTIVE_NOT_RECRUITING" }), criteria: [AGE, BRAIN], max: 10 });
-  assert.equal(again.created, false);
-  assert.equal(again.trial.id, first.trial.id);
-  assert.equal(again.criteriaChanged, false, "the same criteria again change nothing");
-  assert.deepEqual(again.criteria.map((row) => row.id), first.criteria.map((row) => row.id), "and keep their ids");
-  assert.equal((await trials.getCandidateTrial({ studyId, id: first.trial.id })).status, "ACTIVE_NOT_RECRUITING", "while the identity is the record's newest word");
-  assert.equal((await trials.listCandidateTrials({ studyId })).length, 1);
-
-  const edited = await trials.saveCandidateTrial({ studyId, userId: USER, trial: trial("NCT05000002"), criteria: [AGE], max: 10 });
-  assert.equal(edited.criteriaChanged, true);
-  assert.deepEqual((await trials.listCriteria(first.trial.id)).map((row) => row.sourceText), ["Age >= 18"], "a criterion the new set lacks is gone");
-});
-
-test("a write with no criteria leaves the criteria a trial has", options, async () => {
-  const studyId = await seedStudy();
-  const first = await trials.saveCandidateTrial({ studyId, userId: USER, trial: trial("NCT05000003"), criteria: [AGE, BRAIN], max: 10 });
-  const kept = await trials.saveCandidateTrial({ studyId, userId: USER, trial: trial("NCT05000003"), criteria: null, max: 10 });
-  assert.equal(kept.criteriaChanged, false);
-  assert.deepEqual(kept.criteria.map((row) => row.id), first.criteria.map((row) => row.id));
-});
-
-test("a study holds at most the configured number of candidate trials, and a trial it already holds can still be updated", options, async () => {
-  const studyId = await seedStudy();
-  await trials.saveCandidateTrial({ studyId, userId: USER, trial: trial("NCT05000011"), criteria: [AGE], max: 2 });
-  await trials.saveCandidateTrial({ studyId, userId: USER, trial: trial("NCT05000012"), criteria: [AGE], max: 2 });
-  await assert.rejects(
-    trials.saveCandidateTrial({ studyId, userId: USER, trial: trial("NCT05000013"), criteria: [AGE], max: 2 }),
-    (error) => error.status === 409 && error.code === "vcr_write_refused" && /2/.test(error.message));
-  assert.equal((await trials.listCandidateTrials({ studyId })).length, 2, "nothing of the refused one was kept");
-  const updated = await trials.saveCandidateTrial({ studyId, userId: USER, trial: trial("NCT05000011", { title: "Renamed" }), criteria: [AGE, BRAIN], max: 2 });
-  assert.equal(updated.created, false);
-  assert.equal(updated.trial.title, "Renamed");
-});
-
 test("a trial belongs to its study: another study neither reads it nor holds the same registry id as the same row", options, async () => {
   const mine = await seedStudy();
   const theirs = await seedStudy();
-  const saved = await trials.saveCandidateTrial({ studyId: mine, userId: USER, trial: trial("NCT05000021"), criteria: [AGE], max: 10 });
+  const saved = await seedCandidateTrial(trials, { studyId: mine, userId: USER, trial: trial("NCT05000021"), criteria: [AGE] });
   assert.equal(await trials.getCandidateTrial({ studyId: theirs, id: saved.trial.id }), null);
   assert.equal(await trials.getCandidateTrial({ studyId: theirs, registry: "clinicaltrials.gov", registryId: "NCT05000021" }), null);
-  const other = await trials.saveCandidateTrial({ studyId: theirs, userId: USER, trial: trial("NCT05000021"), criteria: [AGE], max: 10 });
+  const other = await seedCandidateTrial(trials, { studyId: theirs, userId: USER, trial: trial("NCT05000021"), criteria: [AGE] });
   assert.notEqual(other.trial.id, saved.trial.id);
-});
-
-test("a registry id and a status are kept as the record gave them, and a criterion outside the vocabulary is refused whole", options, async () => {
-  const studyId = await seedStudy();
-  await assert.rejects(
-    trials.saveCandidateTrial({ studyId, userId: USER, trial: trial("NCT05000031"), criteria: [{ ...AGE, criterionType: "astrology" }], max: 10 }),
-    /check constraint|criterion_type/i);
-  assert.equal((await trials.listCandidateTrials({ studyId })).length, 0, "the trial and its criteria are written together or not at all");
 });
 
 test("deleting the study takes its candidate trials, their criteria and assessments with it", options, async () => {
   const studyId = await seedStudy();
-  const saved = await trials.saveCandidateTrial({ studyId, userId: USER, trial: trial("NCT05000041"), criteria: [AGE, BRAIN], max: 10 });
+  const saved = await seedCandidateTrial(trials, { studyId, userId: USER, trial: trial("NCT05000041"), criteria: [AGE, BRAIN] });
   assert.equal((await q("SELECT count(*)::int AS n FROM evimed_vcr.candidate_trial_criteria WHERE candidate_trial_id = $1", [saved.trial.id]))[0].n, 2);
   await database.transaction((client) => deleteVcrStudyRows(client, studyId));
   assert.equal((await q("SELECT count(*)::int AS n FROM evimed_vcr.candidate_trials WHERE study_id = $1", [studyId]))[0].n, 0);

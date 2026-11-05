@@ -15,6 +15,7 @@ import { shredPlaneFile } from '../src/vcrDataPlane.mjs';
 import { vcrRuntimeWrite } from '../src/vcrGateway.mjs';
 import { createGeoTestDatabase } from './helpers/geoTestDatabase.mjs';
 import { streamOf } from './helpers/vcrIntakeData.mjs';
+import { seedWrittenTrial } from './helpers/vcrCandidateSeed.mjs';
 
 const options = { skip: !process.env.OPEN_SCIENCE_TEST_POSTGRES_URL && 'An isolated test PostgreSQL is required' };
 const origin = 'https://api.example.org';
@@ -94,7 +95,7 @@ test('a subject withdraws consent: their text is overwritten, the rows and hashe
   assert.ok(judgmentsBefore.some(judgment => judgment.evidence.some(item => item.quote === consent)), 'the evaluation quoted the chart');
 
   // The trials the patient was judged against (「给患者找试验」) quote the chart as well.
-  const trial = await vcr.patientTrials.writeTrial(target, { subjectKeys: [s1], trial: { registry: 'clinicaltrials.gov', registryId: 'NCT06000099', title: 'Synthetic trial', phase: 'PHASE2',
+  const trial = await seedWrittenTrial(vcr.patientTrials, vcr.candidateStore, target, { subjectKeys: [s1], trial: { registry: 'clinicaltrials.gov', registryId: 'NCT06000099', title: 'Synthetic trial', phase: 'PHASE2',
     status: 'RECRUITING', conditions: ['NSCLC'], locations: { total: 1, countries: ['China'], sites: [] }, url: 'https://clinicaltrials.gov/study/NCT06000099', recordHash: 'd'.repeat(64),
     retrievedAt: '2026-10-10T07:00:00.000Z', eligibilityText: 'Age >= 18' }, criteria: [{ kind: 'inclusion', criterionType: 'demographic', sourceText: 'Age >= 18',
     requirement: { op: 'compare', variable: 'age', comparator: 'gte', value: 18, unit: 'year' }, applicability: null, sourceLocator: {}, evidenceNeeded: [], reviewState: 'ai_set' }] });

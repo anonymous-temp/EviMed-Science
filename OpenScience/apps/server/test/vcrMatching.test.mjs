@@ -403,7 +403,7 @@ test("C2-19 the window boundary is a calendar month, not thirty days", () => {
   assert.equal(withinWindow(outside, null, anchor), true, "no window means every date qualifies");
 });
 
-// ------------------------------------------------- deferral, gaps, priority
+// ------------------------------------------------- deferral, gaps
 
 test("AC-14 a washout that ends on a known date is deferred, not satisfied early", () => {
   const source = chart("末次多西他赛：2026-09-20。");

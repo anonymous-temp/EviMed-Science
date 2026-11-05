@@ -12,6 +12,7 @@ import { assessSubject } from "../src/vcrMatching.mjs";
 import { createPatientTrials } from "../src/vcrPatientTrials.mjs";
 import { VcrStoreBase, vcrId } from "../src/vcrStoreBase.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
+import { seedCandidateLanguage, seedCandidateTrial, seedWrittenTrial } from "./helpers/vcrCandidateSeed.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 const options = { skip: !databaseUrl && "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured" };
@@ -48,7 +49,7 @@ const q = async (sql, values = []) => (await database.query(sql, values)).rows;
 
 /** The seam under test, over the real stores. @param {Record<string, any>} [parts] */
 function seam(parts = {}) {
-  return createPatientTrials({ candidateStore: candidates, matchStore: matching, config: { vcrCandidateTrialsMax: 20 }, now: () => NOW, ...parts });
+  return createPatientTrials({ candidateStore: candidates, matchStore: matching, now: () => NOW, ...parts });
 }
 
 async function seedStudy() {
@@ -80,14 +81,10 @@ test("a changed source snapshot cannot inherit an old parse or assessment as the
   const study = await seedStudy(); await seedPatient(study);
   const trials = seam();
   const trial = trialOf("NCT06000990");
-  const written = await trials.writeTrial(study, { trial, criteria: [AGE_18], subjectKeys: ["P-1"] });
+  const written = await seedWrittenTrial(trials, candidates, study, { trial, criteria: [AGE_18], subjectKeys: ["P-1"] });
   const oldAssessment = written.evaluation.evaluated[0].assessmentId;
   const newer = { ...trial, recordHash: "e".repeat(64) };
-  await assert.rejects(candidates.saveCandidateTrial({ studyId: study.id, userId: USER, trial: newer, criteria: null, max: 20 }),
-    error => error.code === "vcr_write_refused");
-  assert.equal((await candidates.getCandidateTrial({ studyId: study.id, id: written.trial.id })).recordHash, HASH);
-  assert.ok(await candidates.getAssessment(oldAssessment, study.id), "failed refresh leaves the prior version usable");
-  const updated = await candidates.saveCandidateTrial({ studyId: study.id, userId: USER, trial: newer, criteria: [AGE_18], max: 20 });
+  const updated = await seedCandidateTrial(candidates, { studyId: study.id, userId: USER, trial: newer, criteria: [AGE_18] });
   assert.equal(updated.criteriaChanged, true, "identical expressions over a new source still require reassessment");
   assert.deepEqual(updated.reassess, ["P-1"]);
   const kept = await candidates.getAssessment(oldAssessment, study.id);
@@ -96,33 +93,15 @@ test("a changed source snapshot cannot inherit an old parse or assessment as the
   assert.equal((await candidates.latestAssessments({ studyId: study.id, subjectKey: "P-1" })).size, 0, "it is no longer the current verdict, so the patient reads as not yet judged against the new source");
 });
 
-test("candidate detail exposes a coherent language binding that rejects a later source revision", options, async () => {
-  const study = await seedStudy();
-  await seedPatient(study);
-  const patientTrials = seam();
-  const trial = trialOf("NCT06000989");
-  const written = await patientTrials.writeTrial(study, { trial, criteria: [CONSENT], subjectKeys: ["P-1"] });
-  const read = await patientTrials.runtimeRead(study, { id: written.trial.id });
-  const binding = read.trials[0].criteria[0].languageBindings[0];
-  assert.equal(binding.criterionKey, "consent");
-  assert.equal(binding.expectedRecordHash, trial.recordHash);
-  assert.match(binding.expectedCriterionHash, /^[a-f0-9]{64}$/);
-  const input = { subjectKey: "P-1", candidateTrialId: written.trial.id, criterionKey: "consent", state: "unknown", evidence: [], ...binding };
-  await patientTrials.saveLanguageJudgment(study, input);
-  await candidates.saveCandidateTrial({ studyId: study.id, userId: USER,
-    trial: { ...trial, recordHash: "e".repeat(64) }, criteria: [CONSENT], max: 20 });
-  await assert.rejects(patientTrials.saveLanguageJudgment(study, input), { code: "vcr_write_refused" });
-});
-
 test("absent registry eligibility and invented criteria remain unknown despite compatible patient facts", options, async () => {
   const study = await seedStudy(); await seedPatient(study);
   const trials = seam();
-  const missing = await trials.writeTrial(study, { trial: trialOf("NCT06000991", { registry: "chictr", eligibilityText: "" }), criteria: [AGE_18], subjectKeys: ["P-1"] });
+  const missing = await seedWrittenTrial(trials, candidates, study, { trial: trialOf("NCT06000991", { registry: "chictr", eligibilityText: "" }), criteria: [AGE_18], subjectKeys: ["P-1"] });
   assert.equal(missing.evaluation.evaluated[0].summary, "insufficient_evidence");
   const full = await candidates.getAssessment(missing.evaluation.evaluated[0].assessmentId, study.id);
   assert.equal(full.judgments[0].state, "unknown");
   assert.equal(full.evidenceGaps[0].reason, "criterion_source_unavailable");
-  const invented = await trials.writeTrial(study, { trial: trialOf("NCT06000992", { eligibilityText: "ECOG 0-1" }), criteria: [AGE_18], subjectKeys: ["P-1"] });
+  const invented = await seedWrittenTrial(trials, candidates, study, { trial: trialOf("NCT06000992", { eligibilityText: "ECOG 0-1" }), criteria: [AGE_18], subjectKeys: ["P-1"] });
   assert.equal(invented.evaluation.evaluated[0].summary, "insufficient_evidence");
   const read = await trials.runtimeRead(study, { id: missing.trial.id });
   assert.equal(read.trials[0].eligibilityCoverage.status, "unavailable");
@@ -134,7 +113,7 @@ test("a record with no original wording makes every criterion unknown for 缺登
   // ChiCTR through the evidence API is a listing: title, status, sample size — and no eligibility text, so nothing a criterion could quote.
   await fact(study, "P-1", "egfr_mutation", true);
   const trials = seam();
-  const written = await trials.writeTrial(study, {
+  const written = await seedWrittenTrial(trials, candidates, study, {
     trial: trialOf("ChiCTR2400000001", { registry: "chictr", eligibilityText: "", status: "招募中" }),
     // Age 63 satisfies the first; the brain-metastasis exclusion is explicitly negated; the next is a plain mismatch (63 < 70); and the
     // EGFR fact is there: with the wording, every one of these would be decided.
@@ -164,8 +143,8 @@ test("the list puts a well-decided trial above one with few parsed criteria, say
   const study = await seedStudy(); await seedPatient(study);
   const trials = seam();
   // Thin: one parsed criterion the patient's chart says nothing about. Fewer open (1) than the other trial's two, which used to win.
-  await trials.writeTrial(study, { trial: trialOf("NCT06000101", { title: "Thin" }), criteria: [EGFR], subjectKeys: ["P-1"] });
-  await trials.writeTrial(study, { trial: trialOf("NCT06000102", { title: "Well decided" }), criteria: [AGE_18, ECOG, NO_BRAIN, EGFR, CONSENT], subjectKeys: ["P-1"] });
+  await seedWrittenTrial(trials, candidates, study, { trial: trialOf("NCT06000101", { title: "Thin" }), criteria: [EGFR], subjectKeys: ["P-1"] });
+  await seedWrittenTrial(trials, candidates, study, { trial: trialOf("NCT06000102", { title: "Well decided" }), criteria: [AGE_18, ECOG, NO_BRAIN, EGFR, CONSENT], subjectKeys: ["P-1"] });
   const read = await trials.runtimeRead(study, { subjectKey: "P-1" });
   assert.deepEqual(read.ranking.map((row) => [row.registryId, row.decided.decided, row.decided.applicable, row.decided.percent]), [
     ["NCT06000102", 3, 5, 60],
@@ -188,12 +167,12 @@ test("a patient is judged against every candidate trial by the evaluator the oth
   const study = await seedStudy();
   await seedPatient(study);
   const trials = seam();
-  const met = await trials.writeTrial(study, { trial: trialOf("NCT06000001"), criteria: [AGE_18, ECOG, NO_BRAIN], subjectKeys: ["P-1"] });
+  const met = await seedWrittenTrial(trials, candidates, study, { trial: trialOf("NCT06000001"), criteria: [AGE_18, ECOG, NO_BRAIN], subjectKeys: ["P-1"] });
   assert.deepEqual(met.evaluation.evaluated.map((row) => [row.subjectKey, row.registryId, row.summary]), [["P-1", "NCT06000001", "eligible"]]);
   assert.equal(met.evaluation.evaluated[0].counts.satisfied, 3);
-  await trials.writeTrial(study, { trial: trialOf("NCT06000002", { status: "NOT_YET_RECRUITING" }), criteria: [AGE_18, EGFR], subjectKeys: ["P-1"] });
-  await trials.writeTrial(study, { trial: trialOf("NCT06000003", { status: "RECRUITING" }), criteria: [AGE_18, EGFR], subjectKeys: ["P-1"] });
-  await trials.writeTrial(study, { trial: trialOf("NCT06000004"), criteria: [AGE_70, ECOG], subjectKeys: ["P-1"] });
+  await seedWrittenTrial(trials, candidates, study, { trial: trialOf("NCT06000002", { status: "NOT_YET_RECRUITING" }), criteria: [AGE_18, EGFR], subjectKeys: ["P-1"] });
+  await seedWrittenTrial(trials, candidates, study, { trial: trialOf("NCT06000003", { status: "RECRUITING" }), criteria: [AGE_18, EGFR], subjectKeys: ["P-1"] });
+  await seedWrittenTrial(trials, candidates, study, { trial: trialOf("NCT06000004"), criteria: [AGE_70, ECOG], subjectKeys: ["P-1"] });
 
   const listed = await trials.ranked(study, { subjectKey: "P-1" });
   assert.deepEqual(listed.map((row) => [row.rank, row.registryId, row.summary]), [
@@ -218,7 +197,7 @@ test("the verdicts are stored with what they were made from, and a page reads th
   const study = await seedStudy();
   await seedPatient(study);
   const trials = seam();
-  const written = await trials.writeTrial(study, { trial: trialOf("NCT06000011"), criteria: [AGE_18, NO_BRAIN], subjectKeys: ["P-1"] });
+  const written = await seedWrittenTrial(trials, candidates, study, { trial: trialOf("NCT06000011"), criteria: [AGE_18, NO_BRAIN], subjectKeys: ["P-1"] });
   const [row] = await q("SELECT * FROM evimed_vcr.candidate_trial_assessments WHERE candidate_trial_id = $1", [written.trial.id]);
   assert.equal(row.subject_key, "P-1");
   assert.equal(row.summary, "eligible");
@@ -244,7 +223,7 @@ test("a patient the facts say nothing about is unknown on every criterion: the p
   const study = await seedStudy();
   await fact(study, "P-2", "sex", "female");
   const trials = seam();
-  const written = await trials.writeTrial(study, { trial: trialOf("NCT06000021"), criteria: [AGE_18, ECOG, NO_BRAIN], subjectKeys: ["P-2"] });
+  const written = await seedWrittenTrial(trials, candidates, study, { trial: trialOf("NCT06000021"), criteria: [AGE_18, ECOG, NO_BRAIN], subjectKeys: ["P-2"] });
   assert.equal(written.evaluation.evaluated[0].summary, "insufficient_evidence");
   assert.deepEqual([written.evaluation.evaluated[0].counts.unknown, written.evaluation.evaluated[0].counts.satisfied], [3, 0]);
 });
@@ -254,10 +233,10 @@ test("a trial written again with different criteria keeps the verdicts about the
   await seedPatient(study, "P-1");
   await seedPatient(study, "P-3");
   const trials = seam();
-  await trials.writeTrial(study, { trial: trialOf("NCT06000031"), criteria: [AGE_18, ECOG], subjectKeys: ["P-1", "P-3"] });
+  await seedWrittenTrial(trials, candidates, study, { trial: trialOf("NCT06000031"), criteria: [AGE_18, ECOG], subjectKeys: ["P-1", "P-3"] });
   const before = await trials.ranked(study, { subjectKey: "P-3" });
   assert.equal(before[0].summary, "eligible");
-  const again = await trials.writeTrial(study, { trial: trialOf("NCT06000031"), criteria: [AGE_18, ECOG, EGFR], subjectKeys: ["P-1"] });
+  const again = await seedWrittenTrial(trials, candidates, study, { trial: trialOf("NCT06000031"), criteria: [AGE_18, ECOG, EGFR], subjectKeys: ["P-1"] });
   assert.equal(again.criteriaChanged, true);
   assert.deepEqual(again.evaluation.evaluated.map((row) => row.subjectKey).sort(), ["P-1", "P-3"], "a patient who is not named but had a verdict is judged again");
   const afterOne = await trials.ranked(study, { subjectKey: "P-1" });
@@ -267,7 +246,7 @@ test("a trial written again with different criteria keeps the verdicts about the
   assert.equal((await q("SELECT count(*)::int AS n FROM evimed_vcr.candidate_trial_assessments WHERE candidate_trial_id = $1 AND superseded_at IS NULL", [again.trial.id]))[0].n, 2, "the current verdicts are the new ones");
   assert.equal((await q("SELECT count(*)::int AS n FROM evimed_vcr.candidate_trial_assessments WHERE candidate_trial_id = $1 AND superseded_at IS NOT NULL", [again.trial.id]))[0].n, 2, "and the earlier ones are kept, marked");
   // The same criteria written again are not a change: nothing is dropped, and the named patient is judged again at the new instant.
-  const same = await trials.writeTrial(study, { trial: trialOf("NCT06000031"), criteria: [AGE_18, ECOG, EGFR], subjectKeys: ["P-1"] });
+  const same = await seedWrittenTrial(trials, candidates, study, { trial: trialOf("NCT06000031"), criteria: [AGE_18, ECOG, EGFR], subjectKeys: ["P-1"] });
   assert.equal(same.criteriaChanged, false);
   assert.deepEqual(same.evaluation.evaluated.map((row) => row.subjectKey), ["P-1"]);
 });
@@ -276,10 +255,10 @@ test("a patient whose new evaluation cannot be made keeps the earlier conclusion
   const study = await seedStudy();
   await seedPatient(study, "P-1");
   const trials = seam();
-  const first = await trials.writeTrial(study, { trial: trialOf("NCT06000032"), criteria: [AGE_18, ECOG], subjectKeys: ["P-1"] });
+  const first = await seedWrittenTrial(trials, candidates, study, { trial: trialOf("NCT06000032"), criteria: [AGE_18, ECOG], subjectKeys: ["P-1"] });
   assert.equal((await trials.ranked(study, { subjectKey: "P-1" }))[0].summary, "eligible");
   // The criteria are rewritten and no patient is judged against them (nobody is named, and the writer is told not to look back).
-  await candidates.saveCandidateTrial({ studyId: study.id, userId: USER, trial: trialOf("NCT06000032"), criteria: [AGE_18, ECOG, EGFR], max: 20 });
+  await seedCandidateTrial(candidates, { studyId: study.id, userId: USER, trial: trialOf("NCT06000032"), criteria: [AGE_18, ECOG, EGFR] });
   const listed = await trials.ranked(study, { subjectKey: "P-1" });
   assert.equal(listed.length, 1, "the earlier conclusion is still in the patient's list");
   assert.equal(listed[0].summary, "eligible", "as it was concluded");
@@ -298,9 +277,9 @@ test("naming only patients judges them against every trial the study holds, and 
   const study = await seedStudy();
   await seedPatient(study);
   const trials = seam();
-  const first = await trials.writeTrial(study, { trial: trialOf("NCT06000041"), criteria: [AGE_18], subjectKeys: [] });
+  const first = await seedWrittenTrial(trials, candidates, study, { trial: trialOf("NCT06000041"), criteria: [AGE_18], subjectKeys: [] });
   assert.equal(first.evaluation.evaluated.length, 0, "a trial written for nobody is judged for nobody");
-  await trials.writeTrial(study, { trial: trialOf("NCT06000042"), criteria: [AGE_70], subjectKeys: [] });
+  await seedWrittenTrial(trials, candidates, study, { trial: trialOf("NCT06000042"), criteria: [AGE_70], subjectKeys: [] });
   const all = await trials.evaluate(study, { subjectKeys: ["P-1"] });
   assert.deepEqual(all.evaluated.map((row) => [row.registryId, row.summary]).sort(), [["NCT06000041", "eligible"], ["NCT06000042", "ineligible"]]);
 
@@ -312,7 +291,7 @@ test("naming only patients judges them against every trial the study holds, and 
         return candidates.saveAssessment(input);
       },
     }),
-    matchStore: matching, config: { vcrCandidateTrialsMax: 20 }, now: () => new Date(NOW.getTime() + 60_000),
+    matchStore: matching, now: () => new Date(NOW.getTime() + 60_000),
   });
   const partial = await broken.evaluate(study, { subjectKeys: ["P-1"] });
   assert.deepEqual(partial.evaluated.map((row) => row.registryId), ["NCT06000042"]);
@@ -324,7 +303,7 @@ test("the study's own protocol joins the list once it has judged this patient, v
   const study = await seedStudy();
   await seedPatient(study);
   const trials = seam();
-  await trials.writeTrial(study, { trial: trialOf("NCT06000051"), criteria: [AGE_18, ECOG], subjectKeys: ["P-1"] });
+  await seedWrittenTrial(trials, candidates, study, { trial: trialOf("NCT06000051"), criteria: [AGE_18, ECOG], subjectKeys: ["P-1"] });
   // No protocol yet: only the registry trial.
   assert.deepEqual((await trials.ranked(study, { subjectKey: "P-1" })).map((row) => row.kind), ["registry"]);
 
@@ -367,13 +346,11 @@ test("an answer to a trial's language criterion is bound to that trial, anchored
   const chart = "患者本人可理解研究内容并签署知情同意。";
   const documents = { async read(_study, { documentId }) { return documentId === "doc_1" ? { id: "doc_1", text: chart, visibleAt: "2026-09-01T00:00:00.000Z" } : null; } };
   const trials = seam({ documents });
-  const written = await trials.writeTrial(study, { trial: trialOf("NCT06000061"), criteria: [AGE_18, CONSENT], subjectKeys: ["P-1"] });
+  const written = await seedWrittenTrial(trials, candidates, study, { trial: trialOf("NCT06000061"), criteria: [AGE_18, CONSENT], subjectKeys: ["P-1"] });
   assert.equal(written.evaluation.evaluated[0].summary, "insufficient_evidence", "a criterion only language can decide is unknown until it is answered");
-  assert.deepEqual(await trials.languageKeys(study, written.trial.id), ["consent"]);
-  assert.deepEqual(await trials.languageKeys(study, "ctr_not_this_study"), []);
 
-  const saved = await trials.saveLanguageJudgment(study, {
-    subjectKey: "P-1", candidateTrialId: written.trial.id, criterionKey: "consent", state: "satisfied",
+  const saved = await seedCandidateLanguage(candidates, {
+    studyId: study.id, userId: USER, subjectKey: "P-1", candidateTrialId: written.trial.id, criterionKey: "consent", state: "satisfied",
     evidence: [{ documentId: "doc_1", start: 0, end: chart.length, quote: chart, visibleAt: "2026-09-01T00:00:00.000Z" }],
     provenance: { schema: 1, status: "unknown", runId: null },
   });
@@ -388,16 +365,15 @@ test("an answer to a trial's language criterion is bound to that trial, anchored
   assert.equal(consent.evidence[0].quote, chart);
 
   // An answer whose quotation is not in the patient's chart is not evidence: the criterion falls back to unknown.
-  const forged = await trials.saveLanguageJudgment(study, {
-    subjectKey: "P-1", candidateTrialId: written.trial.id, criterionKey: "consent", state: "satisfied",
+  const forged = await seedCandidateLanguage(candidates, {
+    studyId: study.id, userId: USER, subjectKey: "P-1", candidateTrialId: written.trial.id, criterionKey: "consent", state: "satisfied",
     evidence: [{ documentId: "doc_1", start: 0, end: 10, quote: "患者拒绝签署知情同意", visibleAt: "2026-09-01T00:00:00.000Z" }], provenance: null,
   });
   assert.ok(forged.id);
   assert.equal((await trials.evaluate(study, { subjectKeys: ["P-1"], trialIds: [written.trial.id] })).evaluated[0].summary, "insufficient_evidence");
 
-  // A key the trial does not have is refused, and an answer for another trial is not this trial's.
-  await assert.rejects(trials.saveLanguageJudgment(study, { subjectKey: "P-1", candidateTrialId: written.trial.id, criterionKey: "nothing", state: "unknown", evidence: [] }), /language key/i);
-  const other = await trials.writeTrial(study, { trial: trialOf("NCT06000062"), criteria: [AGE_18, CONSENT], subjectKeys: ["P-1"] });
+  // An answer for another trial is not this trial's.
+  const other = await seedWrittenTrial(trials, candidates, study, { trial: trialOf("NCT06000062"), criteria: [AGE_18, CONSENT], subjectKeys: ["P-1"] });
   assert.equal(other.evaluation.evaluated[0].summary, "insufficient_evidence", "the answer about one trial does not answer another's criterion of the same name");
 });
 
@@ -413,7 +389,7 @@ test("a table of the study's patients is read for the facts a trial asks about, 
     meaning: { columns: { EGFR: { valueMap: { values: { L858R: "present" }, measurement: false } } } },
   };
   const trials = seam({ subjectTable: { async read() { reads += 1; return table; } } });
-  const written = await trials.writeTrial(study, { trial: trialOf("NCT06000071"), criteria: [AGE_18, ECOG, EGFR], subjectKeys: ["P-9"] });
+  const written = await seedWrittenTrial(trials, candidates, study, { trial: trialOf("NCT06000071"), criteria: [AGE_18, ECOG, EGFR], subjectKeys: ["P-9"] });
   assert.equal(written.evaluation.evaluated[0].summary, "eligible", "age and the biomarker from the table, ECOG from the fact");
   assert.equal(reads, 1);
   const detail = await trials.detail(study, { subjectKey: "P-9", id: written.trial.id });
@@ -440,8 +416,8 @@ test("a candidate trial that has not judged this patient is named as owed, not l
   await seedPatient(study, "P-1");
   await fact(study, "P-5", "age", 40, { unit: "year" });
   const trials = seam();
-  const first = await trials.writeTrial(study, { trial: trialOf("NCT06000081"), criteria: [AGE_18], subjectKeys: ["P-1"] });
-  await trials.writeTrial(study, { trial: trialOf("NCT06000082"), criteria: [AGE_70], subjectKeys: ["P-1"] });
+  const first = await seedWrittenTrial(trials, candidates, study, { trial: trialOf("NCT06000081"), criteria: [AGE_18], subjectKeys: ["P-1"] });
+  await seedWrittenTrial(trials, candidates, study, { trial: trialOf("NCT06000082"), criteria: [AGE_70], subjectKeys: ["P-1"] });
   assert.deepEqual((await trials.ranked(study, { subjectKey: "P-5" })), [], "nothing has been judged for P-5");
   assert.deepEqual((await trials.unjudged(study, { subjectKey: "P-5" })).map((row) => row.registryId).sort(), ["NCT06000081", "NCT06000082"]);
   const read = await trials.runtimeRead(study, { subjectKey: "P-5" });
@@ -463,9 +439,9 @@ async function candidateStore_clear(trialId) {
 test("stale assessments cannot be written after a trial source changes", options, async () => {
   const study = await seedStudy();
   const trials = seam();
-  const saved = await trials.writeTrial(study, { trial: trialOf("NCT06000991"), criteria: [AGE_18], subjectKeys: [] });
+  const saved = await seedWrittenTrial(trials, candidates, study, { trial: trialOf("NCT06000991"), criteria: [AGE_18], subjectKeys: [] });
   const old = saved.trial;
-  await trials.writeTrial(study, { trial: trialOf("NCT06000991", { recordHash: "e".repeat(64) }), criteria: [AGE_18], subjectKeys: [] });
+  await seedWrittenTrial(trials, candidates, study, { trial: trialOf("NCT06000991", { recordHash: "e".repeat(64) }), criteria: [AGE_18], subjectKeys: [] });
   await assert.rejects(candidates.saveAssessment({ userId: USER, expectedRecordHash: old.recordHash, expectedCriteriaHash: old.criteriaHash,
     assessment: { studyId: study.id, candidateTrialId: old.id, subjectKey: "P-1", asOf: NOW, summary: "eligible", judgments: [] } }), /changed during evaluation/);
   assert.equal((await candidates.latestAssessments({ studyId: study.id, subjectKey: "P-1" })).size, 0);
@@ -474,7 +450,7 @@ test("stale assessments cannot be written after a trial source changes", options
 test("ranked eligibility is rebuilt from persisted judgments and missing judgments", options, async () => {
   const study = await seedStudy(); await seedPatient(study);
   const trials = seam();
-  const saved = await trials.writeTrial(study, { trial: trialOf("NCT06000992"), criteria: [AGE_18, NO_BRAIN], subjectKeys: ["P-1"] });
+  const saved = await seedWrittenTrial(trials, candidates, study, { trial: trialOf("NCT06000992"), criteria: [AGE_18, NO_BRAIN], subjectKeys: ["P-1"] });
   const assessment = (await candidates.latestAssessments({ studyId: study.id, subjectKey: "P-1" })).get(saved.trial.id);
   await q("UPDATE evimed_vcr.candidate_trial_judgments SET state='not_satisfied' WHERE assessment_id=$1 AND criterion_id=$2", [assessment.id, saved.criteria[1].id]);
   let row = (await trials.ranked(study, { subjectKey: "P-1" }))[0];
@@ -493,7 +469,7 @@ test("ranked eligibility is rebuilt from persisted judgments and missing judgmen
 test("verified collection provenance survives candidate persistence and runtime reads", options, async () => {
   const study = await seedStudy(); const trials = seam();
   const collection = { id: "public-collection", revision: "revision-1", sha256: "b".repeat(64) };
-  const saved = await trials.writeTrial(study, { trial: trialOf("NCT06000993", { collection }), criteria: [AGE_18], subjectKeys: [] });
+  const saved = await seedWrittenTrial(trials, candidates, study, { trial: trialOf("NCT06000993", { collection }), criteria: [AGE_18], subjectKeys: [] });
   assert.deepEqual(saved.trial.collection, collection);
   const read = await trials.runtimeRead(study, { id: saved.trial.id });
   assert.deepEqual(read.trials[0].collection, collection);
@@ -503,7 +479,7 @@ test("verified collection provenance survives candidate persistence and runtime 
 test("ranking snapshot remains coherent across a concurrent trial refresh", options, async () => {
   const study = await seedStudy(); await seedPatient(study);
   const trials = seam();
-  const original = await trials.writeTrial(study, { trial: trialOf("NCT06000994"), criteria: [AGE_18], subjectKeys: ["P-1"] });
+  const original = await seedWrittenTrial(trials, candidates, study, { trial: trialOf("NCT06000994"), criteria: [AGE_18], subjectKeys: ["P-1"] });
   let release; let ready;
   const paused = new Promise(resolve => { ready = resolve; });
   const resume = new Promise(resolve => { release = resolve; });
@@ -515,7 +491,7 @@ test("ranking snapshot remains coherent across a concurrent trial refresh", opti
   }}));
   const read = isolatedStore.rankingSnapshot(study.id, "P-1");
   await paused;
-  await trials.writeTrial(study, { trial: trialOf("NCT06000994", { recordHash: "f".repeat(64) }), criteria: [AGE_70], subjectKeys: [] });
+  await seedWrittenTrial(trials, candidates, study, { trial: trialOf("NCT06000994", { recordHash: "f".repeat(64) }), criteria: [AGE_70], subjectKeys: [] });
   release();
   const snapshot = await read;
   assert.equal(snapshot.trials[0].recordHash, original.trial.recordHash);
@@ -527,8 +503,8 @@ test("ranking snapshot remains coherent across a concurrent trial refresh", opti
 test("exact candidate read selects one registry record and id takes precedence over conflicting registry filters", options, async () => {
   const study = await seedStudy(); await seedPatient(study);
   const trials = seam();
-  const first = await trials.writeTrial(study, { trial: trialOf("NCT06000995", { registry: "clinicaltrials.gov" }), criteria: [AGE_18], subjectKeys: ["P-1"] });
-  const second = await trials.writeTrial(study, { trial: trialOf("NCT06000995", { registry: "ctis" }), criteria: [AGE_70], subjectKeys: ["P-1"] });
+  const first = await seedWrittenTrial(trials, candidates, study, { trial: trialOf("NCT06000995", { registry: "clinicaltrials.gov" }), criteria: [AGE_18], subjectKeys: ["P-1"] });
+  const second = await seedWrittenTrial(trials, candidates, study, { trial: trialOf("NCT06000995", { registry: "ctis" }), criteria: [AGE_70], subjectKeys: ["P-1"] });
   const byRegistry = await trials.runtimeRead(study, { subjectKey: "P-1", registryId: "NCT06000995", registry: "ctis" });
   assert.equal(byRegistry.trials[0].id, second.trial.id);
   assert.equal(byRegistry.trials[0].criteria.length, 1);

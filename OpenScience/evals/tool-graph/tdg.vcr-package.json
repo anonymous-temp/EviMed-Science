@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-package",
-  "version": "sha256:89e9e7f0e2afae50b548f64aec8d196583d8571c3479221d52c1363b632f7751",
+  "version": "sha256:e7ce376d24106ee8b8f05ac142649dc334e80ea56708be6ad9170f87869f2615",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 27,
@@ -942,7 +942,6 @@
               "history",
               "forecast_design",
               "trial_benchmark",
-              "candidate_trial",
               "trial_judgment",
               "soa",
               "regulatory_contact",

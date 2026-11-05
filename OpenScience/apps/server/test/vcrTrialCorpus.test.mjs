@@ -89,16 +89,16 @@ test("frozen product evidence reads 500 deterministically ranked unique IDs in t
   assert.equal((await pipeline.candidatesFor({}, { ...filter, limit: 501 })).code, "vcr_read_filter_invalid");
   const { collection, collectionRevision, registry, registryId } = first.candidates[0];
   const record = await pipeline.registryRecord({}, { collection, collectionRevision, registry, registryId: registryId.toLowerCase() });
-  const exact = await pipeline.candidateRecord({ collection, collectionRevision, registry, registryId });
+  const exact = await pipeline.judgmentRecord({ collection, collectionRevision, registry, registryId });
   assert.equal(record.record.registryId, exact.trial.registryId);
-  assert.equal(record.record.eligibilityText, exact.trial.eligibilityText);
+  assert.equal(record.record.eligibilityText, exact.trial.eligibility);
   assert.equal(record.sources[0].recordHash, exact.trial.recordHash);
   assert.equal(record.collection.databaseSha256, manifest.databaseSha256);
   assert.equal(record.collection.sourceSha256, record.collection.xmlSha256);
   assert.deepEqual(record.record.description, { briefSummary: "Frozen summary", detailedDescription: "Frozen detailed description" });
   assert.doesNotMatch(JSON.stringify(record), /qrels|REFERENCE LABEL|private@example\.test|private-archive\.zip|trials\.sqlite/);
   assert.equal((await pipeline.registryRecord({}, { collection, collectionRevision, registryId: trialId(1000) })).status, "registry_not_found");
-  assert.equal((await pipeline.candidateRecord({ collection, collectionRevision, registryId: trialId(1000) })).status, "registry_not_found");
+  assert.equal((await pipeline.judgmentRecord({ collection, collectionRevision, registryId: trialId(1000) })).status, "registry_not_found");
   assert.equal(liveCalls, 0);
 
   await writeFile(manifestPath, JSON.stringify({ ...manifest, sourceVersion: "release-2", sourceFormat: "trialgpt-json" }));
@@ -107,14 +107,14 @@ test("frozen product evidence reads 500 deterministically ranked unique IDs in t
   const newerPipeline = createVcrEvidencePipeline({ store: {}, trialCorpus: newer });
   const oldCursor = await newerPipeline.candidatesFor({}, { ...filter, cursor: first.nextCursor });
   assert.equal(oldCursor.reason, "trial_collection_cursor_invalid");
-  const wrongRevision = await newerPipeline.candidateRecord({ collection, collectionRevision, registry, registryId });
+  const wrongRevision = await newerPipeline.judgmentRecord({ collection, collectionRevision, registry, registryId });
   assert.equal(wrongRevision.reason, "trial_collection_revision_mismatch");
   const noRevision = await pipeline.registryRecord({}, { collection, registry, registryId });
   assert.equal(noRevision.reason, "trial_collection_revision_mismatch");
-  const newerRecord = await newerPipeline.candidateRecord({ collection, collectionRevision: newer.revision, registry, registryId });
+  const newerRecord = await newerPipeline.judgmentRecord({ collection, collectionRevision: newer.revision, registry, registryId });
   assert.notEqual(newerRecord.trial.recordHash, exact.trial.recordHash);
-  assert.equal(newerRecord.collection.sourceSha256, record.collection.sourceSha256);
-  assert.equal(newerRecord.collection.xmlSha256, undefined);
+  assert.equal(newerRecord.trial.collection.sourceSha256, record.collection.sourceSha256);
+  assert.equal(newerRecord.trial.collection.xmlSha256, undefined);
 });
 
 test("frozen evidence refuses a wrong manifest version or database hash", async (t) => {
