@@ -140,3 +140,12 @@ test("an export of work that was not whole says so: notes beside the verdict, th
   assert.ok(file.rows.some((row) => row.clausesNote?.includes("逐条判定没有完成")));
   assert.ok(file.unfinishedNote);
 });
+
+test("every failure code a pair can carry has words that say what the person can do", async () => {
+  const { vcrMatchFailureReason, VCR_MATCH_FAILURE_FALLBACK_ZH } = await import("@evimed/domain");
+  for (const code of ["vcr_cloud_processing_not_authorized", "vcr_projection_permission_changed", "vcr_source_withdrawn", "vcr_match_record_changed", "vcr_match_judge_failed"]) {
+    const words = vcrMatchFailureReason(code);
+    assert.notEqual(words, VCR_MATCH_FAILURE_FALLBACK_ZH, code);
+    assert.ok(!/vcr_|_/.test(words), `${code} reads as a code`);
+  }
+});
