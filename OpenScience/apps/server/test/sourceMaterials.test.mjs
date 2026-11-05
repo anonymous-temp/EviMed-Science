@@ -55,7 +55,7 @@ test("a PDF's tables are located on the pages its own text layer holds them, wit
   assert.equal(coverage.status, "partial", "unextracted cells make an extraction partial, never failed");
   assert.equal(coverage.extraction.materials, "evimed-materials@1");
   assert.equal(coverage.extraction.parser, PARSER);
-  assert.match(coverage.extraction.locator, /^evimed-source-material-extract@1\.0\.0 \(pypdf \d/);
+  assert.match(coverage.extraction.locator, /^evimed-source-material-extract@1\.1\.0 \(pypdf \d/);
   assert.equal(coverage.sourceSha256, sha(bytes));
   assert.equal(coverage.textSha256, sha(structure.text));
   assert.deepEqual(coverage.pages, { status: "mapped", pageCount: 3, textLayerPages: 2, noTextLayerPages: [3] });
