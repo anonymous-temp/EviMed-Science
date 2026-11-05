@@ -30,7 +30,9 @@ import { VCR_INTAKE_LONG_KINDS } from "./vcrIntakeLayout.mjs";
 // Version 17 changes launch semantics with no new field: the controller derives the disabled platform skills and client bundles
 // (`EVIMED_DISABLED_PLATFORM_SKILLS` / `EVIMED_DISABLED_CLIENT_BUNDLES`) from the verified personal generation's manifest, so a
 // web image refuses an older controller that would launch without them instead of mis-launching the project's choices.
-export const RUNTIME_CONTROLLER_PROTOCOL_VERSION = 17;
+// Version 18 adds bounded source-session capture and idle-only purge. Only project references and frozen identity proofs
+// cross the socket; the controller derives every storage path itself.
+export const RUNTIME_CONTROLLER_PROTOCOL_VERSION = 18;
 
 function controllerError(code, message, status = 503) {
   return new HttpError(status, code, message);
@@ -342,6 +344,24 @@ export class RuntimeControllerClient {
 
   cleanupRuntime(project) {
     return this.request("POST", "/v1/runtime/cleanup", projectReference(project));
+  }
+
+  /** @param {any} project @param {string} sessionId @param {any} [contextReference] */
+  captureConversationSource(project, sessionId, contextReference = null) {
+    return this.request("POST", "/v1/runtime/source-storage/capture", {
+      ...projectReference(project), sessionId, contextReference,
+      incarnation: {
+        ownerCreatedAt: project.sourceOwnerCreatedAt,
+        projectCreatedAt: project.sourceProjectCreatedAt,
+      },
+    }, { timeoutMs: 90000, maxResponseBytes: 2 * 1024 * 1024 });
+  }
+
+  /** @param {any} project @param {any} frozen */
+  purgeConversationSource(project, frozen) {
+    return this.request("POST", "/v1/runtime/source-storage/purge", {
+      ...projectReference(project), frozen,
+    }, { timeoutMs: 90000, maxResponseBytes: 2 * 1024 * 1024 });
   }
 
   runtimeStatus(project) {
