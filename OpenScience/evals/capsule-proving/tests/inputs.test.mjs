@@ -46,6 +46,7 @@ test('LongMemEval runtime input preserves original roles, dates and literal clin
   });
   assert.doesNotMatch(JSON.stringify(input), /answer_session_ids|question_type|"answer"/);
   assert.equal(api.longMemGold(longCase()).answer, '2.5 mg');
+  assert.equal(api.longMemGold(longCase()).question, longCase().question);
 });
 
 test('a malformed source alignment fails instead of silently shifting dates', async () => {
@@ -95,6 +96,31 @@ test('medical anchoring never defaults to all future history when the source ses
   assert.throws(() => api.medMemoryRuntimeInput(medData(), query, { language: 'en', persona: 'persona_1' }), /anchor/);
   const data = medData(); data.sessions[2].session_id = 's-2';
   assert.throws(() => api.medMemoryRuntimeInput(data, medQuery(), { language: 'en', persona: 'persona_1' }), /duplicate/);
+});
+
+test('official medical numeric session IDs have one exact canonical anchor without losing zero or accepting ambiguous aliases', async () => {
+  const api = await subject();
+  const data = medData(); data.sessions.forEach((session, index) => { session.session_id = index; });
+  const query = medQuery(); query.session_id = 1;
+  const input = api.medMemoryRuntimeInput(data, query, { language: 'zh', persona: 'persona_1' });
+  assert.deepEqual(input.histories.map(item => item.sourceSessionId), ['0', '1']);
+  assert.equal(input.question.asOf, '2026-01-03');
+  assert.equal(api.medMemoryGold(query).session_id, 1);
+  assert.equal(api.medMemoryGold(query).question, query.question);
+  const ambiguous = medData(); ambiguous.sessions[0].session_id = 1; ambiguous.sessions[1].session_id = '1';
+  assert.throws(() => api.medMemoryRuntimeInput(ambiguous, query, { language: 'zh', persona: 'persona_1' }), /duplicate/);
+  query.session_id = 1.5;
+  assert.throws(() => api.medMemoryRuntimeInput(data, query, { language: 'zh', persona: 'persona_1' }), /identifier/);
+});
+
+test('empty or null original message text is not fabricated and does not discard an entire official question', async () => {
+  const api = await subject();
+  const source = longCase(); source.haystack_sessions[0] = [{ role: 'assistant', content: '' }, { role: 'user', content: null }];
+  const input = api.longMemRuntimeInput(source);
+  assert.deepEqual(input.histories[0].messages, [{ role: 'assistant', text: '' }, { role: 'user', text: '' }]);
+  assert.equal(input.question.text, source.question);
+  source.question = '';
+  assert.throws(() => api.longMemRuntimeInput(source), /nonempty/);
 });
 
 test('frozen question pools are deterministic, disjoint and report shared history instead of claiming source independence', async () => {
