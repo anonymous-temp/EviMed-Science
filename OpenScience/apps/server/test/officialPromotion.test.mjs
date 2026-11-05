@@ -28,6 +28,7 @@ function ledger() {
   let tick = 0;
   return {
     rows,
+    accountIdentities: async ids => new Map(ids.map(id => [id, `test-incarnation:${id}`])),
     withActivationAuthority: (proof, operation) => activation.run(proof, operation),
     /** Every revision still held of one record, oldest first. */
     history(owner, kind, id) { return structuredClone(revisions.get(`${owner}:${kind}:${id}`) ?? []); },
@@ -198,6 +199,24 @@ test('a witness withdrawn immediately at activation cannot survive as an unguard
   assert.equal(withdrawn, true);
   assert.equal(records(f).some(row => row.payload.status === 'active'), false);
   assert.equal(f.published.count, 0);
+});
+
+test('publication fails closed without an atomic authority even for an established author', async () => {
+  const f = build(); delete f.documents.withActivationAuthority;
+  const promotion = createOfficialPromotion({ documents: f.documents, officialPacks: { publisherId: PLATFORM_PUBLISHER_USER_ID, publishAll: async () => { throw new Error('must not publish'); } },
+    facts: async () => ({}), judge: async () => ({ general: true, class: 'numbers-and-tables' }), established: async ids => new Set(ids),
+    review: async () => ({ independent: true, general: true, class: 'numbers-and-tables' }) });
+  await promotion.consider(method('senior-one')); await promotion.tick();
+  assert.equal(records(f).some(row => row.payload.status === 'active'), false);
+});
+
+test('a recreated author cannot inherit a pending promotion or trigger its delayed model judge', async () => {
+  let judgeCalls = 0;
+  const f = build({ judge: async () => { judgeCalls++; throw new Error('temporarily unavailable'); } });
+  await f.promotion.consider(method('senior-one')); assert.equal(judgeCalls, 1);
+  f.documents.accountIdentities = async ids => new Map(ids.map(id => [id, `replacement:${id}`]));
+  await f.promotion.tick(); assert.equal(judgeCalls, 1);
+  assert.ok(records(f).every(row => row.payload.status === 'rejected' && row.payload.text === null));
 });
 
 test("the model's answer is closed: anything but a general verdict with a listed class is dropped, a refusal is a rejection, and a judge that fails is tried again and then gives up", async () => {
