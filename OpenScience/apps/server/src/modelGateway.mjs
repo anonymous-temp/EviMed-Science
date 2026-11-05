@@ -235,7 +235,7 @@ function gatewayError(status, code, message) {
  * budget refused was recorded by the kernel — and shown in the kernel's own
  * conversation window — as "The model gateway is temporarily unavailable.",
  * which tells the reader to wait for something that is not coming back
- * (2026-10-05: an autopilot episode with a CNY 1.11 budget, refused on its
+ * (2026-10-05: a bounded run with a CNY 1.11 budget, refused on its
  * second call). The ledger knows which limit it was; the body says so.
  * @param {any} error
  * @returns {string | null}
@@ -1325,7 +1325,7 @@ const CONTROL_PLANE_NEVER_SENT = /^(?:ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ENETUNREA
  * made for, counted over that unit's own rows. A scheduled agenda's next-action
  * decision carries its episode's envelope there; the agenda's own daily and
  * weekly caps are never passed as `daily` and `weekly`, which sum everything
- * the account spent (`autopilotNextAction.mjs`).
+ * the account spent.
  *
  * @param {{ config: any, usageLedger: any, fetchImpl?: typeof fetch }} deps
  * @param {{ userId: string, projectId: string, runId?: string | null, purpose?: string, body: any,

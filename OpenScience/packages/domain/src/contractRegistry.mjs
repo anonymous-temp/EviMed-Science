@@ -51,7 +51,7 @@ const NATIVE_DATA_CONTRACTS = new Set(['statistical-analysis-package', 'dataset-
  * an unregistered id (`vocabulary.test.mjs`, "every check id a contract module
  * raises is on the one axis…"). A comment cannot fail.
  *
- * Some findings still carry no `check` at all — the JSON-shaped autopilot kinds
+ * Some findings still carry no `check` at all — the JSON-shaped kinds
  * and the shared `deliverable_rejected` paths. Those are counted as
  * unattributed rather than bucketed under a default that would read as
  * coverage. The line this list holds is narrower and checkable: an id that is

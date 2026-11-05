@@ -1,7 +1,7 @@
 /**
  * The IM module: a researcher's phone, through Feishu (plan §3.6).
  *
- * A layer-2 feature module like the inbox or autopilot: this service, its
+ * A layer-2 feature module like the inbox or the frontier feed: this service, its
  * routes (`imRoutes.mjs`), its leased worker (`imWorker.mjs`) and one switch
  * (`OPEN_SCIENCE_IM_ENABLED`). It is never a DSH plugin and never runs in a
  * runtime. The reason is the runtime's shape: a per-project container started

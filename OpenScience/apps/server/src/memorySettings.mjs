@@ -156,7 +156,7 @@ function publicSessionState(row) {
 /**
  * What a database failure means to a caller.
  *
- * A connection that is down is 503 and nothing else: chat and autopilot read
+ * A connection that is down is 503 and nothing else: chat reads
  * this code to decide between degrading and refusing, and a store that
  * is merely unreachable must never look like a rejected payload. A constraint
  * the store's own validation should have caught first is the opposite case —

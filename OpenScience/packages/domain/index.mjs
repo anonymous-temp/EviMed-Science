@@ -17,7 +17,7 @@
  * two modules defining the same name resolve to `undefined` at the root rather
  * than to either of them, and every consumer sees a defined-looking import that
  * is nothing. It happened twice during the migration — `CLAIM_TIERS` and
- * `AUTOPILOT_TASK_TYPES` — and the tests that caught it were not the ones that
+ * a second constant — and the tests that caught it were not the ones that
  * should have. Named re-exports make the same mistake a `SyntaxError: Duplicate
  * export` at load time, which nobody can ship past.
  *

@@ -36,7 +36,7 @@ export default [
           // duplicated name to `undefined` rather than to either definition, so
           // the consumer imports something that looks defined, is not, and
           // fails somewhere else entirely. It happened twice during the DSH
-          // migration (`CLAIM_TIERS`, `AUTOPILOT_TASK_TYPES`). Named re-exports
+          // migration (`CLAIM_TIERS` and a second constant). Named re-exports
           // turn the same mistake into a load-time `SyntaxError: Duplicate
           // export`, which nobody can ship past.
           selector: "ExportAllDeclaration",

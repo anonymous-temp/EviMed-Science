@@ -6750,7 +6750,7 @@ export class RuntimeManager {
 
   /**
    * Background work in a researcher's own projects — a 虚拟临床研究 or 循证 GEO
-   * step, an autopilot episode: a run reserved a bounded runtime for — holds at
+   * step: a run reserved a bounded runtime for — holds at
    * most one slot less than their ceiling, so a conversation they open always
    * has one (owner, 2026-10-08). That day two background analysis runs of one
    * account held both of its slots, and its third study's conversation waited
@@ -7762,7 +7762,7 @@ export class RuntimeManager {
 
   /**
    * Retry every unconfirmed close that is due, on a timer: the project that
-   * nobody is asking to start (the autopilot defers on the refusal and waits;
+   * nobody is asking to start (a background step defers on the refusal and waits;
    * a researcher has gone home) still gets its slot back. Runs whether or not
    * an idle timeout is configured, which the reaper's early return would have
    * made a coin toss.
@@ -7795,7 +7795,7 @@ export class RuntimeManager {
   /**
    * Stop a project's runtime. `by` says who asked: `"user"` for the researcher's own stop, restart or project
    * deletion — the runs it held are then a user's stop, charged for what ran — and anything else, including
-   * nothing, is the platform's (a release, the idle reaper, a capacity yield, the autopilot): free.
+   * nothing, is the platform's (a release, the idle reaper, a capacity yield, a scheduled task's wake): free.
    * @param {any} project @param {{expectedGeneration?:string|null,terminalStatus?:string,failureCode?:string|null,guard?:(()=>boolean)|null,by?:'user'|'platform'|null}} [options] */
   async stop(project, { expectedGeneration = null, terminalStatus = "canceled", failureCode = null, guard = null, by = null } = {}) {
     const key = this.key(project);
