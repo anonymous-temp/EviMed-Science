@@ -420,6 +420,7 @@ export class VcrMatchResults extends VcrStoreBase {
       done.push({
         record: recordOfPair(scored, clauses),
         subjectKey: String(identity.subject_key), targetKind: String(identity.target_kind), targetId: String(identity.target_id), target: object(scored?.target ?? clauses?.target),
+        documentHash: String((scored ?? clauses).document_hash ?? ""), targetHash: String((scored ?? clauses).target_hash ?? ""),
         fitRowId: scored?.id ?? null, criteriaRowId: clauses?.id ?? null, fit: score === null ? null : Number(score),
         confidence: (scored?.confidence ?? clauses?.confidence) === null || (scored?.confidence ?? clauses?.confidence) === undefined ? null : Number(scored?.confidence ?? clauses?.confidence),
         verdict: verdict.verdict, counts, producer: String(anchor.producer), judgedAt: iso(anchor.updated_at), basisChanged: basisMarkOf(scored?.basis_changed ?? clauses?.basis_changed ?? null),
@@ -660,19 +661,41 @@ export class VcrMatchResults extends VcrStoreBase {
     const rows = await this.judgments.byIds(study.id, ids);
     const fit = rows.find((/** @type {any} */ row) => row.id === pair.fitRowId) ?? null, criteria = rows.find((/** @type {any} */ row) => row.id === pair.criteriaRowId) ?? null;
     if (!fit && !criteria) return null;
+    const previous = await this.#previousReading(study, pair, ids);
     // A reader with no patient-level access gets the verdict of the pair and no clause of it: a clause row states a fact about one person, and the list gives such a reader groups, not people.
     if (pair.readable === false && pair.patientLevel === false) return { ...this.#listed(pair), subjectKey: pair.subjectKey, groups: {}, summary: null, clauses: [], withheld: 0 };
     if (pair.readable === false) {
       const clauses = clauseRows(withoutWords(presentJudgment(fit, criteria)));
-      return { ...this.#listed(pair), subjectKey: pair.subjectKey, groups: {}, summary: null, clauses, withheld: clauses.reduce((sum, clause) => sum + Number(/** @type {any} */ (clause).evidenceHidden ?? 0), 0) };
+      return { ...this.#listed(pair), subjectKey: pair.subjectKey, groups: {}, summary: null, clauses, withheld: clauses.reduce((sum, clause) => sum + Number(/** @type {any} */ (clause).evidenceHidden ?? 0), 0), ...(previous ? { previous } : {}) };
     }
     const presented = await this.#viewed(study, presentJudgment(fit, criteria), viewer);
     const clauses = clauseRows(presented);
     const withheld = clauses.reduce((sum, clause) => sum + Number(/** @type {any} */ (clause).evidenceHidden ?? 0), 0);
     return {
       ...this.#listed(pair), subjectKey: pair.subjectKey, groups: reasonGroups(presented, clauses), summary: clip(text(presented.reasons?.rationale)),
-      clauses, withheld, ...(withheld ? { evidenceNote: evidenceNoteZh(withheld) } : {}),
+      clauses, withheld, ...(withheld ? { evidenceNote: evidenceNoteZh(withheld) } : {}), ...(previous ? { previous } : {}),
     };
+  }
+
+  /**
+   * The reading before the one in use, in one line: its verdict, the day, and that it read an earlier record. Null when the pair has been judged once. A label, from the saved rows alone.
+   * @param {any} study @param {any} pair @param {readonly string[]} inUse
+   */
+  async #previousReading(study, pair, inUse) {
+    try {
+      const rows = await this.judgments.earlier(study.id, { subjectKey: pair.subjectKey, targetKind: pair.targetKind, targetId: pair.targetId, except: inUse });
+      const newest = rows[0];
+      if (!newest) return null;
+      // The rows of that reading are the ones that read the same words as the newest of them.
+      const same = rows.filter((/** @type {any} */ row) => row.documentHash === newest.documentHash && row.targetHash === newest.targetHash);
+      const fit = same.find((/** @type {any} */ row) => row.mode === "fit") ?? null, criteria = same.find((/** @type {any} */ row) => row.mode === "criteria") ?? null;
+      const shown = presentJudgment(fit, criteria);
+      const day = shown.judgedAt ? String(shown.judgedAt).slice(0, 10) : null;
+      const changedPart = newest.documentHash !== pair.documentHash ? "读的是更早的病历" : newest.targetHash !== pair.targetHash ? "读的是试验更早的登记内容" : "读的是更早的内容";
+      return { verdict: shown.verdict, verdictLabel: shown.verdictLabel, judgedAt: shown.judgedAt, line: `上一次判定${day ? `（${day}）` : ""}：${shown.verdictLabel}，${changedPart}。` };
+    } catch {
+      return null;
+    }
   }
 
   /**

@@ -150,6 +150,7 @@ export function JudgedPairDetail({ studyId, pair, mayReadRecord, subject, showTi
         {pair.eligibilityNote && <p data-vcr-eligibility-note="" className="text-caption text-warn-strong">{pair.eligibilityNote}</p>}
         {pair.clausesNote && <p data-vcr-clauses-note="" className="text-caption text-warn-strong">{pair.clausesNote}</p>}
         {pair.recordGap && <p data-vcr-record-gap="" className="text-caption text-warn-strong">{pair.recordGap}</p>}
+        {pair.previous && <p data-vcr-previous="" className="text-caption text-text-3">{pair.previous.line}</p>}
       </header>
       {pair.reasonsWithheld && <p data-vcr-reasons-withheld="" className="text-caption text-text-2">{pair.reasonsWithheld}</p>}
       <ReasonGroups groups={pair.groups} />

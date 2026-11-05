@@ -2537,6 +2537,8 @@ export interface VcrJudgedOpen extends VcrJudgedPair {
   summary: string | null;
   clauses: VcrJudgedClause[];
   withheld: number;
+  /** The reading before the one shown, when the pair has been judged again: its verdict, the day and that it read an earlier record, in one line. */
+  previous?: { verdictLabel: string; judgedAt: string | null; line: string };
   /** Why this reader sees the verdict and no reasons or sentences. */
   reasonsWithheld?: string;
   /** Why some of the sentences are not here. */
@@ -2642,6 +2644,7 @@ function readJudgedOpen(raw: unknown): VcrJudgedOpen | null {
     ...readJudgedPair(value),
     groups: Object.fromEntries((["support", "against", "open"] as const).map((key) => [key, strings(groups[key])]).filter(([, items]) => (items as string[]).length)),
     summary: text(value.summary),
+    ...(text(obj(value.previous).line) ? { previous: { verdictLabel: String(obj(value.previous).verdictLabel ?? ""), judgedAt: text(obj(value.previous).judgedAt), line: String(obj(value.previous).line) } } : {}),
     ...(text(value.reasonsWithheld) ? { reasonsWithheld: String(value.reasonsWithheld) } : {}), ...(text(value.evidenceNote) ? { evidenceNote: String(value.evidenceNote) } : {}),
     clauses: arr(value.clauses).map((clause) => ({
       number: num(clause.number) ?? 0, kind: clause.kind === "exclusion" ? "exclusion" as const : "inclusion" as const, clause: String(clause.clause ?? ""), ...(text(clause.lead) ? { lead: String(clause.lead) } : {}),

@@ -88,6 +88,7 @@ test("a re-judgment that failed leaves the last verdict, marked, and the pair ow
   assert.equal(read.clausesFailed.length, 2);
   assert.ok(read.ranking.every((row) => row.rejudgeFailed?.note && row.verdictLabel));
 
+  assert.equal(page.selected.previous, undefined, "judged once: no reading before");
   const resume = await vcr.matchResults.resumeSelection(study, { direction: "patient_to_trial", subjectKey });
   assert.deepEqual([...resume.ids].sort(), ["NCT00000001", "NCT00000002"]);
 
@@ -98,6 +99,9 @@ test("a re-judgment that failed leaves the last verdict, marked, and the pair ow
   assert.equal(after.progress.state, "done");
   assert.equal(after.failed.count, 0);
   assert.ok(after.trials.every((trial) => !trial.clausesNote));
+  // The pair was judged twice, on two notes: the sheet says what the reading before was.
+  assert.match(after.selected.previous.line, /^上一次判定（\d{4}-\d{2}-\d{2}）：.+，读的是更早的病历。$/u);
+  assert.ok(after.selected.previous.verdictLabel);
 });
 
 test("a read right after a job started, before its first row, says it is running and not that nothing is there", options, async () => {

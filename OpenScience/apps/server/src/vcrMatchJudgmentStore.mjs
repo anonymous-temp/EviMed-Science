@@ -240,6 +240,16 @@ export class VcrMatchJudgmentStore extends VcrStoreBase {
           AND scenario ->> 'protocolVersionId' = $2 ORDER BY created_at DESC LIMIT ${Math.max(1, Math.floor(limit))}`, [studyId, protocolVersionId]);
   }
 
+  /**
+   * The finished readings of a pair that are not the ones in use, newest first, whole: what a sheet says of the reading before. Few, since a pair's history is short.
+   * @param {string} studyId @param {{ subjectKey: string, targetKind: string, targetId: string, except: readonly string[] }} pair
+   */
+  async earlier(studyId, { subjectKey, targetKind, targetId, except }) {
+    return (await this.rows(`SELECT j.* FROM ${VCR_SCHEMA}.match_judgments j WHERE j.study_id=$1 AND j.subject_key=$2 AND j.target_kind=$3 AND j.target_id=$4 AND j.status='done'
+      AND NOT (j.id = ANY($5::text[])) AND NOT EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.subject_withdrawals w WHERE w.study_id=j.study_id AND w.subject_key=j.subject_key)
+      ORDER BY j.updated_at DESC, j.id LIMIT 6`, [studyId, subjectKey, targetKind, targetId, [...except]])).map(judgmentOf);
+  }
+
   /** Whole rows, for the page a reader shows. @param {string} studyId @param {readonly string[]} ids */
   async byIds(studyId, ids) {
     if (!ids.length) return [];

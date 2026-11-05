@@ -282,6 +282,11 @@ describe("给患者找试验 — every state", () => {
     expect(screen.getByText("这条结论没有读全：1 份病历没能读取。")).toBeInTheDocument();
   });
 
+  it("the sheet of a pair judged again says in one line what the reading before it was", async () => {
+    await patientPage({ [JUDGED]: judged((page) => { (page.selected as any).previous = { verdictLabel: "符合", judgedAt: "2026-11-01T00:00:00.000Z", line: "上一次判定（2026-11-01）：符合，读的是更早的病历。" }; return page; }) });
+    expect(document.querySelector("[data-vcr-previous]")).toHaveTextContent("上一次判定（2026-11-01）：符合，读的是更早的病历。");
+  });
+
   it("all done with the cost said once", async () => {
     await patientPage({ [JUDGED]: judged((page) => { page.progress = { ...page.progress, state: "done", total: 5, finished: 5, failed: 0, waiting: 0 }; page.failed = { count: 0, reasons: [], listed: [] }; return page; }) });
     expect(document.querySelector("[data-vcr-judged-progress='done']")).toHaveTextContent("已全部判完：5 个试验，用了 0.13 灵豆。");
