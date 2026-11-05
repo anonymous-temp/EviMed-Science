@@ -1347,10 +1347,13 @@ export function createVcrRoutes(dependencies) {
       const judge = service.packages?.matchJudge ?? /** @type {any} */ (dependencies).matchJudge ?? null;
       const reads = service.packages?.matchJudgments ?? null;
       if (!judge?.rejudge || !reads?.staleTargets) throw UNAVAILABLE();
-      const targetIds = body.registryIds ?? await reads.staleTargets(study, subjectKey);
+      const stale = new Set(await reads.staleTargets(study, subjectKey));
+      const targetIds = body.registryIds ?? [...stale];
+      // Why they are judged again: a registry record changed (the trials the read offers), or the person's own record did (any other trial named).
+      const reason = targetIds.length && targetIds.every((/** @type {string} */ target) => stale.has(target)) ? "registry_record" : "follow_up";
       const job = targetIds.length
         ? await audited("vcr.match.rejudge", () => ({ code: id, detail: subjectKey }), { code: id, detail: subjectKey },
-          () => judge.rejudge(study, { subjectKey, reason: "registry_record", targetIds: [...new Set(targetIds)] }))
+          () => judge.rejudge(study, { subjectKey, reason, targetIds: [...new Set(targetIds)] }))
         : null;
       return reply(job ? { started: true, ...job } : { started: false, reason: "nothing_to_rejudge" }, job ? 201 : 200);
     }

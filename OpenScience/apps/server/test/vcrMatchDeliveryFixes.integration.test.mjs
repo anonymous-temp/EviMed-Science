@@ -170,3 +170,36 @@ test("the patient page carries one line from the newest search for this person: 
   assert.match(page.search, /CTIS 没查到（登记库暂时没有回答）/u);
   assert.ok(!/registry_|_/.test(page.search), "no code in the line");
 });
+
+test("a judging job reserves no engine seconds it never uses", options, async () => {
+  const { subjectKey } = await intake(conv(), { messageSeq: say("女性，33 岁。乳腺癌。") }, origin);
+  const started = await vcr.matchJudge.start(conv(), { subjectKey, registryIds: ["NCT00000041"] });
+  const [row] = await vcr.store.rows("SELECT cpu_seconds_limit FROM evimed_vcr.jobs WHERE id = $1", [started.jobId]);
+  assert.equal(Number(row.cpu_seconds_limit), 1);
+  await runJobs();
+});
+
+test("the conversation says the name the page shows, also when two people's short names would have met", options, async () => {
+  const twin = "P4c1b0f11aaaaaaaa", twin2 = "P4c1b0f11bbbbbbbb";
+  const { subjectKey } = await intake(conv(), { messageSeq: say("男性，61 岁。肺癌。") }, origin);
+  const store = vcr.matchJudgments;
+  await Promise.all([twin, twin2].map((key) => store.save({ studyId: study.id, userId: "owner", subjectKey: key, targetKind: "candidate_trial", targetId: "NCT00000051", targetHash: "t", documentHash: "d", mode: "fit", promptVersion: "p", model: "m",
+    thinking: "", producer: "job", status: "done", fit: 70, confidence: 0.6, verdict: "eligible", answer: { reasons: {}, target: { id: "NCT00000051" } } })));
+  const page = await vcr.matchResults.forPatient(study, twin, { viewer });
+  const read = await readOf(twin);
+  assert.equal(read.ranking[0].subjectLabel, page.label, "the same name on both");
+  assert.notEqual(page.label, (await readOf(twin2)).ranking[0].subjectLabel, "and a different one for the other");
+  assert.ok(subjectKey);
+});
+
+test("the clause funnel does not count a clause row that a newer score of other words has overtaken", options, async () => {
+  const protocol = await vcr.matchStore.saveProtocolVersion({ studyId: study.id, userId: "owner", title: "F", criteria: [
+    { kind: "inclusion", criterionType: "demographic", sourceText: "Age >= 18", requirement: { op: "compare", variable: "age", comparator: "gte", value: 18, unit: "year" } } ] });
+  const save = (subjectKey, mode, documentHash, answer = {}) => vcr.matchJudgments.save({ studyId: study.id, userId: "owner", subjectKey, targetKind: "protocol_version", targetId: protocol.id, targetHash: "t", documentHash, mode,
+    promptVersion: "p", model: "m", thinking: "", producer: "job", status: "done", fit: 80, confidence: 0.7, verdict: "eligible", answer: { reasons: {}, ...answer } });
+  const rows = [{ number: 1, kind: "inclusion", clause: "Age >= 18", label: "included", basis: "stated", reason: "r", evidence: [] }];
+  await save("FUNNEL-A", "criteria", "d1", { rows }); await save("FUNNEL-A", "fit", "d1");
+  await save("FUNNEL-B", "criteria", "d1", { rows }); await save("FUNNEL-B", "fit", "d2");
+  const page = await vcr.matchResults.forProtocol(study, protocol.id, { viewer });
+  assert.equal(page.clauses.judgedPeople, 1, "B's clause row read an older note than B's score: it is history");
+});

@@ -577,6 +577,12 @@ describe('clinical matching controls',()=>{
     render(<ClinicalTimeline studyId="s1" data={data} mayReadOriginal={false} subject="P-0192"/>);
     expect(screen.getByText('P-0192 的临床记录与更正')).toBeInTheDocument();
   });
+  it('names a person by the short name every page uses, never by the key',()=>{
+    const data={timeline:[{id:'f1',variable:'creatinine',at:null,assertion:'affirmed',experiencer:'patient',quote:'肌酐 2.4 mg/dL',locator:null}]} as unknown as VcrMatchingTab;
+    render(<ClinicalTimeline studyId="s1" data={data} mayReadOriginal={false} subject="P4c1b0f11aaaaaaaa"/>);
+    expect(screen.getByText('P-4C1B0F 的临床记录与更正')).toBeInTheDocument();
+    expect(screen.queryByText(/P4c1b0f11aaaaaaaa/)).toBeNull();
+  });
   it('says 患者, once and the same, where the controls ask for the person',async()=>{
     render(<Controls data={{protocols:[{id:'p1',version:1,title:'方案一'}],direction:'patient_to_trial',candidateRoster:['P-001']} as unknown as VcrMatchingTab}/>);
     await userEvent.click(screen.getByRole('button',{name:'患者'}));

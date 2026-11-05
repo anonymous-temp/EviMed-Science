@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { vcrSubjectLabels } from '@evimed/domain';
+import { vcrSubjectLabel, vcrSubjectLabels } from '@evimed/domain';
 import { useNarrow } from '@/lib/useMediaQuery';
 import { CircleCheck, CircleHelp, CircleMinus, CircleX, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
@@ -416,7 +416,7 @@ export function ClinicalTimeline({ studyId, data, mayReadOriginal, subject }: {
     } catch (error) { setProblems(previous => ({ ...previous, [entry.id]: webErrorMessage(error, { fallback: '原文暂时无法打开，请重试。' }) })); }
     finally { setBusy(null); }
   };
-  return <Disclosure summary={subject ? `${subject} 的临床记录与更正` : '临床记录与更正'}>
+  return <Disclosure summary={subject ? `${vcrSubjectLabel(subject)} 的临床记录与更正` : '临床记录与更正'}>
     <ol className="divide-y divide-faint">
       {shown.visible.map(entry => <li key={entry.id} className="flex flex-col gap-2 py-3">
         <p className="text-caption text-text-3">{[formatDay(entry.at) || '日期未记载', entry.dateNote ?? null, assertions[entry.assertion] ?? '未知',

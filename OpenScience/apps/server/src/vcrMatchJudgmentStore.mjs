@@ -240,6 +240,12 @@ export class VcrMatchJudgmentStore extends VcrStoreBase {
           AND scenario ->> 'protocolVersionId' = $2 ORDER BY created_at DESC LIMIT ${Math.max(1, Math.floor(limit))}`, [studyId, protocolVersionId]);
   }
 
+  /** Everyone the study holds a judgment about (not the ones who withdrew), for short names that are unique among them. @param {string} studyId @returns {Promise<string[]>} */
+  async judgedPeople(studyId) {
+    return (await this.rows(`SELECT DISTINCT j.subject_key FROM ${VCR_SCHEMA}.match_judgments j WHERE j.study_id=$1
+      AND NOT EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.subject_withdrawals w WHERE w.study_id=j.study_id AND w.subject_key=j.subject_key) LIMIT 200000`, [studyId])).map((row) => String(row.subject_key));
+  }
+
   /**
    * The finished readings of a pair that are not the ones in use, newest first, whole: what a sheet says of the reading before. Few, since a pair's history is short.
    * @param {string} studyId @param {{ subjectKey: string, targetKind: string, targetId: string, except: readonly string[] }} pair

@@ -627,10 +627,17 @@ export class VcrMatchResults extends VcrStoreBase {
    * @param {string} studyId @param {string} protocolVersionId
    */
   async #funnel(studyId, protocolVersionId) {
-    const newest = `WITH newest AS (
-        SELECT DISTINCT ON (j.subject_key) j.id FROM ${S}.match_judgments j
+    // A person's clause row stands behind their verdict only while no score of the same pair read newer words after it (`standingRows`): an older clause row is history and is not counted.
+    const newest = `WITH ranked AS (
+        SELECT DISTINCT ON (j.subject_key) j.id, j.study_id, j.subject_key, j.target_kind, j.target_id, j.status, j.document_hash, j.target_hash, j.updated_at FROM ${S}.match_judgments j
         WHERE j.study_id = $1 AND j.target_kind = 'protocol_version' AND j.target_id = $2 AND j.mode = 'criteria' AND ${NOT_WITHDRAWN}
-        ORDER BY j.subject_key, (j.status = 'done') DESC, j.updated_at DESC, j.id)`;
+        ORDER BY j.subject_key, (j.status = 'done') DESC, j.updated_at DESC, j.id),
+      newest AS (
+        SELECT r.id FROM ranked r
+        LEFT JOIN LATERAL (SELECT f.document_hash, f.target_hash, f.updated_at FROM ${S}.match_judgments f
+          WHERE f.study_id = r.study_id AND f.subject_key = r.subject_key AND f.target_kind = r.target_kind AND f.target_id = r.target_id AND f.mode = 'fit' AND f.status = 'done'
+          ORDER BY f.updated_at DESC, f.id LIMIT 1) fit ON r.status = 'done'
+        WHERE NOT (fit.updated_at IS NOT NULL AND fit.updated_at >= r.updated_at AND (fit.document_hash <> r.document_hash OR fit.target_hash <> r.target_hash)))`;
     const [answered, unanswered, people] = await Promise.all([
       this.rows(`${newest}
         SELECT (c ->> 'number')::int AS number, max(c ->> 'kind') AS kind, max(c ->> 'clause') AS clause,

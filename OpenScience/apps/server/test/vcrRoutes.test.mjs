@@ -685,6 +685,7 @@ test("judging a person's changed-record trials again starts the judging job for 
   assert.ok(audits.some((line) => line[0] === "vcr.match.rejudge" && line[1] === "completed"), "the request is audited");
   await routes(request("POST", "/api/vcr/studies/std_1/rejudge", { subjectKey: "P-0192", registryIds: ["NCT00000002", "NCT00000002"] }), response());
   assert.deepEqual(asked[1][1].targetIds, ["NCT00000002"], "the trials the page names, once each");
+  assert.equal(asked[1][1].reason, "follow_up", "a trial whose registry record did not change is judged again for the person's own record, and is not labelled a registry change");
   stale = [];
   const none = response();
   await routes(request("POST", "/api/vcr/studies/std_1/rejudge", { subjectKey: "P-0192" }), none);

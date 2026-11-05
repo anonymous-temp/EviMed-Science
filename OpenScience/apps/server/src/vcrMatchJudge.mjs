@@ -38,7 +38,7 @@ import { createHash } from 'node:crypto';
 import {
   vcrMatchFailureReason, VCR_DEFINITION_PROMPT_VERSION, VCR_ENGINE_PROTOCOL_VERSION, VCR_JUDGMENT_PROMPT_VERSIONS, VCR_MATCH_BATCH_DEFAULT_MODEL, VCR_MATCH_BATCH_METHODS, VCR_MATCH_JUDGE_LIMITS, VCR_MIN_CELL_SIZE, VCR_TRIAL_VERDICT_LABELS_ZH,
   canonicalScenarioJson, criteriaMessages, criterionDisplay, fitMessages, isPeak, mergeCriteriaAnswers, mergeFitAnswers, parseCriteriaAnswer, parseFitAnswer, priceUsage, rankJudgments,
-  segmentCriteria, segmentSentences, splitNoteParts, trialVerdict, vcrResultOutputPayload, vcrSubjectLabel,
+  segmentCriteria, segmentSentences, splitNoteParts, trialVerdict, vcrResultOutputPayload, vcrSubjectLabel, vcrSubjectLabels,
 } from '@evimed/domain';
 import { HttpError } from './security.mjs';
 import { callModelForControlPlane } from './modelGateway.mjs';
@@ -1079,7 +1079,9 @@ export function createMatchJudgeExecutor({ store, matchStore, judgments, documen
     const tallyOf = (/** @type {'fit' | 'criteria'} */ mode, /** @type {number} */ asked) => ({
       done: marks[mode].filter((mark) => mark === 'd').length, already: marks[mode].filter((mark) => mark === 'a').length, failed: marks[mode].filter((mark) => mark === 'f' || mark === 't').length, total: asked,
     });
-    const stages = { fit: tallyOf('fit', scenario.fit !== false ? pairs.filter((pair) => !withdrawn.has(pair.subjectKey)).length : marks.criteria.filter((mark) => mark === 'n').length), criteria: tallyOf('criteria', (second?.length ?? 0) - marks.criteria.filter((mark) => mark === 'n').length) };
+    const stages = { fit: tallyOf('fit', scenario.fit !== false ? pairs.filter((pair) => !withdrawn.has(pair.subjectKey)).length : marks.criteria.filter((mark) => mark === 'n').length),
+      // A person who withdrew in the second stage owes nothing: their pairs are not asked for, and the job does not end short of them.
+      criteria: tallyOf('criteria', (second ?? []).filter((index) => marks.criteria[index] !== 'w' && !withdrawn.has(pairs[index].subjectKey)).length - marks.criteria.filter((mark) => mark === 'n').length) };
     await onProgress({ done: finished, total: progressTotal });
 
     const scenarioHash = /^[a-f0-9]{64}$/.test(String(job.scenarioHash ?? '')) ? String(job.scenarioHash) : createHash('sha256').update(canonicalScenarioJson(scenario)).digest('hex');
@@ -1202,7 +1204,8 @@ export function createMatchJudge({ jobs, matchStore, documents, subjectTable = n
       if (open) return { action: 'start', kind: 'match_judge', state: String(open.state), jobId: String(open.id), alreadyRunning: true, ...summary };
       const { job } = await jobs.enqueue({
         studyId: study.id, userId: study.userId, kind: 'match_judge', scenario, inputs: [], internal: true, runId: study.executionOrigin?.runId ?? null,
-        cpuSecondsLimit: 60, maxAttempts: 5, idempotencyKey: `vcr:${study.id}:judge:${scenario.chain}:g${same.length}`,
+        // A judging job spends model calls, booked by the usage ledger, and no engine CPU: it reserves the least a job may, so a study near its compute budget is not made to wait for seconds it never uses.
+        cpuSecondsLimit: 1, maxAttempts: 5, idempotencyKey: `vcr:${study.id}:judge:${scenario.chain}:g${same.length}`,
         detail: { origin: actor, ...(scenario.protocolVersionId ? { protocolVersionId: scenario.protocolVersionId } : {}), principal: study.userId,
           ...(study.cloudContext ? { cloudContext: { runId: String(study.cloudContext.runId), sessionId: String(study.cloudContext.sessionId) } } : {}),
           ...(study.completionOrigin ? { conversationOrigin: study.completionOrigin } : {}) },
@@ -1395,13 +1398,16 @@ export function createMatchJudgmentReads({ judgments, documents, subjectTable = 
     const ranked = rankJudgments(pairs.map((pair) => ({ ...pair, id: order === 'target' ? pair.targetId : pair.subjectKey })));
     const page = ranked.slice(offset, offset + limit);
     const whole = new Map((await judgments.byIds(study.id, page.flatMap((pair) => [pair.fitRow?.id, pair.criteriaRow?.id].filter(Boolean)))).map((/** @type {any} */ row) => [row.id, row]));
+    // The short name a person has on the page: unique among the study's judged people, so the conversation says the name the page shows (a read that fails names them from their own digits).
+    const labels = await judgments.judgedPeople?.(study.id).then((keys) => vcrSubjectLabels([...keys, ...page.map((pair) => pair.subjectKey)])).catch(() => null) ?? null;
     const presented = page.flatMap((pair) => {
       const fit = pair.fitRow ? whole.get(pair.fitRow.id) ?? null : null, criteria = pair.criteriaRow ? whole.get(pair.criteriaRow.id) ?? null : null;
       if (!fit && !criteria) return [];
       const rows = [fit, criteria].filter(Boolean);
       const owed = pair.clauseFailure && !pair.criteriaRow ? { clausesFailed: { code: pair.clauseFailure, reason: vcrMatchFailureReason(pair.clauseFailure) } } : {};
       const refailed = pair.rejudgeFailure ? { rejudgeFailed: { code: pair.rejudgeFailure.code, reason: vcrMatchFailureReason(pair.rejudgeFailure.code), at: pair.rejudgeFailure.at, note: REJUDGE_FAILED_NOTE_ZH } } : {};
-      return [{ row: { ...presentJudgment(fit, criteria), ...owed, ...refailed }, record: { subjectKey: String(rows[0].subjectKey), documentIds: [...new Set(rows.flatMap((row) => list(row.documentIds).map(String)))], snapshotIds: [...new Set(rows.flatMap((row) => list(object(row.answer?.readFrom).snapshots).map((snapshot) => String(object(snapshot).id))))] } }];
+      const shown = presentJudgment(fit, criteria);
+      return [{ row: { ...shown, ...(labels?.get(shown.subjectKey) ? { subjectLabel: labels.get(shown.subjectKey) } : {}), ...owed, ...refailed }, record: { subjectKey: String(rows[0].subjectKey), documentIds: [...new Set(rows.flatMap((row) => list(row.documentIds).map(String)))], snapshotIds: [...new Set(rows.flatMap((row) => list(object(row.answer?.readFrom).snapshots).map((snapshot) => String(object(snapshot).id))))] } }];
     });
     // The trials of this person whose verdict rests on a record that has since changed, whatever page they are on: one action judges them again.
     const stale = order === 'target' && subjectKey
