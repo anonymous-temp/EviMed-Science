@@ -1289,9 +1289,21 @@ export function presentJudgment(fit, criteria) {
     missingClauses: missing,
     eligibilitySource: anchor.answer?.eligibilitySource ?? null,
     producer: anchor.producer, model: anchor.model, thinking: anchor.thinking, judgedAt: anchor.updatedAt,
-    ...(basisChanged ? { basisChanged } : {}), ...(gap ? { recordGap: gap } : {}), ...(standing.older === 'criteria' ? { clausesOutdated: true } : {}), ...(standing.older === 'fit' ? { scoreOutdated: true } : {}),
+    ...(basisChanged ? { restsOnOlder: restsOnOlderWords(basisChanged) } : {}), ...(gap ? { recordGap: gap } : {}), ...(standing.older === 'criteria' ? { clausesOutdated: true } : {}), ...(standing.older === 'fit' ? { scoreOutdated: true } : {}),
     ...(isRegistryMark(basisChanged) && anchor.targetKind === 'candidate_trial' ? { rejudge: { reason: REGISTRY_RECORD_BASIS, label: '重新判定', subjectKey: anchor.subjectKey, registryIds: [anchor.targetId] } } : {}),
   };
+}
+
+/** What a conversation is told of a verdict whose basis moved, in words and not as the stored cause. @param {any} basisChanged */
+function restsOnOlderWords(basisChanged) {
+  if (basisChanged?.label) return String(basisChanged.label);
+  const words = /** @type {Record<string, string>} */ ({
+    document: '病历在判定之后有更新，这个结论读的是更早的病历',
+    projection: '这条结论读过的病历内容在判定之后变了',
+    permission: '这条结论读过的病历，云端处理授权在判定之后变了',
+    withdrawn: '这条结论读过的病历来源在判定之后撤回了',
+  });
+  return words[String(basisChanged)] ?? '这个结论读的是更早的内容';
 }
 
 /** Whether a row's `basisChanged` is the registry watch's mark: the record the verdict was made of has changed since. @param {any} basisChanged */
@@ -1507,7 +1519,7 @@ export function createMatchJudgmentReads({ judgments, documents, subjectTable = 
       if (item.documentHash && item.documentHash !== note.hash) throw failure('vcr_match_note_changed', '这份病历在读取之后变了，句子编号已不对应：重新读一次 sentences 再写。');
       const base = { studyId: study.id, userId: String(study.userId), subjectKey: item.subjectKey, targetKind: direction, targetId: target.id, targetHash: target.hash, documentHash: note.hash,
         model: '', thinking: '', producer: 'conversation', jobId: null, documentIds: note.documentIds, liveDocuments: Boolean(documents.recordStands) };
-      const answer = { target: target.summaryOfTarget, eligibilitySource: target.eligibilitySource, ...(list(note.snapshots).length ? { readFrom: { snapshots: note.snapshots } } : {}) };
+      const answer = { target: target.summaryOfTarget, eligibilitySource: target.eligibilitySource, ...gapsOf(note, target), ...(list(note.snapshots).length ? { readFrom: { snapshots: note.snapshots } } : {}) };
       /** @type {any[]} */ const notices = [];
       /** @type {any} */ let fitRow = null, criteriaRow = null;
       const reasons = object(item.reasons);

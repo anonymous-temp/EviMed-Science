@@ -199,6 +199,8 @@ async function resolveSearchSelection(vcr, study, selection) {
   if (!taken?.registryIds.length) {
     throw gatewayError(400, "vcr_matching_selection_invalid", "searchId 对不上本研究里保存的一次检索（编号不对，或已被较新的检索取代）。请重新检索。");
   }
+  // A search made without naming a person, judged for one, becomes that person's: their withdrawal then takes its condition, terms and demographics with the rest.
+  if (typeof selection.subjectKey === "string") await vcr.candidateSearches?.stampSubject?.(study, String(selection.searchId), selection.subjectKey).catch(() => {});
   const { searchId: _searchId, candidateLimit: _candidateLimit, ...rest } = selection;
   return { ...rest, registryIds: taken.registryIds, ...(taken.collection ? { collection: taken.collection, collectionRevision: taken.collectionRevision } : {}) };
 }

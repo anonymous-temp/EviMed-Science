@@ -137,7 +137,8 @@ test("a changed document or permission labels the judgments that read it, and bl
   assert.equal((await vcr.matchJudgments.list({ studyId: f.target.id, subjectKey: f.s2 }))[0].basisChanged, "document");
   // A new judgment of the same text clears nothing it did not replace; a finished row's label stays until it is judged again.
   const relabelled = await vcr.matchJudgmentReads.forSubject(f.target, f.s2);
-  assert.equal(relabelled.ranking[0].basisChanged, "document");
+  assert.match(relabelled.ranking[0].restsOnOlder, /病历在判定之后有更新/u);
+  assert.equal(relabelled.ranking[0].basisChanged, undefined, "the stored cause word is not what a conversation reads");
 });
 
 test("a study's deletion hides its judgments from every reader, as it hides its facts; the rows stay with the soft-deleted study", options, async () => {

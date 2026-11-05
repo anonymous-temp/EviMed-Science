@@ -68,6 +68,15 @@ export class VcrCandidateSearchStore extends VcrStoreBase {
     return id;
   }
 
+  /**
+   * A search that was made with no person named, judged for one: its receipt now belongs to them, so their withdrawal takes it. A receipt that already has a person keeps it.
+   * @param {{ id: string }} study @param {string} searchId @param {string} subjectKey
+   */
+  async stampSubject(study, searchId, subjectKey) {
+    await this.query(`UPDATE ${VCR_SCHEMA}.candidate_searches s SET subject_key = $3 WHERE s.study_id = $1 AND s.id = $2 AND s.subject_key IS NULL
+      AND NOT EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.subject_withdrawals w WHERE w.study_id = s.study_id AND w.subject_key = $3)`, [study.id, searchId, subjectKey]);
+  }
+
   /** One receipt of this study, or null. @param {{ id: string }} study @param {string} id */
   async get(study, id) {
     return receiptOf(await this.one(`SELECT * FROM ${VCR_SCHEMA}.candidate_searches WHERE study_id = $1 AND id = $2`, [study.id, id]));

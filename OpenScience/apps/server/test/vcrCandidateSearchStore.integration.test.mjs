@@ -121,3 +121,17 @@ test("a search through the evidence pipeline writes its receipt to the real tabl
   assert.deepEqual([third.returned, third.more, third.candidates[0].registryId, asked], [5, false, "NCT00000041", before]);
   assert.deepEqual((await searches.resolveSelection(study, first.searchId, 3)).registryIds, ["NCT00000001", "NCT00000002", "NCT00000003"]);
 });
+
+test("a search made without a person, judged for one, becomes theirs; one that already has a person keeps it, and a withdrawn person takes nothing", options, async () => {
+  const study = await newStudy();
+  const open = await searches.save(study, entry(rows(2), { subjectKey: null }));
+  const owned = await searches.save(study, entry(rows(2), { subjectKey: "P-1" }));
+  await searches.stampSubject(study, open, "P-7");
+  await searches.stampSubject(study, owned, "P-7");
+  assert.equal((await searches.get(study, open)).subjectKey, "P-7");
+  assert.equal((await searches.get(study, owned)).subjectKey, "P-1");
+  const lone = await searches.save(study, entry(rows(1), { subjectKey: null }));
+  await searches.query("INSERT INTO evimed_vcr.subject_withdrawals (study_id, subject_key) VALUES ($1, 'P-8')", [study.id]);
+  await searches.stampSubject(study, lone, "P-8");
+  assert.equal((await searches.get(study, lone)).subjectKey, null);
+});
