@@ -285,6 +285,13 @@
       "open": []
     }
   ],
+  "people": {
+    "total": 1,
+    "offset": 0,
+    "limit": 25,
+    "more": false,
+    "verdict": null
+  },
   "selected": {
     "candidate": {
       "id": "P-0192",

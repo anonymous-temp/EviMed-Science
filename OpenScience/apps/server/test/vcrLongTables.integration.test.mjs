@@ -165,8 +165,9 @@ test("a FHIR export started from the conversation: converted, mapped and frozen 
   const askedRelevance = asked.filter((call) => call.system.includes("Say which concepts"));
   assert.equal(askedRelevance.length, 1, "the choice is asked once");
   assert.ok(JSON.parse(askedRelevance[0].user).concepts.includes(concepts[0]));
-  const judged = asked.find((call) => call.system.includes("criterion level"));
-  assert.match(judged.user, /\d{4}-\d{2}-\d{2} (诊断|检验|用药|操作) /, "the model reads the dated lines");
+  // The export's notes come first and a long record is read in parts, so the dated lines may be in a later part than the first.
+  const judged = asked.filter((call) => call.system.includes("criterion level"));
+  assert.ok(judged.some((call) => /\d{4}-\d{2}-\d{2} (诊断|检验|用药|操作) /.test(call.user)), "the model reads the dated lines");
   const result = await resultOf(started.jobId);
   assert.deepEqual([result.diagnostics.finished, result.diagnostics.total], [1, 1]);
   const context = { ...study, cloudContext: { runId: "r", sessionId: "s" } };
@@ -177,7 +178,7 @@ test("a FHIR export started from the conversation: converted, mapped and frozen 
   assert.ok(ranking.ranking[0].criteria[0].evidence[0].source.long);
   const sentences = await vcr.service.runtimeRead(context, "subject_document", { subjectKey: keys[0], kind: "sentences" });
   assert.ok(sentences.sentences.length > 0);
-  assert.ok(sentences.sentences.every((row) => row.fromTable));
+  assert.ok(sentences.sentences.some((row) => row.fromTable), "the coded lines are read beside the notes the export carries");
   // A second start of the same selection reads the same words and pays for nothing, and does not ask again.
   const calls = asked.length;
   await vcr.matchJudge.start(context, { subjectKey: keys[0], registryIds: ["NCT00000001"], topK: 1 });

@@ -260,10 +260,10 @@ test("a read shows the mark beside the old verdict and offers one action to judg
   assert.equal(answer.ranking.length, 2, "the old verdicts are still shown");
   const stale = answer.ranking.find((entry) => entry.target.id === "NCT00000001");
   const fresh = answer.ranking.find((entry) => entry.target.id === "NCT00000002");
-  assert.equal(stale.basisChanged.label, "登记记录已更新，结论来自旧版本");
+  assert.equal(stale.restsOnOlder, "登记记录已更新，结论来自旧版本");
   assert.equal(stale.verdictLabel.length > 0, true);
   assert.deepEqual(stale.rejudge, { reason: "registry_record", label: "重新判定", subjectKey: "P-1", registryIds: ["NCT00000001"] });
-  assert.equal(fresh.basisChanged, undefined);
+  assert.equal(fresh.restsOnOlder, undefined);
   assert.equal(fresh.rejudge, undefined);
   assert.deepEqual(answer.rejudge, { reason: "registry_record", label: "登记记录已更新，可重新判定", subjectKey: "P-1", registryIds: ["NCT00000001"] });
   assert.equal(answer.rejudging, undefined);
@@ -279,7 +279,7 @@ test("an attended conversation that asks gets the changed trials judged again wi
   assert.deepEqual(calls, [[study.id, { subjectKey: "P-1", reason: "registry_record", targetIds: ["NCT00000001"] }]]);
   assert.deepEqual(first.rejudging, { jobId: "job_r1" });
   assert.equal(first.ranking.length, 2, "beside the old rows, which stay shown with their label");
-  assert.ok(first.ranking.some((entry) => entry.basisChanged));
+  assert.ok(first.ranking.some((entry) => entry.restsOnOlder));
   const again = await reads.forSubject(attended(study), "P-1");
   assert.equal(calls.length, 1, "the same trials are not started twice");
   assert.deepEqual(again.rejudging, { jobId: "job_r1" });
