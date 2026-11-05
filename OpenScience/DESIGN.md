@@ -1156,7 +1156,7 @@ The owner asked that the process picture of 主动科研 be the page's core and 
 (「炫酷和科幻和赛博朋克一些，用户一看就有很好的冲击感」). It is the page's one brand moment, and an explicit exception to
 “flat, no glow, no shimmer” for that one surface only:
 
-- **A fixed dark scene in both themes** (`components/autopilot/ResearchObservatory.css`, named in `designTokens.test.ts`'s
+- **A fixed dark scene in both themes** (`components/activeResearch/ResearchObservatory.css`, named in `designTokens.test.ts`'s
   exceptions): the research queue on top, then the status line, six counters, the research line (规划 → 检索 → 阅读 → 分析 →
   核对 → 撰写 → 交付, the orchestrator above the stage of its last call and each delegated member below its own), the live
   operations feed with the selected operation's input and result, and what the run handed over. Its neon colours are content;
