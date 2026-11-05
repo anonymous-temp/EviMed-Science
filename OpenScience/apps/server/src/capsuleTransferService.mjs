@@ -1,4 +1,4 @@
-import { privateByDefault } from "@evimed/domain";
+import { privateByDefault, sourcePrivacyOf } from "@evimed/domain";
 import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -50,7 +50,7 @@ function privateSelections(value) {
   const selected = new Map();
   for (const entry of value) {
     fields(entry, ["id", "sha256"]);
-    if (typeof entry.id !== "string" || !/^native:nm_[a-f0-9]{24}$/.test(entry.id)
+    if (typeof entry.id !== "string" || !/^native:nm_[a-f0-9]{24}(?:_[a-f0-9]{12})?$/.test(entry.id)
       || typeof entry.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(entry.sha256) || selected.has(entry.id)) throw invalid();
     selected.set(entry.id, entry.sha256);
   }
@@ -70,7 +70,7 @@ function excludedIds(value) {
  * @type {Record<"inferred" | "document" | "sensitive" | "received" | "paused" | "private", (count: number) => string>}
  */
 const EXCLUDED_TEXT = Object.freeze({
-  private: (count) => `关于其他人的 ${count} 条记忆没有放进来；逐条勾选才会分享。`,
+  private: (count) => `尚未选择的 ${count} 条内容没有放进来；逐条勾选才会分享。`,
   inferred: (count) => `助手替你记下、你还没有确认或改过的 ${count} 条内容没有放进来。`,
   document: (count) => `从你上传的资料里整理出来的 ${count} 条内容没有放进来。`,
   sensitive: (count) => `你标为敏感的 ${count} 条内容没有放进来。`,
@@ -152,7 +152,7 @@ function assertShareTextOnly(manifest, payloadPaths) {
   for (const name of payloadPaths) if (!declared.has(name)) throw notTextOnly();
 }
 
-function renderedFiles(snapshotId, entries) {
+function renderedFiles(snapshotId, entries,version=2) {
   const result = Object.create(null);
   for (const entry of entries) {
     if (entry.factKind === "method_preference") {
@@ -165,7 +165,7 @@ function renderedFiles(snapshotId, entries) {
       ? `# Shared profile\n\n${group.map(entry => `## ${entry.factKind} (version ${entry.version})\n\n${entry.content}`).join("\n\n")}\n`
       : group.map(entry => JSON.stringify(entry)).join("\n") + "\n";
   }
-  result["provenance.json"] = JSON.stringify({ format: "evimed-capsule-transfer", version: 1, snapshotId, entries });
+  result["provenance.json"] = JSON.stringify({ format: "evimed-capsule-transfer", version, snapshotId, entries });
   return result;
 }
 /**
@@ -294,6 +294,16 @@ async function exportableMethods(client, userId, rows) {
   return marked.size ? rows.filter((row) => !marked.has(row.payload?.provenance?.runId)) : rows;
 }
 
+function receivedSourcePrivacy(entry,preview) {
+  if(preview.sourceAttestation==='hosted-exact-snapshot'&&entry.sourcePrivacy?.schemaVersion===1)return sourcePrivacyOf(entry);
+  return sourcePrivacyOf({sourcePrivacy:{schemaVersion:1,classification:'unclassified'},originalSources:[entry]});
+}
+
+function receivedAttribution(entry,official=false) {
+  const claimed=Array.isArray(entry.attribution?.origins)?entry.attribution.origins:[entry.origin??'unknown'];
+  return {schemaVersion:1,origins:official?['system']:[...new Set(['imported',...claimed.filter(origin=>CAPSULE_FACT_ORIGINS.includes(origin))])].slice(0,16),confirmed:false};
+}
+
 /**
  * The rows a received pack is written as: the capsule, and one fact for each entry the scan kept. An import writes them for a pack a person
  * took in, and an official pack's adoption writes the same rows for the platform's own (`adoptOfficial`), so that a pack of either kind is
@@ -317,7 +327,9 @@ function receivedPackRecords({ capsuleId, preview, kept, unchecked, held, share,
       // never mounted (`capsuleMethods.mjs`); only what a person wrote or a
       // pack brought becomes this pack's own. A pack exported before origins
       // travelled could hold only entries its sharer had approved by hand.
-      capsuleId, factKind: entry.factKind, layer: entry.layer, content: entry.content, origin: entry.origin === "inferred" ? "inferred" : "system",
+      capsuleId, factKind: entry.factKind, layer: entry.layer, content: entry.content, origin:channel==='official'?'system':'imported',
+      attribution:receivedAttribution(entry,channel==='official'),
+      sourcePrivacy:channel==='official'?{schemaVersion:1,classification:'ordinary',reasons:['official-method']}:receivedSourcePrivacy(entry,preview),
       status: "approved", contextOnly: true, ...(unchecked.has(entry.id) ? { unscanned: true } : {}),
       ...(held.has(entry.id) ? { safetyHold: true } : {}),
       provenance: [{ type: "import", id: `${preview.snapshotId}:${entry.id}` }], share,
@@ -738,7 +750,8 @@ export class CapsuleTransferService {
     const entries = source.facts.map(fact => {
       const id = randomUUID(); const place = location(fact.payload.factKind); const content = checkedText(fact.payload.content);
       return { id, version: fact.revision, factKind: fact.payload.factKind, layer: place.layer, content, sha256: digest(content), path: place.path ?? `methods/${id}/SKILL.md`,
-        origin: CAPSULE_FACT_ORIGINS.includes(fact.payload.origin) ? fact.payload.origin : "inferred" };
+        origin: CAPSULE_FACT_ORIGINS.includes(fact.payload.origin) ? fact.payload.origin : "unknown",
+        attribution:fact.payload.attribution??{schemaVersion:1,origins:[fact.payload.origin??"unknown"],confirmed:false},sourcePrivacy:sourcePrivacyOf(fact.payload) };
     });
     const card = await this.#card(userId, entries, previous, input.card);
     const files = renderedFiles(snapshotId, entries);
@@ -1166,12 +1179,17 @@ export class CapsuleTransferService {
     let metadata;
     try { metadata = JSON.parse(opened.entries["provenance.json"]); } catch { throw invalid(); }
     fields(metadata, ["format", "version", "snapshotId", "entries"]);
-    if (metadata.format !== "evimed-capsule-transfer" || metadata.version !== 1 || !UUID.test(metadata.snapshotId) || metadata.snapshotId !== manifest.capsuleId
+    if (metadata.format !== "evimed-capsule-transfer" || ![1,2].includes(metadata.version) || !UUID.test(metadata.snapshotId) || metadata.snapshotId !== manifest.capsuleId
       || !Array.isArray(metadata.entries) || !metadata.entries.length || metadata.entries.length > MAX_ENTRIES) throw invalid();
     const ids = new Set();
     for (const entry of metadata.entries) {
       // `origin` since 2026-09-20; a pack exported before carries none.
-      fields(entry, ["id", "version", "factKind", "layer", "content", "sha256", "path", "origin"]);
+      fields(entry, ["id", "version", "factKind", "layer", "content", "sha256", "path", "origin", "attribution", "sourcePrivacy"]);
+      if(metadata.version===2){
+        fields(entry.attribution,["schemaVersion","origins","confirmed"]);fields(entry.sourcePrivacy,["schemaVersion","classification","reasons"]);
+        if(entry.attribution.schemaVersion!==1||entry.attribution.confirmed!==false||!Array.isArray(entry.attribution.origins)||entry.attribution.origins.length>16||entry.attribution.origins.some(origin=>!CAPSULE_FACT_ORIGINS.includes(origin))
+          ||entry.sourcePrivacy.schemaVersion!==1||!["private","unclassified","ordinary"].includes(entry.sourcePrivacy.classification)||!Array.isArray(entry.sourcePrivacy.reasons)||entry.sourcePrivacy.reasons.length>32||entry.sourcePrivacy.reasons.some(reason=>typeof reason!=="string"||reason.length>100))throw invalid();
+      }
       if (entry.origin !== undefined && !CAPSULE_FACT_ORIGINS.includes(entry.origin)) throw invalid();
       if (!UUID.test(entry.id) || ids.has(entry.id) || !kindsFor(scopes).includes(entry.factKind)) throw invalid();
       ids.add(entry.id); productInteger(entry.version, 1, 2_147_483_647); checkedText(entry.content);
@@ -1179,7 +1197,7 @@ export class CapsuleTransferService {
       if (entry.layer !== place.layer || entry.path !== (place.path ?? `methods/${entry.id}/SKILL.md`) || entry.sha256 !== digest(entry.content)) throw invalid();
     }
     assertShareTextOnly(opened.manifest, Object.keys(opened.entries));
-    const canonicalFiles = renderedFiles(metadata.snapshotId, metadata.entries);
+    const canonicalFiles = renderedFiles(metadata.snapshotId, metadata.entries,metadata.version);
     if (Object.keys(opened.entries).length !== Object.keys(canonicalFiles).length || Object.entries(canonicalFiles).some(([file, content]) => opened.entries[file] !== content)) throw invalid();
     const archiveSha256 = digest(input.archive);
     const hosted = known && !known.revoked ? await this.documents.get(known.ownerId, "preferences", metadata.snapshotId) : null;
@@ -1196,7 +1214,7 @@ export class CapsuleTransferService {
     // one the account holds only when it is signed by the same key (2026-10-10 review C-4).
     const signingKeyFingerprint = digest(String(known?.publicKey ?? envelope.issuerPublicKey));
     const upgrade = await this.#upgradeTarget(userId, manifest, metadata.entries, { signingKeyFingerprint, trust: known ? "verified" : "unverified" });
-    const preview = { archiveSha256, manifestSha256, snapshotId: metadata.snapshotId, scopes, entries: metadata.entries, newerSnapshotId: replacements.items[0]?.id ?? null, scan,
+    const preview = { ...(hosted&&sourceAccountPresent&&metadata.version===2?{sourceAttestation:"hosted-exact-snapshot"}:{}),archiveSha256, manifestSha256, snapshotId: metadata.snapshotId, scopes, entries: metadata.entries, newerSnapshotId: replacements.items[0]?.id ?? null, scan,
       card, sharedAt: typeof opened.manifest.createdAt === "string" ? opened.manifest.createdAt : null, upgrades: upgrade ? upgrade.view : null,
       issuerTrust: known ? "verified" : "unverified", issuerId: manifest.issuer.userId,
       hostedStatus: known && (known.revoked || !sourceAccountPresent) ? "revoked" : hosted?.payload.status ?? (known ? "unavailable" : "unknown"),
@@ -1316,7 +1334,7 @@ export class CapsuleTransferService {
         for (const entry of preview.entries.filter((/** @type {any} */ item) => kept.has(item.id))) {
           await this.documents.put(userId, "fact", randomUUID(), {
             capsuleId: upgrade.capsule.id, factKind: entry.factKind, layer: entry.layer, content: entry.content,
-            origin: entry.origin === "inferred" ? "inferred" : "system", status: "approved", contextOnly: true,
+            origin: 'imported', attribution:receivedAttribution(entry),sourcePrivacy:receivedSourcePrivacy(entry,preview), status: "approved", contextOnly: true,
             ...(unchecked.has(entry.id) ? { unscanned: true } : {}), ...(held.has(entry.id) ? { safetyHold: true } : {}),
             provenance: [{ type: "import", id: `${preview.snapshotId}:${entry.id}` }], share,
             transfer: { version: entry.version, sha256: entry.sha256, path: entry.path, snapshotId: preview.snapshotId, issuerTrust: preview.issuerTrust },

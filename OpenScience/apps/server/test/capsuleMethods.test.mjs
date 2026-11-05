@@ -37,6 +37,7 @@ function entry(id, overrides = {}) {
       layer: "methods",
       status: "approved",
       origin: "explicit",
+      sourcePrivacy:{schemaVersion:1,classification:"ordinary",reasons:["verified-public-test-source"]},
       content: "Always quote the source sentence.",
       ...payload,
     },
