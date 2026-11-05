@@ -9,8 +9,8 @@ test('source cleanup removes only its attributed memory lines, scrubs undo histo
   f.seed('profile.md',body,{type:'profile'});
   await f.overlay.upsertFile({userId:f.userId,uri,memoryType:'profile',body});
   const a=await f.overlay.addRevision({userId:f.userId,uri,memoryType:'profile',change:'added',actor:'engine',after:'# Profile\n- Source A preference.',engineSession:'dsh-a',archiveUri:`viking://user/${f.engineUser}/sessions/dsh-a/history/archive_001`,projectId:'default'});
-  await f.overlay.syncOrigins(f.userId,uri,{before:'',after:'# Profile\n- Source A preference.',revisionId:a.id,engineSession:'dsh-a',projectId:'default'});
-  await f.overlay.syncOrigins(f.userId,uri,{before:'# Profile\n- Source A preference.',after:body,engineSession:'dsh-b',projectId:'default'});
+  await f.overlay.syncOrigins(f.userId,uri,{before:'',after:'# Profile\n- Source A preference.',origin:{revisionId:a.id,engineSession:'dsh-a',projectId:'default'}});
+  await f.overlay.syncOrigins(f.userId,uri,{before:'# Profile\n- Source A preference.',after:body,origin:{engineSession:'dsh-b',projectId:'default'}});
   const result=await f.store.removeConversationSource(f.userId,'default',['a']);
   assert.ok(result.length>0);
   assert.equal(await f.sessions.read(f.userId,uri),'# Profile\n- Independent B preference.');

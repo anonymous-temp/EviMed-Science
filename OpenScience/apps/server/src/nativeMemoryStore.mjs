@@ -1114,6 +1114,45 @@ export class NativeMemoryStore {
     this.#touch(userId);
   }
 
+  /** Remove only lines whose durable first-party origin names the deleted source, preserving every other line and file.
+   * @param {string} userId @param {string} projectId @param {string[]} sessionIds */
+  async removeConversationSource(userId, projectId, sessionIds) {
+    const context = await this.#projectContext(userId, projectId);
+    const files = await this.files(userId, { context: this.memoryContexts ? context : null });
+    const origins = await this.overlay.originsOf(userId, files.map(file => file.uri));
+    const deleted = new Set(sessionIds), affected = [];
+    for (const file of files) {
+      const prints = new Set();
+      for (const [print, origin] of origins.get(file.uri) ?? []) {
+        if (origin.projectId !== projectId) continue;
+        const source = await this.overlay.conversationOf(userId, origin.engineSession, origin.archiveUri);
+        if (deleted.has(source)) prints.add(print);
+      }
+      if (!prints.size) continue;
+      const removed = [], kept = [];
+      for (const line of file.body.split('\n')) {
+        const statement = line.trim().replace(/^(?:[-*+]|\d+[.)])\s+/, '');
+        if (prints.has(lineFingerprint(statement))) removed.push(statement); else kept.push(line);
+      }
+      if (!removed.length) continue;
+      const next = kept.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+      // Engine reads and overlay undo/export reads must lose the same source text.
+      if (memoryLines(next).some(line => !/^#/.test(line))) await this.#write(userId, file, next, { actor: 'platform', reason: 'source conversation deleted' });
+      else await this.forgetFile(userId, file, { keepText: false, actor: 'platform', reason: 'source conversation deleted' });
+      await this.overlay.scrubLines(userId, file.uri, removed);
+      affected.push({ uri: file.uri, id: nativeFileId(file.uri), hash: file.hash, recordIds: [nativeFileId(file.uri), ...[...prints].map(print => `${nativeFileId(file.uri)}_${print.slice(0, 12)}`)] });
+    }
+    // The engine's raw archives are a second source copy. Delete only sessions whose overlay provenance matches this project.
+    for (const sessionId of sessionIds) {
+      const engineSession = `dsh-${sessionId}`;
+      const knownProject = await this.overlay.projectOfSession(userId, engineSession);
+      if (knownProject === projectId) await context.sessions.deleteSession(userId, engineSession);
+    }
+    await this.overlay.withdrawConversationSource(userId, projectId, sessionIds);
+    this.#touch(userId);
+    return affected;
+  }
+
   /**
    * Forget a memory: the file leaves the engine, every line of it goes on the rejection list, and the history keeps the text
    * only when the forget can be undone (`keepText`, the drawer's 「忘记」); a delete keeps none. A profile line is removed

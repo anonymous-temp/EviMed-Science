@@ -653,6 +653,16 @@ export class NativeMemoryOverlay {
     return null;
   }
 
+  /** Pending extractions and their replay text cannot re-enrol a deliberately deleted source.
+   * @param {string} userId @param {string} projectId @param {string[]} sessionIds */
+  async withdrawConversationSource(userId, projectId, sessionIds) {
+    const sessions = sessionIds.map(id => `dsh-${id}`);
+    await this.#query(`UPDATE evimed_memory.native_commits SET state='abandoned',pending_text=NULL,error='source_conversation_deleted',
+      updated_at=clock_timestamp() WHERE user_id=$1 AND project_id=$2 AND engine_session=ANY($3::text[])`, [owner(userId), projectId, sessions]);
+    await this.#query(`UPDATE evimed_memory.native_admissions SET state='cancelled',pending_text=NULL,error='source_conversation_deleted',
+      updated_at=clock_timestamp() WHERE user_id=$1 AND project_id=$2 AND engine_session=ANY($3::text[])`, [owner(userId), projectId, sessions]);
+  }
+
   // ------------------------------------------------------------ line origins
 
   /**
