@@ -90,6 +90,12 @@
     transcriptView: standard
     linkOpening: new-tab
 
+# The shared developer-tools preference the page reads for the conversation's 运行 tab, the code diff and the interactive
+# HTML preview (the control plane's patch writes it true).
+- id: ui-settings
+  config:
+    enabled: true
+
 # The preset every session gets, named the same way the control plane's
 # generated profile patch names it. Since 0.1.7 a preset is a row of the
 # composition (the socket's `presets/evimed-universal.patch.yml`) and there

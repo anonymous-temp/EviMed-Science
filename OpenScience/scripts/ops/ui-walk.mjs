@@ -3627,6 +3627,7 @@ export const STEP_TARGETS = {
   "frontier-event-handoff": "the event page's hand-off of 深入研究 to the conversation",
   "chat-composer": "the composer inside the kernel's frame, at both widths",
   "chat-schedules": "the sidebar's 定时任务 address, ended on the conversation page with the kernel's own 定时任务 page (its heading and 「新建」) drawn in the frame",
+  "chat-native-surface": "the conversation frame's native surfaces: the developer-tools preference the page reads (the 运行 tab), the thinking-strength seat, and the document viewer's chunk served (a PDF, Word, Excel or PowerPoint file opens)",
   "chat-cleanup-cover": "the answer the walk gives to a runtime start refused for a cleanup in progress",
 };
 
@@ -4422,6 +4423,7 @@ async function main() {
       // The composer's room, chips and statistics at both widths (R13 E-17, A20), read through the frame that just loaded.
       if (chat.loaded) await recordStep(report, failures, notices, "chat-composer", () => walkComposer(page, operator));
       if (chat.loaded) await recordStep(report, failures, notices, "chat-schedules", () => walkSchedules(page, base));
+      if (chat.loaded) await recordStep(report, failures, notices, "chat-native-surface", () => walkNativeSurface(page));
       // A start the control plane refuses for a cleanup in progress, answered by the walk (R11); it starts nothing.
       const waitMs = process.env.OPEN_SCIENCE_WALK_CLEANUP_WAIT_MS !== undefined ? Number(process.env.OPEN_SCIENCE_WALK_CLEANUP_WAIT_MS) || 0 : CLEANUP_WALK_WAIT_MS;
       allowRuntimeStart = false;
@@ -5287,6 +5289,67 @@ async function walkSchedules(page, base) {
     if (read?.headings.includes("定时任务") && read.newButton && /^\/app\/chat(?:\/|$)/.test(new URL(page.url()).pathname)) break;
   }
   return { failures: schedulesFindings(new URL(page.url()).pathname, read), read: { path: new URL(page.url()).pathname, ...(read ?? {}) } };
+}
+
+/**
+ * Runs inside the kernel's frame (serialized by `evaluate`, so it reads nothing of this module): what the page reads for its native
+ * surfaces, from the frame's own origin. `developerTools` is the shared `ui-settings` preference the page reads through the one
+ * settings read (false hides the conversation's 运行 tab, the changed-files card's diff and the interactive HTML preview);
+ * `effort` is the composer seat's accessible name; `documentChunk` is the document preview's PDF viewer chunk, which the shared
+ * asset route has to serve or a PDF, Word, Excel or PowerPoint file opens to a blank pane.
+ */
+export async function nativeSurfaceProbe() {
+  const base = location.pathname.replace(/\/$/, "");
+  /** @type {{ developerTools: boolean | null, effort: string | null, documentChunk: { status: number, type: string } | null }} */
+  const read = { developerTools: null, effort: null, documentChunk: null };
+  try {
+    const answer = await fetch(`${base}/api/settings/describe`, { method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ type: "client-request", rpcId: "walk-native-surface", method: "settings/describe", payload: { args: {} } }) });
+    const body = await answer.json();
+    const view = (body?.result?.value?.namespaces ?? []).find((/** @type {any} */ entry) => entry?.ns === "ui-settings");
+    read.developerTools = view ? view.value?.enabled === true : false;
+  } catch { /* stays null: not observable */ }
+  const seat = [...document.querySelectorAll("button[aria-label]")].map((el) => el.getAttribute("aria-label") ?? "").find((label) => label.includes("思考强度") || /model|模型/i.test(label));
+  read.effort = seat ?? null;
+  try {
+    const entry = /** @type {any} */ (globalThis).__DSH_BOOT__?.entries?.find((/** @type {any} */ item) => item?.id === "@deepseek-ai/dsh-client-ui-sidebar-documentpreview");
+    if (entry?.rev) {
+      const chunk = await fetch(`${location.origin}/__evimed/k/plugins/@deepseek-ai/dsh-client-ui-sidebar-documentpreview/client.pdf.js?rev=${entry.rev}`);
+      read.documentChunk = { status: chunk.status, type: chunk.headers.get("content-type") ?? "" };
+    }
+  } catch { /* stays null */ }
+  return read;
+}
+
+/**
+ * The verdicts on what `nativeSurfaceProbe` read. Every one is a failure and a probe that read nothing is one too.
+ * @param {{ developerTools: boolean | null, effort: string | null, documentChunk: { status: number, type: string } | null } | null} read
+ * @returns {string[]}
+ */
+export function nativeSurfaceFindings(read) {
+  if (!read) return ["chat@desktop: not observable: no kernel frame answered, so the native surfaces were not read"];
+  /** @type {string[]} */ const failures = [];
+  if (read.developerTools !== true) failures.push(`chat@desktop: the page reads the developer-tools preference as ${read.developerTools === null ? "unreadable" : "off"}, so a conversation has no native 运行 tab`);
+  if (read.effort === null) failures.push("chat@desktop: the composer draws no thinking-strength control");
+  else if (!read.effort.startsWith("思考强度") || /model|模型|deepseek/i.test(read.effort)) failures.push(`chat@desktop: the composer's control is not worded as the thinking strength (“${read.effort}”)`);
+  if (!read.documentChunk) failures.push("chat@desktop: not observable: the document preview's PDF viewer chunk was not requested");
+  else if (read.documentChunk.status !== 200 || !/javascript/i.test(read.documentChunk.type)) failures.push(`chat@desktop: the document preview's PDF viewer chunk answered ${read.documentChunk.status} ${read.documentChunk.type || "(no type)"}, so a PDF or Office file opens blank`);
+  return failures;
+}
+
+/**
+ * Read the kernel's native surfaces through the conversation frame that is already open (the chat step has loaded it): the
+ * developer-tools preference, the thinking-strength seat and the document viewer's chunk. Reads and clicks nothing.
+ * @param {any} page
+ */
+async function walkNativeSurface(page) {
+  /** @type {any} */ let read = null;
+  for (const frame of page.frames()) {
+    if (!frame.url().includes("/__evimed/f/")) continue;
+    const seen = await frame.evaluate(nativeSurfaceProbe).catch(() => null);
+    if (seen) read = seen;
+  }
+  return { failures: nativeSurfaceFindings(read), read: read ?? {} };
 }
 
 /** @param {any} page */

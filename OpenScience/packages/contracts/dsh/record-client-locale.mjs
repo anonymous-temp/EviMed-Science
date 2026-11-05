@@ -13,7 +13,7 @@
  * says, recorded from the pinned packages, so a test can hold the override to it.
  *
  *   mkdir /tmp/dsh-client-locale && cd /tmp/dsh-client-locale
- *   for p in chat conversation subagent workspace commands trajectory input-trigger schedule; do
+ *   for p in chat conversation subagent workspace commands trajectory input-trigger schedule model-selection; do
  *     npm pack "@deepseek-ai/dsh-client-ui-$p@<pin>" && mkdir $p && tar -xzf deepseek-ai-dsh-client-ui-$p-<pin>.tgz -C $p
  *   done
  *   node packages/contracts/dsh/record-client-locale.mjs /tmp/dsh-client-locale

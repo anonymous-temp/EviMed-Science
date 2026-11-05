@@ -288,7 +288,10 @@ test("a running turn's steps fold into one work group: the profile sets the chat
   assert.ok(HOSTED_DISABLED_BROWSER_PANELS.includes("ui-settings-general"));
   assert.match(rendered, /- id: ui-settings-general\n {2}disabled: true/);
   assert.ok(RUNTIME_UI_DENIED_NAMESPACES.includes("settings"));
-  assert.deepEqual(RUNTIME_UI_READABLE_SETTINGS, ["ui-chat"]);
+  assert.deepEqual(RUNTIME_UI_READABLE_SETTINGS, ["ui-chat", "ui-settings"]);
+  // The second readable namespace is the developer-tools boolean; without it the page reads false and the 「运行」 tab never draws.
+  assert.match(rendered, /^- id: ui-settings\n {2}config:\n {4}enabled: true$/m);
+  assert.deepEqual(recorded.result.value.namespaces.find((view) => view.ns === "ui-settings").value, { enabled: true });
   // The chat itself stays mounted — folding is its behaviour, not ours.
   assert.doesNotMatch(rendered, /- id: ui-chat\n {2}disabled: true/);
 });

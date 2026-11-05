@@ -1,4 +1,5 @@
-import { memo, useMemo, type ReactElement, type ReactNode } from "react";
+import { memo, useEffect, useMemo, useState, type ReactElement, type ReactNode } from "react";
+import type { FileRoot } from "@ai4s/shared";
 import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
 import remarkBreaks from "remark-breaks";
@@ -8,6 +9,7 @@ import { CodeBlock } from "./CodeBlock";
 import { ClaimCitation, type ClaimReading } from "./ClaimCitation";
 import { claimIdsFromHref, linkClaimMarkers, type ClaimEvidence } from "@/lib/claimCitations";
 import { sanitizeAssistantText } from "@/lib/sanitizeAssistantText";
+import { isRelativeReference, readWorkspaceDataUrl, resolveWorkspaceReference } from "@/lib/relativeAssets";
 import { ScrollRegion } from "@/components/ui/ScrollRegion";
 
 /** Two contexts render markdown: chat-sized prose, and a delivered report
@@ -91,6 +93,7 @@ export const MarkdownViewer = memo(function MarkdownViewer({
   claimStatuses,
   reading,
   renderLink,
+  assetBase,
 }: {
   children: string;
   className?: string;
@@ -107,6 +110,8 @@ export const MarkdownViewer = memo(function MarkdownViewer({
    *  text, a node replaces the anchor; `undefined` leaves the anchor as written. Keep it stable (`useCallback`), or the
    *  document is rebuilt on every render. */
   renderLink?: (href: string | undefined, children: ReactNode) => ReactNode | undefined;
+  /** Where the text lives in the workspace: a picture named by a relative path is read from there, next to the file. */
+  assetBase?: { path: string; root?: FileRoot; projectId?: string };
 }) {
   const s = STYLES[variant];
   // Claim markers become citations when there is a matrix to open; whatever
@@ -166,8 +171,10 @@ export const MarkdownViewer = memo(function MarkdownViewer({
     ),
     th: ({ children }) => <th className={s.th}>{children}</th>,
     td: ({ children }) => <td className={s.td}>{children}</td>,
-    img: ({ src, alt }) => <img src={typeof src === "string" ? src : undefined} alt={alt ?? ""} loading="lazy" className={s.img} />,
-  }), [s, claims, claimStatuses, reading, renderLink]);
+    img: ({ src, alt }) => (assetBase && typeof src === "string" && isRelativeReference(src)
+      ? <WorkspaceImage src={src} alt={alt ?? ""} base={assetBase} className={s.img} />
+      : <img src={typeof src === "string" ? src : undefined} alt={alt ?? ""} loading="lazy" className={s.img} />),
+  }), [s, claims, claimStatuses, reading, renderLink, assetBase]);
   return (
     <div data-prose="" className={cn(s.root, className)}>
       <ReactMarkdown
@@ -183,6 +190,24 @@ export const MarkdownViewer = memo(function MarkdownViewer({
 });
 
 const REMARK_PLUGINS = [remarkGfm, remarkBreaks];
+
+/**
+ * A picture a document names by a path relative to itself, read from the workspace next to it. A path that leaves the
+ * workspace, a file that is not there and one that cannot be read all leave the picture's own alt text, which is how a
+ * missing image reads; none of them is an error page.
+ */
+function WorkspaceImage({ src, alt, base, className }: { src: string; alt: string; base: { path: string; root?: FileRoot; projectId?: string }; className: string }) {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    setUrl(null);
+    const target = resolveWorkspaceReference(base.path, src);
+    if (!target) return;
+    void readWorkspaceDataUrl(target, base.root, base.projectId).then((found) => { if (!cancelled) setUrl(found); });
+    return () => { cancelled = true; };
+  }, [src, base.path, base.root, base.projectId]);
+  return <img src={url ?? undefined} alt={alt} data-workspace-image={url ? "loaded" : "pending"} loading="lazy" className={className} />;
+}
 
 /** Fence content is almost always one string, but react-markdown may split it
  *  into an array of text nodes — flatten defensively. */

@@ -45,7 +45,7 @@ export function rebaseRuntimeUiDocument(payload, headers, prefix, assetPrefix = 
 }
 
 /** Synchronous classic script response: install before the upstream module-loader queue. */
-export function runtimeUiBootstrapSource(frame, installer) {
+export function runtimeUiBootstrapSource(frame, installer, polyfills = null) {
   const encoded = JSON.stringify({ ...frame, muxResponseMaxBytes: RUNTIME_UI_MUX_RESPONSE_MAX_BYTES }).replace(/</g, "\\u003c").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
-  return `"use strict";Object.defineProperty(globalThis,"__EVIMED_FRAME__",{value:Object.freeze(${encoded}),writable:false,configurable:false});(${installer.toString()})(globalThis.__EVIMED_FRAME__);`;
+  return `"use strict";Object.defineProperty(globalThis,"__EVIMED_FRAME__",{value:Object.freeze(${encoded}),writable:false,configurable:false});(${installer.toString()})(globalThis.__EVIMED_FRAME__);${polyfills ? `(${polyfills.toString()})(globalThis);` : ""}`;
 }

@@ -24,7 +24,7 @@ import {
   matrixFindings, matrixProbe, matrixRoute, measure, measureStructure, MISSING_RECORDS, ORIGINAL_MIN_WIDTH,
   pageFindings, pageProbe, PAGE_PROBES, pdfFrameReady, pdfPreviewFindings, pdfProbe, pdfSourceTitle, pickVcrStudies, probeFindings,
   readerFindings, readerProbe, readerReady, RETIRED_NAMES, ROUTES, ROW_CLICK_PAGES, rowClickFindings, rowClickShown,
-  rowClickVerdict, rowProbe, schedulesFindings, schedulesProbe, SECTION_SHAPES_BY_PAGE, skillCreateFindings, skillCreateProbe, skillReturnProbe, sourceReaderRoute, structureFindings, tabOrderFindings,
+  rowClickVerdict, rowProbe, nativeSurfaceFindings, schedulesFindings, schedulesProbe, SECTION_SHAPES_BY_PAGE, skillCreateFindings, skillCreateProbe, skillReturnProbe, sourceReaderRoute, structureFindings, tabOrderFindings,
   OPERATOR_SENTENCES, addressAct, ADDRESS_CASES, addressOpenFindings, addressProbe, addressStateFindings, addressStateHolds, AXE_RULES_PER_NOTICE, AXE_TAGS, axeLoaded, axeNotices,
   axeRun, axeVersionOf, composerFindings, composerProbe, COMPOSER_BOTTOM_PX, loadAxeSource, scanWithAxe,
   asFinding, CAPTURE_MAX_SLICES, CAPTURE_QUALITY, findingText, STEP_TARGETS,
@@ -808,6 +808,8 @@ function context() {
             const mode = process.env.FAKE_SCHEDULES || "";
             return { headings: mode === "blank" ? [] : [mode === "heading" ? "自动化" : "定时任务"], newButton: mode !== "button" && mode !== "blank" };
           }
+          // The native surfaces the chat step reads: the developer-tools preference, the thinking-strength seat, the viewer chunk.
+          if (typeof fn === "function" && fn.name === "nativeSurfaceProbe") return { developerTools: true, effort: "思考强度，当前：高", documentChunk: { status: 200, type: "text/javascript; charset=utf-8" } };
           return { composer: !chatFailing(), stats: [] };
         },
       }],
@@ -3203,3 +3205,15 @@ test("Inbox selection controls get no budget allowance, and selection controls o
   assert.ok(verdict({ selectionControls: { ...selectionControls, valid: false } }).length);
 });
 
+
+test("the native surfaces the conversation depends on are read in the frame, and each defect is its own failure", () => {
+  const good = { developerTools: true, effort: "思考强度，当前：高", documentChunk: { status: 200, type: "text/javascript; charset=utf-8" } };
+  assert.deepEqual(nativeSurfaceFindings(good), []);
+  assert.equal(nativeSurfaceFindings(null).length, 1);
+  assert.match(nativeSurfaceFindings({ ...good, developerTools: false })[0], /off, so a conversation has no native 运行 tab/);
+  assert.match(nativeSurfaceFindings({ ...good, developerTools: null })[0], /unreadable/);
+  assert.match(nativeSurfaceFindings({ ...good, effort: null })[0], /no thinking-strength control/);
+  assert.match(nativeSurfaceFindings({ ...good, effort: "选择模型，当前 deepseek-flash" })[0], /not worded as the thinking strength/);
+  assert.match(nativeSurfaceFindings({ ...good, documentChunk: { status: 404, type: "text/html" } })[0], /PDF viewer chunk answered 404/);
+  assert.match(nativeSurfaceFindings({ ...good, documentChunk: null })[0], /not observable/);
+});
