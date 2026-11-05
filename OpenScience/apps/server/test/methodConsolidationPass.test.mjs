@@ -559,6 +559,41 @@ test("the incremental pass records every relation and builds shared_part and sub
   assert.ok(blocked.noop.includes("blocked_unproven"));
 });
 
+test('incremental deferred merge and abstraction assignments remain owed to the full pass', async () => {
+  for (const type of ['merge', 'abstract_pattern']) {
+    const h = harness({ decide: input => ({ assignments: [{ ASSIGNMENT: 'A1', SKILLS: idsOf(input), RELATION_TYPE: type, REASON: 'A concrete relationship.' }] }) });
+    const subject = await h.make('span-a-one', 'axis-a'); await h.make('span-a-two', 'axis-a');
+    await h.integrate(subject.id);
+    assert.equal((await h.learning.getMethod('u1', subject.id)).payload.learning.decided, undefined, `${type} is recorded but has not been built`);
+    await h.sleep('job_full');
+    assert.equal(h.builds().length, 1, `${type} reaches the full builder`);
+    assert.ok(h.builds()[0].input.assignments.some(entry => entry.RELATION_TYPE === type));
+  }
+});
+
+test('a completed incremental build does not hide another assignment deferred in the same group', async () => {
+  const h = harness({ decide: input => ({ assignments: [
+    { ASSIGNMENT: 'A1', SKILLS: idsOf(input), RELATION_TYPE: 'shared_part', REASON: 'Concrete shared step.' },
+    { ASSIGNMENT: 'A2', SKILLS: idsOf(input), RELATION_TYPE: 'abstract_pattern', REASON: 'A wider procedure remains.' },
+  ] }) });
+  const subject = await h.make('span-a-one', 'axis-a'); await h.make('span-a-two', 'axis-a');
+  await h.integrate(subject.id);
+  assert.deepEqual(h.builds()[0].input.assignments.map(entry => entry.RELATION_TYPE), ['shared_part']);
+  assert.equal((await h.learning.getMethod('u1', subject.id)).payload.learning.decided, undefined);
+  await h.sleep('job_full');
+  assert.equal(h.builds().length, 2);
+  assert.ok(h.builds()[1].input.assignments.some(entry => entry.RELATION_TYPE === 'abstract_pattern'));
+});
+
+test('legacy version-two stamps cannot permanently hide work an incremental pass deferred', async () => {
+  const h = harness({ decide: input => ({ assignments: [{ ASSIGNMENT: 'A1', SKILLS: idsOf(input), RELATION_TYPE: 'merge', REASON: 'Same concrete method.' }] }) });
+  const one = await h.make('span-a-one', 'axis-a'), two = await h.make('span-a-two', 'axis-a');
+  const key = groupKey([one, two]);
+  for (const row of [one, two]) await h.learning.recordDecided('u1', row.id, { key, at: NOW.toISOString(), version: 2 }, row.payload.contentDigest);
+  await h.sleep('job_full');
+  assert.equal(h.builds().length, 1);
+});
+
 test("the counters have a closed vocabulary and appear on the scrape", () => {
   const metrics = new LearningMetrics();
   metrics.observeConsolidateNoop("skipped_unchanged", 3);
