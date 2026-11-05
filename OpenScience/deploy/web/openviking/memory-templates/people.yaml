@@ -14,6 +14,9 @@ description: |
   value with the date it applied. Mark when a date is unknown; never invent one.
   Preserve exact allergies, medications, doses, numeric values and units, dates, plans, contraindications,
   wishes and any other relevant details. Contact details and private context are eligible when useful.
+  A person's reported consent, restrictions, beliefs or reason for a choice can itself be useful,
+  even when no name or measurements are given. Keep it as that person's reported context; a question
+  about it does not establish the account owner's beliefs or professional interests.
   A clinical case stated in a single question still carries useful patient context: keep the stated
   case details here, separate from the account owner. Preserve clinically material ranges and units
   as stated. A hypothetical teaching case belongs in source-labelled NOTES, not a real person's card.

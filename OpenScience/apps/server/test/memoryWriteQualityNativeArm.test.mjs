@@ -20,7 +20,7 @@ test("both directories are replayed, and every case in them is shaped for this a
   const cases = (await Promise.all(NATIVE_CASE_DIRECTORIES.map(load))).flat();
   assert.deepEqual(cases.flatMap(nativeCaseIssues), []);
   const general = await load("cases-general");
-  assert.equal(general.length, 53, "the prior 50 general cases plus three development controls for unnamed people, fictional examples and distinct patient identities (2026-11-05)");
+  assert.equal(general.length, 55, "the prior 50 general cases plus five development controls for unnamed people, fiction, identity separation and nonnumeric personal context (2026-11-05)");
   assert.ok(general.every((item) => item.replay.synthetic === true), "every name and number in them is invented");
   assert.ok(cases.length >= 35);
 });
