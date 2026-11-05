@@ -79,7 +79,8 @@ export class MemoryHistory {
     // A saved native association is provenance, never permission. Re-resolve
     // the first-party conversation and all exclusion classes on every retry.
     const source = await this.resolveSource(commit, context);
-    if (!source || source.sessionId !== platformSessionOf(commit.engineSession) || !source.projectId || !source.projectCreatedAt || !await this.eligible(context, source)) return;
+    if (!source || source.sessionId !== platformSessionOf(commit.engineSession) || !source.projectId || !source.projectCreatedAt) return;
+    if (!await this.eligible(context, source)) { await this.removeConversation({ ...context, projectId: source.projectId, projectCreatedAt: source.projectCreatedAt }, source.sessionId); return; }
     const raw = await context.sessions.read(commit.userId, `${commit.archiveUri}/messages.jsonl`);
     if (raw === null) throw new Error('memory_history_archive_unavailable');
     if (Buffer.byteLength(raw) > MAX_ARCHIVE_BYTES) throw new Error('memory_history_archive_too_large');
@@ -128,7 +129,8 @@ export class MemoryHistory {
       const meta = await this.ledger.lookup(user.id, context.ownerCreatedAt, context.namespaceId, project.id, source.projectCreatedAt, candidate.uri);
       if (!meta) continue;
       const verified = await this.resolveSource({ userId: user.id, projectId: project.id, engineSession: `dsh-${meta.session_id}` }, context);
-      if (!verified || !await this.eligible(context, verified)) continue;
+      if (!verified) continue;
+      if (!await this.eligible(context, verified)) { await this.removeConversation({ ...context, projectId: verified.projectId, projectCreatedAt: verified.projectCreatedAt }, verified.sessionId); continue; }
       const body = await resources.readHistory(user.id, candidate.uri);
       if (body === null || Buffer.byteLength(body) > 32_000 || hash(body) !== meta.digest) continue;
       let parsed; try { parsed = JSON.parse(body); } catch { continue; }
@@ -149,7 +151,7 @@ export class MemoryHistory {
   async removeConversation(context, sessionId) {
     // Only a first-party caller holding a resolved context may fence a source.
     if (!context?.ownerId || !context.ownerCreatedAt || !context.projectId || !/^[A-Za-z0-9_-]{1,160}$/.test(sessionId)) throw new Error('memory_history_scope_denied');
-    await this.ledger.fence(context.ownerId, { ownerCreatedAt: context.ownerCreatedAt, projectId: context.projectId, sessionId, permanent: true });
+    await this.ledger.fence(context.ownerId, { ownerCreatedAt: context.ownerCreatedAt, projectId: context.projectId, projectCreatedAt: context.projectCreatedAt ?? context.policy?.projectCreatedAt, sessionId, permanent: true });
   }
   async reset(userId) { await this.ledger.fence(userId, { permanent: false }); }
   async deleteProject(userId, projectId) { await this.ledger.fence(userId, { projectId, permanent: true }); }

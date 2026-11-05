@@ -1897,6 +1897,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     config, memorySettings, nativeMemory, nativeMemoryImport, store, context, audit, decodeRouteComponent,
     // 「重置记忆」 clears what the page shows: the methods and capsule notes live in the product ledger.
     resetProduct: productDatabase ? userId => resetLearnedMemory(productDatabase, userId) : null,
+    resetHistory: userId => memoryHistory?.reset(userId),
     // A pause for recall turned on under a live runtime: the methods it mounted at launch leave with the idle ones.
     releasePausedRuntimes: userId => runtimeManager.releasePausedMethodRuntimes(userId),
     // 项目 tab: what a project's own runs did and delivered, read from its ledger like the usage 明细 reads the month's.
@@ -1917,7 +1918,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
    *  @param {string} ownerId @param {string | null} [only] */
   const deleteAgentSubjects = (ownerId, only = null) => deleteSubjectAccounts(
     { apiKeys: agentApiKeys, store, memoryIndexing, capsuleTransfers: capsuleTransferService,
-      nativeMemory: { erase: async (/** @type {string} */ userId) => { if (await nativeMemoryHeldBy(userId)) await nativeMemory.eraseAccount(userId); } } }, ownerId, { only });
+      nativeMemory: { erase: async (/** @type {string} */ userId) => { await memoryHistory?.eraseAccount(userId); if (await nativeMemoryHeldBy(userId)) await nativeMemory.eraseAccount(userId); } } }, ownerId, { only });
   const agentKeyRoutes = createAgentKeyRoutes({ config, apiKeys: agentApiKeys, context, audit });
   // 「知识页」 (knowledgePageService.mjs): composed further down, once the run ledger and the runtime exist. The hooks below reach it
   // through these, so a deployment without it (or with it switched off) behaves as it always did.
@@ -2759,6 +2760,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     let methodsStopped = 0;
     // The conversations' own memory state goes with the project; the capsule index's copies are owed a withdrawal in the capsule's
     // own transaction below, and the index is never waited on (`memoryIndexWithdrawals.mjs`).
+    await memoryHistory?.deleteProject(user.id, project.id);
     if (memorySettings.configured) await memorySettings.deleteProjectState(user.id, project.id);
     // The engine's own memories of this project and the sessions of its conversations (`NativeMemoryStore.deleteProject`).
     if (await nativeMemoryHeldBy(user.id)) await nativeMemory.deleteProject(user.id, project.id);
@@ -8600,6 +8602,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         // Nothing of the account is committed to the engine from here, and its commits in flight finish first: a commit that reached
         // the engine as its deletion began left an extraction the deletion then waited on for ever (`nativeTurnCommit.forgetAccount`).
         await nativeTurnCommit.forgetAccount(user.id);
+        await memoryHistory?.eraseAccount(user.id);
         if (await nativeMemoryHeldBy(user.id)) await nativeMemory.eraseAccount(user.id);
         // The memory tables reference the account with ON DELETE CASCADE, so `store.deleteUser` below removes them inside the
         // transaction that can still fail.
