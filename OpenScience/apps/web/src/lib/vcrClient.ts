@@ -2655,6 +2655,8 @@ function readJudgedProgress(raw: unknown): VcrJudgedProgress {
   return {
     total: num(value.total), finished: num(value.finished), failed: num(value.failed), waiting: num(value.waiting),
     state: (["idle", "running", "waiting_budget", "stopped", "done"] as const).find((state) => state === value.state) ?? "idle", jobId: text(value.jobId), startedAt: text(value.startedAt),
+    // The second stage (clause by clause): without it a run whose clauses all failed reads as finished, and nothing offers the rest.
+    ...(value.clauses && typeof value.clauses === "object" ? { clauses: { wanted: num(obj(value.clauses).wanted), done: num(obj(value.clauses).done), left: num(obj(value.clauses).left) } } : {}),
     cost: Object.keys(cost).length ? { ceiling: num(cost.ceiling), spent: num(cost.spent), currency: String(cost.currency ?? "CNY") } : null,
   };
 }

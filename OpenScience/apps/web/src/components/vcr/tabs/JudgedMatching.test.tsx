@@ -131,6 +131,15 @@ describe("给患者找试验 — the trials fill in as the job judges them", () 
     await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(`${MATCHING}/judge`, "POST", { direction: "patient_to_trial", subjectKey: "P-0192", resume: true }));
   });
 
+  it("a job whose every clause call failed is not finished: the page reads the owed second stage off the server's answer and offers the rest", async () => {
+    await patientPage({ [JUDGED]: judged((page) => { page.progress = { ...page.progress, total: 6, finished: 6, failed: 0, waiting: 0, state: "stopped", clauses: { wanted: 6, done: 0, left: 6 } }; return page; }), [JUDGE]: { jobId: "job_next", state: "queued", estimate: { pairs: 6, cost: 0.4, currency: "CNY" } } });
+    const note = document.querySelector("[data-vcr-judged-progress='stopped']") as HTMLElement;
+    expect(note).toHaveTextContent("判定没有做完：已完成 6 / 6 个试验，逐条判了 0 / 6");
+    expect(document.querySelector("[data-vcr-judged-progress='done']")).toBeNull();
+    await userEvent.click(within(note).getByRole("button", { name: "继续判定剩下的 6 个" }));
+    await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(`${MATCHING}/judge`, "POST", { direction: "patient_to_trial", subjectKey: "P-0192", resume: true }));
+  });
+
   it("offers neither stopping nor continuing to a reader who may not run", async () => {
     server = installVcrServer(network.productRequest, { [JUDGED]: judged() });
     draw(<MatchingTab studyId={STUDY_ID} study={study((raw) => { raw.abilities = ["read", "read_patient_level"]; })} />);
