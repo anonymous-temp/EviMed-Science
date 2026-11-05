@@ -136,6 +136,28 @@ test("a gateway path's metric label folds anything that is not an operation", ()
   assert.equal(vcrGatewayRoutePattern("/internal/vcr/v1/whatever"), "/internal/vcr/v1/:operation");
 });
 
+test('each native domain can discover its real method schema without opening a task or running an engine job', async () => {
+  const base = fixture();
+  let opened = 0;
+  base.vcr.store.taskContext = async () => { opened++; throw new Error('Shape must not create a task'); };
+  const handler = createVcrGatewayHandler(config, runtimeManager, { vcr: base.vcr,
+    resolveInvocation: async () => ({ userId: 'u1', projectId: 'prj_1', rootSessionId: 'root', sessionId: 'root', runId: 'run', callId: 'call' }) });
+  for (const [prefix, method] of [['virtual_trial', 'design.analytic'], ['virtual_cohort', 'population.scenario'], ['virtual_patient', 'patients.binary'], ['synthetic_control', 'comparator.evalue']]) {
+    const body = projectResearchInvocation(`${prefix}_describe`, { method }, { jobMethods: VCR_JOB_METHODS, methods: VCR_ENGINE_METHODS }).body;
+    const res = response();
+    await handler(request('/internal/vcr/v1/simulate', body, { authorization: 'Bearer token', 'x-evimed-execution-context': '{}' }), res);
+    assert.equal(res.status, 200, res.body);
+    assert.equal(res.json().data.method, method);
+    assert.equal(res.json().data.version, VCR_ENGINE_METHODS[method].version);
+    assert.ok(res.json().data.scenarioSchema);
+    const malformed = response();
+    await handler(request('/internal/vcr/v1/simulate', { ...body, scenario: {} }), malformed);
+    assert.equal(malformed.status, 400);
+  }
+  assert.equal(opened, 0);
+  assert.equal(base.calls.some(row => row[0] === 'enqueue'), false);
+});
+
 test("the token names the account and the study; there is no id parameter", async () => {
   const { calls, handler } = fixture();
   const res = response();
@@ -965,18 +987,64 @@ test("a stage in flight is the answer only to the scenario the running job froze
 });
 
 test("status returns the producing job's frozen inputs and source checks through the model boundary", async () => {
-  const frozen = { id: 'job_1', state: 'running', method: 'design.analytic', methodVersion: '1.4.0',
-    scenario: { truth: { hazardRatio: 0.7 } }, inputs: [{ kind: 'assumption', id: 'effect@2' }],
+  const frozen = { id: 'job_1', state: 'running', kind: 'design_analytic', method: 'design.analytic', methodVersion: '1.4.0',
+    seed: 2468, replicates: 5000, cpuSecondsLimit: 600,
     checkpoint: { bound: [{ key: 'effect', version: 2, path: 'truth.hazardRatio', value: 0.7 }],
       sourceAssertions: [{ field: 'truth.hazardRatio', publication: 'PMID 123', quote: 'hazard ratio 0.7' }],
       sourceReport: [{ field: 'truth.hazardRatio', state: 'carried', message: 'Quote checked.' }],
       personStated: { schema: 2, readable: false, paths: [], bindings: [] } } };
-  const { handler } = fixture({ jobs: { async get() { return frozen; } } });
+  const configuration = { scenario: { truth: { hazardRatio: 0.7 } }, inputRefs: [{ kind: 'snapshot', id: 'snapshot@2' }], unavailableInputs: 1, scenarioHash: 'frozen-hash' };
+  // The real job summary intentionally has no scenario or engine input paths.
+  const { handler } = fixture({ jobs: { async get() { return frozen; }, async configuration() { return configuration; } } });
   const status = response();
   await handler(request('/internal/vcr/v1/simulate', { action: 'status', jobId: 'job_1' }), status);
   assert.equal(status.status, 200);
-  assert.deepEqual(status.json().data.request, { job: { method: frozen.method, methodVersion: frozen.methodVersion, scenario: frozen.scenario, inputs: frozen.inputs },
+  assert.deepEqual(status.json().data.request, { job: { method: frozen.method, methodVersion: frozen.methodVersion, kind: frozen.kind, scenarioHash: configuration.scenarioHash,
+    seed: 2468, replicates: 5000, cpuSecondsLimit: 600, scenario: configuration.scenario, inputs: configuration.inputRefs }, configurationAvailable: true, configurationStatus: 'available', unavailableInputReferences: 1,
     sources: frozen.checkpoint.sourceAssertions, sourceChecks: frozen.checkpoint.sourceReport, bound: frozen.checkpoint.bound, parameterProvenance: frozen.checkpoint.personStated });
+});
+
+test('a missing reusable configuration is explicit and does not withhold the job state', async () => {
+  const { handler } = fixture({ jobs: { async get() { return { id: 'job_1', method: 'design.analytic', state: 'running', seed: 42, progress: { done: 1 } }; }, async configuration() { throw new Error('unavailable'); } } });
+  const status = response();
+  await handler(request('/internal/vcr/v1/simulate', { action: 'status', jobId: 'job_1' }), status);
+  assert.equal(status.status, 200);
+  assert.equal(status.json().data.state, 'running');
+  assert.equal(status.json().data.request.configurationAvailable, false);
+  assert.equal(status.json().data.request.configurationStatus, 'unavailable');
+  assert.equal(status.json().data.request.job.scenario, null);
+  assert.equal(status.json().data.request.job.seed, 42);
+});
+
+test('model-facing reproduction withholds matching rosters and nested record-selection rules', async () => {
+  const identifier = 'SYNTHETIC_RESTRICTED_SUBJECT';
+  const rule = { op: 'compare', column: 'USUBJID', comparator: 'eq', value: identifier };
+  for (const [method, scenario] of [
+    ['matching.extract', { subjects: [identifier], prefiltered: { selected: [identifier] } }],
+    ['matching.evaluate', { criteria: [{ patient: identifier }] }],
+    ['cohort.build', { rules: [{ name: 'Selected', rule }] }],
+    ['comparator.stc', { model: { cohortRules: [{ rule }] } }],
+    ['population.synthpop', { constraints: [rule] }],
+    ['population.check', { criteria: [rule] }],
+  ]) {
+    let projected = 0, configurationReads = 0;
+    const base = fixture();
+    const boundary = base.vcr.service.forModel;
+    base.vcr.service.forModel = async value => { projected++; return boundary(value); };
+    base.vcr.jobs = { async get() { return { id: 'job_1', method, state: 'running', seed: 42, scenarioHash: 'frozen' }; },
+      async configuration() { configurationReads++; return { scenario, inputRefs: [], unavailableInputs: 0 }; } };
+    const handler = createVcrGatewayHandler(config, runtimeManager, { vcr: base.vcr });
+    const status = response();
+    await handler(request('/internal/vcr/v1/simulate', { action: 'status', jobId: 'job_1' }), status);
+    assert.equal(status.status, 200, method);
+    assert.equal(status.json().data.state, 'running');
+    assert.equal(status.json().data.request.configurationStatus, 'withheld');
+    assert.equal(status.json().data.request.job.scenario, null);
+    assert.equal(status.json().data.request.job.seed, 42);
+    assert.doesNotMatch(status.body, new RegExp(identifier));
+    assert.equal(projected, 1);
+    if (method.startsWith('matching.')) assert.equal(configurationReads, 0);
+  }
 });
 
 test("simulate is start / status / cancel, and a job over budget says so plainly", async () => {

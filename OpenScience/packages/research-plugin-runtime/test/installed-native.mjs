@@ -5,7 +5,7 @@ import { loadHarnessModule } from '@evimed/harness-port'
 const { Context } = await loadHarnessModule('@deepseek-ai/cordis')
 const { ToolRuntime } = await loadHarnessModule('@deepseek-ai/dsh-tools')
 const ctx = new Context()
-ctx.provide('systemPrompt', { tools() {} })
+ctx.provide('systemPrompt', { tools() {}, section() { return () => {} } })
 const runtime = new ToolRuntime(ctx)
 const agent = { session: { id: 'local-probe', requestHeader: () => ({ config: {} }) }, ctx }
 async function call(name, args) {

@@ -35,3 +35,14 @@ test('a successful computation cannot hide failed or unavailable population qual
   assert.match(report, /Unavailable or unknown checks were not passed/)
   assert.match(report, /no privacy guarantee/)
 })
+
+test('a combined research record does not claim every measure belongs to its requested method or seed', () => {
+  const report = renderResearchReport({ method: 'design.analytic', methodVersion: '1.4.0', measures: [], diagnostics: { stageResults: {
+    analytic: { stage: 'analytic', method: 'design.analytic', methodVersion: '1.4.0', conclusion: 'estimable' },
+    simulation: { stage: 'simulation', method: 'design.simulate', methodVersion: '1.5.0', conclusion: 'estimable', stale: true },
+  } } }, null)
+  assert.match(report, /Requested method: design.analytic/)
+  assert.match(report, /different scenarios or random seeds/)
+  assert.match(report, /simulation \| design.simulate \| 1.5.0/)
+  assert.match(report, /Carried forward; not rerun/)
+})

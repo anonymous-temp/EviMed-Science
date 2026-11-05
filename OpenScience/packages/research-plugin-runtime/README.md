@@ -4,6 +4,8 @@ Shared DSH tool registration and asynchronous adapters for the four research bun
 
 Hosted mode is the default and requires an injected `evimedResearchAdapter` service. It must bind each call to authenticated project and study scope and reauthorize every operation; it cannot fall back to local execution. Each tool receives the request-local adapter from `forCall(call)`. A process worker survives the initiating process; another process may read or request cancellation. A stale heartbeat identifies an interrupted worker; it does not automatically resume the job.
 
+The report operation returns Markdown and associated reproduction data. The standalone adapter writes report and JSON files; the hosted adapter returns the reproduction object with the report. A downloadable attachment requires the host's ordinary file-delivery tools; returning a JSON object is not evidence that a file was created.
+
 These packages and their shared dependencies must be distributed together until published. A temporary DSH profile can use pnpm workspace overrides to resolve the dependencies to their local tgz files. The existing engine is separately installed: the package does not copy scientific algorithms or bundle the R library. A clean clinical validation, model applicability review, publication and hosted acceptance are separate activities.
 
 ## Build and install an offline bundle

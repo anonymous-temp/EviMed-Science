@@ -277,7 +277,8 @@ function holdings(objectKind, current) {
  * @param {boolean} sameNumbers */
 function fittingObjects(objectKind, kind, scenario, current, sameNumbers) {
   return objectKind === "trial_scenario" ? vcrMatchTrialScenarios(scenario, current, { sameNumbers })
-    : objectKind === "population" ? current.filter((entry) => POPULATION_KIND_OF_JOB[kind] === undefined || entry.kind === POPULATION_KIND_OF_JOB[kind])
+    : objectKind === "population" ? current.filter((entry) => (POPULATION_KIND_OF_JOB[kind] === undefined || entry.kind === POPULATION_KIND_OF_JOB[kind])
+      && (!sameNumbers || !['generate_population', 'literature_population'].includes(kind) || canonicalScenarioJson(entry.definition) === canonicalScenarioJson(scenario)))
       : current;
 }
 
@@ -367,6 +368,7 @@ export const VCR_OWN_COMPARISON_KINDS = new Set(["evalue", "bias_analysis", "stc
 
 /** The computations a conversation may start with nothing written first: what they compute is all in the scenario they send. */
 const VCR_SELF_FILED_KINDS = new Set(["design_analytic", "design_simulation", "design_grid", "generate_population", "literature_population", ...VCR_OWN_COMPARISON_KINDS]);
+const VCR_SELF_FILED_PATIENT_KINDS = new Set(['generate_patients', 'generate_patients_continuous', 'generate_patients_binary', 'generate_patients_longitudinal']);
 
 /**
  * A conversation's research has no form to fill in. A design or a population the run computes with no object to file it under gets one,
@@ -378,7 +380,19 @@ const VCR_SELF_FILED_KINDS = new Set(["design_analytic", "design_simulation", "d
  * @returns {Promise<string | null>} the id to compute under, when one was made (or, for an E-value, the one that is the same)
  */
 export async function vcrConversationSubject({ store, study, userId, kind, subjectId = null, scenario = {} }) {
-  if (study.scope !== "conversation" || !VCR_SELF_FILED_KINDS.has(kind)) return null;
+  if (study.scope !== "conversation") return null;
+  if (VCR_SELF_FILED_PATIENT_KINDS.has(kind)) {
+    // A complete scenario-only generation needs no preparatory form. Reuse
+    // only an identical unbound scenario; never inherit somebody's selected
+    // real cohort or model while making a new synthetic patient set.
+    if (subjectId || !Object.keys(scenario).length) return null;
+    const held = list(await store.patientSets(study.id, 200));
+    const same = held.find(row => !row.populationId && !row.modelId && canonicalScenarioJson(row.scenario) === canonicalScenarioJson(scenario));
+    if (same) return String(same.id);
+    return (await prepareVcrMethodConfiguration({ store, study, userId,
+      method: VCR_JOB_METHODS[kind], name: `${OBJECT_WORDS_ZH.patient_set} ${held.length + 1}`, scenario })).subjectId;
+  }
+  if (!VCR_SELF_FILED_KINDS.has(kind)) return null;
   const objectKind = /** @type {string} */ (vcrJobObjectKind(kind));
   const rows = await objectRows(store, study.id, objectKind);
   if (subjectId) {
@@ -388,7 +402,10 @@ export async function vcrConversationSubject({ store, study, userId, kind, subje
     // adds to it, and none at all (the stage is built from the object), are the object.
     const named = rows.find((entry) => entry.id === subjectId);
     const own = named ? configurationOf(objectKind, named) : null;
-    if (!named || !own || !Object.keys(scenario).length || !vcrContradiction(own, scenario)) return null;
+    if (!named || !own || !Object.keys(scenario).length) return null;
+    const changed = objectKind === 'population' && ['generate_population', 'literature_population'].includes(kind)
+      ? canonicalScenarioJson(own) !== canonicalScenarioJson(scenario) : vcrContradiction(own, scenario);
+    if (!changed) return null;
     // An E-value, a bias analysis of a stated estimate, a simulated comparison, a target-trial emulation or a borrowed control is one
     // scenario and not a line of versions: another scenario is another object (below).
     if (!VCR_OWN_COMPARISON_KINDS.has(kind)) {
@@ -612,7 +629,8 @@ export async function prepareVcrMethodConfiguration({ store, study, userId, meth
   }
   return store.transaction(async (/** @type {any} */ client) => {
   await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`evimed-vcr-method-configuration:${study.id}`]);
-  const previous = await store.methodConfigurationObject(client, study.id, objectKind, subjectId, scenario, name, model);
+  let previous = await store.methodConfigurationObject(client, study.id, objectKind, subjectId, scenario, name, model);
+  if (!subjectId && objectKind === 'patient_set' && !model && previous?.populationId) previous = null;
   if (subjectId && !previous) throw new VcrSubjectError("vcr_simulate_subject_unknown", "The configuration is not an object of this study for this method.");
   if (previous && objectKind === "population" && POPULATION_KIND_OF_JOB[kind] && previous.kind !== POPULATION_KIND_OF_JOB[kind]) {
     throw new VcrSubjectError("vcr_simulate_subject_unknown", "The population kind does not match this method.");

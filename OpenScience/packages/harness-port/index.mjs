@@ -944,7 +944,7 @@ export function pluginSource(plugin) {
  * are read from a deployment-owned read-only directory rather than materialized
  * into the workspace — a workspace file would be an upload away from being an
  * instruction).
- * @param {any} ctx @param {{ name: string, description: string, content: string, whenToUse?: string }} skill
+ * @param {any} ctx @param {{ name: string, description: string, content: string, whenToUse?: string, resourceDir?: string }} skill
  * @returns {() => void}
  */
 export function registerSkill(ctx, skill) {
@@ -952,6 +952,8 @@ export function registerSkill(ctx, skill) {
     name: skill.name,
     description: skill.description,
     content: skill.content,
+    source: 'runtime',
+    ...(skill.resourceDir ? { resourceBase: { kind: 'directory', path: skill.resourceDir } } : {}),
     // `whenToUse` is a declared field of `SkillSummary`, and the catalog the
     // model reads surfaces it as routing guidance. Under `metadata` it is
     // parsed-frontmatter cargo the catalog never shows, so the skill was

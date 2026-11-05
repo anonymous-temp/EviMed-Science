@@ -68,7 +68,7 @@ import { VCR_LONGITUDINAL_JOBS, VCR_LONGITUDINAL_ERROR_CODES } from '@evimed/dom
 
 import {
   VCR_ASSESSMENT_KEY, VCR_ASSESSMENT_LIMITS, VCR_ASSESSMENT_RATING_FIELDS, VCR_ASSESSMENT_TEXT_FIELDS, VCR_ASSUMPTION_KEY, VCR_CRITERION_TYPES, VCR_DISTRIBUTIONS, VCR_ENDPOINT_TYPES, VCR_ESTIMANDS, VCR_EXPORT_KINDS, VCR_EXPORT_KIND_LABELS_ZH,
-  VCR_INTENDED_USES, VCR_JOB_KINDS, VCR_JOB_METHODS, VCR_MODEL_DOCUMENT_SECTIONS, VCR_MODEL_DOCUMENT_SECTION_LABELS_ZH, VCR_MODEL_RISKS,
+  VCR_INTENDED_USES, VCR_JOB_KINDS, VCR_JOB_METHODS, VCR_ENGINE_METHODS, VCR_MODEL_DOCUMENT_SECTIONS, VCR_MODEL_DOCUMENT_SECTION_LABELS_ZH, VCR_MODEL_RISKS,
   VCR_MODEL_DOCUMENT_KINDS, VCR_POPULATION_KINDS, VCR_RATINGS, VCR_RUN_SCENARIO_FIELDS, VCR_SCENARIO_SCHEMAS,
   VCR_STEPS, VCR_SYNTHETIC_USES, VCR_TRIAL_DESIGNS, canonicalScenarioJson, findExpressionFields, validateRequirement, vcrAssessmentIssues,
   isPlatformCardAddress, platformCardCitations, vcrModelDocumentTakesProse, VCR_SOA_LIMITS,
@@ -126,6 +126,21 @@ const readFilterFields = Object.freeze(["id", "parentId", "kind", "limit", "offs
 /** The filter keys only `what: candidates` takes. */
 const CANDIDATE_FILTER_FIELDS = Object.freeze(["condition", "terms", "age", "sex", "region", "status"]);
 const WRITE_MAX_ITEMS = 200;
+const REPRODUCTION_RESTRICTED_KEYS = new Set(['rules', 'cohortRules', 'constraints', 'criteria', 'subjects', 'prefiltered']);
+/** Model-facing status is not the member-page configuration API. Rules can
+ * contain record identifiers, even when the surrounding method is numeric.
+ * @param {unknown} value @param {number} [depth] @returns {boolean} */
+function reproductionContainsSelection(value, depth = 0) {
+  if (depth > 40) return true;
+  if (Array.isArray(value)) return value.some(item => reproductionContainsSelection(item, depth + 1));
+  if (!value || typeof value !== 'object') return false;
+  return Object.entries(value).some(([key, child]) => {
+    if (key === 'op') return true;
+    if (REPRODUCTION_RESTRICTED_KEYS.has(key) && child != null
+      && (typeof child !== 'object' || Object.keys(child).length > 0)) return true;
+    return reproductionContainsSelection(child, depth + 1);
+  });
+}
 
 /**
  * Keys no runtime write may carry, at any depth (integration contract §3.2):
@@ -362,8 +377,14 @@ const POOL_REQUEST_FIELDS = VCR_RUN_SCENARIO_FIELDS.pool_evidence;
 function simulateRequest(body) {
   onlyFields(body, ["action", "kind", "scenario", "inputs", "seed", "replicates", "cpuSecondsLimit", "jobId", "subjectId", "reconstructionResultId", "selection", "modelId", "modelVersion", "sources"]);
   const action = body.action ?? "start";
-  if (!["start", "status", "cancel", "validate"].includes(action)) {
-    throw gatewayError(400, "vcr_simulate_action_invalid", "action must be start, status, cancel or validate.");
+  if (!["start", "status", "cancel", "validate", "shape"].includes(action)) {
+    throw gatewayError(400, "vcr_simulate_action_invalid", "action must be start, status, cancel, validate or shape.");
+  }
+  if (action === 'shape') {
+    onlyFields(body, ['action', 'kind']);
+    const method = typeof body.kind === 'string' ? VCR_JOB_METHODS[body.kind] : null;
+    if (!method || !VCR_ENGINE_METHODS[method]) throw gatewayError(400, 'vcr_simulate_payload_invalid', 'A registered scientific method kind is required.');
+    return { action, kind: body.kind };
   }
   // `validate` takes what `start` takes and queues nothing (C1).
   if (action === "start" || action === "validate") {
@@ -2685,6 +2706,14 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
         sendJson(res, 200, { data: vcrContractsRead(body.filter?.kind ?? null) });
         return;
       }
+      // Native plugins discover the same current schema without opening a
+      // research object. The MCP client also has a local help reader; its
+      // shape action never travelled through this HTTP gateway before.
+      if (operation === 'simulate' && body.action === 'shape') {
+        const method = VCR_JOB_METHODS[body.kind];
+        sendJson(res, 200, { data: { method, ...VCR_ENGINE_METHODS[method], scenarioSchema: VCR_SCENARIO_SCHEMAS[method] ?? null } });
+        return;
+      }
       if ((!origin || origin.programme) && !programmeStudy) throw gatewayError(403,'vcr_invocation_unavailable','A current native research call or exact study dispatch is required.');
       let study = programmeStudy ?? await vcr.store.studyByControlProject(String(identity.userId),String(identity.projectId));
       if (origin && !programmeStudy && study && !study.conversationSessionId && resolveStudyConversation) {
@@ -2844,11 +2873,28 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
             : null;
           const pooling = result && job.method === "evidence.pool"
             ? poolingSummary(result, object(await vcr.store.one("SELECT checkpoint FROM evimed_vcr.jobs WHERE id = $1", [job.id]).then((/** @type {any} */ row) => row?.checkpoint))) : null;
+          // get() deliberately returns a summary without scenario/inputs.
+          // Reuse the authorized configuration projection, which excludes
+          // private engine locations, instead of reporting absent fields as
+          // if the scientific job had no recorded assumptions.
+          let configuration = null;
+          const numericalConfiguration = Object.hasOwn(VCR_ENGINE_METHODS, job.method) && !job.method.startsWith('matching.');
+          if (numericalConfiguration && typeof vcr.jobs.configuration === 'function') {
+            try { configuration = await vcr.jobs.configuration(study.id, job.id); }
+            catch { report('vcr_gateway_unavailable'); }
+          }
+          const configurationWithheld = !numericalConfiguration || reproductionContainsSelection(configuration?.scenario);
           // What a run reads of a result is what a page shows a member, less
           // its small cells (contract §4): the answer passes the boundary once.
           const answer = { action: "status", jobId: job.id, state: job.state, progress: job.progress,
             method: job.method, methodVersion: job.methodVersion, ...appliedOf(job),
-            request: { job: { method: job.method, methodVersion: job.methodVersion, scenario: job.scenario, inputs: job.inputs ?? [] },
+            request: { job: { method: job.method, methodVersion: job.methodVersion, kind: job.kind ?? null,
+              scenarioHash: configuration?.scenarioHash ?? job.scenarioHash ?? null, seed: configuration?.seed ?? job.seed ?? null,
+              replicates: configuration?.replicates ?? job.replicates ?? null, cpuSecondsLimit: job.cpuSecondsLimit ?? null,
+              scenario: configurationWithheld ? null : configuration?.scenario ?? null, inputs: configuration?.inputRefs ?? [] },
+              configurationAvailable: configuration !== null && !configurationWithheld,
+              configurationStatus: configurationWithheld ? 'withheld' : configuration ? 'available' : 'unavailable',
+              unavailableInputReferences: configuration?.unavailableInputs ?? null,
               sources: job.checkpoint?.sourceAssertions ?? [], sourceChecks: job.checkpoint?.sourceReport ?? [],
               bound: job.checkpoint?.bound ?? [], parameterProvenance: job.checkpoint?.personStated ?? null },
             cpuSeconds: job.cpuSecondsUsed, error: job.error, result, ...(pooling ? { pooling } : {}),

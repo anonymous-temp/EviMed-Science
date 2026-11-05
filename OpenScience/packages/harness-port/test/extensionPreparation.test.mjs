@@ -3,12 +3,33 @@ import { mkdtemp, mkdir, rm, writeFile, readFile, realpath } from 'node:fs/promi
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
 import { Context } from '@deepseek-ai/cordis'
 import { PluginManager } from '@deepseek-ai/dsh-plugin-manager'
 import { createNativeExtensionPreparer, createDisposableNativeExtensionPreparer } from '../src/extensionPreparation.mjs'
+import SEAMS from '../seam-manifest.json' with { type: 'json' }
 
 const coordinate = Object.freeze({ kind: 'npm', name: 'evimed-native-test', version: '1.0.0' })
 const integrity = `sha256:${'a'.repeat(64)}`
+
+// Provision the pinned toolchain once in the invoking environment. A Corepack
+// shim otherwise downloads pnpm again for every isolated HOME, making these
+// local-bundle tests depend on registry latency instead of native preparation.
+const nativePnpm = await (async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'evimed-preparer-pnpm-'))
+  try {
+    await writeFile(path.join(root, 'package.json'), JSON.stringify({ private: true,
+      packageManager: `pnpm@${SEAMS.pnpm}`, scripts: { locate: 'node -p process.env.npm_execpath' } }))
+    // CI's workspace pnpm can be a direct older binary that ignores packageManager.
+    const { stdout } = await promisify(execFile)('corepack', [`pnpm@${SEAMS.pnpm}`, '--silent', 'run', 'locate'], { cwd: root, timeout: 30000 })
+    const executable = await realpath(stdout.trim())
+    const manifest = JSON.parse(await readFile(path.join(path.dirname(executable), '..', 'package.json'), 'utf8'))
+    assert.equal(manifest.name, 'pnpm')
+    assert.equal(manifest.version, SEAMS.pnpm)
+    return executable
+  } finally { await rm(root, { recursive: true, force: true }) }
+})()
 
 /** Actual manager, actual pnpm and a disposable local bundle; no candidate host code is loaded.
  * @param {import('node:test').TestContext} t */
@@ -19,16 +40,22 @@ async function fixture(t) {
   const bundle = path.join(root, 'bundle')
   await mkdir(profile); await mkdir(bundle)
   await writeFile(path.join(root, 'package.json'), JSON.stringify({ name: 'dsh-native-test', version: '0.2.1-rc.5', dependencies: {} }))
-  await writeFile(path.join(profile, 'package.json'), JSON.stringify({ name: 'native-test-profile', private: true, packageManager: 'pnpm@11.7.0', dsh: { profile: { bundles: [] } } }))
+  await writeFile(path.join(profile, 'package.json'), JSON.stringify({ name: 'native-test-profile', private: true, packageManager: `pnpm@${SEAMS.pnpm}`, dsh: { profile: { bundles: [] } } }))
   await writeFile(path.join(profile, 'cordis.patch.yml'), '[]\n')
+  await writeFile(path.join(profile, 'pnpm-workspace.yaml'), 'packages:\n  - .\nupdateNotifier: false\n')
   await writeFile(path.join(bundle, 'package.json'), JSON.stringify({ name: coordinate.name, version: coordinate.version, dsh: { bundle: { patch: './cordis.patch.yml' } } }))
   await writeFile(path.join(bundle, 'cordis.patch.yml'), '[]\n')
   const ctx = new Context()
+  let installLog = ''
+  ctx.on('plugin-manager/install-log', (/** @type {any} */ output) => {
+    installLog = (installLog + output.text).slice(-8192)
+  })
+  t.after(() => { if (!t.passed || process.env.EVIMED_TEST_PREPARER_DIAGNOSTICS === '1') t.diagnostic(installLog.replaceAll(root, '<fixture>')) })
   ctx.provide('profileContext', { name: 'native-test', dir: profile, patchPath: path.join(profile, 'cordis.patch.yml'),
     installAnchor: path.join(root, 'package.json'), cwd: profile, home: root, overlays: [], startedBundles: [], telemetryDisabledEnv: '1',
-    packageManager: { command: 'pnpm', args: [], env: { PATH: process.env.PATH ?? '', HOME: root, DSH_TELEMETRY_DISABLED: '1' } } })
+    packageManager: { command: nativePnpm, args: [], env: { PATH: process.env.PATH ?? '', HOME: root, DSH_TELEMETRY_DISABLED: '1' } } })
   ctx.provide('loader', { entries: () => [] })
-  const manager = new PluginManager(ctx, { pnpmCommand: 'pnpm', outputBytes: 16384, lockWaitMs: 1000, inspectTimeoutMs: 2000,
+  const manager = new PluginManager(ctx, { pnpmCommand: nativePnpm, outputBytes: 16384, lockWaitMs: 1000, inspectTimeoutMs: 2000,
     githubConnectionTimeoutMs: 2000, idleTimeoutMs: 10000, fallbackRegistries: [] })
   const adapter = await createNativeExtensionPreparer(ctx, { resolve: async () => ({ nativeSpec: bundle, packageName: coordinate.name,
     version: coordinate.version, integrity }), timeoutMs: 20000, cancelGraceMs: 1000, terminateAndWait: async () => {} })
@@ -86,11 +113,12 @@ test('disposable bootstrap constructs real native services and refuses reuse of 
   const { root, bundle } = await fixture(t)
   const scratch = path.join(root, 'scratch')
   await mkdir(scratch)
-  const options = { profileRoot: await realpath(scratch), installationAnchor: path.join(root, 'package.json'), pnpmCommand: 'pnpm' }
+  const options = { profileRoot: await realpath(scratch), installationAnchor: path.join(root, 'package.json'), pnpmCommand: nativePnpm }
   const policy = { resolve: async () => ({ nativeSpec: bundle, packageName: coordinate.name, version: '1.0.0', integrity }),
     timeoutMs: 10000, cancelGraceMs: 1000, terminateAndWait: async () => {} }
   const prepared = await createDisposableNativeExtensionPreparer(options, policy)
   try {
+    await writeFile(path.join(scratch, 'profile', 'pnpm-workspace.yaml'), 'packages:\n  - .\nupdateNotifier: false\n')
     assert.equal((await prepared.preparer.inspect(coordinate)).status, 'accepted')
     assert.deepEqual(await prepared.preparer.inventory(), [])
     const result = await prepared.preparer.prepare({ coordinate, requestId: 'native-bootstrap', exactIdentity: integrity })

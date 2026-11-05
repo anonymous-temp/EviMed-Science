@@ -200,16 +200,28 @@ vcr_case("N78e", c("AC-07", "AC-30"), function() {
   cohort_ok <- identical(rc$status, "succeeded") && rc$diagnostics$imputation$rowsAnalysed == kept && rc$diagnostics$cohort$keptRows == kept
   # the budget: a limit that stops the job part-way pools what finished; one that stops it at once keeps the complete-case answer
   m_big <- 14L
-  full_run <- run("comparator.propensity_weight", base, m = m_big)
-  cpu_all <- full_run$manifest$cpuSeconds
-  part <- run("comparator.propensity_weight", base, m = m_big, extra = list(cpuSecondsLimit = max(0.3, 0.45 * cpu_all / 0.9)))
+  # Inject the same interrupt returned by the real budget gate at a known
+  # boundary: the complete-case analysis plus three completed imputations.
+  # Timing a preceding run cannot reliably locate this boundary on another CPU.
+  with_budget_stop <- function(after, action) {
+    original_inner <- .vcr_inner_run; original_interrupt <- vcr_interrupt; completed_runs <- 0L
+    on.exit({ .vcr_inner_run <<- original_inner; vcr_interrupt <<- original_interrupt }, add = TRUE)
+    .vcr_inner_run <<- function(...) { value <- original_inner(...); completed_runs <<- completed_runs + 1L; value }
+    vcr_interrupt <<- function() if (completed_runs >= after) "cpu_budget" else original_interrupt()
+    action()
+  }
+  part <- with_budget_stop(4L, function() run("comparator.propensity_weight", base, m = m_big))
   ip <- part$diagnostics$imputation
-  part_ok <- identical(part$status, "succeeded") && identical(part$conclusion, "limited") && identical(ip$stoppedBy, "cpu_budget") && ip$completed >= 2L && ip$completed < m_big &&
-    "imputations_stopped_early" %in% vcr_chr(part$diagnostics$limitedBy) && ip$requested == m_big
-  none <- run("comparator.propensity_weight", base, m = m_big, extra = list(cpuSecondsLimit = 0.05))
-  none_stop_ok <- identical(none$status, "failed") && "cpu_budget_exhausted" %in% vcr_test_issue_codes(none) && !is.null(none$diagnostics$imputation$completeCase)
+  measure <- vcr_get_measure(part, "weighted_difference")
+  part_ok <- identical(part$status, "succeeded") && identical(part$conclusion, "limited") && identical(ip$stoppedBy, "cpu_budget") && ip$completed == 3L &&
+    "imputations_stopped_early" %in% vcr_chr(part$diagnostics$limitedBy) && ip$requested == m_big &&
+    is.finite(measure$value) && identical(measure$source, "imputed") && is.finite(ip$pooled[[1]]$imputed$estimate) &&
+    abs(measure$value - ip$pooled[[1]]$imputed$estimate) < 1e-10 && is.finite(measure$interval$low) && is.finite(measure$interval$high)
+  none <- with_budget_stop(1L, function() run("comparator.propensity_weight", base, m = m_big))
+  none_stop_ok <- identical(none$status, "failed") && "cpu_budget_exhausted" %in% vcr_test_issue_codes(none) &&
+    isTRUE(none$diagnostics$imputation$completeCase$available) && length(none$diagnostics$imputation$completeCase$estimates) > 0L
   ok <- all(methods_ok) && cox_ok && refusal_ok && none_ok && sparse_ok && old_ok && cohort_ok && part_ok && none_stop_ok
   list(pass = ok,
-       detail = sprintf("entropy balancing / propensity / doubly robust pooled and sourced imputed: %s; weighted Cox pooled with its E-value: %s; no key keeps the refusal naming it: %s; nothing missing runs plain and says so: %s; 6 observed values: imputation_not_possible: %s; 1.4.0 label refused the key: %s; cohort rule keeps %d analysed: %s; a budget of %.0f%% of the run pooled %d of %d (limited, stopped early): %s; at once: failed with the complete-case answer: %s",
-                        paste(methods_ok, collapse = "/"), cox_ok, refusal_ok, none_ok, sparse_ok, old_ok, kept, cohort_ok, 45, ip$completed %||% NA, m_big, part_ok, none_stop_ok))
+       detail = sprintf("entropy balancing / propensity / doubly robust pooled and sourced imputed: %s; weighted Cox pooled with its E-value: %s; no key keeps the refusal naming it: %s; nothing missing runs plain and says so: %s; 6 observed values: imputation_not_possible: %s; 1.4.0 label refused the key: %s; cohort rule keeps %d analysed: %s; a controlled budget interruption pooled %d of %d (limited, stopped early): %s; at once: failed with the complete-case answer: %s",
+                        paste(methods_ok, collapse = "/"), cox_ok, refusal_ok, none_ok, sparse_ok, old_ok, kept, cohort_ok, ip$completed %||% NA, m_big, part_ok, none_stop_ok))
 })

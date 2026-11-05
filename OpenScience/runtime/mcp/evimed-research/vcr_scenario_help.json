@@ -849,6 +849,19 @@
           "fieldRole": "research_fact"
         },
         {"path":"tstrOutcome","type":"string","maxLength":64,"role":"column","fieldRole":"defaultable"},
+        {"path":"imputationRules","type":"list","count":{"min":1,"max":200},"items":{"type":"object"},"fieldRole":"defaultable"},
+        {"path":"imputationRules[].valueColumn","type":"string","maxLength":64,"role":"column","required":true,"within":"imputationRules","fieldRole":"research_fact"},
+        {
+          "path": "imputationRules[].indicatorColumn",
+          "type": "string",
+          "maxLength": 64,
+          "role": "column",
+          "required": true,
+          "within": "imputationRules",
+          "fieldRole": "research_fact"
+        },
+        {"path":"imputationRules[].imputedValue","type":"number","required":true,"within":"imputationRules","fieldRole":"research_fact"},
+        {"path":"imputationRules[].missingValue","type":"integer","min":1,"max":1,"required":true,"within":"imputationRules","fieldRole":"research_fact"},
         {"path":"inference","type":"object"},
         {"path":"inference.nullCalibration","type":"object","within":"inference"},
         {

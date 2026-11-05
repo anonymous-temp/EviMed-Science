@@ -9,6 +9,8 @@ import { spawn } from 'node:child_process'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+export const scientificInterpretationGuidance = 'Distinguish assumed parameters from realized synthetic sample summaries. A nonsignificant diagnostic does not establish validity, transitivity or consistency. Separate jobs or equal seeds do not establish independent random streams; do not derive contrast intervals unless the dependence or stream design is verified.'
+
 /** @typedef {Record<string, any>} ResearchRequest */
 /** @typedef {{ start: (request: ResearchRequest) => Promise<any>, read: (jobId: string) => Promise<any>, cancel: (jobId: string) => Promise<any>, describe?: (method: string) => Promise<any>, readRequest?: (jobId: string) => Promise<any>, saveReport?: (jobId: string, report: string, reproduction: any) => Promise<any>, forCall?: (call: any) => ResearchAdapter }} ResearchAdapter */
 /** @param {Record<string, any>} source */
@@ -171,17 +173,21 @@ export async function registerResearchTools(ctx, config) {
 /** @param {any} ctx
  * @param {{ name: string, methods: readonly string[], mode: string, workspace: string, engineRoot: string, rscript?: string, skillUrl?: URL }} config */
 async function registerConfiguredResearchTools(ctx, { name, methods, mode, workspace, engineRoot, rscript, skillUrl }) {
-  const { defineTool, registerTool, registerResearchConfiguration, registerSkill } = await import('@evimed/harness-port')
+  const { defineTool, registerTool, registerResearchConfiguration, registerSkill, registerSection } = await import('@evimed/harness-port')
   const adapter = ctx.get?.('evimedResearchAdapter') ?? (mode === 'standalone' && workspace && engineRoot ? createLocalAdapter({ workspace, engineRoot, rscript }) : null)
   if (!adapter) throw new Error('research_adapter_not_configured')
   const overview = catalogue.find(item => item.id === name.replaceAll('_', '-'))
+  ctx.inject(['systemPrompt'], (/** @type {any} */ scoped) => {
+    scoped.effect(() => registerSection(scoped, { name: `evimed-research-${name}`, order: 160,
+      text: `Research domain: ${overview?.task ?? name}\nFor a question in this domain, use ${name}_describe to find applicable registered methods and ${name}_start/read/report/cancel for scientific computations and preserved results. Prefer these methods to ad hoc scripts when they fit; compatibility tools remain available for existing hosted records and other operations. Use only the operations the question needs, in any useful order. Answer explanations directly. When required inputs are absent, state what is needed and finish the reply; do not manufacture replacement patient data. Explicitly authorized demonstrations may use clearly labeled assumptions. ${scientificInterpretationGuidance} Unrelated general work stays ordinary conversation.` }))
+  })
   // A bundle's skill belongs in the upstream on-demand skill catalogue, not
   // only in a describe response that a model may never request.
   if (skillUrl) {
     const content = await readFile(skillUrl, 'utf8')
     ctx.inject(['skills'], (/** @type {any} */ scoped) => {
       scoped.effect(() => registerSkill(scoped, { name: name.replaceAll('_', '-'),
-        description: overview?.task ?? 'Virtual research', content,
+        description: overview?.task ?? 'Virtual research', content, resourceDir: fileURLToPath(new URL('.', skillUrl)),
         whenToUse: `For this research domain, use the installed ${name}_describe/start/read/report/cancel tools when applicable. Answer only the requested parts; for missing essential inputs, explain what is needed instead of inventing data.` }))
     })
   }
@@ -195,7 +201,7 @@ async function registerConfiguredResearchTools(ctx, { name, methods, mode, works
       if (!method) return { ok: true, data: { ...overview, methods, guidance: skillUrl ? await readFile(skillUrl, 'utf8') : null } }
       if (!methods.includes(method)) throw new Error('unsupported_method')
       if (!forCall(call).describe) return { ok: true, data: { method, schemaAvailable: false } }
-      return { ok: true, data: await forCall(call).describe(method) }
+      return { ok: true, data: { ...await forCall(call).describe(method), interpretationGuidance: scientificInterpretationGuidance } }
     } },
     { name: `${name}_start`, description: `${overview?.task ?? 'Virtual research'}. Start a research computation using an installed method. Available method IDs: ${methods.join(', ')}. Use only explicit assumptions and authorized inputs.`,
       parameters: { method: { type: 'string', required: true }, scenario: { type: 'object', additionalProperties: true, required: true }, version: { type: 'string' }, inputs: { type: 'array', items: { type: 'object', additionalProperties: true, properties: {} } }, sources: { type: 'array', description: 'At most 8 source assertions: publication {field, publication, quote} or user {origin: user, field, value, quote, unit, context, sessionId?, messageSeq?}. Assertions need independent verification.', items: { type: 'object', additionalProperties: true, properties: {} } }, seed: { type: 'integer' }, replicates: { type: 'integer' }, cpuSecondsLimit: { type: 'integer' }, ...hostedReferenceParameters },

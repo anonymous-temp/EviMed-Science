@@ -1,9 +1,10 @@
 # VCR professional plugins: consolidated plan and execution checklist
 
-Date: 2026-11-05. This is the current planning baseline. Product implementation,
-paid evaluations, deployment and production migration are not performed by this
-review. It consolidates the conversation and retained reviews; old findings are
-kept as history, not automatically re-opened as current defects.
+Approved planning baseline: 2026-11-05. Execution closeout: 2026-11-06.
+The baseline review is preserved below; the execution ledger records subsequent
+implementation and measured acceptance. Production deployment, production data
+migration, main integration and public package-registry publication were not
+performed. Historical review statuses are not a list of current defects.
 
 **Goal:** Deliver independently installable, testable and releasable research
 plugins on DSH and DeepSeek, callable from open-domain conversation in arbitrary
@@ -16,6 +17,26 @@ Patient recruitment and matching remains an independent parallel product.
 **Technical base:** React/TypeScript, Node, existing DSH harness-port and socket,
 MCP, hosted extension generations, PostgreSQL jobs and the existing R/Python
 statistical runtime. Keep one implementation of each scientific method.
+
+## Execution ledger — 2026-11-06
+
+The detailed evidence and remaining limits are in the [acceptance record](2026-11-05-vcr-professional-plugin-acceptance.md). Check marks below mean the stated implementation or check was performed, not a clinical-validity claim. A partial work package retains its unperformed acceptance explicitly.
+
+| Work package | Execution and evidence | Remaining boundary |
+| --- | --- | --- |
+| P00/P01 | Source and ownership matrix retained; four method-domain packages, shared runtime/contracts and compatibility routes implemented | Matching remains separately owned. No indiscriminate matching-branch merge or production data removal |
+| P02/P07 | Four independently installed bundles exercised through native tools plus the existing R engine; four hosted domain-exclusive projects also passed describe/start/read/report | First candidate release; a two-public-version upgrade is not established |
+| P03 | R10: all 20 frozen ordinary-language runs ended completed; four concurrent-domain and four exclusive-domain chains succeeded. R11 retested the two interpretation defects and frozen request read-back | Completion is not correctness. Some cases still did unnecessary hypothetical work or imposed optional age bounds |
+| P04 | Meaning-bound source assertions, original-message quotation checks, frozen scenarios, result versions, report sources and seed/replicate metadata implemented and tested | Quotation membership does not certify clinical semantics; historical records preserve their original provenance |
+| P05 | Terminal observation/deduplication, cancellation, persisted results and saved-result fallback verified | A stop/start plus cold baseline rebase can fence an AI continuation. The tested three results remained reachable, but two were delivered as saved-result notices, not successful automatic explanations |
+| P06 | Existing literature/knowledge/evidence tools remain independently callable; parameter/source and assessment projections are preserved | Actual configured twenty-paper parser/table-selection benchmark cannot run without its service URL/token. Existing KM/precedent evidence remains scoped; no clinical parser score is claimed |
+| P08 | Existing PostgreSQL source/access/lifecycle checks retained. New model-facing reproduction tests withhold record-selection expressions and matching configuration while preserving safe numerical parameters | Standalone is a trusted single-operator workspace, not a hostile multi-tenant OS sandbox |
+| P09 | Compact side-by-side desktop home and narrow layout verified in the built-in browser; real result/history check recorded separately in acceptance | Screenshot provenance and the exact paths observed are stated; unobserved UI states are not upgraded by API/unit tests |
+| P10 | All 12,000 PhysioNet stays profiled, 6,557 age-selected; full five-copy 20,000-row generation; all applicable B/C HR predictions; all 2,139 ACTG participants. Independent replay attempted 35 retained synthetic scenarios | Synthesis fidelity remains red, with some quality checks unavailable. No external-control transportability or individual treatment-counterfactual validation |
+| P11 | Optional suite discovers only actually installed tools, supports arbitrary subsets and adds no sibling installation or mandatory sequence | Composition does not grant data permission or supply an unvalidated disease model |
+| P12 | Versioned packages, compatibility receipts, offline archive builder/installer, standalone installation and hosted activation implemented; integrated source committed/pushed for CI | Public registry publication, operator production admission, main merge and deployment are separate actions and not performed |
+
+The original review inventory and matching checklist below remain historical/parallel-owner evidence. They must not be read as freshly retested matching results.
 
 ## 1. Frozen sources and evidence scope
 
@@ -93,7 +114,7 @@ reports. Extract them from current domain types instead of introducing a second
 copy. Accept compatible imported artifacts without forcing installation of
 sibling plugins. The matching team owns eligibility-specific models and policy.
 
-## 4. Reconciled review findings
+## 4. Reconciled review findings at plan approval
 
 Status meanings: **retained** = implemented evidence exists and should survive
 the split; **open** = current defect or unverified requirement; **partial** = a
@@ -142,14 +163,14 @@ the older source-label version on historical results and version any correction.
 Owner: current lead, with matching-team coordination. No matching implementation
 is reassigned to the four-plugin team.
 
-- [ ] Preserve the three code/evaluation baselines in section 1 and the relevant
+- [x] Preserve the three code/evaluation baselines in section 1 and the relevant
       source/result hashes. Keep inferred and reported outcomes distinct.
-- [ ] Reconcile superseded plans with this checklist. Keep old reports immutable
+- [x] Reconcile superseded plans with this checklist. Keep old reports immutable
       as historical evidence; add successor links where needed.
 - [ ] Verify the paused diagnostic account/database using the original ownership
       receipts; reconcile its settled partial ledger and delete only those
       owned resources. Do not restart the blinded diagnostic to satisfy cleanup.
-- [ ] Agree shared contract ownership with the parallel matching/plugin work.
+- [x] Agree shared contract ownership with the parallel matching/plugin work.
 
 Done when the branch/source matrix, handoff and cleanup receipts are recorded,
 and no task silently depends on an abandoned prototype.
@@ -159,14 +180,14 @@ and no task silently depends on an abandoned prototype.
 Code anchors: `vcrComposition.mjs`, `vcrGateway.mjs`, `vcrService.mjs`,
 `vcrRoutes.mjs`, `packages/domain/src/vcr*`, `capabilities/vcr-*`.
 
-- [ ] Map current method IDs, stores, viewers and schemas to four product owners
+- [x] Map current method IDs, stores, viewers and schemas to four product owners
       and shared interfaces; explicitly retain matching ownership separately.
-- [ ] Define input/result references, version compatibility, actual operation
+- [x] Define input/result references, version compatibility, actual operation
       prerequisites and downstream invalidation. Keep source content in its
       authorized store; a reference is not a permission grant.
-- [ ] Choose standalone and hosted adapters for the first extraction; forbid
+- [x] Choose standalone and hosted adapters for the first extraction; forbid
       imports from `apps/server` in a purported standalone plugin.
-- [ ] Keep compatibility readers/routes for existing studies and pinned jobs.
+- [x] Keep compatibility readers/routes for existing studies and pinned jobs.
 
 Done when each plugin can accept ordinary imported inputs without installing
 the other plugins and a build dependency check detects accidental SaaS coupling.
@@ -177,13 +198,13 @@ Proposed packages: `OpenScience/packages/virtual-trial/` plus only the minimal
 shared contracts/runtime adapters it uses. Reuse `harness-port`, extension
 generation services and `项目代码/vcr-engine`; do not clone the R stack.
 
-- [ ] Package skills, method discovery, tool calls, result rendering and examples
+- [x] Package skills, method discovery, tool calls, result rendering and examples
       through native DSH bundle support and existing hosted extension admission.
-- [ ] Run a clean standalone DSH task and the same task in hosted EviMed with
+- [x] Run a clean standalone DSH task and the same task in hosted EviMed with
       matching, cohort and virtual-patient plugins absent.
-- [ ] Bind the package to actual compatible method/runtime versions. Stop or
+- [x] Bind the package to actual compatible method/runtime versions. Stop or
       explicitly migrate incompatible in-flight jobs when updating.
-- [ ] Verify install, enable, disable, upgrade and rollback; historical results
+- [x] Verify install, enable, disable, upgrade and rollback; historical results
       remain readable and uninstall does not implicitly delete research data.
 
 Done when an independent install can execute and explain a supported design,
@@ -194,14 +215,14 @@ and the same scientific implementation works through the hosted adapter.
 Anchors: capability discovery/router, DSH socket/harness-port, matching-free
 research tool entry and `runtime/mcp/evimed-research/vcr_platform.py`.
 
-- [ ] Publish compact task-domain descriptions and load the relevant skill and
+- [x] Publish compact task-domain descriptions and load the relevant skill and
       exact tool schemas on demand. Plugin selection scopes expertise, not the
       allowed questions or a mandatory report contract.
-- [ ] Handle explanation-only queries, any supported subset, supplied intermediate
+- [x] Handle explanation-only queries, any supported subset, supplied intermediate
       artifacts, follow-ups, topic changes and cross-plugin combinations.
-- [ ] For supported scientific calculations, reach the registered method and
+- [x] For supported scientific calculations, reach the registered method and
       persisted result without forcing every ordinary question into a study.
-- [ ] Run the complete predeclared natural-language scenario set, including
+- [x] Run the complete predeclared natural-language scenario set, including
       negative/general controls and Chinese variants. Preserve every failure.
 
 Done when irrelevant steps, reports and input requests are not forced, while
@@ -213,16 +234,16 @@ task completion, correctness, unnecessary work, tool errors and time/cost.
 Anchors: `vcrPersonStated.mjs`, `vcrExecutionContext.mjs`, original conversation
 reader, `vcrPremises.mjs`, `vcrScenarioSources.mjs`, result presenters/exports.
 
-- [ ] Replace value-coincidence source attribution with parameter-specific
+- [x] Replace value-coincidence source attribution with parameter-specific
       source references that preserve meaning, unit, time and context.
-- [ ] Read authorized original messages rather than treating a 160-character
+- [x] Read authorized original messages rather than treating a 160-character
       ledger preview as the full evidence. Keep source access bounded and scoped.
-- [ ] Preserve user, literature, derived, assumption and model-predicted origins
+- [x] Preserve user, literature, derived, assumption and model-predicted origins
       through jobs, results, page, answer and report. Retain historical versions.
-- [ ] Add counterexamples: 30 months vs 30 people, repeated percentages with
+- [x] Add counterexamples: 30 months vs 30 people, repeated percentages with
       different meanings, contradictory follow-ups, table column mix-ups,
       identical values in two arms and changes beyond the preview limit.
-- [ ] Verify selected scenario, assumptions, headline, plotted numbers and export
+- [x] Verify selected scenario, assumptions, headline, plotted numbers and export
       refer to the same immutable result after edits and sensitivity runs.
 
 Done when the current synthetic defect is fixed and no tested surface upgrades
@@ -233,12 +254,12 @@ an assumption to an observed/user-provided value merely because digits match.
 Anchors: `vcrJobs.mjs`, `vcrWorker.mjs`, `vcrConversationCompletions.mjs`,
 `vcrNotify.mjs`, runtime run ledger and existing finish hooks.
 
-- [ ] Handle completion during a busy turn and after turn end, using existing
+- [x] Handle completion during a busy turn and after turn end, using existing
       events and idempotent continuation rather than repeated model polling.
-- [ ] Prevent duplicate runs/charges when results were already read or delivered.
-- [ ] Preserve cancel intent, permission changes, source-version changes and
+- [x] Prevent duplicate runs/charges when results were already read or delivered.
+- [x] Preserve cancel intent, permission changes, source-version changes and
       partial results across disconnect, restart and failed continuation.
-- [ ] Measure heavy design jobs with actual CPU/replicate caps. Present completed
+- [x] Measure heavy design jobs with actual CPU/replicate caps. Present completed
       replicates, Monte-Carlo error and remaining work accurately.
 
 Done when every finished job is reachable from its owning conversation/result,
@@ -249,11 +270,11 @@ and interruption/retry does not fabricate completion or duplicate work.
 Anchors: evidence pipeline/second read/value checks, knowledge/search services,
 document parser, KM digitizer, source binding, model applicability and report data.
 
-- [ ] Make literature and knowledge retrieval callable independently and from
+- [x] Make literature and knowledge retrieval callable independently and from
       any relevant plugin; reuse a frozen source when it already satisfies need.
-- [ ] Preserve table row/column/arm, units, denominators, endpoint/time and study
+- [x] Preserve table row/column/arm, units, denominators, endpoint/time and study
       identity through parameterization; check reconstructed values separately.
-- [ ] Distinguish certainty, bias, population transportability, model validity
+- [x] Distinguish certainty, bias, population transportability, model validity
       and numerical verification; retain findings with useful results.
 - [ ] Validate the actual internal parser route on the prepared table corpus,
       including choosing the correct table without gold assistance. Add real
@@ -267,17 +288,17 @@ answer, or use only retrieval/interpretation, without source or meaning loss.
 Reuse package/adapter patterns proven by P02, with no new global kernel or
 universal workflow system.
 
-- [ ] Cohort: preserve observed/derived/synthetic/reconstructed provenance, person
+- [x] Cohort: preserve observed/derived/synthetic/reconstructed provenance, person
       counts, selection/version history, fidelity, inference utility and privacy
       diagnostics using existing `population.*` and `cohort.build` methods.
-- [ ] Comparator: publish separate actual-external, literature/indirect,
+- [x] Comparator: publish separate actual-external, literature/indirect,
       borrowing and randomized-prognostic-adjustment routes; retain estimand,
       index-date and post-baseline checks and method-specific diagnostics.
-- [ ] Patient: separate observed history, scenario paths and model predictions;
+- [x] Patient: separate observed history, scenario paths and model predictions;
       preserve model endpoint/horizon/population and calibration evidence. An
       installed training method is not a universal validated clinical model.
-- [ ] Prove each plugin with sibling plugins absent and with compatible imports.
-- [ ] Retain the stated multi-arm/enrichment enrollment approximation unless a
+- [x] Prove each plugin with sibling plugins absent and with compatible imports.
+- [x] Retain the stated multi-arm/enrichment enrollment approximation unless a
       more complete accrual model is implemented and separately validated.
 
 Done when each domain has a working independent task surface, artifacts,
@@ -288,11 +309,11 @@ acceptance suite and honest supported-use scope.
 Anchors: data plane, access, snapshot and erasure stores, job scopes, extension
 permissions and source changes. Reuse existing policy implementation.
 
-- [ ] Verify cross-account/project isolation, source withdrawal, revoked grants,
+- [x] Verify cross-account/project isolation, source withdrawal, revoked grants,
       late responses and mixed-version workers in standalone and hosted modes.
-- [ ] Never put patient records into general shared knowledge/memory or grant
+- [x] Never put patient records into general shared knowledge/memory or grant
       cross-plugin access merely through installation or an object reference.
-- [ ] Keep source/data deletion, plugin uninstall and database retirement as
+- [x] Keep source/data deletion, plugin uninstall and database retirement as
       distinct operations. No startup deletion or automatic production migration.
 
 Done when real persistence/concurrency tests protect each operation boundary,
@@ -303,13 +324,13 @@ including partial failure, and migration compatibility is documented.
 Anchors: `apps/web/src/components/vcr/`, extension centre and current design
 system. Apply the previously requested Huashu/Impeccable principles within tokens.
 
-- [ ] Keep one composer, compact task selection and object-centered results;
+- [x] Keep one composer, compact task selection and object-centered results;
       make data/model prerequisites visible only where relevant.
 - [ ] Verify conversation -> exact result -> edit -> new version -> old result,
       plus source inspection, failure, limited runs, export and cancellation.
 - [ ] Render desktop and narrow layouts in the built-in browser; verify the
       comparator result entry, Simon/compound endpoint cards and >4 alternatives.
-- [ ] Keep algorithm/package/gateway internals out of user copy; preserve
+- [x] Keep algorithm/package/gateway internals out of user copy; preserve
       scientific assumptions and evidence that help assess the answer.
 
 Done when current rendered paths are verified. Old screenshots and API-only
@@ -321,16 +342,16 @@ The concrete campaign matrix is in section 7. Reuse valid prior outputs where
 they answer the same question; do not rerun old matching pipelines simply to
 claim all local files have been exercised.
 
-- [ ] Freeze source/plugin/method/model/prompt versions, complete input inventory,
+- [x] Freeze source/plugin/method/model/prompt versions, complete input inventory,
       split, scoring and budget before each new campaign.
-- [ ] Run all applicable cases through the real feature/backend path. A one-time
+- [x] Run all applicable cases through the real feature/backend path. A one-time
       operational startup check is allowed; do not replace the full campaign
       with successive handpicked pilots or block it on an arbitrary quality target.
-- [ ] Retain failures and excluded/unusable records with counts and reasons;
+- [x] Retain failures and excluded/unusable records with counts and reasons;
       report both total coverage and scores on usable outputs. Resume explicitly.
-- [ ] Use automated attribution, isolated patient workspaces, disabled memory,
+- [x] Use automated attribution, isolated patient workspaces, disabled memory,
       private gold, bounded concurrency and account/usage cleanup.
-- [ ] Compare extraction-before/after outputs and task completion; publish a
+- [x] Compare extraction-before/after outputs and task completion; publish a
       per-plugin report rather than a single undifferentiated success score.
 
 Done when the planned full denominators reconcile and each claimed improvement
@@ -338,10 +359,10 @@ is supported on the same units with the actual execution route disclosed.
 
 ### P11 — P2 — Compose the optional suite
 
-- [ ] Compose selected installed plugin versions through shared contracts.
-- [ ] Test evidence+design only, cohort+comparison, patient+design and a requested
+- [x] Compose selected installed plugin versions through shared contracts.
+- [x] Test evidence+design only, cohort+comparison, patient+design and a requested
       complete study; allow normal DSH conversation to compose without the suite.
-- [ ] Invalidate affected downstream results on input changes and preserve
+- [x] Invalidate affected downstream results on input changes and preserve
       unaffected work. Matching remains optional and explicitly authorized.
 
 Done when composition reuses released components and data rather than copying
@@ -349,7 +370,7 @@ scientific code or enforcing a mandatory cohort-to-trial chain.
 
 ### P12 — P1 — Independent releases and final integration
 
-- [ ] Give each package its own version, dependency lock, compatibility matrix,
+- [x] Give each package its own version, dependency lock, compatibility matrix,
       release artifacts, scientific scope, test evidence and migration notes.
 - [ ] Reuse engine method references, rerun affected numerical cases, and run
       final full CI on the integrated release candidate. Validate standalone
@@ -358,7 +379,7 @@ scientific code or enforcing a mandatory cohort-to-trial chain.
       push alone is not an independently installable release.
 - [ ] Coordinate main integration with the matching team through shared changes;
       retain its independent benchmark and release status.
-- [ ] Keep deployment and production data changes as a separate owner decision.
+- [x] Keep deployment and production data changes as a separate owner decision.
 
 Done when each advertised installation mode works from published artifacts and
 the source, runtime and scientific evidence identities agree.
@@ -474,6 +495,6 @@ Useful links:
 - [Matching delivery and results at its reviewed revision](https://github.com/anonymous-temp/EviMed-Science/blob/d5f690b15/docs/superpowers/plans/2026-11-04-vcr-matching-delivery-plan.md)
 - [Matching review index at its reviewed revision](https://github.com/anonymous-temp/EviMed-Science/blob/d5f690b15/docs/superpowers/plans/2026-11-04-vcr-matching-delivery-assets/README.md)
 
-This review made no product changes, accessed no raw private clinical notes and
-made no paid model calls. The synthetic provenance probe is the only new
-execution evidence; prior test outcomes retain their original scope.
+The original baseline review made no product changes or paid model calls.
+Subsequent implementation and execution are recorded in the execution ledger
+and acceptance report; prior review outcomes retain their original scope.
