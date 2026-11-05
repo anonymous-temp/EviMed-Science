@@ -142,13 +142,12 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
     if (landed.current) return;
     landed.current = true;
     if (linked && /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,79}$/.test(linked)) { touched.current = true; setDirection("patient_to_trial"); setCandidate(linked); return; }
-    let live = true;
+    // No cancel on cleanup: the guard above lets this run once, and a development remount (StrictMode) would otherwise cancel the only read.
     void getVcrJudgedLatest(studyId).then((latest) => {
-      if (!live || !latest || touched.current) return;
+      if (!latest || touched.current) return;
       if (latest.direction === "patient_to_trial") { setDirection("patient_to_trial"); setCandidate(latest.subjectKey); }
       else setProtocolVersionId(latest.protocolVersionId);
     }).catch(() => undefined);
-    return () => { live = false; };
   }, [studyId, linked]);
 
   // The judged page, once it is read, when it is about what the reader chose and something was judged, failed or asked for. Anything else is the earlier path's page.

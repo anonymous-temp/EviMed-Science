@@ -1,3 +1,4 @@
+import { StrictMode } from "react";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -293,6 +294,12 @@ describe("给患者找试验 — every state", () => {
   it("a link to the page alone lands on whatever was judged last", async () => {
     server = installVcrServer(network.productRequest, { [JUDGED]: (request: { query: URLSearchParams }) => (request.query.get("direction") === null ? { available: true, latest: { direction: "patient_to_trial", subjectKey: "P-0192" } } : judged()(request)) });
     draw(<MatchingTab studyId={STUDY_ID} study={study()} />);
+    expect(await screen.findByRole("heading", { name: "P-0192 的试验" })).toBeInTheDocument();
+  });
+
+  it("the landing survives a development remount (StrictMode runs the effect twice): the one read still applies", async () => {
+    server = installVcrServer(network.productRequest, { [JUDGED]: (request: { query: URLSearchParams }) => (request.query.get("direction") === null ? { available: true, latest: { direction: "patient_to_trial", subjectKey: "P-0192" } } : judged()(request)) });
+    draw(<StrictMode><MatchingTab studyId={STUDY_ID} study={study()} /></StrictMode>);
     expect(await screen.findByRole("heading", { name: "P-0192 的试验" })).toBeInTheDocument();
   });
 });
