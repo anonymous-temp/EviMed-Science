@@ -5,11 +5,11 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { WEB_SESSION_STARTED_EVENT, sessionGeneration } from "@/lib/sessionLifecycle";
 import { SidebarConversations } from "./SidebarConversations";
 
-const mocks = vi.hoisted(() => ({ listProjects: vi.fn(), list: vi.fn(), open: vi.fn(), me: vi.fn(), actor: vi.fn(), projects: vi.fn(), runs: vi.fn(), studies: vi.fn(), select: vi.fn() }));
+const mocks = vi.hoisted(() => ({ listProjects: vi.fn(), list: vi.fn(), open: vi.fn(), me: vi.fn(), actor: vi.fn(), projects: vi.fn(), runs: vi.fn(), studies: vi.fn(), select: vi.fn(), currentId: "default" }));
 vi.mock("@/lib/geoClient", () => ({ listGeoProjects: mocks.listProjects }));
 vi.mock("@/lib/geoNativeClient", () => ({ listGeoConversations: mocks.list, openGeoConversation: mocks.open }));
 vi.mock("@/lib/apiClient", async original => ({ ...await original<typeof import("@/lib/apiClient")>(), fetchWebMe: mocks.me, getVerifiedWebActor: mocks.actor, listWebProjects: mocks.projects, listWebAgentRuns: mocks.runs }));
-vi.mock("@/lib/projects", () => ({ useProjectStore: { getState: () => ({ select: mocks.select }) } }));
+vi.mock("@/lib/projects", () => ({ useProjectStore: Object.assign((selector: (state: { currentId: string }) => unknown) => selector({ currentId: mocks.currentId }), { getState: () => ({ select: mocks.select, currentId: mocks.currentId }) }) }));
 vi.mock("@/lib/vcrClient", () => ({ getVcrHome: mocks.studies }));
 vi.mock("./ProjectBrowser", () => ({ ProjectBrowser: ({ studyScope }: { studyScope?: string }) => <div>{studyScope ? `研究 ${studyScope}` : "项目管理"}</div> }));
 const project = { id: "g1", projectId: "p1", name: "GEO", access: { owner: true, abilities: ["read", "run", "edit"] } };
@@ -19,7 +19,7 @@ function Probe() { const location = useLocation(); return <><output>{location.pa
 function setup(initial = "/app/geo/g1/visibility", geoId: string | null = "g1", vcr = false) { return render(<MemoryRouter initialEntries={[initial]}><SidebarConversations geoId={geoId} geo vcr={vcr} onCurrentModule={() => {}} /><Probe /></MemoryRouter>); }
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(r => { resolve = r; }); return { promise, resolve }; }
 beforeEach(() => {
-  sessionStorage.clear(); vi.clearAllMocks(); mocks.me.mockResolvedValue({ user: { id: "u" } }); mocks.actor.mockImplementation(() => ({ generation: sessionGeneration(), tenantId: "t", userId: "u", csrf: "x" }));
+  sessionStorage.clear(); vi.clearAllMocks(); mocks.currentId = "default"; mocks.me.mockResolvedValue({ user: { id: "u" } }); mocks.actor.mockImplementation(() => ({ generation: sessionGeneration(), tenantId: "t", userId: "u", csrf: "x" }));
   mocks.listProjects.mockResolvedValue([project]); mocks.list.mockResolvedValue({ items: [{ sessionId: "s1", title: "First", createdAt: "2026-01-01T00:00:00Z" }], nextCursor: null });
   mocks.projects.mockResolvedValue([]); mocks.runs.mockResolvedValue([]); mocks.studies.mockResolvedValue({ studies: [] }); mocks.select.mockImplementation(async (_id, callback) => callback?.());
 });
@@ -137,9 +137,101 @@ it("does not schedule later project reads after leaving the page", async () => {
   const gate = deferred<{ items: []; nextCursor: null }>();
   mocks.listProjects.mockResolvedValue(Array.from({ length: 6 }, (_, i) => ({ ...project, id: `g${i}`, name: `G${i}` })));
   mocks.list.mockReturnValue(gate.promise);
-  setup("/app/files", null); await waitFor(() => expect(mocks.list).toHaveBeenCalledTimes(3));
-  mocks.listProjects.mockReturnValue(new Promise(() => {}));
-  await userEvent.click(screen.getByRole("link", { name: "换页面" }));
+  const view = setup("/app/files", null); await waitFor(() => expect(mocks.list).toHaveBeenCalledTimes(3));
+  view.unmount();
   await act(async () => gate.resolve({ items: [], nextCursor: null }));
   expect(mocks.list).toHaveBeenCalledTimes(3);
+});
+it("keeps the loaded list during a result tab navigation without another fetch", async () => {
+  render(<MemoryRouter initialEntries={["/app/geo/g1/visibility"]}><SidebarConversations geoId="g1" geo vcr={false} onCurrentModule={() => {}} /><Link to="/app/geo/g1/accuracy?view=latest">结果页</Link></MemoryRouter>);
+  await screen.findByText("First");
+  const calls = mocks.list.mock.calls.length;
+  await userEvent.click(screen.getByRole("link", { name: "结果页" }));
+  expect(screen.getByText("First")).toBeInTheDocument();
+  expect(screen.queryByText("正在读取对话")).not.toBeInTheDocument();
+  expect(mocks.list).toHaveBeenCalledTimes(calls);
+});
+it("keeps the loaded list visible until a settled refresh finishes", async () => {
+  setup(); await screen.findByText("First");
+  const pending = deferred<{ items: { sessionId: string; title: string; createdAt: null }[]; nextCursor: null }>();
+  mocks.list.mockReturnValue(pending.promise);
+  act(() => window.dispatchEvent(new Event("evimed:conversation-settled")));
+  await waitFor(() => expect(mocks.list).toHaveBeenCalledTimes(2));
+  expect(screen.getByText("First")).toBeInTheDocument();
+  expect(screen.queryByText("正在读取对话")).not.toBeInTheDocument();
+  await act(async () => pending.resolve({ items: [{ sessionId: "s2", title: "Updated", createdAt: null }], nextCursor: null }));
+  await screen.findByText("Updated");
+  expect(screen.queryByText("First")).not.toBeInTheDocument();
+});
+
+async function refreshConversations() {
+  act(() => window.dispatchEvent(new Event("evimed:conversation-settled")));
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 250)); });
+}
+it("retains a failed source on refresh after verifying the same actor and readable project", async () => {
+  setup(); await screen.findByText("First");
+  mocks.list.mockRejectedValue(new Error("Temporary outage"));
+  await refreshConversations();
+  expect(await screen.findByRole("alert")).toHaveTextContent("暂未完整显示");
+  expect(screen.getByText("First")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "重试读取" })).toBeInTheDocument();
+});
+it("retains failed ordinary project rows while replacing successful source rows", async () => {
+  mocks.projects.mockResolvedValue([{ id: "p2", name: "Paper" }, { id: "p3", name: "Other" }]);
+  mocks.runs.mockImplementation(async ({ projectId }: { projectId: string }) => [run(projectId, projectId === "p2" ? "Saved paper" : "Old other", "2026-01-01")]);
+  setup("/app/files", null); await screen.findByText("Saved paper"); await screen.findByText("Old other");
+  mocks.runs.mockImplementation(async ({ projectId }: { projectId: string }) => {
+    if (projectId === "p2") throw new Error("Temporary outage");
+    return [run(projectId, "Fresh other", "2026-02-01")];
+  });
+  await refreshConversations();
+  await screen.findByText("Fresh other");
+  expect(screen.getByText("Saved paper")).toBeInTheDocument();
+  expect(screen.queryByText("Old other")).not.toBeInTheDocument();
+});
+it.each([401, 403, 404])("does not retain source rows after a %i response", async status => {
+  setup(); await screen.findByText("First");
+  mocks.list.mockRejectedValue(Object.assign(new Error("Access lost"), { status }));
+  await refreshConversations(); await screen.findByRole("alert");
+  expect(screen.queryByText("First")).not.toBeInTheDocument();
+});
+it("does not retain rows after the project disappears from the authorized listing", async () => {
+  setup(); await screen.findByText("First");
+  mocks.listProjects.mockResolvedValue([]);
+  await refreshConversations();
+  await waitFor(() => expect(screen.queryByText("First")).not.toBeInTheDocument());
+});
+it("does not retain rows after explicit read permission is removed", async () => {
+  setup(); await screen.findByText("First");
+  mocks.listProjects.mockResolvedValue([{ ...project, access: { owner: false, abilities: [] } }]);
+  await refreshConversations();
+  await waitFor(() => expect(screen.queryByText("First")).not.toBeInTheDocument());
+});
+it("does not treat a cached actor as authorization when account verification fails", async () => {
+  setup(); await screen.findByText("First");
+  mocks.me.mockRejectedValue(new Error("Account unavailable"));
+  await refreshConversations();
+  await screen.findByText("账号状态未能验证");
+  expect(screen.queryByText("First")).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "新建本项目对话" })).not.toBeInTheDocument();
+});
+it("does not retain a previous actor's rows when identity changes without a generation event", async () => {
+  setup(); await screen.findByText("First");
+  mocks.actor.mockImplementation(() => ({ generation: sessionGeneration(), tenantId: "different", userId: "u", csrf: "x" }));
+  mocks.list.mockRejectedValue(new Error("Temporary outage"));
+  await refreshConversations(); await screen.findByRole("alert");
+  expect(screen.queryByText("First")).not.toBeInTheDocument();
+});
+it("recomputes module ownership when the selected project changes without refetching", async () => {
+  mocks.currentId = "p1";
+  const onCurrentModule = vi.fn();
+  const contents = () => <MemoryRouter initialEntries={["/app/files"]}><SidebarConversations geoId={null} geo vcr={false} onCurrentModule={onCurrentModule} /></MemoryRouter>;
+  const view = render(contents());
+  await screen.findByText("First");
+  await waitFor(() => expect(onCurrentModule).toHaveBeenLastCalledWith("geo"));
+  const reads = mocks.listProjects.mock.calls.length;
+  mocks.currentId = "default";
+  view.rerender(contents());
+  await waitFor(() => expect(onCurrentModule).toHaveBeenLastCalledWith(null));
+  expect(mocks.listProjects).toHaveBeenCalledTimes(reads);
 });

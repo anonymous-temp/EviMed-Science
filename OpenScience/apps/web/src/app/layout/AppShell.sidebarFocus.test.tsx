@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { createMemoryRouter, RouterProvider, useLocation } from "react-router";
+import { createMemoryRouter, Link, RouterProvider, useLocation } from "react-router";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { useUiStore } from "@/lib/store";
 import { AppShell } from "./AppShell";
@@ -45,6 +45,8 @@ vi.mock("@/components/sidebar/Sidebar", () => ({
         <nav aria-label="工作台">
           <a href="/app/chat">新对话</a>
           <a href="/app/files">知识库</a>
+          <Link to="/app/virtual-research?area=virtual-cohort">虚拟队列</Link>
+          <Link to="/app/virtual-research?area=virtual-patient">虚拟患者</Link>
         </nav>
         <input aria-label="搜索对话" />
       </aside>
@@ -170,6 +172,29 @@ describe("the sidebar's focus and the page behind it", () => {
       expect(screen.getByRole("dialog", { name: "项目设置" })).toHaveFocus();
     });
 
+    it("closes query-addressed module navigation while leaving modified clicks in the current drawer", async () => {
+      mocks.fetchWebMe.mockResolvedValue({ user: { id: "alice", name: "Alice" } });
+      const router = createMemoryRouter([{ path: "/app", element: <AppShell />, children: [{ path: "virtual-research", element: <h1>虚拟临床研究</h1> }] }], { initialEntries: ["/app/virtual-research"] });
+      render(<RouterProvider router={router} />);
+      await screen.findByRole("heading", { name: "虚拟临床研究" });
+      await userEvent.click(await screen.findByRole("button", { name: "展开侧边栏" }));
+      const link = screen.getByRole("link", { name: "虚拟队列" });
+      // The browser owns opening another tab; no committed destination occurs in this shell.
+      link.addEventListener("click", event => { if (event.ctrlKey) event.preventDefault(); });
+      fireEvent.click(link, { ctrlKey: true });
+      expect(router.state.location.search).toBe("");
+      expect(main()).toHaveAttribute("inert");
+      await userEvent.click(link);
+      expect(router.state.location.search).toBe("?area=virtual-cohort");
+      expect(main()).not.toHaveAttribute("inert");
+      expect(useUiStore.getState().sidebarCollapsed).toBe(true);
+      expect(screen.getByRole("button", { name: "展开侧边栏" })).toHaveFocus();
+      await userEvent.click(screen.getByRole("button", { name: "展开侧边栏" }));
+      await userEvent.click(screen.getByRole("link", { name: "虚拟患者" }));
+      expect(router.state.location.search).toBe("?area=virtual-patient");
+      expect(main()).not.toHaveAttribute("inert");
+    });
+
     it("makes the page behind an open drawer inert, and the page live again when it closes", async () => {
       // The shell opens a narrow viewport closed; the reader opens it.
       await renderShell();
@@ -186,7 +211,8 @@ describe("the sidebar's focus and the page behind it", () => {
       const router = await renderShell();
       await userEvent.click(screen.getByRole("button", { name: "展开侧边栏" }));
       await act(() => router.navigate("/app/chat?filter=mine"));
-      expect(main()).toHaveAttribute("inert");
+      expect(main()).not.toHaveAttribute("inert");
+      await userEvent.click(screen.getByRole("button", { name: "展开侧边栏" }));
       await act(() => router.navigate("/app/next"));
       expect(main()).not.toHaveAttribute("inert");
       expect(await screen.findByRole("heading", { name: "新页面" })).toHaveFocus();
@@ -270,6 +296,14 @@ describe("the sidebar's focus and the page behind it", () => {
       expect(useUiStore.getState().sidebarCollapsed).toBe(true);
       expect(await screen.findByRole("button", { name: "展开侧边栏" })).toBeInTheDocument();
     });
+  });
+
+  it("keeps the desktop column open on query-addressed navigation", async () => {
+    const router = await renderShell();
+    await act(() => router.navigate("/app/chat?area=virtual-cohort"));
+    expect(useUiStore.getState().sidebarCollapsed).toBe(false);
+    expect(document.querySelector("[data-sidebar]")).not.toHaveAttribute("inert");
+    expect(main()).not.toHaveAttribute("inert");
   });
 
   it("is a column beside the page from lg up: nothing is made inert and Escape does not close it", async () => {

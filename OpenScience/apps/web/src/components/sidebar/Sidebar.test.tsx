@@ -528,3 +528,25 @@ it("groups destinations without changing their order or dropping tools and exten
   expect(within(nav).getByRole("link", { name: "科研工具" })).toBeVisible();
   expect(within(nav).getByRole("link", { name: "插件与技能" })).toBeVisible();
 });
+
+it("nests VCR directories in the existing sidebar only within the offered module", async () => {
+  mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default" }, features: { vcr: true } });
+  renderSidebar("/app/virtual-research?area=virtual-cohort");
+  const nav = await screen.findByRole("navigation", { name: "虚拟临床研究工作区" });
+  expect(within(nav).getByRole("link", { name: "虚拟队列" })).toHaveAttribute("aria-current", "page");
+  expect(nav.parentElement).toBe(screen.getByRole("navigation", { name: "工作台" }));
+  expect(screen.getByRole("link", { name: "虚拟临床研究" })).toHaveAttribute("aria-current", "page");
+});
+it("does not display VCR directories when the feature is off", async () => {
+  mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default" }, features: { vcr: false } });
+  renderSidebar("/app/virtual-research/std_1/population");
+  await screen.findByRole("link", { name: "设置" });
+  expect(screen.queryByRole("navigation", { name: "虚拟临床研究工作区" })).not.toBeInTheDocument();
+});
+it("never infers a study for directories shown in a VCR project's general conversation", async () => {
+  mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default" }, features: { vcr: true } });
+  projectModule.current = "vcr";
+  renderSidebar("/app/chat/ses_1");
+  const nav = await screen.findByRole("navigation", { name: "虚拟临床研究工作区" });
+  expect(within(nav).getByRole("link", { name: "虚拟患者" })).toHaveAttribute("href", "/app/virtual-research?area=virtual-patient");
+});

@@ -1,7 +1,7 @@
 import { VcrLegacyDraftRecovery } from "@/components/vcr/VcrLegacyDraftRecovery";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
-import { PenLine, Plus, RefreshCw, UsersRound } from "lucide-react";
+import { ArrowRight, Plus, RefreshCw, UsersRound } from "lucide-react";
 import { VCR_TAB_LABELS_ZH, workStateLabel } from "@evimed/domain";
 import { webErrorMessage } from "@/lib/apiClient";
 import {
@@ -14,21 +14,22 @@ import {
 } from "@/lib/vcrClient";
 import { useGeneralResearchDraft } from "@/components/vcr/useGeneralResearchDraft";
 import { PROFESSIONAL_RESEARCH_TASKS } from "@/components/vcr/professionalResearchTasks";
+import { parseVcrWorkspaceArea, type VcrWorkspaceArea } from "@/lib/vcrWorkspaceNavigation";
+import { useVcrEntryDraft } from "@/lib/vcrEntryDraft";
 import { vcrCalculationPath } from "@/lib/vcrMethodLocation";
 import { vcrTabPath } from "@/components/vcr/vcrTabs";
 import { VCR_LIBRARIES, isVcrLibraryTab, type VcrLibraryTab } from "@/components/vcr/vcrLibraries";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
-import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/Button";
 import { Tag } from "@/components/ui/Tag";
 import { IconButton } from "@/components/ui/IconButton";
 import { List, ListRow } from "@/components/ui/ListRow";
-import { MasterDetail, type MasterDetailState } from "@/components/ui/MasterDetail";
+import { Textarea } from "@/components/ui/Input";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { Section } from "@/components/ui/Section";
-import { Toolbar, type ToolbarFilter, type ToolbarProps } from "@/components/ui/Toolbar";
+import { type ToolbarFilter, type ToolbarProps } from "@/components/ui/Toolbar";
 import type { PageActionPlan } from "@/components/layout/HeaderActions";
 import { VcrListSkeleton, VcrOffPage } from "@/components/vcr/VcrStates";
 import { ToolbarSlotContext } from "@/components/vcr/studyFrameContext";
@@ -44,12 +45,6 @@ type HomeTab = "studies" | VcrLibraryTab;
 
 /** Router state on the entry the page pushed to open a preview: closing it goes back one entry, to the list it was pushed from. */
 const PREVIEW_PUSHED = "vcrPreviewPushed";
-
-/**
- * The room the preview is given beside the 340 px list. The task selector and the study preview both want about this
- * much, so the studies split from 340 + 560 = 900 px of the page's own width; below that the list and detail swap.
- */
-const PREVIEW_MIN = 560;
 
 type Listing =
   | { kind: "loading" }
@@ -70,16 +65,16 @@ const STATE_KEYS = ["need", "running", "paused", "done"] as const;
 const STATE_RANK: Record<StudyState, number> = { need: 0, running: 1, paused: 2, other: 3, done: 4 };
 
 /**
- * Component: VcrHomePage; owner: VCR; rules: one list and one selected task or research.
- * Anatomy: Research list (the studies a conversation made, and the module's own) beside the four ways to begin or a selected study preview.
- * Variants: Research list; a library at its old address (`?tab=`), with no view switch.
- * States: Loading, empty, retained data and retryable error.
- * Hit area: Shared toolbar, buttons and linked rows.
- * Keyboard: Native controls and focus on narrow navigation.
- * Long content: Task detail and study names wrap.
+ * Component: VcrHomePage; owner: VCR; rules: the global sidebar owns the research directories.
+ * Anatomy: One full-width records page, an addressed preview, or one question-entry page.
+ * Variants: Records, professional area, new question and compatible reference libraries.
+ * States: Loading, empty, retained data and retryable error; unsent per-area drafts.
+ * Hit area: Shared toolbar, buttons, textarea and linked rows.
+ * Keyboard: Native controls, focus on mode changes and preview Escape.
+ * Long content: Research names and questions wrap without truncating submitted text.
  * Theme: Shared page and control tokens.
- * Responsive: The detail replaces the list below the split width.
- * Verification: VcrHomePage.test.tsx and the shared MasterDetail tests.
+ * Responsive: One main surface at every width; the shell owns mobile navigation.
+ * Verification: VcrHomePage.test.tsx and studyComposition.test.tsx.
  */
 export function VcrHomePage() {
   const feature = useVcrFeature();
@@ -90,6 +85,10 @@ export function VcrHomePage() {
   const tab: HomeTab = isVcrLibraryTab(params.get("tab")) ? params.get("tab") as VcrLibraryTab : "studies";
   const asked = params.get("study");
   const wantsNew = params.get("new") === "1";
+  const area = parseVcrWorkspaceArea(params.toString());
+  const entryMode = wantsNew || area !== "records";
+  const needsListing = tab === "studies" && !entryMode;
+  const [draft, setDraft] = useVcrEntryDraft(wantsNew ? "new" : area);
   const [listing, setListing] = useState<Listing>({ kind: "loading" });
   const [reloads, setReloads] = useState(0);
   const [refreshError, setRefreshError] = useState<string | null>(null);
@@ -98,14 +97,13 @@ export function VcrHomePage() {
   const [query, setQuery] = useState("");
   const [state, setState] = useState<StudyFilter>("all");
   const [sort, setSort] = useState<StudySort>("recent");
-  const listFocus = useRef<HTMLDivElement>(null);
-  const detailFocus = useRef<HTMLDivElement>(null);
-  const wasDetail = useRef(false);
+  const surfaceFocus = useRef<HTMLDivElement>(null);
+  const previousMode = useRef<string | null>(null);
 
   useEffect(() => {
     // `error`: `/api/me` could not be read. The list is asked anyway — the
     // route answers for itself, `vcr_not_enabled` included.
-    if (feature === "loading" || feature === "off") return undefined;
+    if (feature === "loading" || feature === "off" || !needsListing) return undefined;
     let live = true;
     setListing(current => current.kind === "ready" ? current : { kind: "loading" });
     void getVcrHome().then(
@@ -119,7 +117,7 @@ export function VcrHomePage() {
       },
     );
     return () => { live = false; };
-  }, [feature, reloads]);
+  }, [feature, reloads, needsListing]);
 
   const ready = listing.kind === "ready" ? listing.home : null;
   const studies = useMemo(() => ready?.studies.filter(study => study.purpose !== "calculation") ?? [], [ready]);
@@ -147,14 +145,12 @@ export function VcrHomePage() {
   const conversationShown = useMemo(() => (state !== "all" ? [] : conversation.filter((study) => !needle
     || study.name.toLowerCase().includes(needle) || (study.question ?? "").toLowerCase().includes(needle))), [conversation, needle, state]);
 
-  const showingDetail = wantsNew || Boolean(studies.find(study => study.id === asked));
+  const showingDetail = entryMode || Boolean(studies.find(study => study.id === asked));
+  const mode = tab !== "studies" ? tab : entryMode ? (wantsNew ? "new" : area) : showingDetail ? `preview:${asked}` : "records";
   useEffect(() => {
-    const focus = detailFocus.current ?? listFocus.current;
-    if (!focus?.closest('[data-master-detail="single"]')) { wasDetail.current = showingDetail; return; }
-    if (showingDetail) detailFocus.current?.focus();
-    else if (wasDetail.current) listFocus.current?.focus();
-    wasDetail.current = showingDetail;
-  }, [showingDetail, asked]);
+    if (previousMode.current !== null && previousMode.current !== mode) surfaceFocus.current?.focus();
+    previousMode.current = mode;
+  }, [mode]);
 
   if (feature === "off" || listing.kind === "off") return <VcrOffPage />;
 
@@ -170,7 +166,7 @@ export function VcrHomePage() {
   // How the page moves to a preview: onto the list as a new entry when nothing is open (Back returns to the list), in place of the open one
   // when one is (switching studies is one preview, not a trail of them), keeping whether the entry under it is the list's.
   const opening = { replace: showingDetail, state: { [PREVIEW_PUSHED]: showingDetail ? pushedHere : true } };
-  const newStudy: PageActionPlan = { primary: { id: "new-study", label: "新研究", icon: Plus, onSelect: () => setParams(current => { const next = new URLSearchParams(current); next.delete("study"); next.set("new", "1"); return next; }, opening) } };
+  const newStudy: PageActionPlan = { primary: { id: "new-study", label: "新研究", icon: Plus, onSelect: () => setParams(current => { const next = new URLSearchParams(current); next.delete("study"); next.delete("area"); next.set("new", "1"); return next; }, opening) } };
 
   // A state with no study in it is not a chip: 0 is not a filter. The one that is applied stays, though a refresh took its count to 0:
   // a selected filter is never erased from under the reader, who would be looking at an empty list with nothing to say why.
@@ -224,12 +220,11 @@ export function VcrHomePage() {
       const next = new URLSearchParams(current);
       next.delete("study");
       next.delete("new");
+      next.delete("area");
       return next;
     }, { replace: true });
   };
   const clearFilters = () => { setQuery(""); setState("all"); };
-
-  const entry = <TaskEntry ask={ask} />;
 
   const nothingYet = studies.length === 0 && conversation.length === 0;
   const rows = loading ? <VcrListSkeleton />
@@ -279,77 +274,80 @@ export function VcrHomePage() {
     </>
   );
 
-  const list = ({ split }: MasterDetailState) => (split ? (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <PageHeader title="虚拟临床研究" actionPlan={chosen ? newStudy : undefined} className="shrink-0 px-4 pb-3 pt-5" />
-      {/* The one row of controls, over the list it controls. It stands in a fixed column, as the band does on a page, so what does not fit folds. */}
-      <div className="shrink-0 px-4 pb-2"><Toolbar {...toolbar} inBand /></div>
-      <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-6">{retainedWarning}{rows}{conversationRows}{below}</div>
-    </div>
-  ) : (
-    // On a narrow page the list fills the available width; detail replaces it when selected.
-    <div ref={listFocus} tabIndex={-1} className="min-h-0 flex-1 overflow-y-auto outline-none">
-      <div className="mx-auto w-full max-w-wide px-4 pb-6 md:px-6">
-        <PageHeader title="虚拟临床研究" actionPlan={newStudy} className="pb-3 pt-5" />
-        <div className="sticky top-0 z-sticky -mx-4 bg-bg px-4 py-2 md:-mx-6 md:px-6"><Toolbar {...toolbar} inBand /></div>
-        <div className="mt-2">{retainedWarning}{rows}{conversationRows}{below}</div>
+  if (entryMode) {
+    return (
+      <div ref={surfaceFocus} tabIndex={-1} className="min-h-0 flex-1 overflow-y-auto outline-none">
+        <TaskEntry area={wantsNew ? "records" : area} value={draft} onChange={setDraft} ask={ask} />
       </div>
-    </div>
-  ));
-
-  const detail = ({ split }: MasterDetailState) => (
-    <div ref={detailFocus} tabIndex={-1} className="min-h-0 flex-1 overflow-y-auto outline-none">
-      <div className="mx-auto w-full max-w-2xl px-4 py-6 md:px-6">
-        {!split && <><h1 className="sr-only">虚拟临床研究</h1><Button variant="text" onClick={closePreview} className="mb-4">研究列表</Button></>}
-        {chosen && !wantsNew ? <VcrStudyPreview study={chosen} heading onClose={split ? closePreview : undefined} /> : entry}
+    );
+  }
+  if (chosen) {
+    return (
+      <div ref={surfaceFocus} tabIndex={-1} className="min-h-0 flex-1 overflow-y-auto outline-none">
+        <PageShell title={chosen.name} width="read" actionPlan={newStudy}
+          back={<Button variant="text" onClick={closePreview}>研究列表</Button>}>
+          <section aria-label="研究预览"><VcrStudyPreview study={chosen} heading={false} onClose={closePreview} /></section>
+        </PageShell>
       </div>
-    </div>
-  );
-
+    );
+  }
   return (
-    <MasterDetail
-      list={list}
-      detail={detail}
-      selected={chosen !== null || wantsNew}
-      listLabel="研究列表"
-      detailLabel="研究预览"
-      detailMin={PREVIEW_MIN}
-      narrow="swap"
-    />
+    <div ref={surfaceFocus} tabIndex={-1} className="min-h-0 flex-1 overflow-y-auto outline-none">
+      <PageShell title="研究记录" width="wide" actionPlan={newStudy} toolbar={toolbar}>
+        <section aria-label="研究列表">{retainedWarning}{rows}{conversationRows}{below}</section>
+      </PageShell>
+    </div>
   );
 }
 
+const matchingEntry = {
+  label: "患者匹配", summary: "按试验条件核对患者资料，或为患者检索可能适合的试验。",
+  badge: "需患者资料", requirement: "需要患者资料；批量匹配需要患者数据集。试验方案可上传或检索。",
+  examples: ["按一项临床试验的入排标准逐条核对患者资料", "为一位患者检索可能适合的临床试验，并列出需要补充的信息"],
+};
+
 /**
- * Component: TaskEntry; owner: VCR; rules: four examples fill the native composer's draft and nothing else.
- * Anatomy: Heading, one line saying that saying what to study is enough, and four examples each with what it needs.
- * Variants: One per kind of work (匹配, 人群与患者, 对照, 试验).
- * States: None; nothing here has a state, nothing is sent and no study exists until its first result is saved.
- * Hit area: Shared secondary buttons.
- * Keyboard: Native buttons.
- * Long content: Sentences wrap.
- * Theme: Shared text and control tokens.
- * Responsive: Examples stack in the pane.
+ * Component: TaskEntry; owner: VCR; rules: a directory scopes examples, never a mandatory workflow.
+ * Anatomy: One question field, optional data guidance and two editable examples.
+ * Variants: A professional directory, independent patient matching, or an open research question.
+ * States: Empty/edited draft; blank submission disabled; examples fill without sending.
+ * Hit area: Shared textarea, disclosure and buttons.
+ * Keyboard: Native form submission and multiline editing; examples return focus to the field.
+ * Long content: Drafts retain their original whitespace and have no arbitrary length cap.
+ * Theme: Shared page, text, border and input tokens.
+ * Responsive: One reading-width surface with wrapping controls.
  * Verification: VcrHomePage.test.tsx.
  */
-function TaskEntry({ ask }: { ask: ReturnType<typeof useGeneralResearchDraft> }) {
+function TaskEntry({ area, value, onChange, ask }: {
+  area: VcrWorkspaceArea;
+  value: string;
+  onChange: (value: string) => void;
+  ask: ReturnType<typeof useGeneralResearchDraft>;
+}) {
+  const input = useRef<HTMLTextAreaElement>(null);
+  const task = area === "patient-matching" ? matchingEntry : PROFESSIONAL_RESEARCH_TASKS.find(item => item.id === area);
   return (
-    <section aria-label="新研究" className="flex flex-col items-start gap-5">
-      <h2 className="text-section font-semibold text-text">新研究</h2>
-      <ul aria-label="研究示例" className="flex w-full flex-col gap-4">
-        {PROFESSIONAL_RESEARCH_TASKS.map((task) => (
-          <li key={task.id} data-vcr-task={task.id} className="flex flex-col items-start gap-1.5">
-            {/* Nothing starts here: the sentence waits in the composer and the study exists once its first result is saved (the VCR reset ruling). */}
-            <Button variant="secondary" actionKind="draft" onClick={() => ask(task.draft)}><PenLine size={16} aria-hidden="true" />{task.label}</Button>
-            <Tag>{task.badge}</Tag>
-            <p data-vcr-data-requirement={task.id} className="max-w-measure text-ui text-text-2">{task.requirement}</p>
-          </li>
-        ))}
-      </ul>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border pt-4 text-ui">
-        <Button variant="text" actionKind="draft" onClick={() => ask("匹配患者和临床试验。资料是：")}>患者匹配</Button>
-        <Link className="rounded text-link hover:underline" to="/app/extensions">管理专业插件</Link>
+    <PageShell title={task?.label ?? "新研究"} width="read">
+      <div className="flex flex-col gap-6">
+        <p className="max-w-measure text-body text-text-2">{task?.summary ?? "从一个研究问题开始，资料可以在对话中补充。"}</p>
+        <form className="flex flex-col gap-4" onSubmit={event => { event.preventDefault(); if (value.trim()) ask(value); }}>
+          <Textarea ref={input} label="研究问题" rows={5} value={value} onChange={event => onChange(event.target.value)}
+            placeholder="描述你想研究的问题、已有资料和希望得到的结果" hint="进入对话后可继续编辑问题、上传资料，再发送。" />
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            {task && <Tag>{task.badge}</Tag>}
+            <Button type="submit" actionKind="draft" disabled={!value.trim()}><ArrowRight size={16} aria-hidden="true" />进入研究对话</Button>
+          </div>
+        </form>
+        {task && <Disclosure summary="查看数据要求"><p data-vcr-data-requirement={area} className="text-ui text-text-2">{task.requirement}</p></Disclosure>}
+        {task && (
+          <Section title="可以这样问" compact>
+            <ul aria-label="问题示例" className="flex flex-col items-start gap-2">
+              {task.examples.map(example => <li key={example}><Button variant="text" actionKind="draft" className="h-auto whitespace-normal text-left" onClick={() => { onChange(example); input.current?.focus(); }}>{example}</Button></li>)}
+            </ul>
+          </Section>
+        )}
       </div>
-    </section>
+    </PageShell>
   );
 }
 

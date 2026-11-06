@@ -24,6 +24,7 @@ import { SidebarConversations } from "@/components/sidebar/SidebarConversations"
 import { useFrontierFeature } from "@/lib/frontierFeature";
 import { useGeoFeature } from "@/lib/geoClient";
 import { GeoWorkspaceNav, geoWorkspaceId } from "@/components/geo/GeoWorkspaceNav";
+import { VcrWorkspaceNav } from "@/components/vcr/VcrWorkspaceNav";
 import { useVcrFeature } from "@/lib/vcrClient";
 import { useVcrFinishedToasts } from "@/components/vcr/useVcrFinishedToasts";
 import { EviMedMark } from "@/components/brand/EviMedMark";
@@ -236,6 +237,7 @@ export function Sidebar() {
               active={isCurrent(item.to, location.pathname, projectModule)}
               freshState={item.to === "/app/home" ? () => ({ globalEntry: crypto.randomUUID() }) : undefined}
             />
+            {item.to === VCR_NAV.to && vcr && (location.pathname === VCR_NAV.to || location.pathname.startsWith(`${VCR_NAV.to}/`) || projectModule === "vcr") && <VcrWorkspaceNav />}
             {item.to === GEO_NAV.to && geoProjectId && <GeoWorkspaceNav geoId={geoProjectId} />}
             </Fragment>
           ))}

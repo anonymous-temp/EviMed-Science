@@ -19,6 +19,50 @@ The [final acceptance and remaining list](2026-11-06-vcr-plugin-final-acceptance
 supersedes earlier pending-CI wording; historical failures below retain their
 original revision and scope. No production deployment or main merge occurred.
 
+## November 6 navigation alignment (separate UI qualification)
+
+The current UI follows the latest shared sidebar/GEO navigation pattern. Six
+nested VCR directories replace the permanent records/task split: records,
+virtual cohort, virtual patient, synthetic control, virtual trial and
+independent patient matching. Module entries use query areas; study entries
+stay within the explicitly addressed study, including native conversation,
+result, individual/cohort level and sanitized pending-intent state. No study
+is inferred from the global project. Compatible library and calculation
+addresses remain available.
+
+Records occupy one full-width T1 surface. A selected direction shows one
+editable question, a short purpose, an input tag, collapsed data requirements
+and two examples which fill without sending. The continuation action opens
+an unsent native draft, without creating a study, binding a specialist or
+starting a job. Entry drafts survive SPA route changes within the document
+and retire at account boundaries; they never enter browser history or disk
+storage. A single selected preview replaces the list and retains the list's
+search on return.
+
+Review fixed three additional regression classes: failed history reads keep
+only rows whose current account and source permissions remain verified;
+project switches update module identity independently of list refresh; and
+mobile query-based navigation closes the drawer without changing the desktop
+column or modified-click behavior. Code and TypeScript reviews found no
+remaining blocking issue in this UI change.
+
+Local qualification: 1,199 related VCR/sidebar/layout-policy tests passed,
+plus all 74 AppShell layout tests (including the 17 sidebar-focus cases). Full web ESLint, TypeScript and the API-configured production
+build passed. This UI follow-up does not claim a rerun of the previous full
+Docker/numerical CI or a deployment. The actual local browser uses an isolated
+PostgreSQL database, disposable account and two clearly labeled test studies,
+with memory, learning and model providers disabled. Its mock runtime does
+not connect a native conversation frame: the global conversation destination
+was observed; exact unsent text, no study/job creation and ownership behavior
+are covered by frontend tests. No model-quality claim is made here. Browser checks at 1200px desktop and
+390px mobile confirmed the current surface, editable examples, collapsed data
+guidance, automatic mobile drawer dismissal and same-study individual-result
+navigation. The temporary database and all accounts were removed afterward.
+
+Rendered evidence: [records](2026-11-05-vcr-plugin-acceptance-assets/nested-records-desktop.png),
+[virtual cohort](2026-11-05-vcr-plugin-acceptance-assets/nested-cohort-desktop.png),
+[mobile matching](2026-11-05-vcr-plugin-acceptance-assets/nested-matching-390.png).
+
 ## Implemented boundaries
 
 - Four separately packaged DSH bundles: virtual cohort, virtual patient,
@@ -48,7 +92,7 @@ original revision and scope. No production deployment or main merge occurred.
 | Hosted lifecycle | Actual public registration, project installation, leased image/receipt inspection and actual DSH tool-definition proof passed for one bundle, all four plus suite, disable and re-enable. A damaged candidate was refused and the still-authorized last-good generation restored and proved. No fabricated runtime proof was used. |
 | Runtime image | Built locally in the isolated Docker context. All five bundled receipts were inspected as UID 10001 with a read-only root and no network. Native tool registration is tied to the host's actual registry instance rather than another installed copy of the port module. |
 | Parameter/result provenance | Original human-message scope, ambiguous repeated numbers, units, percentages, changed sources, historical read-back and in-flight deduplication have regression coverage. |
-| Homepage | Built application inspected in the in-app browser at desktop and 390px widths; no horizontal overflow at 390px. Desktop uses a research list beside the task entry. These captures use an isolated account and mock conversation runtime, and do not prove live conversation execution. |
+| Homepage | Built application inspected in the in-app browser at desktop and 390px widths; no horizontal overflow at 390px. The earlier capture used a research list beside the task entry; the November 6 alignment above supersedes that layout. These captures use an isolated account and mock conversation runtime, and do not prove live conversation execution. |
 | Independent review | JavaScript/runtime review and scientific/Python review were performed separately. Reproducibility path, fresh mirror bootstrap, rare factor indicator and precision findings were fixed and rechecked. |
 
 The reproducible hosted harness and its predeclared conversation cases are in
