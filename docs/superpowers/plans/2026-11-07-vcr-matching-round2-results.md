@@ -24,7 +24,7 @@ What the measurements decided:
 | Decision | Evidence |
 |---|---|
 | Ranking makes no reasoning-model call | On Board A a Flash trial-level score over the fused head added nothing on dev and −0.003 (top 10) / −0.006 (top 20) on held-out topics; on Board E dev it moved −0.04 (2021), +0.05 (2022), −0.10 (2023). Flash on every pair (z-fusion) gains +0.006 held-out on Board A at 4–5 times the cost |
-| Jev is the second order, fused with Qwen | Qwen alone (the V3 policy) 0.762 held-out; Jev alone 0.798–0.802; their fusion 0.838–0.839 |
+| Jev is the second order, fused with Qwen | Qwen alone (the V3 policy) 0.762 held-out; Jev alone 0.798–0.802; their fusion 0.838–0.839, +0.045 [+0.016, +0.072] (Jev 1.13) and +0.046 [+0.019, +0.072] (Jev 1.14) over TrialGPT 2.0's method on the same Flash; over all 183 patients +0.027 [+0.006, +0.049] and +0.025 [+0.004, +0.046]. (The message of commit b3437073f put the all-patient interval beside the held-out score; these are the correct pairings.) |
 | Fusion, not a cascade | Jev top 20 → Flash (the 11-05 cascade) 0.809 held-out; Qwen→Jev→Flash cascades 0.80–0.81 on dev |
 | Lexical recall gets the ranked terms back, in English | V3 sent the condition alone (eligible recall@500 0.476/0.469 in 2021/2022 against 0.559/0.634 with the terms); the old skill text also let the model write Chinese phrases for English records |
 | Dense query without Qwen's query instruction | Dev recall@300 0.492/0.519/0.252 (2021/22/23) without it, 0.417/0.484/0.261 with it |
