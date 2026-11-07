@@ -91,9 +91,8 @@ function ConstraintLines({ candidate }: { candidate: VcrCampaignCandidate }) {
           <li key={constraint.index} data-vcr-constraint-status={verdict.status} className="text-ui text-text">
             {constraint.label}{op(constraint.op)} {boundText(constraint.bound, verdict.judgedAt)}：
             <span className={verdict.status === "pass" ? "text-text" : "text-text-2"}>{verdict.statusText ?? verdict.status}</span>
-            {nominal
-              ? <span className="text-caption text-text-3">（按检验的名义水准，模拟没有否定它）</span>
-              : verdict.judgedAt && <span className="text-caption text-text-3">（{stage}时最不利情况下的值 {valueText(verdict.judgedAt)}{verdict.judgedAt.unit && verdict.judgedAt.unit !== "%" ? ` ${verdict.judgedAt.unit}` : ""}）</span>}
+            {(nominal || verdict.judgedAt) && <span className="text-caption text-text-3">{nominal ? "（按检验的名义水准，模拟没有否定它）"
+              : `（${stage}时最不利情况下的值 ${valueText(verdict.judgedAt!)}${verdict.judgedAt!.unit && verdict.judgedAt!.unit !== "%" ? ` ${verdict.judgedAt!.unit}` : ""}）`}</span>}
           </li>
         );
       })}
