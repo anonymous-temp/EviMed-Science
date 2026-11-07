@@ -54,7 +54,7 @@ const shortName = (name: string) => (name.length > 14 ? `${name.slice(0, 13)}…
  * about anybody real (R19, plan §5.3; audit B §4.5).
  *
  * ```
- * [虚拟患者 | 预测验证] [分组 全部·试验·对照] [年龄 ▾] [ECOG ▾]      [模型 ›] [下载 CSV] [重新生成] [改设定]   ← the band's one row
+ * [虚拟患者 | 轨迹预测] [分组 全部·试验·对照] [年龄 ▾] [ECOG ▾]      [模型 ›] [下载 CSV] [重新生成] [改设定]   ← the band's one row
  * 2,000 名虚拟患者 · 试验 1,000 · 对照 1,000 · 事件 1,210 · 对照组中位时间 3.9 个月（设定 4.1 ✓）
  * ┌ 两种情景下的推演 ───────────┐ ┌ 每个变量的分布，对照设定 ──────────┐
  * ┌ 患者 2,000 ─ 编号 分组 年龄 ECOG 时间 结局事件 …（排序·分页；点行 → 记录）┐
@@ -65,7 +65,7 @@ const shortName = (name: string) => (name.length > 14 ? `${name.slice(0, 13)}…
  *  - **The page lists people.** The table is the generated table itself, read by the server (`patients/rows`), and one patient's
  *    record is the drawer `?patient=<id>` opens. The tab used to show one example patient and no count.
  *  - **Everything above the content is the band's.** The filters, the model, the download and the rest are handed to the frame's
- *    one toolbar row (`useVcrToolbar`), so they neither scroll away nor sink under a chart; the second view (预测验证) swaps the
+ *    one toolbar row (`useVcrToolbar`), so they neither scroll away nor sink under a chart; the second view (轨迹预测) swaps the
  *    body and keeps the same row.
  *  - **The second view exists only when there is something in it.** Follow-up history and an outside model's predictions are a
  *    feature of their own; with none of it the tab has no switch and no panel.
@@ -78,8 +78,14 @@ const shortName = (name: string) => (name.length > 14 ? `${name.slice(0, 13)}…
 export function PatientsTab({ studyId, study, onStudyChanged }: { studyId: string; study: VcrStudy; onStudyChanged?: () => void }) {
   const { state, reload } = useVcrLoad(`${studyId}:patients`, () => getVcrPatients(studyId));
   const longitudinal = useLongitudinal(studyId);
-  const [view, setView] = useState<"patients" | "forecast">("patients");
+  // The 患者轨迹预测 entrance lands here with `level=individual`: a study that holds a batch prediction opens on it, and so does one that has
+  // no generated patients to show. A choice made on the page stands over both.
+  const [entrance] = useSearchParams();
+  const [chosen, setView] = useState<"patients" | "forecast" | null>(null);
   const forecastData = longitudinal.state.kind === "ready" && longitudinal.state.data.available !== false ? longitudinal.state.data : null;
+  const holdsPrediction = Boolean(forecastData?.records.some((record) => record.kind === "prediction"));
+  const noPatients = study.steps.patients?.status === "none";
+  const view = chosen ?? (holdsPrediction && (entrance.get("level") === "individual" || noPatients) ? "forecast" : "patients");
   const shown = view;
   const switcher: ToolbarChips = {
       kind: "chips",
@@ -87,7 +93,7 @@ export function PatientsTab({ studyId, study, onStudyChanged }: { studyId: strin
       neutral: "patients",
       value: shown,
       onChange: (next) => setView(next === "forecast" ? "forecast" : "patients"),
-      options: [{ value: "patients", label: "虚拟患者" }, { value: "forecast", label: "预测验证" }],
+      options: [{ value: "patients", label: "虚拟患者" }, { value: "forecast", label: "轨迹预测" }],
     };
 
   if (shown === "forecast" && longitudinal.state.kind === "error") return <ForecastState switcher={switcher}><VcrTabError message={longitudinal.state.message} onRetry={longitudinal.reload} /></ForecastState>;

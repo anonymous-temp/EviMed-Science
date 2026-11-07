@@ -467,7 +467,7 @@ describe("虚拟患者 · a study with no people yet", () => {
       return node as HTMLElement;
     });
     expect(within(recipe).getByRole("button", { name: "让 AI 生成虚拟患者" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "预测验证" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "轨迹预测" })).toBeInTheDocument();
     expect(screen.queryByText("预测与验证")).toBeNull();
     expect(screen.queryByText("模型评估")).toBeNull();
     expect(container.querySelector("[data-vcr-example]")).toBeNull();
@@ -483,13 +483,13 @@ describe("虚拟患者 · a study with no people yet", () => {
       return node as HTMLElement;
     });
     expect(running).toHaveTextContent("生成虚拟患者");
-    expect(screen.getByRole("button", { name: "预测验证" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "轨迹预测" })).toBeInTheDocument();
     expect(screen.queryByText("预测与验证")).toBeNull();
     expect(screen.queryByRole("button", { name: /导入/ })).toBeNull();
   });
 });
 
-describe("虚拟患者 · the second view, 预测验证", () => {
+describe("虚拟患者 · the second view, 轨迹预测", () => {
   const history = { id: "history-1", kind: "history", createdAt: "2026-01-01", hash: "h", summary: { origin: "2026-01-01", subjects: 40, events: 80 } };
   const longitudinal = (records: unknown[]) => ({ available: true, records, providers: [], templates: { events: { columns: ["subject_id"], example: ["synthetic"] }, prediction: { schema: 1 } } });
 
@@ -501,17 +501,28 @@ describe("虚拟患者 · the second view, 预测验证", () => {
       [`GET /vcr/studies/${STUDY_ID}/longitudinal/pred-1/subjects?offset=0&limit=50`]: { id: "pred-1", total: 10, matching: 1, offset: 0, limit: 50, more: false, lines: [line], trajectories: {}, actionContext: null } });
     const { container } = draw();
     await screen.findByRole("table", { name: "患者" });
-    await userEvent.click(within(band(container)).getByRole("button", { name: "预测验证" }));
+    await userEvent.click(within(band(container)).getByRole("button", { name: "轨迹预测" }));
     expect(await screen.findByLabelText("患者轨迹预测")).toBeInTheDocument();
     expect(await screen.findByText((_, el) => el?.getAttribute("data-note") === "" && /共提交 10 人：8 人已完成，2 人未纳入/.test(el.textContent ?? ""))).toBeInTheDocument();
     expect(await screen.findByRole("table", { name: "逐人预测去向" })).toBeInTheDocument();
+  });
+
+  it("opens on the batch prediction when the entrance's address says individual and a prediction exists; a plain address keeps the patients", async () => {
+    const prediction = { id: "pred-1", kind: "prediction", createdAt: "2026-01-02", hash: "h", summary: { origin: "2026-01-01", historyId: "history-1", endpoint: { code: "x", unit: "%", type: "continuous" }, horizonsDays: [30], accepted: 8, invalidRows: 0, model: { name: "m", version: "1" }, accounting: { submitted: 10, admitted: 10, completed: 8, rejected: 2, failed: 0, unprocessed: 0, partial: 0 }, versionNumber: 1, premises: [] } };
+    installVcrServer(network.productRequest, { [tab("longitudinal")]: longitudinal([history, prediction]), [`GET /vcr/studies/${STUDY_ID}/longitudinal/pred-1/subjects?offset=0&limit=50`]: { id: "pred-1", total: 10, matching: 0, offset: 0, limit: 50, more: false, lines: [], trajectories: {}, actionContext: null } });
+    const plain = draw();
+    await screen.findByRole("table", { name: "患者" });
+    plain.unmount();
+    draw(ev201(), "/?level=individual");
+    expect(await screen.findByLabelText("患者轨迹预测")).toBeInTheDocument();
+    expect(screen.queryByRole("table", { name: "患者" })).toBeNull();
   });
 
   it("keeps independently available longitudinal records reachable when the patients endpoint fails", async () => {
     installVcrServer(network.productRequest, { [tab("patients")]: () => { throw new Error("patients unavailable"); }, [tab("longitudinal")]: longitudinal([history]) });
     const { container } = draw();
     await screen.findByRole("button", { name: "重试" });
-    await userEvent.click(within(band(container)).getByRole("button", { name: "预测验证" }));
+    await userEvent.click(within(band(container)).getByRole("button", { name: "轨迹预测" }));
     expect(await screen.findByLabelText("输入历史")).toBeInTheDocument();
     await userEvent.click(within(band(container)).getByRole("button", { name: "虚拟患者" }));
     expect(await screen.findByRole("button", { name: "重试" })).toBeInTheDocument();
@@ -526,9 +537,9 @@ describe("虚拟患者 · the second view, 预测验证", () => {
     const { container } = draw();
     await screen.findByRole("table", { name: "患者" });
     const chips = within(band(container));
-    expect(await chips.findByRole("button", { name: "预测验证" })).toHaveAttribute("aria-pressed", "false");
+    expect(await chips.findByRole("button", { name: "轨迹预测" })).toHaveAttribute("aria-pressed", "false");
     expect(chips.getByRole("button", { name: "虚拟患者" })).toHaveAttribute("aria-pressed", "true");
-    await userEvent.click(chips.getByRole("button", { name: "预测验证" }));
+    await userEvent.click(chips.getByRole("button", { name: "轨迹预测" }));
     expect(await screen.findByLabelText("输入历史")).toBeInTheDocument();
     expect(screen.queryByRole("table", { name: "患者" })).toBeNull();
     expect(container.querySelectorAll("[data-page-chrome]")).toHaveLength(1);
