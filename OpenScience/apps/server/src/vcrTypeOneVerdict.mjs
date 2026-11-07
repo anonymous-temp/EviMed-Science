@@ -26,7 +26,7 @@ export const VCR_TYPE_ONE_CONFIDENCE = 0.975;
 /** @param {unknown} value @returns {number | null} */
 const finite = (value) => (typeof value === "number" && Number.isFinite(value) ? value : null);
 
-/** A proportion as a percentage with the given decimals, trailing zeros of a level dropped («2.5%», never «2.50%»). @param {number} value @param {number | null} decimals */
+/** A proportion as a percentage with the given decimals, trailing zeros of a level dropped (“2.5%”, never “2.50%”). @param {number} value @param {number | null} decimals */
 const percentText = (value, decimals) => {
   const scaled = value * 100;
   if (decimals === null) return `${Number(scaled.toFixed(4))}%`;

@@ -161,3 +161,24 @@ test("the lab overview does not read as the last design when that one is the nul
   assert.match(String(presentTrialTab({ ...bundleOf(designs), askedObject: "scn_3" }).premises.find((row) => row.key === "effect")?.value), /1/, "a design asked for reads as itself");
   assert.match(String(presentTrialTab(bundleOf(designs.slice(2))).premises.find((row) => row.key === "effect")?.value), /1/, "one design on the page reads as itself");
 });
+
+test("live D3: a grid row with no label is named by its own size, never by the page's design at the same position", () => {
+  // The grid of the live conversation: 150, 200 and 250 per arm at 30 months, written through vcr_simulate (designs carry sizes only),
+  // on a page whose first three designs are all "固定样本两组比较，风险比 0.75".
+  const grid = {
+    id: "grd_1", version: 1, comparisonGoal: null,
+    dimensions: { base: { accrual: { duration: 12, followup: 30 } }, designs: [{ nTreat: 150, nControl: 150 }, { nTreat: 200, nControl: 200 }, { nTreat: 250, nControl: 250 }] },
+    truthScenarios: [{ name: "HR 0.75", hazardRatio: 0.75 }],
+    cells: [[1, 1, 0.612], [2, 1, 0.753], [3, 1, 0.838]].map(([designIndex, truthIndex, value]) => ({
+      designIndex, truthIndex, status: "succeeded", measures: [{ name: "power", value, simulated: true, mcse: 0.005 }] })),
+  };
+  const tab = presentTrialTab(bundleOf(five().slice(1, 4), { grid }));
+  assert.deepEqual(tab.grid.rows.map((row) => row.header), ["每组 150 例", "每组 200 例", "每组 250 例"]);
+  assert.ok(!tab.grid.rows.some((row) => tab.designs.some((design) => design.name === row.header)), "no row borrows a page design's name");
+  // Unequal arms, a single-arm size, a stated kind, and a label the grid gave all read as they are.
+  const named = presentTrialTab(bundleOf([], { grid: { ...grid, dimensions: { designs: [{ nTreat: 200, nControl: 100 }, { kind: "group_sequential", nTreat: 180, nControl: 180 }, { label: "我的方案" }] },
+    cells: [[1, 1, 0.7], [2, 1, 0.8], [3, 1, 0.9]].map(([designIndex, truthIndex, value]) => ({ designIndex, truthIndex, status: "succeeded", measures: [{ name: "power", value, simulated: true, mcse: 0.005 }] })) } }));
+  assert.equal(named.grid.rows[0].header, "试验组 200 例、对照组 100 例");
+  assert.match(named.grid.rows[1].header, /，每组 180 例$/);
+  assert.equal(named.grid.rows[2].header, "我的方案");
+});

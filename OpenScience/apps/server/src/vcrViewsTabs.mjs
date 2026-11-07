@@ -43,7 +43,7 @@ import {
   VCR_MODEL_RISK_RULE_LABELS_ZH, VCR_RATING_LABELS_ZH, VCR_DESIGN_SUPPORT, VCR_INTENDED_USE_LABELS_ZH, knownErrorCodeMessage, vcrAppliedDefaults,
   vcrAssessmentIssues, vcrAssessmentRows,
   VCR_EFFECT_ROLE_LABELS_ZH, VCR_RESULT_CLASSES, VCR_RESULT_CLASS_LABELS_ZH, VCR_SMD_SEVERE,
-  vcrApplicability, vcrResultClass, vcrResultLimits, vcrTargetTrial,
+  vcrApplicability, vcrResultClass, vcrResultLimits, vcrTargetTrial, VCR_TRIAL_DESIGN_LABELS_ZH,
 } from "@evimed/domain";
 
 import { vcrObjectNode } from "./vcrStore.mjs";
@@ -1590,6 +1590,25 @@ function markersOf(scenario) {
 }
 
 /**
+ * A grid row's name when the grid gave it none: the row's own size, and its kind when the row states one. Live D3 (2026-11-07): the
+ * three rows of a 150/200/250-per-arm grid were each called by the name of the page's design at the same position (“固定样本两组比较，
+ * 风险比 0.75”), and the size that tells them apart was nowhere on the page.
+ * @param {Record<string, any>} design one entry of the grid's `designs`
+ * @returns {string | null}
+ */
+function gridDesignLabel(design) {
+  const kind = /** @type {Record<string, string>} */ (VCR_TRIAL_DESIGN_LABELS_ZH)[String(design.kind)] ?? null;
+  const treat = numeric(design.nTreat);
+  const control = numeric(design.nControl);
+  const total = numeric(design.n);
+  const first = numeric(design.n1);
+  const size = treat !== null && control !== null
+    ? (treat === control ? `每组 ${treat} 例` : `试验组 ${treat} 例、对照组 ${control} 例`)
+    : total !== null ? `共 ${total} 例${first !== null ? `（第一阶段 ${first} 例）` : ""}` : null;
+  return [kind, size].filter(Boolean).join("，") || null;
+}
+
+/**
  * The design grid: a heat grid of one measure across designs and truths, and
  * the power-against-effect series that read off the same cells. Only cells the
  * grid actually holds are drawn.
@@ -1607,9 +1626,12 @@ function gridView(grid, designs) {
   const designCount = Math.max(...cells.map((cell) => Number(cell.designIndex)));
   const truthCount = Math.max(...cells.map((cell) => Number(cell.truthIndex)));
   const columns = Array.from({ length: truthCount }, (_unused, index) => ({ key: `t${index}`, header: text(truths[index]?.name) ?? text(truths[index]?.label) ?? `情景 ${index + 1}` }));
+  // A row is named by what the grid says of it, else by its own size, never first by the page's design at the same position.
+  const rowName = (/** @type {number} */ index) => text(dimensionDesigns[index]?.label) ?? text(dimensionDesigns[index]?.name)
+    ?? (dimensionDesigns[index] ? gridDesignLabel(dimensionDesigns[index]) : null);
   const rows = Array.from({ length: designCount }, (_row, index) => ({
     key: `d${index}`,
-    header: text(dimensionDesigns[index]?.label) ?? text(dimensionDesigns[index]?.name) ?? designs[index]?.name ?? `设计 ${letterCode(index)}`,
+    header: rowName(index) ?? designs[index]?.name ?? `设计 ${letterCode(index)}`,
     cells: Array.from({ length: truthCount }, (_unused, truthIndex) => {
       const cell = cells.find((entry) => Number(entry.designIndex) === index + 1 && Number(entry.truthIndex) === truthIndex + 1);
       const measure = cell ? measureOf(cell, ["power", "type_one_error"]) : null;
@@ -1634,7 +1656,7 @@ function gridView(grid, designs) {
         return { x: /** @type {number} */ (effects[truthIndex]), y: finite(measure?.value), low: null, high: null };
       }).filter((point) => point.y !== null).sort((a, b) => a.x - b.x);
       if (points.length >= 2) {
-        powerSeries.push({ key: `d${index}`, label: text(dimensionDesigns[index]?.label) ?? text(dimensionDesigns[index]?.name) ?? `设计 ${letterCode(index)}`, source: "predicted", ours: false, pooled: false, points,
+        powerSeries.push({ key: `d${index}`, label: rowName(index) ?? `设计 ${letterCode(index)}`, source: "predicted", ours: false, pooled: false, points,
           bandKind: null, endLabel: null, endNote: null, atRisk: [], individuals: [], dashed: false, unobserved: [] });
       }
     }
