@@ -168,3 +168,45 @@ test('A06: a deployable forecast and a logged-action replay are different record
   await assert.rejects(() => vcr.longitudinal.prepare(study,predictRequest({actions:[{code:'Metformin',at:{value:1,unit:'days'}}]}),'owner'),{code:'vcr_job_scenario_invalid'});
   await assert.rejects(() => vcr.longitudinal.subjectPage(study,summary.historyId,'owner'),{code:'vcr_forecast_unavailable'});
 });
+
+test('a logged replay reads its actions only from a frozen history whose source may go to the cloud; what it saves carries both lineages (review eng P0-4, stats P2-15)',options,async () => {
+  await writeProviders({version:'2',actionCodes:['Metformin'],actionUnits:{Metformin:'mg'},requiresActions:false});
+  // a second source: the medication recorded after the origin, with no cloud permission of its own
+  const later = await vcr.dataPlane.registerSource({userId:'owner',studyId:study.id,name:'Authored follow-up medication',allowedUses:['vcr'],valueSource:'synthetic'});
+  const rows = ['PATIENT,AT,AVAILABLE,CODE,VALUE,UNIT'];
+  for (let i = 0; i < 100; i += 2) rows.push(`${id(i)},2026-01-15,2026-01-15,Metformin,500,mg`);
+  await vcr.dataPlane.storeUpload({actor:'owner',studyId:study.id,sourceId:later.id,name:'medication.csv',stream:streamOf(rows.join('\n'))});
+  const mapped = await vcr.dataPlane.proposeFieldMap({actor:'owner',studyId:study.id,sourceId:later.id,columns:[
+    {table:'medication.csv',column:'PATIENT',role:'subject_key',identifier:true},
+    {table:'medication.csv',column:'AT',role:'visit_date',timeKind:'occurred_at',type:'date'},
+    {table:'medication.csv',column:'AVAILABLE',role:'other',timeKind:'visible_at',type:'date'},
+    {table:'medication.csv',column:'CODE',role:'other',type:'text'},
+    {table:'medication.csv',column:'VALUE',role:'other',type:'number'},
+    {table:'medication.csv',column:'UNIT',role:'other',type:'text'},
+  ]});
+  await vcr.dataPlane.confirmFieldMap({actor:'owner',studyId:study.id,sourceId:later.id,hash:mapped.hash});
+  const laterSnapshot = (await vcr.dataPlane.freezeSnapshot({userId:'owner',studyId:study.id,sourceId:later.id})).snapshot;
+  const laterHistory = await vcr.longitudinal.freezeHistory(study,{snapshotId:laterSnapshot.id,asOf:'2026-03-01',
+    mappings:[{...mapping(),inputId:`${laterSnapshot.id}:1`,kind:'medication'}]},'owner');
+  let sent = 0;
+  handler = async (_url,init) => {sent += 1;return respond(JSON.parse(init.body),key => [{subjectKey:key,horizonDays:30,point:7}]);};
+  // an explicit mode with the actions taken from the later history is a replay, not a schedule left out (stats P2-15)
+  const replay = predictRequest({predictionMode:'conditional_forecast',actionHistoryId:laterHistory.id});
+  const refused = await run(replay);
+  assert.equal(refused.job.state,'failed',JSON.stringify(refused.job));
+  assert.equal(sent,0,'nothing of the later source left without its own cloud permission');
+  // a record that is not a frozen history cannot name the actions
+  const prediction = (await vcr.longitudinal.view(study,{kind:'prediction',limit:1})).records[0];
+  await assert.rejects(() => vcr.longitudinal.prepare(study,predictRequest({actionHistoryId:prediction.id}),'owner'),{code:'vcr_history_required'});
+  // with the permission, the replay runs and every record it saved names both sources
+  await vcr.dataPlane.setCloudPermission({studyId:study.id,sourceId:later.id,actor:'owner',permission});
+  const ran = await run({...replay,seed:7});
+  assert.equal(ran.job.state,'succeeded',JSON.stringify(ran.job));
+  assert.ok(sent > 0);
+  const saved = (await vcr.jobs.resultOf(study.id,ran.queued.job.id)).diagnostics.longitudinal;
+  assert.equal(saved.summary.actionContext.label,'logged_action_replay');
+  const held = await vcr.longitudinal.artifacts.read(study,saved.id,'owner');
+  assert.deepEqual(new Set(held.row.source_ids),new Set([source.id,later.id]));
+  const batches = await vcr.store.rows(`SELECT source_ids FROM evimed_vcr.longitudinal_artifacts WHERE study_id=$1 AND kind='provider_batch' AND summary->>'jobId'=$2`,[study.id,ran.queued.job.id]);
+  assert.ok(batches.length && batches.every(row => row.source_ids.includes(later.id)));
+});
