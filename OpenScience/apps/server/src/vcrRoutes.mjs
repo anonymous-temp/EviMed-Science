@@ -184,7 +184,7 @@ export const VCR_ROUTE_ABILITIES = Object.freeze({
   "POST /studies/:id/method-configurations": ["run"],
   "GET /studies/:id/jobs/:job/result": ["read"],
   "GET /studies/:id/longitudinal": ["read"],
-  "GET /studies/:id/longitudinal/:prediction/subjects": ["read"],
+  "GET /studies/:id/longitudinal/:prediction/subjects": ["read_patient_level"],
   "GET /studies/:id/followup-history": ["read_patient_level"],
   "POST /studies/:id/longitudinal/histories": ["run"],
   "POST /studies/:id/longitudinal/predictions": ["run"],
@@ -772,6 +772,8 @@ export function createVcrRoutes(dependencies) {
         Object.fromEntries(['id','parentId','kind','offset','limit'].map(key => [key,url.searchParams.get(key)]))),{minCell:service.minCell,page:true}));
       // The owner's protected per-person read: its keys are the study's pseudonyms, so it is not the suppressed aggregate view above.
       if (method === 'GET' && parts.length === 5 && parts[4] === 'subjects') {
+        // a per-person read, judged as one at the route too (review eng P2-3): the artifact's own lineage check stays the second guard
+        await requireAbility(study,'read_patient_level');
         return reply(await longitudinal.subjectPage(study,parts[3],String(user.id),{status:url.searchParams.get('status'),reason:url.searchParams.get('reason'),
           offset:Number(url.searchParams.get('offset') ?? 0),limit:Number(url.searchParams.get('limit') ?? 50)}));
       }

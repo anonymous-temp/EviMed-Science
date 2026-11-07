@@ -1271,14 +1271,17 @@ test("Start requires run and write; naming also requires the lead and the origin
 test("the per-person trajectory page is the owner's read: filters and the acting account reach the reader, another account's study is not found", async () => {
   /** @type {any[]} */
   const seen = [];
-  const { routes, as } = fixture({ overrides: { longitudinal: { subjectPage: async (/** @type {any} */ study, /** @type {string} */ id, /** @type {string} */ actor, /** @type {any} */ filter) => {
+  const { routes, as } = fixture({ roles: { member: ["viewer"] }, overrides: { longitudinal: { subjectPage: async (/** @type {any} */ study, /** @type {string} */ id, /** @type {string} */ actor, /** @type {any} */ filter) => {
     seen.push([study.id, id, actor, filter]); return { id, lines: [], total: 0 };
   } } } });
   const res = response();
   await routes(request("GET", "/api/vcr/studies/std_1/longitudinal/prd_1/subjects?status=failed&reason=unit_not_convertible&offset=50&limit=25", undefined), res);
   assert.equal(res.status, 200);
   assert.deepEqual(seen, [["std_1", "prd_1", OWNER, { status: "failed", reason: "unit_not_convertible", offset: 50, limit: 25 }]]);
+  // a member who may read the study but not its people's records is refused at the route (review eng P2-3)
+  as("member");
+  await assert.rejects(routes(request("GET", "/api/vcr/studies/std_1/longitudinal/prd_1/subjects", undefined), response()), { status: 403, code: "vcr_forbidden" });
   as("stranger");
   await assert.rejects(routes(request("GET", "/api/vcr/studies/std_1/longitudinal/prd_1/subjects", undefined), response()), { status: 404, code: "vcr_study_not_found" });
-  assert.equal(seen.length, 1, "the reader was not asked for a stranger");
+  assert.equal(seen.length, 1, "the reader was not asked for a member without the ability or a stranger");
 });
