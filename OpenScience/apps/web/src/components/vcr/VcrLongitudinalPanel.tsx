@@ -50,7 +50,7 @@ export function hasLongitudinal(data: VcrLongitudinalData | null | undefined): b
  * here. Templates and imports are the toolbar's 「⋯」: a button that cannot act (a prediction file with no history to attach it to)
  * is not in it.
  */
-export function VcrLongitudinalPanel({ studyId, canRun, canManage = false, data, onReload, switcher }: {
+export function VcrLongitudinalPanel({ studyId, canRun, canManage = false, data, onReload, switcher, extraFilters = [] }: {
   studyId: string;
   canRun: boolean;
   /** The reader may confirm the compute budget (`manage_study`): a job past it waits for them. */
@@ -60,6 +60,8 @@ export function VcrLongitudinalPanel({ studyId, canRun, canManage = false, data,
   onReload: () => void;
   /** The patients tab's view switch, so the toolbar holds the same one on both views. */
   switcher?: ToolbarChips | null;
+  /** Filters of a surface that hosts this panel (the batch workspace's status chips), drawn in the same one toolbar row after the switch. */
+  extraFilters?: readonly ToolbarChips[];
 }) {
   const frame = useStudyFrame();
   const [historyId, setHistoryId] = useState('');
@@ -129,7 +131,7 @@ export function VcrLongitudinalPanel({ studyId, canRun, canManage = false, data,
   ];
   if (canRun && frame) actions.unshift({ key: 'history', label: `${DRAFT_PREFIX}接入纵向资料`, kind: 'draft', onSelect: () => frame.openChat(`为研究 ${studyId} 接入纵向患者资料。请读取我上传的文件，识别患者标识、观测时间、治疗与结局字段，说明缺失及来源边界后生成历史快照；未观察的试验内治疗和结局不可补造。`) });
   useVcrToolbar({
-    ...(switcher ? { filters: [switcher] } : {}),
+    ...(switcher || extraFilters.length ? { filters: [...(switcher ? [switcher] : []), ...extraFilters] } : {}),
     actions: <VcrToolbarActions actions={actions} label="模板与导入" menu />,
   });
 
