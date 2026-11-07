@@ -21,6 +21,10 @@ Scenario generation needs an explicit endpoint and model assumptions. Individual
 
 For an explanation-only request, answer in the conversation; no computation, file or full research sequence is required. If essential inputs are absent, finish the reply by naming the missing inputs and why they matter. In an automated turn no person is waiting to answer: do not keep probing schemas, create substitute patient data, or invent numerical assumptions to avoid that final reply. Use assumed inputs only when the request authorizes them, and label them explicitly.
 
+## Batch trajectories
+
+A forecast for a batch of patients is one job over the whole batch with stable subject keys. Name what the forecast is: `predictionMode` is `factual_forecast` (current care, no future actions), or `conditional_forecast` with the explicit schedule it depends on in `actions` (each `{code, at: {value, unit}, dose?: {value, unit}}`; times and doses convert only within one dimension, never guess a unit). Actions recorded after the prediction origin are never an input to a forecast: replaying them (`actionHistoryId` names the later history) tests the model given what really happened and the result says so. New observations make a new history and a new prediction version (`priorPredictionId`), compared with the old one and with what was observed. Report the denominator as the result gives it: submitted, completed, rejected, failed and not processed, each person with a reason; draws are futures of one person, not more people, and a model that gives no uncertainty has none shown.
+
 ## Results and limits
 
 Read the job result and use the report tool if a report is wanted. State the method, version, relevant inputs, measures, uncertainty, diagnostics and limitations. Generated individuals and trajectories are synthetic, not observed clinical histories. Model output is not a validated digital twin or patient-specific clinical decision.
