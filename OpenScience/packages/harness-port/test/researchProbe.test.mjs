@@ -1,11 +1,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { RESEARCH_NATIVE_BUNDLES } from '@evimed/domain'
 import { registerResearchConfiguration, verifyResearchAgent } from '../src/pluginProbe.mjs'
 
 test('research proof checks actual definitions and disposal', async () => {
   let dispose = () => {}
   const ctx = { effect(/** @type {()=>()=>void} */ fn) { dispose = fn() }, tools: { get(/** @type {string} */ name) { return definitions.get(/** @type {string} */ name) } } }
-  const definitions = new Map(['describe', 'start', 'read', 'cancel', 'report'].map(action => [`virtual_trial_${action}`, {}]))
+  const definitions = new Map(RESEARCH_NATIVE_BUNDLES['virtual-trial'].tools.map((/** @type {string} */ name) => [name, {}]))
   verifyResearchAgent({ tools: { get() {} } }, {}, [])
   await registerResearchConfiguration(ctx, { extensionId: 'virtual-trial', definitions })
   verifyResearchAgent(ctx, {}, ['virtual-trial'])

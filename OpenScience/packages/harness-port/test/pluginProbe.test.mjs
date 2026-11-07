@@ -200,7 +200,7 @@ test('extension proof joins actual fixed research definitions and refuses projec
   }
   const proof=await verifyExtensionAgent(ctx,agent);
   assert.deepEqual(proof.inventory.map(row=>row.extensionId),plugins.map(row=>row.extensionId));
-  assert.equal(proof.tools.length,23);
+  assert.equal(proof.tools.length,25); // the trial bundle carries search and compare since the in-silico round
   definitions.set('virtual_trial_start',{});
   await assert.rejects(verifyExtensionAgent(ctx,agent),/registrations_invalid/);
 });

@@ -39,6 +39,9 @@ async function mount(ids, { suite = false } = {}) {
   const ctx = new Context()
   ctx.provide('systemPrompt', { tools() {}, section() { return () => {} } })
   const runtime = new ToolRuntime(ctx)
+  // Since DSH 0.2.2 a call runs through the composition's selected executor, not ToolRuntime itself (see
+  // harness-port's test/helpers/nativeExecutor.mjs), so the scope mounts the native one the kernel's preset carries.
+  ctx.plugin(await loadHarnessModule('@deepseek-ai/dsh-tool-executor-native'))
   const agent = { ctx, session: { id: 'composition-test', requestHeader: () => ({ config: {} }) } }
   const calls = []
   await ctx.plugin({ name: 'host-adapter', apply: (scoped) => { scoped.provide('evimedResearchAdapter', fakeAdapter(hostPort.registerResearchConfiguration, calls)) } })
@@ -51,7 +54,10 @@ async function mount(ids, { suite = false } = {}) {
   for (const id of ids) await add(id)
   if (suite) await add('virtual-research-suite')
   const has = (name) => Boolean(runtime.get(name, agent))
-  const raw = (name, args) => runtime.execute({ callId: `c-${Math.random()}`, name, agent, arguments: args, signal: new AbortController().signal })
+  const raw = async (name, args) => {
+    const batch = await runtime.execute({ calls: [{ type: 'tool-call', id: `c-${Math.random()}`, name, arguments: JSON.stringify(args ?? {}) }], agent, signal: new AbortController().signal })
+    return batch.results[0].result
+  }
   const call = async (name, args) => {
     const result = await raw(name, args)
     assert.equal(result.isError, false, JSON.stringify(result))
