@@ -399,8 +399,12 @@ export interface VcrPremise {
 }
 
 /** A design on the trade-off scatter and in the grid. */
-/** Whether a number meets a bound: `borderline` is inside twice its Monte-Carlo error of it. */
-export type VcrBoundState = "ok" | "borderline" | "no";
+/**
+ * Whether a number meets a bound. The power: `borderline` is inside twice its Monte-Carlo error of it. The type I error is judged on its
+ * conservative bound, as the lab judges a constraint: `ok` only when that bound is within the level, `undecided` when the simulation
+ * cannot tell (live D8: 2.53% ± 0.11% against 2.5%), `no` when even its lower bound is above it.
+ */
+export type VcrBoundState = "ok" | "borderline" | "undecided" | "no";
 
 export interface VcrDesignBaseline {
   name: string;
@@ -443,7 +447,7 @@ export interface VcrDesign {
   /** A row the page made from `baseline`: it is not a design, cannot be chosen, edited or opened. */
   isBaseline?: boolean;
   /** Whether the design's own numbers meet the objective's two bounds (C7): a statement about the numbers, not a verdict on the design. */
-  meets?: { typeOneError: VcrBoundState | null; power: VcrBoundState | null } | null;
+  meets?: { typeOneError: VcrBoundState | null; power: VcrBoundState | null; typeOneErrorText?: string | null } | null;
   /** The run behind the row, as numbers: what the row's record drawer reads (`vcrViews.mjs`); null before the design ran. */
   record?: {
     method: string | null;
@@ -2313,9 +2317,9 @@ function readDesignBaseline(raw: unknown): VcrDesignBaseline | null {
 
 function readMeets(raw: unknown): VcrDesign["meets"] {
   const value = obj(raw);
-  const state = (entry: unknown): VcrBoundState | null => (["ok", "borderline", "no"] as const).find((candidate) => candidate === entry) ?? null;
+  const state = (entry: unknown): VcrBoundState | null => (["ok", "borderline", "undecided", "no"] as const).find((candidate) => candidate === entry) ?? null;
   const typeOneError = state(value.typeOneError), power = state(value.power);
-  return typeOneError === null && power === null ? null : { typeOneError, power };
+  return typeOneError === null && power === null ? null : { typeOneError, power, typeOneErrorText: text(value.typeOneErrorText) };
 }
 
 function readTrialSensitivity(raw: unknown): VcrTrialTab["sensitivity"] {

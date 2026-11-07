@@ -758,7 +758,25 @@ describe("试验 · the premises, and the type I error that follows the result",
     expect(cell).toHaveTextContent("2.46");
     expect(cell.querySelector("[data-vcr-mcse]")).toHaveTextContent("0.11");
     expect(cell.querySelector("[data-vcr-null-check='agrees']")).toHaveTextContent("复核");
+    expect(cell.querySelector("[data-vcr-bound]"), "no verdict was sent, so none is drawn").toBeNull();
     landed.unmount();
+    // Live D8: 2.53% ± 0.11% against a one-sided 2.5% is neither met nor missed; the tag says the simulation cannot tell, in the server's words.
+    withPremises((raw) => {
+      for (const design of raw.designs) {
+        design.nullState = "done";
+        design.measures.type_one_error = { ...design.measures.power, value: 2.53, unit: "%", mcse: 0.11, source: "synthetic", interval: null, precision: 1 };
+        design.meets = { typeOneError: "undecided", power: null, typeOneErrorText: "无法确定是否不超过 2.5%（模拟 2.53% ± 0.11%）" };
+      }
+      raw.columns = [...raw.columns.filter((column: any) => column.key !== "type_one_error"), { key: "type_one_error", label: "I 类错误", unit: "%" }];
+    });
+    const undecided = draw();
+    await trialDrawn();
+    const tag = (await found(undecided.container, "tr[data-vcr-design='A'] [data-vcr-measure='type_one_error'] [data-vcr-bound='undecided']"));
+    expect(tag).toHaveTextContent("无法确定");
+    await userEvent.hover(tag);
+    expect((await screen.findAllByText("无法确定是否不超过 2.5%（模拟 2.53% ± 0.11%）")).length).toBeGreaterThan(0);
+    expect(undecided.container.querySelector("tr[data-vcr-design='A'] [data-vcr-measure='type_one_error']")).not.toHaveTextContent("接近");
+    undecided.unmount();
     withPremises((raw) => {
       for (const design of raw.designs) { delete design.measures.type_one_error; design.nullState = "canceled"; }
       raw.columns = [...raw.columns.filter((column: any) => column.key !== "type_one_error"), { key: "type_one_error", label: "I 类错误", unit: "%" }];
@@ -826,18 +844,18 @@ describe("试验 · what the sample size rests on, the baseline and the objectiv
 
   it("draws sample size against power with the target power as the line to clear when there is no duration and no success probability, names the objective, and tags only a bound that is not met", async () => {
     serve((raw) => {
-      raw.objective = { source: "default", alpha: 2.5, power: 90, sided: 1, text: "I 类错误不超过 单侧 2.5%，功效不低于 90%" };
+      raw.objective = { source: "default", alpha: 2.5, power: 90, sided: 1, text: "要求：I 类错误不超过单侧 2.5%，功效不低于 90%" };
       for (const design of raw.designs) { delete design.measures.duration_months; delete design.measures.assurance; }
       raw.designs[0].meets = { typeOneError: "ok", power: "ok" };
       raw.designs[1].meets = { typeOneError: "ok", power: "no" };
-      raw.designs[2].meets = { typeOneError: "borderline", power: "ok" };
+      raw.designs[2].meets = { typeOneError: "undecided", power: "ok", typeOneErrorText: "无法确定是否不超过 2.5%（模拟 2.51% ± 0.11%）" };
     });
     const { container } = draw();
     await trialDrawn();
     const scatter = await found(container, "[data-vcr-scatter]");
     expect(scatter.querySelector("[data-vcr-scatter-reference]")).not.toBeNull();
     expect(scatter).toHaveTextContent("目标功效 90%");
-    expect(container.querySelector("[data-vcr-objective='default']")).toHaveTextContent("I 类错误不超过 单侧 2.5%，功效不低于 90%");
+    expect(container.querySelector("[data-vcr-objective='default']")).toHaveTextContent("要求：I 类错误不超过单侧 2.5%，功效不低于 90%");
     expect(container.querySelector("tr[data-vcr-design='A'] [data-vcr-bound]")).toBeNull();
     expect(container.querySelector("tr[data-vcr-design='B'] [data-vcr-bound='no']")).toHaveTextContent("未达标");
     // Nothing is picked or greyed out by drawing it.

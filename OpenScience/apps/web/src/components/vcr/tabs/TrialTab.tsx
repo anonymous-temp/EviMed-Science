@@ -520,12 +520,16 @@ function baselineRow(design: VcrDesign): VcrDesign {
   };
 }
 
-/** A bound the design's own number does not meet, said on the number: nothing is said of one that is met. */
-function BoundTag({ state }: { state: NonNullable<VcrDesign["meets"]>["power"] }) {
-  if (state !== "no" && state !== "borderline") return null;
+/**
+ * A bound the design's own number does not meet, said on the number: nothing is said of one that is met. The type I error's tag is the
+ * server's verdict on its conservative bound, and its title is the verdict in words (「无法确定是否不超过 2.5%（模拟 2.53% ± 0.11%）」).
+ */
+function BoundTag({ state, said = null }: { state: NonNullable<VcrDesign["meets"]>["power"]; said?: string | null }) {
+  if (state !== "no" && state !== "borderline" && state !== "undecided") return null;
+  const title = said ?? (state === "no" ? "没有达到这条要求" : state === "undecided" ? "模拟分不清是否达到这条要求" : "在蒙特卡洛误差的两倍之内，分不清是否达到");
   return (
-    <Tag tone={state === "no" ? "warn" : "neutral"} title={state === "no" ? "没有达到这条要求" : "在蒙特卡洛误差的两倍之内，分不清是否达到"}>
-      <span data-vcr-bound={state}>{state === "no" ? "未达标" : "接近"}</span>
+    <Tag tone={state === "no" ? "warn" : "neutral"} title={title}>
+      <span data-vcr-bound={state}>{state === "no" ? "未达标" : state === "undecided" ? "无法确定" : "接近"}</span>
     </Tag>
   );
 }
@@ -602,7 +606,8 @@ function designColumns(data: TrialData, onEdit: ((design: VcrDesign) => void) | 
               </span>
             )}
             {interval && <span data-vcr-interval="" className="text-meta font-normal text-text-3">{interval}</span>}
-            {(column.key === "power" || column.key === "type_one_error") && !design.isBaseline && <BoundTag state={design.meets?.[column.key === "power" ? "power" : "typeOneError"] ?? null} />}
+            {column.key === "power" && !design.isBaseline && <BoundTag state={design.meets?.power ?? null} />}
+            {column.key === "type_one_error" && !design.isBaseline && <BoundTag state={design.meets?.typeOneError ?? null} said={design.meets?.typeOneErrorText ?? null} />}
             {/* Where the closed form can answer the same question (the nominal alpha for a fixed design), the simulation is a check on it. */}
             {column.key === "type_one_error" && design.nullCheck && (
               <Tag tone={design.nullCheck.agrees === false ? "warn" : "neutral"} title={`与解析值核对：解析 ${numberText(design.nullCheck.analytic)}% · 仿真 ${numberText(design.nullCheck.simulated)}%`}>
