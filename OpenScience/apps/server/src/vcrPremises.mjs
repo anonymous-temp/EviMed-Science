@@ -303,14 +303,18 @@ function trialPremises(input) {
     const duration = numeric(accrual.duration);
     const followup = numeric(accrual.followup);
     const parts = [duration !== null ? `入组 ${plain(duration)} ${time}` : null, followup !== null ? `随访 ${plain(followup)} ${time}` : null].filter(Boolean);
-    if (parts.length) rows.push({ key: "accrual", label: "入组与随访", value: parts.join("，"), source: "assumed", decisive: true });
+    // the person's when every time it states is in their own messages (live D4, 2026-11-07: 「入组期 12 个月」 read 假设)
+    const said = [duration !== null ? "accrual.duration" : null, followup !== null ? "accrual.followup" : null].filter((path) => path !== null);
+    if (parts.length) rows.push({ key: "accrual", label: "入组与随访", value: parts.join("，"), source: personWord(input.personStated, /** @type {string[]} */ (said), "assumed"), decisive: true });
   }
 
   // The error rates the decision is made at.
   const alpha = numeric(analysis.alpha) ?? numeric(defaults.get("analysis.alpha"));
   if (alpha !== null) {
     const sided = numeric(analysis.sided) ?? numeric(defaults.get("analysis.sided"));
-    rows.push({ key: "alpha", label: "显著性水平", value: `${sided === 2 ? "双侧" : sided === 1 ? "单侧" : ""}${percent(alpha)}`, source: defaults.has("analysis.alpha") ? "default" : "assumed", decisive: true });
+    // the level is the person's when its number is in their own messages (「单侧 α=2.5%」 is 0.025); the side is a word and is not read
+    rows.push({ key: "alpha", label: "显著性水平", value: `${sided === 2 ? "双侧" : sided === 1 ? "单侧" : ""}${percent(alpha)}`,
+      source: defaults.has("analysis.alpha") ? "default" : personWord(input.personStated, "analysis.alpha", "assumed"), decisive: true });
   }
 
   // What is applied and not decisive.

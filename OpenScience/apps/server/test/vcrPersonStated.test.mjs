@@ -204,3 +204,35 @@ test('no sources sent: numbers in the original human messages are recognised in 
   assert.equal(personWord(vcrPersonStated({truth:{controlMedian:1200}},[human('median 1,200 days')]),'truth.controlMedian','assumed'),'given');
   assert.equal(personWord(vcrPersonStated({a:0.3},[human('对照30人')]),'a','assumed'),'assumed','a bare count is not a fraction');
 });
+
+test('live D4 (phase 3): the level and the accrual the person wrote are theirs on the premises, a percentage is its fraction exactly, and a time converts only exactly', () => {
+  // Conversation a: 「单侧 α=2.5%」 and 「入组期 12 个月」, 「随访 18 到 30 个月」; conversation e (315 characters): 「入组期大约 18 个月，之后至少再随访 12 个月」,
+  // 「单侧 α 0.025」. Both pages read 显著性水平 and 入组与随访 as 假设: the two rows never asked whose the numbers were.
+  const a = '两臂生存期试验，II 期提示 HR 约 0.75，对照组中位生存期大约 12 个月，入组期 12 个月。单侧 α=2.5%，想要 90% 把握度。每组 150 到 250 人、随访 18 到 30 个月这个范围里，帮我找满足要求的最小设计。';
+  const e = `${'我们科室在准备一项多中心随机对照试验的方案。'.repeat(5)}预计入组期大约 18 个月，之后至少再随访 12 个月，两组按 1:1 随机分配，预计脱落率在 10% 左右。统计上我们打算用分层 log-rank 检验，单侧 α 0.025，把握度 85%。对照组的中位无进展生存期大约是 4.2 个月，而我们预计新方案能把中位无进展生存期提高到 6.0 个月。`;
+  const premises = (/** @type {string} */ text, /** @type {Record<string, any>} */ configuration) => Object.fromEntries(vcrPremises("trial", {
+    endpointType: "time_to_event", designKind: "two_arm_fixed", diagnostics: {}, cards: [], bound: [], appliedDefaults: [],
+    personStated: vcrPersonStated(configuration, [human(text)]), configuration }).map((row) => [row.key, row.source]));
+  const design = (/** @type {Record<string, any>} */ over) => ({ design: { kind: "two_arm_fixed" }, endpoint: { type: "time_to_event" }, analysis: { alpha: 0.025, power: 0.9, sided: 1 }, ...over });
+  const fromA = premises(a, design({ truth: { hazardRatio: 0.75, controlMedian: 12 }, accrual: { duration: 12, followup: 18 } }));
+  assert.deepEqual([fromA.effect, fromA.control, fromA.accrual, fromA.alpha], ["given", "given", "given", "given"]);
+  const fromE = premises(e, design({ truth: { hazardRatio: 0.7, controlMedian: 4.2 }, accrual: { duration: 18, followup: 12, dropoutAnnual: 0.1 } }));
+  assert.deepEqual([fromE.control, fromE.accrual, fromE.alpha, fromE.dropout], ["given", "given", "given", "given"]);
+  assert.equal(fromE.effect, "assumed", "0.7 is the model's reading of 4.2 against 6.0, written nowhere");
+  // A follow-up the person did not write keeps the row an assumption.
+  assert.equal(premises(a, design({ truth: { hazardRatio: 0.75 }, accrual: { duration: 12, followup: 24 } })).accrual, "assumed");
+  // A percentage is its fraction exactly, however the binary fraction rounds (1.1 / 100 is 0.011000000000000001).
+  for (const [text, value] of [['脱落率 1.1%', 0.011], ['显著性 4.13%', 0.0413], ['有效率 0.7%', 0.007], ['百分之 2.2', 0.022]]) {
+    assert.equal(personWord(vcrPersonStated({ x: value }, [human(text)]), 'x', 'assumed'), 'given', text);
+  }
+  assert.equal(personWord(vcrPersonStated({ x: 0.0114 }, [human('脱落率 1.1%')]), 'x', 'assumed'), 'assumed', 'never a near number');
+  // A time written in another unit is the person's when the table converts it exactly, and only for the scenario's times.
+  const years = vcrPersonStated({ accrual: { duration: 18, followup: 24 }, design: { nTreat: 24 } }, [human('入组 1.5 年，随访 2 年，每月入组 20 人')]);
+  assert.equal(personWord(years, ['accrual.duration', 'accrual.followup'], 'assumed'), 'given');
+  assert.equal(personWord(years, 'design.nTreat', 'assumed'), 'assumed', '2 years is no sample size');
+  const weeks = vcrPersonStated({ timeUnit: 'days', truth: { controlMedian: 84 } }, [human('对照组中位 12 周')]);
+  assert.equal(personWord(weeks, 'truth.controlMedian', 'assumed'), 'given');
+  assert.equal(personWord(vcrPersonStated({ truth: { controlMedian: 2.76 } }, [human('对照组中位 12 周')]), 'truth.controlMedian', 'assumed'), 'assumed', 'weeks to months is not exact');
+  assert.equal(personWord(vcrPersonStated({ timeUnit: 'days', accrual: { followup: 7 } }, [human('患者 1 周岁以上')]), 'accrual.followup', 'assumed'), 'assumed', 'an age is no time');
+  assert.equal(personWord(vcrPersonStated({ timeUnit: 'days', accrual: { followup: 7 } }, [human('随访 1 周')]), 'accrual.followup', 'assumed'), 'given');
+});

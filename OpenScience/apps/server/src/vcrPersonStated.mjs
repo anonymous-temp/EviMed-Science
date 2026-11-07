@@ -3,6 +3,7 @@
  * The control plane checks original-message scope and freezes the binding with
  * the computation. Schema 1 remains readable for historical results only. */
 import { createHash } from 'node:crypto';
+import { VCR_DEFAULT_TIME_UNIT, vcrConvertTime, vcrTimeUnitOf } from '@evimed/domain';
 import { numberIsInQuote } from './vcrEvidence.mjs';
 
 export const VCR_PERSON_STATED_SCHEMA = 2;
@@ -55,8 +56,15 @@ export function vcrPersonStated(scenario, messages, sources = []) {
   // (live D4: the model sent no sources, so the person's own alpha, hazard ratio and median read as assumptions). Numeric notation only:
   // the digest is every distinct number token of the messages, and a fraction also reads as the percentage written for it.
   const bound = new Set(bindings.map(row => row.path));
-  const digest = originals.length ? numberDigest(originals.map(entry => entry.text)) : '';
-  const matched = digest ? [...leaves].filter(([path, value]) => !bound.has(path) && humanQuoteNumber(digest, value)).map(([path]) => path) : [];
+  const texts = originals.map(entry => entry.text);
+  const digest = originals.length ? numberDigest(texts) : '';
+  // A time the scenario holds in its own unit is also the person's when they wrote it in another unit the table converts exactly
+  // (「入组 1.5 年」 is 18 months; a week is seven days), and only for the scenario's times.
+  const unit = vcrTimeUnitOf(scenario?.timeUnit) ?? VCR_DEFAULT_TIME_UNIT;
+  const times = digest ? timeTokens(texts) : [];
+  const timeMatch = (/** @type {string} */ path, /** @type {number} */ value) => TIME_PATHS.has(path)
+    && times.some(token => token.unit !== unit && EXACT_CONVERSIONS.has(`${token.unit}>${unit}`) && sameNumber(vcrConvertTime(token.value, token.unit, unit), value));
+  const matched = digest ? [...leaves].filter(([path, value]) => !bound.has(path) && (humanQuoteNumber(digest, value) || timeMatch(path, value))).map(([path]) => path) : [];
   return { schema: VCR_PERSON_STATED_SCHEMA, readable: Boolean(latest), paths: bindings.map(row => row.path), bindings, ...(matched.length ? { matched } : {}) };
 }
 
@@ -72,15 +80,33 @@ function numberDigest(texts) {
 }
 const DIGEST_TOKEN = /百分之\s*-?\d+(?:\.\d+)?|(?<![\w.])[+-]?\d{1,3}(?:,\d{3})+(?:\.\d+)?(?:\s*(?:%|％|percent\b))?|(?<![\w.,])[+-]?\d+(?:\.\d+)?(?!\d|\.\d)(?:\s*(?:%|％|percent\b))?/giu;
 
+/** The scenario's times: what a survival design enrols and follows for, and the control median it is sized on. */
+const TIME_PATHS = new Set(['accrual.duration', 'accrual.followup', 'accrual.maxFollowup', 'accrual.tail', 'truth.controlMedian']);
+/** The conversions of the time table that are exact: twelve months a year, seven days a week (months to weeks is not). */
+const EXACT_CONVERSIONS = new Set(['years>months', 'months>years', 'weeks>days', 'days>weeks']);
+/** A number and the time unit written after it (the closed spellings; not 月 or 日 alone, which are dates, nor 岁, an age). */
+const TIME_TOKEN = /(?<![\w.])(\d+(?:\.\d+)?)\s*(个月|星期|周(?!岁)|天|年|months?\b|weeks?\b|days?\b|years?\b)/giu;
+
+/** @param {readonly string[]} texts @returns {Array<{ value: number, unit: string }>} */
+function timeTokens(texts) {
+  return texts.flatMap(text => [...text.replace(/(?<=\d)[·⋅∙](?=\d)/g, '.').matchAll(TIME_TOKEN)]
+    .map(match => ({ value: Number(match[1]), unit: vcrTimeUnitOf(match[2]) ?? '' })).filter(token => token.unit));
+}
+
+/** The same number once the floating-point noise of a conversion is taken off. @param {number | null} left @param {number} right */
+const sameNumber = (left, right) => left !== null && Number(left.toPrecision(12)) === Number(right.toPrecision(12));
+
 /** Numeric notation only; never infer a parameter's meaning from words. A bare
  * count cannot become a fraction merely because the caller labels it one.
+ * A percentage is its fraction exactly: the written decimal moved two places
+ * (`1.1e-2`), never a division, which reads 1.1% as 0.011000000000000001.
  * @param {string} quote @param {number} value */
 function humanQuoteNumber(quote, value) {
   if (numberIsInQuote(quote, value)) return true;
   if (!(value > 0 && value < 1)) return false;
   const tokens = [...quote.matchAll(/(-?\d+(?:\.\d+)?)\s*(?:%|％|percent\b)/giu),
     ...quote.matchAll(/百分之\s*(-?\d+(?:\.\d+)?)/gu)];
-  return tokens.some(token => Number(token[1]) / 100 === value);
+  return tokens.some(token => Number(`${token[1]}e-2`) === value);
 }
 
 /** Non-blocking, inspectable model mappings: the original is authenticated,
