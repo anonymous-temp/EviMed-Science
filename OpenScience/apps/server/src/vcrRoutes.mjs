@@ -1325,7 +1325,7 @@ export function createVcrRoutes(dependencies) {
         throw new HttpError(400, "vcr_payload_invalid", "subjectKey is the study's own key for the patient.");
       }
       const subjectKey = body.subjectKey;
-      const { study, roles } = await authorize(id, "run");
+      const { study } = await authorize(id, "run");
       if (!hooks.orchestrator?.requestTrialSearch) throw UNAVAILABLE();
       // A person is known by a document, a table row or a judgment, or by the facts the study's rules-based matching holds.
       const known = await service.packages?.subjectKnown?.(study, subjectKey)
@@ -1333,11 +1333,7 @@ export function createVcrRoutes(dependencies) {
       if (!known) throw new HttpError(404, "vcr_subject_not_found", "所选受试者不在本研究已登记的名单中。");
       const answer = await audited("vcr.trial_search.request", () => ({ code: id, detail: subjectKey }), { code: id, detail: subjectKey },
         () => hooks.orchestrator.requestTrialSearch(user, study, { subjectKey }));
-      const trials = service.packages?.patientTrials ?? null;
-      if (trials) trials.counters.searches += 1;
-      const evaluated = trials?.evaluate && roles.some((role) => roleHolds(role, "read_patient_level"))
-        ? await trials.evaluate(study, { subjectKeys: [subjectKey] }).then((done) => done.evaluated.length).catch(() => null) : null;
-      return reply({ ...answer, evaluated });
+      return reply(answer);
     }
 
     // --- 「按更新后的登记记录重新判定」 ---------------------------------------------------

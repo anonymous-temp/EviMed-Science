@@ -110,9 +110,6 @@ export const VCR_FACT_VOID_REASONS = Object.freeze([
 /** Polarities that may be reasoned from. A family history or a plan is not a finding. */
 export const VCR_ASSERTIVE_POLARITIES = CLINICAL_ASSERTIVE_POLARITIES;
 
-/** The layers a criterion-level error is stratified by (plan §7.1, attachment C2 failure modes). */
-export const VCR_ERROR_LAYERS = Object.freeze(["time", "number", "negation", "logic", "applicability", "other"]);
-
 /** How a criterion type maps onto an error layer, for the stratified confusion report. */
 const LAYER_BY_TYPE = Object.freeze({
   time_window: "time", lab: "number", biomarker: "number", performance_status: "number",

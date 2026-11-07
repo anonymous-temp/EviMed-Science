@@ -35,7 +35,6 @@ import { VcrFunnelBar } from "../VcrDiagrams";
 import { VcrStepPending, VcrTabSkeleton } from "../VcrStates";
 import { VcrToolbarActions } from "../VcrToolbarActions";
 import { PatientTrials } from "./PatientTrials";
-import { PatientTrialsLegacy } from "./PatientTrialsLegacy";
 import { MatchingPeople } from "./MatchingPeople";
 import { MatchingExport } from "./MatchingExport";
 import { useVcrToolbar } from "../studyFrameContext";
@@ -297,30 +296,6 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
           onPatient={(key) => { touched.current = true; setDirection("patient_to_trial"); setCandidate(key); setTrial(null); setPerson(null); }}
           onChanged={judgedLoad.reload}
         />
-      </div>
-    );
-  }
-  // The earlier path's page of one patient's trials: drawn as it always was for a patient the judgments have nothing on. It is taken only
-  // where the server sent that page; a server that did not answers the direction with the protocol's page.
-  if (view === "matching" && direction === "patient_to_trial" && data.patientTrials) {
-    const owner = data.patientTrials.subject;
-    return (
-      <div className="flex flex-col gap-6">
-        {aside}
-        <PatientTrialsLegacy
-          studyId={studyId}
-          study={study}
-          page={data.patientTrials}
-          roster={data.candidateRoster ?? []}
-          asked={candidate}
-          picked={trial}
-          facts={owner && timelineOwner(data) === owner ? data.timeline : undefined}
-          onPick={(id) => pickTrial(id)}
-          onSearched={reloadAll}
-        />
-        {owner && timelineOwner(data) === owner && (
-          <ClinicalTimeline studyId={studyId} data={data} subject={owner} mayReadOriginal={study.abilities.includes("read_patient_level")} />
-        )}
       </div>
     );
   }

@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 /**
- * The one step that removes three VCR tables nothing reads or writes any more: the batch reading's ledger of records read (`matching_extractions`, a pseudonym, a document id and counts)
- * and the per-account cache of a registry trial's structuring (`parsed_trial_criteria`, `parsed_trial_criteria_versions`, a public record's parse). A fresh schema does not have them, and
- * the schema never drops a table on a start (`vcrPersistence.mjs`), so a database from before 2026-11-05 keeps them until an operator runs this.
+ * The one step that removes the VCR tables nothing reads or writes any more: the batch reading's ledger of records read (`matching_extractions`, a pseudonym, a document id and counts),
+ * the per-account cache of a registry trial's structuring (`parsed_trial_criteria`, `parsed_trial_criteria_versions`, a public record's parse) and the definition cards of a trial's
+ * clauses (`clause_definitions`), and the rules-based candidate trials of 「给患者找试验」 before the judged page replaced them (`candidate_trials` and its three child tables;
+ * the `language_judgments.candidate_trial_id` column stays, unread). A fresh schema does not have them, and the schema never drops a table on a start (`vcrPersistence.mjs`), so a database from before the release that
+ * stopped reading them keeps them until an operator runs this. Tables are listed child-first: the drop uses no CASCADE.
  *
  *   OPEN_SCIENCE_DATABASE_URL=... node scripts/ops/vcr-retire-unread-tables.mjs            counts what is there
  *   OPEN_SCIENCE_DATABASE_URL=... node scripts/ops/vcr-retire-unread-tables.mjs --apply    and drops them, in one transaction
@@ -11,7 +13,8 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-export const UNREAD_TABLES = Object.freeze(['matching_extractions', 'parsed_trial_criteria', 'parsed_trial_criteria_versions']);
+export const UNREAD_TABLES = Object.freeze(['matching_extractions', 'parsed_trial_criteria', 'parsed_trial_criteria_versions', 'clause_definitions',
+  'candidate_trial_judgments', 'candidate_trial_assessments', 'candidate_trial_criteria', 'candidate_trials']);
 
 /**
  * Count each table that exists and, with `apply`, drop it. Run it inside a transaction.

@@ -77,36 +77,6 @@ export function matchingVariablesOf(criteria) {
 }
 
 /**
- * The variables a criterion asks whether something is there (`present`, `absent`), apart from those it only compares: the questions a
- * table answers through what its codes mean.
- * @param {readonly any[]} criteria @returns {string[]}
- */
-export function presenceVariablesOf(criteria) {
-  /** @type {Set<string>} */
-  const found = new Set();
-  /** @param {any} node */
-  const walk = (node) => {
-    if (!node || typeof node !== "object") return;
-    if (["present", "absent"].includes(String(node.op)) && typeof node.variable === "string" && node.variable) found.add(node.variable);
-    for (const child of Array.isArray(node.operands) ? node.operands : []) walk(child);
-    if (node.operand) walk(node.operand);
-  };
-  for (const criterion of criteria ?? []) { walk(criterion?.requirement); walk(criterion?.applicability); }
-  return [...found].sort();
-}
-
-/**
- * Whether a column can say anything about presence at all: it holds dates, or the meaning recorded a map or a measurement for it. A
- * column that cannot is no answer to a `present` question, and the record is still asked.
- * @param {{ name: string, type?: string | null } | undefined} column @param {TableMeaning | null | undefined} meaning
- */
-export function columnReadsPresence(column, meaning) {
-  if (!column) return false;
-  const map = meaning?.columns?.[column.name]?.valueMap;
-  return column.type === "date" || Boolean(map && (map.measurement === true || Object.keys(map.values ?? {}).length > 0));
-}
-
-/**
  * The column a variable is asked of: the one whose alias, else whose concept,
  * else whose source column name is that variable. Two columns at the same level
  * are an ambiguity and answer nothing.

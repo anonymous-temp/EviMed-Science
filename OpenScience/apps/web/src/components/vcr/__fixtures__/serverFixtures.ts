@@ -88,13 +88,9 @@ export function installVcrServer(productRequest: ReturnType<typeof vi.fn>, overr
             : { available: true, direction: "trial_to_patient", protocolVersionId: query.get("protocolVersionId") ?? "", tallies: { eligible: 0, possible: 0, insufficient: 0, ineligible: 0 }, people: [], total: 0, offset: 0, limit: 25, more: false, clauses: { judgedPeople: 0, rows: [] }, changed: 0, ...idle };
         }
         if (section === "matching" && set === "ev201") {
-          const view = query.get("view");
-          // 「给患者找试验」: nobody asked for, a person the study has found no trial for (P-0201), or P-0192's ranked list — the first trial
-          // judged by default, or the one asked for with `trial=` (ctr_2 has a rule still unknown).
-          if (query.get("direction") === "patient_to_trial" && (view === null || view === "matching")) {
-            if (query.get("candidate") === "P-0201") return fixture("ev201/matching-patient-trials-none.json");
-            if (query.get("candidate") === "P-0192") return fixture(query.get("trial") === "ctr_2" ? "ev201/matching-patient-trials-open.json" : "ev201/matching-patient-trials.json");
-            return fixture("ev201/matching-patient-trials-nobody.json");
+          // The patient direction reads the same page; the study holds the two patients the judged-page fixtures are about.
+          if (query.get("direction") === "patient_to_trial" && (query.get("view") === null || query.get("view") === "matching")) {
+            return { ...fixture("ev201/matching.json"), candidateRoster: ["P-0192", "P-0201"] };
           }
           // Three subjects have matching detail records.
           if (query.get("candidate") === "P-0201") return fixture("ev201/matching-p0201.json");
@@ -111,7 +107,7 @@ export function installVcrServer(productRequest: ReturnType<typeof vi.fn>, overr
     // A press of a step answers that it was taken and what waits for what — there is no session in it, nothing to go to.
     if (method === "POST" && /\/run$/.test(path)) return { accepted: true, runId: "run_1", step: (body as { step?: string } | undefined)?.step ?? null, queuedBehind: [] };
     // 「为该患者找试验」 answers a run, like a step, and how many verdicts the trials already held now have about the patient.
-    if (method === "POST" && /\/trial-search$/.test(path)) return { accepted: true, runId: "run_3", step: null, queuedBehind: [], evaluated: 0 };
+    if (method === "POST" && /\/trial-search$/.test(path)) return { accepted: true, runId: "run_3", step: null, queuedBehind: [] };
     if (method === "POST" && /\/export$/.test(path)) return { export: { id: "exp_9" }, accepted: true, runId: "run_2", step: null, queuedBehind: [] };
     if (method === "POST" && /\/cancel$/.test(path) && !/\/jobs\//.test(path)) return { canceled: { runId: null, jobs: 0 } };
     return {};

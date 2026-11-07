@@ -52,7 +52,7 @@ export const EXIT = Object.freeze({ finished: 0, error: 1, refused: 2, stopped: 
 
 const OPTIONS = {
   board: { type: 'string' }, split: { type: 'string' }, arm: { type: 'string' }, mode: { type: 'string' },
-  thinking: { type: 'string', default: 'high' }, 'thinking-criteria': { type: 'string' }, definitions: { type: 'boolean', default: false }, 'top-k': { type: 'string' }, concurrency: { type: 'string', default: '8' },
+  thinking: { type: 'string', default: 'high' }, 'thinking-criteria': { type: 'string' }, 'top-k': { type: 'string' }, concurrency: { type: 'string', default: '8' },
   'limit-patients': { type: 'string' }, out: { type: 'string' }, 'cap-cny': { type: 'string', default: String(DEFAULT_CAP_CNY) },
   'floor-cny': { type: 'string', default: String(DEFAULT_FLOOR_CNY) }, 'allow-peak': { type: 'boolean', default: false },
   'plan-only': { type: 'boolean', default: false }, 'worker-batches': { type: 'boolean', default: false }, score: { type: 'string', default: 'auto' },
@@ -110,7 +110,7 @@ export function parseOptions(argv, env = process.env) {
   if (!keyFile && !planOnly) throw fail('--key-file (or OPEN_SCIENCE_DEEPSEEK_API_KEY_FILE) names the DeepSeek key file; the key is never printed.', 'option_missing');
   return {
     help: false, board, split, arm: values.arm, unseal: Boolean(values.unseal), n2c2Boards: n2c2Boards ? path.resolve(n2c2Boards) : null, zhBoards: zhBoards ? path.resolve(zhBoards) : null,
-    n2c2Labels: values['n2c2-labels'] ?? env.VCR_BOARDS_N2C2_LABELS ?? null, n2c2Root: values['n2c2-root'] ?? env.EVIMED_N2C2_ROOT ?? null, mode, thinking: String(values.thinking), thinkingCriteria: String(values['thinking-criteria'] ?? values.thinking), definitions: Boolean(values.definitions), topK,
+    n2c2Labels: values['n2c2-labels'] ?? env.VCR_BOARDS_N2C2_LABELS ?? null, n2c2Root: values['n2c2-root'] ?? env.EVIMED_N2C2_ROOT ?? null, mode, thinking: String(values.thinking), thinkingCriteria: String(values['thinking-criteria'] ?? values.thinking), topK,
     concurrency: whole(values.concurrency, '--concurrency', 1, 64), workerBatches: values['worker-batches'] === true,
     limitPatients: values['limit-patients'] == null ? null : whole(values['limit-patients'], '--limit-patients', 1, 100_000),
     out: values.out ? path.resolve(values.out) : null, capCny: Number(values['cap-cny']), floorCny: Number(values['floor-cny']),
@@ -130,7 +130,7 @@ const yuan = (value) => (Number.isFinite(value) ? value.toFixed(2) : '?');
 const short = (value) => (value >= 1e6 ? `${(value / 1e6).toFixed(1)}M` : value >= 1e3 ? `${(value / 1e3).toFixed(0)}k` : String(Math.round(value)));
 
 /** What an arm was started with; a later run of the same arm has to agree, or its rows would be read as one experiment. @param {Record<string, any>} o */
-const armSettings = (o) => ({ board: o.board, mode: o.mode, thinking: o.thinking, thinkingCriteria: o.thinkingCriteria, ...(o.definitions ? { definitions: true } : {}), topK: o.topK, model: o.model, prompts: VCR_JUDGMENT_PROMPT_VERSIONS });
+const armSettings = (o) => ({ board: o.board, mode: o.mode, thinking: o.thinking, thinkingCriteria: o.thinkingCriteria, topK: o.topK, model: o.model, prompts: VCR_JUDGMENT_PROMPT_VERSIONS });
 
 /**
  * Run the loop. `deps` replaces the clock, the log and the balance check in tests; nothing else is replaced.
@@ -237,7 +237,7 @@ export async function runDevJob(o, deps = {}) {
     const fitOn = o.mode !== 'criteria';
     const topK = o.mode === 'fit' ? 0 : o.topK;
     const selectionOf = (/** @type {string} */ subjectKey, /** @type {readonly string[]} */ ids, /** @type {{ fit: boolean, topK: number | 'all' }} */ step) => ({
-      direction: 'patient_to_trial', subjectKey, registryIds: [...ids], collection: collection?.id, collectionRevision: collection?.revision, fit: step.fit, topK: step.topK, thinking: o.thinking, thinkingCriteria: o.thinkingCriteria, ...(o.definitions ? { definitions: true } : {}) });
+      direction: 'patient_to_trial', subjectKey, registryIds: [...ids], collection: collection?.id, collectionRevision: collection?.revision, fit: step.fit, topK: step.topK, thinking: o.thinking, thinkingCriteria: o.thinkingCriteria });
     if (rankingBoard) {
       for (const row of cases) {
         const subjectKey = subjectOf(row.patientId);
@@ -258,7 +258,7 @@ export async function runDevJob(o, deps = {}) {
       const subjectKeys = cases.map((row) => subjectOf(row.patientId));
       const step = { ids: [n2c2Version], fit: false, topK: /** @type {'all'} */ ('all') };
       items.push({ key: 'n2c2', patientIds: cases.map((row) => row.patientId), subjectKeys, targetIds: [n2c2Version], step,
-        selection: { direction: 'trial_to_patient', protocolVersionId: n2c2Version, subjectKeys, fit: false, topK: 'all', thinking: o.thinking, thinkingCriteria: o.thinkingCriteria, ...(o.definitions ? { definitions: true } : {}) } });
+        selection: { direction: 'trial_to_patient', protocolVersionId: n2c2Version, subjectKeys, fit: false, topK: 'all', thinking: o.thinking, thinkingCriteria: o.thinkingCriteria } });
     } else {
       const existing = await vcr.matchStore.protocols(study.id);
       /** @type {Map<string, { patientIds: string[] }>} */
@@ -281,7 +281,7 @@ export async function runDevJob(o, deps = {}) {
         const protocol = /** @type {NonNullable<ReturnType<typeof protocols.get>>} */ (protocols.get(key));
         const step = { ids: [protocol.versionId], fit: fitOn, topK: /** @type {'all'} */ ('all') };
         items.push({ key, patientIds: group.patientIds, subjectKeys: group.patientIds.map(subjectOf), targetIds: [protocol.versionId], protocol, step,
-          selection: { direction: 'trial_to_patient', protocolVersionId: protocol.versionId, subjectKeys: group.patientIds.map(subjectOf), fit: fitOn, topK: 'all', thinking: o.thinking, thinkingCriteria: o.thinkingCriteria, ...(o.definitions ? { definitions: true } : {}) } });
+          selection: { direction: 'trial_to_patient', protocolVersionId: protocol.versionId, subjectKeys: group.patientIds.map(subjectOf), fit: fitOn, topK: 'all', thinking: o.thinking, thinkingCriteria: o.thinkingCriteria } });
       }
     }
 

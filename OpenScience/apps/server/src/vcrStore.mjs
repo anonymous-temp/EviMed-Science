@@ -158,7 +158,7 @@ const VCR_CONVERSATION_STUDY_CONTENT = Object.freeze([
   ["patients", ["patient_sets"]],
   ["comparator", ["comparator_designs"]],
   ["trial", ["trial_scenarios", "design_grids", "forecasts"]],
-  ["matching", ["protocol_versions", "criteria", "matching_candidates", "matching_assessments", "candidate_trials", "candidate_trial_assessments", "match_judgments"]],
+  ["matching", ["protocol_versions", "criteria", "matching_candidates", "matching_assessments", "match_judgments"]],
   ["data", ["study_definitions", "study_precedents", "evidence_items", "curve_extractions", "assumptions", "sources",
     "source_files", "snapshots", "analysis_tables", "study_packs"]],
 ]);

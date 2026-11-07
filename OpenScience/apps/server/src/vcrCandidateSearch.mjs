@@ -30,8 +30,6 @@
  * @module vcrCandidateSearch
  */
 
-import { registryStatusLabel, registryStatusOpen, phaseLabel } from "./vcrPatientTrials.mjs";
-
 /** The registries a candidate list asks, in the order their results are kept first (the record with eligibility text wins a duplicate). */
 export const CANDIDATE_REGISTRIES = Object.freeze([
   Object.freeze({ id: "clinicaltrials.gov", name: "ClinicalTrials.gov" }),
@@ -54,7 +52,6 @@ export const CANDIDATES_NOT_COVERED = Object.freeze([
  * them as TrialGPT's keyword step does — the patient's problems summarised, then up to 32 conditions ranked by priority.
  */
 export const CANDIDATE_TERMS_MAX = 32;
-export const FROZEN_CANDIDATE_TERMS_MAX = CANDIDATE_TERMS_MAX;
 /** The most candidates one search keeps for one patient, and the most a frozen collection's list holds. */
 export const CANDIDATE_RETRIEVE_MAX = 500;
 export const FROZEN_CANDIDATE_LIMIT = CANDIDATE_RETRIEVE_MAX;
@@ -71,6 +68,65 @@ const CTIS_OPEN_STATUSES = Object.freeze([2, 3, 4]);
 
 /** @param {unknown} value */
 const text = (value) => String(value ?? "").trim();
+
+/**
+ * A registry's words for where a trial stands, as one closed table: whether it is open (the rank — lower is sooner, up to 2 is open),
+ * and the reader's word. ClinicalTrials.gov spells them `NOT_YET_RECRUITING`, ChiCTR `Not yet recruiting`, EU CTIS
+ * `Authorised, recruitment pending`; a word is compared with its case and punctuation folded. A word this table does not know is
+ * kept as the registry wrote it and ranked after what is open and before what is closed — it is not read as closed.
+ */
+const STATUS_TABLE = Object.freeze([
+  // `zh` is a status the evidence API sends for ChiCTR as ChiCTR writes it: only the word its documented example shows. Any other Chinese
+  // status is unknown to this table and is shown as it was written.
+  { rank: 0, label: "招募中", words: ["recruiting", "authorisedrecruiting", "ongoingrecruiting"], zh: ["招募中"] },
+  { rank: 1, label: "尚未开始招募", words: ["notyetrecruiting", "authorisedrecruitmentpending", "recruitmentpending"] },
+  { rank: 2, label: "邀请入组", words: ["enrollingbyinvitation"] },
+  { rank: 3, label: "进行中，不再招募", words: ["activenotrecruiting", "ongoingrecruitmentended", "ongoingnotrecruiting"] },
+  { rank: 4, label: "状态未知", words: ["unknown", "unknownstatus"] },
+  { rank: 6, label: "已暂停", words: ["suspended", "halted", "temporarilyhalted"] },
+  { rank: 7, label: "已完成", words: ["completed", "ended"] },
+  { rank: 8, label: "已终止", words: ["terminated", "prematurelyended", "earlyterminated"] },
+  { rank: 9, label: "已撤回", words: ["withdrawn", "notauthorised", "revoked"] },
+]);
+/** @param {unknown} status */
+const statusEntry = (status) => {
+  const given = text(status);
+  const word = given.toLowerCase().replace(/[^a-z]/g, "");
+  return STATUS_TABLE.find((entry) => (word && entry.words.includes(word)) || (/** @type {{ zh?: string[] }} */ (entry).zh ?? []).includes(given)) ?? null;
+};
+
+/**
+ * Whether a registry status is one of a trial that is open or about to be (recruiting, not yet recruiting, by invitation): `true`, `false`
+ * for the closed ones the table knows (not recruiting any more, suspended, completed, terminated, withdrawn), and `null` for a word it does
+ * not know or an unstated status — which is unknown, not closed.
+ * @param {unknown} status @returns {boolean | null}
+ */
+export function registryStatusOpen(status) {
+  const entry = statusEntry(status);
+  if (!entry || entry.label === "状态未知") return null;
+  return entry.rank <= 2;
+}
+
+/** The reader's word for a registry status; a word the table does not know is shown as the registry wrote it. @param {unknown} status */
+export function registryStatusLabel(status) {
+  return statusEntry(status)?.label ?? text(status);
+}
+
+const PHASE_NUMERALS = Object.freeze(/** @type {Record<string, string>} */ ({ 1: "I", 2: "II", 3: "III", 4: "IV" }));
+
+/**
+ * A trial's phase in the reader's numerals: `PHASE2` is 「II 期」, `PHASE1/PHASE2` 「I/II 期」. A phase that is not
+ * ClinicalTrials.gov's is shown as it was registered.
+ * @param {unknown} phase
+ */
+export function phaseLabel(phase) {
+  const raw = text(phase);
+  if (!raw) return "";
+  if (raw === "NA") return "不适用";
+  if (raw === "EARLY_PHASE1") return "早期 I 期";
+  const numbers = raw.split("/").map((part) => /^PHASE([1-4])$/.exec(text(part))?.[1] ?? null);
+  return numbers.every(Boolean) ? `${numbers.map((number) => PHASE_NUMERALS[/** @type {string} */ (number)]).join("/")} 期` : raw;
+}
 /** @param {unknown} value */
 const list = (value) => (Array.isArray(value) ? value : []);
 /** An id as two registrations of one trial would agree on it: case and spacing folded. @param {unknown} value */

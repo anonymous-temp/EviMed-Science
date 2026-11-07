@@ -205,8 +205,7 @@ test("the service resolves the criterion a read names, with the terminology the 
     async criterionById(_study, id) { asked.push(["criterion", id]); return id === "crt_1" ? { id, ...MI } : null; },
     async passageTerminology(_study, criterion) { asked.push(["terminology", criterion.id]); return MI_TERMINOLOGY; },
   };
-  const patientTrials = { async criterionById(_study, id) { asked.push(["candidate", id]); return null; } };
-  const service = new VcrService({ store: {}, config: {}, documents, matching, patientTrials });
+  const service = new VcrService({ store: {}, config: {}, documents, matching });
   const read = (filter) => service.runtimeRead(STUDY, "subject_document", { subjectKey: "P-1", documentId: "doc_1", ...filter });
 
   const found = await read({ id: "crt_1" });
@@ -225,6 +224,6 @@ test("the service resolves the criterion a read names, with the terminology the 
   // A criterion of another study (or none): named, and not an empty answer that would read as a record that says nothing.
   const missing = await read({ id: "crt_other" });
   assert.deepEqual([missing.available, missing.code], [false, "vcr_read_filter_invalid"]);
-  assert.deepEqual(asked.map((entry) => entry[0]), ["criterion", "candidate"], "a protocol's criteria, then the candidate trials'");
+  assert.deepEqual(asked.map((entry) => entry[0]), ["criterion"], "the protocol's criteria are the only ones");
   assert.equal(missing.passages, undefined);
 });

@@ -240,16 +240,6 @@ describe("给患者找试验 — the trials fill in as the job judges them", () 
 describe("给患者找试验 — every state", () => {
   beforeEach(wide);
 
-  it("a patient with nothing judged and nothing asked is the earlier page, as it was", async () => {
-    server = installVcrServer(network.productRequest);
-    draw(<MatchingTab studyId={STUDY_ID} study={study()} />);
-    await screen.findByRole("heading", { name: "P-0201" });
-    await userEvent.click(screen.getByRole("button", { name: "给患者找试验" }));
-    await userEvent.click(await screen.findByRole("button", { name: /^患者/ }));
-    await userEvent.click(await screen.findByRole("menuitemradio", { name: "P-0201" }));
-    expect(await screen.findByText(/还没有为 P-0201 找过试验/)).toBeInTheDocument();
-  });
-
   it("a job just begun, before any pair is judged, is a page that says 已完成 0 / n — not a patient nobody has searched for", async () => {
     await patientPage({ [JUDGED]: judged((page) => { page.trials = []; page.selected = null; page.failed = { count: 0, reasons: [], listed: [] };
       page.progress = { ...page.progress, total: 7, finished: 0, failed: 0, waiting: 7 }; return page; }) });

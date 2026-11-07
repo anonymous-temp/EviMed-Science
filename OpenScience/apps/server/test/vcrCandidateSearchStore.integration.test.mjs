@@ -6,21 +6,19 @@ import { after, before, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { VCR_TABLES } from "../src/vcrPersistence.mjs";
 import { CANDIDATE_SEARCHES_KEPT, VcrCandidateSearchStore, summaryStamp } from "../src/vcrCandidateSearchStore.mjs";
-import { VcrClauseDefinitionStore } from "../src/vcrClauseDefinitions.mjs";
 import { createVcrEvidencePipeline } from "../src/vcrEvidence.mjs";
 import { VcrStore } from "../src/vcrStore.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL;
 const options = { skip: !url && "An isolated PostgreSQL is required" };
-let database, isolated, studies, searches, definitions;
+let database, isolated, studies, searches;
 before(async () => {
   if (!url) return;
   isolated = await createGeoTestDatabase(url, "vcrsearch");
   database = new ControlPlaneDatabase({ databaseUrl: isolated.url, databasePoolMax: 4, databaseConnectionTimeoutMs: 2000 });
   studies = new VcrStore({ database });
   searches = new VcrCandidateSearchStore({ database });
-  definitions = new VcrClauseDefinitionStore({ database });
   await studies.ready();
 });
 after(async () => { await database?.close(); await isolated?.drop(); });
@@ -81,25 +79,6 @@ test("a study's deletion takes its receipts", options, async () => {
   await searches.query("DELETE FROM evimed_vcr.studies WHERE id=$1", [study.id]);
   assert.equal(await searches.get(study, id), null);
   assert.equal(Number((await searches.one("SELECT count(*)::int AS n FROM evimed_vcr.candidate_searches WHERE study_id=$1", [study.id])).n), 0);
-});
-
-test("a trial's definition cards are one row a text, prompt version and model: the first words stay, a registry trial's are shared and a protocol's go with its study", options, async () => {
-  assert.ok(VCR_TABLES.includes("clause_definitions"));
-  const study = await newStudy();
-  const key = { studyId: null, targetHash: "h".repeat(16), promptVersion: "defs-1", model: "deepseek-flash" };
-  assert.equal(await definitions.get(key), null);
-  const first = await definitions.save({ ...key, definitions: [{ number: 1, counts: "first", doesNotCount: "", source: "knowledge" }], usage: { calls: 1 } });
-  const second = await definitions.save({ ...key, definitions: [{ number: 1, counts: "second", doesNotCount: "", source: "knowledge" }] });
-  assert.deepEqual([first[0].counts, second[0].counts], ["first", "first"], "a second writer reads the first row");
-  assert.equal(await definitions.get({ ...key, promptVersion: "defs-2" }), null);
-  assert.equal(await definitions.get({ ...key, model: "other" }), null);
-  const own = { ...key, studyId: study.id };
-  assert.equal(await definitions.get(own), null, "a study's protocol does not read the shared row");
-  await definitions.save({ ...own, definitions: [{ number: 1, counts: "mine", doesNotCount: "", source: "knowledge" }] });
-  assert.equal((await definitions.get(own))[0].counts, "mine");
-  await definitions.query("DELETE FROM evimed_vcr.studies WHERE id=$1", [study.id]);
-  assert.equal(await definitions.get(own), null, "its cards went with the study");
-  assert.equal((await definitions.get(key))[0].counts, "first", "the shared row stayed");
 });
 
 test("a search through the evidence pipeline writes its receipt to the real table, and a second page is read from it without a registry", options, async () => {
