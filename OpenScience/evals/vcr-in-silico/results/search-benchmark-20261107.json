@@ -1,0 +1,4556 @@
+{
+  "revision": "81379e80dedd791f04042ffd9de7d6e06d750821",
+  "engine": {
+    "versions": {
+      "design.simulate": "1.5.0",
+      "design.analytic": "1.4.0"
+    },
+    "cores": 2,
+    "concurrency": 1
+  },
+  "startedAt": "2026-11-07T16:50:55.590Z",
+  "analytic": {
+    "campaign": {
+      "arm": "analytic",
+      "stop": "acceptable_precision",
+      "best": {
+        "key": "c004",
+        "set": {
+          "design.allocation": 0.5,
+          "accrual.duration": 24
+        },
+        "status": "evaluated",
+        "reason": null,
+        "final": {
+          "required_patients": {
+            "name": "required_patients",
+            "value": 386,
+            "mcse": null,
+            "simulated": false,
+            "source": "calculated"
+          },
+          "required_events": {
+            "name": "required_events",
+            "value": 247,
+            "mcse": null,
+            "simulated": false,
+            "source": "calculated"
+          }
+        },
+        "verdicts": [
+          {
+            "measure": "required_events",
+            "status": "pass",
+            "bound": {
+              "kind": "exact",
+              "confidence": null,
+              "lower": 247,
+              "upper": 247
+            }
+          }
+        ]
+      },
+      "feasible": [
+        "c000",
+        "c001",
+        "c002",
+        "c003",
+        "c004",
+        "c005",
+        "c006",
+        "c007",
+        "c008",
+        "c009",
+        "c010",
+        "c011",
+        "c012",
+        "c013",
+        "c014"
+      ],
+      "inconclusive": [],
+      "finalists": [
+        "c000",
+        "c001",
+        "c002",
+        "c003",
+        "c004",
+        "c005",
+        "c006",
+        "c007",
+        "c008",
+        "c009",
+        "c010",
+        "c011",
+        "c012",
+        "c013",
+        "c014"
+      ],
+      "candidates": [
+        {
+          "key": "c000",
+          "set": {
+            "design.allocation": 0.5,
+            "accrual.duration": 12
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "required_patients": {
+              "name": "required_patients",
+              "value": 444,
+              "mcse": null,
+              "simulated": false,
+              "source": "calculated"
+            },
+            "required_events": {
+              "name": "required_events",
+              "value": 247,
+              "mcse": null,
+              "simulated": false,
+              "source": "calculated"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "required_events",
+              "status": "pass",
+              "bound": {
+                "kind": "exact",
+                "confidence": null,
+                "lower": 247,
+                "upper": 247
+              }
+            }
+          ]
+        },
+        {
+          "key": "c001",
+          "set": {
+            "design.allocation": 0.5,
+            "accrual.duration": 15
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "required_patients": {
+              "name": "required_patients",
+              "value": 426,
+              "mcse": null,
+              "simulated": false,
+              "source": "calculated"
+            },
+            "required_events": {
+              "name": "required_events",
+              "value": 247,
+              "mcse": null,
+              "simulated": false,
+              "source": "calculated"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "required_events",
+              "status": "pass",
+              "bound": {
+                "kind": "exact",
+                "confidence": null,
+                "lower": 247,
+                "upper": 247
+              }
+            }
+          ]
+        },
+        {
+          "key": "c002",
+          "set": {
+            "design.allocation": 0.5,
+            "accrual.duration": 18
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "required_patients": {
+              "name": "required_patients",
+              "value": 410,
+              "mcse": null,
+              "simulated": false,
+              "source": "calculated"
+            },
+            "required_events": {
+              "name": "required_events",
+              "value": 247,
+              "mcse": null,
+              "simulated": false,
+              "source": "calculated"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "required_events",
+              "status": "pass",
+              "bound": {
+                "kind": "exact",
+                "confidence": null,
+                "lower": 247,
+                "upper": 247
+              }
+            }
+          ]
+        },
+        {
+          "key": "c003",
+          "set": {
+            "design.allocation": 0.5,
+            "accrual.duration": 21
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "required_patients": {
+              "name": "required_patients",
+              "value": 398,
+              "mcse": null,
+              "simulated": false,
+              "source": "calculated"
+            },
+            "required_events": {
+              "name": "required_events",
+              "value": 247,
+              "mcse": null,
+              "simulated": false,
+              "source": "calculated"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "required_events",
+              "status": "pass",
+              "bound": {
+                "kind": "exact",
+                "confidence": null,
+                "lower": 247,
+                "upper": 247
+              }
+            }
+          ]
+        },
+        {
+          "key": "c004",
+          "set": {
+            "design.allocation": 0.5,
+            "accrual.duration": 24
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "required_patients": {
+              "name": "required_patients",
+              "value": 386,
+              "mcse": null,
+              "simulated": false,
+              "source": "calculated"
+            },
+            "required_events": {
+              "name": "required_events",
+              "value": 247,
+              "mcse": null,
+              "simulated": false,
+              "source": "calculated"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "required_events",
+              "status": "pass",
+              "bound": {
+                "kind": "exact",
+                "confidence": null,
+                "lower": 247,
+                "upper": 247
+              }
+            }
+          ]
+        },
+        {
+          "key": "c005",
+          "set": {
+            "design.allocation": 0.6,
+            "accrual.duration": 12
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "required_patients": {
+              "name": "required_patients",
+              "value": 473,
+              "mcse": null,
+              "simulated": false,
+              "source": "calculated"
+            },
+            "required_events": {
+              "name": "required_events",
+              "value": 258,
+              "mcse": null,
+              "simulated": false,
+              "source": "calculated"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "required_events",
+              "status": "pass",
+              "bound": {
+                "kind": "exact",
+                "confidence": null,
+                "lower": 258,
+                "upper": 258
+              }
+            }
+          ]
+        },
+        {
+          "key": "c006",
+          "set": {
+            "design.allocation": 0.6,
+            "accrual.duration": 15
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "required_patients": {
+              "name": "required_patients",
+              "value": 453,
+              "mcse": null,
+              "simulated": false,
+              "source": "calculated"
+            },
+            "required_events": {
+              "name": "required_events",
+              "value": 258,
+              "mcse": null,
+              "simulated": false,
+              "source": "calculated"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "required_events",
+              "status": "pass",
+              "bound": {
+                "kind": "exact",
+                "confidence": null,
+                "lower": 258,
+                "upper": 258
+              }
+            }
+          ]
+        },
+        {
+          "key": "c007",
+          "set": {
+            "design.allocation": 0.6,
+            "accrual.duration": 18
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "required_patients": {
+              "name": "required_patients",
+              "value": 437,
+              "mcse": null,
+              "simulated": false,
+              "source": "calculated"
+            },
+            "required_events": {
+              "name": "required_events",
+              "value": 258,
+              "mcse": null,
+              "simulated": false,
+              "source": "calculated"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "required_events",
+              "status": "pass",
+              "bound": {
+                "kind": "exact",
+                "confidence": null,
+                "lower": 258,
+                "upper": 258
+              }
+            }
+          ]
+        },
+        {
+          "key": "c008",
+          "set": {
+            "design.allocation": 0.6,
+            "accrual.duration": 21
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "required_patients": {
+              "name": "required_patients",
+              "value": 422,
+              "mcse": null,
+              "simulated": false,
+              "source": "calculated"
+            },
+            "required_events": {
+              "name": "required_events",
+              "value": 258,
+              "mcse": null,
+              "simulated": false,
+              "source": "calculated"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "required_events",
+              "status": "pass",
+              "bound": {
+                "kind": "exact",
+                "confidence": null,
+                "lower": 258,
+                "upper": 258
+              }
+            }
+          ]
+        },
+        {
+          "key": "c009",
+          "set": {
+            "design.allocation": 0.6,
+            "accrual.duration": 24
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "required_patients": {
+              "name": "required_patients",
+              "value": 410,
+              "mcse": null,
+              "simulated": false,
+              "source": "calculated"
+            },
+            "required_events": {
+              "name": "required_events",
+              "value": 258,
+              "mcse": null,
+              "simulated": false,
+              "source": "calculated"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "required_events",
+              "status": "pass",
+              "bound": {
+                "kind": "exact",
+                "confidence": null,
+                "lower": 258,
+                "upper": 258
+              }
+            }
+          ]
+        },
+        {
+          "key": "c010",
+          "set": {
+            "design.allocation": 0.6666666666666666,
+            "accrual.duration": 12
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "required_patients": {
+              "name": "required_patients",
+              "value": 519,
+              "mcse": null,
+              "simulated": false,
+              "source": "calculated"
+            },
+            "required_events": {
+              "name": "required_events",
+              "value": 278,
+              "mcse": null,
+              "simulated": false,
+              "source": "calculated"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "required_events",
+              "status": "pass",
+              "bound": {
+                "kind": "exact",
+                "confidence": null,
+                "lower": 278,
+                "upper": 278
+              }
+            }
+          ]
+        },
+        {
+          "key": "c011",
+          "set": {
+            "design.allocation": 0.6666666666666666,
+            "accrual.duration": 15
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "required_patients": {
+              "name": "required_patients",
+              "value": 497,
+              "mcse": null,
+              "simulated": false,
+              "source": "calculated"
+            },
+            "required_events": {
+              "name": "required_events",
+              "value": 278,
+              "mcse": null,
+              "simulated": false,
+              "source": "calculated"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "required_events",
+              "status": "pass",
+              "bound": {
+                "kind": "exact",
+                "confidence": null,
+                "lower": 278,
+                "upper": 278
+              }
+            }
+          ]
+        },
+        {
+          "key": "c012",
+          "set": {
+            "design.allocation": 0.6666666666666666,
+            "accrual.duration": 18
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "required_patients": {
+              "name": "required_patients",
+              "value": 477,
+              "mcse": null,
+              "simulated": false,
+              "source": "calculated"
+            },
+            "required_events": {
+              "name": "required_events",
+              "value": 278,
+              "mcse": null,
+              "simulated": false,
+              "source": "calculated"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "required_events",
+              "status": "pass",
+              "bound": {
+                "kind": "exact",
+                "confidence": null,
+                "lower": 278,
+                "upper": 278
+              }
+            }
+          ]
+        },
+        {
+          "key": "c013",
+          "set": {
+            "design.allocation": 0.6666666666666666,
+            "accrual.duration": 21
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "required_patients": {
+              "name": "required_patients",
+              "value": 462,
+              "mcse": null,
+              "simulated": false,
+              "source": "calculated"
+            },
+            "required_events": {
+              "name": "required_events",
+              "value": 278,
+              "mcse": null,
+              "simulated": false,
+              "source": "calculated"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "required_events",
+              "status": "pass",
+              "bound": {
+                "kind": "exact",
+                "confidence": null,
+                "lower": 278,
+                "upper": 278
+              }
+            }
+          ]
+        },
+        {
+          "key": "c014",
+          "set": {
+            "design.allocation": 0.6666666666666666,
+            "accrual.duration": 24
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "required_patients": {
+              "name": "required_patients",
+              "value": 449,
+              "mcse": null,
+              "simulated": false,
+              "source": "calculated"
+            },
+            "required_events": {
+              "name": "required_events",
+              "value": 278,
+              "mcse": null,
+              "simulated": false,
+              "source": "calculated"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "required_events",
+              "status": "pass",
+              "bound": {
+                "kind": "exact",
+                "confidence": null,
+                "lower": 278,
+                "upper": 278
+              }
+            }
+          ]
+        }
+      ],
+      "evaluated": 15,
+      "usage": {
+        "cpuSeconds": 23.75,
+        "queueSeconds": 0,
+        "wallSeconds": 45.407,
+        "replicatesCompleted": 0,
+        "modelCalls": 0,
+        "units": 15,
+        "peakKb": 135544,
+        "queueIfSubmittedTogether": {
+          "total": 296.23800000000006,
+          "max": 42.623
+        }
+      },
+      "units": [
+        {
+          "unit": "c000:final:planned",
+          "stage": "final",
+          "method": "design.analytic",
+          "replicates": null,
+          "engineCpuSeconds": 1.629,
+          "wallSeconds": 3.465,
+          "peakKb": 135040,
+          "submittedAt": 0.001,
+          "queueIfSubmittedTogether": 0
+        },
+        {
+          "unit": "c001:final:planned",
+          "stage": "final",
+          "method": "design.analytic",
+          "replicates": null,
+          "engineCpuSeconds": 1.175,
+          "wallSeconds": 1.948,
+          "peakKb": 135252,
+          "submittedAt": 0.002,
+          "queueIfSubmittedTogether": 3.465
+        },
+        {
+          "unit": "c002:final:planned",
+          "stage": "final",
+          "method": "design.analytic",
+          "replicates": null,
+          "engineCpuSeconds": 1.233,
+          "wallSeconds": 2.178,
+          "peakKb": 135256,
+          "submittedAt": 0.002,
+          "queueIfSubmittedTogether": 5.413
+        },
+        {
+          "unit": "c003:final:planned",
+          "stage": "final",
+          "method": "design.analytic",
+          "replicates": null,
+          "engineCpuSeconds": 2.02,
+          "wallSeconds": 3.371,
+          "peakKb": 135412,
+          "submittedAt": 0.002,
+          "queueIfSubmittedTogether": 7.591
+        },
+        {
+          "unit": "c004:final:planned",
+          "stage": "final",
+          "method": "design.analytic",
+          "replicates": null,
+          "engineCpuSeconds": 1.562,
+          "wallSeconds": 2.965,
+          "peakKb": 135032,
+          "submittedAt": 0.002,
+          "queueIfSubmittedTogether": 10.962
+        },
+        {
+          "unit": "c005:final:planned",
+          "stage": "final",
+          "method": "design.analytic",
+          "replicates": null,
+          "engineCpuSeconds": 1.434,
+          "wallSeconds": 2.391,
+          "peakKb": 135256,
+          "submittedAt": 0.003,
+          "queueIfSubmittedTogether": 13.927
+        },
+        {
+          "unit": "c006:final:planned",
+          "stage": "final",
+          "method": "design.analytic",
+          "replicates": null,
+          "engineCpuSeconds": 1.798,
+          "wallSeconds": 2.931,
+          "peakKb": 135288,
+          "submittedAt": 0.003,
+          "queueIfSubmittedTogether": 16.317999999999998
+        },
+        {
+          "unit": "c007:final:planned",
+          "stage": "final",
+          "method": "design.analytic",
+          "replicates": null,
+          "engineCpuSeconds": 1.646,
+          "wallSeconds": 2.809,
+          "peakKb": 135204,
+          "submittedAt": 0.003,
+          "queueIfSubmittedTogether": 19.249
+        },
+        {
+          "unit": "c008:final:planned",
+          "stage": "final",
+          "method": "design.analytic",
+          "replicates": null,
+          "engineCpuSeconds": 1.341,
+          "wallSeconds": 2.311,
+          "peakKb": 135288,
+          "submittedAt": 0.003,
+          "queueIfSubmittedTogether": 22.058
+        },
+        {
+          "unit": "c009:final:planned",
+          "stage": "final",
+          "method": "design.analytic",
+          "replicates": null,
+          "engineCpuSeconds": 1.491,
+          "wallSeconds": 2.42,
+          "peakKb": 135048,
+          "submittedAt": 0.003,
+          "queueIfSubmittedTogether": 24.369
+        },
+        {
+          "unit": "c010:final:planned",
+          "stage": "final",
+          "method": "design.analytic",
+          "replicates": null,
+          "engineCpuSeconds": 1.859,
+          "wallSeconds": 3.695,
+          "peakKb": 135544,
+          "submittedAt": 0.004,
+          "queueIfSubmittedTogether": 26.789
+        },
+        {
+          "unit": "c011:final:planned",
+          "stage": "final",
+          "method": "design.analytic",
+          "replicates": null,
+          "engineCpuSeconds": 1.562,
+          "wallSeconds": 3.899,
+          "peakKb": 135012,
+          "submittedAt": 0.004,
+          "queueIfSubmittedTogether": 30.484
+        },
+        {
+          "unit": "c012:final:planned",
+          "stage": "final",
+          "method": "design.analytic",
+          "replicates": null,
+          "engineCpuSeconds": 1.948,
+          "wallSeconds": 4.224,
+          "peakKb": 135284,
+          "submittedAt": 0.004,
+          "queueIfSubmittedTogether": 34.383
+        },
+        {
+          "unit": "c013:final:planned",
+          "stage": "final",
+          "method": "design.analytic",
+          "replicates": null,
+          "engineCpuSeconds": 1.761,
+          "wallSeconds": 4.016,
+          "peakKb": 135416,
+          "submittedAt": 0.004,
+          "queueIfSubmittedTogether": 38.607
+        },
+        {
+          "unit": "c014:final:planned",
+          "stage": "final",
+          "method": "design.analytic",
+          "replicates": null,
+          "engineCpuSeconds": 1.291,
+          "wallSeconds": 2.784,
+          "peakKb": 135492,
+          "submittedAt": 0.005,
+          "queueIfSubmittedTogether": 42.623
+        }
+      ]
+    }
+  },
+  "survival": {
+    "reference": {
+      "arm": "reference",
+      "stop": "no_feasible_beneficial_candidate",
+      "best": null,
+      "feasible": [],
+      "inconclusive": [],
+      "finalists": [
+        "c000"
+      ],
+      "candidates": [
+        {
+          "key": "c000",
+          "set": {
+            "design.nTreat": 150,
+            "design.nControl": 150,
+            "accrual.duration": 18
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "power": {
+              "name": "power",
+              "value": 0.6914,
+              "mcse": 0.0065324733447600074,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "type_one_error": {
+              "name": "type_one_error",
+              "value": 0.024,
+              "mcse": 0.0010822199406774946,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "expected_sample_size": {
+              "name": "expected_sample_size",
+              "value": 300,
+              "mcse": 0,
+              "simulated": true,
+              "source": "synthetic"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "fail",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 3457,
+                "trials": 5000,
+                "lower": 0.6783875536086987,
+                "upper": 0.7041886355134739
+              }
+            },
+            {
+              "measure": "type_one_error",
+              "status": "pass",
+              "bound": {
+                "kind": "nominal_level",
+                "confidence": 0.975,
+                "events": 480,
+                "trials": 20000,
+                "lower": 0.021923304049225184,
+                "upper": 0.02621659545489255
+              }
+            }
+          ]
+        }
+      ],
+      "evaluated": 1,
+      "usage": {
+        "cpuSeconds": 94.112,
+        "queueSeconds": 0,
+        "wallSeconds": 116.578,
+        "replicatesCompleted": 25000,
+        "modelCalls": 0,
+        "units": 2,
+        "peakKb": 148724,
+        "queueIfSubmittedTogether": {
+          "total": 19.763,
+          "max": 19.763
+        }
+      },
+      "units": [
+        {
+          "unit": "c000:final:alternative",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 5000,
+          "engineCpuSeconds": 20.158,
+          "wallSeconds": 19.763,
+          "peakKb": 139144,
+          "submittedAt": 0,
+          "queueIfSubmittedTogether": 0
+        },
+        {
+          "unit": "c000:final:null",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 20000,
+          "engineCpuSeconds": 73.954,
+          "wallSeconds": 96.815,
+          "peakKb": 148724,
+          "submittedAt": 0,
+          "queueIfSubmittedTogether": 19.763
+        }
+      ]
+    },
+    "staged": {
+      "arm": "staged",
+      "stop": "acceptable_precision",
+      "best": {
+        "key": "c014",
+        "set": {
+          "design.nTreat": 200,
+          "design.nControl": 200,
+          "accrual.duration": 24
+        },
+        "status": "evaluated",
+        "reason": null,
+        "final": {
+          "power": {
+            "name": "power",
+            "value": 0.8378,
+            "mcse": 0.00521327459472451,
+            "simulated": true,
+            "source": "synthetic"
+          },
+          "type_one_error": {
+            "name": "type_one_error",
+            "value": 0.02485,
+            "mcse": 0.0011007378775167137,
+            "simulated": true,
+            "source": "synthetic"
+          },
+          "expected_sample_size": {
+            "name": "expected_sample_size",
+            "value": 400,
+            "mcse": 0,
+            "simulated": true,
+            "source": "synthetic"
+          }
+        },
+        "verdicts": [
+          {
+            "measure": "power",
+            "status": "pass",
+            "bound": {
+              "kind": "clopper_pearson",
+              "confidence": 0.975,
+              "events": 4189,
+              "trials": 5000,
+              "lower": 0.8272855790335796,
+              "upper": 0.8479184042677095
+            }
+          },
+          {
+            "measure": "type_one_error",
+            "status": "pass",
+            "bound": {
+              "kind": "nominal_level",
+              "confidence": 0.975,
+              "events": 497,
+              "trials": 20000,
+              "lower": 0.022736882526396635,
+              "upper": 0.027102731466144864
+            }
+          }
+        ]
+      },
+      "feasible": [
+        "c014"
+      ],
+      "inconclusive": [
+        "c013"
+      ],
+      "finalists": [
+        "c010",
+        "c013",
+        "c014"
+      ],
+      "candidates": [
+        {
+          "key": "c000",
+          "set": {
+            "design.nTreat": 100,
+            "design.nControl": 100,
+            "accrual.duration": 12
+          },
+          "status": "eliminated",
+          "reason": "screening_violates:power",
+          "final": {},
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "not_judged",
+              "bound": 0.8
+            },
+            {
+              "measure": "type_one_error",
+              "status": "not_judged",
+              "bound": 0.025
+            }
+          ]
+        },
+        {
+          "key": "c001",
+          "set": {
+            "design.nTreat": 100,
+            "design.nControl": 100,
+            "accrual.duration": 18
+          },
+          "status": "eliminated",
+          "reason": "screening_violates:power",
+          "final": {},
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "not_judged",
+              "bound": 0.8
+            },
+            {
+              "measure": "type_one_error",
+              "status": "not_judged",
+              "bound": 0.025
+            }
+          ]
+        },
+        {
+          "key": "c002",
+          "set": {
+            "design.nTreat": 100,
+            "design.nControl": 100,
+            "accrual.duration": 24
+          },
+          "status": "eliminated",
+          "reason": "screening_violates:power",
+          "final": {},
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "not_judged",
+              "bound": 0.8
+            },
+            {
+              "measure": "type_one_error",
+              "status": "not_judged",
+              "bound": 0.025
+            }
+          ]
+        },
+        {
+          "key": "c003",
+          "set": {
+            "design.nTreat": 125,
+            "design.nControl": 125,
+            "accrual.duration": 12
+          },
+          "status": "eliminated",
+          "reason": "screening_violates:power",
+          "final": {},
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "not_judged",
+              "bound": 0.8
+            },
+            {
+              "measure": "type_one_error",
+              "status": "not_judged",
+              "bound": 0.025
+            }
+          ]
+        },
+        {
+          "key": "c004",
+          "set": {
+            "design.nTreat": 125,
+            "design.nControl": 125,
+            "accrual.duration": 18
+          },
+          "status": "eliminated",
+          "reason": "screening_violates:power",
+          "final": {},
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "not_judged",
+              "bound": 0.8
+            },
+            {
+              "measure": "type_one_error",
+              "status": "not_judged",
+              "bound": 0.025
+            }
+          ]
+        },
+        {
+          "key": "c005",
+          "set": {
+            "design.nTreat": 125,
+            "design.nControl": 125,
+            "accrual.duration": 24
+          },
+          "status": "eliminated",
+          "reason": "screening_violates:power",
+          "final": {},
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "not_judged",
+              "bound": 0.8
+            },
+            {
+              "measure": "type_one_error",
+              "status": "not_judged",
+              "bound": 0.025
+            }
+          ]
+        },
+        {
+          "key": "c006",
+          "set": {
+            "design.nTreat": 150,
+            "design.nControl": 150,
+            "accrual.duration": 12
+          },
+          "status": "eliminated",
+          "reason": "screening_violates:power",
+          "final": {},
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "not_judged",
+              "bound": 0.8
+            },
+            {
+              "measure": "type_one_error",
+              "status": "not_judged",
+              "bound": 0.025
+            }
+          ]
+        },
+        {
+          "key": "c007",
+          "set": {
+            "design.nTreat": 150,
+            "design.nControl": 150,
+            "accrual.duration": 18
+          },
+          "status": "eliminated",
+          "reason": "screening_violates:power",
+          "final": {},
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "not_judged",
+              "bound": 0.8
+            },
+            {
+              "measure": "type_one_error",
+              "status": "not_judged",
+              "bound": 0.025
+            }
+          ]
+        },
+        {
+          "key": "c008",
+          "set": {
+            "design.nTreat": 150,
+            "design.nControl": 150,
+            "accrual.duration": 24
+          },
+          "status": "eliminated",
+          "reason": "screening_violates:power",
+          "final": {},
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "not_judged",
+              "bound": 0.8
+            },
+            {
+              "measure": "type_one_error",
+              "status": "not_judged",
+              "bound": 0.025
+            }
+          ]
+        },
+        {
+          "key": "c009",
+          "set": {
+            "design.nTreat": 175,
+            "design.nControl": 175,
+            "accrual.duration": 12
+          },
+          "status": "eliminated",
+          "reason": "screening_violates:power",
+          "final": {},
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "not_judged",
+              "bound": 0.8
+            },
+            {
+              "measure": "type_one_error",
+              "status": "not_judged",
+              "bound": 0.025
+            }
+          ]
+        },
+        {
+          "key": "c010",
+          "set": {
+            "design.nTreat": 175,
+            "design.nControl": 175,
+            "accrual.duration": 18
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "power": {
+              "name": "power",
+              "value": 0.7494,
+              "mcse": 0.006128615504337012,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "type_one_error": {
+              "name": "type_one_error",
+              "value": 0.0248,
+              "mcse": 0.0010996581286927315,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "expected_sample_size": {
+              "name": "expected_sample_size",
+              "value": 350,
+              "mcse": 0,
+              "simulated": true,
+              "source": "synthetic"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "fail",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 3747,
+                "trials": 5000,
+                "lower": 0.7371446694925934,
+                "upper": 0.7613635028148795
+              }
+            },
+            {
+              "measure": "type_one_error",
+              "status": "pass",
+              "bound": {
+                "kind": "nominal_level",
+                "confidence": 0.975,
+                "events": 496,
+                "trials": 20000,
+                "lower": 0.022689006259934336,
+                "upper": 0.027050624472730572
+              }
+            }
+          ]
+        },
+        {
+          "key": "c011",
+          "set": {
+            "design.nTreat": 175,
+            "design.nControl": 175,
+            "accrual.duration": 24
+          },
+          "status": "screened",
+          "reason": null,
+          "final": {},
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "not_judged",
+              "bound": 0.8
+            },
+            {
+              "measure": "type_one_error",
+              "status": "not_judged",
+              "bound": 0.025
+            }
+          ]
+        },
+        {
+          "key": "c012",
+          "set": {
+            "design.nTreat": 200,
+            "design.nControl": 200,
+            "accrual.duration": 12
+          },
+          "status": "screened",
+          "reason": null,
+          "final": {},
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "not_judged",
+              "bound": 0.8
+            },
+            {
+              "measure": "type_one_error",
+              "status": "not_judged",
+              "bound": 0.025
+            }
+          ]
+        },
+        {
+          "key": "c013",
+          "set": {
+            "design.nTreat": 200,
+            "design.nControl": 200,
+            "accrual.duration": 18
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "power": {
+              "name": "power",
+              "value": 0.8024,
+              "mcse": 0.005631238584894091,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "type_one_error": {
+              "name": "type_one_error",
+              "value": 0.02475,
+              "mcse": 0.0010985772048427002,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "expected_sample_size": {
+              "name": "expected_sample_size",
+              "value": 400,
+              "mcse": 0,
+              "simulated": true,
+              "source": "synthetic"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "inconclusive",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 4012,
+                "trials": 5000,
+                "lower": 0.7910877874901905,
+                "upper": 0.8133580303905443
+              }
+            },
+            {
+              "measure": "type_one_error",
+              "status": "pass",
+              "bound": {
+                "kind": "nominal_level",
+                "confidence": 0.975,
+                "events": 495,
+                "trials": 20000,
+                "lower": 0.0226411322974244,
+                "upper": 0.02699851518200644
+              }
+            }
+          ]
+        },
+        {
+          "key": "c014",
+          "set": {
+            "design.nTreat": 200,
+            "design.nControl": 200,
+            "accrual.duration": 24
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "power": {
+              "name": "power",
+              "value": 0.8378,
+              "mcse": 0.00521327459472451,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "type_one_error": {
+              "name": "type_one_error",
+              "value": 0.02485,
+              "mcse": 0.0011007378775167137,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "expected_sample_size": {
+              "name": "expected_sample_size",
+              "value": 400,
+              "mcse": 0,
+              "simulated": true,
+              "source": "synthetic"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "pass",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 4189,
+                "trials": 5000,
+                "lower": 0.8272855790335796,
+                "upper": 0.8479184042677095
+              }
+            },
+            {
+              "measure": "type_one_error",
+              "status": "pass",
+              "bound": {
+                "kind": "nominal_level",
+                "confidence": 0.975,
+                "events": 497,
+                "trials": 20000,
+                "lower": 0.022736882526396635,
+                "upper": 0.027102731466144864
+              }
+            }
+          ]
+        }
+      ],
+      "evaluated": 15,
+      "usage": {
+        "cpuSeconds": 287.87299999999993,
+        "queueSeconds": 0,
+        "wallSeconds": 283.37199999999996,
+        "replicatesCompleted": 79500,
+        "modelCalls": 0,
+        "units": 21,
+        "peakKb": 171768,
+        "queueIfSubmittedTogether": {
+          "total": 1971.598,
+          "max": 248.51999999999998
+        }
+      },
+      "units": [
+        {
+          "unit": "c000:screening:alternative",
+          "stage": "screening",
+          "method": "design.simulate",
+          "replicates": 300,
+          "engineCpuSeconds": 3.211,
+          "wallSeconds": 8.149,
+          "peakKb": 128316,
+          "submittedAt": 0,
+          "queueIfSubmittedTogether": 0
+        },
+        {
+          "unit": "c001:screening:alternative",
+          "stage": "screening",
+          "method": "design.simulate",
+          "replicates": 300,
+          "engineCpuSeconds": 3.711,
+          "wallSeconds": 9.001,
+          "peakKb": 127852,
+          "submittedAt": 0,
+          "queueIfSubmittedTogether": 8.149
+        },
+        {
+          "unit": "c002:screening:alternative",
+          "stage": "screening",
+          "method": "design.simulate",
+          "replicates": 300,
+          "engineCpuSeconds": 3.592,
+          "wallSeconds": 9.952,
+          "peakKb": 127676,
+          "submittedAt": 0.001,
+          "queueIfSubmittedTogether": 17.15
+        },
+        {
+          "unit": "c003:screening:alternative",
+          "stage": "screening",
+          "method": "design.simulate",
+          "replicates": 300,
+          "engineCpuSeconds": 3.846,
+          "wallSeconds": 11.513,
+          "peakKb": 128248,
+          "submittedAt": 0.001,
+          "queueIfSubmittedTogether": 27.101999999999997
+        },
+        {
+          "unit": "c004:screening:alternative",
+          "stage": "screening",
+          "method": "design.simulate",
+          "replicates": 300,
+          "engineCpuSeconds": 3.34,
+          "wallSeconds": 7.018,
+          "peakKb": 129640,
+          "submittedAt": 0.001,
+          "queueIfSubmittedTogether": 38.614999999999995
+        },
+        {
+          "unit": "c005:screening:alternative",
+          "stage": "screening",
+          "method": "design.simulate",
+          "replicates": 300,
+          "engineCpuSeconds": 3.486,
+          "wallSeconds": 7.093,
+          "peakKb": 134712,
+          "submittedAt": 0.002,
+          "queueIfSubmittedTogether": 45.632999999999996
+        },
+        {
+          "unit": "c006:screening:alternative",
+          "stage": "screening",
+          "method": "design.simulate",
+          "replicates": 300,
+          "engineCpuSeconds": 3.528,
+          "wallSeconds": 6.269,
+          "peakKb": 134972,
+          "submittedAt": 0.002,
+          "queueIfSubmittedTogether": 52.726
+        },
+        {
+          "unit": "c007:screening:alternative",
+          "stage": "screening",
+          "method": "design.simulate",
+          "replicates": 300,
+          "engineCpuSeconds": 3.614,
+          "wallSeconds": 7.47,
+          "peakKb": 129732,
+          "submittedAt": 0.003,
+          "queueIfSubmittedTogether": 58.995
+        },
+        {
+          "unit": "c008:screening:alternative",
+          "stage": "screening",
+          "method": "design.simulate",
+          "replicates": 300,
+          "engineCpuSeconds": 3.631,
+          "wallSeconds": 7.763,
+          "peakKb": 134728,
+          "submittedAt": 0.003,
+          "queueIfSubmittedTogether": 66.465
+        },
+        {
+          "unit": "c009:screening:alternative",
+          "stage": "screening",
+          "method": "design.simulate",
+          "replicates": 300,
+          "engineCpuSeconds": 3.268,
+          "wallSeconds": 5.259,
+          "peakKb": 134748,
+          "submittedAt": 0.003,
+          "queueIfSubmittedTogether": 74.22800000000001
+        },
+        {
+          "unit": "c010:screening:alternative",
+          "stage": "screening",
+          "method": "design.simulate",
+          "replicates": 300,
+          "engineCpuSeconds": 3.144,
+          "wallSeconds": 4.772,
+          "peakKb": 134900,
+          "submittedAt": 0.004,
+          "queueIfSubmittedTogether": 79.48700000000001
+        },
+        {
+          "unit": "c011:screening:alternative",
+          "stage": "screening",
+          "method": "design.simulate",
+          "replicates": 300,
+          "engineCpuSeconds": 3.645,
+          "wallSeconds": 5.349,
+          "peakKb": 134904,
+          "submittedAt": 0.004,
+          "queueIfSubmittedTogether": 84.25900000000001
+        },
+        {
+          "unit": "c012:screening:alternative",
+          "stage": "screening",
+          "method": "design.simulate",
+          "replicates": 300,
+          "engineCpuSeconds": 3.605,
+          "wallSeconds": 6.744,
+          "peakKb": 135156,
+          "submittedAt": 0.004,
+          "queueIfSubmittedTogether": 89.60800000000002
+        },
+        {
+          "unit": "c013:screening:alternative",
+          "stage": "screening",
+          "method": "design.simulate",
+          "replicates": 300,
+          "engineCpuSeconds": 3.341,
+          "wallSeconds": 5.067,
+          "peakKb": 134908,
+          "submittedAt": 0.005,
+          "queueIfSubmittedTogether": 96.35200000000002
+        },
+        {
+          "unit": "c014:screening:alternative",
+          "stage": "screening",
+          "method": "design.simulate",
+          "replicates": 300,
+          "engineCpuSeconds": 3.81,
+          "wallSeconds": 5.811,
+          "peakKb": 134776,
+          "submittedAt": 0.005,
+          "queueIfSubmittedTogether": 101.41900000000001
+        },
+        {
+          "unit": "c010:final:alternative",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 5000,
+          "engineCpuSeconds": 19.18,
+          "wallSeconds": 28.022,
+          "peakKb": 139252,
+          "submittedAt": 0.005,
+          "queueIfSubmittedTogether": 107.23000000000002
+        },
+        {
+          "unit": "c010:final:null",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 20000,
+          "engineCpuSeconds": 61.463,
+          "wallSeconds": 60.373,
+          "peakKb": 171768,
+          "submittedAt": 0.006,
+          "queueIfSubmittedTogether": 135.252
+        },
+        {
+          "unit": "c013:final:alternative",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 5000,
+          "engineCpuSeconds": 16.122,
+          "wallSeconds": 10.64,
+          "peakKb": 139256,
+          "submittedAt": 0.006,
+          "queueIfSubmittedTogether": 195.625
+        },
+        {
+          "unit": "c013:final:null",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 20000,
+          "engineCpuSeconds": 59.419,
+          "wallSeconds": 32.253,
+          "peakKb": 171384,
+          "submittedAt": 0.006,
+          "queueIfSubmittedTogether": 206.265
+        },
+        {
+          "unit": "c014:final:alternative",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 5000,
+          "engineCpuSeconds": 16.128,
+          "wallSeconds": 10.002,
+          "peakKb": 139384,
+          "submittedAt": 0.006,
+          "queueIfSubmittedTogether": 238.51799999999997
+        },
+        {
+          "unit": "c014:final:null",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 20000,
+          "engineCpuSeconds": 62.789,
+          "wallSeconds": 34.852,
+          "peakKb": 171516,
+          "submittedAt": 0.007,
+          "queueIfSubmittedTogether": 248.51999999999998
+        }
+      ]
+    },
+    "grid": {
+      "arm": "grid",
+      "stop": "budget_exhausted",
+      "best": null,
+      "feasible": [],
+      "inconclusive": [],
+      "finalists": [
+        "c000",
+        "c001",
+        "c002",
+        "c003",
+        "c004",
+        "c005",
+        "c006",
+        "c007",
+        "c008",
+        "c009",
+        "c010",
+        "c011",
+        "c012",
+        "c013",
+        "c014"
+      ],
+      "candidates": [
+        {
+          "key": "c000",
+          "set": {
+            "design.nTreat": 100,
+            "design.nControl": 100,
+            "accrual.duration": 12
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "power": {
+              "name": "power",
+              "value": 0.4916,
+              "mcse": 0.007070069872356284,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "type_one_error": {
+              "name": "type_one_error",
+              "value": 0.0249,
+              "mcse": 0.0011018164547691234,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "expected_sample_size": {
+              "name": "expected_sample_size",
+              "value": 200,
+              "mcse": 0,
+              "simulated": true,
+              "source": "synthetic"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "fail",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 2458,
+                "trials": 5000,
+                "lower": 0.4776512363575559,
+                "upper": 0.5055585784667049
+              }
+            },
+            {
+              "measure": "type_one_error",
+              "status": "pass",
+              "bound": {
+                "kind": "nominal_level",
+                "confidence": 0.975,
+                "events": 498,
+                "trials": 20000,
+                "lower": 0.02278476109005631,
+                "upper": 0.027154836169018676
+              }
+            }
+          ]
+        },
+        {
+          "key": "c001",
+          "set": {
+            "design.nTreat": 100,
+            "design.nControl": 100,
+            "accrual.duration": 18
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "power": {
+              "name": "power",
+              "value": 0.5118,
+              "mcse": 0.007069098386640265,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "type_one_error": {
+              "name": "type_one_error",
+              "value": 0.0256,
+              "mcse": 0.0011167954154633695,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "expected_sample_size": {
+              "name": "expected_sample_size",
+              "value": 200,
+              "mcse": 0,
+              "simulated": true,
+              "source": "synthetic"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "fail",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 2559,
+                "trials": 5000,
+                "lower": 0.49784133831285426,
+                "upper": 0.5257448741780817
+              }
+            },
+            {
+              "measure": "type_one_error",
+              "status": "pass",
+              "bound": {
+                "kind": "nominal_level",
+                "confidence": 0.975,
+                "events": 512,
+                "trials": 20000,
+                "lower": 0.023455298470436398,
+                "upper": 0.027884065198188118
+              }
+            }
+          ]
+        },
+        {
+          "key": "c002",
+          "set": {
+            "design.nTreat": 100,
+            "design.nControl": 100,
+            "accrual.duration": 24
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "power": {
+              "name": "power",
+              "value": 0.557,
+              "mcse": 0.007024969750824554,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "type_one_error": {
+              "name": "type_one_error",
+              "value": 0.02425,
+              "mcse": 0.0010877025673409067,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "expected_sample_size": {
+              "name": "expected_sample_size",
+              "value": 200,
+              "mcse": 0,
+              "simulated": true,
+              "source": "synthetic"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "fail",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 2785,
+                "trials": 5000,
+                "lower": 0.5431013768423056,
+                "upper": 0.5708320185418094
+              }
+            },
+            {
+              "measure": "type_one_error",
+              "status": "pass",
+              "bound": {
+                "kind": "nominal_level",
+                "confidence": 0.975,
+                "events": 485,
+                "trials": 20000,
+                "lower": 0.022162520905634836,
+                "upper": 0.02647729441558469
+              }
+            }
+          ]
+        },
+        {
+          "key": "c003",
+          "set": {
+            "design.nTreat": 125,
+            "design.nControl": 125,
+            "accrual.duration": 12
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "power": {
+              "name": "power",
+              "value": 0.5704,
+              "mcse": 0.007000626257700092,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "type_one_error": {
+              "name": "type_one_error",
+              "value": 0.02485,
+              "mcse": 0.0011007378775167137,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "expected_sample_size": {
+              "name": "expected_sample_size",
+              "value": 250,
+              "mcse": 0,
+              "simulated": true,
+              "source": "synthetic"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "fail",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 2852,
+                "trials": 5000,
+                "lower": 0.5565412348620375,
+                "upper": 0.5841764998865602
+              }
+            },
+            {
+              "measure": "type_one_error",
+              "status": "pass",
+              "bound": {
+                "kind": "nominal_level",
+                "confidence": 0.975,
+                "events": 497,
+                "trials": 20000,
+                "lower": 0.022736882526396635,
+                "upper": 0.027102731466144864
+              }
+            }
+          ]
+        },
+        {
+          "key": "c004",
+          "set": {
+            "design.nTreat": 125,
+            "design.nControl": 125,
+            "accrual.duration": 18
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "power": {
+              "name": "power",
+              "value": 0.611,
+              "mcse": 0.006894621091836737,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "type_one_error": {
+              "name": "type_one_error",
+              "value": 0.0247,
+              "mcse": 0.0010974951024947674,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "expected_sample_size": {
+              "name": "expected_sample_size",
+              "value": 250,
+              "mcse": 0,
+              "simulated": true,
+              "source": "synthetic"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "fail",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 3055,
+                "trials": 5000,
+                "lower": 0.5973251651569795,
+                "upper": 0.6245451079027025
+              }
+            },
+            {
+              "measure": "type_one_error",
+              "status": "pass",
+              "bound": {
+                "kind": "nominal_level",
+                "confidence": 0.975,
+                "events": 494,
+                "trials": 20000,
+                "lower": 0.022593260645709018,
+                "upper": 0.026946403587218976
+              }
+            }
+          ]
+        },
+        {
+          "key": "c005",
+          "set": {
+            "design.nTreat": 125,
+            "design.nControl": 125,
+            "accrual.duration": 24
+          },
+          "status": "failed",
+          "reason": "cpu_budget_exhausted",
+          "final": {
+            "power": {
+              "name": "power",
+              "value": 0.6254,
+              "mcse": 0.006845068882049325,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "type_one_error": {
+              "name": "type_one_error",
+              "value": 0.02722222222222222,
+              "mcse": 0.0017153286967001129,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "expected_sample_size": {
+              "name": "expected_sample_size",
+              "value": 250,
+              "mcse": 0,
+              "simulated": true,
+              "source": "synthetic"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "fail",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 3127,
+                "trials": 5000,
+                "lower": 0.6118138164103513,
+                "upper": 0.6388396169776369
+              }
+            },
+            {
+              "measure": "type_one_error",
+              "status": "not_judged",
+              "bound": 0.025
+            }
+          ]
+        },
+        {
+          "key": "c006",
+          "set": {
+            "design.nTreat": 150,
+            "design.nControl": 150,
+            "accrual.duration": 12
+          },
+          "status": "finalist",
+          "reason": null,
+          "final": {},
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "not_judged",
+              "bound": 0.8
+            },
+            {
+              "measure": "type_one_error",
+              "status": "not_judged",
+              "bound": 0.025
+            }
+          ]
+        },
+        {
+          "key": "c007",
+          "set": {
+            "design.nTreat": 150,
+            "design.nControl": 150,
+            "accrual.duration": 18
+          },
+          "status": "finalist",
+          "reason": null,
+          "final": {},
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "not_judged",
+              "bound": 0.8
+            },
+            {
+              "measure": "type_one_error",
+              "status": "not_judged",
+              "bound": 0.025
+            }
+          ]
+        },
+        {
+          "key": "c008",
+          "set": {
+            "design.nTreat": 150,
+            "design.nControl": 150,
+            "accrual.duration": 24
+          },
+          "status": "finalist",
+          "reason": null,
+          "final": {},
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "not_judged",
+              "bound": 0.8
+            },
+            {
+              "measure": "type_one_error",
+              "status": "not_judged",
+              "bound": 0.025
+            }
+          ]
+        },
+        {
+          "key": "c009",
+          "set": {
+            "design.nTreat": 175,
+            "design.nControl": 175,
+            "accrual.duration": 12
+          },
+          "status": "finalist",
+          "reason": null,
+          "final": {},
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "not_judged",
+              "bound": 0.8
+            },
+            {
+              "measure": "type_one_error",
+              "status": "not_judged",
+              "bound": 0.025
+            }
+          ]
+        },
+        {
+          "key": "c010",
+          "set": {
+            "design.nTreat": 175,
+            "design.nControl": 175,
+            "accrual.duration": 18
+          },
+          "status": "finalist",
+          "reason": null,
+          "final": {},
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "not_judged",
+              "bound": 0.8
+            },
+            {
+              "measure": "type_one_error",
+              "status": "not_judged",
+              "bound": 0.025
+            }
+          ]
+        },
+        {
+          "key": "c011",
+          "set": {
+            "design.nTreat": 175,
+            "design.nControl": 175,
+            "accrual.duration": 24
+          },
+          "status": "finalist",
+          "reason": null,
+          "final": {},
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "not_judged",
+              "bound": 0.8
+            },
+            {
+              "measure": "type_one_error",
+              "status": "not_judged",
+              "bound": 0.025
+            }
+          ]
+        },
+        {
+          "key": "c012",
+          "set": {
+            "design.nTreat": 200,
+            "design.nControl": 200,
+            "accrual.duration": 12
+          },
+          "status": "finalist",
+          "reason": null,
+          "final": {},
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "not_judged",
+              "bound": 0.8
+            },
+            {
+              "measure": "type_one_error",
+              "status": "not_judged",
+              "bound": 0.025
+            }
+          ]
+        },
+        {
+          "key": "c013",
+          "set": {
+            "design.nTreat": 200,
+            "design.nControl": 200,
+            "accrual.duration": 18
+          },
+          "status": "finalist",
+          "reason": null,
+          "final": {},
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "not_judged",
+              "bound": 0.8
+            },
+            {
+              "measure": "type_one_error",
+              "status": "not_judged",
+              "bound": 0.025
+            }
+          ]
+        },
+        {
+          "key": "c014",
+          "set": {
+            "design.nTreat": 200,
+            "design.nControl": 200,
+            "accrual.duration": 24
+          },
+          "status": "finalist",
+          "reason": null,
+          "final": {},
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "not_judged",
+              "bound": 0.8
+            },
+            {
+              "measure": "type_one_error",
+              "status": "not_judged",
+              "bound": 0.025
+            }
+          ]
+        }
+      ],
+      "evaluated": 6,
+      "usage": {
+        "cpuSeconds": 288.048,
+        "queueSeconds": 0,
+        "wallSeconds": 167.726,
+        "replicatesCompleted": 139000,
+        "modelCalls": 0,
+        "units": 12,
+        "peakKb": 176888,
+        "queueIfSubmittedTogether": {
+          "total": 944.762,
+          "max": 156.679
+        }
+      },
+      "units": [
+        {
+          "unit": "c000:final:alternative",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 5000,
+          "engineCpuSeconds": 10.971,
+          "wallSeconds": 7.572,
+          "peakKb": 139508,
+          "submittedAt": 0,
+          "queueIfSubmittedTogether": 0
+        },
+        {
+          "unit": "c000:final:null",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 20000,
+          "engineCpuSeconds": 40.542,
+          "wallSeconds": 24.067,
+          "peakKb": 173172,
+          "submittedAt": 0,
+          "queueIfSubmittedTogether": 7.572
+        },
+        {
+          "unit": "c001:final:alternative",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 5000,
+          "engineCpuSeconds": 10.689,
+          "wallSeconds": 7.431,
+          "peakKb": 139256,
+          "submittedAt": 0,
+          "queueIfSubmittedTogether": 31.639
+        },
+        {
+          "unit": "c001:final:null",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 20000,
+          "engineCpuSeconds": 38.06,
+          "wallSeconds": 21.237,
+          "peakKb": 171640,
+          "submittedAt": 0,
+          "queueIfSubmittedTogether": 39.07
+        },
+        {
+          "unit": "c002:final:alternative",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 5000,
+          "engineCpuSeconds": 10.447,
+          "wallSeconds": 6.875,
+          "peakKb": 139252,
+          "submittedAt": 0,
+          "queueIfSubmittedTogether": 60.307
+        },
+        {
+          "unit": "c002:final:null",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 20000,
+          "engineCpuSeconds": 38.992,
+          "wallSeconds": 21.768,
+          "peakKb": 176888,
+          "submittedAt": 0.001,
+          "queueIfSubmittedTogether": 67.182
+        },
+        {
+          "unit": "c003:final:alternative",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 5000,
+          "engineCpuSeconds": 11.574,
+          "wallSeconds": 7.693,
+          "peakKb": 139512,
+          "submittedAt": 0.001,
+          "queueIfSubmittedTogether": 88.95
+        },
+        {
+          "unit": "c003:final:null",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 20000,
+          "engineCpuSeconds": 42.63,
+          "wallSeconds": 23.389,
+          "peakKb": 172024,
+          "submittedAt": 0.001,
+          "queueIfSubmittedTogether": 96.643
+        },
+        {
+          "unit": "c004:final:alternative",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 5000,
+          "engineCpuSeconds": 11.142,
+          "wallSeconds": 6.756,
+          "peakKb": 139256,
+          "submittedAt": 0.001,
+          "queueIfSubmittedTogether": 120.032
+        },
+        {
+          "unit": "c004:final:null",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 20000,
+          "engineCpuSeconds": 42.487,
+          "wallSeconds": 23.112,
+          "peakKb": 172408,
+          "submittedAt": 0.001,
+          "queueIfSubmittedTogether": 126.788
+        },
+        {
+          "unit": "c005:final:alternative",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 5000,
+          "engineCpuSeconds": 11.132,
+          "wallSeconds": 6.779,
+          "peakKb": 139512,
+          "submittedAt": 0.002,
+          "queueIfSubmittedTogether": 149.9
+        },
+        {
+          "unit": "c005:final:null",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 9000,
+          "engineCpuSeconds": 19.382,
+          "wallSeconds": 11.047,
+          "peakKb": 133492,
+          "submittedAt": 0.002,
+          "queueIfSubmittedTogether": 156.679
+        }
+      ]
+    },
+    "random": {
+      "arm": "random",
+      "stop": "budget_exhausted",
+      "best": {
+        "key": "c001",
+        "set": {
+          "design.nTreat": 200,
+          "design.nControl": 200,
+          "accrual.duration": 24
+        },
+        "status": "evaluated",
+        "reason": null,
+        "final": {
+          "power": {
+            "name": "power",
+            "value": 0.8264,
+            "mcse": 0.005356548142227417,
+            "simulated": true,
+            "source": "synthetic"
+          },
+          "type_one_error": {
+            "name": "type_one_error",
+            "value": 0.02655,
+            "mcse": 0.001136773889126593,
+            "simulated": true,
+            "source": "synthetic"
+          },
+          "expected_sample_size": {
+            "name": "expected_sample_size",
+            "value": 400,
+            "mcse": 0,
+            "simulated": true,
+            "source": "synthetic"
+          }
+        },
+        "verdicts": [
+          {
+            "measure": "power",
+            "status": "pass",
+            "bound": {
+              "kind": "clopper_pearson",
+              "confidence": 0.975,
+              "events": 4132,
+              "trials": 5000,
+              "lower": 0.8156116848820365,
+              "upper": 0.8368057928716963
+            }
+          },
+          {
+            "measure": "type_one_error",
+            "status": "pass",
+            "bound": {
+              "kind": "nominal_level",
+              "confidence": 0.975,
+              "events": 531,
+              "trials": 20000,
+              "lower": 0.02436599997359143,
+              "upper": 0.028873048596547962
+            }
+          }
+        ]
+      },
+      "feasible": [
+        "c001"
+      ],
+      "inconclusive": [],
+      "finalists": [
+        "c000",
+        "c001",
+        "c002",
+        "c003",
+        "c004",
+        "c005",
+        "c006",
+        "c007",
+        "c008",
+        "c009",
+        "c010",
+        "c011",
+        "c012",
+        "c013",
+        "c014"
+      ],
+      "candidates": [
+        {
+          "key": "c000",
+          "set": {
+            "design.nTreat": 150,
+            "design.nControl": 150,
+            "accrual.duration": 18
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "power": {
+              "name": "power",
+              "value": 0.6864,
+              "mcse": 0.006561326695112811,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "type_one_error": {
+              "name": "type_one_error",
+              "value": 0.0255,
+              "mcse": 0.0011146692334499952,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "expected_sample_size": {
+              "name": "expected_sample_size",
+              "value": 300,
+              "mcse": 0,
+              "simulated": true,
+              "source": "synthetic"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "fail",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 3432,
+                "trials": 5000,
+                "lower": 0.673333959877088,
+                "upper": 0.6992480856700101
+              }
+            },
+            {
+              "measure": "type_one_error",
+              "status": "pass",
+              "bound": {
+                "kind": "nominal_level",
+                "confidence": 0.975,
+                "events": 510,
+                "trials": 20000,
+                "lower": 0.023359480613524802,
+                "upper": 0.027779916349281814
+              }
+            }
+          ]
+        },
+        {
+          "key": "c001",
+          "set": {
+            "design.nTreat": 200,
+            "design.nControl": 200,
+            "accrual.duration": 24
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "power": {
+              "name": "power",
+              "value": 0.8264,
+              "mcse": 0.005356548142227417,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "type_one_error": {
+              "name": "type_one_error",
+              "value": 0.02655,
+              "mcse": 0.001136773889126593,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "expected_sample_size": {
+              "name": "expected_sample_size",
+              "value": 400,
+              "mcse": 0,
+              "simulated": true,
+              "source": "synthetic"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "pass",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 4132,
+                "trials": 5000,
+                "lower": 0.8156116848820365,
+                "upper": 0.8368057928716963
+              }
+            },
+            {
+              "measure": "type_one_error",
+              "status": "pass",
+              "bound": {
+                "kind": "nominal_level",
+                "confidence": 0.975,
+                "events": 531,
+                "trials": 20000,
+                "lower": 0.02436599997359143,
+                "upper": 0.028873048596547962
+              }
+            }
+          ]
+        },
+        {
+          "key": "c002",
+          "set": {
+            "design.nTreat": 175,
+            "design.nControl": 175,
+            "accrual.duration": 24
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "power": {
+              "name": "power",
+              "value": 0.7744,
+              "mcse": 0.005911085179558827,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "type_one_error": {
+              "name": "type_one_error",
+              "value": 0.02425,
+              "mcse": 0.0010877025673409067,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "expected_sample_size": {
+              "name": "expected_sample_size",
+              "value": 350,
+              "mcse": 0,
+              "simulated": true,
+              "source": "synthetic"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "fail",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 3872,
+                "trials": 5000,
+                "lower": 0.7625560958275122,
+                "upper": 0.7859226956377192
+              }
+            },
+            {
+              "measure": "type_one_error",
+              "status": "pass",
+              "bound": {
+                "kind": "nominal_level",
+                "confidence": 0.975,
+                "events": 485,
+                "trials": 20000,
+                "lower": 0.022162520905634836,
+                "upper": 0.02647729441558469
+              }
+            }
+          ]
+        },
+        {
+          "key": "c003",
+          "set": {
+            "design.nTreat": 150,
+            "design.nControl": 150,
+            "accrual.duration": 24
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "power": {
+              "name": "power",
+              "value": 0.7132,
+              "mcse": 0.006396026266362577,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "type_one_error": {
+              "name": "type_one_error",
+              "value": 0.02435,
+              "mcse": 0.0010898870927761278,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "expected_sample_size": {
+              "name": "expected_sample_size",
+              "value": 300,
+              "mcse": 0,
+              "simulated": true,
+              "source": "synthetic"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "fail",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 3566,
+                "trials": 5000,
+                "lower": 0.700442071227503,
+                "upper": 0.7257085723038224
+              }
+            },
+            {
+              "measure": "type_one_error",
+              "status": "pass",
+              "bound": {
+                "kind": "nominal_level",
+                "confidence": 0.975,
+                "events": 487,
+                "trials": 20000,
+                "lower": 0.02225822436446892,
+                "upper": 0.026581557333137745
+              }
+            }
+          ]
+        },
+        {
+          "key": "c004",
+          "set": {
+            "design.nTreat": 125,
+            "design.nControl": 125,
+            "accrual.duration": 18
+          },
+          "status": "failed",
+          "reason": "cpu_budget_exhausted",
+          "final": {
+            "power": {
+              "name": "power",
+              "value": 0.6082,
+              "mcse": 0.006903517364358549,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "type_one_error": {
+              "name": "type_one_error",
+              "value": 0.026,
+              "mcse": 0.0025161478493920027,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "expected_sample_size": {
+              "name": "expected_sample_size",
+              "value": 250,
+              "mcse": 0,
+              "simulated": true,
+              "source": "synthetic"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "fail",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 3041,
+                "trials": 5000,
+                "lower": 0.5945093746235723,
+                "upper": 0.6217641723988574
+              }
+            },
+            {
+              "measure": "type_one_error",
+              "status": "not_judged",
+              "bound": 0.025
+            }
+          ]
+        },
+        {
+          "key": "c005",
+          "set": {
+            "design.nTreat": 100,
+            "design.nControl": 100,
+            "accrual.duration": 12
+          },
+          "status": "finalist",
+          "reason": null,
+          "final": {},
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "not_judged",
+              "bound": 0.8
+            },
+            {
+              "measure": "type_one_error",
+              "status": "not_judged",
+              "bound": 0.025
+            }
+          ]
+        },
+        {
+          "key": "c006",
+          "set": {
+            "design.nTreat": 200,
+            "design.nControl": 200,
+            "accrual.duration": 12
+          },
+          "status": "finalist",
+          "reason": null,
+          "final": {},
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "not_judged",
+              "bound": 0.8
+            },
+            {
+              "measure": "type_one_error",
+              "status": "not_judged",
+              "bound": 0.025
+            }
+          ]
+        },
+        {
+          "key": "c007",
+          "set": {
+            "design.nTreat": 150,
+            "design.nControl": 150,
+            "accrual.duration": 12
+          },
+          "status": "finalist",
+          "reason": null,
+          "final": {},
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "not_judged",
+              "bound": 0.8
+            },
+            {
+              "measure": "type_one_error",
+              "status": "not_judged",
+              "bound": 0.025
+            }
+          ]
+        },
+        {
+          "key": "c008",
+          "set": {
+            "design.nTreat": 175,
+            "design.nControl": 175,
+            "accrual.duration": 12
+          },
+          "status": "finalist",
+          "reason": null,
+          "final": {},
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "not_judged",
+              "bound": 0.8
+            },
+            {
+              "measure": "type_one_error",
+              "status": "not_judged",
+              "bound": 0.025
+            }
+          ]
+        },
+        {
+          "key": "c009",
+          "set": {
+            "design.nTreat": 125,
+            "design.nControl": 125,
+            "accrual.duration": 12
+          },
+          "status": "finalist",
+          "reason": null,
+          "final": {},
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "not_judged",
+              "bound": 0.8
+            },
+            {
+              "measure": "type_one_error",
+              "status": "not_judged",
+              "bound": 0.025
+            }
+          ]
+        },
+        {
+          "key": "c010",
+          "set": {
+            "design.nTreat": 100,
+            "design.nControl": 100,
+            "accrual.duration": 24
+          },
+          "status": "finalist",
+          "reason": null,
+          "final": {},
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "not_judged",
+              "bound": 0.8
+            },
+            {
+              "measure": "type_one_error",
+              "status": "not_judged",
+              "bound": 0.025
+            }
+          ]
+        },
+        {
+          "key": "c011",
+          "set": {
+            "design.nTreat": 125,
+            "design.nControl": 125,
+            "accrual.duration": 24
+          },
+          "status": "finalist",
+          "reason": null,
+          "final": {},
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "not_judged",
+              "bound": 0.8
+            },
+            {
+              "measure": "type_one_error",
+              "status": "not_judged",
+              "bound": 0.025
+            }
+          ]
+        },
+        {
+          "key": "c012",
+          "set": {
+            "design.nTreat": 200,
+            "design.nControl": 200,
+            "accrual.duration": 18
+          },
+          "status": "finalist",
+          "reason": null,
+          "final": {},
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "not_judged",
+              "bound": 0.8
+            },
+            {
+              "measure": "type_one_error",
+              "status": "not_judged",
+              "bound": 0.025
+            }
+          ]
+        },
+        {
+          "key": "c013",
+          "set": {
+            "design.nTreat": 175,
+            "design.nControl": 175,
+            "accrual.duration": 18
+          },
+          "status": "finalist",
+          "reason": null,
+          "final": {},
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "not_judged",
+              "bound": 0.8
+            },
+            {
+              "measure": "type_one_error",
+              "status": "not_judged",
+              "bound": 0.025
+            }
+          ]
+        },
+        {
+          "key": "c014",
+          "set": {
+            "design.nTreat": 100,
+            "design.nControl": 100,
+            "accrual.duration": 18
+          },
+          "status": "finalist",
+          "reason": null,
+          "final": {},
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "not_judged",
+              "bound": 0.8
+            },
+            {
+              "measure": "type_one_error",
+              "status": "not_judged",
+              "bound": 0.025
+            }
+          ]
+        }
+      ],
+      "evaluated": 5,
+      "usage": {
+        "cpuSeconds": 288.67500000000007,
+        "queueSeconds": 0,
+        "wallSeconds": 165.65599999999998,
+        "replicatesCompleted": 109000,
+        "modelCalls": 0,
+        "units": 10,
+        "peakKb": 172276,
+        "queueIfSubmittedTogether": {
+          "total": 787.576,
+          "max": 158.765
+        }
+      },
+      "units": [
+        {
+          "unit": "c000:final:alternative",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 5000,
+          "engineCpuSeconds": 13.064,
+          "wallSeconds": 7.87,
+          "peakKb": 139384,
+          "submittedAt": 0,
+          "queueIfSubmittedTogether": 0
+        },
+        {
+          "unit": "c000:final:null",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 20000,
+          "engineCpuSeconds": 47.027,
+          "wallSeconds": 25.437,
+          "peakKb": 172020,
+          "submittedAt": 0,
+          "queueIfSubmittedTogether": 7.87
+        },
+        {
+          "unit": "c001:final:alternative",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 5000,
+          "engineCpuSeconds": 14.752,
+          "wallSeconds": 8.871,
+          "peakKb": 139224,
+          "submittedAt": 0,
+          "queueIfSubmittedTogether": 33.307
+        },
+        {
+          "unit": "c001:final:null",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 20000,
+          "engineCpuSeconds": 60.034,
+          "wallSeconds": 33.767,
+          "peakKb": 171512,
+          "submittedAt": 0.001,
+          "queueIfSubmittedTogether": 42.178000000000004
+        },
+        {
+          "unit": "c002:final:alternative",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 5000,
+          "engineCpuSeconds": 14.175,
+          "wallSeconds": 8.463,
+          "peakKb": 139384,
+          "submittedAt": 0.001,
+          "queueIfSubmittedTogether": 75.94500000000001
+        },
+        {
+          "unit": "c002:final:null",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 20000,
+          "engineCpuSeconds": 54.262,
+          "wallSeconds": 29.758,
+          "peakKb": 171896,
+          "submittedAt": 0.001,
+          "queueIfSubmittedTogether": 84.408
+        },
+        {
+          "unit": "c003:final:alternative",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 5000,
+          "engineCpuSeconds": 12.689,
+          "wallSeconds": 7.885,
+          "peakKb": 139256,
+          "submittedAt": 0.002,
+          "queueIfSubmittedTogether": 114.166
+        },
+        {
+          "unit": "c003:final:null",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 20000,
+          "engineCpuSeconds": 48.943,
+          "wallSeconds": 26.835,
+          "peakKb": 172276,
+          "submittedAt": 0.003,
+          "queueIfSubmittedTogether": 122.051
+        },
+        {
+          "unit": "c004:final:alternative",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 5000,
+          "engineCpuSeconds": 13.545,
+          "wallSeconds": 9.879,
+          "peakKb": 139196,
+          "submittedAt": 0.003,
+          "queueIfSubmittedTogether": 148.886
+        },
+        {
+          "unit": "c004:final:null",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 4000,
+          "engineCpuSeconds": 10.184,
+          "wallSeconds": 6.891,
+          "peakKb": 125172,
+          "submittedAt": 0.004,
+          "queueIfSubmittedTogether": 158.765
+        }
+      ]
+    },
+    "exhaustive": {
+      "arm": "exhaustive",
+      "stop": "acceptable_precision",
+      "best": {
+        "key": "c014",
+        "set": {
+          "design.nTreat": 200,
+          "design.nControl": 200,
+          "accrual.duration": 24
+        },
+        "status": "evaluated",
+        "reason": null,
+        "final": {
+          "power": {
+            "name": "power",
+            "value": 0.8382,
+            "mcse": 0.005208085252758446,
+            "simulated": true,
+            "source": "synthetic"
+          },
+          "type_one_error": {
+            "name": "type_one_error",
+            "value": 0.0249,
+            "mcse": 0.0011018164547691234,
+            "simulated": true,
+            "source": "synthetic"
+          },
+          "expected_sample_size": {
+            "name": "expected_sample_size",
+            "value": 400,
+            "mcse": 0,
+            "simulated": true,
+            "source": "synthetic"
+          }
+        },
+        "verdicts": [
+          {
+            "measure": "power",
+            "status": "pass",
+            "bound": {
+              "kind": "clopper_pearson",
+              "confidence": 0.975,
+              "events": 4191,
+              "trials": 5000,
+              "lower": 0.8276955067740268,
+              "upper": 0.8483080025828906
+            }
+          },
+          {
+            "measure": "type_one_error",
+            "status": "pass",
+            "bound": {
+              "kind": "nominal_level",
+              "confidence": 0.975,
+              "events": 498,
+              "trials": 20000,
+              "lower": 0.02278476109005631,
+              "upper": 0.027154836169018676
+            }
+          }
+        ]
+      },
+      "feasible": [
+        "c014"
+      ],
+      "inconclusive": [
+        "c013"
+      ],
+      "finalists": [
+        "c000",
+        "c001",
+        "c002",
+        "c003",
+        "c004",
+        "c005",
+        "c006",
+        "c007",
+        "c008",
+        "c009",
+        "c010",
+        "c011",
+        "c012",
+        "c013",
+        "c014"
+      ],
+      "candidates": [
+        {
+          "key": "c000",
+          "set": {
+            "design.nTreat": 100,
+            "design.nControl": 100,
+            "accrual.duration": 12
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "power": {
+              "name": "power",
+              "value": 0.4718,
+              "mcse": 0.007059812462098409,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "type_one_error": {
+              "name": "type_one_error",
+              "value": 0.0246,
+              "mcse": 0.0010953273483301693,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "expected_sample_size": {
+              "name": "expected_sample_size",
+              "value": 200,
+              "mcse": 0,
+              "simulated": true,
+              "source": "synthetic"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "fail",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 2359,
+                "trials": 5000,
+                "lower": 0.45788289812159855,
+                "upper": 0.48575005209595545
+              }
+            },
+            {
+              "measure": "type_one_error",
+              "status": "pass",
+              "bound": {
+                "kind": "nominal_level",
+                "confidence": 0.975,
+                "events": 492,
+                "trials": 20000,
+                "lower": 0.022497524301944155,
+                "upper": 0.02684217345812509
+              }
+            }
+          ]
+        },
+        {
+          "key": "c001",
+          "set": {
+            "design.nTreat": 100,
+            "design.nControl": 100,
+            "accrual.duration": 18
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "power": {
+              "name": "power",
+              "value": 0.512,
+              "mcse": 0.007069031050999847,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "type_one_error": {
+              "name": "type_one_error",
+              "value": 0.02625,
+              "mcse": 0.0011305073529172642,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "expected_sample_size": {
+              "name": "expected_sample_size",
+              "value": 200,
+              "mcse": 0,
+              "simulated": true,
+              "source": "synthetic"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "fail",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 2560,
+                "trials": 5000,
+                "lower": 0.49804135337817834,
+                "upper": 0.5259446254249356
+              }
+            },
+            {
+              "measure": "type_one_error",
+              "status": "pass",
+              "bound": {
+                "kind": "nominal_level",
+                "confidence": 0.975,
+                "events": 525,
+                "trials": 20000,
+                "lower": 0.02407832678167046,
+                "upper": 0.028560821064897962
+              }
+            }
+          ]
+        },
+        {
+          "key": "c002",
+          "set": {
+            "design.nTreat": 100,
+            "design.nControl": 100,
+            "accrual.duration": 24
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "power": {
+              "name": "power",
+              "value": 0.5374,
+              "mcse": 0.007051258611056611,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "type_one_error": {
+              "name": "type_one_error",
+              "value": 0.02445,
+              "mcse": 0.001092066790539846,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "expected_sample_size": {
+              "name": "expected_sample_size",
+              "value": 200,
+              "mcse": 0,
+              "simulated": true,
+              "source": "synthetic"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "fail",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 2687,
+                "trials": 5000,
+                "lower": 0.5234613296182926,
+                "upper": 0.5512949699483072
+              }
+            },
+            {
+              "measure": "type_one_error",
+              "status": "pass",
+              "bound": {
+                "kind": "nominal_level",
+                "confidence": 0.975,
+                "events": 489,
+                "trials": 20000,
+                "lower": 0.02235393728937199,
+                "upper": 0.026685810812562133
+              }
+            }
+          ]
+        },
+        {
+          "key": "c003",
+          "set": {
+            "design.nTreat": 125,
+            "design.nControl": 125,
+            "accrual.duration": 12
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "power": {
+              "name": "power",
+              "value": 0.551,
+              "mcse": 0.007034187941759873,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "type_one_error": {
+              "name": "type_one_error",
+              "value": 0.02515,
+              "mcse": 0.0011071918871631962,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "expected_sample_size": {
+              "name": "expected_sample_size",
+              "value": 250,
+              "mcse": 0,
+              "simulated": true,
+              "source": "synthetic"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "fail",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 2755,
+                "trials": 5000,
+                "lower": 0.5370868244848397,
+                "upper": 0.5648535826508652
+              }
+            },
+            {
+              "measure": "type_one_error",
+              "status": "pass",
+              "bound": {
+                "kind": "nominal_level",
+                "confidence": 0.975,
+                "events": 503,
+                "trials": 20000,
+                "lower": 0.023024188131282514,
+                "upper": 0.027415325558687503
+              }
+            }
+          ]
+        },
+        {
+          "key": "c004",
+          "set": {
+            "design.nTreat": 125,
+            "design.nControl": 125,
+            "accrual.duration": 18
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "power": {
+              "name": "power",
+              "value": 0.5968,
+              "mcse": 0.006937287077813632,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "type_one_error": {
+              "name": "type_one_error",
+              "value": 0.0251,
+              "mcse": 0.0011061191165511969,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "expected_sample_size": {
+              "name": "expected_sample_size",
+              "value": 250,
+              "mcse": 0,
+              "simulated": true,
+              "source": "synthetic"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "fail",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 2984,
+                "trials": 5000,
+                "lower": 0.5830498849969801,
+                "upper": 0.6104369904713449
+              }
+            },
+            {
+              "measure": "type_one_error",
+              "status": "pass",
+              "bound": {
+                "kind": "nominal_level",
+                "confidence": 0.975,
+                "events": 502,
+                "trials": 20000,
+                "lower": 0.022976298182196514,
+                "upper": 0.027363232208652194
+              }
+            }
+          ]
+        },
+        {
+          "key": "c005",
+          "set": {
+            "design.nTreat": 125,
+            "design.nControl": 125,
+            "accrual.duration": 24
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "power": {
+              "name": "power",
+              "value": 0.6382,
+              "mcse": 0.006795597986932423,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "type_one_error": {
+              "name": "type_one_error",
+              "value": 0.02675,
+              "mcse": 0.0011409302673695706,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "expected_sample_size": {
+              "name": "expected_sample_size",
+              "value": 250,
+              "mcse": 0,
+              "simulated": true,
+              "source": "synthetic"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "fail",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 3191,
+                "trials": 5000,
+                "lower": 0.6247032420291605,
+                "upper": 0.6515352193916304
+              }
+            },
+            {
+              "measure": "type_one_error",
+              "status": "pass",
+              "bound": {
+                "kind": "nominal_level",
+                "confidence": 0.975,
+                "events": 535,
+                "trials": 20000,
+                "lower": 0.024557823889317903,
+                "upper": 0.029081158609446073
+              }
+            }
+          ]
+        },
+        {
+          "key": "c006",
+          "set": {
+            "design.nTreat": 150,
+            "design.nControl": 150,
+            "accrual.duration": 12
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "power": {
+              "name": "power",
+              "value": 0.6516,
+              "mcse": 0.00673821103854725,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "type_one_error": {
+              "name": "type_one_error",
+              "value": 0.026,
+              "mcse": 0.0011252555265360842,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "expected_sample_size": {
+              "name": "expected_sample_size",
+              "value": 300,
+              "mcse": 0,
+              "simulated": true,
+              "source": "synthetic"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "fail",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 3258,
+                "trials": 5000,
+                "lower": 0.6382078217846288,
+                "upper": 0.6648149619448391
+              }
+            },
+            {
+              "measure": "type_one_error",
+              "status": "pass",
+              "bound": {
+                "kind": "nominal_level",
+                "confidence": 0.975,
+                "events": 520,
+                "trials": 20000,
+                "lower": 0.023838657380409883,
+                "upper": 0.02830057335551775
+              }
+            }
+          ]
+        },
+        {
+          "key": "c007",
+          "set": {
+            "design.nTreat": 150,
+            "design.nControl": 150,
+            "accrual.duration": 18
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "power": {
+              "name": "power",
+              "value": 0.6782,
+              "mcse": 0.006606735351139774,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "type_one_error": {
+              "name": "type_one_error",
+              "value": 0.02415,
+              "mcse": 0.0010855131850880486,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "expected_sample_size": {
+              "name": "expected_sample_size",
+              "value": 300,
+              "mcse": 0,
+              "simulated": true,
+              "source": "synthetic"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "fail",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 3391,
+                "trials": 5000,
+                "lower": 0.6650498082650207,
+                "upper": 0.6911418399060456
+              }
+            },
+            {
+              "measure": "type_one_error",
+              "status": "pass",
+              "bound": {
+                "kind": "nominal_level",
+                "confidence": 0.975,
+                "events": 483,
+                "trials": 20000,
+                "lower": 0.022066826970045944,
+                "upper": 0.02637302200293487
+              }
+            }
+          ]
+        },
+        {
+          "key": "c008",
+          "set": {
+            "design.nTreat": 150,
+            "design.nControl": 150,
+            "accrual.duration": 24
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "power": {
+              "name": "power",
+              "value": 0.715,
+              "mcse": 0.006383964285614387,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "type_one_error": {
+              "name": "type_one_error",
+              "value": 0.0256,
+              "mcse": 0.0011167954154633695,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "expected_sample_size": {
+              "name": "expected_sample_size",
+              "value": 300,
+              "mcse": 0,
+              "simulated": true,
+              "source": "synthetic"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "fail",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 3575,
+                "trials": 5000,
+                "lower": 0.7022646446340275,
+                "upper": 0.7274838887045834
+              }
+            },
+            {
+              "measure": "type_one_error",
+              "status": "pass",
+              "bound": {
+                "kind": "nominal_level",
+                "confidence": 0.975,
+                "events": 512,
+                "trials": 20000,
+                "lower": 0.023455298470436398,
+                "upper": 0.027884065198188118
+              }
+            }
+          ]
+        },
+        {
+          "key": "c009",
+          "set": {
+            "design.nTreat": 175,
+            "design.nControl": 175,
+            "accrual.duration": 12
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "power": {
+              "name": "power",
+              "value": 0.7194,
+              "mcse": 0.0063539537297654285,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "type_one_error": {
+              "name": "type_one_error",
+              "value": 0.02405,
+              "mcse": 0.001083318916570739,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "expected_sample_size": {
+              "name": "expected_sample_size",
+              "value": 350,
+              "mcse": 0,
+              "simulated": true,
+              "source": "synthetic"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "fail",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 3597,
+                "trials": 5000,
+                "lower": 0.7067208535194087,
+                "upper": 0.7318225209208467
+              }
+            },
+            {
+              "measure": "type_one_error",
+              "status": "pass",
+              "bound": {
+                "kind": "nominal_level",
+                "confidence": 0.975,
+                "events": 481,
+                "trials": 20000,
+                "lower": 0.021971142615442057,
+                "upper": 0.02626874003778354
+              }
+            }
+          ]
+        },
+        {
+          "key": "c010",
+          "set": {
+            "design.nTreat": 175,
+            "design.nControl": 175,
+            "accrual.duration": 18
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "power": {
+              "name": "power",
+              "value": 0.746,
+              "mcse": 0.006156037686694258,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "type_one_error": {
+              "name": "type_one_error",
+              "value": 0.02535,
+              "mcse": 0.0011114714908624513,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "expected_sample_size": {
+              "name": "expected_sample_size",
+              "value": 350,
+              "mcse": 0,
+              "simulated": true,
+              "source": "synthetic"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "fail",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 3730,
+                "trials": 5000,
+                "lower": 0.7336929483668237,
+                "upper": 0.7580192162240609
+              }
+            },
+            {
+              "measure": "type_one_error",
+              "status": "pass",
+              "bound": {
+                "kind": "nominal_level",
+                "confidence": 0.975,
+                "events": 507,
+                "trials": 20000,
+                "lower": 0.023215770434845934,
+                "upper": 0.027623676515936474
+              }
+            }
+          ]
+        },
+        {
+          "key": "c011",
+          "set": {
+            "design.nTreat": 175,
+            "design.nControl": 175,
+            "accrual.duration": 24
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "power": {
+              "name": "power",
+              "value": 0.7836,
+              "mcse": 0.005823590644954366,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "type_one_error": {
+              "name": "type_one_error",
+              "value": 0.02545,
+              "mcse": 0.0011136044517691189,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "expected_sample_size": {
+              "name": "expected_sample_size",
+              "value": 350,
+              "mcse": 0,
+              "simulated": true,
+              "source": "synthetic"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "fail",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 3918,
+                "trials": 5000,
+                "lower": 0.7719220732447802,
+                "upper": 0.7949458929147588
+              }
+            },
+            {
+              "measure": "type_one_error",
+              "status": "pass",
+              "bound": {
+                "kind": "nominal_level",
+                "confidence": 0.975,
+                "events": 509,
+                "trials": 20000,
+                "lower": 0.02331157500005618,
+                "upper": 0.02772783861914227
+              }
+            }
+          ]
+        },
+        {
+          "key": "c012",
+          "set": {
+            "design.nTreat": 200,
+            "design.nControl": 200,
+            "accrual.duration": 12
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "power": {
+              "name": "power",
+              "value": 0.773,
+              "mcse": 0.005924035786522563,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "type_one_error": {
+              "name": "type_one_error",
+              "value": 0.02595,
+              "mcse": 0.001124201883560066,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "expected_sample_size": {
+              "name": "expected_sample_size",
+              "value": 400,
+              "mcse": 0,
+              "simulated": true,
+              "source": "synthetic"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "fail",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 3865,
+                "trials": 5000,
+                "lower": 0.761131550569055,
+                "upper": 0.7845488875490023
+              }
+            },
+            {
+              "measure": "type_one_error",
+              "status": "pass",
+              "bound": {
+                "kind": "nominal_level",
+                "confidence": 0.975,
+                "events": 519,
+                "trials": 20000,
+                "lower": 0.023790729926823323,
+                "upper": 0.028248517404611068
+              }
+            }
+          ]
+        },
+        {
+          "key": "c013",
+          "set": {
+            "design.nTreat": 200,
+            "design.nControl": 200,
+            "accrual.duration": 18
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "power": {
+              "name": "power",
+              "value": 0.8042,
+              "mcse": 0.005611815392544555,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "type_one_error": {
+              "name": "type_one_error",
+              "value": 0.0257,
+              "mcse": 0.0011189171104241814,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "expected_sample_size": {
+              "name": "expected_sample_size",
+              "value": 400,
+              "mcse": 0,
+              "simulated": true,
+              "source": "synthetic"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "inconclusive",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 4021,
+                "trials": 5000,
+                "lower": 0.7929247729184554,
+                "upper": 0.815118922236554
+              }
+            },
+            {
+              "measure": "type_one_error",
+              "status": "pass",
+              "bound": {
+                "kind": "nominal_level",
+                "confidence": 0.975,
+                "events": 514,
+                "trials": 20000,
+                "lower": 0.023551125125288813,
+                "upper": 0.027988205273751815
+              }
+            }
+          ]
+        },
+        {
+          "key": "c014",
+          "set": {
+            "design.nTreat": 200,
+            "design.nControl": 200,
+            "accrual.duration": 24
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "power": {
+              "name": "power",
+              "value": 0.8382,
+              "mcse": 0.005208085252758446,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "type_one_error": {
+              "name": "type_one_error",
+              "value": 0.0249,
+              "mcse": 0.0011018164547691234,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "expected_sample_size": {
+              "name": "expected_sample_size",
+              "value": 400,
+              "mcse": 0,
+              "simulated": true,
+              "source": "synthetic"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "pass",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 4191,
+                "trials": 5000,
+                "lower": 0.8276955067740268,
+                "upper": 0.8483080025828906
+              }
+            },
+            {
+              "measure": "type_one_error",
+              "status": "pass",
+              "bound": {
+                "kind": "nominal_level",
+                "confidence": 0.975,
+                "events": 498,
+                "trials": 20000,
+                "lower": 0.02278476109005631,
+                "upper": 0.027154836169018676
+              }
+            }
+          ]
+        }
+      ],
+      "evaluated": 15,
+      "usage": {
+        "cpuSeconds": 944.4430000000001,
+        "queueSeconds": 0,
+        "wallSeconds": 583.49,
+        "replicatesCompleted": 375000,
+        "modelCalls": 0,
+        "units": 30,
+        "peakKb": 173560,
+        "queueIfSubmittedTogether": {
+          "total": 7089.089000000001,
+          "max": 505.24500000000006
+        }
+      },
+      "units": [
+        {
+          "unit": "c000:final:alternative",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 5000,
+          "engineCpuSeconds": 10.378,
+          "wallSeconds": 6.617,
+          "peakKb": 139380,
+          "submittedAt": 0,
+          "queueIfSubmittedTogether": 0
+        },
+        {
+          "unit": "c000:final:null",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 20000,
+          "engineCpuSeconds": 40.114,
+          "wallSeconds": 23.217,
+          "peakKb": 171256,
+          "submittedAt": 0,
+          "queueIfSubmittedTogether": 6.617
+        },
+        {
+          "unit": "c001:final:alternative",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 5000,
+          "engineCpuSeconds": 10.89,
+          "wallSeconds": 7.722,
+          "peakKb": 139256,
+          "submittedAt": 0,
+          "queueIfSubmittedTogether": 29.834
+        },
+        {
+          "unit": "c001:final:null",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 20000,
+          "engineCpuSeconds": 38.128,
+          "wallSeconds": 21.445,
+          "peakKb": 171512,
+          "submittedAt": 0.001,
+          "queueIfSubmittedTogether": 37.556
+        },
+        {
+          "unit": "c002:final:alternative",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 5000,
+          "engineCpuSeconds": 10.255,
+          "wallSeconds": 6.659,
+          "peakKb": 139512,
+          "submittedAt": 0.001,
+          "queueIfSubmittedTogether": 59.001
+        },
+        {
+          "unit": "c002:final:null",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 20000,
+          "engineCpuSeconds": 40.002,
+          "wallSeconds": 22.232,
+          "peakKb": 171512,
+          "submittedAt": 0.001,
+          "queueIfSubmittedTogether": 65.66
+        },
+        {
+          "unit": "c003:final:alternative",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 5000,
+          "engineCpuSeconds": 11.362,
+          "wallSeconds": 7.244,
+          "peakKb": 139384,
+          "submittedAt": 0.001,
+          "queueIfSubmittedTogether": 87.892
+        },
+        {
+          "unit": "c003:final:null",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 20000,
+          "engineCpuSeconds": 41.863,
+          "wallSeconds": 22.822,
+          "peakKb": 172280,
+          "submittedAt": 0.001,
+          "queueIfSubmittedTogether": 95.136
+        },
+        {
+          "unit": "c004:final:alternative",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 5000,
+          "engineCpuSeconds": 11.453,
+          "wallSeconds": 6.982,
+          "peakKb": 139128,
+          "submittedAt": 0.002,
+          "queueIfSubmittedTogether": 117.958
+        },
+        {
+          "unit": "c004:final:null",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 20000,
+          "engineCpuSeconds": 43.926,
+          "wallSeconds": 23.989,
+          "peakKb": 172024,
+          "submittedAt": 0.002,
+          "queueIfSubmittedTogether": 124.94
+        },
+        {
+          "unit": "c005:final:alternative",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 5000,
+          "engineCpuSeconds": 11.461,
+          "wallSeconds": 7.036,
+          "peakKb": 139512,
+          "submittedAt": 0.003,
+          "queueIfSubmittedTogether": 148.929
+        },
+        {
+          "unit": "c005:final:null",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 20000,
+          "engineCpuSeconds": 43.712,
+          "wallSeconds": 23.973,
+          "peakKb": 172276,
+          "submittedAt": 0.003,
+          "queueIfSubmittedTogether": 155.965
+        },
+        {
+          "unit": "c006:final:alternative",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 5000,
+          "engineCpuSeconds": 13.935,
+          "wallSeconds": 10.49,
+          "peakKb": 139348,
+          "submittedAt": 0.003,
+          "queueIfSubmittedTogether": 179.938
+        },
+        {
+          "unit": "c006:final:null",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 20000,
+          "engineCpuSeconds": 51.711,
+          "wallSeconds": 30.135,
+          "peakKb": 171944,
+          "submittedAt": 0.005,
+          "queueIfSubmittedTogether": 190.428
+        },
+        {
+          "unit": "c007:final:alternative",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 5000,
+          "engineCpuSeconds": 13.35,
+          "wallSeconds": 8.993,
+          "peakKb": 139472,
+          "submittedAt": 0.006,
+          "queueIfSubmittedTogether": 220.563
+        },
+        {
+          "unit": "c007:final:null",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 20000,
+          "engineCpuSeconds": 51.073,
+          "wallSeconds": 30.868,
+          "peakKb": 172152,
+          "submittedAt": 0.007,
+          "queueIfSubmittedTogether": 229.55599999999998
+        },
+        {
+          "unit": "c008:final:alternative",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 5000,
+          "engineCpuSeconds": 13.934,
+          "wallSeconds": 9.199,
+          "peakKb": 139256,
+          "submittedAt": 0.007,
+          "queueIfSubmittedTogether": 260.424
+        },
+        {
+          "unit": "c008:final:null",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 20000,
+          "engineCpuSeconds": 49.974,
+          "wallSeconds": 28.12,
+          "peakKb": 172280,
+          "submittedAt": 0.008,
+          "queueIfSubmittedTogether": 269.623
+        },
+        {
+          "unit": "c009:final:alternative",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 5000,
+          "engineCpuSeconds": 13.622,
+          "wallSeconds": 8.249,
+          "peakKb": 139128,
+          "submittedAt": 0.008,
+          "queueIfSubmittedTogether": 297.743
+        },
+        {
+          "unit": "c009:final:null",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 20000,
+          "engineCpuSeconds": 53.943,
+          "wallSeconds": 29.491,
+          "peakKb": 172144,
+          "submittedAt": 0.009,
+          "queueIfSubmittedTogether": 305.992
+        },
+        {
+          "unit": "c010:final:alternative",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 5000,
+          "engineCpuSeconds": 14.137,
+          "wallSeconds": 8.517,
+          "peakKb": 139388,
+          "submittedAt": 0.009,
+          "queueIfSubmittedTogether": 335.483
+        },
+        {
+          "unit": "c010:final:null",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 20000,
+          "engineCpuSeconds": 55.494,
+          "wallSeconds": 34.012,
+          "peakKb": 172280,
+          "submittedAt": 0.011,
+          "queueIfSubmittedTogether": 344
+        },
+        {
+          "unit": "c011:final:alternative",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 5000,
+          "engineCpuSeconds": 13.756,
+          "wallSeconds": 8.173,
+          "peakKb": 139304,
+          "submittedAt": 0.011,
+          "queueIfSubmittedTogether": 378.012
+        },
+        {
+          "unit": "c011:final:null",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 20000,
+          "engineCpuSeconds": 54.83,
+          "wallSeconds": 30.005,
+          "peakKb": 171768,
+          "submittedAt": 0.012,
+          "queueIfSubmittedTogether": 386.185
+        },
+        {
+          "unit": "c012:final:alternative",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 5000,
+          "engineCpuSeconds": 14.669,
+          "wallSeconds": 8.521,
+          "peakKb": 139512,
+          "submittedAt": 0.013,
+          "queueIfSubmittedTogether": 416.19
+        },
+        {
+          "unit": "c012:final:null",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 20000,
+          "engineCpuSeconds": 57.569,
+          "wallSeconds": 30.942,
+          "peakKb": 173560,
+          "submittedAt": 0.013,
+          "queueIfSubmittedTogether": 424.711
+        },
+        {
+          "unit": "c013:final:alternative",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 5000,
+          "engineCpuSeconds": 14.595,
+          "wallSeconds": 8.718,
+          "peakKb": 139512,
+          "submittedAt": 0.014,
+          "queueIfSubmittedTogether": 455.653
+        },
+        {
+          "unit": "c013:final:null",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 20000,
+          "engineCpuSeconds": 57.796,
+          "wallSeconds": 31.113,
+          "peakKb": 171816,
+          "submittedAt": 0.015,
+          "queueIfSubmittedTogether": 464.37100000000004
+        },
+        {
+          "unit": "c014:final:alternative",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 5000,
+          "engineCpuSeconds": 15.469,
+          "wallSeconds": 9.761,
+          "peakKb": 139508,
+          "submittedAt": 0.015,
+          "queueIfSubmittedTogether": 495.48400000000004
+        },
+        {
+          "unit": "c014:final:null",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 20000,
+          "engineCpuSeconds": 71.042,
+          "wallSeconds": 78.245,
+          "peakKb": 164596,
+          "submittedAt": 0.016,
+          "queueIfSubmittedTogether": 505.24500000000006
+        }
+      ]
+    },
+    "scores": [
+      {
+        "arm": "reference",
+        "stop": "no_feasible_beneficial_candidate",
+        "picked": null,
+        "pickedSize": null,
+        "referenceSize": 400,
+        "foundReferenceBest": false,
+        "sizeAboveReference": null,
+        "feasibleFound": false,
+        "cpuSeconds": 94.112,
+        "wallSeconds": 116.578,
+        "units": 2
+      },
+      {
+        "arm": "staged",
+        "stop": "acceptable_precision",
+        "picked": {
+          "design.nTreat": 200,
+          "design.nControl": 200,
+          "accrual.duration": 24
+        },
+        "pickedSize": 400,
+        "referenceSize": 400,
+        "foundReferenceBest": true,
+        "sizeAboveReference": 0,
+        "feasibleFound": true,
+        "cpuSeconds": 287.87299999999993,
+        "wallSeconds": 283.37199999999996,
+        "units": 21
+      },
+      {
+        "arm": "grid",
+        "stop": "budget_exhausted",
+        "picked": null,
+        "pickedSize": null,
+        "referenceSize": 400,
+        "foundReferenceBest": false,
+        "sizeAboveReference": null,
+        "feasibleFound": false,
+        "cpuSeconds": 288.048,
+        "wallSeconds": 167.726,
+        "units": 12
+      },
+      {
+        "arm": "random",
+        "stop": "budget_exhausted",
+        "picked": {
+          "design.nTreat": 200,
+          "design.nControl": 200,
+          "accrual.duration": 24
+        },
+        "pickedSize": 400,
+        "referenceSize": 400,
+        "foundReferenceBest": true,
+        "sizeAboveReference": 0,
+        "feasibleFound": true,
+        "cpuSeconds": 288.67500000000007,
+        "wallSeconds": 165.65599999999998,
+        "units": 10
+      }
+    ],
+    "matchedBudgetCpuSeconds": 287.87299999999993
+  },
+  "finishedAt": "2026-11-07T16:50:55.679Z"
+}
