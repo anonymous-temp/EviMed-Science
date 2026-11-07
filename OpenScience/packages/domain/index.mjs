@@ -2155,6 +2155,9 @@ export {
   vcrNormalQuantile,
   vcrRegularizedBeta,
   vcrScenarioDerivedMeasures,
+  VCR_EXACT_CALIBRATIONS,
+  VCR_CAMPAIGN_ALPHA_SEARCH_METHODS,
+  VCR_CAMPAIGN_ALPHA_PATH,
 } from './src/vcrExperimentSearch.mjs'
 
 // vcrTimeUnits — the one closed table of time units (the model cards' horizon table), the spellings a source writes them in, and
@@ -2398,7 +2401,7 @@ export {
   vcrWordList,
 } from './src/vcrWriteWords.mjs'
 
-// vcrScenarioHelp — 9 exports: what a model is given to write a scenario from, rendered from the schemas above
+// vcrScenarioHelp — 10 exports: what a model is given to write a scenario from, rendered from the schemas above
 // (`runtime/mcp/evimed-research/vcr_scenario_help.json` is generated from it), and the keys read inside a node
 export {
   VCR_RUN_SCENARIO_FIELDS,
@@ -2410,6 +2413,7 @@ export {
   vcrScenarioParentOf,
   vcrRowRole,
   vcrScenarioRows,
+  VCR_FORECAST_FIELD_NOTES,
 } from './src/vcrScenarioHelp.mjs'
 
 // vcrLineage — 8 exports: lineage: which results a changed input makes stale, and whether a
