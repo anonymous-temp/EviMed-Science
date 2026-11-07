@@ -672,13 +672,17 @@ function undecidedView(manifest, verdict, candidates) {
       constraints: row.constraints.map((/** @type {any} */ c) => {
         const needed = c.needed ?? null;
         const label = measureLabel(c.measure);
-        const value = c.estimate == null ? "" : `${plain(c.measure, Number(c.estimate))}${c.mcse ? `（模拟误差约 ${plain(c.measure, Number(c.mcse))}）` : ""}`;
+        const value = c.estimate == null ? "" : `${plain(c.measure, Number(c.estimate))}${c.mcse ? `（模拟误差约 ${rate(c.measure) ? `${Number((Number(c.mcse) * 100).toPrecision(2))}%` : Number(Number(c.mcse).toPrecision(2))}）` : ""}`;
         const at = `“${label}”的模拟值是 ${value}，要求${c.op === "<=" ? "不超过" : "不低于"} ${plain(c.measure, Number(c.bound))}`;
         const kind = list(manifest.constraints)[c.index]?.kind;
         /** @type {string} */
         let advice;
         if (needed?.reason === "estimate_at_bound") {
-          const lower = Number((Number(c.bound) * 0.96).toPrecision(2));
+          // the level that would leave the simulated rate its own margin: the constraint less how far the conservative bound sits above the
+          // estimate, down to a tenth of a percent (an asymptotic test's simulated rate sits at its own level), never a fixed fraction
+          const margin = c.op === "<=" && Number.isFinite(c.upper) && Number.isFinite(c.estimate) ? Number(c.upper) - Number(c.estimate) : null;
+          const stepped = margin == null ? NaN : Math.floor((Number(c.bound) - margin) * 1000 + 1e-9) / 1000;
+          const lower = stepped > 0 ? stepped : Number((Number(c.bound) * 0.9).toPrecision(2));
           advice = kind === "error_control" && levelCan && !searchesLevel
             ? `${at}，正好在界上：再多模拟几次也判断不出来。这个设计可以把检验水准定得更低（例如 ${percentWord(lower)}，约束仍是 ${plain(c.measure, Number(c.bound))}）来留出余量；这要作为一个新的实验方案重新开始，约束本身不改。`
             : kind === "error_control" && levelCan

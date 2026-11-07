@@ -170,7 +170,8 @@ test('a campaign undecided at its precision says so and what would decide it (re
   assert.ok(view.undecided.closest.constraints[0].estimate.mcse > 0);
   const advice = view.undecided.advice.join('\n');
   assert.match(advice, /再多模拟几次也判断不出来/);
-  assert.match(advice, /检验水准定得更低（例如 2\.4%，约束仍是 2\.5%）/);
+  assert.match(advice, /检验水准定得更低（例如 2\.2%，约束仍是 2\.5%）/);
+  assert.match(advice, /模拟误差约 0\.11%/);
   assert.match(advice, /新的实验方案/);
   assert.doesNotMatch(advice, /增加复核次数/, 'more replicates are not offered where they cannot decide');
   assert.ok(!/「|」/.test(advice));
