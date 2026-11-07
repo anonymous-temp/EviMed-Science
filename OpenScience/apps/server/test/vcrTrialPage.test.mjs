@@ -182,3 +182,23 @@ test("live D3: a grid row with no label is named by its own size, never by the p
   assert.match(named.grid.rows[1].header, /，每组 180 例$/);
   assert.equal(named.grid.rows[2].header, "我的方案");
 });
+
+test("live D3 (phase 3): a grid row its grid does not describe is numbered, never named after another object, and a truth reads its effect", () => {
+  // Live 2026-11-07: a 250/306-per-arm null check was filed under a grid made for one design (D1b, fixed in vcrSubjects): its second row
+  // was called by the page's design B (「固定样本两组比较，风险比 0.75」) on an HR 1 run, and its column 「情景 1」.
+  const grid = {
+    id: "grd_1", version: 3, comparisonGoal: null,
+    dimensions: { base: { accrual: { duration: 12, followup: 30 } }, designs: [{ nTreat: 250, nControl: 250 }] },
+    truthScenarios: [{ hazardRatio: 1, null: true }],
+    cells: [[1, 0.0232], [2, 0.02435]].map(([designIndex, value]) => ({ designIndex, truthIndex: 1, status: "succeeded",
+      measures: [{ name: "type_one_error", value, simulated: true, mcse: 0.0011 }] })),
+  };
+  const tab = presentTrialTab(bundleOf(five().slice(1, 3), { grid }));
+  assert.deepEqual(tab.grid.rows.map((row) => row.header), ["每组 250 例", "设计 2"]);
+  assert.ok(!tab.grid.rows.some((row) => tab.designs.some((design) => design.name === row.header)), "no row borrows a page design's name");
+  assert.deepEqual(tab.grid.columns.map((column) => column.header), ["风险比 1（无效应）"]);
+  const effects = presentTrialTab(bundleOf([], { grid: { ...grid, truthScenarios: [{ hazardRatio: 0.75 }, { effect: 0.3 }], dimensions: {},
+    cells: [[1, 1], [1, 2]].map(([designIndex, truthIndex]) => ({ designIndex, truthIndex, status: "succeeded", measures: [{ name: "power", value: 0.8, simulated: true, mcse: 0.005 }] })) } }));
+  assert.deepEqual(effects.grid.columns.map((column) => column.header), ["风险比 0.75", "效应 0.3"]);
+  assert.deepEqual(effects.grid.rows.map((row) => row.header), ["设计 1"]);
+});

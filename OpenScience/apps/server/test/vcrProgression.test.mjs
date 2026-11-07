@@ -133,3 +133,41 @@ test("an entry range outside mild to moderate disease is said to be an extrapola
   const lines = JSON.stringify(card).match(/"bandKind":"[a-z_]+"/g) ?? [];
   assert.deepEqual(lines, [], "mean ± 1.96 SD of a bounded score is not drawn as a 95% prediction band");
 });
+
+test("the live case: twelve Alzheimer runs are twelve cards, each titled by what it compared, its arm sizes and its study variation", () => {
+  // Live D3 (2026-11-07, conversation c): the patients page listed 8 of 12 runs (a cap of eight dropped the oldest -- the no-drug and the
+  // symptomatic run), all under one title.
+  const base = fixture("alzheimer-beta-logit");
+  /** @param {string} id @param {{ drug: "none" | "symptomatic" | "dm", perArm: number, uncertainty?: string, at: number }} run */
+  const run = (id, { drug, perArm, uncertainty = "new_study", at }) => {
+    const row = structuredClone(base);
+    const progression = row.diagnostics.progression;
+    row.id = id;
+    row.createdAt = new Date(Date.UTC(2026, 10, 7, 21, 10, at)).toISOString();
+    progression.uncertainty = uncertainty;
+    progression.isNull = drug === "none";
+    progression.treatment = { ...progression.treatment, symptomaticLogitEmax: drug === "symptomatic" ? -0.166 : 0, diseaseModifyingFraction: drug === "dm" ? 0.3 : 0 };
+    progression.given = drug === "symptomatic" ? [{ key: "treatment.symptomatic.pointsAt", value: -2, basis: "assumed", atWeek: 12, referenceAdas: 25 }]
+      : drug === "dm" ? [{ key: "treatment.diseaseModifying.fraction", value: 0.3, basis: "assumed" }] : [];
+    progression.observed = progression.observed.map((entry, index) => index === 0
+      ? { ...entry, control: { ...entry.control, value: perArm }, treated: { ...entry.treated, value: perArm } } : entry);
+    row.counts = { ...row.counts, generatedRecords: progression.trials * 2 * perArm };
+    return row;
+  };
+  const runs = [
+    run("res_none", { drug: "none", perArm: 200, at: 1 }), run("res_sym", { drug: "symptomatic", perArm: 200, at: 2 }), run("res_dm", { drug: "dm", perArm: 200, at: 3 }),
+    ...[800, 950, 1000, 1200, 1700, 1800].map((perArm, index) => run(`res_dm${perArm}`, { drug: "dm", perArm, at: 10 + index })),
+    ...[800, 1000, 1200].map((perArm, index) => run(`res_typ${perArm}`, { drug: "dm", perArm, uncertainty: "typical_study", at: 20 + index })),
+  ];
+  const cards = presentProgressions({ allResults: runs, stale: [] }, { nodeOf: (result) => `result:${result.id}` });
+  assert.equal(cards.length, 12, "every current run is a card");
+  assert.equal(new Set(cards.map((card) => card.title)).size, 12, cards.map((card) => card.title).join("\n"));
+  const titleOf = (/** @type {string} */ id) => cards.find((card) => card.id === id)?.title;
+  assert.equal(titleOf("res_none"), "阿尔茨海默病 ADAS-cog 11 进展：两组都不用药，每组 200 人（含研究之间的差异）");
+  assert.equal(titleOf("res_sym"), "阿尔茨海默病 ADAS-cog 11 进展：对症药物（第 12 周少 2 分）对比不用药，每组 200 人（含研究之间的差异）");
+  assert.equal(titleOf("res_dm1000"), "阿尔茨海默病 ADAS-cog 11 进展：疾病修饰药物（减慢 30%）对比不用药，每组 1000 人（含研究之间的差异）");
+  assert.equal(titleOf("res_typ1000"), "阿尔茨海默病 ADAS-cog 11 进展：疾病修饰药物（减慢 30%）对比不用药，每组 1000 人（同一个典型研究）");
+  // The other families say their own slowing and size.
+  assert.equal(progressionCard(fixture("linear-change")).title, "线性进展：进展减慢 25%，共 300 人");
+  assert.match(progressionCard(fixture("null")).title, /治疗不改变进展/);
+});

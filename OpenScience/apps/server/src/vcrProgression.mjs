@@ -176,6 +176,42 @@ function alzheimerPremisesOf(progression) {
 }
 
 /**
+ * What one run compared, said in its title so that no two runs of a study read alike (live 2026-11-07: twelve Alzheimer runs -- no drug,
+ * a symptomatic and a disease-modifying hypothesis at 200 per arm, then sample sizes from 800 to 1,800 with and without study-to-study
+ * variation -- each read 「阿尔茨海默病 ADAS-cog 11 进展：人群的平均病程与检验的功效」). The hypothesis is the scenario's own values, the arm
+ * sizes are the engine's count of people at the first visit (everyone is observed then), else the people of one simulated trial.
+ * @param {Record<string, any>} result @param {Record<string, any>} progression @param {boolean} alzheimer
+ * @returns {string}
+ */
+function runWords(result, progression, alzheimer) {
+  const treatment = object(progression.treatment);
+  let arms;
+  if (alzheimer) {
+    const points = givenOf(progression, "treatment.symptomatic.pointsAt");
+    const fraction = numeric(treatment.diseaseModifyingFraction);
+    const drugs = [
+      numeric(points.value) !== null ? `对症药物（第 ${plain(Number(points.atWeek))} 周${Number(points.value) < 0 ? "少" : "多"} ${plain(Math.abs(Number(points.value)))} 分）`
+        : numeric(treatment.symptomaticLogitEmax) ? "对症药物" : null,
+      fraction !== null && fraction > 0 ? `疾病修饰药物（减慢 ${plain(fraction * 100)}%）` : null,
+    ].filter(Boolean);
+    arms = progression.isNull === true || !drugs.length ? "两组都不用药" : `${drugs.join("加")}对比不用药`;
+  } else {
+    const slowing = numeric(treatment.slowing);
+    arms = progression.isNull === true || !slowing ? "治疗不改变进展" : `进展减慢 ${plain(slowing * 100)}%`;
+  }
+  const first = object(list(progression.observed)[0]);
+  const control = numeric(object(first.control).value);
+  const treated = numeric(object(first.treated).value);
+  const total = numeric(object(result.counts).generatedRecords) !== null && numeric(progression.trials) ? Number(object(result.counts).generatedRecords) / Number(progression.trials) : null;
+  const size = control !== null && treated !== null && Number.isInteger(control) && Number.isInteger(treated)
+    ? (control === treated ? `每组 ${control} 人` : `治疗组 ${treated} 人、对照组 ${control} 人`)
+    : total !== null && Number.isInteger(total) ? `共 ${total} 人` : null;
+  const variation = alzheimer ? /** @type {Record<string, string>} */ ({ typical_study: "同一个典型研究", new_study: "含研究之间的差异", posterior_draws: "含参数的不确定性" })[String(progression.uncertainty)] : null;
+  const slope = object(progression.analysis).kind === "slope" ? "按斜率比较" : null;
+  return [arms, size, slope].filter(Boolean).join("，") + (variation ? `（${variation}）` : "");
+}
+
+/**
  * @param {Record<string, any>} result @param {any} staleMark
  */
 function cardOf(result, staleMark) {
@@ -213,7 +249,7 @@ function cardOf(result, staleMark) {
   }));
   return {
     id: String(result.id), version: Number(result.version),
-    title: `${FAMILY_WORDS[family] ?? family}进展：人群的平均病程与检验的功效`,
+    title: `${FAMILY_WORDS[family] ?? family}进展：${runWords(result, progression, alzheimer)}`,
     question: isNull
       ? "治疗什么都不改变时，这个检验会误判有效的概率是多少"
       : alzheimer
@@ -244,13 +280,15 @@ function cardOf(result, staleMark) {
 }
 
 /**
- * The cards of the patients tab for the progression simulations the study holds now, newest first.
+ * The cards of the patients tab for every progression simulation the study holds now, newest first.
  * @param {Record<string, any>} bundle the patients tab's bundle (`results`, `allResults`, `stale`)
  * @param {{ nodeOf: (result: Record<string, any>) => string }} helpers
  */
 export function presentProgressions(bundle, { nodeOf }) {
+  // Every current one: a run asked on another scenario is another result, and none is left off (a cap of eight hid the first four of
+  // twelve live runs, 2026-11-07).
   const results = list(bundle.allResults ?? bundle.results).map(object).filter((row) => row.kind === "progression_simulation" && !row.supersededBy)
-    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, 8);
+    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
   return results.map((result) => cardOf(result, markFor(bundle.stale ?? [], nodeOf(result)))).filter(Boolean);
 }
 

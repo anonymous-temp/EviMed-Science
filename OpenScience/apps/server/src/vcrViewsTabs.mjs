@@ -80,7 +80,7 @@ import {
   presentModelCard, registryDesignWords, resultNode, scenarioName, simonBoundaryText, valueString,
 } from "./vcrViews.mjs";
 import {
-  allResultsOf, countsView, finite, intervalView, letterCode, list, markFor, measureLabel, measureValue, naturalScale, numeric, object,
+  allResultsOf, countsView, finite, intervalView, list, markFor, measureLabel, measureValue, naturalScale, numeric, object,
   personName, plainText, PARAMETER_LABELS, METHOD_LABELS, roundTo, scaledSeries, staleNote, text, zhDate, zhTime, VCR_ROBUSTNESS_MEASURES,
   TIME_UNIT_WORDS, zhUnit, vcrFailureSentence, vcrPageSentence, hazardLawWords,
 } from "./vcrViewsKit.mjs";
@@ -1270,7 +1270,7 @@ export function presentTrialTab(bundle) {
   const columns = columnSpec
     .filter(([key]) => live.some((design) => design.measures[/** @type {string} */ (key)] || (key === "type_one_error" && design.nullState)))
     .map(([key, label, unit]) => ({ key, label, unit }));
-  const grids = gridView(grid, designs);
+  const grids = gridView(grid);
   const powerRaw = object(headlineRow?._result?.diagnostics?.powerCurve);
   // The curve's axis is a probability the page shows as a percentage, like every design measure.
   const powerSeries = (seriesList(powerRaw.series).length ? seriesList(powerRaw.series) : grids.powerSeries).map((series) => scaledSeries(series, 100));
@@ -1609,12 +1609,32 @@ function gridDesignLabel(design) {
 }
 
 /**
+ * A grid column's name when the grid gave the truth none: the effect it states, and that it is the null when it says so. A column called
+ * 「情景 2」 said nothing of the truth it held.
+ * @param {Record<string, any>} truth one entry of the grid's truths
+ * @returns {string | null}
+ */
+function gridTruthLabel(truth) {
+  const value = (/** @type {string} */ key) => numeric(truth[key]);
+  const rate = (/** @type {number} */ x) => `${roundTo(x * 100, 1)}%`;
+  const effect = value("hazardRatio") !== null ? `风险比 ${value("hazardRatio")}`
+    : value("effect") !== null ? `效应 ${value("effect")}`
+    : value("oddsRatio") !== null ? `比值比 ${value("oddsRatio")}`
+    : value("riskDifference") !== null ? `率差 ${value("riskDifference")}`
+    : value("treatmentRate") !== null ? `试验组率 ${rate(/** @type {number} */ (value("treatmentRate")))}`
+    : value("responseRate") !== null ? `有效率 ${rate(/** @type {number} */ (value("responseRate")))}`
+    : null;
+  const none = truth.null === true ? "无效应" : null;
+  return effect && none ? `${effect}（${none}）` : effect ?? none;
+}
+
+/**
  * The design grid: a heat grid of one measure across designs and truths, and
  * the power-against-effect series that read off the same cells. Only cells the
  * grid actually holds are drawn.
- * @param {Record<string, any> | null} grid @param {readonly Record<string, any>[]} designs
+ * @param {Record<string, any> | null} grid
  */
-function gridView(grid, designs) {
+function gridView(grid) {
   // A cell is addressed the way the engine numbers it: the first design under the first truth is
   // (1, 1) — R's own — so the position on the page is the index less one, and a cell numbered 0
   // is not one of this grid's (it would be the design before the first).
@@ -1625,13 +1645,17 @@ function gridView(grid, designs) {
   const measureOf = (/** @type {any} */ cell, /** @type {string[]} */ names) => list(cell.measures).map(object).find((measure) => names.includes(String(measure.name)));
   const designCount = Math.max(...cells.map((cell) => Number(cell.designIndex)));
   const truthCount = Math.max(...cells.map((cell) => Number(cell.truthIndex)));
-  const columns = Array.from({ length: truthCount }, (_unused, index) => ({ key: `t${index}`, header: text(truths[index]?.name) ?? text(truths[index]?.label) ?? `情景 ${index + 1}` }));
-  // A row is named by what the grid says of it, else by its own size, never first by the page's design at the same position.
+  // A column is named by what the grid says of its truth, else by the effect the truth states.
+  const columns = Array.from({ length: truthCount }, (_unused, index) => ({ key: `t${index}`,
+    header: text(truths[index]?.name) ?? text(truths[index]?.label) ?? (truths[index] ? gridTruthLabel(truths[index]) : null) ?? `情景 ${index + 1}` }));
+  // A row is named by what the grid says of it, else by its own size, never by the page's design at the same position (live 2026-11-07: a
+  // row the grid's list did not hold was called 「固定样本两组比较，风险比 0.75」, the name of another object); with neither it is numbered.
   const rowName = (/** @type {number} */ index) => text(dimensionDesigns[index]?.label) ?? text(dimensionDesigns[index]?.name)
     ?? (dimensionDesigns[index] ? gridDesignLabel(dimensionDesigns[index]) : null);
+  const rowHeader = (/** @type {number} */ index) => rowName(index) ?? `设计 ${index + 1}`;
   const rows = Array.from({ length: designCount }, (_row, index) => ({
     key: `d${index}`,
-    header: rowName(index) ?? designs[index]?.name ?? `设计 ${letterCode(index)}`,
+    header: rowHeader(index),
     cells: Array.from({ length: truthCount }, (_unused, truthIndex) => {
       const cell = cells.find((entry) => Number(entry.designIndex) === index + 1 && Number(entry.truthIndex) === truthIndex + 1);
       const measure = cell ? measureOf(cell, ["power", "type_one_error"]) : null;
@@ -1656,7 +1680,7 @@ function gridView(grid, designs) {
         return { x: /** @type {number} */ (effects[truthIndex]), y: finite(measure?.value), low: null, high: null };
       }).filter((point) => point.y !== null).sort((a, b) => a.x - b.x);
       if (points.length >= 2) {
-        powerSeries.push({ key: `d${index}`, label: rowName(index) ?? `设计 ${letterCode(index)}`, source: "predicted", ours: false, pooled: false, points,
+        powerSeries.push({ key: `d${index}`, label: rowHeader(index), source: "predicted", ours: false, pooled: false, points,
           bandKind: null, endLabel: null, endNote: null, atRisk: [], individuals: [], dashed: false, unobserved: [] });
       }
     }
