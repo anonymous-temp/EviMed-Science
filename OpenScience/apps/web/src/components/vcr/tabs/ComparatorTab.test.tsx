@@ -395,7 +395,11 @@ describe("对照 · comparability and the prior", () => {
     expect(folded).not.toHaveAttribute("open");
     expect(folded.querySelector("[data-vcr-reconstruction-level='events_only']")).toHaveTextContent("论文只给了总事件数（没有风险人数表）");
     expect(folded).toHaveTextContent("论文没有给，没有核对");
-    expect(container.querySelector("[data-vcr-premises]")).toBeNull();
+    // The one premises block says where the control comes from (reconstructed pseudo-patients, not observed people);
+    // the reconstruction's checks stay in their own fold and are never a premise.
+    const premises = container.querySelector("[data-vcr-premises]");
+    expect(premises).toHaveTextContent("伪个体");
+    expect(premises).not.toHaveTextContent("重建质控");
   });
 
   it("draws no prior section when no route borrowed one", async () => {

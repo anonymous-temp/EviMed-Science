@@ -70,7 +70,7 @@ it('draws a finished search: candidates with objective, constraint verdicts and 
   serve([entry('cmp1', 'campaign')], { cmp1: campaign() });
   draw();
   expect(await screen.findByText('找出满足约束的最小样本量')).toBeInTheDocument();
-  const table = screen.getByRole('table', { name: '设计搜索的候选方案' });
+  const table = screen.getByRole('table', { name: '设计搜索比较的方案' });
   expect(within(table).getAllByRole('row')).toHaveLength(4);
   expect(within(table).getAllByText(/第一类错误不超过 2.5%：/).length).toBeGreaterThan(0);
   expect(within(table).getByText('初筛时把握度已明显不满足约束（最有利的界值也不满足）。')).toBeInTheDocument();
@@ -203,7 +203,7 @@ it('switches between the experiments of a study', async () => {
   serve([entry('cmp1', 'campaign'), entry('exp1', 'experiment')], { cmp1: campaign(), exp1: experiment() });
   const user = userEvent.setup();
   draw();
-  await screen.findByRole('table', { name: '设计搜索的候选方案' });
+  await screen.findByRole('table', { name: '设计搜索比较的方案' });
   // the choice of object is a filter of the band, never a select in the body
   expect(screen.queryByLabelText('实验')).toBeNull();
   await user.click(screen.getByRole('button', { name: /实验/ }));

@@ -149,7 +149,7 @@ function CampaignView({ studyId, view, reload }: { studyId: string; view: VcrCam
     <section className="flex flex-col gap-6" aria-label="设计搜索" data-vcr-lab-kind="campaign">
       <div className="flex flex-col gap-2">
         <h2 className="text-heading font-semibold text-text">{view.question || "设计搜索"}</h2>
-        <Note result={["已评估 ", { n: evaluated }, ` / ${planned} 个候选方案，`, { n: view.finalists.length, onOpen: view.finalists.length ? () => { setOnly("finalists"); setOffset(0); } : undefined, label: `${view.finalists.length} 个入围复核，只看这些` }, " 个入围复核。",
+        <Note result={["已评估 ", { n: evaluated }, ` / ${planned} 个方案，`, { n: view.finalists.length, onOpen: view.finalists.length ? () => { setOnly("finalists"); setOffset(0); } : undefined, label: `${view.finalists.length} 个入围复核，只看这些` }, " 个入围复核。",
           ...(best ? [`最优的是 #${best.index + 1}${best.objective.final ? `，${view.objective.label} ${valueText(best.objective.final)}` : ""}。`]
             : view.undecided?.closest ? [`没有方案确认满足全部约束；最接近的是 #${view.undecided.closest.index + 1}${view.undecided.closest.objective ? `，${view.objective.label} ${valueText(view.undecided.closest.objective)}` : ""}，还有 ${view.undecided.closest.constraints.length} 个约束无法确定。`] : [])]} />
         {view.againstReference?.difference
@@ -160,9 +160,9 @@ function CampaignView({ studyId, view, reload }: { studyId: string; view: VcrCam
       <FactList rows={facts} />
       <VcrPremises premises={view.premises} />
 
-      <Section title="候选方案" level="sub" count={rows.length}>
+      <Section title="参与比较的方案" level="sub" count={rows.length}>
         <div className="flex flex-col gap-3">
-          <DataTable label="设计搜索的候选方案" rows={page} rowKey={(candidate) => candidate.key} columns={columns} emptyText="没有符合条件的方案。"
+          <DataTable label="设计搜索比较的方案" rows={page} rowKey={(candidate) => candidate.key} columns={columns} emptyText="没有符合条件的方案。"
             footnote={rows.length ? `第 ${offset + 1}–${offset + page.length} 个，共 ${rows.length} 个。` : undefined} />
           {rows.length > PAGE && (
             <div className="flex gap-2">

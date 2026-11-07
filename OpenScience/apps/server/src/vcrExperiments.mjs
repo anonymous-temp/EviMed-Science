@@ -72,7 +72,7 @@ export const VCR_CAMPAIGN_STOP_TEXT_ZH = Object.freeze({
   budget_exhausted: "计算预算已用完；已完成的方案保留。",
   acceptable_precision: "找到了在预先设定的约束下全部满足的方案，并已另做一批独立模拟、按正常次数复核。",
   no_useful_improvement: "有满足约束的方案，但比参照方案的改进小于预先设定的最小改进。",
-  unsupported_candidate: "候选方案都无法用所选方法计算。",
+  unsupported_candidate: "要比较的方案都无法用所选方法计算。",
   persistent_model_failure: "计算连续失败，已停止，未完成的方案没有结果。",
   user_cancellation: "已按要求停止，已完成的方案保留。",
   no_feasible_beneficial_candidate: "没有找到在预先设定的约束下可行且优于参照的方案。",
