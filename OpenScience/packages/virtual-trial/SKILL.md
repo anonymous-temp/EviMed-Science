@@ -21,6 +21,14 @@ A design, endpoint, effect, analysis assumptions and where relevant accrual and 
 
 For an explanation-only request, answer in the conversation; no computation, file or full research sequence is required. If essential inputs are absent, finish the reply by naming the missing inputs and why they matter. In an automated turn no person is waiting to answer: do not keep probing schemas, create substitute patient data, or invent numerical assumptions to avoid that final reply. Use assumed inputs only when the request authorizes them, and label them explicitly.
 
+## Comparing designs and searching for one (virtual lab)
+
+To compare named design alternatives without new assumptions, use `virtual_trial_compare` with `{experiment: {question, arms, comparison}}`: each arm is either an existing saved result (`{name, resultId}`, never rerun) or a design method with its scenario (`{name, method, scenario}`); all arms share one endpoint and analysis; `comparison` names the measures and the reference arm. Read it back with `{experimentId}`.
+
+To search for a design that meets stated requirements ("keep simulating until a design works"), use `virtual_trial_search` with a frozen `{manifest}`, stated before anything runs: `objective` {measure, direction, truth}; `constraints` [{measure, op, bound, kind: error_control | design | safety, truth}]; `space` {method, scenario, truths [{name, truth}], and either `variables` [{path, values}] or `candidates` [{set}]}; `stages` {screening {replicates}, final {count}}; `budget` {maxCandidates, cpuSeconds}. Only design paths may vary: the truth, endpoint, nominal alpha, sidedness and what is measured are the evaluator and are refused. An error-control bound can never exceed the stated alpha, and a dose-finding design is judged by toxicity and selection constraints, not by a superiority alpha. Read progress with `{campaignId}`; stop with `{campaignId, cancel: true}`. A changed manifest is a new campaign.
+
+The platform evaluates every candidate: screening numbers only rank candidates and are never results; finalists are re-run at the method's normal precision on new random streams, and a constraint counts as met only when its conservative bound meets it ("inconclusive" near the bound is not met). Report the stop reason, the best design with its final numbers and their error, which constraints were met, inconclusive or not, and the budget used. Never recompute or round a number yourself, never relax a constraint to make a candidate win, and say plainly when nothing feasible was found.
+
 ## Results and limits
 
 Read the job result and use the report tool if a report is wanted. State the method, version, relevant inputs, measures, uncertainty, diagnostics and limitations. Operating characteristics are conditional on the specified model and assumptions. Simulations do not establish clinical efficacy or guarantee a real trial outcome.
