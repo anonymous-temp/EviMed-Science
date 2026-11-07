@@ -24,6 +24,7 @@ import { Tooltip } from "@/components/ui/Tooltip";
 import { VcrSeriesLegend, VcrTrajectoryChart } from "../VcrCharts";
 import { VcrTornadoChart } from "../VcrDiagrams";
 import { VcrNumber } from "../VcrNumber";
+import { VcrPremises } from "../VcrPremises";
 import { PartialResultNote, Stale, VcrStepFailed, VcrStepPending, VcrTabSkeleton } from "../VcrStates";
 import { useStudyFrame, useVcrToolbar } from "../studyFrameContext";
 import { useVcrLoad, VcrTabError } from "../vcrTabKit";
@@ -303,6 +304,9 @@ function PatientsView({ studyId, study, data, switcher, reload, onStudyChanged }
       <Stale note={data.stale}>
         <div className="flex flex-col gap-6">
           {headline && <Headline parts={headline} />}
+
+          {/* What the model behind these results was and was not validated for: the same block every result page has. */}
+          <VcrPremises premises={data.premises} />
 
           {gridRows.length > 0 && <ChartGrid rows={gridRows} />}
 

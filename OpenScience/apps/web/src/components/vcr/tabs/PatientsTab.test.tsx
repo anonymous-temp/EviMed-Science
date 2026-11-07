@@ -541,4 +541,15 @@ describe("虚拟患者 · a spline survival fit made in the conversation", () =>
     expect(block).toHaveTextContent("最后一个时间点离数据有多远");
     expect(screen.queryByText(/还没有|尚未/)).toBeNull();
   });
+
+  it("carries what the model behind the people was not validated for, as one sentence in the one block", async () => {
+    const raw = fixture("ev201/patients.json");
+    raw.premises = [{ key: "use:use_not_validated", label: "模型的适用范围", value: "这个模型尚未验证过这种用途；结果表示在所列模型假设下可能怎样变化。", source: "assumed", decisive: true }];
+    installVcrServer(network.productRequest, { [tab("patients")]: raw });
+    const { container } = draw();
+    const block = await found(container, "[data-vcr-premises]");
+    expect(block).toHaveTextContent("这个模型尚未验证过这种用途");
+    expect(container.querySelectorAll("[data-vcr-premises]")).toHaveLength(1);
+    expect(screen.getByRole("table", { name: "患者" })).toBeInTheDocument();
+  });
 });

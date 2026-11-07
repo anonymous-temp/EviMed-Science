@@ -50,6 +50,7 @@ import { vcrObjectNode } from "./vcrStore.mjs";
 import { VCR_UNSUPPORTED_COMPARATOR_ROUTES } from "./vcrService.mjs";
 import { constraintRows, generatedProfileRows } from "./vcrPopulationProfileView.mjs";
 import { bindingUseFindings, populationBindingPremises, populationBindingView } from "./vcrPopulationBinding.mjs";
+import { modelUseOf, modelUsePremisesOf } from "./vcrModelUsePage.mjs";
 import { decidedShare } from "./vcrMatching.mjs";
 import { phaseLabel, registryStatusLabel } from "./vcrPatientTrials.mjs";
 import { reportSchedule } from "./vcrScheduleView.mjs";
@@ -602,6 +603,8 @@ export function presentPatientsTab(bundle) {
   const described = table ? generatedProfileRows(table.profile) : null;
   return {
     model,
+    // 「这个结论的前提」 of a model-based result: what the model was and was not validated for, in the same block as every other page's
+    premises: modelRow ? modelUsePremisesOf(models, modelRow, { endpoint: text(diagnostics.endpoint) ?? text(bundle.definition?.endpointType), mode: "conditional_forecast" }) : [],
     selection: current ? { objectId: current.id, version: current.version, ...(result ? { resultId: result.id, resultVersion: result.version } : {}) } : null,
     records: table ? { result: table.result, rows: table.rows, arms: list(table.calibration?.arms) } : null,
     profile: described ?? [],
@@ -899,14 +902,17 @@ export function presentComparatorTab(bundle) {
     // A borrowing route's rejection probabilities over the drifts of the true control rate (`comparator.map_prior`), with their errors.
     operatingCharacteristics: operatingCharacteristicsView(diagnostics),
     // 「这个结论的前提」: the list and its rules are `vcrPremises`'s; the comparator's facts are filled in beside the route's own rows.
-    premises: vcrPremises("comparator", {
+    premises: finishPremises([...vcrPremises("comparator", {
       route: shown?.route ?? null, estimand: ownEstimand, estimandStated: ownEstimand !== null && shown ? shown.estimand !== "ATT" && shown.estimand === ownEstimand : false, diagnostics,
       measures: Object.fromEntries(list(result?.measures).map(object).map((measure) => [String(measure.name), numeric(measure.value)])),
       applicability: shown ? vcrApplicability(shown.configuration) : null,
       targetTrial: shown ? vcrTargetTrial(shown.targetTrial, shown.configuration?.targetTrial) : null,
       covariates: list(shown?.configuration?.covariates).length ? list(shown?.configuration?.covariates).map(String) : balance.map((row) => String(row.covariate ?? "")),
       anchored: typeof diagnostics.anchored === "boolean" ? diagnostics.anchored : null,
-    }),
+      // a comparison that predicts its control with a model says what that model was validated for, in the same block
+      modelUse: execution?.method === "model.prognostic_apply" || shown?.route === "model_comparator"
+        ? modelUseOf(bundle.models, diagnostics.sourceModel, { mode: "conditional_forecast", endpoint: text(diagnostics.endpoint) }) : [],
+    })]),
     limits,
     robustness: robustnessView(result, value),
     // Quantitative bias analysis (C1, C2) and who a propensity trimming left (C14): cards of the comparison, null when the result has neither.

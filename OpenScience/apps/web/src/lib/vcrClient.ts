@@ -984,6 +984,8 @@ export interface VcrPatientsTab {
   /** The label the model's output has earned: never 「数字孪生」 by default. */
   twin: { label: string; reason: string | null } | null;
   headline?: string | null;
+  /** 「这个结论的前提」 of a model-based result: what the model was and was not validated for, as sentences of the one block. */
+  premises?: VcrPremise[];
   /** Population-level progression simulations (P4): a card each. */
   progressions?: VcrProgressionCard[];
   /** The survival fits with a spline the study holds now (C13), newest first: the curve beyond the data with how far beyond, and the premises. */
@@ -3331,6 +3333,7 @@ export function readVcrPatients(raw: unknown): VcrPatientsTab {
     ...(value as unknown as VcrPatientsTab),
     model: value.model ? readVcrModelCard(value.model) : null,
     assessments: readVcrAssessments(value.assessments),
+    premises: readPremises(value.premises),
     twin: value.twin && typeof value.twin === "object" ? value.twin as VcrPatientsTab["twin"] : null,
     records: typeof records.result === "string" && records.result
       ? {
