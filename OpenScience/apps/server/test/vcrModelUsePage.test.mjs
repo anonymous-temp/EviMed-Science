@@ -24,7 +24,7 @@ function patientsPage(model, diagnostics = {}) {
 test("A04: the patients page of a model-based result carries what the model was not validated for, as a sentence of the one block", () => {
   const page = patientsPage(validatedFor(), { endpoint: "event_free" });
   assert.deepEqual(page.premises.map((/** @type {any} */ row) => row.key), ["use:use_not_validated"], "the result stands; the premise is beside it");
-  assert.match(page.premises[0].value, /尚未验证过这种用途/);
+  assert.match(page.premises[0].value, /没有为这种用途验证过/);
   assert.equal(page.premises[0].decisive, true);
   assert.doesNotMatch(JSON.stringify(page.premises), /mdl_|prognostic-eq|adapter|job/);
 });

@@ -73,10 +73,10 @@ export function vcrPopulationVariables(population) {
  *   horizon?: { value: number, unit: string } | null, eventTypes?: readonly string[], trajectories?: number | null }} study
  *   `horizon`, `eventTypes` and `trajectories` are what a study asks of a model of the event-history shape; a limit the study
  *   does not state is not checked.
- * @returns {Array<{ code: string, field: string, text: string }>}
+ * @returns {Array<{ code: string, field: string, text: string, limits?: number[] }>}
  */
 export function vcrModelApplicabilityIssues(model, { endpointType, variables, horizon = null, eventTypes = [], trajectories = null }) {
-  /** @type {Array<{ code: string, field: string, text: string }>} */
+  /** @type {Array<{ code: string, field: string, text: string, limits?: number[] }>} */
   const issues = [...vcrModelCardIssues(model)];
   const applicability = object(model.applicability);
   const card = object(model.card);
@@ -96,7 +96,7 @@ export function vcrModelApplicabilityIssues(model, { endpointType, variables, ho
     const seen = variables.get(field);
     if (!seen || limits.length < 2 || !limits.every(Number.isFinite)) continue;
     if ((seen.min !== null && seen.min < limits[0]) || (seen.max !== null && seen.max > limits[1])) {
-      issues.push({ code: "input_out_of_range", field, text: `「${field}」在人群里的取值范围超出了它声明的 ${limits[0]}–${limits[1]}` });
+      issues.push({ code: "input_out_of_range", field, limits: [limits[0], limits[1]], text: `「${field}」在人群里的取值范围超出了它声明的 ${limits[0]}–${limits[1]}` });
     }
   }
   issues.push(...vcrEventHistoryScopeIssues(model, { horizon, eventTypes, trajectories }));
@@ -118,7 +118,7 @@ export const VCR_USE_TEXT_ZH = Object.freeze({
   authorization_lost: "模型、来源或数据的使用授权已经撤回，这一项不能再算。",
   runtime_limit_exceeded: "超出了计算环境声明的上限，这一项算不了。",
   runtime_unavailable: "这个机理模型需要的求解器没有安装在计算环境里，这一项算不了。",
-  use_not_validated: "这个模型尚未验证过这种用途；结果表示在所列模型假设下可能怎样变化。",
+  use_not_validated: "这个模型没有为这种用途验证过；结果只说明按它的设定会怎样，不能当作经过验证的预测。",
   population_outside_validation: "这个模型验证过的人群不包括这一次的人群；结果是把模型用到了它验证范围之外。",
   endpoint_outside_validation: "这个模型验证过的终点不包括这一次的终点；结果是把模型用到了它验证范围之外。",
   horizon_beyond_validation: "这次推演的时间比模型验证过的更长；超出的部分是外推。",

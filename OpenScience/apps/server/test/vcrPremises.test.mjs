@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { VCR_PREMISES_DECISIVE_MAX, VCR_PREMISE_SOURCES, vcrAppliedDefaults } from "@evimed/domain";
-import { finishPremises, premiseSourceOfCard, vcrPremises } from "../src/vcrPremises.mjs";
+import { finishPremises, modelUsePremises, premiseSourceOfCard, vcrPremises } from "../src/vcrPremises.mjs";
 import { presentComparatorTab, presentPopulationTab, presentTrialTab } from "../src/vcrViewsTabs.mjs";
 
 /** The two-arm survival design that states six values and nothing else. */
@@ -410,8 +410,23 @@ test("a premise with no number is one sentence in the same block: never dropped,
   ] }));
   const use = rows.filter((row) => row.key.startsWith("use:"));
   assert.deepEqual(use.map((row) => row.key), ["use:use_not_validated", "use:horizon_beyond_validation"]);
-  assert.equal(use[0].value, "这个模型尚未验证过这种用途；结果表示在所列模型假设下可能怎样变化。");
+  assert.equal(use[0].value, "这个模型没有为这种用途验证过；结果只说明按它的设定会怎样，不能当作经过验证的预测。");
   assert.equal(use[0].decisive, true);
   assert.ok(rows.filter((row) => row.decisive).length <= VCR_PREMISES_DECISIVE_MAX);
   for (const row of use) assert.doesNotMatch(row.value, /use_not_validated|horizon_beyond|job|tool|[0-9]+(\.[0-9]+)?%/);
+});
+
+test("a model run outside its fitted range or horizon is told in a plain sentence, and a population or endpoint it was never validated on is as decisive as an unvalidated use", () => {
+  const found = vcrPremises("trial", trialInput({ modelUse: [
+    { code: "input_out_of_range", field: "age", limits: [18, 85] }, { code: "horizon_exceeded" },
+    { code: "population_outside_validation" }, { code: "endpoint_outside_validation" }, { code: "horizon_beyond_validation" },
+  ] })).filter((row) => row.key.startsWith("use:"));
+  const byCode = Object.fromEntries(found.map((row) => [row.key, row]));
+  assert.equal(byCode["use:input_out_of_range"].value, "有变量超出了模型声明的取值范围（18–85）；超出的部分是外推。");
+  assert.equal(byCode["use:horizon_exceeded"].value, "这次推演的时长超过了模型声明的最长时长；超出的部分是外推。");
+  assert.equal(new Set(found.map((row) => row.label)).size, found.length, "adjacent rows are labelled by what they state");
+  for (const row of found) assert.doesNotMatch(row.value + row.label, /age|[「」]/);
+  // decisive: each of these bears on whether the conclusion reaches the people it is about
+  const flags = Object.fromEntries(modelUsePremises([{ code: "population_outside_validation" }, { code: "endpoint_outside_validation" }, { code: "horizon_beyond_validation" }, { code: "no_independent_data" }]).map((row) => [row.key, row.decisive]));
+  assert.deepEqual(flags, { "use:population_outside_validation": true, "use:endpoint_outside_validation": true, "use:horizon_beyond_validation": true, "use:no_independent_data": false });
 });

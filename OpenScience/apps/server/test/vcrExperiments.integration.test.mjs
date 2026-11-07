@@ -197,7 +197,8 @@ test('a design experiment compares named arms with a saved result attached and n
   const pairedArm = power.contrasts.find((c) => c.arm === '每组 75');
   assert.equal(pairedArm.coupling, 'independent', 'two sizes draw differently, so their seeds differ and the errors add');
   assert.ok(view.alignment.every((row) => row.aligned), JSON.stringify(view.alignment));
-  assert.ok(view.premises.some((row) => row.key === 'lab:conditional'));
+  assert.ok(view.premises.some((row) => row.key === 'lab:aligned'));
+  assert.ok(!view.premises.some((row) => row.key === 'lab:conditional'), 'no generic disclaimer: the alignment sentence and each arm\'s scenario say what the comparison rests on');
   const again = await experiments.startExperiment(study, { question: '三种每组例数的功效', arms: [
     { name: '每组 60', method: 'design.simulate', scenario: arm(60) }, { name: '每组 75', method: 'design.simulate', scenario: arm(75) },
     { name: '已复核的方案', resultId: saved.id }], comparison: { measures: ['power', 'expected_sample_size'], reference: '每组 60' } }, { userId: origin.userId });

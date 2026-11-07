@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { vcrCampaignAdvance, vcrCampaignInitialState, vcrCampaignManifest, vcrCampaignRecord, VCR_PREMISES_DECISIVE_MAX } from '@evimed/domain';
-import { presentCampaign, VCR_CAMPAIGN_STOP_TEXT_ZH } from '../src/vcrExperiments.mjs';
+import { presentCampaign, refusedText, VCR_CAMPAIGN_STOP_TEXT_ZH } from '../src/vcrExperiments.mjs';
 
 const ID = 'b'.repeat(64);
 const input = {
@@ -58,6 +58,28 @@ test('the read model lists every candidate with its stage, objective, verdicts a
   assert.equal(alpha.final.status, 'pass');
   assert.ok(view.budget.used.queueSeconds > 0 && view.budget.used.units === view.candidates.reduce((n, c) => n + c.resultIds.length, 0));
   assert.ok(view.againstReference && view.againstReference.difference.value < 0, 'the best design is smaller than the reference');
+});
+
+test('the design search says which efficacy hypotheses it simulated and a fixed alpha in percent, with no generic disclaimer and no engine words', () => {
+  const view = presentCampaign(finished());
+  const byKey = Object.fromEntries(view.premises.map((row) => [row.key, row]));
+  assert.equal(byKey.alpha.value, '固定为 2.5%，搜索中不能放宽。');
+  assert.equal(byKey['campaign:conditional'].value, '结果是在“alternative”“null”这 2 个疗效假设下模拟的；疗效假设变了，最优方案可能不同。');
+  assert.doesNotMatch(Object.values(byKey).map((row) => row.value).join(''), /不估计药物的真实疗效|保守上界|新的随机数|真值情景/);
+  assert.equal(view.objective.label.includes('_'), false);
+  assert.equal(VCR_CAMPAIGN_STOP_TEXT_ZH.budget_exhausted, '计算预算已用完；已完成的方案保留。');
+});
+
+test('a refused arm reads in words, never as an error code', () => {
+  assert.deepEqual(refusedText(['invalid_parameters', 'units_not_convertible']), ['这一组的参数不合法，无法计算。', '这一组里有单位无法换算，无法计算。']);
+  assert.deepEqual(refusedText(['adapter_missing', 'something_new']), ['这一组的设置无法用所选方法计算。']);
+  assert.deepEqual(refusedText(undefined), []);
+});
+
+test('the design search\'s own measures have Chinese names', async () => {
+  const { measureLabel } = await import('../src/vcrViewsKit.mjs');
+  assert.equal(measureLabel('sample_size'), '样本量');
+  assert.equal(measureLabel('cost'), '平均费用');
 });
 
 test('the premises block holds the fixed alpha, the two precisions and the model-conditional reading, at most five decisive and no back-office words', () => {

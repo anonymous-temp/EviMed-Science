@@ -87,7 +87,7 @@ test("the Alzheimer model (beta_logit) says what it rests on: the person's hypot
   assert.match(card.title, /阿尔茨海默病 ADAS-cog 11/);
   assert.equal(card.label, "人群层面，不是对个人的预测");
   assert.match(card.question, /第 78 周/);
-  assert.match(card.question, /低 2\.5 分/);
+  assert.ok(card.question.length < 40, "the card's question is one short sentence; the effect lives in the premise");
   assert.equal(card.power.source, "synthetic");
   assert.ok(card.power.mcse > 0);
   assert.equal(card.approximation, null, "the model has no closed-form power, and the card claims none");
@@ -99,13 +99,16 @@ test("the Alzheimer model (beta_logit) says what it rests on: the person's hypot
   assert.equal(card.expected.value.unit, "分");
   assert.ok(Math.abs(card.table.rows[0].gap.value) < 1e-12, "the arms start alike");
   const decisive = card.premises.filter((premise) => premise.decisive).map((premise) => premise.key);
-  assert.deepEqual(decisive, ["progression:ad:effect", "progression:ad:parameters", "progression:ad:regulatory", "progression:ad:scope", "progression:ad:mmse"]);
+  assert.deepEqual(decisive, ["progression:ad:effect", "progression:ad:parameters", "progression:ad:scope", "progression:ad:mmse"]);
   const byKey = Object.fromEntries(card.premises.map((premise) => [premise.key, premise]));
   assert.match(byKey["progression:ad:effect"].value, /你设定的假设，不是对某个药物疗效的预测/);
   assert.match(byKey["progression:ad:effect"].value, /减慢 30%/);
   assert.equal(byKey["progression:ad:effect"].source, "assumed");
-  assert.match(byKey["progression:ad:parameters"].value, /表 7、表 9、表 11/);
-  assert.match(byKey["progression:ad:parameters"].value, /表 10 的区间和图 15、图 16 对不上/);
+  assert.equal(byKey["progression:ad:parameters"].value, "参数直接用 CAMD 模型（Rogers 等，2012）公开的原值，没有按你的数据重新估计。");
+  assert.doesNotMatch(byKey["progression:ad:parameters"].value, /表 \d|图 \d|EMA/, "the reproduction detail is a folded row, never in the decisive sentence");
+  assert.match(byKey["progression:ad:reproduction"].value, /表 7、表 9、表 11 一致，与表 10 和图 15、图 16 不一致/);
+  assert.equal(byKey["progression:ad:reproduction"].decisive, false);
+  assert.equal(byKey["progression:ad:regulatory"].decisive, false);
   assert.match(byKey["progression:ad:regulatory"].value, /不适用于这里的计算/);
   assert.match(byKey["progression:ad:scope"].value, /不是对某一个人的预测/);
   assert.match(byKey["progression:ad:scope"].value, /第 130 周，超过两年的部分是外推/);

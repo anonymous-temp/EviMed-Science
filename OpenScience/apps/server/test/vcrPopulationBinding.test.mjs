@@ -84,7 +84,7 @@ test("A04: a use the model was not validated for runs and says so in the premise
   assert.deepEqual(findings.map((finding) => finding.code), ["use_not_validated"]);
   const rows = modelUsePremisesOf([validated], validated, { mode: "conditional_forecast", endpoint: "ADAS-cog 11" });
   assert.equal(rows.length, 1);
-  assert.match(rows[0].value, /尚未验证过这种用途/);
+  assert.match(rows[0].value, /没有为这种用途验证过/);
   assert.equal(rows[0].decisive, true);
   assert.deepEqual(modelUseOf([model()], { name: "ad-progression" }, { mode: "conditional_forecast" }), [], "no validation list: nothing to be held against");
   assert.deepEqual(modelUseOf([], { name: "ad-progression" }), []);

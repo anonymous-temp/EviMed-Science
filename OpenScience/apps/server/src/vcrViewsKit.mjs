@@ -353,6 +353,9 @@ export const MEASURE_META = Object.freeze({
   empirical_se: { label: "经验标准误" },
   mse: { label: "均方误差" },
   expected_sample_size: { label: VCR_PERFORMANCE_MEASURE_LABELS_ZH.expected_sample_size, unit: "例" },
+  // the design search's own measures (VCR_CAMPAIGN_METHODS): never shown to a person under their engine names
+  sample_size: { label: "样本量", unit: "例" },
+  cost: { label: "平均费用" },
   expected_events: { label: "期望事件数", unit: "个" },
   // the confirmatory designs (design_confirmatory): the cells of the per-effect table and the headline numbers
   expected_sample_size_h0: { label: "无效应时的期望样本量", unit: "例" },

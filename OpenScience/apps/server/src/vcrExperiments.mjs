@@ -37,7 +37,7 @@ import {
 } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
 import { finishPremises } from "./vcrPremises.mjs";
-import { ALZHEIMER_PARAMETERS_TEXT, ALZHEIMER_REGULATORY_TEXT, alzheimerScopeText } from "./vcrProgression.mjs";
+import { ALZHEIMER_PARAMETERS_TEXT, ALZHEIMER_REGULATORY_TEXT, ALZHEIMER_REPRODUCTION_TEXT, alzheimerScopeText } from "./vcrProgression.mjs";
 import { measureLabel, measureValue } from "./vcrViewsKit.mjs";
 
 const SCHEMA = "evimed_vcr";
@@ -55,8 +55,8 @@ const seconds = (a, b) => (a && b ? Math.max(0, (new Date(String(b)).getTime() -
 
 /** What a person reads for each closed code. */
 export const VCR_CAMPAIGN_STOP_TEXT_ZH = Object.freeze({
-  budget_exhausted: "计算预算已用完，已完成的方案和次数如下。",
-  acceptable_precision: "找到了在预先设定的约束下全部满足的方案，并已在新的随机数上按正常次数复核。",
+  budget_exhausted: "计算预算已用完；已完成的方案保留。",
+  acceptable_precision: "找到了在预先设定的约束下全部满足的方案，并已另做一批独立模拟、按正常次数复核。",
   no_useful_improvement: "有满足约束的方案，但比参照方案的改进小于预先设定的最小改进。",
   unsupported_candidate: "候选方案都无法用所选方法计算。",
   persistent_model_failure: "计算连续失败，已停止，未完成的方案没有结果。",
@@ -85,6 +85,14 @@ function reasonText(reason) {
   if (reason === "cpu_budget_exhausted") return "这次计算用完了分到的计算预算，只保留了已完成的部分。";
   return "这个方案的计算没有成功。";
 }
+
+/** The sentences a person reads for the codes a refused arm carries; any other code reads as the general one. */
+const REFUSED_TEXT_ZH = Object.freeze({
+  invalid_parameters: "这一组的参数不合法，无法计算。", units_not_convertible: "这一组里有单位无法换算，无法计算。",
+});
+const REFUSED_FALLBACK_ZH = "这一组的设置无法用所选方法计算。";
+/** @param {unknown} codes @returns {string[]} */
+export const refusedText = (codes) => [...new Set(list(codes).map((code) => /** @type {Record<string, string>} */ (REFUSED_TEXT_ZH)[String(code)] ?? REFUSED_FALLBACK_ZH))];
 
 export class VcrExperiments {
   /**
@@ -340,7 +348,7 @@ export class VcrExperiments {
       const armScenario = arm.scenario ?? (job ? object(job.scenario) : null);
       arms.push({ name: arm.name, hypothesis: disease && armScenario ? hypothesisView(armScenario) : null, trajectory: disease ? trajectoryOf(progression) : null,
         beyond: progression.extrapolation?.beyond === true, method: arm.method ?? job?.method ?? null, methodVersion: arm.version ?? job?.method_version ?? null, attached: Boolean(arm.resultId),
-        status, refused: entry.refused ?? null, resultId: result?.id ?? null, scenario: arm.scenario ?? (job ? object(job.scenario) : null),
+        status, refused: entry.refused ? refusedText(entry.refused) : null, resultId: result?.id ?? null, scenario: arm.scenario ?? (job ? object(job.scenario) : null),
         evaluation: result ? { state: status === "complete" ? "succeeded" : "failed", seed: job?.seed == null ? null : Number(job.seed), replicates: execution?.replicates == null ? null : Number(execution.replicates),
           measures: list(result.measures), drawSignature: evaluation.drawSignature ?? null, rejects: evaluation.rejects ?? null } : null });
     }
@@ -367,8 +375,8 @@ export class VcrExperiments {
         { key: "lab:aligned", label: "比较的前提", value: alignment.every((entry) => entry.aligned) ? "各组用同一个终点和同一套分析设置。"
           : `各组的${alignment.filter((entry) => !entry.aligned).map((entry) => ALIGNED_FIELD_TEXT_ZH[/** @type {keyof typeof ALIGNED_FIELD_TEXT_ZH} */ (entry.field)]).join("、")}不一致或未知，差值只能对照着看。`,
           source: "given", decisive: true },
-        ...(disease ? diseasePremises(arms.some((arm) => arm.beyond), arms.map((arm) => object(arm.scenario))) : [
-          { key: "lab:conditional", label: "结论的含义", value: "这是设计层面的模拟：结果表示在所列假设下各方案的表现，不估计药物的真实疗效，也不保证真实试验成功。", source: /** @type {const} */ ("assumed"), decisive: true }]),
+        // no general disclaimer: the comparison's alignment and each arm's own scenario already say what it rests on
+        ...(disease ? diseasePremises(arms.some((arm) => arm.beyond), arms.map((arm) => object(arm.scenario))) : []),
         ...(incomplete.length ? [{ key: "lab:incomplete", label: "未完成的组", value: `${incomplete.join("、")}还没有可比较的结果，比较中缺少它们。`, source: /** @type {const} */ ("given"), decisive: true }] : []),
       ]),
       createdAt: iso(row.created_at),
@@ -411,6 +419,7 @@ function diseasePremises(beyond, scenarios) {
     { key: "progression:ad:effect", label: "药物效果", value: "各组的药物效果都是你设定的假设，不是对某个药物疗效的预测；比较的是“如果效果是这样，试验会看到什么”。", source: /** @type {const} */ ("assumed"), decisive: true },
     { key: "progression:ad:parameters", label: "模型参数", value: ALZHEIMER_PARAMETERS_TEXT, source: /** @type {const} */ ("literature"), decisive: true },
     { key: "progression:ad:scope", label: "适用范围", value: alzheimerScopeText(beyond || last > ALZHEIMER_DATA_WEEKS, last), source: /** @type {const} */ ("literature"), decisive: true },
+    { key: "progression:ad:reproduction", label: "复现情况", value: ALZHEIMER_REPRODUCTION_TEXT, source: /** @type {const} */ ("literature"), decisive: false },
     { key: "progression:ad:regulatory", label: "监管认可", value: ALZHEIMER_REGULATORY_TEXT, source: /** @type {const} */ ("literature"), decisive: false },
   ];
 }
@@ -503,21 +512,35 @@ export function presentCampaign(row) {
     inFlight: state.inFlight ? { unit: state.inFlight.unitKey, stage: object(state.inFlight.unit).stage ?? null } : null,
     cancelRequested: state.cancelRequested === true, stop,
     premises: finishPremises([
-      ...(errorControl.length ? [{ key: "alpha", label: "第一类错误", value: `固定为 ${alpha}，搜索中不能放宽；只按复核结果的保守上界判断，接近界值记为“无法确定”，不算通过。`, source: /** @type {const} */ ("given"), decisive: true }] : []),
+      ...(errorControl.length ? [{ key: "alpha", label: "第一类错误", value: `固定为 ${percentWord(alpha)}，搜索中不能放宽。`, source: /** @type {const} */ ("given"), decisive: true }] : []),
       { key: "campaign:precision", label: "初筛与复核", value: screeningSize
-        ? `初筛每个方案模拟 ${screeningSize} 次，只用来排序和排除明显不满足的方案；入围方案按方法的正常次数在新的随机数上重算后，才判断是否满足约束。`
+        ? `初筛每个方案模拟 ${screeningSize} 次，只用来排序和排除明显不满足的方案；入围方案另做一批独立模拟、按方法的正常次数重算后，才判断是否满足约束。`
         : "每个方案按方法的正常精度计算一次，直接判断是否满足约束。", source: "given", decisive: !disease },
-      { key: "campaign:bound", label: "约束怎样算满足", value: `每个约束按预先声明的单侧 ${percentWord(list(manifest.constraints)[0]?.confidence ?? 0.975)} 置信界判断：最不利的界值也满足才算满足。`, source: "given", decisive: true },
+      { key: "campaign:bound", label: "约束怎样算满足", value: boundPremiseText(list(manifest.constraints)), source: "given", decisive: true },
       ...(disease
         ? diseasePremises(false, [object(object(manifest.space).scenario), ...vcrCampaignCandidates(manifest).map((candidate) => object(candidate.set))])
-        : [{ key: "campaign:conditional", label: "结论的含义", value: "结果只表示在所列设计假设和真值情景下的模拟表现，不估计药物的真实疗效，也不保证真实试验成功。", source: /** @type {const} */ ("assumed"), decisive: true }]),
-      { key: "campaign:frozen", label: "冻结的评价方式", value: "目标、约束、真值情景和每个阶段的模拟次数在开始前已固定；改动任何一项就是一个新的实验方案。", source: "given", decisive: false },
+        : (() => {
+          // the one sentence that decides this result: which efficacy hypotheses were simulated
+          const names = list(manifest.space?.truths).map((truth) => String(truth.name)).filter(Boolean);
+          return names.length ? [{ key: "campaign:conditional", label: "疗效假设", value: `结果是在“${names.join("”“")}”这 ${names.length} 个疗效假设下模拟的；疗效假设变了，最优方案可能不同。`, source: /** @type {const} */ ("assumed"), decisive: true }] : [];
+        })()),
+      { key: "campaign:frozen", label: "开始前已固定的评价方式", value: "目标、约束、疗效假设和每个阶段的模拟次数在开始前已固定；改动任何一项就是一个新的实验方案。", source: "given", decisive: false },
     ]),
     createdAt: iso(row.created_at), updatedAt: iso(row.updated_at),
   };
 }
 
 /** @param {number} confidence */
+/**
+ * How the constraints are judged, one sentence: the confidence of each (one confidence says it once, several name their measure).
+ * @param {Array<Record<string, any>>} constraints
+ */
+function boundPremiseText(constraints) {
+  const confidences = constraints.map((constraint) => Number(constraint.confidence ?? 0.975));
+  const rule = "最不利情况下的值也满足才算满足；接近界值记为“无法确定”，不算通过。";
+  if (new Set(confidences).size <= 1) return `每个约束按预先声明的单侧 ${percentWord(confidences[0] ?? 0.975)} 置信界判断：${rule}`;
+  return `${constraints.map((constraint, index) => `${measureLabel(constraint.measure)}按单侧 ${percentWord(confidences[index])}`).join("，")}置信界判断：${rule}`;
+}
 const percentWord = (confidence) => `${String(Number((confidence * 100).toPrecision(4)))}%`;
 
 /** @param {any[]} rows @param {string} field */

@@ -101,7 +101,7 @@ function alzheimerEffectWords(progression) {
     const v = Number(points.value);
     parts.push(`第 ${plain(Number(points.atWeek))} 周比不用药${v < 0 ? "低" : "高"} ${plain(Math.abs(v))} 分（对基线 ${plain(Number(points.referenceAdas))} 分的人）${half}`);
   } else if (numeric(givenOf(progression, "treatment.symptomatic.logitEmax").value) !== null) {
-    parts.push(`改善症状，最大效应在对数优势尺度上是 ${plain(Number(givenOf(progression, "treatment.symptomatic.logitEmax").value))}${half}`);
+    parts.push(`改善症状，最大效应强度是 ${plain(Number(givenOf(progression, "treatment.symptomatic.logitEmax").value))}${half}`);
   }
   const fraction = numeric(treatment.diseaseModifyingFraction);
   if (fraction !== null && fraction > 0) parts.push(`病情恶化的速度减慢 ${plain(fraction * 100)}%（停药后保持）`);
@@ -109,7 +109,9 @@ function alzheimerEffectWords(progression) {
 }
 
 /** What the Alzheimer model's parameters are and what they reproduce (a sentence the result card and the lab's experiments both say). */
-export const ALZHEIMER_PARAMETERS_TEXT = "用的是 CAMD 阿尔茨海默病疾病—药物—试验模型（Rogers 等，2012）作者在 2013 年 8 月公开的 1600 组后验参数，没有重新估计；用它们算出的数与 EMA 2013 年资格认定意见表 7、表 9、表 11 公布的数一致，与表 10 的区间和图 15、图 16 对不上";
+export const ALZHEIMER_PARAMETERS_TEXT = "参数直接用 CAMD 模型（Rogers 等，2012）公开的原值，没有按你的数据重新估计。";
+/** What those parameters reproduce of the 2013 EMA opinion: a folded detail, not a decisive row. */
+export const ALZHEIMER_REPRODUCTION_TEXT = "用这些参数算出的结果，与 EMA 2013 年资格认定意见的表 7、表 9、表 11 一致，与表 10 和图 15、图 16 不一致。";
 /** The 2013 regulatory documents concern the original tool, not this implementation. */
 export const ALZHEIMER_REGULATORY_TEXT = "FDA 2013 年 6 月 12 日的信函和 EMA 2013 年 9 月 19 日通过的资格认定意见，针对的是原来的工具和它限定的用途，不适用于这里的计算";
 /** @param {boolean} beyond @param {number} lastVisit */
@@ -132,7 +134,8 @@ function alzheimerPremisesOf(progression) {
       value: effect ? `${effect}。这是你设定的假设，不是对某个药物疗效的预测` : "没有设定药物效果，两组相同：这里看的是检验误判有效的概率" },
     { key: "progression:ad:parameters", label: "模型参数", decisive: true, source: "literature",
       value: ALZHEIMER_PARAMETERS_TEXT },
-    { key: "progression:ad:regulatory", label: "监管认可", decisive: true, source: "literature",
+    { key: "progression:ad:reproduction", label: "复现情况", decisive: false, source: "literature", value: ALZHEIMER_REPRODUCTION_TEXT },
+    { key: "progression:ad:regulatory", label: "监管认可", decisive: false, source: "literature",
       value: ALZHEIMER_REGULATORY_TEXT },
     { key: "progression:ad:scope", label: "适用范围", decisive: true, source: "literature",
       value: alzheimerScopeText(extrapolation.beyond === true, Number(extrapolation.lastVisit)) },
@@ -198,14 +201,13 @@ function cardOf(result, staleMark) {
     points: curves.map((curve) => ({ x: Number(curve.visit), ...(band(object(curve[arm]), 1.96) ?? { y: null, low: null, high: null }) })),
     bandKind: "prediction", bandLevel: 95, endLabel: null, endNote: null, atRisk: [], individuals: [], dashed: arm === "control", unobserved: [],
   }));
-  const effect = alzheimer ? alzheimerEffectWords(progression) : null;
   return {
     id: String(result.id), version: Number(result.version),
     title: `${FAMILY_WORDS[family] ?? family}进展：人群的平均病程与检验的功效`,
     question: isNull
       ? "治疗什么都不改变时，这个检验会误判有效的概率是多少"
       : alzheimer
-        ? `药物${effect ?? "按你设定的效果起作用"}时，比较第 ${plain(Number(analysis.visit))} 周相对基线的变化，检验判出有效的把握有多大`
+        ? `药物按你设定的效果起作用时，第 ${plain(Number(analysis.visit))} 周检验判出有效的把握有多大`
         : `这么多人、把进展减慢 ${plain(Number(object(progression.treatment).slowing) * 100)}% 时，${slope ? "按每个人的进展斜率比较" : "按基线到所选随访的变化比较"}，检验判出有效的把握有多大`,
     label: "人群层面，不是对个人的预测",
     reason: "这条曲线只描述一组人的平均病程和人与人之间的散布，用来估计检验的把握；它不能告诉你某一个人会怎样。",
