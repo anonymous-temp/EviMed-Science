@@ -118,6 +118,44 @@ export function vcrDesignShare(design) {
 }
 
 /**
+ * Whether a scenario and a design differ in how the sample is decided. A design that fixes both arm sizes and one that solves them for
+ * a power are different designs, not two versions of one: the scenario that states the sizes is the design's own only when the sizes
+ * it states are the ones the design solved (`row.solvedPatients`, read from the design's result), so a simulation at the solved size
+ * stays the design's next stage and a simulation at another size is another design (found live 2026-11-07: 250 per arm was filed as
+ * a version of the design solved to 367 per arm, whose page then read 734 patients beside a power of 76%).
+ * @param {Record<string, any>} jobScenario @param {Record<string, any>} row `configuration`, and `solvedPatients` when its result is read
+ * @returns {boolean}
+ */
+export function vcrSizingDiffers(jobScenario, row) {
+  const scenario = object(jobScenario);
+  const own = object(row.configuration);
+  const fixed = (/** @type {Record<string, any>} */ design) => finite(design.nTreat) !== null && finite(design.nControl) !== null;
+  const solved = (/** @type {Record<string, any>} */ whole) => !fixed(object(whole.design)) && finite(object(whole.analysis).power) !== null;
+  const theirs = object(scenario.design);
+  if (fixed(theirs) && solved(own)) {
+    const total = Number(theirs.nTreat) + Number(theirs.nControl);
+    const known = finite(row.solvedPatients);
+    return known === null || known !== total;
+  }
+  return solved(scenario) && fixed(object(own.design));
+}
+
+/**
+ * The trial scenarios of a study with the size each one solved, read from its result, so a fit can tell a fixed-size scenario from the
+ * design's own solved size.
+ * @param {any} store @param {string} studyId @param {string} objectKind @param {ReadonlyArray<Record<string, any>>} current
+ */
+async function withSolvedSizes(store, studyId, objectKind, current) {
+  if (objectKind !== "trial_scenario" || typeof store?.result !== "function") return current;
+  return Promise.all(current.map(async (row) => {
+    if (!row.resultId) return row;
+    const result = await store.result(studyId, String(row.resultId));
+    const measure = list(object(result).measures).map(object).find((item) => item.name === "required_patients" || item.name === "required_total");
+    return finite(measure?.value) === null ? row : { ...row, solvedPatients: Number(measure?.value) };
+  }));
+}
+
+/**
  * How a job's frozen scenario reads against one trial scenario: the design kind, the endpoint and the allocation share must
  * agree where both say one, and the count of agreeing numbers in the design, the truth, the hypothesis, the analysis and the accrual breaks a tie. A number both state and
  * that differs is counted too (`disagreeing`): it does not unfit a design here (the backfill reads old results against the design
@@ -132,6 +170,7 @@ export function vcrTrialScenarioFit(jobScenario, row) {
   if (kind !== null && kind !== row.design) return { fits: false, agreeing: 0, disagreeing: 0 };
   const endpoint = typeof object(scenario.endpoint).type === "string" ? object(scenario.endpoint).type : null;
   if (endpoint !== null && endpoint !== row.endpointType) return { fits: false, agreeing: 0, disagreeing: 0 };
+  if (vcrSizingDiffers(scenario, row)) return { fits: false, agreeing: 0, disagreeing: 0 };
   const own = object(row.configuration);
   const share = vcrDesignShare(design);
   const ownShare = vcrDesignShare(object(own.design));
@@ -329,7 +368,7 @@ export async function resolveJobSubject({ store, study, kind, subjectId = null, 
     }
   } else {
     // Said without an id: the one object that fits what the scenario states is the one it is about.
-    const fitting = fittingObjects(objectKind, kind, scenario, current, study.scope === "conversation");
+    const fitting = fittingObjects(objectKind, kind, scenario, await withSolvedSizes(store, study.id, objectKind, current), study.scope === "conversation");
     // A computation that is a comparison of its own is never taken for the one comparison the study holds when that was made by another
     // method: its primary result would be replaced, and the page would read the first method's sentences beside the second's numbers.
     if (fitting.length === 1 && VCR_OWN_COMPARISON_KINDS.has(kind) && objectKind === "comparator") {
@@ -405,6 +444,11 @@ export async function vcrConversationSubject({ store, study, userId, kind, subje
     if (!named || !own || !Object.keys(scenario).length) return null;
     const changed = objectKind === 'population' && ['generate_population', 'literature_population'].includes(kind)
       ? canonicalScenarioJson(own) !== canonicalScenarioJson(scenario) : vcrContradiction(own, scenario);
+    // A fixed-size scenario sent under a design solved for a power (or the other way round) is another design, never its next version.
+    if (objectKind === 'trial_scenario' && vcrSizingDiffers(scenario, (await withSolvedSizes(store, study.id, objectKind, [named]))[0])) {
+      return (await prepareVcrMethodConfiguration({ store, study, userId, method: /** @type {Record<string, string>} */ (VCR_JOB_METHODS)[kind],
+        name: `${OBJECT_WORDS_ZH[objectKind]} ${vcrCurrentObjects(objectKind, rows).length + 1}`, scenario })).subjectId;
+    }
     if (!changed) return null;
     // An E-value, a bias analysis of a stated estimate, a simulated comparison, a target-trial emulation or a borrowed control is one
     // scenario and not a line of versions: another scenario is another object (below).
@@ -422,7 +466,7 @@ export async function vcrConversationSubject({ store, study, userId, kind, subje
   if (VCR_OWN_COMPARISON_KINDS.has(kind)) {
     const same = current.find((entry) => canonicalScenarioJson(entry.configuration) === canonicalScenarioJson(scenario));
     if (same) return String(same.id);
-  } else if (fittingObjects(objectKind, kind, scenario, current, true).length) return null;
+  } else if (fittingObjects(objectKind, kind, scenario, await withSolvedSizes(store, study.id, objectKind, current), true).length) return null;
   const method = /** @type {Record<string, string>} */ (VCR_JOB_METHODS)[kind];
   const name = `${OBJECT_WORDS_ZH[objectKind]} ${current.length + 1}`;
   return (await prepareVcrMethodConfiguration({ store, study, userId, method, name, scenario })).subjectId;
