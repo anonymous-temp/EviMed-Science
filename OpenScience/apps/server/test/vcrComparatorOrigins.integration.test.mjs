@@ -153,7 +153,7 @@ test("A11: a simulated control states its origin on the page and in the export, 
   assert.equal(page.origins.observedPeople, 0);
   assert.equal(page.origins.modelConditional, true);
   const keys = page.premises.map((/** @type {any} */ row) => row.key);
-  assert.ok(keys.includes("origin:simulated") && keys.includes("origin:transport"), keys.join(","));
+  assert.ok(keys.includes("origin:simulated") && !keys.includes("origin:transport"), keys.join(","));
   const report = vcrReportModel({ study, results: bundle.results, comparator: bundle.comparator });
   assert.equal(report.comparatorOrigins.origin, "simulated");
   assert.equal(report.comparatorOrigins.observedPeople, 0);
@@ -177,7 +177,7 @@ test("A11: an observed control and a reconstructed one are told apart, the targe
   assert.equal(page.origins.observedPeople, 640);
   const keys = page.premises.map((/** @type {any} */ entry) => entry.key);
   assert.ok(!keys.some((/** @type {string} */ key) => /^origin:(simulated|reconstructed|model_predicted)$/.test(key)), "an observed control has no origin warning");
-  assert.ok(keys.includes("origin:transport") && keys.includes("targetTrial") && keys.includes("applicability"), keys.join(","));
+  assert.ok(!keys.includes("origin:transport") && keys.includes("targetTrial") && keys.includes("applicability"), keys.join(","));
 
   // a literature route with a reconstruction that could not be estimated: the origin and the method's own rule are both on the page
   const rebuilt = await result(study, userId, "comparator.rmst", { subjectId: row.id, conclusion: "not_estimable", notEstimableRule: "tau_beyond_followup",

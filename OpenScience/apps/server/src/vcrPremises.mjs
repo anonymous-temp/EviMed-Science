@@ -64,9 +64,9 @@ const PRIORITY = Object.freeze([
   "prognosticTraining", "prognosticFolds", "prognosticRho", "prognosticDiscount", "prognosticForest",
   // a progression simulation: its parameters, in the order a conclusion turns on them
   // what the model behind the result was and was not validated for (a sentence each, never a number)
-  "use:population_outside_validation", "use:endpoint_outside_validation", "use:horizon_beyond_validation", "use:no_independent_data", "use:provenance_missing",
+  "use:use_not_validated", "use:input_out_of_range", "use:horizon_exceeded", "use:population_outside_validation", "use:endpoint_outside_validation", "use:horizon_beyond_validation", "use:no_independent_data", "use:provenance_missing",
   "progression:model.amplitude", "progression:model.betweenPersonSd", "progression:treatment.slowing", "progression:baseline.sd", "progression:residualSd",
-  "binding:origin", "binding:members", "origin:not_stated", "origin:transport",
+  "binding:origin", "binding:members", "origin:not_stated",
 ]);
 
 /**

@@ -55,13 +55,11 @@ test("A11: the four kinds of control are told apart from what the run recorded, 
   assert.equal(hybrid.origin, "reconstructed");
 });
 
-test("every comparison carries the dataset a transportability claim would need; an observed control has no origin row", () => {
+test("an observed control has no origin row, and no comparison carries a generic sentence about other populations", () => {
   const rows = comparatorOriginPremises(comparatorOrigins({ route: "external_control", diagnostics: { valueSourcesUsed: { weakest: "observed" } }, counts: { realPatients: 10 } }));
-  assert.deepEqual(rows.map((row) => row.key), ["origin:transport"]);
-  assert.match(rows[0].value, /独立的真实外部数据集/);
-  assert.equal(rows[0].decisive, false);
+  assert.deepEqual(rows.map((row) => row.key), []);
   const simulated = comparatorOriginPremises(comparatorOrigins({ route: "model_comparator", diagnostics: { valueSourcesUsed: { weakest: "synthetic" } }, counts: { generatedRecords: 9 } }));
-  assert.deepEqual(simulated.map((row) => row.key), ["origin:simulated", "origin:transport"]);
+  assert.deepEqual(simulated.map((row) => row.key), ["origin:simulated"]);
   assert.match(simulated[0].value, /不增加真实患者数/);
   const rebuilt = comparatorOriginPremises(comparatorOrigins({ route: "literature_control", diagnostics: { valueSourcesUsed: { weakest: "reconstructed" } }, counts: { reconstructedPseudoPatients: 300 } }));
   assert.match(rebuilt[0].value, /伪个体（共 300 个），/);
@@ -74,13 +72,13 @@ test("the comparator page says where the control comes from, in the one block, w
   assert.equal(view.origins.origin, "simulated");
   assert.equal(view.origins.observedPeople, 0);
   const keys = view.premises.map((/** @type {any} */ row) => row.key);
-  assert.ok(keys.includes("origin:simulated") && keys.includes("origin:transport") && keys.includes("use:use_not_validated"), keys.join(","));
+  assert.ok(keys.includes("origin:simulated") && !keys.includes("origin:transport") && keys.includes("use:use_not_validated"), keys.join(","));
   assert.ok(view.premises.filter((/** @type {any} */ row) => row.decisive).length <= 5);
   assert.equal(view.premises.length, new Set(keys).size);
   const plain = page({ diagnostics: { valueSourcesUsed: { weakest: "observed" } }, counts: { realPatients: 500 } });
   assert.equal(plain.origins.origin, "observed");
   assert.equal(plain.origins.observedPeople, 500);
-  assert.ok(plain.premises.some((/** @type {any} */ row) => row.key === "origin:transport"));
+  assert.ok(!plain.premises.some((/** @type {any} */ row) => row.key === "origin:transport"));
 });
 
 test("the export carries the same origin, and a simulated control adds no observed people", () => {

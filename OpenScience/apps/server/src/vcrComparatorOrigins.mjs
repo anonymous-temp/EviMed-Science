@@ -118,11 +118,9 @@ const ORIGIN_PREMISES = Object.freeze({
     value: "这次计算没有写明对照组数据是真实观察还是别的来源，所以不把它当作真实观察到的人。" },
 });
 
-const TRANSPORT_TEXT = "如果要说这个结论适用于别处的患者（别的医院、别的国家，或之后几年的患者），需要一份独立的真实外部数据集：来自那个目标人群，治疗策略、结局定义、随访时间和基线变量与这次一致，并且没有用来建这个比较。现在没有这样的数据，所以结果只代表这次比较的两个来源。";
-
 /**
- * The origin of a comparator's control as premises of the one block: what the control is made of, and what a claim about another
- * population would need. An observed control has no origin row; every comparison has the transport row.
+ * The origin of a comparator's control as premises of the one block: what the control is made of. An observed control has no origin row.
+ * No row talks about another population: no result of this page claims one, and a sentence that no result turns on is a disclaimer.
  * @param {ReturnType<typeof comparatorOrigins>} origins
  * @returns {PremiseRow[]}
  */
@@ -135,7 +133,6 @@ export function comparatorOriginPremises(origins) {
     const pseudo = origin === "reconstructed" && origins.reconstructedPseudoPatients > 0 ? `（共 ${origins.reconstructedPseudoPatients} 个）` : "";
     rows.push({ key: `origin:${origin}`, ...premise, value: premise.value.replace("伪个体，", `伪个体${pseudo}，`) });
   }
-  rows.push({ key: "origin:transport", label: "结论能不能用到别的人群", value: TRANSPORT_TEXT, decisive: false, source: "default" });
   return rows;
 }
 
