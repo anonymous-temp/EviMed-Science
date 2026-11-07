@@ -218,17 +218,22 @@ export function populationBindingPremises(view) {
 }
 
 /**
- * The premises of the use the bound model was held to, as the domain's use check reads them for the population's own context
- * (the endpoint the binding states). Empty for a population with no current binding.
+ * The premises of the use every bound model is held to, as the domain's use check reads them for the context each binding states
+ * (its endpoint). A code found for several models is said once. Empty for a population with no binding that still holds.
  * @param {ReturnType<typeof populationBindingView>} view
  * @param {readonly Record<string, any>[]} models
  * @returns {Array<{ code: string, field: string }>}
  */
 export function bindingUseFindings(view, models) {
-  const binding = view.bindings.find((entry) => entry.state === "current" && entry.model);
-  if (!binding) return [];
-  const model = list(models).find((row) => (row.name === binding.model.name) && String(row.version) === binding.model.version);
-  if (!model) return [];
-  return vcrModelApplicabilityAssessment(model, { endpointType: binding.useContext.endpoint, variables: new Map(), mode: "conditional_forecast",
-    ...(binding.useContext.endpoint ? { endpoint: binding.useContext.endpoint } : {}) }).premises;
+  /** @type {Map<string, { code: string, field: string }>} */
+  const found = new Map();
+  for (const binding of view.bindings) {
+    if (binding.state !== "current" || !binding.model) continue;
+    const model = list(models).find((row) => row.name === binding.model.name && String(row.version) === binding.model.version);
+    if (!model) continue;
+    const { premises } = vcrModelApplicabilityAssessment(model, { endpointType: binding.useContext.endpoint, variables: new Map(), mode: "conditional_forecast",
+      ...(binding.useContext.endpoint ? { endpoint: binding.useContext.endpoint } : {}) });
+    for (const premise of premises) if (!found.has(premise.code)) found.set(premise.code, premise);
+  }
+  return [...found.values()];
 }
