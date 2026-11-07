@@ -302,11 +302,24 @@ test('native admission binds the fixed bundle, tools, row and receipt digest', a
     manifest.admittedArtifacts.push({ id, coordinate: receipt.coordinate, integrity: receipt.integrity, artifactDigest: bundle.artifactDigest, adapterRevision: bundle.adapterRevision, suiteRevision: bundle.suiteRevision });
     await f.write(manifest);
     assert.equal(loadExtensionDeployment({ dataDir: f.root }).status, 'configured');
-    for (const mutate of [b => { b.id = 'unknown'; }, b => { b.tools[0] = 'forged'; }, b => { b.row = 'other'; }, b => { b.receiptDigest = digest('forged'); }, b => { b.artifactDigest = digest('forged'); }]) {
+    // a row that names no managed-native entry is a broken allow-list: the file is refused
+    const unknown = structuredClone(manifest);
+    unknown.admittedNativeBundles[0].id = 'unknown';
+    await f.write(unknown);
+    assert.equal(loadExtensionDeployment({ dataDir: f.root }).status, 'unavailable');
+    // a receipt this build no longer admits (forged, or written before the bundle's tools grew) leaves that bundle out alone, named,
+    // and every other admitted extension stays (review eng P1-4)
+    for (const mutate of [b => { b.tools[0] = 'forged'; }, b => { b.row = 'other'; }, b => { b.receiptDigest = digest('forged'); }, b => { b.artifactDigest = digest('forged'); },
+      b => { b.tools = b.tools.filter(tool => !['virtual_trial_search', 'virtual_trial_compare'].includes(tool)); }]) {
       const invalid = structuredClone(manifest);
       mutate(invalid.admittedNativeBundles[0]);
       await f.write(invalid);
-      assert.equal(loadExtensionDeployment({ dataDir: f.root }).status, 'unavailable');
+      const loaded = loadExtensionDeployment({ dataDir: f.root });
+      assert.equal(loaded.status, 'configured');
+      assert.deepEqual(loaded.admittedNativeBundles, []);
+      assert.deepEqual(loaded.staleNativeBundles, [{ id, reason: 'receipt_mismatch' }]);
+      assert.ok(!loaded.catalogue.some(row => row.id === id) && !loaded.admittedArtifacts.some(row => row.id === id), 'the stale bundle is not admitted anywhere');
+      assert.deepEqual(loaded.admittedDescriptors.map(row => row.id), ['cowork-portable'], 'the isolated tool stays admitted');
     }
   } finally { await f.close(); }
 });

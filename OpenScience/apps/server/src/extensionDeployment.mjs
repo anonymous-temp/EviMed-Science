@@ -160,19 +160,28 @@ export function loadExtensionDeployment(config) {
       })) || row.artifactDigest !== extensionToolArtifactDigest(row)) throw failure();
       descriptors.set(row.id, freeze(row));
     }
+    // A native bundle whose receipt no longer matches what this build admits (its tools grew, review eng P1-4) is left out alone and
+    // named in `staleNativeBundles`: it is not admitted until the operator admits it again, and nothing else in the file is touched.
+    // A row that is malformed, or that names no managed-native catalogue entry, is still a broken allow-list and refuses the file.
+    /** @type {Map<string, string>} */
+    const stale = new Map();
     for (const row of manifest.admittedNativeBundles ?? []) {
       extensionRequestObject(row, ['id', 'coordinate', 'integrity', 'closureDigest', 'row', 'tools', 'receiptDigest', 'artifactDigest', 'adapterRevision', 'suiteRevision']);
       const entry = catalogue.get(row.id);
       const receipt = { schemaVersion: 1, id: row.id, coordinate: row.coordinate, integrity: row.integrity, closureDigest: row.closureDigest, row: row.row, tools: row.tools };
-      if (nativeBundles.has(row.id) || !entry || entry.executionClass !== 'managed-native' || Object.keys(entry.settingsSchema).length !== 0 ||
+      if (nativeBundles.has(row.id) || stale.has(row.id) || !entry || entry.executionClass !== 'managed-native' || Object.keys(entry.settingsSchema).length !== 0 ||
           canonicalExtensionCoordinate(entry.coordinate) !== canonicalExtensionCoordinate(row.coordinate) || entry.integrity !== row.integrity ||
-          ![row.receiptDigest, row.artifactDigest, row.adapterRevision, row.suiteRevision].every(value => DIGEST.test(value)) ||
-          researchNativeReceiptDigest(receipt, digest) !== row.receiptDigest || researchNativeArtifactDigest(row, digest) !== row.artifactDigest) throw failure();
+          ![row.receiptDigest, row.artifactDigest, row.adapterRevision, row.suiteRevision].every(value => DIGEST.test(value))) throw failure();
+      let matches = false;
+      try { matches = researchNativeReceiptDigest(receipt, digest) === row.receiptDigest && researchNativeArtifactDigest(row, digest) === row.artifactDigest; } catch { matches = false; }
+      if (!matches) { stale.set(row.id, 'receipt_mismatch'); continue; }
       nativeBundles.set(row.id, freeze(row));
     }
+    for (const id of stale.keys()) catalogue.delete(id);
     for (const row of manifest.admittedArtifacts) {
       extensionRequestObject(row, ['id', 'coordinate', 'integrity', 'artifactDigest', 'adapterRevision', 'suiteRevision']);
       extensionIdentifier(row.id);
+      if (stale.has(row.id)) continue;
       const entry = catalogue.get(row.id),
         descriptor = descriptors.get(row.id) ?? nativeBundles.get(row.id);
       if (artifacts.has(row.id) || !entry || !descriptor || canonicalExtensionCoordinate(row.coordinate) !== canonicalExtensionCoordinate(entry.coordinate) || row.integrity !== entry.integrity || row.artifactDigest !== descriptor.artifactDigest || row.adapterRevision !== (descriptor.adapterDigest ?? descriptor.adapterRevision) || (nativeBundles.has(row.id) && row.suiteRevision !== descriptor.suiteRevision) || !DIGEST.test(row.suiteRevision)) throw failure();
@@ -198,6 +207,7 @@ export function loadExtensionDeployment(config) {
       admittedArtifacts: Object.freeze([...artifacts.values()]),
       admittedDescriptors: Object.freeze([...descriptors.values()]),
       admittedNativeBundles: Object.freeze([...nativeBundles.values()]),
+      staleNativeBundles: Object.freeze([...stale].map(([id, reason]) => Object.freeze({ id, reason }))),
       generatedAt: manifest.generatedAt,
       surfaces: immutableMap([...surfaces]),
       qualificationRoot: path.join(parent, 'extension-qualification'),

@@ -84,7 +84,10 @@ export function loaderAccepts(manifest) {
     const target = path.join(scratch, ".openscience", FILE);
     fs.writeFileSync(target, `${canonicalJson(manifest)}\n`, { mode: 0o400 });
     const deployment = loadExtensionDeployment({ dataDir: scratch });
-    return { ok: deployment.status === "configured", catalogue: deployment.catalogue.length };
+    // The platform leaves a native bundle whose receipt it no longer admits out alone and keeps the rest; an operator writing the
+    // file means every row to count, so a file with such a row is not written.
+    const stale = (deployment.staleNativeBundles ?? []).map((/** @type {any} */ row) => row.id);
+    return { ok: deployment.status === "configured" && !stale.length, catalogue: deployment.catalogue.length, ...(stale.length ? { stale } : {}) };
   } finally { fs.rmSync(scratch, { recursive: true, force: true }); }
 }
 
