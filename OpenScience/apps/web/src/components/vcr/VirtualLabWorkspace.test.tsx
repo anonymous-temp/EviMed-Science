@@ -30,7 +30,7 @@ const experiment = (): VcrDesignExperimentView => ({ id: 'exp1', kind: 'experime
   comparison: [{ measure: 'power', label: '把握度', arms: ['A', 'B', 'C'].map((name, i) => ({ name, status: 'complete', value: value(70 + i * 5), precision: 'final' })),
     contrasts: [{ arm: 'B', against: 'A', coupling: 'paired', couplingText: '同一批模拟患者上的配对比较', difference: value(5) }, { arm: 'C', against: 'A', coupling: 'independent', couplingText: '独立随机数上的比较', difference: value(10) }] }],
   alignment: [{ field: 'endpoint', aligned: true, unknown: [] }, { field: 'timeUnit', aligned: false, unknown: [] }], incomplete: [],
-  premises: [{ key: 'lab:conditional', label: '结论的含义', value: '这是设计层面的模拟，不估计药物的真实疗效。', source: 'assumed', decisive: true, reason: null }], createdAt: null });
+  premises: [{ key: 'lab:aligned', label: '比较的前提', value: '各组的时间单位不一致，差值只能对照着看。', source: 'given', decisive: true, reason: null }], createdAt: null });
 const entry = (id: string, kind: VcrLabEntry['kind'], status = 'stopped'): VcrLabEntry => ({ id, kind, question: kind === 'campaign' ? '找出满足约束的最小样本量' : '三个样本量方案比较', status, stopReason: null, createdAt: null, updatedAt: null });
 const serve = (list: VcrLabEntry[], views: Record<string, unknown>) => network.productRequest.mockImplementation(async (url: string, method?: string) => {
   if (url.endsWith('/experiments')) return { experiments: list };
@@ -74,9 +74,11 @@ it('draws a finished search: candidates with objective, constraint verdicts and 
   expect(within(table).getAllByRole('row')).toHaveLength(4);
   expect(within(table).getAllByText(/第一类错误不超过 2.5%：/).length).toBeGreaterThan(0);
   expect(within(table).getByText('初筛时把握度已明显不满足约束（最有利的界值也不满足）。')).toBeInTheDocument();
-  // the two passes are told apart, and a coarse verdict is never worded as final
-  expect(within(table).getAllByText('粗筛').length).toBeGreaterThan(0);
-  expect(screen.getByText(/粗筛：重复次数少，只用来排序/)).toBeInTheDocument();
+  // one word for the coarse pass everywhere, no second column for the stage, and no footnote that explains it a second time
+  expect(document.body.textContent).not.toMatch(/粗筛/);
+  expect(within(table).queryByRole('columnheader', { name: '进行到' })).toBeNull();
+  expect(within(table).getAllByText('（初筛）').length).toBeGreaterThan(0);
+  expect(within(table).queryByText(/保守/)).toBeNull();
   expect(screen.getByText(/找到了在预先设定的约束下全部满足的方案/)).toBeInTheDocument();
   expect(screen.getByText(/42 秒（排队等待另计 12 秒）/)).toBeInTheDocument();
   expect(screen.getByText(/1 个方案无法确定是否满足约束/)).toBeInTheDocument();
@@ -144,9 +146,12 @@ it('draws a three-arm comparison with the matched definitions, the coupling of e
   expect(screen.getByRole('table', { name: '各组的把握度' })).toBeInTheDocument();
   expect(screen.getByText('同一批模拟患者上的配对比较')).toBeInTheDocument();
   expect(screen.getByText('独立随机数上的比较')).toBeInTheDocument();
-  expect(screen.getByText(/终点一致；时间单位不一致/)).toBeInTheDocument();
+  // the alignment is said once, in the premise; no second panel restates it
+  expect(screen.queryByText(/比较的口径/)).toBeNull();
   expect(screen.getAllByText('这个结论的前提')).toHaveLength(1);
-  expect(screen.getByText(/不估计药物的真实疗效/)).toBeInTheDocument();
+  expect(screen.getByText('各组的时间单位不一致，差值只能对照着看。')).toBeInTheDocument();
+  expect(screen.getByRole('columnheader', { name: '精度' })).toBeInTheDocument();
+  expect(screen.getAllByText('完整').length).toBeGreaterThan(0);
   expect(document.body.textContent?.match(BACK_OFFICE)?.[0]).toBeUndefined();
 });
 
@@ -162,7 +167,7 @@ it('draws three Alzheimer hypotheses with each arm\'s hypothesis, the calculated
   serve([entry('exp1', 'experiment')], { exp1: view });
   draw();
   expect(await screen.findByText('三个样本量方案比较')).toBeInTheDocument();
-  expect(screen.getByText(/随访时间点一致；每组人数一致/)).toBeInTheDocument();
+  expect(screen.queryByText(/随访时间点一致/)).toBeNull();
   expect(screen.getByRole('table', { name: /各组的平均病程/ })).toBeInTheDocument();
   expect(screen.getByRole('columnheader', { name: '不用药' })).toBeInTheDocument();
   expect(screen.getByText('改善症状的假设')).toBeInTheDocument();
@@ -177,7 +182,7 @@ it('an arm still running or without a result is listed as incomplete, not as a z
   view.arms[2].status = 'running'; view.comparison[0].arms[2] = { name: 'C', status: 'running', value: null, precision: null }; view.comparison[0].contrasts = [];
   serve([entry('exp1', 'experiment')], { exp1: view });
   draw();
-  expect(await screen.findByText(/C（计算中）/)).toBeInTheDocument();
+  await screen.findByRole('table', { name: '各组的把握度' });
   expect(screen.getAllByText('计算中').length).toBeGreaterThan(0);
 });
 
@@ -186,7 +191,10 @@ it('switches between the experiments of a study', async () => {
   const user = userEvent.setup();
   draw();
   await screen.findByRole('table', { name: '设计搜索的候选方案' });
-  await user.selectOptions(screen.getByLabelText('实验'), 'exp1');
+  // the choice of object is a filter of the band, never a select in the body
+  expect(screen.queryByLabelText('实验')).toBeNull();
+  await user.click(screen.getByRole('button', { name: /实验/ }));
+  await user.click(await screen.findByRole('menuitemradio', { name: /设计比较/ }).catch(() => screen.findByRole('menuitem', { name: /设计比较/ })));
   expect(await screen.findByRole('table', { name: '各组的把握度' })).toBeInTheDocument();
 });
 
@@ -194,4 +202,27 @@ it('an experiment that cannot be read shows the error, not the previous one', as
   serve([entry('gone', 'campaign')], {});
   draw();
   expect(await screen.findByRole('button', { name: /重试/ })).toBeInTheDocument();
+});
+
+it('says what a measure of the search is in Chinese and a verdict on the test\'s own level in its own words, never the worst-case wording', async () => {
+  const nominal = candidate(0, { constraints: [{ index: 0, measure: 'type_one_error', label: '第一类错误', kind: 'error_control', op: '<=', bound: 0.025, screening: verdict('pass', false), final: { ...verdict('pass', true), boundKind: 'nominal_level' } }] });
+  serve([entry('cmp1', 'campaign')], { cmp1: campaign({ candidates: [nominal], finalists: [], best: null, inconclusive: [], objective: { measure: 'sample_size', direction: 'minimize', truth: 'alt', label: '样本量' } }) });
+  draw();
+  expect(await screen.findByText('按检验的名义水准，模拟没有否定它', { exact: false })).toBeInTheDocument();
+  expect(screen.queryByText(/最不利情况下的值/)).toBeNull();
+  expect(document.body.textContent).not.toMatch(/[a-z]{3,}_[a-z_]+|sample_size|\bcost\b/);
+});
+
+it('words an arm that could not be calculated, an attached preliminary result is not differenced, and a list setting reads as items', async () => {
+  const view = experiment();
+  view.arms[1] = { ...view.arms[1], status: 'unsupported', refused: ['这一组的设置无法用所选方法计算。'], resultId: null };
+  view.comparison[0].arms[0] = { ...view.comparison[0].arms[0], precision: 'screening' };
+  serve([entry('exp1', 'experiment')], { exp1: view });
+  const user = userEvent.setup();
+  draw();
+  await screen.findByRole('table', { name: '各组的把握度' });
+  await user.click(screen.getByText('各组的设置'));
+  expect(await screen.findByText('这一组的设置无法用所选方法计算。')).toBeInTheDocument();
+  expect(screen.getAllByText('初筛（只用于排序）').length).toBeGreaterThan(0);
+  expect(document.body.textContent).not.toMatch(/invalid_parameters|units_not_convertible|\[object Object\]/);
 });

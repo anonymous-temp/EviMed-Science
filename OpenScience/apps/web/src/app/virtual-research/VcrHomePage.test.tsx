@@ -28,7 +28,7 @@ function drawHome(path = "/app/virtual-research?area=records") { return render(<
 const where = () => screen.getByTestId("where").textContent;
 const AREAS = [
   ["virtual-population", "虚拟人群", "文献可先开始"],
-  ["patient-trajectory", "患者轨迹预测", "需患者基线和适用模型"],
+  ["patient-trajectory", "患者轨迹预测", "需每位患者带时间的观测和适用模型"],
   ["virtual-lab", "虚拟实验室", "设计比较可先用文献"],
   ["synthetic-control", "合成对照臂", "效果分析需结局数据"],
   ["patient-matching", "患者匹配", "需患者资料"],
@@ -60,7 +60,7 @@ it("keeps examples editable, data requirements collapsed and whitespace-only que
   const disclosure = screen.getByText("查看数据要求").closest("details");
   expect(disclosure).not.toHaveAttribute("open");
   await userEvent.click(screen.getByText("查看数据要求"));
-  expect(screen.getByText("可按文献中的分布或设定开始，无需上传。用真实患者数据构建需要患者数据集；要在人群上做干预研究，还需要适用的反应模型。")).toBeVisible();
+  expect(screen.getByText("可按文献中的分布或设定开始，无需上传。用真实患者数据构建需要患者数据集；要在人群上做干预研究，还需要适用的、能推演治疗效果的模型。")).toBeVisible();
   const example = within(screen.getByRole("list", { name: "问题示例" })).getAllByRole("button")[0];
   await userEvent.click(example);
   expect(input).toHaveValue(example.textContent);

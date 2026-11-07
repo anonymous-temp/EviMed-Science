@@ -9,8 +9,8 @@ const copy: Record<string, { capability: string; label: string; draft: string; s
   "virtual-population": {
     capability: "virtual-cohort", label: "虚拟人群",
     draft: "建立可复用的研究人群。目标和已有资料是：",
-    summary: "建立并查看可复用的研究人群：只描述人群，或绑定到某个反应模型。",
-    requirement: "可按文献中的分布或设定开始，无需上传。用真实患者数据构建需要患者数据集；要在人群上做干预研究，还需要适用的反应模型。",
+    summary: "建立并查看可复用的研究人群：只描述人群，或接上一个能推演治疗效果的模型。",
+    requirement: "可按文献中的分布或设定开始，无需上传。用真实患者数据构建需要患者数据集；要在人群上做干预研究，还需要适用的、能推演治疗效果的模型。",
     badge: "文献可先开始",
     examples: ["根据文献中的年龄、性别和疾病分布构建一个研究人群", "按入排标准从现有病历中筛选并整理一个研究人群"],
   },
@@ -18,8 +18,8 @@ const copy: Record<string, { capability: string; label: string; draft: string; s
     capability: "virtual-patient", label: "患者轨迹预测",
     draft: "预测一批患者在未来一段时间的变化。患者资料和问题是：",
     summary: "一次提交一批患者（例如 100 人），得到每位患者的轨迹预测和整个人群的汇总。",
-    requirement: "真实患者预测需要每位患者的基线或病史，以及适用的模型；只做情景推演时，可先用明确设定，结果会标明是情景。",
-    badge: "需患者基线和适用模型",
+    requirement: "真实患者预测需要每位患者带时间的观测记录，以及适用的模型；只做情景推演时，可先用明确设定，结果会标明是情景。",
+    badge: "需每位患者带时间的观测和适用模型",
     examples: ["预测这 100 位患者未来 12 个月的变化，并汇总整体趋势", "检查一个预后模型是否适用于这批患者"],
   },
   "virtual-lab": {
@@ -28,7 +28,7 @@ const copy: Record<string, { capability: string; label: string; draft: string; s
     summary: "在设定的干预或设计下做计算实验，包括样本量、期中分析、无效终止和剂量爬坡的设计搜索。",
     requirement: "试验设计比较可从文献参数和明确假设开始；干预实验需要可运行的人群、适用的模型和干预定义。",
     badge: "设计比较可先用文献",
-    examples: ["比较两种试验设计的样本量与把握度", "评估随访时长和脱落率变化对试验设计的影响"],
+    examples: ["比较两种试验设计的样本量与把握度", "在样本量 100 到 300 之间搜索把握度不低于 80% 的最小方案", "评估随访时长和脱落率变化对试验设计的影响"],
   },
   "synthetic-control": {
     capability: "synthetic-control", label: "合成对照臂",
