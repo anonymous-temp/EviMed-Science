@@ -313,7 +313,8 @@ function PatientsView({ studyId, study, data, switcher, reload, onStudyChanged }
           {headline && <Headline parts={headline} />}
 
           {/* What the model behind these results was and was not validated for: the same block every result page has. */}
-          <VcrPremises premises={data.premises} />
+          {/* A progression card carries its own block; the page's would then be a second one, so it shows only when no card does. */}
+          {!(data.progressions ?? []).some((card) => (card.premises?.length ?? 0) > 0) && <VcrPremises premises={data.premises} />}
 
           {gridRows.length > 0 && <ChartGrid rows={gridRows} />}
 

@@ -8,7 +8,6 @@ import { Note, type NoteNumber, type NoteResult } from '@/components/ui/Note';
 import { Section } from '@/components/ui/Section';
 import { Tag, type TagTone } from '@/components/ui/Tag';
 import { ChartCard } from '@/components/ui/ChartCard';
-import { EmptyState } from '@/components/cards/EmptyState';
 import type { ToolbarChips } from '@/components/ui/Toolbar';
 import { getVcrTrajectorySubjects, type LongitudinalRecord, type TrajectoryStatus, type TrajectorySubjectLine, type VcrLongitudinalData } from '@/lib/vcrLongitudinalClient';
 import type { VcrSeries } from '@/lib/vcrClient';
@@ -92,12 +91,17 @@ export function PatientTrajectoryWorkspace({ studyId, canRun, canManage = false,
     points: timeline.map(p => ({ x: p.horizonDays, y: p.point,
       low: p.quantiles.length ? p.quantiles[0]?.value ?? null : null, high: p.quantiles.length ? p.quantiles[p.quantiles.length - 1]?.value ?? null : null })) }] : [];
 
+  // A person is “患者 N”, N in submission order; the pseudonymous key is never what a reader sees.
+  const orderOf = (key: string) => { const index = lines.findIndex(line => line.subjectKey === key); return index < 0 ? null : (shown?.offset ?? 0) + index + 1; };
+  const personName = (key: string) => `患者 ${orderOf(key) ?? ''}`.trim();
+  // The uncertainty column exists only when some person's forecast carries one; otherwise the premise already says the model gave none.
+  const anyUncertainty = lines.some(line => line.status === 'completed' && line.uncertainty?.available);
   const columns: Array<DataColumn<TrajectorySubjectLine>> = [
-    { key: 'subject', header: '受试者', rowHeader: true, cell: line => <Button variant="text" size="sm" aria-label={`查看受试者 ${line.subjectKey.slice(0, 8)} 的轨迹`} onClick={() => setPerson(line.subjectKey)}>{line.subjectKey.slice(0, 8)}</Button> },
+    { key: 'subject', header: '患者', rowHeader: true, cell: line => <Button variant="text" size="sm" aria-label={`查看${personName(line.subjectKey)}的轨迹`} onClick={() => setPerson(line.subjectKey)}>{personName(line.subjectKey)}</Button> },
     { key: 'status', header: '状态', cell: line => <Tag tone={STATUS_TONE[line.status]}>{STATUS_LABEL[line.status]}{line.partial ? '（部分时间点）' : ''}</Tag> },
     { key: 'reason', header: '原因', cell: line => reasonText(line.reason), isEmpty: line => !line.reason },
     { key: 'points', header: '预测时间点', align: 'right', cell: line => `${line.horizonsAccepted} / ${line.horizonsRequested}` },
-    { key: 'uncertainty', header: '不确定性', cell: line => personUncertainty(line) },
+    ...(anyUncertainty ? [{ key: 'uncertainty', header: '不确定性', cell: (line: TrajectorySubjectLine) => personUncertainty(line) }] : []),
   ];
 
   const statusChips: ToolbarChips = { kind: 'chips', label: '状态', value: status, neutral: 'all', onChange: value => { setStatus(value as 'all' | TrajectoryStatus); setOffset(0); setPerson(''); },
@@ -108,19 +112,19 @@ export function PatientTrajectoryWorkspace({ studyId, canRun, canManage = false,
   const draws = summary?.uncertainty?.drawsTotal ?? 0;
   return <section className="flex flex-col gap-6" aria-label="患者轨迹预测">
     {predictions.length > 1 && <Select label="预测版本" value={selected.id} onChange={event => { setChosen(event.target.value); setOffset(0); setPerson(''); }}>
-      {predictions.map(record => <option key={record.id} value={record.id}>第 {record.summary.versionNumber ?? 1} 版 · {record.summary.endpoint?.code} · {record.summary.origin?.slice(0, 10)} · {record.summary.model?.version ?? '版本未提供'}</option>)}
+      {predictions.map(record => <option key={record.id} value={record.id}>{`第 ${record.summary.versionNumber ?? 1} 版${record.summary.origin ? ` · 起点 ${record.summary.origin.slice(0, 10)}` : ''}`}</option>)}
     </Select>}
 
     <div className="flex flex-col gap-2">
       <h2 className="text-section font-semibold text-text">{replay ? '按实际用药回放的检验' : '每位患者的预测轨迹'}</h2>
       {counts
         ? <Note result={denominatorParts(counts, value => { setStatus(value); setOffset(0); setPerson(''); })} />
-        : <Note result={['这个预测来自早期导入，没有逐人的去向记录；可用的预测 ', { n: summary?.accepted ?? 0 }, ' 条。']} />}
+        : <Note result={['这个预测来自早期导入，没有逐人的去向记录；可用的预测值 ', { n: summary?.accepted ?? 0 }, ' 个（不是人数）。']} />}
       {counts && counts.submitted !== counts.completed + counts.rejected + counts.failed + counts.unprocessed
-        && <Note tone="warn" action={<Button size="sm" variant="secondary" onClick={onReload}>刷新</Button>}>各部分人数与提交人数对不上；刷新后仍对不上，请在研究对话中说明这批预测。</Note>}
+        && <Note tone="warn" action={<Button size="sm" variant="secondary" onClick={onReload}>刷新</Button>}>各部分人数与提交人数对不上；刷新后仍对不上，请重新开始这批预测。</Note>}
       {counts && counts.unprocessed > 0 && <Note result={['还有 ', { n: counts.unprocessed, onOpen: () => { setStatus('unprocessed'); setOffset(0); setPerson(''); } },
         ' 人没有处理（预测被停止或预算用完）；已完成的结果已保留，重新开始同一预测会接着做，不会重复计费。']} />}
-      {draws > 0 && <Note result={['模型对每位患者给出了多次抽样，共 ', { n: draws }, ' 条；它们是同一个人未来的不同可能，不当作更多的人。']} />}
+      {draws > 0 && <Note result={['抽样次数：共 ', { n: draws }, ' 次，都是同一个人未来的不同可能，不算更多的人。']} />}
       {counts && counts.partial > 0 && <Note result={['其中 ', { n: counts.partial }, ' 人只有部分时间点有预测，已计入“已完成”。']} />}
     </div>
 
@@ -130,7 +134,7 @@ export function PatientTrajectoryWorkspace({ studyId, canRun, canManage = false,
       <DataTable label="按预测时间的人群汇总" rows={(summary?.trajectories ?? []).map(p => ({ ...p, key: String(p.day) }))} rowKey={p => p.key}
         footnote={`均值是已完成患者的平均；“患者之间的差异”是 10%–90% 分位，不是模型对预测本身的不确定性。${summary?.uncertainty?.available
           ? `模型给出的不确定性：${Object.entries(summary.uncertainty.kinds).map(([kind, n]) => `${KIND[kind] ?? kind} ${n} 条`).join('，')}。`
-          : '这个模型没有给出不确定性，所以没有预测区间。'}`}
+          : ''}`}
         columns={[
           { key: 'day', header: '距起点（天）', rowHeader: true, cell: p => number(p.day) },
           { key: 'subjects', header: '人数', align: 'right', cell: p => p.subjects == null ? '小样本未展示' : number(p.subjects) },
@@ -155,22 +159,16 @@ export function PatientTrajectoryWorkspace({ studyId, canRun, canManage = false,
       </div>
     </Section>
 
-    {person && <Section title={`受试者 ${person.slice(0, 8)} 的时间线`} level="sub">
+    {person && <Section title={`${personName(person)}的时间线`} level="sub">
       {series.length
         ? <ChartCard title="随预测时间变化的结果"><VcrTrajectoryChart xLabel="距预测起点（天）" yLabel={summary?.endpoint?.unit} series={series} /></ChartCard>
         : <Note action={<Button size="sm" variant="secondary" onClick={() => setPerson('')}>关闭</Button>}>这位患者没有可显示的预测，原因见上表。</Note>}
-      {timeline?.length ? <FactList rows={[{ label: '这位患者的不确定性', value: timeline.some(p => p.sd != null || p.quantiles.length || p.draws)
-        ? `${timeline.some(p => p.quantiles.length) ? '模型给出了预测区间；' : ''}${timeline.some(p => p.draws) ? `含 ${Math.max(...timeline.map(p => p.draws))} 次抽样；` : ''}区间的来源以模型的说明为准。`
-        : '模型没有给出，所以没有画预测区间。' }]} /> : null}
+      {timeline?.some(p => p.sd != null || p.quantiles.length || p.draws) ? <FactList rows={[{ label: '这位患者的不确定性',
+        value: `${timeline.some(p => p.quantiles.length) ? '模型给出了预测区间' : ''}${timeline.some(p => p.quantiles.length) && timeline.some(p => p.draws) ? '；' : ''}${timeline.some(p => p.draws) ? `含 ${Math.max(...timeline.map(p => p.draws))} 次抽样` : ''}。` }]} /> : null}
     </Section>}
 
     <Disclosure summary="输入历史、预测版本与验证">
       <VcrLongitudinalPanel studyId={studyId} canRun={canRun} canManage={canManage} data={data} onReload={onReload} switcher={switcher} extraFilters={[statusChips]} />
     </Disclosure>
   </section>;
-}
-
-/** An empty entrance: nothing submitted yet. The surface says what a batch needs, in one sentence, and the question box is the page's. */
-export function PatientTrajectoryEmpty() {
-  return <EmptyState title="还没有批量预测" description="给出一批患者的带时间的观测记录（比如 100 位患者），就能得到每位患者的预测轨迹和整批人群的汇总；每个人的去向都会列出来。" />;
 }

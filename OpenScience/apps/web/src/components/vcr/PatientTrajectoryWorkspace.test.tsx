@@ -37,7 +37,7 @@ it('says where all 100 people went, in one sentence whose parts add up to the fi
   expect(trajectoryDenominator(counts)).toBe('共提交 100 人：60 人已完成，30 人未纳入，10 人失败，0 人未处理。');
   expect(await sentence(/^共提交 100 人：60 人已完成，30 人未纳入，10 人失败，0 人未处理。$/)).toBeInTheDocument();
   // a draw is not a person, and the page says so beside the counts
-  expect(await sentence(/共 180 条；它们是同一个人未来的不同可能，不当作更多的人/)).toBeInTheDocument();
+  expect(await sentence(/抽样次数：共 180 次，都是同一个人未来的不同可能，不算更多的人/)).toBeInTheDocument();
   expect(await screen.findByText('观测的单位无法换算成终点的单位')).toBeInTheDocument();
 });
 
@@ -69,7 +69,7 @@ it('opens one person\'s timeline, with the interval the model gave and no interv
   network.productRequest.mockResolvedValue(page([line(1)]));
   const user = userEvent.setup();
   draw([history, prediction()]);
-  await user.click(await screen.findByRole('button', { name: /查看受试者 subject-/ }));
+  await user.click(await screen.findByRole('button', { name: /查看患者 1的轨迹/ }));
   const section = await screen.findByRole('region', { name: /的时间线/ }).catch(() => screen.getByText(/的时间线/).closest('section')!);
   expect(within(section as HTMLElement).getByText(/模型给出了预测区间/)).toBeInTheDocument();
 });
@@ -98,7 +98,7 @@ it('names a person\'s uncertainty or says the model gave none', () => {
 it('an older import with no ledger is said to have none, not drawn as zero people', async () => {
   network.productRequest.mockResolvedValue(page([]));
   draw([history, prediction({ accounting: undefined })]);
-  expect(await sentence(/没有逐人的去向记录；可用的预测 60 条/)).toBeInTheDocument();
+  expect(await sentence(/没有逐人的去向记录；可用的预测值 60 个（不是人数）/)).toBeInTheDocument();
 });
 
 it('a number in the denominator opens the people it counts', async () => {
@@ -109,4 +109,15 @@ it('a number in the denominator opens the people it counts', async () => {
   await user.click(screen.getByRole('button', { name: '30' }));
   await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith('/vcr/studies/one/longitudinal/pred-1/subjects?status=rejected&offset=0&limit=50'));
   expect(await screen.findByText(/第 1–1 人，共 30 人/)).toBeInTheDocument();
+});
+
+it('names people by their order, never by a key, and offers a version by its number and origin only', async () => {
+  network.productRequest.mockResolvedValue(page([line(1), line(2)]));
+  draw([history, prediction(), prediction({ versionNumber: 2 }, 'pred-2')]);
+  expect(await screen.findByRole('button', { name: '查看患者 2的轨迹' })).toBeInTheDocument();
+  expect(screen.queryByText(/subject-/)).toBeNull();
+  const options = screen.getAllByRole('option').map(option => option.textContent ?? '').filter(text => text.startsWith('第'));
+  expect(options.length).toBeGreaterThanOrEqual(2);
+  for (const text of options) expect(text).toMatch(/^第 \d 版 · 起点 /);
+  expect(options.join('')).not.toMatch(/HbA1c|版本未提供/);
 });
