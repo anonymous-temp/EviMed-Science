@@ -1071,8 +1071,14 @@ def _control_plane_shape(kind: str):
     if not isinstance(schema, dict):
         return None
     required, optional = list(schema.get("required", [])), list(schema.get("optional", []))
-    keys = ["%s: %s; required" % (key, "id of a stored record" if key.endswith("Id") else "value") for key in required]
-    keys += ["%s: %s; optional" % (key, "id of a stored record" if key.endswith("Id") else "value") for key in optional]
+    fields = schema.get("fields") if isinstance(schema.get("fields"), dict) else {}
+
+    def say(key: str) -> str:
+        # a field the domain describes (the batch forecast's mode, actions and versioning) is said in the domain's words
+        return fields.get(key) or ("id of a stored record" if key.endswith("Id") else "value")
+
+    keys = ["%s: %s; required" % (key, say(key)) for key in required]
+    keys += ["%s: %s; optional" % (key, say(key)) for key in optional]
     return {
         "status": "success",
         "summary": "The scenario of %s (method %s) reads %d keys; the platform computes it from the stored records they name." % (kind, method_id, len(keys)),

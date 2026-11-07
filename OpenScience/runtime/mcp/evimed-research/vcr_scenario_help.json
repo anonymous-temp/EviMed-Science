@@ -7249,10 +7249,23 @@
   "longitudinal": {
     "forecast.trajectories": {
       "required": ["historyId","providerId","endpoint","horizonsDays"],
-      "optional": ["scenario","samples","modelVersion","predictionMode","actions","actionSource","actionHistoryId","priorPredictionId"]
+      "optional": ["scenario","samples","modelVersion","predictionMode","actions","actionSource","actionHistoryId","priorPredictionId"],
+      "fields": {
+        "predictionMode": "What the forecast is: factual_forecast (current care, no future actions; the default), conditional_forecast (depends on the schedule in actions) or intervention_comparison. A factual forecast takes no actions and a conditional one needs them.",
+        "actions": "The schedule a conditional forecast depends on, [{ code, at: { value, unit }, dose?: { value, unit } }], applied to everyone. A time is converted to days and a dose only within its own dimension; one that cannot be converted refuses that action, never a guessed unit.",
+        "actionSource": "Where the actions came from: none, supplied_schedule (stated at the origin; the default when actions are given) or logged_replay (recorded after the origin, per person). A logged replay tests the model given what really happened and is not a forecast anyone could have had at the origin.",
+        "actionHistoryId": "The later history whose recorded actions are replayed (sets actionSource to logged_replay). Actions recorded after the prediction origin are never an input to an ordinary forecast.",
+        "priorPredictionId": "The earlier prediction this one updates after new observations (the new history is the prediction's own); the result is then compared with the old version and with what was observed."
+      }
     },
     "forecast.evaluate": {"required":["predictionId","outcomeHistoryId"],"optional":["windowDays","eventCodes","followupCode","bootstrap","split","trainingOverlap","riskSet","groupBy"]},
-    "forecast.compare": {"required":["predictionId","otherPredictionId"],"optional":["bootstrap","mode","outcomeHistoryId"]},
+    "forecast.compare": {
+      "required": ["predictionId","otherPredictionId"],
+      "optional": ["bootstrap","mode","outcomeHistoryId"],
+      "fields": {
+        "outcomeHistoryId": "A history holding the observed outcomes: both predictions are read against it as well as against each other (an update compared with what happened)."
+      }
+    },
     "forecast.trial_benchmark": {"required":["benchmarkId"],"optional":["bootstrap"]}
   }
 }

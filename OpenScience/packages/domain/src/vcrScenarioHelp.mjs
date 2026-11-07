@@ -751,6 +751,24 @@ const PROGNOSTIC_TRAIN_NOTES = Object.freeze([
   'The result holds the equation in the shape model.prognostic_apply takes, labelled as trained on the person\'s own data and not externally validated; to apply it to other people, bind the result as a model with vcr_write what=model and card.trainedResultId (the equation is the engine\'s, nothing in the card is), then vcr_simulate kind apply_prognostic_model with that modelId and modelVersion and the table to predict: the equation, endpoint, source condition and units are filled in by the platform; out-of-fold discrimination (C index, AUC or R squared), calibration slope and intercept, the correlation rho between score and outcome with its interval (for a time-to-event outcome the correlation with an event by the horizon among people whose status there is known, an approximation), and a table of PROCOVA sample-size savings under discounts lambda on the correlation and gamma on the control SD, from design.procova\'s own formula, at the estimated rho and at the lower end of its interval. A model that cannot be estimated (fewer than 10 events or non-events, or fewer than 5 per fitted parameter) is not_estimable, never invented.',
 ])
 
+/**
+ * What the forecast kinds' optional fields mean (they run in the control plane, so no schema row carries a description): one sentence
+ * a field, for the model that writes a scenario. A batch forecast names what it is, what it depends on, where its actions came from
+ * and which earlier version it updates.
+ */
+export const VCR_FORECAST_FIELD_NOTES = Object.freeze({
+  'forecast.trajectories': Object.freeze({
+    predictionMode: 'What the forecast is: factual_forecast (current care, no future actions; the default), conditional_forecast (depends on the schedule in actions) or intervention_comparison. A factual forecast takes no actions and a conditional one needs them.',
+    actions: 'The schedule a conditional forecast depends on, [{ code, at: { value, unit }, dose?: { value, unit } }], applied to everyone. A time is converted to days and a dose only within its own dimension; one that cannot be converted refuses that action, never a guessed unit.',
+    actionSource: 'Where the actions came from: none, supplied_schedule (stated at the origin; the default when actions are given) or logged_replay (recorded after the origin, per person). A logged replay tests the model given what really happened and is not a forecast anyone could have had at the origin.',
+    actionHistoryId: 'The later history whose recorded actions are replayed (sets actionSource to logged_replay). Actions recorded after the prediction origin are never an input to an ordinary forecast.',
+    priorPredictionId: 'The earlier prediction this one updates after new observations (the new history is the prediction\'s own); the result is then compared with the old version and with what was observed.',
+  }),
+  'forecast.compare': Object.freeze({
+    outcomeHistoryId: 'A history holding the observed outcomes: both predictions are read against it as well as against each other (an update compared with what happened).',
+  }),
+})
+
 /** What the disease-progression simulator is and is not (algorithm round P4), for the model that writes the scenario. */
 const PROGRESSION_NOTES = Object.freeze([
   'A population-level simulator of the average course of a continuous score and how widely people scatter around it, from a model family the run takes from a publication: linear (slope), exponential (slope and acceleration), logistic (amplitude, midpoint, steepness) or emax (amplitude, halfTime). Every number is { value, basis: literature | assumed | data, citation? }: the source of a value is a premise the page shows, and nothing is built in: no disease, no parameter. The first visit is time zero, the baseline. The between-person spread (betweenPersonSd) is on the progression amplitude, correlated with the baseline by `correlation` (default 0).',
@@ -883,10 +901,11 @@ export function vcrScenarioHelp() {
   for (const method of Object.keys(VCR_ENGINE_METHODS)) methods[method] = methodEntry(method)
   // The forecast kinds run in the control plane, not the engine: their scenario is a few references to stored histories,
   // forecasts and outcomes plus options, read off `VCR_LONGITUDINAL_SCHEMAS` (the validator's own lists).
-  /** @type {Record<string, { required: string[], optional: string[] }>} */
+  /** @type {Record<string, { required: string[], optional: string[], fields?: Record<string, string> }>} */
   const longitudinal = {}
   for (const [method, schema] of Object.entries(VCR_LONGITUDINAL_SCHEMAS)) {
-    longitudinal[method] = { required: [.../** @type {any} */ (schema).required], optional: [.../** @type {any} */ (schema).optional] }
+    const notes = /** @type {Record<string, Record<string, string>>} */ (VCR_FORECAST_FIELD_NOTES)[method]
+    longitudinal[method] = { required: [.../** @type {any} */ (schema).required], optional: [.../** @type {any} */ (schema).optional], ...(notes ? { fields: { ...notes } } : {}) }
   }
   return {
     schemaVersion: VCR_SCENARIO_HELP_VERSION,

@@ -314,6 +314,16 @@ class VcrToolDefinitionTests(unittest.TestCase):
                 self.assertFalse(any(line.startswith(guess + ":") for line in lines), kind)
         self.assertGreater(walked, 500, "the walk proves it walked")
 
+    def test_the_batch_forecast_fields_are_said_in_the_domains_words(self):
+        # a field the domain describes (mode, actions, where the actions came from, the version an update replaces) is not rendered as "value"
+        lines = vcr_platform.shape({"kind": "forecast_trajectories"})["data"]["keys"]
+        said = {line.split(":", 1)[0]: line for line in lines}
+        for field, word in (("predictionMode", "factual_forecast"), ("actions", "conditional forecast"), ("actionSource", "logged_replay"),
+                            ("actionHistoryId", "later history"), ("priorPredictionId", "earlier prediction")):
+            self.assertIn(word, said[field], field)
+        self.assertTrue(said["historyId"].startswith("historyId: id of a stored record"))
+        self.assertIn("observed outcomes", {line.split(":", 1)[0]: line for line in vcr_platform.shape({"kind": "compare_forecasts"})["data"]["keys"]}["outcomeHistoryId"])
+
     def test_shape_renders_accrual_with_its_real_keys_units_and_gate(self):
         answer = vcr_platform.shape({"kind": "design_analytic"})
         self.assertEqual(answer["status"], "success")
