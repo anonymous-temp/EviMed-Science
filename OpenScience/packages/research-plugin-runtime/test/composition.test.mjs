@@ -58,7 +58,8 @@ async function mount(ids, { suite = false } = {}) {
     return result.value.data
   }
   const visible = () => Object.values(PLUGINS).flatMap((prefix) => ACTIONS.map((action) => `${prefix}_${action}`)).filter(has)
-  return { ctx, calls, handles, has, call, raw, add, visible, async dispose() { await ctx.fiber.dispose() } }
+  const description = (name) => runtime.get(name, agent)?.description ?? ''
+  return { ctx, calls, handles, has, call, raw, add, visible, description, async dispose() { await ctx.fiber.dispose() } }
 }
 const settle = () => new Promise((done) => setTimeout(done, 60))
 
@@ -147,6 +148,25 @@ test('disabling one plugin removes only its tools and enabling it again restores
     await world.add('virtual-patient')
     assert.equal(world.visible().length, 20)
     assert.equal((await world.call('virtual_patient_start', { method: 'patients.binary', scenario: {} })).jobId, 'job_2')
+  } finally { await world.dispose() }
+})
+
+test('the trial and patient plugins name the disease-progression arms the lab compares, in no more words than before', async () => {
+  // Live 2026-11-07 (D2): an Alzheimer three-arm ADAS-cog question was answered by a script of the model's own. When these plugins are
+  // admitted their task line rides describe, start, the skill and the prompt section, so it says the class within its old length
+  // (trial 223, patient 108, compare 232 characters before).
+  const world = await mount(['virtual-trial', 'virtual-patient'])
+  try {
+    const trial = catalogue.find((item) => item.id === 'virtual-trial').task
+    const patient = catalogue.find((item) => item.id === 'virtual-patient').task
+    const compare = world.description('virtual_trial_compare')
+    for (const [text, words, cap] of [[trial, ['disease-progression model', 'Alzheimer ADAS-cog', 'saved', 'search for a design'], 223],
+      [patient, ['disease progression', 'Alzheimer ADAS-cog'], 108], [compare, ['resultId (no rerun)', 'disease-progression model'], 232]]) {
+      for (const word of words) assert.ok(text.includes(word), `${word}: ${text}`)
+      assert.ok(text.length <= cap, `${text.length} > ${cap}: ${text}`)
+    }
+    assert.ok(world.description('virtual_patient_start').startsWith(patient) && world.description('virtual_trial_start').startsWith(trial))
+    assert.ok(catalogue.find((item) => item.id === 'virtual-patient').methods.includes('patients.progression'), 'the patient plugin runs the model it names')
   } finally { await world.dispose() }
 })
 

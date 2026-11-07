@@ -229,7 +229,7 @@ async function registerConfiguredResearchTools(ctx, { name, methods, mode, works
       { name: 'virtual_trial_search', description: 'Bounded design search. {manifest} freezes objective, constraints with fixed bounds, truths, the searched design paths, screening and final sizes, budget; the platform screens, re-checks finalists at full precision and stops with a reason. {campaignId} reads; add cancel:true to stop.',
         parameters: { manifest: { type: 'object', additionalProperties: true, properties: {} }, campaignId: { type: 'string' }, cancel: { type: 'boolean' } },
         execute: async (/** @type {any} */ args, /** @type {any} */ call) => labCall(call, 'search', args) },
-      { name: 'virtual_trial_compare', description: 'Compare named design arms: attach saved results by resultId (no rerun) and/or run design methods on stated scenarios over one endpoint and analysis; read contrasts against a reference arm. {experiment} creates, {experimentId} reads.',
+      { name: 'virtual_trial_compare', description: 'Compare arms on one endpoint and analysis: saved design results by resultId (no rerun), design methods, or drug hypotheses on a disease-progression model; contrasts to a reference arm. {experiment} creates, {experimentId} reads.',
         parameters: { experiment: { type: 'object', additionalProperties: true, properties: {} }, experimentId: { type: 'string' } },
         execute: async (/** @type {any} */ args, /** @type {any} */ call) => labCall(call, 'compare', args) },
     ] : []),
