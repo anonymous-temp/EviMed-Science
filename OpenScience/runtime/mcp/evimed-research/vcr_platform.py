@@ -1632,6 +1632,9 @@ def _job_answer(data: dict, action: str) -> dict:
         # A design is chosen by the researcher: the reply recommends one in a sentence and says which bound decided it.
         actions.append("When designs are compared, close with one sentence of recommendation that says which constraint decided it (the type I error "
                        "bound, the target power, the sample size or the duration), from the numbers in the result; the platform does not pick the design.")
+        # Live D6 (2026-11-07): a simulated power of 83.8% (MCSE 0.37%) was given a "95% interval 81.8-85.8%" of the model's own.
+        actions.append("A simulated number is said with the Monte Carlo SE its measure carries (83.8% ± 0.37%); work out no interval, sensitivity or "
+                       "derived figure of your own: a further number is another start.")
     return {
         "status": "success",
         "summary": "Job %s succeeded." % job_id if action != "cancel" else "Job %s is cancelled." % job_id,

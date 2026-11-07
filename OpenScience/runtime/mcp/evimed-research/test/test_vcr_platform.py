@@ -384,6 +384,8 @@ class VcrToolDefinitionTests(unittest.TestCase):
         self.assertTrue(any("data.typeOneError.text" in line and "never conclude it from the estimate" in line for line in answer["next_actions"]))
         plain = vcr_platform._job_answer({"state": "succeeded", "jobId": "job_1", "result": {"kind": "trial_scenario"}}, "status")
         self.assertFalse(any("typeOneError" in line for line in plain["next_actions"]))
+        # Live D6: a "95% interval 81.8-85.8%" of the model's own for a power of 83.8% (MCSE 0.37%).
+        self.assertTrue(any("Monte Carlo SE its measure carries" in line and "no interval" in line for line in plain["next_actions"]))
 
     def test_the_disease_progression_and_forecast_shapes_say_which_is_which(self):
         # Live 2026-11-07: three drug hypotheses on Alzheimer patients were simulated in the model's own script, and six listed patients were given
