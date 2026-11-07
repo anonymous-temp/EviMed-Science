@@ -75,3 +75,33 @@ vcr_case("N102c", c("AC-08", "AC-11", "AC-30"), function() {
   list(pass = ok,
        detail = sprintf("true ATT 0.70; the unmeasured confounder's closed-form bias 0.8; mean estimate over %d trials %.4f: bias %+.4f (%.1f sd of %.4f)", R, mean(r$est), bias, bias / sd_est, sd_est))
 })
+
+vcr_case("N102d", c("AC-08", "AC-11", "AC-30"), function() {
+  # Double robustness, each half on its own (review stats P2-9): with both working models right, any one of the three estimators is
+  # unbiased, so a broken correction term would pass N102a. Here one model is wrong at a time. Leaving x2 out of the outcome model biases
+  # the regression estimate by 0.5 * (0.6 - 0.4) = 0.1 (x2 is independent of x1 in each source), and leaving it out of the propensity
+  # model biases the weighting estimate by the same 0.1; the doubly robust estimate stays within a fifth of its standard deviation of the
+  # ATT 0.7 in both, and its influence-function interval covers 0.7 in at least 90% of 300 trials (nominal 95%, three Monte-Carlo SEs).
+  set.seed(20261110L, kind = VCR_RNG_KIND)
+  R <- 300L; truth <- 0.7
+  both <- c("x1", "x2"); only <- "x1"
+  one <- function(ps, out) {
+    res <- replicate(R, {
+      d <- .n102_gen(150L, 600L)
+      fit <- vcr_aipw_att(d$y, d$arm, as.matrix(d[, ps, drop = FALSE]), as.matrix(d[, out, drop = FALSE]), FALSE)
+      c(est = fit$tau, regression = fit$regression, weighting = fit$weighting, se = fit$influence$se)
+    })
+    list(est = res["est", ], regression = res["regression", ], weighting = res["weighting", ],
+         covered = mean(abs(res["est", ] - truth) <= stats::qnorm(0.975) * res["se", ]))
+  }
+  wrong_out <- one(both, only)
+  wrong_ps <- one(only, both)
+  sd1 <- stats::sd(wrong_out$est); sd2 <- stats::sd(wrong_ps$est)
+  b1 <- mean(wrong_out$est) - truth; b2 <- mean(wrong_ps$est) - truth
+  br <- mean(wrong_out$regression) - truth; bw <- mean(wrong_ps$weighting) - truth
+  ok <- abs(b1) <= 0.2 * sd1 && abs(b2) <= 0.2 * sd2 && abs(br - 0.1) < 0.03 && abs(bw - 0.1) < 0.03 &&
+    wrong_out$covered >= 0.9 && wrong_ps$covered >= 0.9
+  list(pass = ok,
+       detail = sprintf("ATT 0.70; outcome model without x2: regression bias %+.4f (closed form 0.1), doubly robust bias %+.4f (%.2f sd), coverage %.3f; propensity without x2: weighting bias %+.4f (closed form 0.1), doubly robust bias %+.4f (%.2f sd), coverage %.3f",
+                        br, b1, b1 / sd1, wrong_out$covered, bw, b2, b2 / sd2, wrong_ps$covered))
+})

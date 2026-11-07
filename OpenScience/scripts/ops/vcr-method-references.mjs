@@ -366,6 +366,7 @@ export const NUMERIC_REFERENCES = {
   N102a: { methods: ['comparator.aipw'], anchors: ['unadjusted difference is biased by E[y0 | trial] - E[y0 | control] = 0.8 * 0.5 + 0.5 * 0.2 = 0.5', 'abs(bias) <= 0.2 * sd_est && abs(naive_bias - 0.5) < 0.03 && abs(est - truth) < 3 * se && abs(naive - truth) > 3 * se'] },
   N102b: { methods: ['comparator.aipw'], anchors: ['so the estimate is the effect among the trial\'s', 'ok <- abs(m - 0.7) <= 0.2 * sd_est && (m - 0.4) > 3 * sd_est'] },
   N102c: { methods: ['comparator.aipw'], anchors: ['An unmeasured confounder: u lifts the outcome (gamma 1)', 'ok <- abs(bias - 0.8) < 0.08 && bias > 5 * sd_est'] },
+  N102d: { methods: ['comparator.aipw'], anchors: ['biases the weighting estimate by the same 0.1', 'abs(br - 0.1) < 0.03 && abs(bw - 0.1) < 0.03'] },
   N35a: { methods: ['comparator.aipw'], anchors: ['The estimator from its formula, outside the engine', 'abs(v(rb, "aipw_difference") - hb$tau) < 1e-10'] },
   N36a: { methods: ['comparator.covariate_sets'], anchors: ['Four sets of a confounded design with a true effect of 0.5', 'all(abs(est - refs) < 1e-7)'] },
 };
