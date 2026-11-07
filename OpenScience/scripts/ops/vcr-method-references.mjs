@@ -335,6 +335,12 @@ export const NUMERIC_REFERENCES = {
   N100b: { methods: ['design.confirmatory'], anchors: ['closed <- p1$value * at_interim[["mean"]] + (1 - p1$value) * n0', 'n0 <- ceiling(plan / per_head); cap <- ceiling(1.0001 * plan)'] },
   N100c: { methods: ['design.confirmatory'], anchors: ['head_multi <- .n100_per_head(0.6)', 'ev <- t_event < t_drop & entry + t_event <= 30'] },
   N100d: { methods: ['design.confirmatory'], anchors: ['recorded <- c(futility_tte = "f079dc9b9383b2335d62025a8b8b8b0b19fb7cb4a75f722c5f458a786f60c749"', 'identical(unname(got), unname(recorded))'] },
+  // the campaign's screening precision (design search, plan T10): exact t-test power, exact Clopper-Pearson bounds, the bitset against the measure
+  N110a: { methods: ['design.simulate'], anchors: ['"scenario_value_invalid@scenario.evaluation.screeningReplicates" %in% codes(at_floor) &&'] },
+  N110b: { methods: ['design.simulate'], anchors: ['exact <- stats::power.t.test(n = 64, delta = 0.5, sd = 1, sig.level = 0.025, type = "two.sample", alternative = "one.sided", strict = TRUE)$power'] },
+  N110c: { methods: ['design.simulate'], anchors: ['counts_agree <- sum(ra) == round(pa$value * 800) && sum(rb) == round(pb$value * 800)'] },
+  N110d: { methods: ['design.simulate'], anchors: ['upper <- stats::qbeta(0.975, k + 1, n - k); lower <- if (k > 0) stats::qbeta(0.025, k, n - k + 1) else 0'] },
+  N110e: { methods: ['design.simulate'], anchors: ['same <- identical(one$manifest$outputHash, two$manifest$outputHash) && identical(one$diagnostics$evaluation, two$diagnostics$evaluation) &&'] },
 
   // --- the comparator-effect stream's cases (listed so that merging it needs no edit here; inert until the cases exist) ---
   N33a: { methods: ['comparator.weighted_cox'], anchors: ['Cross-software: the weights are WeightIt', 'rel(m(j_ebal, "hazard_ratio"), r_ebal$hr) < 1e-6'] },
