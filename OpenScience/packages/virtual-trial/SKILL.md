@@ -3,7 +3,7 @@ name: virtual-trial
 description: Explore design alternatives, sample size, operating characteristics, dose-finding and sensitivity under stated assumptions.
 ---
 
-# Virtual trial design
+# Virtual laboratory: design simulation
 
 Example natural request: “How many events and participants might this design need?”
 
@@ -28,6 +28,10 @@ To compare named design alternatives without new assumptions, use `virtual_trial
 To search for a design that meets stated requirements ("keep simulating until a design works"), use `virtual_trial_search` with a frozen `{manifest}`, stated before anything runs: `objective` {measure, direction, truth}; `constraints` [{measure, op, bound, kind: error_control | design | safety, truth}]; `space` {method, scenario, truths [{name, truth}], and either `variables` [{path, values}] or `candidates` [{set}]}; `stages` {screening {replicates}, final {count}}; `budget` {maxCandidates, cpuSeconds}. Only design paths may vary: the truth, endpoint, nominal alpha, sidedness and what is measured are the evaluator and are refused. An error-control bound can never exceed the stated alpha, and a dose-finding design is judged by toxicity and selection constraints, not by a superiority alpha. Read progress with `{campaignId}`; stop with `{campaignId, cancel: true}`. A changed manifest is a new campaign.
 
 The platform evaluates every candidate: screening numbers only rank candidates and are never results; finalists are re-run at the method's normal precision on new random streams, and a constraint counts as met only when its conservative bound meets it ("inconclusive" near the bound is not met). Report the stop reason, the best design with its final numbers and their error, which constraints were met, inconclusive or not, and the budget used. Never recompute or round a number yourself, never relax a constraint to make a candidate win, and say plainly when nothing feasible was found.
+
+### Drug-effect hypotheses in a disease model
+
+The lab also compares what different drug hypotheses do in a disease model. Make each arm a `patients.progression` run of the same trial (today the Alzheimer ADAS-cog 11 family `beta_logit`, in weeks; see the patient plugin's describe for its scenario). The arms differ only in `treatment`: none (placebo against placebo, which shows the analysis's type I error), `symptomatic` or `diseaseModifying`; they must share people, model, visits, design and analysis, and a design arm and a disease arm are never one experiment. For a search, state the drug worlds as `space.truths` whose `truth` is a `treatment` block (an empty block means no effect) and move only the design: `design.nTreat` and `design.nControl` together (use `candidates`), or `visits` with `analysis.visit`. There is no screening stage here: every candidate runs at the engine's own number of trials. `total_sample_size` and `last_visit_weeks` are calculated from the scenario and may be the objective; a type I error at the analysis's own 5% is "inconclusive", not met. The drug effects are the researcher's hypotheses, never a prediction for a compound; the parameters are the published CAMD posterior and no FDA or EMA status comes with them; the model describes mild to moderate Alzheimer disease for up to two years. A population imported or built elsewhere is not needed to start: the trial states its own people.
 
 ## Results and limits
 

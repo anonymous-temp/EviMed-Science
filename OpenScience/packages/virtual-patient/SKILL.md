@@ -3,7 +3,7 @@ name: virtual-patient
 description: Generate research scenarios and apply or train supported prognostic models where inputs and intended use permit.
 ---
 
-# Virtual patients
+# Patient trajectory prediction
 
 Example natural request: “Generate binary outcome scenarios for two groups of 40 patients.”
 

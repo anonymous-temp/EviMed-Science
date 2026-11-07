@@ -1,9 +1,11 @@
-// Product inventory; modes describe intended adapters, not installed or validated status.
+// Product inventory; modes describe intended adapters, not installed or validated status. `id` is the historical package id and never
+// changes with the name a person reads (`title`, `displayName`): the names follow the five entrances, the ids keep every installed profile and recorded call valid.
 const domainCatalogue = [
   {
     "id": "virtual-trial",
-    "title": "Virtual trial",
-    "task": "Trial design and operating characteristics",
+    "title": "Virtual laboratory: design simulation",
+    "displayName": "虚拟实验室 · 设计模拟",
+    "task": "Design simulation within the virtual laboratory: sample size, operating characteristics and dose-finding under stated assumptions; on the hosted platform also compare named designs or drug hypotheses and search for a design",
     "dataRequirement": "Design assumptions",
     "draft": true,
     "methods": [
@@ -26,8 +28,9 @@ const domainCatalogue = [
   },
   {
     "id": "virtual-cohort",
-    "title": "Virtual cohort",
-    "task": "Cohort construction and population scenarios",
+    "title": "Virtual population",
+    "displayName": "虚拟人群",
+    "task": "Virtual population: build and check a population from stated assumptions, literature distributions or authorized records",
     "dataRequirement": "Declared assumptions or authorized records",
     "draft": true,
     "methods": [
@@ -47,8 +50,9 @@ const domainCatalogue = [
   },
   {
     "id": "virtual-patient",
-    "title": "Virtual patient",
-    "task": "Patient scenarios and model application",
+    "title": "Patient trajectory prediction",
+    "displayName": "患者轨迹预测",
+    "task": "Patient trajectory prediction: scenarios, and applying or training supported models on supplied patient data",
     "dataRequirement": "Model and compatible inputs",
     "draft": true,
     "methods": [
@@ -69,8 +73,9 @@ const domainCatalogue = [
   },
   {
     "id": "synthetic-control",
-    "title": "Synthetic control",
-    "task": "Comparator construction and diagnostics",
+    "title": "Synthetic control arm",
+    "displayName": "合成对照臂",
+    "task": "Synthetic control arm: comparator construction and diagnostics from authorized observed data",
     "dataRequirement": "Authorized comparator data and estimand",
     "draft": true,
     "methods": [

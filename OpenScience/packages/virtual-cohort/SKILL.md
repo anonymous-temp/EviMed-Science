@@ -3,7 +3,7 @@ name: virtual-cohort
 description: Profile authorized data, construct cohorts, generate assumed populations and assess population quality.
 ---
 
-# Virtual cohorts
+# Virtual population
 
 Example natural request: “Generate a scenario population with a mean age of 60 and standard deviation of 9.”
 

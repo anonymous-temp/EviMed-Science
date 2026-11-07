@@ -21,7 +21,7 @@ async function registerSuite(ctx, register) {
     parameters: {},
     execute: async () => {
       const visible = ctx.tools.view().visible
-      const tools = [...visible.keys()].filter(name => /^(virtual_trial|virtual_cohort|virtual_patient|synthetic_control)_(describe|start|read|report|cancel)$/.test(name)).sort()
+      const tools = [...visible.keys()].filter(name => /^(virtual_trial|virtual_cohort|virtual_patient|synthetic_control)_(describe|start|read|report|cancel)$|^virtual_trial_(search|compare)$/.test(name)).sort()
       return { ok: true, data: { tools } }
     },
   })
