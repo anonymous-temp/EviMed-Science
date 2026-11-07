@@ -7367,6 +7367,140 @@
           }
         ]
       }
+    },
+    {
+      "name": "a campaign screening run of a two-arm survival design: 500 replicates below the floor",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ],
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.5.0",
+        "scenario": {
+          "design": {
+            "kind": "two_arm_fixed",
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "truth": {
+            "hazardRatio": 0.7,
+            "controlMedian": 12
+          },
+          "analysis": {
+            "method": "logrank",
+            "alpha": 0.025,
+            "sided": 1
+          },
+          "accrual": {
+            "kind": "uniform",
+            "duration": 12,
+            "followup": 12
+          },
+          "evaluation": {
+            "version": 1,
+            "screeningReplicates": 500
+          }
+        }
+      }
+    },
+    {
+      "name": "a campaign final run of the same design: the precision block with no screening count runs at the floor",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ],
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.5.0",
+        "scenario": {
+          "design": {
+            "kind": "two_arm_fixed",
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "truth": {
+            "hazardRatio": 0.7,
+            "controlMedian": 12
+          },
+          "analysis": {
+            "method": "logrank",
+            "alpha": 0.025,
+            "sided": 1
+          },
+          "accrual": {
+            "kind": "uniform",
+            "duration": 12,
+            "followup": 12
+          },
+          "evaluation": {
+            "version": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "a campaign screening run of a BOIN dose-finding design",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ],
+        "kind": "design_dose",
+        "method": "design.dose",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "kind": "boin",
+            "targetToxicity": 0.3,
+            "cohortSize": 3,
+            "maxPatients": 30
+          },
+          "truth": {
+            "toxicity": [
+              0.05,
+              0.1,
+              0.2,
+              0.3,
+              0.45,
+              0.6
+            ]
+          },
+          "evaluation": {
+            "version": 1,
+            "screeningReplicates": 1000
+          }
+        }
+      }
     }
   ],
   "invalid": [
@@ -30464,6 +30598,252 @@
       },
       "expected": [
         "method_version_mismatch@methodVersion"
+      ]
+    },
+    {
+      "name": "a screening run below the smallest screening size",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ],
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.5.0",
+        "scenario": {
+          "design": {
+            "kind": "two_arm_fixed",
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "truth": {
+            "hazardRatio": 0.7,
+            "controlMedian": 12
+          },
+          "analysis": {
+            "method": "logrank",
+            "alpha": 0.025,
+            "sided": 1
+          },
+          "accrual": {
+            "kind": "uniform",
+            "duration": 12,
+            "followup": 12
+          },
+          "evaluation": {
+            "version": 1,
+            "screeningReplicates": 100
+          }
+        }
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.evaluation.screeningReplicates"
+      ]
+    },
+    {
+      "name": "a screening run at the floor is not a screening run",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ],
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.5.0",
+        "scenario": {
+          "design": {
+            "kind": "two_arm_fixed",
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "truth": {
+            "hazardRatio": 0.7,
+            "controlMedian": 12
+          },
+          "analysis": {
+            "method": "logrank",
+            "alpha": 0.025,
+            "sided": 1
+          },
+          "accrual": {
+            "kind": "uniform",
+            "duration": 12,
+            "followup": 12
+          },
+          "evaluation": {
+            "version": 1,
+            "screeningReplicates": 5000
+          }
+        }
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.evaluation.screeningReplicates"
+      ]
+    },
+    {
+      "name": "a precision block with no version",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ],
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.5.0",
+        "scenario": {
+          "design": {
+            "kind": "two_arm_fixed",
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "truth": {
+            "hazardRatio": 0.7,
+            "controlMedian": 12
+          },
+          "analysis": {
+            "method": "logrank",
+            "alpha": 0.025,
+            "sided": 1
+          },
+          "accrual": {
+            "kind": "uniform",
+            "duration": 12,
+            "followup": 12
+          },
+          "evaluation": {
+            "screeningReplicates": 500
+          }
+        }
+      },
+      "expected": [
+        "scenario_field_missing@scenario.evaluation.version"
+      ]
+    },
+    {
+      "name": "a campaign precision block under an older compatible label",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ],
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.4.0",
+        "scenario": {
+          "design": {
+            "kind": "two_arm_fixed",
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "truth": {
+            "hazardRatio": 0.7,
+            "controlMedian": 12
+          },
+          "analysis": {
+            "method": "logrank",
+            "alpha": 0.025,
+            "sided": 1
+          },
+          "accrual": {
+            "kind": "uniform",
+            "duration": 12,
+            "followup": 12
+          },
+          "evaluation": {
+            "version": 1,
+            "screeningReplicates": 500
+          }
+        }
+      },
+      "expected": [
+        "method_version_mismatch@methodVersion"
+      ]
+    },
+    {
+      "name": "a precision block on the exact randomised dose selection",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ],
+        "kind": "design_dose",
+        "method": "design.dose",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "kind": "randomized_selection",
+            "margin": 0.1,
+            "targetProbability": 0.9,
+            "maxPerArm": 400
+          },
+          "truth": {
+            "responseScenarios": [
+              [
+                0.3,
+                0.3,
+                0.3
+              ],
+              [
+                0.3,
+                0.4,
+                0.5
+              ]
+            ]
+          },
+          "evaluation": {
+            "version": 1
+          }
+        }
+      },
+      "expected": [
+        "scenario_field_unknown@scenario.evaluation"
       ]
     }
   ],

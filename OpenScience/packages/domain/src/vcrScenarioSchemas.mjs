@@ -467,7 +467,21 @@ const CONFIRMATORY_SCHEMA = object({
  */
 const DOSE_SELECTION = is('design.kind', 'randomized_selection')
 const DOSE_SIMULATED = isNot('design.kind', 'randomized_selection')
+/**
+ * The precision a design-search campaign evaluates a candidate at (version 1). Set by the platform's campaign alone: the job queue
+ * refuses it from every other caller. With `screeningReplicates` the run is a screening run of exactly that many replicates, below the
+ * method's floor (`maxScreening` is one under it), and the engine labels every measure screening precision; without it the run is a
+ * final one at the normal floor. Either way the result reports what lets two runs be compared pairwise (the draw signature, and for a
+ * simulated design the per-replicate rejections). A changed block is a changed scenario: its own hash, cache key and receipt.
+ * @param {number} maxScreening
+ */
+const EVALUATION = (maxScreening) => object({
+  version: req(integer({ min: 1, max: 1 })),
+  screeningReplicates: integer({ min: 200, max: maxScreening, unit: 'replicates' }),
+})
+
 const DOSE_SCHEMA = object({
+  evaluation: gated(EVALUATION(9999), DOSE_SIMULATED),
   design: req(object({
     kind: req(string({ values: [...VCR_DOSE_DESIGNS], badValueCode: 'design_unknown' })),
     compare: gated(array(string({ values: [...VCR_DOSE_FINDING_DESIGNS] }), { min: 1, max: 3, unique: true }), DOSE_SIMULATED),
@@ -1444,7 +1458,7 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
     hypothesis: HYPOTHESIS,
   }),
 
-  'design.simulate': object({ ...SIMULATE_FIELDS }),
+  'design.simulate': object({ ...SIMULATE_FIELDS, evaluation: EVALUATION(4999) }),
 
   'design.confirmatory': CONFIRMATORY_SCHEMA,
 

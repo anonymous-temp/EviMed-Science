@@ -1298,6 +1298,8 @@ vcr_job_at_least <- function(job, from) {
 }
 
 .vcrp_legacy_design_version <- function(job,spec) {
+  # a campaign's precision block is the current release's: no older label carries it (mirrors legacyDesignVersionMatches)
+  if (!is.null(.vcrp_get(job$scenario, "evaluation"))) return(FALSE)
   # the hypothesis is 1.4.0's: no older release had it (this function is not asked about a job at the current version)
   if (job[["method"]] %in% c("design.analytic","design.simulate","design.grid") && !is.null(.vcrp_get(job$scenario,"hypothesis")) && utils::compareVersion(job$methodVersion,"1.4.0")<0) return(FALSE)
   if (job$methodVersion %in% unlist(spec$compatibleVersions)) {

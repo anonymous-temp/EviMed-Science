@@ -2113,6 +2113,41 @@ export {
   vcrExperimentRecord,
 } from './src/vcrExperiment.mjs'
 
+// vcrExperimentSearch — a bounded design-search campaign: frozen manifest, candidates, staged precision, conservative constraint verdicts, stop reasons
+export {
+  VCR_CAMPAIGN_FROZEN_PATHS,
+  VCR_CAMPAIGN_LIMITS,
+  VCR_CAMPAIGN_METHODS,
+  VCR_CAMPAIGN_SCHEMA_VERSION,
+  VCR_CAMPAIGN_STOP_REASONS,
+  VCR_CONSTRAINT_KINDS,
+  VCR_CONSTRAINT_OPS,
+  VCR_CONSTRAINT_STATUSES,
+  VCR_EVALUATION_PURPOSES,
+  VCR_SCREENING,
+  vcrBetaQuantile,
+  vcrCampaignAdvance,
+  vcrCampaignAnalyticScenario,
+  vcrCampaignCandidates,
+  vcrCampaignCanonical,
+  vcrCampaignDrawKey,
+  vcrCampaignInitialState,
+  vcrCampaignManifest,
+  vcrCampaignRecord,
+  vcrCampaignSeed,
+  vcrCampaignUnit,
+  vcrCampaignVerdict,
+  vcrCandidateScenario,
+  vcrCandidateVerdicts,
+  vcrClopperPearson,
+  vcrEvaluationContrast,
+  vcrEvaluationMeasure,
+  vcrJudgeConstraint,
+  vcrNominalErrorControl,
+  vcrNormalQuantile,
+  vcrRegularizedBeta,
+} from './src/vcrExperimentSearch.mjs'
+
 // vcrTimeUnits — the one closed table of time units (the model cards' horizon table), the spellings a source writes them in, and
 // the conversions: evidence in mixed units is converted before it is pooled, and a scenario's unit is stated, taken from its
 // evidence, or months

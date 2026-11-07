@@ -301,6 +301,8 @@ vcr_run_job <- function(job, output_dir = NULL, cancel_file = NULL, progress = N
     method_ok <- is.character(job[["method"]]) && length(job[["method"]]) == 1L && !is.na(job[["method"]])
     default_src <- vcr_default_measure_source(if (method_ok) job[["method"]] else "")
     measures <- lapply(measures, function(m) { if (is.null(m$source)) m$source <- default_src; m })
+    # a campaign's screening run is labelled in every measure: it ranks candidates and is never a result (vcrExperimentSearch)
+    if (is.list(job) && !is.null(vcr_screening_replicates(job$scenario))) measures <- lapply(measures, function(m) { m$precision <- "screening"; m })
     # A run that stopped before it finished (a spent CPU budget, a cancel) and
     # still holds measures from the batches that did finish says `limited`: it is
     # the one word that lets the control plane keep those measures as a partial
@@ -2201,11 +2203,13 @@ vcr_job_design_simulate <- function(job, output_dir = NULL, cancel_file = NULL, 
   curve <- if (isTRUE(sc$analysis$method %in% c("maxcombo", "modestly_weighted"))) NULL else tryCatch(vcr_power_curve_summary(sc, vcr_scalar(sc$analysis$alpha, 0.025), vcr_check_sided(sc$analysis$sided),
                                             if (length(simulated)) list(value = simulated[[1]]$value, mcse = simulated[[1]]$mcse %||% NA_real_) else NULL),
                     error = function(e) NULL)
+  evaluation <- vcr_evaluation_record(sc, job$seed, res$values, res$diagnostics$replicateFloor, res$diagnostics$replicatesCompleted,
+                                      extras = list(logrank = maxcombo, bounds = edges$bounds))
   list(status = res$status, measures = res$measures, issues = res$issues,
        notEstimableRule = res$notEstimableRule,
        conclusion = res$diagnostics$conclusion,
        counts = vcr_counts(realPatients = 0, generatedRecords = generated),
-       diagnostics = c(res$diagnostics, list(analyticCheck = check, powerCurve = curve),
+       diagnostics = c(res$diagnostics, list(analyticCheck = check, powerCurve = curve), if (!is.null(evaluation)) list(evaluation = evaluation),
                        # from the release that has it: one trial of the run, the first replicate, as a record can show it (remediation plan D7)
                        if (utils::compareVersion(as.character(job$methodVersion %||% "1.0.0"), "1.3.0") >= 0) list(exampleTrial = vcr_example_trial(res$values, job$seed))),
        tables = tables)

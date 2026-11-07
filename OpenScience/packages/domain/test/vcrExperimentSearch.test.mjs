@@ -1,0 +1,314 @@
+import { test } from 'node:test'
+import assert from 'node:assert/strict'
+import {
+  vcrCampaignManifest, vcrCampaignCanonical, vcrCampaignCandidates, vcrCampaignUnit, vcrCampaignInitialState, vcrCampaignAdvance,
+  vcrCampaignRecord, vcrCampaignVerdict, vcrJudgeConstraint, vcrClopperPearson, vcrEvaluationContrast, vcrCampaignDrawKey,
+  vcrNominalErrorControl, VCR_CAMPAIGN_STOP_REASONS,
+} from '../src/vcrExperimentSearch.mjs'
+import { canonicalScenarioJson, validateEngineJob, VCR_ENGINE_METHODS } from '../src/vcrEngineJob.mjs'
+
+const BASE = {
+  design: { kind: 'two_arm_fixed', nTreat: 100, nControl: 100 }, endpoint: { type: 'time_to_event' },
+  truth: { hazardRatio: 0.7, controlMedian: 12 }, accrual: { kind: 'uniform', duration: 12, followup: 12 },
+  analysis: { method: 'logrank', alpha: 0.025, sided: 1 },
+}
+const manifestOf = (over = {}) => ({
+  question: 'Smallest two-arm trial with power at least 0.8',
+  objective: { measure: 'expected_sample_size', direction: 'minimize', truth: 'alternative' },
+  constraints: [
+    { measure: 'power', op: '>=', bound: 0.8, kind: 'design', truth: 'alternative' },
+    { measure: 'type_one_error', op: '<=', bound: 0.025, kind: 'error_control', truth: 'null' },
+  ],
+  space: { method: 'design.simulate', scenario: BASE,
+    truths: [{ name: 'alternative', truth: { hazardRatio: 0.7, controlMedian: 12 } }, { name: 'null', truth: { hazardRatio: 1, controlMedian: 12 } }],
+    variables: [{ path: 'design.nTreat', values: [80, 120, 160] }, { path: 'design.nControl', values: [80, 120, 160] }] },
+  stages: { screening: { replicates: 500 }, final: { count: 2 } },
+  budget: { maxCandidates: 9, cpuSeconds: 3600, modelCalls: 0 },
+  ...over,
+})
+const frozen = (over) => { const out = vcrCampaignManifest(manifestOf(over)); assert.deepEqual(out.issues, []); return /** @type {Record<string, any>} */ (out.manifest) }
+const ID = 'a'.repeat(64)
+
+test('a manifest freezes only known fields and its canonical bytes ignore key order', () => {
+  const a = frozen()
+  const reordered = vcrCampaignManifest(JSON.parse(JSON.stringify({ budget: manifestOf().budget, stages: manifestOf().stages, space: manifestOf().space,
+    constraints: manifestOf().constraints, objective: manifestOf().objective, question: manifestOf().question, extra: 'dropped' })))
+  assert.equal(vcrCampaignCanonical(a), vcrCampaignCanonical(/** @type {any} */ (reordered.manifest)))
+  const stricter = frozen({ constraints: [{ measure: 'power', op: '>=', bound: 0.85, kind: 'design', truth: 'alternative' }] })
+  assert.notEqual(vcrCampaignCanonical(a), vcrCampaignCanonical(stricter), 'a changed constraint is a new campaign')
+  assert.equal(a.space.version, VCR_ENGINE_METHODS['design.simulate'].version)
+})
+
+test('the evaluator cannot be searched or relaxed', () => {
+  const codes = (over) => vcrCampaignManifest(manifestOf(over)).issues.map((issue) => `${issue.code}@${issue.field}`)
+  assert.ok(codes({ space: { ...manifestOf().space, variables: [{ path: 'truth.hazardRatio', values: [0.6, 0.7] }] } }).includes('campaign_value_frozen@space.variables[0].path'))
+  assert.ok(codes({ space: { ...manifestOf().space, variables: [{ path: 'analysis.alpha', values: [0.025, 0.05] }] } }).includes('campaign_value_frozen@space.variables[0].path'))
+  assert.ok(codes({ space: { ...manifestOf().space, variables: [{ path: 'endpoint.type', values: ['binary'] }] } }).includes('campaign_value_frozen@space.variables[0].path'))
+  assert.ok(codes({ constraints: [{ measure: 'type_one_error', op: '<=', bound: 0.05, kind: 'error_control', truth: 'null' }] }).includes('campaign_alpha_relaxed@constraints[0].bound'))
+})
+
+test('a misspecified evaluator is refused before anything runs', () => {
+  const codes = (over) => vcrCampaignManifest(manifestOf(over)).issues.map((issue) => `${issue.code}@${issue.field}`)
+  // a measure the method never produces
+  assert.ok(codes({ objective: { measure: 'win_ratio', direction: 'maximize', truth: 'alternative' } }).includes('campaign_measure_unknown@objective.measure'))
+  // a type I error constraint judged under a truth with an effect would read power
+  assert.ok(codes({ constraints: [{ measure: 'type_one_error', op: '<=', bound: 0.025, kind: 'error_control', truth: 'alternative' }] })
+    .includes('campaign_error_control_truth@constraints[0].truth'))
+  // error control on a measure that is not an error rate
+  assert.ok(codes({ constraints: [{ measure: 'power', op: '<=', bound: 0.025, kind: 'error_control', truth: 'null' }] }).includes('campaign_error_control_measure@constraints[0].measure'))
+})
+
+test('dose finding is judged by toxicity and selection, never by a superiority alpha', () => {
+  const dose = {
+    objective: { measure: 'correct_dose_probability', direction: 'maximize', truth: 'curve' },
+    constraints: [{ measure: 'patients_above_mtd', op: '<=', bound: 6, kind: 'safety', truth: 'curve' }],
+    space: { method: 'design.dose', scenario: { design: { kind: 'boin', targetToxicity: 0.3, cohortSize: 3, maxPatients: 30 }, truth: { toxicity: [0.05, 0.12, 0.3, 0.45] } },
+      truths: [{ name: 'curve', truth: { toxicity: [0.05, 0.12, 0.3, 0.45] } }],
+      variables: [{ path: 'design.kind', values: ['boin', 'keyboard', 'three_plus_three'] }, { path: 'design.cohortSize', values: [1, 3] }] },
+    stages: { screening: { replicates: 1000 }, final: { count: 2 } }, budget: { maxCandidates: 6, cpuSeconds: 600 },
+  }
+  assert.deepEqual(vcrCampaignManifest(dose).issues, [])
+  const alpha = vcrCampaignManifest({ ...dose, constraints: [{ measure: 'correct_dose_probability', op: '<=', bound: 0.025, kind: 'error_control', truth: 'curve' }] })
+  assert.ok(alpha.issues.some((issue) => issue.code === 'campaign_error_control_measure' && /toxicity and selection/.test(issue.detail)))
+  const target = vcrCampaignManifest({ ...dose, space: { ...dose.space, variables: [{ path: 'design.targetToxicity', values: [0.25, 0.3] }] } })
+  assert.ok(target.issues.some((issue) => issue.code === 'campaign_value_frozen'))
+})
+
+test('screening sizes stay under the floor and finalists never run below it', () => {
+  const codes = (over) => vcrCampaignManifest(manifestOf(over)).issues.map((issue) => issue.code)
+  assert.ok(codes({ stages: { screening: { replicates: 100 }, final: { count: 2 } } }).includes('campaign_screening_replicates'))
+  assert.ok(codes({ stages: { screening: { replicates: 5000 }, final: { count: 2 } } }).includes('campaign_screening_replicates'), 'a screening run is below the 5,000 floor')
+  assert.ok(codes({ stages: { screening: { replicates: 500 }, final: { count: 2, replicates: 2000 } } }).includes('campaign_final_below_floor'))
+  assert.ok(codes({ budget: { maxCandidates: 4, cpuSeconds: 60 } }).includes('campaign_space_exceeds_budget'))
+})
+
+test('candidates come in a deterministic order and a random subset is a pure function of its seed', () => {
+  const all = vcrCampaignCandidates(frozen())
+  assert.deepEqual(all.map((c) => c.key), ['c000', 'c001', 'c002', 'c003', 'c004', 'c005', 'c006', 'c007', 'c008'])
+  assert.deepEqual(all[1].set, { 'design.nTreat': 80, 'design.nControl': 120 })
+  const sampled = frozen({ space: { ...manifestOf().space, sample: { count: 4, seed: 7 } }, budget: { maxCandidates: 5, cpuSeconds: 60 }, reference: 0 })
+  const one = vcrCampaignCandidates(sampled).map((c) => c.key), two = vcrCampaignCandidates(sampled).map((c) => c.key)
+  assert.deepEqual(one, two)
+  assert.ok(one.includes('c000'), 'the reference is always evaluated')
+  assert.ok(one.length === 4 || one.length === 5)
+})
+
+test('screening and final units never share a cache key, a scenario or a stream', () => {
+  const manifest = frozen()
+  const candidate = vcrCampaignCandidates(manifest)[4]
+  const screen = vcrCampaignUnit(manifest, ID, candidate, 'screening', 'alternative')
+  const final = vcrCampaignUnit(manifest, ID, candidate, 'final', 'alternative')
+  assert.deepEqual(screen.scenario.evaluation, { version: 1, screeningReplicates: 500 })
+  assert.deepEqual(final.scenario.evaluation, { version: 1 })
+  assert.notEqual(canonicalScenarioJson(screen.scenario), canonicalScenarioJson(final.scenario))
+  assert.notEqual(screen.idempotencyKey, final.idempotencyKey)
+  assert.notEqual(screen.seed, final.seed, 'finalists are checked on streams no screening unit used')
+  assert.equal(screen.kind, 'design_simulation')
+  // each unit is a job the engine protocol accepts as it stands
+  for (const unit of [screen, final]) {
+    const job = { jobId: 'job_x', studyId: 'std_x', kind: unit.kind, method: unit.method, methodVersion: unit.version, protocolVersion: 1,
+      scenario: unit.scenario, inputs: [], seed: unit.seed, cpuSecondsLimit: 60 }
+    assert.deepEqual(validateEngineJob(job).map((issue) => `${issue.code}@${issue.field}`), [])
+  }
+})
+
+test('candidates that draw identically share a seed; a different size draws on its own', () => {
+  const manifest = frozen({ space: { ...manifestOf().space, scenario: { ...BASE, design: { kind: 'group_sequential', nTreat: 100, nControl: 100, informationRates: [0.5, 1] } },
+    variables: [{ path: 'design.informationRates', values: [[0.5, 1], [0.6, 1]] }, { path: 'design.nTreat', values: [100, 120] }] }, budget: { maxCandidates: 4, cpuSeconds: 60 } })
+  const [a, b, c] = vcrCampaignCandidates(manifest)   // (0.5,100), (0.5,120), (0.6,100)
+  assert.equal(vcrCampaignDrawKey(manifest, a), vcrCampaignDrawKey(manifest, c))
+  assert.notEqual(vcrCampaignDrawKey(manifest, a), vcrCampaignDrawKey(manifest, b))
+  assert.equal(vcrCampaignUnit(manifest, ID, a, 'final', 'alternative').seed, vcrCampaignUnit(manifest, ID, c, 'final', 'alternative').seed)
+  assert.notEqual(vcrCampaignUnit(manifest, ID, a, 'final', 'alternative').seed, vcrCampaignUnit(manifest, ID, b, 'final', 'alternative').seed)
+})
+
+test('Clopper-Pearson bounds match R qbeta to 1e-12', () => {
+  const a = vcrClopperPearson(500, 20000, 0.975)
+  assert.ok(Math.abs(a.upper - 0.027259038729895657) < 1e-12)
+  assert.ok(Math.abs(a.lower - 0.022880525081978138) < 1e-12)
+  assert.ok(Math.abs(vcrClopperPearson(0, 20000, 0.975).upper - 0.00018442696396189909) < 1e-12)
+  assert.ok(Math.abs(vcrClopperPearson(11, 200, 0.975).upper - 0.096277644433912846) < 1e-12)
+})
+
+const evaluation = (measures, over = {}) => ({ state: 'succeeded', precision: 'final', replicates: 20000, measures, ...over })
+const m = (name, value, extra = {}) => ({ name, value, mcse: Math.sqrt(value * (1 - value) / 20000), simulated: true, source: 'synthetic', ...extra })
+
+test('an error-rate constraint passes only on its upper bound; at the nominal alpha it is inconclusive, never a pass', () => {
+  const manifest = frozen()
+  const [, alphaRule] = manifest.constraints
+  const at = (value) => vcrJudgeConstraint(manifest, alphaRule, evaluation([m('type_one_error', value)]), { stage: 'final' })
+  assert.equal(at(0.025).status, 'inconclusive', 'an estimate exactly at alpha leaves compliance undecided')
+  assert.equal(at(0.0249).status, 'inconclusive')
+  assert.equal(at(0.022).status, 'pass')
+  assert.ok(at(0.022).bound.upper <= 0.025 && at(0.022).bound.kind === 'clopper_pearson')
+  assert.equal(at(0.03).status, 'fail')
+  // error control is not judged on a screening evaluation, and a screening measure never satisfies a final constraint
+  assert.equal(vcrJudgeConstraint(manifest, alphaRule, evaluation([m('type_one_error', 0.001)]), { stage: 'screening' }).reason, 'error_control_judged_at_final')
+  const screened = vcrJudgeConstraint(manifest, alphaRule, evaluation([m('type_one_error', 0.001, { precision: 'screening' })], { precision: 'screening', replicates: 500 }), { stage: 'final' })
+  assert.deepEqual([screened.status, screened.reason], ['not_judged', 'screening_result_not_final'])
+})
+
+test('a test calibrated at its nominal alpha passes on that level unless the simulation contradicts it', () => {
+  const manifest = frozen({ constraints: [{ measure: 'type_one_error', op: '<=', bound: 0.025, kind: 'error_control', truth: 'null', analyticSupport: true }] })
+  const rule = manifest.constraints[0]
+  assert.equal(vcrJudgeConstraint(manifest, rule, evaluation([m('type_one_error', 0.0255)], { nominalControl: true }), { stage: 'final' }).status, 'pass')
+  assert.equal(vcrJudgeConstraint(manifest, rule, evaluation([m('type_one_error', 0.0305)], { nominalControl: true }), { stage: 'final' }).status, 'fail')
+  assert.equal(vcrJudgeConstraint(manifest, rule, evaluation([m('type_one_error', 0.0255)], { nominalControl: false }), { stage: 'final' }).status, 'inconclusive',
+    'a test without a nominal guarantee is held to the simulation bound')
+  assert.equal(vcrNominalErrorControl({ ...BASE, analysis: { method: 'maxcombo' } }), false)
+  assert.equal(vcrNominalErrorControl(BASE), true)
+  assert.ok(vcrCampaignManifest(manifestOf({ constraints: [{ measure: 'type_one_error', op: '<=', bound: 0.02, kind: 'error_control', truth: 'null', analyticSupport: true }] }))
+    .issues.some((issue) => issue.field === 'constraints[0].analyticSupport'))
+})
+
+test('a mean is judged with its MCSE and an exact value as it is', () => {
+  const manifest = frozen({ constraints: [{ measure: 'expected_sample_size', op: '<=', bound: 250, kind: 'design', truth: 'alternative' }] })
+  const rule = manifest.constraints[0]
+  const mean = (value, mcse) => vcrJudgeConstraint(manifest, rule, evaluation([{ name: 'expected_sample_size', value, mcse, simulated: true }]), { stage: 'final' })
+  assert.equal(mean(240, 2).status, 'pass')
+  assert.equal(mean(248, 2).status, 'inconclusive')
+  assert.equal(mean(260, 2).status, 'fail')
+  assert.equal(mean(250, 0).status, 'pass', 'a simulated mean that is the same in every trial is exact')
+})
+
+/** A fake engine: the power and expected size of a two-arm design at n per arm, deterministic. */
+function fakeOutcome(unit, { failAll = false, powerScale = 1, nullRate = 0.02 } = {}) {
+  if (failAll) return { jobId: `job_${unit.key}`, state: 'failed', issues: ['handler_error'], cpuSeconds: 1 }
+  const n = unit.scenario.design.nTreat + unit.scenario.design.nControl
+  const isNull = unit.scenario.truth.hazardRatio === 1
+  const reps = unit.stage === 'screening' ? 500 : 20000
+  const p = isNull ? nullRate : Math.min(0.999, powerScale * (1 - Math.exp(-n / 180)))
+  const k = Math.round(p * reps) / reps
+  const precision = unit.stage === 'screening' ? 'screening' : undefined
+  return { jobId: `job_${unit.key}`, state: 'succeeded', replicates: reps, seed: unit.seed, cpuSeconds: unit.stage === 'screening' ? 2 : 20, queueSeconds: 1, wallSeconds: 3,
+    measures: [m(isNull ? 'type_one_error' : 'power', k, precision ? { precision } : {}), { name: 'expected_sample_size', value: n, mcse: 0, simulated: true, source: 'synthetic', ...(precision ? { precision } : {}) }] }
+}
+
+/** Run a campaign to its stop with the fake engine. */
+function drive(manifest, engine = fakeOutcome, { limit = 200, interrupt = null } = {}) {
+  let state = vcrCampaignInitialState(manifest)
+  const units = []
+  for (let i = 0; i < limit; i++) {
+    const { state: next, action } = vcrCampaignAdvance(manifest, state, { identity: ID })
+    state = next
+    if (action.type !== 'evaluate') return { state, action, units }
+    units.push(action.unit)
+    state = { ...state, inFlight: { unitKey: action.unit.key } }
+    if (interrupt) state = interrupt(state, units.length) ?? state
+    state = vcrCampaignRecord(manifest, state, action.unit, engine(action.unit))
+  }
+  throw new Error('campaign did not stop')
+}
+
+test('a campaign screens every candidate, checks finalists on independent streams and stops with acceptable precision', () => {
+  const manifest = frozen({ constraints: [{ measure: 'power', op: '>=', bound: 0.8, kind: 'design', truth: 'alternative' },
+    { measure: 'type_one_error', op: '<=', bound: 0.025, kind: 'error_control', truth: 'null' }] })
+  const { state, action, units } = drive(manifest)
+  assert.equal(action.reason, 'acceptable_precision')
+  const screening = units.filter((unit) => unit.stage === 'screening')
+  assert.equal(screening.length, 9, 'error-control truths are not screened')
+  assert.ok(screening.every((unit) => unit.truth === 'alternative'))
+  // small designs are eliminated by their screening power bound, the rest ranked by expected size
+  assert.equal(state.candidates.c000.status, 'eliminated')
+  assert.equal(state.finalists.length, 2)
+  const finals = units.filter((unit) => unit.stage === 'final')
+  assert.equal(finals.length, 4, 'two finalists under both truths')
+  const screenSeeds = new Set(screening.map((unit) => unit.seed))
+  assert.ok(finals.every((unit) => !screenSeeds.has(unit.seed)), 'no final unit reuses a screening stream')
+  const verdict = vcrCampaignVerdict(manifest, state)
+  assert.ok(verdict.best && verdict.feasible.includes(verdict.best))
+  assert.equal(state.stop.reason, 'acceptable_precision')
+  assert.ok(VCR_CAMPAIGN_STOP_REASONS.includes(state.stop.reason))
+  assert.equal(state.usage.cpuSeconds, 9 * 2 + 4 * 20)
+})
+
+test('a null design with nothing feasible stops with no feasible beneficial candidate', () => {
+  const manifest = frozen()
+  const { action, state } = drive(manifest, (unit) => fakeOutcome(unit, { powerScale: 0.3 }))
+  assert.equal(action.reason, 'no_feasible_beneficial_candidate')
+  assert.ok(Object.values(state.candidates).every((entry) => entry.status === 'eliminated'))
+})
+
+test('a design calibrated exactly at alpha leaves compliance inconclusive and is not promoted', () => {
+  const manifest = frozen()
+  const { action, state } = drive(manifest, (unit) => fakeOutcome(unit, { nullRate: 0.025 }))
+  assert.equal(action.reason, 'no_feasible_beneficial_candidate')
+  assert.deepEqual(state.stop.verdict.inconclusive, ['c008'], 'the only design with enough power is undecided on alpha, not passed')
+  const row = state.stop.verdict.rows.find((entry) => entry.key === 'c008')
+  assert.deepEqual(row.verdicts.map((v) => v.status), ['pass', 'inconclusive'])
+})
+
+test('screening optimism does not decide: the final, independent evaluation does', () => {
+  const manifest = frozen({ objective: { measure: 'power', direction: 'maximize', truth: 'alternative' },
+    constraints: [{ measure: 'power', op: '>=', bound: 0.5, kind: 'design', truth: 'alternative' }] })
+  // the screen flatters c004 (a lucky stream); its final evaluation does not
+  const engine = (unit) => {
+    const out = fakeOutcome(unit)
+    if (unit.candidate === 'c004' && unit.stage === 'screening') out.measures[0] = m('power', 0.99, { precision: 'screening' })
+    return out
+  }
+  const { state } = drive(manifest, engine)
+  assert.ok(state.finalists.includes('c004'))
+  const verdict = vcrCampaignVerdict(manifest, state)
+  assert.notEqual(verdict.best, 'c004', 'the winner is chosen on the final streams')
+})
+
+test('a screening outcome recorded in a final slot can never satisfy a final constraint', () => {
+  const manifest = frozen({ constraints: [{ measure: 'power', op: '>=', bound: 0.5, kind: 'design', truth: 'alternative' }] })
+  const engine = (unit) => unit.stage === 'final' ? { ...fakeOutcome({ ...unit, stage: 'screening' }), precision: 'screening' } : fakeOutcome(unit)
+  const { action } = drive(manifest, engine)
+  assert.equal(action.reason, 'no_feasible_beneficial_candidate')
+})
+
+test('stop rules: persistent failure, unsupported space, budget and cancellation', () => {
+  assert.equal(drive(frozen(), (unit) => fakeOutcome(unit, { failAll: true })).action.reason, 'persistent_model_failure')
+  const unsupported = drive(frozen(), (unit) => ({ jobId: null, state: 'failed', unsupported: true, issues: ['design_not_supported'] }))
+  assert.equal(unsupported.action.reason, 'unsupported_candidate')
+  const budget = drive(frozen({ budget: { maxCandidates: 9, cpuSeconds: 5 } }))
+  assert.equal(budget.action.reason, 'budget_exhausted')
+  assert.equal(budget.state.usage.cpuSeconds, 6, 'the units that ran are counted, the rest never started')
+  const cancelled = drive(frozen(), fakeOutcome, { interrupt: (state, n) => (n === 3 ? { ...state, cancelRequested: true } : null) })
+  assert.equal(cancelled.action.reason, 'user_cancellation')
+  assert.equal(cancelled.units.length, 3)
+})
+
+test('an improvement smaller than the declared minimum over the reference stops as no useful improvement', () => {
+  const manifest = frozen({ reference: 8, stopRules: { minImprovement: 1000 },
+    constraints: [{ measure: 'power', op: '>=', bound: 0.7, kind: 'design', truth: 'alternative' }] })
+  const { action, state } = drive(manifest)
+  assert.ok(state.finalists.includes('c008'), 'the reference is evaluated at final precision')
+  assert.equal(action.reason, 'no_useful_improvement')
+  const beneficial = drive(frozen({ reference: 8, stopRules: { minImprovement: 10 }, constraints: [{ measure: 'power', op: '>=', bound: 0.7, kind: 'design', truth: 'alternative' }] }))
+  assert.equal(beneficial.action.reason, 'acceptable_precision')
+  assert.equal(beneficial.state.stop.verdict.improvement, 80, 'the improvement is read on the final evaluations: 320 against 240')
+})
+
+test('an analytic pre-check eliminates sizes below the closed-form requirement before any simulation', () => {
+  const manifest = frozen({ constraints: [{ measure: 'power', op: '>=', bound: 0.8, kind: 'design', truth: 'alternative' }],
+    stages: { analytic: { scenario: { design: { kind: 'two_arm_fixed' }, endpoint: { type: 'time_to_event' }, truth: { hazardRatio: 0.7, controlMedian: 12 },
+      analysis: { alpha: 0.025, power: 0.8, sided: 1 }, accrual: { duration: 12, followup: 12 } },
+    eliminate: [{ measure: 'required_patients', exceeds: ['design.nTreat', 'design.nControl'], tolerance: 0.05 }] }, screening: { replicates: 500 }, final: { count: 2 } } })
+  const engine = (unit) => unit.stage === 'analytic'
+    ? { jobId: 'job_a', state: 'succeeded', measures: [{ name: 'required_patients', value: 280, source: 'calculated' }], cpuSeconds: 0.1 }
+    : fakeOutcome(unit)
+  const { units, state } = drive(manifest, engine)
+  assert.equal(units[0].stage, 'analytic')
+  assert.equal(units.filter((unit) => unit.stage === 'analytic').length, 1, 'one analytic unit serves every candidate with the same applied paths')
+  assert.equal(state.candidates.c000.reason, 'analytic_below:required_patients')
+  assert.ok(!units.some((unit) => unit.stage === 'screening' && unit.candidate === 'c000'))
+})
+
+test('contrasts follow the coupling the runs really had', () => {
+  const bits = (pattern) => pattern.match(/.{1,8}/g).map((byte) => Number.parseInt(byte.padEnd(8, '0').split('').reverse().join(''), 2).toString(16).padStart(2, '0')).join('')
+  const a = { seed: 5, drawSignature: 'x', replicates: 16, rejects: bits('1111000011110000'), measures: [{ name: 'power', value: 0.5, mcse: 0.125, simulated: true }] }
+  const b = { seed: 5, drawSignature: 'x', replicates: 16, rejects: bits('1110000011100000'), measures: [{ name: 'power', value: 0.375, mcse: 0.121, simulated: true }] }
+  const paired = vcrEvaluationContrast(a, b, 'power')
+  assert.equal(paired.coupling, 'paired')
+  assert.deepEqual(paired.discordant, { onlyA: 2, onlyB: 0 })
+  assert.ok(paired.mcse < Math.sqrt(0.125 ** 2 + 0.121 ** 2), 'pairing removes the shared variance')
+  const shifted = vcrEvaluationContrast(a, { ...b, drawSignature: 'y' }, 'power')
+  assert.deepEqual([shifted.coupling, shifted.mcse], ['same_seed_different_draws', null], 'same seed, different draws: no interval')
+  const independent = vcrEvaluationContrast(a, { ...b, seed: 6 }, 'power')
+  assert.equal(independent.coupling, 'independent')
+  assert.ok(Math.abs(independent.mcse - Math.sqrt(0.125 ** 2 + 0.121 ** 2)) < 1e-12)
+})

@@ -901,6 +901,8 @@ function versionAtLeast(version, from) {
 function legacyDesignVersionMatches(job) {
   const spec = /** @type {any} */ (VCR_ENGINE_METHODS)[job.method]
   if (!spec) return false
+  // a campaign's precision block is the current release's: no older label carries it (mirrored in protocol.R)
+  if (job.scenario?.evaluation !== undefined) return false
   // the oldest releases did not have the hypothesis either (a design is never labelled with a version that did not have it)
   if (['design.analytic', 'design.simulate', 'design.grid'].includes(job.method) && usesHypothesis(job.scenario) && !versionAtLeast(job.methodVersion, '1.4.0')) return false
   if ((spec.compatibleVersions ?? []).includes(job.methodVersion)) {

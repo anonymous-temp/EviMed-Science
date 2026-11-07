@@ -61,6 +61,9 @@
 #' instead of `type_one_error`. Both errors are silent and both survive review.
 vcr_plan_replicates <- function(scenario, requested = NULL, estimand = NULL) {
   flag <- scenario$truth[["null"]]
+  # a campaign's screening run (scenario.evaluation.screeningReplicates) runs exactly that many replicates, below the floor; the
+  # floor is still computed and reported, and every measure of the run is labelled screening precision (vcr_run_job)
+  screening <- vcr_screening_replicates(scenario)
   is_null_case <- if (is.logical(flag) && length(flag) == 1L && !is.na(flag)) flag
                   # a non-inferiority design is at its null on the margin, not at an effect of zero (T1)
                   else if (!is.null(vcr_hypothesis(scenario))) vcr_is_null_scenario(scenario)
@@ -69,11 +72,42 @@ vcr_plan_replicates <- function(scenario, requested = NULL, estimand = NULL) {
   target <- vcr_scalar(scenario$targetMcse, NULL)
   p <- if (is_null_case) (vcr_scalar(scenario$analysis$alpha, 0.025)) else 0.5
   floor_ <- vcr_replicate_floor(is_null_case, target, p)
-  n <- as.integer(max(floor_, requested %||% 0))
+  n <- if (!is.null(screening)) screening else as.integer(max(floor_, requested %||% 0))
   cap <- vcr_max_replicates()
   capped <- n > cap
   list(replicates = as.integer(min(n, cap)), isNull = is_null_case, targetMcse = target,
-       floor = floor_, basisProportion = p, capped = capped)
+       floor = floor_, basisProportion = p, capped = capped, screening = !is.null(screening))
+}
+
+#' The screening replicate count a campaign's precision block states, or NULL for an ordinary or final run.
+vcr_screening_replicates <- function(scenario) {
+  ev <- if (is.list(scenario)) scenario[["evaluation"]] else NULL
+  n <- if (is.list(ev)) ev[["screeningReplicates"]] else NULL
+  if (is.numeric(n) && length(n) == 1L && is.finite(n)) as.integer(n) else NULL
+}
+
+#' What lets two campaign runs be compared pairwise (a scenario that carries the precision block, and only then): the purpose, the
+#' replicates that ran against the floor, the draw signature (the sha256 of the RNG state after replicate 1 consumed its draws, so
+#' two runs with the same seed and the same signature drew the same numbers in the same order) and the primary test's rejection
+#' indicator per replicate as a hex bitset, least significant bit first (a failed replicate did not reject, as in the measure).
+vcr_evaluation_record <- function(scenario, seed, values, plan_floor, done, extras = list()) {
+  if (!is.list(scenario[["evaluation"]])) return(NULL)
+  signature <- tryCatch({
+    runner <- vcr_scenario_runner(scenario, extras)
+    stream <- vcr_stream_bank(seed)$take(1L)[[1L]]
+    end <- vcr_with_stream(stream, function(i) { runner$run(i); get(".Random.seed", envir = .GlobalEnv) }, 1L)
+    vcr_sha256(paste(c("draws-v1", as.character(end)), collapse = ","))
+  }, error = function(e) NULL)
+  rej <- if (!is.null(values) && "reject" %in% colnames(values)) values[, "reject"] else NULL
+  bits <- if (is.null(rej) || !length(rej)) NULL else {
+    b <- as.integer(!is.na(rej) & rej == 1)
+    b <- c(b, integer((8L - length(b) %% 8L) %% 8L))
+    bytes <- colSums(matrix(b, nrow = 8L) * (2L^(0:7)))
+    paste(sprintf("%02x", as.integer(bytes)), collapse = "")
+  }
+  screening <- vcr_screening_replicates(scenario)
+  Filter(Negate(is.null), list(version = 1L, purpose = if (is.null(screening)) "final" else "screening", replicates = as.integer(done),
+    floor = as.integer(plan_floor), drawSignature = signature, rejects = bits))
 }
 
 #' Monte-Carlo standard errors for the ADEMP performance measures.
@@ -526,6 +560,8 @@ vcr_gs_boundaries_job <- function(job, sc, cancel_file = NULL) {
   spend <- gs$alphaSpent * sided
   null_sc <- sc
   null_sc$truth[["hazardRatio"]] <- 1; null_sc$truth[["treatmentHazardRatios"]] <- NULL; null_sc$truth[["null"]] <- NULL
+  # the boundaries are part of the design under test, so a screening run still finds them on the full null floor
+  null_sc[["evaluation"]] <- NULL
   limit <- vcr_scalar(job$cpuSecondsLimit, Inf)
   res <- vcr_run_simulation(null_sc, as.integer((as.numeric(job$seed) + 15485863) %% 2147483647), NULL, vcr_cores(job$cores), cancel_file = cancel_file,
                             batch_size = vcr_scalar(job$batchSize, 500L), cpu_seconds_limit = if (is.finite(limit)) 0.45 * limit else Inf)

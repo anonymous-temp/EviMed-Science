@@ -532,6 +532,8 @@ export const VCR_RESULT_KIND_TABS = Object.freeze({
   prognostic_training: 'comparator', progression_simulation: 'patients', model_fit: 'patients',
   accrual_forecast: 'trial', design_confirmatory: 'trial', design_dose: 'trial', design_bayesian: 'trial', design_win_ratio: 'trial', matching: 'matching', match_extract: 'matching', evidence_pool: 'data', snapshot_profile: 'data', population_check: 'population',
   network_meta: 'data', dose_response_meta: 'data', effect_shrinkage: 'data',
+  // a design-search campaign's candidate evaluations (screening and final) belong to no card of their own; the lab reads them by campaign
+  experiment_candidate: 'trial',
 })
 /**
  * The writes that put a patient's matching on the matching tab. A matching is judged at the write -- there is no job to finish -- so

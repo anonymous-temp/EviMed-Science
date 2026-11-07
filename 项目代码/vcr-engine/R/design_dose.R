@@ -441,8 +441,9 @@ vcr_dose_select_isotonic <- function(N, Y, target, cutoff) {
 .vcr_dose_finding <- function(job, progress = NULL) {
   sc <- job$scenario
   p <- .vcr_dose_read(sc)
-  want <- as.integer(vcr_scalar(job$replicates, VCR_DOSE_DEFAULT_TRIALS))
-  if (is.null(job$replicates)) p <- .vcr_dose_assume(p, "trials", want, basis = "default: simulated trials per design")
+  screening <- vcr_screening_replicates(sc)
+  want <- screening %||% as.integer(vcr_scalar(job$replicates, VCR_DOSE_DEFAULT_TRIALS))
+  if (is.null(job$replicates) && is.null(screening)) p <- .vcr_dose_assume(p, "trials", want, basis = "default: simulated trials per design")
   tables <- .vcr_dose_tables(p)
   seed <- vcr_scalar(job$seed, 1)
   parts <- list(); done <- 0L; stopped <- NULL; b <- 0L
@@ -478,8 +479,11 @@ vcr_dose_select_isotonic <- function(N, Y, target, cutoff) {
       "The CPU budget ran out before every trial ran; the numbers use the trials that finished.")) else list())
   list(status = stop_state$status %||% "succeeded", measures = measures, issues = stop_state$issues %||% list(), counts = vcr_counts(generatedRecords = done * length(p$kinds)),
        conclusion = if (is.null(stop_state)) "estimable" else "limited",
-       diagnostics = list(replicatesCompleted = done, doseFinding = list(kind = p$kind, curve = list(toxicity = p$tox, target = p$target, mtd = p$mtd, doses = p$K),
-         designs = designs, differences = differences, trials = done, trialsRequested = want, assumed = p$assumed, given = .vcr_dose_given(sc, p))))
+       diagnostics = c(list(replicatesCompleted = done, doseFinding = list(kind = p$kind, curve = list(toxicity = p$tox, target = p$target, mtd = p$mtd, doses = p$K),
+         designs = designs, differences = differences, trials = done, trialsRequested = want, assumed = p$assumed, given = .vcr_dose_given(sc, p))),
+         # a campaign's run says its purpose and how many trials ran against the design's normal number (its pairing is within the job)
+         if (is.list(sc[["evaluation"]])) list(evaluation = list(version = 1L, purpose = if (is.null(screening)) "final" else "screening",
+           replicates = as.integer(done), floor = VCR_DOSE_DEFAULT_TRIALS))))
 }
 
 .vcr_dose_given <- function(sc, p) {
