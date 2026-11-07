@@ -31,3 +31,24 @@ test('an observation the newer version could already see is not a test of it',()
   assert.equal(compareVersionsToObserved(older,newer,{events:[observation('a',9,'2026-01-05T00:00:00.000Z')]},{}).available,false);
   assert.equal(compareVersionsToObserved(newer,older,outcomes,{}).available,false,'the newer must have the later origin');
 });
+
+test('real people under the small-cell floor: a date keeps its identity and loses its means and counts (review eng P0-3)',() => {
+  const real = (/** @type {any} */ p) => ({...p,dataClass:'patient'});
+  const older = real(prediction('2026-01-01T00:00:00.000Z',[30],{a:7,b:8}));
+  const newer = real(prediction('2026-01-11T00:00:00.000Z',[20],{a:6.2,b:8.5}));
+  const outcomes = {events:[observation('a',6,'2026-01-31T00:00:00.000Z'),observation('b',8.4,'2026-01-31T00:00:00.000Z')]};
+  const result = compareVersionsToObserved(older,newer,outcomes,{});
+  assert.equal(result.available,true,'two observed people are still an observed comparison');
+  const group = result.groups[0];
+  assert.equal(group.targetAt,'2026-01-31T00:00:00.000Z');
+  for (const key of ['observed','observedMean','olderMean','newerMean','olderError','newerError','newerCloser','olderCloser','pairedPredictions']) assert.equal(group[key],null,key);
+  assert.ok(group.suppressed.includes('observedMean'));
+  // enough people: the means stand, but a split with a handful on one side is withheld
+  const keys = Array.from({length:12},(_,i) => `p${i}`);
+  const many = (/** @type {string} */ origin,/** @type {number} */ h,/** @type {(i:number)=>number} */ f) => real(prediction(origin,[h],Object.fromEntries(keys.map((k,i) => [k,f(i)]))));
+  const o2 = many('2026-01-01T00:00:00.000Z',30,() => 7), n2 = many('2026-01-11T00:00:00.000Z',20,(i) => i < 2 ? 6.9 : 7.5);
+  const big = compareVersionsToObserved(o2,n2,{events:keys.map(k => observation(k,6.8,'2026-01-31T00:00:00.000Z'))},{}).groups[0];
+  assert.equal(big.observed,12);
+  assert.ok(Number.isFinite(big.observedMean));
+  assert.deepEqual([big.newerCloser,big.olderCloser],[null,null],'two people whose older forecast was closer are two people');
+});

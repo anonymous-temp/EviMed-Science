@@ -1,6 +1,7 @@
 /** Forecast evaluation: one patient is one sampling unit. Distributions describe
  * future observations, not additional trial participants or a treatment effect. */
 import { longitudinalMean as mean, longitudinalVariance as variance, longitudinalQuantile as quantile, longitudinalSubjects } from './vcrLongitudinal.mjs'
+import { VCR_MIN_CELL_SIZE } from './vcrVocabulary.mjs'
 
 /** Reproducible bootstrap, isolated from model sampling. @param {number} seed */
 export function forecastRandom(seed) {
@@ -330,7 +331,12 @@ export function compareForecasts(first, second, options = {}) {
  * all three share. The newer version is scored only where the observation happened after ITS origin (`pairForecastOutcomes` demands
  * it), so an observation the newer version could already see is never counted as a test of it. Absolute error for a value, squared
  * error (Brier) for a probability; point estimates over the same people, no significance test.
- * @param {any} older @param {any} newer @param {any} outcomes @param {any} [options] */
+ *
+ * Real people's outcomes under the small-cell floor are withheld here, at the source, because every reader (the page, the export, a run)
+ * reads this block and none of its keys is a head count a boundary would recognise (review eng P0-3): a date observed for fewer than
+ * `minCell` people keeps its identity and loses its means, errors and counts; and the split of the people by which version came closer
+ * (newer, older, tied: the parts of `observed`) is withheld when one part is a handful of people. A synthetic comparison is shown whole.
+ * @param {any} older @param {any} newer @param {any} outcomes @param {{ seed?: number, windowDays?: number, minCell?: number }} [options] */
 export function compareVersionsToObserved(older, newer, outcomes, options = {}) {
   const base = compareForecasts(older, newer, { mode: 'update', bootstrap: 0, seed: options.seed })
   if (!base.available) return { available: false, code: base.code ?? 'paired_inputs_differ', mode: 'update' }
@@ -343,20 +349,31 @@ export function compareVersionsToObserved(older, newer, outcomes, options = {}) 
   const oldBy = new Map(pairOld.map((/** @type {any} */ r) => [key(r, r.horizonDays), r]))
   const newBy = new Map(pairNew.map((/** @type {any} */ r) => [key(r, r.horizonDays), r]))
   const error = (/** @type {number} */ predicted, /** @type {number} */ actual) => probability ? (predicted - actual) ** 2 : Math.abs(predicted - actual)
+  const minCell = Number.isInteger(options.minCell) && Number(options.minCell) >= 2 ? Number(options.minCell) : VCR_MIN_CELL_SIZE
+  let anyObserved = false
   const groups = base.groups.map((/** @type {any} */ group) => {
     const rows = []
     for (const row of older.rows.filter((/** @type {any} */ r) => r.horizonDays === group.horizonDays)) {
       const was = oldBy.get(key(row, group.horizonDays)), now = newBy.get(key(row, group.secondHorizonDays))
       if (was && now && was.actual === now.actual) rows.push({ older: was.point, newer: now.point, actual: was.actual })
     }
-    return { horizonDays: group.horizonDays, secondHorizonDays: group.secondHorizonDays, targetAt: group.targetAt, pairedPredictions: group.subjects,
+    /** @type {Record<string, any>} */
+    const shown = { horizonDays: group.horizonDays, secondHorizonDays: group.secondHorizonDays, targetAt: group.targetAt, pairedPredictions: group.subjects,
       observed: rows.length, observedMean: mean(rows.map(r => r.actual)), olderMean: mean(rows.map(r => r.older)), newerMean: mean(rows.map(r => r.newer)),
       olderError: mean(rows.map(r => error(r.older, r.actual))), newerError: mean(rows.map(r => error(r.newer, r.actual))),
       newerCloser: rows.filter(r => error(r.newer, r.actual) < error(r.older, r.actual)).length,
       olderCloser: rows.filter(r => error(r.older, r.actual) < error(r.newer, r.actual)).length,
       errorMetric: probability ? 'brier' : 'mae' }
+    if (rows.length > 0) anyObserved = true
+    if (base.dataClass === 'synthetic') return shown
+    const small = (/** @type {number} */ count) => count >= 1 && count < minCell
+    const hide = (/** @type {string[]} */ keys) => { for (const key of keys) shown[key] = null; shown.suppressed = [...new Set([...(shown.suppressed ?? []), ...keys])] }
+    if (small(shown.pairedPredictions)) hide(['pairedPredictions'])
+    if (small(rows.length)) hide(['observed', 'observedMean', 'olderMean', 'newerMean', 'olderError', 'newerError', 'newerCloser', 'olderCloser'])
+    else if (small(shown.newerCloser) || small(shown.olderCloser) || small(rows.length - shown.newerCloser - shown.olderCloser)) hide(['newerCloser', 'olderCloser'])
+    return shown
   })
-  return { available: groups.some((/** @type {any} */ g) => g.observed > 0), code: groups.some((/** @type {any} */ g) => g.observed > 0) ? null : 'no_observed_outcomes',
+  return { available: anyObserved, code: anyObserved ? null : 'no_observed_outcomes',
     mode: 'update', endpoint: older.endpoint, origins: [older.origin, newer.origin], groups, changedFactors: base.changedFactors,
     interpretation: 'older_vs_newer_vs_observed', causalEffectIdentified: false,
     notes: base.notes, dataClass: base.dataClass }

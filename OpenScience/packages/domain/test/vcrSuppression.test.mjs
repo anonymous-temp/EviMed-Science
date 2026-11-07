@@ -34,23 +34,25 @@ test("the people-count keys are the contract's, and the floor is ten", () => {
   assert.deepEqual([...VCR_PEOPLE_COUNT_FIELDS], ["n", "count", "patients", "realPatients", "subjects", "events", "kept", "excluded",
     "indeterminate", "cohortSize", "screened", "eligible", "enrolled", "referred", "contacted", "candidates", "nonEvents", "validPredictions", "invalidPredictions",
     "removed", "startedWithinGrace", "startedAfterGrace", "neverStarted", "startedAtTimeZero", "treatedBeforeTimeZero"]);
-  assert.deepEqual([...VCR_PEOPLE_COUNT_MAP_KEYS], ["levels", "people", "readable", "startsByArm", "eventsByArm"]);
+  assert.deepEqual([...VCR_PEOPLE_COUNT_MAP_KEYS], ["levels", "people", "readable", "startsByArm", "accountingReasons", "eventsByArm"]);
   assert.deepEqual([...VCR_PEOPLE_COUNT_SCALAR_FIELDS], ["rows", "startingRows", "keptRows", "trainingObservations", "effectiveSampleSize",
     "requestedSubjects", "batchSubjects", "batchEvaluated", "batchUnavailable", "outsideBatch", "subjectsNotEvaluated",
     "peopleSelected", "recordsToRead", "recordsRead", "recordsAlreadyRead", "prefiltered",
     "removedTotal", "keptTotal", "rowsAnalysed", "rowsIncomplete", "droppedRows", "inputRows", "usedRows", "excludedRows", "persons", "personsInTable", "personPeriods",
     "personTrials", "expandedRows", "eligiblePeriods", "recordsCutShort", "rowsDroppedWhereCut", "rowsAfterEventDropped", "observedRows", "nTraining", "nHoldout",
-    "holdoutRows", "referenceSize", "leftOut", "smallerGroup", "rowsUsed", "rowsOtherArm", "controlPeopleUsed"]);
+    "holdoutRows", "referenceSize", "leftOut", "smallerGroup", "rowsUsed", "rowsOtherArm", "controlPeopleUsed", "observedPeople"]);
   assert.deepEqual([...VCR_PEOPLE_COUNT_MEASURES], ["rows", "cohort_size", "cohort_size_strict", "cohort_size_lenient", "training_observations", "effective_sample_size",
     "eligible", "ineligible", "insufficient_evidence", "pending", "records_read", "records_already_read", "trimmed_treated", "trimmed_control"]);
   assert.deepEqual(Object.fromEntries(Object.entries(VCR_PEOPLE_COUNT_BLOCK_FIELDS).map(([block, keys]) => [block, [...keys]])),
     { byYear: ["treated", "control"], estimate: ["people", "records"], plan: ["toRead", "alreadyRead", "prefiltered", "noDocuments", "deferred"],
-      covariates: ["missing"], design: ["people"], waitingTime: ["people"] });
+      covariates: ["missing"], design: ["people"], waitingTime: ["people"],
+      accounting: ["submitted", "admitted", "completed", "rejected", "failed", "unprocessed", "partial"] });
   assert.deepEqual(VCR_PEOPLE_COUNT_LINKS.map((link) => [[...link.triggers], [...link.whole], [...link.derived]]),
     [[["events", "nonEvents"], ["n", "events", "nonEvents"], ["observedRisk", "calibrationInLarge"]],
       [["startedWithinGrace", "startedAfterGrace", "neverStarted", "treatedBeforeTimeZero"], ["people", "startedWithinGrace", "startedAfterGrace", "neverStarted", "treatedBeforeTimeZero"], []],
       [["startedWithinGrace", "startedAfterGrace", "neverStarted"], ["people", "startedWithinGrace", "startedAfterGrace", "neverStarted"], []],
-      [["usedRows", "excludedRows"], ["inputRows", "usedRows", "excludedRows"], []], [["rowsIncomplete"], ["rowsAnalysed", "rowsIncomplete"], []], [["droppedRows"], ["rows", "droppedRows"], []]]);
+      [["usedRows", "excludedRows"], ["inputRows", "usedRows", "excludedRows"], []], [["rowsIncomplete"], ["rowsAnalysed", "rowsIncomplete"], []], [["droppedRows"], ["rows", "droppedRows"], []],
+      [["submitted", "admitted", "completed", "rejected", "failed", "unprocessed", "partial"], ["submitted", "admitted", "completed", "rejected", "failed", "unprocessed", "partial"], []]]);
   assert.deepEqual({ ...VCR_PEOPLE_DERIVED_MEASURES }, { observedRisk: "observed_risk", calibrationInLarge: "calibration_in_the_large" });
   assert.deepEqual(Object.keys(VCR_PEOPLE_COUNT_WITHHELD_BLOCKS), ["enrolmentYear", "waitingTime"]);
 });
@@ -501,4 +503,25 @@ test("a target-trial emulation's people by when they began: the parts make the w
   assert.deepEqual(suppressForModel({ design: { people: 6, gracePeriod: 3 } }).design, { people: null, gracePeriod: 3, suppressed: ["people"] });
   assert.deepEqual(suppressForModel({ checks: { persons: 5, personPeriods: 40, eligiblePeriods: 38, recordsCutShort: 0 } }).checks,
     { persons: null, personPeriods: 40, eligiblePeriods: 38, recordsCutShort: 0, suppressed: ["persons"] });
+});
+
+test("a comparison's control restated as observed people in another object is a head count there too (review eng P0-2)", () => {
+  const shown = suppressForModel({ counts: { realPatients: 6 }, comparatorOrigins: { origin: "observed", observedPeople: 6, reconstructedPseudoPatients: 0, simulatedMembers: 40 } });
+  assert.equal(shown.counts.realPatients, null);
+  assert.equal(shown.comparatorOrigins.observedPeople, null);
+  assert.deepEqual(shown.comparatorOrigins.suppressed, ["observedPeople"]);
+  assert.equal(shown.comparatorOrigins.simulatedMembers, 40, "generated records are not people");
+  assert.equal(suppressForModel({ comparatorOrigins: { observedPeople: 640 } }).comparatorOrigins.observedPeople, 640);
+});
+
+test("a batch forecast's ledger and its reasons: one small status takes the ledger, the reasons are sibling cells (review eng P1-3)", () => {
+  const summary = { accounting: { submitted: 100, admitted: 100, completed: 97, rejected: 2, failed: 1, unprocessed: 0, partial: 0 },
+    accountingReasons: { action_input_missing: 2, provider_request_failed: 1 } };
+  const shown = suppressForModel({ summary }).summary;
+  assert.deepEqual(Object.values(shown.accounting).filter((value) => typeof value === "number"), [], "the parts make the whole: none is printed");
+  assert.deepEqual(shown.accountingReasons, { action_input_missing: null, provider_request_failed: null });
+  const whole = { accounting: { submitted: 100, admitted: 100, completed: 80, rejected: 20, failed: 0, unprocessed: 0, partial: 0 }, accountingReasons: { action_input_missing: 20 } };
+  assert.deepEqual(suppressForModel({ summary: whole }).summary, whole);
+  // the names are generic elsewhere: a job's own `failed` is not a person
+  assert.deepEqual(suppressForModel({ jobs: { completed: 3, failed: 2 } }), { jobs: { completed: 3, failed: 2 } });
 });

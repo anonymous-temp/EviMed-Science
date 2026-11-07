@@ -1261,6 +1261,8 @@ export const VCR_PEOPLE_COUNT_MAP_KEYS = frozen([
   'people', 'readable',
   // the person-trials a sequential target-trial emulation began, by arm (`{ "0": 155, "1": 93 }`)
   'startsByArm',
+  // the people of a batch trajectory forecast by why they have no forecast (`{ action_input_missing: 2 }`): each reason's people are a cell
+  'accountingReasons',
   // the events of each arm of a weighted or augmented time-to-event comparison (`{ treated, control }`)
   'eventsByArm',
 ])
@@ -1282,6 +1284,9 @@ export const VCR_PEOPLE_COUNT_BLOCK_FIELDS = Object.freeze({
   covariates: frozen(['missing']),
   design: frozen(['people']),
   waitingTime: frozen(['people']),
+  // a batch trajectory forecast's ledger of the people it was given: submitted, admitted, and what became of each (they make each other,
+  // `VCR_PEOPLE_COUNT_LINKS`); a person's own line is the owner's per-person read, never this block
+  accounting: frozen(['submitted', 'admitted', 'completed', 'rejected', 'failed', 'unprocessed', 'partial']),
 })
 /**
  * Counts that stand in arithmetic with each other, and what is computed from them. A table of outcomes states its people, its events
@@ -1317,6 +1322,13 @@ export const VCR_PEOPLE_COUNT_LINKS = Object.freeze([
   Object.freeze({ triggers: frozen(['usedRows', 'excludedRows']), whole: frozen(['inputRows', 'usedRows', 'excludedRows']), derived: frozen([]) }),
   Object.freeze({ triggers: frozen(['rowsIncomplete']), whole: frozen(['rowsAnalysed', 'rowsIncomplete']), derived: frozen([]) }),
   Object.freeze({ triggers: frozen(['droppedRows']), whole: frozen(['rows', 'droppedRows']), derived: frozen([]) }),
+  // a batch trajectory forecast's ledger: `submitted = completed + rejected + failed + unprocessed`, so one small status printed beside the
+  // others is a subtraction, and the whole ledger goes (review eng P1-3)
+  Object.freeze({
+    triggers: frozen(['submitted', 'admitted', 'completed', 'rejected', 'failed', 'unprocessed', 'partial']),
+    whole: frozen(['submitted', 'admitted', 'completed', 'rejected', 'failed', 'unprocessed', 'partial']),
+    derived: frozen([]),
+  }),
 ])
 /**
  * Measures that are a function of a block's hidden count, by the field of the block they restate. A local calibration's observed risk
@@ -1365,6 +1377,8 @@ export const VCR_PEOPLE_COUNT_SCALAR_FIELDS = frozen([
   // the rows of the active arm a single-arm simulated comparison was taken from (and the other arm's it left), and the control people an
   // outcome model was fitted on
   'rowsUsed', 'rowsOtherArm', 'controlPeopleUsed',
+  // the real people a comparison's control is made of, restated beside the result's own counts in the report's origin block (review eng P0-2)
+  'observedPeople',
 ])
 /**
  * Names of measures — `{ name, value }` — whose value is a head count of the
