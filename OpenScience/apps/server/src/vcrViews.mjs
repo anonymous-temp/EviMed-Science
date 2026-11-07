@@ -1608,6 +1608,8 @@ export function presentExport(row, bundle) {
     if (!Object.hasOwn(model, 'inputVersions')) delete result.inputVersions;
     // A package frozen before the visit schedule and the regulatory log were part of it is not "changed" by their being there now.
     for (const key of ['schedule', 'regulatoryContacts']) if (!Object.hasOwn(model, key)) delete result[key];
+    // the lab block is read live by `reportModel` and is not among the inputs this comparison rebuilds: its being there or not is no change
+    delete result.lab;
     result.review = { ...result.review, records: list(result.review?.records).map((review, position) => {
       const entry = { ...review };
       if (!Object.hasOwn(model.review?.records?.[position] ?? {}, 'current')) delete entry.current;

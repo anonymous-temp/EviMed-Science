@@ -399,8 +399,45 @@ export class VcrExperiments {
     return row.kind === "campaign" ? presentCampaign(row) : this.#presentExperiment(study, row);
   }
 
-  /** @param {{ id: string }} study @param {any} row */
-  async #presentExperiment(study, row) {
+  /**
+   * The study's lab as its report and export model carry it (F4): every experiment and campaign, newest first, each with the one
+   * premises block it is read under and every result next to the design it was computed for. A campaign gives its stop, its best and
+   * its undecided designs and its finalists (each finalist's own setting, objective and verdicts; the candidates set aside stay on the
+   * page); an experiment gives each arm's method, scenario and result id, the comparison and the alignment. Numbers are the engine's, in
+   * the read model's own words; nothing is judged here. No new document: the report's templates bind to this block like any other.
+   * @param {{ id: string }} study @param {any} [store] the snapshot the rest of the report was read from, when it has the reads this needs
+   * @param {number} [limit]
+   */
+  async reportBlock(study, store = null, limit = 20) {
+    const reader = store && store !== this.store && typeof store.rows === "function" && typeof store.one === "function" && typeof store.result === "function"
+      && typeof store.resultOfJob === "function" ? new VcrExperiments({ store, jobs: null, config: this.config }) : this;
+    const rows = await reader.store.rows(`SELECT * FROM ${SCHEMA}.experiments WHERE study_id = $1 ORDER BY created_at DESC, id LIMIT $2`, [study.id, limit]);
+    const out = [];
+    for (const row of rows) {
+      if (row.kind === "campaign") {
+        const view = presentCampaign(row);
+        const finalists = list(view.finalists).map((key) => view.candidates.find((candidate) => candidate.key === key)).filter(Boolean).map((candidate) => ({
+          index: candidate.index + 1, design: candidate.set, status: candidate.status, objective: candidate.objective.final,
+          constraints: candidate.constraints.map((constraint) => ({ measure: constraint.measure, label: constraint.label, op: constraint.op, bound: constraint.bound, verdict: constraint.final })),
+          resultIds: candidate.resultIds }));
+        const at = (/** @type {string | null} */ key) => (key ? view.candidates.find((candidate) => candidate.key === key) ?? null : null);
+        const best = at(view.best);
+        out.push({ id: view.id, kind: "campaign", question: view.question, method: view.method, methodVersion: view.methodVersion, status: view.status,
+          stop: view.stop, objective: view.objective, constraints: view.constraints,
+          best: best ? { index: best.index + 1, design: best.set, objective: best.objective.final } : null,
+          undecided: view.undecided ? { closest: view.undecided.closest, advice: view.undecided.advice } : null,
+          finalists, budget: view.budget, premises: view.premises, createdAt: view.createdAt });
+      } else {
+        const view = await reader.#presentExperiment(study, row, { design: true });
+        out.push({ id: view.id, kind: "experiment", experimentKind: view.experimentKind, question: view.question, purpose: view.purpose, status: view.status,
+          arms: view.arms, comparison: view.comparison, alignment: view.alignment, incomplete: view.incomplete, premises: view.premises, createdAt: view.createdAt });
+      }
+    }
+    return out;
+  }
+
+  /** @param {{ id: string }} study @param {any} row @param {{ design?: boolean }} [options] `design`: keep each arm's scenario (the report's pairing of a result with its design) */
+  async #presentExperiment(study, row, { design = false } = {}) {
     const record = object(row.manifest);
     const disease = record.kind === "disease";
     const held = object(object(row.state).arms);
@@ -440,7 +477,7 @@ export class VcrExperiments {
     return {
       id: String(row.id), kind: "experiment", experimentKind: disease ? "disease" : "design", question: String(record.question ?? ""), purpose: String(record.purpose ?? ""),
       status: incomplete.some((name) => arms.find((arm) => arm.name === name)?.status === "running") ? "running" : "complete",
-      arms: arms.map(({ evaluation: _e, scenario: _s, beyond: _b, ...arm }) => arm), comparison, alignment: alignment.map(({ values: _v, ...rest }) => rest), incomplete,
+      arms: arms.map(({ evaluation: _e, scenario, beyond: _b, ...arm }) => (design ? { ...arm, design: scenario } : arm)), comparison, alignment: alignment.map(({ values: _v, ...rest }) => rest), incomplete,
       premises: finishPremises([
         { key: "lab:aligned", label: "比较的前提", value: alignment.every((entry) => entry.aligned) ? "各组用同一个终点和同一套分析设置。"
           : `各组的${alignment.filter((entry) => !entry.aligned).map((entry) => ALIGNED_FIELD_TEXT_ZH[/** @type {keyof typeof ALIGNED_FIELD_TEXT_ZH} */ (entry.field)]).join("、")}不一致或未知，差值只能对照着看。`,

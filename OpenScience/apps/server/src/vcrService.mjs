@@ -1740,7 +1740,10 @@ export class VcrService {
         .map((/** @type {any} */ row) => [String(row.id), { id: String(row.id), method: String(row.method) }])) : null;
     const report = vcrReportModel({ study, definition, assumptions, results, reviews: reviews.map(review => ({ ...review, current: vcrReviewIsCurrent(review, { results, stale, current, exports }) })), staleMarks: stale, population, comparator,
       scenarios, models, seal: vcrSealState(study), modelAnalysis, schedule, contacts, executions });
-    return this.packages.longitudinal ? {...report,longitudinal:await this.packages.longitudinal.view(study,{all:true},store)} : report;
+    // the virtual lab's experiments and campaigns, each result beside its own design and each under its premises (absent when the study has none)
+    const lab = await /** @type {any} */ (this.packages).experiments?.reportBlock?.(study, store) ?? [];
+    const withLab = lab.length ? { ...report, lab } : report;
+    return this.packages.longitudinal ? {...withLab,longitudinal:await this.packages.longitudinal.view(study,{all:true},store)} : withLab;
   }
 
   /**
