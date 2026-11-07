@@ -1324,7 +1324,12 @@ export function presentTrialTab(bundle) {
     headline: (primaryCard ? cardHeadline(primaryCard.card, designs) : null) ?? trialHeadline(designs, { primary: headlineRow ? designs.find((design) => design.id === headlineRow.id) : null, asked: Boolean(askedRow) }),
     ademp: primaryCard ? adempOf(bundle, null) : adempOf(bundle, headlineRow?._scenario ?? scenarios[0] ?? null, object(headlineRow?._result?.diagnostics), headlineRow?._stages ?? {}),
     // 「这个结论的前提」: the numbers the headline design's result stands on, where each came from, and the defaults among them.
-    premises: primaryCard ? list(primaryCard.card.premises) : headlineRow ? vcrPremises("trial", trialPremiseInput(bundle, headlineRow)) : [],
+    // With no design asked for or chosen and several on the page, the block holds only what every one of them stands on: the last design's
+    // numbers above a table of other designs read as the page's (live D3: the null check's hazard ratio of 1 above designs at 0.75).
+    premises: primaryCard ? list(primaryCard.card.premises)
+      : headlineRow ? (!asked && !chosenRow && live.filter((design) => designRows.some((row) => row.id === design.id && row._result)).length > 1
+        ? premisesInCommon(designRows.filter((row) => !row.dominated && row._result).map((row) => vcrPremises("trial", trialPremiseInput(bundle, row))))
+        : vcrPremises("trial", trialPremiseInput(bundle, headlineRow))) : [],
     // What the sample size rests on, one input at a time, and the power the effect's published shrinkage leaves (C6).
     sensitivity: trialSensitivity(headlineRow),
     // The yardstick the trade-off is drawn against when nobody wrote one: alpha and the target power (C7).
@@ -1367,6 +1372,17 @@ export function presentTrialTab(bundle) {
     stale: staleNote(marks),
     partial: partialOf(bundle, ["trial_scenario", "design_grid"], "这次模拟"),
   };
+}
+
+/**
+ * The premises every one of several designs states alike: the same key, value and word in each list, in the first list's order.
+ * @param {ReadonlyArray<ReadonlyArray<Record<string, any>>>} lists
+ * @returns {Array<Record<string, any>>}
+ */
+function premisesInCommon(lists) {
+  const [first = [], ...others] = lists;
+  const same = (/** @type {Record<string, any>} */ a, /** @type {Record<string, any>} */ b) => a.key === b.key && JSON.stringify(a.value) === JSON.stringify(b.value) && a.source === b.source;
+  return first.filter((row) => others.every((other) => other.some((entry) => same(entry, row))));
 }
 
 /**

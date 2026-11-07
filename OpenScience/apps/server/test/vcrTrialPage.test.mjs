@@ -69,8 +69,9 @@ test("a page of more than three designs is about ONE: the first sentence, the pr
   const tab = presentTrialTab(bundleOf(five()));
   assert.match(tab.headline, /^方案 E（固定样本两组比较，风险比 0\.85） 需要 1,592 例事件、2,500 名患者；页面上另有 4 个方案，各在下面的表里。$/);
   assert.ok(!/方案 [ABCD] /.test(tab.headline), "the first three are not listed");
-  const effect = tab.premises.find((row) => row.key === "effect");
-  assert.match(String(effect.value), /0\.85/, "the premises are E's");
+  // D3: with several designs and none asked for or chosen, the block holds only what they all stand on, never the last one's numbers alone
+  assert.equal(tab.premises.find((row) => row.key === "effect"), undefined, "the effect differs from design to design: it is not the page's");
+  assert.ok(tab.premises.find((row) => row.key === "control"), "the control median every design shares stays");
   assert.ok(tab.ademp.some((line) => /0\.85/.test(line.text)), "so are the data-generation lines");
   // three designs or fewer keep the sentence that compares them
   const three = presentTrialTab(bundleOf(five().slice(0, 3)));
@@ -147,4 +148,16 @@ test('a result uses its producing job and exact assumption version after later e
   const after = presentTrialTab(bundle);
   assert.deepEqual(after.premises,before.premises);
   assert.equal(after.headline,before.headline);
+});
+
+test("the lab overview does not read as the last design when that one is the null check of the others (live D3)", () => {
+  const truth = (/** @type {number} */ hazardRatio) => ({ truth: { hazardRatio, controlMedian: 12 } });
+  const designs = [design(1, { configuration: truth(0.75) }), design(2, { configuration: truth(0.75) }), design(3, { configuration: truth(1) })];
+  const overview = presentTrialTab(bundleOf(designs));
+  assert.ok(!overview.premises.some((row) => /(^|[^\d.])1(\.0)?([^\d.]|$)/.test(String(row.value)) && row.key === "effect"), "the null check's hazard ratio of 1 is not the overview's");
+  assert.equal(overview.premises.find((row) => row.key === "effect"), undefined);
+  const same = presentTrialTab(bundleOf(designs.slice(0, 2)));
+  assert.match(String(same.premises.find((row) => row.key === "effect")?.value), /0\.75/, "what every design shares stays");
+  assert.match(String(presentTrialTab({ ...bundleOf(designs), askedObject: "scn_3" }).premises.find((row) => row.key === "effect")?.value), /1/, "a design asked for reads as itself");
+  assert.match(String(presentTrialTab(bundleOf(designs.slice(2))).premises.find((row) => row.key === "effect")?.value), /1/, "one design on the page reads as itself");
 });
