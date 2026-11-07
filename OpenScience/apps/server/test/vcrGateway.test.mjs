@@ -2014,3 +2014,22 @@ test("the lab's actions reach the experiments package with the study and the ori
   }
   assert.equal(asked.length, 5, "a refused call reaches nothing");
 });
+
+test("a lab answer passes the small-cell boundary: a compared people count is hidden by its name, the run's own manifest stays (review eng P0-1)", async () => {
+  const { call, made } = conversationCalls("https://evimed.example");
+  made.vcr.experiments = {
+    async view(/** @type {any} */ _study, /** @type {string} */ id) {
+      return id.startsWith("exp_")
+        ? { id, kind: "experiment", comparison: [{ measure: "cohort_size", arms: [{ name: "A", value: { name: "cohort_size", value: 3 } }, { name: "B", value: { name: "cohort_size", value: 41 } }],
+          contrasts: [{ arm: "B", against: "A", difference: { name: "cohort_size", value: 38 } }] }], arms: [{ name: "A", counts: { realPatients: 3 } }] }
+        : { id, kind: "campaign", stages: { final: { count: 3, replicates: "floor" } }, budget: { declared: { maxCandidates: 4, cpuSeconds: 60 }, used: { units: 2 } } };
+    },
+  };
+  const read = (await call("simulate", { action: "compare_status", experimentId: "exp_1" })).json().data;
+  assert.equal(read.comparison[0].arms[0].value.value, null, "a cohort of three is not a number a model reads");
+  assert.equal(read.arms[0].counts.realPatients, null);
+  const campaign = (await call("simulate", { action: "search_status", campaignId: "cmp_1" })).json().data;
+  assert.deepEqual(campaign.stages, { final: { count: 3, replicates: "floor" } }, "the number of finalists is the run's own setting, not people");
+  assert.deepEqual(campaign.budget.declared, { maxCandidates: 4, cpuSeconds: 60 });
+  assert.equal(campaign.resultEntry.tab, "trial");
+});

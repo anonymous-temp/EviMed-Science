@@ -853,6 +853,9 @@ export function createVcrRoutes(dependencies) {
         // First: the run's own end advances the programme, and by then there must be nothing left for it to take up.
         const held = hooks.orchestrator?.holdProgramme
           ? (await hooks.orchestrator.holdProgramme(study.id).catch(() => ({ held: [] }))).held : [];
+        // the study's design searches stop before their units are cancelled, so none moves on to its next candidate (review eng P1-2)
+        const lab = service.packages?.experiments ?? null;
+        if (lab?.cancelStudy) await lab.cancelStudy(study).catch(() => 0);
         const { flight } = await readRunMarks(data(), study.id).catch(() => ({ flight: null }));
         /** @type {string | null} */
         let runId = null;

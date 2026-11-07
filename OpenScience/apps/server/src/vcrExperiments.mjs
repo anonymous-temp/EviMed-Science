@@ -24,6 +24,14 @@
  *   database) leaves the decided unit for `repair()`.
  * - **The model proposes and reads; code decides.** Nothing here interprets text. The view's sentences are fixed Chinese words for
  *   closed codes; every number is the engine's, judged by the domain's bounds.
+ * - **An experiment attaches designs, never people** (review eng P0-1). A saved result joins an experiment only when it is a design's
+ *   (`VCR_EXPERIMENT_ATTACHABLE_KINDS`) and was computed at its method's normal precision: a population, a matching or a data profile
+ *   holds head counts the comparison would hand on as numbers, and a campaign's screening run is not a result (stats P2-5). Every
+ *   compared value keeps its measure's name, so the model boundary's by-name rule can judge it.
+ * - **A cancelled unit stops its campaign** (review eng P1-2). Whoever cancelled it — the campaign's own cancel, the study's 「停止」,
+ *   a job cancel from a run or the page — the campaign stops with `user_cancellation` once the unit is recorded; it never moves on
+ *   to the next candidate, and the cancelled unit is not a model failure. A decided unit that has no job yet when a cancel arrives is
+ *   never started.
  *
  * @module vcrExperiments
  */
@@ -41,6 +49,12 @@ import { ALZHEIMER_PARAMETERS_TEXT, ALZHEIMER_REGULATORY_TEXT, ALZHEIMER_REPRODU
 import { measureLabel, measureValue } from "./vcrViewsKit.mjs";
 
 const SCHEMA = "evimed_vcr";
+/**
+ * The saved results an experiment may attach: what a design states about itself (trial scenarios, grids, the confirmatory, dose,
+ * Bayesian and win-ratio designs, the disease-response trial, and a campaign's final evaluations). None counts a study's people.
+ */
+export const VCR_EXPERIMENT_ATTACHABLE_KINDS = Object.freeze(["trial_scenario", "design_grid", "design_confirmatory", "design_dose", "design_bayesian",
+  "design_win_ratio", "progression_simulation", "experiment_candidate"]);
 const TERMINAL = new Set(["succeeded", "failed", "canceled"]);
 /** @param {unknown} value @returns {Record<string, any>} */
 const object = (value) => (value && typeof value === "object" && !Array.isArray(value) ? /** @type {Record<string, any>} */ (value) : {});
@@ -141,8 +155,11 @@ export class VcrExperiments {
       const decided = await this.store.transaction(async (/** @type {any} */ client) => {
         const row = (await client.query(`SELECT * FROM ${SCHEMA}.experiments WHERE id = $1 AND study_id = $2 FOR UPDATE`, [id, studyId])).rows[0];
         if (!row || row.kind !== "campaign" || row.status !== "running") return null;
-        const state = object(row.state);
-        if (state.inFlight) return state.inFlight.jobId ? null : { row, unit: state.inFlight.unit, state };
+        let state = object(row.state);
+        if (state.inFlight?.jobId) return null;
+        // a decided unit with no job is enqueued again, unless the campaign was cancelled meanwhile: then it is never started (review eng P2-2)
+        if (state.inFlight && state.cancelRequested !== true) return { row, unit: state.inFlight.unit, state };
+        if (state.inFlight) state = { ...state, inFlight: null };
         const { state: next, action } = vcrCampaignAdvance(row.manifest, state, { identity: row.identity });
         if (action.type === "evaluate") {
           next.inFlight = { unitKey: action.unit.key, unit: action.unit, jobId: null, decidedAt: this.now().toISOString() };
@@ -206,13 +223,15 @@ export class VcrExperiments {
     const job = await this.store.one(`SELECT * FROM ${SCHEMA}.jobs WHERE id = $1 AND study_id = $2`, [jobId, studyId]);
     if (!job || !TERMINAL.has(String(job.state))) return;
     const execution = await this.store.one(`SELECT * FROM ${SCHEMA}.executions WHERE job_id = $1 ORDER BY created_at DESC LIMIT 1`, [jobId]);
+    // every attempt of a resubmitted job spent CPU, not only the last one (review eng P2-5)
+    const spent = await this.store.one(`SELECT COALESCE(SUM(cpu_seconds), 0) AS cpu, COUNT(*) AS runs FROM ${SCHEMA}.executions WHERE job_id = $1`, [jobId]);
     const result = await this.store.resultOfJob(studyId, jobId);
     const evaluation = object(object(result?.diagnostics).evaluation);
     await this.#settleOutcome(studyId, id, unitKey, jobId, {
       jobId, resultId: result?.id ?? null, state: String(job.state), seed: job.seed == null ? null : Number(job.seed),
       replicates: execution?.replicates == null ? (Number.isInteger(evaluation.replicates) ? evaluation.replicates : null) : Number(execution.replicates),
       precision: evaluation.purpose ?? undefined, measures: list(result?.measures),
-      cpuSeconds: Number(execution?.cpu_seconds ?? job.cpu_seconds_used ?? 0) || 0,
+      cpuSeconds: Number(Number(spent?.runs ?? 0) > 0 ? spent?.cpu : job.cpu_seconds_used ?? 0) || 0,
       queueSeconds: seconds(job.created_at, execution?.started_at ?? job.finished_at), wallSeconds: seconds(job.created_at, job.finished_at),
       issues: [object(job.error).code].filter(Boolean), drawSignature: evaluation.drawSignature ?? null, rejects: evaluation.rejects ?? null,
     });
@@ -260,12 +279,33 @@ export class VcrExperiments {
    */
   async cancel(study, id, { actor = "runtime" } = {}) {
     const row = await this.store.one(`UPDATE ${SCHEMA}.experiments SET state = jsonb_set(state, '{cancelRequested}', 'true'::jsonb),
-      revision = revision + 1, updated_at = now() WHERE id = $1 AND study_id = $2 AND kind = 'campaign' RETURNING *`, [id, study.id]);
+      revision = revision + 1, updated_at = now() WHERE id = $1 AND study_id = $2 RETURNING *`, [id, study.id]);
     if (!row) throw new HttpError(404, "vcr_experiment_not_found", "这个实验方案不属于本研究。");
+    if (row.kind === "experiment") {
+      // a design experiment's arms are ordinary jobs: each one still open is cancelled, and what finished stays (review eng P2-4)
+      for (const entry of Object.values(object(object(row.state).arms)).map(object)) {
+        if (!entry.jobId) continue;
+        const job = await this.store.one(`SELECT state FROM ${SCHEMA}.jobs WHERE id = $1 AND study_id = $2`, [entry.jobId, study.id]);
+        if (job && !TERMINAL.has(String(job.state))) await this.jobs.cancel(study.id, String(entry.jobId), { actor }).catch(() => null);
+      }
+      return this.view(study, id);
+    }
     const jobId = object(object(row.state).inFlight).jobId;
     if (jobId && row.status === "running") await this.jobs.cancel(study.id, String(jobId), { actor });
     await this.advance(study.id, id);
     return this.view(study, id);
+  }
+
+  /**
+   * The study's 「停止」: every running campaign of the study is asked to stop before its jobs are cancelled, so a unit that was decided
+   * and not yet queued is never started and none moves on to its next candidate (review eng P1-2). Returns how many were asked.
+   * @param {{ id: string }} study
+   */
+  async cancelStudy(study) {
+    const rows = await this.store.rows(`UPDATE ${SCHEMA}.experiments SET state = jsonb_set(state, '{cancelRequested}', 'true'::jsonb),
+      revision = revision + 1, updated_at = now() WHERE study_id = $1 AND kind = 'campaign' AND status = 'running' RETURNING id`, [study.id]);
+    for (const row of rows) await this.advance(study.id, String(row.id)).catch((error) => this.report(String(/** @type {any} */ (error)?.code ?? "vcr_experiment_cancel_failed")));
+    return rows.length;
   }
 
   // --- design experiments ------------------------------------------------------------------------------------------------------
@@ -276,11 +316,18 @@ export class VcrExperiments {
    * @param {{ id: string, userId: string }} study @param {unknown} input @param {{ userId: string, origin?: Record<string, any> | null }} who
    */
   async startExperiment(study, input, { userId, origin = null }) {
-    const { record, issues } = vcrDesignExperiment(input, { methods: VCR_ENGINE_METHODS });
+    const { record, issues } = vcrDesignExperiment(input, { methods: VCR_ENGINE_METHODS, measures: VCR_CAMPAIGN_METHODS });
     if (!record) throw invalid("vcr_experiment_invalid", "实验设置不完整：", issues);
     for (const [index, arm] of record.arms.entries()) {
-      if (arm.resultId && !(await this.store.result(study.id, arm.resultId))) {
-        throw invalid("vcr_experiment_invalid", "实验设置不完整：", [{ code: "experiment_result_unknown", field: `arms[${index}].resultId`, detail: "This study has no such result." }]);
+      if (!arm.resultId) continue;
+      const field = `arms[${index}].resultId`;
+      const held = await this.store.result(study.id, arm.resultId);
+      if (!held) throw invalid("vcr_experiment_invalid", "实验设置不完整：", [{ code: "experiment_result_unknown", field, detail: "This study has no such result." }]);
+      if (!VCR_EXPERIMENT_ATTACHABLE_KINDS.includes(String(held.kind))) {
+        throw invalid("vcr_experiment_invalid", "实验设置不完整：", [{ code: "experiment_result_kind_unsupported", field, detail: `An experiment attaches a design's result (${VCR_EXPERIMENT_ATTACHABLE_KINDS.join(", ")}), never a ${held.kind}.` }]);
+      }
+      if (object(object(held.diagnostics).evaluation).purpose === "screening" || list(held.measures).some((measure) => object(measure).precision === "screening")) {
+        throw invalid("vcr_experiment_invalid", "实验设置不完整：", [{ code: "experiment_result_screening", field, detail: "A screening run is not a result: attach a design computed at its method's normal precision." }]);
       }
     }
     const identity = sha256(vcrDesignExperimentCanonical(record));
@@ -291,26 +338,31 @@ export class VcrExperiments {
     if (inserted) this.counters.experiments += 1;
     /** @type {Record<string, any>} */
     const arms = {};
-    for (const arm of record.arms) {
-      if (arm.resultId) { arms[arm.name] = { resultId: arm.resultId }; continue; }
-      const kind = Object.entries(/** @type {Record<string, string>} */ (VCR_JOB_METHODS)).find(([, method]) => method === arm.method)?.[0];
-      const campaignInfo = /** @type {Record<string, any>} */ (VCR_CAMPAIGN_METHODS)[arm.method];
-      const runsWithBlock = Boolean(campaignInfo) && campaignInfo.exact !== true && campaignInfo.precisionBlock !== false;
-      const scenario = runsWithBlock ? { ...arm.scenario, evaluation: { version: 1 } } : arm.scenario;
-      // arms that draw identically share a seed, so their comparison can be paired; the engine's draw signature confirms it
-      const drawKey = arm.method === "design.simulate" ? vcrCampaignDrawKey({ space: { method: arm.method, scenario: arm.scenario } }, { key: arm.name, set: {} }) : `own:${arm.name}`;
-      try {
-        const { job } = await this.jobs.enqueue({ studyId: study.id, userId: String(userId), kind, scenario, inputs: [], internal: true,
-          seed: vcrCampaignSeed(identity, "experiment", "arm", drawKey), idempotencyKey: `vcr-experiment:${identity.slice(0, 24)}:${sha256(arm.name).slice(0, 12)}`,
-          detail: { resultKind: "experiment_candidate", subjectId: `${id}:${sha256(arm.name).slice(0, 12)}`, experiment: { id, arm: arm.name } } });
-        arms[arm.name] = { jobId: job.id };
-      } catch (error) {
-        if (Number(/** @type {any} */ (error)?.status) !== 400) throw error;
-        arms[arm.name] = { refused: list(/** @type {any} */ (error)?.issues).map((issue) => String(object(issue).code)).slice(0, 5) };
-      }
-    }
-    await this.store.query(`UPDATE ${SCHEMA}.experiments SET state = $3::jsonb, revision = revision + 1, updated_at = now() WHERE id = $1 AND study_id = $2`,
+    // the arms queued so far are written down whatever happens to the next one, so a failed start keeps what it began (review eng P2-4)
+    const keep = async () => this.store.query(`UPDATE ${SCHEMA}.experiments SET state = $3::jsonb, revision = revision + 1, updated_at = now() WHERE id = $1 AND study_id = $2`,
       [id, study.id, JSON.stringify({ arms })]);
+    try {
+      for (const arm of record.arms) {
+        if (arm.resultId) { arms[arm.name] = { resultId: arm.resultId }; continue; }
+        const kind = Object.entries(/** @type {Record<string, string>} */ (VCR_JOB_METHODS)).find(([, method]) => method === arm.method)?.[0];
+        const campaignInfo = /** @type {Record<string, any>} */ (VCR_CAMPAIGN_METHODS)[arm.method];
+        const runsWithBlock = Boolean(campaignInfo) && campaignInfo.exact !== true && campaignInfo.precisionBlock !== false;
+        const scenario = runsWithBlock ? { ...arm.scenario, evaluation: { version: 1 } } : arm.scenario;
+        // arms that draw identically share a seed, so their comparison can be paired; the engine's draw signature confirms it
+        const drawKey = arm.method === "design.simulate" ? vcrCampaignDrawKey({ space: { method: arm.method, scenario: arm.scenario } }, { key: arm.name, set: {} }) : `own:${arm.name}`;
+        try {
+          const { job } = await this.jobs.enqueue({ studyId: study.id, userId: String(userId), kind, scenario, inputs: [], internal: true,
+            seed: vcrCampaignSeed(identity, "experiment", "arm", drawKey), idempotencyKey: `vcr-experiment:${identity.slice(0, 24)}:${sha256(arm.name).slice(0, 12)}`,
+            detail: { resultKind: "experiment_candidate", subjectId: `${id}:${sha256(arm.name).slice(0, 12)}`, experiment: { id, arm: arm.name } } });
+          arms[arm.name] = { jobId: job.id };
+        } catch (error) {
+          if (Number(/** @type {any} */ (error)?.status) !== 400) throw error;
+          arms[arm.name] = { refused: list(/** @type {any} */ (error)?.issues).map((issue) => String(object(issue).code)).slice(0, 5) };
+        }
+      }
+    } finally {
+      await keep();
+    }
     return { created: Boolean(inserted), ...(await this.view(study, id)) };
   }
 
@@ -357,12 +409,13 @@ export class VcrExperiments {
       measure: name, label: measureLabel(name),
       arms: arms.map((arm) => {
         const measure = arm.evaluation ? vcrEvaluationMeasure(arm.evaluation, name) : null;
-        return { name: arm.name, status: arm.status, value: measure ? measureValue(measure, { kind: "experiment_candidate" }) : null, precision: measure?.precision ?? null };
+        // the measure's name rides with its value, so the model boundary's by-name rule can judge it
+        return { name: arm.name, status: arm.status, value: measure ? { name, ...measureValue(measure, { kind: "experiment_candidate" }) } : null, precision: measure?.precision ?? null };
       }),
       contrasts: reference?.evaluation ? arms.filter((arm) => arm !== reference && arm.evaluation).map((arm) => {
         const contrast = vcrEvaluationContrast(/** @type {any} */ (arm.evaluation), reference.evaluation, name);
         return { arm: arm.name, against: reference.name, coupling: contrast.coupling, couplingText: COUPLING_TEXT_ZH[/** @type {keyof typeof COUPLING_TEXT_ZH} */ (contrast.coupling)] ?? null,
-          difference: contrast.difference == null ? null : measureValue({ name, value: contrast.difference, mcse: contrast.mcse ?? undefined, simulated: contrast.mcse != null }, { kind: "experiment_candidate" }) };
+          difference: contrast.difference == null ? null : { name, ...measureValue({ name, value: contrast.difference, mcse: contrast.mcse ?? undefined, simulated: contrast.mcse != null }, { kind: "experiment_candidate" }) } };
       }) : [],
     }));
     const alignment = vcrExperimentAlignment(arms.map((arm) => ({ name: arm.name, scenario: arm.scenario })), disease ? VCR_DISEASE_EXPERIMENT_ALIGNED_FIELDS : undefined);

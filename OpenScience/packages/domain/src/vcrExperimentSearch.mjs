@@ -720,7 +720,9 @@ export function vcrCandidateVerdicts(manifest, entry, stage) {
 
 /**
  * Record a finished unit and return the next state (pure). A failed unit counts towards the consecutive-failure stop; an unsupported
- * one (refused by validation before it ran) marks its candidate unsupported and does not.
+ * one (refused by validation before it ran) marks its candidate unsupported and does not. A cancelled unit is neither: whoever
+ * cancelled it, the campaign is being stopped (`cancelRequested`), so the next decision is `user_cancellation`, never the next
+ * candidate (review eng P1-2).
  * @param {Record<string, any>} manifest @param {Record<string, any>} state
  * @param {{ key: string, candidate?: string, stage: string, truth?: string }} unit
  * @param {Record<string, any>} outcome `{ jobId, state, measures, replicates, precision, cpuSeconds, queueSeconds, wallSeconds, issues, unsupported?, drawSignature?, rejects?, resultId? }`
@@ -742,9 +744,11 @@ export function vcrCampaignRecord(manifest, state, unit, outcome) {
   next.usage.queueSeconds += evaluation.queueSeconds
   next.usage.wallSeconds += evaluation.wallSeconds
   next.usage.replicatesCompleted += Number.isInteger(evaluation.replicates) ? evaluation.replicates : 0
+  const canceled = outcome.state === 'canceled'
+  if (canceled) next.cancelRequested = true
   if (unit.stage === 'analytic') {
     next.analytic[unit.key] = evaluation
-    next.consecutiveFailures = outcome.state === 'succeeded' ? 0 : outcome.unsupported ? next.consecutiveFailures : next.consecutiveFailures + 1
+    next.consecutiveFailures = outcome.state === 'succeeded' ? 0 : outcome.unsupported || canceled ? next.consecutiveFailures : next.consecutiveFailures + 1
     return next
   }
   const entry = next.candidates[/** @type {string} */ (unit.candidate)]
@@ -752,9 +756,11 @@ export function vcrCampaignRecord(manifest, state, unit, outcome) {
   entry.evaluations[`${unit.stage}:${unit.truth}`] = evaluation
   if (outcome.unsupported) {
     entry.status = 'unsupported'; entry.reason = evaluation.issues[0] ?? 'candidate_unsupported'
+  } else if (canceled) {
+    // not a failure of the model, and not a verdict on the candidate: the campaign stops here
   } else if (outcome.state !== 'succeeded') {
     next.consecutiveFailures += 1
-    if (outcome.state !== 'canceled') { entry.status = 'failed'; entry.reason = evaluation.issues[0] ?? 'evaluation_failed' }
+    entry.status = 'failed'; entry.reason = evaluation.issues[0] ?? 'evaluation_failed'
   } else {
     next.consecutiveFailures = 0
     if (unit.stage === 'screening') {

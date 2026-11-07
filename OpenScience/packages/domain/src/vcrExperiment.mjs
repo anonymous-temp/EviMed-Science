@@ -17,6 +17,7 @@
 
 import { canonicalScenarioJson } from './vcrEngineJob.mjs'
 import { VCR_PREDICTION_MODES } from './vcrModelUse.mjs'
+import { VCR_PEOPLE_COUNT_MEASURES } from './vcrVocabulary.mjs'
 
 /** The fields a version freezes, in the order the record is written. */
 export const VCR_EXPERIMENT_FIELDS = Object.freeze([
@@ -90,11 +91,17 @@ const pathValue = (source, path) => path.split('.').reduce((/** @type {any} */ n
  * A design experiment as it is frozen: the question, the arms (each either an existing saved result by id, or a design method,
  * its version and its scenario to run), and the comparison (which measures, against which arm). Only known fields; a changed arm, a
  * changed scenario or a changed comparison is a new experiment.
+ *
+ * The comparison reads only what a design states about itself (review eng P0-1): a measure that counts a study's people
+ * (`VCR_PEOPLE_COUNT_MEASURES`) is refused by name, and when the run arms' methods declare what they measure (`registry.measures`, the
+ * campaign table `VCR_CAMPAIGN_METHODS`), a compared measure is one of those. Which saved results may be attached is the caller's check:
+ * it holds the store.
  * @param {unknown} input
- * @param {{ methods: Record<string, { version: string }> }} registry the engine's method registry (`VCR_ENGINE_METHODS`)
+ * @param {{ methods: Record<string, { version: string }>, measures?: Record<string, { measures: Record<string, string> }> }} registry the
+ *   engine's method registry (`VCR_ENGINE_METHODS`) and, optionally, the measures each method declares
  * @returns {{ record: Record<string, any> | null, issues: Array<{ code: string, field: string, detail: string }> }}
  */
-export function vcrDesignExperiment(input, { methods }) {
+export function vcrDesignExperiment(input, { methods, measures: declared = {} }) {
   const L = VCR_DESIGN_EXPERIMENT_LIMITS
   /** @type {Array<{ code: string, field: string, detail: string }>} */
   const issues = []
@@ -131,6 +138,16 @@ export function vcrDesignExperiment(input, { methods }) {
   const measures = Array.isArray(comparisonIn.measures) ? comparisonIn.measures.map(String) : []
   if (!measures.length || measures.length > L.maxMeasures || measures.some((name) => !/^[a-z][a-z0-9_]{0,63}$/.test(name))) {
     bad('experiment_value_invalid', 'comparison.measures', `A comparison names 1 to ${L.maxMeasures} measures.`)
+  }
+  measures.forEach((name, i) => {
+    if (VCR_PEOPLE_COUNT_MEASURES.includes(name)) bad('experiment_measure_unsupported', `comparison.measures[${i}]`, `${name} counts a study's people: an experiment compares what designs state, never who is in a study.`)
+  })
+  const stated = running.map((arm) => declared[/** @type {any} */ (arm).method]?.measures).filter(Boolean)
+  if (stated.length) {
+    const known = new Set(stated.flatMap((table) => Object.keys(/** @type {Record<string, string>} */ (table))))
+    measures.forEach((name, i) => {
+      if (!known.has(name) && !VCR_PEOPLE_COUNT_MEASURES.includes(name)) bad('experiment_measure_unsupported', `comparison.measures[${i}]`, `No arm's method measures ${name}.`)
+    })
   }
   const reference = typeof comparisonIn.reference === 'string' ? comparisonIn.reference : arms[0]?.name ?? null
   if (!arms.some((arm) => arm.name === reference)) bad('experiment_value_invalid', 'comparison.reference', 'The contrast is against one of the arms.')

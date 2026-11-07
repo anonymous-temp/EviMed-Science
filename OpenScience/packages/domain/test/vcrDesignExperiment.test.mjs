@@ -41,3 +41,13 @@ test('alignment says which frozen definitions the arms share and never counts an
   assert.equal(two.endpoint.aligned, true)
   assert.equal(two['analysis.alpha'].aligned, false)
 })
+
+test('a comparison reads what designs state: a people count is refused by name, and an undeclared measure of a declared method (review eng P0-1)', async () => {
+  const { VCR_CAMPAIGN_METHODS } = await import('../src/vcrExperimentSearch.mjs')
+  const codes = (/** @type {any} */ input, /** @type {any} */ registry = { methods }) => vcrDesignExperiment(input, registry).issues.map((issue) => `${issue.code}@${issue.field}`)
+  const attachedOnly = { question: 'q', arms: [{ name: 'A', resultId: 'res_a' }, { name: 'B', resultId: 'res_b' }], comparison: { measures: ['cohort_size'] } }
+  assert.deepEqual(codes(attachedOnly), ['experiment_measure_unsupported@comparison.measures[0]'])
+  assert.deepEqual(codes({ ...three, comparison: { measures: ['power', 'made_up'], reference: '小' } }, { methods, measures: VCR_CAMPAIGN_METHODS }),
+    ['experiment_measure_unsupported@comparison.measures[1]'])
+  assert.deepEqual(codes(three, { methods, measures: VCR_CAMPAIGN_METHODS }), [])
+})

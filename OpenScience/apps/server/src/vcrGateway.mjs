@@ -2842,7 +2842,15 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
               : lab.action === "search_cancel" ? await vcr.experiments.cancel(study, lab.ref, { actor: "runtime" })
               : await vcr.experiments.view(study, lab.ref);
             if (["search", "compare"].includes(lab.action)) await nameWhatItHolds(vcr, study);
-            return { action: lab.action, ...answer, resultEntry: vcrResultEntry({ studyId: study.id, tab: "trial", publicUrl: config?.publicUrl ?? null }) };
+            // What a run reads of an experiment passes the small-cell boundary like every other read (review eng P0-1). The frozen
+            // stage sizes and budget are the manifest the run itself sent, never people, and are given back as they were.
+            if (typeof vcr.service.forModel !== "function") throw gatewayError(503, "vcr_gateway_unavailable", "这份读取结果无法确认不含小样本格子，已整体拒绝。");
+            const safe = await vcr.service.forModel({ action: lab.action, ...answer }, { projection: "lab" });
+            if (answer?.kind === "campaign" && safe && typeof safe === "object") {
+              if (answer.stages !== undefined) safe.stages = answer.stages;
+              if (answer.budget?.declared !== undefined && safe.budget) safe.budget.declared = answer.budget.declared;
+            }
+            return { ...safe, resultEntry: vcrResultEntry({ studyId: study.id, tab: "trial", publicUrl: config?.publicUrl ?? null }) };
           }
           if (!vcr.jobs) {
             throw gatewayError(503, "vcr_gateway_unavailable", "作业队列在本部署尚未接入：这一步暂不可用。");

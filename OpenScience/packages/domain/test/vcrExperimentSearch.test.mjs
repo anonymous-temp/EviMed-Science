@@ -315,3 +315,12 @@ test('contrasts follow the coupling the runs really had', () => {
   assert.equal(independent.coupling, 'independent')
   assert.ok(Math.abs(Number(independent.mcse) - Math.sqrt(0.125 ** 2 + 0.121 ** 2)) < 1e-12)
 })
+
+test('a unit cancelled from outside stops the campaign as a cancellation, not a model failure, and no next candidate starts (review eng P1-2)', () => {
+  const engine = (/** @type {any} */ unit) => (unit.key === 'c000:screening:alternative' ? { jobId: `job_${unit.key}`, state: 'canceled', issues: [], cpuSeconds: 1 } : fakeOutcome(unit))
+  const { action, state, units } = drive(frozen(), engine)
+  assert.equal(action.reason, 'user_cancellation')
+  assert.equal(units.length, 1, 'the next candidate is never evaluated')
+  assert.equal(state.consecutiveFailures, 0)
+  assert.equal(state.candidates.c000.status, 'pending', 'the cancelled candidate is not judged')
+})

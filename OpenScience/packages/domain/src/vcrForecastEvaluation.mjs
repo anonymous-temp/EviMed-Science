@@ -367,7 +367,7 @@ export function compareVersionsToObserved(older, newer, outcomes, options = {}) 
     if (rows.length > 0) anyObserved = true
     if (base.dataClass === 'synthetic') return shown
     const small = (/** @type {number} */ count) => count >= 1 && count < minCell
-    const hide = (/** @type {string[]} */ keys) => { for (const key of keys) shown[key] = null; shown.suppressed = [...new Set([...(shown.suppressed ?? []), ...keys])] }
+    const hide = (/** @type {string[]} */ keys) => { for (const name of keys) shown[name] = null; shown.suppressed = [...new Set([...(shown.suppressed ?? []), ...keys])] }
     if (small(shown.pairedPredictions)) hide(['pairedPredictions'])
     if (small(rows.length)) hide(['observed', 'observedMean', 'olderMean', 'newerMean', 'olderError', 'newerError', 'newerCloser', 'olderCloser'])
     else if (small(shown.newerCloser) || small(shown.olderCloser) || small(rows.length - shown.newerCloser - shown.olderCloser)) hide(['newerCloser', 'olderCloser'])
