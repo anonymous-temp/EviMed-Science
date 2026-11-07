@@ -45,7 +45,7 @@ node OpenScience/evals/vcr-in-silico/search-benchmark.mjs --score <campaign-view
 ## How to run
 
 ```
-source /home/coder/evimed-wt/vcrfix-handoff/isl/env.sh   # VCR_R_LIBS, VCR_ENGINE_ROOT, VCR_TEST_CORES=2, TMPDIR
+export VCR_R_LIBS=<the engine's R library>  VCR_ENGINE_ROOT=<repo>/项目代码/vcr-engine  VCR_TEST_CORES=2  TMPDIR=<scratch>
 cd OpenScience
 setsid nohup node evals/vcr-in-silico/search-benchmark.mjs --exhaustive --cache $TMPDIR/bench-cache.jsonl \
   --out evals/vcr-in-silico/results/search-benchmark-20261107.json </dev/null > $TMPDIR/bench.out 2> $TMPDIR/bench.log &
