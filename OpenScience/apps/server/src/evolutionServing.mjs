@@ -1,4 +1,3 @@
-import { AGENDA_DEFAULT_BUDGETS } from '@evimed/domain';
 import { HttpError } from './security.mjs';
 import { EVOLUTION_PROJECT_ID, isInternalProject } from './internalProjects.mjs';
 import { createEvolutionService, evolutionKey } from './evolutionService.mjs';
@@ -21,23 +20,18 @@ import { evolutionScientificUse } from './evolutionScientificUse.mjs';
 import { evolutionCompletedResult } from './evolutionUsage.mjs';
 import { readRunTranscript } from './runTranscripts.mjs';
 import { quarantineRetiredEvolutionJobs } from './evolutionRetiredJobs.mjs';
-import { createEvolutionSelfCheck } from './evolutionSelfCheck.mjs';
 import { evolutionMonthlyMetrics } from './evolutionMetrics.mjs';
 
 /** Published tools, account-local feedback and existing product continuation only.
  * Experimental composition is reachable exclusively from the offline campaign entry.
  * @param {any} dependencies */
-export function createEvolutionServing({config,store,documents,jobs,database,notifications,registry,runtimeManager,agentRuns,controller,autopilot,evaluationIsolation,dataSemantics=null,sourceChanges=null,canRun=async()=>true,resolvePositiveEvidence=null,report=()=>{}}) {
+export function createEvolutionServing({config,store,documents,jobs,database,notifications,registry,runtimeManager,agentRuns,controller,evaluationIsolation,sourceChanges=null,canRun=async()=>true,resolvePositiveEvidence=null,report=()=>{}}) {
  if(!config.evolutionEnabled||!database||!documents||!jobs)return null;
  // Serving mode is a composition role, independent of the historical search pause switch.
  const servingConfig={...config,evolutionSearchPaused:true,evolutionServingOnly:true};
  const ensureOwner=async()=>{const owner=config.operatorUsers[0],user=owner&&await store.userById(owner);if(!user)throw new HttpError(503,'evolution_owner_missing','Evolution requires a configured platform operator.');await store.projectFor(user,EVOLUTION_PROJECT_ID,'EviMed 循证进化');return owner;};
- const service=createEvolutionService({documents,jobs,config:servingConfig,notifications,ensureOwner,callbacks:{
-  waiterOwners:async()=>(await database.query("SELECT DISTINCT user_id FROM evimed_product.documents WHERE kind='knowledge' AND payload->>'recordType'='evolution-waiter' AND deleted_at IS NULL")).rows.map(row=>row.user_id),
-  waitingAgendaCount:async capabilityIds=>Number((await database.query("SELECT count(*)::integer AS count FROM evimed_product.documents WHERE kind='knowledge' AND payload->>'recordType'='evolution-waiter' AND payload->>'status'='waiting' AND payload->>'capabilityId'=ANY($1::text[]) AND deleted_at IS NULL",[capabilityIds])).rows[0]?.count??0),
-  wakeAgenda:input=>integration.wakeAgenda(input)
- }});
- const integration=new EvolutionIntegration({service,autopilot,report});
+ const service=createEvolutionService({documents,jobs,config:servingConfig,notifications,ensureOwner,callbacks:{}});
+ const integration=new EvolutionIntegration({service,report});
  const supply=createPlatformSkillSupply(config,{report});
  const signals=createEvolutionSignals({service,capabilityIds:async()=>(await registry).list({includeInternal:false}).map(item=>item.id),operatorIds:()=>config.operatorUsers??[],floors:evolutionAccountFloors(config)});
  const policyBasis=createEvolutionPolicyBasis({service,sourceChanges:()=>sourceChanges,calibrationCases:readGeoCalibrationCases,verifyReproduction:validEvolutionFailureReproduction});
@@ -68,23 +62,12 @@ export function createEvolutionServing({config,store,documents,jobs,database,not
  }});
  const feedback=createEvolutionFeedback({service,maintenance,resolvePositiveEvidence});
  service.callbacks.observeFeedback=feedback.observeFeedback;
- // A published tool on a researcher's own dataset, in the isolated executor: the agenda waiting on that dataset resumes from it.
- const selfCheck=dataSemantics?createEvolutionSelfCheck({service,dataSemantics,store,controller,supply,config}):null;
- const worker=createEvolutionServingWorker({service,integration,decisions,maintenance,selfCheck,config:servingConfig,canRun,
+ const worker=createEvolutionServingWorker({service,integration,decisions,maintenance,config:servingConfig,canRun,
   quarantine:admission=>quarantineRetiredEvolutionJobs(database,config.operatorUsers[0],{admission})});
   const routes = createEvolutionRoutes({ store, service, decisions, worker, config: servingConfig, evidenceRegistration: null, capabilityMap: async () => (await service.get('evolution-capability-map'))?.payload ?? null, isOperator: user => config.operatorUsers.includes(user.id),
     registerEvaluationPolicy: async (user, { projectId, policy }) => { await store.requireProject(user, projectId); return evaluationIsolation.registerPending({ userId: user.id, projectId }, policy); },
     evaluationAudit: async (user, { projectId }) => { const project = await store.requireProject(user, projectId); return Promise.all((await agentRuns.list(project)).map(run => evaluationIsolation.audit(run.id))); },
-    adoptOpportunity: async (user, { opportunityId, projectId }) => {
-      const opportunity = await service.get(opportunityId, user.id);
-      if (!opportunity || opportunity.projectId !== projectId || opportunity.payload.recordType !== "evolution-opportunity") throw new HttpError(404, "evolution_opportunity_missing", "The research opportunity is unavailable.");
-      if (opportunity.payload.agendaId) return autopilot.get(user.id, opportunity.payload.agendaId);
-      const agenda = await autopilot.create(user.id, { projectId, title: opportunity.payload.title, prompt: opportunity.payload.prompt ?? opportunity.payload.title,
-        taskTypes: opportunity.payload.taskTypes ?? ["literature-sentinel"], ...AGENDA_DEFAULT_BUDGETS,
-        schedule: { kind: "daily", timeZone: "Asia/Shanghai", time: "08:00" } });
-      await service.save("opportunity", opportunity.id, { ...opportunity.payload, agendaId: agenda.id }, opportunity, user.id);
-      return agenda;
-    }, maxJsonBytes: config.maxJsonBytes });
+    maxJsonBytes: config.maxJsonBytes });
   const dailyCost = async client => Number((await client.query(`SELECT coalesce(sum(CASE WHEN status='settled' THEN actual_cost WHEN ${openCostPredicate("24 hours", "$1")} THEN ${OPEN_COST_VALUE} ELSE 0 END),0) AS cost FROM evimed_usage.model_requests WHERE purpose='evolution' AND created_at>=$1::timestamptz-interval '24 hours'`, [new Date().toISOString()])).rows[0]?.cost ?? 0);
   const scientificUseScope = async event => {
     const user=await store.userById(event.userId), project=await store.requireProject(user,event.projectId);
@@ -142,7 +125,7 @@ export function createEvolutionServing({config,store,documents,jobs,database,not
 
  /** @param {any} event */
  const observe=async event=>{
-  if(!['frontier','geo','autopilot','sources','evidence','memory','runtime','tools'].includes(event.moduleId))return null;
+  if(!['frontier','geo','sources','evidence','memory','runtime','tools'].includes(event.moduleId))return null;
   if(event.userId)return signals.record(event);
   if(!['screened-out','edit-verification'].includes(event.kind))return null;
   const id=`evolution-module-observation-${evolutionKey([event.moduleId,event.eventId,event.kind])}`;
@@ -151,13 +134,7 @@ export function createEvolutionServing({config,store,documents,jobs,database,not
   return service.save('module-observation',id,{moduleId:event.moduleId,kind:event.kind,counts,policyRevisionId:event.policyRevisionId??null,at:service.now().toISOString()});
  };
  service.callbacks.moduleObservation=observe;
- /** @param {any} input */
- const recordResumedResearchCompleted=async({userId,projectId,agendaId,runId,status})=>{
-  if(!userId||!projectId||!agendaId||!runId||!['delivered','succeeded'].includes(status))return 0;
-  let recorded=0;for(const row of await service.list('waiter',userId)){if(row.payload.projectId!==projectId||row.payload.agendaId!==agendaId||row.payload.status!=='resolved'||row.payload.completedResearchAt)continue;await service.save('waiter',row.id,{...row.payload,completedResearchAt:service.now().toISOString(),completionRunId:runId},row,userId);recorded++;}return recorded;
- };
- service.callbacks.recordResumedResearchCompleted=recordResumedResearchCompleted;
- return {service,integration,supply,signals,policyBasis,observe,onExecution,onRetrieval,finishRun,observeVerifiedRun:feedback.observeVerifiedRun,observeFeedback:feedback.observeFeedback,gateway,routes,toolAdmission,worker,decisions,maintenance,recordResumedResearchCompleted,
+ return {service,integration,supply,signals,policyBasis,observe,onExecution,onRetrieval,finishRun,observeVerifiedRun:feedback.observeVerifiedRun,observeFeedback:feedback.observeFeedback,gateway,routes,toolAdmission,worker,decisions,maintenance,
   executorCounters:async()=>(await controller.evolutionAdmissionAvailable())?.executor??null,
   limitCounters:()=>({signals:signals.counters,resourceWaits:decisions.counters,serving:worker.counters,experimentScheduling:false})};
 }

@@ -66,12 +66,6 @@ inputs:
   - jurisdiction
   - decisionDate
   - uploadedFiles
-autopilot:
-  taskTypes: []
-  costClass: medium
-  unattendedInputs:
-  - drug
-  - proposedUse
 estimatedMinutes:
 - 15
 - 35

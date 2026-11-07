@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import vm from 'node:vm';
 import { RUNTIME_UI_MUX_RESPONSE_MAX_BYTES } from '@evimed/domain';
-import { installRuntimeUiTransport } from '../src/runtimeUiTransport.mjs';
+import { installRuntimeUiPolyfills, installRuntimeUiTransport } from '../src/runtimeUiTransport.mjs';
 
 test('scoped bootstrap retains its non-owner hint through the pinned index assignment', () => {
   const { target } = browser();
@@ -528,4 +528,25 @@ test('GEO selection survives normal draft edits but clears on cancellation, expl
   stage(); assert.equal((await submit('Use the selected plan.', 'other')).geoPlanContext, undefined);
   assert.equal((await submit('Use the selected plan.')).geoPlanContext, undefined);
   hooks.dispose();
+});
+
+test('Math.sumPrecise is supplied to the PDF viewer, in the page and in its worker source, and to nothing else', async () => {
+  // Without it the kernel's pdf.js draws every CJK font with a substitute (live, Chromium 145, 2026-11-05).
+  const math = Object.create(Math);
+  const target = { Math: math, Blob };
+  installRuntimeUiPolyfills(target);
+  assert.equal(math.sumPrecise([1, 2, 3.5]), 6.5);
+  assert.equal(math.sumPrecise([]), 0);
+  const worker = await new target.Blob(['/* pdfjsVersion = 6.3.289 */ Math.sumPrecise(widths)']).text();
+  assert.match(worker, /^if\(typeof Math\.sumPrecise!=="function"\)/);
+  assert.match(worker, /Math\.sumPrecise\(widths\)$/);
+  assert.equal(await new target.Blob(['plain text with pdfjsVersion only']).text(), 'plain text with pdfjsVersion only');
+  assert.equal(await new target.Blob(['unrelated Math.sumPrecise()']).text(), 'unrelated Math.sumPrecise()');
+  // A browser that has it keeps its own, and installing twice wraps nothing twice.
+  const own = () => 42;
+  const native = { Math: { sumPrecise: own }, Blob };
+  installRuntimeUiPolyfills(native);
+  installRuntimeUiPolyfills(native);
+  assert.equal(native.Math.sumPrecise, own);
+  assert.equal(await new native.Blob(['pdfjsVersion Math.sumPrecise']).text().then((t) => (t.match(/typeof Math/g) ?? []).length), 1);
 });

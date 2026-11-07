@@ -11,7 +11,7 @@ function fixture(judgeService) {
     documents: { database: { query: async sql => ({ rows: sql.includes('count(*)')
       ? [{ scouts: jobs.length, admitted_until: '2026-10-07T13:00:00Z' }] : [] }) } },
     enqueue: async (kind, payload, key, runAfter) => { const job = { kind, payload, key, runAfter }; jobs.push(job); return job; } };
-  return { service, jobs, integration: new EvolutionIntegration({ service, autopilot: {}, judgeService }) };
+  return { service, jobs, integration: new EvolutionIntegration({ service, judgeService }) };
 }
 
 test('J17 ranks retained publications before the existing eight-scout cap and admitted work', async () => {
@@ -78,7 +78,7 @@ test('the real event service carries ranked millisecond slots to the queue whose
       put: async (_owner, _kind, id, payload) => { const row = { id, payload, revision: (rows.get(id)?.revision ?? 0) + 1 }; rows.set(id, row); return row; } },
     jobs: { enqueue: async (owner, kind, payload, options) => { const job = { id: String(10 - jobs.length), kind, payload, ...options }; jobs.push(job); return job; } } });
   await service.save('cursor', 'evolution-frontier-cursor', { sequence: 0 });
-  const integration = new EvolutionIntegration({ service, autopilot: {}, judgeService: { judge: async (_site, input) => ({ outcome: 'settled', value: { relevance: Number(input.title.split(' ').at(-1)) / 10 } }) } });
+  const integration = new EvolutionIntegration({ service, judgeService: { judge: async (_site, input) => ({ outcome: 'settled', value: { relevance: Number(input.title.split(' ').at(-1)) / 10 } }) } });
   const feed = events.slice(0, 3).map((event, index) => ({ seq: index + 1, id: event.paper.id, title_raw: event.paper.title, identity_key: event.paper.identity }));
   const signals = new EvolutionFrontierSignals({ service, integration, database: { query: async sql => ({ rows: sql.includes('AS floor') ? [{ floor: 0 }] : feed }) } });
   assert.equal((await signals.tick()).sequence, 3);

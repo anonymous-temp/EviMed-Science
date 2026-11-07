@@ -15,7 +15,7 @@ import {
  *
  * Hidden knowledge: this is the last of the durable product subsystems to get a
  * routes module, and the reason it mattered is not tidiness. Capsules have
- * `capsuleRoutes`, learned methods have `learningRoutes`, sources, autopilot,
+ * `capsuleRoutes`, learned methods have `learningRoutes`, sources,
  * notifications, usage and plugins each have their own — memory alone was
  * inlined in `createWebApiApp`, which meant the composition root imported the
  * memory store *and* held its request handling, so "turn memory off" had no

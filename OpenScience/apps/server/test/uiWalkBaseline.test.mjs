@@ -64,7 +64,7 @@ test("every page the router serves has a template in the page table, and every p
   const served = [...new Set([...app.matchAll(/path: "([^"]+)"[^}]*?element: (?:<(\w+)|null)/g)]
     .filter(([, , element]) => element !== "Navigate")
     .map(([, address]) => address))].filter((address) => address !== "/app");
-  assert.ok(served.length >= 20 && ["frontier", "account", "autopilot/:taskId?", ":tab", "answers/:snapshotId"].every((address) => served.includes(address)), `read ${served.length} routes from the router: ${served.join(", ")}`);
+  assert.ok(served.length >= 20 && ["frontier", "account", "autopilot", ":tab", "answers/:snapshotId"].every((address) => served.includes(address)), `read ${served.length} routes from the router: ${served.join(", ")}`);
   const patterns = [...table.views.map((view) => view.pattern), ...table.unwalked.map((entry) => entry.pattern)];
   const covers = (pattern, address) => pattern === `/app/${address}` || pattern.endsWith(`/${address}`);
   const withoutTemplate = served.filter((address) => !patterns.some((pattern) => covers(pattern, address)));

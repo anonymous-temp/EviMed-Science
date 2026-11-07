@@ -546,8 +546,8 @@ pages after every release.
    - a **record** — a memory entry, an inbox message, an evidence-matrix row, a GEO
      source or a wrong answer — opens in the right-hand drawer (`Drawer`) and the list stays where it
      is; a record's row does not take the reader to another page to read what it holds;
-   - a **conversation-type object** — a scheduled task — opens its conversation in the main area,
-     with the list as a column inside the page (`/app/autopilot/:taskId`);
+   - a **scheduled task** is the kernel's own page (2026-11-04, `/app/autopilot` opens it in the project's frame): its list, its rule
+     and its records are upstream's, and what a run produced is an ordinary conversation of the project;
    - a **document** — a frontier article, a knowledge-base source, a compiled wiki page, a report, an event, a file the
      assistant made (a spreadsheet, a deck, a script, shown by the kernel's own preview) — opens on a page of
      its own that has an address, and going back restores the list as it was; the knowledge base reads its
@@ -620,7 +620,7 @@ fills them. `compositionFixtures.tsx` holds a sample of each, `pageComposition.t
 | Template | For | Slots, top to bottom | One kind of body | A record opens |
 |---|---|---|---|---|
 | T1 列表页 | 前沿动态, 收件箱, 科研工具, 插件与技能, the study home's library views | header · `toolbar` (views at the left; filters, search, count at the right) · `List` / `DataTable` · `ShowMore` | a list or a table | a drawer (a record), a page (a document), the main area (a conversation) |
-| T2 主从页 | 定时任务, 知识库, 记忆胶囊 (a navigation column beside its sections), the 虚拟临床研究 home, 方法库, 假设卡 | `MasterDetail`: the list column carries the page's header (title, the one primary button) and at most one toolbar; the record, preview or form beside it; below the room for both, a `Drawer`, or the page swaps for a conversation or a form | a list and one record | the right-hand column |
+| T2 主从页 | 知识库, 记忆胶囊 (a navigation column beside its sections), the 虚拟临床研究 home, 方法库, 假设卡 | `MasterDetail`: the list column carries the page's header (title, the one primary button) and at most one toolbar; the record, preview or form beside it; below the room for both, a `Drawer`, or the page swaps for a conversation or a form | a list and one record | the right-hand column |
 | T3 模块页 | 循证 GEO (including its addressed answer); VCR uses the conversation/result variant below | GEO: header · active work when present · result tabs · scoped controls · current result, with the native conversation beside it when opened. The earlier rail and dock are superseded by the GEO workspace below. | a chart and details, an object list, or project work | as T1 |
 | T4 数据页 | 记忆总览, GEO 总览 / 可见度, 研究的对照 / 试验, 知识图谱 | header · `toolbar` · `headline` · 记忆总览 only: 记忆星图 · `StatBand` (only the numbers that exist) · `ChartGrid` (full rows) · the table behind the charts | charts and one table | a drawer; a mark is a row |
 | T5 阅读页 | a knowledge-base document, a report, an evidence card, an event | back · document title · the primary action · `Outline` (from four sections) · the text · one 「来源与核对」 fold | a document; a long list is a table with a toolbar | — |
@@ -994,6 +994,7 @@ hint under a card, “为什么入选”; this historical blanket wording is sup
 - Frontier uses an editorial list, coherent summaries and distinct reader blocks. Keep original-source access predictable. Publication/discovery dates and AI importance/evidence quality stay distinguishable. The whole feed card opens its addressed reader; original-source access is separate, and long article text is not hidden behind retired reveal actions.
 - Knowledge distinguishes source/readiness/compiled page/graph/output. Reading preserves source location and jump-back. Fixed scientific canvases still need readable UI text and keyboard equivalents.
 - Memory uses the current native OpenViking engine and combines honest sparse visualizations with readable records and real source/scope; there is no retired records-engine fallback. One person has one capsule, and project is an entry label. Do not create visual links without evidence or mistake a membership star for semantic relationships.
+- The conversation's native surfaces are the kernel's own, in Chinese, never rebuilt (owner, 2026-11-05). The composer's seat reads 「思考强度：高」 with the tiers 关闭 / 低 / 高 / 最高 and names no model or provider; a conversation has two views, 对话 and the kernel's 运行 (trajectory: timing overview, per-step ledger, record inspector), the second drawn because the page may read the shared developer-tools preference. The todo list above the composer, 子任务 and 后台任务 in the header, the changed-files card (「已编辑 N 个文件」) with its review tab, the file tree and the document tabs are the kernel's. A PDF, Word, Excel or PowerPoint file opens in the right pane through the kernel's own LibreOffice preview and carries a visible 下载 in the pane's header; the file card's right-click 「下载」 is the same save. The report page resolves a report's pictures against the report's own folder (Markdown and HTML); a missing one stays a missing picture.
 - GEO, VCR, schedules, extensions and settings/inbox product decisions are linked by the full specification DS15-DS17 and the adoption plan's module register; how work is presented on those pages is DS23 (模块工作台 below). Do not duplicate their changing task scope here.
 
 ---
@@ -1159,7 +1160,7 @@ The owner asked that the process picture of 主动科研 be the page's core and 
 (「炫酷和科幻和赛博朋克一些，用户一看就有很好的冲击感」). It is the page's one brand moment, and an explicit exception to
 “flat, no glow, no shimmer” for that one surface only:
 
-- **A fixed dark scene in both themes** (`components/autopilot/ResearchObservatory.css`, named in `designTokens.test.ts`'s
+- **A fixed dark scene in both themes** (`components/activeResearch/ResearchObservatory.css`, named in `designTokens.test.ts`'s
   exceptions): the research queue on top, then the status line, six counters, the research line (规划 → 检索 → 阅读 → 分析 →
   核对 → 撰写 → 交付, the orchestrator above the stage of its last call and each delegated member below its own), the live
   operations feed with the selected operation's input and result, and what the run handed over. Its neon colours are content;
@@ -1172,7 +1173,7 @@ The owner asked that the process picture of 主动科研 be the page's core and 
 - **The page opens on the scene (owner, 2026-11-01).** 主动科研 is what the AI is researching, not a form: it opens on the running
   research's observatory, then the most recent one; a project with none stands by in the same dark scene, with the recipe and both
   actions inside it. Two things start from here: 「发起研究」 (one sentence, the goal; the run is on screen at once, never a composer
-  or a command) and 「接入数据」 (into the project's knowledge base). A scheduled study is made in 定时任务 and shown in the queue.
+  or a command) and 「接入数据」 (into the project's knowledge base). A scheduled study is made in 定时任务, the kernel's own page.
 - **No back office on the page.** Tool names, route reasons, ledger caveats and “what was not observed” sentences stay out;
   operations are named in the reader's words (`callLabel`), and a missing observation is simply absent.
 - **A goal says what it came to (2026-11-03).** A round that ran to its end says nothing of the goal, so the queue reads the control

@@ -26,7 +26,6 @@ test('an error code is counted under the reason it names, and an unnamed one is 
   assert.equal(researchDbRefusalReason('research_db_login_failed'), 'login_failed');
   assert.equal(researchDbRefusalReason('research_db_login_too_privileged'), 'too_privileged');
   assert.equal(researchDbRefusalReason('research_db_unreachable'), 'unreachable');
-  assert.equal(researchDbRefusalReason('autopilot_materials_full'), 'materials_full');
   assert.equal(researchDbRefusalReason('research_db_selection_invalid'), 'selection_invalid');
   for (const other of ['research_db_unavailable', 'ECONNRESET', undefined, null, '__proto__', 'constructor']) assert.equal(researchDbRefusalReason(other), 'failed', String(other));
 });

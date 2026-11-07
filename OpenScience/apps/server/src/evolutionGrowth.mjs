@@ -17,7 +17,7 @@ export function evolutionOpportunitySource(kind){
  * How many failures a platform record of a module counts: a module observation (a title-only edit, a number or unit the source does not have), or the aggregate of a
  * signal of a kind that is a repair. One definition, read by the opportunity a record opens (`collect`) and by the proposal that answers it (`recordedModuleFailure`).
  * Until 2026-10-12 the second counted only `counts.failed` and could not read a signal summary at all, so a repair opened by a number check that failed, or by a
- * platform signal (all of autopilot's), was sent back `reproducible-failure-required` five times in a row, though the platform itself had recorded the failure.
+ * platform signal was sent back `reproducible-failure-required` five times in a row, though the platform itself had recorded the failure.
  * @param {any} payload @param {string} [recordType] the record type when the caller listed it by type and the payload does not say
  */
 export function evolutionRecordedFailures(payload,recordType=payload?.recordType){
@@ -28,8 +28,8 @@ export function evolutionRecordedFailures(payload,recordType=payload?.recordType
  if(recordType==='evolution-signal-summary'&&payload.state!=='inactive'&&evolutionOpportunitySource(payload.kind)==='repair')return Number(payload.occurrences??0);
  return 0;
 }
-/** @param {{service:any,opportunity:any,database:any,floors?:{user:number,operator:number},operatorIds?:()=>string[]}} deps */
-export function createEvolutionGrowth({service,opportunity,database,floors=evolutionAccountFloors(),operatorIds=()=>[]}){
+/** @param {{service:any,opportunity:any,floors?:{user:number,operator:number}}} deps */
+export function createEvolutionGrowth({service,opportunity,floors=evolutionAccountFloors()}){
  async function resource(id,kinds,payload){const prior=await service.get(id);return service.save('resource-asset',id,{...prior?.payload,...payload,kinds:[...new Set([...(prior?.payload.kinds??[]),...kinds])],scope:'public',at:service.now().toISOString()},prior);}
  async function collect(){
   for(const row of await service.list('signal-summary')){
@@ -70,20 +70,5 @@ export function createEvolutionGrowth({service,opportunity,database,floors=evolu
    await service.withLock(id,async()=>{const existing=await service.get(id);if(existing){if(existing.payload.missionId===mission.id)added++;return;}await service.save('supported-family',id,{moduleId:mission.payload.moduleId,taskFamily:family,capabilityIds:candidate.capabilityIds ?? (raw.capability?[raw.capability]:undefined),candidateId:candidate.id,missionId:mission.id,verdictId:verdict.id,confirmedAt:service.now().toISOString()});added++;});
   }return added;
  }
- async function recordResumedResearchCompleted({userId,projectId,agendaId,runId,status}){
-  if(!userId||!projectId||!agendaId||!runId||!['delivered','succeeded'].includes(status))return 0;
-  let recorded=0;
-  for(const row of await service.list('waiter',userId)){
-   if(row.payload.projectId!==projectId||row.payload.agendaId!==agendaId||row.payload.status!=='resolved'||row.payload.completedResearchAt)continue;
-   await service.save('waiter',row.id,{...row.payload,completedResearchAt:service.now().toISOString(),completionRunId:runId},row,userId);recorded++;
-  }return recorded;
- }
- /** How many resumed researches finished in the window, or null when too few accounts did to say. Each class of account is counted on its own
-  * against its own floor, and only a class that reaches it adds to the number. */
- async function completedAggregate(from,to){
-  const result=await database.query(`SELECT (user_id=ANY($3::text[])) AS operator_class,count(*)::integer AS completed,count(DISTINCT user_id)::integer AS accounts FROM evimed_product.documents WHERE kind='knowledge' AND deleted_at IS NULL AND payload->>'recordType'='evolution-waiter' AND payload->>'status'='resolved' AND payload->>'completedResearchAt'>=$1 AND payload->>'completedResearchAt'<$2 GROUP BY operator_class`,[from,to,[...new Set(operatorIds().map(String).filter(Boolean))]]);
-  const counted=result.rows.filter(row=>Number(row.accounts)>=floors[row.operator_class===true?'operator':'user']);
-  return counted.length?counted.reduce((sum,row)=>sum+Number(row.completed),0):null;
- }
- return {collect,recordConfirmedFamilies,recordResumedResearchCompleted,completedAggregate};
+return {collect,recordConfirmedFamilies};
 }

@@ -1092,36 +1092,7 @@ def chk_report_format(spec, ctx):
     return out
 
 
-# ------------------------------------------------------------------------------------------------------------ schedule / knowledge
-def chk_schedule(spec, ctx):
-    s = ctx.record.get("schedule") or {}
-    agendas = s.get("agendas")
-    items = agendas if isinstance(agendas, list) else (agendas or {}).get("items", []) if isinstance(agendas, dict) else []
-    out = [result("task_created", bool(items), f"{len(items)} task(s) in the project; notes {s.get('notes')}")]
-    executions = s.get("executions") or []
-    statuses = [e.get("status") for e in executions]
-    finished = [e for e in executions if e.get("status") not in ("queued", "running", "pending", "planned", "dispatching", "starting", "waiting", "scheduled", "verifying", "canceled", "cancelled", None, "")]
-    out.append(result("execution_ran_to_the_end", bool(finished), f"{len(executions)} execution(s), statuses {statuses}"))
-    text = "\n".join(str(e.get("reply") or "") for e in executions)
-    exec_root = ctx.files_dir / "ws-execution"
-    if exec_root.is_dir():
-        for file in sorted(exec_root.rglob("*")):
-            if file.is_file():
-                text += "\n" + textio.file_text(file)
-    urls = _urls(text)
-    out.append(result("execution_output_has_links", len(urls) >= spec["min_items_links"], f"{len(urls)} link(s) in what the execution produced ({[e.get('files') for e in executions][:1]})"))
-    agents = [str(e.get("agent") or "") for e in executions]
-    files = [f for e in executions for f in (e.get("files") or [])]
-    clinical_files = [f for f in files if re.search(r"clinical-evidence|evidence-matrix|agenda-delta", f)]
-    clinical = "clinical-evidence-synthesis" in agents or bool(clinical_files) or bool(FORBIDDEN["evidence_framework"].search(text))
-    out.append(result("execution_is_not_a_clinical_evidence_review", not clinical, f"execution agents {agents}; clinical-evidence files {clinical_files}; evidence-review vocabulary {'present' if FORBIDDEN['evidence_framework'].search(text) else 'absent'}"))
-    types = [e.get("taskType") for e in executions]
-    out.append(result("task_type_is_not_the_literature_sentinel", "literature-sentinel" not in types, f"the execution ran as task type {types}", required=False))
-    inbox = json.dumps(ctx.record.get("inbox", {}), ensure_ascii=False)
-    out.append(result("inbox_does_not_call_it_research", "研究" not in inbox, f"inbox mentions 研究: {re.findall(r'.{0,12}研究.{0,12}', inbox)[:2]}" if "研究" in inbox else "no 研究 in the inbox (inbox holds %d chars)" % len(inbox)))
-    return out
-
-
+# ------------------------------------------------------------------------------------------------------------ knowledge
 def chk_kb(spec, ctx):
     out = []
     uploads = ctx.record.get("inputs", [])
@@ -1319,7 +1290,7 @@ CHECKS: dict[str, Callable[[dict, Ctx], list[dict]]] = {
     "rename_script": chk_rename_script, "project_tests": chk_project_tests, "churn": chk_churn, "links": chk_links,
     "web_unavailable_honest": chk_web_unavailable_honest, "node_lts": chk_node_lts, "report_pages": chk_report_pages,
     "reply_or_file_mentions": chk_reply_or_file_mentions, "translation": chk_translation, "numbers_preserved": chk_numbers_preserved,
-    "weekly": chk_weekly, "report_format": chk_report_format, "schedule": chk_schedule, "kb": chk_kb, "opening": chk_opening, "citations": chk_citations,
+    "weekly": chk_weekly, "report_format": chk_report_format, "kb": chk_kb, "opening": chk_opening, "citations": chk_citations,
     "clinical_package": chk_clinical_package, "meta": chk_meta,
 }
 

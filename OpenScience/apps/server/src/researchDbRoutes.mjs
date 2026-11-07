@@ -6,7 +6,6 @@ import { researchDbSnapshotFingerprint } from './researchDbCredentials.mjs';
 import { listResearchTables, snapshotResearchTable } from './researchDbSnapshot.mjs';
 import { createResearchDbCapacity } from './researchDbCapacity.mjs';
 import { RESEARCH_DB_LIMIT_DEFAULTS } from './researchDbConfig.mjs';
-import { researchDbLogicalPath } from './researchDbImport.mjs';
 import { recordResearchDbImport, recordResearchDbRefusal, researchDbRefusalReason } from './researchDbMetrics.mjs';
 
 /** @param {any} value @param {string[]} keys */
@@ -30,10 +29,10 @@ const auditCode = error => {
  * `.remove` and `research_db.import`: the connection's or the source's id, never a password, host or user name).
  * Every limit is `limits` (`researchDbConfig.mjs`) and every refusal or limit that bit is counted
  * (`researchDbMetrics.mjs`); neither can fail a request.
- * @param {{store:any,credentials:any,agenda:any,policy:string,caDir?:string,limits?:import('./researchDbConfig.mjs').ResearchDbLimits,maxJsonBytes:number,publish:any,open?:any,
+ * @param {{store:any,credentials:any,policy:string,caDir?:string,limits?:import('./researchDbConfig.mjs').ResearchDbLimits,maxJsonBytes:number,publish:any,open?:any,
  *   audit?:(user:any,project:any,action:string,status:string,details?:Record<string,any>)=>Promise<unknown>}} dependencies
  */
-export function createResearchDbRoutes({ store, credentials, agenda, policy, caDir = '', limits = RESEARCH_DB_LIMIT_DEFAULTS, maxJsonBytes, publish, open = openResearchDb, audit = async () => {} }) {
+export function createResearchDbRoutes({ store, credentials, policy, caDir = '', limits = RESEARCH_DB_LIMIT_DEFAULTS, maxJsonBytes, publish, open = openResearchDb, audit = async () => {} }) {
   /** @type {Promise<any> | null} */ let ready = null;
   const capacity = createResearchDbCapacity({ slots: limits.slots, perUser: limits.perUser });
   const record = (/** @type {any} */ user, /** @type {any} */ project, /** @type {string} */ action, /** @type {string} */ status, /** @type {Record<string, any>} */ details) =>
@@ -60,7 +59,7 @@ export function createResearchDbRoutes({ store, credentials, agenda, policy, caD
     await store.assertCsrf(req, url.pathname);
     const parts = url.pathname.slice('/api/research-databases'.length).split('/').filter(Boolean);
     const method = req.method ?? 'GET';
-    const configured = Boolean(credentials && agenda && publish && policy);
+    const configured = Boolean(credentials && publish && policy);
     if (parts.length === 1 && parts[0] === 'status' && method === 'GET') {
       // Answers even when the connector is off, so a page can hide its entry instead of offering a dead one.
       const projectId = url.searchParams.get('projectId'); assertClientProject(projectId);
@@ -106,31 +105,24 @@ export function createResearchDbRoutes({ store, credentials, agenda, policy, caD
         sendJson(res, 200, { data: { ...listing, limits: { rows: limits.rows, columns: limits.columns, cellBytes: limits.cellBytes } } }); return true;
       }
       if (parts.length === 2 && parts[1] === 'snapshot' && method === 'POST') {
-        const posted = body(await readJson(req, maxJsonBytes), ['projectId', 'agendaId', 'schema', 'table', 'columns', 'requestId']);
+        const posted = body(await readJson(req, maxJsonBytes), ['projectId', 'schema', 'table', 'columns', 'requestId']);
         // No columns, or an empty list, means every supported column; both forms are one request to the fingerprint.
         const input = { ...posted, columns: posted.columns ?? [] };
         assertClientProject(input.projectId);
         const project = await store.requireProject(user, input.projectId);
-        // A study is optional: without one the table is imported to the project's knowledge base.
-        const question = input.agendaId ? await agenda.get(user.id, input.agendaId) : null;
-        if (question && question.projectId !== project.id) throw new HttpError(404, 'autopilot_material_not_found', 'The research question was not found.');
-        if (question) agenda.assertNotArchived(question);
         const fingerprint = researchDbSnapshotFingerprint({ connectionId: parts[0], ...input });
         const previous = await credentials.snapshotResult(user.id, project.id, input.requestId, fingerprint);
         if (previous) { recordResearchDbImport('replayed'); sendJson(res, 200, { data: previous }); return true; }
         const connection = await credentials.open(user.id, project.id, parts[0]);
         const target = { host: connection.host, port: connection.port, database: connection.database };
         const result = await guarded(user, project, 'research_db.import', `${input.schema}.${input.table}`, async () => {
-          // A full list of material refuses a new document BEFORE the remote database is read; a new version of a table
-          // the question already holds takes that one's place and needs no room.
-          if (question) await agenda.assertMaterialRoom(user.id, question.id, researchDbLogicalPath(target, String(input.schema), String(input.table)));
           const snapshot = await capacity.run(user.id, async () => {
             const transport = await open(connection, policy, { caDir, limits });
             try { return await snapshotResearchTable(transport.client, { schema: input.schema, table: input.table, columns: input.columns }, { limits }); }
             catch (error) { if (error instanceof HttpError) throw error; throw new HttpError(503, 'research_db_unavailable', 'The database snapshot could not be read.'); }
             finally { await transport.close(); }
           });
-          return publish({ user, project, connectionId: parts[0], target, ...(question ? { agendaId: question.id } : {}), requestId: input.requestId, fingerprint, snapshot });
+          return publish({ user, project, connectionId: parts[0], target, requestId: input.requestId, fingerprint, snapshot });
         });
         recordResearchDbImport(result.partial ? 'partial' : 'complete');
         if (result.truncated) recordResearchDbRefusal('truncated');
@@ -156,7 +148,7 @@ export function createResearchDbRoutes({ store, credentials, agenda, policy, caD
      * @returns {Promise<{required: false, enabled: boolean, warning?: string}>}
      */
     async readiness() {
-      if (!(credentials && agenda && publish && policy)) return { required: false, enabled: false };
+      if (!(credentials && publish && policy)) return { required: false, enabled: false };
       try { await migrate(); return { required: false, enabled: true }; }
       catch (error) { return { required: false, enabled: true, warning: auditCode(error) === 'research_db_keyring_incomplete' ? 'research_db_keyring_incomplete' : 'research_db_unavailable' }; }
     },

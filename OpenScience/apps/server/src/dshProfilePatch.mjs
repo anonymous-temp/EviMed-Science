@@ -107,7 +107,7 @@ export const HOSTED_PERMISSION_PRESET_DESCRIPTION = "只能读写本项目的工
  * @property {{ deliveryAttemptLimit: number, maxChildrenTotal?: number, maxConcurrentChildren?: number, maxParallelChildren?: number, maxSteps: number, maxTokens: number, evidenceStaleMinutes: number, screeningBatchSize?: number }} limits
  *   `maxParallelChildren` is the retired single limit, read only as the
  *   fallback for the two that replaced it.
- * @property {{ hosted: boolean, askUser: boolean, askUserMode?: 'attended'|'timed', review: boolean, capsule: boolean, operator?: boolean, requiredEnforcement: 'full'|'partial' }} flags
+ * @property {{ hosted: boolean, askUser: boolean, askUserMode?: 'attended'|'timed', scheduleNewSessionIntervalSeconds?: number, review: boolean, capsule: boolean, operator?: boolean, requiredEnforcement: 'full'|'partial' }} flags
  * @property {readonly string[]} [disabledClientBundles] ids of `COMMUNITY_CLIENT_BUNDLE_ROWS`
  *   the deployment switched off; each becomes a `disabled: true` row
  */
@@ -302,6 +302,14 @@ export function renderProfilePatch(input) {
     `    transcriptView: ${CHAT_PRESENTATION.transcriptView}`,
     `    linkOpening: ${CHAT_PRESENTATION.linkOpening}`,
     "",
+    "# The shared developer-tools preference. The conversation's 「运行」 tab (the kernel's trajectory), the code diff",
+    "# of a turn's changes and the interactive HTML preview all read this one boolean, and the page reads a namespace",
+    "# the proxy does not forward as false. The kernel's default is true; it is written down so a changed default",
+    "# upstream does not take the tab away again. Writes stay refused.",
+    "- id: ui-settings",
+    "  config:",
+    "    enabled: true",
+    "",
     "# The preset a session gets when it names none. Since DSH 0.1.7 a preset is",
     "# a row of the composition -- the socket ships `evimed-universal` in its own",
     "# bundle patch -- and the registry that chooses among the declared ones reads",
@@ -468,10 +476,6 @@ export const HOSTED_DISABLED_BROWSER_PANELS = Object.freeze([
   // the item never draws; hidden anyway, because the preference it would write is the
   // one a hosted runtime must not have a button for.
   "ui-settings-session-log",
-  // 0.2.1: the "automation tasks" page, its right-sidebar tab and the header clock — cron-like prompts
-  // the kernel runs itself, over `schedule/*`. The `schedule` row behind it is disabled in the socket's
-  // bundle; the platform's own scheduled tasks are control-plane jobs, opened from its own pages.
-  "ui-schedule",
   // 0.2.1-rc.4: the "More" menus of the left sidebar, the conversation's view tabs and the right sidebar's guide, with
   // two items each: "Browse other plugins" (opens the plugin manager's page, hidden above with its service) and "Create
   // your plugin" (opens a blank session on the plugin-writing preset, which this composition does not declare). Both
@@ -794,6 +798,8 @@ export function runtimeEnvironment(input) {
     // Always sent, like every switch: the preset's `tool-ask-user` row reads it, and a name that is sent only when a caller
     // passes it would leave the row on the blocking tool while the deployment believes it chose the other.
     EVIMED_ASK_USER_MODE: input.flags.askUserMode === "timed" ? "timed" : "attended",
+    // The `schedule` row of the socket's bundle reads it; 900 is the same default as the row's own.
+    EVIMED_SCHEDULE_NEW_SESSION_INTERVAL_SECONDS: String(input.flags.scheduleNewSessionIntervalSeconds ?? 900),
     EVIMED_CAPSULE_ACTIVE: input.flags.capsule ? "1" : "0",
     EVIMED_REVIEW_ENABLED: input.flags.review ? "1" : "0",
     // Where the control plane wrote the tools this runtime does not offer

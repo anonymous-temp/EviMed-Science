@@ -119,6 +119,19 @@ function parseDisabledSocketPlugins(ids) {
 }
 
 /**
+ * Which of the document parsing service's two engines reads a document. They are not a primary and a standby, so a
+ * misspelt value is refused here rather than sent to a route that does not exist.
+ * @param {unknown} value
+ * @returns {'engine-a'|'engine-b'}
+ */
+export function parseDocumentParserEngine(value) {
+  const engine = String(value ?? '').trim().toLowerCase();
+  if (engine === '' || engine === 'engine-a') return 'engine-a';
+  if (engine === 'engine-b') return 'engine-b';
+  throw new Error(`OPEN_SCIENCE_DOCUMENT_PARSER_ENGINE must be engine-a or engine-b, got ${JSON.stringify(String(value))}.`);
+}
+
+/**
  * How the ask-user tool waits for the person: the kernel's own two modes, named for what the turn does.
  * `attended` is the blocking tool every shipped preset uses. `timed` returns "pending" after the tool's own deadline so the
  * model carries on with work that does not depend on the answer, and the answer, whenever it comes, arrives as a message.
@@ -2162,6 +2175,12 @@ export function loadConfig(overrides = {}) {
     databaseConnectionTimeoutMs: Number(
       overrides.databaseConnectionTimeoutMs ?? process.env.OPEN_SCIENCE_DATABASE_CONNECTION_TIMEOUT_MS ?? 10_000,
     ),
+    // How long a control-plane session may sit idle inside an open transaction before PostgreSQL ends it (0 = unbounded).
+    // A transaction that waits on something outside the database holds its row and advisory locks and a pool connection for
+    // the whole wait (2026-11-05: two such waits on the engine froze ingestion and drained the pool for 8 and 17 minutes).
+    databaseIdleInTransactionMs: Number(
+      overrides.databaseIdleInTransactionMs ?? process.env.OPEN_SCIENCE_DATABASE_IDLE_IN_TRANSACTION_MS ?? 120_000,
+    ),
     securityHeaders: overrides.securityHeaders ?? boolEnv("OPEN_SCIENCE_SECURITY_HEADERS", true),
     corsOrigins: overrides.corsOrigins ?? listEnv("OPEN_SCIENCE_CORS_ORIGINS"),
     maxJsonBytes: Number(overrides.maxJsonBytes ?? process.env.OPEN_SCIENCE_MAX_JSON_BYTES ?? 12 * 1024 * 1024),
@@ -2379,7 +2398,7 @@ export function loadConfig(overrides = {}) {
       process.env.OPEN_SCIENCE_DSH_VERSION ??
       release.manifest?.runtime?.dshVersion ??
       depsVersions.dsh?.version ??
-      "0.2.1-rc.5",
+      "0.2.2-rc.1",
     socketBundleVersion:
       overrides.socketBundleVersion ??
       process.env.OPEN_SCIENCE_SOCKET_BUNDLE_VERSION ??
@@ -2475,6 +2494,13 @@ export function loadConfig(overrides = {}) {
     // A session that has taken a timed answer holds a message kind 0.1.7-rc.2 cannot read, so going back below the
     // 0.2.0-rc.2 pin after this has been on loses those sessions (docs/WEB_DEPLOYMENT.md).
     runtimeAskUserMode: parseAskUserMode(overrides.runtimeAskUserMode ?? process.env.OPEN_SCIENCE_RUNTIME_ASK_USER_MODE),
+    // The floor between two fresh conversations of one scheduled task (the kernel's `newSessionIntervalSeconds`, 60 to 604,800).
+    // A `new` task has no concurrency cap of its own and each delivery is a whole conversation the person pays for.
+    // Starting a stopped runtime when one of its scheduled tasks falls due (`scheduleWake.mjs`). Off, a task is delivered at the runtime's next start.
+    scheduleWakeEnabled: overrides.scheduleWakeEnabled ?? boolEnv("OPEN_SCIENCE_SCHEDULE_WAKE_ENABLED", true),
+    // How long a runtime started for a task stays up with nothing to do. It stops at the usual idle timeout otherwise, and nobody is coming back to it.
+    scheduleWakeRestAfterMs: Number(overrides.scheduleWakeRestAfterMs ?? process.env.OPEN_SCIENCE_SCHEDULE_WAKE_REST_AFTER_MS ?? 600_000),
+    scheduleNewSessionIntervalSeconds: Math.min(604_800, Math.max(60, Number(overrides.scheduleNewSessionIntervalSeconds ?? process.env.OPEN_SCIENCE_SCHEDULE_NEW_SESSION_INTERVAL_SECONDS ?? 900) || 900)),
     // The socket plugins a runtime runs without (preset row ids, comma
     // separated). Empty — every plugin on — is the product; naming one is how
     // a plugin is measured against the kernel's own composition (principle 11).
@@ -3002,6 +3028,9 @@ export function loadConfig(overrides = {}) {
       overrides.memoryIndexReconcileMs ?? process.env.OPEN_SCIENCE_MEMORY_INDEX_RECONCILE_MS ?? 300_000,
     ),
     documentParserUrl: String(overrides.documentParserUrl ?? process.env.OPEN_SCIENCE_DOCUMENT_PARSER_URL ?? "").replace(/\/+$/, ""),
+    // Which of the service's two parsing engines reads a document (`engine-a` | `engine-b`; documentParserClient.mjs). They
+    // are not a primary and a standby: the service never switches, so this is the one place it is chosen.
+    documentParserEngine: parseDocumentParserEngine(overrides.documentParserEngine ?? process.env.OPEN_SCIENCE_DOCUMENT_PARSER_ENGINE),
     documentParserToken: documentParserSecret.value,
     documentParserTokenSource: documentParserSecret.source,
     documentParserTokenError: documentParserSecret.error,
@@ -3112,19 +3141,6 @@ export function loadConfig(overrides = {}) {
     // entries that apply to it (`libraryService.mjs`), so the library costs the disk once per project: a project whose
     // directory does not exist yet and whose copy would pass this gets none, and its runtime starts without /workspace/library.
     libraryViewMaxBytes: Number(overrides.libraryViewMaxBytes ?? process.env.OPEN_SCIENCE_LIBRARY_VIEW_MAX_BYTES ?? 512 * 1024 * 1024),
-    autopilotEnabled: overrides.autopilotEnabled ?? boolEnv("OPEN_SCIENCE_AUTOPILOT_ENABLED", production),
-    autopilotPollMs: Number(overrides.autopilotPollMs ?? process.env.OPEN_SCIENCE_AUTOPILOT_POLL_MS ?? 1_000),
-    autopilotLeaseMs: Number(overrides.autopilotLeaseMs ?? process.env.OPEN_SCIENCE_AUTOPILOT_LEASE_MS ?? 300_000),
-    // The one model decision before each proactive episode (N10, 2026-10-04):
-    // which task type to run, from the agenda's progress, or whether to stop.
-    // Off, or with the provider off, the date rotation chooses and each episode
-    // says so (`selection.fallbackReason`). The decision's own deadline sits on
-    // the scheduler's path — it walks every due agenda in one loop — so it is
-    // short, and three failures in a row rest the planner for five minutes. Its
-    // budget is the agenda's own daily and weekly caps with the account's,
-    // through the gateway's reserve-then-settle under purpose `autopilot`.
-    autopilotPlannerEnabled: overrides.autopilotPlannerEnabled ?? boolEnv("OPEN_SCIENCE_AUTOPILOT_PLANNER_ENABLED", true),
-    autopilotPlannerTimeoutMs: Number(overrides.autopilotPlannerTimeoutMs ?? 20_000),
     // --- frontier: 「前沿动态」 and the knowledge-source plugin (2026-09-22) ---
     ...frontierSettings(overrides),
     ...evidenceSettings(overrides),
@@ -3177,7 +3193,7 @@ export function loadConfig(overrides = {}) {
     evolutionLightConcurrency: Number(overrides.evolutionLightConcurrency ?? process.env.OPEN_SCIENCE_EVOLUTION_LIGHT_CONCURRENCY ?? 2),
     evolutionSearchPaused: overrides.evolutionSearchPaused ?? boolEnv("OPEN_SCIENCE_EVOLUTION_SEARCH_PAUSED", false),
     // The serving cutover (2026-10-26, the offline RSI lab): on, the control plane composes only what serves published state (events, decision
-    // expiries, the operators' digest, a retirement's completion, a published tool's self-check) and nothing experimental runs online. It is a
+    // expiries, the operators' digest, a retirement's completion) and nothing experimental runs online. It is a
     // one-way cutover of queued experimental work: at the first worker poll the nine experimental job kinds that are queued or lease-expired are
     // cancelled as `evolution_offline_only`, queued events of any other type are closed as `retired-to-lab`, pending decision cards whose default
     // is an experiment are closed, an unanswered harm review takes the protective retirement, the experimental POST /api/evolution routes answer
@@ -3218,9 +3234,6 @@ export function loadConfig(overrides = {}) {
     evolutionMaxBuildAttempts: Number(overrides.evolutionMaxBuildAttempts ?? process.env.OPEN_SCIENCE_EVOLUTION_MAX_BUILD_ATTEMPTS ?? 3),
     evolutionMaxJobAttempts: Number(overrides.evolutionMaxJobAttempts ?? process.env.OPEN_SCIENCE_EVOLUTION_MAX_JOB_ATTEMPTS ?? 3),
     evolutionMaxArtifactBytes: Number(overrides.evolutionMaxArtifactBytes ?? process.env.OPEN_SCIENCE_EVOLUTION_MAX_ARTIFACT_BYTES ?? 2_000_000),
-    evolutionSelfCheckMaxBytes: Number(overrides.evolutionSelfCheckMaxBytes ?? process.env.OPEN_SCIENCE_EVOLUTION_SELF_CHECK_MAX_BYTES ?? 4 * 1024 * 1024),
-    evolutionSelfCheckMaxRows: Number(overrides.evolutionSelfCheckMaxRows ?? process.env.OPEN_SCIENCE_EVOLUTION_SELF_CHECK_MAX_ROWS ?? 10_000),
-    evolutionSelfCheckSampleRows: Number(overrides.evolutionSelfCheckSampleRows ?? process.env.OPEN_SCIENCE_EVOLUTION_SELF_CHECK_SAMPLE_ROWS ?? 256),
     // Candidate execution has its own controller instance, slots and timeout (`evolutionVerificationController.mjs`):
     // static checks, self tests, hidden-case replicates and every tenant call of a published tool are one disposable
     // container each, hundreds per build cycle, and they must never share a slot, an admission lock or the
@@ -3591,13 +3604,6 @@ export function loadConfig(overrides = {}) {
     // (principle 13); off, the source cards simply carry none.
     sourceUpdatesEnabled: overrides.sourceUpdatesEnabled ?? boolEnv("OPEN_SCIENCE_SOURCE_UPDATES_ENABLED", true),
     resultsEnabled: overrides.resultsEnabled ?? boolEnv("OPEN_SCIENCE_RESULTS_ENABLED", true),
-    // How many result impacts of ONE source change an agenda the researcher is already running rechecks without being
-    // asked again (resultImpact.mjs, N15). The agenda's own budgets still apply to each recheck; this bounds how many
-    // episodes one retraction of a widely used paper may queue at once. The rest stay in the result's impact panel for the
-    // researcher to continue. 0 turns the automatic recheck off; the labels and the panel do not depend on it.
-    sourceChangeRecheckLimit: Math.max(0, Math.min(20, Math.trunc(Number(
-      overrides.sourceChangeRecheckLimit ?? process.env.OPEN_SCIENCE_SOURCE_CHANGE_RECHECK_LIMIT ?? 3,
-    )) || 0)),
     // What a project's datasets mean (dataSemanticsService.mjs): the recorded interpretation a repeat analysis starts
     // from, the exact source versions it was read from, and the named outcomes of the data checks. The tool the two
     // data capabilities use reaches it through its own gateway; off, that tool answers `semantics_disabled` and every
@@ -3636,14 +3642,6 @@ export function loadConfig(overrides = {}) {
     // see and edit — the compiled pages — and a hidden second channel that is recalled but cannot be read has no reason to be
     // written. Off stops new writes only: what was written stays where it is until its document goes.
     documentMemoryEnabled: overrides.documentMemoryEnabled ?? boolEnv("OPEN_SCIENCE_DOCUMENT_MEMORY_ENABLED", false),
-    // Scheduled tasks made and changed from a conversation (`schedule_task` / `update_task`, taskToolsGateway.mjs, N-13): the
-    // form's twin, with the platform's default budget and no step to approve. Off, the runtime is given no route and the tools
-    // are not offered; the 定时任务 page is unchanged. `taskToolsMaxTasks` is the most tasks one project may hold before the
-    // conversation is told to delete or pause one: a limit that keeps a loop from filling an account with scheduled spend.
-    taskToolsEnabled: overrides.taskToolsEnabled ?? boolEnv("OPEN_SCIENCE_TASK_TOOLS_ENABLED", true),
-    taskToolsMaxTasks: Math.max(1, Math.min(500, Math.trunc(Number(
-      overrides.taskToolsMaxTasks ?? process.env.OPEN_SCIENCE_TASK_TOOLS_MAX_TASKS ?? 30,
-    )) || 30)),
     // Truthful capability availability (availabilityModule.mjs): the collector that joins finished runs to what they
     // used and produced. A label and never a gate, so the switch only decides whether operations are collected; with
     // it off the projection is still served from the deployment's composition and every label that needs a record

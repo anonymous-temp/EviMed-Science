@@ -2,16 +2,14 @@ import type { GeoConversationScope } from "./geoNativeClient";
 import { useSyncExternalStore } from "react";
 import { geoConversationPane, geoIdFromChatPath } from "@/lib/geoLocation";
 import { isStudyChatPath } from "@/lib/studyLocation";
-import { isTaskPath } from "@/lib/taskLocation";
 
 /**
- * Where the kernel's conversation is wanted on a page that holds it in a pane: a task's page, a study's conversation view and a GEO project's conversation.
+ * Where the kernel's conversation is wanted on a page that holds it in a pane: a study's conversation view and a GEO project's conversation.
  *
  * The frame cannot be rendered by the page: the kernel's application is an iframe holding a document, a websocket and a handshake,
  * and putting an iframe in another place in the tree reloads all three (`SessionFrameHost` explains what that cost). So the page
  * only says where it wants the conversation — the element that is its pane — and which conversation, and the shell's resident frame
- * is sized and placed over that element. The page registers while it wants the frame (a task whose execution has a conversation to
- * show, a study that has one) and withdraws when it does not: a run still working in a bounded runtime shows its progress in the
+ * is sized and placed over that element. The page registers while it wants the frame (a study that has a conversation to show) and withdraws when it does not: a run still working in a bounded runtime shows its progress in the
  * pane instead.
  */
 export interface TaskPaneRequest {
@@ -19,7 +17,7 @@ export interface TaskPaneRequest {
   element: HTMLElement;
   /** The project the page belongs to: a frame of another project is never placed here. */
   projectId: string;
-  /** The conversation the pane shows: the execution's, or the study's own. */
+  /** The conversation the pane shows. */
   sessionId: string;
   /** A page creating a native session can consume the exact acknowledged request and actual session. */
   onSessionAcknowledged?: (requestId: string, sessionId: string) => void;
@@ -34,11 +32,11 @@ export interface TaskPaneRequest {
 
 /**
  * Whether an address is one of the pages that hold the conversation in a pane — the places the frame may be placed over besides the
- * chat surface itself: a scheduled task (`/app/autopilot/:taskId`) a study's conversation view
+ * chat surface itself: a study's conversation view
  * (`/app/virtual-research/:studyId/chat`) and GEO's addressed conversation (`/app/geo/:geoId/chat/:sessionId`). Read from the address alone, on every navigation, as the chat surface is.
  */
 export function isPanePath(pathname: string, search = ""): boolean {
-  return pathname === "/app/active-research" || pathname === "/app/active-research/" || isTaskPath(pathname) || isStudyChatPath(pathname) || geoIdFromChatPath(pathname) !== null || geoConversationPane(pathname, search) !== null;
+  return pathname === "/app/active-research" || pathname === "/app/active-research/" || isStudyChatPath(pathname) || geoIdFromChatPath(pathname) !== null || geoConversationPane(pathname, search) !== null;
 }
 
 /** Admit a scoped pane only for the exact project and session in its address. */

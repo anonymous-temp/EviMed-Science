@@ -139,8 +139,11 @@ vcr_bop2_boundaries <- function(pp, looks, lambda, gamma, eta = NULL) {
 }
 
 #' Simon's optimal and minimax designs at the same alpha and power, with their expected sizes under both rates; NULL when none exists up to `n_max`
-#' (the baseline is then left out of the result, not replaced by a search that would take minutes).
-.vcr_bd_simon <- function(p0, p1, alpha, power, n_max) {
+#' (the baseline is then left out of the result, not replaced by a search that would take minutes). The search is the baseline's own, never cut at the
+#' Bayesian design's `maxN`: a baseline cut there is the best Simon design that fits that size, and the saving read against it is overstated (p0 0.1,
+#' p1 0.3, maxN 26: expected size 16.77 against the optimal 15.01 at n = 29). `designMaxN` rides with the result so a reader sees when the baseline
+#' needs more patients than the design may enrol.
+.vcr_bd_simon <- function(p0, p1, alpha, power, n_max, design_max_n = NULL) {
   s <- tryCatch(vcr_simon_two_stage(p0, p1, alpha = alpha, beta = 1 - power, n_max = n_max), error = function(e) NULL)
   if (is.null(s) || (is.null(s$optimal) && is.null(s$minimax))) return(NULL)
   describe <- function(x) if (is.null(x)) NULL else {
@@ -148,7 +151,7 @@ vcr_bop2_boundaries <- function(pp, looks, lambda, gamma, eta = NULL) {
     list(n1 = x$n1, r1 = x$r1, n = x$n, r = x$r, typeOneError = x$alpha, power = x$power, expectedN0 = x$EN0, expectedN1 = x$n1 + (1 - pet1) * (x$n - x$n1),
          earlyStop0 = x$PET0, earlyStop1 = pet1)
   }
-  list(optimal = describe(s$optimal), minimax = describe(s$minimax))
+  list(optimal = describe(s$optimal), minimax = describe(s$minimax), searchedUpTo = as.integer(n_max), designMaxN = design_max_n)
 }
 
 .vcr_bd_read_phase2 <- function(sc) {
@@ -211,7 +214,7 @@ vcr_bop2_boundaries <- function(pp, looks, lambda, gamma, eta = NULL) {
     # the smallest lambda that gives the chosen rule is reported; a larger one in the same interval would give the same boundaries
   }
   bd <- chosen$bounds
-  simon <- .vcr_bd_simon(p$p0, p$p1, p$alpha, p$power, min(p$max_n, VCR_BD_SIMON_MAX))
+  simon <- .vcr_bd_simon(p$p0, p$p1, p$alpha, p$power, VCR_BD_SIMON_MAX, p$max_n)
   looks_out <- lapply(seq_len(L), function(i) list(look = i, size = looks[i],
     futilityAtOrBelow = if (i < L && bd$fut[i] >= 0) bd$fut[i] else NULL,
     efficacyAtOrAbove = if (i < L && is.finite(bd$eff[i]) && bd$eff[i] <= looks[i]) bd$eff[i] else NULL,
@@ -281,7 +284,7 @@ vcr_bop2_boundaries <- function(pp, looks, lambda, gamma, eta = NULL) {
   lowest <- if (s >= 1L && s <= N + 1L) pp_final[s] else NULL
   highest <- if (s <= N) pp_final[s + 1L] else NULL
   bd <- chosen$bounds
-  simon <- .vcr_bd_simon(p$p0, p$p1, p$alpha, p$power, min(p$max_n, VCR_BD_SIMON_MAX))
+  simon <- .vcr_bd_simon(p$p0, p$p1, p$alpha, p$power, VCR_BD_SIMON_MAX, p$max_n)
   looks_out <- lapply(seq_len(L), function(i) list(look = i, size = looks[i],
     futilityAtOrBelow = if (i < L && bd$fut[i] >= 0) bd$fut[i] else NULL,
     efficacyAtOrAbove = if (i < L && is.finite(bd$eff[i]) && bd$eff[i] <= looks[i]) bd$eff[i] else NULL,

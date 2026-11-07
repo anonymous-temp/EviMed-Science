@@ -1197,7 +1197,7 @@ test("web deployment env example documents required hosted settings", async () =
   // launching the image it just built.
   const composeForEnv = await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8");
   const composeRuntimeImage = composeForEnv.match(/\$\{OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE:-([^}]+)\}/)?.[1];
-  assert.equal(composeRuntimeImage, "open-science-runtime:dsh-0.2.1-rc.5-uv-0.11.26");
+  assert.equal(composeRuntimeImage, "open-science-runtime:dsh-0.2.2-rc.1-uv-0.11.26");
   assert.match(env, new RegExp(`^OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE=${composeRuntimeImage.replace(/[.]/g, "\\.")}$`, "m"));
   assert.match(env, /OPEN_SCIENCE_RUNTIME_TRANSPORT=unix/);
   assert.match(env, /OPEN_SCIENCE_RUNTIME_NETWORK_MODE=open-science-runtime-internal/);
@@ -2699,14 +2699,7 @@ test("every optional-channel lever the server reads is forwarded by compose", as
   // Both shapes the file uses. A lever read through `boolEnv`/`listEnv` was
   // invisible to a scan that only knew `process.env.X`, which is the exact way
   // a guard against a missing forward can itself go missing.
-  // `AUTOPILOT` joined the scan on 2026-09-08: its three levers were listed
-  // only by `docker-compose.ingestion.yml`, so a deployment without that
-  // overlay ran with autopilot defaulted on in production while an operator
-  // setting `OPEN_SCIENCE_AUTOPILOT_ENABLED=false` in `.env` changed nothing
-  // and was told nothing. A lever that cannot turn a subsystem off is the
-  // worse direction of this defect, and this scan was already the right guard
-  // — its family list just did not name this family.
-  const pattern = /(?:process\.env\.|(?:bool|list)Env\(")(OPEN_SCIENCE_(?:GEO_PROBE|WEB_SEARCH|RUNTIME_UI|SELF_REGISTRATION|AUTOPILOT)[A-Z0-9_]*)/g;
+  const pattern = /(?:process\.env\.|(?:bool|list)Env\(")(OPEN_SCIENCE_(?:GEO_PROBE|WEB_SEARCH|RUNTIME_UI|SELF_REGISTRATION)[A-Z0-9_]*)/g;
   const read = [...config.matchAll(pattern)].map((match) => match[1]);
   const names = [...new Set(read)].sort();
   assert.ok(
@@ -2716,7 +2709,6 @@ test("every optional-channel lever the server reads is forwarded by compose", as
   assert.ok(names.includes("OPEN_SCIENCE_GEO_PROBE_URL"), "the scan missed the GEO probe URL");
   assert.ok(names.includes("OPEN_SCIENCE_RUNTIME_UI_PORT"), "the scan missed the browser application's port");
   assert.ok(names.includes("OPEN_SCIENCE_SELF_REGISTRATION_ENABLED"), "the scan missed the registration switch");
-  assert.ok(names.includes("OPEN_SCIENCE_AUTOPILOT_ENABLED"), "the scan missed the autopilot switch");
   for (const name of names) {
     assert.ok(
       compose.includes(`\${${name}`),

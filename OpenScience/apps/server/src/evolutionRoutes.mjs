@@ -1,6 +1,6 @@
 import { HttpError, readJson, sendJson } from './security.mjs';
 /** @param {any} dependencies */
-export function createEvolutionRoutes({ store, service, decisions, worker, config = {}, isOperator, registerEvaluationPolicy, evaluationAudit, adoptOpportunity, evidenceRegistration, capabilityMap = null, maxJsonBytes = 262144 }) {
+export function createEvolutionRoutes({ store, service, decisions, worker, config = {}, isOperator, registerEvaluationPolicy, evaluationAudit, evidenceRegistration, capabilityMap = null, maxJsonBytes = 262144 }) {
   /** @param {any} req @param {any} res */
   return async (req, res) => {
     const url = new URL(req.url ?? '/', 'http://evimed.local');
@@ -9,8 +9,7 @@ export function createEvolutionRoutes({ store, service, decisions, worker, confi
     await store.assertCsrf(req, url.pathname);
     if (!service || config.evolutionEnabled !== true) throw new HttpError(404, 'evolution_disabled', 'Evolution is disabled.');
     if (config.evolutionServingOnly === true && req.method !== 'GET') {
-      const servingMutation = url.pathname === '/api/evolution/opportunities/adopt'
-        || /^\/api\/evolution\/decisions\/[^/]+\/resolve$/.test(url.pathname);
+      const servingMutation = /^\/api\/evolution\/decisions\/[^/]+\/resolve$/.test(url.pathname);
       if (!servingMutation) throw new HttpError(409, 'evolution_offline_only', 'Platform experiments run only in offline campaigns.');
     }
 
@@ -18,16 +17,6 @@ export function createEvolutionRoutes({ store, service, decisions, worker, confi
       const projectId = url.searchParams.get('projectId');
       await store.requireProject(user, projectId);
       sendJson(res, 200, { data: await service.availableTools({}) }); return true;
-    }
-    if (req.method === 'GET' && url.pathname === '/api/evolution/opportunities') {
-      const projectId = url.searchParams.get('projectId'); await store.requireProject(user, projectId);
-      sendJson(res, 200, { data: (await service.opportunities(user.id)).filter((/** @type {any} */ row) => row.payload.projectId === projectId) }); return true;
-    }
-    if (req.method === 'POST' && url.pathname === '/api/evolution/opportunities/adopt') {
-      const input = await readJson(req, maxJsonBytes); await store.requireProject(user, input.projectId);
-      const opportunity = await service.get(input.opportunityId, user.id);
-      if (!opportunity || opportunity.payload.projectId !== input.projectId) throw new HttpError(404, 'evolution_opportunity_missing', 'Opportunity not found.');
-      sendJson(res, 200, { data: await service.withLock(`adopt:${user.id}:${opportunity.id}`, () => adoptOpportunity(user, input)) }); return true;
     }
     if (!await isOperator(user)) throw new HttpError(403, 'evolution_operator_required', 'Evolution is available to operators only.');
     // The capability map is the evolution engine's own model of what the platform can do (task family x capability), not a

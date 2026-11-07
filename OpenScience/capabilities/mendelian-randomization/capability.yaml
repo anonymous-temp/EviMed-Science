@@ -47,12 +47,6 @@ inputs:
   - analysisDirection
   - exposureSource
   - outcomeSource
-autopilot:
-  taskTypes: []
-  costClass: high
-  unattendedInputs:
-  - exposure
-  - outcome
 estimatedMinutes:
 - 30
 - 180

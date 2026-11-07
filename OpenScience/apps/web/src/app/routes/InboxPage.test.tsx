@@ -151,8 +151,6 @@ it("opens a 虚拟临床研究 notice on its study's tab, and nothing that is no
 it("opens a digest, the frontier daily and a memory where each lives, without deciding anything", async () => {
   serve({
     items: [
-      { ...review, id: "digest", title: "主动科研简报：GLP-1", source: { type: "digest", id: "digest-owned" },
-        actions: [{ id: "open", label: "查看简报", style: "neutral" }], readAt: at(1), resolvedAt: at(1) },
       { ...review, id: "daily", noticeType: "notify", title: "今日前沿 · 9月23日", body: "头条：FDA 发布新方法学专题",
         source: { type: "digest", id: "frontier-daily:2026-09-23" }, actions: [{ id: "open", label: "打开日报", style: "neutral" }], readAt: at(1) },
       { ...review, id: "weekly", noticeType: "notify", title: "本周医学进展", source: { type: "digest", id: "frontier-weekly:2026-09-21" }, actions: [{ id: "open", label: "查看周刊", style: "primary" }], readAt: at(1) },
@@ -172,7 +170,6 @@ it("opens a digest, the frontier daily and a memory where each lives, without de
   expect(await screen.findByRole("link", { name: "DeepSeek 把玛仕度肽说成每天注射一次" })).toHaveAttribute("href", "/app/geo/geo_1/answers/snap_1");
   expect(screen.queryByRole("link", { name: "一条来路不明的通知" })).toBeNull();
   expect(screen.getByRole("link", { name: "资料变更待处理" })).toHaveAttribute("href", `/app/geo/geo_1?signal=gs_${'a'.repeat(64)}`);
-  expect(await screen.findByRole("link", { name: "主动科研简报：GLP-1" })).toHaveAttribute("href", "/app/autopilot?digest=digest-owned");
   expect(screen.getByRole("link", { name: "今日前沿 · 9月23日" })).toHaveAttribute("href", "/app/frontier?view=daily&day=2026-09-23&from=push");
   expect(screen.getByRole("link", { name: "一条记忆被改写" })).toHaveAttribute("href", "/app/memory?record=rec_1");
   expect(screen.getByRole("link", { name: "本周医学进展" })).toHaveAttribute("href", "/app/frontier?view=weekly&week=2026-09-21&from=push");
@@ -751,59 +748,4 @@ describe("the inbox's composition", () => {
     const facts = expectComposed(container, { tablists: 1, stepRail: false, toolbar: true });
     expect(facts.toolbars[0].compareDocumentPosition(screen.getByRole("list", { name: "消息" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
-});
-
-it("opens a terminal task failure in the task's own project", async () => {
-  serve({ items: [{ ...review, id: "task-failure", title: "行业日报未完成", noticeType: "notify", projectId: "project-two", source: { type: "system", id: "autopilot-task:agenda-one" }, actions: [{ id: "open", label: "查看任务", style: "primary" }], readAt: at(1) }], nextCursor: null });
-  open();
-  expect(await screen.findByRole("link", { name: "行业日报未完成" })).toHaveAttribute("href", "/app/autopilot/agenda-one?project=project-two");
-});
-
-
-it("selects loaded IDs, excludes safety and retries only failed batch reads", async () => {
- const first = runNotice({ id: "batch-a", title: "Batch A" }); const second = runNotice({ id: "batch-b", title: "Batch B" });
- serve({ items: [first, second], nextCursor: null });
- vi.mocked(api.markInboxRead).mockImplementation(async id => { if (id === "batch-b") throw new Error("offline"); return { ...first, readAt: at(0), revision: 2 }; });
- open();
- // Nothing is ticked: the toolbar has no selection group and the page draws no explanatory note for one.
- const toolbar = await screen.findByRole("group", { name: "收件箱筛选" });
- expect(screen.queryByRole("toolbar", { name: "批量标为已读" })).not.toBeInTheDocument();
- expect(screen.queryByRole("button", { name: /所选标为已读|清除选择|全选已加载/ })).not.toBeInTheDocument();
- expect(document.body).not.toHaveTextContent(/仅包括当前已加载|需要优先查看的消息请逐条打开/);
- await userEvent.click(screen.getByRole("checkbox", { name: /选择：Batch A/ }));
- // Ticking a row selects it; it neither opens the notice nor marks it read.
- expect(api.markInboxRead).not.toHaveBeenCalled();
- const selectionToolbar = within(toolbar).getByRole("toolbar", { name: "批量标为已读" });
- expect(selectionToolbar).toHaveTextContent("已选 1 条");
- // The one action is secondary: no second primary in the page.
- const act = within(selectionToolbar).getByRole("button", { name: "所选标为已读" });
- expect(act.className).not.toMatch(/bg-accent/);
- await userEvent.click(within(selectionToolbar).getByRole("button", { name: "全选已加载的 2 条" }));
- expect(selectionToolbar).toHaveTextContent("已选 2 条");
- await userEvent.click(act);
- expect(await screen.findByText(/失败 1 条：Batch B/)).toBeInTheDocument();
- expect(screen.getByRole("checkbox", { name: /选择：Batch B/ })).toBeChecked();
- vi.mocked(api.markInboxRead).mockClear();
- await userEvent.click(screen.getByRole("button", { name: "所选标为已读" }));
- await waitFor(() => expect(api.markInboxRead).toHaveBeenCalledTimes(1)); expect(api.markInboxRead).toHaveBeenCalledWith("batch-b", 1);
-});
-
-it("lets go of a selection from the toolbar, and the group leaves with it", async () => {
- serve({ items: [runNotice({ id: "batch-a", title: "Batch A" }), runNotice({ id: "batch-b", title: "Batch B" })], nextCursor: null });
- open();
- await userEvent.click(await screen.findByRole("checkbox", { name: /选择：Batch A/ }));
- await userEvent.click(screen.getByRole("button", { name: "清除选择" }));
- expect(screen.queryByRole("toolbar", { name: "批量标为已读" })).not.toBeInTheDocument();
- expect(screen.getByRole("checkbox", { name: /选择：Batch A/ })).not.toBeChecked();
-});
-
-// Review R2 P1-1: the row's title is stretched over the whole row, and the selection box sat under it, so a click on the box opened
-// the notice. The leading slot is raised above the stretched title and lets through whatever is only a mark.
-it("keeps a row's selection box above the row's own target", async () => {
- serve({ items: [runNotice({ id: "batch-a", title: "Batch A" })], nextCursor: null });
- open();
- const box = await screen.findByRole("checkbox", { name: /选择：Batch A/ });
- const leading = box.closest("[data-row-leading]") as HTMLElement;
- expect(leading).toHaveClass("relative", "z-sticky", "pointer-events-none");
- expect(leading.className).toMatch(/label,\[role=switch\]/);
 });

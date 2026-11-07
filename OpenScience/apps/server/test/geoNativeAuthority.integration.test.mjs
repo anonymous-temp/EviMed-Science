@@ -242,14 +242,27 @@ test('explicit conversations are idempotent, scoped, paginated and respect membe
   await assert.rejects(f.authority.listConversations(f.users.editor, f.geo.id), error => [403, 404].includes(error.status));
 });
 
-test('unknown creation outcome is not repeated by another authority instance', options, async t => {
-  const f = await setup(t); let creates = 0;
-  f.authority.createSession = async () => { creates++; throw new Error('kernel response lost'); };
+test('a creation whose outcome was lost is finished by the retry, from any authority instance, and is never two sessions', options, async t => {
+  const f = await setup(t, 4, { kernel: [] }); let creates = 0; const asked = [];
+  const make = createSession => new GeoNativeAuthority({ store: f.store, accounts: f.accounts, service: f.service, documents: f.documents, results: f.authority.results,
+    createSession, ensureSession: f.authority.ensureSession, runs: f.authority.runs, sessionListed: async (_project, sessionId) => f.inventory.has(sessionId) });
+  // The first attempt fails before the kernel has the session; the retry asks for the same id and completes.
+  const failing = make(async () => { creates++; throw new Error('kernel response lost'); });
   const target = { kind: 'new', requestId: 'uncertain_request_123' };
-  await assert.rejects(f.authority.descriptor(f.users.editor, f.geo.id, target), /kernel response lost/);
-  const other = new GeoNativeAuthority({ store: f.store, accounts: f.accounts, service: f.service, documents: f.documents, results: f.authority.results, createSession: f.authority.createSession, ensureSession: f.authority.ensureSession, runs: f.authority.runs });
-  await assert.rejects(other.descriptor(f.users.editor, f.geo.id, target), error => error.code === 'geo_creation_pending');
-  assert.equal(creates, 1);
+  await assert.rejects(failing.descriptor(f.users.editor, f.geo.id, target), /kernel response lost/);
+  const working = make(async (_project, options) => { creates++; asked.push(options?.sessionId); f.inventory.add(options.sessionId); return { id: options.sessionId }; });
+  const done = await working.descriptor(f.users.editor, f.geo.id, target);
+  assert.equal(creates, 2); assert.ok(done.sessionId.startsWith('gnc_'));
+  assert.deepEqual((await working.descriptor(f.users.editor, f.geo.id, target)).sessionId, done.sessionId);
+  assert.equal(creates, 2, 'a completed request is answered from its receipt');
+  // The first attempt reached the kernel and only its answer was lost: the retry finds the session and does not ask again.
+  const lost = make(async (_project, options) => { creates++; f.inventory.add(options.sessionId); throw new Error('response lost after creation'); });
+  const second = { kind: 'new', requestId: 'lost_answer_request_1' };
+  await assert.rejects(lost.descriptor(f.users.editor, f.geo.id, second), /response lost after creation/);
+  const before = creates;
+  const found = await working.descriptor(f.users.editor, f.geo.id, second);
+  assert.equal(creates, before, 'the session already existed, so nothing was created');
+  assert.notEqual(found.sessionId, done.sessionId); assert.equal(f.inventory.size, 2);
 });
 
 test('list reads a practical ledger snapshot once and excludes unrelated sessions', options, async t => {

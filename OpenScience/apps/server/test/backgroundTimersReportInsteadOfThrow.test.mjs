@@ -1,6 +1,6 @@
 // Every recurring job in server.mjs is started from a timer under `void`, so a
 // rejection that escapes its chain is an unhandled rejection, and Node makes
-// that fatal. On 2026-09-09 the autopilot scheduler's catch rethrew a Postgres
+// that fatal. On 2026-09-09 a scheduler's catch rethrew a Postgres
 // connection timeout and the whole control plane died mid-run. The schedulers
 // are not reachable from a unit test without a live Postgres, so this reads
 // the source: each `maintenanceMutation(...)` chain must have a catch, and no

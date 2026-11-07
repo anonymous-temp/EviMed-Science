@@ -160,7 +160,7 @@ const minimatch = require(require.resolve("minimatch", { paths: [require.resolve
 
 const PAGE_FILES = [
   "src/app/**/*.{ts,tsx}",
-  "src/components/{geo,vcr,memory,sources,frontier,inbox,autopilot,capsule,settings,skills}/**/*.{ts,tsx}",
+  "src/components/{geo,vcr,memory,sources,frontier,inbox,activeResearch,capsule,settings,skills}/**/*.{ts,tsx}",
 ];
 const VCR_FILES = ["src/components/vcr/**/*.{ts,tsx}", "src/app/virtual-research/**/*.{ts,tsx}"];
 // A text-submit handler: Enter that confirms an IME composition must not submit a draft. It is part of the 虚拟临床研究 group's own

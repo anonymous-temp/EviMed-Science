@@ -50,7 +50,9 @@
         "@deepseek-ai/dsh-client-ui-layout",
         "@deepseek-ai/dsh-client-ui-sidebar-right",
         "@deepseek-ai/dsh-client-ui-commands",
-        "@deepseek-ai/dsh-client-ui-input-trigger"
+        "@deepseek-ai/dsh-client-ui-input-trigger",
+        "@deepseek-ai/dsh-client-ui-file-actions",
+        "@deepseek-ai/dsh-api-remotes"
       ]
     }
   },
@@ -77,7 +79,7 @@
     "@evimed/research-plugin-runtime"
   ],
   "peerDependencies": {
-    "@deepseek-ai/cordis": "4.0.5"
+    "@deepseek-ai/cordis": "4.1.0"
   },
   "peerDependenciesMeta": {
     "@deepseek-ai/cordis": {

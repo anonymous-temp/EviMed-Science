@@ -230,3 +230,30 @@ vcr_case("N72g", c("AC-08", "AC-30"), function() {
   }
   list(pass = worst_tipr < 1e-9 && worst_back < 1e-9, detail = sprintf("%s; largest difference from tipr %.1e, from the substituted bias factor %.1e", paste(text, collapse = "; "), worst_tipr, worst_back))
 })
+
+vcr_case("N72h", c("AC-08", "AC-30"), function() {
+  # A normal bias on a ratio scale is normal on the LOG scale (the help's wording): the draw is the log-ratio and is not logged again. HR 0.70
+  # (0.50-0.98), a bias of log 1.5 = 0.405 with sd 0.08. Reference: the adjusted log ratio is theta + b, so it is normal with mean theta + 0.405 and
+  # sd 0.08 on its own (systematic) and sqrt(0.08^2 + se^2) with the sampling error - closed-form qnorm quantiles, and the share still protective is pnorm.
+  est <- 0.7; lo <- 0.5; hi <- 0.98; z <- stats::qnorm(0.975)
+  se <- (log(hi) - log(lo)) / (2 * z); th <- log(est); mu <- 0.405; sd <- 0.08
+  run <- function(mean_, sd_, id) vcr_test_run(.n72_job(list(scale = "hazard_ratio", estimate = est, lower = lo, upper = hi,
+                         probabilistic = list(bias = list(family = "normal", mean = mean_, sd = sd_))), id, replicates = 100000L))
+  r <- run(mu, sd, "n72h")
+  pa <- r$diagnostics$biasAnalysis$probabilistic
+  stot <- sqrt(sd^2 + se^2)
+  want_sys <- exp(th + mu + sd * stats::qnorm(c(0.025, 0.5, 0.975))); want_comb <- exp(th + mu + stot * stats::qnorm(c(0.025, 0.5, 0.975)))
+  want_persist <- stats::pnorm(0, th + mu, stot, lower.tail = TRUE)
+  pers <- vcr_get_measure(r, "bias_adjusted_effect_persists")
+  # a smaller bias that used to give NaNs (draws below 0 were logged)
+  r2 <- run(0.223, 0.1, "n72h2"); pa2 <- r2$diagnostics$biasAnalysis$probabilistic
+  want2 <- exp(th + 0.223 + sqrt(0.1^2 + se^2) * stats::qnorm(0.5))
+  ok <- identical(r$status, "succeeded") &&
+    abs(pa$systematic$low - want_sys[1]) < 3 * pa$systematic$lowMcse && abs(pa$systematic$median - want_sys[2]) < 3 * pa$systematic$medianMcse &&
+    abs(pa$systematic$high - want_sys[3]) < 3 * pa$systematic$highMcse &&
+    abs(pa$combined$low - want_comb[1]) < 3 * pa$combined$lowMcse && abs(pa$combined$median - want_comb[2]) < 3 * pa$combined$medianMcse &&
+    abs(pa$combined$high - want_comb[3]) < 3 * pa$combined$highMcse && abs(pers$value - want_persist) < 3 * pers$mcse &&
+    identical(r2$status, "succeeded") && is.finite(pa2$combined$median) && abs(pa2$combined$median - want2) < 3 * pa2$combined$medianMcse
+  list(pass = ok, detail = sprintf("normal log-bias 0.405 sd 0.08 on HR 0.70: systematic median %.4f (closed form %.4f), interval %.4f-%.4f vs %.4f-%.4f; combined median %.4f vs %.4f; share still protective %.4f vs %.4f; mean 0.223 sd 0.1: status %s, combined median %.4f vs %.4f",
+                        pa$systematic$median, want_sys[2], pa$combined$low, pa$combined$high, want_comb[1], want_comb[3], pa$combined$median, want_comb[2], pers$value, want_persist, r2$status, pa2$combined$median, want2))
+})

@@ -75,3 +75,33 @@ test('closed queued question never becomes answer authority without delivery', {
   assert.equal(delivered.length,1,'only ready, not the question, reached the browser');
   assert.equal(allowed,false,'a question discarded after closure must not authorize an answer');
 });
+
+test('a scoped frame reads the skill catalogue and the GoalBar of the conversations it can read, and nothing wider', () => {
+  const scope = new NativeUiScope({ rootSessionId: 'root', workspacePath: '/workspace', provider: 'p', model: 'm' });
+  scope.setChildren([{ kind: 'subagent', parentSessionId: 'root', childSessionId: 'child', mode: 'one-shot' }]);
+  const skills = sessionId => ({ args: { request: { sessionId } } });
+  assert.equal(scope.permits('skills/list', skills('root')), true);
+  assert.equal(scope.permits('skills/list', skills('child')), true, 'a child session the frame can read has its own catalogue');
+  assert.equal(scope.permits('skills/list', skills('someone-elses')), false);
+  assert.equal(scope.permits('skills/list', { args: { request: { sessionId: 'root', other: 1 } } }), false);
+  assert.equal(scope.permits('skills/list', { args: { request: { sessionId: 'root' }, extra: true } }), false);
+  assert.equal(scope.permits('skills/list', { args: {} }), false);
+  const bar = (op, sessionId = 'root', extra = {}) => ({ v: 'loopx_goalbar_request_v2', op, sessionId, ...extra });
+  assert.equal(scope.permits('loopx.goalbar', bar('read')), true);
+  assert.equal(scope.permits('loopx.goalbar', bar('watch')), true);
+  assert.equal(scope.permits('loopx.goalbar', bar('read', 'child')), true);
+  assert.equal(scope.permits('loopx.goalbar', bar('read', 'someone-elses')), false);
+  for (const op of ['start', 'pause']) assert.equal(scope.permits('loopx.goalbar', bar(op, 'root', { expected: { goalId: 'g', loopxAgentId: 'a' } })), false, `${op} is a person's turn, not a read`);
+  assert.equal(scope.permits('loopx.goalbar', { ...bar('read'), extra: 1 }), false);
+  assert.equal(scope.permits('loopx.goalbar', { ...bar('read'), v: 'other' }), false);
+  assert.equal(scope.permits('commands/list', skills('root')), false, 'the command catalogue stays denied until its request shape is measured on a live kernel');
+  assert.equal(scope.permits('settings/mutate', { args: {} }), false);
+  // The answer is projected: no absolute path, no personal skill of the runtime's owner, and the bar answers only for its own session.
+  const listed = scope.project('skills/list', skills('root'), { skills: [{ name: 'literature', path: '/home/u/skills/literature/SKILL.md', description: 'd' }, { name: 'personal-mine', path: '/p' }] });
+  assert.deepEqual(listed, { forward: true, value: { skills: [{ name: 'literature', description: 'd' }] } });
+  assert.equal(scope.project('skills/list', skills('root'), { nope: 1 }).forward, false);
+  const answer = { v: 'loopx_goalbar_response_v2', op: 'read', sessionId: 'root', result: { kind: 'absent' } };
+  assert.equal(scope.project('loopx.goalbar', bar('read'), answer).forward, true);
+  assert.equal(scope.project('loopx.goalbar', bar('read'), { ...answer, sessionId: 'child' }).forward, false);
+  assert.ok(scope.access().grants.find(grant => grant.resource.id === 'root').actions.includes('skills/list'));
+});

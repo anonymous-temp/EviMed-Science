@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 // The extractor describes a task; only the evaluator controls its evidence and holdout status.
 const EXTRACTED_FIELDS = ['id', 'sourceQuotes', 'taskFamily', 'screen', 'edit', 'expect', 'question', 'claims', 'competitors', 'careFlags',
-  'agenda', 'progress', 'stopAllowed', 'equivalentVariant', 'abstentionExpected', 'curatorReview'];
+  'equivalentVariant', 'abstentionExpected', 'curatorReview'];
 
 /** Frozen public snapshots come from the preservation gateway; extraction has a separate identity from proposal.
  * Missing preservation or source-root/date proofs produce no confirmation task.
@@ -19,7 +19,7 @@ export function createModuleEvolutionCurator({ taskPool, readSnapshots, extractT
   return {
     /** @param {{moduleId:string, candidate:any, modelReleasedAt:string, epoch:string, exposedSourceRoots?:string[], pool?:string, quarter?:string, want?:number}} input */
     async curate(input) {
-      if (!["frontier", "geo", "autopilot"].includes(input.moduleId)) return {status:"unavailable",reason:"curator_module_unavailable",added:0};
+      if (!["frontier", "geo"].includes(input.moduleId)) return {status:"unavailable",reason:"curator_module_unavailable",added:0};
       const boundary = Math.max(Date.parse(input.candidate.frozenAt), Date.parse(input.modelReleasedAt));
       if (!Number.isFinite(boundary)) return {status:"unavailable",reason:"environment_date_unknown",added:0};
       const exposed = new Set([...(input.candidate.developmentSourceRoots ?? []),...(input.exposedSourceRoots ?? [])]);

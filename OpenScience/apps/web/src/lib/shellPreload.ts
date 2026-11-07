@@ -21,7 +21,6 @@ const PAGES: ReadonlyArray<() => Promise<unknown>> = [
   () => import("@/app/routes/MemoryHubPage"),
   () => import("@/app/virtual-research/VcrHomePage"),
   () => import("@/app/routes/GeoHomePage"),
-  () => import("@/app/routes/AutopilotPage"),
 ];
 
 type ConnectionHints = { saveData?: boolean; effectiveType?: string };

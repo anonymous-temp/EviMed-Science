@@ -27,7 +27,7 @@ const KnowledgePage = lazy(() => import("./routes/KnowledgePage").then((m) => ({
 const KnowledgeOpenPage = lazy(() => import("./routes/KnowledgeOpenPage").then((m) => ({ default: m.KnowledgeOpenPage })));
 const GalleryPage = lazy(() => import("./routes/GalleryPage").then((m) => ({ default: m.GalleryPage })));
 const ActiveResearchPage = lazy(() => import("./routes/ActiveResearchPage").then((m) => ({ default: m.ActiveResearchPage })));
-const AutopilotPage = lazy(() => import("./routes/AutopilotPage").then((m) => ({ default: m.AutopilotPage })));
+const ScheduledTasksPage = lazy(() => import("./routes/ScheduledTasksPage").then((m) => ({ default: m.ScheduledTasksPage })));
 const VcrCalculationWorkbenchPage = lazy(() => import("./routes/VcrCalculationWorkbenchPage").then((m) => ({ default: m.VcrCalculationWorkbenchPage })));
 const VcrMethodWorkbenchPage = lazy(() => import("./routes/VcrMethodWorkbenchPage").then((m) => ({ default: m.VcrMethodWorkbenchPage })));
 const CapabilitiesPage = lazy(() => import("./routes/CapabilitiesPage").then((m) => ({ default: m.CapabilitiesPage })));
@@ -140,10 +140,8 @@ export const routes: RouteObject[] = [
         { path: "files/open", element: <KnowledgeOpenPage /> },
         // One route for the list and a document in its pane, so choosing another document does not remount the list.
         { path: "files/:sourceId?", element: <KnowledgePage /> },
-        // 「定时任务」: the list at `/app/autopilot`, one task and its conversation at `/app/autopilot/:taskId`. One route, with or
-        // without the id, so opening a task from the list is not a remount (the kernel's frame is placed over the task's pane
-        // by `SessionFrameHost`). `?task=` and `?digest=` are the old addresses and are resolved by the page.
-        { path: "autopilot/:taskId?", element: <AutopilotPage /> },
+        // 「定时任务」 are the kernel's own automation tasks (owner, 2026-11-04): this address opens their page in the project's frame.
+        { path: "autopilot", element: <ScheduledTasksPage /> },
         { path: "active-research", element: <ActiveResearchPage /> },
         { path: "memory", element: <MemoryHubPage /> },
         // 「记忆地图」 was a tab until 2026-10-27, and is part of 总览 now: an old address goes there with what it can carry over.

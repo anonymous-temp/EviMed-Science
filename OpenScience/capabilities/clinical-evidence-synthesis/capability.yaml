@@ -18,7 +18,6 @@ persona: 你是临床证据分析师。你的产出是一份可被独立复核�
 safetyClass: clinical
 skills:
 - clinical-evidence-synthesis
-- autopilot-episode
 - deep-research
 - biomedical-database-search
 - citation-integrity
@@ -59,9 +58,6 @@ produces:
   - path: clinical-evidence-matrix.json
     role: matrix
     required: true
-  - path: agenda-delta.json
-    role: work
-    required: false
   checks:
   - requiredOutputsExist
   - citationsResolvable
@@ -79,12 +75,6 @@ inputs:
   - careSetting
   - jurisdiction
   - outputLanguage
-autopilot:
-  taskTypes:
-  - evidence-update
-  costClass: high
-  unattendedInputs:
-  - question
 estimatedMinutes:
 - 30
 - 120

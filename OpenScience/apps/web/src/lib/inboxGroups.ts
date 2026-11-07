@@ -8,8 +8,7 @@ import type { InboxItem, InboxSeverity } from "@/lib/inboxClient";
  *
  * It used to group by day, fold a day's routine completions into one line and
  * fold automated work into 「自动运行 N 条」 (2026-09-23 plan §5.8). The
- * server writes no notice for an evaluation, an internal project or an
- * autopilot run any more — a proactive result arrives as its digest — and
+ * server writes no notice for an evaluation or an internal project, and
  * nothing is silent, so the page renders every item it is given as a row and
  * reads no grouping field. The day moved into each row's time column.
  *

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import * as port from '../index.mjs'
+import { mountNativeExecutor, runNativeCall } from './helpers/nativeExecutor.mjs'
 
 test('engine tool bodies receive their own request-header policy without changing public arguments or visibility', async () => {
   /** @type {any[]} */ const calls = []
@@ -35,6 +36,7 @@ test('the pinned native registry dispatches concurrent decorated bodies without 
   const root = new Context()
   root.provide('systemPrompt', { tools() {} })
   /** @type {any} */ const runtime = new ToolRuntime(root)
+  await mountNativeExecutor(root)
   const dispose = port.decorateEngineToolContext(root)
   const name = 'mcp__evimed__research_calculate'
   /** @type {any[]} */ const seen = []
@@ -56,12 +58,12 @@ test('the pinned native registry dispatches concurrent decorated bodies without 
     agent.ctx = createScope(root, agent).ctx
     return agent
   })
-  const results = await Promise.all(agents.map(agent => runtime.execute({ callId: agent.session.id,
+  const results = await Promise.all(agents.map(agent => runNativeCall(runtime, { callId: agent.session.id,
     name, agent, arguments: { action: 'start' }, signal: new globalThis.AbortController().signal })))
   assert.ok(results.every(result => !result.isError), JSON.stringify(results))
   assert.deepEqual(seen.map(value => [value.sessionId, value.reasoningEffort]).sort(), [['native-low','low'], ['native-max','max']])
   const deny = agents[0].ctx.tools.restrict({ deny: [name] })
-  const refused = await runtime.execute({ callId: 'blocked', name, agent: agents[0], arguments: { action: 'start' }, signal: new globalThis.AbortController().signal })
+  const refused = await runNativeCall(runtime, { callId: 'blocked', name, agent: agents[0], arguments: { action: 'start' }, signal: new globalThis.AbortController().signal })
   assert.equal(refused.isError, true)
   assert.equal(seen.length, 2, 'the body must not run after a native restriction')
   deny()
@@ -110,6 +112,7 @@ test('pinned native tool runtime dispatch carries store-owned child scope as its
   const child = { id: 'native-child', header: { id: 'native-child', origin: 'subagent', parentSession: parent.id }, requestHeader: () => ({ config: { provider: 'deepseek-official', model: 'deepseek-flash' } }) }
   root.provide('sessions', { get: (/** @type {string} */ id) => id === parent.id ? parent : id === child.id ? child : undefined })
   const runtime = new ToolRuntime(root)
+  await mountNativeExecutor(root)
   const dispose = port.decorateEngineToolContext(root)
   let received
   const unregister = runtime.register({ name: 'mcp__evimed__kb_browse', description: 'test', parameters: { type: 'object', properties: {}, additionalProperties: false }, output: { schema: { type: 'object' }, render: () => [] }, execute: async args => { received = /** @type {{ __evimed_execution_context: { sessionId: string } }} */ (args).__evimed_execution_context.sessionId; return {} } })
@@ -117,7 +120,7 @@ test('pinned native tool runtime dispatch carries store-owned child scope as its
   const fixture = { session: child, ctx: root }
   const agent = /** @type {import('@deepseek-ai/dsh-agent').Agent} */ (/** @type {unknown} */ (fixture))
   fixture.ctx = createScope(root, agent).ctx
-  const result = await runtime.execute({ callId: /** @type {Parameters<typeof runtime.execute>[0]['callId']} */ ('child-call'), name: 'mcp__evimed__kb_browse', agent, arguments: {}, signal: new globalThis.AbortController().signal })
+  const result = await runNativeCall(runtime, { callId: 'child-call', name: 'mcp__evimed__kb_browse', agent, arguments: {}, signal: new globalThis.AbortController().signal })
   assert.equal(result.isError, false)
   assert.equal(received, parent.id)
   unregister(); dispose()

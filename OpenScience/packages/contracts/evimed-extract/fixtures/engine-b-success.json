@@ -1,0 +1,12 @@
+{
+  "code": 200,
+  "message": "success",
+  "uuid": "3A1B0C2D-0000-4000-8000-000000000002",
+  "timestamp": 1781164621,
+  "elapsed_ms": 900,
+  "data": {
+    "content": "引擎 B 的正文。",
+    "format": null,
+    "media_type": null
+  }
+}

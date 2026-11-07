@@ -26,7 +26,7 @@ test('the optional composition is absent by default and enabled wiring supplies 
   assert.equal(createEvolution({config:{evolutionEnabled:false}}),null);
   assert.equal(createEvolution({config:{evolutionEnabled:true}}),null);
   const config={...Object.fromEntries(Object.entries(EVOLUTION_CONFIG_SCHEMA).map(([key,field])=>[key,field.default])),evolutionEnabled:true,dataDir:os.tmpdir(),operatorUsers:[],frontierEnabled:false,evolutionDependencyAllowlist:[]};
-  const module=createEvolution({config,database:{},documents:{},jobs:{},usageLedger:{},store:{},runtimeManager:{},registry:Promise.resolve({}),controller:{},agentRuns:{},evaluationIsolation:{},autopilot:{},dataSemantics:{}});
+  const module=createEvolution({config,database:{},documents:{},jobs:{},usageLedger:{},store:{},runtimeManager:{},registry:Promise.resolve({}),controller:{},agentRuns:{},evaluationIsolation:{},dataSemantics:{}});
   for(const key of ['gateway','routes','finishRun'])assert.equal(typeof module[key],'function');
   for(const key of ['supply','worker','runs','candidateEvaluator','paperGold'])assert.ok(module[key]);
   assert.equal(module.worker.status().enabled,true);

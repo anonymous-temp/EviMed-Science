@@ -1,6 +1,6 @@
 {
   "note": "Account-wide counts, whoever asks (the engine's own statement; not a per-user number).",
-  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.1.1",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.3",
   "request": {
     "method": "GET",
     "path": "/api/v1/stats/memories",

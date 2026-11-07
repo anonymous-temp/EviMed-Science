@@ -2,9 +2,9 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {evolutionScientificUse} from '../src/evolutionScientificUse.mjs';
 import {evolutionMonthlyMetrics} from '../src/evolutionMetrics.mjs';
-test('human and genuine autopilot calls count; automated engineering receipts and internal evaluations do not',()=>{
+test('human and genuine module calls count; automated engineering receipts and internal evaluations do not',()=>{
  assert.deepEqual(evolutionScientificUse('research',{automated:false}),{evaluation:false,researcherOwned:true});
- assert.equal(evolutionScientificUse('research',{effectiveRouteReason:'autopilot:data-prospecting'}).evaluation,false);
+ assert.equal(evolutionScientificUse('research',{effectiveRouteReason:'geo:evidence'}).evaluation,false);
  assert.equal(evolutionScientificUse('research',{automated:true}).evaluation,true);
  assert.equal(evolutionScientificUse('eval-paper-test',{}).evaluation,true);
  assert.deepEqual(evolutionScientificUse('research',null),{evaluation:false,researcherOwned:false});

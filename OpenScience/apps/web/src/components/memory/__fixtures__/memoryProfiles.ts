@@ -62,7 +62,7 @@ export const nativeProfile: WebMemoryProfile = {
       { nativeType: "project_context", folder: "projects", scope: "project", scopeId: "prj_1", kind: "project_fact" }),
     nativeFile("发布窗口", "- 发布定在周三。", { nativeType: "decisions", folder: "decisions", scope: "project", scopeId: "prj_1" }),
   ],
-  groups: empty, activeCount: 7, pendingCount: 0, episodeCount: 0, conversations: {}, usage: {}, pending: [],
+  groups: empty, activeCount: 7, pendingCount: 0, conversations: {}, usage: {}, pending: [],
 };
 
 export const nativeSettings = { learningPaused: false, recallPaused: false, pausedProjects: [], updatedAt: null };

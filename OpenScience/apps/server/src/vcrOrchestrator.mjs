@@ -121,7 +121,7 @@ export const VCR_DEFINITION_FIRST_SENTENCE = "先说一句要研究什么：在�
 const FINISHED = new Set(["done", "minimal"]);
 const TERMINAL_RUN = new Set(["succeeded", "failed", "canceled", "cancelled"]);
 /** Dispatch refusals that will not clear by waiting a minute. */
-const TERMINAL_DISPATCH = new Set(["vcr_unavailable", "vcr_study_not_found", "project_not_found", "autopilot_capability_unavailable"]);
+const TERMINAL_DISPATCH = new Set(["vcr_unavailable", "vcr_study_not_found", "project_not_found"]);
 
 /** Runs: two tries a key, a claim that stalls for ten minutes is retried. */
 export const VCR_RUN_RULES = Object.freeze({ attempts: 2, staleClaimMinutes: 10, studiesPerTick: 200, noticesPerTick: 20 });

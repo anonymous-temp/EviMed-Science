@@ -2,7 +2,6 @@ import { createHash } from "node:crypto";
 
 export const MODULE_EVOLUTION_SURFACES = Object.freeze({
   frontier: ["screenInstructions", "editInstructions", "selectionThreshold"],
-  autopilot: ["plannerInstructions"],
   geo: ["supplements"],
 });
 

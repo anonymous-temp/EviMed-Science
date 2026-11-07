@@ -1,12 +1,8 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
-import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 import { SOURCE_CHANGE_LINK_STATES, linkStatesLeftFor } from "@evimed/domain";
-import { loadConfig } from "../src/config.mjs";
 import { NATIVE_SOURCE_STATES } from "../src/nativeMemoryPersistence.mjs";
-import { KnowledgeChangeService, memoryLinkOf, producingAgenda } from "../src/knowledgeChange.mjs";
+import { KnowledgeChangeService, memoryLinkOf } from "../src/knowledgeChange.mjs";
 import { ResultImpactService } from "../src/resultImpact.mjs";
 import { productDocumentsDouble } from "./helpers/productDocumentsDouble.mjs";
 
@@ -85,17 +81,14 @@ function methodsDouble({ linked = {}, fail = false } = {}) {
   };
 }
 
-function fixture({ memory = memoryDouble(), methods = methodsDouble(), authorize = null, autoRecheckLimit, ...options } = {}) {
+function fixture({ memory = memoryDouble(), methods = methodsDouble(), ...options } = {}) {
   const documents = productDocumentsDouble();
   const { versions, results } = project(options);
-  const calls = [];
   const notices = new Map();
   const knowledge = new KnowledgeChangeService({ native: memory, methods, now: () => NOW });
-  const service = new ResultImpactService({ documents, results, knowledge, now: () => NOW, authorizeContinuation: authorize,
-    ...(autoRecheckLimit === undefined ? {} : { autoRecheckLimit }),
-    notifications: { async create(_user, input) { notices.set(input.idempotencyKey, input); } },
-    autopilot: { async schedule(_user, agendaId, input) { calls.push({ agendaId, input }); return { episode: { id: `episode-${input.requestId}` } }; } } });
-  return { service, documents, versions, calls, notices, memory, methods };
+  const service = new ResultImpactService({ documents, results, knowledge, now: () => NOW,
+    notifications: { async create(_user, input) { notices.set(input.idempotencyKey, input); } } });
+  return { service, documents, versions, notices, memory, methods };
 }
 
 const impactsOf = async f => (await f.service.list("alice", { projectId: "p" })).items;
@@ -119,21 +112,6 @@ test("a correction finds the calculation, the report bound to it and the report 
     assert.equal(payload.historicalResultPreserved, true);
   }
   assert.deepEqual(f.versions.map(version => version.versionId), [1, 2, 3, 4, 5, 6].map(n => rv(String(n))), "nothing was deleted or reordered");
-});
-
-test("unaffected work is not asked to run again: a recheck names only what rests on the source", async () => {
-  const f = fixture();
-  const { items } = await f.service.reconcileSourceUpdate("alice", { projectId: "p", source: { id: DOI }, status: correction() });
-  const report = items.find(item => item.payload.versionId === rv("2"));
-  await f.documents.put("alice", "agenda", "running", { enabled: true, status: "active" }, { expectedRevision: 0, projectId: "p" });
-  const scheduled = await f.service.continueImpact("alice", "p", report.id, { agendaId: "running" });
-  assert.equal(scheduled.payload.continuation.status, "scheduled");
-  const note = f.calls[0].input.note;
-  assert.ok(note.includes(rv("1")), "the calculation that rests on the source is named");
-  assert.ok(!note.includes(rv("4")) && !note.includes(rv("5")) && !note.includes(rv("6")), "no unaffected version is named");
-  assert.match(note, /Recheck only what rests on this source and leave every other result/);
-  assert.match(note, /does not by itself show the result's conclusion is wrong/);
-  assert.match(note, /Preserve the prior result/);
 });
 
 test("the inbox says the source changed and what rests on it, never that a result is wrong", async () => {
@@ -236,7 +214,7 @@ test("a source gap labels no method: there is no change to record", async () => 
   assert.deepEqual(methods.labels, []);
 });
 
-test("a later check refreshes what rests on the same change without moving its continuation", async () => {
+test("a later check refreshes what rests on the same change", async () => {
   const memory = memoryDouble({ rows: [] });
   const f = fixture({ memory });
   const first = await f.service.reconcileSourceUpdate("alice", { projectId: "p", source: { id: DOI }, status: correction() });
@@ -249,7 +227,6 @@ test("a later check refreshes what rests on the same change without moving its c
   const again = second.items.find(item => item.payload.versionId === rv("3"));
   assert.equal(again.id, cited.id, "one change is one impact");
   assert.equal(again.payload.affected.memories.total, 1);
-  assert.equal(again.payload.continuation.status, "awaiting_user");
   assert.equal(again.revision, cited.revision + 1);
   const third = await f.service.reconcileSourceUpdate("alice", { projectId: "p", source: { id: DOI }, status: correction() });
   assert.equal(third.items.find(item => item.payload.versionId === rv("3")).revision, again.revision, "an unchanged answer writes nothing");
@@ -299,41 +276,6 @@ test("a memory that names a replaced document is found by its src id even when n
   assert.doesNotMatch([...f.notices.values()][0].body, /暂时查不到/, "no result and no method link is a finished lookup, not a failed one");
 });
 
-test("an agenda the researcher is running rechecks without a further approval; a paused or not started one is not started", async () => {
-  const f = fixture({ authorize: async (_owner, impact) => (impact.payload.versionId === rv("3") ? "running" : impact.payload.versionId === rv("2") ? "paused" : null) });
-  await f.documents.put("alice", "agenda", "running", { enabled: true, status: "active" }, { expectedRevision: 0, projectId: "p" });
-  await f.documents.put("alice", "agenda", "paused", { enabled: false, status: "paused" }, { expectedRevision: 0, projectId: "p" });
-  const { items } = await f.service.reconcileSourceUpdate("alice", { projectId: "p", source: { id: DOI }, status: correction() });
-  const status = Object.fromEntries(items.map(item => [item.payload.versionId, item.payload.continuation.status]));
-  assert.equal(status[rv("3")], "scheduled");
-  assert.equal(status[rv("2")], "awaiting_user", "a paused agenda starts nothing and the researcher can still choose");
-  assert.equal(status[rv("1")], "awaiting_user", "no agenda produced this one");
-  assert.deepEqual(f.calls.map(call => call.agendaId), ["running"]);
-});
-
-test("automatic rechecks of one change are bounded and a failure leaves the impact for the researcher", async () => {
-  const f = fixture({ authorize: async () => "running", autoRecheckLimit: 2 });
-  await f.documents.put("alice", "agenda", "running", { enabled: true, status: "active" }, { expectedRevision: 0, projectId: "p" });
-  const reported = [];
-  f.service.report = code => reported.push(code);
-  const { items } = await f.service.reconcileSourceUpdate("alice", { projectId: "p", source: { id: DOI }, status: correction() });
-  assert.equal(items.filter(item => item.payload.continuation.status === "scheduled").length, 2);
-  assert.equal(items.filter(item => item.payload.continuation.status === "awaiting_user").length, 1, "the rest wait for the researcher, still visible in the panel");
-  const broken = fixture({ authorize: async () => { throw Object.assign(new Error("agenda store down"), { code: "autopilot_unavailable" }); } });
-  broken.service.report = code => reported.push(code);
-  const reply = await broken.service.reconcileSourceUpdate("alice", { projectId: "p", source: { id: DOI }, status: correction() });
-  assert.equal(reply.items.length, 3, "the labels and impacts survive the failed recheck");
-  assert.ok(reported.includes("autopilot_unavailable"));
-  assert.equal(broken.calls.length, 0);
-});
-
-test("an unknown or unavailable source never starts a recheck", async () => {
-  const f = fixture({ authorize: async () => "running" });
-  await f.documents.put("alice", "agenda", "running", { enabled: true, status: "active" }, { expectedRevision: 0, projectId: "p" });
-  await f.service.reconcileSourceUpdate("alice", { projectId: "p", source: { id: DOI }, status: { state: "unknown", checkedAt: null, reason: "not_in_crossref", updates: [] } });
-  assert.equal(f.calls.length, 0);
-});
-
 test("only identifiers a memory can record are memory links", () => {
   assert.deepEqual(memoryLinkOf({ id: "DOI:10.1000/ABC", doi: "10.1000/ABC" }), { type: "doi", id: "10.1000/abc" });
   assert.deepEqual(memoryLinkOf({ id: SRC_OLD }), { type: "knowledge_source", id: SRC_OLD });
@@ -341,50 +283,8 @@ test("only identifiers a memory can record are memory links", () => {
   assert.equal(memoryLinkOf({ id: "src_short" }), null);
 });
 
-test("the agenda that produced a result is the one authorization, and only while it is running", async () => {
-  const f = fixture();
-  const agendas = new Map([
-    ["running", { projectId: "p", payload: { enabled: true, status: "active" } }],
-    ["paused", { projectId: "p", payload: { enabled: false, status: "paused" } }],
-    ["archived", { projectId: "p", payload: { enabled: true, status: "active", archivedAt: "2026-10-01" } }],
-    ["elsewhere", { projectId: "q", payload: { enabled: true, status: "active" } }],
-  ]);
-  const episodes = { "run-agenda": "running", "run-chat": null, "run-paused": "paused", "run-archived": "archived", "run-elsewhere": "elsewhere" };
-  const autopilot = {
-    async episodeForRun(_owner, _project, runId) { return episodes[runId] ? { payload: { agendaId: episodes[runId] } } : null; },
-    async get(_owner, id) { const row = agendas.get(id); if (!row) throw new Error("gone"); return row; },
-  };
-  const resolve = producingAgenda({ results: f.service.results, autopilot });
-  const impact = (versionId, calculations = []) => ({ projectId: "p", payload: { versionId, affected: { calculations: { items: calculations.map(id => ({ versionId: id })) } } } });
-  assert.equal(await resolve("alice", impact(rv("1"))), "running");
-  delete f.versions[1].producer;
-  assert.equal(await resolve("alice", impact(rv("2"))), null, "a report that records no run has no agenda of its own");
-  assert.equal(await resolve("alice", impact(rv("2"), [rv("1")])), "running", "and takes the agenda of the calculation it rests on");
-  assert.equal(await resolve("alice", impact(rv("3"))), null, "a chat run is no agenda's");
-  assert.equal(await resolve("alice", impact(rv("6"))), null);
-  for (const [run, expected] of [["run-paused", null], ["run-archived", null], ["run-elsewhere", null]]) {
-    f.versions[0].producer = { runId: run };
-    assert.equal(await resolve("alice", impact(rv("1"))), expected, run);
-  }
-  f.versions[0].producer = { runId: "run-agenda" };
-  autopilot.episodeForRun = async () => { throw new Error("agenda store down"); };
-  assert.equal(await resolve("alice", impact(rv("1"))), null, "a failing lookup is no authorization");
-});
-
 test("every state a check gives a link is one the memory store records", () => {
   for (const state of SOURCE_CHANGE_LINK_STATES) assert.ok(NATIVE_SOURCE_STATES.includes(state), state);
-});
-
-test("the automatic recheck bound is a lever whose compose fallback is the code's own default and which .env.example names", async () => {
-  const repoRoot = fileURLToPath(new URL("../../..", import.meta.url));
-  const config = loadConfig({ rootDir: repoRoot });
-  assert.equal(config.sourceChangeRecheckLimit, 3);
-  assert.equal(loadConfig({ rootDir: repoRoot, sourceChangeRecheckLimit: 0 }).sourceChangeRecheckLimit, 0, "zero turns the automatic recheck off");
-  assert.equal(loadConfig({ rootDir: repoRoot, sourceChangeRecheckLimit: 5000 }).sourceChangeRecheckLimit, 20);
-  const compose = await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8");
-  assert.match(compose, new RegExp(`^ +OPEN_SCIENCE_SOURCE_CHANGE_RECHECK_LIMIT: \\$\\{OPEN_SCIENCE_SOURCE_CHANGE_RECHECK_LIMIT:-${config.sourceChangeRecheckLimit}\\}$`, "m"),
-    "a compose fallback that differed from the code's default would override it");
-  assert.match(await readFile(path.join(repoRoot, "deploy/web/.env.example"), "utf8"), new RegExp(`^OPEN_SCIENCE_SOURCE_CHANGE_RECHECK_LIMIT=${config.sourceChangeRecheckLimit}$`, "m"));
 });
 
 test("another member of the project sees the project's memories on an impact and not the account's own", async () => {

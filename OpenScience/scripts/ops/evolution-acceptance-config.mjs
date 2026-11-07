@@ -18,7 +18,7 @@ export function createEvolutionConfiguration(input, secrets) {
     maxRunningRuntimes: input.hostRuntimeLimit ?? 2, maxRunningRuntimesPerUser: 1, runtimeRequireImageLocal: true,
     modelGatewayInternalUrl: gateway + "/internal/model/v1", publicSourceGatewayInternalUrl: gateway + "/internal/sources/v1/fetch",
     webSearchGatewayInternalUrl: gateway + "/internal/search/v1/query", evolutionGatewayInternalUrl: gateway + "/internal/evolution/v1",
-    learningEnabled: false, sourceIngestionEnabled: true, sourceUnderstandingEnabled: false, autopilotEnabled: true, reviewEnabled: false, runtimeReviewEnabled: false,
+    learningEnabled: false, sourceIngestionEnabled: true, sourceUnderstandingEnabled: false, reviewEnabled: false, runtimeReviewEnabled: false,
     frontierEnabled: false, imEnabled: false, geoEnabled: false, vcrEnabled: false, evimedCreditsEnabled: false,
     personalSkillsEnabled: false, memoryEnabled: false, llmRoutingEnabled: true,
     evolutionEnabled: true, evolutionDailyBudgetCny: 50, evolutionRunBudgetCny: 10, evolutionMaxBuildAttempts: input.maxBuildAttempts ?? 3,

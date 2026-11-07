@@ -54,7 +54,7 @@ export const COMPUTED_CONTRACT_KINDS = Object.freeze([
 
 /**
  * Deliverables no review is set on: the learning loop's and the source
- * pipeline's own packages, and the autopilot's JSON plans, which state no
+ * pipeline's own packages, and the surveillance and hypothesis JSON files, which state no
  * claim a reader acts on.
  */
 export const UNREVIEWED_CONTRACT_KINDS = Object.freeze([
@@ -63,10 +63,6 @@ export const UNREVIEWED_CONTRACT_KINDS = Object.freeze([
   'source-understanding',
   'method-candidate',
   'method-relations',
-  'episode-plan',
-  'agenda-delta',
-  'analysis-plan',
-  'reproducibility-pack',
   'surveillance-diff',
   'hypothesis-set',
 ])

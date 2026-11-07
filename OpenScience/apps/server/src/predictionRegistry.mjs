@@ -6,7 +6,7 @@
  * It is the evolution module's prospective registration, not a second registry: a registration is an `evolution-prospective` record
  * with the module's own lifecycle words (`waiting-publication` → `scored`), its publication match is the module's
  * (`matchProspectivePublication` tells this registry of every paper the feed publishes), and each score is an observation on the method
- * that made the prediction. What it adds is the shape of a prediction a virtual clinical study or an agenda files — an estimate with
+ * that made the prediction. What it adds is the shape of a prediction a virtual clinical study files — an estimate with
  * an interval, or a probability — and the rules of who may read it when.
  *
  * Hidden knowledge:
@@ -26,7 +26,7 @@
  *   (the model call) and returns a value only when its quotation is in the preserved text and prints that very number
  *   (`prospectiveNumericQuoteMatches`, the module's own bond), and a "primary endpoint met" judgement only with a quotation that is in the
  *   text. No proposer is composed in the server yet; without one a matched registration stays waiting and says why (see the report).
- * - **Tenant rows stay the tenant's.** Registrations are documents of the filing account, in the project of the study or agenda, so the
+ * - **Tenant rows stay the tenant's.** Registrations are documents of the filing account, in the project of the study, so the
  *   ledger's own scoping isolates them; the cross-account reads this file makes (the registrations a paper wakes, the scored ones the
  *   calibration counts) are the control plane's, and expose a prediction only through the view rules above.
  *
@@ -41,8 +41,8 @@ import { identifierKeys, identifierKeysInText } from "@evimed/domain/entity-keys
 import { HttpError } from "./security.mjs";
 import { prospectiveNumericQuoteMatches } from "./evolutionProspectiveScore.mjs";
 
-/** Who may file a prediction: a virtual clinical study, or an agenda (the programme's or a researcher's). */
-export const PREDICTION_SOURCES = Object.freeze(["vcr", "agenda"]);
+/** Who may file a prediction: a virtual clinical study. */
+export const PREDICTION_SOURCES = Object.freeze(["vcr"]);
 /** The fewest scored predictions before the overall calibration is published (plan §5.2, F25). */
 export const PREDICTION_CALIBRATION_MIN_SCORED = 30;
 /** The lifecycle words, the module's own plus the two ends a registration alone can reach. */
@@ -68,10 +68,9 @@ const text = (value, max) => (typeof value === "string" && value.trim() && value
  */
 export function normalizePrediction(input, recordedAt) {
   if (!input || typeof input !== "object") throw invalid("a registration is an object");
-  if (!PREDICTION_SOURCES.includes(input.source)) throw invalid("source is vcr or agenda");
-  const link = input.source === "vcr" ? "studyId" : "agendaId";
-  const linked = text(input[link], 200);
-  if (!linked) throw invalid(`${link} names the ${input.source === "vcr" ? "study" : "agenda"}`);
+  if (!PREDICTION_SOURCES.includes(input.source)) throw invalid("source is vcr");
+  const linked = text(input.studyId, 200);
+  if (!linked) throw invalid("studyId names the study");
   const accountId = text(input.accountId, 200);
   const projectId = text(input.projectId, 200);
   if (!accountId || !projectId) throw invalid("accountId and projectId name who files it and where");
@@ -93,7 +92,7 @@ export function normalizePrediction(input, recordedAt) {
   for (const key of ["engineJobId", "receiptId", "methodId"]) if (input[key] != null && !text(input[key], 200)) throw invalid(`${key} is a short identifier`);
   const prediction = { ...(hasEstimate ? { estimate: input.estimate } : {}), ...(input.interval != null ? { interval: [input.interval[0], input.interval[1]] } : {}), ...(hasProbability ? { probability: input.probability } : {}) };
   const payload = {
-    source: input.source, [link]: linked, accountId, projectId, registryId: registryKey.slice("reg:".length), registryKey,
+    source: input.source, studyId: linked, accountId, projectId, registryId: registryKey.slice("reg:".length), registryKey,
     endpoint, endpointKey: endpoint.toLowerCase().replace(/\s+/g, " "), prediction,
     ...(input.methodId != null ? { methodId: input.methodId } : {}), ...(input.engineJobId != null ? { engineJobId: input.engineJobId } : {}), ...(input.receiptId != null ? { receiptId: input.receiptId } : {}),
     filedAt: new Date(filedAt).toISOString(),
@@ -181,7 +180,7 @@ export function createPredictionRegistry({ config, evolution, isOperator = () =>
 
   /**
    * File a prediction: checked, stamped, hashed and stored once. Another filing of the same trial, endpoint and source is another row.
-   * @param {any} input `{ source, studyId | agendaId, projectId, accountId, registryId, endpoint, estimate?, interval?, probability?, engineJobId?, receiptId?, methodId?, filedAt }`
+   * @param {any} input `{ source, studyId, projectId, accountId, registryId, endpoint, estimate?, interval?, probability?, engineJobId?, receiptId?, methodId?, filedAt }`
    */
   async function register(input) {
     if (!enabled) throw off();
@@ -194,12 +193,6 @@ export function createPredictionRegistry({ config, evolution, isOperator = () =>
     counters.registered += 1;
     return { id, status: saved.payload.status, payloadHash, recordedAt: saved.payload.recordedAt, existing: false };
   }
-
-  /**
-   * An agenda's prediction (the programme's, or a researcher's) through the same door, the account being the agenda's.
-   * @param {any} input `register`'s, with `agendaId` and without `source`
-   */
-  const registerAgendaPrediction = (input) => register({ ...input, source: "agenda" });
 
   /**
    * One registration as the viewer may see it: all of it to its owner and to an operator, the predicted-against-actual view to anyone once it is
@@ -325,7 +318,7 @@ export function createPredictionRegistry({ config, evolution, isOperator = () =>
     }
   }
 
-  return { enabled, register, registerAgendaPrediction, read, listOwn, publicScored, predictionCalibration, onPublication, status: () => ({ enabled, counters: structuredClone(counters) }) };
+  return { enabled, register, read, listOwn, publicScored, predictionCalibration, onPublication, status: () => ({ enabled, counters: structuredClone(counters) }) };
 }
 
 /** The operator-metric families of the registry, with the module off and nothing to read reporting zero. @param {ReturnType<typeof createPredictionRegistry> | null} registry @param {any} config */

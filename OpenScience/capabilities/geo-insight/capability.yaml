@@ -81,13 +81,6 @@ inputs:
   - minimal
   - clientQuestions
   - competitors
-autopilot:
-  # Scheduling is the GEO module's own (its orchestrator dispatches this run);
-  # the autopilot allocator has no GEO task type.
-  taskTypes: []
-  costClass: high
-  unattendedInputs:
-  - brandEntity
 estimatedMinutes:
 - 30
 - 120

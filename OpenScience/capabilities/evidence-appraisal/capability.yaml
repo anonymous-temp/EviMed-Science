@@ -91,13 +91,6 @@ inputs:
   - outcomes
   - appraisalInstrument
   - outputLanguage
-autopilot:
-  # Deliberately empty. Every other field of an unattended episode can be
-  # inferred from an agenda; the study list cannot, and an appraisal that picks
-  # its own studies is a synthesis wearing this capability's name.
-  taskTypes: []
-  costClass: medium
-  unattendedInputs: []
 estimatedMinutes:
 - 20
 - 75

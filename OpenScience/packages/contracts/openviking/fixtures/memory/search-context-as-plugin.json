@@ -1,6 +1,6 @@
 {
   "note": "Context mode as the plugin sends it (purpose coding; query_expansion off set here): bucketed retrieval, custom types are not reached.",
-  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.1.1",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.3",
   "request": {
     "method": "POST",
     "path": "/api/v1/search/search",
@@ -29,7 +29,7 @@
         {
           "uri": "viking://user/fx-user-a/memories/preferences/self/回答结构.md",
           "category": "preferences",
-          "score": 0.7840331792831421,
+          "score": 0.7838811874389648,
           "detail": "abstract",
           "text": "- 回答先给结论，再给依据，最后列出风险。",
           "origin": "self"
@@ -37,7 +37,7 @@
         {
           "uri": "viking://user/fx-user-a/memories/preferences/self",
           "category": "preferences",
-          "score": 0.7693814635276794,
+          "score": 0.7693068981170654,
           "detail": "overview",
           "text": "# Preferences Overview\n\n- [回答结构](./回答结构.md)",
           "origin": "self"
@@ -45,30 +45,30 @@
         {
           "uri": "viking://agent/skills/llm-wiki/SKILL.md",
           "category": "skills",
-          "score": 0.6456177234649658,
+          "score": 0.6456159353256226,
           "detail": "abstract",
-          "text": "name: llm-wiki\ndescription: Compile heterogeneous knowledge sources—including documents, notes, web\n  content, transcripts, research materials, and code repositories—into a Karpathy-style,\n  evidence-grounded LLM Wiki with a maintained index; default entity and concept pages;\n  and selective method, comparison, analysis, or instruction-requested summary pages.\n  Use with ov compile to create or incrementally refresh knowledge that is easy for\n  people and agents to retrieve, navigate, and reuse.",
+          "text": "name: llm-wiki\ndescription: Compile  heterogeneous knowledge sources—including documents, notes,\n  web content, transcripts, research materials, and code repositories—into a Karpathy-style,\n  evidence-grounded LLM Wiki with a maintained index; default entity and concept pages;\n  and selective method, comparison, analysis, or instruction-requested summary pages.\n  Use with ov compile to create or incrementally refresh knowledge that is easy for\n  people and agents to retrieve, navigate, and reuse.",
           "origin": "self"
         },
         {
           "uri": "viking://agent/skills/knowledge-graph/SKILL.md",
           "category": "skills",
-          "score": 0.6294044852256775,
+          "score": 0.6295391321182251,
           "detail": "abstract",
           "text": "name: knowledge-graph\ndescription: Compile documents, notes, web content, transcripts, research materials,\n  or code repositories into an evidence-grounded, visualization-ready knowledge graph\n  with semantically typed entity nodes, statement-level provenance, and typed relationship\n  edges. Use with ov compile to create or incrementally refresh `entities/*.md` node\n  artifacts and a root `relations.jsonl` edge file for people, organizations, groups,\n  animals, places, products, projects, systems, services, modules, datasets, standards,\n  documents, events, and other identifiable things.",
           "origin": "self"
         }
       ],
-      "rendered": "<memory uri=\"viking://user/fx-user-a/memories/preferences/self/回答结构.md\" type=\"preferences\" score=\"0.78\" detail=\"abstract\">\n- 回答先给结论，再给依据，最后列出风险。\n</memory>\n<memory uri=\"viking://user/fx-user-a/memories/preferences/self\" type=\"preferences\" score=\"0.77\" detail=\"overview\">\n# Preferences Overview\n\n- [回答结构](./回答结构.md)\n</memory>\n<memory uri=\"viking://agent/skills/llm-wiki/SKILL.md\" type=\"skills\" score=\"0.65\" detail=\"abstract\">\nname: llm-wiki\ndescription: Compile heterogeneous knowledge sources—including documents, notes, web\n  content, transcripts, research materials, and code repositories—into a Karpathy-style,\n  evidence-grounded LLM Wiki with a maintained index; default entity and concept pages;\n  and selective method, comparison, analysis, or instruction-requested summary pages.\n  Use with ov compile to create or incrementally refresh knowledge that is easy for\n  people and agents to retrieve, navigate, and reuse.\n</memory>\n<memory uri=\"viking://agent/skills/knowledge-graph/SKILL.md\" type=\"skills\" score=\"0.63\" detail=\"abstract\">\nname: knowledge-graph\ndescription: Compile documents, notes, web content, transcripts, research materials,\n  or code repositories into an evidence-grounded, visualization-ready knowledge graph\n  with semantically typed entity nodes, statement-level provenance, and typed relationship\n  edges. Use with ov compile to create or incrementally refresh `entities/*.md` node\n  artifacts and a root `relations.jsonl` edge file for people, organizations, groups,\n  animals, places, products, projects, systems, services, modules, datasets, standards,\n  documents, events, and other identifiable things.\n</memory>",
+      "rendered": "<memory uri=\"viking://user/fx-user-a/memories/preferences/self/回答结构.md\" type=\"preferences\" score=\"0.78\" detail=\"abstract\">\n- 回答先给结论，再给依据，最后列出风险。\n</memory>\n<memory uri=\"viking://user/fx-user-a/memories/preferences/self\" type=\"preferences\" score=\"0.77\" detail=\"overview\">\n# Preferences Overview\n\n- [回答结构](./回答结构.md)\n</memory>\n<memory uri=\"viking://agent/skills/llm-wiki/SKILL.md\" type=\"skills\" score=\"0.65\" detail=\"abstract\">\nname: llm-wiki\ndescription: Compile  heterogeneous knowledge sources—including documents, notes,\n  web content, transcripts, research materials, and code repositories—into a Karpathy-style,\n  evidence-grounded LLM Wiki with a maintained index; default entity and concept pages;\n  and selective method, comparison, analysis, or instruction-requested summary pages.\n  Use with ov compile to create or incrementally refresh knowledge that is easy for\n  people and agents to retrieve, navigate, and reuse.\n</memory>\n<memory uri=\"viking://agent/skills/knowledge-graph/SKILL.md\" type=\"skills\" score=\"0.63\" detail=\"abstract\">\nname: knowledge-graph\ndescription: Compile documents, notes, web content, transcripts, research materials,\n  or code repositories into an evidence-grounded, visualization-ready knowledge graph\n  with semantically typed entity nodes, statement-level provenance, and typed relationship\n  edges. Use with ov compile to create or incrementally refresh `entities/*.md` node\n  artifacts and a root `relations.jsonl` edge file for people, organizations, groups,\n  animals, places, products, projects, systems, services, modules, datasets, standards,\n  documents, events, and other identifiable things.\n</memory>",
       "digest": "",
       "stats": {
         "searched": {
-          "events": 0,
           "experiences": 0,
           "entities": 0,
           "resources": 4,
-          "preferences": 2,
-          "skills": 2
+          "events": 0,
+          "skills": 2,
+          "preferences": 2
         },
         "candidates": 4,
         "excluded": 0,

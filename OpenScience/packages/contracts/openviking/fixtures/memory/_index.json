@@ -121,14 +121,14 @@
   {
     "file": "task-running.json",
     "method": "GET",
-    "path": "/api/v1/tasks/bbc322c7-85ae-48c7-b7b5-a4c1dd0a3ae9",
+    "path": "/api/v1/tasks/942bfba0-3eba-45be-98b0-e573113333c4",
     "status": 200,
     "note": "The task right after the commit."
   },
   {
     "file": "task-completed.json",
     "method": "GET",
-    "path": "/api/v1/tasks/bbc322c7-85ae-48c7-b7b5-a4c1dd0a3ae9",
+    "path": "/api/v1/tasks/942bfba0-3eba-45be-98b0-e573113333c4",
     "status": 200,
     "note": "The finished task: memories_extracted, token_usage (cumulative over the session), memory_diff_uri."
   },
@@ -163,7 +163,7 @@
   {
     "file": "task-completed-no-operations.json",
     "method": "GET",
-    "path": "/api/v1/tasks/b1e66bc4-48de-480d-896d-3b2ce00700e9",
+    "path": "/api/v1/tasks/2f53e8b6-e321-4658-93cc-cde3ad7b290a",
     "status": 200,
     "note": "A commit whose extraction wrote nothing."
   },
@@ -415,7 +415,7 @@
   {
     "file": "task-completed-while-paused.json",
     "method": "GET",
-    "path": "/api/v1/tasks/10362945-22f5-4a18-a1fc-ac8f5e51cc36",
+    "path": "/api/v1/tasks/697a34f9-2eec-4a52-991a-522c484abfcd",
     "status": 200,
     "note": "Its task: what the extraction did with self memory disabled."
   },
@@ -451,7 +451,7 @@
     "file": "request-during-user-deletion.json",
     "method": "GET",
     "path": "/api/v1/fs/ls",
-    "status": 404,
+    "status": 412,
     "note": "A request as the user being deleted, at once."
   },
   {
@@ -499,7 +499,7 @@
   {
     "file": "session-delete-remember-store.json",
     "method": "DELETE",
-    "path": "/api/v1/sessions/mcp-store-3856c71e20d1",
+    "path": "/api/v1/sessions/mcp-store-50f6091f6e7c",
     "status": 200,
     "note": "Deleting the one-off session a remember call left behind."
   },

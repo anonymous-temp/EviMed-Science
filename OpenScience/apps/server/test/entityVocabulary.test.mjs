@@ -213,7 +213,7 @@ test("rows made without a glossary are backfilled after the glossary loads: boun
   /** @type {number[]} */
   const calls = [];
   let remaining = ENTITY_BACKFILL_PASS_ROWS * 2 + 7;
-  vocab.registerBackfill("autopilot", async ({ limit }) => {
+  vocab.registerBackfill("geo-sample", async ({ limit }) => {
     calls.push(limit);
     const tagged = Math.min(limit, remaining);
     remaining -= tagged;
@@ -223,10 +223,10 @@ test("rows made without a glossary are backfilled after the glossary loads: boun
   const reports = [];
   const reporting = vocabulary({ report: (code) => reports.push(code) }).vocab;
   reporting.registerBackfill("geo", async () => { throw Object.assign(new Error("down"), { code: "42P01" }); });
-  assert.deepEqual(await vocab.backfill(), { autopilot: ENTITY_BACKFILL_PASS_ROWS * 2 + 7, geo: 0 });
+  assert.deepEqual(await vocab.backfill(), { "geo-sample": ENTITY_BACKFILL_PASS_ROWS * 2 + 7, geo: 0 });
   assert.deepEqual(calls, [100, 100, 100], "a pass that comes back short is the last");
   assert.equal(vocab.stats().counters.backfillFailures, 1);
-  assert.deepEqual(vocab.stats().counters.backfilled, { autopilot: 207 }, "a failed run tagged nothing");
+  assert.deepEqual(vocab.stats().counters.backfilled, { "geo-sample": 207 }, "a failed run tagged nothing");
   await reporting.backfill();
   assert.deepEqual(reports, ["entity vocabulary backfill geo: 42P01"]);
   // A runner never runs more passes than the bound.
@@ -241,23 +241,23 @@ test("the first non-empty glossary load starts the backfill; a vocabulary that i
   /** @type {string[]} */
   const ran = [];
   const { vocab } = vocabulary();
-  vocab.registerBackfill("autopilot", async () => { ran.push("autopilot"); return { tagged: 0 }; });
+  vocab.registerBackfill("geo-sample", async () => { ran.push("geo-sample"); return { tagged: 0 }; });
   await vocab.keysForText({ texts: ["semaglutide"] });
   await new Promise((resolve) => setImmediate(resolve));
-  assert.deepEqual(ran, ["autopilot"]);
+  assert.deepEqual(ran, ["geo-sample"]);
   await vocab.keysForText({ texts: ["semaglutide"] });
   await new Promise((resolve) => setImmediate(resolve));
-  assert.deepEqual(ran, ["autopilot"], "once per load, not once per call");
+  assert.deepEqual(ran, ["geo-sample"], "once per load, not once per call");
   const empty = vocabulary({ database: database([]) }).vocab;
-  empty.registerBackfill("autopilot", async () => { ran.push("empty"); return { tagged: 0 }; });
+  empty.registerBackfill("geo-sample", async () => { ran.push("empty"); return { tagged: 0 }; });
   await empty.keysForText({ texts: ["semaglutide"] });
   await new Promise((resolve) => setImmediate(resolve));
-  assert.deepEqual(ran, ["autopilot"], "an empty glossary tags nothing, so there is nothing to backfill");
+  assert.deepEqual(ran, ["geo-sample"], "an empty glossary tags nothing, so there is nothing to backfill");
   const off = createEntityVocabulary({ enabled: false });
-  off.registerBackfill("autopilot", async () => { ran.push("off"); return { tagged: 0 }; });
+  off.registerBackfill("geo-sample", async () => { ran.push("off"); return { tagged: 0 }; });
   await off.keysForText({ texts: ["semaglutide"] });
   await off.refresh();
-  assert.deepEqual(ran, ["autopilot"]);
+  assert.deepEqual(ran, ["geo-sample"]);
 });
 
 test("the glossary reports where each term sits, and `match` still reports the entries in the order they are named", () => {

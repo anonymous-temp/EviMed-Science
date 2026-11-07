@@ -504,6 +504,12 @@ vcr_job_target_trial <- function(job, output_dir = NULL, cancel_file = NULL, ...
   if (pe$n < 2L) return(not_estimable("no_eligible_person_trials", "fewer than two people are eligible in any period"))
   rows <- sum(pmin(pe$last, H - 1) + 1) * 2
   if (rows > cap) refuse_size(rows)
+  # What is allocated is people x (horizon or grace period) for each weight and at-risk matrix, however short a record is: one long record lets a
+  # table of thousands of short ones through the horizon check. The cells are held to ten times the person-period cap (60 million cells measured 3.8 GB).
+  cells <- as.numeric(pe$n) * (max(H - 1L, g) + 1)
+  if (cells > 10 * cap) vcr_abort("too_many_person_periods", "inputs",
+    sprintf("This design holds %s people x %s periods = %s cells of weights in memory; this engine holds at most %s (the memory of a job is 3 GiB). Shorten the horizon or use fewer people.",
+            format(pe$n, big.mark = ","), format(max(H - 1L, g) + 1, big.mark = ","), format(cells, big.mark = ",", scientific = FALSE), format(10 * cap, big.mark = ",", scientific = FALSE)))
   if (H - 1L > max(pe$last)) return(not_estimable("horizon_beyond_followup", sprintf("the horizon is %d periods and the longest follow-up is %d", H, max(pe$last) + 1L)))
   if (sum(is.finite(pe$e)) < 2L) return(not_estimable("too_few_events", "fewer than two events after time zero"))
   degree <- 3L

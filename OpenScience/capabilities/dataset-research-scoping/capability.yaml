@@ -18,7 +18,6 @@ persona: 你是数据驱动选题分析师。你先把数据本身摸清楚（�
 safetyClass: general
 skills:
 - dataset-research-scoping
-- autopilot-episode
 - deep-research
 - biomedical-database-search
 - research-topic-selection
@@ -72,9 +71,6 @@ produces:
   - path: scoping-run.json
     role: work
     required: false
-  - path: agenda-delta.json
-    role: work
-    required: false
   checks:
   - citationsResolvable
   - skillsLoaded
@@ -86,12 +82,6 @@ inputs:
   - domain
   - populationOfInterest
   - outputLanguage
-autopilot:
-  taskTypes:
-  - data-prospecting
-  costClass: high
-  unattendedInputs:
-  - datasetPath
 estimatedMinutes:
 - 30
 - 120

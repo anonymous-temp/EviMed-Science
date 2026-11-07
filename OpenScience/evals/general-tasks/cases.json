@@ -1054,19 +1054,27 @@
     "GA17",
     "GA24"
    ],
-   "title": "Weekday-morning AI news task, triggered once by hand",
+   "title": "Weekday-morning AI news task",
    "turns": [
     {
      "text": "每个工作日早上 9 点给我一份昨天的 AI 行业要闻，五条以内，带链接。"
     }
    ],
-   "manual_trigger": "schedule",
-   "pass_text": "The task is created; the execution produces linked news items, not a clinical evidence review; the inbox does not call it 研究.",
+   "pass_text": "The task is created with the stated schedule through the kernel's own scheduled-task tool; the reply says so in plain words and is not a clinical evidence review.",
    "checks": [
     {
-     "type": "schedule",
-     "min_items_links": 1,
-     "max_items": 5
+     "type": "route_not",
+     "agents": [
+      "clinical-evidence-synthesis"
+     ]
+    },
+    {
+     "type": "reply_forbidden",
+     "kinds": [
+      "evidence_framework",
+      "medical_disclaimer",
+      "tool_names"
+     ]
     }
    ],
    "variants": [

@@ -195,6 +195,8 @@ export const NUMERIC_REFERENCES = {
   N80h: { methods: ['comparator.target_trial'], anchors: ['abs(vcr_measure_value(inside, "risk_treated_start") - km_all) < 1e-9', 'list(pass = ok14 && ok15 && ok17 && ok28,'] },
   // --- the algorithm round's dose-finding and Bayesian designs (T7, T15, T8, T10, 2026-11-03) ---
   // design.dose: the decision tables and final doses equal BOIN's, the keyboard package's and dfcrm's; 3+3 equals its exact enumeration and the closed form of Lin and Shih; the operating characteristics equal get.oc, get.oc.kb and crmsim
+  // N82h dispatches design.dose (3+3 and BOIN from a stated starting dose) and holds it to a plain-R sequential simulator of the traditional rule.
+  N82h: { methods: ['design.dose'], anchors: ['a plain sequential simulator of the traditional rule', 'ref <- t(vapply(seq_len(M), function(i) one(), numeric(K + 1L)))', 'z_max < 4'] },
   N81a: { methods: ['design.dose'], anchors: ['BOIN::get.boundary(tg, 12, 3, p.saf = phi1, p.tox = phi2, cutoff.eli = cut)$full_boundary_tab', 'BOIN::select.mtd(0.3, N[t, ], Y[t, ])$MTD'] },
   N81b: { methods: ['design.dose'], anchors: ['Keyboard::get.boundary.kb(s[1], 12, 3, marginL = s[2], marginR = s[2])$full_boundary_tab'] },
   N81c: { methods: ['design.dose'], anchors: ['ref <- dfcrm::crm(sk, 0.25, tox, lev, var.est = FALSE)', 'dfcrm::getprior(0.05, 0.25, 3, 5)'] },
@@ -263,7 +265,7 @@ export const NUMERIC_REFERENCES = {
   N76c: { methods: ['evidence.dose_response'], anchors: ['S <- matrix(1 / a[1] + 1 / b[1], k - 1L, k - 1L) + diag(1 / a[-1] + 1 / b[-1], k - 1L)', 'v <- 1 / as.numeric(t(x) %*% solve(S) %*% x); beta <- v * as.numeric(t(x) %*% solve(S) %*% lor)'] },
   N76f: { methods: ['evidence.dose_response'], anchors: ['m <- metafor::rma(vapply(fits, `[`, numeric(1), 1L), vapply(fits, `[`, numeric(1), 2L), method = "REML")', 'list(pass = mixed && ok21 && ok20 && ok6,'] },
   N77a: { methods: ['evidence.shrinkage'], anchors: ['rows <- c(d$table2, d$table3)', 's <- .n77_stratum(as.numeric(row$p[[1]]), as.numeric(row$p[[2]]), mix)'] },
-  N77b: { methods: ['evidence.shrinkage'], anchors: ['folded_med <- stats::uniroot(', 'sign_int <- stats::integrate(dens, 0, Inf, rel.tol = 1e-11)$value'] },
+  N77b: { methods: ['evidence.shrinkage'], anchors: ['folded_med <- stats::uniroot(', 'sign_int <- stats::integrate(dens, 0, Inf, rel.tol = 1e-11)$value', 'jr <- vcr_test_run(.n77_job(list(list(id = "paper", estimate = 0.44, se = 0.2)), "n77b_job"))', 'abs(jrow$replication - repl_int)'] },
 
   // comparator.borrowing (power prior): the definition integrated numerically, RBesT, a closed form for a mean, an enumeration decided by RBesT and a simulation
   N91a: { methods: ['comparator.borrowing'], anchors: ['ref <- .n91_definition(a0); r <- .n91_rows(a0)[[2L]]', 'worst <- max(worst, d)'] },

@@ -4,7 +4,7 @@ import {evolutionServiceFixture} from './helpers/evolutionServiceFixture.mjs';
 import {EvolutionMaintenance} from '../src/evolutionMaintenance.mjs';
 import {evolutionScientificUse} from '../src/evolutionScientificUse.mjs';
 test('managed module research counts as real use and no-harm alone cannot promote V4',async()=>{
- for(const route of ['geo:content','vcr:analysis','autopilot:research'])assert.equal(evolutionScientificUse('research',{automated:true,effectiveRouteReason:route}).researcherOwned,true);
+ for(const route of ['geo:content','vcr:analysis'])assert.equal(evolutionScientificUse('research',{automated:true,effectiveRouteReason:route}).researcherOwned,true);
  const f=evolutionServiceFixture(),maintenance=new EvolutionMaintenance({service:f.service});
  const tool=await f.service.registerTool({id:'tool',track:'M',artifactDigest:'digest',holdoutCases:[]});
  await f.service.save('tool','tool',{...tool.payload,validationLevel:'V3'},tool);

@@ -88,13 +88,6 @@
     ]
   },
   "safetyClass": "general",
-  "autopilot": {
-    "taskTypes": [],
-    "costClass": "high",
-    "unattendedInputs": [
-      "step"
-    ]
-  },
   "budget": {
     "maxSteps": 120,
     "maxTokens": 4000000,

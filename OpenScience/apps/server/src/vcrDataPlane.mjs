@@ -2926,7 +2926,7 @@ export class VcrDataPlane {
    *
    * @param {{ studyId: string, snapshotId: string, principal: string, purpose?: string | null, fields?: string[] | null,
    *   kind?: string | null, jobKind?: string | null, method?: string | null, endpointType?: string | null,
-   *   parameterCode?: string | null, include?: ("subject" | "longitudinal" | "events" | "files")[] | null }} input
+   *   parameterCode?: string | null, outcomeParameter?: string | null, include?: ("subject" | "longitudinal" | "events" | "files")[] | null }} input
    * @returns {Promise<{ snapshotId: string,
    *   inputs: { kind: string, id: string, shape?: string, location: string, hash: string, valueSource: string, columnSources?: Record<string, string> }[],
    *   withheld: { id: string, kind: string, shape?: string, reason: string, fields: string[] }[],
@@ -2941,7 +2941,10 @@ export class VcrDataPlane {
     let snapshot = await this.#snapshot(studyId, String(input.snapshotId ?? ""));
     const fieldMaps = await this.store.listFieldMaps(snapshot.id);
     const frozen = snapshotFreezeNotes(snapshot);
-    const entries = entriesOfRows(fieldMaps, frozen);
+    // A job that names the parameter it takes as its outcome (a target trial's `parameters.outcome`) reads that parameter's source column as an
+    // outcome whether or not the map flagged it: sealed until the plan is frozen, and its first read on the record. The seal never depends on a flag.
+    const jobOutcomeParameter = typeof input.outcomeParameter === "string" && input.outcomeParameter ? input.outcomeParameter : null;
+    const entries = entriesOfRows(fieldMaps, frozen).map((entry) => (jobOutcomeParameter && entry.role === "measurement" && entry.parameter === jobOutcomeParameter && !entry.outcome ? { ...entry, outcome: true } : entry));
     snapshot = await this.#reconcile({ study, snapshot, entries });
 
     const tables = await this.store.listAnalysisTables({ snapshotId: snapshot.id, studyId });
@@ -3023,7 +3026,7 @@ export class VcrDataPlane {
         const labels = engineColumnSources(table.derivedFrom?.columnSources, table.columns, table.valueSource);
         inputs.push({ kind: "analysis_table", id, shape: table.shape, location: table.location, hash: table.sha256, valueSource: table.valueSource,
           ...(labels ? { columnSources: labels } : {}), ...(timeUnit ? { timeUnit } : {}), ...(needsScientificUnits ? { columnUnits: analysisUnits(table) } : {}) });
-        if (table.outcomeBearing) for (const column of mapped.map((item) => item.source)) if (outcomeColumns.has(column)) outcomeRead.add(column);
+        if (table.outcomeBearing || jobOutcomeParameter) for (const column of mapped.map((item) => item.source)) if (outcomeColumns.has(column)) outcomeRead.add(column);
         continue;
       }
       const carried = mapped.filter((column) => !missing.includes(column.source));

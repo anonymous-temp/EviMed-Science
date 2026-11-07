@@ -16,7 +16,7 @@ import test from "node:test";
 
 import { ALL_ERROR_CODES, RUN_OUTCOME_KINDS, errorCodeMessage } from "@evimed/domain";
 import {
-  RUN_NOTICE_STATUS_WORDS, isGoalContinuation, runFinishedInboxItem, runFinishedNotice, runFinishedNotifies, runFinishedReachesInbox, shanghaiDay,
+  RUN_NOTICE_STATUS_WORDS, SCHEDULE_ROUTE, isGoalContinuation, isScheduledRun, runFinishedInboxItem, runFinishedNotice, runFinishedNotifies, runFinishedReachesInbox, shanghaiDay,
 } from "../src/notificationService.mjs";
 import { automatedRun } from "../src/server.mjs";
 
@@ -272,7 +272,6 @@ test("only a person's own research reaches the inbox; evaluations and background
   // fold is gone with them (plan 2026-09-23 §5.8).
   assert.equal(runFinishedReachesInbox(run, { automated: true }), false, "an evaluation harness said so at dispatch");
   assert.equal(runFinishedReachesInbox(run, { internalProject: true }), false, "a lesson or a document being read");
-  assert.equal(runFinishedReachesInbox(run, { autopilotOwned: true }), false, "an autopilot episode reports through its digest");
   // And the person's own rules still apply on top.
   assert.equal(runFinishedReachesInbox({ ...run, status: "canceled", canceledBy: "user" }), false);
   assert.equal(runFinishedReachesInbox({ ...run, dispatchStatus: "rejected" }), false);
@@ -324,10 +323,35 @@ test("a goal's automatic turns reach the inbox as one item per conversation, wha
   assert.equal(runFinishedReachesInbox({ ...turn, effectiveRouteReason: "unrouted:open-domain" }, { automated: true }), false);
 });
 
-test("a run is automated when a harness said so, or when autopilot started it", () => {
+test("a scheduled task's delivery is told in the inbox however short and with no file, and only the person's own stop is not", () => {
+  // The route the ledger records for an adopted delivery (`agentRuns.adoptRuntimeTurns`); the bare route never reaches it.
+  assert.equal(SCHEDULE_ROUTE, "schedule");
+  const turn = finished("run-sch", "2026-11-05T01:00:00.000Z", {
+    durationMs: 8_000, artifacts: [], outputFiles: [], automated: true, effectiveRouteReason: "adopted:runtime-ui:schedule", sessionId: "session-sch-1",
+  });
+  assert.equal(isScheduledRun(turn), true);
+  assert.equal(isScheduledRun({ effectiveRouteReason: "schedule" }), true);
+  for (const reason of ["adopted:runtime-ui:unrouted:open-domain", "adopted:runtime-ui:loopx-continuation", "adopted:runtime-ui:scheduled", "adopted:runtime-ui:schedule-x", "reschedule", "", undefined]) {
+    assert.equal(isScheduledRun({ effectiveRouteReason: reason }), false, String(reason));
+  }
+  assert.equal(isScheduledRun(null), false);
+  // The ledger's `automated` is the kernel's schedule, not a harness's: the person made the task and asked for what it does.
+  assert.equal(runFinishedReachesInbox(turn, { automated: true }), true, "a two-sentence answer nobody was there to read");
+  assert.equal(runFinishedReachesInbox({ ...turn, status: "failed", errorCode: "runtime_monitor_timeout" }, { automated: true }), true);
+  assert.equal(runFinishedReachesInbox({ ...turn, status: "canceled", canceledBy: "platform", errorCode: "runtime_canceled" }, { automated: true }), true, "a runtime that went away");
+  assert.equal(runFinishedReachesInbox({ ...turn, status: "canceled", canceledBy: "user" }, { automated: true }), false);
+  assert.equal(runFinishedReachesInbox(turn, { automated: true, internalProject: true }), false);
+  // Another automated turn of the same length is still nobody's news.
+  assert.equal(runFinishedReachesInbox({ ...turn, effectiveRouteReason: "adopted:runtime-ui:unrouted:open-domain" }, { automated: true }), false);
+  const item = runFinishedInboxItem({ id: "default" }, turn, { peers: [] });
+  assert.deepEqual(item.source, { type: "run", id: "run-sch" });
+  assert.equal(item.idempotencyKey, "run-finished:run-sch");
+});
+
+test("a run is automated when a harness said so, or when it is a verification or the retired scheduler's", () => {
   assert.equal(automatedRun({ automated: true }), true);
-  assert.equal(automatedRun({ effectiveRouteReason: "autopilot:literature-sentinel" }), true);
-  assert.equal(automatedRun({ dispatchId: `episode-${"a".repeat(32)}-v1` }), true, "an independent verification");
+  assert.equal(automatedRun({ effectiveRouteReason: "autopilot:literature-sentinel" }), true, "a run the retired scheduler wrote");
+  assert.equal(automatedRun({ effectiveRouteReason: "autopilot-verify" }), true, "an independent verification");
   assert.equal(automatedRun({ effectiveRouteReason: "unrouted:open-domain", dispatchId: "dispatch-1" }), false);
   assert.equal(automatedRun({ automated: "yes" }), false, "only the boolean the dispatch validated counts");
 });

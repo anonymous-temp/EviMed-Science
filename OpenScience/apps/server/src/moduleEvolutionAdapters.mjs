@@ -32,13 +32,13 @@ export function createModuleEvolutionAdapters({ enabled = {}, policies, defaults
     },
     async prepare(candidate) {
       if (!enabled[moduleId]) return { status: "unavailable", reason: "module_disabled" };
-      if (["frontier", "geo", "autopilot"].includes(moduleId) && !validateModuleEvolutionPolicy(moduleId, candidate.policy))
+      if (["frontier", "geo"].includes(moduleId) && !validateModuleEvolutionPolicy(moduleId, candidate.policy))
         return { status: "invalid", reason: "module_policy_invalid" };
-      if (!["frontier","geo","autopilot"].includes(moduleId))return {status:"invalid",reason:"code-change-requires-reviewed-release-pr"};
+      if (!["frontier","geo"].includes(moduleId))return {status:"invalid",reason:"code-change-requires-reviewed-release-pr"};
       const baseline = policies ? await policies.resolve(moduleId, defaults[moduleId] ?? {}) : {revisionId:"code-default",policy:structuredClone(defaults[moduleId] ?? {})};
       const policy = {...baseline.policy,...candidate.policy};
       const changed = Object.keys(policy).filter((field) => JSON.stringify(policy[field]) !== JSON.stringify(baseline.policy[field]));
-      if (["frontier","geo","autopilot"].includes(moduleId) && changed.length !== 1)
+      if (["frontier","geo"].includes(moduleId) && changed.length !== 1)
         return {status:"invalid",reason:"candidate_must_change_one_component"};
       if(candidate.proposal?.components?.length!==1 || candidate.proposal.components[0]!==changed[0])return {status:"invalid",reason:"declared_component_mismatch"};
       return { status: "prepared", candidate: {...structuredClone(candidate),policy}, baseline };

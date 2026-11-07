@@ -631,51 +631,6 @@
    "project": "A"
   },
   {
-   "id": "T01-routine-task-instruction",
-   "family": "task",
-   "domain": "general",
-   "persona": "通用用户",
-   "task": {
-    "title": "开源版本摘要",
-    "prompt": "每个工作日早上汇总一下我关注的开源项目的新版本发布，整理成三行摘要，每次先列出版本号。",
-    "taskType": "routine",
-    "runs": 2
-   },
-   "checks": {
-    "never": [
-     "三行摘要",
-     "先列出版本号"
-    ],
-    "neverEpisode": [
-     "三行摘要",
-     "先列出版本号"
-    ]
-   },
-   "project": "A"
-  },
-  {
-   "id": "T02-research-task-instruction",
-   "family": "task",
-   "domain": "medical",
-   "persona": "研究者",
-   "task": {
-    "title": "房颤新文献简报",
-    "prompt": "每天早上检索 PubMed 上关于房颤抗凝的新文献，按研究类型整理成简报，每次先列出新增文献数量。",
-    "taskType": "literature-sentinel",
-    "runs": 2
-   },
-   "checks": {
-    "never": [
-     "简报",
-     "新增文献数量"
-    ],
-    "neverEpisode": [
-     "新增文献数量"
-    ]
-   },
-   "project": "A"
-  },
-  {
    "id": "C01-correction-replaces-preference",
    "family": "correct",
    "domain": "general",

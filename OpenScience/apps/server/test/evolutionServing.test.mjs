@@ -9,7 +9,7 @@ function fixture(extra={}){
  const f=evolutionServiceFixture();let next=null;
  const jobs={...f.service.jobs,claim:async kinds=>{assert.deepEqual(kinds,['evolution-event','evolution-decision','evolution-digest','evolution-maintain']);const job=next;next=null;return job;},renew:async()=>true,finish:async()=>({status:'complete'}),fail:async()=>({status:'deferred'})};
  const user={id:'operator'};
- const facade=createEvolutionServing({config:{evolutionEnabled:true,operatorUsers:['operator'],dataDir:'/unused'},documents:f.documents,jobs,database:{query:async()=>({rows:[]}),transaction:async fn=>fn({query:async()=>({rows:[]})})},store:{userById:async()=>user,projectFor:async()=>({id:'evolution'}),ensureSessionUser:async()=>({user}),assertCsrf:async()=>{},requireProject:async()=>({id:'p',userId:user.id})},registry:Promise.resolve({list:()=>[]}),runtimeManager:{},controller:{},agentRuns:{list:async()=>[]},notifications:f.service.notifications,autopilot:{wakeForEvolution:async()=>({woken:true})},...extra});
+ const facade=createEvolutionServing({config:{evolutionEnabled:true,operatorUsers:['operator'],dataDir:'/unused'},documents:f.documents,jobs,database:{query:async()=>({rows:[]}),transaction:async fn=>fn({query:async()=>({rows:[]})})},store:{userById:async()=>user,projectFor:async()=>({id:'evolution'}),ensureSessionUser:async()=>({user}),assertCsrf:async()=>{},requireProject:async()=>({id:'p',userId:user.id})},registry:Promise.resolve({list:()=>[]}),runtimeManager:{},controller:{},agentRuns:{list:async()=>[]},notifications:f.service.notifications,...extra});
  return {...f,facade,queue(job){next=job;}};
 }
 test('actual serving composition constructs no experimental engine and processes account feedback',async()=>{
@@ -30,15 +30,4 @@ test('serving import closure cannot reach experimental constructors',async()=>{
  const visited=new Set();const forbidden=/\/(?:evolutionComposition|evolutionLoops|evolutionRuns|evolutionScout|evolutionBuild|evolutionPolicyTrial|evolutionMissions)\.mjs$/;
  async function visit(url){if(visited.has(url.href))return;visited.add(url.href);assert.equal(forbidden.test(url.pathname),false,url.pathname);const text=await readFile(url,'utf8');for(const match of text.matchAll(/(?:from\s*|import\s*)['"](\.\.?\/[^'"]+\.mjs)['"]/g))await visit(new URL(match[1],url));}
  await visit(new URL('../src/evolutionServing.mjs',import.meta.url));
-});
-test('dataset continuation queues the published tool\'s self-check, which the serving worker claims',async()=>{
- const {facade,jobs}=fixture({dataSemantics:{get:async()=>null}}),s=facade.service;
- assert.ok(facade.worker.kinds.includes('evolution-self-check'));
- await s.save('tool','existing-tool',{track:'M',status:'active',validationLevel:'V0',artifactDigest:'pin'});
- const waiter=await s.waitFor({userId:'operator',projectId:'p',agendaId:'agenda',toolId:'existing-tool',dataRequirements:{schema:{fields:[]}}});
- await s.resolveWaiters({type:'dataset-ready',id:'data-event',userId:'operator',projectId:'p',datasetId:'data',dataset:{semanticsChecksPassed:true}});
- const current=await s.get(waiter.id,'operator');assert.equal(current.payload.status,'waiting');assert.equal(current.payload.selfCheckIntent,undefined);
- assert.deepEqual(jobs.filter(job=>job.kind==='evolution-self-check').map(job=>[job.payload.waiterId,job.payload.toolId,job.payload.datasetId]),[[waiter.id,'existing-tool','data']]);
- assert.equal((await s.enqueue('build',{dossierId:'d'},'build')).code,'evolution_offline_only','an experiment is still refused');
- await facade.worker.close();
 });

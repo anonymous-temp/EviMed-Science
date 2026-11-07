@@ -23,7 +23,7 @@ function dependencies(configOverrides = {}) {
     database: { query: async () => ({ rows: [] }), transaction: async fn => fn({ query: async () => ({ rows: [] }) }) },
     store: { userById: async () => user, projectFor: async () => ({ id: 'evolution' }), ensureSessionUser: async () => ({ user }), assertCsrf: async () => {}, requireProject: async () => ({ id: 'p', userId: user.id }) },
     registry: Promise.resolve({ list: () => [] }), runtimeManager: {}, researchSessions: {}, controller: {}, agentRuns: { list: async () => [] }, evaluationIsolation: {},
-    sourceService: {}, autopilot: { wakeForEvolution: async () => ({ woken: true }) }, dataSemantics: null, sourceChanges: null, canRun: async () => true, webReader: null } };
+    sourceService: {}, dataSemantics: null, sourceChanges: null, canRun: async () => true, webReader: null } };
 }
 
 test('the switch is a boolean config key, off by default, read from OPEN_SCIENCE_EVOLUTION_SERVING_ONLY', () => {

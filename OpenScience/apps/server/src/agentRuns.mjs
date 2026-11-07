@@ -43,6 +43,7 @@ import { describeRunArtifacts, describeRunArtifactRoles, isOrdinaryConversation 
 import { withoutOtherRunsJobFiles, workspaceChangedFiles } from "./runWorkspaceChanges.mjs";
 import { foreignDeliverableIds, overlappingRuns, withoutOtherSessionsFiles } from "./runArtifactAttribution.mjs";
 import { isGoalContinuation } from "./researchGoalState.mjs";
+import { SCHEDULE_ROUTE } from "./notificationService.mjs";
 import { pickMainDocuments } from "./terminalPresentation.mjs";
 import { normalizeRunEstimate } from "./runRoute.mjs";
 import {
@@ -151,7 +152,6 @@ const dispatchFields = new Set([
   "sessionId",
   "dispatchId",
   "dispatchFingerprint",
-  "agendaId",
   "automated",
   // A person is waiting on this dispatch (an interactive route, a messaging channel): waking the
   // runtime waits for a free slot instead of refusing. Read by `dispatch` itself, not recorded.
@@ -455,7 +455,6 @@ function normalizeDispatchInput(input) {
     sessionId: safeId(input.sessionId, "research session id"),
     dispatchId: safeId(input.dispatchId, "agent run dispatch id"),
     dispatchFingerprint: input.dispatchFingerprint == null ? null : normalizeDispatchFingerprint(input.dispatchFingerprint),
-    agendaId: input.agendaId == null ? null : safeId(input.agendaId, "research agenda id"),
     // Started by a harness rather than a person; read by the inbox, which
     // records such a run's completion without notifying anyone (C1).
     automated: input.automated === true,
@@ -612,7 +611,6 @@ function foldEvents(events) {
         dispatchId,
         ...(event.dispatchFingerprint != null ? { dispatchFingerprint: normalizeDispatchFingerprint(event.dispatchFingerprint) } : {}),
         dispatchStatus,
-        ...(event.agendaId ? { agendaId: safeStoredId(event.agendaId, "agendaId") } : {}),
         ...(Object.hasOwn(event, "baselineCursor") ? { baselineCursor: event.baselineCursor } : {}),
         ...(event.nativeTurn ? { nativeTurn: validateNativeTurn(event.nativeTurn) } : {}),
         ...(event.kernelRequestIds ? { kernelRequestIds: event.kernelRequestIds.map(storedKernelRequestId) } : {}),
@@ -1376,7 +1374,19 @@ function workloadInput(message) {
   if (messageRole(message) !== "user") return false;
   const request = String(message.info?.sourceRequestId ?? "");
   return (message.info?.source === "loopx-continuation" && request.startsWith("loopx:"))
-    || (message.info?.source === "user-question-reply" && request.startsWith("reply:"));
+    || (message.info?.source === "user-question-reply" && request.startsWith("reply:"))
+    || message.info?.source === "schedule";
+}
+
+/**
+ * The instruction a scheduled delivery carries, out of the kernel's wrapper (`[SCHEDULE REMINDER]`, one JSON string on a line of its
+ * own). A format, read as one; anything else is shown as it came. Several tasks due at once share one message: the first names it.
+ * @param {string} text @returns {string}
+ */
+export function scheduledInstruction(text) {
+  const line = /^reminder_prompt_json: (".*")$/m.exec(text);
+  if (!line) return text;
+  try { return String(JSON.parse(line[1])); } catch { return text; }
 }
 
 /**
@@ -4413,14 +4423,15 @@ function runSideActivitySignature(projection) {
 
 /**
  * Whether a run is a researcher's own turn rather than work a machine started
- * — an evaluation, an autopilot episode, a lesson or a source being read.
+ * — an evaluation, a lesson or a source being read.
  * What "last open" reopens (`lastSessionId`) and what 与我相关 reads a
  * researcher's questions from (`frontierProfiles.mjs`) are both this.
  * @param {Record<string, any> | null | undefined} run @returns {boolean}
  */
 export function isResearcherRun(run) {
+  // A run the retired scheduler wrote before 2026-11 is told by its route reason alone.
   if (!run || run.automated === true || String(run.effectiveRouteReason ?? "").startsWith("autopilot:")) return false;
-  // The independent re-check of a scheduled execution's claim is not an `autopilot:` reason and carries no `automated`, so it used to
+  // The independent re-check of a scheduled execution's claim carries no `automated`, so it used to
   // be the researcher's "last open" conversation and a question of theirs.
   if (isVerificationRun(run)) return false;
   return usagePurposeOfRun(run) === "kernel";
@@ -4737,7 +4748,7 @@ export class AgentRunStore {
    * The conversation a researcher last worked in, in this project (C4 "me"
    * `lastSessionId`): the session of the run that moved most recently, so the
    * shell can reopen it instead of a blank page. Work a machine started —
-   * an evaluation, an autopilot episode, a lesson or a source being read — is
+   * an evaluation, a lesson or a source being read — is
    * not "last open": on 2026-09-21 the chat page opened a method distillation
    * that had run in the researcher's own project that morning, titled
    * 「<evimed-budget-scope>e…」 and full of the loop's English working.
@@ -5055,7 +5066,6 @@ export class AgentRunStore {
     baselineCursor,
     dispatchId = null,
     dispatchFingerprint = null,
-    agendaId = null,
     automated = false,
     estimatedMinutes = null,
     forkedFrom = null,
@@ -5153,7 +5163,6 @@ export class AgentRunStore {
         dispatchId,
         ...(dispatchFingerprint != null ? { dispatchFingerprint } : {}),
         dispatchStatus: dispatchId ? "dispatching" : "accepted",
-        ...(agendaId ? { agendaId } : {}),
         ...(nativeTurn ? { nativeTurn } : {}),
         kernelRequestIds: kernelRequestIds ?? (dispatchId ? [randomId("req_")] : []),
         sessionId: session.sessionId,
@@ -5230,7 +5239,6 @@ export class AgentRunStore {
       dispatchId,
       dispatchFingerprint,
       automated,
-      agendaId,
       estimatedMinutes,
       question,
       briefText,
@@ -5271,7 +5279,7 @@ export class AgentRunStore {
     const pinned = routedOverBinding && session.mode === "specialist"
       ? { ...session, agentId: selected.effectiveAgentId, agentVersion: selected.effectiveAgentVersion, runtimeAgent: selected.effectiveRuntimeAgent }
       : session;
-    const reservation = await this.reserveRun(project, pinned, { baselineCursor, dispatchId, dispatchFingerprint, agendaId, automated, estimatedMinutes, question, ...selected, effectiveProducts,beforeReserve });
+    const reservation = await this.reserveRun(project, pinned, { baselineCursor, dispatchId, dispatchFingerprint, automated, estimatedMinutes, question, ...selected, effectiveProducts,beforeReserve });
     const record = reservation.run;
     if (!reservation.owner) return this.existingDispatch(project, record);
     this.projects.set(`${project.userId}:${project.id}`, project);
@@ -6097,13 +6105,10 @@ export class AgentRunStore {
     //
     // A separate field, not `artifacts`.
     //
-    // `artifacts` means "the gate accepted these", and five modules rely on
-    // exactly that: `server.mjs` picks the autopilot's verification result out
-    // of it, `autopilotService` reads `agenda-delta.json` out of it, and
-    // `learningRuntime` and `sourceUnderstandingRuntime` read a bounded run's
+    // `artifacts` means "the gate accepted these", and two modules rely on
+    // exactly that: `learningRuntime` and `sourceUnderstandingRuntime` read a bounded run's
     // output out of it. Widening it would have made an ungraded file readable
-    // as a verified result — the same defect class as an autopilot verification
-    // that was never sound — so the fix would have bought the researcher their
+    // as a verified result, so the fix would have bought the researcher their
     // files at the price of the guarantee that makes those files worth having.
     //
     // So the verdict is untouched, `artifacts` keeps its meaning, and what the
@@ -8158,6 +8163,9 @@ export class AgentRunStore {
           && String(item.effectiveRouteReason ?? "").startsWith(adoptedRouteReason)) : null;
         const question = first.parts.map((part) => part.type === "text" ? part.text : "").join(" ").trim();
         const continuation = first.source === "loopx-continuation";
+        // A scheduled task's delivery (`@deepseek-ai/dsh-schedule`): nobody dispatched it and nobody is at it. The person asked for it when
+        // they made the task, so it is told in the inbox; it is not their words, so it teaches nothing and goes to no classifier.
+        const scheduled = first.source === "schedule";
         // A late answer to a question the model left pending: the person answered in the page, and the work goes on under the
         // turn that asked (its question, its contract), attended and charged like any turn of theirs.
         const reply = first.source === "user-question-reply";
@@ -8167,6 +8175,7 @@ export class AgentRunStore {
         // Keep the initiating research contract; heartbeat text is not a new specialty request.
         const routed = legacy ? {} : continuation ? { ...previous, effectiveRouteReason: "loopx-continuation" }
           : reply ? { ...previous, effectiveRouteReason: "ask-user-reply" }
+          : scheduled ? { effectiveRouteReason: SCHEDULE_ROUTE }
           : await routeTurn(question, { requestIds });
         // Like a module step dispatched over a conversation's binding, an authenticated request-local
         // route pins this run to its actual capability. The persistent research-session record is unchanged.
@@ -8175,7 +8184,7 @@ export class AgentRunStore {
         const selected = binding?.mode === "specialist" && !requestLocal ? {
           ...routed,
           effectiveAgentId: binding.agentId, effectiveAgentVersion: binding.agentVersion,
-          effectiveRuntimeAgent: binding.runtimeAgent, effectiveRouteReason: continuation || reply ? routed.effectiveRouteReason : "session-binding",
+          effectiveRuntimeAgent: binding.runtimeAgent, effectiveRouteReason: continuation || reply || scheduled ? routed.effectiveRouteReason : "session-binding",
         } : routed;
         const pinned = requestLocal && binding?.mode === "specialist" ? { ...binding,
           agentId: selected.effectiveAgentId, agentVersion: selected.effectiveAgentVersion, runtimeAgent: selected.effectiveRuntimeAgent,
@@ -8188,8 +8197,9 @@ export class AgentRunStore {
           startedAt: turn.time > 0 ? new Date(turn.time).toISOString() : null,
           kernelRequestIds: requestIds,
           legacyRunId: legacy?.id,
-          question: (continuation || reply) && previous?.question ? previous.question : questionPreview(reply ? replyAnswerText(question) : question),
-          automated: continuation,
+          question: (continuation || reply) && previous?.question ? previous.question
+            : questionPreview(reply ? replyAnswerText(question) : scheduled ? scheduledInstruction(question) : question),
+          automated: continuation || scheduled,
           ...(goalId ? { goal: { id: goalId, runId: previous?.id ?? null } } : {}),
           estimatedMinutes: selected.estimatedMinutes ?? null,
           forkedFrom: source,

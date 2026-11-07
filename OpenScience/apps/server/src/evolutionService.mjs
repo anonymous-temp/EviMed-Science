@@ -1,7 +1,7 @@
 import { evolutionServingAction, evolutionServingJob, evolutionDeferred, assertEvolutionExperimentalPublication } from './evolutionServingPolicy.mjs';
 import { trustedEvolutionNativeName } from './evolutionToolRouting.mjs';
 import { createHash, randomUUID } from 'node:crypto';
-import { canonicalJson, EVOLUTION_TRACKS, EVOLUTION_TOOL_STATES, EVOLUTION_DATA_LEVELS, EVOLUTION_GAP_CODES, EVOLUTION_LEAD_SOURCES, evolutionMethodFields, evolutionValidationLevel, evolutionToolVisible, evolutionDataMatch, validateEvolutionDataRequirements } from '@evimed/domain';
+import { canonicalJson, EVOLUTION_TRACKS, EVOLUTION_TOOL_STATES, EVOLUTION_DATA_LEVELS, EVOLUTION_GAP_CODES, EVOLUTION_LEAD_SOURCES, evolutionMethodFields, evolutionValidationLevel, evolutionToolVisible, validateEvolutionDataRequirements } from '@evimed/domain';
 import { HttpError } from './security.mjs';
 import { EVOLUTION_PROJECT_ID } from './internalProjects.mjs';
 import { MODULE_LEAD_SOURCES, moduleLeadPayload } from './evolutionLeadSources.mjs';
@@ -107,7 +107,7 @@ export class EvolutionService {
   /** Only closed operational codes cross the researcher's tenant boundary. @param {any} input */
   async addLead(input) {
     if (!EVOLUTION_TRACKS.includes(input.track) || !EVOLUTION_LEAD_SOURCES.includes(input.source) || !EVOLUTION_GAP_CODES.includes(input.gapCode)) throw new HttpError(400, 'evolution_lead_invalid', 'Unknown evolution lead vocabulary.');
-    const privateSource = ['runtime-failure', 'autopilot', 'dataset'].includes(input.source);
+    const privateSource = ['runtime-failure', 'dataset'].includes(input.source);
     // The platform's own modules (flywheel F20): a closed code and closed entity keys, chosen from lists `evolutionLeadSources.mjs` owns.
     const payload = MODULE_LEAD_SOURCES.includes(input.source) ? moduleLeadPayload(input) : privateSource ? { track: input.track, source: input.source, gapCode: input.gapCode, code: EVOLUTION_GAP_CODES.includes(input.code) ? input.code : input.gapCode }
       : { track: input.track, source: input.source, gapCode: input.gapCode, method: input.method, papers: input.papers ?? [], features: input.features ?? {}, origin: input.origin ?? 'literature' };
@@ -196,7 +196,6 @@ export class EvolutionService {
     const assessments = [...tool.payload.assessments.filter((/** @type {any} */ a) => a.id !== assessment.id), assessment];
     const validationLevel = evolutionValidationLevel(assessments, tool.payload.usage);
     const saved = await this.save('tool', id, { ...tool.payload, assessments, validationLevel }, tool);
-    if (tool.payload.validationLevel !== validationLevel) await this.resolveWaiters({ type: 'tool-ready', toolId: id });
     return saved;
   }
   async dossiers() { return this.list('dossier'); }
@@ -206,79 +205,6 @@ export class EvolutionService {
   /** @param {any} agenda @returns {Promise<any[]>} */
   async availableTools(agenda = {}) { return (await this.tools()).filter((row) => evolutionToolVisible(row.payload) && (!agenda.track || row.payload.track === agenda.track)
     && (!agenda.capabilityId || row.payload.capabilityIds?.includes(agenda.capabilityId))).map((row) => ({ id: row.id, ...(trustedEvolutionNativeName(row.payload) ? {nativeName:trustedEvolutionNativeName(row.payload)} : {}), papers: evolutionPublicPapers(row.payload.lineage?.papers ?? row.payload.papers), ...Object.fromEntries(['name', 'description', 'track', 'capabilityIds', 'toolKind', 'validationLevel', 'dataLevel', 'dataRequirements', 'status', 'maintenanceState', 'entrypoint', 'publicationKind', 'artifactDigest', 'usage', 'whenToUse'].filter((key) => row.payload[key] !== undefined).map((key) => [key, row.payload[key]])) })); }
-  /** @param {any} input */
-  async waitFor(input) {
-    const id = `evolution-waiter-${evolutionKey([input.userId, input.projectId, input.agendaId, input.sourceEpisodeId, input.capabilityId, input.methodId, input.toolId, input.requirementId])}`;
-    const existing = await this.get(id, input.userId);
-    if (existing) return existing;
-    return this.save('waiter', id, { ...input, status: 'waiting' }, null, input.userId);
-  }
-  /** @param {any} event */
-  async resolveWaiters(event) {
-    const owners = event.userId ? [event.userId] : await this.callbacks.waiterOwners?.() ?? [];
-    const resolved = [];
-    for (const owner of owners) for (const row of await this.list('waiter', owner)) {
-      const wait = row.payload;
-      if (wait.status !== 'waiting' || (event.userId && wait.projectId !== event.projectId)) continue;
-      const tool = event.type === 'tool-ready' ? await this.get(event.toolId) : null;
-      const toolMatch = wait.kind === 'tool' && event.type === 'tool-ready' && tool && evolutionToolVisible(tool.payload) && (!wait.methodId || tool.payload.methodId === wait.methodId) && (!wait.capabilityId || tool.payload.capabilityIds?.includes(wait.capabilityId)) && (wait.toolId ? wait.toolId === event.toolId : Boolean(wait.capabilityId || wait.methodId));
-      const dataMatch = event.type === 'dataset-ready' && Boolean(wait.dataRequirements) && (!event.requirementId || wait.requirementId === event.requirementId) && evolutionDataMatch(wait.dataRequirements, event.dataset).matched;
-      if (!toolMatch && !dataMatch) continue;
-      if (dataMatch) {
-        const available = wait.toolId ? [await this.get(wait.toolId)] : (await this.tools()).filter(item => evolutionToolVisible(item.payload)
-          && wait.capabilityId && item.payload.capabilityIds?.includes(wait.capabilityId)
-          && evolutionDataMatch(item.payload.dataRequirements, event.dataset).matched);
-        const matched = available.find(Boolean);
-        if (!matched) continue;
-        // Serving runs it (an already published tool on the researcher's own dataset); a legacy pause keeps the event to queue it once after the pause.
-        const queued = await this.enqueue('self-check', { userId: owner, projectId: wait.projectId, agendaId: wait.agendaId,
-          waiterId: row.id, sourceEventId: event.id, toolId: matched.id, datasetId: event.datasetId }, `check:${row.id}:${event.id}:${matched.id}`);
-        if (queued?.status === 'deferred') throw new HttpError(409, queued.code, queued.reason);
-        continue;
-      }
-      const woke = await this.wakeWait(row, owner, wait, event);
-      if (!woke.woken) continue;
-      resolved.push(await this.save('waiter', row.id, { ...wait, status: 'resolved', resolvedAt: this.now().toISOString(),
-        ...(woke.deferred ? { wakeDeferred: woke.deferred } : {}) }, row, owner));
-    }
-    return resolved;
-  }
-  /**
-   * One wait's wake is the agenda's business, and an agenda that cannot be woken cannot fail the platform's event
-   * or the waits behind it: the failure is kept on its own wait as a closed code and the wait stays, to be tried at
-   * the next event; an agenda that is gone closes its wait. An agenda the researcher holds back (it stopped reading,
-   * it rejected the direction) keeps its wait too, and one refused for budget is woken, to continue on its schedule.
-   * @param {any} row @param {string} owner @param {any} wait @param {any} event
-   * @returns {Promise<{woken: boolean, deferred?: string}>}
-   */
-  async wakeWait(row, owner, wait, event) {
-    let woke;
-    try { woke = await this.callbacks.wakeAgenda?.({ ...wait, event }); }
-    catch (error) {
-      const code = typeof error?.code === 'string' && /^[a-z0-9_]{1,64}$/.test(error.code) ? error.code : 'evolution_wake_failed';
-      const patch = error?.status === 404 ? { status: 'closed', closedReason: code, closedAt: this.now().toISOString() }
-        : { wakeFailure: { code, at: this.now().toISOString(), count: Number(wait.wakeFailure?.count ?? 0) + 1 } };
-      await this.save('waiter', row.id, { ...wait, ...patch }, row, owner).catch(() => null);
-      return { woken: false };
-    }
-    if (woke?.closed) await this.save('waiter', row.id, { ...wait, status: 'closed', closedReason: woke.closed, closedAt: this.now().toISOString() }, row, owner).catch(() => null);
-    if (woke === false || woke?.resumed === false) return { woken: false };
-    return { woken: true, ...(woke?.deferred ? { deferred: woke.deferred } : {}) };
-  }
-  /** Dataset matching schedules a check; completed measurements annotate the resumed agenda without gating delivery. @param {any} input @param {any} result */
-  async completeSelfCheck(input, result) {
-    if (!input.waiterId || !(['passed','failed','inconclusive'].includes(result?.payload?.status)) || (result.payload.status !== 'passed' && result.payload.measurementCompleted !== true)) return { resumed: false };
-    const row = await this.get(input.waiterId, input.userId);
-    if (!row || row.projectId !== input.projectId || row.payload.status !== 'waiting') return { resumed: false };
-    const wait = row.payload;
-    const event = { id: input.sourceEventId, type: 'dataset-ready', userId: input.userId, projectId: input.projectId,
-      datasetId: input.datasetId, toolId: input.toolId, selfCheckId: result.id, selfCheckStatus: result.payload.status };
-    const woke = await this.wakeWait(row, input.userId, wait, event);
-    if (!woke.woken) return { resumed: false };
-    await this.save('waiter', row.id, { ...wait, status: 'resolved', resolvedAt: this.now().toISOString(), selfCheckId: result.id,
-      ...(woke.deferred ? { wakeDeferred: woke.deferred } : {}) }, row, input.userId);
-    return { resumed: true };
-  }
   /** Failed approaches are immutable and wake only on new resources or methods. @param {any} input */
   async recordFailure(input) {
     if (!EVOLUTION_GAP_CODES.includes(input.gapCode)) throw new HttpError(400, 'evolution_failure_invalid', 'Unknown failure category.');

@@ -20,7 +20,7 @@ const MAX_BYTES = 64 * 1024 * 1024;
 // `documents` and `revisions`. A kind whose stored payload holds more than
 // that — a storage location, a queue id, another user's id — leaves through a
 // projection; see `exportDocumentRow`.
-const customerKinds = ["capsule", "fact", "method", "source", "source-unit", "knowledge", "profile", "agenda", "episode", "digest", "notification", "preferences", "plugin",
+const customerKinds = ["capsule", "fact", "method", "source", "source-unit", "knowledge", "profile", "notification", "preferences", "plugin",
   "document-export", "result-version", "result-impact", "result-revision", "result-replay",
   // What a project's datasets were understood to mean: the researcher's own corrections and the model's readings with
   // their basis, the file hashes they were read from, no patient row (dataSemanticsService.mjs).
@@ -300,15 +300,14 @@ const payloadProjections = {
       // What the run left, from the domain's own closed projection; absent until the run ends.
       ...(payload.outcome ? { outcome: projectCorrectionOutcome(payload.outcome) } : {}) };
   },
-  // Which source changed under which result, and whether research continued.
+  // Which source changed under which result.
   "result-impact": payload => {
     recorded(payload, "result-impact");
     return { ...pick(payload, ["schemaVersion", "recordType", "versionId", "effect", "claimIds", "coverage", "historicalResultPreserved", "recomputed", "observedAt"]),
       source: pick(payload.source, ["id", "digest", "versionId", "doi", "contentDigest", "replacedBy"]),
       // What was found to rest on the source (N15): the calculations, memories and learned methods, as the closed record.
       ...(projectAffected(payload.affected) ? { affected: projectAffected(payload.affected) } : {}),
-      sourceStatus: pick(payload.sourceStatus, ["state", "checkedAt", "reason", "updates"]),
-      continuation: pick(payload.continuation, ["status", "reason", "agendaId", "episodeId", "requestedAt", "scheduledAt"]) };
+      sourceStatus: pick(payload.sourceStatus, ["state", "checkedAt", "reason", "updates"]) };
   },
   // Two record types share this kind: the frozen recipe of an engine result,
   // and one request to calculate or recalculate.

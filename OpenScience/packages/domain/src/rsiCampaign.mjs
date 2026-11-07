@@ -9,7 +9,6 @@ export const RSI_CAMPAIGN_SURFACES = Object.freeze({
   'frontier-selection': { kind: 'policy', consumer: 'frontier-mix', activation: 'shadow' },
   'frontier-screen': { kind: 'policy', consumer: 'frontier-screen', activation: 'shadow' },
   'frontier-edit': { kind: 'policy', consumer: 'frontier-edit', activation: 'shadow' },
-  'autopilot-planner': { kind: 'policy', consumer: 'autopilot-planner', activation: 'cohort' },
   'geo-supplements': { kind: 'policy', consumer: 'geo-capability', activation: 'cohort' },
   'capability-skill': { kind: 'skill', consumer: 'dsh-capability', activation: 'cohort' },
   // A patched runtime image (guidance supplement + skills) measured offline on lane runs (2026-11-01). Shadow only: nothing of it is imported into production in this round, a qualified result is a pull-request proposal.

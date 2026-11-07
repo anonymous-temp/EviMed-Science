@@ -12,7 +12,7 @@
  *
  * Hidden knowledge: both are read from the run ledger of the
  * project, as `/api/account/usage/runs` reads it for the month, and they leave
- * out the same things it does — a run a machine started (an autopilot episode,
+ * out the same things it does — a run a machine started (a scheduled task's run,
  * a continuation, a source being read), a capability that is the platform's
  * own, a run the researcher deleted. A run that failed delivered nothing and
  * answered nothing, so it is neither counted nor listed. A file is a work when

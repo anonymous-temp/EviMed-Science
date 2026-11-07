@@ -33,7 +33,7 @@ services:
       OPEN_SCIENCE_DOCUMENT_PARSER_URL: ${OPEN_SCIENCE_DOCUMENT_PARSER_URL:-}
       OPEN_SCIENCE_DOCUMENT_PARSER_TOKEN_FILE: /run/secrets/document-parser-token
       OPEN_SCIENCE_DOCUMENT_PARSER_TIMEOUT_MS: ${OPEN_SCIENCE_DOCUMENT_PARSER_TIMEOUT_MS:-300000}
-      OPEN_SCIENCE_DOCUMENT_PARSER_REVISION: ${OPEN_SCIENCE_DOCUMENT_PARSER_REVISION:-evimed-extract@0.5.0}
+      OPEN_SCIENCE_DOCUMENT_PARSER_REVISION: ${OPEN_SCIENCE_DOCUMENT_PARSER_REVISION:-evimed-extract@1.0.0}
     volumes:
       # Empty in content: the parser service needs no key (measured 2026-09-22); an empty file sends no Authorization header.
       - type: bind

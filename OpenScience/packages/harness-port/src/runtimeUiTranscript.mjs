@@ -212,6 +212,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
   const platformTags = kit.vocabulary.platformTags;
 
   function HiddenRow() { return null; }
+  const noChain = () => null;
 
   /** The kernel's own renderer for a context row: the next entry below ours. */
   function shippedContextRow() {
@@ -242,7 +243,12 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     if (!Shipped) return null;
     const data = props?.node?.data;
     const content = withoutPlatformBlocks(data?.content, platformTags);
-    return h(Shipped, content === data?.content ? props : { ...props, node: { ...props.node, data: { ...data, content } } });
+    // From 0.2.2 the `user` entry declares a chain, `conversation.chat.user.before`, and its bubble calls `renderSlotChain` unconditionally.
+    // The renderer binds that per entry to the children the entry declared, and a second entry may not declare them again, so this one
+    // has none to pass on. Only plugins this composition leaves out fill that chain (the Cordis runner, liveshare), and the kernel's own
+    // `steering` entry passes the same empty render.
+    const row = { ...props, renderSlotChain: props?.renderSlotChain ?? noChain };
+    return h(Shipped, content === data?.content ? row : { ...row, node: { ...props.node, data: { ...data, content } } });
   }
 
   // `locale: 'chat'` hands these the chat namespace's translator, which the

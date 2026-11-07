@@ -1,6 +1,6 @@
 {
   "$comment": "What dsh-sandbox-local's `confine` returns for the two modes (read-only, workspace-write): `builtin` is its own Landlock runner's argv, `runnerCommand` the argv it hands a custom runner (the sandbox row's runnerCommand: deploy/runtime-dsh/evimed-landlock-run.sh, the runner's `--ro-bind / / --dev /dev ...` profile, then `--`, then the command). Recorded by scripts/ops/sandbox-profile.mjs from the installed closure of the pin, with stand-in paths; never edit by hand. The runner accepts exactly these two shapes and refuses everything else.",
-  "pin": "0.2.1-rc.5",
+  "pin": "0.2.2-rc.1",
   "placeholders": {
     "launcher": "/launcher/landlock-run",
     "runner": "/runner/evimed-landlock-run"

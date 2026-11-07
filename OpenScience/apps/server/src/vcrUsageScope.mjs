@@ -10,9 +10,8 @@
  *   (`runUsageKeys`, `evimedCreditsService.settleTask`). A call with no run id was
  *   in neither: on 2026-10-04, 59 of the module's 79 second-opinion reviews (¥22.53
  *   of ¥29.75) had none — they were queued by the orchestrator when a computation
- *   finished, which no run had asked for. Autopilot solved the same problem for a
- *   planner decision by naming the episode as the run (`autopilotUsageScope`); a
- *   study is the module's episode.
+ *   finished, which no run had asked for. A study is named as the run, so
+ *   that its calls are in one.
  * - **Keyed by the study's project, not by the study.** A study is one row on top
  *   of one ordinary project, and a run knows its project and nothing of the study:
  *   the scope has to be computable from what a run object carries, or the billing

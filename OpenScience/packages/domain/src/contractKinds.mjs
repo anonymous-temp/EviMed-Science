@@ -57,11 +57,7 @@ export const CONTRACT_KINDS = Object.freeze([
   'vcr-matching-assessment',
   // Reserved: regulated, ships only when product and compliance decide (§9.9)
   'clinical-decision-brief',
-  // Autopilot contract kinds (§24.7)
-  'episode-plan',
-  'agenda-delta',
-  'analysis-plan',
-  'reproducibility-pack',
+  // JSON-shaped contract kinds (§24.7)
   'surveillance-diff',
   'hypothesis-set',
   // Self-evolution: the two internal packages the learning loop runs. Neither
@@ -171,10 +167,6 @@ export const CONTRACT_KIND_LABELS = Object.freeze({
   'vcr-cohort-snapshot': '虚拟临床研究队列快照',
   'vcr-matching-assessment': '虚拟临床研究匹配评估',
   'clinical-decision-brief': '临床决策辅助简报',
-  'episode-plan': '回合计划',
-  'agenda-delta': '议程增量',
-  'analysis-plan': '分析计划',
-  'reproducibility-pack': '可复现包',
   'surveillance-diff': '监测差异',
   'hypothesis-set': '假说集',
   'method-candidate': '方法候选',

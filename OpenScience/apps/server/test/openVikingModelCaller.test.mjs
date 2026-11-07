@@ -182,7 +182,7 @@ test("a spent day answers 402 by name before anything is reserved or sent, and t
   // still fails; a 4xx ends the attempt at once on v0.5.0 (lab/memory §E-3), and on v0.5.1+ a 402 does only with a
   // body code its classifier knows.
   const events = [];
-  const spent = { "memory-extraction": 30, knowledge: 19.9999 };
+  const spent = { "memory-extraction": 49.9999, knowledge: 0 };
   const { post, serviceCaller } = await gateway(t, { usageLedger: ledger(events, { spent }), events });
   const refused = await post(SERVICE_KEY, extractionRequest);
   assert.equal(refused.status, 402);
@@ -192,9 +192,9 @@ test("a spent day answers 402 by name before anything is reserved or sent, and t
   assert.equal(body.error.code, "insufficient_quota");
   assert.equal(OPENVIKING_QUOTA_CODE, "insufficient_quota");
   assert.match(body.error.message, /nothing was sent to the provider/);
-  assert.deepEqual(events.map((event) => event.type), ["spend", "spend"], "a refused call reserved or dispatched something");
-  // Both purposes are one budget, read from the ledger for the platform's own project over the rolling day.
-  assert.deepEqual(events.map((event) => event.input.purpose).sort(), ["knowledge", "memory-extraction"]);
+  assert.deepEqual(events.map((event) => event.type), ["spend"], "a refused call reserved or dispatched something");
+  // Each purpose has the budget on its own, read from the ledger for the platform's own project over the rolling day.
+  assert.deepEqual(events.map((event) => event.input.purpose), ["memory-extraction"]);
   for (const event of events) {
     assert.equal(event.input.userId, PLATFORM_PUBLISHER_USER_ID);
     assert.equal(event.input.projectId, OPENVIKING_PROJECT_ID);
@@ -210,8 +210,25 @@ test("a spent day answers 402 by name before anything is reserved or sent, and t
   assert.deepEqual(serviceCaller.counters.admitted, { "memory-extraction": 1, knowledge: 0 });
   const status = await serviceCaller.status();
   assert.equal(status.budgetCny, 50);
-  assert.equal(status.spentCny, 20.9999);
+  assert.deepEqual(status.spentCny, { "memory-extraction": 1, knowledge: 0 });
   assert.ok(!("warning" in status));
+});
+
+test("a compile that spends its own budget leaves extraction running (2026-11-05: one round stopped everybody's memory for a day)", async (t) => {
+  const events = [];
+  const spent = { "memory-extraction": 0.93, knowledge: 50 };
+  const { post, serviceCaller } = await gateway(t, { usageLedger: ledger(events, { spent }), events });
+  const admitted = await post(SERVICE_KEY, extractionRequest);
+  assert.equal(admitted.status, 200);
+  await admitted.json();
+  assert.deepEqual(serviceCaller.counters.refused, { "memory-extraction": 0, knowledge: 0 });
+  const refused = await post(openVikingKnowledgeModelKey(SERVICE_KEY), extractionRequest);
+  assert.equal(refused.status, 402);
+  assert.equal((await refused.json()).error.code, "insufficient_quota");
+  assert.deepEqual(serviceCaller.counters.refused, { "memory-extraction": 0, knowledge: 1 });
+  const status = await serviceCaller.status();
+  assert.deepEqual(status.exhausted, ["knowledge"]);
+  assert.equal(status.warning, "openviking_model_budget_exhausted");
 });
 
 test("a budget of zero is no cap, and the ledger is not asked what was spent before a call", async (t) => {

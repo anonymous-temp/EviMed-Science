@@ -154,8 +154,8 @@ export const WEB_DOCKERFILE = "deploy/web/Dockerfile";
 // evidence content copies. This digest is calculated from the resolved recipe;
 // independent merge review and complete production image acceptance remain pending.
 // The hosted extension adapters and measured source closure now ship in the Web image.
-// 2026-10-07: three added lines — 循证进化's module loops read evals/frontier-editing,
-// evals/autopilot-next-action and evals/geo-judge-cards cases.json at run time and the
+// 2026-10-07: three added lines — 循证进化's module loops read evals/frontier-editing
+// and evals/geo-judge-cards cases.json at run time and the
 // image did not carry them (deploy.test.mjs now derives every literal evals/ read).
 // 2026-10-07 (R10): one added line — the 插件与技能 page reads the community skills' text
 // (dsh-ppt, deep-structural-analysis) from the control plane's own copy, as it does the others.
@@ -175,7 +175,11 @@ export const WEB_DOCKERFILE = "deploy/web/Dockerfile";
 // 2026-10-31 (merge of the Gitee main e9c9f96f6): two added COPY lines in the build stage's manifest layer — packages/design-tokens/package.json
 // and packages/search-topics/package.json, so the frozen-lockfile install sees every workspace package the lockfile names (the server and the web app
 // link the first, only the server the second). Stages, commands, secrets and build arguments are unchanged.
-export const WEB_DOCKERFILE_SHA256 = "sha256:f648ea314366120062e36245824b7e85fd3296238f7deef866ed8a7e88774558";
+// 2026-11-05 (platform scheduler retired, main): the autopilot-next-action eval case COPY line and its mention in the comment above it were
+// removed. 2026-11-05 (VCR research plugins, branch): six manifest COPY lines in the build stage (research-plugin-runtime and the five research
+// bundles) and one COPY of packages/research-plugin-runtime into the final stage. 2026-11-07: the two merged; this digest is the merged recipe's.
+// Stages, commands, secrets and build arguments are unchanged.
+export const WEB_DOCKERFILE_SHA256 = "sha256:04a4bea2e6cc50a991f6e246057150991dff074e6b57ded8a9a6ac4be239412f";
 export const WEB_INPUTS = Object.freeze([
   "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "deps-version.json",
   "apps/web/package.json", "apps/server/package.json", "packages/shared/package.json",

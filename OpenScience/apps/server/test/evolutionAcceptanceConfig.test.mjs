@@ -34,11 +34,10 @@ test('dedicated evaluation network is explicit, optional and validated without c
   }finally{if(previous===undefined)delete process.env[name];else process.env[name]=previous;}
 });
 
-test('isolated nonproduction acceptance explicitly enables the actual upload and tool-wake episode worker', () => {
+test('isolated nonproduction acceptance runs with the ingestion and data-semantics modules on', () => {
   const overrides = createEvolutionConfiguration({ dataDir: '/acceptance', databaseUrl: 'postgresql://localhost/evimed_test_evolution', runtimeImage: 'acceptance-fixture', volume: 'acceptance-fixture', network: 'acceptance-fixture', evaluationDataDir: '/control-eval' }, { password: 'test-only-password', modelSecret: 'test-only-model-secret', workloadSecret: 'test-only-workload-secret' });
   const config = loadConfig(overrides);
   assert.equal(config.production, false);
-  assert.equal(config.autopilotEnabled, true);
   assert.equal(config.evolutionEnabled, true);
   assert.equal(config.sourceIngestionEnabled, true);
   assert.equal(config.dataSemanticsEnabled, true);

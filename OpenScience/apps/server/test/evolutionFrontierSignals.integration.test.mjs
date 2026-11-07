@@ -31,7 +31,7 @@ before(async () => {
   documents = new ProductDocuments(database); jobs = new ProductJobs(database);
   clock = NOW;
   service = new EvolutionService({ documents, jobs, ownerId: owner, now: () => clock, config: { evolutionMaxPaperScoutsPerDay: 2 } });
-  integration = new EvolutionIntegration({ service, autopilot: {} });
+  integration = new EvolutionIntegration({ service });
   signals = new EvolutionFrontierSignals({ database, service, integration });
 });
 after(async () => {
@@ -53,7 +53,7 @@ test('ranked scout leases retain ordering after the admitted-work floor', option
   await database.query('DELETE FROM evimed_product.jobs WHERE user_id=$1', [owner]);
   const floor = new Date(NOW.getTime() + 600_000);
   await service.enqueue('build', { dossierId: 'ranking-floor' }, 'build:ranking-floor', floor);
-  const rankedIntegration = new EvolutionIntegration({ service, autopilot: {}, judgeService: { judge: async (_site, input) => ({
+  const rankedIntegration = new EvolutionIntegration({ service, judgeService: { judge: async (_site, input) => ({
     outcome: 'settled', value: { relevance: Number(input.title.split(' ').at(-1)) / 10 } }) } });
   const ranked = await rankedIntegration.rankPublications([1, 2, 3].map(n => ({ id: `ranked:${n}`,
     paper: { id: `ranked-paper-${n}`, identity: `ranked:${n}`, title: `Method ${n}` } })));
