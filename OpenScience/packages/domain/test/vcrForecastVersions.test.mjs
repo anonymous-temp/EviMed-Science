@@ -3,8 +3,10 @@ import test from 'node:test';
 import { compareVersionsToObserved } from '../index.mjs';
 
 const endpoint = {code:'HbA1c',type:'continuous',unit:'%'};
+/** @param {string} origin @param {number[]} horizonsDays @param {Record<string, number>} points @returns {any} */
 const prediction = (origin,horizonsDays,points) => ({origin,endpoint,horizonsDays,historyId:'h',model:{name:'m',version:'1'},dataClass:'synthetic',
-  rows:Object.entries(points).flatMap(([subjectKey,point]) => horizonsDays.map(horizonDays => ({subjectKey,horizonDays,point})))});
+  rows:Object.entries(points).flatMap(([subjectKey,point]) => horizonsDays.map((/** @type {number} */ horizonDays) => ({subjectKey,horizonDays,point})))});
+/** @param {string} subjectKey @param {number} value @param {string} occurredAt */
 const observation = (subjectKey,value,occurredAt) => ({subjectKey,code:'HbA1c',unit:'%',value,occurredAt,availableAt:occurredAt,valueSource:'observed'});
 
 test('older, newer and observed are compared on the people and the target date they share',() => {
