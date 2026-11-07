@@ -32,7 +32,7 @@ export function longitudinalResultBlocks(model) {
         ['接收／可用／无效预测',`${n(`${base}.received`,'int')} / ${n(`${base}.accepted`,'int')} / ${n(`${base}.invalidRows`,'int')}`],
         ['用途',s.dataClass === 'synthetic' ? '合成数据流程检验' : '研究预测'] ]});
       if (s.accounting) blocks.push({type:'facts',title:'这批患者的去向',rows:[
-        ['提交／完成／拒绝／失败／未处理',['submitted','completed','rejected','failed','unprocessed'].map(k => n(`${base}.accounting.${k}`,'int')).join(' / ')],
+        ['提交／完成／未纳入／失败／未处理',['submitted','completed','rejected','failed','unprocessed'].map(k => n(`${base}.accounting.${k}`,'int')).join(' / ')],
         ['预测的性质',{logged_action_replay:'按实际记录的用药回放，用来检验模型，不是起点时可得的预测',factual_forecast:'按当前诊疗情况的预测',
           conditional_forecast:'在给定用药安排下的模型推演',intervention_comparison:'干预比较的模型推演'}[s.actionContext?.label] ?? '预测']]});
       if (s.failures?.length) blocks.push({type:'list',title:'未完成的预测部分',items:s.failures.map((/** @type {any} */ f) => String(f.code))});

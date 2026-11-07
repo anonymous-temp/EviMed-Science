@@ -147,16 +147,16 @@ export function realizationAccounting(rows, parentKey) {
 
 /** @type {Readonly<Record<string, (title: string) => string>>} */
 const READINESS_TEXT = Object.freeze({
-  descriptive_only: () => "这批虚拟人目前只描述了人群本身（各变量的分布和相互关系），还没有和任何能往后推演的模型绑定；不能直接拿来比较治疗。",
-  transition_model_bound: (title) => `已绑定模型“${title}”：可以按它推演每个人往后的变化；这个模型没有可以放入治疗的输入，所以不能用它比较治疗。`,
-  intervention_mapping_available: (title) => `已绑定模型“${title}”：可以把你给定的治疗安排放进去做模型推演；结果表示在该安排下可能怎样变化，不是疗效的证明。`,
+  descriptive_only: () => "这批人目前只描述了人群本身（各变量的分布和相互关系），还没有接上能往后推演的模型；不能直接拿来比较治疗。",
+  transition_model_bound: (title) => `已接上模型“${title}”：可以按它推演每个人往后的变化；这个模型没有可以放入治疗的输入，所以不能用它比较治疗。`,
+  intervention_mapping_available: (title) => `已接上模型“${title}”：可以把你给定的治疗安排放进去做模型推演；结果表示在该安排下可能怎样变化，不是疗效的证明。`,
 });
 
 /** @type {Readonly<Record<string, string>>} */
 const ORIGIN_TEXT = Object.freeze({
-  literature_constrained: "这批虚拟人的分布来自文献里的汇总数，不是真实患者；同一个人的多次虚拟实现不算多个真实的人。",
-  built_in: "这批虚拟人按设定的变量分布生成，不是任何真实患者；同一个人的多次虚拟实现不算多个真实的人。",
-  data_derived: "这批虚拟人由授权的真实患者数据生成，每一条记录都是合成的，不是真实的人；真实患者数以数据本身为准。",
+  literature_constrained: "这批人的分布来自文献里的汇总数，不是真实患者；同一个虚拟人的多次抽样不算多个真实的人。",
+  built_in: "这批人按设定的变量分布生成，不是任何真实患者；同一个虚拟人的多次抽样不算多个真实的人。",
+  data_derived: "这批人由授权的真实患者数据生成，每一条记录都是合成的，不是真实的人；真实患者数以数据本身为准。",
 });
 
 /**

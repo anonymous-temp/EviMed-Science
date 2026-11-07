@@ -24,7 +24,7 @@ test("A03: a descriptive population is a valid object and does not claim to be e
   assert.equal(view.readiness, "descriptive_only");
   const rows = populationBindingPremises(view);
   assert.deepEqual(rows.map((row) => row.key), ["binding:origin", "binding:readiness"]);
-  assert.match(rows[1].value, /还没有和任何能往后推演的模型绑定/);
+  assert.match(rows[1].value, /还没有接上能往后推演的模型/);
   assert.equal(rows[1].decisive, true);
   assert.match(rows[0].value, /不是真实患者/);
   // a real cohort is its data: no origin sentence and no readiness sentence
