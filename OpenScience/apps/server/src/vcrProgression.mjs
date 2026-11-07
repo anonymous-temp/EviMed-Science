@@ -108,6 +108,13 @@ function alzheimerEffectWords(progression) {
   return parts.length ? parts.join("；") : null;
 }
 
+/** What the Alzheimer model's parameters are and what they reproduce (a sentence the result card and the lab's experiments both say). */
+export const ALZHEIMER_PARAMETERS_TEXT = "用的是 CAMD 阿尔茨海默病疾病—药物—试验模型（Rogers 等，2012）作者在 2013 年 8 月公开的 1600 组后验参数，没有重新估计；用它们算出的数与 EMA 2013 年资格认定意见表 7、表 9、表 11 公布的数一致，与表 10 的区间和图 15、图 16 对不上";
+/** The 2013 regulatory documents concern the original tool, not this implementation. */
+export const ALZHEIMER_REGULATORY_TEXT = "FDA 2013 年 6 月 12 日的信函和 EMA 2013 年 9 月 19 日通过的资格认定意见，针对的是原来的工具和它限定的用途，不适用于这里的计算";
+/** @param {boolean} beyond @param {number} lastVisit */
+export const alzheimerScopeText = (beyond, lastVisit) => `描述一组人：轻中度阿尔茨海默病、ADAS-cog 11（0–70 分，越高越差）、两年以内的试验，不是对某一个人的预测${beyond ? `；最后一次随访在第 ${plain(lastVisit)} 周，超过两年的部分是外推` : ""}`;
+
 /** The premises of the Alzheimer model (beta_logit): five decisive sentences, the rest folded. @param {Record<string, any>} progression */
 function alzheimerPremisesOf(progression) {
   const effect = alzheimerEffectWords(progression);
@@ -124,11 +131,11 @@ function alzheimerPremisesOf(progression) {
     { key: "progression:ad:effect", label: "药物效果", decisive: true, source: effect ? BASIS_SOURCE[effectBasis] ?? "assumed" : "default",
       value: effect ? `${effect}。这是你设定的假设，不是对某个药物疗效的预测` : "没有设定药物效果，两组相同：这里看的是检验误判有效的概率" },
     { key: "progression:ad:parameters", label: "模型参数", decisive: true, source: "literature",
-      value: "用的是 CAMD 阿尔茨海默病疾病—药物—试验模型（Rogers 等，2012）作者在 2013 年 8 月公开的 1600 组后验参数，没有重新估计；用它们算出的数与 EMA 2013 年资格认定意见表 7、表 9、表 11 公布的数一致，与表 10 的区间和图 15、图 16 对不上" },
+      value: ALZHEIMER_PARAMETERS_TEXT },
     { key: "progression:ad:regulatory", label: "监管认可", decisive: true, source: "literature",
-      value: "FDA 2013 年 6 月 12 日的信函和 EMA 2013 年 9 月 19 日通过的资格认定意见，针对的是原来的工具和它限定的用途，不适用于这里的计算" },
+      value: ALZHEIMER_REGULATORY_TEXT },
     { key: "progression:ad:scope", label: "适用范围", decisive: true, source: "literature",
-      value: `描述一组人：轻中度阿尔茨海默病、ADAS-cog 11（0–70 分，越高越差）、两年以内的试验，不是对某一个人的预测${extrapolation.beyond === true ? `；最后一次随访在第 ${plain(Number(extrapolation.lastVisit))} 周，超过两年的部分是外推` : ""}` },
+      value: alzheimerScopeText(extrapolation.beyond === true, Number(extrapolation.lastVisit)) },
     { key: "progression:ad:mmse", label: "入组的人", decisive: true, source: assumedHas(progression, "population.mmseRange") ? "default" : BASIS_SOURCE[String(givenOf(progression, "population.mmseRange").basis)] ?? "assumed",
       value: mmse ? `基线 MMSE 在 ${plain(mmse[0])}–${plain(mmse[1])} 分之间均匀分布${ages ? `，年龄 ${plain(ages[0])}–${plain(ages[1])} 岁` : ""}` : "按模型默认的入组范围" },
   ];

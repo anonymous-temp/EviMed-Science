@@ -509,6 +509,9 @@ export const MEASURE_META = Object.freeze({
   expected_control_change: { label: "对照组到所选随访的平均变化" },
   expected_treated_change: { label: "治疗组到所选随访的平均变化" },
   simulated_difference: { label: "模拟试验里治疗组减对照组的平均估计" },
+  // what a lab search says about an Alzheimer trial's own size and length (calculated from its scenario)
+  total_sample_size: { label: "入组总人数", unit: "例" },
+  last_visit_weeks: { label: "最后一次随访", unit: "周" },
   curve_mean: { label: "均值" },
   curve_sd: { label: "标准差" },
   curve_change: { label: "相对基线的变化" },

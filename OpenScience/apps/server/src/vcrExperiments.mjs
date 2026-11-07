@@ -32,10 +32,12 @@ import { createHash } from "node:crypto";
 import {
   VCR_ENGINE_METHODS, VCR_CAMPAIGN_METHODS, VCR_JOB_METHODS, vcrCampaignAdvance, vcrCampaignCandidates, vcrCampaignCanonical,
   vcrCampaignInitialState, vcrCampaignManifest, vcrCampaignRecord, vcrCampaignVerdict, vcrCampaignDrawKey, vcrCampaignSeed, vcrCandidateVerdicts,
-  vcrDesignExperiment, vcrDesignExperimentCanonical, vcrEvaluationContrast, vcrEvaluationMeasure, vcrExperimentAlignment,
+  vcrDesignExperiment, vcrDesignExperimentCanonical, vcrDiseaseHypothesis, vcrEvaluationContrast, vcrEvaluationMeasure, vcrExperimentAlignment,
+  VCR_DISEASE_EXPERIMENT_ALIGNED_FIELDS,
 } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
 import { finishPremises } from "./vcrPremises.mjs";
+import { ALZHEIMER_PARAMETERS_TEXT, ALZHEIMER_REGULATORY_TEXT, alzheimerScopeText } from "./vcrProgression.mjs";
 import { measureLabel, measureValue } from "./vcrViewsKit.mjs";
 
 const SCHEMA = "evimed_vcr";
@@ -284,7 +286,8 @@ export class VcrExperiments {
     for (const arm of record.arms) {
       if (arm.resultId) { arms[arm.name] = { resultId: arm.resultId }; continue; }
       const kind = Object.entries(/** @type {Record<string, string>} */ (VCR_JOB_METHODS)).find(([, method]) => method === arm.method)?.[0];
-      const runsWithBlock = Object.hasOwn(VCR_CAMPAIGN_METHODS, arm.method) && arm.method !== "design.analytic";
+      const campaignInfo = /** @type {Record<string, any>} */ (VCR_CAMPAIGN_METHODS)[arm.method];
+      const runsWithBlock = Boolean(campaignInfo) && campaignInfo.exact !== true && campaignInfo.precisionBlock !== false;
       const scenario = runsWithBlock ? { ...arm.scenario, evaluation: { version: 1 } } : arm.scenario;
       // arms that draw identically share a seed, so their comparison can be paired; the engine's draw signature confirms it
       const drawKey = arm.method === "design.simulate" ? vcrCampaignDrawKey({ space: { method: arm.method, scenario: arm.scenario } }, { key: arm.name, set: {} }) : `own:${arm.name}`;
@@ -322,6 +325,7 @@ export class VcrExperiments {
   /** @param {{ id: string }} study @param {any} row */
   async #presentExperiment(study, row) {
     const record = object(row.manifest);
+    const disease = record.kind === "disease";
     const held = object(object(row.state).arms);
     const arms = [];
     for (const arm of list(record.arms)) {
@@ -332,7 +336,10 @@ export class VcrExperiments {
       const execution = job ? await this.store.one(`SELECT replicates, cpu_seconds FROM ${SCHEMA}.executions WHERE job_id = $1 ORDER BY created_at DESC LIMIT 1`, [job.id]) : null;
       const evaluation = object(object(result?.diagnostics).evaluation);
       const status = entry.refused ? "unsupported" : result && (!job || job.state === "succeeded") ? "complete" : job && TERMINAL.has(String(job.state)) ? "failed" : job ? "running" : "incomplete";
-      arms.push({ name: arm.name, method: arm.method ?? job?.method ?? null, methodVersion: arm.version ?? job?.method_version ?? null, attached: Boolean(arm.resultId),
+      const progression = object(object(result?.diagnostics).progression);
+      const armScenario = arm.scenario ?? (job ? object(job.scenario) : null);
+      arms.push({ name: arm.name, hypothesis: disease && armScenario ? hypothesisView(armScenario) : null, trajectory: disease ? trajectoryOf(progression) : null,
+        beyond: progression.extrapolation?.beyond === true, method: arm.method ?? job?.method ?? null, methodVersion: arm.version ?? job?.method_version ?? null, attached: Boolean(arm.resultId),
         status, refused: entry.refused ?? null, resultId: result?.id ?? null, scenario: arm.scenario ?? (job ? object(job.scenario) : null),
         evaluation: result ? { state: status === "complete" ? "succeeded" : "failed", seed: job?.seed == null ? null : Number(job.seed), replicates: execution?.replicates == null ? null : Number(execution.replicates),
           measures: list(result.measures), drawSignature: evaluation.drawSignature ?? null, rejects: evaluation.rejects ?? null } : null });
@@ -350,17 +357,18 @@ export class VcrExperiments {
           difference: contrast.difference == null ? null : measureValue({ name, value: contrast.difference, mcse: contrast.mcse ?? undefined, simulated: contrast.mcse != null }, { kind: "experiment_candidate" }) };
       }) : [],
     }));
-    const alignment = vcrExperimentAlignment(arms.map((arm) => ({ name: arm.name, scenario: arm.scenario })));
+    const alignment = vcrExperimentAlignment(arms.map((arm) => ({ name: arm.name, scenario: arm.scenario })), disease ? VCR_DISEASE_EXPERIMENT_ALIGNED_FIELDS : undefined);
     const incomplete = arms.filter((arm) => arm.status !== "complete").map((arm) => arm.name);
     return {
-      id: String(row.id), kind: "experiment", question: String(record.question ?? ""), purpose: String(record.purpose ?? ""),
+      id: String(row.id), kind: "experiment", experimentKind: disease ? "disease" : "design", question: String(record.question ?? ""), purpose: String(record.purpose ?? ""),
       status: incomplete.some((name) => arms.find((arm) => arm.name === name)?.status === "running") ? "running" : "complete",
-      arms: arms.map(({ evaluation: _e, scenario: _s, ...arm }) => arm), comparison, alignment: alignment.map(({ values: _v, ...rest }) => rest), incomplete,
+      arms: arms.map(({ evaluation: _e, scenario: _s, beyond: _b, ...arm }) => arm), comparison, alignment: alignment.map(({ values: _v, ...rest }) => rest), incomplete,
       premises: finishPremises([
         { key: "lab:aligned", label: "比较的前提", value: alignment.every((entry) => entry.aligned) ? "各组用同一个终点和同一套分析设置。"
           : `各组的${alignment.filter((entry) => !entry.aligned).map((entry) => ALIGNED_FIELD_TEXT_ZH[/** @type {keyof typeof ALIGNED_FIELD_TEXT_ZH} */ (entry.field)]).join("、")}不一致或未知，差值只能对照着看。`,
           source: "given", decisive: true },
-        { key: "lab:conditional", label: "结论的含义", value: "这是设计层面的模拟：结果表示在所列假设下各方案的表现，不估计药物的真实疗效，也不保证真实试验成功。", source: "assumed", decisive: true },
+        ...(disease ? diseasePremises(arms.some((arm) => arm.beyond), arms.map((arm) => object(arm.scenario))) : [
+          { key: "lab:conditional", label: "结论的含义", value: "这是设计层面的模拟：结果表示在所列假设下各方案的表现，不估计药物的真实疗效，也不保证真实试验成功。", source: /** @type {const} */ ("assumed"), decisive: true }]),
         ...(incomplete.length ? [{ key: "lab:incomplete", label: "未完成的组", value: `${incomplete.join("、")}还没有可比较的结果，比较中缺少它们。`, source: /** @type {const} */ ("given"), decisive: true }] : []),
       ]),
       createdAt: iso(row.created_at),
@@ -368,7 +376,46 @@ export class VcrExperiments {
   }
 }
 
-const ALIGNED_FIELD_TEXT_ZH = Object.freeze({ endpoint: "终点", "analysis.alpha": "检验水准", "analysis.sided": "单双侧", hypothesis: "假设类型", timeUnit: "时间单位" });
+const ALIGNED_FIELD_TEXT_ZH = Object.freeze({ endpoint: "终点", "analysis.alpha": "检验水准", "analysis.sided": "单双侧", hypothesis: "假设类型", timeUnit: "时间单位",
+  visits: "随访时间点", design: "每组人数", model: "模型设置", population: "入组人群", placebo: "安慰剂反应设置", dropoutModel: "脱落设置",
+  "analysis.kind": "分析方法", "analysis.visit": "分析所在的随访点" });
+const HYPOTHESIS_TEXT_ZH = Object.freeze({ none: "没有药物效果（只看检验会不会误判有效）", symptomatic: "改善症状的假设", disease_modifying: "减慢病情恶化的假设", both: "改善症状并减慢恶化的假设" });
+
+/** The drug hypothesis of a disease arm, in a word and in the closed sentence. @param {Record<string, any>} scenario */
+function hypothesisView(scenario) {
+  const kind = vcrDiseaseHypothesis(scenario);
+  return { kind, text: HYPOTHESIS_TEXT_ZH[kind] };
+}
+
+/**
+ * The calculated mean course of a disease arm, one row per visit: the untreated and the treated group's ADAS-cog score in the typical
+ * study. Numbers only; null when the arm has no result.
+ * @param {Record<string, any>} progression the result's `diagnostics.progression`
+ */
+function trajectoryOf(progression) {
+  const curves = list(progression.curves).map(object);
+  if (!curves.length) return null;
+  const value = (/** @type {any} */ measure) => (Number.isFinite(Number(object(measure).value)) ? Number(object(measure).value) : null);
+  return curves.map((curve) => ({ visit: Number(curve.visit), control: value(object(curve.control).mean), treated: value(object(curve.treated).mean) }));
+}
+
+/**
+ * What a person must know to read an Alzheimer experiment or search: the drug effects are the researcher's hypotheses, the parameters are
+ * a published model's, no regulatory status comes with them and the scope is mild to moderate disease on ADAS-cog 11 for up to two years.
+ * Three or four decisive rows; the regulatory sentence is folded.
+ * @param {boolean} beyond @param {Array<Record<string, any>>} scenarios
+ */
+function diseasePremises(beyond, scenarios) {
+  const last = Math.max(0, ...scenarios.flatMap((scenario) => list(scenario.visits).map(Number).filter(Number.isFinite)));
+  return [
+    { key: "progression:ad:effect", label: "药物效果", value: "各组的药物效果都是你设定的假设，不是对某个药物疗效的预测；比较的是“如果效果是这样，试验会看到什么”。", source: /** @type {const} */ ("assumed"), decisive: true },
+    { key: "progression:ad:parameters", label: "模型参数", value: ALZHEIMER_PARAMETERS_TEXT, source: /** @type {const} */ ("literature"), decisive: true },
+    { key: "progression:ad:scope", label: "适用范围", value: alzheimerScopeText(beyond || last > ALZHEIMER_DATA_WEEKS, last), source: /** @type {const} */ ("literature"), decisive: true },
+    { key: "progression:ad:regulatory", label: "监管认可", value: ALZHEIMER_REGULATORY_TEXT, source: /** @type {const} */ ("literature"), decisive: false },
+  ];
+}
+/** The two years of data the Alzheimer parameter set rests on, in weeks (the engine's own constant). */
+const ALZHEIMER_DATA_WEEKS = 104;
 
 /** @param {Record<string, any> | null} origin */
 function originOf(origin) {
@@ -437,7 +484,8 @@ export function presentCampaign(row) {
   const versus = verdict?.best && verdict.reference && verdict.best !== verdict.reference && finalOf(verdict.best) && finalOf(verdict.reference)
     ? vcrEvaluationContrast(finalOf(verdict.best), finalOf(verdict.reference), manifest.objective.measure) : null;
   const stop = state.stop ? { reason: state.stop.reason, text: VCR_CAMPAIGN_STOP_TEXT_ZH[/** @type {keyof typeof VCR_CAMPAIGN_STOP_TEXT_ZH} */ (state.stop.reason)] ?? null, at: state.stop.at ?? null } : null;
-  const alpha = Number(object(object(manifest.space).scenario).analysis?.alpha ?? 0.025);
+  const disease = manifest.space?.method === "patients.progression";
+  const alpha = Number(object(object(manifest.space).scenario).analysis?.alpha ?? (disease ? 0.05 : 0.025));
   const errorControl = list(manifest.constraints).filter((c) => c.kind === "error_control");
   const screeningSize = manifest.stages?.screening?.replicates ?? null;
   return {
@@ -458,9 +506,11 @@ export function presentCampaign(row) {
       ...(errorControl.length ? [{ key: "alpha", label: "第一类错误", value: `固定为 ${alpha}，搜索中不能放宽；只按复核结果的保守上界判断，接近界值记为“无法确定”，不算通过。`, source: /** @type {const} */ ("given"), decisive: true }] : []),
       { key: "campaign:precision", label: "初筛与复核", value: screeningSize
         ? `初筛每个方案模拟 ${screeningSize} 次，只用来排序和排除明显不满足的方案；入围方案按方法的正常次数在新的随机数上重算后，才判断是否满足约束。`
-        : "每个方案按方法的正常精度计算一次，直接判断是否满足约束。", source: "given", decisive: true },
+        : "每个方案按方法的正常精度计算一次，直接判断是否满足约束。", source: "given", decisive: !disease },
       { key: "campaign:bound", label: "约束怎样算满足", value: `每个约束按预先声明的单侧 ${percentWord(list(manifest.constraints)[0]?.confidence ?? 0.975)} 置信界判断：最不利的界值也满足才算满足。`, source: "given", decisive: true },
-      { key: "campaign:conditional", label: "结论的含义", value: "结果只表示在所列设计假设和真值情景下的模拟表现，不估计药物的真实疗效，也不保证真实试验成功。", source: "assumed", decisive: true },
+      ...(disease
+        ? diseasePremises(false, [object(object(manifest.space).scenario), ...vcrCampaignCandidates(manifest).map((candidate) => object(candidate.set))])
+        : [{ key: "campaign:conditional", label: "结论的含义", value: "结果只表示在所列设计假设和真值情景下的模拟表现，不估计药物的真实疗效，也不保证真实试验成功。", source: /** @type {const} */ ("assumed"), decisive: true }]),
       { key: "campaign:frozen", label: "冻结的评价方式", value: "目标、约束、真值情景和每个阶段的模拟次数在开始前已固定；改动任何一项就是一个新的实验方案。", source: "given", decisive: false },
     ]),
     createdAt: iso(row.created_at), updatedAt: iso(row.updated_at),

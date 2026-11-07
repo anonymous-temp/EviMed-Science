@@ -69,3 +69,48 @@ test('the premises block holds the fixed alpha, the two precisions and the model
   for (const banned of ['virtual_trial', 'job_', 'design.simulate', 'screeningReplicates', 'experiment_candidate', 'campaign', 'MCSE']) assert.ok(!words.includes(banned), banned);
   assert.ok(!/「|」/.test(words), 'UI copy quotes with “”');
 });
+
+// --- the Alzheimer disease-response search ---------------------------------------------------------------------------------------------
+
+const AD = { endpoint: { type: 'continuous', unit: 'points' }, design: { nTreat: 100, nControl: 100 }, timeUnit: 'weeks', visits: [0, 26, 52, 78, 130],
+  model: { family: 'beta_logit', parameterSet: { id: 'camd-adas-cog-11', version: 'adsim-3.0' } }, analysis: { kind: 'change', visit: 78, alpha: 0.05 } };
+
+/** An Alzheimer search run to its stop on a fake engine whose power grows with the people enrolled. */
+function finishedDisease() {
+  const { manifest, issues } = vcrCampaignManifest({
+    question: '最小入组', objective: { measure: 'total_sample_size', direction: 'minimize', truth: 'drug' },
+    constraints: [{ measure: 'power', op: '>=', bound: 0.8, kind: 'design', truth: 'drug' }],
+    space: { method: 'patients.progression', scenario: AD, truths: [{ name: 'drug', truth: { diseaseModifying: { fraction: { value: 0.3, basis: 'assumed' } } } }],
+      candidates: [100, 200, 300].map((n) => ({ set: { 'design.nTreat': n, 'design.nControl': n } })) },
+    stages: { final: { count: 3 } }, budget: { maxCandidates: 3, cpuSeconds: 1000 } });
+  assert.deepEqual(issues, []);
+  let state = vcrCampaignInitialState(manifest);
+  for (let i = 0; i < 20; i++) {
+    const { state: next, action } = vcrCampaignAdvance(manifest, state, { identity: ID });
+    state = next;
+    if (action.type !== 'evaluate') break;
+    const unit = action.unit, n = unit.scenario.design.nTreat * 2, p = Math.round((1 - Math.exp(-n / 250)) * 5000) / 5000;
+    state = vcrCampaignRecord(manifest, { ...state, inFlight: { unitKey: unit.key, unit } }, unit, { jobId: `job_${unit.key}`, resultId: `res_${unit.key}`, state: 'succeeded', seed: unit.seed, replicates: 5000,
+      measures: [{ name: 'power', value: p, mcse: Math.sqrt(p * (1 - p) / 5000), simulated: true, source: 'synthetic' }], cpuSeconds: 1, queueSeconds: 1, wallSeconds: 2 });
+  }
+  return { id: 'cmp_ad', kind: 'campaign', identity: ID, manifest, state, status: 'stopped', created_at: '2026-11-07T00:00:00Z', updated_at: '2026-11-07T00:10:00Z' };
+}
+
+test('an Alzheimer search shows the calculated enrolment, the smallest feasible size and the claims of the model in the one block', () => {
+  const view = presentCampaign(finishedDisease());
+  assert.equal(view.method, 'patients.progression');
+  assert.deepEqual(view.candidates.map((c) => c.objective.final.value), [200, 400, 600].map((n) => n), 'enrolment is the scenario\'s own sum');
+  assert.equal(view.best, 'c002', 'power 1 - exp(-n / 250): only 600 people clear 0.8');
+  assert.equal(view.stop.reason, 'acceptable_precision');
+  const keys = view.premises.map((row) => row.key);
+  for (const key of ['campaign:bound', 'progression:ad:effect', 'progression:ad:parameters', 'progression:ad:scope', 'progression:ad:regulatory']) assert.ok(keys.includes(key), key);
+  assert.ok(!keys.includes('campaign:conditional'), 'the model-conditional sentence is the Alzheimer one');
+  assert.ok(view.premises.filter((row) => row.decisive).length <= VCR_PREMISES_DECISIVE_MAX);
+  const scope = view.premises.find((row) => row.key === 'progression:ad:scope');
+  assert.match(scope.value, /超过两年的部分是外推/, 'a candidate visit beyond two years is said to be an extrapolation');
+  const text = view.premises.map((row) => `${row.label}${row.value}`).join('\n');
+  assert.match(text, /不是对某个药物疗效的预测/);
+  assert.match(text, /不适用于这里的计算/, 'no 2013 regulatory status is inherited');
+  for (const banned of ['patients.progression', 'beta_logit', 'total_sample_size', 'job_', 'campaign']) assert.ok(!text.includes(banned), banned);
+  assert.ok(!/「|」/.test(text));
+});
