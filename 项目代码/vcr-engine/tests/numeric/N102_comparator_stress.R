@@ -65,8 +65,8 @@ vcr_case("N102b", c("AC-08", "AC-11", "AC-30"), function() {
 vcr_case("N102c", c("AC-08", "AC-11", "AC-30"), function() {
   # An unmeasured confounder: u lifts the outcome (gamma 1) and is 0.8 higher in the trial, so adjusting for the measured x1 and x2
   # cannot remove it. The estimate is biased by gamma * shift = 0.8 (to a tenth of that) and the bias is more than five standard
-  # deviations: no estimator here corrects it, which is why the result carries its sensitivity premises and an E-value rather than a
-  # claim of no bias.
+  # deviations: no adjustment for what was measured corrects it. What this holds is the estimator's behaviour under the simulation's
+  # own confounder; it does not test a premise or an E-value (comparator.aipw writes no E-value for a continuous outcome).
   set.seed(20261109L, kind = VCR_RNG_KIND)
   R <- 300L
   r <- .n102_run(R, 150L, 600L, gamma = 1, shift = 0.8)
