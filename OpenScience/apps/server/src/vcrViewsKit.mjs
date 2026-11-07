@@ -508,6 +508,7 @@ export const MEASURE_META = Object.freeze({
   expected_difference: { label: "治疗组减对照组的平均差" },
   expected_control_change: { label: "对照组到所选随访的平均变化" },
   expected_treated_change: { label: "治疗组到所选随访的平均变化" },
+  simulated_difference: { label: "模拟试验里治疗组减对照组的平均估计" },
   curve_mean: { label: "均值" },
   curve_sd: { label: "标准差" },
   curve_change: { label: "相对基线的变化" },

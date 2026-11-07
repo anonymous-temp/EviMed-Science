@@ -32,8 +32,9 @@ let source;
 async function actualSource() {
   if (source) return source;
   const runtimeFiles = [];
-  for (const name of (await fs.readdir(path.join(engine, 'R'))).filter(name => /\.(?:R|json)$/.test(name))) {
-    runtimeFiles.push({ path: `R/${name}`, bytes: await fs.readFile(path.join(engine, 'R', name)) });
+  // R/ and its subdirectories (R/models/ holds a model's parameter file), as the importer and the engine's health digest read them
+  for (const name of (await fs.readdir(path.join(engine, 'R'), { recursive: true })).filter(name => /\.(?:R|json)$/.test(name)).sort()) {
+    runtimeFiles.push({ path: `R/${name.split(path.sep).join('/')}`, bytes: await fs.readFile(path.join(engine, 'R', name)) });
   }
   const caseFiles = [];
   for (const name of (await fs.readdir(path.join(engine, 'tests/numeric'))).filter(name => /\.R$/.test(name))) {

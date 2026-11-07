@@ -59,7 +59,11 @@ const ruleLabels: Record<string, string> = {
 const pathLabels: Record<string, Record<string, string>> = {
   "comparator.borrowing:prior.kind": { power: "固定折扣（幂先验）", sam: "自适应混合先验（SAM）", elastic: "弹性先验" },
   "comparator.borrowing:prior.function": { logistic: "逻辑斯蒂函数", step: "阶梯函数" },
-  "patients.progression:model.family": { linear: "线性", exponential: "指数", logistic: "逻辑斯蒂（S 形）", emax: "Emax（逐渐饱和）" },
+  "patients.progression:model.family": { linear: "线性", exponential: "指数", logistic: "逻辑斯蒂（S 形）", emax: "Emax（逐渐饱和）", beta_logit: "阿尔茨海默病 ADAS-cog 11（CAMD 模型）" },
+  "patients.progression:model.parameterSet.id": { "camd-adas-cog-11": "CAMD 阿尔茨海默病 ADAS-cog 11 模型" },
+  "patients.progression:model.parameterSet.version": { "adsim-3.0": "作者 2013 年 8 月公开的参数" },
+  "patients.progression:model.uncertainty": { new_study: "每次模拟一项新研究", typical_study: "典型研究，不考虑研究之间的差异", posterior_draws: "每次模拟先抽一组后验参数，再抽一项新研究" },
+  "patients.progression:dropoutModel": { parameter_set: "按模型的脱落规律", none: "不考虑脱落" },
   "patients.longitudinal:trajectory.kind": { plateau: "逐渐趋平", quadratic: "二次曲线" },
   "patients.longitudinal:dropoutModel.mechanism": { mar: "随机缺失（看上一次的值）", mnar: "非随机缺失（看这次的值）" },
 };
@@ -228,7 +232,8 @@ const exampleLabels: Record<string, Record<string, string>> = {
   },
   "patients.progression": {
     "linear progression of a score, 25% slower under treatment, power of the change at 18 months (every number says where it came from)": "线性进展的评分：治疗减慢 25%，18 个月变化的功效（每个数字都写明来源）",
-    "a saturating (Emax) progression, tested by the per-person slope": "逐渐饱和（Emax）的进展，用每个人的斜率检验"
+    "a saturating (Emax) progression, tested by the per-person slope": "逐渐饱和（Emax）的进展，用每个人的斜率检验",
+    "mild to moderate Alzheimer disease on ADAS-cog 11 (the CAMD model with its released parameters): a hypothetical drug 2.5 points better at week 24 plus 30% slower decline, 78 weeks, 200 per arm": "轻中度阿尔茨海默病 ADAS-cog 11（CAMD 模型和它公开的参数）：假设的药物第 24 周好 2.5 分、病情恶化减慢 30%，78 周，每组 200 人"
   },
   "population.check": {
     "a generated population against a second, independent baseline table (the platform fills `generated` from the population subjectId names)": "生成的人群与第二份基线表对照"

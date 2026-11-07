@@ -81,3 +81,39 @@ test("the cards of the tab are the current results, newest first, and no back-of
     for (const word of strings({ title: card.title, question: card.question, label: card.label, reason: card.reason, premises: card.premises.map((p) => [p.label, p.value]) })) assert.ok(!/[a-z]+_[a-z_]+/.test(word), word);
   }
 });
+
+test("the Alzheimer model (beta_logit) says what it rests on: the person's hypothesis, the published parameters, no regulatory status, a group within its range", () => {
+  const card = progressionCard(fixture("alzheimer-beta-logit"));
+  assert.match(card.title, /阿尔茨海默病 ADAS-cog 11/);
+  assert.equal(card.label, "人群层面，不是对个人的预测");
+  assert.match(card.question, /第 78 周/);
+  assert.match(card.question, /低 2\.5 分/);
+  assert.equal(card.power.source, "synthetic");
+  assert.ok(card.power.mcse > 0);
+  assert.equal(card.approximation, null, "the model has no closed-form power, and the card claims none");
+  assert.equal(card.expected.value.source, "calculated");
+  assert.ok(card.expected.value.value < 0, "a drug that helps lowers the ADAS-cog change");
+  assert.equal(card.timeUnit, "周");
+  assert.equal(card.table.rows.length, 9);
+  assert.equal(card.table.rows[0].control.mean.unit, "分", "ADAS-cog points, in the page's word");
+  assert.equal(card.expected.value.unit, "分");
+  assert.ok(Math.abs(card.table.rows[0].gap.value) < 1e-12, "the arms start alike");
+  const decisive = card.premises.filter((premise) => premise.decisive).map((premise) => premise.key);
+  assert.deepEqual(decisive, ["progression:ad:effect", "progression:ad:parameters", "progression:ad:regulatory", "progression:ad:scope", "progression:ad:mmse"]);
+  const byKey = Object.fromEntries(card.premises.map((premise) => [premise.key, premise]));
+  assert.match(byKey["progression:ad:effect"].value, /你设定的假设，不是对某个药物疗效的预测/);
+  assert.match(byKey["progression:ad:effect"].value, /减慢 30%/);
+  assert.equal(byKey["progression:ad:effect"].source, "assumed");
+  assert.match(byKey["progression:ad:parameters"].value, /表 7、表 9、表 11/);
+  assert.match(byKey["progression:ad:parameters"].value, /表 10 的区间和图 15、图 16 对不上/);
+  assert.match(byKey["progression:ad:regulatory"].value, /不适用于这里的计算/);
+  assert.match(byKey["progression:ad:scope"].value, /不是对某一个人的预测/);
+  assert.match(byKey["progression:ad:scope"].value, /第 130 周，超过两年的部分是外推/);
+  assert.equal(byKey["progression:ad:mmse"].source, "default");
+  assert.match(byKey["progression:ad:mmse"].value, /16–26 分/);
+  assert.ok(byKey["progression:ad:uncertainty"] && byKey["progression:ad:dropout"] && byKey["progression:ad:analysis"] && !byKey["progression:ad:uncertainty"].decisive);
+  for (const word of strings({ title: card.title, question: card.question, label: card.label, reason: card.reason, premises: card.premises.map((p) => [p.label, p.value]) })) {
+    assert.ok(!/[a-z]+_[a-z_]+/.test(word), word);
+    assert.doesNotMatch(word, /adsim|parameterSet|posterior_draws|「|」/);
+  }
+});
