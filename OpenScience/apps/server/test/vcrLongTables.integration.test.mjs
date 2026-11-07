@@ -44,7 +44,8 @@ before(async () => {
     const system = body.messages[0].content;
     asked.push({ system, user: body.messages.at(-1).content });
     const content = system.includes("say which concepts") || system.includes("Say which concepts") ? JSON.stringify(relevance) : system.includes("what each column is") ? JSON.stringify(shapes)
-      : system.includes("criterion level") ? JSON.stringify({ 1: ["年龄", [Number(/(\d+)\D{0,4}\d{4}-\d{2}-\d{2} (?:诊断|检验|用药|操作)/u.exec(body.messages.at(-1).content)?.[1] ?? 0)], "included"] }) : '{"score":70,"confidence":0.6,"eligible_reasons":"1. a","ineligible_reasons":"","missing_information":""}';
+      // A part of the record with no dated line (the export's notes) says nothing about the clause, as a model reading it would.
+      : system.includes("criterion level") ? JSON.stringify(((cited) => ({ 1: cited ? ["年龄", [Number(cited[1])], "included"] : ["年龄", [], "not enough information"] }))(/(\d+)\D{0,4}\d{4}-\d{2}-\d{2} (?:诊断|检验|用药|操作)/u.exec(body.messages.at(-1).content))) : '{"score":70,"confidence":0.6,"eligible_reasons":"1. a","ineligible_reasons":"","missing_information":""}';
     return new Response(JSON.stringify({ id: "x", model: "deepseek-flash", choices: [{ finish_reason: "stop", message: { role: "assistant", content } }], usage: { prompt_tokens: 40, completion_tokens: 10 } }), { status: 200, headers: { "content-type": "application/json" } });
   };
   vcr = composeVcr({ config, productDatabase: database, fetchImpl, intakeController: localIntakeController(config) });
@@ -175,7 +176,8 @@ test("a FHIR export started from the conversation: converted, mapped and frozen 
   assert.equal(ranking.ranking.length, 1);
   assert.ok(ranking.ranking[0].criteria[0].evidence.length >= 1, "evidence read from a long line comes back");
   assert.equal(ranking.ranking[0].criteria[0].evidenceWithheld, undefined);
-  assert.ok(ranking.ranking[0].criteria[0].evidence[0].source.long);
+  // Which cited sentence comes first is the order of the model's answer, not of the record; the long line is among them.
+  assert.ok(ranking.ranking[0].criteria[0].evidence.some((item) => item.source?.long), "a cited sentence comes from a long-table line");
   // The export's notes come first, so the coded lines may be on a later page of the same reading.
   const sentences = [];
   for (let offset = 0, more = true; more;) {
