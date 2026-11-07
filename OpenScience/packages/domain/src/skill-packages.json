@@ -1224,7 +1224,7 @@
       "origin": "capability",
       "version": "1.9.0",
       "source": {"kind":"release"},
-      "digest": "sha256:2c3698d489aee524cbba32fd603fa71e23f7c4776353f4052ac1e21220655ca5",
+      "digest": "sha256:e4ec9197fe0885c257c4b1f1bcf04769ba6b34c9178f7dfceab53a280b0ee4a1",
       "digestAlgorithm": "release-directory-v1",
       "references": [
         {"path":"capability.yaml","sha256":"7f17c564817ab9d88f34b81ac2efc3aeada782a1bf61c025280a5d6487527f0c"},

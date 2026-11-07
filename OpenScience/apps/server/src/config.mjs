@@ -1163,8 +1163,8 @@ function vcrSettings(overrides) {
     // Ranking policy rrf-qwen-jev-v1 (measured 2026-11-07): Jev's typed fit is the second order fused with the Qwen3.7 rerank; one request
     // per candidate, bounded by the depth. Off keeps the rerank order alone. The depth bounds lexical, dense, fused, rerank and Jev stages.
     patientMatchingJevEnabled: overrides.patientMatchingJevEnabled ?? boolEnv("OPEN_SCIENCE_PATIENT_MATCHING_JEV_ENABLED", true),
-    patientMatchingDiscoveryDepth: integer("patientMatchingDiscoveryDepth", "OPEN_SCIENCE_PATIENT_MATCHING_DISCOVERY_DEPTH", 200, 20, 500),
-    patientMatchingJevDepth: integer("patientMatchingJevDepth", "OPEN_SCIENCE_PATIENT_MATCHING_JEV_DEPTH", 200, 0, 500),
+    patientMatchingDiscoveryDepth: integer("patientMatchingDiscoveryDepth", "OPEN_SCIENCE_PATIENT_MATCHING_DISCOVERY_DEPTH", 300, 20, 500),
+    patientMatchingJevDepth: integer("patientMatchingJevDepth", "OPEN_SCIENCE_PATIENT_MATCHING_JEV_DEPTH", 300, 0, 500),
     patientMatchingTrialIndexManifest: String(overrides.patientMatchingTrialIndexManifest ?? process.env.OPEN_SCIENCE_PATIENT_MATCHING_TRIAL_INDEX_MANIFEST ?? ''),
     patientMatchingCataloguePath: String(overrides.patientMatchingCataloguePath ?? process.env.OPEN_SCIENCE_PATIENT_MATCHING_CATALOGUE ?? ''),
     patientMatchingWorkerSocket: String(overrides.patientMatchingWorkerSocket ?? process.env.OPEN_SCIENCE_PATIENT_MATCHING_WORKER_SOCKET ?? ''),

@@ -1,0 +1,145 @@
+{
+ "title": "Board E: TREC CT 2022 full corpus (375,580 trials), dev topics; official measures, unjudged = not relevant",
+ "patients": 10,
+ "groups": {
+  "2022": 10
+ },
+ "arms": [
+  {
+   "name": "EviMed rrf-qwen-jev-v1 (Jev 1.13)",
+   "type": "same, Jev 1.13",
+   "backbone": "Qwen3.7 embed+rerank, Jev 1.13",
+   "point": {
+    "ndcg": 0.5749422913921385,
+    "ep10": 0.53,
+    "mrr": 0.7416666666666667,
+    "j10": 0.5900000000000001,
+    "cndcg": 0.9083314398410851
+   },
+   "byGroup": {
+    "2022": {
+     "ndcg": 0.5749422913921385,
+     "ep10": 0.53,
+     "mrr": 0.7416666666666667,
+     "j10": 0.5900000000000001,
+     "cndcg": 0.9083314398410851
+    }
+   },
+   "ci": [
+    0.38758211708037194,
+    0.7515498488166868
+   ],
+   "best": 1,
+   "worst": 5
+  },
+  {
+   "name": "Hybrid recall → Qwen3.7 rerank (V3 policy)",
+   "type": "rerank only",
+   "backbone": "Qwen3.7 embed+rerank",
+   "point": {
+    "ndcg": 0.5665362707540671,
+    "ep10": 0.48,
+    "mrr": 0.6380952380952382,
+    "j10": 0.65,
+    "cndcg": 0.8520528801103919
+   },
+   "byGroup": {
+    "2022": {
+     "ndcg": 0.5665362707540671,
+     "ep10": 0.48,
+     "mrr": 0.6380952380952382,
+     "j10": 0.65,
+     "cndcg": 0.8520528801103919
+    }
+   },
+   "ci": [
+    0.3958160232934523,
+    0.7156991910322923
+   ],
+   "best": 1,
+   "worst": 5
+  },
+  {
+   "name": "EviMed rrf-qwen-jev-v1 (Jev 1.14)",
+   "type": "hybrid recall → Qwen3.7 rerank ⊕ Jev, RRF",
+   "backbone": "Qwen3.7 embed+rerank, Jev 1.14",
+   "point": {
+    "ndcg": 0.5491741881409904,
+    "ep10": 0.51,
+    "mrr": 0.7194444444444444,
+    "j10": 0.55,
+    "cndcg": 0.9078887585592392
+   },
+   "byGroup": {
+    "2022": {
+     "ndcg": 0.5491741881409904,
+     "ep10": 0.51,
+     "mrr": 0.7194444444444444,
+     "j10": 0.55,
+     "cndcg": 0.9078887585592392
+    }
+   },
+   "ci": [
+    0.36902438846714813,
+    0.7215760090778957
+   ],
+   "best": 1,
+   "worst": 5
+  },
+  {
+   "name": "Hybrid recall only (lexical ⊕ dense, RRF)",
+   "type": "first stage",
+   "backbone": "FTS5 BM25 + Qwen3.7 embedding",
+   "point": {
+    "ndcg": 0.47715374680300116,
+    "ep10": 0.38,
+    "mrr": 0.6166666666666667,
+    "j10": 0.5700000000000001,
+    "cndcg": 0.7873610126108583
+   },
+   "byGroup": {
+    "2022": {
+     "ndcg": 0.47715374680300116,
+     "ep10": 0.38,
+     "mrr": 0.6166666666666667,
+     "j10": 0.5700000000000001,
+     "cndcg": 0.7873610126108583
+    }
+   },
+   "ci": [
+    0.3221159543632373,
+    0.6290857260010209
+   ],
+   "best": 1,
+   "worst": 5
+  },
+  {
+   "name": "Lexical recall only (product FTS5, condition + ranked English terms)",
+   "type": "first stage",
+   "backbone": "FTS5 BM25",
+   "point": {
+    "ndcg": 0.4586184443336837,
+    "ep10": 0.38,
+    "mrr": 0.5471428571428572,
+    "j10": 0.54,
+    "cndcg": 0.7735213967774861
+   },
+   "byGroup": {
+    "2022": {
+     "ndcg": 0.4586184443336837,
+     "ep10": 0.38,
+     "mrr": 0.5471428571428572,
+     "j10": 0.54,
+     "cndcg": 0.7735213967774861
+    }
+   },
+   "ci": [
+    0.2742966003160904,
+    0.6355779074718081
+   ],
+   "best": 1,
+   "worst": 5
+  }
+ ],
+ "reported": []
+}

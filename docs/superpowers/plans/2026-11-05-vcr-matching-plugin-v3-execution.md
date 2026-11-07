@@ -1,5 +1,7 @@
 # Patient Matching V3 implementation and verification
 
+**Superseded in part (2026-11-07):** the ranking policy "Qwen owns relevance order" and the multi-candidate Jev priority fallback were replaced by the measured policy `rrf-qwen-jev-v1` (Qwen3.7 rerank fused with Jev's per-candidate five-level fit), and discovery sends ranked terms again. Results and every leaderboard: [round 2](2026-11-07-vcr-matching-round2-results.md).
+
 Status: engineering closeout. The owner stopped remaining TREC and then SIGIR/all leaderboard work on2026-11-05. No further paid evaluation will run. Owner budget: **CNY500 total across providers**, approved2026-11-05. Clinical reasoning is **DeepSeek V4.1 Flash only**. No Pro escalation, translated SIGIR, PR, main merge, package publication or production deployment is authorized by this execution.
 
 The design authority is [V3](2026-11-05-vcr-matching-plugin-v3.md). Historical diagnosis and score definitions remain in [V1](2026-11-05-vcr-matching-next-phase.md); original score artifacts are unchanged.

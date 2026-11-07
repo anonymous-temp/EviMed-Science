@@ -10,8 +10,8 @@ const result=(status,data)=>({status,summary:'Candidate discovery completed with
  * the saved order is the reciprocal-rank fusion of the two. `depth` bounds every stage (at most 500, the reranker's request bound).
  * @param {{vcr:any,models:any,index?:any,jevEnabled?:boolean,depth?:number,jevDepth?:number,assertCurrent?:(envelope:any)=>Promise<any>}} dependencies
  */
-export function createPatientMatchingDiscovery({vcr,models,index=null,jevEnabled=true,depth=200,jevDepth=depth,assertCurrent=async()=>{}}){
-  const stageDepth=Math.min(500,Math.max(20,Math.trunc(Number(depth)||200))),scoredDepth=Math.min(stageDepth,Math.max(0,Math.trunc(Number(jevDepth)||0)));
+export function createPatientMatchingDiscovery({vcr,models,index=null,jevEnabled=true,depth=300,jevDepth=depth,assertCurrent=async()=>{}}){
+  const stageDepth=Math.min(500,Math.max(20,Math.trunc(Number(depth)||300))),scoredDepth=Math.min(stageDepth,Math.max(0,Math.trunc(Number(jevDepth)||0)));
   return async({scope,origin,study,meta,input,patient})=>{
     const limit=Math.min(100,Math.max(1,input.limit??20));
     if(meta.protocolVersionId){const roster=[...new Map((await vcr.documents.roster(study)).map(row=>[row.subjectKey,row])).values()];const rows=roster.slice(0,limit).map(row=>({subjectKey:row.subjectKey,label:row.subjectLabel??row.subjectKey}));return result('complete',{protocolVersionId:meta.protocolVersionId,people:rows,available:roster.length,returned:rows.length,more:roster.length>rows.length});}

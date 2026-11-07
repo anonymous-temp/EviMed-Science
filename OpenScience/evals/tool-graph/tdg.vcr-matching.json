@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-matching",
-  "version": "sha256:d0f1a7b5c8b24516680b08926bdcd1bd38c1e7dbe92560681522a2f0ac3254e6",
+  "version": "sha256:5ab399842dc16ba3a9eaf54931ec56b1503ec6a5a000603635f7532a0e10d6c4",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 39,
@@ -794,7 +794,7 @@
           },
           "maxItems": 32,
           "uniqueItems": true,
-          "description": "Up to 32 search phrases ranked by importance: the patient's problems, treatments and decisive findings, in the registry's language (English for ClinicalTrials.gov; also Chinese for ChiCTR when the record is Chinese). Earlier phrases weigh more."
+          "description": "Up to 32 search phrases ranked by importance: the patient's problems, treatments and decisive findings, written in English; add Chinese phrases only when the patient's record itself is written in Chinese (for ChiCTR). Earlier phrases weigh more."
         },
         "limit": {
           "type": "integer",
