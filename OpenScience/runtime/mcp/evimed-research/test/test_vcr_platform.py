@@ -774,6 +774,21 @@ class VcrReadWriteTests(_GatewayCase):
         result = self.server.call_tool("vcr_read", {"what": "results"})
         self.assertEqual(result["error"]["code"], "vcr_response_too_large")
 
+    def test_a_grid_s_null_check_read_through_results_or_status_is_said_in_the_platforms_verdict(self):
+        # Live D8, phase 3 (2026-11-07): "能不能确认一类错误不超过 2.5%？" was answered from vcr_read results, whose grid null check of 2.44% +/- 0.11%
+        # carried no verdict, as "能确认不超过 2.5%". The verdict rides each cell, and both answers say to use it.
+        cell = {"designIndex": 2, "truthIndex": 1, "measures": [{"name": "type_one_error", "value": 0.02435, "mcse": 0.0011}],
+                "typeOneError": {"verdict": "inconclusive", "text": "I 类错误无法确定是否不超过 2.5%（模拟 2.44% ± 0.11%）"}}
+        grid = {"id": "res_g", "kind": "design_grid", "diagnostics": {"cells": [cell]}}
+        _Gateway.answers["read"] = (200, {"data": {"what": "results", "results": [grid]}})
+        read = self.server.call_tool("vcr_read", {"what": "results"})
+        self.assertEqual(read["status"], "success")
+        self.assertTrue(any("typeOneError.text" in line and "grid" in line and "never conclude it from the estimate" in line for line in read["next_actions"]))
+        _Gateway.answers["read"] = (200, {"data": {"what": "results", "results": [{"id": "res_p", "kind": "trial_scenario", "measures": [{"name": "power", "value": 0.8}]}]}})
+        self.assertFalse(any("typeOneError" in line for line in self.server.call_tool("vcr_read", {"what": "results"})["next_actions"]))
+        status = vcr_platform._job_answer({"state": "succeeded", "jobId": "job_g", "result": grid}, "status")
+        self.assertTrue(any("typeOneError.text" in line for line in status["next_actions"]), "the grid's status answer too")
+
 
 class VcrSimulateTests(_GatewayCase):
     def test_a_start_posts_exactly_the_frozen_scenario_and_answers_the_job(self):

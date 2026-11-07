@@ -807,6 +807,9 @@ def read(arguments: dict) -> dict:
         # that needed it is affected.
         warnings.append(str(data.get("message") or "This part of the platform is not available on this deployment."))
         next_actions.append("Do the steps that do not need it, and say in the report what is missing and why.")
+    if what == "results" and any(_type_one_verdicts(result) for result in data.get("results") or [] if isinstance(result, dict)):
+        # Live D8, phase 3 (2026-11-07): a grid's null check of 2.44% +/- 0.11% was read here and answered "can confirm it does not exceed 2.5%".
+        next_actions.append(TYPE_ONE_VERDICT_LINE)
     return {
         "status": "warning" if warnings else "success",
         "summary": ("Read %s of this 虚拟临床研究 study. %s" % (what, _longitudinal_comparison_summary(data) if what == "longitudinal" else "")).strip(),
@@ -1415,6 +1418,22 @@ def _lab_answer(data: dict, action: str) -> dict:
     }
 
 
+# How a simulated type I error is said wherever the platform judged it: the result's own typeOneError, or a design grid cell's.
+TYPE_ONE_VERDICT_LINE = ("Say each type I error in the words of its verdict (data.typeOneError.text, a result's typeOneError.text, or a grid "
+                         "cell's in diagnostics.cells), the platform's verdict on its conservative bound: \"not above\" only when that text says "
+                         "so; never conclude it from the estimate, and give no interval of your own.")
+
+
+def _type_one_verdicts(holder) -> bool:
+    """Whether an answer's object carries a type I verdict: its own, or one of its design grid cells'."""
+    if not isinstance(holder, dict):
+        return False
+    if isinstance(holder.get("typeOneError"), dict) and isinstance(holder["typeOneError"].get("text"), str):
+        return True
+    diagnostics = holder.get("diagnostics") if isinstance(holder.get("diagnostics"), dict) else {}
+    return any(isinstance(cell, dict) and isinstance(cell.get("typeOneError"), dict) for cell in diagnostics.get("cells") or [])
+
+
 def _validate_answer(data: dict, kind) -> dict:
     """The answer of ``action: validate``: what the platform would do with this scenario, said without queueing it and without waiting.
 
@@ -1622,12 +1641,10 @@ def _job_answer(data: dict, action: str) -> dict:
             "data": data, "warnings": [], "next_actions": [],
         }
     actions = ["Read the result with vcr_read (what: results) and cite the fields, never retyped numbers."]
-    verdict = data.get("typeOneError") if isinstance(data.get("typeOneError"), dict) else None
-    if verdict and isinstance(verdict.get("text"), str):
-        # Live D8 (2026-11-07): 2.53% +/- 0.11% was headed "the simulation supports not exceeding 2.5%"; its upper bound is 2.75%.
-        actions.append("Say the type I error in the words of data.typeOneError.text, the platform's verdict on its conservative bound: \"not above\" "
-                       "only when that text says so; never conclude it from the estimate, and give no interval of your own.")
     result = data.get("result") if isinstance(data.get("result"), dict) else {}
+    if _type_one_verdicts(data) or _type_one_verdicts(result):
+        # Live D8 (2026-11-07): 2.53% +/- 0.11% was headed "the simulation supports not exceeding 2.5%"; its upper bound is 2.75%.
+        actions.append(TYPE_ONE_VERDICT_LINE)
     if result.get("kind") in ("trial_scenario", "design_grid"):
         # A design is chosen by the researcher: the reply recommends one in a sentence and says which bound decided it.
         actions.append("When designs are compared, close with one sentence of recommendation that says which constraint decided it (the type I error "

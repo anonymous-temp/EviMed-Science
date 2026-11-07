@@ -1,6 +1,7 @@
 // Live defect D1b (2026-11-07, phase 3, conversation a) on the real store: three design grids a conversation started without a subjectId
 // were filed as versions of one grid, and the 83.6% the reply cited was on no page. Each set of defining inputs is its own grid, and the
-// trial page draws the grid a link names (the newest without one).
+// trial page draws the grid a link names (the newest without one). And the null check of the same conversation, read back through
+// `vcr_read results` for the follow-up 「能不能确认一类错误不超过 2.5%？」, carries each cell's verdict (live D8).
 import assert from 'node:assert/strict';
 import { before, after, test } from 'node:test';
 import fs from 'node:fs/promises';
@@ -60,4 +61,22 @@ test('three grids of one conversation are three grids, each keeps its cells, and
   assert.deepEqual(named.grid.rows.map((/** @type {any} */ row) => [row.header, row.cells[0].text]), [['每组 250 例', '83.6%']], 'the 30-month grid the reply cited is on its page');
   // A link to something that is not a grid of this study leaves the newest grid on the page.
   assert.deepEqual((await vcr.service.tab(user, study.id, 'trial', { object: 'grd_nobody' })).grid.rows.length, 2);
+});
+
+test('live D8 on the real store: a grid null check read through vcr_read results carries each cell\'s verdict at the level its job stated', options, async () => {
+  const study = await vcr.store.taskContext({ userId: 'typeone', projectId: 'default', rootSessionId: 'typeone_root', sessionId: 'typeone_root', runId: 'r', callId: 'c', programme: false }, { create: true });
+  const jobId = 'job_typeone_grid';
+  await vcr.store.query(`INSERT INTO evimed_vcr.jobs (id, study_id, user_id, kind, method, method_version, state, scenario_hash, seed, replicates, progress, scenario)
+    VALUES ($1, $2, $3, 'design_grid', 'design.grid', '1.3.0', 'succeeded', $4, 5, 20000, '{}'::jsonb, $5::jsonb)`,
+  [jobId, study.id, study.userId, 'a'.repeat(64), JSON.stringify({ ...nullCheck, analysis: { ...nullCheck.analysis, alpha: 0.025 } })]);
+  const execution = await vcr.store.recordExecution({ jobId, studyId: study.id, userId: study.userId, method: 'design.grid', methodVersion: '1.3.0',
+    scenarioHash: 'a'.repeat(64), seed: 5, replicates: 20000, cpuSeconds: 100 });
+  await vcr.store.recordResult({ studyId: study.id, userId: study.userId, requestedUse: 'design_support', kind: 'design_grid', executionId: execution.id, conclusion: 'estimable',
+    counts: {}, measures: [{ name: 'cells', value: 2, source: 'calculated' }], diagnostics: { cells: [
+      { designIndex: 1, truthIndex: 1, status: 'succeeded', measures: [{ name: 'type_one_error', value: 0.0232, mcse: 0.00107 }] },
+      { designIndex: 2, truthIndex: 1, status: 'succeeded', measures: [{ name: 'type_one_error', value: 0.02435, mcse: 0.0011 }] }] } });
+  const read = await vcr.service.runtimeRead(study, 'results', {});
+  const grid = read.results.find((/** @type {any} */ result) => result.kind === 'design_grid');
+  assert.deepEqual(grid.diagnostics.cells.map((/** @type {any} */ cell) => cell.typeOneError?.text),
+    ['I 类错误无法确定是否不超过 2.5%（模拟 2.32% ± 0.11%）', 'I 类错误无法确定是否不超过 2.5%（模拟 2.44% ± 0.11%）']);
 });

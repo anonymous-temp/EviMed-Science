@@ -97,3 +97,33 @@ export function vcrTypeOneLevel({ scenario = null, result = null }) {
   const check = diagnostics.analyticCheck && typeof diagnostics.analyticCheck === "object" ? diagnostics.analyticCheck : null;
   return check && check.name === "type_one_error" ? finite(check.value) : null;
 }
+
+/**
+ * A result as a conversation reads it, with the verdict laid on each simulated type I error it holds: the result's own (a null run of a
+ * design) as `typeOneError`, and each cell of a design grid that measured one as that cell's `typeOneError`, all `{ verdict, text }` with
+ * the text the page and the inbox say. Every answer that carries such a number says it this way (live D8, 2026-11-07, phase 3: a grid's
+ * null check of 2.44% ± 0.11% was read through `vcr_read results`, which carried no verdict, and the reply said 「能确认不超过 2.5%」).
+ * A copy; the result is unchanged when it holds no type I error or there is no level to judge it against.
+ * @param {Record<string, any>} result as the answer carries it (`measures`, `diagnostics.cells[].measures`)
+ * @param {number | null} level the level of the design (`vcrTypeOneLevel`)
+ * @returns {Record<string, any>}
+ */
+export function vcrWithTypeOneVerdicts(result, level) {
+  if (!result || typeof result !== "object" || level === null) return result;
+  /** @param {unknown} measures */
+  const judged = (measures) => {
+    const measure = (Array.isArray(measures) ? measures : []).find((/** @type {any} */ entry) => entry?.name === "type_one_error");
+    const verdict = measure ? vcrTypeOneVerdict({ value: measure.value, mcse: measure.mcse, bound: level }) : null;
+    return verdict ? { verdict: verdict.status, text: `I 类错误${verdict.text}` } : null;
+  };
+  const own = judged(result.measures);
+  const diagnostics = result.diagnostics && typeof result.diagnostics === "object" ? result.diagnostics : null;
+  const cells = Array.isArray(diagnostics?.cells) ? diagnostics.cells : null;
+  const judgedCells = cells?.map((/** @type {any} */ cell) => {
+    const verdict = cell && typeof cell === "object" ? judged(cell.measures) : null;
+    return verdict ? { ...cell, typeOneError: verdict } : cell;
+  });
+  const cellsChanged = Boolean(judgedCells?.some((/** @type {any} */ cell, /** @type {number} */ index) => cell !== cells?.[index]));
+  if (!own && !cellsChanged) return result;
+  return { ...result, ...(own ? { typeOneError: own } : {}), ...(cellsChanged ? { diagnostics: { ...diagnostics, cells: judgedCells } } : {}) };
+}

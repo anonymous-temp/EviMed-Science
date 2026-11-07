@@ -53,6 +53,7 @@ import { HttpError } from "./security.mjs";
 import { VCR_DEFAULT_STUDY_NAME, vcrObjectNode, vcrStudyNameFrom } from "./vcrStore.mjs";
 import { vcrSealState } from "./vcrSeal.mjs";
 import { VCR_SCHEMA } from "./vcrPersistence.mjs";
+import { vcrTypeOneLevel, vcrWithTypeOneVerdicts } from "./vcrTypeOneVerdict.mjs";
 import {
   presentConversationStudy, presentExport, presentModels, presentPrecedents, presentReviewNotes, presentStudy, presentSummary, resultNode, useCeilingOf, intakeNeedsOf,
   vcrCurrentNodes, vcrReviewIsCurrent,
@@ -1778,7 +1779,31 @@ export class VcrService {
     const payload = await this.#runtimeRead(study, what, filter);
     // This one projection has already verified the entire generated lineage; synthetic counts are not patient disclosure cells.
     if (what === "generated_records") return stripPlaneAddresses(payload);
-    return this.forModel(payload, { publishedFigures: VCR_PUBLISHED_FIGURE_READS.includes(what), projection:what });
+    const shown = this.forModel(payload, { publishedFigures: VCR_PUBLISHED_FIGURE_READS.includes(what), projection:what });
+    return what === "results" ? this.#withTypeOneVerdicts(study, shown) : shown;
+  }
+
+  /**
+   * The results a run reads, each simulated type I error said as its verdict on the conservative bound, against the level its own job
+   * stated (live D8, 2026-11-07, phase 3: the follow-up 「能不能确认一类错误不超过 2.5%？」 was answered from this read, which carried
+   * 2.44% ± 0.11% and no verdict, as 「能确认不超过 2.5%」). A level that cannot be read leaves the number as it is.
+   * @param {any} study @param {any} shown
+   */
+  async #withTypeOneVerdicts(study, shown) {
+    const results = Array.isArray(shown?.results) ? shown.results : [];
+    const holds = (/** @type {any} */ result) => [result?.measures, ...(Array.isArray(result?.diagnostics?.cells) ? result.diagnostics.cells.map((/** @type {any} */ cell) => cell?.measures) : [])]
+      .some((measures) => Array.isArray(measures) && measures.some((/** @type {any} */ measure) => measure?.name === "type_one_error"));
+    const asked = results.filter(holds).map((/** @type {any} */ result) => String(result.id));
+    if (!asked.length) return shown;
+    /** @type {Map<string, Record<string, any>>} */
+    const scenarios = new Map();
+    if (typeof this.store.rows === "function") {
+      const rows = await this.store.rows(`SELECT r.id, j.scenario FROM ${VCR_SCHEMA}.results r JOIN ${VCR_SCHEMA}.executions e ON e.id = r.execution_id
+        JOIN ${VCR_SCHEMA}.jobs j ON j.id = e.job_id WHERE r.study_id = $1 AND r.id = ANY($2::text[])`, [study.id, asked]).catch(() => []);
+      for (const row of rows) scenarios.set(String(row.id), row.scenario && typeof row.scenario === "object" ? row.scenario : {});
+    }
+    return { ...shown, results: results.map((/** @type {any} */ result) => asked.includes(String(result.id))
+      ? vcrWithTypeOneVerdicts(result, vcrTypeOneLevel({ scenario: scenarios.get(String(result.id)) ?? null, result })) : result) };
   }
 
   /** @param {any} study @param {string} what @param {Record<string, any>} filter */
