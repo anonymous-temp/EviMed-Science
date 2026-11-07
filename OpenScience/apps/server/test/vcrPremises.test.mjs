@@ -373,9 +373,20 @@ test("a sequential design carries the fixed-sample design as a marked baseline r
 
 test("the trade-off is drawn against an objective taken from alpha and the target power, and names which bound each design meets (C7)", () => {
   const tab = presentTrialTab(withAnalyticExtras({ appliedDefaults: [{ path: "analysis.power", value: 0.9 }] }));
-  assert.deepEqual(tab.objective, { source: "default", alpha: 2.5, power: 90, sided: 1, text: "I 类错误不超过 单侧 2.5%，功效不低于 90%" });
-  // The design measured 90% power (±0.4) and a type I error of 2.46% (±0.11): both bounds are met.
-  assert.deepEqual(tab.designs[0].meets, { typeOneError: "ok", power: "ok" });
+  // Live D8 (2026-11-07): the line under the chart is the requirement the designs are held to, said as one, never as a design's result.
+  assert.deepEqual(tab.objective, { source: "default", alpha: 2.5, power: 90, sided: 1, text: "要求：I 类错误不超过单侧 2.5%，功效不低于 90%" });
+  // The design measured 90% power (±0.4) and a type I error of 2.46% (±0.11). The power bound is met; the type I error is an error-control
+  // bound, judged as the lab judges one, on its conservative bound (2.46 + 1.96 × 0.11 = 2.68% > 2.5%): the simulation cannot tell. Before
+  // D8 a point estimate under the level read "met" (changed on purpose).
+  assert.deepEqual(tab.designs[0].meets, { typeOneError: "undecided", power: "ok", typeOneErrorText: "无法确定是否不超过 2.5%（模拟 2.46% ± 0.11%）" });
+  const nullOf = (/** @type {Record<string, any>} */ bundle) => bundle.allResults[0].diagnostics.stageResults.simulation_null.measures.find((/** @type {any} */ measure) => measure.name === "type_one_error");
+  const clear = withAnalyticExtras({ appliedDefaults: [{ path: "analysis.power", value: 0.9 }] });
+  Object.assign(nullOf(clear), { value: 0.0205, mcse: 0.001 });
+  assert.equal(presentTrialTab(clear).designs[0].meets.typeOneError, "ok", "met only when even its upper bound is within the level");
+  const over = withAnalyticExtras({ appliedDefaults: [{ path: "analysis.power", value: 0.9 }] });
+  Object.assign(nullOf(over), { value: 0.031, mcse: 0.0012 });
+  assert.equal(presentTrialTab(over).designs[0].meets.typeOneError, "no");
+  assert.equal(presentTrialTab(over).designs[0].meets.typeOneErrorText, "超过 2.5%（模拟 3.10% ± 0.12%）");
   // A researcher's own comparison goal is the objective when there is one, and the bounds are still read for the designs.
   const written = designBundle({ withNull: true });
   written.decisions = [{ id: "dec_1", question: "I 类错误不超过 2.5%，功效尽量高", createdAt: "2026-11-01T11:30:00.000Z", chosen: {} }];

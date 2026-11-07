@@ -377,6 +377,14 @@ class VcrToolDefinitionTests(unittest.TestCase):
         notes = " ".join(vcr_platform.shape({"action": "shape", "kind": "design_dose"}).get("data", {}).get("notes", []))
         self.assertNotIn("instead of writing your own simulation", notes)
 
+    def test_a_finished_type_one_simulation_is_said_in_the_platforms_verdict(self):
+        # Live D8 (2026-11-07): a null run at 2.53% +/- 0.11% was headed "仿真支持“不超过 2.5%”" in the reply; the gateway now hands the verdict.
+        said = {"verdict": "inconclusive", "text": "I 类错误无法确定是否不超过 2.5%（模拟 2.53% ± 0.11%）"}
+        answer = vcr_platform._job_answer({"state": "succeeded", "jobId": "job_1", "typeOneError": said, "result": {"kind": "trial_scenario"}}, "status")
+        self.assertTrue(any("data.typeOneError.text" in line and "never conclude it from the estimate" in line for line in answer["next_actions"]))
+        plain = vcr_platform._job_answer({"state": "succeeded", "jobId": "job_1", "result": {"kind": "trial_scenario"}}, "status")
+        self.assertFalse(any("typeOneError" in line for line in plain["next_actions"]))
+
     def test_the_disease_progression_and_forecast_shapes_say_which_is_which(self):
         # Live 2026-11-07: three drug hypotheses on Alzheimer patients were simulated in the model's own script, and six listed patients were given
         # projections with prediction intervals of the model's own when the deployment had no forecast service.

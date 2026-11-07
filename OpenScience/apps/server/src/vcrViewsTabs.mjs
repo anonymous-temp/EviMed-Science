@@ -62,6 +62,7 @@ import { presentConfirmatoryDesigns } from "./vcrConfirmatory.mjs";
 import { presentDoseDesigns } from "./vcrDoseFinding.mjs";
 import { presentBayesianDesigns } from "./vcrBayesianDesign.mjs";
 import { presentWinRatioDesigns } from "./vcrWinRatio.mjs";
+import { vcrTypeOneVerdict } from "./vcrTypeOneVerdict.mjs";
 import { presentPrognosticModels } from "./vcrPrognosticTraining.mjs";
 import { presentProgressions } from "./vcrProgression.mjs";
 import { presentEvidenceSyntheses, tauPriorWords, vcrSuccessRatesPage } from "./vcrEvidenceSynthesis.mjs";
@@ -1195,17 +1196,26 @@ function trialObjective(row, statedGoal) {
   return {
     source: statedGoal ? "stated" : "default",
     alpha: alphaPercent, power: powerPercent, sided,
-    text: statedGoal ?? [alphaPercent !== null ? `I 类错误不超过 ${sided === 2 ? "双侧" : "单侧"} ${alphaPercent}%` : null, powerPercent !== null ? `功效不低于 ${powerPercent}%` : null].filter(Boolean).join("，"),
+    // Said as the requirement the designs are held to, never as something a design reached (live D8: under the chart it read as design B's
+    // verdict while B's own type I error was undecided).
+    text: statedGoal ?? `要求：${[alphaPercent !== null ? `I 类错误不超过${sided === 2 ? "双侧" : "单侧"} ${alphaPercent}%` : null, powerPercent !== null ? `功效不低于 ${powerPercent}%` : null].filter(Boolean).join("，")}`,
   };
 }
 
 /**
- * Whether a design's own numbers meet the objective's two bounds: `ok`, `borderline` (inside twice the Monte-Carlo error of the
- * bound) or `no`; null where the design has not measured it. A statement about the numbers, not a verdict on the design.
+ * Whether a design's own numbers meet the objective's two bounds; null where the design has not measured it. A statement about the
+ * numbers, not a verdict on the design. The power is `ok`, `borderline` (inside twice the Monte-Carlo error of the bound) or `no`. The
+ * type I error is an error-control bound and is judged as the lab judges one (`vcrTypeOneVerdict`, live D8): `ok` only when its
+ * conservative bound is within the level, `no` when even its lower bound is above it, `undecided` between; `typeOneErrorText` says it
+ * in words (「无法确定是否不超过 2.5%（模拟 2.53% ± 0.11%）」).
  * @param {Record<string, any>} measures a design's measures @param {{ alpha: number | null, power: number | null } | null} objective
  */
 function trialMeets(measures, objective) {
   if (!objective) return null;
+  const typeOne = measures.type_one_error && objective.alpha !== null
+    ? vcrTypeOneVerdict({ value: finite(measures.type_one_error.value) === null ? null : measures.type_one_error.value / 100,
+      mcse: finite(measures.type_one_error.mcse) === null ? null : measures.type_one_error.mcse / 100, bound: objective.alpha / 100 })
+    : null;
   /** @param {string} name @param {number | null} bound @param {'at_most' | 'at_least'} direction */
   const read = (name, bound, direction) => {
     const value = finite(measures[name]?.value);
@@ -1215,9 +1225,9 @@ function trialMeets(measures, objective) {
     if (met) return "ok";
     return (direction === "at_most" ? value - error <= bound : value + error >= bound) ? "borderline" : "no";
   };
-  const typeOneError = read("type_one_error", objective.alpha, "at_most");
+  const typeOneError = typeOne ? ({ pass: "ok", fail: "no", inconclusive: "undecided" })[typeOne.status] : null;
   const power = read("power", objective.power, "at_least");
-  return typeOneError === null && power === null ? null : { typeOneError, power };
+  return typeOneError === null && power === null ? null : { typeOneError, power, ...(typeOne ? { typeOneErrorText: typeOne.text } : {}) };
 }
 
 /**

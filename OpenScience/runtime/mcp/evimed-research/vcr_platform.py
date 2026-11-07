@@ -1622,6 +1622,11 @@ def _job_answer(data: dict, action: str) -> dict:
             "data": data, "warnings": [], "next_actions": [],
         }
     actions = ["Read the result with vcr_read (what: results) and cite the fields, never retyped numbers."]
+    verdict = data.get("typeOneError") if isinstance(data.get("typeOneError"), dict) else None
+    if verdict and isinstance(verdict.get("text"), str):
+        # Live D8 (2026-11-07): 2.53% +/- 0.11% was headed "the simulation supports not exceeding 2.5%"; its upper bound is 2.75%.
+        actions.append("Say the type I error in the words of data.typeOneError.text, the platform's verdict on its conservative bound: \"not above\" "
+                       "only when that text says so; never conclude it from the estimate, and give no interval of your own.")
     result = data.get("result") if isinstance(data.get("result"), dict) else {}
     if result.get("kind") in ("trial_scenario", "design_grid"):
         # A design is chosen by the researcher: the reply recommends one in a sentence and says which bound decided it.

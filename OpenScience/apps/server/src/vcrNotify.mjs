@@ -32,6 +32,7 @@
 import {
   VCR_CONVERSATION_STUDY_NAME, VCR_NOTIFICATION_KINDS, VCR_NOT_ESTIMABLE_RULE_LABELS_ZH, VCR_RESULT_KIND_TABS, VCR_TAB_LABELS_ZH, errorCodeMessage, vcrResultClass,
 } from "@evimed/domain";
+import { vcrTypeOneLevel, vcrTypeOneMeasured, vcrTypeOneVerdict } from "./vcrTypeOneVerdict.mjs";
 
 /** The seven kinds, by the key each notice is counted under. */
 export const VCR_NOTICE_KINDS = VCR_NOTIFICATION_KINDS;
@@ -122,7 +123,12 @@ export function vcrJobNoticeText({ resultKind, stage = null, label = null, state
       headline = [name, events ? `所需事件数 ${count(events.value)} 例` : null, total ? `所需样本量 ${count(total.value)} 例` : null].filter(Boolean).join(" ");
     } else if (stage === "assurance" && assurance) headline = `${lead}成功把握 ${percent(assurance.value)}`;
     else if (power) headline = `${lead}功效 ${percent(power.value)}`;
-    else if (typeOne) headline = `${lead}I 类错误 ${percent(typeOne.value)}`;
+    else if (typeOne) {
+      // Said from the verdict on its conservative bound, as the page and the lab say it (live D8: 2.53% ± 0.11% read 「I 类错误 2.5%」);
+      // with no level to judge against, the estimate and its error, never the estimate rounded onto the level.
+      const verdict = vcrTypeOneVerdict({ value: typeOne.value, mcse: typeOne.mcse, bound: vcrTypeOneLevel({ result }) });
+      headline = `${lead}I 类错误${verdict ? verdict.text : ` ${vcrTypeOneMeasured({ value: typeOne.value, mcse: typeOne.mcse })}`}`;
+    }
   } else if (resultKind === "population" || resultKind === "patient_set") {
     const generated = finiteNumber(result?.counts?.generatedRecords);
     const real = finiteNumber(result?.counts?.realPatients);

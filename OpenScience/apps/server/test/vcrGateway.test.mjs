@@ -2062,3 +2062,26 @@ test("a stored trial scenario may not carry a design search's precision block (r
   assert.deepEqual(data.issues.map((/** @type {any} */ issue) => [issue.index, issue.field]), [[0, "configuration.evaluation"]]);
   assert.equal(calls.filter((call) => call[0] === "scenario").length, 1, "the other design is written");
 });
+
+test("live D8: a finished type I simulation is handed over with its verdict on the conservative bound, in the page's words", async () => {
+  const done = { id: "job_1", state: "succeeded", kind: "design_simulation", method: "design.simulate", methodVersion: "1.9.0", progress: {}, cpuSecondsUsed: 27, error: null };
+  /** @param {Record<string, any>} measure @param {Record<string, any>} scenario */
+  const statusOf = async (measure, scenario) => {
+    const base = fixture();
+    const { handler } = fixture({
+      jobs: { ...base.vcr.jobs, async get() { return done; }, async configuration() { return { scenario, inputRefs: [], scenarioHash: "h" }; } },
+      store: { ...base.vcr.store, async one() { return { id: "exe_1" }; },
+        async allResults() { return [{ id: "res_1", version: 1, kind: "trial_scenario", executionId: "exe_1", conclusion: "estimable", measures: [measure], diagnostics: {} }]; } },
+    });
+    const res = response();
+    await handler(request("/internal/vcr/v1/simulate", { action: "status", jobId: "job_1" }), res);
+    assert.equal(res.status, 200);
+    return res.json().data;
+  };
+  const atLevel = await statusOf({ name: "type_one_error", value: 0.0253, mcse: 0.0011, simulated: true }, { truth: { hazardRatio: 1 }, analysis: { alpha: 0.025, sided: 1 } });
+  assert.deepEqual(atLevel.typeOneError, { verdict: "inconclusive", text: "I 类错误无法确定是否不超过 2.5%（模拟 2.53% ± 0.11%）" });
+  const clear = await statusOf({ name: "type_one_error", value: 0.0228, mcse: 0.00105, simulated: true }, { analysis: { alpha: 0.025 } });
+  assert.equal(clear.typeOneError.verdict, "pass");
+  const power = await statusOf({ name: "power", value: 0.838, mcse: 0.0037, simulated: true }, { analysis: { alpha: 0.025 } });
+  assert.equal("typeOneError" in power, false, "a result with no type I error carries no verdict");
+});
