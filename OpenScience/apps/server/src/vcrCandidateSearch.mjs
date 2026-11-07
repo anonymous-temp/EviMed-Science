@@ -54,7 +54,6 @@ export const CANDIDATES_NOT_COVERED = Object.freeze([
  * them as TrialGPT's keyword step does — the patient's problems summarised, then up to 32 conditions ranked by priority.
  */
 export const CANDIDATE_TERMS_MAX = 32;
-export const FROZEN_CANDIDATE_TERMS_MAX = CANDIDATE_TERMS_MAX;
 /** The most candidates one search keeps for one patient, and the most a frozen collection's list holds. */
 export const CANDIDATE_RETRIEVE_MAX = 500;
 export const FROZEN_CANDIDATE_LIMIT = CANDIDATE_RETRIEVE_MAX;
