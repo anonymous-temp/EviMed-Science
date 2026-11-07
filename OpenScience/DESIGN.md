@@ -1184,3 +1184,7 @@ The owner asked that the process picture of 主动科研 be the page's core and 
 - **The conversation pane fits the window.** The kernel's frame is laid over the pane's rectangle and the shell clips at the window's
   bottom, so the pane is as tall as the window leaves below its top (at least 360 px), measured after the page has scrolled to it and on
   resize. LoopX's bar in the frame shows its progress, its state and its button, never its product name or the goal's internal id.
+
+## November 7 VCR target revision (not yet implemented)
+
+The five-entrance target supersedes November 6's six-directory navigation: Virtual Population, Patient Trajectory Prediction, Virtual Laboratory, Synthetic Control Arm and separately owned Patient Matching. Research records join the lower conversation/research history, preserving saved results and ownership. Internal VCR steps do not become another visible mandatory rail. The next implementation must express computational availability and evidence limits as plain sentences in the single existing premises block, including nonnumeric model-validity statements; do not add evidence-level badges or hide runnable exploratory work. Use operation-specific input hints. See the repository-root November 7 in silico implementation plan and the matching-owner boundary there. Existing screenshots remain evidence of their earlier implementation only.
