@@ -184,6 +184,7 @@ function requests(target, ids) {
     "GET /studies/:id/:tab": async () => ["GET", `${S}/overview`, undefined],
     "GET /studies/:id/runs": async () => ["GET", `${S}/runs`, undefined],
     "GET /studies/:id/longitudinal": async () => ["GET", `${S}/longitudinal`, undefined],
+    "GET /studies/:id/longitudinal/:prediction/subjects": async () => ["GET", `${S}/longitudinal/vlf_missing/subjects`, undefined],
     "GET /studies/:id/followup-history": async () => ["GET", `${S}/followup-history`, undefined],
     "POST /studies/:id/longitudinal/histories": async () => ["POST", `${S}/longitudinal/histories`, {}],
     "POST /studies/:id/longitudinal/predictions": async () => ["POST", `${S}/longitudinal/predictions`, {}],
