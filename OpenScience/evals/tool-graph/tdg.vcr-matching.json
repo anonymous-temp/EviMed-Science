@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-matching",
-  "version": "sha256:8f784e1b1f364b42c98f52bf2ed816a4678d3d07260201024b51710847097501",
+  "version": "sha256:d0f1a7b5c8b24516680b08926bdcd1bd38c1e7dbe92560681522a2f0ac3254e6",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 39,
@@ -781,9 +781,20 @@
         "query": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 4000,
-          "description": "Discovery question.",
+          "maxLength": 200,
+          "description": "Focused condition or medical query, 1–200 Unicode characters; patient context is fetched from the task separately.",
           "required": true
+        },
+        "terms": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "maxItems": 32,
+          "uniqueItems": true,
+          "description": "Up to 32 search phrases ranked by importance: the patient's problems, treatments and decisive findings, in the registry's language (English for ClinicalTrials.gov; also Chinese for ChiCTR when the record is Chinese). Earlier phrases weigh more."
         },
         "limit": {
           "type": "integer",

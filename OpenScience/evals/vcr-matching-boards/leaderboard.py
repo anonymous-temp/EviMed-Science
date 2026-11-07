@@ -21,7 +21,8 @@ import random
 import statistics as st
 from pathlib import Path
 
-METRIC_NAMES = {"ndcg": "nDCG@10", "gp10": "P@10 (graded)", "ep10": "P@10 (eligible)", "mrr": "MRR", "ex10": "Excluded in top 10"}
+METRIC_NAMES = {"ndcg": "nDCG@10", "gp10": "P@10 (graded)", "ep10": "P@10 (eligible)", "mrr": "MRR", "ex10": "Excluded in top 10",
+                "j10": "J@10", "cndcg": "condensed nDCG@10"}
 
 
 def jsonl(path):
@@ -39,7 +40,9 @@ def metrics(order, truth):
     g = [truth.get(t, 0) for t in order]
     return {"ndcg": dcg(g) / ideal, "gp10": sum(x / 2 for x in g[:10]) / 10, "ep10": sum(x == 2 for x in g[:10]) / 10,
             "mrr": next((1 / (i + 1) for i, x in enumerate(g) if x == 2), 0.0), "ex10": sum(x == 1 for x in g[:10]) / 10,
-            "j10": sum(t in truth for t in order[:10]) / 10}
+            "j10": sum(t in truth for t in order[:10]) / 10,
+            # condensed list (Sakai 2007): the same order with unjudged trials removed; an auxiliary view, never the official score
+            "cndcg": dcg([truth[t] for t in order if t in truth]) / ideal}
 
 
 def qrels(spec):
@@ -103,7 +106,7 @@ def main():
         by_group.setdefault(group(p, board), []).append(p)
     rng = random.Random(20261107)
     resamples = [{g: [rng.randrange(len(v)) for _ in v] for g, v in by_group.items()} for _ in range(a.resamples)]
-    metric_keys = ["ndcg", "gp10", "ep10", "mrr", "ex10"] + (["j10"] if board == "E" else [])
+    metric_keys = ["ndcg", "ep10", "mrr", "j10", "cndcg"] if board == "E" else ["ndcg", "gp10", "ep10", "mrr", "ex10"]
     for arm in arms:
         arm["point"] = {k: macro(arm["per"], common, k, board) for k in metric_keys}
         arm["byGroup"] = {g: {k: st.fmean(arm["per"][p][k] for p in v) for k in metric_keys} for g, v in by_group.items()}
@@ -121,7 +124,7 @@ def main():
     arms.sort(key=lambda r: -r["point"][primary])
     lines = [f"### {cfg['title']}", "", f"Patients/topics scored: {len(common)} ({', '.join(f'{g} {len(v)}' for g, v in sorted(by_group.items()))}). "
              f"Primary metric {METRIC_NAMES[primary]}; 95% CI: percentile bootstrap over patients within each cohort, {a.resamples:,} resamples, macro over cohorts.", ""]
-    head = ["Rank", "Rank spread", "System", "Type", "Backbone", METRIC_NAMES[primary], "95% CI"] + [METRIC_NAMES.get(k, "J@10") for k in metric_keys if k != primary] + ["Cost", "Source"]
+    head = ["Rank", "Rank spread", "System", "Type", "Backbone", METRIC_NAMES[primary], "95% CI"] + [METRIC_NAMES[k] for k in metric_keys if k != primary] + ["Cost", "Source"]
     lines.append("| " + " | ".join(head) + " |")
     lines.append("|" + "---|" * len(head))
     for rank, arm in enumerate(arms, 1):

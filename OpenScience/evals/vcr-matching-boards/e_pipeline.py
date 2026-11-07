@@ -78,7 +78,9 @@ def cmd_dense(a):
     out = []
     for key, directory in corpora.items():
         ids = Path(directory, "ids.txt").read_text().split()
-        v = np.memmap(Path(directory, "vectors.f16"), dtype=np.float16, mode="r").reshape(len(ids), -1)
+        rows_on_disk = Path(directory, "vectors.f16").stat().st_size // (2 * q.shape[1])
+        ids = ids[:rows_on_disk]  # a build still appending holds at most one batch more on one side
+        v = np.memmap(Path(directory, "vectors.f16"), dtype=np.float16, mode="r", shape=(len(ids), q.shape[1]))
         rows = [i for i, qid in enumerate(qids) if corpus_of(qid.split("|")[0]) == key]
         if not rows:
             continue
