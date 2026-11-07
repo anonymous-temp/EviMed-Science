@@ -150,7 +150,8 @@ function CampaignView({ studyId, view, reload }: { studyId: string; view: VcrCam
       <div className="flex flex-col gap-2">
         <h2 className="text-heading font-semibold text-text">{view.question || "设计搜索"}</h2>
         <Note result={["已评估 ", { n: evaluated }, ` / ${planned} 个候选方案，`, { n: view.finalists.length, onOpen: view.finalists.length ? () => { setOnly("finalists"); setOffset(0); } : undefined, label: `${view.finalists.length} 个入围复核，只看这些` }, " 个入围复核。",
-          ...(best ? [`最优的是 #${best.index + 1}${best.objective.final ? `，${view.objective.label} ${valueText(best.objective.final)}` : ""}。`] : [])]} />
+          ...(best ? [`最优的是 #${best.index + 1}${best.objective.final ? `，${view.objective.label} ${valueText(best.objective.final)}` : ""}。`]
+            : view.undecided?.closest ? [`没有方案确认满足全部约束；最接近的是 #${view.undecided.closest.index + 1}${view.undecided.closest.objective ? `，${view.objective.label} ${valueText(view.undecided.closest.objective)}` : ""}，还有 ${view.undecided.closest.constraints.length} 个约束无法确定。`] : [])]} />
         {view.againstReference?.difference
           ? <Note result={["与参照方案比，差值 ", { n: `${valueText(view.againstReference.difference)}${mcseSuffix(view.againstReference.difference)}` }, view.againstReference.couplingText ? `；${view.againstReference.couplingText}。` : "。"]} />
           : view.improvement != null && view.reference && <Note result={[view.objective.direction === "min" || view.objective.direction === "minimize" ? "比参照方案少 " : "比参照方案多 ", { n: `${numberText(Math.abs(view.improvement))}${(best?.objective.final ?? best?.objective.screening)?.unit ?? ""}` }, `（${view.objective.label}）。`]} />}
@@ -175,7 +176,7 @@ function CampaignView({ studyId, view, reload }: { studyId: string; view: VcrCam
       {view.inconclusive.length > 0 && (
         <Disclosure summary={`${view.inconclusive.length} 个方案无法确定是否满足约束`}>
           <FactList rows={[{ label: "方案", value: view.inconclusive.map((key) => `#${(view.candidates.find((candidate) => candidate.key === key)?.index ?? 0) + 1}`).join("、") },
-            { label: "怎么办", value: "这些方案离限值太近，现有的复核次数下结论不了；增加复核次数才可能判断出来，在那之前既不算通过，也不算不满足。" }]} />
+            { label: "怎么办", value: view.undecided?.advice.length ? view.undecided.advice.join("") : "这些方案离限值太近，现有的复核次数下结论不了；在判断出来之前既不算通过，也不算不满足。" }]} />
         </Disclosure>
       )}
     </section>

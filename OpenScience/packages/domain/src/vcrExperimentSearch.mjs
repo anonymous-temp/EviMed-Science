@@ -893,7 +893,7 @@ export function vcrCampaignVerdict(manifest, state) {
   // error, and the best of them by the objective when no finalist passed everything. The frozen constraint is never touched: this only
   // reports how close the closest design came and what would decide it.
   const undecided = rows.filter((row) => row.inconclusive).map((row) => ({ key: row.key, index: row.index, objective: row.objective,
-    constraints: row.verdicts.filter((v) => v.status === 'inconclusive').map((v) => ({ index: v.index, measure: v.measure, op: v.op, bound: v.bound,
+    constraints: row.verdicts.filter((v) => v.status === 'inconclusive').map((v) => ({ index: v.index, measure: v.measure, op: v.op, bound: list(manifest.constraints)[v.index]?.bound ?? null,
       estimate: v.estimate ?? null, mcse: v.mcse ?? null, needed: v.needed ?? null })) }))
   const bestUndecided = best ? null : undecided.filter((row) => row.objective).map((row) => ({ ...row, value: /** @type {any} */ (row.objective).value })).sort(byObjective(manifest))[0]?.key ?? null
   return { rows, feasible: feasible.map((row) => row.key), best: best?.key ?? null, inconclusive: rows.filter((row) => row.inconclusive).map((row) => row.key),

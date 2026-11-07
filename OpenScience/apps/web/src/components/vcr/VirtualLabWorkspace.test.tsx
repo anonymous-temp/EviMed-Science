@@ -126,6 +126,19 @@ it('a search with no feasible candidate says so, and still shows the budget it u
   expect(screen.queryByText('最优')).toBeNull();
 });
 
+it('an undecided stop names the closest design and shows the server\'s advice, never a promise that more replicates decide a rate on its bound', async () => {
+  const advice = '“I 类错误”的模拟值是 2.5%（模拟误差约 0.11%），要求不超过 2.5%，正好在界上：再多模拟几次也判断不出来。这个设计可以把检验水准定得更低（例如 2.4%，约束仍是 2.5%）来留出余量；这要作为一个新的实验方案重新开始，约束本身不改。';
+  serve([entry('cmp1', 'campaign')], { cmp1: campaign({ best: null, finalists: ['c1'], feasible: [], inconclusive: ['c1'], inFlight: null,
+    stop: { reason: 'inconclusive_at_precision', text: '没有方案被确认不满足约束，但有方案在现有复核次数下无法确定是否满足。', at: null },
+    undecided: { closest: { key: 'c1', index: 1, objective: value(40), constraints: [{ label: '第一类错误', estimate: value(2.5), advice }] }, advice: [advice] } }) });
+  const user = userEvent.setup();
+  draw();
+  expect(await screen.findByText(/没有方案确认满足全部约束；最接近的是 #2/)).toBeInTheDocument();
+  await user.click(screen.getByText(/个方案无法确定是否满足约束/));
+  expect(await screen.findByText(/检验水准定得更低（例如 2\.4%，约束仍是 2\.5%）/)).toBeInTheDocument();
+  expect(document.body.textContent).not.toMatch(/增加复核次数/);
+});
+
 it('pages a large candidate table twenty at a time', async () => {
   const many = Array.from({ length: 45 }, (_, i) => candidate(i));
   serve([entry('cmp1', 'campaign')], { cmp1: campaign({ candidates: many, finalists: [], best: null, inconclusive: [] }) });

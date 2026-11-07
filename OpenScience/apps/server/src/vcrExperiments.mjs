@@ -77,7 +77,9 @@ export const VCR_CAMPAIGN_STOP_TEXT_ZH = Object.freeze({
   user_cancellation: "已按要求停止，已完成的方案保留。",
   no_feasible_beneficial_candidate: "没有找到在预先设定的约束下可行且优于参照的方案。",
   // no finalist failed a constraint, but at least one could not be decided at the precision used: never worded as “no feasible design”
-  inconclusive_at_precision: "没有方案被确认不满足约束，但有方案在现有复核次数下无法确定是否满足；增加复核次数，才可能判断出来。",
+  // what would decide it differs by constraint (more replicates, or none at all), so the one sentence here says only what happened;
+  // the advice is `undecided.advice` of the campaign view, from each undecided constraint's `needed`
+  inconclusive_at_precision: "没有方案被确认不满足约束，但有方案在现有复核次数下无法确定是否满足。",
 });
 export const VCR_CANDIDATE_STATUS_TEXT_ZH = Object.freeze({
   pending: "待评估", screened: "已初筛", finalist: "入围复核", evaluated: "已复核", eliminated: "已排除", failed: "计算失败", unsupported: "无法计算",
@@ -565,6 +567,7 @@ export function presentCampaign(row) {
   const disease = manifest.space?.method === "patients.progression";
   const alpha = Number(object(object(manifest.space).scenario).analysis?.alpha ?? (disease ? 0.05 : 0.025));
   const errorControl = list(manifest.constraints).filter((c) => c.kind === "error_control");
+  const searchesLevel = searchesAnalysisLevel(manifest);
   const screeningSize = manifest.stages?.screening?.replicates ?? null;
   return {
     id: String(row.id), kind: "campaign", question: String(manifest.question ?? ""), status: String(row.status), method: manifest.space?.method, methodVersion: manifest.space?.version,
@@ -580,12 +583,16 @@ export function presentCampaign(row) {
     improvementBound: verdict?.improvementBound ? { lower: verdict.improvementBound.lower, upper: verdict.improvementBound.upper, confidence: verdict.improvementBound.confidence,
       basis: verdict.improvementBound.basis } : null,
     selection: verdict?.selection ?? null,
+    // the closest design no constraint failed and what would decide each undecided constraint (only when nothing passed everything)
+    undecided: verdict && !verdict.best ? undecidedView(manifest, verdict, candidates) : null,
     againstReference: versus ? { coupling: versus.coupling, couplingText: COUPLING_TEXT_ZH[/** @type {keyof typeof COUPLING_TEXT_ZH} */ (versus.coupling)] ?? null,
       difference: versus.difference == null ? null : measureValue({ name: manifest.objective.measure, value: versus.difference, mcse: versus.mcse ?? undefined, simulated: versus.mcse != null }, { kind: "experiment_candidate" }) } : null,
     inFlight: state.inFlight ? { unit: state.inFlight.unitKey, stage: object(state.inFlight.unit).stage ?? null } : null,
     cancelRequested: state.cancelRequested === true, stop,
     premises: finishPremises([
-      ...(errorControl.length ? [{ key: "alpha", label: "第一类错误", value: `固定为 ${percentWord(alpha)}，搜索中不能放宽。`, source: /** @type {const} */ ("given"), decisive: true }] : []),
+      ...(errorControl.length ? [{ key: "alpha", label: "第一类错误", value: searchesLevel
+        ? `约束固定为 ${percentWord(Math.min(...errorControl.map((c) => Number(c.bound))))}，搜索中不能放宽；检验水准也在搜索范围内，只取不高于约束的值，用来给模拟结果留出余量。`
+        : `固定为 ${percentWord(alpha)}，搜索中不能放宽。`, source: /** @type {const} */ ("given"), decisive: true }] : []),
       { key: "campaign:precision", label: "初筛与复核", value: screeningSize
         ? `初筛每个方案模拟 ${screeningSize} 次，只用来排序和排除明显不满足的方案；入围方案另做一批独立模拟、按方法的正常次数重算后，才判断是否满足约束。`
         : "每个方案按方法的正常精度计算一次，直接判断是否满足约束。", source: "given", decisive: !disease },
@@ -602,6 +609,60 @@ export function presentCampaign(row) {
     createdAt: iso(row.created_at), updatedAt: iso(row.updated_at),
   };
 }
+
+/** Whether a campaign names the analysis level among its search variables (F4). @param {Record<string, any>} manifest */
+const searchesAnalysisLevel = (manifest) => list(manifest.space?.variables).some((entry) => entry.path === "analysis.alpha")
+  || list(manifest.space?.candidates).some((entry) => Object.hasOwn(object(entry.set), "analysis.alpha"));
+
+/**
+ * What an `inconclusive_at_precision` stop says about the closest designs, in the words a person reads (F4). Pure over the domain's verdict.
+ * The constraint stays as frozen; for a simulated rate sitting on its bound the advice is a lower analysis level in a NEW campaign, for a
+ * rate near it the replicates that would decide it, with the number.
+ * @param {Record<string, any>} manifest @param {Record<string, any>} verdict the domain's `vcrCampaignVerdict`
+ * @param {Array<Record<string, any>>} candidates the view's candidates (for the index and the shown objective)
+ */
+function undecidedView(manifest, verdict, candidates) {
+  if (!verdict?.undecided?.length) return null;
+  const method = String(manifest.space?.method ?? "");
+  const types = /** @type {Record<string, any>} */ (VCR_CAMPAIGN_METHODS)[method]?.measures ?? {};
+  const rate = (/** @type {string} */ name) => types[name] === "proportion" || types[name] === "error_rate";
+  const plain = (/** @type {string} */ name, /** @type {number} */ value) => (rate(name) ? percentWord(value) : String(Number(value.toPrecision(4))));
+  const searchesLevel = searchesAnalysisLevel(manifest);
+  const levelCan = ["design.simulate", "patients.progression"].includes(method);
+  const items = verdict.undecided.map((/** @type {any} */ row) => {
+    const candidate = candidates.find((c) => c.key === row.key);
+    return { key: row.key, index: candidate?.index ?? row.index, objective: candidate?.objective?.final ?? null,
+      constraints: row.constraints.map((/** @type {any} */ c) => {
+        const needed = c.needed ?? null;
+        const label = measureLabel(c.measure);
+        const value = c.estimate == null ? "" : `${plain(c.measure, Number(c.estimate))}${c.mcse ? `（模拟误差约 ${plain(c.measure, Number(c.mcse))}）` : ""}`;
+        const at = `“${label}”的模拟值是 ${value}，要求${c.op === "<=" ? "不超过" : "不低于"} ${plain(c.measure, Number(c.bound))}`;
+        const kind = list(manifest.constraints)[c.index]?.kind;
+        /** @type {string} */
+        let advice;
+        if (needed?.reason === "estimate_at_bound") {
+          const lower = Number((Number(c.bound) * 0.96).toPrecision(2));
+          advice = kind === "error_control" && levelCan && !searchesLevel
+            ? `${at}，正好在界上：再多模拟几次也判断不出来。这个设计可以把检验水准定得更低（例如 ${percentWord(lower)}，约束仍是 ${plain(c.measure, Number(c.bound))}）来留出余量；这要作为一个新的实验方案重新开始，约束本身不改。`
+            : kind === "error_control" && levelCan
+              ? `${at}，正好在界上：再多模拟几次也判断不出来。这次搜索里的检验水准没有给它留出余量；可以再试更低的检验水准，作为新的实验方案重新开始，约束本身不改。`
+              : `${at}，正好在界上：再多模拟几次也判断不出来。需要调整设计，让它离界值远一些，作为新的实验方案重新开始。`;
+        } else if (Number.isFinite(needed?.replicates)) {
+          advice = `${at}，离界值很近：约需 ${numberWord(needed.replicates)} 次复核模拟才可能判断。`;
+        } else {
+          advice = `${at}：现有信息不足以估计需要多少次复核；增加复核次数才可能判断。`;
+        }
+        return { index: c.index, measure: c.measure, label, op: c.op, bound: c.bound, status: "inconclusive",
+          estimate: c.estimate == null ? null : measureValue({ name: c.measure, value: c.estimate, mcse: c.mcse ?? undefined, simulated: true }, { kind: "experiment_candidate" }),
+          needed: needed ? { replicates: needed.replicates ?? null, reason: needed.reason ?? null } : null, advice };
+      }) };
+  });
+  const closest = verdict.bestUndecided ? items.find((item) => item.key === verdict.bestUndecided) ?? null : null;
+  const advice = [...new Set(items.flatMap((item) => item.constraints.map((c) => c.advice)))];
+  return { closest, items, advice };
+}
+/** @param {number} n */
+const numberWord = (n) => new Intl.NumberFormat("zh-CN").format(n);
 
 /** @param {number} confidence */
 /**

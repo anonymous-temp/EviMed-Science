@@ -75,7 +75,7 @@ test('a refused arm reads in words, never as an error code', () => {
   assert.deepEqual(refusedText(['adapter_missing', 'something_new']), ['这一组的设置无法用所选方法计算。']);
   assert.deepEqual(refusedText(undefined), []);
   assert.equal(refusedText(['experiment_result_screening'])[0], '初筛的结果不能放进实验比较。');
-  assert.match(VCR_CAMPAIGN_STOP_TEXT_ZH.inconclusive_at_precision, /无法确定是否满足.*增加复核次数/);
+  assert.match(VCR_CAMPAIGN_STOP_TEXT_ZH.inconclusive_at_precision, /无法确定是否满足/);
   assert.doesNotMatch(VCR_CAMPAIGN_STOP_TEXT_ZH.inconclusive_at_precision, /没有可行|no feasible/);
 });
 
@@ -162,4 +162,28 @@ test('a campaign undecided at its precision says so and what would decide it (re
   assert.ok(undecided.length > 0);
   assert.deepEqual(undecided[0].constraints[1].final.needed, { replicates: null, reason: 'estimate_at_bound' });
   assert.equal(undecided[0].constraints[1].final.calibration, null);
+  // F4: the closest design with its undecided constraint, its value and error, and the advice for a rate sitting on its bound
+  assert.equal(view.best, null);
+  assert.ok(view.undecided.closest, 'the best of the designs no constraint failed');
+  assert.equal(view.undecided.closest.constraints[0].measure, 'type_one_error');
+  assert.equal(view.undecided.closest.constraints[0].estimate.value, 2.5, 'shown in percent like every simulated rate');
+  assert.ok(view.undecided.closest.constraints[0].estimate.mcse > 0);
+  const advice = view.undecided.advice.join('\n');
+  assert.match(advice, /再多模拟几次也判断不出来/);
+  assert.match(advice, /检验水准定得更低（例如 2\.4%，约束仍是 2\.5%）/);
+  assert.match(advice, /新的实验方案/);
+  assert.doesNotMatch(advice, /增加复核次数/, 'more replicates are not offered where they cannot decide');
+  assert.ok(!/「|」/.test(advice));
+});
+
+test('a rate near its bound is told how many more replicates would decide it, and a searched analysis level is said in the premise (F4)', () => {
+  const { manifest } = vcrCampaignManifest({ ...input, space: { ...input.space, variables: [...input.space.variables, { path: 'analysis.alpha', values: [0.02, 0.025] }] },
+    budget: { ...input.budget, maxCandidates: 200 } });
+  assert.ok(manifest, 'the analysis level is accepted as a variable');
+  const row = (needed) => ({ id: 'cmp_3', kind: 'campaign', identity: ID, manifest, status: 'stopped', created_at: '2026-11-07T00:00:00Z', updated_at: '2026-11-07T00:10:00Z',
+    state: { ...vcrCampaignInitialState(manifest), finalists: [], stop: { reason: 'inconclusive_at_precision' } } });
+  const view = presentCampaign(row());
+  const alpha = view.premises.find((premise) => premise.key === 'alpha');
+  assert.match(alpha.value, /约束固定为 2\.5%.*检验水准也在搜索范围内/);
+  assert.equal(view.constraints[1].bound, 0.025, 'the frozen constraint is what it was');
 });

@@ -4634,6 +4634,8 @@ export interface VcrCampaignView {
   candidates: VcrCampaignCandidate[]; finalists: string[]; best: string | null; inconclusive: string[]; feasible: string[];
   reference: string | null; improvement: number | null;
   againstReference?: { coupling: string; couplingText: string | null; difference: VcrValue | null } | null; inFlight: { unit: string; stage: string | null } | null; cancelRequested: boolean;
+  /** When nothing passed every constraint but none failed: the closest design, each undecided constraint with its simulated value and error, and what would decide it (sentences are the server's). */
+  undecided?: { closest: { key: string; index: number; objective: VcrValue | null; constraints: Array<{ label: string; estimate: VcrValue | null; advice: string }> } | null; advice: string[] } | null;
   stop: { reason: string; text: string | null; at: string | null } | null; premises: VcrLabPremise[]; createdAt: string | null; updatedAt: string | null;
 }
 export interface VcrDesignExperimentView {
