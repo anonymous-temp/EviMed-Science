@@ -10,7 +10,8 @@
 #   file's SHA-256 are in it); the engine refuses to run on a parameter file whose SHA-256 is not the pinned one. The equations are adsim's
 #   `acRun` and `dropTime` (training manual Eqs. 2.1-2.12, 3.1-3.3): on the logit scale of ADAS/70, a person's intercept and slope, a Bateman
 #   placebo curve from study week 0 in every arm, and the drug's terms; the score is 70 x Beta(theta tau, (1 - theta) tau) with adsim's own guard
-#   of 1e-5 on both shapes. What the source audit (`AD-SOURCE.md`) could not recover is not here: no fitted shape xi other than 1, no
+#   of 1e-5 on both shapes, drawn as a ratio of two gammas because `rbeta` returns exactly 1 for a tiny first shape (91 of 40,000 scores of
+#   people at MMSE 30 after ten years were 70 where their expected score was near 0); a score reaches 0 or 70 only where the model puts its mass. What the source audit (`AD-SOURCE.md`) could not recover is not here: no fitted shape xi other than 1, no
 #   intercept-slope covariance, no treatment term in the dropout, no dose-response for a new compound.
 # - **What it reproduces and what it does not.** With this posterior and these equations the numeric cases (N101) reproduce the EMA 2013
 #   qualification opinion's Tables 7, 9 and 11 within the published rounding and Monte Carlo error, Table 8's medians under a stated covariate
@@ -140,10 +141,22 @@ vcr_beta_logit_drug <- function(tr, t) {
 # --- calculated moments ----------------------------------------------------------------------------------------------------------------
 
 #' The mean and variance of the score 70 x Beta((theta + g) tau, (1 - theta + g) tau) for a latent mean `theta` (any shape) and precision `tau`,
-#' g adsim's guard: the closed form of the observation model.
-vcr_beta_logit_score_moments <- function(theta, tau) {
-  g <- .VCR_BETA_LOGIT_GUARD
+#' g adsim's guard: the closed form of the observation model (`guard = 0` is the training manual's, which prints it without the guard).
+vcr_beta_logit_score_moments <- function(theta, tau, guard = .VCR_BETA_LOGIT_GUARD) {
+  g <- guard
   list(mean = 70 * (theta + g) / (1 + 2 * g), var = 70^2 * (theta + g) * (1 - theta + g) / ((1 + 2 * g)^2 * (tau * (1 + 2 * g) + 1)))
+}
+
+#' Scores 70 x Beta((theta + g) tau, (1 - theta + g) tau), one per latent mean `theta`, drawn as a ratio of two gammas (all the first, then
+#' all the second): `stats::rbeta` returns exactly 1 for a tiny first shape (its algorithm BC overflows), which gave a score of 70 to people
+#' whose expected score was near 0.
+vcr_beta_logit_scores <- function(theta, tau) {
+  g <- .VCR_BETA_LOGIT_GUARD
+  x <- stats::rgamma(length(theta), (theta + g) * tau); y <- stats::rgamma(length(theta), (1 - theta + g) * tau)
+  s <- x + y
+  out <- x / s
+  out[!(s > 0)] <- theta[!(s > 0)]
+  70 * out
 }
 
 #' The Weibull rate of leaving for people of these ages and MMSE scores in a study whose dropout effect is `omega`: S(t) = exp(-rate t^v).
@@ -257,10 +270,8 @@ vcr_beta_logit_moments <- function(par, study, times, drug = NULL, placebo = TRU
   drug <- vcr_beta_logit_drug(p$treatment, ta)
   pbo <- if (isTRUE(p$placebo)) vcr_beta_logit_placebo(par, ta) else 0
   x_a <- eta + alpha * ta + pbo + treated * (drug$symptomatic - drug$fraction * mu_alpha * drug$onDrug)
-  g <- .VCR_BETA_LOGIT_GUARD; tau <- study[["tau"]]
   th0 <- stats::plogis(eta); tha <- stats::plogis(x_a)
-  y0 <- 70 * stats::rbeta(n, (th0 + g) * tau, (1 - th0 + g) * tau)
-  ya <- 70 * stats::rbeta(n, (tha + g) * tau, (1 - tha + g) * tau)
+  y0 <- vcr_beta_logit_scores(th0, study[["tau"]]); ya <- vcr_beta_logit_scores(tha, study[["tau"]])
   list(treated = treated, y0 = y0, ya = ya, leaves = leaves, latent = x_a, mmse = mmse, apoe = apoe, age = age, female = female, eta = eta, alpha = alpha,
        meanSlope = mu_alpha, study = study, row = row)
 }

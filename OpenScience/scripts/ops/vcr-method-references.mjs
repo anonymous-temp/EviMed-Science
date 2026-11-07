@@ -46,6 +46,8 @@ export const REQUIRED_CURRENT_REFERENCES = {
   'design.analytic': ['N53a', 'N53c', 'N53e'],
   'model.survival_fit': ['N52a', 'N52b', 'N52k'],
   'model.prognostic_apply': ['N52d'],
+  // 1.1.0's beta_logit family: the parameter file and the training manual's printed numbers, EMA Tables 9 and 11
+  'patients.progression': ['N101a', 'N101c', 'N101d'],
 };
 export const NUMERIC_REFERENCES = {
   N53e: { methods: ['design.analytic'], anchors: ['Independently integrate arm event probabilities', 'abs(at$y-checked)<1e-10'] },
@@ -330,6 +332,20 @@ export const NUMERIC_REFERENCES = {
   N99c: { methods: ['patients.progression'], anchors: ['ctl_at <- function(t) 3 + 5 * t / (12 + t)', 'sd18 <- sqrt(1.2^2 + 1.2^2 * u18^2 + 2 * 0.3 * 1.2 * 1.2 * u18 + 0.7^2)'] },
   N99d: { methods: ['patients.progression'], anchors: ['identical(vcr_output_hash(r1), vcr_output_hash(r2)) && identical(vcr_output_hash(r1), vcr_output_hash(r3))'] },
   N99e: { methods: ['patients.progression'], anchors: ['identical(code(unsourced), "scenario_field_missing")'] },
+  // patients.progression 1.1.0, the beta_logit family (plan T06): the CAMD ADAS-cog 11 Alzheimer model with adsim 3.0's posterior, held to the EMA qualification opinion's
+  // tables and the training manual's printed numbers, its terms to their closed forms, its null to its level, and the four other families to the 1.0.0 release's hashes
+  N101a: { methods: ['patients.progression'], anchors: ['# adsim 3.0 training manual (S11): Listing 2.6 phiEta * 70 / 4 = 7.2415', 'abs(l26 - 7.2415) <= 5e-5 && abs(l28 - 3.509151) <= 5e-7 && abs(l46 - (-0.1010641)) <= 5e-8 && abs(et50 - 1.62) <= 0.005'] },
+  N101b: { methods: ['patients.progression'], anchors: ['# EMA qualification opinion 2013 Table 7 "Predicted"', 'table7 <- list(apoe = c(0.42, 0.44, 0.14), male = 0.45, age = c(75.3, 75.6, 66.5), sd = 9.3)'] },
+  N101c: { methods: ['patients.progression'], anchors: ['# EMA qualification opinion 2013 Table 9 (S2 p.28)', 'table9 <- list(`16` = c(32.2, 29.6, 34.9), `21` = c(22.3, 20.0, 24.8), `26` = c(14.2, 12.4, 16.1))'] },
+  N101d: { methods: ['patients.progression'], anchors: ['# EMA qualification opinion 2013 Table 11 (S2 p.28', 'rows <- list(list(16, 0, 0, c(7.14, 4.48, 9.54)), list(21, 0, 0, c(4.48, 1.99, 7.09)), list(21, 1, 0, c(3.97, 1.42, 6.57)),'] },
+  N101e: { methods: ['patients.progression'], anchors: ['# EMA qualification opinion 2013 Table 8 (S2 p.25)', 'table8 <- list(young = c(.133, .239, .329), old = c(.165, .293, .398), low = c(.179, .315, .426), high = c(.119, .216, .298))'] },
+  N101f: { methods: ['patients.progression'], anchors: ['list(pass = all(abs(sds - c(6, 8, 10.5)) <= 0.6),'] },
+  N101g: { methods: ['patients.progression'], anchors: ['y <- vcr_beta_logit_scores(rep(theta, 1e5), tau); cf <- vcr_beta_logit_score_moments(theta, tau)', 'wrong_edge <- wrong_edge + sum(y == 70 & th < 0.997) + sum(y == 0 & th > 0.003)'] },
+  N101h: { methods: ['patients.progression'], anchors: ['integral <- stats::integrate(function(t) vcr_beta_logit_placebo(par, t), 0, Inf, rel.tol = 1e-12)$value', 'max(abs(gap[with_dm$treated == 1] - (-0.4 * with_dm$meanSlope[with_dm$treated == 1] * 26))) < 1e-12'] },
+  N101i: { methods: ['patients.progression'], anchors: ['null_ok <- abs(t1$value - 0.05) <= 3.5 * t1$mcse && abs(t2$value - 0.05) <= 3.5 * t2$mcse', 'abs(sim$value - calc$value) <= 4 * sim$mcse && same && curve_ok && cancel_ok'] },
+  N101j: { methods: ['patients.progression'], anchors: ['expected_rows <- 1600 * (1 - (1 - 1 / 1600)^trials)'] },
+  N101k: { methods: ['patients.progression'], anchors: ['identical(tampered, "input_hash_mismatch@scenario.model.parameterSet")'] },
+  N101l: { methods: ['patients.progression'], anchors: ['linear = list(sc("linear", 0.25, 60L), "aa19d54aae7038ba4ca8b61e9c9083e364a3f563cd12c3ceedf9fc411f75cc8b"),', 'list(pass = identical(unname(got), want),'] },
   // the people of an adaptive design whose answer is in events (live check 2026-11-04, design.confirmatory 1.2.0): patient-level simulations and the Lachin-Foulkes chance of an event written out
   N100a: { methods: ['design.confirmatory'], anchors: ['sim <- lapply(c(0.5, 1), function(rate) .n100_enrolled(n, 0.5, hr, rate * max_events))', 'expected <- ended[1] * got[1] + (1 - ended[1]) * got[2]'] },
   N100b: { methods: ['design.confirmatory'], anchors: ['closed <- p1$value * at_interim[["mean"]] + (1 - p1$value) * n0', 'n0 <- ceiling(plan / per_head); cap <- ceiling(1.0001 * plan)'] },
