@@ -160,9 +160,13 @@ export class VcrConversationCompletions {
     if(original?.status==='canceled') return 'vcr_completion_canceled';
     const reserved=final && dispatchId ? runs?.find(run=>run.dispatchId===dispatchId) : null;
     if(reserved && reserved.status!=='running') return 'vcr_completion_canceled';
-    if(final && this.readCurrentInput && (!input || !original || !(
-      input.requestId && original.kernelRequestIds?.includes(input.requestId)
-      || Number.isSafeInteger(input.turnStartSeq) && input.turnStartSeq===original.nativeTurn?.startSeq
+    // The newest kernel input is the turn this continuation answers when it is the original turn's input or the prompt of an earlier
+    // platform continuation of the same conversation (a dispatch id of ours): that is the platform's own wake, never a person typing.
+    // Without it the second job of a run, finishing after the first one's continuation, was disclosed in the inbox and never woken (live D5).
+    const turns=original ? [original,...(runs ?? []).filter(run=>run.sessionId===row.root_session_id && run.automated && String(run.dispatchId ?? '').startsWith('vcr-completion-'))] : [];
+    if(final && this.readCurrentInput && (!input || !original || !turns.some(turn=>
+      input.requestId && turn.kernelRequestIds?.includes(input.requestId)
+      || Number.isSafeInteger(input.turnStartSeq) && input.turnStartSeq===turn.nativeTurn?.startSeq
     ))) return 'vcr_completion_disclosed';
     // A result unobserved at the end of a turn is disclosed without charging
     // for a second answer. A timestamp chooses disclosure, never consumption.
@@ -226,7 +230,10 @@ export class VcrConversationCompletions {
       FROM selected WHERE c.id=selected.id RETURNING c.*`,
     [this.config.vcrCompletionBatch ?? 5,Number(this.config.vcrCompletionLeaseMs ?? 300000)/1000]);
     this.counters.attempted+=rows.length;
+    const covered=new Set();
     for (const row of rows) {
+      if(covered.has(row.id)) continue;
+      const siblings=[];
       try {
         const generation=Number(row.dispatch_generation ?? 0);
         // This former 79-character producer format could never pass the ledger
@@ -250,12 +257,20 @@ export class VcrConversationCompletions {
         if(disposition) {await this.settleDisposition(row,disposition);continue;}
         const state = await this.inbox(owned.project,row.root_session_id);
         if (!state || state.running !== false || state.queued !== 0) { await this.mark(row,'pending','vcr_conversation_busy'); continue; }
+        // Jobs of one conversation that finished together are one continuation: it reads every unobserved result, never one turn per job.
+        for(const other of rows) {
+          if(other===row || covered.has(other.id) || other.user_id!==row.user_id || other.root_session_id!==row.root_session_id) continue;
+          if(await this.disposition(other,owned.project)===null) siblings.push(other);
+        }
         const label={succeeded:'计算已完成',failed:'计算未完成',canceled:'计算已取消'}[outcome.state] ?? '计算状态有更新';
         const campaignText=outcome.campaignId ? `设计搜索已结束：${VCR_CAMPAIGN_STOP_TEXT_ZH[outcome.stopReason] ?? '已停止。'}${outcome.best ? `${outcome.best.source==='feasible'?'最优':'最接近'}的方案是第 ${outcome.best.index} 个。` : ''}` : null;
         const text = campaignText ? `${campaignText}请继续原来的任务，读取实际结果再解释。` : `${label}${outcome.partial ? '，保留了部分结果' : ''}。请继续原来的任务，读取实际结果再解释。`;
         const systemSupplement = outcome.campaignId
           ? `Platform design-search notice. Campaign=${outcome.campaignId}; tool=vcr_simulate action=search_status; stop=${outcome.stopReason}; best=${JSON.stringify(outcome.best)}. This is an automated continuation of the original user request. Read the campaign with search_status before you explain it and use only its numbers; the frozen constraints never change, and a design undecided on a constraint is neither passed nor failed. Do not start another campaign without a new user request. Nobody is attending this turn.`
           : `Platform computation notice. Original job=${outcome.replayId ?? row.job_id}; tool=${outcome.replayId ? "research_calculate" : "vcr_simulate"}; state=${outcome.state}; result=${outcome.resultId ?? 'none'}; version=${outcome.resultVersion ?? 'none'}; partial=${outcome.partial === true}; error=${outcome.error?.code ?? 'none'}. This is an automated continuation of the original user request. Use the recorded result; do not treat a failure, cancellation or partial result as success. Nobody is attending this turn.${outcome.state === "canceled" ? " The computation was canceled. Do not restart it or queue replacement calculations without a new user request." : ""}`;
+        const alsoText=siblings.map(other=>other.payload.campaignId
+          ? ` Also finished in this conversation: campaign=${other.payload.campaignId}; tool=vcr_simulate action=search_status; stop=${other.payload.stopReason}.`
+          : ` Also finished in this conversation: job=${other.payload.replayId ?? other.job_id}; state=${other.payload.state}; result=${other.payload.resultId ?? 'none'}; version=${other.payload.resultVersion ?? 'none'}; error=${other.payload.error?.code ?? 'none'}.`).join('');
         const assertCurrent=async ({runs=null,final=false,signal=null}={}) => {
           const current=await this.resolve(row);signal?.throwIfAborted();
           if(!current?.session) throw Object.assign(new Error('Original conversation unavailable'),{code:'research_session_not_found',definitivelyRejected:true});
@@ -265,7 +280,7 @@ export class VcrConversationCompletions {
           if(code) throw Object.assign(new Error(code),{code,definitivelyRejected:true});
         };
         const dispatched = await this.dispatch(owned.user,owned.project,row.root_session_id,dispatchId,text,{ nativeContinuation:true,
-          dispatchFingerprint:row.fingerprint,systemSupplement,originRunId:outcome.runId,
+          dispatchFingerprint:row.fingerprint,systemSupplement:systemSupplement+alsoText,originRunId:outcome.runId,
           beforePrompt:({signal=null}={})=>assertCurrent({final:true,signal}),beforeReserve:assertCurrent });
         const run = dispatched?.run ?? dispatched;
         if (run?.dispatchStatus === 'rejected') {
@@ -277,6 +292,7 @@ export class VcrConversationCompletions {
           await this.mark(row,'pending','runtime_prompt_rejected');continue;
         }
         await this.mark(row,'delivered');
+        for(const other of siblings) {covered.add(other.id);await this.mark(other,'delivered','vcr_completion_covered');}
       } catch (error) {
         // Dispatch identity is stable across a lost response or process restart.
         // An unknown acceptance stays pending and uses AgentRuns' existing identity.
