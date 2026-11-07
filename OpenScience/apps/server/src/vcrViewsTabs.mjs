@@ -52,6 +52,7 @@ import { constraintRows, generatedProfileRows } from "./vcrPopulationProfileView
 import { bindingUseFindings, populationBindingPremises, populationBindingView } from "./vcrPopulationBinding.mjs";
 import { comparatorOriginPremises, comparatorOrigins } from "./vcrComparatorOrigins.mjs";
 import { modelUseOf, modelUsePremisesOf } from "./vcrModelUsePage.mjs";
+import { vcrPopulationVariables } from "./vcrModelApplicability.mjs";
 import { decidedShare } from "./vcrMatching.mjs";
 import { phaseLabel, registryStatusLabel } from "./vcrPatientTrials.mjs";
 import { reportSchedule } from "./vcrScheduleView.mjs";
@@ -477,7 +478,7 @@ export function presentPopulationTab(bundle) {
       { currentResultId: current.resultId ?? null }) : null,
     // 「这个结论的前提」 of a generated population: how its variables relate, how far it is the source trial's, how far its parameters moved.
     premises: current ? finishPremises([
-      ...vcrPremises("population", { kind: current.kind, diagnostics, modelUse: bindingUseFindings(binding, bundle.models) }),
+      ...vcrPremises("population", { kind: current.kind, diagnostics, modelUse: bindingUseFindings(binding, bundle.models, current) }),
       ...populationBindingPremises(binding),
     ]) : [],
     binding: binding ? {
@@ -605,7 +606,8 @@ export function presentPatientsTab(bundle) {
   return {
     model,
     // 「这个结论的前提」 of a model-based result: what the model was and was not validated for, in the same block as every other page's
-    premises: modelRow ? modelUsePremisesOf(models, modelRow, { endpoint: text(diagnostics.endpoint) ?? text(bundle.definition?.endpointType), mode: "conditional_forecast" }) : [],
+    premises: modelRow ? modelUsePremisesOf(models, modelRow, { endpoint: text(diagnostics.endpoint) ?? text(bundle.definition?.endpointType), mode: "conditional_forecast",
+      variables: vcrPopulationVariables(list(bundle.populations).find((/** @type {any} */ row) => row.id === current?.populationId) ?? null) }) : [],
     selection: current ? { objectId: current.id, version: current.version, ...(result ? { resultId: result.id, resultVersion: result.version } : {}) } : null,
     records: table ? { result: table.result, rows: table.rows, arms: list(table.calibration?.arms) } : null,
     profile: described ?? [],
@@ -913,7 +915,8 @@ export function presentComparatorTab(bundle) {
       anchored: typeof diagnostics.anchored === "boolean" ? diagnostics.anchored : null,
       // a comparison that predicts its control with a model says what that model was validated for, in the same block
       modelUse: execution?.method === "model.prognostic_apply" || shown?.route === "model_comparator"
-        ? modelUseOf(bundle.models, diagnostics.sourceModel, { mode: "conditional_forecast", endpoint: text(diagnostics.endpoint) }) : [],
+        ? modelUseOf(bundle.models, diagnostics.sourceModel, { mode: "conditional_forecast", endpoint: text(diagnostics.endpoint),
+          variables: vcrPopulationVariables(list(bundle.populations).find((/** @type {any} */ row) => row.id === text(object(shown?.configuration).populationId)) ?? null) }) : [],
     }), ...(shown && result ? comparatorOriginPremises(origins) : [])]),
     // Where the control comes from: real people, a published summary, a reconstruction, a model's prediction or a simulation, with the
     // number of observed people it holds (never a simulated member).

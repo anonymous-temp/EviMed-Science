@@ -28,7 +28,7 @@
 /** @typedef {import("./vcrPremises.mjs").VcrPremise} VcrPremise */
 /** @typedef {Pick<VcrPremise, "key" | "label" | "value" | "source" | "decisive">} PremiseRow */
 
-import { vcrModelApplicabilityAssessment } from "./vcrModelApplicability.mjs";
+import { vcrModelApplicabilityAssessment, vcrPopulationVariables } from "./vcrModelApplicability.mjs";
 import { list, numeric, object, text } from "./vcrViewsKit.mjs";
 
 /** Where a population's people came from (closed). */
@@ -219,19 +219,22 @@ export function populationBindingPremises(view) {
 
 /**
  * The premises of the use every bound model is held to, as the domain's use check reads them for the context each binding states
- * (its endpoint). A code found for several models is said once. Empty for a population with no binding that still holds.
+ * (its endpoint) and the population's own variable ranges (a range wider than the model was fitted on is a premise, review stats
+ * P1-5). A code found for several models is said once. Empty for a population with no binding that still holds.
  * @param {ReturnType<typeof populationBindingView>} view
  * @param {readonly Record<string, any>[]} models
+ * @param {Record<string, any> | null} [population] the population the bindings are of
  * @returns {Array<{ code: string, field: string }>}
  */
-export function bindingUseFindings(view, models) {
+export function bindingUseFindings(view, models, population = null) {
+  const variables = vcrPopulationVariables(population);
   /** @type {Map<string, { code: string, field: string }>} */
   const found = new Map();
   for (const binding of view.bindings) {
     if (binding.state !== "current" || !binding.model) continue;
     const model = list(models).find((row) => row.name === binding.model.name && String(row.version) === binding.model.version);
     if (!model) continue;
-    const { premises } = vcrModelApplicabilityAssessment(model, { endpointType: binding.useContext.endpoint, variables: new Map(), mode: "conditional_forecast",
+    const { premises } = vcrModelApplicabilityAssessment(model, { endpointType: binding.useContext.endpoint, variables, mode: "conditional_forecast",
       ...(binding.useContext.endpoint ? { endpoint: binding.useContext.endpoint } : {}) });
     for (const premise of premises) if (!found.has(premise.code)) found.set(premise.code, premise);
   }

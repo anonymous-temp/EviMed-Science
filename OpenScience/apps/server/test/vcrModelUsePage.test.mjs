@@ -46,3 +46,22 @@ test("the comparator page of a model-predicted control carries the same sentence
     executions: new Map([["ex_1", { id: "ex_1", jobId: "j", method: "comparator.entropy_balance", methodVersion: "1.4.0" }]]) }));
   assert.ok(!weighted.premises.some((/** @type {any} */ row) => String(row.key).startsWith("use:")));
 });
+
+test("a cohort outside the range the model was fitted on is computed by extrapolation and says so on the page (review stats P1-5)", () => {
+  const fitted = validatedFor({ card: { inputRanges: { age: [40, 80] } } });
+  const population = { id: "pop_1", version: 1, kind: "real", definition: { population: { variables: [{ name: "age", min: 30, max: 92 }] } }, profile: {} };
+  const set = { id: "ps_1", version: 1, populationId: "pop_1", modelId: fitted.name, modelVersion: "1", scenario: {}, counts: {}, twinLabel: null, resultId: "res_1", createdAt: AT };
+  const result = { id: "res_1", version: 1, kind: "patient_set", conclusion: "estimable", counts: {}, measures: [], diagnostics: { endpoint: "event_free" }, createdAt: AT, executionId: "ex_1", subjectId: "ps_1" };
+  const executions = new Map([["ex_1", { id: "ex_1", jobId: "j", method: "model.prognostic_apply", methodVersion: "1.1.0" }]]);
+  const page = presentPatientsTab(bundleOf({ patientSets: [set], results: [result], allResults: [result], models: [fitted], populations: [population], executions }));
+  assert.ok(page.premises.some((/** @type {any} */ row) => row.key === "use:input_out_of_range"), page.premises.map((/** @type {any} */ row) => row.key).join(","));
+  // a cohort inside the range says nothing of it
+  const inside = { ...population, definition: { population: { variables: [{ name: "age", min: 45, max: 75 }] } } };
+  const quiet = presentPatientsTab(bundleOf({ patientSets: [set], results: [result], allResults: [result], models: [fitted], populations: [inside], executions }));
+  assert.ok(!quiet.premises.some((/** @type {any} */ row) => row.key === "use:input_out_of_range"));
+  // the comparator page reads the population its configuration names
+  const comparator = { id: "cmp_1", version: 1, route: "model_comparator", estimand: "ATT", resultId: "res_2", conclusion: "estimable", gapList: [], createdAt: AT, targetTrial: {}, configuration: { populationId: "pop_1" } };
+  const filed = { id: "res_2", version: 1, kind: "comparator", conclusion: "estimable", counts: {}, measures: [], diagnostics: { sourceModel: { id: "mdl_1", version: "1" }, endpoint: "event_free" }, createdAt: AT, executionId: "ex_1" };
+  const view = presentComparatorTab(bundleOf({ comparators: [comparator], comparator, results: [filed], allResults: [filed], models: [fitted], populations: [population], executions }));
+  assert.ok(view.premises.some((/** @type {any} */ row) => row.key === "use:input_out_of_range"));
+});

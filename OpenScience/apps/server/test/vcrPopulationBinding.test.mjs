@@ -93,6 +93,12 @@ test("A04: a use the model was not validated for runs and says so in the premise
   const view = populationBindingView(population(), { patientSets: [set()], models: [validated] });
   assert.deepEqual(bindingUseFindings(view, [validated]).map((finding) => finding.code), ["use_not_validated"]);
   assert.deepEqual(bindingUseFindings(populationBindingView(population(), {}), [validated]), []);
+  // the population's own range against the range the bound model was fitted on (review stats P1-5)
+  const fitted = model({ card: { ...validated.card, inputRanges: { age: [50, 85] } } });
+  const wide = population({ definition: { population: { variables: [{ name: "age", min: 40, max: 90 }] } } });
+  const bound = populationBindingView(wide, { patientSets: [set()], models: [fitted] });
+  assert.ok(bindingUseFindings(bound, [fitted], wide).some((finding) => finding.code === "input_out_of_range"));
+  assert.ok(!bindingUseFindings(bound, [fitted]).some((finding) => finding.code === "input_out_of_range"), "with no population named, no range is held against it");
 });
 
 test("no back-office word reaches a premise sentence", () => {
