@@ -42,7 +42,9 @@ test('a manifest freezes only known fields and its canonical bytes ignore key or
 test('the evaluator cannot be searched or relaxed', () => {
   const codes = (/** @type {any} */ over) => vcrCampaignManifest(manifestOf(over)).issues.map((issue) => `${issue.code}@${issue.field}`)
   assert.ok(codes({ space: { ...manifestOf().space, variables: [{ path: 'truth.hazardRatio', values: [0.6, 0.7] }] } }).includes('campaign_value_frozen@space.variables[0].path'))
-  assert.ok(codes({ space: { ...manifestOf().space, variables: [{ path: 'analysis.alpha', values: [0.025, 0.05] }] } }).includes('campaign_value_frozen@space.variables[0].path'))
+  // the analysis level may be searched downward only (F4): a level above the frozen constraint is a relaxation, not a candidate
+  assert.ok(codes({ space: { ...manifestOf().space, variables: [{ path: 'analysis.alpha', values: [0.025, 0.05] }] } }).includes('campaign_alpha_relaxed@space.variables[0].values'))
+  assert.ok(codes({ space: { ...manifestOf().space, variables: [{ path: 'analysis.sided', values: [1, 2] }] } }).includes('campaign_value_frozen@space.variables[0].path'))
   assert.ok(codes({ space: { ...manifestOf().space, variables: [{ path: 'endpoint.type', values: ['binary'] }] } }).includes('campaign_value_frozen@space.variables[0].path'))
   assert.ok(codes({ constraints: [{ measure: 'type_one_error', op: '<=', bound: 0.05, kind: 'error_control', truth: 'null' }] }).includes('campaign_alpha_relaxed@constraints[0].bound'))
 })
@@ -248,6 +250,12 @@ test('a design calibrated exactly at alpha leaves compliance inconclusive at thi
   const row = state.stop.verdict.rows.find((/** @type {any} */ entry) => entry.key === 'c008')
   assert.deepEqual(row.verdicts.map((/** @type {any} */ v) => v.status), ['pass', 'inconclusive'])
   assert.deepEqual(row.verdicts[1].needed, { replicates: null, reason: 'estimate_at_bound' }, 'an estimate on the bound is decided by no number of replicates')
+  // the closest design is reported with the constraint nothing could decide, its simulated value and error (F4)
+  assert.equal(state.stop.verdict.best, null)
+  assert.equal(state.stop.verdict.bestUndecided, 'c008')
+  const undecided = state.stop.verdict.undecided.find((/** @type {any} */ entry) => entry.key === 'c008')
+  assert.deepEqual(undecided.constraints.map((/** @type {any} */ c) => [c.measure, c.estimate, c.needed.reason]), [['type_one_error', 0.025, 'estimate_at_bound']])
+  assert.ok(undecided.constraints[0].mcse > 0)
   // just inside the bound: the replicates that would decide it are stated
   const near = drive(manifest, (unit) => fakeOutcome(unit, { nullRate: 0.0245 }))
   const needed = near.state.stop.verdict.rows.find((/** @type {any} */ entry) => entry.key === 'c008').verdicts[1].needed
@@ -378,4 +386,38 @@ test('an analytic pre-check eliminates only in the world the objective is judged
   const smaller = vcrCampaignManifest(manifestOf({ stages: stages({ hazardRatio: 0.8, controlMedian: 12 }) }))
   assert.ok(smaller.issues.some((issue) => issue.code === 'campaign_analytic_truth_mismatch' && issue.field === 'stages.analytic.scenario.truth.hazardRatio'))
   assert.deepEqual(vcrCampaignManifest(manifestOf({ stages: stages({ hazardRatio: 0.7, controlMedian: 12 }) })).issues, [])
+})
+
+const alphaSpace = (/** @type {any[]} */ levels) => ({ ...manifestOf().space, variables: [{ path: 'design.nTreat', values: [200] }, { path: 'analysis.alpha', values: levels }] })
+
+test('the analysis level is a search variable only at or below the frozen error-control bound (F4)', () => {
+  const codes = (/** @type {any} */ over) => vcrCampaignManifest(manifestOf(over)).issues.map((issue) => `${issue.code}@${issue.field}`)
+  const ok = frozen({ space: alphaSpace([0.02, 0.024, 0.025]), budget: { maxCandidates: 3, cpuSeconds: 3600 } })
+  assert.equal(ok.constraints.find((/** @type {any} */ c) => c.kind === 'error_control').bound, 0.025, 'the constraint is what it was')
+  assert.equal(vcrCampaignCandidates(ok).length, 3)
+  assert.notEqual(vcrCampaignCanonical(ok), vcrCampaignCanonical(frozen({ space: alphaSpace([0.02, 0.024]), budget: { maxCandidates: 3, cpuSeconds: 3600 } })))
+  assert.ok(codes({ space: alphaSpace([0.02, 0.03]) }).includes('campaign_alpha_relaxed@space.variables[1].values'))
+  assert.ok(codes({ space: alphaSpace([0]) }).includes('campaign_alpha_relaxed@space.variables[1].values'))
+  // searching the level with no constraint to hold it under would let a larger level win on power
+  assert.ok(codes({ space: alphaSpace([0.02]), constraints: [{ measure: 'power', op: '>=', bound: 0.8, kind: 'design', truth: 'alternative' }] }).includes('campaign_alpha_search_unbounded@constraints'))
+  // explicit candidates are held to the same ceiling
+  const explicit = { ...manifestOf().space, variables: undefined, candidates: [{ set: { 'design.nTreat': 120, 'analysis.alpha': 0.05 } }] }
+  assert.ok(codes({ space: explicit, budget: { maxCandidates: 1, cpuSeconds: 3600 } }).includes('campaign_alpha_relaxed@space.candidates[0].set.analysis.alpha'))
+  // the dose design has no analysis level to search
+  assert.ok(vcrCampaignManifest({ ...manifestOf(), space: { ...manifestOf().space, method: 'design.dose', variables: [{ path: 'analysis.alpha', values: [0.02] }] } }).issues.length > 0)
+})
+
+test('a lower analysis level gives an asymptotically calibrated test margin under the unchanged constraint (F4)', () => {
+  const manifest = frozen({ space: alphaSpace([0.022, 0.025]), budget: { maxCandidates: 2, cpuSeconds: 3600 }, stages: { screening: { replicates: 500 }, final: { count: 2 } } })
+  const engine = (/** @type {any} */ unit) => {
+    const out = fakeOutcome(unit, { nullRate: 0.02 })
+    // the simulated type I error of an asymptotic test sits at its own level
+    return unit.scenario.truth.hazardRatio === 1 ? { ...out, measures: [m('type_one_error', unit.scenario.analysis.alpha)] } : out
+  }
+  const { state, action } = drive(manifest, engine)
+  const verdict = vcrCampaignVerdict(manifest, state)
+  const level = (/** @type {string} */ key) => vcrCampaignCandidates(manifest).find((c) => c.key === key)?.set['analysis.alpha']
+  assert.equal(action.reason, 'acceptable_precision')
+  assert.equal(level(/** @type {string} */ (verdict.best)), 0.022, 'the lower level passes the unchanged 2.5% bound')
+  assert.deepEqual(verdict.inconclusive.map(level), [0.025], 'the level equal to the bound stays undecided and is never passed on its point estimate')
 })

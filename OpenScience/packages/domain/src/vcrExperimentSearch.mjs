@@ -108,6 +108,14 @@ export const VCR_CAMPAIGN_METHODS = Object.freeze({
   }) }),
 })
 
+/**
+ * The methods whose analysis level (`analysis.alpha`) a campaign may search (F4). The frozen error-control constraint stays what it is;
+ * a lower analysis level is a design the campaign tries to give the simulated rate margin under that constraint, never a relaxation:
+ * every searched level is at or below the smallest error-control bound, and a campaign that searches it states such a constraint.
+ */
+export const VCR_CAMPAIGN_ALPHA_SEARCH_METHODS = Object.freeze(['design.simulate', 'patients.progression'])
+export const VCR_CAMPAIGN_ALPHA_PATH = 'analysis.alpha'
+
 /** Paths no variable may move: the evaluator. A path equal to or below one of these is refused. */
 export const VCR_CAMPAIGN_FROZEN_PATHS = Object.freeze({
   common: Object.freeze(['truth', 'endpoint', 'evaluation', 'performance', 'targetMcse', 'hypothesis', 'costs', 'timeUnit',
@@ -216,6 +224,7 @@ export function vcrCampaignManifest(input) {
   if (variables.length > L.maxVariables) bad('campaign_value_invalid', 'space.variables', `At most ${L.maxVariables} variables.`)
   const checkPath = (/** @type {string} */ path, /** @type {string} */ field) => {
     if (!PATH.test(path)) { bad('campaign_value_invalid', field, 'A variable is a dotted scenario path.'); return }
+    if (path === VCR_CAMPAIGN_ALPHA_PATH && VCR_CAMPAIGN_ALPHA_SEARCH_METHODS.includes(method)) return
     if (frozenPath(method, path)) bad('campaign_value_frozen', field, `${path} belongs to the evaluator (truth, endpoint, nominal alpha, what is measured, precision) and cannot be searched.`)
   }
   variables.forEach((entry, i) => {
@@ -280,6 +289,22 @@ export function vcrCampaignManifest(input) {
     }
     return out
   })
+
+  // the analysis level may be searched only downward from the frozen constraint: each level at or below the smallest error-control bound
+  const searchedLevels = [
+    ...variables.filter((entry) => entry.path === VCR_CAMPAIGN_ALPHA_PATH).flatMap((entry, _i) => entry.values.map((value) => ({ field: `space.variables[${variables.indexOf(entry)}].values`, value }))),
+    ...explicit.flatMap((entry, i) => (Object.hasOwn(entry.set, VCR_CAMPAIGN_ALPHA_PATH) ? [{ field: `space.candidates[${i}].set.${VCR_CAMPAIGN_ALPHA_PATH}`, value: entry.set[VCR_CAMPAIGN_ALPHA_PATH] }] : [])),
+  ]
+  if (searchedLevels.length) {
+    const errorBounds = constraints.filter((c) => c.kind === 'error_control' && typeof c.bound === 'number').map((c) => c.bound)
+    if (!errorBounds.length) bad('campaign_alpha_search_unbounded', 'constraints', 'Searching the analysis level needs an error-control constraint it must stay under: without one, a larger level would simply win on power.')
+    const ceiling = Math.min(...errorBounds)
+    for (const level of searchedLevels) {
+      if (!(typeof level.value === 'number' && level.value > 0 && level.value <= ceiling + 1e-12)) {
+        bad('campaign_alpha_relaxed', level.field, `An analysis level searched here is a number above 0 and at most the error-control bound ${ceiling}; a higher one would relax the constraint to let a candidate win.`)
+      }
+    }
+  }
 
   // stages
   const stagesIn = object(src.stages)
@@ -864,7 +889,15 @@ export function vcrCampaignVerdict(manifest, state) {
     improvementBound = { lower: improvement - z * mcse, upper: improvement + z * mcse, mcse, confidence, coupling: contrast.coupling,
       basis: contrast.mcse == null ? 'independent_error' : contrast.coupling }
   }
+  // Undecided is an answer too (F4): the finalists no constraint failed, the undecided constraint of each named with the simulated value and its
+  // error, and the best of them by the objective when no finalist passed everything. The frozen constraint is never touched: this only
+  // reports how close the closest design came and what would decide it.
+  const undecided = rows.filter((row) => row.inconclusive).map((row) => ({ key: row.key, index: row.index, objective: row.objective,
+    constraints: row.verdicts.filter((v) => v.status === 'inconclusive').map((v) => ({ index: v.index, measure: v.measure, op: v.op, bound: v.bound,
+      estimate: v.estimate ?? null, mcse: v.mcse ?? null, needed: v.needed ?? null })) }))
+  const bestUndecided = best ? null : undecided.filter((row) => row.objective).map((row) => ({ ...row, value: /** @type {any} */ (row.objective).value })).sort(byObjective(manifest))[0]?.key ?? null
   return { rows, feasible: feasible.map((row) => row.key), best: best?.key ?? null, inconclusive: rows.filter((row) => row.inconclusive).map((row) => row.key),
+    undecided, bestUndecided,
     reference: referenceKey, improvement, improvementBound,
     // each finalist is judged on its own at the constraints' confidence; the best is then picked among them (stats P2-1)
     selection: { finalists: keys.length, confidences: [...new Set(list(manifest.constraints).map((c) => Number(c.confidence)))] } }
