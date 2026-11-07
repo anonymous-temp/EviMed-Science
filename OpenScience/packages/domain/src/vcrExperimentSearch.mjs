@@ -30,6 +30,7 @@
 import { canonicalScenarioJson, vcrIsNullScenario } from './vcrEngineJob.mjs'
 import { VCR_JOB_METHODS, VCR_ENGINE_METHODS } from './vcrEngineJob.mjs'
 import { VCR_REPLICATES_ALT_MIN } from './vcrVocabulary.mjs'
+import { vcrDiseaseHypothesis } from './vcrExperiment.mjs'
 
 /** @param {unknown} value @returns {Record<string, any>} */
 const object = (value) => (value && typeof value === 'object' && !Array.isArray(value) ? /** @type {Record<string, any>} */ (value) : {})
@@ -79,6 +80,14 @@ export const VCR_CAMPAIGN_METHODS = Object.freeze({
     correct_dose_probability: 'proportion', select_none_probability: 'proportion', patients_above_mtd: 'mean',
     expected_sample_size: 'mean', expected_dlt: 'mean',
   }) }),
+  // The disease-response trial (plan T09): the Alzheimer `beta_logit` family of patients.progression. Its "truth" is the drug hypothesis
+  // (`treatment`), its candidates move the design (sample size, duration), it has no screening precision (every unit runs at the engine's
+  // floor), and its sample size and last visit are calculated from the scenario itself, so a search can minimize the first under a power bound.
+  'patients.progression': Object.freeze({ exact: false, precisionBlock: false, truthField: 'treatment', defaultAlpha: 0.05, finalFloor: VCR_REPLICATES_ALT_MIN,
+    measures: Object.freeze({
+      power: 'proportion', type_one_error: 'error_rate', expected_difference: 'exact', expected_control_change: 'exact', expected_treated_change: 'exact',
+      simulated_difference: 'mean', total_sample_size: 'exact', last_visit_weeks: 'exact',
+    }) }),
   'design.analytic': Object.freeze({ exact: true, measures: Object.freeze({
     required_events: 'exact', required_events_exact: 'exact', required_patients: 'exact', sample_size: 'exact', max_events: 'exact',
     expected_events_h0: 'exact', expected_events_h1: 'exact', power: 'exact', type_one_error: 'exact',
@@ -90,6 +99,8 @@ export const VCR_CAMPAIGN_FROZEN_PATHS = Object.freeze({
   common: Object.freeze(['truth', 'endpoint', 'evaluation', 'performance', 'targetMcse', 'hypothesis', 'costs', 'timeUnit',
     'analysis.alpha', 'analysis.sided', 'analysis.power', 'external']),
   'design.dose': Object.freeze(['design.targetToxicity']),
+  // the drug hypothesis is the evaluator's world, as are the model, its population and what the analysis estimates
+  'patients.progression': Object.freeze(['treatment', 'model', 'population', 'placebo', 'dropoutModel', 'analysis.kind']),
 })
 
 /** The fields of a design.simulate scenario that only analyse or judge the draws: candidates differing only here share their draws. */
@@ -168,11 +179,15 @@ export function vcrCampaignManifest(input) {
 
   // truths: the evaluator's worlds, by name
   const rawTruths = list(space.truths)
-  const truths = rawTruths.length ? rawTruths.map((entry) => ({ name: String(object(entry).name ?? ''), truth: object(object(entry).truth) })) : [{ name: 'base', truth: object(base.truth) }]
+  // a method whose truth is a block of its own scenario (`truthField`, the disease trial's drug hypothesis) may state "no effect" as an empty block
+  const truthField = info?.truthField ?? 'truth'
+  const emptyTruthOk = Boolean(info?.truthField)
+  if (emptyTruthOk && rawTruths.length && base[truthField] !== undefined) bad('campaign_value_frozen', `space.scenario.${truthField}`, `The ${truthField} of each world is stated in space.truths, not in the base scenario.`)
+  const truths = rawTruths.length ? rawTruths.map((entry) => ({ name: String(object(entry).name ?? ''), truth: object(object(entry).truth) })) : [{ name: 'base', truth: object(base[truthField]) }]
   if (truths.length > L.maxTruths) bad('campaign_value_invalid', 'space.truths', `At most ${L.maxTruths} truth scenarios.`)
   truths.forEach((entry, i) => {
     if (!/^[a-z][a-z0-9_]{0,23}$/.test(entry.name)) bad('campaign_value_invalid', `space.truths[${i}].name`, 'A truth is named with a short lower-case word.')
-    if (!Object.keys(entry.truth).length) bad('campaign_value_invalid', `space.truths[${i}].truth`, 'A truth scenario states its truth.')
+    if (!emptyTruthOk && !Object.keys(entry.truth).length) bad('campaign_value_invalid', `space.truths[${i}].truth`, 'A truth scenario states its truth.')
   })
   if (new Set(truths.map((entry) => entry.name)).size !== truths.length) bad('campaign_value_invalid', 'space.truths', 'Truth names are unique.')
   const truthNames = truths.map((entry) => entry.name)
@@ -231,10 +246,11 @@ export function vcrCampaignManifest(input) {
         : 'An error-control constraint judges a type I error the method measures under a null truth.')
       if (out.op !== '<=') bad('campaign_value_invalid', `${at}.op`, 'An error rate is held at or below its bound.')
       const truth = truths.find((entry) => entry.name === out.truth)
-      if (truth && type === 'error_rate' && !vcrIsNullScenario({ ...base, truth: truth.truth })) {
+      const nullTruth = info?.truthField ? vcrDiseaseHypothesis(truth?.truth) === 'none' : vcrIsNullScenario({ ...base, truth: truth?.truth })
+      if (truth && type === 'error_rate' && !nullTruth) {
         bad('campaign_error_control_truth', `${at}.truth`, 'A type I error is measured under a null truth; this truth states an effect, so the evaluator would measure power instead.')
       }
-      const alpha = typeof getPath(base, 'analysis.alpha') === 'number' ? getPath(base, 'analysis.alpha') : 0.025
+      const alpha = typeof getPath(base, 'analysis.alpha') === 'number' ? getPath(base, 'analysis.alpha') : (info?.defaultAlpha ?? 0.025)
       if (typeof out.bound === 'number' && out.bound > alpha + 1e-12) {
         bad('campaign_alpha_relaxed', `${at}.bound`, `The nominal alpha is ${alpha}; an error-control bound above it would relax it to let a candidate win.`)
       }
@@ -254,7 +270,8 @@ export function vcrCampaignManifest(input) {
   const screeningIn = stagesIn.screening == null ? null : object(stagesIn.screening)
   const exact = info?.exact === true
   const neededTruths = [...new Set([objective.truth, ...constraints.filter((c) => c.kind !== 'error_control').map((c) => c.truth)])]
-  const screening = screeningIn && !exact ? { replicates: screeningIn.replicates, truths: list(screeningIn.truths).length ? list(screeningIn.truths).map(String) : neededTruths } : null
+  const screening = screeningIn && !exact && info?.precisionBlock !== false ? { replicates: screeningIn.replicates, truths: list(screeningIn.truths).length ? list(screeningIn.truths).map(String) : neededTruths } : null
+  if (screeningIn && info?.precisionBlock === false) bad('campaign_value_invalid', 'stages.screening', `${method} runs every unit at the engine's own number of trials: it has no screening precision.`)
   if (screeningIn && exact) bad('campaign_value_invalid', 'stages.screening', 'An exact method has no screening stage: every value is final.')
   if (screening) {
     const floor = /** @type {Record<string, any>} */ (VCR_SCREENING.methods)[method]?.finalFloor ?? 0
@@ -266,7 +283,7 @@ export function vcrCampaignManifest(input) {
   const finalIn = object(stagesIn.final)
   const final = { count: finalIn.count ?? 3, replicates: finalIn.replicates ?? 'floor' }
   if (!(Number.isInteger(final.count) && final.count >= 1 && final.count <= L.finalCountMax)) bad('campaign_value_invalid', 'stages.final.count', `1 to ${L.finalCountMax} finalists.`)
-  if (final.replicates !== 'floor' && !(Number.isInteger(final.replicates) && final.replicates >= (/** @type {Record<string, any>} */ (VCR_SCREENING.methods)[method]?.finalFloor ?? 1))) {
+  if (final.replicates !== 'floor' && !(Number.isInteger(final.replicates) && final.replicates >= (/** @type {Record<string, any>} */ (VCR_SCREENING.methods)[method]?.finalFloor ?? info?.finalFloor ?? 1))) {
     bad('campaign_final_below_floor', 'stages.final.replicates', 'Finalists run at the method\'s normal floor ("floor") or more, never below it.')
   }
   if (exact && final.replicates !== 'floor') bad('campaign_value_invalid', 'stages.final.replicates', 'An exact method has no replicates.')
@@ -387,8 +404,9 @@ export function vcrCandidateScenario(manifest, candidate, truthName, stage) {
   const scenario = clone(object(manifest.space?.scenario))
   for (const [path, value] of Object.entries(object(candidate.set))) setPath(scenario, path, value)
   const truth = list(manifest.space?.truths).find((entry) => entry.name === truthName)
-  if (truth) scenario.truth = clone(truth.truth)
-  if (!VCR_CAMPAIGN_METHODS[/** @type {keyof typeof VCR_CAMPAIGN_METHODS} */ (manifest.space.method)]?.exact) {
+  const info = /** @type {Record<string, any>} */ (VCR_CAMPAIGN_METHODS)[manifest.space.method]
+  if (truth) scenario[info?.truthField ?? 'truth'] = clone(truth.truth)
+  if (!info?.exact && info?.precisionBlock !== false) {
     scenario.evaluation = stage === 'screening'
       ? { version: VCR_SCREENING.version, screeningReplicates: manifest.stages.screening.replicates }
       : { version: VCR_SCREENING.version }
@@ -451,6 +469,22 @@ export function vcrCampaignAnalyticScenario(manifest, candidate) {
   const scenario = clone(object(analytic.scenario))
   for (const path of list(analytic.apply)) if (Object.hasOwn(object(candidate.set), path)) setPath(scenario, path, candidate.set[path])
   return { scenario, key: `analytic:${fnv1a(canonicalScenarioJson(scenario)).toString(16).padStart(8, '0')}` }
+}
+
+/**
+ * The measures a scenario states about itself, which the engine does not report: for the disease trial the number of people enrolled and
+ * the week of the last visit. They are arithmetic on the frozen scenario (never estimated), so a search can minimize the first under a
+ * power bound; a unit that failed still carries them, and a method with none returns nothing.
+ * @param {string} method @param {Record<string, any>} scenario
+ */
+export function vcrScenarioDerivedMeasures(method, scenario) {
+  if (method !== 'patients.progression') return []
+  const n = Number(object(scenario.design).nTreat) + Number(object(scenario.design).nControl)
+  const visits = list(scenario.visits).map(Number).filter(Number.isFinite)
+  return [
+    ...(Number.isFinite(n) ? [{ name: 'total_sample_size', value: n, mcse: null, simulated: false, source: 'calculated' }] : []),
+    ...(visits.length ? [{ name: 'last_visit_weeks', value: Math.max(...visits), mcse: null, simulated: false, source: 'calculated' }] : []),
+  ]
 }
 
 // ---------------------------------------------------------------------------
@@ -696,7 +730,7 @@ export function vcrCampaignRecord(manifest, state, unit, outcome) {
   const evaluation = {
     jobId: outcome.jobId ?? null, resultId: outcome.resultId ?? null, state: outcome.state, seed: outcome.seed ?? null,
     replicates: outcome.replicates ?? null, precision: outcome.precision ?? (unit.stage === 'screening' ? 'screening' : unit.stage === 'analytic' ? 'exact' : 'final'),
-    measures: list(outcome.measures).map((m) => ({ name: m.name, value: m.value, mcse: m.mcse ?? null, simulated: m.simulated === true, source: m.source ?? null,
+    measures: [...list(outcome.measures), ...vcrScenarioDerivedMeasures(manifest.space.method, object(/** @type {any} */ (unit).scenario))].map((m) => ({ name: m.name, value: m.value, mcse: m.mcse ?? null, simulated: m.simulated === true, source: m.source ?? null,
       ...(m.precision ? { precision: m.precision } : {}) })),
     cpuSeconds: Number(outcome.cpuSeconds ?? 0) || 0, queueSeconds: Number(outcome.queueSeconds ?? 0) || 0, wallSeconds: Number(outcome.wallSeconds ?? 0) || 0,
     issues: list(outcome.issues).slice(0, 5).map(String), drawSignature: outcome.drawSignature ?? null, rejects: outcome.rejects ?? null,

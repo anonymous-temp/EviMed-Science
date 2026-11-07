@@ -2110,8 +2110,11 @@ export {
   VCR_EXPERIMENT_FIELDS,
   VCR_DESIGN_EXPERIMENT_LIMITS,
   VCR_EXPERIMENT_ALIGNED_FIELDS,
+  VCR_DISEASE_EXPERIMENT_ALIGNED_FIELDS,
+  VCR_DISEASE_EXPERIMENT_METHODS,
   vcrDesignExperiment,
   vcrDesignExperimentCanonical,
+  vcrDiseaseHypothesis,
   vcrExperimentAlignment,
   vcrExperimentCanonical,
   vcrExperimentIssues,
@@ -2151,6 +2154,7 @@ export {
   vcrNominalErrorControl,
   vcrNormalQuantile,
   vcrRegularizedBeta,
+  vcrScenarioDerivedMeasures,
 } from './src/vcrExperimentSearch.mjs'
 
 // vcrTimeUnits — the one closed table of time units (the model cards' horizon table), the spellings a source writes them in, and
