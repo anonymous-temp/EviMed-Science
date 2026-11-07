@@ -1,5 +1,7 @@
 # VCR professional plugins: consolidated plan and execution checklist
 
+**Follow-on direction (2026-11-07):** The [in silico platform implementation plan](2026-11-07-vcr-in-silico-platform-implementation-plan.md) defines the five-entrance product, model capability packs, batch forecasts and intervention experiments. It supersedes the older task-label/navigation target for future work, not the historical acceptance evidence below. Matching implementation and benchmarks are outside that follow-on workstream; only its entrance and explicit context handoff are included.
+
 Approved planning baseline: 2026-11-05. Execution closeout: 2026-11-06.
 The baseline review is preserved below; the execution ledger records subsequent
 implementation and measured acceptance. Production deployment, production data
