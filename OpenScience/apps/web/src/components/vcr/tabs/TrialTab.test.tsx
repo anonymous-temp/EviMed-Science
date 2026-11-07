@@ -1052,22 +1052,34 @@ describe("试验 · the lab's experiments", () => {
   const labEntry = { id: "cmp_1", kind: "campaign", question: "找出满足约束的最小样本量", status: "stopped", stopReason: null, createdAt: null, updatedAt: null };
   const labPath = `/vcr/studies/${STUDY_ID}/experiments`;
 
-  it("adds a 「实验」 view beside the designs when the study has experiments, and opens the lab from it", async () => {
+  it("adds a 「虚拟实验室」 view beside the designs when the study has experiments, and opens the lab from it", async () => {
     installVcrServer(network.productRequest, { [`GET ${labPath}`]: { experiments: [labEntry] }, [`GET ${labPath}/cmp_1`]: () => { throw new Error("not read until opened"); } });
     const user = userEvent.setup();
     const { container } = draw();
     await trialDrawn();
-    const chip = await waitFor(() => within(band(container)).getByRole("button", { name: /实验/ }));
+    const chip = await waitFor(() => within(band(container)).getByRole("button", { name: /虚拟实验室/ }));
     await user.click(chip);
     // the lab replaces the designs and keeps the band's switch, so the reader can go back
     await waitFor(() => expect(network.productRequest.mock.calls.some(([path]) => path === `${labPath}/cmp_1`)).toBe(true));
     expect(within(band(container)).getByRole("button", { name: /方案/ })).toBeInTheDocument();
   });
 
+  it("opens the record that was chosen on leaving the lab, never 方案 by default", async () => {
+    installVcrServer(network.productRequest, { [`GET ${labPath}`]: { experiments: [labEntry] }, [`GET ${labPath}/cmp_1`]: () => { throw new Error("the lab's own view is not what this test reads"); } });
+    const user = userEvent.setup();
+    const { container } = draw();
+    await trialDrawn();
+    await user.click(await waitFor(() => within(band(container)).getByRole("button", { name: /虚拟实验室/ })));
+    await waitFor(() => expect(network.productRequest.mock.calls.some(([path]) => path === `${labPath}/cmp_1`)).toBe(true));
+    await user.click(within(band(container)).getByRole("button", { name: /监管/ }));
+    await waitFor(() => expect(screen.queryByRole("table", { name: "方案的对比" })).toBeNull());
+    expect(within(band(container)).getByRole("button", { name: /监管/ })).toHaveAttribute("aria-pressed", "true");
+  });
+
   it("leaves the designs alone when the lab cannot be read or is empty", async () => {
     installVcrServer(network.productRequest, { [`GET ${labPath}`]: () => { throw new Error("down"); } });
     const { container } = draw();
     await trialDrawn();
-    expect(within(band(container)).queryByRole("button", { name: /实验/ })).toBeNull();
+    expect(within(band(container)).queryByRole("button", { name: /虚拟实验室/ })).toBeNull();
   });
 });

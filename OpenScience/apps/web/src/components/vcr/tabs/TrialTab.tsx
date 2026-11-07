@@ -13,6 +13,7 @@ import { useSearchParams } from "react-router";
 import { getVcrTrial, listVcrLabExperiments, recordVcrDecision, type VcrDesign, type VcrPremise, type VcrStudy, type VcrTrialTab as TrialData } from "@/lib/vcrClient";
 import { webErrorMessage } from "@/lib/apiClient";
 import { toast } from "@/lib/toast";
+import { CONVERSATION_SETTLED_EVENT } from "@/lib/runtimeUiBridge";
 import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/Button";
 import { ChartCard } from "@/components/ui/ChartCard";
@@ -112,10 +113,15 @@ export function TrialTab({ studyId, study }: { studyId: string; study: VcrStudy 
   // one that has only those opens on it. A lab that cannot be read is no experiments, never an error on the designs.
   const [labCount, setLabCount] = useState(0);
   const [showLab, setShowLab] = useState<boolean | null>(null);
+  // The record the person chose when leaving the lab: the designs view mounts fresh, so it must open on that record and not on 方案.
+  const [leftFor, setLeftFor] = useState<Exclude<TrialView, "lab">>("designs");
+  // The conversation creates experiments while this page is open: read the count again when it settles.
   useEffect(() => {
     let live = true;
-    Promise.resolve().then(() => listVcrLabExperiments(studyId)).then((answer) => { if (live) setLabCount(answer.experiments.length); }, () => undefined);
-    return () => { live = false; };
+    const read = () => { Promise.resolve().then(() => listVcrLabExperiments(studyId)).then((answer) => { if (live) setLabCount(answer.experiments.length); }, () => undefined); };
+    read();
+    window.addEventListener(CONVERSATION_SETTLED_EVENT, read);
+    return () => { live = false; window.removeEventListener(CONVERSATION_SETTLED_EVENT, read); };
   }, [studyId]);
   if (state.kind === "loading") return <VcrTabSkeleton />;
   if (state.kind === "error") return <VcrTabError message={state.message} onRetry={reload} />;
@@ -124,10 +130,10 @@ export function TrialTab({ studyId, study }: { studyId: string; study: VcrStudy 
     const chips = trialViews(state.data, study, labCount);
     return (
       <VirtualLabWorkspace studyId={studyId} canRun={study.abilities.includes("run")}
-        switcher={{ kind: "chips", label: "记录", neutral: chips[0].value, value: "lab", onChange: (next) => { if (next !== "lab") setShowLab(false); }, options: chips }} />
+        switcher={{ kind: "chips", label: "记录", neutral: chips[0].value, value: "lab", onChange: (next) => { if (next !== "lab") { setLeftFor(next as Exclude<TrialView, "lab">); setShowLab(false); } }, options: chips }} />
     );
   }
-  return <TrialView studyId={studyId} study={study} data={state.data} reload={reload} labCount={labCount} onShowLab={() => setShowLab(true)} />;
+  return <TrialView studyId={studyId} study={study} data={state.data} reload={reload} labCount={labCount} initialView={leftFor} onShowLab={() => setShowLab(true)} />;
 }
 
 /** Whether the step holds a design or a forecast of its own. */
@@ -139,13 +145,13 @@ function trialViews(data: TrialData, study: VcrStudy, labCount: number): Array<{
   if (trialHasDesigns(data)) views.push({ value: "designs", label: "方案", ...(data.designs.length > 0 ? { count: data.designs.length } : {}) });
   if (data.schedule) views.push({ value: "schedule", label: "访视" });
   if (data.regulatory.length > 0 || study.abilities.includes("write")) views.push({ value: "regulatory", label: "监管", ...(data.regulatory.length > 0 ? { count: data.regulatory.length } : {}) });
-  if (labCount > 0) views.push({ value: "lab", label: "实验", count: labCount });
+  if (labCount > 0) views.push({ value: "lab", label: "虚拟实验室", count: labCount });
   return views;
 }
 
-function TrialView({ studyId, study, data, reload, labCount = 0, onShowLab }: { studyId: string; study: VcrStudy; data: TrialData; reload: () => void; labCount?: number; onShowLab?: () => void }) {
+function TrialView({ studyId, study, data, reload, labCount = 0, initialView = "designs", onShowLab }: { studyId: string; study: VcrStudy; data: TrialData; reload: () => void; labCount?: number; initialView?: TrialView; onShowLab?: () => void }) {
   const frame = useStudyFrame();
-  const [view, setView] = useState<TrialView>("designs");
+  const [view, setView] = useState<TrialView>(initialView);
   const [choosing, setChoosing] = useState(false);
   const [registering, setRegistering] = useState(false);
   const [recording, setRecording] = useState(false);
