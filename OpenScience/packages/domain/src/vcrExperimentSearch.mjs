@@ -573,7 +573,7 @@ export function vcrEvaluationMeasure(evaluation, name) {
  * @param {Record<string, any>} manifest @param {Record<string, any>} constraint
  * @param {Record<string, any> | null | undefined} evaluation the unit's outcome (`measures`, `replicates`, `precision`, `state`)
  * @param {{ stage: 'screening' | 'final' }} options
- * @returns {{ status: string, final: boolean, reason?: string, estimate?: number, mcse?: number | null, bound?: Record<string, any> }}
+ * @returns {Record<string, any>} `{ status, final, reason?, estimate?, mcse?, bound? }`
  */
 export function vcrJudgeConstraint(manifest, constraint, evaluation, { stage }) {
   if (!evaluation || evaluation.state !== 'succeeded') return { status: 'not_judged', final: false, reason: evaluation ? 'evaluation_failed' : 'not_evaluated' }
@@ -637,7 +637,7 @@ export function vcrNominalErrorControl(scenario) {
 // The state machine
 // ---------------------------------------------------------------------------
 
-/** A fresh campaign state. @param {Record<string, any>} manifest */
+/** A fresh campaign state. @param {Record<string, any>} manifest @returns {Record<string, any>} */
 export function vcrCampaignInitialState(manifest) {
   const candidates = vcrCampaignCandidates(manifest)
   return {
@@ -676,6 +676,7 @@ const byObjective = (manifest) => (/** @type {any} */ a, /** @type {any} */ b) =
 /**
  * Every constraint's verdict for a candidate at a stage.
  * @param {Record<string, any>} manifest @param {Record<string, any>} entry @param {'screening' | 'final'} stage
+ * @returns {Array<Record<string, any>>}
  */
 export function vcrCandidateVerdicts(manifest, entry, stage) {
   return list(manifest.constraints).map((constraint, index) => ({ index, measure: constraint.measure, kind: constraint.kind, op: constraint.op,
@@ -769,7 +770,7 @@ export function vcrCampaignVerdict(manifest, state) {
  * Decide what a campaign does next (pure): evaluate one unit, wait for the unit in flight, or stop with one reason. Finalists are
  * chosen here, once, from the screening ranking (or every survivor of an exact method), and written into the returned state.
  * @param {Record<string, any>} manifest @param {Record<string, any>} state @param {{ identity: string }} context
- * @returns {{ state: Record<string, any>, action: { type: 'evaluate', unit: Record<string, any> } | { type: 'wait' } | { type: 'stop', reason: string } | { type: 'none' } }}
+ * @returns {{ state: Record<string, any>, action: { type: 'evaluate' | 'wait' | 'stop' | 'none', unit?: Record<string, any>, reason?: string } }}
  */
 export function vcrCampaignAdvance(manifest, state, { identity }) {
   const next = clone(state)

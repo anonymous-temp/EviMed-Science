@@ -1,4 +1,3 @@
-// @ts-nocheck -- fixtures are loose JSON-shaped objects; the module under test is type-checked
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
@@ -13,7 +12,7 @@ const BASE = {
   truth: { hazardRatio: 0.7, controlMedian: 12 }, accrual: { kind: 'uniform', duration: 12, followup: 12 },
   analysis: { method: 'logrank', alpha: 0.025, sided: 1 },
 }
-const manifestOf = (over = {}) => ({
+const manifestOf = (/** @type {any} */ over = {}) => ({
   question: 'Smallest two-arm trial with power at least 0.8',
   objective: { measure: 'expected_sample_size', direction: 'minimize', truth: 'alternative' },
   constraints: [
@@ -27,7 +26,7 @@ const manifestOf = (over = {}) => ({
   budget: { maxCandidates: 9, cpuSeconds: 3600, modelCalls: 0 },
   ...over,
 })
-const frozen = (over) => { const out = vcrCampaignManifest(manifestOf(over)); assert.deepEqual(out.issues, []); return /** @type {Record<string, any>} */ (out.manifest) }
+const frozen = (/** @type {any} */ over = {}) => { const out = vcrCampaignManifest(manifestOf(over)); assert.deepEqual(out.issues, []); return /** @type {Record<string, any>} */ (out.manifest) }
 const ID = 'a'.repeat(64)
 
 test('a manifest freezes only known fields and its canonical bytes ignore key order', () => {
@@ -41,7 +40,7 @@ test('a manifest freezes only known fields and its canonical bytes ignore key or
 })
 
 test('the evaluator cannot be searched or relaxed', () => {
-  const codes = (over) => vcrCampaignManifest(manifestOf(over)).issues.map((issue) => `${issue.code}@${issue.field}`)
+  const codes = (/** @type {any} */ over) => vcrCampaignManifest(manifestOf(over)).issues.map((issue) => `${issue.code}@${issue.field}`)
   assert.ok(codes({ space: { ...manifestOf().space, variables: [{ path: 'truth.hazardRatio', values: [0.6, 0.7] }] } }).includes('campaign_value_frozen@space.variables[0].path'))
   assert.ok(codes({ space: { ...manifestOf().space, variables: [{ path: 'analysis.alpha', values: [0.025, 0.05] }] } }).includes('campaign_value_frozen@space.variables[0].path'))
   assert.ok(codes({ space: { ...manifestOf().space, variables: [{ path: 'endpoint.type', values: ['binary'] }] } }).includes('campaign_value_frozen@space.variables[0].path'))
@@ -49,7 +48,7 @@ test('the evaluator cannot be searched or relaxed', () => {
 })
 
 test('a misspecified evaluator is refused before anything runs', () => {
-  const codes = (over) => vcrCampaignManifest(manifestOf(over)).issues.map((issue) => `${issue.code}@${issue.field}`)
+  const codes = (/** @type {any} */ over) => vcrCampaignManifest(manifestOf(over)).issues.map((issue) => `${issue.code}@${issue.field}`)
   // a measure the method never produces
   assert.ok(codes({ objective: { measure: 'win_ratio', direction: 'maximize', truth: 'alternative' } }).includes('campaign_measure_unknown@objective.measure'))
   // a type I error constraint judged under a truth with an effect would read power
@@ -76,7 +75,7 @@ test('dose finding is judged by toxicity and selection, never by a superiority a
 })
 
 test('screening sizes stay under the floor and finalists never run below it', () => {
-  const codes = (over) => vcrCampaignManifest(manifestOf(over)).issues.map((issue) => issue.code)
+  const codes = (/** @type {any} */ over) => vcrCampaignManifest(manifestOf(over)).issues.map((issue) => issue.code)
   assert.ok(codes({ stages: { screening: { replicates: 100 }, final: { count: 2 } } }).includes('campaign_screening_replicates'))
   assert.ok(codes({ stages: { screening: { replicates: 5000 }, final: { count: 2 } } }).includes('campaign_screening_replicates'), 'a screening run is below the 5,000 floor')
   assert.ok(codes({ stages: { screening: { replicates: 500 }, final: { count: 2, replicates: 2000 } } }).includes('campaign_final_below_floor'))
@@ -131,13 +130,13 @@ test('Clopper-Pearson bounds match R qbeta to 1e-12', () => {
   assert.ok(Math.abs(vcrClopperPearson(11, 200, 0.975).upper - 0.096277644433912846) < 1e-12)
 })
 
-const evaluation = (measures, over = {}) => ({ state: 'succeeded', precision: 'final', replicates: 20000, measures, ...over })
-const m = (name, value, extra = {}) => ({ name, value, mcse: Math.sqrt(value * (1 - value) / 20000), simulated: true, source: 'synthetic', ...extra })
+const evaluation = (/** @type {any} */ measures, /** @type {any} */ over = {}) => ({ state: 'succeeded', precision: 'final', replicates: 20000, measures, ...over })
+const m = (/** @type {any} */ name, /** @type {any} */ value, /** @type {any} */ extra = {}) => ({ name, value, mcse: Math.sqrt(value * (1 - value) / 20000), simulated: true, source: 'synthetic', ...extra })
 
 test('an error-rate constraint passes only on its upper bound; at the nominal alpha it is inconclusive, never a pass', () => {
   const manifest = frozen()
   const [, alphaRule] = manifest.constraints
-  const at = (value) => vcrJudgeConstraint(manifest, alphaRule, evaluation([m('type_one_error', value)]), { stage: 'final' })
+  const at = (/** @type {any} */ value) => vcrJudgeConstraint(manifest, alphaRule, evaluation([m('type_one_error', value)]), { stage: 'final' })
   assert.equal(at(0.025).status, 'inconclusive', 'an estimate exactly at alpha leaves compliance undecided')
   assert.equal(at(0.0249).status, 'inconclusive')
   assert.equal(at(0.022).status, 'pass')
@@ -165,7 +164,7 @@ test('a test calibrated at its nominal alpha passes on that level unless the sim
 test('a mean is judged with its MCSE and an exact value as it is', () => {
   const manifest = frozen({ constraints: [{ measure: 'expected_sample_size', op: '<=', bound: 250, kind: 'design', truth: 'alternative' }] })
   const rule = manifest.constraints[0]
-  const mean = (value, mcse) => vcrJudgeConstraint(manifest, rule, evaluation([{ name: 'expected_sample_size', value, mcse, simulated: true }]), { stage: 'final' })
+  const mean = (/** @type {any} */ value, /** @type {any} */ mcse) => vcrJudgeConstraint(manifest, rule, evaluation([{ name: 'expected_sample_size', value, mcse, simulated: true }]), { stage: 'final' })
   assert.equal(mean(240, 2).status, 'pass')
   assert.equal(mean(248, 2).status, 'inconclusive')
   assert.equal(mean(260, 2).status, 'fail')
@@ -173,6 +172,7 @@ test('a mean is judged with its MCSE and an exact value as it is', () => {
 })
 
 /** A fake engine: the power and expected size of a two-arm design at n per arm, deterministic. */
+/** @param {any} unit @param {{ failAll?: boolean, powerScale?: number, nullRate?: number }} [options] @returns {Record<string, any>} */
 function fakeOutcome(unit, { failAll = false, powerScale = 1, nullRate = 0.02 } = {}) {
   if (failAll) return { jobId: `job_${unit.key}`, state: 'failed', issues: ['handler_error'], cpuSeconds: 1 }
   const n = unit.scenario.design.nTreat + unit.scenario.design.nControl
@@ -186,6 +186,7 @@ function fakeOutcome(unit, { failAll = false, powerScale = 1, nullRate = 0.02 } 
 }
 
 /** Run a campaign to its stop with the fake engine. */
+/** @param {any} manifest @param {(unit: any) => Record<string, any>} [engine] @param {{ limit?: number, interrupt?: ((state: any, n: number) => any) | null }} [options] @returns {{ state: Record<string, any>, action: Record<string, any>, units: any[] }} */
 function drive(manifest, engine = fakeOutcome, { limit = 200, interrupt = null } = {}) {
   let state = vcrCampaignInitialState(manifest)
   const units = []
@@ -193,10 +194,11 @@ function drive(manifest, engine = fakeOutcome, { limit = 200, interrupt = null }
     const { state: next, action } = vcrCampaignAdvance(manifest, state, { identity: ID })
     state = next
     if (action.type !== 'evaluate') return { state, action, units }
-    units.push(action.unit)
-    state = { ...state, inFlight: { unitKey: action.unit.key } }
+    const unit = /** @type {any} */ (action.unit)
+    units.push(unit)
+    state = { ...state, inFlight: { unitKey: unit.key } }
     if (interrupt) state = interrupt(state, units.length) ?? state
-    state = vcrCampaignRecord(manifest, state, action.unit, engine(action.unit))
+    state = vcrCampaignRecord(manifest, state, unit, engine(unit))
   }
   throw new Error('campaign did not stop')
 }
@@ -235,15 +237,15 @@ test('a design calibrated exactly at alpha leaves compliance inconclusive and is
   const { action, state } = drive(manifest, (unit) => fakeOutcome(unit, { nullRate: 0.025 }))
   assert.equal(action.reason, 'no_feasible_beneficial_candidate')
   assert.deepEqual(state.stop.verdict.inconclusive, ['c008'], 'the only design with enough power is undecided on alpha, not passed')
-  const row = state.stop.verdict.rows.find((entry) => entry.key === 'c008')
-  assert.deepEqual(row.verdicts.map((v) => v.status), ['pass', 'inconclusive'])
+  const row = state.stop.verdict.rows.find((/** @type {any} */ entry) => entry.key === 'c008')
+  assert.deepEqual(row.verdicts.map((/** @type {any} */ v) => v.status), ['pass', 'inconclusive'])
 })
 
 test('screening optimism does not decide: the final, independent evaluation does', () => {
   const manifest = frozen({ objective: { measure: 'power', direction: 'maximize', truth: 'alternative' },
     constraints: [{ measure: 'power', op: '>=', bound: 0.5, kind: 'design', truth: 'alternative' }] })
   // the screen flatters c004 (a lucky stream); its final evaluation does not
-  const engine = (unit) => {
+  const engine = (/** @type {any} */ unit) => {
     const out = fakeOutcome(unit)
     if (unit.candidate === 'c004' && unit.stage === 'screening') out.measures[0] = m('power', 0.99, { precision: 'screening' })
     return out
@@ -256,7 +258,7 @@ test('screening optimism does not decide: the final, independent evaluation does
 
 test('a screening outcome recorded in a final slot can never satisfy a final constraint', () => {
   const manifest = frozen({ constraints: [{ measure: 'power', op: '>=', bound: 0.5, kind: 'design', truth: 'alternative' }] })
-  const engine = (unit) => unit.stage === 'final' ? { ...fakeOutcome({ ...unit, stage: 'screening' }), precision: 'screening' } : fakeOutcome(unit)
+  const engine = (/** @type {any} */ unit) => unit.stage === 'final' ? { ...fakeOutcome({ ...unit, stage: 'screening' }), precision: 'screening' } : fakeOutcome(unit)
   const { action } = drive(manifest, engine)
   assert.equal(action.reason, 'no_feasible_beneficial_candidate')
 })
@@ -289,7 +291,7 @@ test('an analytic pre-check eliminates sizes below the closed-form requirement b
     stages: { analytic: { scenario: { design: { kind: 'two_arm_fixed' }, endpoint: { type: 'time_to_event' }, truth: { hazardRatio: 0.7, controlMedian: 12 },
       analysis: { alpha: 0.025, power: 0.8, sided: 1 }, accrual: { duration: 12, followup: 12 } },
     eliminate: [{ measure: 'required_patients', exceeds: ['design.nTreat', 'design.nControl'], tolerance: 0.05 }] }, screening: { replicates: 500 }, final: { count: 2 } } })
-  const engine = (unit) => unit.stage === 'analytic'
+  const engine = (/** @type {any} */ unit) => unit.stage === 'analytic'
     ? { jobId: 'job_a', state: 'succeeded', measures: [{ name: 'required_patients', value: 280, source: 'calculated' }], cpuSeconds: 0.1 }
     : fakeOutcome(unit)
   const { units, state } = drive(manifest, engine)
@@ -300,7 +302,7 @@ test('an analytic pre-check eliminates sizes below the closed-form requirement b
 })
 
 test('contrasts follow the coupling the runs really had', () => {
-  const bits = (pattern) => pattern.match(/.{1,8}/g).map((byte) => Number.parseInt(byte.padEnd(8, '0').split('').reverse().join(''), 2).toString(16).padStart(2, '0')).join('')
+  const bits = (/** @type {any} */ pattern) => pattern.match(/.{1,8}/g).map((/** @type {any} */ byte) => Number.parseInt(byte.padEnd(8, '0').split('').reverse().join(''), 2).toString(16).padStart(2, '0')).join('')
   const a = { seed: 5, drawSignature: 'x', replicates: 16, rejects: bits('1111000011110000'), measures: [{ name: 'power', value: 0.5, mcse: 0.125, simulated: true }] }
   const b = { seed: 5, drawSignature: 'x', replicates: 16, rejects: bits('1110000011100000'), measures: [{ name: 'power', value: 0.375, mcse: 0.121, simulated: true }] }
   const paired = vcrEvaluationContrast(a, b, 'power')
@@ -311,5 +313,5 @@ test('contrasts follow the coupling the runs really had', () => {
   assert.deepEqual([shifted.coupling, shifted.mcse], ['same_seed_different_draws', null], 'same seed, different draws: no interval')
   const independent = vcrEvaluationContrast(a, { ...b, seed: 6 }, 'power')
   assert.equal(independent.coupling, 'independent')
-  assert.ok(Math.abs(independent.mcse - Math.sqrt(0.125 ** 2 + 0.121 ** 2)) < 1e-12)
+  assert.ok(Math.abs(Number(independent.mcse) - Math.sqrt(0.125 ** 2 + 0.121 ** 2)) < 1e-12)
 })
