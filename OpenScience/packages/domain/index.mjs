@@ -2108,6 +2108,11 @@ export {
 // vcrExperiment — the immutable experiment version record and the canonical bytes its identity is the hash of
 export {
   VCR_EXPERIMENT_FIELDS,
+  VCR_DESIGN_EXPERIMENT_LIMITS,
+  VCR_EXPERIMENT_ALIGNED_FIELDS,
+  vcrDesignExperiment,
+  vcrDesignExperimentCanonical,
+  vcrExperimentAlignment,
   vcrExperimentCanonical,
   vcrExperimentIssues,
   vcrExperimentRecord,

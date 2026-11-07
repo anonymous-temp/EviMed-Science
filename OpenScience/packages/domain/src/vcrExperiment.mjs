@@ -65,3 +65,82 @@ export function vcrExperimentIssues(record) {
 export function vcrExperimentCanonical(input) {
   return canonicalScenarioJson(vcrExperimentRecord(input))
 }
+
+// ---------------------------------------------------------------------------
+// Design experiments (plan T09): named arms of existing design methods over one frozen endpoint and analysis
+// ---------------------------------------------------------------------------
+
+export const VCR_DESIGN_EXPERIMENT_LIMITS = Object.freeze({ minArms: 2, maxArms: 8, maxMeasures: 8, nameMax: 40, questionMax: 500 })
+/** The fields every arm of a design experiment must agree on: the frozen endpoint and analysis definitions. */
+export const VCR_EXPERIMENT_ALIGNED_FIELDS = Object.freeze(['endpoint', 'analysis.alpha', 'analysis.sided', 'hypothesis', 'timeUnit'])
+const ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,120}$/
+
+/** @param {Record<string, any>} source @param {string} path */
+const pathValue = (source, path) => path.split('.').reduce((/** @type {any} */ node, part) => (node && typeof node === 'object' ? node[part] : undefined), source)
+
+/**
+ * A design experiment as it is frozen: the question, the arms (each either an existing saved result by id, or a design method,
+ * its version and its scenario to run), and the comparison (which measures, against which arm). Only known fields; a changed arm, a
+ * changed scenario or a changed comparison is a new experiment.
+ * @param {unknown} input
+ * @param {{ methods: Record<string, { version: string }> }} registry the engine's method registry (`VCR_ENGINE_METHODS`)
+ * @returns {{ record: Record<string, any> | null, issues: Array<{ code: string, field: string, detail: string }> }}
+ */
+export function vcrDesignExperiment(input, { methods }) {
+  const L = VCR_DESIGN_EXPERIMENT_LIMITS
+  /** @type {Array<{ code: string, field: string, detail: string }>} */
+  const issues = []
+  const bad = (/** @type {string} */ code, /** @type {string} */ field, /** @type {string} */ detail) => { issues.push({ code, field, detail }) }
+  const src = object(input)
+  const armsIn = Array.isArray(src.arms) ? src.arms : []
+  if (armsIn.length < L.minArms || armsIn.length > L.maxArms) bad('experiment_arms_invalid', 'arms', `An experiment compares ${L.minArms} to ${L.maxArms} named arms.`)
+  const arms = armsIn.map((raw, i) => {
+    const arm = object(raw)
+    const name = typeof arm.name === 'string' ? arm.name.trim().slice(0, L.nameMax) : ''
+    if (!name) bad('experiment_value_invalid', `arms[${i}].name`, 'Every arm is named.')
+    if (arm.resultId != null) {
+      if (typeof arm.resultId !== 'string' || !ID.test(arm.resultId)) bad('experiment_value_invalid', `arms[${i}].resultId`, 'A saved result is named by its id.')
+      if (arm.method != null || arm.scenario != null) bad('experiment_value_invalid', `arms[${i}]`, 'An arm attaches a saved result or runs a method, not both.')
+      return { name, resultId: String(arm.resultId) }
+    }
+    const method = typeof arm.method === 'string' ? arm.method : ''
+    const spec = methods[method]
+    if (!method.startsWith('design.') || !spec) bad('experiment_method_unsupported', `arms[${i}].method`, 'A design experiment runs a registered design method (design.*) or attaches a saved result.')
+    const version = arm.version ?? spec?.version ?? null
+    if (spec && version !== spec.version) bad('experiment_method_version', `arms[${i}].version`, `${method} is ${spec.version} in this build.`)
+    const scenario = object(arm.scenario)
+    if (!Object.keys(scenario).length) bad('experiment_value_invalid', `arms[${i}].scenario`, 'An arm that runs states its scenario.')
+    if (scenario.evaluation !== undefined) bad('experiment_value_invalid', `arms[${i}].scenario.evaluation`, 'An experiment arm runs at the method\'s normal precision.')
+    return { name, method, version, scenario }
+  })
+  if (new Set(arms.map((arm) => arm.name)).size !== arms.length) bad('experiment_value_invalid', 'arms', 'Arm names are unique.')
+  const comparisonIn = object(src.comparison)
+  const measures = Array.isArray(comparisonIn.measures) ? comparisonIn.measures.map(String) : []
+  if (!measures.length || measures.length > L.maxMeasures || measures.some((name) => !/^[a-z][a-z0-9_]{0,63}$/.test(name))) {
+    bad('experiment_value_invalid', 'comparison.measures', `A comparison names 1 to ${L.maxMeasures} measures.`)
+  }
+  const reference = typeof comparisonIn.reference === 'string' ? comparisonIn.reference : arms[0]?.name ?? null
+  if (!arms.some((arm) => arm.name === reference)) bad('experiment_value_invalid', 'comparison.reference', 'The contrast is against one of the arms.')
+  if (issues.length) return { record: null, issues }
+  return { record: { schemaVersion: 1, kind: 'design', question: typeof src.question === 'string' ? src.question.slice(0, L.questionMax) : '',
+    purpose: typeof src.purpose === 'string' ? src.purpose.slice(0, 200) : '', arms, comparison: { measures, reference } }, issues }
+}
+
+/** The canonical bytes a design experiment's identity is the sha256 of. @param {Record<string, any>} record */
+export function vcrDesignExperimentCanonical(record) {
+  return canonicalScenarioJson({ designExperiment: 1, record })
+}
+
+/**
+ * Whether the arms stand on the same frozen endpoint and analysis: one row per aligned field with every arm's value, and whether
+ * they agree. An arm whose scenario is not known (a saved result whose configuration is withheld) is listed as unknown, never as agreeing.
+ * @param {Array<{ name: string, scenario: Record<string, any> | null }>} arms
+ */
+export function vcrExperimentAlignment(arms) {
+  return VCR_EXPERIMENT_ALIGNED_FIELDS.map((field) => {
+    const values = arms.map((arm) => ({ name: arm.name, known: arm.scenario != null, value: arm.scenario ? pathValue(arm.scenario, field) ?? null : null }))
+    const known = values.filter((entry) => entry.known)
+    const texts = new Set(known.map((entry) => canonicalScenarioJson(entry.value)))
+    return { field, aligned: known.length === values.length && texts.size <= 1, unknown: values.filter((entry) => !entry.known).map((entry) => entry.name), values }
+  })
+}
