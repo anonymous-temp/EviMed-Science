@@ -340,6 +340,14 @@ function comparatorFromRow(row) {
 }
 
 /** @param {any} row */
+/** A design grid as the store reads it. @param {any} row */
+function designGridFromRow(row) {
+  if (!row) return null;
+  return { id: String(row.id), studyId: String(row.study_id), version: Number(row.version), name: text(row.name) ?? `Design grid v${row.version}`, dimensions: object(row.dimensions),
+    truthScenarios: list(row.truth_scenarios), comparisonGoal: row.comparison_goal == null ? null : object(row.comparison_goal),
+    cells: list(row.cells), createdAt: iso(row.created_at) };
+}
+
 function scenarioFromRow(row) {
   if (!row) return null;
   return {
@@ -1345,11 +1353,16 @@ export class VcrStore extends VcrStoreBase {
 
   /** @param {string} studyId */
   async latestDesignGrid(studyId) {
-    const row = await this.one(`SELECT * FROM ${VCR_SCHEMA}.design_grids WHERE study_id = $1 ORDER BY version DESC LIMIT 1`, [studyId]);
-    if (!row) return null;
-    return { id: String(row.id), studyId: String(row.study_id), version: Number(row.version), name: text(row.name) ?? `Design grid v${row.version}`, dimensions: object(row.dimensions),
-      truthScenarios: list(row.truth_scenarios), comparisonGoal: row.comparison_goal == null ? null : object(row.comparison_goal),
-      cells: list(row.cells), createdAt: iso(row.created_at) };
+    return designGridFromRow(await this.one(`SELECT * FROM ${VCR_SCHEMA}.design_grids WHERE study_id = $1 ORDER BY version DESC LIMIT 1`, [studyId]));
+  }
+
+  /**
+   * One grid of a study by its id, with its cells: a study holds a grid per set of defining inputs, the pages read the newest, and a
+   * link that names an earlier one reads that one.
+   * @param {string} studyId @param {string} id
+   */
+  async designGrid(studyId, id) {
+    return designGridFromRow(await this.one(`SELECT * FROM ${VCR_SCHEMA}.design_grids WHERE study_id = $1 AND id = $2`, [studyId, id]));
   }
 
   /**

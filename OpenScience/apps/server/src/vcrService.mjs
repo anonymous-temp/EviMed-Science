@@ -1070,6 +1070,12 @@ export class VcrService {
     if (tab === "comparator" && typeof query.object === "string") bundle.askedComparator = query.object;
     // and the trial tab's (a saved design's id, or the key a computed design is filed under): the first sentence and the premises follow it
     if (tab === "trial" && typeof query.object === "string") bundle.askedObject = query.object;
+    // A grid the link names is the grid the page draws: a study keeps one grid per set of sizes, follow-up and truths, and only the newest
+    // is read otherwise (live 2026-11-07: the reply cited a 30-month grid's power while the page drew a later null check).
+    if (tab === "trial" && typeof query.object === "string" && query.object !== grid?.id && typeof this.store.designGrid === "function") {
+      const asked = await this.store.designGrid(study.id, query.object).catch(() => null);
+      if (asked) bundle.grid = asked;
+    }
     // What the study's data intake waits on a person for: said on the overview, where the study is read, and not only inside 数据接入.
     if (tab === 'overview') {
       bundle.intakeNeeds = intakeNeedsOf(await this.packages.dataPlane?.intakeRows?.(study).catch(() => null));

@@ -212,8 +212,14 @@ export function vcrMatchTrialScenarios(jobScenario, rows, { sameNumbers = false,
   return scored.filter((entry) => entry.agreeing === best).map((entry) => entry.row);
 }
 
-/** The scenario an object of a self-filed kind holds. @param {string} objectKind @param {Record<string, any>} row @returns {Record<string, any> | null} */
+/** The scenario an object of a self-filed kind holds. A grid holds its base scenario, its designs and its truths, the way
+ * `prepareVcrMethodConfiguration` wrote them from the scenario it was made from. @param {string} objectKind @param {Record<string, any>} row
+ * @returns {Record<string, any> | null} */
 function configurationOf(objectKind, row) {
+  if (objectKind === "design_grid") {
+    const dimensions = object(row.dimensions);
+    return { ...object(dimensions.base), designs: list(dimensions.designs), truths: list(row.truthScenarios) };
+  }
   return objectKind === "trial_scenario" || objectKind === "comparator" ? object(row.configuration) : objectKind === "population" ? object(row.definition) : null;
 }
 
@@ -233,6 +239,27 @@ export function vcrContradiction(held, asked, at = "") {
     else if (canonicalScenarioJson(mine) !== canonicalScenarioJson(value)) return path;
   }
   return null;
+}
+
+/**
+ * The first value a grid scenario states differently from a grid: the base scenario as `vcrContradiction` reads it, and the designs and the
+ * truths entry by entry (another count of them is another grid; a key only one entry states, such as a label the scenario's normalisation
+ * left out, is no disagreement). Null when there is none.
+ * @param {Record<string, any>} held @param {Record<string, any>} asked
+ * @returns {string | null}
+ */
+function gridContradiction(held, asked) {
+  for (const key of ["designs", "truths"]) {
+    if (!Array.isArray(asked[key]) || !Array.isArray(held[key])) continue;
+    if (asked[key].length !== held[key].length) return key;
+    for (const [at, entry] of asked[key].entries()) {
+      const inner = vcrContradiction(object(held[key][at]), object(entry), `${key}[${at}]`);
+      if (inner) return inner;
+    }
+  }
+  const { designs: _heldDesigns, truths: _heldTruths, ...heldBase } = held;
+  const { designs: _askedDesigns, truths: _askedTruths, ...askedBase } = asked;
+  return vcrContradiction(heldBase, askedBase);
 }
 
 /**
@@ -320,6 +347,9 @@ function holdings(objectKind, current) {
  * @param {boolean} sameNumbers */
 function fittingObjects(objectKind, kind, scenario, current, sameNumbers) {
   return objectKind === "trial_scenario" ? vcrMatchTrialScenarios(scenario, current, { sameNumbers, sizing: true })
+    // A grid's sizes, follow-up and truths are what it is, as a design's numbers are (live 2026-11-07: a 30-month grid, a 240-month grid
+    // and a null check were filed as three versions of one grid, and the first two results were superseded off the page).
+    : objectKind === "design_grid" ? current.filter((entry) => !sameNumbers || !gridContradiction(/** @type {Record<string, any>} */ (configurationOf(objectKind, entry)), scenario))
     : objectKind === "population" ? current.filter((entry) => (POPULATION_KIND_OF_JOB[kind] === undefined || entry.kind === POPULATION_KIND_OF_JOB[kind])
       && (!sameNumbers || !['generate_population', 'literature_population'].includes(kind) || canonicalScenarioJson(entry.definition) === canonicalScenarioJson(scenario)))
       : current;
@@ -443,11 +473,13 @@ export async function vcrConversationSubject({ store, study, userId, kind, subje
     // the object, written like the browser's method configurations (`prepareVcrMethodConfiguration`: the scenario is the configuration, as it
     // is for an object made from a scenario), so that the result is filed under what was computed. A scenario that restates the object or only
     // adds to it, and none at all (the stage is built from the object), are the object.
-    const named = rows.find((entry) => entry.id === subjectId);
+    // Only the newest grid is a current row; a grid named by id may be an earlier one.
+    const named = rows.find((entry) => entry.id === subjectId) ?? (objectKind === "design_grid" && typeof store.methodConfigurationObject === "function"
+      ? await store.methodConfigurationObject(store, study.id, objectKind, subjectId, {}, "", null) : undefined);
     const own = named ? configurationOf(objectKind, named) : null;
     if (!named || !own || !Object.keys(scenario).length) return null;
     const changed = objectKind === 'population' && ['generate_population', 'literature_population'].includes(kind)
-      ? canonicalScenarioJson(own) !== canonicalScenarioJson(scenario) : vcrContradiction(own, scenario);
+      ? canonicalScenarioJson(own) !== canonicalScenarioJson(scenario) : objectKind === 'design_grid' ? gridContradiction(own, scenario) : vcrContradiction(own, scenario);
     // A fixed-size scenario sent under a design solved for a power (or the other way round) is another design, never its next version.
     if (objectKind === 'trial_scenario' && vcrSizingDiffers(scenario, (await withSolvedSizes(store, study.id, objectKind, [named]))[0])) {
       return (await prepareVcrMethodConfiguration({ store, study, userId, method: /** @type {Record<string, string>} */ (VCR_JOB_METHODS)[kind],
@@ -472,7 +504,8 @@ export async function vcrConversationSubject({ store, study, userId, kind, subje
     if (same) return String(same.id);
   } else if (fittingObjects(objectKind, kind, scenario, await withSolvedSizes(store, study.id, objectKind, current), true).length) return null;
   const method = /** @type {Record<string, string>} */ (VCR_JOB_METHODS)[kind];
-  const name = `${OBJECT_WORDS_ZH[objectKind]} ${current.length + 1}`;
+  // A study reads only its newest grid, whose version counts every grid it has: the next one is named by the version it will have.
+  const name = `${OBJECT_WORDS_ZH[objectKind]} ${objectKind === "design_grid" ? Number(rows[0]?.version ?? 0) + 1 : current.length + 1}`;
   return (await prepareVcrMethodConfiguration({ store, study, userId, method, name, scenario })).subjectId;
 }
 
