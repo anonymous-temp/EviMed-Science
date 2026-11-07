@@ -486,7 +486,8 @@ function diseasePremises(beyond, scenarios) {
   return [
     { key: "progression:ad:effect", label: "药物效果", value: "各组的药物效果都是你设定的假设，不是对某个药物疗效的预测；比较的是“如果效果是这样，试验会看到什么”。", source: /** @type {const} */ ("assumed"), decisive: true },
     { key: "progression:ad:parameters", label: "模型参数", value: ALZHEIMER_PARAMETERS_TEXT, source: /** @type {const} */ ("literature"), decisive: true },
-    { key: "progression:ad:scope", label: "适用范围", value: alzheimerScopeText(beyond || last > ALZHEIMER_DATA_WEEKS, last), source: /** @type {const} */ ("literature"), decisive: true },
+    { key: "progression:ad:scope", label: "适用范围", value: alzheimerScopeText(beyond || last > ALZHEIMER_DATA_WEEKS, last,
+      scenarios.map((scenario) => list(object(scenario.population).mmseRange)).find((range) => range.length === 2) ?? null), source: /** @type {const} */ ("literature"), decisive: true },
     { key: "progression:ad:reproduction", label: "复现情况", value: ALZHEIMER_REPRODUCTION_TEXT, source: /** @type {const} */ ("literature"), decisive: false },
     { key: "progression:ad:regulatory", label: "监管认可", value: ALZHEIMER_REGULATORY_TEXT, source: /** @type {const} */ ("literature"), decisive: false },
   ];

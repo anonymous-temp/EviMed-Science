@@ -115,7 +115,15 @@ export const ALZHEIMER_REPRODUCTION_TEXT = "用这些参数算出的结果，与
 /** The 2013 regulatory documents concern the original tool, not this implementation. */
 export const ALZHEIMER_REGULATORY_TEXT = "FDA 2013 年 6 月 12 日的信函和 EMA 2013 年 9 月 19 日通过的资格认定意见，针对的是原来的工具和它限定的用途，不适用于这里的计算";
 /** @param {boolean} beyond @param {number} lastVisit */
-export const alzheimerScopeText = (beyond, lastVisit) => `描述一组人：轻中度阿尔茨海默病、ADAS-cog 11（0–70 分，越高越差）、两年以内的试验，不是对某一个人的预测${beyond ? `；最后一次随访在第 ${plain(lastVisit)} 周，超过两年的部分是外推` : ""}`;
+export const alzheimerScopeText = (beyond, lastVisit, mmse = null) => `描述一组人：轻中度阿尔茨海默病、ADAS-cog 11（0–70 分，越高越差）、两年以内的试验，不是对某一个人的预测${beyond ? `；最后一次随访在第 ${plain(lastVisit)} 周，超过两年的部分是外推` : ""}${alzheimerOutsideContext(mmse) ? `；入组的基线 MMSE ${plain(mmse[0])}–${plain(mmse[1])} 分超出了轻中度的范围（约 ${ALZHEIMER_CONTEXT_MMSE[0]}–${ALZHEIMER_CONTEXT_MMSE[1]} 分），这部分人是模型适用范围之外的外推` : ""}`;
+/**
+ * The baseline MMSE of mild to moderate Alzheimer's disease, the model's context of use (moderate from 10, mild up to 26; the regulators
+ * state "no validity outside this range, e.g. severe or prodromal", AD-SOURCE §2.1). An entry range reaching outside it is computed and
+ * said to be an extrapolation, like a visit beyond two years (review stats P2-6).
+ */
+export const ALZHEIMER_CONTEXT_MMSE = Object.freeze([10, 26]);
+/** @param {readonly number[] | null | undefined} mmse */
+export const alzheimerOutsideContext = (mmse) => Array.isArray(mmse) && mmse.length === 2 && (Number(mmse[0]) < ALZHEIMER_CONTEXT_MMSE[0] || Number(mmse[1]) > ALZHEIMER_CONTEXT_MMSE[1]);
 
 /** The premises of the Alzheimer model (beta_logit): five decisive sentences, the rest folded. @param {Record<string, any>} progression */
 function alzheimerPremisesOf(progression) {
@@ -138,7 +146,7 @@ function alzheimerPremisesOf(progression) {
     { key: "progression:ad:regulatory", label: "监管认可", decisive: false, source: "literature",
       value: ALZHEIMER_REGULATORY_TEXT },
     { key: "progression:ad:scope", label: "适用范围", decisive: true, source: "literature",
-      value: alzheimerScopeText(extrapolation.beyond === true, Number(extrapolation.lastVisit)) },
+      value: alzheimerScopeText(extrapolation.beyond === true, Number(extrapolation.lastVisit), mmse) },
     { key: "progression:ad:mmse", label: "入组的人", decisive: true, source: assumedHas(progression, "population.mmseRange") ? "default" : BASIS_SOURCE[String(givenOf(progression, "population.mmseRange").basis)] ?? "assumed",
       value: mmse ? `基线 MMSE 在 ${plain(mmse[0])}–${plain(mmse[1])} 分之间均匀分布${ages ? `，年龄 ${plain(ages[0])}–${plain(ages[1])} 岁` : ""}` : "按模型默认的入组范围" },
   ];
@@ -199,7 +207,9 @@ function cardOf(result, staleMark) {
   const series = ["control", "treated"].map((arm) => ({
     key: arm, label: arm === "control" ? "对照组" : "治疗组", source: "assumed", ours: arm === "treated", pooled: false,
     points: curves.map((curve) => ({ x: Number(curve.visit), ...(band(object(curve[arm]), 1.96) ?? { y: null, low: null, high: null }) })),
-    bandKind: "prediction", bandLevel: 95, endLabel: null, endNote: null, atRisk: [], individuals: [], dashed: arm === "control", unobserved: [],
+    // mean ± 1.96 SD is no 95% prediction band of a bounded, skewed score (it leaves the 0–70 scale near its ends): the Alzheimer curve
+    // draws its mean only (review stats P2-7)
+    bandKind: alzheimer ? null : "prediction", bandLevel: alzheimer ? null : 95, endLabel: null, endNote: null, atRisk: [], individuals: [], dashed: arm === "control", unobserved: [],
   }));
   return {
     id: String(result.id), version: Number(result.version),

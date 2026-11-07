@@ -120,3 +120,16 @@ test("the Alzheimer model (beta_logit) says what it rests on: the person's hypot
     assert.doesNotMatch(word, /adsim|parameterSet|posterior_draws|「|」/);
   }
 });
+
+test("an entry range outside mild to moderate disease is said to be an extrapolation, and the curve claims no 95% band (review stats P2-6, P2-7)", () => {
+  const base = fixture("alzheimer-beta-logit");
+  const moved = structuredClone(base);
+  moved.diagnostics.progression.population = { ...moved.diagnostics.progression.population, mmseRange: [5, 12] };
+  const scope = progressionCard(moved).premises.find((premise) => premise.key === "progression:ad:scope");
+  assert.match(scope.value, /基线 MMSE 5–12 分超出了轻中度的范围（约 10–26 分）/);
+  const within = progressionCard(base).premises.find((premise) => premise.key === "progression:ad:scope");
+  assert.doesNotMatch(within.value, /超出了轻中度的范围/, "16–26 is mild to moderate");
+  const card = progressionCard(base);
+  const lines = JSON.stringify(card).match(/"bandKind":"[a-z_]+"/g) ?? [];
+  assert.deepEqual(lines, [], "mean ± 1.96 SD of a bounded score is not drawn as a 95% prediction band");
+});
