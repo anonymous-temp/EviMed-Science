@@ -211,10 +211,14 @@ class VcrToolDefinitionTests(unittest.TestCase):
         # Live check 2026-11-04: a pasted small table of three drugs asked for the best one was worked out in a script of the conversation's own (no
         # vcr tool opened), and dose escalation reached the engine in two of five runs. The line stays within its cap and says both, in the words a
         # person uses, beside what it already covered; shortened elsewhere (the pointer to the result page, the examples of dose finding) to fit.
+        # Live check 2026-11-07: an Alzheimer three-arm ADAS-cog simulation (no vcr tool opened), a comparison of three designs computed in an
+        # earlier conversation and a forecast for six listed patients were each worked out in the model's own scripts. The line names the
+        # three classes within the same cap; "modelId requires modelVersion" left it for the gateway's refusal, which says exactly that.
         description = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}["vcr_simulate"]["description"]
         self.assertLessEqual(len(description), 420)
         for words in ("sample size", "power or events", "comparing designs", "dose finding", "synthetic cohort", "baseline table", "external control",
-                      "comparing several drugs", "network meta-analysis"):
+                      "comparing several drugs", "network meta-analysis",
+                      "saved", "searching", "disease-progression", "Alzheimer ADAS-cog", "patient forecasts", "not in your script"):
             self.assertIn(words, description)
 
     def test_a_refusal_the_gateway_answers_with_400_is_the_run_s_to_fix(self):
@@ -273,8 +277,10 @@ class VcrToolDefinitionTests(unittest.TestCase):
         # A description rides every request of the run; the per-method shapes are served on demand from the generated help.
         description = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}["vcr_simulate"]["description"]
         self.assertLess(len(description), 1700, "the shapes live in the shape action, not here")
-        for fragment in ("action=shape", "do not guess keys", "outlive this turn", "modelVersion"):
+        for fragment in ("action=shape", "do not guess keys", "outlive this turn"):
             self.assertIn(fragment, description)
+        # modelVersion is in the schema and in the gateway's refusal of a modelId without it, no longer in the line (2026-11-07, for room)
+        self.assertIn("modelVersion", {tool["name"]: tool for tool in vcr_platform.tool_definitions()}["vcr_simulate"]["inputSchema"]["properties"])
         for typed in ("accrual?", "dropoutAnnual", "design_simulation {", "truth{", "[time_to_event]", "isNull", "dropoutRate"):
             self.assertNotIn(typed, description, "a hand-typed shape is what drifted")
         self.assertIn("shape", vcr_platform.SIMULATE_ACTIONS)
@@ -358,14 +364,36 @@ class VcrToolDefinitionTests(unittest.TestCase):
 
     def test_the_shape_of_a_generic_design_names_the_kinds_that_answer_dose_finding_single_arm_looks_composites_and_networks(self):
         # Live 2026-11-04: the model shaped a generic design kind and then wrote its own simulation of what design_dose / design_bayesian compute.
+        # Live 2026-11-07: having shaped design_analytic for a sample size, the model projected six listed patients itself; the pointer also names
+        # the disease-progression kind, the batch forecast and the lab's two actions.
+        others = ("design_dose", "design_bayesian", "design_confirmatory", "design_win_ratio", "network_meta", "generate_progression", "forecast_trajectories")
         for kind in ("design_analytic", "design_simulation", "design_grid"):
             notes = " ".join(vcr_platform.shape({"action": "shape", "kind": kind})["data"]["notes"])
-            for other in ("design_dose", "design_bayesian", "design_confirmatory", "design_win_ratio", "network_meta"):
+            for other in others + ("Alzheimer ADAS-cog", "action compare", "action search"):
                 self.assertIn(other, notes, (kind, other))
-        self.assertTrue(all(kind in vcr_platform.JOB_KINDS for kind in ("design_dose", "design_bayesian", "design_confirmatory", "design_win_ratio", "network_meta")))
+        self.assertTrue(all(kind in vcr_platform.JOB_KINDS for kind in others))
+        self.assertTrue({"compare", "search"} <= set(vcr_platform.LAB_ACTIONS))
         # A kind that is not a generic design carries no pointer.
         notes = " ".join(vcr_platform.shape({"action": "shape", "kind": "design_dose"}).get("data", {}).get("notes", []))
         self.assertNotIn("instead of writing your own simulation", notes)
+
+    def test_the_disease_progression_and_forecast_shapes_say_which_is_which(self):
+        # Live 2026-11-07: three drug hypotheses on Alzheimer patients were simulated in the model's own script, and six listed patients were given
+        # projections with prediction intervals of the model's own when the deployment had no forecast service.
+        progression = " ".join(vcr_platform.shape({"kind": "generate_progression"})["data"]["notes"])
+        for fragment in ("action compare", '"patients.progression"', "differ only in treatment", "forecast_trajectories"):
+            self.assertIn(fragment, progression)
+        for kind in ("generate_patients", "generate_patients_continuous", "generate_patients_binary", "generate_patients_longitudinal"):
+            notes = " ".join(vcr_platform.shape({"kind": kind})["data"].get("notes", []))
+            self.assertIn("forecast_trajectories", notes, kind)
+            self.assertIn("generate_progression", notes, kind)
+        forecast = " ".join(vcr_platform.shape({"kind": "forecast_trajectories"})["data"]["notes"])
+        for fragment in ("vcr_read what longitudinal", "With none listed, no individual forecast can be computed here", "never project a patient yourself"):
+            self.assertIn(fragment, forecast)
+        for kind in ("evaluate_forecast", "compare_forecasts", "benchmark_trial_effect"):
+            self.assertNotIn("never project a patient", " ".join(vcr_platform.shape({"kind": kind})["data"]["notes"]), kind)
+        # A kind that is neither carries none of it.
+        self.assertNotIn("forecast_trajectories", " ".join(vcr_platform.shape({"kind": "design_dose"})["data"].get("notes", [])))
 
     def test_every_row_of_shape_says_what_it_asks_of_a_person_and_no_object_does(self):
         # C2: the role is read off the schema by the platform (research_fact: required, no default, not a choice of words; defaultable: the
@@ -787,8 +815,11 @@ class VcrSimulateTests(_GatewayCase):
         self.assertEqual(properties["action"]["enum"][-5:], list(vcr_platform.LAB_ACTIONS))
         for key in ("manifest", "campaignId", "experiment", "experimentId"):
             self.assertIn(key, properties)
-        for word in ("manifest", "campaign", "search"):
+        # The line names searching for a design and comparing saved ones in a person's words (live 2026-11-07); the lab's forms stay in shape.
+        for word in ("manifest", "campaign", "experiment"):
             self.assertNotIn(word, definitions["vcr_simulate"]["description"], "the lab is in the schema and in shape, not in what rides every request")
+        for fragment in ("another conversation", "stated again", "patients.progression", "differ only in treatment"):
+            self.assertIn(fragment, lab["compare"])
         # the tool catalogue the root conversation sees: the five actions and four keys are the whole growth (13,159 -> 13,475 bytes compact)
         import json
         self.assertLess(len(json.dumps(list(definitions.values()), separators=(",", ":"))), 13_600)

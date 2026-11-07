@@ -158,11 +158,25 @@ SOURCE_KINDS = ("design_analytic", "design_simulation", "design_grid", "assuranc
 # The generic design kinds the model opens first. A question that has a method of its own is answered by that kind, and in three live conversations
 # (2026-11-04: dose escalation, a single-arm look every ten patients, a three-level composite) the model had shaped a generic kind and then wrote its own
 # simulation for what another kind computes. The pointer rides on the shape answer, where the model is already choosing, and not in the tool description.
+# Live 2026-11-07: an Alzheimer three-arm simulation, a comparison of designs computed earlier and a forecast for six listed patients each went
+# to a script of the model's own; in the forecast conversation the model had shaped design_analytic for the sample-size half of the question.
+# So the pointer also names the disease-progression kind, the batch forecast and the lab's two actions.
 DESIGN_POINTER_KINDS = ("design_analytic", "design_simulation", "design_grid")
 DESIGN_POINTER = ("This kind designs one trial of the usual kinds. If the question is of another sort, shape that kind instead of writing your own simulation: "
                   "design_dose (3+3, BOIN, CRM, Keyboard: which dose is chosen), design_bayesian (a single-arm trial looked at every few patients: BOP2, "
                   "predictive monitoring, against Simon), design_confirmatory (futility stops, sample-size re-estimation, multi-arm selection, enrichment), "
-                  "design_win_ratio (death, then admissions, then a score, compared in order), network_meta (which of several treatments is best).")
+                  "design_win_ratio (death, then admissions, then a score, compared in order), network_meta (which of several treatments is best), "
+                  "generate_progression (trial arms on a disease-progression model: the Alzheimer ADAS-cog model with a symptomatic or disease-modifying "
+                  "drug hypothesis), forecast_trajectories (a forecast for each of the person's patients). Designs already computed are compared with "
+                  "action compare, and the smallest design that meets stated requirements is found with action search; action shape with no kind gives "
+                  "both forms.")
+# The disease-progression kind: several drug hypotheses on the same people are one comparison, and a population's course is not a person's forecast.
+PROGRESSION_POINTER = ("Several drug hypotheses on the same people (no drug, symptomatic, disease-modifying) are one start each, or one comparison: action "
+                       "compare with arms [{name, method: \"patients.progression\", scenario}] that differ only in treatment (action shape with no kind "
+                       "gives its form). The result is the course of a population, not a forecast for a named patient: that is forecast_trajectories.")
+# Generated people are not the person's patients: a forecast for a list of real patients is the batch forecast.
+GENERATED_PATIENTS_POINTER = ("These people are generated from stated assumptions; a forecast for each of the person's own patients is forecast_trajectories, "
+                              "and the course of a disease under drug hypotheses is generate_progression.")
 HELP_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "vcr_scenario_help.json")
 # Where the VCR methods are in the runtime image. They are capability skill bodies, which delegation injects into a planned
 # capability's run; a plain conversation in a study uses these tools too and its skill catalogue does not list them, so the tools
@@ -573,7 +587,11 @@ def tool_definitions():
     descriptions = {
         "vcr_read": "Read this conversation's research. what=study opens compact context and enables specialist tools. patient_context lists authenticated human-message references (filter beforeSeq/limit); use messageSeq to preserve an earlier case. subject_document reads permitted original material. trial_registry_record reads one registry (filter registryId). contracts gives write syntax before any task exists; data_intake lists original upload handles; matching filter.kind=contract gives write syntax; candidate_trials reads patient trial matches. Any eligibility verdict you deliver (reply, table or file) is copied from the saved read-back (matching or candidate_trials with filter.subjectKey), never retyped.",
         "vcr_write": "Save a research object; data_intake imports an owned original upload then maps/freezes it (read contracts first). candidate_trial stores registry-linked eligibility. Never write calculated results. patient_context data={messageSeq} preserves a listed original human case, or {sourceId} an owned human upload; no model-written prose. task_context opens an independent hidden task. A fact states only what its quote says: what the text does not mention is unknown, never negated, and age, sex or a diagnosis do not imply pregnancy, menopause or a negative result. A candidate_trial's criteria are that one trial's own eligibility lines. Use the VCR workflow skill for object contracts (read %s/vcr-matching/SKILL.md before writing facts, criteria or trials; vcr-protocol, vcr-evidence, vcr-analysis and vcr-package sit beside it; none is in the skill catalogue) and vcr_simulate action=shape for numerical inputs." % root,
-        "vcr_simulate": "A human trial's sample size, power or events, comparing designs, dose finding, a synthetic cohort from a baseline table, an external control, comparing several drugs (network meta-analysis): calculate here, not in your own script. No study needed; a start opens a result page. action=shape with kind gives exact fields; do not guess keys. Long jobs resume here if they outlive this turn. modelId requires modelVersion.",
+        # The one line of the module a general conversation always reads: the classes of question in a person's words. Live 2026-11-07: an
+        # Alzheimer three-arm simulation, a comparison of designs computed earlier and a forecast for six listed patients went to the
+        # model's own scripts; they are named here within the same 420 characters ("modelId requires modelVersion" is said by the
+        # gateway's refusal of a modelId without it, the pointer to the result page by the answer of start).
+        "vcr_simulate": "Trial sample size, power or events; comparing designs (saved too) or searching one; dose finding; disease-progression arms (Alzheimer ADAS-cog); patient forecasts; synthetic cohort from a baseline table; external control; comparing several drugs (network meta-analysis): calculate here, not in your script. No study needed. action=shape with kind gives fields; do not guess keys. Jobs that outlive this turn resume here.",
     }
     tools = _detailed_tool_definitions()
     for tool in tools:
@@ -1069,6 +1087,13 @@ def _method_of(kind: str):
     return (entry, method_id, method) if isinstance(method, dict) else (None, None, None)
 
 
+# Live 2026-11-07: asked for each of six listed patients' MMSE over 24 months, with no forecast service in the deployment, the model wrote
+# per-patient projections with prediction intervals of its own. The answer says what a forecast needs and what to say when it is not there.
+FORECAST_PROVIDER_NOTE = ("A forecast for named patients needs their history stored for this study and a forecast service: providerId is one that vcr_read "
+                          "what longitudinal lists. With none listed, no individual forecast can be computed here: say so and never project a patient "
+                          "yourself; the course of a population under stated assumptions is generate_progression or generate_patients_longitudinal.")
+
+
 def _control_plane_shape(kind: str):
     """A forecast kind runs in the control plane, not the engine: its scenario names stored histories, forecasts and outcomes by id,
     plus options. The keys come from the generated help's ``longitudinal`` section (the validator's own lists)."""
@@ -1091,7 +1116,8 @@ def _control_plane_shape(kind: str):
         "status": "success",
         "summary": "The scenario of %s (method %s) reads %d keys; the platform computes it from the stored records they name." % (kind, method_id, len(keys)),
         "data": {"kind": kind, "method": method_id, "controlPlane": True, "keys": keys,
-                 "notes": ["Ids name records already stored for this study (vcr_read what: longitudinal); the platform computes every metric."]},
+                 "notes": ["Ids name records already stored for this study (vcr_read what: longitudinal); the platform computes every metric."]
+                 + ([FORECAST_PROVIDER_NOTE] if kind == "forecast_trajectories" else [])},
         "warnings": [],
         "next_actions": ["Write exactly these keys and no others, then queue it with vcr_simulate action start."],
     }
@@ -1109,7 +1135,9 @@ LAB_SHAPES = {
               "constraint stated: it is how a design gains margin under the same constraint. A changed manifest is a new campaign. Read with "
               "search_status {campaignId}, stop with search_cancel {campaignId}.",
     "compare": "action compare with experiment {question, arms [{name, resultId} | {name, method, scenario}], comparison {measures, reference}}: saved "
-               "design results attach by id and are never rerun. Read with compare_status {experimentId}.",
+               "design results attach by id and are never rerun. A design this conversation cannot read by id (computed in another conversation) is "
+               "an arm {name, method, scenario} stated again from its numbers. The arms of a disease experiment are {name, method: "
+               "\"patients.progression\", scenario} that differ only in treatment. Read with compare_status {experimentId}.",
 }
 
 
@@ -1185,6 +1213,10 @@ def shape(arguments: dict) -> dict:
             notes.append("A grid has at most %s cells (designs x truths), and every cell is a valid scenario of its own." % method["gridCells"])
         if kind in DESIGN_POINTER_KINDS:
             notes.append(DESIGN_POINTER)
+        if kind == "generate_progression":
+            notes.append(PROGRESSION_POINTER)
+        if kind in ("generate_patients", "generate_patients_continuous", "generate_patients_binary", "generate_patients_longitudinal"):
+            notes.append(GENERATED_PATIENTS_POINTER)
         if kind == "literature_population":
             # On 2026-11-01 the run read this path's evidence bindings, saw no source to bind a pasted table to, and left for its own R.
             notes.append("A baseline table the person pasted, with no paper preserved to bind its numbers to, goes through generate_population with the "
