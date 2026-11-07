@@ -57,6 +57,7 @@ const STAGE_MEANING = "粗筛：重复次数少，只用来排序和排除明显
 export const VCR_LAB_EXAMPLES: ReadonlyArray<{ key: string; label: string; draft: string }> = [
   { key: "compare", label: "比较三个样本量方案", draft: "比较三个样本量方案：每组 100、150、200 人，同一终点、同一检验水准，给出每个方案的把握度和差值。" },
   { key: "search", label: "在预算内搜索样本量", draft: "在样本量 100 到 300 之间搜索满足把握度不低于 80%、第一类错误不超过 2.5% 的最小方案，计算预算 10 分钟。" },
+  { key: "alzheimer", label: "比较三种药物效果假设", draft: "在轻中度阿尔茨海默病（ADAS-cog 11）的试验里比较三种药物效果假设：不用药、第 24 周症状改善 2.5 分、病情恶化减慢 30%，每组 200 人、观察 78 周，给出每种假设下的把握度和平均差值。" },
 ];
 
 const op = (value: string) => (value === "<=" ? "不超过" : "不低于");
