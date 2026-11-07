@@ -21,6 +21,7 @@
 #   j  the three uncertainty modes do what they say
 #   k  what is refused, by name
 #   l  the four other families give the 1.0.0 release's output hashes, under both labels
+#   m  a CPU budget that runs out keeps the batches that finished
 
 .n101_set <- function() vcr_beta_logit_parameter_set("camd-adas-cog-11", "adsim-3.0")
 .n101_P <- function(v, basis = "assumed") list(value = v, basis = basis)
@@ -309,4 +310,17 @@ vcr_case("N101l", c("AC-31", "AC-04"), function() {
   list(pass = identical(unname(got), want),
        detail = sprintf("the linear, Emax (slope), exponential and logistic (no slowing) scenarios under the 1.0.0 and the 1.1.0 labels: %d of 8 output hashes equal the 1.0.0 release's (%s)",
                         sum(unname(got) == want), paste(sprintf("%s %s", names(got), substr(got, 1, 8)), collapse = ", ")))
+})
+
+vcr_case("N101m", c("AC-04", "AC-28"), function() {
+  # a CPU budget of one second against a null scenario of 400 per arm at the 20,000-trial floor (about 25 CPU seconds on this kind of machine, so the
+  # budget ends it on any machine within an order of magnitude of it): the batches that finished are the result, said so, with their error
+  r <- vcr_test_run(vcr_test_job("patients.progression", .n101_sc(n = 400L), seed = 10114L, extra = list(cpuSecondsLimit = 1)))
+  pg <- r$diagnostics$progression; t1 <- Filter(function(m) identical(m$name, "type_one_error"), r$measures)
+  codes <- vcr_test_issue_codes(r)
+  ok <- identical(r$status, "failed") && "cpu_budget_exhausted" %in% codes && length(t1) == 1L && is.finite(t1[[1]]$mcse) &&
+    pg$trials < pg$trialsRequested && pg$trials %% 500L == 0L && pg$trials >= 500L
+  list(pass = ok, detail = sprintf("a one-second CPU budget: status %s with %s, %d of %d trials kept (whole batches of 500), type I error %.4f (MCSE %.4f) from those",
+                                   r$status, paste(codes, collapse = ", "), pg$trials %||% NA_integer_, pg$trialsRequested %||% NA_integer_,
+                                   if (length(t1)) t1[[1]]$value else NA_real_, if (length(t1)) t1[[1]]$mcse else NA_real_))
 })

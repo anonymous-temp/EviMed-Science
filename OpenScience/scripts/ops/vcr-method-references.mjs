@@ -346,6 +346,7 @@ export const NUMERIC_REFERENCES = {
   N101j: { methods: ['patients.progression'], anchors: ['expected_rows <- 1600 * (1 - (1 - 1 / 1600)^trials)'] },
   N101k: { methods: ['patients.progression'], anchors: ['identical(tampered, "input_hash_mismatch@scenario.model.parameterSet")'] },
   N101l: { methods: ['patients.progression'], anchors: ['linear = list(sc("linear", 0.25, 60L), "aa19d54aae7038ba4ca8b61e9c9083e364a3f563cd12c3ceedf9fc411f75cc8b"),', 'list(pass = identical(unname(got), want),'] },
+  N101m: { methods: ['patients.progression'], anchors: ['pg$trials < pg$trialsRequested && pg$trials %% 500L == 0L && pg$trials >= 500L'] },
   // the people of an adaptive design whose answer is in events (live check 2026-11-04, design.confirmatory 1.2.0): patient-level simulations and the Lachin-Foulkes chance of an event written out
   N100a: { methods: ['design.confirmatory'], anchors: ['sim <- lapply(c(0.5, 1), function(rate) .n100_enrolled(n, 0.5, hr, rate * max_events))', 'expected <- ended[1] * got[1] + (1 - ended[1]) * got[2]'] },
   N100b: { methods: ['design.confirmatory'], anchors: ['closed <- p1$value * at_interim[["mean"]] + (1 - p1$value) * n0', 'n0 <- ceiling(plan / per_head); cap <- ceiling(1.0001 * plan)'] },
