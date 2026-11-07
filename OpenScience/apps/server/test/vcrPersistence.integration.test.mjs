@@ -68,16 +68,21 @@ test("the tables nothing reads any more stay out of a fresh schema, survive a st
   await q("CREATE TABLE IF NOT EXISTS evimed_vcr.parsed_trial_criteria (user_id text)");
   await q("CREATE TABLE IF NOT EXISTS evimed_vcr.parsed_trial_criteria_versions (user_id text)");
   await q("CREATE TABLE IF NOT EXISTS evimed_vcr.clause_definitions (target_hash text)");
+  // Child first: the retirement drops without CASCADE, in this order.
+  await q("CREATE TABLE IF NOT EXISTS evimed_vcr.candidate_trials (id text PRIMARY KEY)");
+  await q("CREATE TABLE IF NOT EXISTS evimed_vcr.candidate_trial_criteria (id text PRIMARY KEY, candidate_trial_id text REFERENCES evimed_vcr.candidate_trials(id))");
+  await q("CREATE TABLE IF NOT EXISTS evimed_vcr.candidate_trial_assessments (id text PRIMARY KEY, candidate_trial_id text REFERENCES evimed_vcr.candidate_trials(id))");
+  await q("CREATE TABLE IF NOT EXISTS evimed_vcr.candidate_trial_judgments (id text PRIMARY KEY, assessment_id text REFERENCES evimed_vcr.candidate_trial_assessments(id), criterion_id text REFERENCES evimed_vcr.candidate_trial_criteria(id))");
   await q("INSERT INTO evimed_vcr.matching_extractions VALUES ('s', 'P-1')");
   await database.transaction(async (client) => {
     const { vcrSchemaSql } = await import("../src/vcrPersistence.mjs");
     await client.query(vcrSchemaSql());
   });
-  assert.equal((await present()).length, 4, "a start never drops a table");
+  assert.equal((await present()).length, 8, "a start never drops a table");
   await database.transaction(async (client) => {
-    assert.deepEqual(await retireUnreadTables(client, { apply: false }), { matching_extractions: 1, parsed_trial_criteria: 0, parsed_trial_criteria_versions: 0, clause_definitions: 0 });
-    assert.equal((await present()).length, 4, "without --apply nothing moves");
-    assert.deepEqual(await retireUnreadTables(client, { apply: true }), { matching_extractions: 1, parsed_trial_criteria: 0, parsed_trial_criteria_versions: 0, clause_definitions: 0 });
+    assert.deepEqual(await retireUnreadTables(client, { apply: false }), { matching_extractions: 1, parsed_trial_criteria: 0, parsed_trial_criteria_versions: 0, clause_definitions: 0, candidate_trial_judgments: 0, candidate_trial_assessments: 0, candidate_trial_criteria: 0, candidate_trials: 0 });
+    assert.equal((await present()).length, 8, "without --apply nothing moves");
+    assert.deepEqual(await retireUnreadTables(client, { apply: true }), { matching_extractions: 1, parsed_trial_criteria: 0, parsed_trial_criteria_versions: 0, clause_definitions: 0, candidate_trial_judgments: 0, candidate_trial_assessments: 0, candidate_trial_criteria: 0, candidate_trials: 0 });
   });
   assert.deepEqual(await present(), []);
   await database.transaction(async (client) => {

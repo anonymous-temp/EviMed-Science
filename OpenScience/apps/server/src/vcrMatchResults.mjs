@@ -41,7 +41,7 @@ import {
 import { presentJudgment } from "./vcrMatchJudge.mjs";
 import { legacyMatchingVerdict } from './patientMatchingProjection.mjs';
 import { rankMatchingResults } from '@evimed/patient-matching-core';
-import { phaseLabel, registryStatusLabel } from "./vcrPatientTrials.mjs";
+import { phaseLabel, registryStatusLabel } from "./vcrCandidateSearch.mjs";
 import { REGISTRY_RECORD_BASIS, REJUDGE_FAILED_NOTE_ZH, WITHDRAWN_SUBJECT_MARK, basisChangedOf, judgingProgress, recordGapOf, standingRows } from "./vcrMatchJudgmentStore.mjs";
 import { VCR_SCHEMA } from "./vcrPersistence.mjs";
 import { VcrStoreBase } from "./vcrStoreBase.mjs";

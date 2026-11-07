@@ -459,11 +459,11 @@ export class VcrService {
    * @param {{ store: import("./vcrStore.mjs").VcrStore, config: Record<string, any>, engine?: any, now?: () => Date,
    *   metricName?: ((id: string) => string | null) | null,
    *   access?: any, dataPlane?: any, evidence?: any, matching?: any, jobs?: any, seal?: any,
-   *   matchStore?: any, evidenceStore?: any, documents?: any, knowledge?: any, patientTrials?: any }} options
+   *   matchStore?: any, evidenceStore?: any, documents?: any, knowledge?: any }} options
    */
   constructor({ store, config, engine = null, now = () => new Date(), metricName = null,
     access = null, dataPlane = null, evidence = null, matching = null, jobs = null, seal = null,
-    matchStore = null, evidenceStore = null, documents = null, knowledge = null, patientTrials = null }) {
+    matchStore = null, evidenceStore = null, documents = null, knowledge = null }) {
     if (!store || !config) throw new TypeError("The VCR service needs its store and the config.");
     this.store = store;
     this.config = config;
@@ -477,7 +477,7 @@ export class VcrService {
      * (`matching.tab`, `evidence.tab`) answer for the runtime and the deliverable,
      * not for a page.
      */
-    this.packages = { access, dataPlane, evidence, matching, jobs, seal, matchStore, evidenceStore, documents, knowledge, patientTrials, erasure: null, frontierEvents: null, platformPacks: null, predictions: null, engineProbe: null, records: null, draftSpokenIn: null, longitudinal: /** @type {any} */ (null),
+    this.packages = { access, dataPlane, evidence, matching, jobs, seal, matchStore, evidenceStore, documents, knowledge, erasure: null, frontierEvents: null, platformPacks: null, predictions: null, engineProbe: null, records: null, draftSpokenIn: null, longitudinal: /** @type {any} */ (null),
       // The run ledger's record of one run (`{ startedAt, progress }`) and the study's conversation (`{ sessionId, exists }`, created for the owner
       // when a study has none): both are the control plane's, attached by the composition root (R3, 2026-10-14).
       runLedger: /** @type {any} */ (null), conversations: /** @type {any} */ (null) };
@@ -1363,15 +1363,10 @@ export class VcrService {
     const cited = [...list(selected?.judgments).flatMap((/** @type {any} */ judgment) => [...list(judgment.evidence), ...list(judgment.applicabilityEvidence)].map((/** @type {any} */ item) => item?.locator?.documentId)),
       ...clinicalTimeline.map(fact => fact.source?.documentId)].filter(Boolean);
     const documentNames = cited.length && typeof matchStore.documentNames === 'function' ? await matchStore.documentNames(study.id, cited).catch(() => new Map()) : new Map();
-    // 「给患者找试验」: the patient the page asks for, and the trials that have judged them (the candidates a run found, and the study's own
-    // protocol) in order. Read only for that direction, and only for a patient the study holds.
-    const patientTrials = query.direction === "patient_to_trial" && (query.view ?? "matching") === "matching"
-      ? await this.#patientTrials(study, candidateRoster, query, viewer) : null;
     return {
       ...(candidateCoverage ? {candidateCoverage} : {}),
       ...(records ? { hasRecords: records.length > 0 } : {}),
       documentNames,
-      ...(patientTrials ? { patientTrials } : {}),
       people: { total: listedTotal, offset: pageStart, limit: pageSize, verdict: narrowedTo },
       protocols, candidateRoster, comparisons, timeline: clinicalTimeline,
       protocol, criteria, subjects, selected, openByAssessment,
@@ -1380,22 +1375,6 @@ export class VcrService {
       forecastResult: null,
       snapshotAt: null,
     };
-  }
-
-  /**
-   * What the matching tab needs of 「给患者找试验」: the patient (one the study holds, else none), the trials that have judged them in order,
-   * and the one chosen — `query.trial` when it is one of theirs, else the first — with the criteria it was judged on.
-   * @param {any} study @param {readonly string[]} roster @param {Record<string, string>} query @param {{id:string}} viewer
-   */
-  async #patientTrials(study, roster, query, viewer) {
-    const seam = this.packages.patientTrials;
-    if (!seam?.ranked) return { available: false, subjectKey: null, ranked: [], detail: null };
-    const subjectKey = query.candidate && roster.includes(query.candidate) ? query.candidate : null;
-    if (!subjectKey) return { available: true, subjectKey: null, ranked: [], detail: null };
-    const ranked = await seam.ranked(study, { subjectKey });
-    const chosen = ranked.find((/** @type {any} */ row) => row.id === query.trial) ?? ranked[0] ?? null;
-    const detail = chosen ? await seam.detail(study, { subjectKey, id: chosen.id, ranked, viewer }) : null;
-    return { available: true, subjectKey, ranked, detail };
   }
 
   // --- cross-study pages --------------------------------------------------------------
@@ -1886,16 +1865,17 @@ export class VcrService {
         return knowledge.runtimeReadLibrary(study, filter);
       }
       case "candidate_trials": {
-        const trials = this.packages.patientTrials;
-        if (!trials?.runtimeRead) {
-          return { available: false, code: "vcr_matching_unavailable", message: "给患者找试验在本部署尚未接入：这一步暂不可用，其余步骤照常。" };
+        // What the model judged for a patient, in order; a patient nobody judged trials for, or one who withdrew, is a plain answer.
+        const subjectKey = filter.subjectKey ? String(filter.subjectKey) : null;
+        if (subjectKey && (await this.packages.matchStore?.withdrawnSubjects?.(study.id) ?? new Set()).has(subjectKey)) {
+          return { subjectKey, withdrawn: true, trials: [], ranking: [], assessment: null, more: false };
         }
-        // A patient the model has judged trials for reads those judgments; a study with none answers as it always did.
-        if (filter.subjectKey && !filter.id && !filter.registryId && this.packages.matchJudgments?.forSubject) {
-          const judged = await this.packages.matchJudgments.forSubject(study, String(filter.subjectKey), { limit, offset: Number(filter.offset ?? 0) });
-          if (judged.ranking.length || judged.failedPairs || judged.total) return { subjectKey: String(filter.subjectKey), ...judged };
+        const offset = Math.max(0, Number(filter.offset ?? 0));
+        if (subjectKey && !filter.id && !filter.registryId && this.packages.matchJudgments?.forSubject) {
+          const judged = await this.packages.matchJudgments.forSubject(study, subjectKey, { limit, offset });
+          if (judged.ranking.length || judged.failedPairs || judged.total) return { subjectKey, ...judged };
         }
-        return trials.runtimeRead(study, { ...filter, limit });
+        return subjectKey ? { subjectKey, total: 0, offset, more: false, ranking: [] } : { trials: [], more: false };
       }
       case "precedents": {
         const evidence = this.packages.evidence;
@@ -1943,10 +1923,9 @@ export class VcrService {
     const query = filter.query ? String(filter.query) : null;
     if (!filter.id) return { terms: passageTerms(null, null, query), criterionId: null };
     const id = String(filter.id);
-    const criterion = await this.packages.matching?.criterionById?.(study, id).catch(() => null)
-      ?? await this.packages.patientTrials?.criterionById?.(study, id).catch(() => null) ?? null;
+    const criterion = await this.packages.matching?.criterionById?.(study, id).catch(() => null) ?? null;
     if (!criterion) {
-      return { refusal: { available: false, code: "vcr_read_filter_invalid", message: "本研究里没有这条条件：id 取自 vcr_read what:criteria（方案的条件）或 what:candidate_trials（候选试验的条件）。" } };
+      return { refusal: { available: false, code: "vcr_read_filter_invalid", message: "本研究里没有这条条件：id 取自 vcr_read what:criteria（方案的条件）。" } };
     }
     const terminology = await this.packages.matching?.passageTerminology?.(study, criterion).catch(() => null) ?? null;
     return { terms: passageTerms(criterion, terminology, query), criterionId: id };

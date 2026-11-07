@@ -634,18 +634,17 @@ test("a registry read carries its numbered clauses, and a record with no eligibi
 
 test("the numbered sentences and the ranking read through the service, and a study without the piece says so", async () => {
   const f = fixture();
-  const service = new VcrService({ store: {}, config: {}, documents: { ...f.documents, async subjectDocuments() { return { available: true }; } }, patientTrials: { async runtimeRead() { return { trials: [], ranking: [], requests: [], today: true }; } } });
+  const service = new VcrService({ store: {}, config: {}, documents: { ...f.documents, async subjectDocuments() { return { available: true }; } } });
   const off = await service.runtimeRead({ id: "std_1", userId: "u" }, "subject_document", { subjectKey: "P-1", kind: "sentences" });
   assert.equal(off.code, "vcr_matching_unavailable");
-  assert.equal((await service.runtimeRead({ id: "std_1", userId: "u" }, "candidate_trials", { subjectKey: "P-1" })).today, true);
+  assert.deepEqual((await service.runtimeRead({ id: "std_1", userId: "u" }, "candidate_trials", { subjectKey: "P-1" })).ranking, []);
   service.attach({ matchJudgments: f.reads_ });
   const on = await service.runtimeRead(STUDY, "subject_document", { subjectKey: "P-1", kind: "sentences" });
   assert.equal(on.sentences.length, 3);
-  assert.equal((await service.runtimeRead(STUDY, "candidate_trials", { subjectKey: "P-1" })).today, true, "nothing judged yet: the answer it always gave");
+  assert.deepEqual((await service.runtimeRead(STUDY, "candidate_trials", { subjectKey: "P-1" })).ranking, [], "nothing judged yet: a plain empty ranking");
   await f.run(f.job({ topK: 0 }));
   const ranked = await service.runtimeRead(STUDY, "candidate_trials", { subjectKey: "P-1" });
   assert.deepEqual(ranked.ranking.map((row) => row.target.id), ["NCT00000001", "NCT00000003", "NCT00000002"]);
-  assert.equal(ranked.today, undefined);
 });
 
 test("a batch gives its turn back with what it needs and carries on from there; what failed for a passing reason is tried once more, and a provider that is down is waited out", async () => {

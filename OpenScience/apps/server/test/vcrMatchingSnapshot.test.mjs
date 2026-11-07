@@ -40,9 +40,7 @@ test('applicability wording belongs to the language answer binding independently
 
 test('persisted judgment axes preserve legacy rows and applicability citations obey withdrawal', () => {
   const sql = vcrSchemaSql();
-  for (const table of ['criterion_judgments', 'candidate_trial_judgments']) {
-    assert.ok(sql.includes(`ALTER TABLE evimed_vcr.${table} ADD COLUMN IF NOT EXISTS evaluation jsonb;`));
-  }
+  assert.ok(sql.includes('ALTER TABLE evimed_vcr.criterion_judgments ADD COLUMN IF NOT EXISTS evaluation jsonb;'));
   const evidence = [{ quote: 'Requirement evidence', locator: { documentId: 'requirement' } }];
   const applicabilityEvidence = [{ quote: 'Premise evidence', locator: { documentId: 'premise' } }];
   const axes = { requirementState: 'not_satisfied', applicabilityState: 'unknown',

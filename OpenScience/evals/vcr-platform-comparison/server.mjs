@@ -48,8 +48,8 @@ if (process.env.VCR_STARTUP_RECEIPT) {
   const fs = await import('node:fs/promises');
   const repo = path.resolve(process.env.OS, '..');
   const git = (...args) => execFileSync('git', args, { cwd: repo, encoding: 'utf8' }).trim();
-  const modules = ['apps/server/src/server.mjs', 'apps/server/src/vcrService.mjs', 'apps/server/src/vcrPatientTrials.mjs',
-    'apps/server/src/vcrTrialCorpus.mjs', 'apps/server/src/vcrCandidateTrialStore.mjs', 'apps/server/src/vcrGateway.mjs',
+  const modules = ['apps/server/src/server.mjs', 'apps/server/src/vcrService.mjs',
+    'apps/server/src/vcrTrialCorpus.mjs', 'apps/server/src/vcrGateway.mjs',
     'apps/server/src/vcrRoutes.mjs', 'apps/server/src/config.mjs', 'evals/general-tasks/runner/harness.mjs', 'evals/vcr-platform-comparison/server.mjs', 'evals/vcr-platform-comparison/budget-guard.mjs'];
   const hashes = {};
   for (const module of modules) hashes[module] = createHash('sha256').update(await fs.readFile(path.join(process.env.OS, module))).digest('hex');

@@ -48,8 +48,6 @@ import {
 import { vcrObjectNode } from "./vcrStore.mjs";
 import { VCR_UNSUPPORTED_COMPARATOR_ROUTES } from "./vcrService.mjs";
 import { constraintRows, generatedProfileRows } from "./vcrPopulationProfileView.mjs";
-import { decidedShare } from "./vcrMatching.mjs";
-import { phaseLabel, registryStatusLabel } from "./vcrPatientTrials.mjs";
 import { reportSchedule } from "./vcrScheduleView.mjs";
 import { vcrPremises } from "./vcrPremises.mjs";
 import { presentPopulationCheck } from "./vcrPopulationCheck.mjs";
@@ -1520,49 +1518,6 @@ function verdictOf(summary, rows) {
 }
 
 /**
- * 「给患者找试验」: one patient's trials as the page reads them — the list in the order the platform ranked it (each with the registry id and
- * its link, the title, the phase and the status in the reader's words, the eligibility and how many criteria stand where) and the chosen
- * trial's criterion table for this patient. Nothing is ranked or judged here: the order and every state were made in code.
- * @param {Record<string, any>} bundle @param {{ available?: boolean, subjectKey: string | null, ranked: any[], detail: any }} held
- */
-function presentPatientTrials(bundle, held) {
-  const { now } = bundle;
-  const count = (/** @type {any} */ counts, /** @type {string} */ key) => Number(object(counts)[key] ?? 0);
-  const trials = held.ranked.map((entry) => {
-    const counts = {
-      satisfied: count(entry.counts, "satisfied"), unknown: count(entry.counts, "unknown"),
-      notSatisfied: count(entry.counts, "not_satisfied"), pending: count(entry.counts, "pending_recheck"),
-    };
-    const decided = entry.counts ? decidedShare(entry.counts) : null;
-    return {
-      id: String(entry.id), kind: entry.kind, rank: entry.rank,
-      registry: entry.registry ?? null, registryId: entry.registryId ?? null, url: entry.url ? String(entry.url) : null,
-      ...(entry.collection ? { collection: entry.collection } : {}),
-      // The registry's status is as of the day its record was read (the study's own protocol has none).
-      title: String(entry.title), phase: phaseLabel(entry.phase), status: registryStatusLabel(entry.status),
-      statusAsOf: entry.kind === "registry" && entry.retrievedAt ? zhDate(entry.retrievedAt, now) : null,
-      // 已判 n/m: the criteria found satisfied or not satisfied over every one that applies; unknowns are in the m.
-      decided,
-      conditions: list(entry.conditions).map(String),
-      sites: entry.locations ? { total: numeric(entry.locations.total), countries: list(entry.locations.countries).map(String) } : null,
-      eligibility: entry.summary,
-      counts,
-      summary: [`${counts.satisfied} 条满足`, `${counts.unknown} 条未知`, `${counts.notSatisfied} 条不满足`, ...(counts.pending ? [`${counts.pending} 条待复评`] : [])].join(" · "),
-      assessedAt: zhTime(entry.asOf, now),
-    };
-  });
-  const detail = held.detail;
-  let selected = null;
-  if (detail) {
-    const codes = criterionCodes(detail.criteria);
-    const byCriterion = new Map(list(detail.judgments).map((/** @type {any} */ row) => [row.criterionId, row]));
-    const rows = detail.criteria.map((/** @type {any} */ criterion) => judgementView(criterion, codes.get(criterion.id) ?? "", byCriterion.get(criterion.id) ?? null, now));
-    selected = { id: String(detail.entry.id), criteria: rows, verdict: verdictOf(detail.entry.summary, rows), assessedAt: zhTime(detail.entry.asOf, now) };
-  }
-  return { available: held.available !== false, subject: held.subjectKey, trials, selected };
-}
-
-/**
  * `GET /api/vcr/studies/:id/matching`: the earlier path's assessments (what a patient or a protocol with nothing in the model's judgments still draws). What the model judged is
  * read from `matching/judged` (`vcrMatchResults.mjs`).
  * @param {Record<string, any>} bundle @param {{ view?: string | null, candidate?: string | null, direction?: string | null }} [query]
@@ -1668,13 +1623,12 @@ export function presentMatchingTab(bundle, query = {}) {
     headline: total ? `${total.toLocaleString("en-US")} 人已评估，${(eligible ?? 0).toLocaleString("en-US")} 人全部满足，${insufficient.toLocaleString("en-US")} 人至少有 1 条未知或待复评。` : null,
     partner: total ? { name: null, candidates: total, tier: study.dataTier, snapshotAt: match.snapshotAt ? zhDate(match.snapshotAt, now) : null } : null,
     // Two directions, one evaluation run from either end. 「给试验找患者」 is the protocol's patients (everything below); 「给患者找试验」
-    // adds `patientTrials`: one patient's trials, ranked.
-    direction: match.patientTrials ? "patient_to_trial" : "trial_to_patient",
+    // is the patient's side, read from the saved judgments.
+    direction: "trial_to_patient",
     directions: ["trial_to_patient", "patient_to_trial"],
     // A conversation's "这位患者能入哪些试验" leaves a patient and their trials and no protocol: its result is on the patient's side, and
     // the other side would open on an empty page asking for a research question.
     ...(!list(match.protocols).length && list(match.candidateRoster).length ? { opensOnPatient: String(list(match.candidateRoster)[0]) } : {}),
-    ...(match.patientTrials ? { patientTrials: presentPatientTrials(bundle, match.patientTrials) } : {}),
     funnel,
     candidates,
     // The table's size and the page in view; `verdict` is the narrowing the page was cut under.

@@ -79,8 +79,8 @@ for (const [key, value] of Object.entries(expected)) {
 if (Boolean(app.config.deepseekApiKey) !== launch.paid) throw new Error('Provider key does not match paid mode');
 const modules = {};
 for (const module of [
-  'apps/server/src/server.mjs', 'apps/server/src/vcrService.mjs', 'apps/server/src/vcrPatientTrials.mjs',
-  'apps/server/src/vcrTrialCorpus.mjs', 'apps/server/src/vcrCandidateTrialStore.mjs',
+  'apps/server/src/server.mjs', 'apps/server/src/vcrService.mjs',
+  'apps/server/src/vcrTrialCorpus.mjs',
   'apps/server/src/vcrGateway.mjs', 'apps/server/src/vcrRoutes.mjs', 'apps/server/src/config.mjs',
   'apps/server/src/vcrMatchBatch.mjs',
   'apps/server/src/vcrMatchStore.mjs', 'apps/server/src/vcrMatching.mjs', 'apps/server/src/vcrMatchingEvidence.mjs',

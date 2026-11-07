@@ -117,7 +117,6 @@ function fixture({ who = OWNER, roles = {}, overrides = {}, operators = [], sett
       matchJudgments: { async staleTargets() { return ["NCT00000001"]; } },
       // Whoever the study holds (a document, a table row or a judgment says so), as the composition attaches it.
       async subjectKnown(/** @type {any} */ _study, /** @type {string} */ subjectKey) { return subjectKey === "P-0192"; },
-      patientTrials: { counters: { searches: 0 }, async evaluate(/** @type {any} */ _study, /** @type {any} */ input) { calls.push(["patientTrials.evaluate", ...input.subjectKeys]); return { evaluated: [{}, {}], unavailable: [], notes: [] }; } },
     },
     allows: (/** @type {any} */ user) => vcrAudienceAllows(config, user),
     isOperator: (/** @type {any} */ user) => operators.includes(String(user?.id)),
@@ -644,18 +643,17 @@ test("the protected document comes with the identifiers of closed formats in it 
   assert.ok(!document.suggestions.some((/** @type {any} */ span) => "text" in span || "replacement" in span), "spans only: the reviewer decides, and the projection is built from what was accepted");
 });
 
-test("「为该患者找试验」 asks the orchestrator for the run, judges the trials the study already holds for the patient at once, and refuses a patient the study does not hold", async () => {
+test("「为该患者找试验」 asks the orchestrator for the run and refuses a patient the study does not hold", async () => {
   /** @type {any[]} */
   const asked = [];
   const overrides = { ...composedHooks(), orchestrator: { runStep: async () => ({}), recomputeAfterChange: async () => ({}),
     requestTrialSearch: async (/** @type {any} */ user, /** @type {any} */ study, /** @type {any} */ request) => { asked.push([user.id, study.id, request]); return { sessionId: "ses_9", runId: "run_9", deferred: null }; } } };
-  const { routes, calls, audits } = fixture({ overrides });
+  const { routes, audits } = fixture({ overrides });
   const ok = response();
   assert.equal(await routes(request("POST", "/api/vcr/studies/std_1/trial-search", { subjectKey: "P-0192" }), ok), true);
   assert.equal(ok.status, 200);
-  assert.deepEqual(ok.json().data, { sessionId: "ses_9", runId: "run_9", deferred: null, evaluated: 2 }, "the run, and how many verdicts the trials already held now have for this patient");
+  assert.deepEqual(ok.json().data, { sessionId: "ses_9", runId: "run_9", deferred: null }, "the run, and nothing else");
   assert.deepEqual(asked, [[OWNER, "std_1", { subjectKey: "P-0192" }]]);
-  assert.deepEqual(calls.filter((call) => call[0] === "patientTrials.evaluate"), [["patientTrials.evaluate", "P-0192"]]);
   assert.ok(audits.some((line) => line[0] === "vcr.trial_search.request" && line[1] === "completed"), "the request is audited");
 
   // A patient the study does not hold, and a key that is not one, are refused by name before anything is asked.

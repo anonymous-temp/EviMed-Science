@@ -91,8 +91,6 @@ import { VcrJobs } from "./vcrJobs.mjs";
 import { VcrKnowledge } from "./vcrKnowledge.mjs";
 import { VcrKnowledgeStore } from "./vcrKnowledgeStore.mjs";
 import { VcrMatchStore } from "./vcrMatchStore.mjs";
-import { VcrCandidateTrialStore } from "./vcrCandidateTrialStore.mjs";
-import { createPatientTrials } from "./vcrPatientTrials.mjs";
 import { matchingAssessmentEvidence } from "./vcrMatchingEvidence.mjs";
 import { VcrMembers } from "./vcrMembers.mjs";
 import { createVcrModelPlans } from "./vcrModelDocuments.mjs";
@@ -1144,8 +1142,6 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   const matchStore = new VcrMatchStore({ database: productDatabase });
   // Withdrawal, the retirement of a projection, and the marks on what was derived from a basis that has since changed.
   const erasure = new VcrErasureStore({ database: productDatabase, matchStore });
-  // The trials a run found for a patient (「给患者找试验」): their own tables, never the study's protocol versions.
-  const candidateStore = new VcrCandidateTrialStore({ database: productDatabase });
   const evidenceStore = new VcrEvidenceStore({ database: productDatabase });
 
   const access = new VcrAccess({ store: dataStore });
@@ -1263,9 +1259,8 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   jobs.addFinishHook((done) => matching.onJobFinished(done),'matching');
   const dataPlaneSeam = dataPlane ? vcrDataPlaneSeam({ dataPlane, dataStore, access }) : null;
 
-  const patientTrials = createPatientTrials({ candidateStore, matchStore, documents, subjectTable, report });
   const service = new VcrService({
-    store, config, engine, access, dataPlane: dataPlaneSeam, evidence, matching, jobs, seal, matchStore, evidenceStore, documents, patientTrials,
+    store, config, engine, access, dataPlane: dataPlaneSeam, evidence, matching, jobs, seal, matchStore, evidenceStore, documents,
   });
 
   const longitudinal = createVcrLongitudinal({store,dataStore,dataPlane,matchStore,access,jobs,config,fetchImpl});
@@ -1357,7 +1352,7 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   service.attach({ records });
   composed = {
     publications, simulations, frontierEvents, predictions, records,
-    store, dataStore, matchStore, erasure, candidateStore, candidateSearches, candidateReranker, patientTrials, evidenceStore, corrections, knowledge, knowledgeStore, longitudinal, matchJudge, matchJudgeCounters, matchJudgments, matchJudgmentReads, matchResults, registryWatch, registryWatchCounters, registryPages, registryPageCounters, subjectKnown, recordsImport, recordsOriginals, patientDocuments,
+    store, dataStore, matchStore, erasure, candidateSearches, candidateReranker, evidenceStore, corrections, knowledge, knowledgeStore, longitudinal, matchJudge, matchJudgeCounters, matchJudgments, matchJudgmentReads, matchResults, registryWatch, registryWatchCounters, registryPages, registryPageCounters, subjectKnown, recordsImport, recordsOriginals, patientDocuments,
     access, members, dataPlane, dataPlaneSeam, documents, subjectTable, engine, engineProbe, engineStatus, removeEngineJob, jobs, seal, evidence, matching, registry, service,
     intake: { counters: intakeCounters, extractor, importer, digitizer },
     // Composed later, beside the other modules' workers (server.mjs).
@@ -1476,7 +1471,6 @@ export async function vcrMetricsSnapshot(vcr) {
     evidence: vcr.evidence?.counters ? { ...vcr.evidence.counters } : null,
     publications: vcr.publications ? { ...vcr.publications.counters, reads: Number(vcr.simulations?.counters?.reads ?? 0) } : null,
     predictions: vcr.predictions ? { ...vcr.predictions.counters } : null,
-    patientTrials: vcr.patientTrials?.counters ? { ...vcr.patientTrials.counters } : null,
     candidateRerank: vcr.candidateReranker ? vcr.candidateReranker.counts() : null,
     matchJudge: vcr.matchJudgeCounters ? { ...vcr.matchJudgeCounters } : null,
     registryWatch: vcr.registryWatch ? { ...vcr.registryWatchCounters } : null,
@@ -1567,10 +1561,6 @@ export function vcrMetricFamilies(enabled, snapshot) {
   if (snapshot.predictions) {
     add("predictions_total", "Predictions of a registered trial's primary endpoint filed with the registry from a study's trial scenario (flywheel F25): filed, asked again, refused, and filings the registry did not take.", "counter",
       Object.entries(snapshot.predictions).map(([outcome, value]) => ({ labels: { outcome }, value: Number(value) })));
-  }
-  if (snapshot.patientTrials) {
-    add("patient_trials_total", "What 「给患者找试验」 did since this process started: patients evaluated against a trial, evaluations that could not be made, the searches the page asked for.", "counter",
-      Object.entries(snapshot.patientTrials).map(([kind, value]) => ({ labels: { kind }, value: Number(value) })));
   }
   if (snapshot.candidateRerank) {
     add("candidate_rerank_total", "What the reordering of a candidate list against the run's patient summary did since this process started (G11): batches that scored, documents scored, tokens booked to the usage ledger under purpose vcr, requests that came back with no token count, bookings that failed, and batches that failed by code (the list then keeps the registries' order).", "counter", [
