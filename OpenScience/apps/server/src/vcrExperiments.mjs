@@ -76,6 +76,8 @@ export const VCR_CAMPAIGN_STOP_TEXT_ZH = Object.freeze({
   persistent_model_failure: "计算连续失败，已停止，未完成的方案没有结果。",
   user_cancellation: "已按要求停止，已完成的方案保留。",
   no_feasible_beneficial_candidate: "没有找到在预先设定的约束下可行且优于参照的方案。",
+  // no finalist failed a constraint, but at least one could not be decided at the precision used: never worded as “no feasible design”
+  inconclusive_at_precision: "没有方案被确认不满足约束，但有方案在现有复核次数下无法确定是否满足；增加复核次数，才可能判断出来。",
 });
 export const VCR_CANDIDATE_STATUS_TEXT_ZH = Object.freeze({
   pending: "待评估", screened: "已初筛", finalist: "入围复核", evaluated: "已复核", eliminated: "已排除", failed: "计算失败", unsupported: "无法计算",
@@ -103,6 +105,8 @@ function reasonText(reason) {
 /** The sentences a person reads for the codes a refused arm carries; any other code reads as the general one. */
 const REFUSED_TEXT_ZH = Object.freeze({
   invalid_parameters: "这一组的参数不合法，无法计算。", units_not_convertible: "这一组里有单位无法换算，无法计算。",
+  experiment_result_kind_unsupported: "这个已保存的结果不能放进实验比较。", experiment_result_screening: "初筛的结果不能放进实验比较。",
+  experiment_measure_unsupported: "这个指标不能用于实验比较。",
 });
 const REFUSED_FALLBACK_ZH = "这一组的设置无法用所选方法计算。";
 /** @param {unknown} codes @returns {string[]} */

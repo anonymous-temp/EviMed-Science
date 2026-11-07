@@ -74,6 +74,9 @@ test('a refused arm reads in words, never as an error code', () => {
   assert.deepEqual(refusedText(['invalid_parameters', 'units_not_convertible']), ['这一组的参数不合法，无法计算。', '这一组里有单位无法换算，无法计算。']);
   assert.deepEqual(refusedText(['adapter_missing', 'something_new']), ['这一组的设置无法用所选方法计算。']);
   assert.deepEqual(refusedText(undefined), []);
+  assert.equal(refusedText(['experiment_result_screening'])[0], '初筛的结果不能放进实验比较。');
+  assert.match(VCR_CAMPAIGN_STOP_TEXT_ZH.inconclusive_at_precision, /无法确定是否满足.*增加复核次数/);
+  assert.doesNotMatch(VCR_CAMPAIGN_STOP_TEXT_ZH.inconclusive_at_precision, /没有可行|no feasible/);
 });
 
 test('the design search\'s own measures have Chinese names', async () => {
