@@ -1733,8 +1733,13 @@ export class VcrService {
     const current = vcrCurrentNodes({ study, assumptions, populations, patientSets, comparators, scenarios, grid, results, definition, protocol });
     const modelAnalysis = isModelDocumentKind(String(options.kind ?? ""))
       ? buildModelAnalysis({ inputs: await readModelAnalysisInputs(store, study), results, versions: await store.modelPlanVersions(study.id) }) : null;
+    // the execution of the comparison the newest comparator design names, so the export says what its control is made of by the method that ran
+    const comparison = comparator?.resultId ? results.find((/** @type {any} */ row) => row.id === comparator.resultId) : null;
+    const executions = comparison?.executionId && typeof store.rows === "function"
+      ? new Map((await store.rows(`SELECT id, method FROM ${VCR_SCHEMA}.executions WHERE study_id = $1 AND id = $2`, [study.id, comparison.executionId]))
+        .map((/** @type {any} */ row) => [String(row.id), { id: String(row.id), method: String(row.method) }])) : null;
     const report = vcrReportModel({ study, definition, assumptions, results, reviews: reviews.map(review => ({ ...review, current: vcrReviewIsCurrent(review, { results, stale, current, exports }) })), staleMarks: stale, population, comparator,
-      scenarios, models, seal: vcrSealState(study), modelAnalysis, schedule, contacts });
+      scenarios, models, seal: vcrSealState(study), modelAnalysis, schedule, contacts, executions });
     return this.packages.longitudinal ? {...report,longitudinal:await this.packages.longitudinal.view(study,{all:true},store)} : report;
   }
 

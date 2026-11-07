@@ -249,7 +249,7 @@ export function vcrReportModel(input) {
     useDowngrade: object(headline).useDowngrade ?? null,
     counts,
     // where the comparison's control comes from (observed, reconstructed, model-predicted, simulated): a simulated control adds no observed people
-    comparatorOrigins: comparatorOriginsOfReport({ results, comparator: input.comparator ? comparator : null }),
+    comparatorOrigins: comparatorOriginsOfReport({ results, comparator: input.comparator ? comparator : null, executions: input.executions instanceof Map ? input.executions : null }),
     measures: list(object(headline).measures),
     diagnostics: object(object(headline).diagnostics),
     tables: list(object(headline).tables),

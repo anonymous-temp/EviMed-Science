@@ -83,7 +83,7 @@ test("the comparator page says where the control comes from, in the one block, w
 
 test("the export carries the same origin, and a simulated control adds no observed people", () => {
   const study = { id: "std_1", name: "s", question: "q" };
-  const comparator = { id: "cmp_1", version: 1, route: "model_comparator", estimand: "ATT" };
+  const comparator = { id: "cmp_1", version: 1, route: "model_comparator", estimand: "ATT", resultId: "res_1" };
   const results = [{ id: "res_1", kind: "comparator", diagnostics: { valueSourcesUsed: { weakest: "synthetic" } }, counts: { generatedRecords: 800, realPatients: 800 }, measures: [] }];
   const report = vcrReportModel({ study, results, comparator });
   assert.equal(report.comparatorOrigins.origin, "simulated");
@@ -92,4 +92,44 @@ test("the export carries the same origin, and a simulated control adds no observ
   assert.equal(report.comparatorOrigins.modelConditional, true);
   assert.equal(vcrReportModel({ study, results: [] }).comparatorOrigins, null);
   assert.equal(comparatorOriginsOfReport({}), null);
+});
+
+test("a weighting against a published control is an aggregate control, never observed people (review stats P1-3, P2-11)", () => {
+  for (const method of ["comparator.maic", "comparator.stc"]) {
+    const found = comparatorOrigins({ route: "literature_control", method, diagnostics: { valueSourcesUsed: { weakest: "calculated" } }, counts: { realPatients: 150 } });
+    assert.deepEqual([found.origin, found.origins, found.observedPeople], ["aggregate", ["aggregate"], 0], method);
+    assert.deepEqual(comparatorOriginPremises(found).map((row) => row.key), ["origin:aggregate"]);
+  }
+  // the method alone is enough when a report has no route, and the route alone when it has no method
+  assert.equal(comparatorOrigins({ method: "comparator.maic", diagnostics: { valueSourcesUsed: { weakest: "observed" } }, counts: { realPatients: 150 } }).origin, "aggregate");
+  assert.equal(comparatorOrigins({ route: "literature_control", diagnostics: { valueSourcesUsed: { weakest: "observed" } }, counts: { realPatients: 150 } }).observedPeople, 0);
+  // a model's prediction for people who exist is not observed people either (the file header's rule)
+  const predicted = comparatorOrigins({ route: "model_comparator", method: "model.prognostic_apply", diagnostics: { valueSourcesUsed: { weakest: "observed" } }, counts: { realPatients: 200 } });
+  assert.deepEqual([predicted.origin, predicted.observedPeople], ["model_predicted", 0]);
+});
+
+test("the export describes the comparison the newest design names, with the method that ran it (review stats P1-4)", () => {
+  const study = { id: "std_1", name: "s", question: "q" };
+  const observed = { id: "res_old", kind: "comparator", executionId: "ex_1", diagnostics: { valueSourcesUsed: { weakest: "calculated" } }, counts: { realPatients: 640 }, measures: [] };
+  // a newer model-comparator design that has not run: there is no comparison of it to describe, and the older observed one is not its
+  const unrun = { id: "cmp_2", version: 2, route: "model_comparator", estimand: "ATT", resultId: null };
+  assert.equal(vcrReportModel({ study, results: [observed], comparator: unrun }).comparatorOrigins, null);
+  // the design that ran it: its execution names the method, so a published control reads as aggregate
+  const maic = { id: "cmp_1", version: 1, route: "external_control", estimand: "ATT", resultId: "res_old" };
+  const executions = new Map([["ex_1", { id: "ex_1", method: "comparator.maic" }]]);
+  const report = vcrReportModel({ study, results: [observed], comparator: maic, executions });
+  assert.deepEqual([report.comparatorOrigins.origin, report.comparatorOrigins.observedPeople], ["aggregate", 0]);
+  assert.equal(vcrReportModel({ study, results: [observed], comparator: maic }).comparatorOrigins.origin, "observed", "without the execution the route decides");
+});
+
+test("a run reading the report model never sees a small control's people through the origin block (review eng P0-2)", async () => {
+  const { suppressForModel } = await import("@evimed/domain");
+  const study = { id: "std_1", name: "s", question: "q" };
+  const comparator = { id: "cmp_1", version: 1, route: "external_control", estimand: "ATT", resultId: "res_1" };
+  const results = [{ id: "res_1", kind: "comparator", diagnostics: { valueSourcesUsed: { weakest: "observed" } }, counts: { realPatients: 6 }, measures: [] }];
+  const report = vcrReportModel({ study, results, comparator });
+  assert.equal(report.comparatorOrigins.observedPeople, 6, "the export the owner reads keeps it");
+  const shown = suppressForModel({ model: report }).model;
+  assert.equal(shown.counts.realPatients, null);
+  assert.equal(shown.comparatorOrigins.observedPeople, null);
 });

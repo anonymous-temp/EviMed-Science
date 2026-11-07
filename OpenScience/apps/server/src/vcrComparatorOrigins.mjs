@@ -16,6 +16,12 @@
  * - **A simulated control never adds an observed subject.** `observedPeople` is a count of real people and is zero for a simulated
  *   or a model-predicted control arm, whatever the table's row count; a lab experiment's arm entering a comparison keeps the origin
  *   `simulated` and the premise that its conclusion is model-conditional.
+ * - **The weakest source of a weighting against a publication is the trial's own table, not the control** (review stats P1-3). A
+ *   matching-adjusted indirect comparison or a simulated treatment comparison (`AGGREGATE_CONTROL_METHODS`), and any comparison on the
+ *   `literature_control` route, weighs the trial's own patients against a published control: the control is the published summary
+ *   (or a curve rebuilt from it) and is never observed people, however real the trial's rows are.
+ * - **The export reads the comparison the design names** (review stats P1-4): the result is the comparator design's own `resultId` with
+ *   the execution that wrote it, never the study's newest comparator result under another design's route.
  * - **A transportability claim needs data this analysis does not have.** Every comparison states, in one row, what an independent
  *   real external dataset would have to be before the result could be said to hold in another population. Nothing here claims it.
  * - **Pure.** The caller hands over the result's diagnostics and counts.
@@ -37,6 +43,8 @@ export const VCR_COMPARATOR_ORIGIN_LABELS_ZH = Object.freeze({
 });
 
 const REAL = new Set(["observed", "extracted", "calculated", "imputed"]);
+/** The comparisons whose control is a publication's summary numbers by construction: the trial's own rows weighted to it. */
+const AGGREGATE_CONTROL_METHODS = new Set(["comparator.maic", "comparator.stc"]);
 
 /**
  * The origin of one input from its value source (and, for a lab experiment's arm, its kind). A source this table does not hold is
@@ -85,10 +93,12 @@ export function comparatorOrigins({ route = null, method = null, diagnostics = {
     // a model's prediction for people who exist, or for people it generated itself
     origins.add(weakest === "synthetic" || weakest === "assumed" || (!REAL.has(weakest) && generated > 0 && real === 0) ? "simulated" : "model_predicted");
   } else {
+    // the control is a publication's: what the run's own sources say is about the trial's patients, never about the control
+    const published = route === "literature_control" || AGGREGATE_CONTROL_METHODS.has(String(method ?? ""));
     if (pseudo > 0 || weakest === "reconstructed") origins.add("reconstructed");
-    else if (route === "literature_control" && !REAL.has(weakest)) origins.add("aggregate");
+    else if (published) origins.add("aggregate");
     if (weakest === "aggregate") origins.add("aggregate");
-    if (REAL.has(weakest) || (route === "external_control" && real > 0)) origins.add("observed");
+    if (!published && (REAL.has(weakest) || (route === "external_control" && real > 0))) origins.add("observed");
     if (weakest === "synthetic") origins.add("simulated");
   }
   if (!origins.size) origins.add("not_stated");
@@ -96,8 +106,8 @@ export function comparatorOrigins({ route = null, method = null, diagnostics = {
   const origin = weakestOrigin(ordered);
   return {
     origins: ordered, origin,
-    // only an observed control (or the observed half of a hybrid) is made of people; a simulated or predicted arm adds none
-    observedPeople: origins.has("observed") || (applied && origin === "model_predicted") ? real : 0,
+    // only an observed control (or the observed half of a hybrid) is made of people; a simulated or predicted arm adds none (review stats P2-11)
+    observedPeople: origins.has("observed") ? real : 0,
     reconstructedPseudoPatients: pseudo,
     simulatedMembers: origin === "simulated" ? generated : 0,
     modelConditional: ordered.some((entry) => entry === "model_predicted" || entry === "simulated"),
@@ -143,8 +153,12 @@ export function comparatorOriginPremises(origins) {
  * @returns {{ origin: string, origins: string[], label: string, observedPeople: number, reconstructedPseudoPatients: number, simulatedMembers: number, modelConditional: boolean } | null}
  */
 export function comparatorOriginsOfReport({ results = [], comparator = null, executions = null } = {}) {
-  const result = list(results).map(object).find((row) => row.kind === "comparator") ?? null;
-  if (!result && !comparator) return null;
+  const named = text(object(comparator).resultId);
+  // the design's own comparison; a design that has not run has no control to describe
+  const result = comparator
+    ? (named ? list(results).map(object).find((row) => row.id === named && row.kind === "comparator") ?? null : null)
+    : list(results).map(object).find((row) => row.kind === "comparator") ?? null;
+  if (!result) return null;
   const execution = result?.executionId && executions ? executions.get(String(result.executionId)) : null;
   const found = comparatorOrigins({ route: text(object(comparator).route), method: text(object(execution).method), diagnostics: object(result?.diagnostics), counts: object(result?.counts) });
   return { ...found, label: VCR_COMPARATOR_ORIGIN_LABELS_ZH[found.origin] };
