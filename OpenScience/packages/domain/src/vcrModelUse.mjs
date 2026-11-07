@@ -124,16 +124,22 @@ export function assessModelUse(pack, request) {
     if (!sameMode.length) {
       premise('use_not_validated', 'mode', `no sourced validation covers ${mode || 'this use'}`)
     } else {
-      if (text(asked.population) && !sameMode.some((entry) => entry.population === asked.population)) {
-        premise('population_outside_validation', 'population', 'the population is not one the model was validated on')
+      // Coverage is one validation entry's, never a field of one entry and a field of another (review stats P2-12): (adults, heart
+      // rate, 24 h) and (children, blood pressure, 1 y) do not validate (children, heart rate, 1 y). The entries are narrowed by what is
+      // predicted first, then for whom, then for how long; each dimension no remaining entry covers is a premise. An entry that states
+      // no horizon validated none, so it does not cover a stated one.
+      let covering = sameMode
+      const narrow = (/** @type {(entry: Record<string, any>) => boolean} */ holds, /** @type {() => void} */ otherwise) => {
+        const kept = covering.filter(holds)
+        if (kept.length) covering = kept
+        else otherwise()
       }
-      if (text(asked.endpoint) && !sameMode.some((entry) => entry.endpoint === asked.endpoint)) {
-        premise('endpoint_outside_validation', 'endpoint', 'the endpoint is not one the model was validated on')
+      if (text(asked.endpoint)) narrow((entry) => entry.endpoint === asked.endpoint, () => premise('endpoint_outside_validation', 'endpoint', 'the endpoint is not one the model was validated on'))
+      if (text(asked.population)) narrow((entry) => entry.population === asked.population, () => premise('population_outside_validation', 'population', 'the population is not one the model was validated on'))
+      if (Number.isFinite(asked.horizonHours)) {
+        narrow((entry) => Number.isFinite(entry.horizonHours) && entry.horizonHours >= asked.horizonHours, () => premise('horizon_beyond_validation', 'horizonHours', 'the horizon is longer than any validated horizon'))
       }
-      if (Number.isFinite(asked.horizonHours) && !sameMode.some((entry) => !Number.isFinite(entry.horizonHours) || entry.horizonHours >= asked.horizonHours)) {
-        premise('horizon_beyond_validation', 'horizonHours', 'the horizon is longer than any validated horizon')
-      }
-      if (sameMode.every((entry) => entry.independent === false)) premise('no_independent_data', 'validation', 'the validation used no independent data')
+      if (covering.every((entry) => entry.independent === false)) premise('no_independent_data', 'validation', 'the validation used no independent data')
     }
   }
   return { executionIssues, premises }

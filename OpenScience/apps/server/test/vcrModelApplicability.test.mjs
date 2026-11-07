@@ -35,7 +35,7 @@ test("use evidence on the card becomes premises, a revoked source an execution i
   const asked = { endpointType: "binary", variables, mode: "conditional_forecast", population: "p" };
   const ok = vcrModelApplicabilityAssessment(model, asked);
   assert.deepEqual(ok.executionIssues, []);
-  assert.ok(ok.premises.some((i) => i.code === "use_not_validated" && /尚未验证/.test(String(i.text))));
+  assert.ok(ok.premises.some((i) => i.code === "use_not_validated" && /没有为这种用途验证过/.test(String(i.text))));
   const revoked = vcrModelApplicabilityAssessment(model, { ...asked, authorized: false });
   assert.deepEqual(revoked.executionIssues.map((i) => i.code), ["authorization_lost"]);
   assert.ok(revoked.premises.length > 0, "every other finding is kept");

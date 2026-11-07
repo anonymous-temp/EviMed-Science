@@ -93,3 +93,14 @@ test('a declared solver the runtime lock lacks is an execution issue', () => {
   assert.deepEqual(missing.map((i) => i.code), ['runtime_unavailable'])
   assert.deepEqual(vcrMechanisticRuntimeIssues({ engine: 'desolve' }, [...names, 'deSolve']), [])
 })
+
+test('validation covers a use only within one entry; an entry with no horizon validated none (review stats P2-12)', () => {
+  const two = { ...pack, validation: [
+    { mode: 'factual_forecast', population: 'adults', endpoint: 'heart_rate', horizonHours: 24, evidenceRef: 'a', independent: true },
+    { mode: 'factual_forecast', population: 'children', endpoint: 'bp', horizonHours: 8766, evidenceRef: 'b', independent: true }] }
+  const mixed = assessModelUse(two, { mode: 'factual_forecast', population: 'children', endpoint: 'heart_rate', horizonHours: 8766 })
+  assert.deepEqual(codes(mixed.premises), ['population_outside_validation', 'horizon_beyond_validation'], 'heart rate was validated in adults over a day only')
+  assert.deepEqual(assessModelUse(two, { mode: 'factual_forecast', population: 'children', endpoint: 'bp', horizonHours: 8766 }).premises, [])
+  const open = { ...pack, validation: [{ mode: 'factual_forecast', population: 'adults', endpoint: 'heart_rate', evidenceRef: 'a', independent: true }] }
+  assert.deepEqual(codes(assessModelUse(open, { mode: 'factual_forecast', endpoint: 'heart_rate', horizonHours: 24 }).premises), ['horizon_beyond_validation'])
+})
