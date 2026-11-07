@@ -4,6 +4,7 @@ import { canonicalJson, mcpToolName } from '@evimed/domain';
 import { HttpError } from './security.mjs';
 import { VCR_JOB_METHODS, VCR_ENGINE_METHODS } from '@evimed/domain';
 import { isResearchPluginTool, projectResearchInvocation, researchPluginOfTool } from '@evimed/research-plugin-runtime/hosted-protocol';
+import { VCR_LAB_ACTION_FIELDS } from './vcrGateway.mjs';
 const unavailable = () => new HttpError(403, 'vcr_invocation_unavailable', 'A current native research call is required.');
 const object = value => value && typeof value === 'object' && !Array.isArray(value);
 
@@ -23,7 +24,10 @@ function projected(tool, operation, actual, body) {
       ...(actual.calibres != null ? {calibres:actual.calibres} : {}),...(actual.method != null ? {method:actual.method} : {})}}
     : {action:actual.action,jobId:actual.jobId};
   if (tool !== `vcr_${operation}`) throw unavailable();
-  const keys = operation === 'read' ? ['what', 'filter'] : operation === 'write' ? ['what', 'data', 'items']
+  // A lab action is proved by the fields the gateway reads for it (live 2026-11-07: with only action and jobId kept, every compare,
+  // search and their reads from a real conversation was refused here).
+  const lab = operation === 'simulate' && Object.hasOwn(VCR_LAB_ACTION_FIELDS, actual.action) ? /** @type {Record<string, readonly string[]>} */ (VCR_LAB_ACTION_FIELDS)[actual.action] : null;
+  const keys = operation === 'read' ? ['what', 'filter'] : operation === 'write' ? ['what', 'data', 'items'] : lab ? lab
     : ['start', 'validate'].includes(actual.action ?? 'start') ? ['action', 'kind', 'scenario', 'inputs', 'seed', 'replicates', 'cpuSecondsLimit', 'subjectId', 'reconstructionResultId', 'selection', 'modelId', 'modelVersion', 'sources'] : ['action', 'jobId'];
   const result = Object.fromEntries(keys.filter(key => operation === 'write' ? Object.hasOwn(actual,key) : actual[key] != null).map(key => [key, actual[key]]));
   if (operation === 'simulate') result.action ??= 'start';

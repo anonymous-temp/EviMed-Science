@@ -374,8 +374,14 @@ async function shapeRefusals(what, rows) {
 const POOL_REQUEST_FIELDS = VCR_RUN_SCENARIO_FIELDS.pool_evidence;
 /** The keys an accrual request may carry: the target and horizon are the study's to state; the sites' rates come from the ledger. */
 
-/** The lab's actions on the simulate operation (`virtual_trial_search`, `virtual_trial_compare`). */
-const LAB_ACTIONS = Object.freeze(["search", "search_status", "search_cancel", "compare", "compare_status"]);
+/**
+ * The lab's actions on the simulate operation (`virtual_trial_search`, `virtual_trial_compare`) and the fields each one reads: the
+ * object that names the work, or the id that reads or stops it. The native-call proof (`vcrExecutionContext.mjs`) projects a pending
+ * `vcr_simulate` call through the same lists, so a field read here is a field proved there.
+ */
+export const VCR_LAB_ACTION_FIELDS = Object.freeze({ search: Object.freeze(["action", "manifest"]), search_status: Object.freeze(["action", "campaignId"]),
+  search_cancel: Object.freeze(["action", "campaignId"]), compare: Object.freeze(["action", "experiment"]), compare_status: Object.freeze(["action", "experimentId"]) });
+const LAB_ACTIONS = Object.freeze(Object.keys(VCR_LAB_ACTION_FIELDS));
 
 /** @param {Record<string, any>} body */
 function simulateRequest(body) {
@@ -387,9 +393,7 @@ function simulateRequest(body) {
   // The virtual lab (`vcrExperiments.mjs`): a design-search campaign from a frozen manifest, an experiment that compares named arms,
   // and the read and the stop of each. Code evaluates; the call carries the manifest and reads what came back.
   if (LAB_ACTIONS.includes(action)) {
-    const own = /** @type {Record<string, string[]>} */ ({ search: ["action", "manifest"], search_status: ["action", "campaignId"], search_cancel: ["action", "campaignId"],
-      compare: ["action", "experiment"], compare_status: ["action", "experimentId"] })[action];
-    onlyFields(body, own);
+    onlyFields(body, [.../** @type {Record<string, readonly string[]>} */ (VCR_LAB_ACTION_FIELDS)[action]]);
     const payload = action === "search" ? body.manifest : action === "compare" ? body.experiment : null;
     if ((action === "search" || action === "compare") && (!payload || typeof payload !== "object" || Array.isArray(payload))) {
       throw gatewayError(400, "vcr_simulate_payload_invalid", action === "search" ? "manifest is the frozen campaign object." : "experiment is the object of named arms and their comparison.");
