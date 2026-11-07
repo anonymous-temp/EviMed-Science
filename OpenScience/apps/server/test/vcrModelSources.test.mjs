@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
-import { createVcrModelSources } from "../src/vcrModelSources.mjs";
+import { createVcrModelSources, vcrModelIdentity } from "../src/vcrModelSources.mjs";
 const sha = text => createHash("sha256").update(text).digest("hex");
 function fixture(text = "Control response was 40%; intervention response was 60%.") {
   const source = { id: `src_${"a".repeat(32)}`, userId: "u1", projectId: "project1", payload: { title: "Trial source", generation: 2, status: "ready", analysis: { textSha256: sha(text) } } };
@@ -178,4 +178,14 @@ test('positive Cox HR is logged once; nonpositive ratios and untyped transformed
  const card=await f.port.prepare(f.user,f.study,f.card);assert.ok(card.executionSpec);assert.equal(card.equation.model.terms[0].coefficient,Math.log(1.05));
  coefficient.candidateId=by(0);assert.equal((await f.port.prepare(f.user,f.study,f.card)).executionSpec,null);
  coefficient.candidateId=by(1.05);model.terms[0].transform='log';assert.equal((await f.port.prepare(f.user,f.study,f.card)).executionSpec,null);
+});
+test("a changed model hash is a new identity, the old identity stays what it was, and a card that pins nothing is identified as before", () => {
+  const model = { name: "m", version: "1.0.0", card: { sourceSha256: sha("a"), weightsSha256: sha("w"), executionSpec: { scenarioHash: sha("s") } } };
+  const same = vcrModelIdentity({ ...model, card: { ...model.card } });
+  assert.equal(vcrModelIdentity(model), same);
+  assert.notEqual(vcrModelIdentity({ ...model, card: { ...model.card, weightsSha256: sha("w2") } }), same);
+  assert.notEqual(vcrModelIdentity({ ...model, card: { ...model.card, executionSpec: { scenarioHash: sha("s2") } } }), same);
+  const legacy = { name: "old", version: "1.0.0", card: {} };
+  assert.equal(vcrModelIdentity(legacy), vcrModelIdentity({ name: "old", version: "1.0.0" }));
+  assert.notEqual(vcrModelIdentity({ ...legacy, version: "1.0.1" }), vcrModelIdentity(legacy));
 });
