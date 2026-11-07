@@ -388,7 +388,10 @@ export class VcrExperiments {
   /** The study's experiments and campaigns, newest first, as summaries. @param {{ id: string }} study */
   async list(study) {
     const rows = await this.store.rows(`SELECT * FROM ${SCHEMA}.experiments WHERE study_id = $1 ORDER BY created_at DESC LIMIT 100`, [study.id]);
-    return rows.map((row) => ({ id: String(row.id), kind: String(row.kind), question: String(object(row.manifest).question ?? ""), status: String(row.status),
+    // An experiment's own row never leaves its insert default, `running`: its status is read from its arms, as its page reads it (live D12).
+    const statuses = new Map();
+    for (const row of rows) if (row.kind === "experiment") statuses.set(String(row.id), String((await this.#presentExperiment(study, row)).status));
+    return rows.map((row) => ({ id: String(row.id), kind: String(row.kind), question: String(object(row.manifest).question ?? ""), status: statuses.get(String(row.id)) ?? String(row.status),
       stopReason: object(object(row.state).stop).reason ?? null, createdAt: iso(row.created_at), updatedAt: iso(row.updated_at) }));
   }
 
@@ -486,16 +489,29 @@ export class VcrExperiments {
     }));
     const alignment = vcrExperimentAlignment(arms.map((arm) => ({ name: arm.name, scenario: arm.scenario })), disease ? VCR_DISEASE_EXPERIMENT_ALIGNED_FIELDS : undefined);
     const incomplete = arms.filter((arm) => arm.status !== "complete").map((arm) => arm.name);
+    // A requested measure the compared designs do not carry is an execution issue of that measure alone (live D13, 2026-11-07: `expected_sample_size`
+    // asked of analytic results answered complete with every value empty, and the model subtracted the designs itself). The measures they do carry
+    // are named, so the next call can ask for one; the measures that exist keep their values. The page reads the same text.
+    const carried = [...new Set(arms.flatMap((arm) => list(arm.evaluation?.measures).map((measure) => String(object(measure).name ?? ""))).filter(Boolean))];
+    const measureIssues = comparison.flatMap((entry) => {
+      const lacking = entry.arms.filter((cell) => cell.status === "complete" && !cell.value).map((cell) => cell.name);
+      if (!lacking.length) return [];
+      const carriedText = carried.filter((name) => name !== entry.measure).map(measureLabel).join("、");
+      return [{ code: "comparison_measure_not_carried", measure: entry.measure, label: entry.label, arms: lacking,
+        carried: carried.filter((name) => name !== entry.measure),
+        text: `“${entry.label}”这些方案的结果里没有（${lacking.join("、")}），这一项没有比较。${carriedText ? `它们有的指标：${carriedText}。` : ""}` }];
+    });
     return {
       id: String(row.id), kind: "experiment", experimentKind: disease ? "disease" : "design", question: String(record.question ?? ""), purpose: String(record.purpose ?? ""),
       status: incomplete.some((name) => arms.find((arm) => arm.name === name)?.status === "running") ? "running" : "complete",
-      arms: arms.map(({ evaluation: _e, scenario, beyond: _b, ...arm }) => (design ? { ...arm, design: scenario } : arm)), comparison, alignment: alignment.map(({ values: _v, ...rest }) => rest), incomplete,
+      arms: arms.map(({ evaluation: _e, scenario, beyond: _b, ...arm }) => (design ? { ...arm, design: scenario } : arm)), comparison, measureIssues, alignment: alignment.map(({ values: _v, ...rest }) => rest), incomplete,
       premises: finishPremises([
         { key: "lab:aligned", label: "比较的前提", value: alignment.every((entry) => entry.aligned) ? "各组用同一个终点和同一套分析设置。"
           : `各组的${alignment.filter((entry) => !entry.aligned).map((entry) => ALIGNED_FIELD_TEXT_ZH[/** @type {keyof typeof ALIGNED_FIELD_TEXT_ZH} */ (entry.field)]).join("、")}不一致或未知，差值只能对照着看。`,
           source: "given", decisive: true },
         // no general disclaimer: the comparison's alignment and each arm's own scenario already say what it rests on
         ...(disease ? diseasePremises(arms.some((arm) => arm.beyond), arms.map((arm) => object(arm.scenario))) : []),
+        ...(measureIssues.length ? [{ key: "lab:measure_missing", label: "没有比较的指标", value: measureIssues.map((issue) => issue.text).join(""), source: /** @type {const} */ ("given"), decisive: true }] : []),
         ...(incomplete.length ? [{ key: "lab:incomplete", label: "未完成的组", value: `${incomplete.join("、")}还没有可比较的结果，比较中缺少它们。`, source: /** @type {const} */ ("given"), decisive: true }] : []),
       ]),
       createdAt: iso(row.created_at),

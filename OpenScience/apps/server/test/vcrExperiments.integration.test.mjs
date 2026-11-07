@@ -252,3 +252,18 @@ test('a unit cancelled from outside, or the study stopped, stops the campaign an
   assert.equal(stopped.stop?.reason, 'user_cancellation');
   assert.equal(submitted - before, 0, 'the decided unit was never started');
 });
+
+test('a comparison asked for a measure the designs do not carry says so, keeps the others, and the list reads the experiment\'s own status (D13, D12)', options, async () => {
+  const saved = await vcr.store.one("SELECT r.id FROM evimed_vcr.results r WHERE r.study_id = $1 AND r.subject_id LIKE '%:final:alternative' LIMIT 1", [study.id]);
+  const created = await experiments.startExperiment(study, { question: 'missing measure', arms: [{ name: 'X', resultId: saved.id }, { name: 'Y', resultId: saved.id }],
+    comparison: { measures: ['power', 'no_such_measure'], reference: 'X' } }, { userId: origin.userId });
+  const issue = created.measureIssues.find((entry) => entry.measure === 'no_such_measure');
+  assert.ok(issue, 'the measure the arms do not carry is named');
+  assert.deepEqual(issue.arms, ['X', 'Y']);
+  assert.ok(issue.carried.includes('power'), 'the measures they carry are listed');
+  assert.ok(!created.measureIssues.some((entry) => entry.measure === 'power'), 'the measure that exists is not an issue');
+  assert.ok(created.premises.some((p) => p.key === 'lab:measure_missing' && p.value.includes(issue.text)), 'the page reads the same sentence');
+  const listed = (await experiments.list(study)).find((entry) => entry.id === created.id);
+  assert.equal(listed.status, created.status, 'the list says what the experiment says');
+  assert.equal(listed.status, 'complete');
+});

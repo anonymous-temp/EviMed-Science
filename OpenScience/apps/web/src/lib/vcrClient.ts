@@ -4650,6 +4650,8 @@ export interface VcrDesignExperimentView {
   comparison: Array<{ measure: string; label: string; arms: Array<{ name: string; status: string; value: VcrValue | null; precision: string | null }>;
     contrasts: Array<{ arm: string; against: string; coupling: string; couplingText: string | null; difference: VcrValue | null }> }>;
   alignment: Array<{ field: string; aligned: boolean; unknown: string[] }>; incomplete: string[]; premises: VcrLabPremise[]; createdAt: string | null;
+  /** A requested measure the compared designs do not carry: the server's sentence, the arms lacking it and the measures they do carry. */
+  measureIssues?: Array<{ code: string; measure: string; label: string; arms: string[]; carried: string[]; text: string }>;
 }
 export interface VcrLabEntry { id: string; kind: "experiment" | "campaign"; question: string; status: string; stopReason: string | null; createdAt: string | null; updatedAt: string | null }
 
