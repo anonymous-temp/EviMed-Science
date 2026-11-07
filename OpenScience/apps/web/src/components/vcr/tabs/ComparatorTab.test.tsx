@@ -590,4 +590,19 @@ describe("对照 · the simulated treatment comparison", () => {
     expect(card).toHaveTextContent("比值比（OR）");
     expect(screen.queryByText(/还没有|尚未/)).toBeNull();
   });
+
+  it("says where the control comes from in the one block: a simulated control is not observed people, and every comparison says what a claim about another population needs", async () => {
+    const raw = fixture("ev201/comparator.json");
+    raw.premises = [
+      { key: "origin:simulated", label: "对照组的数据", value: "对照组完全由模拟生成，没有一个真实观察到的人；它不增加真实患者数，结论只在所设的模型假设下成立。", source: "assumed", decisive: true },
+      { key: "origin:transport", label: "结论能不能用到别的人群", value: "如果要说这个结论适用于别处的患者，需要一份独立的真实外部数据集。", source: "default", decisive: false },
+    ];
+    installVcrServer(network.productRequest, { [tab("comparator")]: raw });
+    const { container } = draw();
+    const block = await found(container, "[data-vcr-premises]");
+    expect(container.querySelectorAll("[data-vcr-premises]")).toHaveLength(1);
+    expect(block.querySelector("[data-vcr-premises-open] [data-vcr-premise='origin:simulated']")).toHaveTextContent("不增加真实患者数");
+    expect(block.querySelector("[data-vcr-premise='origin:transport']")).toHaveTextContent("独立的真实外部数据集");
+    expect(block.textContent).not.toMatch(/origin:|model_predicted|simulated"/);
+  });
 });
