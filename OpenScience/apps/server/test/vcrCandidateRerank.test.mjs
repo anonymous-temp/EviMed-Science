@@ -2,9 +2,15 @@
 // inside one call's limits, an order that puts the scored in score order and leaves what could not be scored where it was, and every failure
 // failing open. The endpoint is a double; nothing here shows that the reranker ranks well — the public pools in evals/vcr-model-comparison do.
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { after } from "node:test";
 
 import { VCR_RERANK_INSTRUCT, VcrCandidateRerank, candidateCard, orderByScores, rerankCandidates } from "../src/vcrCandidateRerank.mjs";
+
+// The clients under test arm their pacing and deadline timers unref'd, as a server's should be; a test that waits on such a timer
+// alone holds no other handle, and Node 22's runner then ends the file early ("Promise resolution is still pending"). One
+// ref'd interval keeps the loop for the file's duration.
+const keepAlive = setInterval(() => {}, 60_000);
+after(() => clearInterval(keepAlive));
 
 const API = "https://dashscope.example.org/compatible-api/v1/reranks";
 const NATIVE = "https://dashscope.example.org/api/v1/services/rerank/text-rerank/text-rerank";

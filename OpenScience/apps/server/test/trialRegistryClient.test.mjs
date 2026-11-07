@@ -5,7 +5,7 @@
 // The record itself is in `vcrEvidenceFixtures.mjs`, which is not a test file
 // so that importing it does not re-run this suite.
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { after } from "node:test";
 
 import { VCR_ENROLLMENT_KINDS } from "@evimed/domain";
 
@@ -16,6 +16,12 @@ import {
   monthsBetween, reducedRegistryRecord, registryRecordHash, renderRegistryRecordText,
 } from "../src/trialRegistryClient.mjs";
 import { vcrChictrAdapter } from "../src/vcrComposition.mjs";
+
+// The clients under test arm their pacing and deadline timers unref'd, as a server's should be; a test that waits on such a timer
+// alone holds no other handle, and Node 22's runner then ends the file early ("Promise resolution is still pending"). One
+// ref'd interval keeps the loop for the file's duration.
+const keepAlive = setInterval(() => {}, 60_000);
+after(() => clearInterval(keepAlive));
 
 
 /** The retrieval clock every fixture-built precedent carries. */
