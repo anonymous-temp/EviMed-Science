@@ -101,6 +101,7 @@
     "numeric": null,
     "uncertainty": null
   },
+  "premises": [],
   "selection": {
     "objectId": "pts_1",
     "version": 1,

@@ -1065,7 +1065,7 @@
       "id": "mth_41",
       "name": "人群层面的疾病进展模拟",
       "method": "patients.progression",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "endpoints": "连续",
       "numeric": null,
       "validation": {
