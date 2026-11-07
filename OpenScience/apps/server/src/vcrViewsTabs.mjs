@@ -50,6 +50,7 @@ import { vcrObjectNode } from "./vcrStore.mjs";
 import { VCR_UNSUPPORTED_COMPARATOR_ROUTES } from "./vcrService.mjs";
 import { constraintRows, generatedProfileRows } from "./vcrPopulationProfileView.mjs";
 import { bindingUseFindings, populationBindingPremises, populationBindingView } from "./vcrPopulationBinding.mjs";
+import { comparatorOriginPremises, comparatorOrigins } from "./vcrComparatorOrigins.mjs";
 import { modelUseOf, modelUsePremisesOf } from "./vcrModelUsePage.mjs";
 import { decidedShare } from "./vcrMatching.mjs";
 import { phaseLabel, registryStatusLabel } from "./vcrPatientTrials.mjs";
@@ -823,6 +824,7 @@ export function presentComparatorTab(bundle) {
   const echoedUnit = diagnostics.timeUnit === undefined ? TIME_UNIT_WORDS.months : TIME_UNIT_WORDS[String(diagnostics.timeUnit)] ?? null;
   const tauWords = numeric(diagnostics.tau) !== null && echoedUnit ? `${diagnostics.tau} ${echoedUnit.after} ` : "";
   const conclusion = result?.conclusion ?? shown?.conclusion ?? null;
+  const origins = comparatorOrigins({ route: shown?.route ?? null, method: execution?.method ?? null, diagnostics, counts: object(result?.counts) });
   // What the reader is told: the conclusion, or 仅基准 for a result that is a benchmark (A8).
   const readAs = conclusion && result
     ? vcrResultClass({ conclusion, method: execution?.method ?? null, route: shown?.route, diagnostics, measures: result.measures })
@@ -912,7 +914,11 @@ export function presentComparatorTab(bundle) {
       // a comparison that predicts its control with a model says what that model was validated for, in the same block
       modelUse: execution?.method === "model.prognostic_apply" || shown?.route === "model_comparator"
         ? modelUseOf(bundle.models, diagnostics.sourceModel, { mode: "conditional_forecast", endpoint: text(diagnostics.endpoint) }) : [],
-    })]),
+    }), ...(shown && result ? comparatorOriginPremises(origins) : [])]),
+    // Where the control comes from: real people, a published summary, a reconstruction, a model's prediction or a simulation, with the
+    // number of observed people it holds (never a simulated member).
+    origins: shown && result ? { origin: origins.origin, origins: origins.origins, observedPeople: origins.observedPeople,
+      reconstructedPseudoPatients: origins.reconstructedPseudoPatients, simulatedMembers: origins.simulatedMembers, modelConditional: origins.modelConditional } : null,
     limits,
     robustness: robustnessView(result, value),
     // Quantitative bias analysis (C1, C2) and who a propensity trimming left (C14): cards of the comparison, null when the result has neither.

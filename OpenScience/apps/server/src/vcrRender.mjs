@@ -54,6 +54,7 @@
  * @module vcrRender
  */
 
+import { comparatorOriginsOfReport } from "./vcrComparatorOrigins.mjs";
 import { createHash } from "node:crypto";
 import {
   documentExportDigest, VCR_COUNT_KEYS, VCR_VALUE_SOURCE_LABELS_ZH,
@@ -247,6 +248,8 @@ export function vcrReportModel(input) {
     intendedUse: object(headline).intendedUse ?? String(study.intendedUse ?? "exploratory"),
     useDowngrade: object(headline).useDowngrade ?? null,
     counts,
+    // where the comparison's control comes from (observed, reconstructed, model-predicted, simulated): a simulated control adds no observed people
+    comparatorOrigins: comparatorOriginsOfReport({ results, comparator: input.comparator ? comparator : null }),
     measures: list(object(headline).measures),
     diagnostics: object(object(headline).diagnostics),
     tables: list(object(headline).tables),
