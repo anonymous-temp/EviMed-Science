@@ -49,7 +49,8 @@ async function boot(enabled) {
   }
   let response
   for (let attempt = 0; attempt < 150; attempt++) {
-    try { response = await rpc(); if (response.status !== 503) break } catch { /* Native carrier is still starting. */ }
+    // The web host answers 404 for a moment before an enabled bundle's route is registered; only a disabled bundle's 404 is final.
+    try { response = await rpc(); if (response.status !== 503 && !(enabled && response.status === 404)) break } catch { /* Native carrier is still starting. */ }
     if (childProcess.exitCode !== null) break
     await delay(100)
   }

@@ -337,7 +337,7 @@ A read-only trace of every importer of the old path decided what could go now; t
 |---|---|---|
 | Native clinical child on C, n2c2 and the incident cases; 20-candidate latency (target P50 2 min) | not run in this round; discovery stages measured (rerank 2.6 s per 100 trials, Jev 0.25 s per pair with eight in flight, dense and lexical under 2 s) | a reference-host configuration on this machine (≈CNY 10 of Flash) |
 | G1: the plugin serves project-scoped studies and ships everywhere; then delete the batch judge, `match_judge`, the old reranker, `legacy-matching.md`, old eval drivers, prompt builders | old path still live | the deployment decision; one real-session check that a programme run binds the project study |
-| Publication and deployment of plugin 0.1.2 (worker 0.1.0 unchanged) | native smoke and status smoke pass offline on the pinned kernel (DSH 0.2.1-rc.5, zero model calls; bundle SHA256 a9b95abb…85e2e1, receipts in the assets) | owner |
+| Publication and deployment of plugin 0.1.2 (worker 0.1.0 unchanged) | native smoke and status smoke pass offline on the pinned kernel (DSH 0.2.1-rc.5, zero model calls; bundle SHA256 4f301473…c30d2d with fast-uri 3.1.9, receipts in the assets) | owner |
 | Operator step after the release | — | `node scripts/ops/vcr-retire-unread-tables.mjs --apply` (five tables) |
 | Production trial index (ClinicalTrials.gov + ChiCTR, Qwen3.7, 1024-d) | the TREC snapshots were indexed for the benchmark only | operator build with `deploy/patient-matching/build-trial-index.mjs` |
 
