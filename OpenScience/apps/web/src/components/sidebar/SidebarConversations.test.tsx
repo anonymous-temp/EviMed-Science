@@ -293,3 +293,26 @@ it("keeps only still-authorized history when one research's runs fail to refresh
   expect(screen.queryByText("Beta")).toBeNull();          // access lost: dropped
   expect(screen.getByRole("group", { name: "研究：Research A" })).toBeInTheDocument();
 });
+
+const made = (id: string, projectId: string, name: string, originatingSessionId: string | null, createdAt = "2026-03-01T00:00:00Z") => ({ id, projectId, name, tabs: ["population"], originatingSessionId, question: null, status: "draft", updatedAt: createdAt, createdAt });
+it("files each conversation-made research under its own conversation and keeps an ordinary chat of the same project flat", async () => {
+  mocks.projects.mockResolvedValue([{ id: "default", name: "Default" }]);
+  mocks.studies.mockResolvedValue({ studies: [], conversationStudies: [made("std_x", "default", "Predict 100 patients", "x1"), made("std_y", "default", "Compare two designs", "y1")] });
+  mocks.runs.mockResolvedValue([run("w1", "Write weekly report", "2026-02-01"), run("x1", "Predict 100 patients", "2026-02-02"), run("y1", "Compare two designs", "2026-02-03")]);
+  setup("/app/files", null, true);
+  const groupX = await screen.findByRole("group", { name: "研究：Predict 100 patients" });
+  const groupY = screen.getByRole("group", { name: "研究：Compare two designs" });
+  expect(within(groupX).getAllByRole("button").map(b => b.textContent)).toEqual(["Predict 100 patients"]);
+  expect(within(groupY).getAllByRole("button").map(b => b.textContent)).toEqual(["Compare two designs"]);
+  expect(screen.getByText("Write weekly report").closest("[role=group]")).toBeNull();
+});
+it("gives a conversation-made research whose conversation is gone one saved-result row and lists research and chats newest first", async () => {
+  mocks.projects.mockResolvedValue([{ id: "default", name: "Default" }]);
+  mocks.studies.mockResolvedValue({ studies: [], conversationStudies: [made("std_old", "default", "Old research", "gone", "2026-01-01T00:00:00Z")] });
+  mocks.runs.mockResolvedValue([run("w1", "Today chat", "2026-02-05")]);
+  setup("/app/files", null, true);
+  const group = await screen.findByRole("group", { name: "研究：Old research" });
+  expect(within(group).getAllByRole("button").map(b => b.textContent)).toEqual(["已保存的结果"]);
+  const chat = screen.getByText("Today chat");
+  expect(chat.compareDocumentPosition(group) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});

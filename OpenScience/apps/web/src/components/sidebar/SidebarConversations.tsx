@@ -18,7 +18,7 @@ import { conversationNavigationState, newRuntimeUiIntent, prepareRuntimeUiIntent
 import { sessionGeneration, subscribeSessionBoundary } from "@/lib/sessionLifecycle";
 import { vcrChatPath } from "@/lib/studyLocation";
 import { getVcrHome } from "@/lib/vcrClient";
-import { groupResearchHistory, VcrResearchHistory, type HistoryEntry, type HistoryStudy } from "@/components/vcr/VcrResearchHistory";
+import { groupResearchHistory, historyTimeline, VcrResearchGroup, type HistoryEntry, type HistoryStudy } from "@/components/vcr/VcrResearchHistory";
 import { studyOfPath } from "@/components/vcr/useVcrFinishedToasts";
 import { FilterSelect } from "@/components/ui/FilterChips";
 import { ProjectBrowser } from "./ProjectBrowser";
@@ -35,8 +35,15 @@ async function limited<T>(values: T[], action: (value: T) => Promise<void>, curr
 /** The researches the account can read: the module's studies and the ones its conversations made (once each; a task is no research). */
 function researchOf(home: Awaited<ReturnType<typeof getVcrHome>>): HistoryStudy[] {
   const found = new Map<string, HistoryStudy>();
-  for (const study of home.studies) if (study.purpose !== "task") found.set(study.id, { id: study.id, projectId: study.projectId, name: study.name || "研究", tabs: [], calculation: study.purpose === "calculation", at: moment(study.createdAt ?? null) });
-  for (const study of home.conversationStudies ?? []) { const old = found.get(study.id); found.set(study.id, { id: study.id, projectId: study.projectId, name: old?.name ?? (study.name || "研究"), tabs: study.tabs, calculation: old?.calculation ?? false, at: old?.at ?? moment(study.createdAt ?? null) }); }
+  // A calculation is no research of its own: its conversation is an ordinary row, its saved results sit in the archive.
+  for (const study of home.studies) if (study.purpose !== "task" && study.purpose !== "calculation") found.set(study.id, { id: study.id, projectId: study.projectId, name: study.name || "研究", tabs: [], calculation: false, at: moment(study.createdAt ?? null) });
+  const calculations = new Set(home.studies.filter(study => study.purpose === "calculation").map(study => study.id));
+  for (const study of home.conversationStudies ?? []) {
+    if (calculations.has(study.id)) continue;
+    const old = found.get(study.id);
+    // A programme study the conversation list also names stays one project's research; any other is owned by the session it was made in.
+    found.set(study.id, { id: study.id, projectId: study.projectId, name: old?.name ?? (study.name || "研究"), tabs: study.tabs, calculation: false, at: old?.at ?? moment(study.createdAt ?? study.updatedAt ?? null), ...(old ? {} : { sessionId: study.originatingSessionId }) });
+  }
   return [...found.values()];
 }
 function canRetainRead(error: unknown): boolean {
@@ -237,6 +244,8 @@ export function SidebarConversations({ geoId, geo, vcr, onCurrentModule }: { geo
   // Research (study) conversations and saved results are grouped by research; every other conversation keeps the flat, newest-first list.
   const { groups, rest } = groupResearchHistory(listed, scope === "all" ? view.studies : [], query);
   const rows = rest.sort((a, b) => b.at - a.at || a.key.localeCompare(b.key));
+  // One newest-first list: a research sits where its newest conversation sits and is never pinned above today's ordinary chat.
+  const timeline = historyTimeline(groups, rows);
   const isCurrent = (item: Entry) => item.to ? location.pathname === item.to : (item.geoId ? location.pathname === geoChatPath(item.geoId, item.sessionId) || new URLSearchParams(location.search).get("session") === item.sessionId && geoId === item.geoId : location.pathname === (item.studyId ? vcrChatPath(item.studyId) : chatPath(item.sessionId)));
   return <section aria-label="对话" className="flex min-h-0 flex-1 flex-col overflow-y-auto">
     <div className="flex min-h-11 items-center gap-1 px-3 pt-2 text-caption text-text-3"><span>对话</span>
@@ -250,8 +259,7 @@ export function SidebarConversations({ geoId, geo, vcr, onCurrentModule }: { geo
       {view.failed.map(message => <p role="alert" key={message} className="px-4 text-caption">{message}</p>)}
       {view.failed.length > 0 && <button type="button" className="px-4 text-left text-caption text-link" onClick={() => setRevision(value => value + 1)}>重试读取</button>}
       {!view.loading && !view.failed.length && !rows.length && !groups.length && <p className="px-4 text-caption text-text-3">没有对话</p>}
-      <VcrResearchHistory groups={groups} isCurrent={isCurrent} onOpen={open} />
-      {rows.map(item => <button key={item.key} type="button" onClick={() => open(item)} aria-current={isCurrent(item) ? "page" : undefined} className="mx-2 flex min-h-control items-center gap-2 rounded px-3 py-2 text-left text-ui text-text-2 outline-none hover:bg-surface-2 hover:text-text focus-visible:outline-focus aria-[current=page]:bg-surface-2 aria-[current=page]:text-text"><Tooltip kind="label" content={scope === "all" ? `${item.title} · ${item.projectName}` : item.title} whenTruncated><span className="min-w-0 flex-1 truncate">{item.title}</span></Tooltip>{scope === "all" && <span className="max-w-24 truncate text-text-3">{item.projectName}</span>}</button>)}
+      {timeline.map(entry => entry.kind === "group" ? <VcrResearchGroup key={entry.key} group={entry.group} isCurrent={isCurrent} onOpen={open} /> : (item => <button key={item.key} type="button" onClick={() => open(item)} aria-current={isCurrent(item) ? "page" : undefined} className="mx-2 flex min-h-control items-center gap-2 rounded px-3 py-2 text-left text-ui text-text-2 outline-none hover:bg-surface-2 hover:text-text focus-visible:outline-focus aria-[current=page]:bg-surface-2 aria-[current=page]:text-text"><Tooltip kind="label" content={scope === "all" ? `${item.title} · ${item.projectName}` : item.title} whenTruncated><span className="min-w-0 flex-1 truncate">{item.title}</span></Tooltip>{scope === "all" && <span className="max-w-24 truncate text-text-3">{item.projectName}</span>}</button>)(entry.row))}
       {view.entries.some(item => item.geoOwnerId && view.cursors[item.geoOwnerId]) && <p className="px-4 text-caption text-text-3">请加载该 GEO 项目的更多对话，以显示其余个人会话。</p>}
       {Object.keys(view.cursors).map(id => <button type="button" className="px-4 text-left text-caption text-link" key={id} onClick={() => void loadMore(id)}>加载更多：{view.projects.find(project => project.id === id)?.name}</button>)}
     </>}
