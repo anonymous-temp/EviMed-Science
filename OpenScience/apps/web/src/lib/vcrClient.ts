@@ -4608,3 +4608,48 @@ export async function downloadVcrFollowupHistory(studyId: string, offset: number
     document.body.appendChild(link); link.click(); link.remove();
   } finally { URL.revokeObjectURL(url); }
 }
+
+// --- the virtual lab: design experiments and design-search campaigns (server `vcrExperiments.mjs`) ---------------------------
+// Started from the conversation (virtual_trial_search / virtual_trial_compare); the page reads them. Every number is a `VcrValue`.
+
+export interface VcrLabPremise { key: string; label: string; value: string; source: string; decisive: boolean; reason: string | null }
+export interface VcrConstraintVerdict { status: "pass" | "fail" | "inconclusive" | "not_judged"; statusText: string | null; final: boolean; reason: string | null;
+  boundKind: string | null; confidence: number | null; judgedAt: VcrValue | null }
+export interface VcrCampaignCandidate {
+  key: string; index: number; set: Record<string, unknown>; status: string; statusText: string; stage: "screening" | "final" | null;
+  reason: string | null; reasonText: string | null;
+  objective: { screening: (VcrValue & { stage: string }) | null; final: (VcrValue & { stage: string }) | null };
+  constraints: Array<{ index: number; measure: string; label: string; kind: string; op: string; bound: number; screening: VcrConstraintVerdict | null; final: VcrConstraintVerdict | null }>;
+  resultIds: string[]; usage: { cpuSeconds: number; queueSeconds: number; wallSeconds: number; replicates: number };
+}
+export interface VcrCampaignView {
+  id: string; kind: "campaign"; question: string; status: "running" | "stopped"; method: string; methodVersion: string; identity: string;
+  objective: { measure: string; direction: string; truth: string; label: string };
+  constraints: Array<{ measure: string; op: string; bound: number; kind: string; truth: string; confidence: number; label: string; kindText: string }>;
+  truths: string[]; stages: Record<string, unknown>;
+  budget: { declared: { maxCandidates: number; cpuSeconds: number; modelCalls: number }; used: Record<string, number> };
+  candidates: VcrCampaignCandidate[]; finalists: string[]; best: string | null; inconclusive: string[]; feasible: string[];
+  reference: string | null; improvement: number | null; inFlight: { unit: string; stage: string | null } | null; cancelRequested: boolean;
+  stop: { reason: string; text: string | null; at: string | null } | null; premises: VcrLabPremise[]; createdAt: string | null; updatedAt: string | null;
+}
+export interface VcrDesignExperimentView {
+  id: string; kind: "experiment"; question: string; purpose: string; status: "running" | "complete";
+  arms: Array<{ name: string; method: string | null; methodVersion: string | null; attached: boolean; status: string; refused: string[] | null; resultId: string | null }>;
+  comparison: Array<{ measure: string; label: string; arms: Array<{ name: string; status: string; value: VcrValue | null; precision: string | null }>;
+    contrasts: Array<{ arm: string; against: string; coupling: string; couplingText: string | null; difference: VcrValue | null }> }>;
+  alignment: Array<{ field: string; aligned: boolean; unknown: string[] }>; incomplete: string[]; premises: VcrLabPremise[]; createdAt: string | null;
+}
+export interface VcrLabEntry { id: string; kind: "experiment" | "campaign"; question: string; status: string; stopReason: string | null; createdAt: string | null; updatedAt: string | null }
+
+/** The study's lab experiments and campaigns, newest first. */
+export function listVcrLabExperiments(studyId: string) {
+  return productRequest<{ experiments: VcrLabEntry[] }>(`${study(studyId)}/experiments`);
+}
+/** One experiment or campaign as the lab page reads it. */
+export function getVcrLabExperiment(studyId: string, experimentId: string) {
+  return productRequest<VcrCampaignView | VcrDesignExperimentView>(`${study(studyId)}/experiments/${encodeURIComponent(experimentId)}`);
+}
+/** Stop a campaign after the unit in flight; what ran is kept. */
+export function cancelVcrLabCampaign(studyId: string, experimentId: string) {
+  return productRequest<VcrCampaignView>(`${study(studyId)}/experiments/${encodeURIComponent(experimentId)}/cancel`, "POST", {});
+}
