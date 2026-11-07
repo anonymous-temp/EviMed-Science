@@ -179,7 +179,8 @@ export function renderVcrNumbers(template, results) {
  *
  * @param {{ study: any, definition?: any, assumptions?: any[], results?: any[], seal?: any, reviews?: any[],
  *   staleMarks?: any[], models?: any[], population?: any, comparator?: any, scenarios?: any[], counts?: Record<string, any>,
- *   modelAnalysis?: Record<string, any> | null, schedule?: any, contacts?: any[] }} input
+ *   modelAnalysis?: Record<string, any> | null, schedule?: any, contacts?: any[], executions?: Map<string, Record<string, any>> | null }} input
+ *   `executions` holds the execution of the comparison the newest comparator design names, so its origin is read by the method that ran
  */
 export function vcrReportModel(input) {
   const study = object(input.study);

@@ -49,8 +49,6 @@ export function frozenHistorySplit(study,input,events) {
     counts:Object.fromEntries(['train','calibration','test','unknown'].map(role => [role,Object.values(assignments).filter(r => r === role).length]))};
 }
 
-/** @param {any} input */
-
 /** What the accuracy of an evaluation or a comparison of these predictions is the accuracy of: a forecast's, or, when any of them
  * replayed actions recorded after its origin, a logged-action replay's, which no reader may take for forecast accuracy (review stats
  * P1-6). The weakest context is carried, with each prediction's own. @param {any[]} predictions saved prediction artifacts */
@@ -68,6 +66,7 @@ function lineageOf(rows,parentId) {
     bindings:rows.flatMap(row => row.bindings ?? []),parentId};
 }
 
+/** @param {any} input */
 export function createVcrLongitudinal({store,dataStore,dataPlane,matchStore,access,jobs,config = {},fetchImpl,now = () => new Date()}) {
   if (!dataPlane) return null;
   const artifacts = new VcrLongitudinalStore({store,plane:dataPlane,access});
