@@ -24,7 +24,6 @@
  * @module @evimed/domain/vcrTrialJudgment
  */
 
-import { definitionLines } from './vcrClauseDefinitions.mjs'
 
 /** Bumped when a prompt changes enough that a pair judged under the old one should be judged again. */
 export const VCR_JUDGMENT_PROMPT_VERSIONS = Object.freeze({ fit: 'fit-3', criteria: 'criteria-5' })
@@ -548,12 +547,10 @@ function criteriaSystem(kind) {
 /**
  * The per-criterion call of one patient and one trial (TrialGPT 1.0): numbered sentences, numbered clauses, one answer per clause. With
  * `kind` the call carries that side only, as the original does; without it, one call carries both.
- * `definitions` (optional, default none) are the trial's definition cards (`vcrClauseDefinitions.mjs`): background on what a term usually means,
- * added after the criteria for the clauses of this call. With none the messages are exactly what they are without the field.
-  * @param {{ title?: string, summary?: string, takes?: string, kind?: 'inclusion' | 'exclusion', criteria: ReadonlyArray<{ number: number, kind: string, text: string, lead?: string }>, sentences: ReadonlyArray<{ id: number, text: string }>, conditions?: readonly string[], interventions?: readonly string[], definitions?: ReadonlyArray<{ number: number, counts: string, doesNotCount: string }> }} input
+  * @param {{ title?: string, summary?: string, takes?: string, kind?: 'inclusion' | 'exclusion', criteria: ReadonlyArray<{ number: number, kind: string, text: string, lead?: string }>, sentences: ReadonlyArray<{ id: number, text: string }>, conditions?: readonly string[], interventions?: readonly string[] }} input
  * @returns {Array<{ role: 'system' | 'user', content: string }>}
  */
-export function criteriaMessages({ title = '', summary = '', takes = '', kind, criteria, sentences, conditions = [], interventions = [], definitions = [] }) {
+export function criteriaMessages({ title = '', summary = '', takes = '', kind, criteria, sentences, conditions = [], interventions = [] }) {
   const listed = kind ? criteria.filter((clause) => clause.kind === kind || clause.kind === 'unsectioned') : criteria
   /** @param {string} name @param {string} heading */
   const section = (name, heading) => {
@@ -573,7 +570,6 @@ export function criteriaMessages({ title = '', summary = '', takes = '', kind, c
     ...section('inclusion', 'Inclusion criteria'),
     ...section('exclusion', 'Exclusion criteria'),
     ...section('unsectioned', kind ? `${kind === 'inclusion' ? 'Inclusion' : 'Exclusion'} criteria` : 'Other criteria'),
-    ...definitionLines(definitions, new Set(listed.map((clause) => clause.number))),
     '',
     'Plain JSON output:',
   ].join('\n')

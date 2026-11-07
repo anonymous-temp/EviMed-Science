@@ -36,7 +36,7 @@
 
 import { createHash } from 'node:crypto';
 import {
-  vcrMatchFailureReason, VCR_DEFINITION_PROMPT_VERSION, VCR_ENGINE_PROTOCOL_VERSION, VCR_JUDGMENT_PROMPT_VERSIONS, VCR_MATCH_BATCH_METHODS, VCR_MATCH_JUDGE_LIMITS, VCR_MIN_CELL_SIZE, VCR_TRIAL_VERDICT_LABELS_ZH,
+  vcrMatchFailureReason, VCR_ENGINE_PROTOCOL_VERSION, VCR_JUDGMENT_PROMPT_VERSIONS, VCR_MATCH_BATCH_METHODS, VCR_MATCH_JUDGE_LIMITS, VCR_MIN_CELL_SIZE, VCR_TRIAL_VERDICT_LABELS_ZH,
   canonicalScenarioJson, criteriaMessages, criterionDisplay, fitMessages, isPeak, mergeCriteriaAnswers, mergeFitAnswers, parseCriteriaAnswer, parseFitAnswer, priceUsage, rankJudgments,
   segmentCriteria, segmentSentences, splitNoteParts, trialVerdict, vcrResultOutputPayload, vcrSubjectLabel, vcrSubjectLabels,
 } from '@evimed/domain';
@@ -133,12 +133,11 @@ const registryOfId = (registryId) => (/^ChiCTR/iu.test(registryId) ? 'chictr' : 
  *   `candidateLimit` keeps the first N of either list, so a patient with 500 candidates can be judged on the best 100;
  * - trial to patient: `protocolVersionId` (the latest when absent) and `subjectKeys` (the study's roster when absent);
  * - `fit` (stage one, default true), `topK` (stage two: 0 none, `all` every pair, a number per person; the deployment's when absent), `thinking` (`high` or `off`),
- *   `definitions` (default off: each trial's clauses get a definition card, written once, that the clause-level calls read as background).
  *
  * @param {unknown} raw @param {{ collectionAlone?: boolean }} [options] `collectionAlone`: the caller looks up a named collection's revision next @returns {Record<string, any>}
  */
 export function judgeSelection(raw = {}, { collectionAlone = false } = {}) {
-  const fields = ['direction', 'subjectKey', 'registryIds', 'searchId', 'candidateLimit', 'definitions', 'registry', 'collection', 'collectionRevision', 'protocolVersionId', 'subjectKeys', 'fit', 'topK', 'thinking', 'thinkingCriteria'];
+  const fields = ['direction', 'subjectKey', 'registryIds', 'searchId', 'candidateLimit', 'registry', 'collection', 'collectionRevision', 'protocolVersionId', 'subjectKeys', 'fit', 'topK', 'thinking', 'thinkingCriteria'];
   const row = object(raw);
   const bad = (/** @type {string} */ message) => new HttpError(400, 'vcr_matching_selection_invalid', message);
   const unknown = Object.keys(row).find((key) => !fields.includes(key));
@@ -171,7 +170,6 @@ export function judgeSelection(raw = {}, { collectionAlone = false } = {}) {
   if (row.fit === false && row.topK === 0) throw bad('fit 为 false 时只有逐条判定一步，topK 不能为 0。');
   if (row.thinking != null && !['high', 'off'].includes(row.thinking)) throw bad('thinking 是 high 或 off。');
   if (row.thinkingCriteria != null && !['high', 'off'].includes(row.thinkingCriteria)) throw bad('thinkingCriteria 是 high 或 off。');
-  if (row.definitions != null && typeof row.definitions !== 'boolean') throw bad('definitions 是 true 或 false。');
   // A list of ids is cut to its first `candidateLimit` here; a saved search's list is cut by the gateway that reads it, which consumes both fields.
   const registryIds = row.registryIds ? [...new Set(/** @type {string[]} */ (row.registryIds))].slice(0, row.candidateLimit ?? undefined) : null;
   const { candidateLimit: _limit, ...kept } = row;
@@ -492,15 +490,15 @@ async function judgeFit({ judge, study, jobId, note, target, thinking, cap }) {
 }
 
 /**
- * One pair's per-clause judgment, a call per part of the record. `definitions` are the trial's definition cards, read as background when there are any.
- * @param {{ judge: any, study: any, jobId: string, note: any, target: any, thinking: string, cap: number, definitions?: any[] }} input
+ * One pair's per-clause judgment, a call per part of the record.
+ * @param {{ judge: any, study: any, jobId: string, note: any, target: any, thinking: string, cap: number }} input
  */
-async function judgeCriteria({ judge, study, jobId, note, target, thinking, cap, definitions = [] }) {
+async function judgeCriteria({ judge, study, jobId, note, target, thinking, cap }) {
   const parts = splitNoteParts(note.records, cap);
   const answers = [];
   /** @type {any[]} */ const calls = [];
   for (const part of parts) {
-    const messages = criteriaMessages({ title: target.title, summary: target.summary, takes: target.takes, criteria: target.clauses, sentences: part.sentences, conditions: target.conditions, interventions: target.interventions, definitions });
+    const messages = criteriaMessages({ title: target.title, summary: target.summary, takes: target.takes, criteria: target.clauses, sentences: part.sentences, conditions: target.conditions, interventions: target.interventions });
     answers.push(await askOnceMore({ judge, ask: { study, jobId, messages, thinking }, calls,
       read: (/** @type {string} */ content) => parseCriteriaAnswer(content, { criteria: target.clauses, sentences: part.sentences }),
       usable: (parsed) => parsed.rows.length > 0 }));
@@ -610,7 +608,6 @@ export async function planMatchJudge({ study, selection: raw = {}, matchStore, d
   const cap = VCR_MATCH_JUDGE_LIMITS.noteChars;
   let inputTokens = 0, outputTokens = 0, calls = 0;
   const perPerson = criteriaPairs(1, targets, topK);
-  const definitions = selection.definitions === true;
   for (const key of readable) {
     const chars = charsOf.get(key) ?? 2_000;
     const parts = Math.max(1, Math.ceil(chars / cap));
@@ -619,8 +616,6 @@ export async function planMatchJudge({ study, selection: raw = {}, matchStore, d
     inputTokens += pairs * (chars + parts * (VCR_MATCH_JUDGE_LIMITS.trialChars + VCR_MATCH_JUDGE_LIMITS.overheadTokens));
     outputTokens += parts * ((fit ? targets : 0) * outputFor(outputPerCall, thinking) + perPerson * outputFor(outputPerCall, thinkingCriteria));
   }
-  // A definition card is one call a trial, whoever is judged against it.
-  if (definitions) { calls += targets; inputTokens += targets * (VCR_MATCH_JUDGE_LIMITS.trialChars + VCR_MATCH_JUDGE_LIMITS.overheadTokens); outputTokens += targets * 1_500; }
   const priced = priceUsage({ resourceType: 'model', model, cacheHit: 0, cacheMiss: inputTokens, output: outputTokens, peak });
   const pairs = people.length * targets;
   // Each of those calls may be asked again and tried again, and a study with long tables pays for two questions about them. What is promised is the ceiling when that is the lower.
@@ -628,9 +623,8 @@ export async function planMatchJudge({ study, selection: raw = {}, matchStore, d
   const ceiling = effectiveJobCeiling(config);
   const atMost = priced.priced ? priced.cost * ASKS_PER_CALL_AT_MOST + (overhead.priced ? overhead.cost : 0) : null;
   const estimate = { basis: 'estimate', model, thinking, pairs, calls, inputTokens, outputTokens, outputTokensPerCall: outputPerCall, costOnce: priced.priced ? priced.cost : null, cost: atMost === null ? null : Math.min(atMost, ceiling), ceiling, currency: priced.currency || 'CNY' };
-  // A judgment that read definition cards is another judgment: the prompt version says so, and the ledger finds only rows made the same way.
-  const promptVersions = { ...VCR_JUDGMENT_PROMPT_VERSIONS, ...(definitions ? { criteria: `${VCR_JUDGMENT_PROMPT_VERSIONS.criteria}+${VCR_DEFINITION_PROMPT_VERSION}` } : {}) };
-  const scenario = { direction, subjects: people, ...target, fit, topK, thinking, thinkingCriteria, model, ...(definitions ? { definitions: true } : {}), promptVersions, estimate };
+  const promptVersions = { ...VCR_JUDGMENT_PROMPT_VERSIONS };
+  const scenario = { direction, subjects: people, ...target, fit, topK, thinking, thinkingCriteria, model, promptVersions, estimate };
   return { ok: true, scenario: { ...scenario, chain: judgeChain(scenario) }, statement: judgeStatement({ pairs, fit, topK, estimate, withdrawn: leftOut, noRecord: people.length - readable.length, exact, minCell: matchBatchMinCell(config) }), withdrawn: leftOut, noRecord: people.length - readable.length };
 }
 
@@ -670,10 +664,9 @@ function judgeStatement({ pairs, fit, topK, estimate, withdrawn, noRecord, exact
  * that failed for a reason that passes is tried once more at the end of its stage.
  *
  * @param {{ store: any, matchStore: any, judgments: any, documents: any, subjectTable?: any, targets: ReturnType<typeof judgmentTargets>, judge: ReturnType<typeof createPairJudge>,
- *   clauseDefinitions?: { forTarget: (input: { study: any, jobId: string, target: any, targetKind: string }) => Promise<{ definitions: any[], calls: any[], failed?: string }> } | null,
  *   config?: Record<string, any>, report?: (code: string) => void, counters?: ReturnType<typeof createMatchJudgeCounters>, now?: () => Date }} deps
  */
-export function createMatchJudgeExecutor({ store, matchStore, judgments, documents, subjectTable = null, targets, judge, clauseDefinitions = null, config = {}, report = () => {}, counters = createMatchJudgeCounters(), now = () => new Date() }) {
+export function createMatchJudgeExecutor({ store, matchStore, judgments, documents, subjectTable = null, targets, judge, config = {}, report = () => {}, counters = createMatchJudgeCounters(), now = () => new Date() }) {
   const width = Math.max(1, Math.min(64, Number(config.vcrMatchJudgeConcurrency ?? 8) || 8));
   const stopAfter = Math.max(1, Number(config.vcrMatchJudgeMaxUpstreamFailures ?? 20) || 20);
   const slicePairs = Math.max(1, Number(config.vcrMatchJudgeSlicePairs ?? 400) || 400);
@@ -912,17 +905,13 @@ export function createMatchJudgeExecutor({ store, matchStore, judgments, documen
           saved = await judgments.save({ ...base, ...live, targetHash: target.hash, documentHash: note.hash, status: 'done', fit: parsed.fit, confidence: parsed.confidence, verdict: verdict.verdict,
             answer: { ...answer, reasons: parsed.reasons, issues: parsed.issues, parts }, usage: { ...usage, settings }, documentIds: note.documentIds });
         } else {
-          // The trial's definition cards, when the job was asked for them: one call a trial, whichever pair gets there first, and a failure is a pair read without them.
-          const cards = scenario.definitions === true && clauseDefinitions ? await clauseDefinitions.forTarget({ study, jobId, target, targetKind }) : null;
-          if (cards?.calls?.length) account(cards.calls);
-          const { parsed, calls, parts } = await judgeCriteria({ ...context, definitions: cards?.definitions ?? [] });
+          const { parsed, calls, parts } = await judgeCriteria(context);
           const usage = account(calls);
           // The trial-level row of these same words, whichever batch wrote it.
           const scored = fitSeen.get(pairKey) ?? done.get(judgmentKey({ ...base, mode: 'fit', promptVersion: String(promptVersions.fit), thinking: thinkingOf('fit'), targetHash: target.hash, documentHash: note.hash }));
           const verdict = trialVerdict({ fit: scored?.fit ?? null, criteria: parsed.rows, missing: parsed.missing });
           saved = await judgments.save({ ...base, ...live, targetHash: target.hash, documentHash: note.hash, status: 'done', fit: scored?.fit ?? null, confidence: scored?.confidence ?? null, verdict: verdict.verdict,
-            answer: { ...answer, rows: parsed.rows, missing: parsed.missing, droppedSentenceIds: parsed.droppedSentenceIds, issues: parsed.issues, parts,
-              ...(cards ? { definitions: { version: VCR_DEFINITION_PROMPT_VERSION, used: cards.definitions.length, ...(cards.failed ? { failed: cards.failed } : {}) } } : {}) }, usage: { ...usage, settings }, documentIds: note.documentIds });
+            answer: { ...answer, rows: parsed.rows, missing: parsed.missing, droppedSentenceIds: parsed.droppedSentenceIds, issues: parsed.issues, parts }, usage: { ...usage, settings }, documentIds: note.documentIds });
         }
         consecutiveUpstream = 0;
         judgedThisBatch += 1;

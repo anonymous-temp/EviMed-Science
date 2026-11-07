@@ -1766,8 +1766,8 @@ export const VCR_MODULE_ERROR_CODES = Object.freeze([
   // judging patients against trials (vcrMatchJudge.mjs)
   'vcr_match_answer_unreadable', 'vcr_match_judge_cut_off', 'vcr_match_judge_failed', 'vcr_match_judge_incomplete', 'vcr_match_judge_network', 'vcr_match_judge_nothing_to_read', 'vcr_match_judge_nothing_to_resume', 'vcr_match_judge_timeout',
   'vcr_match_no_patient_text', 'vcr_match_note_changed', 'vcr_match_nothing_finished', 'vcr_match_stopped_early', 'vcr_match_job_ceiling', 'vcr_match_record_changed',
-  // the reordering of a patient's candidate trials (vcrCandidateRerank.mjs) and the definition cards of a judging job (vcrClauseDefinitions.mjs): both fail open
-  'vcr_rerank_unconfigured', 'vcr_rerank_timeout', 'vcr_rerank_unavailable', 'vcr_rerank_auth_failed', 'vcr_rerank_upstream_error', 'vcr_rerank_response_invalid', 'vcr_definitions_failed',
+  // the reordering of a patient's candidate trials (vcrCandidateRerank.mjs): it fails open
+  'vcr_rerank_unconfigured', 'vcr_rerank_timeout', 'vcr_rerank_unavailable', 'vcr_rerank_auth_failed', 'vcr_rerank_upstream_error', 'vcr_rerank_response_invalid',
   // jobs, derived tables and the orchestrator's step notes
   'vcr_job_kind_retired', 'vcr_job_retire_failed', 'vcr_derived_table_missing', 'vcr_population_profile_missing', 'vcr_derived_table_unsupported', 'vcr_engine_table_invalid', 'vcr_job_attempts_exhausted',
   'vcr_object_unknown', 'vcr_scenario_endpoint_missing', 'vcr_scenario_grid_empty', 'vcr_scenario_unknown_fields',
@@ -2762,7 +2762,6 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_rerank_auth_failed: '候选试验的重排服务拒绝了这里的凭据，这次按检索顺序给出候选；请运维检查密钥。',
   vcr_rerank_upstream_error: '候选试验的重排服务出错了，这次按检索顺序给出候选，其余照常。',
   vcr_rerank_response_invalid: '候选试验的重排服务返回的内容读不出来，这次按检索顺序给出候选，其余照常。',
-  vcr_definitions_failed: '这次没取到条款里术语的定义说明，判定照常进行，只是少了这一块说明。',
   vcr_extract_failed: '这份病历没有读成；已读完的保留，没读成的会在下一次启动时再读。',
   vcr_extract_incomplete: '模型的回答被截断了，这份病历没有读成；下一次启动时会再读它。',
   vcr_extract_timeout: '读这份病历超时了，没有读成；下一次启动时会再读它。',

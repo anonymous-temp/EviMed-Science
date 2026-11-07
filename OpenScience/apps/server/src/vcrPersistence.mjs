@@ -85,7 +85,7 @@ export const VCR_TABLES = Object.freeze([
   "knowledge_packs", "study_packs", "definitions", "definition_versions", "definition_uses",
   "models", "methods",
   "jobs", "conversation_completions", "executions", "results", "forecasts", "longitudinal_artifacts",
-  "matching_assessments", "criterion_judgments", "matching_facts", "language_judgments", "matching_inputs", "document_projections", "cloud_reads", "subject_withdrawals", "retired_recruitment_subjects", "retirement_erased_accounts", "derived_marks", "matching_candidates", "matching_producers", "match_judgments", "match_target_checks", "registry_pages", "candidate_searches", "clause_definitions",
+  "matching_assessments", "criterion_judgments", "matching_facts", "language_judgments", "matching_inputs", "document_projections", "cloud_reads", "subject_withdrawals", "retired_recruitment_subjects", "retirement_erased_accounts", "derived_marks", "matching_candidates", "matching_producers", "match_judgments", "match_target_checks", "registry_pages", "candidate_searches",
   "candidate_trials", "candidate_trial_criteria", "candidate_trial_assessments", "candidate_trial_judgments",
   "followup_episodes",
   "dependencies", "stale_marks", "reviews", "decisions", "regulatory_contacts", "exports", "audit", "schedule_marks",
@@ -1212,20 +1212,6 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.candidate_searches (
   created_at  timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS vcr_candidate_searches_study_idx ON evimed_vcr.candidate_searches (study_id, created_at DESC);
--- The definition cards of a trial's eligibility clauses (vcrClauseDefinitions, built and off until measured): what the model wrote once for a trial's clauses, read as
--- background by every patient's clause-level calls. A registry trial's words are public and the card is shared (study_id null); a study's own protocol is the study's, so its
--- card is too and goes with it. One card per text, prompt version and model: the first writer's words stay, so the pairs judged under them read the same. No patient data.
-CREATE TABLE IF NOT EXISTS evimed_vcr.clause_definitions (
-  id             bigserial PRIMARY KEY,
-  study_id       text REFERENCES evimed_vcr.studies(id) ON DELETE CASCADE,
-  target_hash    text NOT NULL,
-  prompt_version text NOT NULL,
-  model          text NOT NULL,
-  definitions    jsonb NOT NULL DEFAULT '[]'::jsonb,
-  usage          jsonb,
-  created_at     timestamptz NOT NULL DEFAULT now()
-);
-CREATE UNIQUE INDEX IF NOT EXISTS vcr_clause_definitions_key_idx ON evimed_vcr.clause_definitions (COALESCE(study_id, ''), target_hash, prompt_version, model);
 ALTER TABLE evimed_vcr.sources ADD COLUMN IF NOT EXISTS cloud_permission jsonb;
 CREATE TABLE IF NOT EXISTS evimed_vcr.document_projections (
   id text PRIMARY KEY,

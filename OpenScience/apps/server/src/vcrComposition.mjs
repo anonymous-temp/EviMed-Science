@@ -117,7 +117,6 @@ import { createPatientDocumentRead } from "./vcrPatientContext.mjs";
 import { createLongTableReader } from "./vcrLongTables.mjs";
 import { VcrCandidateRerank, createRerankMeter } from "./vcrCandidateRerank.mjs";
 import { VcrCandidateSearchStore } from "./vcrCandidateSearchStore.mjs";
-import { VcrClauseDefinitionStore, createClauseDefinitionCounters, createClauseDefinitions } from "./vcrClauseDefinitions.mjs";
 import { createMatchJudge, createMatchJudgeCounters, createMatchJudgeExecutor, createMatchJudgmentReads, createPairJudge, judgmentTargets, tableFieldsOf } from "./vcrMatchJudge.mjs";
 import { VcrMatchJudgmentStore } from "./vcrMatchJudgmentStore.mjs";
 import { VcrRegistryPageStore, createRegistryPageCounters, createRegistryPages } from "./vcrRegistryPages.mjs";
@@ -1283,12 +1282,9 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   const registryPages = config.vcrRegistryPagesEnabled !== false && webReader
     ? createRegistryPages({ store: new VcrRegistryPageStore({ database: productDatabase }), webReader, config, report, counters: registryPageCounters }) : null;
   const judgeTargets = judgmentTargets({ evidence, matchStore, pages: registryPages });
-  // Definition cards (`match_judge` selection `definitions: true`, off until measured): one model call a trial, kept by the trial's text.
   const pairJudge = createPairJudge({ config, usageLedger, fetchImpl: call, counters: matchJudgeCounters });
-  const clauseDefinitionCounters = createClauseDefinitionCounters();
-  const clauseDefinitions = createClauseDefinitions({ store: new VcrClauseDefinitionStore({ database: productDatabase }), judge: pairJudge, counters: clauseDefinitionCounters, report });
   jobs.localExecutors["matching.judge"] = createMatchJudgeExecutor({
-    store, matchStore, judgments: matchJudgments, documents, subjectTable, targets: judgeTargets, config, report, counters: matchJudgeCounters, clauseDefinitions,
+    store, matchStore, judgments: matchJudgments, documents, subjectTable, targets: judgeTargets, config, report, counters: matchJudgeCounters,
     judge: pairJudge,
   });
   const matchJudge = createMatchJudge({ jobs, matchStore, documents, subjectTable, judgments: matchJudgments, config, counters: matchJudgeCounters });
@@ -1361,7 +1357,7 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   service.attach({ records });
   composed = {
     publications, simulations, frontierEvents, predictions, records,
-    store, dataStore, matchStore, erasure, candidateStore, candidateSearches, candidateReranker, clauseDefinitionCounters, patientTrials, evidenceStore, corrections, knowledge, knowledgeStore, longitudinal, matchJudge, matchJudgeCounters, matchJudgments, matchJudgmentReads, matchResults, registryWatch, registryWatchCounters, registryPages, registryPageCounters, subjectKnown, recordsImport, recordsOriginals, patientDocuments,
+    store, dataStore, matchStore, erasure, candidateStore, candidateSearches, candidateReranker, patientTrials, evidenceStore, corrections, knowledge, knowledgeStore, longitudinal, matchJudge, matchJudgeCounters, matchJudgments, matchJudgmentReads, matchResults, registryWatch, registryWatchCounters, registryPages, registryPageCounters, subjectKnown, recordsImport, recordsOriginals, patientDocuments,
     access, members, dataPlane, dataPlaneSeam, documents, subjectTable, engine, engineProbe, engineStatus, removeEngineJob, jobs, seal, evidence, matching, registry, service,
     intake: { counters: intakeCounters, extractor, importer, digitizer },
     // Composed later, beside the other modules' workers (server.mjs).
@@ -1482,7 +1478,6 @@ export async function vcrMetricsSnapshot(vcr) {
     predictions: vcr.predictions ? { ...vcr.predictions.counters } : null,
     patientTrials: vcr.patientTrials?.counters ? { ...vcr.patientTrials.counters } : null,
     candidateRerank: vcr.candidateReranker ? vcr.candidateReranker.counts() : null,
-    clauseDefinitions: vcr.clauseDefinitionCounters ? { ...vcr.clauseDefinitionCounters } : null,
     matchJudge: vcr.matchJudgeCounters ? { ...vcr.matchJudgeCounters } : null,
     registryWatch: vcr.registryWatch ? { ...vcr.registryWatchCounters } : null,
     registryPages: vcr.registryPages ? { ...vcr.registryPageCounters } : null,
@@ -1582,10 +1577,6 @@ export function vcrMetricFamilies(enabled, snapshot) {
       { labels: { kind: "batches" }, value: snapshot.candidateRerank.succeeded }, { labels: { kind: "documents" }, value: snapshot.candidateRerank.documents },
       { labels: { kind: "billed_tokens" }, value: snapshot.candidateRerank.billedTokens ?? 0 }, { labels: { kind: "unmetered_requests" }, value: snapshot.candidateRerank.unmetered ?? 0 }, { labels: { kind: "billing_failed" }, value: snapshot.candidateRerank.billingFailed ?? 0 },
       ...Object.entries(snapshot.candidateRerank.failed).map(([code, value]) => ({ labels: { kind: `failed:${code}` }, value: Number(value) }))]);
-  }
-  if (snapshot.clauseDefinitions) {
-    add("clause_definitions_total", "What the definition cards of a trial's clauses did since this process started (built, off until measured): cards written by a model call, cards read from the cache, calls that failed (the pair is then read without a card), and clauses that got a card.", "counter",
-      Object.entries(snapshot.clauseDefinitions).map(([kind, value]) => ({ labels: { kind }, value: Number(value) })));
   }
   if (snapshot.matchJudge) {
     add("match_judge_total", "What judging patients against trials did since this process started: jobs started, pairs judged and failed, model calls retried, jobs stopped by a budget, a ceiling or a run of upstream failures, jobs canceled, and records that changed under a job.", "counter",

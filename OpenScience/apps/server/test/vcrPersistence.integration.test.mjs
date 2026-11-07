@@ -60,23 +60,24 @@ test("the migration creates every declared table and runs twice without complain
   assert.equal(after[0].n, VCR_TABLES.length);
 });
 
-test("the three tables nothing reads any more stay out of a fresh schema, survive a start on an old database, and go only by the retirement step", options, async () => {
+test("the tables nothing reads any more stay out of a fresh schema, survive a start on an old database, and go only by the retirement step", options, async () => {
   const { retireUnreadTables, UNREAD_TABLES } = await import("../../../scripts/ops/vcr-retire-unread-tables.mjs");
   const present = async () => (await q("SELECT table_name FROM information_schema.tables WHERE table_schema = 'evimed_vcr' AND table_name = ANY($1::text[]) ORDER BY table_name", [[...UNREAD_TABLES]])).map((row) => row.table_name);
   assert.deepEqual(await present(), [], "a fresh schema has none of them");
   await q("CREATE TABLE IF NOT EXISTS evimed_vcr.matching_extractions (study_id text, subject_key text)");
   await q("CREATE TABLE IF NOT EXISTS evimed_vcr.parsed_trial_criteria (user_id text)");
   await q("CREATE TABLE IF NOT EXISTS evimed_vcr.parsed_trial_criteria_versions (user_id text)");
+  await q("CREATE TABLE IF NOT EXISTS evimed_vcr.clause_definitions (target_hash text)");
   await q("INSERT INTO evimed_vcr.matching_extractions VALUES ('s', 'P-1')");
   await database.transaction(async (client) => {
     const { vcrSchemaSql } = await import("../src/vcrPersistence.mjs");
     await client.query(vcrSchemaSql());
   });
-  assert.equal((await present()).length, 3, "a start never drops a table");
+  assert.equal((await present()).length, 4, "a start never drops a table");
   await database.transaction(async (client) => {
-    assert.deepEqual(await retireUnreadTables(client, { apply: false }), { matching_extractions: 1, parsed_trial_criteria: 0, parsed_trial_criteria_versions: 0 });
-    assert.equal((await present()).length, 3, "without --apply nothing moves");
-    assert.deepEqual(await retireUnreadTables(client, { apply: true }), { matching_extractions: 1, parsed_trial_criteria: 0, parsed_trial_criteria_versions: 0 });
+    assert.deepEqual(await retireUnreadTables(client, { apply: false }), { matching_extractions: 1, parsed_trial_criteria: 0, parsed_trial_criteria_versions: 0, clause_definitions: 0 });
+    assert.equal((await present()).length, 4, "without --apply nothing moves");
+    assert.deepEqual(await retireUnreadTables(client, { apply: true }), { matching_extractions: 1, parsed_trial_criteria: 0, parsed_trial_criteria_versions: 0, clause_definitions: 0 });
   });
   assert.deepEqual(await present(), []);
   await database.transaction(async (client) => {
