@@ -1661,6 +1661,8 @@ const WRITERS = {
     const design = item.choice("design", VCR_TRIAL_DESIGNS, { required: true });
     const endpointType = item.choice("endpointType", VCR_ENDPOINT_TYPES, { required: true });
     const configuration = item.obj("configuration") ?? {};
+    // the precision of a design-search stage is the campaign's, never a stored design's (review eng P1-1)
+    if (configuration.evaluation !== undefined) item.bad("configuration.evaluation", "初筛精度只属于设计搜索，不能写进保存的试验方案。");
     const assumptionIds = (item.arr("assumptionIds", { max: 60 }) ?? []).map(String);
     const comparatorId = item.row.comparatorId == null ? null : String(item.row.comparatorId);
     if (comparatorId) await item.owned("comparatorId", "comparator", comparatorId);

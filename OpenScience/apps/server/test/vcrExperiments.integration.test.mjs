@@ -174,6 +174,9 @@ test('a cancel stops after the unit in flight; a spent budget stops with what ra
 test('a screening precision block is refused from any caller but a campaign', options, async () => {
   await assert.rejects(vcr.jobs.enqueue({ studyId: study.id, userId: origin.userId, kind: 'design_simulation', inputs: [],
     scenario: { ...manifest().space.scenario, evaluation: { version: 1, screeningReplicates: 300 } } }), { code: 'vcr_job_scenario_invalid' });
+  // the programme enqueues internally too: the permission is the campaign's, not the platform's (review eng P1-1)
+  await assert.rejects(vcr.jobs.enqueue({ studyId: study.id, userId: origin.userId, kind: 'design_simulation', inputs: [], internal: true,
+    scenario: { ...manifest().space.scenario, evaluation: { version: 1, screeningReplicates: 300 } } }), { code: 'vcr_job_scenario_invalid' });
   const checked = await vcr.jobs.validate({ kind: 'design_simulation', studyId: study.id, inputs: [], scenario: { ...manifest().space.scenario, evaluation: { version: 1 } } });
   assert.equal(checked.valid, false);
 });
@@ -204,4 +207,48 @@ test('a design experiment compares named arms with a saved result attached and n
     { name: '已复核的方案', resultId: saved.id }], comparison: { measures: ['power', 'expected_sample_size'], reference: '每组 60' } }, { userId: origin.userId });
   assert.equal(again.id, created.id);
   assert.equal(submitted - before, 2, 'the same experiment again queues nothing new');
+});
+
+test('an experiment attaches designs at their normal precision, never people or a screening run (review eng P0-1, stats P2-5)', options, async () => {
+  const screened = await vcr.store.one("SELECT id FROM evimed_vcr.results WHERE study_id = $1 AND subject_id LIKE '%:screening:%' LIMIT 1", [study.id]);
+  const final = await vcr.store.one("SELECT id FROM evimed_vcr.results WHERE study_id = $1 AND subject_id LIKE '%:final:alternative' LIMIT 1", [study.id]);
+  assert.ok(screened && final);
+  // a population result of the same study, as a cohort run files it
+  await vcr.store.query(`INSERT INTO evimed_vcr.results (id, study_id, execution_id, user_id, kind, subject_id, version, conclusion, counts, measures, diagnostics, tables)
+    SELECT 'res_population_small', study_id, execution_id, user_id, 'population', 'pop_small', 1, conclusion, '{"realPatients":3}'::jsonb,
+      '[{"name":"cohort_size","value":3}]'::jsonb, '{}'::jsonb, '[]'::jsonb FROM evimed_vcr.results WHERE id = $1`, [final.id]);
+  const attach = (/** @type {string} */ id) => experiments.startExperiment(study, { question: 'attach', arms: [{ name: 'A', resultId: final.id }, { name: 'B', resultId: id }],
+    comparison: { measures: ['power'], reference: 'A' } }, { userId: origin.userId });
+  await assert.rejects(attach('res_population_small'), (error) => /** @type {any} */ (error).issues?.[0]?.code === 'experiment_result_kind_unsupported');
+  await assert.rejects(attach(screened.id), (error) => /** @type {any} */ (error).issues?.[0]?.code === 'experiment_result_screening');
+  await assert.rejects(experiments.startExperiment(study, { question: 'count', arms: [{ name: 'A', resultId: final.id }, { name: 'B', resultId: final.id }],
+    comparison: { measures: ['cohort_size'], reference: 'A' } }, { userId: origin.userId }), (error) => /** @type {any} */ (error).issues?.[0]?.code === 'experiment_measure_unsupported');
+});
+
+test('a unit cancelled from outside, or the study stopped, stops the campaign and starts nothing new (review eng P1-2, P2-2)', options, async () => {
+  const outside = await experiments.startCampaign(study, manifest({ question: 'outside cancel' }), { userId: origin.userId });
+  const flight = (await vcr.store.one('SELECT state FROM evimed_vcr.experiments WHERE id = $1', [outside.id])).state.inFlight;
+  assert.ok(flight?.jobId, 'the first unit is queued');
+  const before = submitted;
+  // a run or the page cancels the unit's job, not the campaign
+  await vcr.jobs.cancel(study.id, flight.jobId, { actor: origin.userId });
+  for (let i = 0; i < 5; i++) { await loops.jobs(); await experiments.repair(); }
+  const view = await experiments.view(study, outside.id);
+  assert.equal(view.status, 'stopped');
+  assert.equal(view.stop.reason, 'user_cancellation');
+  assert.equal(submitted - before, 0, 'no next candidate was started');
+  assert.equal(Number((await vcr.store.one("SELECT count(*) AS n FROM evimed_vcr.jobs WHERE checkpoint->'experiment'->>'id' = $1", [outside.id])).n), 1);
+
+  // the study's stop arrives while a unit is decided and not yet queued: it is never started
+  const decided = await experiments.startCampaign(study, manifest({ question: 'study stop' }), { userId: origin.userId });
+  const queued = (await vcr.store.one('SELECT state FROM evimed_vcr.experiments WHERE id = $1', [decided.id])).state.inFlight.jobId;
+  // the process died after the decision and before the job was queued: no job runs it, and the campaign's flight has no job id
+  await vcr.store.query(`UPDATE evimed_vcr.jobs SET state = 'canceled', finished_at = now() WHERE id = $1`, [queued]);
+  await vcr.store.query(`UPDATE evimed_vcr.experiments SET state = jsonb_set(state, '{inFlight,jobId}', 'null'::jsonb) WHERE id = $1`, [decided.id]);
+  const asked = await experiments.cancelStudy(study);
+  assert.ok(asked >= 1);
+  await experiments.repair();
+  const stopped = await experiments.view(study, decided.id);
+  assert.equal(stopped.stop?.reason, 'user_cancellation');
+  assert.equal(submitted - before, 0, 'the decided unit was never started');
 });

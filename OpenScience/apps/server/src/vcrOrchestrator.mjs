@@ -562,6 +562,13 @@ export function vcrProjectScenario(method, candidate) {
   /** @type {string[]} */
   const dropped = [];
   if (!schema) return { scenario: {}, dropped: [`method:${method}`] };
+  // the precision block is a design-search campaign's and never a stored object's: a step built from the study's objects runs at the
+  // method's normal precision (review eng P1-1)
+  if (isObject(candidate) && candidate.evaluation !== undefined) {
+    const { evaluation: _evaluation, ...rest } = candidate;
+    dropped.push("evaluation");
+    candidate = rest;
+  }
   /** @param {string} path @param {string} key */
   const at = (path, key) => (path ? `${path}.${key}` : key);
   /** @param {Record<string, any>} fields @param {unknown} value @param {string} path */

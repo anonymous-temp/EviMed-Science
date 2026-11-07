@@ -516,6 +516,10 @@ test("a scenario is the object projected onto the schema of the method that runs
   assert.equal(analytic.scenario.design.allocation, 0.6667);
   // A null is not a value in the protocol: the key is left out.
   assert.deepEqual(vcrProjectScenario("design.simulate", { ...candidate, truth: { ...candidate.truth, null: null } }).scenario.truth, candidate.truth);
+  // A design search's precision block never reaches a step built from a stored object, though the method's schema reads it (review eng P1-1).
+  const screened = vcrProjectScenario("design.simulate", { ...candidate, evaluation: { version: 1, screeningReplicates: 200 } });
+  assert.equal(screened.scenario.evaluation, undefined);
+  assert.ok(screened.dropped.includes("evaluation"));
 });
 
 test("an assumption card's point value is the number the scenario uses, and a new version of the card is a different scenario", () => {

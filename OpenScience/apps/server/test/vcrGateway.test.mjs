@@ -2033,3 +2033,14 @@ test("a lab answer passes the small-cell boundary: a compared people count is hi
   assert.deepEqual(campaign.budget.declared, { maxCandidates: 4, cpuSeconds: 60 });
   assert.equal(campaign.resultEntry.tab, "trial");
 });
+
+test("a stored trial scenario may not carry a design search's precision block (review eng P1-1)", async () => {
+  const { calls, handler } = fixture();
+  const res = response();
+  await handler(request("/internal/vcr/v1/write", { what: "trial_scenario", items: [
+    { label: "A", design: "two_arm_fixed", endpointType: "continuous", configuration: { evaluation: { version: 1, screeningReplicates: 200 } } },
+    { label: "B", design: "two_arm_fixed", endpointType: "continuous", configuration: { design: { kind: "two_arm_fixed" } } }] }), res);
+  const data = res.json().data;
+  assert.deepEqual(data.issues.map((/** @type {any} */ issue) => [issue.index, issue.field]), [[0, "configuration.evaluation"]]);
+  assert.equal(calls.filter((call) => call[0] === "scenario").length, 1, "the other design is written");
+});

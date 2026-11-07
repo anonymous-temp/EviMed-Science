@@ -1021,8 +1021,10 @@ export class VcrJobs {
     const batch = Object.hasOwn(VCR_MATCH_BATCH_JOBS,kind);
     if (batch && input.internal !== true) throw new HttpError(400,'vcr_job_scenario_invalid','A batch reading freezes its roster from the study before enqueue.');
     let scenario = { ...object(input.scenario) };
-    // Screening precision is a campaign's (it ranks candidates and is never a result); no other caller may set it.
-    if (scenario.evaluation !== undefined && input.internal !== true) {
+    // Screening precision is a campaign's (it ranks candidates and is never a result); no other caller may set it. The permission is
+    // the campaign's (its unit names the experiment it belongs to), not the platform's: the programme also enqueues `internal`, and a
+    // stored scenario carrying the block would otherwise file a screening number as an ordinary design result (review eng P1-1).
+    if (scenario.evaluation !== undefined && !(input.internal === true && object(object(input.detail).experiment).id)) {
       throw this.#invalid("vcr_job_scenario_invalid", [{ code: "scenario_field_unknown", field: "scenario.evaluation", detail: CAMPAIGN_PRECISION_ONLY }]);
     }
     const unitBound = vcrCanonicalScenarioTimeUnit(method, scenario);
