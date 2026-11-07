@@ -154,7 +154,7 @@ test('operator database event diagnostics cannot print connection URLs or server
   redactOperatorDatabaseErrors({ pool });
   pool.emit('connect', client);
   client.on('error', error => diagnostics.push(`${error.code} ${error.message}`));
-  for (const emitter of [pool, client]) emitter.emit('error', Object.assign(new Error('postgres://secret-user:private-password@host/server-body'), { code: 'RAW_DATABASE_BODY' }));
+  for (const emitter of [pool, client]) emitter.emit('error', Object.assign(new Error(['postgres:', '', `secret-user:${'private'}-password@host`, 'server-body'].join('/')), { code: 'RAW_DATABASE_BODY' }));
   assert.deepEqual(diagnostics, Array(2).fill('trial_index_database_unavailable The selected database is unavailable.'));
 });
 

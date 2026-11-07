@@ -6,3 +6,4 @@ export { CLINICAL_ELIGIBILITY, WORK_STATES, pairIdentity, validateMatchingTask, 
 export { PROJECTION_VERSION, rankMatchingResults, projectMatchingResult, validateMatchingResult, reportInputFromResult } from './src/projection.mjs'
 export { planReassessment } from './src/dependencies.mjs'
 export { METRIC_PROFILES, validateMetricProfile, metricInputFromResults } from './src/metrics.mjs'
+export { RANKING_POLICY, JEV_FIT_INSTRUCTIONS, JEV_FIT_LEVELS, trialRecordText, composeRanking } from './src/ranking.mjs'

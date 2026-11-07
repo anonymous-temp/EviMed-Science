@@ -52,20 +52,39 @@ test('rerank returns exact candidate identities; an invalid provider order prese
   assert.equal(result.data.fallback, true);
 });
 
-test('typed priority uses its own pinned Jev profile and endpoint without changing the review model', async () => {
+test('typed fit asks Jev once per candidate with the pinned profile and the five-level rubric, without changing the review model', async () => {
   const config = { reviewJevModel: 'jev-1.13.0' };
+  const seen = [];
   const ports = createPatientMatchingModelPorts({ config,
     authorize: async () => ({ userId: 'user-a', projectId: 'project-a' }),
     callJevImpl: async (dependencies, call) => {
       assert.equal(dependencies.config.reviewJevModel, 'jev-1.14.0');
       assert.equal(dependencies.config.reviewJevApiBase, 'https://api.typesafe.ai/v1');
-      assert.equal(call.questions.candidate_0.type, 'score');
-      return { answers: { candidate_0: { type: 'score', score: 2, confidence: 0.7 } }, model: 'jev-1.14.0' };
+      assert.equal(call.questions.fit.type, 'score');
+      assert.equal(call.questions.fit.criteria.length, 5);
+      seen.push(call.state.trial_record);
+      return { answers: { fit: { type: 'score', score: call.state.trial_record === 'Trial B' ? 3.6 : 0.4, confidence: 0.7 } }, model: 'jev-1.14.0' };
     },
   });
-  const result = await ports.priority({ scope, input: { query: 'clinical relevance', candidates: [{ registryId: 'A', text: 'Public trial' }] } });
+  const result = await ports.jevFit({ scope, input: { query: 'patient passages', candidates: [{ registryId: 'A', text: 'Trial A' }, { registryId: 'B', text: 'Trial B' }] } });
   assert.equal(result.status, 'complete');
+  assert.deepEqual(result.data.scores.map(row => [row.registryId, row.score]), [['A', 0.4], ['B', 3.6]]);
+  assert.deepEqual(seen.sort(), ['Trial A', 'Trial B']);
   assert.equal(config.reviewJevModel, 'jev-1.13.0');
+});
+
+test('a failed or out-of-range Jev answer leaves that candidate unscored and the others scored', async () => {
+  const ports = createPatientMatchingModelPorts({ config: {},
+    authorize: async () => ({ userId: 'user-a', projectId: 'project-a' }),
+    callJevImpl: async (_dependencies, call) => {
+      if (call.state.trial_record === 'bad') return { answers: { fit: { type: 'score', score: 7 } } };
+      if (call.state.trial_record === 'down') throw Object.assign(new Error('provider'), { code: 'jev_http_503' });
+      return { answers: { fit: { type: 'score', score: 2 } }, model: 'jev-1.14.0' };
+    },
+  });
+  const result = await ports.jevFit({ scope, input: { query: 'p', candidates: [{ registryId: 'A', text: 'ok' }, { registryId: 'B', text: 'bad' }, { registryId: 'C', text: 'down' }] } });
+  assert.equal(result.status, 'partial');
+  assert.deepEqual(result.data.scores.map(row => [row.registryId, row.score, row.code ?? null]), [['A', 2, null], ['B', null, 'patient_matching_priority_invalid'], ['C', null, 'jev_http_503']]);
 });
 
 test('embedding endpoints form distinct immutable profiles',()=>{
@@ -76,8 +95,8 @@ test('embedding endpoints form distinct immutable profiles',()=>{
 test('Jev source authorization is repeated by its retry/fetch hook',async()=>{
  let authorized=0;
  const ports=createPatientMatchingModelPorts({config:{},authorize:async()=>{if(++authorized>1)throw new Error('revoked');return {userId:'user-a',projectId:'project-a'};},callJevImpl:async deps=>{await deps.assertModelAccess();throw new Error('provider must not be reached');}});
- const value=await ports.priority({scope,input:{query:'objective',candidates:[{registryId:'a',text:'public'}]}});
- assert.equal(authorized,2);assert.equal(value.status,'failed');
+ const value=await ports.jevFit({scope,input:{query:'objective',candidates:[{registryId:'a',text:'public'}]}});
+ assert.equal(authorized,2);assert.equal(value.status,'failed');assert.equal(value.data.scores[0].score,null);
 });
 
 test('documented native rerank dialect and repeated query billing remain bounded',async()=>{

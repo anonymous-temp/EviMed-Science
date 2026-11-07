@@ -23,3 +23,38 @@ test('long or blank discovery questions stop before source/model work and preser
  }
  assert.equal(reads,0);assert.equal(models,0);
 });
+test('discovery asks the lexical branch for the condition and its ranked terms, and saves the rerank and Jev orders fused', async () => {
+ let asked, saved;
+ const ids = ['NCT00000001', 'NCT00000002', 'NCT00000003'];
+ const vcr = { service: { runtimeRead: async (_study, kind, input) => {
+   if (kind === 'candidates') { asked = input; return { candidates: ids.map(registryId => ({ registryId, title: registryId })), registries: [{ status: 'ok' }] }; }
+   return { record: { title: input.registryId, eligibilityText: `criteria of ${input.registryId}` } };
+ } }, candidateSearches: { save: async (_study, value) => { saved = value; return 'search'; } } };
+ const models = { embeddingProfileDigest: 'profile',
+   rerank: async () => ({ status: 'complete', data: { order: [...ids], model: 'qwen3.7-text-rerank' } }),
+   jevFit: async (envelope) => {
+     assert.match(envelope.input.candidates[0].text, /^Title: NCT00000001\nTarget conditions:/);
+     assert.match(envelope.input.candidates[0].text, /Eligibility Criteria \(raw\):\ncriteria of NCT00000001/);
+     return { status: 'complete', data: { model: 'jev-1.14.0', rubric: 'jev-fit-5-v1', answered: 3, scores: [{ registryId: ids[0], score: 0.2 }, { registryId: ids[1], score: 3.9 }, { registryId: ids[2], score: 3.8 }] } };
+   } };
+ const discover = createPatientMatchingDiscovery({ vcr, models, depth: 50 });
+ const answer = await discover({ scope, origin, study: { id: 'study' }, meta: { taskId: 'task', contextSubjectKey: 'person', selectedPairs: [] },
+   input: { query: 'non-small cell lung cancer', terms: ['EGFR exon 19 deletion', 'osimertinib', '', 'EGFR exon 19 deletion'], limit: 3 }, patient: { sources: [], passages: [{ text: 'record' }] } });
+ assert.deepEqual(asked.terms, ['EGFR exon 19 deletion', 'osimertinib']);
+ assert.equal(asked.limit, 50);
+ assert.deepEqual(saved.rerank.rerankOrder, ids);
+ assert.deepEqual(saved.rerank.jev.order, [ids[1], ids[2], ids[0]]);
+ assert.deepEqual(saved.rerank.finalOrder, [ids[1], ids[0], ids[2]], 'rank fusion: the second candidate leads both orders on the sum, the first keeps its rerank lead over the third');
+ assert.equal(saved.rerank.policy, 'rrf-qwen-jev-v1');
+ assert.deepEqual(answer.data.candidates.map(row => row.registryId), saved.rerank.finalOrder);
+});
+test('without Jev the rerank order stands, and a failed Jev answer never fails discovery', async () => {
+ const ids = ['NCT00000001', 'NCT00000002'];
+ const vcr = { service: { runtimeRead: async (_s, kind, input) => kind === 'candidates' ? { candidates: ids.map(registryId => ({ registryId })) } : { record: { title: input.registryId } } }, candidateSearches: { save: async () => 'search' } };
+ const rerank = async () => ({ status: 'complete', data: { order: [ids[1], ids[0]] } });
+ const off = await createPatientMatchingDiscovery({ vcr, models: { embeddingProfileDigest: 'profile', rerank, jevFit: async () => { throw new Error('must not be asked'); } }, jevEnabled: false })({ scope, origin, study: {}, meta: { taskId: 't', selectedPairs: [] }, input: { query: 'q' } });
+ assert.deepEqual(off.data.candidates.map(row => row.registryId), [ids[1], ids[0]]);
+ const failed = await createPatientMatchingDiscovery({ vcr, models: { embeddingProfileDigest: 'profile', rerank, jevFit: async () => ({ status: 'failed', data: { code: 'jev_http_503' } }) } })({ scope, origin, study: {}, meta: { taskId: 't', selectedPairs: [] }, input: { query: 'q' } });
+ assert.deepEqual(failed.data.candidates.map(row => row.registryId), [ids[1], ids[0]]);
+ assert.equal(failed.data.rerank.jev.state, 'failed');
+});

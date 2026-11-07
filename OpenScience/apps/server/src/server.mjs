@@ -6121,7 +6121,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     patientMatchingAdapter=createPatientMatchingHostAdapter({vcr,documents:productDocuments,config,modelPorts:patientMatchingModels,indexPorts:patientMatchingIndex,
       calculate:async(input,options)=>{await runtimeManager.inspectPatientMatchingWorker();return calculate(input,options);},
       knowledge:createPatientMatchingKnowledge({sources:sourceService,index:kbIndex,sourceScope:origin=>conversationSourceScope(origin,origin.rootSessionId)}),
-      discover:createPatientMatchingDiscovery({vcr,models:patientMatchingModels,index:patientMatchingIndex,priorityEnabled:config.patientMatchingPriorityEnabled,assertCurrent:envelope=>patientMatchingAdapter.authorizeModel(envelope)}),
+      discover:createPatientMatchingDiscovery({vcr,models:patientMatchingModels,index:patientMatchingIndex,jevEnabled:config.patientMatchingJevEnabled,depth:config.patientMatchingDiscoveryDepth,jevDepth:config.patientMatchingJevDepth,assertCurrent:envelope=>patientMatchingAdapter.authorizeModel(envelope)}),
       onPending:(origin,taskId)=>patientMatchingContinuation?.enqueue(origin,taskId),
       onCancel:async(origin,taskId)=>runtimeManager.cancelPatientMatchingTask(await sourceProject(origin),taskId) });
     patientMatchingContinuation=new PatientMatchingContinuation({jobs:productJobs,documents:productDocuments,adapter:patientMatchingAdapter,

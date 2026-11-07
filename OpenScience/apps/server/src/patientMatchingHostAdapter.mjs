@@ -175,7 +175,7 @@ export function createPatientMatchingHostAdapter({ vcr, documents, config = {}, 
         : registryIds.map(trialId => ({ subjectKey: input.subjectKey??row?.payload.contextSubjectKey, trialId }));
       if (!selectedPairs.length || selectedPairs.length > 10000 || selectedPairs.some(pair => !pair.subjectKey) || new Set(selectedPairs.map(pairIdentity)).size !== selectedPairs.length) deny('patient_matching_selection_invalid');
       const subjectKey=input.subjectKey??row?.payload.contextSubjectKey,selectedIds=new Set(registryIds);
-      const stageOrders=Object.fromEntries(Object.entries({incoming:searchReceipt?.rerank?.incomingOrder,rerank:searchReceipt?.rerank?.finalOrder})
+      const stageOrders=Object.fromEntries(Object.entries({incoming:searchReceipt?.rerank?.incomingOrder,rerank:searchReceipt?.rerank?.rerankOrder??searchReceipt?.rerank?.finalOrder,jev:searchReceipt?.rerank?.jev?.order,final:searchReceipt?.rerank?.rerankOrder?searchReceipt?.rerank?.finalOrder:undefined})
         .filter(([,ids])=>Array.isArray(ids)).map(([stage,ids])=>[stage,ids.filter(registryId=>selectedIds.has(registryId)).map(trialId=>pairIdentity({subjectKey,trialId}))]));
       const selection = { direction: protocolVersionId ? 'protocol-to-patients' : selectedPairs.length === 1 ? 'specified-pair' : 'patient-to-trials', selectedPairs,
         protocolVersionId: protocolVersionId ?? null, collection, collectionRevision,stageOrders };
