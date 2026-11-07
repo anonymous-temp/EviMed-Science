@@ -54,6 +54,7 @@ import { VCR_DEFAULT_STUDY_NAME, vcrObjectNode, vcrStudyNameFrom } from "./vcrSt
 import { vcrSealState } from "./vcrSeal.mjs";
 import { VCR_SCHEMA } from "./vcrPersistence.mjs";
 import { vcrTypeOneLevel, vcrWithTypeOneVerdicts } from "./vcrTypeOneVerdict.mjs";
+import { vcrProgressionWithDifferences } from "./vcrProgression.mjs";
 import {
   presentConversationStudy, presentExport, presentModels, presentPrecedents, presentReviewNotes, presentStudy, presentSummary, resultNode, useCeilingOf, intakeNeedsOf,
   vcrCurrentNodes, vcrReviewIsCurrent,
@@ -1780,21 +1781,23 @@ export class VcrService {
     // This one projection has already verified the entire generated lineage; synthetic counts are not patient disclosure cells.
     if (what === "generated_records") return stripPlaneAddresses(payload);
     const shown = this.forModel(payload, { publishedFigures: VCR_PUBLISHED_FIGURE_READS.includes(what), projection:what });
-    return what === "results" ? this.#withTypeOneVerdicts(study, shown) : shown;
+    return what === "results" ? this.#resultsAnswer(study, shown) : shown;
   }
 
   /**
    * The results a run reads, each simulated type I error said as its verdict on the conservative bound, against the level its own job
    * stated (live D8, 2026-11-07, phase 3: the follow-up 「能不能确认一类错误不超过 2.5%？」 was answered from this read, which carried
-   * 2.44% ± 0.11% and no verdict, as 「能确认不超过 2.5%」). A level that cannot be read leaves the number as it is.
+   * 2.44% ± 0.11% and no verdict, as 「能确认不超过 2.5%」), and each progression run with the difference between its arms at every visit
+   * (live D6: a reply subtracted the means itself). A level that cannot be read leaves the number as it is.
    * @param {any} study @param {any} shown
    */
-  async #withTypeOneVerdicts(study, shown) {
-    const results = Array.isArray(shown?.results) ? shown.results : [];
+  async #resultsAnswer(study, shown) {
+    const results = (Array.isArray(shown?.results) ? shown.results : []).map((/** @type {any} */ result) => vcrProgressionWithDifferences(result));
+    if (!Array.isArray(shown?.results)) return shown;
     const holds = (/** @type {any} */ result) => [result?.measures, ...(Array.isArray(result?.diagnostics?.cells) ? result.diagnostics.cells.map((/** @type {any} */ cell) => cell?.measures) : [])]
       .some((measures) => Array.isArray(measures) && measures.some((/** @type {any} */ measure) => measure?.name === "type_one_error"));
     const asked = results.filter(holds).map((/** @type {any} */ result) => String(result.id));
-    if (!asked.length) return shown;
+    if (!asked.length) return { ...shown, results };
     /** @type {Map<string, Record<string, any>>} */
     const scenarios = new Map();
     if (typeof this.store.rows === "function") {

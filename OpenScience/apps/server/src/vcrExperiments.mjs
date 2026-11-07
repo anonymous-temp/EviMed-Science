@@ -459,6 +459,18 @@ export class VcrExperiments {
           measures: list(result.measures), drawSignature: evaluation.drawSignature ?? null, rejects: evaluation.rejects ?? null } : null });
     }
     const reference = arms.find((arm) => arm.name === record.comparison?.reference) ?? null;
+    // A disease arm's difference from the reference arm at each visit, said by code from the two calculated courses (live D6, 2026-11-07: a
+    // reply compared three Alzheimer arms by subtracting their means itself). Exact in the typical study, like the courses; only at the
+    // visits both arms have.
+    if (disease && reference?.trajectory) {
+      for (const arm of arms) {
+        if (arm === reference || !arm.trajectory) continue;
+        arm.trajectory = arm.trajectory.map((/** @type {any} */ point) => {
+          const against = /** @type {any[]} */ (reference.trajectory).find((/** @type {any} */ entry) => entry.visit === point.visit);
+          return against && point.treated !== null && against.treated !== null ? { ...point, againstReference: point.treated - against.treated } : point;
+        });
+      }
+    }
     const comparison = list(record.comparison?.measures).map((name) => ({
       measure: name, label: measureLabel(name),
       arms: arms.map((arm) => {

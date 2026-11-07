@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { VCR_JOB_METHODS, VCR_RESULT_KIND_TABS } from "@evimed/domain";
-import { progressionCard, presentProgressions, vcrProgressionSubjectId } from "../src/vcrProgression.mjs";
+import { progressionCard, presentProgressions, vcrProgressionSubjectId, vcrProgressionWithDifferences } from "../src/vcrProgression.mjs";
 import { vcrResultKindFor } from "../src/vcrJobs.mjs";
 
 const fixture = (name) => ({ ...JSON.parse(readFileSync(new URL(`./fixtures/vcr-progression/${name}.json`, import.meta.url), "utf8")), id: "res_1", version: 1, kind: "progression_simulation", createdAt: "2026-11-04T00:00:00Z" });
@@ -170,4 +170,22 @@ test("the live case: twelve Alzheimer runs are twelve cards, each titled by what
   // The other families say their own slowing and size.
   assert.equal(progressionCard(fixture("linear-change")).title, "线性进展：进展减慢 25%，共 300 人");
   assert.match(progressionCard(fixture("null")).title, /治疗不改变进展/);
+});
+
+test("live D6: the answer a conversation reads says the difference between the arms at each visit, the card's own 治疗减对照", () => {
+  // Phase 3 (2026-11-07, conversation c): the reply's table of 对症−安慰剂 and 疾修−安慰剂 at each visit was subtracted by the model.
+  const result = fixture("alzheimer-beta-logit");
+  const answered = vcrProgressionWithDifferences(result);
+  const card = progressionCard(result);
+  const differences = answered.diagnostics.progression.curves.map((/** @type {any} */ curve) => curve.difference);
+  assert.equal(differences.length, card.table.rows.length);
+  differences.forEach((/** @type {any} */ difference, /** @type {number} */ at) => {
+    assert.ok(Math.abs(difference.value - card.table.rows[at].gap.value) < 1e-7, `the page and the answer say one number at visit ${card.table.rows[at].visit}`);
+    assert.equal(difference.source, "calculated");
+    assert.equal("mcse" in difference, false, "exact in the typical study, like the means");
+  });
+  assert.ok(Math.abs(differences[0].value) < 1e-12 && differences.at(-1).value < 0);
+  assert.equal(result.diagnostics.progression.curves[0].difference, undefined, "the stored result is not changed");
+  const other = { kind: "trial_scenario", measures: [], diagnostics: {} };
+  assert.equal(vcrProgressionWithDifferences(other), other);
 });

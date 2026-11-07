@@ -294,3 +294,29 @@ export function presentProgressions(bundle, { nodeOf }) {
 
 /** @param {Record<string, any>} result @param {any} staleMark exported for the tests that read one result */
 export const progressionCard = (result, staleMark = null) => cardOf(result, staleMark);
+
+/**
+ * A progression result as a conversation reads it, with the difference between its arms at each visit said by code: each curve's
+ * `difference` is the treated group's mean less the untreated group's, the 「治疗减对照」 column of the card, calculated exactly in the
+ * typical study like the means it is made of (no Monte Carlo error; the simulated difference at the analysis visit, `simulated_difference`,
+ * carries its own). Live D6 (2026-11-07, phase 3): three Alzheimer arms were compared by a reply that subtracted the means itself. A copy;
+ * a result of another kind, or a curve without both means, is unchanged.
+ * @param {Record<string, any>} result as the answer carries it
+ * @returns {Record<string, any>}
+ */
+export function vcrProgressionWithDifferences(result) {
+  const diagnostics = object(result?.diagnostics);
+  const progression = object(diagnostics.progression);
+  const curves = list(progression.curves);
+  if (result?.kind !== "progression_simulation" || !curves.length) return result;
+  const unit = text(progression.outcomeUnit);
+  const withDifference = curves.map((raw) => {
+    const curve = object(raw);
+    const treated = numeric(object(object(curve.treated).mean).value);
+    const control = numeric(object(object(curve.control).mean).value);
+    return treated === null || control === null ? raw
+      : { ...curve, difference: { name: "curve_difference", value: treated - control, source: "calculated", ...(unit ? { unit } : {}),
+        note: "treated less untreated mean at this visit, calculated exactly in the typical study" } };
+  });
+  return { ...result, diagnostics: { ...diagnostics, progression: { ...progression, curves: withDifference } } };
+}

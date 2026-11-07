@@ -790,6 +790,23 @@ class VcrReadWriteTests(_GatewayCase):
         self.assertTrue(any("typeOneError.text" in line for line in status["next_actions"]), "the grid's status answer too")
 
 
+    def test_a_progression_run_and_a_disease_comparison_say_the_platforms_differences_between_arms(self):
+        # Live D6, phase 3 (2026-11-07): three Alzheimer arms were compared by a reply that subtracted the arms' means itself.
+        run = {"id": "res_ad", "kind": "progression_simulation", "diagnostics": {"progression": {"curves": [
+            {"visit": 13, "control": {"mean": {"value": 22.41}}, "treated": {"mean": {"value": 20.63}}, "difference": {"value": -1.78, "source": "calculated"}}]}}}
+        status = vcr_platform._job_answer({"state": "succeeded", "jobId": "job_ad", "result": run}, "status")
+        self.assertTrue(any("curves[].difference" in line and "never subtract" in line for line in status["next_actions"]))
+        _Gateway.answers["read"] = (200, {"data": {"what": "results", "results": [run]}})
+        self.assertTrue(any("never subtract" in line for line in self.server.call_tool("vcr_read", {"what": "results"})["next_actions"]))
+        plain = vcr_platform._job_answer({"state": "succeeded", "jobId": "job_1", "result": {"kind": "trial_scenario"}}, "status")
+        self.assertFalse(any("never subtract" in line for line in plain["next_actions"]))
+        comparison = {"action": "compare_status", "kind": "experiment", "id": "exp_1", "status": "complete", "arms": [
+            {"name": "安慰剂", "trajectory": [{"visit": 13, "control": 22.41, "treated": 22.41}]},
+            {"name": "对症", "trajectory": [{"visit": 13, "control": 22.41, "treated": 20.63, "againstReference": -1.78}]}]}
+        lab = vcr_platform._lab_answer(comparison, "compare_status")
+        self.assertTrue(any("againstReference" in line and "never subtract" in line for line in lab["next_actions"]))
+
+
 class VcrSimulateTests(_GatewayCase):
     def test_a_start_posts_exactly_the_frozen_scenario_and_answers_the_job(self):
         scenario = {"design": {"kind": "two_arm_fixed", "nTreat": 120, "nControl": 60}, "endpoint": {"type": "time_to_event"},

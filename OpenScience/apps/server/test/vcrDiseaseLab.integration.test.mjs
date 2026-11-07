@@ -86,6 +86,15 @@ test('three Alzheimer hypotheses run as arms of one experiment on the real engin
   assert.equal(difference.contrasts.find((c) => c.arm === '对症假设').coupling, 'exact');
   assert.ok(difference.contrasts.find((c) => c.arm === '对症假设').difference.value < 0, 'the symptomatic hypothesis lowers the score against no drug');
   assert.ok(view.arms.every((a) => a.trajectory.length === 4 && a.trajectory[0].visit === 0));
+  // Each arm's difference from the reference arm at every visit is said by code from the two calculated courses (live D6, 2026-11-07: a reply
+  // compared three Alzheimer arms by subtracting the means itself), and the reference arm has none.
+  const placebo = view.arms.find((a) => a.name === '安慰剂');
+  assert.ok(placebo.trajectory.every((/** @type {any} */ point) => !('againstReference' in point)));
+  for (const arm of view.arms.filter((a) => a !== placebo)) {
+    arm.trajectory.forEach((/** @type {any} */ point, /** @type {number} */ at) => assert.equal(point.againstReference, point.treated - placebo.trajectory[at].treated, `${arm.name} week ${point.visit}`));
+    assert.ok(Math.abs(arm.trajectory[0].againstReference) < 1e-9, 'the arms start alike');
+  }
+  assert.ok(view.arms.find((a) => a.name === '对症假设').trajectory[1].againstReference < 0, 'the symptomatic hypothesis is below no drug at week 26');
   assert.ok(view.alignment.every((row) => row.aligned), JSON.stringify(view.alignment));
   const keys = view.premises.map((row) => row.key);
   for (const key of ['lab:aligned', 'progression:ad:effect', 'progression:ad:parameters', 'progression:ad:scope', 'progression:ad:regulatory']) assert.ok(keys.includes(key), key);

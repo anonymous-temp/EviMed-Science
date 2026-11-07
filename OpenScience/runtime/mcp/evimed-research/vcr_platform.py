@@ -810,6 +810,8 @@ def read(arguments: dict) -> dict:
     if what == "results" and any(_type_one_verdicts(result) for result in data.get("results") or [] if isinstance(result, dict)):
         # Live D8, phase 3 (2026-11-07): a grid's null check of 2.44% +/- 0.11% was read here and answered "can confirm it does not exceed 2.5%".
         next_actions.append(TYPE_ONE_VERDICT_LINE)
+    if what == "results" and any(_progression_differences(result) for result in data.get("results") or []):
+        next_actions.append(PROGRESSION_DIFFERENCE_LINE)
     return {
         "status": "warning" if warnings else "success",
         "summary": ("Read %s of this 虚拟临床研究 study. %s" % (what, _longitudinal_comparison_summary(data) if what == "longitudinal" else "")).strip(),
@@ -1405,6 +1407,9 @@ def _lab_answer(data: dict, action: str) -> dict:
             "Report the stop reason in the researcher's words, the best design with its final numbers and their error, which constraints were met, "
             "undecided or not met, and the budget used; cite the fields, never retyped numbers.",
         ]
+        if any(isinstance(point, dict) and "againstReference" in point for arm in data.get("arms") or [] if isinstance(arm, dict)
+               for point in arm.get("trajectory") or []):
+            next_actions.append(PROGRESSION_DIFFERENCE_LINE)
         undecided = data.get("undecided") if isinstance(data.get("undecided"), dict) else None
         if undecided and undecided.get("advice"):
             next_actions.append(
@@ -1422,6 +1427,22 @@ def _lab_answer(data: dict, action: str) -> dict:
 TYPE_ONE_VERDICT_LINE = ("Say each type I error in the words of its verdict (data.typeOneError.text, a result's typeOneError.text, or a grid "
                          "cell's in diagnostics.cells), the platform's verdict on its conservative bound: \"not above\" only when that text says "
                          "so; never conclude it from the estimate, and give no interval of your own.")
+
+
+# How the difference between two arms of a disease-progression run, or between two arms of a comparison, is said: the platform's own.
+PROGRESSION_DIFFERENCE_LINE = ("The difference between arms at each visit is the platform's: diagnostics.progression.curves[].difference (treated less "
+                               "untreated) in a run, trajectory[].againstReference (an arm less the reference arm) in a comparison, both calculated "
+                               "exactly in the typical study; the simulated difference at the analysis visit carries its Monte Carlo SE. Cite them; "
+                               "never subtract the means yourself.")
+
+
+def _progression_differences(result) -> bool:
+    """Whether a result is a progression run whose curves carry the platform's differences between its arms."""
+    if not isinstance(result, dict) or result.get("kind") != "progression_simulation":
+        return False
+    progression = (result.get("diagnostics") or {}).get("progression") if isinstance(result.get("diagnostics"), dict) else None
+    curves = progression.get("curves") if isinstance(progression, dict) else None
+    return any(isinstance(curve, dict) and isinstance(curve.get("difference"), dict) for curve in curves or [])
 
 
 def _type_one_verdicts(holder) -> bool:
@@ -1645,6 +1666,9 @@ def _job_answer(data: dict, action: str) -> dict:
     if _type_one_verdicts(data) or _type_one_verdicts(result):
         # Live D8 (2026-11-07): 2.53% +/- 0.11% was headed "the simulation supports not exceeding 2.5%"; its upper bound is 2.75%.
         actions.append(TYPE_ONE_VERDICT_LINE)
+    if _progression_differences(result):
+        # Live D6 (2026-11-07): three Alzheimer arms were compared by a reply that subtracted the arms' means itself.
+        actions.append(PROGRESSION_DIFFERENCE_LINE)
     if result.get("kind") in ("trial_scenario", "design_grid"):
         # A design is chosen by the researcher: the reply recommends one in a sentence and says which bound decided it.
         actions.append("When designs are compared, close with one sentence of recommendation that says which constraint decided it (the type I error "
