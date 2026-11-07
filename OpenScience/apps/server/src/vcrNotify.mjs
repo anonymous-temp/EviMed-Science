@@ -116,11 +116,13 @@ export function vcrJobNoticeText({ resultKind, stage = null, label = null, state
     const assurance = measure("assurance");
     const events = measure("required_events");
     const total = measure("required_total");
+    // The design's name and the label of its number are two words: a number or a Latin letter never runs into the next one (live D9, 「试验方案 4I 类错误」).
+    const lead = name ? `${name} ` : "";
     if (stage === "analytic" && (events || total)) {
       headline = [name, events ? `所需事件数 ${count(events.value)} 例` : null, total ? `所需样本量 ${count(total.value)} 例` : null].filter(Boolean).join(" ");
-    } else if (stage === "assurance" && assurance) headline = `${name}成功把握 ${percent(assurance.value)}`.trim();
-    else if (power) headline = `${name}功效 ${percent(power.value)}`.trim();
-    else if (typeOne) headline = `${name}I 类错误 ${percent(typeOne.value)}`.trim();
+    } else if (stage === "assurance" && assurance) headline = `${lead}成功把握 ${percent(assurance.value)}`;
+    else if (power) headline = `${lead}功效 ${percent(power.value)}`;
+    else if (typeOne) headline = `${lead}I 类错误 ${percent(typeOne.value)}`;
   } else if (resultKind === "population" || resultKind === "patient_set") {
     const generated = finiteNumber(result?.counts?.generatedRecords);
     const real = finiteNumber(result?.counts?.realPatients);

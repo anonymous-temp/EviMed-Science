@@ -13,7 +13,7 @@ import {
   vcrProductsOfSteps, vcrProgramSteps, vcrProjectScenario, vcrReviewRepairBrief, vcrRunId, vcrRunPrompt, vcrSimpleStepStatus, vcrStepUpdates, vcrStepsInFlight,
   vcrStepClosure, vcrSupersededNodes, wantedVcrSteps,
 } from "../src/vcrOrchestrator.mjs";
-import { VCR_NOTICE_KINDS, createVcrNotifier, vcrNoticeHref, vcrStudyName } from "../src/vcrNotify.mjs";
+import { VCR_NOTICE_KINDS, createVcrNotifier, vcrJobNoticeText, vcrNoticeHref, vcrStudyName } from "../src/vcrNotify.mjs";
 import {
   VCR_ENGINE_METHODS, VCR_EXPORT_KINDS, VCR_EXPORT_KIND_LABELS_ZH, VCR_JOB_KINDS, VCR_JOB_METHODS, VCR_NOTIFICATION_KINDS, VCR_NOT_ESTIMABLE_RULES,
   VCR_MODEL_DOCUMENT_SECTIONS, VCR_NOT_ESTIMABLE_RULE_LABELS_ZH, VCR_SCENARIO_SCHEMAS, VCR_STEPS, VCR_STEP_CAPABILITIES, VCR_STEP_NEEDS, validateEngineJob,
@@ -354,12 +354,21 @@ test("there are exactly seven notices, and they are the domain's seven: the five
     ["package_ready", "not_estimable", "budget_confirm", "new_evidence", "job_finished"]);
 });
 
+test("a notice title puts a space between the design's name and the label of its number (live D9)", () => {
+  const title = (/** @type {string} */ label, /** @type {Record<string, any>} */ measure, stage = "simulation") =>
+    vcrJobNoticeText({ resultKind: "trial_scenario", stage, label, state: "succeeded", result: { conclusion: "estimable", measures: [measure] } })?.title;
+  assert.equal(title("试验方案 4", { name: "type_one_error", value: 0.025 }), "方案模拟完成：试验方案 4 I 类错误 2.5%");
+  assert.equal(title("试验方案 2", { name: "power", value: 0.764 }), "方案模拟完成：试验方案 2 功效 76.4%");
+  assert.equal(title("试验方案 3", { name: "assurance", value: 0.71 }, "assurance"), "成功把握计算完成：试验方案 3 成功把握 71%");
+  assert.equal(title("", { name: "power", value: 0.9 }), "方案模拟完成：功效 90%", "no name, no leading space");
+});
+
 test("a finished computation says what was computed and the one number a reader wants first, from the engine's own measures", async () => {
   const { sent, notifier } = notifierFixture();
   const measures = [{ name: "power", value: 0.915, simulated: true, mcse: 0.004 }];
   await notifier.jobFinished(study, { jobId: "job_1", resultKind: "trial_scenario", stage: "simulation", label: "B 1:1 固定设计", state: "succeeded",
     result: { conclusion: "estimable", measures } });
-  assert.equal(sent[0].title, "方案模拟完成：1:1 固定设计功效 91.5%", "the design's letter is the page's, the number is the result's");
+  assert.equal(sent[0].title, "方案模拟完成：1:1 固定设计 功效 91.5%", "the design's letter is the page's, the number is the result's");
   assert.match(sent[0].body, /EV-201 二线 NSCLC/);
   assert.match(sent[0].body, /「试验」页/);
   assert.deepEqual(sent[0].source, { type: "vcr", id: "std_1/trial" }, "the notice carries the study and the tab it opens");

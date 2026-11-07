@@ -763,7 +763,7 @@ test("R10 a computation a conversation queues is filed under the design it was q
   // One notice per computation the conversation asked for, in the researcher's words; none for the programme's own stages.
   const titles = notices_of(module).map((notice) => notice.title);
   assert.equal(titles.filter((title) => title.startsWith("方案计算完成")).length, 2);
-  assert.ok(titles.some((title) => /^方案模拟完成：1:1 固定设计功效 71\.2%$/.test(title)), `the simulation says its number: ${titles.join(" | ")}`);
+  assert.ok(titles.some((title) => /^方案模拟完成：1:1 固定设计 功效 71\.2%$/.test(title)), `the simulation says its number: ${titles.join(" | ")}`);
   assert.ok(notices_of(module).every((notice) => notice.source.id === `${study.id}/trial` || !String(notice.title).includes("完成")));
   const simulationNotices = notices_of(module).filter((notice) => notice.title.startsWith("方案模拟完成"));
   assert.equal(simulationNotices.length, 2, "two simulations were asked for, and C was the programme's own");
