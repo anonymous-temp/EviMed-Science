@@ -5,11 +5,12 @@ import { VcrDoseDesigns } from "../VcrDoseDesigns";
 import { VcrSuccessRates } from "../VcrSuccessRates";
 import { VcrScientificBasis } from "../VcrScientificBasis";
 import { VcrVersionComparison } from "../VcrVersionComparison";
+import { VirtualLabWorkspace } from "../VirtualLabWorkspace";
 import { VcrWinRatioDesigns } from "../VcrWinRatioDesigns";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CircleCheck, PenLine, TriangleAlert } from "lucide-react";
 import { useSearchParams } from "react-router";
-import { getVcrTrial, recordVcrDecision, type VcrDesign, type VcrPremise, type VcrStudy, type VcrTrialTab as TrialData } from "@/lib/vcrClient";
+import { getVcrTrial, listVcrLabExperiments, recordVcrDecision, type VcrDesign, type VcrPremise, type VcrStudy, type VcrTrialTab as TrialData } from "@/lib/vcrClient";
 import { webErrorMessage } from "@/lib/apiClient";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/cn";
@@ -73,7 +74,7 @@ function designContext(design: VcrDesign): string {
   return `${design.code} ${design.name}${design.version ? `（版本 ${design.version}）` : ""}`;
 }
 
-type TrialView = "designs" | "schedule" | "regulatory";
+type TrialView = "designs" | "schedule" | "regulatory" | "lab";
 
 /**
  * 试验: what each design would actually do, and what choosing one costs.
@@ -107,12 +108,42 @@ export function TrialTab({ studyId, study }: { studyId: string; study: VcrStudy 
   const [params] = useSearchParams();
   const object = params.get("object");
   const { state, reload } = useVcrLoad(`${studyId}:trial:${object ?? ""}`, () => getVcrTrial(studyId, object ? { object } : undefined));
+  // The lab's experiments and design searches (虚拟实验室) are a record of this step too: a study that has any gets a 「实验」 view, and
+  // one that has only those opens on it. A lab that cannot be read is no experiments, never an error on the designs.
+  const [labCount, setLabCount] = useState(0);
+  const [showLab, setShowLab] = useState<boolean | null>(null);
+  useEffect(() => {
+    let live = true;
+    Promise.resolve().then(() => listVcrLabExperiments(studyId)).then((answer) => { if (live) setLabCount(answer.experiments.length); }, () => undefined);
+    return () => { live = false; };
+  }, [studyId]);
   if (state.kind === "loading") return <VcrTabSkeleton />;
   if (state.kind === "error") return <VcrTabError message={state.message} onRetry={reload} />;
-  return <TrialView studyId={studyId} study={study} data={state.data} reload={reload} />;
+  const lab = showLab ?? (labCount > 0 && !trialHasDesigns(state.data));
+  if (lab && labCount > 0) {
+    const chips = trialViews(state.data, study, labCount);
+    return (
+      <VirtualLabWorkspace studyId={studyId} canRun={study.abilities.includes("run")}
+        switcher={{ kind: "chips", label: "记录", neutral: chips[0].value, value: "lab", onChange: (next) => { if (next !== "lab") setShowLab(false); }, options: chips }} />
+    );
+  }
+  return <TrialView studyId={studyId} study={study} data={state.data} reload={reload} labCount={labCount} onShowLab={() => setShowLab(true)} />;
 }
 
-function TrialView({ studyId, study, data, reload }: { studyId: string; study: VcrStudy; data: TrialData; reload: () => void }) {
+/** Whether the step holds a design or a forecast of its own. */
+export const trialHasDesigns = (data: TrialData): boolean => data.designs.length > 0 || data.ademp.length > 0 || data.forecasts.length > 0 || data.milestones.length > 0 || Boolean(data.accrualForecasts?.length) || Boolean(data.confirmatoryDesigns?.length) || Boolean(data.doseDesigns?.length) || Boolean(data.bayesianDesigns?.length) || Boolean(data.winRatioDesigns?.length);
+
+/** The kinds of record the step holds, as the band's switch lists them. */
+function trialViews(data: TrialData, study: VcrStudy, labCount: number): Array<{ value: TrialView; label: string; count?: number }> {
+  const views: Array<{ value: TrialView; label: string; count?: number }> = [];
+  if (trialHasDesigns(data)) views.push({ value: "designs", label: "方案", ...(data.designs.length > 0 ? { count: data.designs.length } : {}) });
+  if (data.schedule) views.push({ value: "schedule", label: "访视" });
+  if (data.regulatory.length > 0 || study.abilities.includes("write")) views.push({ value: "regulatory", label: "监管", ...(data.regulatory.length > 0 ? { count: data.regulatory.length } : {}) });
+  if (labCount > 0) views.push({ value: "lab", label: "实验", count: labCount });
+  return views;
+}
+
+function TrialView({ studyId, study, data, reload, labCount = 0, onShowLab }: { studyId: string; study: VcrStudy; data: TrialData; reload: () => void; labCount?: number; onShowLab?: () => void }) {
   const frame = useStudyFrame();
   const [view, setView] = useState<TrialView>("designs");
   const [choosing, setChoosing] = useState(false);
@@ -123,7 +154,7 @@ function TrialView({ studyId, study, data, reload }: { studyId: string; study: V
   const failed = study.steps.trial?.status === "failed";
   const canWrite = study.abilities.includes("write");
   // The protocol's visit schedule and the regulatory log are records of the study, not results of this step: a study that has either is not empty.
-  const hasDesigns = data.designs.length > 0 || data.ademp.length > 0 || data.forecasts.length > 0 || data.milestones.length > 0 || Boolean(data.accrualForecasts?.length) || Boolean(data.confirmatoryDesigns?.length) || Boolean(data.doseDesigns?.length) || Boolean(data.bayesianDesigns?.length) || Boolean(data.winRatioDesigns?.length);
+  const hasDesigns = trialHasDesigns(data);
   const nothing = !hasDesigns && !data.schedule && data.regulatory.length === 0;
   const noneRan = !data.designs.some(designRan);
   const decided = Boolean(data.decision?.chosen);
@@ -132,11 +163,9 @@ function TrialView({ studyId, study, data, reload }: { studyId: string; study: V
   const hasForecasts = data.forecasts.length > 0;
 
   // One kind of record at a time: the switch exists when the step holds more than one kind.
-  const views: Array<{ value: TrialView; label: string; count?: number }> = [];
-  if (hasDesigns) views.push({ value: "designs", label: "方案", ...(data.designs.length > 0 ? { count: data.designs.length } : {}) });
-  if (data.schedule) views.push({ value: "schedule", label: "访视" });
-  if (data.regulatory.length > 0 || canWrite) views.push({ value: "regulatory", label: "监管", ...(data.regulatory.length > 0 ? { count: data.regulatory.length } : {}) });
-  const shown: TrialView = views.some((entry) => entry.value === view) ? view : views[0]?.value ?? "designs";
+  const views = trialViews(data, study, labCount);
+  const ownViews = views.filter((entry) => entry.value !== "lab");
+  const shown: TrialView = ownViews.some((entry) => entry.value === view) ? view : ownViews[0]?.value ?? "designs";
 
   // 「加一个方案」 and 「改假设」 say it in the conversation: the draft waits in the composer, and the reader sends it.
   const [comparing, setComparing] = useState(false);
@@ -163,7 +192,7 @@ function TrialView({ studyId, study, data, reload }: { studyId: string; study: V
     ? {
       label: "试验的筛选与操作",
       ...(views.length > 1
-        ? { filters: [{ kind: "chips" as const, label: "记录", neutral: views[0].value, value: shown, onChange: (next: string) => setView(next as TrialView), options: views }] }
+        ? { filters: [{ kind: "chips" as const, label: "记录", neutral: views[0].value, value: shown, onChange: (next: string) => { if (next === "lab") onShowLab?.(); else setView(next as TrialView); }, options: views }] }
         : {}),
       ...(shown === "designs" && data.designs.length > 0 && views.length === 1 ? { summary: `${data.designs.length} 个方案` } : {}),
       ...(actions.length > 0 ? { actions: <VcrToolbarActions actions={actions} /> } : {}),

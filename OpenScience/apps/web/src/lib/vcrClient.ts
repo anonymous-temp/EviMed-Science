@@ -4615,7 +4615,7 @@ export async function downloadVcrFollowupHistory(studyId: string, offset: number
 // --- the virtual lab: design experiments and design-search campaigns (server `vcrExperiments.mjs`) ---------------------------
 // Started from the conversation (virtual_trial_search / virtual_trial_compare); the page reads them. Every number is a `VcrValue`.
 
-export interface VcrLabPremise { key: string; label: string; value: string; source: string; decisive: boolean; reason: string | null }
+export interface VcrLabPremise { key: string; label: string; value: string; source: VcrPremise["source"]; decisive: boolean; reason: string | null }
 export interface VcrConstraintVerdict { status: "pass" | "fail" | "inconclusive" | "not_judged"; statusText: string | null; final: boolean; reason: string | null;
   boundKind: string | null; confidence: number | null; judgedAt: VcrValue | null }
 export interface VcrCampaignCandidate {
@@ -4632,7 +4632,8 @@ export interface VcrCampaignView {
   truths: string[]; stages: Record<string, unknown>;
   budget: { declared: { maxCandidates: number; cpuSeconds: number; modelCalls: number }; used: Record<string, number> };
   candidates: VcrCampaignCandidate[]; finalists: string[]; best: string | null; inconclusive: string[]; feasible: string[];
-  reference: string | null; improvement: number | null; inFlight: { unit: string; stage: string | null } | null; cancelRequested: boolean;
+  reference: string | null; improvement: number | null;
+  againstReference?: { coupling: string; couplingText: string | null; difference: VcrValue | null } | null; inFlight: { unit: string; stage: string | null } | null; cancelRequested: boolean;
   stop: { reason: string; text: string | null; at: string | null } | null; premises: VcrLabPremise[]; createdAt: string | null; updatedAt: string | null;
 }
 export interface VcrDesignExperimentView {
