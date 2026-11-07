@@ -479,7 +479,9 @@ export class VcrService {
     this.packages = { access, dataPlane, evidence, matching, jobs, seal, matchStore, evidenceStore, documents, knowledge, patientTrials, erasure: null, frontierEvents: null, platformPacks: null, predictions: null, engineProbe: null, records: null, draftSpokenIn: null, longitudinal: /** @type {any} */ (null),
       // The run ledger's record of one run (`{ startedAt, progress }`) and the study's conversation (`{ sessionId, exists }`, created for the owner
       // when a study has none): both are the control plane's, attached by the composition root (R3, 2026-10-14).
-      runLedger: /** @type {any} */ (null), conversations: /** @type {any} */ (null) };
+      runLedger: /** @type {any} */ (null), conversations: /** @type {any} */ (null),
+      // the virtual lab's experiments and campaigns (`vcrExperiments.mjs`), read by the lab's routes
+      experiments: /** @type {any} */ (null) };
     this.counters = { studiesCreated: 0, reads: 0, writes: 0, writeIssues: 0, notFound: 0, tabs: 0 };
     /** @type {readonly string[] | null} set by `seedVcrCatalogue` at composition */
     this.engineMismatch = null;

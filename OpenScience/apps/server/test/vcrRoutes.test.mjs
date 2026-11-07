@@ -113,6 +113,9 @@ function fixture({ who = OWNER, roles = {}, overrides = {}, operators = [], sett
     // The patients the study holds and the trials judged for them (「给患者找试验」), as the module's seams answer.
     packages: {
       longitudinal: overrides.longitudinal,
+      // the lab's read models (`vcrExperiments.mjs`), as the routes call them
+      experiments: { async list() { return []; }, async view(/** @type {any} */ _study, /** @type {string} */ id) { return { id }; },
+        async cancel(/** @type {any} */ _study, /** @type {string} */ id) { calls.push(["experiments.cancel", id]); return { id, status: "stopped" }; } },
       matchStore: { async candidateSubjects() { return ["P-0192"]; } },
       patientTrials: { counters: { searches: 0 }, async evaluate(/** @type {any} */ _study, /** @type {any} */ input) { calls.push(["patientTrials.evaluate", ...input.subjectKeys]); return { evaluated: [{}, {}], unavailable: [], notes: [] }; } },
     },
@@ -493,6 +496,9 @@ const REQUESTS = {
   "POST /studies/:id/method-configurations": ["POST", "/api/vcr/studies/std_1/method-configurations", { method: "profile.snapshot", name: "Profile", scenario: {} }],
   "POST /studies/:id/jobs": ["POST", "/api/vcr/studies/std_1/jobs", { kind: "design_simulation", scenario: {} }],
   "POST /studies/:id/jobs/:job/cancel": ["POST", "/api/vcr/studies/std_1/jobs/job_1/cancel", {}],
+  "GET /studies/:id/experiments": ["GET", "/api/vcr/studies/std_1/experiments", undefined],
+  "GET /studies/:id/experiments/:experiment": ["GET", "/api/vcr/studies/std_1/experiments/cmp_1", undefined],
+  "POST /studies/:id/experiments/:experiment/cancel": ["POST", "/api/vcr/studies/std_1/experiments/cmp_1/cancel", {}],
   "POST /studies/:id/budget": ["POST", "/api/vcr/studies/std_1/budget", { cpuSeconds: 600 }],
   "POST /studies/:id/assumptions": ["POST", "/api/vcr/studies/std_1/assumptions", { key: "dropout" }],
   "POST /studies/:id/model-assessments": ["POST", "/api/vcr/studies/std_1/model-assessments", { key: "pfs_projection", influence: "low" }],

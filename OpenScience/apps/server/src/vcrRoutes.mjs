@@ -189,6 +189,9 @@ export const VCR_ROUTE_ABILITIES = Object.freeze({
   "POST /studies/:id/longitudinal/predictions": ["run"],
   "POST /studies/:id/longitudinal/benchmarks": ["run"],
   "POST /studies/:id/jobs/:job/cancel": ["run"],
+  "GET /studies/:id/experiments": ["read"],
+  "GET /studies/:id/experiments/:experiment": ["read"],
+  "POST /studies/:id/experiments/:experiment/cancel": ["run"],
   "POST /studies/:id/budget": ["manage_study"],
   "POST /studies/:id/assumptions": ["write"],
   "POST /studies/:id/model-assessments": ["manage_study"],
@@ -269,7 +272,7 @@ export function vcrRoutePattern(pathname) {
   if (parts.length === 1) return "/api/vcr/studies";
   if (parts.length === 2) return "/api/vcr/studies/:id";
   if (parts[1] === "of-project" && parts.length === 3) return "/api/vcr/studies/of-project/:project";
-  const known = [...VCR_TABS, "run", "cancel", "trial-search", "jobs", "method-configurations", "budget", "assumptions", "model-assessments", "reviews", "curve-extractions", "model-sources", "correction-cases", "decisions", "export", "publications", "predictions", "members", "referrals", "pack", "definitions", "runs"];
+  const known = [...VCR_TABS, "run", "cancel", "trial-search", "jobs", "method-configurations", "budget", "assumptions", "model-assessments", "reviews", "curve-extractions", "model-sources", "correction-cases", "decisions", "export", "publications", "predictions", "members", "referrals", "pack", "definitions", "runs", "experiments"];
   const section = known.includes(parts[2]) ? parts[2] : ":route";
   if (parts[2] === "data" && parts.length > 3) {
     // The intake routes: `data/<kind>[/:item[/<action>[/confirm]]]`, every id folded.
@@ -1219,6 +1222,28 @@ export function createVcrRoutes(dependencies) {
       const prepared = await prepareVcrMethodConfiguration({ store: service.store, study, userId: String(user.id),
         method: body.method, name, scenario: reconstruction.scenario, subjectId: body.subjectId, model });
       return reply(reconstruction.reconstructionResultId ? { ...prepared, reconstructionResultId: reconstruction.reconstructionResultId, scenario: body.scenario } : prepared, 201);
+    }
+
+    // --- the virtual lab: design experiments and design-search campaigns (vcrExperiments.mjs) -------------------------------
+    // Read models for the lab page; they are started from the conversation (virtual_trial_search / virtual_trial_compare).
+    if (section === "experiments") {
+      const lab = service.packages?.experiments ?? null;
+      if (parts.length === 3 && method === "GET") {
+        const { study } = await authorize(id, "read");
+        if (!lab) throw UNAVAILABLE();
+        return reply({ experiments: await lab.list(study) });
+      }
+      if (parts.length === 4 && method === "GET") {
+        const { study } = await authorize(id, "read");
+        if (!lab) throw UNAVAILABLE();
+        return reply(await lab.view(study, parts[3]));
+      }
+      if (parts.length === 5 && parts[4] === "cancel" && method === "POST") {
+        await bodyOf(req, maxJsonBytes, []);
+        const { study } = await authorize(id, "run");
+        if (!lab) throw UNAVAILABLE();
+        return reply(await audited("vcr.experiment.cancel", () => ({ code: parts[3] }), { code: parts[3] }, () => lab.cancel(study, parts[3], { actor: String(user.id) })));
+      }
     }
 
     // --- jobs ------------------------------------------------------------------

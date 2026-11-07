@@ -6320,6 +6320,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     });
     // The virtual lab's experiments and design-search campaigns: a unit at a time through the same queue, advanced by its finish hook.
     vcr.experiments = new VcrExperiments({ store: vcr.store, jobs: vcr.jobs, config, report: (code) => process.stderr.write(`vcr experiments: ${code}\n`) });
+    vcr.service.attach({ experiments: vcr.experiments });
     vcr.completions = new VcrConversationCompletions({
       store: vcr.store, jobs:vcr.jobs, config,
       readOrigin:async (project,runId)=>(await agentRuns.list(project)).find(run=>run.id===runId) ?? null,
