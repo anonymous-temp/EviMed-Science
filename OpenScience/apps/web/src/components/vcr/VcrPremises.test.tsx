@@ -109,4 +109,26 @@ describe("这个结论的前提", () => {
     expect(container.querySelector("[data-vcr-premise-change='effect']")).not.toBeNull();
     expect(container.querySelectorAll("[data-vcr-premises]").length).toBe(1);
   });
+
+  it("draws no source tag and no change draft on a sentence row about a platform rule or a model, and keeps both on a named setting", () => {
+    const rows = ["campaign:precision", "campaign:bound", "lab:aligned", "binding:readiness", "origin:transport", "trajectory:uncertainty", "progression:ad:curves", "use:use_not_validated"]
+      .map((key) => premise(key, { source: key.startsWith("binding") || key.startsWith("origin") ? "default" : "given", decisive: false }));
+    const { container } = render(<VcrPremises premises={[...rows, premise("effect", { source: "given" })]} onChange={vi.fn()} />);
+    for (const row of rows) {
+      const node = container.querySelector(`[data-vcr-premise='${row.key}']`) as HTMLElement;
+      expect(node.querySelector("[data-tag], span.tag")).toBeNull();
+      expect(within(node).queryByText(/^(默认|你给的数据|假设|文献)$/)).toBeNull();
+      expect(node.querySelector("[data-vcr-premise-change]")).toBeNull();
+    }
+    const effect = container.querySelector("[data-vcr-premise='effect']") as HTMLElement;
+    expect(within(effect).getByText("你给的数据")).toBeInTheDocument();
+    expect(effect.querySelector("[data-vcr-premise-change]")).not.toBeNull();
+  });
+
+  it("gives every block its own heading id, so two blocks on one page do not collide", () => {
+    const { container } = render(<><VcrPremises premises={[premise("a")]} /><VcrPremises premises={[premise("b")]} /></>);
+    const ids = [...container.querySelectorAll("[data-vcr-premises]")].map((node) => node.getAttribute("aria-labelledby"));
+    expect(new Set(ids).size).toBe(2);
+    for (const id of ids) expect(container.querySelector(`[id="${id}"]`)).not.toBeNull();
+  });
 });
