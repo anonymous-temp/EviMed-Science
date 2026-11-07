@@ -1,12 +1,23 @@
 /** Presentation of ledger-derived summaries. The caller names the projection;
- * an arbitrary user-supplied dataClass cannot exempt a model card or a report. */
+ * an arbitrary user-supplied dataClass cannot exempt a model card or a report.
+ *
+ * Hidden knowledge:
+ *
+ * - **The page reads a batch's ledger whole; a run never does** (review eng P1-3). A batch forecast's per-status head counts and its
+ *   reason histogram are people counts the model boundary hides (`accounting`, `accountingReasons` in the domain's vocabulary); the
+ *   study's own page (`{ page: true }`, the routes only) gets them back from the saved summary, because who was rejected and why is what
+ *   the person reads the ledger for. Nothing else is restored, and the model projections never pass the option. */
 import { suppressForModel } from '@evimed/domain';
+
+/** The summary keys only the page projection restores. */
+const PAGE_LEDGER_KEYS = Object.freeze(['accounting','accountingReasons']);
 
 /** @param {any} record @param {any} options */
 function artifact(record,options) {
   const shown = suppressForModel(record,options);
   if (!record?.summary || !String(record.id).startsWith('vlf_')) return shown;
   if (record.summary.dataClass === 'synthetic') return {...shown,summary:structuredClone(record.summary)};
+  if (options?.page === true && shown.summary) for (const key of PAGE_LEDGER_KEYS) if (record.summary[key] !== undefined) shown.summary[key] = structuredClone(record.summary[key]);
   /** Only time and group identities are restored, never hidden counts. */
   const timed = (/** @type {any} */ row,/** @type {any} */ original) => row.suppressed?.length
     ? {...row,...(original.horizonDays != null ? {horizonDays:original.horizonDays} : {}),
@@ -25,8 +36,8 @@ function artifact(record,options) {
   return shown;
 }
 
-/** Only accepts metadata from longitudinalIndex or saved artifacts.
- * @param {any} payload @param {any} [options] */
+/** Only accepts metadata from longitudinalIndex or saved artifacts. `options.page` is the study page's projection (see the header).
+ * @param {any} payload @param {{ minCell?: number, page?: boolean }} [options] */
 export function presentLongitudinal(payload,options = {}) {
   if (payload?.id) return artifact(payload,options);
   const shown = suppressForModel(payload,options);

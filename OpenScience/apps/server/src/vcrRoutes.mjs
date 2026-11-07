@@ -769,7 +769,7 @@ export function createVcrRoutes(dependencies) {
       if (!longitudinal && method === 'GET') return reply({available:false,records:[],providers:[],templates:LONGITUDINAL_TEMPLATES});
       if (!longitudinal) throw UNAVAILABLE();
       if (method === 'GET' && parts.length === 3) return reply(presentLongitudinal(await longitudinal.view(study,
-        Object.fromEntries(['id','parentId','kind','offset','limit'].map(key => [key,url.searchParams.get(key)]))),{minCell:service.minCell}));
+        Object.fromEntries(['id','parentId','kind','offset','limit'].map(key => [key,url.searchParams.get(key)]))),{minCell:service.minCell,page:true}));
       // The owner's protected per-person read: its keys are the study's pseudonyms, so it is not the suppressed aggregate view above.
       if (method === 'GET' && parts.length === 5 && parts[4] === 'subjects') {
         return reply(await longitudinal.subjectPage(study,parts[3],String(user.id),{status:url.searchParams.get('status'),reason:url.searchParams.get('reason'),
@@ -781,7 +781,7 @@ export function createVcrRoutes(dependencies) {
           : ['schema','historyId','origin','endpoint','horizonsDays','rows','model','scenario','priorPredictionId','subjectKeyMode','predictions'];
         const body = await bodyOf(req,Math.max(maxJsonBytes,8*1024*1024),fields);
         const save = parts[3] === 'histories' ? longitudinal.freezeHistory : parts[3] === 'predictions' ? longitudinal.importPrediction : longitudinal.importBenchmark;
-        return reply(presentLongitudinal(await save(study,body,String(user.id)),{minCell:service.minCell}),201);
+        return reply(presentLongitudinal(await save(study,body,String(user.id)),{minCell:service.minCell,page:true}),201);
       }
       throw new HttpError(404,'not_found','Longitudinal route not found.');
     }
