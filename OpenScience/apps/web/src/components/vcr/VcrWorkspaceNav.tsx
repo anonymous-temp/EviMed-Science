@@ -1,22 +1,21 @@
 import { Link, useLocation } from "react-router";
-import { ClipboardList, FlaskConical, GitCompareArrows, UserRound, UsersRound, UserSearch } from "lucide-react";
+import { FlaskConical, GitCompareArrows, Route, UsersRound, UserSearch } from "lucide-react";
 import { navItemClasses } from "@/components/ui/NavItem";
 import { sanitizeRuntimeUiHistoryState } from "@/lib/runtimeUiNavigation";
 import { vcrWorkspaceCurrentArea, vcrWorkspaceDestinationPath, type VcrWorkspaceArea } from "@/lib/vcrWorkspaceNavigation";
 
 const rows = [
-  { area: "records", label: "研究记录", icon: ClipboardList },
-  { area: "virtual-cohort", label: "虚拟队列", icon: UsersRound },
-  { area: "virtual-patient", label: "虚拟患者", icon: UserRound },
+  { area: "virtual-population", label: "虚拟人群", icon: UsersRound },
+  { area: "patient-trajectory", label: "患者轨迹预测", icon: Route },
+  { area: "virtual-lab", label: "虚拟实验室", icon: FlaskConical },
   { area: "synthetic-control", label: "合成对照臂", icon: GitCompareArrows },
-  { area: "virtual-trial", label: "虚拟试验", icon: FlaskConical },
   { area: "patient-matching", label: "患者匹配", icon: UserSearch },
-] satisfies Array<{ area: VcrWorkspaceArea; label: string; icon: typeof ClipboardList }>;
+] satisfies Array<{ area: VcrWorkspaceArea; label: string; icon: typeof UsersRound }>;
 
 /**
- * Anatomy: Six directory links nested under the primary VCR destination; owner H.
- * Variants: Module directories or results in the explicitly addressed study.
- * States: Selected directory, study result, or no selection for libraries/drafts.
+ * Anatomy: Five entrance links nested under the primary VCR destination; owner H. Past research is the sidebar's lower history, not a row here.
+ * Variants: Module entrances or results in the explicitly addressed study.
+ * States: Selected entrance, study result, or no selection for libraries/drafts/the archive.
  * Hit area: Shared full-width navigation links.
  * Keyboard: Native links preserve keyboard and modified-click navigation.
  * Long content: Labels truncate within the existing sidebar width.

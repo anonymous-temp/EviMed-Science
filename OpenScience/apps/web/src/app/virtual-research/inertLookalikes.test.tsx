@@ -46,13 +46,13 @@ describe("nothing that looks pressed is inert", () => {
   });
 
   it("the list of studies", async () => {
-    drawStudy("/app/virtual-research");
+    drawStudy("/app/virtual-research?area=records");
     await screen.findByRole("list", { name: "研究" });
     expect(inertLookalikes(document.body).map(describeEach)).toEqual([]);
   });
 
   it("the addressed preview has usable actions and its progress marks are not inert controls", async () => {
-    drawStudy("/app/virtual-research");
+    drawStudy("/app/virtual-research?area=records");
     await userEvent.click(await screen.findByRole("link", { name: /EV-201 二线/ }));
     await screen.findByRole("list", { name: "研究进度" });
     expect(screen.queryByRole("list", { name: "研究" })).toBeNull();

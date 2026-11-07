@@ -95,21 +95,21 @@ describe("the frame and the views that are its own", () => {
 describe("the list", () => {
   it("is rows: a study's question and finding are the row's own, and nothing stands outside the rows", async () => {
     installVcrServer(network.productRequest);
-    drawStudy("/app/virtual-research");
+    drawStudy("/app/virtual-research?area=records");
     await screen.findByRole("list", { name: "研究" });
     expect(blocks()).toEqual([]);
   });
 
   it("is a recipe in its empty state, not a paragraph", async () => {
     installVcrServer(network.productRequest, { "GET /vcr/studies": { studies: [], draftProjectIds: [] } });
-    drawStudy("/app/virtual-research");
+    drawStudy("/app/virtual-research?area=records");
     await screen.findByText("暂无研究");
     expect(blocks()).toEqual([]);
   });
   describe("records and addressed preview", () => {
     it("keeps task introductions off the records page", async () => {
       installVcrServer(network.productRequest);
-      drawStudy("/app/virtual-research");
+      drawStudy("/app/virtual-research?area=records");
       await screen.findByRole("list", { name: "研究" });
       expect(screen.queryByRole("list", { name: "研究示例" })).toBeNull();
       expect(screen.queryByRole("textbox", { name: "研究问题" })).toBeNull();
@@ -118,7 +118,7 @@ describe("the list", () => {
 
     it("a chosen study's preview stands one block of text — the finding the study wrote — and every other sentence is a note, a row or a fact", async () => {
       installVcrServer(network.productRequest);
-      drawStudy("/app/virtual-research");
+      drawStudy("/app/virtual-research?area=records");
       await userEvent.click(await screen.findByRole("link", { name: /EV-201 二线/ }));
       await screen.findByRole("heading", { level: 1, name: /EV-201 二线/ });
       const standing = blocks();

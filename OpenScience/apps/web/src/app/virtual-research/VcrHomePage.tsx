@@ -14,7 +14,7 @@ import {
 } from "@/lib/vcrClient";
 import { useGeneralResearchDraft } from "@/components/vcr/useGeneralResearchDraft";
 import { PROFESSIONAL_RESEARCH_TASKS } from "@/components/vcr/professionalResearchTasks";
-import { parseVcrWorkspaceArea, type VcrWorkspaceArea } from "@/lib/vcrWorkspaceNavigation";
+import { parseVcrWorkspaceArea, vcrWorkspaceAreaPath, type VcrWorkspaceArea } from "@/lib/vcrWorkspaceNavigation";
 import { useVcrEntryDraft } from "@/lib/vcrEntryDraft";
 import { vcrCalculationPath } from "@/lib/vcrMethodLocation";
 import { vcrTabPath } from "@/components/vcr/vcrTabs";
@@ -65,9 +65,9 @@ const STATE_KEYS = ["need", "running", "paused", "done"] as const;
 const STATE_RANK: Record<StudyState, number> = { need: 0, running: 1, paused: 2, other: 3, done: 4 };
 
 /**
- * Component: VcrHomePage; owner: VCR; rules: the global sidebar owns the research directories.
- * Anatomy: One full-width records page, an addressed preview, or one question-entry page.
- * Variants: Records, professional area, new question and compatible reference libraries.
+ * Component: VcrHomePage; owner: VCR; rules: the global sidebar owns the five entrances and the research history.
+ * Anatomy: One question-entry page per entrance (the module root is the laboratory's), an addressed preview, or the retained records archive.
+ * Variants: Entrance, new question, archive (`?area=records`) and compatible reference libraries.
  * States: Loading, empty, retained data and retryable error; unsent per-area drafts.
  * Hit area: Shared toolbar, buttons, textarea and linked rows.
  * Keyboard: Native controls, focus on mode changes and preview Escape.
@@ -86,7 +86,9 @@ export function VcrHomePage() {
   const asked = params.get("study");
   const wantsNew = params.get("new") === "1";
   const area = parseVcrWorkspaceArea(params.toString());
-  const entryMode = wantsNew || area !== "records";
+  // The module root is the laboratory's entry surface; the archive is `?area=records` or a study preview (`?study=`), kept readable but no entrance.
+  const archive = area === "records" || (!params.has("area") && Boolean(asked));
+  const entryMode = wantsNew || !archive;
   const needsListing = tab === "studies" && !entryMode;
   const [draft, setDraft] = useVcrEntryDraft(wantsNew ? "new" : area);
   const [listing, setListing] = useState<Listing>({ kind: "loading" });
@@ -220,7 +222,7 @@ export function VcrHomePage() {
       const next = new URLSearchParams(current);
       next.delete("study");
       next.delete("new");
-      next.delete("area");
+      next.set("area", "records");
       return next;
     }, { replace: true });
   };
@@ -363,7 +365,7 @@ function OtherViews({ tab, children }: { tab: VcrLibraryTab; children: ReactNode
   const controls: ToolbarProps = panel ? { ...base, ...panel } : base;
   return (
     <ToolbarSlotContext.Provider value={setPanel}>
-      <PageShell title="虚拟临床研究" width="wide" back={<Link to="/app/virtual-research" className="rounded text-ui text-link">回到研究列表</Link>} toolbar={controls}>
+      <PageShell title="虚拟临床研究" width="wide" back={<Link to={vcrWorkspaceAreaPath("records")} className="rounded text-ui text-link">回到研究列表</Link>} toolbar={controls}>
         {children}
       </PageShell>
     </ToolbarSlotContext.Provider>

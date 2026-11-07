@@ -45,8 +45,8 @@ vi.mock("@/components/sidebar/Sidebar", () => ({
         <nav aria-label="工作台">
           <a href="/app/chat">新对话</a>
           <a href="/app/files">知识库</a>
-          <Link to="/app/virtual-research?area=virtual-cohort">虚拟队列</Link>
-          <Link to="/app/virtual-research?area=virtual-patient">虚拟患者</Link>
+          <Link to="/app/virtual-research?area=virtual-population">虚拟人群</Link>
+          <Link to="/app/virtual-research?area=patient-trajectory">患者轨迹预测</Link>
         </nav>
         <input aria-label="搜索对话" />
       </aside>
@@ -178,20 +178,20 @@ describe("the sidebar's focus and the page behind it", () => {
       render(<RouterProvider router={router} />);
       await screen.findByRole("heading", { name: "虚拟临床研究" });
       await userEvent.click(await screen.findByRole("button", { name: "展开侧边栏" }));
-      const link = screen.getByRole("link", { name: "虚拟队列" });
+      const link = screen.getByRole("link", { name: "虚拟人群" });
       // The browser owns opening another tab; no committed destination occurs in this shell.
       link.addEventListener("click", event => { if (event.ctrlKey) event.preventDefault(); });
       fireEvent.click(link, { ctrlKey: true });
       expect(router.state.location.search).toBe("");
       expect(main()).toHaveAttribute("inert");
       await userEvent.click(link);
-      expect(router.state.location.search).toBe("?area=virtual-cohort");
+      expect(router.state.location.search).toBe("?area=virtual-population");
       expect(main()).not.toHaveAttribute("inert");
       expect(useUiStore.getState().sidebarCollapsed).toBe(true);
       expect(screen.getByRole("button", { name: "展开侧边栏" })).toHaveFocus();
       await userEvent.click(screen.getByRole("button", { name: "展开侧边栏" }));
-      await userEvent.click(screen.getByRole("link", { name: "虚拟患者" }));
-      expect(router.state.location.search).toBe("?area=virtual-patient");
+      await userEvent.click(screen.getByRole("link", { name: "患者轨迹预测" }));
+      expect(router.state.location.search).toBe("?area=patient-trajectory");
       expect(main()).not.toHaveAttribute("inert");
     });
 
@@ -300,7 +300,7 @@ describe("the sidebar's focus and the page behind it", () => {
 
   it("keeps the desktop column open on query-addressed navigation", async () => {
     const router = await renderShell();
-    await act(() => router.navigate("/app/chat?area=virtual-cohort"));
+    await act(() => router.navigate("/app/chat?area=virtual-population"));
     expect(useUiStore.getState().sidebarCollapsed).toBe(false);
     expect(document.querySelector("[data-sidebar]")).not.toHaveAttribute("inert");
     expect(main()).not.toHaveAttribute("inert");

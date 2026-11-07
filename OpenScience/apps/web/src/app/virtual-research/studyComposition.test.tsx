@@ -93,7 +93,7 @@ describe("T3 — a study, at each of its tabs", () => {
 
 describe("T1 — the records list and compatible libraries", () => {
   it("has one full-width records surface with the shared header and toolbar", async () => {
-    const { container } = drawStudy("/app/virtual-research");
+    const { container } = drawStudy("/app/virtual-research?area=records");
     const rows = await screen.findByRole("list", { name: "研究" });
     const facts = expectComposed(container, { toolbar: true, tablists: 0, stepRail: false });
     expect(container.querySelector("[data-master-detail]")).toBeNull();

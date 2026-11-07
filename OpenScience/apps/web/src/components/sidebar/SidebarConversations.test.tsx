@@ -235,3 +235,61 @@ it("recomputes module ownership when the selected project changes without refetc
   await waitFor(() => expect(onCurrentModule).toHaveBeenLastCalledWith(null));
   expect(mocks.listProjects).toHaveBeenCalledTimes(reads);
 });
+
+const study = (id: string, projectId: string, name: string, extra = {}) => ({ id, projectId, name, originatingSessionId: undefined, purpose: "programme", createdAt: "2026-03-01T00:00:00Z", ...extra });
+it("groups conversations by research, keeps two sessions of one research as two rows and leaves other conversations flat", async () => {
+  mocks.projects.mockResolvedValue([{ id: "p2", name: "Project of A" }, { id: "p3", name: "Paper" }]);
+  mocks.studies.mockResolvedValue({ studies: [study("std_a", "p2", "Research A")] });
+  mocks.runs.mockImplementation(async ({ projectId }: { projectId: string }) => projectId === "p2" ? [run("a1", "First question", "2026-02-01"), run("a2", "Second question", "2026-02-02")] : [run("c1", "Plain chat", "2026-02-03")]);
+  setup("/app/files", null, true);
+  const group = await screen.findByRole("group", { name: "研究：Research A" });
+  expect(within(group).getAllByRole("button").map(button => button.textContent)).toEqual(["Second question", "First question"]);
+  expect(screen.getAllByRole("group")).toHaveLength(1);
+  expect(screen.getByText("Plain chat").closest("[role=group]")).toBeNull();
+  expect(screen.queryByText("已保存的结果")).toBeNull();
+});
+it("keeps a research with no surviving conversation reachable through one saved-result row, and invents nothing", async () => {
+  mocks.projects.mockResolvedValue([{ id: "p2", name: "Project of A" }]);
+  mocks.studies.mockResolvedValue({ studies: [study("std_a", "p2", "Research A")], conversationStudies: [{ id: "std_a", projectId: "p2", name: "Research A", tabs: ["population"], originatingSessionId: null, question: null, status: "draft", updatedAt: "" }] });
+  mocks.runs.mockResolvedValue([]);
+  setup("/app/files", null, true);
+  const group = await screen.findByRole("group", { name: "研究：Research A" });
+  const rows = within(group).getAllByRole("button"); expect(rows).toHaveLength(1);
+  expect(rows[0]).toHaveTextContent("已保存的结果");
+  await userEvent.click(rows[0]);
+  expect(mocks.select).toHaveBeenCalledWith("p2", expect.any(Function), expect.any(AbortSignal));
+  expect(await screen.findByText("/app/virtual-research/std_a/population")).toBeInTheDocument();
+  expect(screen.queryByText("没有对话")).toBeNull();
+});
+it("shows no research group for a project that is not a study", async () => {
+  mocks.projects.mockResolvedValue([{ id: "p3", name: "Paper" }]);
+  mocks.studies.mockResolvedValue({ studies: [] }); mocks.runs.mockResolvedValue([run("c1", "Plain chat", "2026-02-03")]);
+  setup("/app/files", null, true); await screen.findByText("Plain chat");
+  expect(screen.queryByRole("group")).toBeNull(); expect(screen.queryByText("已保存的结果")).toBeNull();
+});
+it("searches research names and conversation titles within the scope it listed", async () => {
+  mocks.projects.mockResolvedValue([{ id: "p2", name: "Project A" }, { id: "p4", name: "Project B" }]);
+  mocks.studies.mockResolvedValue({ studies: [study("std_a", "p2", "Hypertension cohort"), study("std_b", "p4", "Diabetes lab")] });
+  mocks.runs.mockImplementation(async ({ projectId }: { projectId: string }) => projectId === "p2" ? [run("a1", "Alpha", "2026-02-01"), run("a2", "Beta", "2026-02-02")] : [run("b1", "Gamma", "2026-02-03")]);
+  setup("/app/files", null, true); await screen.findByText("Alpha"); const user = userEvent.setup();
+  const search = screen.getByRole("searchbox", { name: "搜索最近对话" });
+  await user.type(search, "hypertension");
+  expect(screen.getByText("Alpha")).toBeInTheDocument(); expect(screen.getByText("Beta")).toBeInTheDocument(); expect(screen.queryByText("Gamma")).toBeNull();
+  await user.clear(search); await user.type(search, "gamma");
+  expect(screen.getByRole("group", { name: "研究：Diabetes lab" })).toBeInTheDocument(); expect(screen.queryByText("Alpha")).toBeNull();
+  await user.clear(search); await user.type(search, "nothing-matches");
+  expect(screen.queryByRole("group")).toBeNull();
+});
+it("keeps only still-authorized history when one research's runs fail to refresh", async () => {
+  mocks.projects.mockResolvedValue([{ id: "p2", name: "Project A" }, { id: "p4", name: "Project B" }]);
+  mocks.studies.mockResolvedValue({ studies: [study("std_a", "p2", "Research A"), study("std_b", "p4", "Research B")] });
+  mocks.runs.mockResolvedValue([]);
+  mocks.runs.mockImplementation(async ({ projectId }: { projectId: string }) => [run(projectId === "p2" ? "a1" : "b1", projectId === "p2" ? "Alpha" : "Beta", "2026-02-01")]);
+  setup("/app/files", null, true); await screen.findByText("Alpha"); await screen.findByText("Beta");
+  mocks.runs.mockImplementation(async ({ projectId }: { projectId: string }) => { throw Object.assign(new Error("x"), { status: projectId === "p2" ? 500 : 403 }); });
+  act(() => window.dispatchEvent(new Event("evimed:conversation-settled")));
+  await screen.findAllByText(/暂未完整显示/);
+  expect(screen.getByText("Alpha")).toBeInTheDocument();   // transient failure: kept
+  expect(screen.queryByText("Beta")).toBeNull();          // access lost: dropped
+  expect(screen.getByRole("group", { name: "研究：Research A" })).toBeInTheDocument();
+});

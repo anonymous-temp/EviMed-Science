@@ -15,7 +15,7 @@ vi.mock("@/lib/apiClient", async original => ({ ...(await original<typeof import
 const store = vi.hoisted(() => ({ currentId: "geo-project", select: vi.fn(async (_id: string, land?: () => void) => land?.()) }));
 vi.mock("@/lib/projects", () => ({ useProjectStore: (selector: (state: typeof store) => unknown) => selector(store) }));
 function Probe() { const location = useLocation(); return <pre data-testid="location">{JSON.stringify({ path: location.pathname, state: location.state })}</pre>; }
-function draw(path = "/app/virtual-research") { return render(<MemoryRouter initialEntries={[path]}><Routes><Route path="/app/virtual-research" element={<VcrHomePage />} /><Route path="*" element={<Probe />} /></Routes></MemoryRouter>); }
+function draw(path = "/app/virtual-research?area=records") { return render(<MemoryRouter initialEntries={[path]}><Routes><Route path="/app/virtual-research" element={<VcrHomePage />} /><Route path="*" element={<Probe />} /></Routes></MemoryRouter>); }
 let server: ReturnType<typeof installVcrServer>;
 beforeEach(() => {
   window.dispatchEvent(new Event(WEB_SESSION_ENDED_EVENT));
@@ -24,13 +24,13 @@ beforeEach(() => {
 afterEach(() => cleanup());
 function Back() { const navigate = useNavigate(); return <button onClick={() => navigate(-1)}>浏览器返回</button>; }
 function Where() { const location = useLocation(); return <p data-testid="where">{`${location.pathname}${location.search}`}</p>; }
-function drawHome(path = "/app/virtual-research") { return render(<MemoryRouter initialEntries={[path]}><VcrHomePage /><Where /></MemoryRouter>); }
+function drawHome(path = "/app/virtual-research?area=records") { return render(<MemoryRouter initialEntries={[path]}><VcrHomePage /><Where /></MemoryRouter>); }
 const where = () => screen.getByTestId("where").textContent;
 const AREAS = [
-  ["virtual-cohort", "虚拟队列", "真实队列需患者数据"],
-  ["virtual-patient", "虚拟患者", "预测需适用模型"],
+  ["virtual-population", "虚拟人群", "文献可先开始"],
+  ["patient-trajectory", "患者轨迹预测", "需患者基线和适用模型"],
+  ["virtual-lab", "虚拟实验室", "设计比较可先用文献"],
   ["synthetic-control", "合成对照臂", "效果分析需结局数据"],
-  ["virtual-trial", "虚拟试验", "可先用文献"],
   ["patient-matching", "患者匹配", "需患者资料"],
 ];
 it.each(AREAS)("opens only the addressed %s directory and forwards the exact question as an unsent draft", async (area, label, badge) => {
@@ -55,17 +55,17 @@ it.each(AREAS)("opens only the addressed %s directory and forwards the exact que
   expect(store.select).toHaveBeenCalledWith("default", expect.any(Function));
 });
 it("keeps examples editable, data requirements collapsed and whitespace-only questions unsent", async () => {
-  drawHome("/app/virtual-research?area=virtual-cohort");
+  drawHome("/app/virtual-research?area=virtual-population");
   const input = await screen.findByRole("textbox", { name: "研究问题" });
   const disclosure = screen.getByText("查看数据要求").closest("details");
   expect(disclosure).not.toHaveAttribute("open");
   await userEvent.click(screen.getByText("查看数据要求"));
-  expect(screen.getByText("可从文献或设定开始。真实队列和数据驱动合成需要患者数据。")).toBeVisible();
+  expect(screen.getByText("可按文献中的分布或设定开始，无需上传。用真实患者数据构建需要患者数据集；要在人群上做干预研究，还需要适用的反应模型。")).toBeVisible();
   const example = within(screen.getByRole("list", { name: "问题示例" })).getAllByRole("button")[0];
   await userEvent.click(example);
   expect(input).toHaveValue(example.textContent);
   expect(input).toHaveFocus();
-  expect(where()).toBe("/app/virtual-research?area=virtual-cohort");
+  expect(where()).toBe("/app/virtual-research?area=virtual-population");
   await userEvent.clear(input); await userEvent.type(input, "   ");
   expect(screen.getByRole("button", { name: "进入研究对话" })).toBeDisabled();
   expect(server.calls).toEqual([]);
@@ -80,7 +80,7 @@ it("opens a generic research question without a forced specialty or a study", as
 });
 it("retains an unsent question after a real route unmount and retires it at an account boundary", async () => {
   function Leave() { const navigate = useNavigate(); return <button onClick={() => navigate("/elsewhere")}>离开模块</button>; }
-  render(<MemoryRouter initialEntries={["/app/virtual-research?area=virtual-cohort"]}><Routes>
+  render(<MemoryRouter initialEntries={["/app/virtual-research?area=virtual-population"]}><Routes>
     <Route path="/app/virtual-research" element={<><VcrHomePage /><Leave /></>} /><Route path="/elsewhere" element={<Back />} />
   </Routes></MemoryRouter>);
   const text = "需要保留的研究问题\n以及条件";
@@ -220,7 +220,7 @@ it("says in each row what asks for the reader, what is being done or how far it 
   // The row is the name, the line and when it moved: the date stands at its end, and nothing in it is a button.
   expect(rows[1]).toHaveTextContent("今天 09:09");
   expect(within(rows[1]).queryAllByRole("button")).toHaveLength(0);
-  expect(within(rows[1]).getByRole("link", { name: EV })).toHaveAttribute("href", "/app/virtual-research?study=std_1");
+  expect(within(rows[1]).getByRole("link", { name: EV })).toHaveAttribute("href", "/app/virtual-research?area=records&study=std_1");
 });
 
 describe("one current surface for records, question entry and preview", () => {
@@ -240,7 +240,7 @@ describe("one current surface for records, question entry and preview", () => {
     drawHome(); await screen.findByRole("list", { name: "研究" });
     await userEvent.type(screen.getByRole("searchbox", { name: "搜索研究" }), "EV");
     await userEvent.click(screen.getByRole("link", { name: EV }));
-    expect(where()).toBe("/app/virtual-research?study=std_1");
+    expect(where()).toBe("/app/virtual-research?area=records&study=std_1");
     expect(screen.queryByRole("list", { name: "研究" })).toBeNull();
     expect(screen.getByRole("heading", { level: 1, name: EV })).toBeInTheDocument();
     const preview = screen.getByRole("region", { name: "研究预览" });
@@ -252,35 +252,35 @@ describe("one current surface for records, question entry and preview", () => {
     expect(screen.queryByRole("link", { name: GLP })).toBeNull();
     expect(screen.getByRole("region", { name: "研究列表" }).closest("[tabindex]")).toHaveFocus();
   });
-  const afterAnotherPage = (path = "/app/virtual-research") =>
+  const afterAnotherPage = (path = "/app/virtual-research?area=records") =>
     render(<MemoryRouter initialEntries={["/elsewhere", path]} initialIndex={1}><VcrHomePage /><Where /><Back /></MemoryRouter>);
   const back = () => userEvent.click(screen.getByRole("button", { name: "浏览器返回" }));
   it("closes a pushed preview to the original records entry and Escape preserves browser history", async () => {
     afterAnotherPage();
     await userEvent.click(await screen.findByRole("link", { name: EV }));
     await userEvent.keyboard("{Escape}");
-    expect(where()).toBe("/app/virtual-research");
+    expect(where()).toBe("/app/virtual-research?area=records");
     await back(); expect(where()).toBe("/elsewhere");
   });
   it("closes a deep-linked preview in place without adding a stale preview to history", async () => {
     afterAnotherPage("/app/virtual-research?study=std_1");
     await screen.findByRole("heading", { name: EV });
     await userEvent.click(screen.getByRole("button", { name: "关闭预览" }));
-    expect(where()).toBe("/app/virtual-research");
+    expect(where()).toBe("/app/virtual-research?area=records");
     await back(); expect(where()).toBe("/elsewhere");
   });
   it("returns from the new-question page without losing the records entry", async () => {
     afterAnotherPage(); await screen.findByRole("list", { name: "研究" });
     await userEvent.click(screen.getByRole("button", { name: "新研究" }));
     expect(where()).toBe("/app/virtual-research?new=1");
-    await back(); expect(where()).toBe("/app/virtual-research");
+    await back(); expect(where()).toBe("/app/virtual-research?area=records");
     await back(); expect(where()).toBe("/elsewhere");
   });
   it("keeps each unsent area question while switching directories and using browser history", async () => {
-    function Switch() { const navigate = useNavigate(); return <button onClick={() => navigate("?area=virtual-patient")}>切换患者目录</button>; }
-    render(<MemoryRouter initialEntries={["/app/virtual-research?area=virtual-cohort"]}><VcrHomePage /><Switch /><Back /></MemoryRouter>);
+    function Switch() { const navigate = useNavigate(); return <button onClick={() => navigate("?area=patient-trajectory")}>切换轨迹入口</button>; }
+    render(<MemoryRouter initialEntries={["/app/virtual-research?area=virtual-population"]}><VcrHomePage /><Switch /><Back /></MemoryRouter>);
     await userEvent.type(screen.getByRole("textbox", { name: "研究问题" }), "队列的问题");
-    await userEvent.click(screen.getByRole("button", { name: "切换患者目录" }));
+    await userEvent.click(screen.getByRole("button", { name: "切换轨迹入口" }));
     expect(screen.getByRole("textbox", { name: "研究问题" })).toHaveValue("");
     await userEvent.type(screen.getByRole("textbox", { name: "研究问题" }), "患者的问题");
     await back();
@@ -305,7 +305,7 @@ describe("one current surface for records, question entry and preview", () => {
   });
   it.each(["precedents", "definitions", "models"])("keeps the compatible %s library on its own page", async tab => {
     const { container } = drawHome(`/app/virtual-research?tab=${tab}&study=std_1`);
-    expect(await screen.findByRole("link", { name: "回到研究列表" })).toHaveAttribute("href", "/app/virtual-research");
+    expect(await screen.findByRole("link", { name: "回到研究列表" })).toHaveAttribute("href", "/app/virtual-research?area=records");
     expect(container.querySelector("[data-master-detail]")).toBeNull();
     expect(screen.queryByRole("button", { name: "新研究" })).toBeNull();
   });
@@ -326,7 +326,7 @@ describe("the studies a conversation made (VCR remediation F1)", () => {
     expect(first.closest("li")!.textContent).toContain("今天 10:12");
     expect(within(rows).getByRole("link", { name: "生成一个虚拟人群" })).toHaveAttribute("href", "/app/virtual-research/std_pop/population");
     // The module's own studies are still their own list, and a press on one of them still previews it.
-    expect(within(await screen.findByRole("list", { name: "研究" })).getByRole("link", { name: EV })).toHaveAttribute("href", "/app/virtual-research?study=std_1");
+    expect(within(await screen.findByRole("list", { name: "研究" })).getByRole("link", { name: EV })).toHaveAttribute("href", "/app/virtual-research?area=records&study=std_1");
     expect(within(await screen.findByRole("list", { name: "研究" })).queryByRole("link", { name: "帮我匹配患者和临床试验" })).toBeNull();
   });
 
@@ -372,4 +372,23 @@ describe("the studies a conversation made (VCR remediation F1)", () => {
     expect(document.querySelector("[data-vcr-preview]")).toBeNull();
     expect(screen.queryByRole("textbox", { name: "研究问题" })).toBeNull();
   });
+});
+it("opens the laboratory entry at the module root without creating or reading anything", async () => {
+  draw("/app/virtual-research");
+  await screen.findByRole("heading", { level: 1, name: "虚拟实验室" });
+  expect(screen.queryByRole("list", { name: "研究" })).toBeNull();
+  expect(screen.queryByRole("heading", { name: "研究记录" })).toBeNull();
+  expect(server.calls).toEqual([]);
+});
+it("reads an old area address as its entrance and shares its unsent draft", async () => {
+  function Switch() { const navigate = useNavigate(); return <button onClick={() => navigate("?area=virtual-cohort")}>旧地址</button>; }
+  render(<MemoryRouter initialEntries={["/app/virtual-research?area=virtual-population"]}><VcrHomePage /><Switch /></MemoryRouter>);
+  await userEvent.type(await screen.findByRole("textbox", { name: "研究问题" }), "同一个草稿");
+  await userEvent.click(screen.getByRole("button", { name: "旧地址" }));
+  expect(await screen.findByRole("heading", { level: 1, name: "虚拟人群" })).toBeInTheDocument();
+  expect(screen.getByRole("textbox", { name: "研究问题" })).toHaveValue("同一个草稿");
+});
+it("keeps the archive readable at its own address", async () => {
+  drawHome("/app/virtual-research?area=records");
+  expect(await screen.findByRole("heading", { level: 1, name: "研究记录" })).toBeInTheDocument();
 });
