@@ -1,3 +1,4 @@
+// @ts-nocheck -- fixtures are loose JSON-shaped objects; the module under test is type-checked
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
@@ -262,7 +263,7 @@ test('a screening outcome recorded in a final slot can never satisfy a final con
 
 test('stop rules: persistent failure, unsupported space, budget and cancellation', () => {
   assert.equal(drive(frozen(), (unit) => fakeOutcome(unit, { failAll: true })).action.reason, 'persistent_model_failure')
-  const unsupported = drive(frozen(), (unit) => ({ jobId: null, state: 'failed', unsupported: true, issues: ['design_not_supported'] }))
+  const unsupported = drive(frozen(), (_unit) => ({ jobId: null, state: 'failed', unsupported: true, issues: ['design_not_supported'] }))
   assert.equal(unsupported.action.reason, 'unsupported_candidate')
   const budget = drive(frozen({ budget: { maxCandidates: 9, cpuSeconds: 5 } }))
   assert.equal(budget.action.reason, 'budget_exhausted')

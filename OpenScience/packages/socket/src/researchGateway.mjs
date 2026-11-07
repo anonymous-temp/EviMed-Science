@@ -53,7 +53,8 @@ export function createResearchGatewayAdapter({ gatewayUrl, readToken, fetchImpl 
     /** @type {Promise<any>|undefined} */
     let response
     const once = async () => { call.signal.throwIfAborted(); return response ??= send() }
-    const scoped = { start: once, read: once, cancel: once, describe: once, readRequest: async () => (await once())?.request ?? null }
+    // `search` and `compare` are the trial plugin's lab tools: the same one projected call, nothing else behind it
+    const scoped = { start: once, read: once, cancel: once, describe: once, search: once, compare: once, readRequest: async () => (await once())?.request ?? null }
     calls.set(call, scoped)
     return scoped
   }

@@ -195,6 +195,12 @@ async function registerConfiguredResearchTools(ctx, { name, methods, mode, works
   const forCall = (call) => adapter.forCall?.(call) ?? adapter
   /** @param {any} call */
   const pluginFor = (call) => createPlugin({ adapter: forCall(call), methods })
+  /** A lab tool needs the hosted platform, which persists and advances campaigns. @param {any} call @param {'search' | 'compare'} kind @param {any} args */
+  const labCall = async (call, kind, args) => {
+    const scoped = /** @type {any} */ (forCall(call))
+    if (typeof scoped[kind] !== 'function') throw new Error('research_lab_hosted_only')
+    return { ok: true, data: await scoped[kind](args) }
+  }
   /** @type {Parameters<typeof import('@evimed/harness-port').defineTool>[0][]} */
   const definitions = [
     { name: `${name}_describe`, description: `${overview?.task ?? 'Virtual research'}. Discover methods, prerequisites and one method schema. Answer conceptual questions directly. If essential inputs are missing, finish with a concise list of what is needed; do not repeatedly inspect schemas or manufacture data. Prefer an applicable registered method over an ad hoc calculation.`, parameters: { method: { type: 'string' } }, execute: async ({ method }, call) => {
@@ -218,6 +224,15 @@ async function registerConfiguredResearchTools(ctx, { name, methods, mode, works
       return { ok: true, data: { report, ...(saved ?? { reproduction }) } }
     } },
     { name: `${name}_cancel`, description: 'Cancel a running research job.', parameters: { jobId: { type: 'string', required: true } }, execute: async ({ jobId }, call) => { await pluginFor(call).cancel(jobId); return { ok: true, data: { jobId, requested: true } } } },
+    // The virtual lab (trial plugin, hosted): the model proposes a frozen campaign or a comparison and reads it; code evaluates.
+    ...(name === 'virtual_trial' ? [
+      { name: 'virtual_trial_search', description: 'Bounded design search. {manifest} freezes objective, constraints with fixed bounds, truths, the searched design paths, screening and final sizes, budget; the platform screens, re-checks finalists at full precision and stops with a reason. {campaignId} reads; add cancel:true to stop.',
+        parameters: { manifest: { type: 'object', additionalProperties: true, properties: {} }, campaignId: { type: 'string' }, cancel: { type: 'boolean' } },
+        execute: async (/** @type {any} */ args, /** @type {any} */ call) => labCall(call, 'search', args) },
+      { name: 'virtual_trial_compare', description: 'Compare named design arms: attach saved results by resultId (no rerun) and/or run design methods on stated scenarios over one endpoint and analysis; read contrasts against a reference arm. {experiment} creates, {experimentId} reads.',
+        parameters: { experiment: { type: 'object', additionalProperties: true, properties: {} }, experimentId: { type: 'string' } },
+        execute: async (/** @type {any} */ args, /** @type {any} */ call) => labCall(call, 'compare', args) },
+    ] : []),
   ]
   /** @type {Map<string, any>} */
   const registered = new Map()

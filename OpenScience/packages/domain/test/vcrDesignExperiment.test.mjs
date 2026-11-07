@@ -1,3 +1,4 @@
+// @ts-nocheck -- fixtures are loose JSON-shaped objects; the module under test is type-checked
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { vcrDesignExperiment, vcrDesignExperimentCanonical, vcrExperimentAlignment } from '../src/vcrExperiment.mjs'

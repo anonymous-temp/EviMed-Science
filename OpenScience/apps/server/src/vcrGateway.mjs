@@ -373,12 +373,29 @@ async function shapeRefusals(what, rows) {
 const POOL_REQUEST_FIELDS = VCR_RUN_SCENARIO_FIELDS.pool_evidence;
 /** The keys an accrual request may carry: the target and horizon are the study's to state; the sites' rates come from the ledger. */
 
+/** The lab's actions on the simulate operation (`virtual_trial_search`, `virtual_trial_compare`). */
+const LAB_ACTIONS = Object.freeze(["search", "search_status", "search_cancel", "compare", "compare_status"]);
+
 /** @param {Record<string, any>} body */
 function simulateRequest(body) {
   onlyFields(body, ["action", "kind", "scenario", "inputs", "seed", "replicates", "cpuSecondsLimit", "jobId", "subjectId", "reconstructionResultId", "selection", "modelId", "modelVersion", "sources"]);
   const action = body.action ?? "start";
-  if (!["start", "status", "cancel", "validate", "shape"].includes(action)) {
-    throw gatewayError(400, "vcr_simulate_action_invalid", "action must be start, status, cancel, validate or shape.");
+  if (!["start", "status", "cancel", "validate", "shape", ...LAB_ACTIONS].includes(action)) {
+    throw gatewayError(400, "vcr_simulate_action_invalid", `action must be start, status, cancel, validate, shape or ${LAB_ACTIONS.join(", ")}.`);
+  }
+  // The virtual lab (`vcrExperiments.mjs`): a design-search campaign from a frozen manifest, an experiment that compares named arms,
+  // and the read and the stop of each. Code evaluates; the call carries the manifest and reads what came back.
+  if (LAB_ACTIONS.includes(action)) {
+    const own = /** @type {Record<string, string[]>} */ ({ search: ["action", "manifest"], search_status: ["action", "campaignId"], search_cancel: ["action", "campaignId"],
+      compare: ["action", "experiment"], compare_status: ["action", "experimentId"] })[action];
+    onlyFields(body, own);
+    const payload = action === "search" ? body.manifest : action === "compare" ? body.experiment : null;
+    if ((action === "search" || action === "compare") && (!payload || typeof payload !== "object" || Array.isArray(payload))) {
+      throw gatewayError(400, "vcr_simulate_payload_invalid", action === "search" ? "manifest is the frozen campaign object." : "experiment is the object of named arms and their comparison.");
+    }
+    const ref = action === "search_status" || action === "search_cancel" ? body.campaignId : action === "compare_status" ? body.experimentId : null;
+    if (ref !== null && (typeof ref !== "string" || !ID.test(ref))) throw gatewayError(400, "vcr_simulate_payload_invalid", "The id is the one the start answered with.");
+    return { action, payload, ref };
   }
   if (action === 'shape') {
     onlyFields(body, ['action', 'kind']);
@@ -2627,7 +2644,7 @@ function poolingSummary(result, about) {
 /**
  * @param {any} config @param {any} runtimeManager
  * @param {{ vcr: { service: any, store: any, jobs?: any, orchestrator?: any, evidence?: any, evidenceStore?: any, matchStore?: any,
- *   matching?: any, patientTrials?: any, seal?: any, dataPlaneSeam?: any, documents?: any, knowledge?: any, patientContext?: any, dataIntake?: any } | null,
+ *   matching?: any, patientTrials?: any, seal?: any, dataPlaneSeam?: any, documents?: any, knowledge?: any, patientContext?: any, dataIntake?: any, experiments?: any } | null,
  *   report?: (code: string) => void, budgetMs?: number, resolveStudyConversation?: ((study:any,options:any)=>Promise<any>)|null, resolveInvocation?: ((identity:any,header:any,operation:string,body:any)=>Promise<any>)|null, readProducerRun?: ((study:any,runId:string)=>Promise<any>)|null,
  *   readPersonMessages?: ((study:any,sessionId:string)=>Promise<readonly import("./vcrPersonStated.mjs").HumanParameterMessage[] | null>)|null }} dependencies
  */
@@ -2721,7 +2738,7 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
         if (legacy?.sessionId) { await vcr.store.setConversationSession(study.id,legacy.sessionId); study={...study,conversationSessionId:legacy.sessionId}; }
       }
       if (origin && !programmeStudy && (!study || study.conversationSessionId!==origin.rootSessionId)) {
-        const create=operation==='write' || operation==='digitize' || operation==='simulate' && (body.action ?? 'start')==='start';
+        const create=operation==='write' || operation==='digitize' || operation==='simulate' && ['start','search','compare'].includes(body.action ?? 'start');
         // The study is made with a placeholder name; a title the model gives (task_context) or the kind of work it comes to hold names it.
         study=await vcr.store.taskContext(origin,{create}) ?? {id:null,userId:origin.userId,projectId:origin.projectId,scope:'conversation',purpose:'task',conversationSessionId:origin.rootSessionId};
       }
@@ -2816,6 +2833,17 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
       } else {
         const request = simulateRequest(body);
         work = async () => {
+          if (LAB_ACTIONS.includes(request.action)) {
+            const lab = /** @type {any} */ (request);
+            if (!vcr.experiments || !study.id) throw gatewayError(503, "vcr_gateway_unavailable", "虚拟实验室在本部署尚未接入：这一步暂不可用。");
+            const who = { userId: study.userId, origin };
+            const answer = lab.action === "search" ? await vcr.experiments.startCampaign(study, lab.payload, who)
+              : lab.action === "compare" ? await vcr.experiments.startExperiment(study, lab.payload, who)
+              : lab.action === "search_cancel" ? await vcr.experiments.cancel(study, lab.ref, { actor: "runtime" })
+              : await vcr.experiments.view(study, lab.ref);
+            if (["search", "compare"].includes(lab.action)) await nameWhatItHolds(vcr, study);
+            return { action: lab.action, ...answer, resultEntry: vcrResultEntry({ studyId: study.id, tab: "trial", publicUrl: config?.publicUrl ?? null }) };
+          }
           if (!vcr.jobs) {
             throw gatewayError(503, "vcr_gateway_unavailable", "作业队列在本部署尚未接入：这一步暂不可用。");
           }

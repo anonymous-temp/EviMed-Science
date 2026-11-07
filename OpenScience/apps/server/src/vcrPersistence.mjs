@@ -91,7 +91,7 @@ export const VCR_TABLES = Object.freeze([
   "dependencies", "stale_marks", "reviews", "decisions", "regulatory_contacts", "exports", "audit", "schedule_marks",
   "model_assessments", "model_plan_versions", "published_simulations",
   "precedent_candidates", "evidence_signals", "frontier_scans", "platform_packs", "pack_promotions",
-  "evidence_second_reads",
+  "evidence_second_reads", "experiments",
 ]);
 
 const migrations = new WeakMap();
@@ -981,6 +981,26 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.results (
 );
 CREATE INDEX IF NOT EXISTS vcr_results_execution_idx ON evimed_vcr.results (execution_id);
 CREATE INDEX IF NOT EXISTS vcr_results_study_idx ON evimed_vcr.results (study_id, kind, created_at DESC);
+
+-- A virtual-lab experiment or a design-search campaign (plan T09, T10, vcrExperiments.mjs): the frozen manifest and the identity that
+-- is its hash are written once and never changed (a changed manifest is a new row), the progress is replaced by compare-and-set on
+-- \`revision\`. Its engine runs are ordinary jobs and results (kind experiment_candidate) and go with the study.
+CREATE TABLE IF NOT EXISTS evimed_vcr.experiments (
+  id         text PRIMARY KEY,
+  study_id   text NOT NULL REFERENCES evimed_vcr.studies(id) ON DELETE CASCADE,
+  user_id    text NOT NULL,
+  kind       text NOT NULL CHECK (kind IN ('experiment', 'campaign')),
+  identity   text NOT NULL,
+  manifest   jsonb NOT NULL,
+  state      jsonb NOT NULL DEFAULT '{}'::jsonb,
+  status     text NOT NULL DEFAULT 'running' CHECK (status IN ('running', 'stopped')),
+  revision   integer NOT NULL DEFAULT 1,
+  origin     jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (study_id, kind, identity)
+);
+CREATE INDEX IF NOT EXISTS vcr_experiments_running_idx ON evimed_vcr.experiments (updated_at) WHERE status = 'running';
 
 -- A prediction registered before the outcome it predicts, with the timestamp
 -- and hash that prove the order (plan §5.4, AC-23).

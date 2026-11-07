@@ -129,7 +129,7 @@ import path from "node:path";
 
 import {
   VCR_CHECK_STAGES, VCR_ENGINE_METHODS, VCR_ENGINE_PROTOCOL_VERSION, VCR_JOB_KINDS, VCR_JOB_METHODS, VCR_JOB_STATES, VCR_ROBUSTNESS_STAGES,
-  canonicalScenarioJson, errorCodeMessage, knownErrorCodeMessage, validateCallerInputs, validateEngineJob, vcrAppliedDefaults, vcrLocationIsValid, vcrNormalizeScenarioKeys, vcrNullReplicateFloor, vcrReplicatePlanFor, vcrResultOutputPayload, vcrScenarioRows,
+  VCR_SCREENING, canonicalScenarioJson, errorCodeMessage, knownErrorCodeMessage, validateCallerInputs, validateEngineJob, vcrAppliedDefaults, vcrLocationIsValid, vcrNormalizeScenarioKeys, vcrNullReplicateFloor, vcrReplicatePlanFor, vcrResultOutputPayload, vcrScenarioRows,
 } from "@evimed/domain";
 
 import { VCR_SCHEMA } from "./vcrPersistence.mjs";
@@ -295,6 +295,13 @@ export function vcrReplicatesForJob(kind, scenario, asked, options = {}) {
  */
 export function vcrReplicatePlanForJob(kind, scenario, asked, { intendedUse = null } = {}) {
   const requested = Number.isInteger(asked) ? Number(asked) : 0;
+  // A campaign's screening run takes exactly its screening count, below the floor; the floor is still the plan's record of what a
+  // final run takes (`vcrExperimentSearch`, the engine's `vcr_plan_replicates`).
+  const screening = object(scenario?.evaluation).screeningReplicates;
+  if (Number.isInteger(screening) && (kind === "design_simulation" || kind === "design_dose")) {
+    const floor = kind === "design_simulation" ? vcrReplicatePlanFor(scenario, { intendedUse }).floor : VCR_SCREENING.methods["design.dose"].finalFloor;
+    return { replicates: Number(screening), floor, basis: "screening", intendedUse, targetMcse: null };
+  }
   if (kind === "design_simulation") {
     const plan = vcrReplicatePlanFor(scenario, { intendedUse });
     return { replicates: Math.max(plan.floor, requested), floor: plan.floor, basis: plan.basis, intendedUse, targetMcse: plan.targetMcse };
@@ -359,6 +366,9 @@ export function vcrJobCostClass(kind, scenario = {}) {
   if (kind === "design_confirmatory") return ["futility_group_sequential", "count_endpoint"].includes(String(object(scenario.design).kind)) ? "light" : "heavy";
   return "light";
 }
+
+/** Why a scenario's precision block is refused from any caller but the platform's own campaign. */
+const CAMPAIGN_PRECISION_ONLY = "The evaluation precision is set by a design-search campaign (virtual_trial_search), not by a scenario: a screening number ranks candidates and is never a result.";
 
 /** The kinds whose replicate count is a floor (`vcrReplicatePlanForJob`), which the study's intended use can raise. */
 const SIZED_KINDS = new Set(["design_simulation", "design_grid", "map_prior"]);
@@ -942,6 +952,9 @@ export class VcrJobs {
       return { action: "validate", kind, queued: false, checked: false,
         message: "这类计算的场景由平台在启动时补全（来源绑定、曲线回执、模型方程或已保存的记录），这里不检查；直接 start，被拒的字段会按路径回来。" };
     }
+    if (object(input.scenario).evaluation !== undefined) {
+      return { action: "validate", kind, queued: false, checked: true, valid: false, issues: [{ code: "scenario_field_unknown", field: "scenario.evaluation", message: CAMPAIGN_PRECISION_ONLY }] };
+    }
     const unitBound = vcrCanonicalScenarioTimeUnit(method, object(input.scenario));
     // Keys that only describe what the method does anyway (`vcrNormalizeScenarioKeys`) are left out, as the frozen job would leave them.
     const described = vcrNormalizeScenarioKeys(method, unitBound.scenario);
@@ -1008,6 +1021,10 @@ export class VcrJobs {
     const batch = Object.hasOwn(VCR_MATCH_BATCH_JOBS,kind);
     if (batch && input.internal !== true) throw new HttpError(400,'vcr_job_scenario_invalid','A batch reading freezes its roster from the study before enqueue.');
     let scenario = { ...object(input.scenario) };
+    // Screening precision is a campaign's (it ranks candidates and is never a result); no other caller may set it.
+    if (scenario.evaluation !== undefined && input.internal !== true) {
+      throw this.#invalid("vcr_job_scenario_invalid", [{ code: "scenario_field_unknown", field: "scenario.evaluation", detail: CAMPAIGN_PRECISION_ONLY }]);
+    }
     const unitBound = vcrCanonicalScenarioTimeUnit(method, scenario);
     if (unitBound.issue) throw this.#invalid("vcr_job_scenario_invalid", [unitBound.issue]);
     scenario = unitBound.scenario;

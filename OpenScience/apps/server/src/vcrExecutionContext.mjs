@@ -3,7 +3,7 @@
 import { canonicalJson, mcpToolName } from '@evimed/domain';
 import { HttpError } from './security.mjs';
 import { VCR_JOB_METHODS, VCR_ENGINE_METHODS } from '@evimed/domain';
-import { isResearchPluginTool, projectResearchInvocation } from '@evimed/research-plugin-runtime/hosted-protocol';
+import { isResearchPluginTool, projectResearchInvocation, researchPluginOfTool } from '@evimed/research-plugin-runtime/hosted-protocol';
 const unavailable = () => new HttpError(403, 'vcr_invocation_unavailable', 'A current native research call is required.');
 const object = value => value && typeof value === 'object' && !Array.isArray(value);
 
@@ -74,7 +74,7 @@ export async function verifyVcrInvocation({ header, project, runtimeManager, res
   // including reads/cancellation while an old runtime is still alive.
   if (isResearchPluginTool(tool)) {
     if (!assertResearchPluginSelection) throw unavailable();
-    await assertResearchPluginSelection(tool.replace(/_(describe|start|read|cancel|report)$/, '').replaceAll('_', '-'));
+    await assertResearchPluginSelection(researchPluginOfTool(tool));
   }
   return { userId: authenticatedUserId ?? project.userId, projectId: project.id, sessionId: context.sessionId, rootSessionId: run.sessionId,
     runId: run.id, callId: context.callId, dispatchId:run.dispatchId ?? null, routeReason:run.effectiveRouteReason ?? null,

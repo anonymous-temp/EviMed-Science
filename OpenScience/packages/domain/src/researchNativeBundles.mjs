@@ -2,6 +2,8 @@ import { canonicalExtensionCoordinate } from './extensions.mjs'
 import { canonicalJson } from './capsule.mjs'
 
 const methods = ['describe', 'start', 'read', 'cancel', 'report']
+/** The trial bundle's virtual-lab tools (a design-search campaign, a comparison of named arms), on top of the five every bundle has. */
+const LAB_TOOLS = Object.freeze({ virtual_trial: Object.freeze(['virtual_trial_search', 'virtual_trial_compare']) })
 /** The only native research bundles the hosted deployment may admit. */
 export const RESEARCH_NATIVE_BUNDLES = Object.freeze(Object.fromEntries([
   ['virtual-trial', 'virtual_trial'], ['virtual-cohort', 'virtual_cohort'],
@@ -9,7 +11,7 @@ export const RESEARCH_NATIVE_BUNDLES = Object.freeze(Object.fromEntries([
   ['virtual-research-suite', null],
 ].map(([id, prefix]) => [id, Object.freeze({
   name: `@evimed/${id}`, row: `evimed-${id}`,
-  tools: Object.freeze(prefix ? methods.map(method => `${prefix}_${method}`) : ['virtual_research_available']),
+  tools: Object.freeze(prefix ? [...methods.map(method => `${prefix}_${method}`), ...(/** @type {Record<string, readonly string[]>} */ (LAB_TOOLS)[prefix] ?? [])] : ['virtual_research_available']),
 })])))
 const DIGEST = /^sha256:[a-f0-9]{64}$/u
 /** Validate a receipt's complete content before hashing it. Hash is injected to keep domain browser-safe.

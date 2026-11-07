@@ -24,6 +24,8 @@ test('hosted bundle may mount before its adapter and follows the provider lifeti
     } })
     for (let attempt = 0; attempt < 100 && !tools.get('virtual_trial_start', agent); attempt++) await new Promise(done => setTimeout(done, 10))
     assert.ok(tools.get('virtual_trial_start', agent))
+    // the trial bundle's lab tools come with it, and only with it
+    assert.ok(tools.get('virtual_trial_search', agent) && tools.get('virtual_trial_compare', agent))
     for (let attempt = 0; attempt < 100 && !(await skills.list()).some(row => row.name === 'virtual-trial'); attempt++) await new Promise(done => setTimeout(done, 10))
     const loaded = await skills.get('virtual-trial')
     assert.match(loaded.whenToUse, /virtual_trial_describe/)

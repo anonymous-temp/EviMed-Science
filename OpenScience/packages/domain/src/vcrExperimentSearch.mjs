@@ -168,7 +168,7 @@ export function vcrCampaignManifest(input) {
 
   // truths: the evaluator's worlds, by name
   const rawTruths = list(space.truths)
-  const truths = rawTruths.length ? rawTruths.map((entry, i) => ({ name: String(object(entry).name ?? ''), truth: object(object(entry).truth) })) : [{ name: 'base', truth: object(base.truth) }]
+  const truths = rawTruths.length ? rawTruths.map((entry) => ({ name: String(object(entry).name ?? ''), truth: object(object(entry).truth) })) : [{ name: 'base', truth: object(base.truth) }]
   if (truths.length > L.maxTruths) bad('campaign_value_invalid', 'space.truths', `At most ${L.maxTruths} truth scenarios.`)
   truths.forEach((entry, i) => {
     if (!/^[a-z][a-z0-9_]{0,23}$/.test(entry.name)) bad('campaign_value_invalid', `space.truths[${i}].name`, 'A truth is named with a short lower-case word.')
@@ -457,7 +457,7 @@ export function vcrCampaignAnalyticScenario(manifest, candidate) {
 // Bounds
 // ---------------------------------------------------------------------------
 
-/** ln Γ(x) by Lanczos (g = 7, nine terms), x > 0. @param {number} x */
+/** ln Γ(x) by Lanczos (g = 7, nine terms), x > 0. @param {number} x @returns {number} */
 function lgamma(x) {
   const c = [0.99999999999980993, 676.5203681218851, -1259.1392167224028, 771.32342877765313, -176.61502916214059,
     12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7]
@@ -530,26 +530,26 @@ export function vcrNormalQuantile(p) {
   const q = p - 0.5
   if (Math.abs(q) <= 0.425) {
     const r = 0.180625 - q * q
-    return q * (((((((2509.0809287301226727 * r + 33430.575583588128105) * r + 67265.770927008700853) * r + 45921.953931549871457) * r
-      + 13731.693765509461125) * r + 1971.5909503065514427) * r + 133.14166789178437745) * r + 3.387132872796366608)
-      / (((((((5226.495278852545925 * r + 28729.085735721942674) * r + 39307.89580009271061) * r + 21213.794301586595867) * r
-      + 5394.1960214247511077) * r + 687.1870074920579083) * r + 42.313330701600911252) * r + 1)
+    return q * (((((((2509.0809287301227 * r + 33430.57558358813) * r + 67265.7709270087) * r + 45921.95393154987) * r
+      + 13731.69376550946) * r + 1971.5909503065513) * r + 133.14166789178438) * r + 3.3871328727963665)
+      / (((((((5226.495278852546 * r + 28729.085735721943) * r + 39307.89580009271) * r + 21213.794301586597) * r
+      + 5394.196021424751) * r + 687.1870074920579) * r + 42.31333070160091) * r + 1)
   }
   let r = q < 0 ? p : 1 - p
   r = Math.sqrt(-Math.log(r))
   let value
   if (r <= 5) {
     r -= 1.6
-    value = (((((((7.7454501427834140764e-4 * r + 0.0227238449892691845833) * r + 0.24178072517745061177) * r + 1.27045825245236838258) * r
-      + 3.64784832476320460504) * r + 5.7694972214606914055) * r + 4.6303378461565452959) * r + 1.42343711074968357734)
-      / (((((((1.05075007164441684324e-9 * r + 5.475938084995344946e-4) * r + 0.0151986665636164571966) * r + 0.14810397642748007459) * r
-      + 0.68976733498510000455) * r + 1.6763848301838038494) * r + 2.05319162663775882187) * r + 1)
+    value = (((((((7.745450142783414e-4 * r + 0.022723844989269184) * r + 0.2417807251774506) * r + 1.2704582524523684) * r
+      + 3.6478483247632045) * r + 5.769497221460691) * r + 4.630337846156546) * r + 1.4234371107496835)
+      / (((((((1.0507500716444169e-9 * r + 5.475938084995345e-4) * r + 0.015198666563616457) * r + 0.14810397642748008) * r
+      + 0.6897673349851) * r + 1.6763848301838038) * r + 2.053191626637759) * r + 1)
   } else {
     r -= 5
-    value = (((((((2.01033439929228813265e-7 * r + 2.71155556874348757815e-5) * r + 0.0012426609473880784386) * r + 0.026532189526576123093) * r
-      + 0.29656057182850489123) * r + 1.7848265399172913358) * r + 5.4637849111641143699) * r + 6.6579046435011037772)
-      / (((((((2.04426310338993978564e-15 * r + 1.4215117583164458887e-7) * r + 1.8463183175100546818e-5) * r + 7.868691311456132591e-4) * r
-      + 0.0148753612908506148525) * r + 0.13692988092273580531) * r + 0.59983220655588793769) * r + 1)
+    value = (((((((2.0103343992922881e-7 * r + 2.7115555687434876e-5) * r + 0.0012426609473880784) * r + 0.026532189526576124) * r
+      + 0.29656057182850487) * r + 1.7848265399172913) * r + 5.463784911164114) * r + 6.657904643501103)
+      / (((((((2.0442631033899397e-15 * r + 1.421511758316446e-7) * r + 1.8463183175100548e-5) * r + 7.868691311456133e-4) * r
+      + 0.014875361290850615) * r + 0.1369298809227358) * r + 0.599832206555888) * r + 1)
   }
   return q < 0 ? -value : value
 }
@@ -757,7 +757,7 @@ export function vcrCampaignVerdict(manifest, state) {
   const best = ranked[0] ?? null
   const reference = referenceKey ? rows.find((row) => row.key === referenceKey) ?? null : null
   let improvement = null
-  if (best && reference?.objective) {
+  if (best?.objective && reference?.objective) {
     const sign = manifest.objective.direction === 'minimize' ? -1 : 1
     improvement = sign * (best.objective.value - reference.objective.value)
   }
@@ -797,7 +797,7 @@ export function vcrCampaignAdvance(manifest, state, { identity }) {
       if (done.state !== 'succeeded') { entry.status = 'eliminated'; entry.reason = 'analytic_check_failed'; continue }
       for (const rule of manifest.stages.analytic.eliminate) {
         const needed = vcrEvaluationMeasure(done, rule.measure)
-        const total = rule.exceeds.reduce((sum, /** @type {string} */ path) => sum + Number(getPath(vcrCandidateScenario(manifest, candidate, manifest.objective.truth, 'final'), path) ?? 0), 0)
+        const total = rule.exceeds.reduce((/** @type {number} */ sum, /** @type {string} */ path) => sum + Number(getPath(vcrCandidateScenario(manifest, candidate, manifest.objective.truth, 'final'), path) ?? 0), 0)
         if (needed && Number.isFinite(total) && total < Number(needed.value) * (1 - rule.tolerance)) {
           entry.status = 'eliminated'; entry.reason = `analytic_below:${rule.measure}`; break
         }

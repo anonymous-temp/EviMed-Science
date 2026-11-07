@@ -46,6 +46,7 @@ import { createResultReplayRoutes } from "./resultReplayRoutes.mjs";
 import { readVcrBenchmarkFile } from './vcrBenchmarkFile.mjs';
 import { createVcrPatientContext } from './vcrPatientContext.mjs';
 import { VcrConversationCompletions, createVcrCompletionResolver } from './vcrConversationCompletions.mjs';
+import { VcrExperiments } from "./vcrExperiments.mjs";
 import { verifyVcrInvocation, vcrOriginalHumanMessages } from './vcrExecutionContext.mjs';
 import { createResultGateway, RESULT_GATEWAY_PATH } from "./resultGateway.mjs";
 import { DataSemanticsService } from "./dataSemanticsService.mjs";
@@ -6317,6 +6318,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       report: (code) => process.stderr.write(`vcr drafts: ${code}\n`),
       audit: vcrAudit,
     });
+    // The virtual lab's experiments and design-search campaigns: a unit at a time through the same queue, advanced by its finish hook.
+    vcr.experiments = new VcrExperiments({ store: vcr.store, jobs: vcr.jobs, config, report: (code) => process.stderr.write(`vcr experiments: ${code}\n`) });
     vcr.completions = new VcrConversationCompletions({
       store: vcr.store, jobs:vcr.jobs, config,
       readOrigin:async (project,runId)=>(await agentRuns.list(project)).find(run=>run.id===runId) ?? null,
@@ -6356,7 +6359,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       report: (/** @type {string} */ loop, /** @type {string} */ code) => process.stderr.write(`vcr ${loop}: ${code}\n`),
       // `matching` is the deferral recheck loop: a washout that ends is re-judged on
       // its own day, not when someone next opens the study.
-      loops: createVcrWorkerLoops({ jobs: vcr.jobs, orchestrator, store: vcr.store, matching: vcr.matching, frontierEvents: vcr.frontierEvents, knowledge: vcr.knowledge, drafts: vcr.drafts, completions: vcr.completions }),
+      loops: createVcrWorkerLoops({ jobs: vcr.jobs, orchestrator, store: vcr.store, matching: vcr.matching, frontierEvents: vcr.frontierEvents, knowledge: vcr.knowledge, drafts: vcr.drafts, completions: vcr.completions, experiments: vcr.experiments }),
     });
     // The catalogue the 模型与方法 page reads: three reference simulators and
     // the engine's own method list, seeded once, idempotently.
