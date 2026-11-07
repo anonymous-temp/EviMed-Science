@@ -4637,8 +4637,10 @@ export interface VcrCampaignView {
   stop: { reason: string; text: string | null; at: string | null } | null; premises: VcrLabPremise[]; createdAt: string | null; updatedAt: string | null;
 }
 export interface VcrDesignExperimentView {
-  id: string; kind: "experiment"; question: string; purpose: string; status: "running" | "complete";
-  arms: Array<{ name: string; method: string | null; methodVersion: string | null; attached: boolean; status: string; refused: string[] | null; resultId: string | null }>;
+  id: string; kind: "experiment"; experimentKind?: "design" | "disease"; question: string; purpose: string; status: "running" | "complete";
+  arms: Array<{ name: string; method: string | null; methodVersion: string | null; attached: boolean; status: string; refused: string[] | null; resultId: string | null;
+    /** A disease arm's drug hypothesis (the closed sentence), and its calculated mean course by visit (ADAS-cog points, week as the visit). */
+    hypothesis?: { kind: string; text: string } | null; trajectory?: Array<{ visit: number; control: number | null; treated: number | null }> | null }>;
   comparison: Array<{ measure: string; label: string; arms: Array<{ name: string; status: string; value: VcrValue | null; precision: string | null }>;
     contrasts: Array<{ arm: string; against: string; coupling: string; couplingText: string | null; difference: VcrValue | null }> }>;
   alignment: Array<{ field: string; aligned: boolean; unknown: string[] }>; incomplete: string[]; premises: VcrLabPremise[]; createdAt: string | null;

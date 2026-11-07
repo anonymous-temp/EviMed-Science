@@ -49,7 +49,8 @@ const POLL_MS = 5000;
 
 const CANDIDATE_TONE: Record<string, TagTone> = { finalist: "accent", evaluated: "neutral", eliminated: "neutral", failed: "warn", unsupported: "warn", screened: "neutral", pending: "neutral" };
 const ARM_STATUS: Record<string, string> = { complete: "已有结果", running: "计算中", failed: "没算成", unsupported: "无法计算", incomplete: "还没有结果" };
-const ALIGNED_FIELD: Record<string, string> = { endpoint: "终点", "analysis.alpha": "检验水准", "analysis.sided": "单双侧", hypothesis: "假设类型", timeUnit: "时间单位" };
+const ALIGNED_FIELD: Record<string, string> = { endpoint: "终点", "analysis.alpha": "检验水准", "analysis.sided": "单双侧", hypothesis: "假设类型", timeUnit: "时间单位",
+  visits: "随访时间点", design: "每组人数", model: "模型设置", population: "入组人群", placebo: "安慰剂反应设置", dropoutModel: "脱落设置", "analysis.kind": "分析方法", "analysis.visit": "分析所在的随访点" };
 const STAGE_TEXT = { screening: "粗筛", final: "复核" } as const;
 const STAGE_MEANING = "粗筛：重复次数少，只用来排序和排除明显不满足的方案；复核：按方法要求的次数在新的随机数上重算，只有复核才判断是否满足约束。";
 
@@ -178,6 +179,12 @@ function CampaignView({ studyId, view, reload }: { studyId: string; view: VcrCam
 function ExperimentView({ studyId, view, reload }: { studyId: string; view: VcrDesignExperimentView; reload: () => void }) {
   useLabToolbar(studyId, view, reload, []);
   const running = view.status === "running";
+  // the calculated mean course of the treated group of each disease arm by visit, with the untreated course the first arm shows beside them
+  const withCourse = view.arms.filter((arm) => arm.trajectory?.length);
+  const course = (withCourse[0]?.trajectory ?? []).map((point, index) => ({
+    visit: point.visit, none: point.control,
+    values: Object.fromEntries(withCourse.map((arm) => [arm.name, arm.trajectory?.[index]?.treated ?? null])) as Record<string, number | null>,
+  }));
   const facts: Fact[] = [
     { label: "比较的口径", value: view.alignment.map((entry) => `${ALIGNED_FIELD[entry.field] ?? entry.field}${entry.aligned ? "一致" : entry.unknown.length ? `未知（${entry.unknown.join("、")}）` : "不一致"}`).join("；") },
     ...(view.incomplete.length ? [{ label: "还没有结果的组", value: `${view.incomplete.join("、")}${running ? "（计算中）" : ""}` }] : []),
@@ -205,9 +212,20 @@ function ExperimentView({ studyId, view, reload }: { studyId: string; view: VcrD
             ]} />
         </Section>
       ))}
+      {course.length > 0 && (
+        <Section title="平均病程" level="sub">
+          <DataTable label="各组的平均病程（ADAS-cog 分，典型研究）" rows={course} rowKey={(row) => String(row.visit)} columns={[
+            { key: "visit", header: "第几周", rowHeader: true, cell: (row) => row.visit },
+            { key: "none", header: "不用药", align: "right", cell: (row) => (row.none === null ? "—" : row.none.toFixed(1)) },
+            ...view.arms.filter((arm) => arm.trajectory).map((arm) => ({ key: arm.name, header: arm.name, align: "right" as const,
+              cell: (row: { values: Record<string, number | null> }) => (row.values[arm.name] == null ? "—" : row.values[arm.name]!.toFixed(1)) })),
+          ]} />
+        </Section>
+      )}
       <Disclosure summary="各组的设置">
         <DataTable label="各组" rows={view.arms} rowKey={(arm) => arm.name} columns={[
           { key: "name", header: "组", rowHeader: true, cell: (arm) => arm.name },
+          { key: "hypothesis", header: "药物效果假设", cell: (arm) => arm.hypothesis?.text, isEmpty: (arm) => !arm.hypothesis },
           { key: "source", header: "来源", cell: (arm) => (arm.attached ? "已保存的结果，没有重算" : "按设定计算") },
           { key: "state", header: "状态", cell: (arm) => ARM_STATUS[arm.status] ?? arm.status },
           { key: "refused", header: "无法计算的原因", cell: (arm) => arm.refused?.join("；"), isEmpty: (arm) => !arm.refused?.length },

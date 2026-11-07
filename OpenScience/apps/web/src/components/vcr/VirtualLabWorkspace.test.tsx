@@ -150,6 +150,27 @@ it('draws a three-arm comparison with the matched definitions, the coupling of e
   expect(document.body.textContent?.match(BACK_OFFICE)?.[0]).toBeUndefined();
 });
 
+it('draws three Alzheimer hypotheses with each arm\'s hypothesis, the calculated course and the model\'s claims in the one block', async () => {
+  const view = experiment();
+  view.experimentKind = 'disease';
+  const kinds: Array<[string, string]> = [['none', '没有药物效果（只看检验会不会误判有效）'], ['symptomatic', '改善症状的假设'], ['disease_modifying', '减慢病情恶化的假设']];
+  view.arms = ['安慰剂', '对症假设', '改病假设'].map((name, i) => ({ name, method: 'patients.progression', methodVersion: '1.1.0', attached: false, status: 'complete', refused: null, resultId: `r${i}`,
+    hypothesis: { kind: kinds[i][0], text: kinds[i][1] }, trajectory: [0, 26, 52, 78].map((visit) => ({ visit, control: 24 + visit / 6, treated: i === 0 ? 24 + visit / 6 : 24 + visit / 7 })) }));
+  view.comparison = [{ measure: 'expected_difference', label: '治疗组减对照组的平均差', arms: view.arms.map((arm, i) => ({ name: arm.name, status: 'complete', value: value(-i, { unit: '分', mcse: undefined, source: 'calculated' }), precision: null })), contrasts: [] }];
+  view.alignment = [{ field: 'visits', aligned: true, unknown: [] }, { field: 'design', aligned: true, unknown: [] }];
+  view.premises = [{ key: 'progression:ad:effect', label: '药物效果', value: '各组的药物效果都是你设定的假设，不是对某个药物疗效的预测。', source: 'assumed', decisive: true, reason: null }];
+  serve([entry('exp1', 'experiment')], { exp1: view });
+  draw();
+  expect(await screen.findByText('三个样本量方案比较')).toBeInTheDocument();
+  expect(screen.getByText(/随访时间点一致；每组人数一致/)).toBeInTheDocument();
+  expect(screen.getByRole('table', { name: /各组的平均病程/ })).toBeInTheDocument();
+  expect(screen.getByRole('columnheader', { name: '不用药' })).toBeInTheDocument();
+  expect(screen.getByText('改善症状的假设')).toBeInTheDocument();
+  expect(screen.getAllByText('这个结论的前提')).toHaveLength(1);
+  expect(screen.getByText(/不是对某个药物疗效的预测/)).toBeInTheDocument();
+  expect(document.body.textContent?.match(BACK_OFFICE)?.[0]).toBeUndefined();
+});
+
 it('an arm still running or without a result is listed as incomplete, not as a zero', async () => {
   const view = experiment();
   view.status = 'running'; view.incomplete = ['C'];
