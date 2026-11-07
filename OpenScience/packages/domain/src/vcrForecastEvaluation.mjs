@@ -326,6 +326,42 @@ export function compareForecasts(first, second, options = {}) {
     scenarios: [first.scenario ?? null,second.scenario ?? null] }
 }
 
+/** An earlier prediction, the one made after new observations arrived, and what was observed afterwards, for the people and target dates
+ * all three share. The newer version is scored only where the observation happened after ITS origin (`pairForecastOutcomes` demands
+ * it), so an observation the newer version could already see is never counted as a test of it. Absolute error for a value, squared
+ * error (Brier) for a probability; point estimates over the same people, no significance test.
+ * @param {any} older @param {any} newer @param {any} outcomes @param {any} [options] */
+export function compareVersionsToObserved(older, newer, outcomes, options = {}) {
+  const base = compareForecasts(older, newer, { mode: 'update', bootstrap: 0, seed: options.seed })
+  if (!base.available) return { available: false, code: base.code ?? 'paired_inputs_differ', mode: 'update' }
+  if (Date.parse(newer.origin) <= Date.parse(older.origin)) return { available: false, code: 'newer_origin_not_later', mode: 'update' }
+  const probability = ['risk', 'survival_probability'].includes(older.endpoint.type)
+  const events = outcomes.evaluationEvents ?? outcomes.events ?? []
+  const pairOld = pairForecastOutcomes(older, events, options).paired
+  const pairNew = pairForecastOutcomes(newer, events, options).paired
+  const key = (/** @type {any} */ row, /** @type {number} */ horizon) => `${row.subjectKey}\0${horizon}`
+  const oldBy = new Map(pairOld.map((/** @type {any} */ r) => [key(r, r.horizonDays), r]))
+  const newBy = new Map(pairNew.map((/** @type {any} */ r) => [key(r, r.horizonDays), r]))
+  const error = (/** @type {number} */ predicted, /** @type {number} */ actual) => probability ? (predicted - actual) ** 2 : Math.abs(predicted - actual)
+  const groups = base.groups.map((/** @type {any} */ group) => {
+    const rows = []
+    for (const row of older.rows.filter((/** @type {any} */ r) => r.horizonDays === group.horizonDays)) {
+      const was = oldBy.get(key(row, group.horizonDays)), now = newBy.get(key(row, group.secondHorizonDays))
+      if (was && now && was.actual === now.actual) rows.push({ older: was.point, newer: now.point, actual: was.actual })
+    }
+    return { horizonDays: group.horizonDays, secondHorizonDays: group.secondHorizonDays, targetAt: group.targetAt, pairedPredictions: group.subjects,
+      observed: rows.length, observedMean: mean(rows.map(r => r.actual)), olderMean: mean(rows.map(r => r.older)), newerMean: mean(rows.map(r => r.newer)),
+      olderError: mean(rows.map(r => error(r.older, r.actual))), newerError: mean(rows.map(r => error(r.newer, r.actual))),
+      newerCloser: rows.filter(r => error(r.newer, r.actual) < error(r.older, r.actual)).length,
+      olderCloser: rows.filter(r => error(r.older, r.actual) < error(r.newer, r.actual)).length,
+      errorMetric: probability ? 'brier' : 'mae' }
+  })
+  return { available: groups.some((/** @type {any} */ g) => g.observed > 0), code: groups.some((/** @type {any} */ g) => g.observed > 0) ? null : 'no_observed_outcomes',
+    mode: 'update', endpoint: older.endpoint, origins: [older.origin, newer.origin], groups, changedFactors: base.changedFactors,
+    interpretation: 'older_vs_newer_vs_observed', causalEffectIdentified: false,
+    notes: base.notes, dataClass: base.dataClass }
+}
+
 /** Design assumptions retain their model origin and dispersion meaning. A risk
  * is not an event hazard; forecast confidence bands are not an outcome SD.
  * @param {any} prediction */

@@ -31,6 +31,10 @@ export function longitudinalResultBlocks(model) {
         ['记录',record.id],['历史',s.historyId],['终点',`${s.endpoint?.code ?? '未知'} · ${s.endpoint?.unit ?? '未知'}`],
         ['接收／可用／无效预测',`${n(`${base}.received`,'int')} / ${n(`${base}.accepted`,'int')} / ${n(`${base}.invalidRows`,'int')}`],
         ['用途',s.dataClass === 'synthetic' ? '合成数据流程检验' : '研究预测'] ]});
+      if (s.accounting) blocks.push({type:'facts',title:'这批患者的去向',rows:[
+        ['提交／完成／拒绝／失败／未处理',['submitted','completed','rejected','failed','unprocessed'].map(k => n(`${base}.accounting.${k}`,'int')).join(' / ')],
+        ['预测的性质',{logged_action_replay:'按实际记录的用药回放，用来检验模型，不是起点时可得的预测',factual_forecast:'按当前诊疗情况的预测',
+          conditional_forecast:'在给定用药安排下的模型推演',intervention_comparison:'干预比较的模型推演'}[s.actionContext?.label] ?? '预测']]});
       if (s.failures?.length) blocks.push({type:'list',title:'未完成的预测部分',items:s.failures.map((/** @type {any} */ f) => String(f.code))});
       continue;
     }
@@ -44,6 +48,12 @@ export function longitudinalResultBlocks(model) {
     if (record.kind === 'trial_evaluation') blocks.push({type:'facts',rows:[['纳入／排除比较',`${n(`${base}.comparisons`,'int')} / ${n(`${base}.excluded`,'int')}`]]});
     if (record.kind === 'comparison') blocks.push({type:'facts',rows:[['比较目的',{scenario:'治疗情景',input_sensitivity:'输入敏感性',model_version:'模型版本',update:'新增观测后的更新'}[s.mode] ?? '治疗情景'],
       ['第一／第二预测',s.predictionIds?.join(' / ') ?? '—'],['比较说明','差值为第一预测减第二预测，只配对相同受试者和目标日期；多项条件同时变化时不能归因于单一因素。']]});
+    if (record.kind === 'comparison' && s.observed?.groups?.length) blocks.push({type:'table',title:'旧预测、新预测与随后的实际观测',
+      columns:['目标日期','有观测的人数','旧预测误差','新预测误差','新预测更接近的人数','旧预测更接近的人数'],
+      rows:s.observed.groups.map((/** @type {any} */ _,/** @type {number} */ k) => {
+        const p = `${base}.observed.groups[${k}]`;
+        return [s.observed.groups[k].targetAt?.slice(0,10) ?? '—',n(`${p}.observed`,'int'),n(`${p}.olderError`),n(`${p}.newerError`),n(`${p}.newerCloser`,'int'),n(`${p}.olderCloser`,'int')];
+      })});
     for (const [j,group] of (s.groups ?? []).entries()) {
       const p = `${base}.groups[${j}]`, title = `${n(`${p}.horizonDays`,'int')} 天${group.endpoint ? ` · ${group.endpoint} · ${group.scale} · ${group.unit}` : ''}`;
       if (record.kind === 'comparison') {

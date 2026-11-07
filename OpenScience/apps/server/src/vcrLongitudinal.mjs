@@ -13,6 +13,7 @@ import { VcrLongitudinalStore, longitudinalHash, longitudinalArtifactView } from
 import { createForecastProviders } from './vcrForecastProvider.mjs';
 import { HttpError } from './security.mjs';
 import { runForecastCalculation } from './vcrForecastCalculation.mjs';
+import { actionContext, loggedActionSchedule, reasonCounts, reconcileSubjects, trajectoryPremises, uncertaintyProvenance } from './vcrTrajectoryBatch.mjs';
 const forecastCandidates = JSON.parse(readFileSync(new URL('../../../packages/contracts/healthflux/candidates.json',import.meta.url),'utf8'));
 
 /** @param {string} code @param {string} message */
@@ -191,12 +192,22 @@ export function createVcrLongitudinal({store,dataStore,dataPlane,matchStore,acce
       model:input.model ?? {name:'unknown',version:'unknown'},scenario:input.scenario ?? null,rows:checked.rows,
       issues:checked.issues,rejected:[...(checked.rejected ?? []),...(provenance.rejected ?? [])],dataClass:history.content.dataClass,
       received:checked.received,valueSource:'predicted',originKind:provenance.originKind ?? 'external_file',
-      provenance:{...provenance,importDigest:longitudinalHash(input)},priorPredictionId:input.priorPredictionId ?? null};
+      provenance:/** @type {Record<string,any>} */ ({...Object.fromEntries(Object.entries(provenance).filter(([key]) => !['accounting','premises','uncertainty'].includes(key))),importDigest:longitudinalHash(input)}),priorPredictionId:input.priorPredictionId ?? null};
     const original = await artifacts.save(study,'prediction_import',input,{historyId:input.historyId,received:rows.length},
       {snapshotIds:history.row.snapshot_ids,sourceIds:history.row.source_ids,bindings:history.row.bindings,parentId:input.historyId});
     content.provenance.importArtifactId = original.id;
-    if (input.priorPredictionId) await artifacts.read(study,input.priorPredictionId,actor);
-    const summary = {origin:content.origin,endpoint:content.endpoint,horizonsDays:content.horizonsDays,model:content.model,scenario:content.scenario,
+    const prior = input.priorPredictionId ? await artifacts.read(study,input.priorPredictionId,actor) : null;
+    if (prior && prior.row.kind !== 'prediction') throw invalid('vcr_forecast_unavailable','The preceding record must be a prediction.');
+    // A cloud batch brings its own ledger; an imported file is accounted the same way (every person of the history, one batch).
+    const subjectsOfHistory = longitudinalSubjects(history.content);
+    const accounting = provenance.accounting ?? reconcileSubjects({subjects:subjectsOfHistory,horizonsDays:content.horizonsDays,rows:checked.rows,
+      validationRejected:content.rejected,batches:[{keys:subjectsOfHistory,outcome:'done'}]});
+    content.accounting = accounting.lines;
+    const context = provenance.actionContext ?? {mode:'factual_forecast',actionSource:'none',deployable:true,label:'factual_forecast'};
+    const versionNumber = (prior?.row.summary?.versionNumber ?? (prior ? 1 : 0))+1;
+    const summary = {accounting:accounting.counts,accountingReasons:reasonCounts(accounting.lines),actionContext:context,versionNumber,
+      uncertainty:provenance.uncertainty ?? uncertaintyProvenance(checked.rows),leakageDropped:provenance.leakageDropped ?? 0,
+      useFindings:provenance.premises ?? [],origin:content.origin,endpoint:content.endpoint,horizonsDays:content.horizonsDays,model:content.model,scenario:content.scenario,
       historyId:content.historyId,priorPredictionId:content.priorPredictionId,jobId:provenance.jobId ?? null,
       received:provenance.receipts?.reduce((/** @type {number} */ total,/** @type {any} */ r) => total+(r.receivedRows ?? 0),0) ?? checked.received,
       accepted:checked.rows.length,invalidRows:checked.received-checked.rows.length
@@ -205,6 +216,7 @@ export function createVcrLongitudinal({store,dataStore,dataPlane,matchStore,acce
       designInputs:content.horizonsDays?.length && checked.rows.length ? forecastDesignInputs(content) : [],
       trajectories:aggregateForecastCurve(content),actualProvider:provenance.receipts?.map((/** @type {any} */ r) => ({provider:r.provider,model:r.actualModel,version:r.actualVersion})),
       cost:provenance.receipts?.map((/** @type {any} */ r) => ({value:r.cost,currency:r.costCurrency})),failures:provenance.failures ?? []};
+    summary.premises = trajectoryPremises({findings:summary.useFindings,actionContext:context,uncertainty:summary.uncertainty});
     const saved = await artifacts.save(study,'prediction',content,summary,{snapshotIds:history.row.snapshot_ids,sourceIds:history.row.source_ids,bindings:history.row.bindings,parentId:input.priorPredictionId ?? input.historyId});
     return longitudinalArtifactView(saved);
   }
@@ -216,9 +228,10 @@ export function createVcrLongitudinal({store,dataStore,dataPlane,matchStore,acce
     const method = VCR_LONGITUDINAL_JOBS[/** @type {keyof typeof VCR_LONGITUDINAL_JOBS} */ (request.kind)];
     const scenario = obj(request.scenario);
     const problems = validateLongitudinalScenario(method,scenario);
+    if (method === 'forecast.trajectories') for (const issue of actionContext(scenario).issues) problems.push({code:issue.code,field:`scenario.${issue.field}`,detail:issue.detail});
     if (problems.length) throw invalid('vcr_job_scenario_invalid',problems.map(p => p.field).join(', '));
     /** @type {any[]} */ const inputs = [];
-    for (const key of ['historyId','predictionId','outcomeHistoryId','otherPredictionId','benchmarkId']) if (scenario[key]) {
+    for (const key of ['historyId','predictionId','outcomeHistoryId','otherPredictionId','benchmarkId','actionHistoryId','priorPredictionId']) if (scenario[key]) {
       const held = await artifacts.read(study,scenario[key],actor);
       inputs.push({kind:'source',id:held.row.id,hash:held.row.sha256});
     }
@@ -253,6 +266,15 @@ export function createVcrLongitudinal({store,dataStore,dataPlane,matchStore,acce
       if (!pinnedProvider || pinnedProvider.hash !== longitudinalHash(await providers.require(scenario.providerId))) {
         throw invalid('vcr_forecast_request_changed','The provider configuration changed after enqueue; start a new prediction version.');
       }
+      // A logged replay reads its actions from a LATER history (what happened after the origin), never from the one the forecast is
+      // made from, and says so on the result; a supplied schedule is a hypothesis stated at the origin.
+      let prediction = {predictionMode:scenario.predictionMode,actions:scenario.actions,actionSource:scenario.actionSource};
+      if (scenario.actionHistoryId) {
+        const later = await read(scenario.actionHistoryId);
+        const provider = await providers.require(scenario.providerId);
+        prediction = {predictionMode:scenario.predictionMode ?? 'conditional_forecast',actionSource:'logged_replay',
+          actions:loggedActionSchedule(later.content.events,history.content.asOf,(provider.actionCodes ?? []).map(String))};
+      }
       /** @param {any} batch */
       const saveBatch = async batch => {
         // Preserve raw exchanges inside the plane. Only aggregate metadata reaches a run.
@@ -262,12 +284,14 @@ export function createVcrLongitudinal({store,dataStore,dataPlane,matchStore,acce
         saved = await importPrediction(study,{historyId:history.row.id,origin:history.content.asOf,endpoint:scenario.endpoint,
           horizonsDays:scenario.horizonsDays,rows:batch.rows,model:{name:batch.receipts?.[0]?.actualModel ?? scenario.providerId,
             version:batch.receipts?.[0]?.actualVersion ?? 'unknown'},
-          scenario:scenario.scenario},actor,{originKind:'cloud_api',jobId:job.jobId,receipts:batch.receipts,failures:batch.failures,rejected:batch.rejected});
+          scenario:scenario.scenario,...(scenario.priorPredictionId ? {priorPredictionId:scenario.priorPredictionId} : {})},actor,
+        {originKind:'cloud_api',jobId:job.jobId,receipts:batch.receipts,failures:batch.failures,rejected:batch.rejected,
+          accounting:batch.accounting,premises:batch.premises,uncertainty:batch.uncertainty,actionContext:batch.actionContext,leakageDropped:batch.leakageDropped});
         await onProgress({done:batch.rows.length,total:history.content.events.length});
       };
       try {
         const result = await providers.predict({providerId:scenario.providerId,history:history.content,endpoint:scenario.endpoint,
-          horizonsDays:scenario.horizonsDays,scenario:scenario.scenario,seed:job.seed,samples:scenario.samples,jobId:job.jobId,
+          horizonsDays:scenario.horizonsDays,scenario:scenario.scenario,prediction,seed:job.seed,samples:scenario.samples,jobId:job.jobId,
           budgetMs:Math.min(job.cpuSecondsLimit*1000,600_000),
           beginBatch:async batch => {
             const existing = await store.one(`SELECT id FROM evimed_vcr.longitudinal_artifacts WHERE study_id=$1
@@ -310,7 +334,11 @@ export function createVcrLongitudinal({store,dataStore,dataPlane,matchStore,acce
     } else if (job.method === 'forecast.compare') {
       const first = await read(scenario.predictionId), second = await read(scenario.otherPredictionId);
       const computed = await runForecastCalculation(job.method,[first.content,second.content,{seed:job.seed,bootstrap:scenario.bootstrap,mode:scenario.mode}],{timeoutMs:job.cpuSecondsLimit*1000,isCanceled});
-      const comparison = {...computed,predictionIds:[first.row.id,second.row.id]};
+      // Old version, new version and what was observed afterwards, on the people and dates all three share.
+      const observed = scenario.outcomeHistoryId
+        ? await runForecastCalculation('forecast.compare_observed',[first.content,second.content,(await read(scenario.outcomeHistoryId)).content,{seed:job.seed,
+          dataClass:first.content.dataClass,windowDays:scenario.windowDays}],{timeoutMs:job.cpuSecondsLimit*1000,isCanceled}) : null;
+      const comparison = {...computed,predictionIds:[first.row.id,second.row.id],...(observed ? {observed} : {})};
       saved = longitudinalArtifactView(await artifacts.save(study,'comparison',comparison,comparison,
         {snapshotIds:[...new Set([...first.row.snapshot_ids,...second.row.snapshot_ids])],sourceIds:[...new Set([...first.row.source_ids,...second.row.source_ids])],bindings:[...(first.row.bindings ?? []),...(second.row.bindings ?? [])],parentId:first.row.id}));
     } else if (job.method === 'forecast.trial_benchmark') {
@@ -376,6 +404,25 @@ export function createVcrLongitudinal({store,dataStore,dataPlane,matchStore,acce
           ...(validation ? {validation:{id:validation.row.id,hash:validation.row.sha256,dataClass:validation.content.dataClass,
             randomizationAt:input.randomizationAt,correlationMeaning:'heldout_predictive_correlation',clinicalQualification:false}} : {})}});
       return {available:true,jobId:queued.job.id,state:queued.job.state};
+    },
+    /** The per-person lines of one prediction, from its protected artifact: the grant is rejudged by the read, a page is bounded and
+     * filtered by status, and a prediction from before the ledger existed is accounted from its rows on the way out.
+     * @param {any} study @param {string} id @param {string} actor @param {{status?:string|null,reason?:string|null,offset?:number,limit?:number}} [filter] */
+    async subjectPage(study,id,actor,filter = {}) {
+      const held = await artifacts.read(study,id,actor);
+      if (held.row.kind !== 'prediction') throw invalid('vcr_forecast_unavailable','Select a prediction.');
+      const lines = held.content.accounting ?? reconcileSubjects({subjects:[...new Set(held.content.rows.map((/** @type {any} */ r) => r.subjectKey))],
+        horizonsDays:held.content.horizonsDays,rows:held.content.rows,validationRejected:held.content.rejected ?? [],
+        batches:[{keys:[...new Set(held.content.rows.map((/** @type {any} */ r) => r.subjectKey))],outcome:'done'}]}).lines;
+      const shown = lines.filter((/** @type {any} */ l) => (!filter.status || l.status === filter.status) && (!filter.reason || l.reason === filter.reason));
+      const limit = Math.min(200,Math.max(1,Math.floor(Number(filter.limit) || 50))), offset = Math.max(0,Math.floor(Number(filter.offset) || 0));
+      const page = shown.slice(offset,offset+limit);
+      const keys = new Set(page.map((/** @type {any} */ l) => l.subjectKey));
+      return {id,total:lines.length,matching:shown.length,offset,limit,more:offset+limit < shown.length,lines:page,
+        // one person's own trajectory: their rows, never an aggregate of another person's
+        trajectories:Object.fromEntries([...keys].map(key => [key,held.content.rows.filter((/** @type {any} */ r) => r.subjectKey === key)
+          .map((/** @type {any} */ r) => ({horizonDays:r.horizonDays,point:r.point,sd:r.sd ?? null,quantiles:r.quantiles ?? [],draws:(r.samples ?? []).length,uncertainty:r.uncertainty}))])),
+        actionContext:held.content.actionContext ?? held.row.summary?.actionContext ?? null};
     },
     /** @param {any} study @param {any} [filter] @param {any} [readStore] */
     async view(study,filter = {},readStore = store) {
