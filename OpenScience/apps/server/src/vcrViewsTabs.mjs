@@ -1328,7 +1328,7 @@ export function presentTrialTab(bundle) {
     // numbers above a table of other designs read as the page's (live D3: the null check's hazard ratio of 1 above designs at 0.75).
     premises: primaryCard ? list(primaryCard.card.premises)
       : headlineRow ? (!asked && !chosenRow && live.filter((design) => designRows.some((row) => row.id === design.id && row._result)).length > 1
-        ? premisesInCommon(designRows.filter((row) => !row.dominated && row._result).map((row) => vcrPremises("trial", trialPremiseInput(bundle, row))))
+        ? premisesInCommon([headlineRow, ...designRows.filter((row) => row !== headlineRow && !row.dominated && row._result)].map((row) => vcrPremises("trial", trialPremiseInput(bundle, row))))
         : vcrPremises("trial", trialPremiseInput(bundle, headlineRow))) : [],
     // What the sample size rests on, one input at a time, and the power the effect's published shrinkage leaves (C6).
     sensitivity: trialSensitivity(headlineRow),
@@ -1375,13 +1375,13 @@ export function presentTrialTab(bundle) {
 }
 
 /**
- * The premises every one of several designs states alike: the same key, value and word in each list, in the first list's order.
+ * The premises every one of several designs states alike: the same key and value in each list, as the first list (the newest design's) words them.
  * @param {ReadonlyArray<ReadonlyArray<Record<string, any>>>} lists
  * @returns {Array<Record<string, any>>}
  */
 function premisesInCommon(lists) {
   const [first = [], ...others] = lists;
-  const same = (/** @type {Record<string, any>} */ a, /** @type {Record<string, any>} */ b) => a.key === b.key && JSON.stringify(a.value) === JSON.stringify(b.value) && a.source === b.source;
+  const same = (/** @type {Record<string, any>} */ a, /** @type {Record<string, any>} */ b) => a.key === b.key && JSON.stringify(a.value) === JSON.stringify(b.value);
   return first.filter((row) => others.every((other) => other.some((entry) => same(entry, row))));
 }
 

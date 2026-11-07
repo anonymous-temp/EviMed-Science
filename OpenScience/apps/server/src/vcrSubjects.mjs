@@ -118,7 +118,7 @@ export function vcrDesignShare(design) {
 }
 
 /**
- * Whether a scenario and a design differ in how the sample is decided. A design that fixes both arm sizes and one that solves them for
+ * Whether a scenario and a design differ in how the sample is decided. A scenario that fixes both arm sizes and a design that solves them for
  * a power are different designs, not two versions of one: the scenario that states the sizes is the design's own only when the sizes
  * it states are the ones the design solved (`row.solvedPatients`, read from the design's result), so a simulation at the solved size
  * stays the design's next stage and a simulation at another size is another design (found live 2026-11-07: 250 per arm was filed as
@@ -137,7 +137,8 @@ export function vcrSizingDiffers(jobScenario, row) {
     const known = finite(row.solvedPatients);
     return known === null || known !== total;
   }
-  return solved(scenario) && fixed(object(own.design));
+  // The other way round is no difference: a design that holds fixed sizes beside a power is sized by the closed form on its own object.
+  return false;
 }
 
 /**
@@ -160,17 +161,20 @@ async function withSolvedSizes(store, studyId, objectKind, current) {
  * agree where both say one, and the count of agreeing numbers in the design, the truth, the hypothesis, the analysis and the accrual breaks a tie. A number both state and
  * that differs is counted too (`disagreeing`): it does not unfit a design here (the backfill reads old results against the design
  * as it is now), but a scenario a conversation sends is not about a design it contradicts.
+ * With `sizing`, a scenario that fixes the arm sizes does not fit a design solved for a power (`vcrSizingDiffers`); the backfill reads
+ * old results against designs whose results it does not know yet and leaves it off.
  * @param {Record<string, any>} jobScenario @param {{ design: string, endpointType: string, configuration: Record<string, any> }} row
+ * @param {{ sizing?: boolean }} [options]
  * @returns {{ fits: boolean, agreeing: number, disagreeing: number }}
  */
-export function vcrTrialScenarioFit(jobScenario, row) {
+export function vcrTrialScenarioFit(jobScenario, row, { sizing = false } = {}) {
   const scenario = object(jobScenario);
   const design = object(scenario.design);
   const kind = typeof design.kind === "string" ? design.kind : null;
   if (kind !== null && kind !== row.design) return { fits: false, agreeing: 0, disagreeing: 0 };
   const endpoint = typeof object(scenario.endpoint).type === "string" ? object(scenario.endpoint).type : null;
   if (endpoint !== null && endpoint !== row.endpointType) return { fits: false, agreeing: 0, disagreeing: 0 };
-  if (vcrSizingDiffers(scenario, row)) return { fits: false, agreeing: 0, disagreeing: 0 };
+  if (sizing && vcrSizingDiffers(scenario, row)) return { fits: false, agreeing: 0, disagreeing: 0 };
   const own = object(row.configuration);
   const share = vcrDesignShare(design);
   const ownShare = vcrDesignShare(object(own.design));
@@ -199,10 +203,10 @@ export function vcrTrialScenarioFit(jobScenario, row) {
  * they fit equally well (the caller treats that as ambiguous). With `sameNumbers`, a design whose stated numbers the scenario
  * contradicts is not one it fits.
  * @param {Record<string, any>} jobScenario @param {ReadonlyArray<Record<string, any>>} rows the current row of each design
- * @param {{ sameNumbers?: boolean }} [options]
+ * @param {{ sameNumbers?: boolean, sizing?: boolean }} [options]
  */
-export function vcrMatchTrialScenarios(jobScenario, rows, { sameNumbers = false } = {}) {
-  const scored = rows.map((row) => ({ row, ...vcrTrialScenarioFit(jobScenario, /** @type {any} */ (row)) }))
+export function vcrMatchTrialScenarios(jobScenario, rows, { sameNumbers = false, sizing = false } = {}) {
+  const scored = rows.map((row) => ({ row, ...vcrTrialScenarioFit(jobScenario, /** @type {any} */ (row), { sizing }) }))
     .filter((entry) => entry.fits && !(sameNumbers && entry.disagreeing > 0));
   const best = Math.max(0, ...scored.map((entry) => entry.agreeing));
   return scored.filter((entry) => entry.agreeing === best).map((entry) => entry.row);
@@ -315,7 +319,7 @@ function holdings(objectKind, current) {
  * @param {string} objectKind @param {string} kind @param {Record<string, any>} scenario @param {ReadonlyArray<Record<string, any>>} current
  * @param {boolean} sameNumbers */
 function fittingObjects(objectKind, kind, scenario, current, sameNumbers) {
-  return objectKind === "trial_scenario" ? vcrMatchTrialScenarios(scenario, current, { sameNumbers })
+  return objectKind === "trial_scenario" ? vcrMatchTrialScenarios(scenario, current, { sameNumbers, sizing: true })
     : objectKind === "population" ? current.filter((entry) => (POPULATION_KIND_OF_JOB[kind] === undefined || entry.kind === POPULATION_KIND_OF_JOB[kind])
       && (!sameNumbers || !['generate_population', 'literature_population'].includes(kind) || canonicalScenarioJson(entry.definition) === canonicalScenarioJson(scenario)))
       : current;

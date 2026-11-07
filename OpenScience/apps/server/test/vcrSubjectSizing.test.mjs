@@ -29,9 +29,10 @@ test("a fixed-size scenario and a design solved for a power are different design
   assert.equal(vcrSizingDiffers(simulation(250), row), true);
   assert.equal(vcrSizingDiffers(simulation(367), row), false, "a simulation at the solved size is the design's next stage");
   assert.equal(vcrSizingDiffers(simulation(367), { configuration: solvedConfiguration }), true, "a design with no solved size yet cannot be told to be the same");
-  assert.equal(vcrSizingDiffers({ ...solvedConfiguration }, { configuration: simulation(250) }), true, "a solve-for-power scenario is not a fixed design either");
+  assert.equal(vcrSizingDiffers({ ...solvedConfiguration }, { configuration: { ...simulation(250), analysis: { alpha: 0.025, power: 0.9 } } }), false, "the closed form sizes a fixed design's own object");
   assert.equal(vcrSizingDiffers({ design: { kind: "two_arm_fixed" } }, row), false, "a scenario that says nothing about the sample is the design");
-  assert.equal(vcrTrialScenarioFit(simulation(250), { design: "two_arm_fixed", endpointType: "time_to_event", configuration: solvedConfiguration }).fits, false);
+  assert.equal(vcrTrialScenarioFit(simulation(250), { design: "two_arm_fixed", endpointType: "time_to_event", configuration: solvedConfiguration }, { sizing: true }).fits, false);
+  assert.equal(vcrTrialScenarioFit(simulation(250), { design: "two_arm_fixed", endpointType: "time_to_event", configuration: solvedConfiguration }).fits, true, "the backfill reads old results without it");
 });
 
 test("the live case: 250 per arm is not filed under the design solved for 90% power, 367 per arm is", async () => {

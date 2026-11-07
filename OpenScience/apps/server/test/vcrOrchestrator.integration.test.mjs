@@ -2606,7 +2606,12 @@ test("SOURCES a median the call says it read in a paper is the paper's on the re
   assert.deepEqual(unnamedJob.checkpoint.bound, [{ key: "control_median_tte", version: 1, path: "truth.controlMedian", value: 13.8 }]);
 
   await drainJobs(module, study);
-  const trial = await module.service.tab({ id: study.userId }, study.id, "trial");
+  // D3: the overview of several designs holds only what they all share; the paper's design is read through a link that names it
+  const paperRow = (await store.trialScenarios(study.id)).find((/** @type {any} */ row) => row.configuration.truth?.controlMedian === 13.8 && row.configuration.truth?.hazardRatio === 0.75);
+  assert.ok(paperRow, "the design computed with the paper's median is on the page");
+  const overview = await module.service.tab({ id: study.userId }, study.id, "trial");
+  assert.equal(overview.premises.find((/** @type {any} */ row) => row.key === "control"), undefined, "the designs state other medians: not the overview's");
+  const trial = await module.service.tab({ id: study.userId }, study.id, "trial", { object: paperRow.id });
   const control = trial.premises.find((/** @type {any} */ row) => row.key === "control");
   assert.deepEqual([control.source, control.reason], ["literature", "引自 PMID 37676259"], "the page says 文献 and names the paper");
   const effect = trial.premises.find((/** @type {any} */ row) => row.key === "effect");
