@@ -51,6 +51,16 @@ export function frozenHistorySplit(study,input,events) {
 
 /** @param {any} input */
 
+/** What the accuracy of an evaluation or a comparison of these predictions is the accuracy of: a forecast's, or, when any of them
+ * replayed actions recorded after its origin, a logged-action replay's, which no reader may take for forecast accuracy (review stats
+ * P1-6). The weakest context is carried, with each prediction's own. @param {any[]} predictions saved prediction artifacts */
+function accuracyOf(predictions) {
+  const contexts = predictions.map(held => held.row.summary?.actionContext ?? held.content?.actionContext ?? null);
+  const replay = contexts.find(context => context && context.deployable === false) ?? null;
+  return {actionContext:replay ?? contexts[0] ?? {mode:'factual_forecast',actionSource:'none',deployable:true,label:'factual_forecast'},
+    actionContexts:contexts,accuracyKind:replay ? 'logged_action_replay' : 'forecast'};
+}
+
 /** The lineage of an artifact made from several saved ones: every snapshot, source and binding of each, so a grant withdrawn from any
  * of them reaches it (review eng P0-4). @param {any[]} rows @param {string | null} parentId */
 function lineageOf(rows,parentId) {
@@ -345,7 +355,9 @@ export function createVcrLongitudinal({store,dataStore,dataPlane,matchStore,acce
     } else if (job.method === 'forecast.evaluate') {
       const prediction = await read(scenario.predictionId), outcomes = await read(scenario.outcomeHistoryId);
       const history = await artifacts.read(study,prediction.content.historyId,actor);
-      const evaluation = await runForecastCalculation(job.method,[prediction.content,history.content,outcomes.content,{...scenario,seed:job.seed}],{timeoutMs:job.cpuSecondsLimit*1000,isCanceled});
+      const computed = await runForecastCalculation(job.method,[prediction.content,history.content,outcomes.content,{...scenario,seed:job.seed}],{timeoutMs:job.cpuSecondsLimit*1000,isCanceled});
+      // a replay's accuracy is the model's given what really happened after the origin, never a forecast's accuracy (review stats P1-6)
+      const evaluation = {...computed,...accuracyOf([prediction])};
       saved = longitudinalArtifactView(await artifacts.save(study,'evaluation',evaluation,evaluation,
         {snapshotIds:[...new Set([...prediction.row.snapshot_ids,...outcomes.row.snapshot_ids])],
           sourceIds:[...new Set([...prediction.row.source_ids,...outcomes.row.source_ids])],bindings:[...(prediction.row.bindings ?? []),...(outcomes.row.bindings ?? [])],parentId:prediction.row.id}));
@@ -356,7 +368,7 @@ export function createVcrLongitudinal({store,dataStore,dataPlane,matchStore,acce
       const observed = scenario.outcomeHistoryId
         ? await runForecastCalculation('forecast.compare_observed',[first.content,second.content,(await read(scenario.outcomeHistoryId)).content,{seed:job.seed,
           dataClass:first.content.dataClass,windowDays:scenario.windowDays}],{timeoutMs:job.cpuSecondsLimit*1000,isCanceled}) : null;
-      const comparison = {...computed,predictionIds:[first.row.id,second.row.id],...(observed ? {observed} : {})};
+      const comparison = {...computed,predictionIds:[first.row.id,second.row.id],...(observed ? {observed} : {}),...accuracyOf([first,second])};
       saved = longitudinalArtifactView(await artifacts.save(study,'comparison',comparison,comparison,
         {snapshotIds:[...new Set([...first.row.snapshot_ids,...second.row.snapshot_ids])],sourceIds:[...new Set([...first.row.source_ids,...second.row.source_ids])],bindings:[...(first.row.bindings ?? []),...(second.row.bindings ?? [])],parentId:first.row.id}));
     } else if (job.method === 'forecast.trial_benchmark') {
@@ -381,6 +393,8 @@ export function createVcrLongitudinal({store,dataStore,dataPlane,matchStore,acce
      * @param {any} study @param {any} input @param {string} actor */
     async enqueueDesign(study,input,actor) {
       const first = await artifacts.read(study,input.predictionId,actor), second = await artifacts.read(study,input.controlPredictionId,actor);
+      // a replay used actions recorded after the origin: it is no forecast a trial could be designed on (review stats P1-6)
+      if (accuracyOf([first,second]).accuracyKind === 'logged_action_replay') return {available:false,code:'logged_replay_not_deployable'};
       const paired = compareForecasts(first.content,second.content,{bootstrap:0});
       if (!paired.available) return {available:false,code:paired.code};
       const controlSubjects = new Set(second.content.rows.filter((/** @type {any} */ r) => r.horizonDays === input.horizonDays).map((/** @type {any} */ r) => r.subjectKey));

@@ -209,4 +209,20 @@ test('a logged replay reads its actions only from a frozen history whose source 
   assert.deepEqual(new Set(held.row.source_ids),new Set([source.id,later.id]));
   const batches = await vcr.store.rows(`SELECT source_ids FROM evimed_vcr.longitudinal_artifacts WHERE study_id=$1 AND kind='provider_batch' AND summary->>'jobId'=$2`,[study.id,ran.queued.job.id]);
   assert.ok(batches.length && batches.every(row => row.source_ids.includes(later.id)));
+
+  // the replay's accuracy is scored apart from a forecast's, and it is not a design input (review stats P1-6)
+  const outcomes = await vcr.longitudinal.freezeHistory(study,{snapshotId:snapshot.id,asOf:'2026-03-01',mappings:[mapping()]},'owner');
+  const scored = await run({kind:'evaluate_forecast',scenario:{predictionId:saved.id,outcomeHistoryId:outcomes.id}});
+  assert.equal(scored.job.state,'succeeded',JSON.stringify(scored.job));
+  const evaluation = (await vcr.jobs.resultOf(study.id,scored.queued.job.id)).diagnostics.longitudinal.summary;
+  assert.equal(evaluation.accuracyKind,'logged_action_replay');
+  assert.equal(evaluation.actionContext.deployable,false);
+  const forecast = (await vcr.longitudinal.view(study,{kind:'prediction',limit:50})).records.find(r => r.summary?.actionContext?.deployable === true);
+  assert.ok(forecast,'a deployable forecast of the earlier tests');
+  const compared = await run({kind:'compare_forecasts',scenario:{predictionId:forecast.id,otherPredictionId:saved.id}});
+  assert.equal(compared.job.state,'succeeded',JSON.stringify(compared.job));
+  const comparison = (await vcr.jobs.resultOf(study.id,compared.queued.job.id)).diagnostics.longitudinal.summary;
+  assert.deepEqual([comparison.accuracyKind,comparison.actionContexts.map(c => c.deployable)],['logged_action_replay',[true,false]]);
+  assert.deepEqual(await vcr.longitudinal.enqueueDesign(study,{predictionId:saved.id,controlPredictionId:forecast.id,horizonDays:30},'owner'),
+    {available:false,code:'logged_replay_not_deployable'});
 });
