@@ -1983,3 +1983,34 @@ test('in-flight dedupe requires identical frozen human and publication sources, 
   assert.equal((await ask(paper('456'))).jobId,'job_4','new publication cannot borrow a previous job even with identical values');
   assert.equal(queued,4);
 });
+
+// ---------------------------------------------------------------------------
+// The virtual lab (plan T09, T10): the trial plugin's search and compare reach the experiments package as simulate actions; the
+// call's shape is checked before any study is opened, and the answer carries the entry to the trial page.
+// ---------------------------------------------------------------------------
+
+test("the lab's actions reach the experiments package with the study and the origin; a malformed call is refused by shape", async () => {
+  const { call, made } = conversationCalls("https://evimed.example");
+  /** @type {any[]} */ const asked = [];
+  made.vcr.experiments = {
+    async startCampaign(/** @type {any} */ study, /** @type {any} */ manifest, /** @type {any} */ who) { asked.push(["search", study.id, manifest.question, who.origin?.runId]); return { id: "cmp_1", kind: "campaign", created: true }; },
+    async startExperiment(/** @type {any} */ study, /** @type {any} */ experiment) { asked.push(["compare", study.id, experiment.arms.length]); return { id: "exp_1", kind: "experiment" }; },
+    async view(/** @type {any} */ _study, /** @type {string} */ id) { asked.push(["view", id]); return { id }; },
+    async cancel(/** @type {any} */ _study, /** @type {string} */ id) { asked.push(["cancel", id]); return { id, status: "stopped" }; },
+  };
+  const started = await call("simulate", { action: "search", manifest: { question: "最小样本量" } });
+  assert.equal(started.status, 200);
+  assert.equal(started.json().data.id, "cmp_1");
+  assert.deepEqual(started.json().data.resultEntry, { studyId: "std_task", tab: "trial", label: "在“试验”页查看", url: "https://evimed.example/app/virtual-research/std_task/trial" });
+  assert.equal((await call("simulate", { action: "search_status", campaignId: "cmp_1" })).status, 200);
+  assert.equal((await call("simulate", { action: "search_cancel", campaignId: "cmp_1" })).status, 200);
+  assert.equal((await call("simulate", { action: "compare", experiment: { arms: [{}, {}] } })).status, 200);
+  assert.equal((await call("simulate", { action: "compare_status", experimentId: "exp_1" })).status, 200);
+  assert.deepEqual(asked, [["search", "std_task", "最小样本量", "run_1"], ["view", "cmp_1"], ["cancel", "cmp_1"], ["compare", "std_task", 2], ["view", "exp_1"]]);
+  for (const body of [{ action: "search", manifest: [] }, { action: "search", manifest: {}, kind: "design_simulation" }, { action: "search_status", campaignId: "../x" },
+    { action: "compare" }, { action: "compare_status", experimentId: 7 }]) {
+    const refused = await call("simulate", body);
+    assert.equal(refused.status, 400, JSON.stringify(body));
+  }
+  assert.equal(asked.length, 5, "a refused call reaches nothing");
+});

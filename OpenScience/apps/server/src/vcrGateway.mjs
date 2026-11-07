@@ -378,8 +378,8 @@ const LAB_ACTIONS = Object.freeze(["search", "search_status", "search_cancel", "
 
 /** @param {Record<string, any>} body */
 function simulateRequest(body) {
-  onlyFields(body, ["action", "kind", "scenario", "inputs", "seed", "replicates", "cpuSecondsLimit", "jobId", "subjectId", "reconstructionResultId", "selection", "modelId", "modelVersion", "sources"]);
   const action = body.action ?? "start";
+  if (!LAB_ACTIONS.includes(action)) onlyFields(body, ["action", "kind", "scenario", "inputs", "seed", "replicates", "cpuSecondsLimit", "jobId", "subjectId", "reconstructionResultId", "selection", "modelId", "modelVersion", "sources"]);
   if (!["start", "status", "cancel", "validate", "shape", ...LAB_ACTIONS].includes(action)) {
     throw gatewayError(400, "vcr_simulate_action_invalid", `action must be start, status, cancel, validate, shape or ${LAB_ACTIONS.join(", ")}.`);
   }
