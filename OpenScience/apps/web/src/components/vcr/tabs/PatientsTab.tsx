@@ -31,7 +31,8 @@ import { useVcrLoad, VcrTabError } from "../vcrTabKit";
 import { VcrToolbarActions, type VcrToolbarAction } from "../VcrToolbarActions";
 import { COMPARE_DRAFT_LABEL, DRAFT_PREFIX } from "../vcrActionWords";
 import { scrollBlockToTop } from "../vcrScroll";
-import { VcrLongitudinalPanel, useLongitudinal } from "../VcrLongitudinalPanel";
+import { useLongitudinal } from "../VcrLongitudinalPanel";
+import { PatientTrajectoryWorkspace } from "../PatientTrajectoryWorkspace";
 import { CalibrationStrip } from "../patients/CalibrationStrip";
 import { DistributionGrid } from "../patients/DistributionGrid";
 import { ModelRecordDrawer } from "../patients/ModelRecordDrawer";
@@ -94,7 +95,7 @@ export function PatientsTab({ studyId, study, onStudyChanged }: { studyId: strin
   if (shown === "forecast" && !forecastData) return <ForecastState switcher={switcher}><Note action={null}>当前工作空间尚未启用纵向预测。已有患者记录仍可查看。</Note></ForecastState>;
   if (shown === "forecast" && forecastData) {
     return (
-      <VcrLongitudinalPanel
+      <PatientTrajectoryWorkspace
         studyId={studyId}
         canRun={study.abilities.includes("run")}
         canManage={study.abilities.includes("manage_study")}

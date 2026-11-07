@@ -493,6 +493,20 @@ describe("虚拟患者 · the second view, 预测验证", () => {
   const history = { id: "history-1", kind: "history", createdAt: "2026-01-01", hash: "h", summary: { origin: "2026-01-01", subjects: 40, events: 80 } };
   const longitudinal = (records: unknown[]) => ({ available: true, records, providers: [], templates: { events: { columns: ["subject_id"], example: ["synthetic"] }, prediction: { schema: 1 } } });
 
+  it("mounts the batch workspace for a prediction: its denominator and the server's page of people", async () => {
+    const counts = { submitted: 10, admitted: 10, completed: 8, rejected: 2, failed: 0, unprocessed: 0, partial: 0 };
+    const prediction = { id: "pred-1", kind: "prediction", createdAt: "2026-01-02", hash: "h", summary: { origin: "2026-01-01", historyId: "history-1", endpoint: { code: "x", unit: "%", type: "continuous" }, horizonsDays: [30], accepted: 8, invalidRows: 0, model: { name: "m", version: "1" }, accounting: counts, versionNumber: 1, premises: [] } };
+    const line = { subjectKey: "subject-0001-abcdef", status: "completed", reason: null, horizonsRequested: 1, horizonsAccepted: 1 };
+    installVcrServer(network.productRequest, { [tab("longitudinal")]: longitudinal([history, prediction]),
+      [`GET /vcr/studies/${STUDY_ID}/longitudinal/pred-1/subjects?offset=0&limit=50`]: { id: "pred-1", total: 10, matching: 1, offset: 0, limit: 50, more: false, lines: [line], trajectories: {}, actionContext: null } });
+    const { container } = draw();
+    await screen.findByRole("table", { name: "患者" });
+    await userEvent.click(within(band(container)).getByRole("button", { name: "预测验证" }));
+    expect(await screen.findByLabelText("患者轨迹预测")).toBeInTheDocument();
+    expect(await screen.findByText((_, el) => el?.getAttribute("data-note") === "" && /共提交 10 人：8 人已完成，2 人未纳入/.test(el.textContent ?? ""))).toBeInTheDocument();
+    expect(await screen.findByRole("table", { name: "逐人预测去向" })).toBeInTheDocument();
+  });
+
   it("keeps independently available longitudinal records reachable when the patients endpoint fails", async () => {
     installVcrServer(network.productRequest, { [tab("patients")]: () => { throw new Error("patients unavailable"); }, [tab("longitudinal")]: longitudinal([history]) });
     const { container } = draw();

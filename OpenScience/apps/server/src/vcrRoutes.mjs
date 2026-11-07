@@ -184,6 +184,7 @@ export const VCR_ROUTE_ABILITIES = Object.freeze({
   "POST /studies/:id/method-configurations": ["run"],
   "GET /studies/:id/jobs/:job/result": ["read"],
   "GET /studies/:id/longitudinal": ["read"],
+  "GET /studies/:id/longitudinal/:prediction/subjects": ["read"],
   "GET /studies/:id/followup-history": ["read_patient_level"],
   "POST /studies/:id/longitudinal/histories": ["run"],
   "POST /studies/:id/longitudinal/predictions": ["run"],
@@ -769,6 +770,11 @@ export function createVcrRoutes(dependencies) {
       if (!longitudinal) throw UNAVAILABLE();
       if (method === 'GET' && parts.length === 3) return reply(presentLongitudinal(await longitudinal.view(study,
         Object.fromEntries(['id','parentId','kind','offset','limit'].map(key => [key,url.searchParams.get(key)]))),{minCell:service.minCell}));
+      // The owner's protected per-person read: its keys are the study's pseudonyms, so it is not the suppressed aggregate view above.
+      if (method === 'GET' && parts.length === 5 && parts[4] === 'subjects') {
+        return reply(await longitudinal.subjectPage(study,parts[3],String(user.id),{status:url.searchParams.get('status'),reason:url.searchParams.get('reason'),
+          offset:Number(url.searchParams.get('offset') ?? 0),limit:Number(url.searchParams.get('limit') ?? 50)}));
+      }
       if (method === 'POST' && parts.length === 4 && ['histories','predictions','benchmarks'].includes(parts[3])) {
         const fields = parts[3] === 'histories' ? ['snapshotId','asOf','mappings','split','priorHistoryId','includeClinicalFacts','perturbation']
           : parts[3] === 'benchmarks' ? ['model','comparisons','split','trainingOverlap']
