@@ -564,6 +564,10 @@ export function presentCampaign(row) {
       candidatesEvaluated: candidates.filter((c) => c.stage).length, candidatesPlanned: candidates.length } },
     candidates, finalists: list(state.finalists), best: verdict?.best ?? null, inconclusive: verdict?.inconclusive ?? [], feasible: verdict?.feasible ?? [],
     reference: verdict?.reference ?? null, improvement: verdict?.improvement ?? null,
+    // the improvement's bound the stop was decided on, and how many finalists the best was picked among (stats P2-1)
+    improvementBound: verdict?.improvementBound ? { lower: verdict.improvementBound.lower, upper: verdict.improvementBound.upper, confidence: verdict.improvementBound.confidence,
+      basis: verdict.improvementBound.basis } : null,
+    selection: verdict?.selection ?? null,
     againstReference: versus ? { coupling: versus.coupling, couplingText: COUPLING_TEXT_ZH[/** @type {keyof typeof COUPLING_TEXT_ZH} */ (versus.coupling)] ?? null,
       difference: versus.difference == null ? null : measureValue({ name: manifest.objective.measure, value: versus.difference, mcse: versus.mcse ?? undefined, simulated: versus.mcse != null }, { kind: "experiment_candidate" }) } : null,
     inFlight: state.inFlight ? { unit: state.inFlight.unitKey, stage: object(state.inFlight.unit).stage ?? null } : null,
@@ -610,5 +614,9 @@ function verdictView(verdict, constraint) {
   const side = constraint.op === "<=" ? bound.upper : bound.lower;
   return { status: verdict.status, statusText: VCR_CONSTRAINT_STATUS_TEXT_ZH[/** @type {keyof typeof VCR_CONSTRAINT_STATUS_TEXT_ZH} */ (verdict.status)] ?? null,
     final: verdict.final === true, reason: verdict.reason ?? null, boundKind: bound.kind ?? null, confidence: bound.confidence ?? null,
+    // which exact calibration a nominal pass rests on, and whether a nominal level was asked for a test that has none (stats P1-2)
+    calibration: bound.calibration ?? null, nominalNotExact: bound.nominalNotExact === true,
+    // what precision would decide an inconclusive verdict: replicates, or the reason none would (stats P1-1)
+    needed: verdict.needed ? { replicates: verdict.needed.replicates ?? null, reason: verdict.needed.reason ?? null } : null,
     judgedAt: side == null ? null : measureValue({ name: constraint.measure, value: side, source: "calculated" }, { kind: "experiment_candidate" }) };
 }

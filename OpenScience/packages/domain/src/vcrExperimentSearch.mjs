@@ -23,6 +23,15 @@
  * - **This package cannot hash** (it is browser-safe): the caller hashes `vcrCampaignCanonical(manifest)` and hands the hex digest in.
  * - **The model proposes; code decides.** Nothing here reads language. A dose design has no superiority alpha: an error-control
  *   constraint is admitted only on an error-rate measure the method produces.
+ * - **Undecided is not infeasible** (review stats P1-1). When no finalist fails and at least one is only inconclusive at its bound, the
+ *   campaign stops `inconclusive_at_precision`, never "nothing feasible", and each inconclusive verdict says how many replicates
+ *   would decide it (`needed`), or that none would (the estimate sits on the bound). An improvement over the reference is decided on
+ *   the bound of the two runs' contrast, not on two point estimates (stats P2-1).
+ * - **A nominal level is a guarantee only where it is exact** (review stats P1-2). `analyticSupport` lets an error-control constraint
+ *   rest on the test's own level only for a test whose size is exact under the simulated model (`VCR_EXACT_CALIBRATIONS`: the pooled
+ *   two-sample t-test of a fixed two-arm design with a normal, equal-SD outcome, the engine's continuous model). The score z of a
+ *   binary design, Farrington–Manning, the log-rank and a group-sequential log-rank are asymptotic: their size at these sample sizes
+ *   can exceed alpha (2.7% at 30 per arm and p = 0.10), so their type I error is held to the simulation's conservative bound.
  *
  * @module @evimed/domain/vcrExperimentSearch
  */
@@ -43,8 +52,13 @@ export const VCR_CAMPAIGN_SCHEMA_VERSION = 1
 /** Why a campaign stopped (plan section 9). Exactly one is recorded. */
 export const VCR_CAMPAIGN_STOP_REASONS = Object.freeze([
   'budget_exhausted', 'acceptable_precision', 'no_useful_improvement', 'unsupported_candidate', 'persistent_model_failure',
-  'user_cancellation', 'no_feasible_beneficial_candidate',
+  'user_cancellation', 'no_feasible_beneficial_candidate', 'inconclusive_at_precision',
 ])
+/**
+ * The tests whose size is exact under the simulated model, by the name a final evaluation records (`nominalControl`). Only these may
+ * carry an error-control constraint on their nominal level (`analyticSupport`).
+ */
+export const VCR_EXACT_CALIBRATIONS = Object.freeze(['pooled_t_equal_sd_normal'])
 export const VCR_CONSTRAINT_KINDS = Object.freeze(['error_control', 'design', 'safety'])
 export const VCR_CONSTRAINT_OPS = Object.freeze(['<=', '>='])
 export const VCR_EVALUATION_PURPOSES = Object.freeze(['screening', 'final'])
@@ -98,6 +112,8 @@ export const VCR_CAMPAIGN_METHODS = Object.freeze({
 export const VCR_CAMPAIGN_FROZEN_PATHS = Object.freeze({
   common: Object.freeze(['truth', 'endpoint', 'evaluation', 'performance', 'targetMcse', 'hypothesis', 'costs', 'timeUnit',
     'analysis.alpha', 'analysis.sided', 'analysis.power', 'external']),
+  // the patients' dropout is the world the designs are judged in, not a design choice: a search for power would "choose" none (stats P2-2)
+  'design.simulate': Object.freeze(['accrual.dropoutAnnual']),
   'design.dose': Object.freeze(['design.targetToxicity']),
   // the drug hypothesis is the evaluator's world, as are the model, its population and what the analysis estimates
   'patients.progression': Object.freeze(['treatment', 'model', 'population', 'placebo', 'dropoutModel', 'analysis.kind']),
@@ -625,7 +641,9 @@ export function vcrJudgeConstraint(manifest, constraint, evaluation, { stage }) 
   const verdict = (/** @type {number} */ lower, /** @type {number} */ upper, /** @type {Record<string, any>} */ bound) => {
     const passes = le ? upper <= constraint.bound : lower >= constraint.bound
     const fails = le ? lower > constraint.bound : upper < constraint.bound
-    return { status: passes ? 'pass' : fails ? 'fail' : 'inconclusive', final: finalVerdict, estimate: value, mcse: measure.mcse ?? null, bound: { ...bound, lower, upper } }
+    const status = passes ? 'pass' : fails ? 'fail' : 'inconclusive'
+    return { status, final: finalVerdict, estimate: value, mcse: measure.mcse ?? null, bound: { ...bound, lower, upper },
+      ...(status === 'inconclusive' ? { needed: neededPrecision(value, measure, constraint, type, Number(evaluation.replicates)) } : {}) }
   }
   if (type === 'exact' || (measure.simulated !== true && measure.mcse == null)) {
     return verdict(value, value, { kind: 'exact', confidence: null })
@@ -635,13 +653,16 @@ export function vcrJudgeConstraint(manifest, constraint, evaluation, { stage }) 
     const k = Math.round(value * n)
     if (Number.isInteger(n) && n >= 1 && Math.abs(k / n - value) <= 1e-9) {
       const cp = vcrClopperPearson(k, n, constraint.confidence)
-      // A test calibrated at the nominal alpha (`vcrNominalErrorControl`) controls its type I error by construction; the simulation
-      // can then only contradict it: a lower bound above the bound is a fail, anything else rests on the test's nominal level.
-      if (constraint.kind === 'error_control' && constraint.analyticSupport === true && evaluation.nominalControl === true) {
+      // A test whose size is exact under the simulated model (`VCR_EXACT_CALIBRATIONS`, `vcrNominalErrorControl`) controls its type I
+      // error by construction; the simulation can then only contradict it: a lower bound above the bound is a fail, anything else rests
+      // on the test's nominal level. Any other test asked to rest on its level is held to the simulation's bound, and says why.
+      const calibration = typeof evaluation.nominalControl === 'string' && VCR_EXACT_CALIBRATIONS.includes(evaluation.nominalControl) ? evaluation.nominalControl : null
+      if (constraint.kind === 'error_control' && constraint.analyticSupport === true && calibration) {
         return { status: cp.lower > constraint.bound ? 'fail' : 'pass', final: finalVerdict, estimate: value, mcse: measure.mcse ?? null,
-          bound: { kind: 'nominal_level', confidence: constraint.confidence, events: k, trials: n, lower: cp.lower, upper: cp.upper } }
+          bound: { kind: 'nominal_level', calibration, confidence: constraint.confidence, events: k, trials: n, lower: cp.lower, upper: cp.upper } }
       }
-      return verdict(cp.lower, cp.upper, { kind: 'clopper_pearson', confidence: constraint.confidence, events: k, trials: n })
+      return verdict(cp.lower, cp.upper, { kind: 'clopper_pearson', confidence: constraint.confidence, events: k, trials: n,
+        ...(constraint.kind === 'error_control' && constraint.analyticSupport === true ? { nominalNotExact: true } : {}) })
     }
   }
   const mcse = Number(measure.mcse)
@@ -652,19 +673,41 @@ export function vcrJudgeConstraint(manifest, constraint, evaluation, { stage }) 
 }
 
 /**
- * Whether a design.simulate scenario's test is calibrated at its nominal alpha by construction: a fixed two-arm design analysed by the
- * t-test, the risk difference or the log-rank test, or a group-sequential design analysed by the log-rank test with its spending
- * boundaries. A weighted test whose boundaries are themselves simulated, an RMST analysis, a single-arm or an external-control design
- * has no such guarantee, and its type I error is held to the simulation's bound alone.
+ * Which exact calibration a design.simulate scenario's test has under the engine's model, or null: the pooled two-sample t-test of a
+ * fixed two-arm design on a continuous endpoint, whose outcome the engine draws normal with one SD in both arms (`truth.sd`), has size
+ * exactly alpha (a non-inferiority margin shifts its null and keeps that). Every other test (the score z of a risk difference,
+ * Farrington–Manning, the log-rank, a group-sequential log-rank, a weighted test, an RMST analysis, a single-arm or external-control
+ * design) is asymptotic or simulated, and its type I error is held to the simulation's bound alone (review stats P1-2).
  * @param {Record<string, any>} scenario
+ * @returns {string | null}
  */
 export function vcrNominalErrorControl(scenario) {
   const kind = scenario?.design?.kind ?? 'two_arm_fixed'
   const endpoint = scenario?.endpoint?.type
   const method = scenario?.analysis?.method ?? ({ continuous: 'ttest', binary: 'risk_difference', time_to_event: 'logrank' })[/** @type {string} */ (endpoint)]
-  if (kind === 'two_arm_fixed') return ['ttest', 'risk_difference', 'logrank'].includes(method)
-  if (kind === 'group_sequential') return method === 'logrank'
-  return false
+  return kind === 'two_arm_fixed' && endpoint === 'continuous' && method === 'ttest' ? 'pooled_t_equal_sd_normal' : null
+}
+
+/**
+ * How much precision would decide an inconclusive verdict: the replicates at which the same estimate's bound would clear the constraint
+ * (the Monte-Carlo error falls with the square root of the replicates), or `null` with the reason when no number of replicates would
+ * (the estimate sits on the bound, or the measure is exact). For a proportion the normal approximation of its binomial error is used;
+ * the Clopper–Pearson bound needs a few more, so this is a lower guide, never a promise.
+ * @param {number} value @param {Record<string, any>} measure @param {Record<string, any>} constraint @param {string | undefined} type
+ * @param {number} replicates
+ */
+function neededPrecision(value, measure, constraint, type, replicates) {
+  const gap = Math.abs(value - Number(constraint.bound))
+  if (!(gap > 1e-12)) return { replicates: null, reason: 'estimate_at_bound' }
+  const z = vcrNormalQuantile(Number(constraint.confidence ?? 0.975))
+  if (type === 'proportion' || type === 'error_rate') {
+    const variance = value * (1 - value)
+    if (!(variance > 0)) return { replicates: null, reason: 'estimate_at_bound' }
+    return { replicates: Math.ceil(z * z * variance / (gap * gap)), reason: null }
+  }
+  const mcse = Number(measure.mcse)
+  if (!(mcse > 0) || !(replicates >= 1)) return { replicates: null, reason: 'precision_unknown' }
+  return { replicates: Math.ceil(replicates * (z * mcse / gap) ** 2), reason: null }
 }
 
 // ---------------------------------------------------------------------------
@@ -736,7 +779,7 @@ export function vcrCampaignRecord(manifest, state, unit, outcome) {
       ...(m.precision ? { precision: m.precision } : {}) })),
     cpuSeconds: Number(outcome.cpuSeconds ?? 0) || 0, queueSeconds: Number(outcome.queueSeconds ?? 0) || 0, wallSeconds: Number(outcome.wallSeconds ?? 0) || 0,
     issues: list(outcome.issues).slice(0, 5).map(String), drawSignature: outcome.drawSignature ?? null, rejects: outcome.rejects ?? null,
-    nominalControl: unit.stage === 'final' && manifest.space.method === 'design.simulate' && vcrNominalErrorControl(object(/** @type {any} */ (unit).scenario)),
+    nominalControl: unit.stage === 'final' && manifest.space.method === 'design.simulate' ? vcrNominalErrorControl(object(/** @type {any} */ (unit).scenario)) : null,
   }
   next.inFlight = null
   next.unitsEvaluated += 1
@@ -798,12 +841,25 @@ export function vcrCampaignVerdict(manifest, state) {
   const best = ranked[0] ?? null
   const reference = referenceKey ? rows.find((row) => row.key === referenceKey) ?? null : null
   let improvement = null
+  /** @type {Record<string, any> | null} */
+  let improvementBound = null
   if (best?.objective && reference?.objective) {
     const sign = manifest.objective.direction === 'minimize' ? -1 : 1
     improvement = sign * (best.objective.value - reference.objective.value)
+    // the improvement is decided on the bound of the two final runs' contrast: with the error their coupling allows, or, where the coupling
+    // leaves it unknown, the independent error (common random numbers only make it smaller)
+    const finalOf = (/** @type {string} */ key) => object(object(state.candidates[key]).evaluations)[`final:${manifest.objective.truth}`]
+    const contrast = vcrEvaluationContrast(finalOf(best.key), finalOf(reference.key), manifest.objective.measure)
+    const confidence = Number(list(manifest.constraints)[0]?.confidence ?? 0.975)
+    const mcse = contrast.mcse ?? Math.hypot(Number(best.objective.mcse ?? 0), Number(reference.objective.mcse ?? 0))
+    const z = vcrNormalQuantile(confidence)
+    improvementBound = { lower: improvement - z * mcse, upper: improvement + z * mcse, mcse, confidence, coupling: contrast.coupling,
+      basis: contrast.mcse == null ? 'independent_error' : contrast.coupling }
   }
   return { rows, feasible: feasible.map((row) => row.key), best: best?.key ?? null, inconclusive: rows.filter((row) => row.inconclusive).map((row) => row.key),
-    reference: referenceKey, improvement }
+    reference: referenceKey, improvement, improvementBound,
+    // each finalist is judged on its own at the constraints' confidence; the best is then picked among them (stats P2-1)
+    selection: { finalists: keys.length, confidences: [...new Set(list(manifest.constraints).map((c) => Number(c.confidence)))] } }
 }
 
 /**
@@ -819,10 +875,12 @@ export function vcrCampaignAdvance(manifest, state, { identity }) {
   const stop = (/** @type {string} */ reason) => { next.stop = { reason, verdict: next.finalists ? vcrCampaignVerdict(manifest, next) : null }; return { state: next, action: /** @type {const} */ ({ type: 'stop', reason }) } }
   if (next.cancelRequested) return stop('user_cancellation')
   if (next.consecutiveFailures >= manifest.stopRules.maxConsecutiveFailures) return stop('persistent_model_failure')
-  if (next.usage.cpuSeconds >= manifest.budget.cpuSeconds) return stop('budget_exhausted')
   const candidates = vcrCampaignCandidates(manifest)
   const open = (/** @type {string} */ key) => ['pending', 'screened', 'finalist'].includes(next.candidates[key]?.status)
-  const evaluate = (/** @type {any} */ unit) => ({ state: next, action: /** @type {const} */ ({ type: 'evaluate', unit }) })
+  // a spent budget stops the next unit, never a verdict that needs none: the engine checks its CPU between batches, so the last final
+  // unit can end a little over the ceiling (stats P2-3)
+  const evaluate = (/** @type {any} */ unit) => (next.usage.cpuSeconds >= manifest.budget.cpuSeconds ? stop('budget_exhausted')
+    : { state: next, action: /** @type {const} */ ({ type: 'evaluate', unit }) })
 
   // 1. the analytic pre-check: one unit per distinct analytic scenario, then elimination by its rules
   if (manifest.stages.analytic) {
@@ -895,12 +953,19 @@ export function vcrCampaignAdvance(manifest, state, { identity }) {
     }
   }
 
-  // 5. the verdict
+  // 5. the verdict: undecided at this precision is its own stop, never "nothing feasible" (stats P1-1)
   const verdict = vcrCampaignVerdict(manifest, next)
-  if (!verdict.best) return stop(candidates.every((c) => next.candidates[c.key].status === 'unsupported') ? 'unsupported_candidate' : 'no_feasible_beneficial_candidate')
-  if (verdict.reference && verdict.improvement != null) {
-    if (verdict.best === verdict.reference || verdict.improvement <= 0) return stop('no_feasible_beneficial_candidate')
-    if (manifest.stopRules.minImprovement != null && verdict.improvement < manifest.stopRules.minImprovement) return stop('no_useful_improvement')
+  if (!verdict.best) {
+    if (candidates.every((c) => next.candidates[c.key].status === 'unsupported')) return stop('unsupported_candidate')
+    return stop(verdict.inconclusive.length ? 'inconclusive_at_precision' : 'no_feasible_beneficial_candidate')
+  }
+  const bound = verdict.improvementBound
+  if (verdict.reference && verdict.improvement != null && bound) {
+    if (verdict.best === verdict.reference || bound.upper <= 0) return stop('no_feasible_beneficial_candidate')
+    if (bound.lower <= 0) return stop('inconclusive_at_precision')
+    const least = manifest.stopRules.minImprovement
+    if (least != null && bound.upper < least) return stop('no_useful_improvement')
+    if (least != null && bound.lower < least) return stop('inconclusive_at_precision')
   }
   return stop('acceptable_precision')
 }

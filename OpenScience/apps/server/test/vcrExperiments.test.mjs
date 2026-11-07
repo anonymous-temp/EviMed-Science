@@ -139,3 +139,27 @@ test('an Alzheimer search shows the calculated enrolment, the smallest feasible 
   for (const banned of ['patients.progression', 'beta_logit', 'total_sample_size', 'job_', 'campaign']) assert.ok(!text.includes(banned), banned);
   assert.ok(!/「|」/.test(text));
 });
+
+test('a campaign undecided at its precision says so and what would decide it (review stats P1-1, P1-2)', () => {
+  const { manifest } = vcrCampaignManifest(input);
+  let state = vcrCampaignInitialState(manifest);
+  for (let i = 0; i < 50; i++) {
+    const { state: next, action } = vcrCampaignAdvance(manifest, state, { identity: ID });
+    state = next;
+    if (action.type !== 'evaluate') break;
+    const unit = action.unit, n = unit.scenario.design.nTreat, reps = unit.stage === 'screening' ? 400 : unit.truth === 'null' ? 20000 : 5000;
+    // a test whose real size is at alpha: the conservative bound cannot pass it at 20,000 replicates
+    const p = unit.truth === 'null' ? 0.025 : Math.round((1 - Math.exp(-n / 70)) * reps) / reps;
+    const label = unit.stage === 'screening' ? { precision: 'screening' } : {};
+    state = vcrCampaignRecord(manifest, { ...state, inFlight: { unitKey: unit.key, unit } }, unit, { jobId: `job_${unit.key}`, state: 'succeeded', seed: unit.seed, replicates: reps,
+      measures: [{ name: unit.truth === 'null' ? 'type_one_error' : 'power', value: p, mcse: Math.sqrt(p * (1 - p) / reps), simulated: true, source: 'synthetic', ...label },
+        { name: 'expected_sample_size', value: n * 2, mcse: 0, simulated: true, source: 'synthetic', ...label }], cpuSeconds: 1 });
+  }
+  const view = presentCampaign({ id: 'cmp_2', kind: 'campaign', identity: ID, manifest, state, status: 'stopped', created_at: '2026-11-07T00:00:00Z', updated_at: '2026-11-07T00:10:00Z' });
+  assert.equal(view.stop.reason, 'inconclusive_at_precision');
+  assert.equal(view.stop.text, VCR_CAMPAIGN_STOP_TEXT_ZH.inconclusive_at_precision);
+  const undecided = view.candidates.filter((c) => c.constraints[1].final?.status === 'inconclusive');
+  assert.ok(undecided.length > 0);
+  assert.deepEqual(undecided[0].constraints[1].final.needed, { replicates: null, reason: 'estimate_at_bound' });
+  assert.equal(undecided[0].constraints[1].final.calibration, null);
+});

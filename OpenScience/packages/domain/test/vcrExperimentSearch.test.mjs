@@ -148,15 +148,23 @@ test('an error-rate constraint passes only on its upper bound; at the nominal al
   assert.deepEqual([screened.status, screened.reason], ['not_judged', 'screening_result_not_final'])
 })
 
-test('a test calibrated at its nominal alpha passes on that level unless the simulation contradicts it', () => {
+test('a test whose size is exact passes on its nominal level unless the simulation contradicts it; an asymptotic one is held to the bound (review stats P1-2)', () => {
   const manifest = frozen({ constraints: [{ measure: 'type_one_error', op: '<=', bound: 0.025, kind: 'error_control', truth: 'null', analyticSupport: true }] })
   const rule = manifest.constraints[0]
-  assert.equal(vcrJudgeConstraint(manifest, rule, evaluation([m('type_one_error', 0.0255)], { nominalControl: true }), { stage: 'final' }).status, 'pass')
-  assert.equal(vcrJudgeConstraint(manifest, rule, evaluation([m('type_one_error', 0.0305)], { nominalControl: true }), { stage: 'final' }).status, 'fail')
-  assert.equal(vcrJudgeConstraint(manifest, rule, evaluation([m('type_one_error', 0.0255)], { nominalControl: false }), { stage: 'final' }).status, 'inconclusive',
-    'a test without a nominal guarantee is held to the simulation bound')
-  assert.equal(vcrNominalErrorControl({ ...BASE, analysis: { method: 'maxcombo' } }), false)
-  assert.equal(vcrNominalErrorControl(BASE), true)
+  const exact = 'pooled_t_equal_sd_normal'
+  const nominal = vcrJudgeConstraint(manifest, rule, evaluation([m('type_one_error', 0.0255)], { nominalControl: exact }), { stage: 'final' })
+  assert.deepEqual([nominal.status, nominal.bound.kind, nominal.bound.calibration], ['pass', 'nominal_level', exact])
+  assert.equal(vcrJudgeConstraint(manifest, rule, evaluation([m('type_one_error', 0.0305)], { nominalControl: exact }), { stage: 'final' }).status, 'fail')
+  // the pooled score z of a binary design at its true size (2.72% at 30 per arm, p = 0.10) no longer passes on its level
+  const asymptotic = vcrJudgeConstraint(manifest, rule, evaluation([m('type_one_error', 0.0272)], { nominalControl: null }), { stage: 'final' })
+  assert.deepEqual([asymptotic.status, asymptotic.bound.kind, asymptotic.bound.nominalNotExact], ['inconclusive', 'clopper_pearson', true])
+  assert.equal(vcrJudgeConstraint(manifest, rule, evaluation([m('type_one_error', 0.0255)], { nominalControl: true }), { stage: 'final' }).status, 'inconclusive',
+    'a record that said only "calibrated" (the log-rank of an older build) is held to the simulation bound')
+  assert.equal(vcrNominalErrorControl({ ...BASE, analysis: { method: 'maxcombo' } }), null)
+  assert.equal(vcrNominalErrorControl(BASE), null, 'the log-rank test is asymptotic')
+  assert.equal(vcrNominalErrorControl({ design: { kind: 'two_arm_fixed' }, endpoint: { type: 'binary' } }), null, 'the score z of a risk difference is asymptotic')
+  assert.equal(vcrNominalErrorControl({ design: { kind: 'two_arm_fixed' }, endpoint: { type: 'continuous' } }), exact)
+  assert.equal(vcrNominalErrorControl({ design: { kind: 'group_sequential' }, endpoint: { type: 'continuous' } }), null)
   assert.ok(vcrCampaignManifest(manifestOf({ constraints: [{ measure: 'type_one_error', op: '<=', bound: 0.02, kind: 'error_control', truth: 'null', analyticSupport: true }] }))
     .issues.some((issue) => issue.field === 'constraints[0].analyticSupport'))
 })
@@ -232,13 +240,21 @@ test('a null design with nothing feasible stops with no feasible beneficial cand
   assert.ok(Object.values(state.candidates).every((entry) => entry.status === 'eliminated'))
 })
 
-test('a design calibrated exactly at alpha leaves compliance inconclusive and is not promoted', () => {
+test('a design calibrated exactly at alpha leaves compliance inconclusive at this precision, not infeasible (review stats P1-1)', () => {
   const manifest = frozen()
   const { action, state } = drive(manifest, (unit) => fakeOutcome(unit, { nullRate: 0.025 }))
-  assert.equal(action.reason, 'no_feasible_beneficial_candidate')
+  assert.equal(action.reason, 'inconclusive_at_precision', 'nothing failed: it is undecided, never "nothing feasible"')
   assert.deepEqual(state.stop.verdict.inconclusive, ['c008'], 'the only design with enough power is undecided on alpha, not passed')
   const row = state.stop.verdict.rows.find((/** @type {any} */ entry) => entry.key === 'c008')
   assert.deepEqual(row.verdicts.map((/** @type {any} */ v) => v.status), ['pass', 'inconclusive'])
+  assert.deepEqual(row.verdicts[1].needed, { replicates: null, reason: 'estimate_at_bound' }, 'an estimate on the bound is decided by no number of replicates')
+  // just inside the bound: the replicates that would decide it are stated
+  const near = drive(manifest, (unit) => fakeOutcome(unit, { nullRate: 0.0245 }))
+  const needed = near.state.stop.verdict.rows.find((/** @type {any} */ entry) => entry.key === 'c008').verdicts[1].needed
+  assert.equal(near.action.reason, 'inconclusive_at_precision')
+  assert.ok(needed.replicates > 20000 && needed.reason === null, JSON.stringify(needed))
+  // a failure is still a failure: an alpha the simulation contradicts is "nothing feasible"
+  assert.equal(drive(manifest, (unit) => fakeOutcome(unit, { nullRate: 0.04 })).action.reason, 'no_feasible_beneficial_candidate')
 })
 
 test('screening optimism does not decide: the final, independent evaluation does', () => {
@@ -323,4 +339,34 @@ test('a unit cancelled from outside stops the campaign as a cancellation, not a 
   assert.equal(units.length, 1, 'the next candidate is never evaluated')
   assert.equal(state.consecutiveFailures, 0)
   assert.equal(state.candidates.c000.status, 'pending', 'the cancelled candidate is not judged')
+})
+
+test('a spent budget never hides a verdict that needs no more runs (review stats P2-3); dropout is the world, not a design (P2-2)', () => {
+  // every unit costs 20 CPU-seconds at the final stage: the last final unit ends over a budget of 100
+  const manifest = frozen({ stages: { final: { count: 2 } }, budget: { maxCandidates: 9, cpuSeconds: 98, modelCalls: 0 },
+    constraints: [{ measure: 'power', op: '>=', bound: 0.5, kind: 'design', truth: 'alternative' }],
+    space: { ...manifestOf().space, variables: [{ path: 'design.nTreat', values: [160, 200] }] } })
+  const done = drive(manifest, (unit) => ({ ...fakeOutcome(unit), cpuSeconds: 49 }))
+  assert.ok(done.state.usage.cpuSeconds >= 98)
+  assert.equal(done.action.reason, 'acceptable_precision')
+  const searched = vcrCampaignManifest(manifestOf({ space: { ...manifestOf().space, variables: [{ path: 'accrual.dropoutAnnual', values: [0, 0.1, 0.2] }] } }))
+  assert.ok(searched.issues.some((issue) => issue.code === 'campaign_value_frozen' && issue.field === 'space.variables[0].path'))
+})
+
+test('an improvement over the reference is decided on the bound of the contrast, not two point estimates (review stats P2-1)', () => {
+  const manifest = frozen({ objective: { measure: 'power', direction: 'maximize', truth: 'alternative' }, reference: 0, stopRules: { minImprovement: 0.02 },
+    constraints: [{ measure: 'power', op: '>=', bound: 0.3, kind: 'design', truth: 'alternative' }],
+    stages: { final: { count: 2 } }, space: { ...manifestOf().space, variables: [{ path: 'design.nTreat', values: [200, 201] }] } })
+  // two powers 0.03 apart, each with the error of 500 replicates: the difference is not decided
+  const engine = (/** @type {any} */ unit) => {
+    const out = fakeOutcome(unit)
+    const p = unit.candidate === 'c000' ? 0.70 : 0.73
+    out.replicates = 500
+    out.measures[0] = { name: 'power', value: p, mcse: Math.sqrt(p * (1 - p) / 500), simulated: true, source: 'synthetic' }
+    return out
+  }
+  const { action, state } = drive(manifest, engine)
+  assert.equal(action.reason, 'inconclusive_at_precision')
+  assert.ok(state.stop.verdict.improvementBound.lower < 0.02 && state.stop.verdict.improvement > 0.02)
+  assert.equal(state.stop.verdict.selection.finalists, 2)
 })
