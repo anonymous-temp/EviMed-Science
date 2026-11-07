@@ -160,6 +160,24 @@ describe("人群 · a generated population", () => {
     expect(spies.openChat.mock.calls[0][0]).toContain("改“变量之间的相关性”（现在是 假设相互独立）");
   });
 
+  it("says what the people are and what a computation may do with them inside the same block: descriptive until a model is bound, stale results named", async () => {
+    serve((raw) => {
+      raw.premises = [
+        { key: "binding:readiness", label: "能用来做什么", value: "这批虚拟人目前只描述了人群本身（各变量的分布和相互关系），还没有和任何能往后推演的模型绑定；不能直接拿来比较治疗。", source: "default", decisive: true },
+        { key: "binding:stale_population", label: "人群有变动", value: "2 个结果是按这批人的更早版本算的，没有随人群更新；它们仍可查看，需要时重新计算。", source: "default", decisive: true },
+        { key: "binding:origin", label: "这批人从哪里来", value: "这批虚拟人的分布来自文献里的汇总数，不是真实患者；同一个人的多次虚拟实现不算多个真实的人。", source: "literature", decisive: false },
+      ];
+    });
+    const { container } = draw();
+    const block = await found(container, "[data-vcr-premises]");
+    expect(block.querySelectorAll("[data-vcr-premises-open] [data-vcr-premise]")).toHaveLength(2);
+    expect(block.querySelector("[data-vcr-premise='binding:readiness']")).toHaveTextContent("还没有和任何能往后推演的模型绑定");
+    expect(block.querySelector("[data-vcr-premise='binding:stale_population']")).toHaveTextContent("仍可查看");
+    // one block, no second panel, and no back-office word
+    expect(container.querySelectorAll("[data-vcr-premises]")).toHaveLength(1);
+    expect(block.textContent).not.toMatch(/descriptive_only|patient_set|binding:|readiness/);
+  });
+
   it("carries a synthetic quality report of values, tagged exploratory, and no verdict", async () => {
     const quality: VcrQualityReport = {
       tag: "合成 · 探索性", trainingRecords: 3412, copies: 1,
