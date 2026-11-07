@@ -1,5 +1,5 @@
 {
-  "revision": "81379e80dedd791f04042ffd9de7d6e06d750821",
+  "revision": "7e2f3a4d2a04695a65eaad6e71bddf300533c30e",
   "engine": {
     "versions": {
       "design.simulate": "1.5.0",
@@ -8,7 +8,7 @@
     "cores": 2,
     "concurrency": 1
   },
-  "startedAt": "2026-11-07T16:50:55.590Z",
+  "startedAt": "2026-11-07T18:31:15.469Z",
   "analytic": {
     "campaign": {
       "arm": "analytic",
@@ -46,7 +46,9 @@
               "confidence": null,
               "lower": 247,
               "upper": 247
-            }
+            },
+            "boundKind": "exact",
+            "needed": null
           }
         ]
       },
@@ -68,6 +70,7 @@
         "c014"
       ],
       "inconclusive": [],
+      "closestUndecided": null,
       "finalists": [
         "c000",
         "c001",
@@ -119,7 +122,9 @@
                 "confidence": null,
                 "lower": 247,
                 "upper": 247
-              }
+              },
+              "boundKind": "exact",
+              "needed": null
             }
           ]
         },
@@ -156,7 +161,9 @@
                 "confidence": null,
                 "lower": 247,
                 "upper": 247
-              }
+              },
+              "boundKind": "exact",
+              "needed": null
             }
           ]
         },
@@ -193,7 +200,9 @@
                 "confidence": null,
                 "lower": 247,
                 "upper": 247
-              }
+              },
+              "boundKind": "exact",
+              "needed": null
             }
           ]
         },
@@ -230,7 +239,9 @@
                 "confidence": null,
                 "lower": 247,
                 "upper": 247
-              }
+              },
+              "boundKind": "exact",
+              "needed": null
             }
           ]
         },
@@ -267,7 +278,9 @@
                 "confidence": null,
                 "lower": 247,
                 "upper": 247
-              }
+              },
+              "boundKind": "exact",
+              "needed": null
             }
           ]
         },
@@ -304,7 +317,9 @@
                 "confidence": null,
                 "lower": 258,
                 "upper": 258
-              }
+              },
+              "boundKind": "exact",
+              "needed": null
             }
           ]
         },
@@ -341,7 +356,9 @@
                 "confidence": null,
                 "lower": 258,
                 "upper": 258
-              }
+              },
+              "boundKind": "exact",
+              "needed": null
             }
           ]
         },
@@ -378,7 +395,9 @@
                 "confidence": null,
                 "lower": 258,
                 "upper": 258
-              }
+              },
+              "boundKind": "exact",
+              "needed": null
             }
           ]
         },
@@ -415,7 +434,9 @@
                 "confidence": null,
                 "lower": 258,
                 "upper": 258
-              }
+              },
+              "boundKind": "exact",
+              "needed": null
             }
           ]
         },
@@ -452,7 +473,9 @@
                 "confidence": null,
                 "lower": 258,
                 "upper": 258
-              }
+              },
+              "boundKind": "exact",
+              "needed": null
             }
           ]
         },
@@ -489,7 +512,9 @@
                 "confidence": null,
                 "lower": 278,
                 "upper": 278
-              }
+              },
+              "boundKind": "exact",
+              "needed": null
             }
           ]
         },
@@ -526,7 +551,9 @@
                 "confidence": null,
                 "lower": 278,
                 "upper": 278
-              }
+              },
+              "boundKind": "exact",
+              "needed": null
             }
           ]
         },
@@ -563,7 +590,9 @@
                 "confidence": null,
                 "lower": 278,
                 "upper": 278
-              }
+              },
+              "boundKind": "exact",
+              "needed": null
             }
           ]
         },
@@ -600,7 +629,9 @@
                 "confidence": null,
                 "lower": 278,
                 "upper": 278
-              }
+              },
+              "boundKind": "exact",
+              "needed": null
             }
           ]
         },
@@ -637,23 +668,25 @@
                 "confidence": null,
                 "lower": 278,
                 "upper": 278
-              }
+              },
+              "boundKind": "exact",
+              "needed": null
             }
           ]
         }
       ],
       "evaluated": 15,
       "usage": {
-        "cpuSeconds": 23.75,
+        "cpuSeconds": 13.111,
         "queueSeconds": 0,
-        "wallSeconds": 45.407,
+        "wallSeconds": 21.264,
         "replicatesCompleted": 0,
         "modelCalls": 0,
         "units": 15,
-        "peakKb": 135544,
+        "peakKb": 135804,
         "queueIfSubmittedTogether": {
-          "total": 296.23800000000006,
-          "max": 42.623
+          "total": 149.024,
+          "max": 19.816
         }
       },
       "units": [
@@ -662,10 +695,10 @@
           "stage": "final",
           "method": "design.analytic",
           "replicates": null,
-          "engineCpuSeconds": 1.629,
-          "wallSeconds": 3.465,
-          "peakKb": 135040,
-          "submittedAt": 0.001,
+          "engineCpuSeconds": 0.931,
+          "wallSeconds": 1.474,
+          "peakKb": 135668,
+          "submittedAt": 0,
           "queueIfSubmittedTogether": 0
         },
         {
@@ -673,154 +706,154 @@
           "stage": "final",
           "method": "design.analytic",
           "replicates": null,
-          "engineCpuSeconds": 1.175,
-          "wallSeconds": 1.948,
-          "peakKb": 135252,
-          "submittedAt": 0.002,
-          "queueIfSubmittedTogether": 3.465
+          "engineCpuSeconds": 0.865,
+          "wallSeconds": 1.43,
+          "peakKb": 135672,
+          "submittedAt": 0.001,
+          "queueIfSubmittedTogether": 1.474
         },
         {
           "unit": "c002:final:planned",
           "stage": "final",
           "method": "design.analytic",
           "replicates": null,
-          "engineCpuSeconds": 1.233,
-          "wallSeconds": 2.178,
-          "peakKb": 135256,
-          "submittedAt": 0.002,
-          "queueIfSubmittedTogether": 5.413
+          "engineCpuSeconds": 0.892,
+          "wallSeconds": 1.462,
+          "peakKb": 135672,
+          "submittedAt": 0.001,
+          "queueIfSubmittedTogether": 2.904
         },
         {
           "unit": "c003:final:planned",
           "stage": "final",
           "method": "design.analytic",
           "replicates": null,
-          "engineCpuSeconds": 2.02,
-          "wallSeconds": 3.371,
-          "peakKb": 135412,
-          "submittedAt": 0.002,
-          "queueIfSubmittedTogether": 7.591
+          "engineCpuSeconds": 0.839,
+          "wallSeconds": 1.365,
+          "peakKb": 135672,
+          "submittedAt": 0.001,
+          "queueIfSubmittedTogether": 4.366
         },
         {
           "unit": "c004:final:planned",
           "stage": "final",
           "method": "design.analytic",
           "replicates": null,
-          "engineCpuSeconds": 1.562,
-          "wallSeconds": 2.965,
-          "peakKb": 135032,
+          "engineCpuSeconds": 0.869,
+          "wallSeconds": 1.387,
+          "peakKb": 135672,
           "submittedAt": 0.002,
-          "queueIfSubmittedTogether": 10.962
+          "queueIfSubmittedTogether": 5.731
         },
         {
           "unit": "c005:final:planned",
           "stage": "final",
           "method": "design.analytic",
           "replicates": null,
-          "engineCpuSeconds": 1.434,
-          "wallSeconds": 2.391,
-          "peakKb": 135256,
-          "submittedAt": 0.003,
-          "queueIfSubmittedTogether": 13.927
+          "engineCpuSeconds": 0.861,
+          "wallSeconds": 1.372,
+          "peakKb": 135804,
+          "submittedAt": 0.002,
+          "queueIfSubmittedTogether": 7.118
         },
         {
           "unit": "c006:final:planned",
           "stage": "final",
           "method": "design.analytic",
           "replicates": null,
-          "engineCpuSeconds": 1.798,
-          "wallSeconds": 2.931,
-          "peakKb": 135288,
-          "submittedAt": 0.003,
-          "queueIfSubmittedTogether": 16.317999999999998
+          "engineCpuSeconds": 0.86,
+          "wallSeconds": 1.416,
+          "peakKb": 135544,
+          "submittedAt": 0.002,
+          "queueIfSubmittedTogether": 8.49
         },
         {
           "unit": "c007:final:planned",
           "stage": "final",
           "method": "design.analytic",
           "replicates": null,
-          "engineCpuSeconds": 1.646,
-          "wallSeconds": 2.809,
-          "peakKb": 135204,
-          "submittedAt": 0.003,
-          "queueIfSubmittedTogether": 19.249
+          "engineCpuSeconds": 0.895,
+          "wallSeconds": 1.419,
+          "peakKb": 135668,
+          "submittedAt": 0.002,
+          "queueIfSubmittedTogether": 9.906
         },
         {
           "unit": "c008:final:planned",
           "stage": "final",
           "method": "design.analytic",
           "replicates": null,
-          "engineCpuSeconds": 1.341,
-          "wallSeconds": 2.311,
-          "peakKb": 135288,
-          "submittedAt": 0.003,
-          "queueIfSubmittedTogether": 22.058
+          "engineCpuSeconds": 0.847,
+          "wallSeconds": 1.405,
+          "peakKb": 135668,
+          "submittedAt": 0.002,
+          "queueIfSubmittedTogether": 11.325000000000001
         },
         {
           "unit": "c009:final:planned",
           "stage": "final",
           "method": "design.analytic",
           "replicates": null,
-          "engineCpuSeconds": 1.491,
-          "wallSeconds": 2.42,
-          "peakKb": 135048,
-          "submittedAt": 0.003,
-          "queueIfSubmittedTogether": 24.369
+          "engineCpuSeconds": 0.863,
+          "wallSeconds": 1.44,
+          "peakKb": 135804,
+          "submittedAt": 0.002,
+          "queueIfSubmittedTogether": 12.73
         },
         {
           "unit": "c010:final:planned",
           "stage": "final",
           "method": "design.analytic",
           "replicates": null,
-          "engineCpuSeconds": 1.859,
-          "wallSeconds": 3.695,
-          "peakKb": 135544,
-          "submittedAt": 0.004,
-          "queueIfSubmittedTogether": 26.789
+          "engineCpuSeconds": 0.869,
+          "wallSeconds": 1.382,
+          "peakKb": 135800,
+          "submittedAt": 0.003,
+          "queueIfSubmittedTogether": 14.17
         },
         {
           "unit": "c011:final:planned",
           "stage": "final",
           "method": "design.analytic",
           "replicates": null,
-          "engineCpuSeconds": 1.562,
-          "wallSeconds": 3.899,
-          "peakKb": 135012,
-          "submittedAt": 0.004,
-          "queueIfSubmittedTogether": 30.484
+          "engineCpuSeconds": 0.883,
+          "wallSeconds": 1.471,
+          "peakKb": 135548,
+          "submittedAt": 0.003,
+          "queueIfSubmittedTogether": 15.552
         },
         {
           "unit": "c012:final:planned",
           "stage": "final",
           "method": "design.analytic",
           "replicates": null,
-          "engineCpuSeconds": 1.948,
-          "wallSeconds": 4.224,
-          "peakKb": 135284,
-          "submittedAt": 0.004,
-          "queueIfSubmittedTogether": 34.383
+          "engineCpuSeconds": 0.896,
+          "wallSeconds": 1.396,
+          "peakKb": 135672,
+          "submittedAt": 0.003,
+          "queueIfSubmittedTogether": 17.023
         },
         {
           "unit": "c013:final:planned",
           "stage": "final",
           "method": "design.analytic",
           "replicates": null,
-          "engineCpuSeconds": 1.761,
-          "wallSeconds": 4.016,
-          "peakKb": 135416,
-          "submittedAt": 0.004,
-          "queueIfSubmittedTogether": 38.607
+          "engineCpuSeconds": 0.843,
+          "wallSeconds": 1.397,
+          "peakKb": 135672,
+          "submittedAt": 0.003,
+          "queueIfSubmittedTogether": 18.419
         },
         {
           "unit": "c014:final:planned",
           "stage": "final",
           "method": "design.analytic",
           "replicates": null,
-          "engineCpuSeconds": 1.291,
-          "wallSeconds": 2.784,
-          "peakKb": 135492,
-          "submittedAt": 0.005,
-          "queueIfSubmittedTogether": 42.623
+          "engineCpuSeconds": 0.898,
+          "wallSeconds": 1.448,
+          "peakKb": 135800,
+          "submittedAt": 0.003,
+          "queueIfSubmittedTogether": 19.816
         }
       ]
     }
@@ -832,6 +865,7 @@
       "best": null,
       "feasible": [],
       "inconclusive": [],
+      "closestUndecided": null,
       "finalists": [
         "c000"
       ],
@@ -879,18 +913,26 @@
                 "trials": 5000,
                 "lower": 0.6783875536086987,
                 "upper": 0.7041886355134739
-              }
+              },
+              "boundKind": "clopper_pearson",
+              "needed": null
             },
             {
               "measure": "type_one_error",
-              "status": "pass",
+              "status": "inconclusive",
               "bound": {
-                "kind": "nominal_level",
+                "kind": "clopper_pearson",
                 "confidence": 0.975,
                 "events": 480,
                 "trials": 20000,
+                "nominalNotExact": true,
                 "lower": 0.021923304049225184,
                 "upper": 0.02621659545489255
+              },
+              "boundKind": "clopper_pearson",
+              "needed": {
+                "replicates": 89983,
+                "reason": null
               }
             }
           ]
@@ -898,16 +940,16 @@
       ],
       "evaluated": 1,
       "usage": {
-        "cpuSeconds": 94.112,
+        "cpuSeconds": 61.668,
         "queueSeconds": 0,
-        "wallSeconds": 116.578,
+        "wallSeconds": 37.623,
         "replicatesCompleted": 25000,
         "modelCalls": 0,
         "units": 2,
-        "peakKb": 148724,
+        "peakKb": 172152,
         "queueIfSubmittedTogether": {
-          "total": 19.763,
-          "max": 19.763
+          "total": 10.903,
+          "max": 10.903
         }
       },
       "units": [
@@ -916,10 +958,10 @@
           "stage": "final",
           "method": "design.simulate",
           "replicates": 5000,
-          "engineCpuSeconds": 20.158,
-          "wallSeconds": 19.763,
-          "peakKb": 139144,
-          "submittedAt": 0,
+          "engineCpuSeconds": 13.473,
+          "wallSeconds": 10.903,
+          "peakKb": 139512,
+          "submittedAt": 0.001,
           "queueIfSubmittedTogether": 0
         },
         {
@@ -927,38 +969,44 @@
           "stage": "final",
           "method": "design.simulate",
           "replicates": 20000,
-          "engineCpuSeconds": 73.954,
-          "wallSeconds": 96.815,
-          "peakKb": 148724,
-          "submittedAt": 0,
-          "queueIfSubmittedTogether": 19.763
+          "engineCpuSeconds": 48.195,
+          "wallSeconds": 26.72,
+          "peakKb": 172152,
+          "submittedAt": 0.001,
+          "queueIfSubmittedTogether": 10.903
         }
       ]
     },
     "staged": {
       "arm": "staged",
-      "stop": "acceptable_precision",
-      "best": {
-        "key": "c014",
+      "stop": "inconclusive_at_precision",
+      "best": null,
+      "feasible": [],
+      "inconclusive": [
+        "c013",
+        "c014"
+      ],
+      "closestUndecided": {
+        "key": "c013",
         "set": {
           "design.nTreat": 200,
           "design.nControl": 200,
-          "accrual.duration": 24
+          "accrual.duration": 18
         },
         "status": "evaluated",
         "reason": null,
         "final": {
           "power": {
             "name": "power",
-            "value": 0.8378,
-            "mcse": 0.00521327459472451,
+            "value": 0.8024,
+            "mcse": 0.005631238584894091,
             "simulated": true,
             "source": "synthetic"
           },
           "type_one_error": {
             "name": "type_one_error",
-            "value": 0.02485,
-            "mcse": 0.0011007378775167137,
+            "value": 0.02475,
+            "mcse": 0.0010985772048427002,
             "simulated": true,
             "source": "synthetic"
           },
@@ -973,36 +1021,67 @@
         "verdicts": [
           {
             "measure": "power",
-            "status": "pass",
+            "status": "inconclusive",
             "bound": {
               "kind": "clopper_pearson",
               "confidence": 0.975,
-              "events": 4189,
+              "events": 4012,
               "trials": 5000,
-              "lower": 0.8272855790335796,
-              "upper": 0.8479184042677095
+              "lower": 0.7910877874901905,
+              "upper": 0.8133580303905443
+            },
+            "boundKind": "clopper_pearson",
+            "needed": {
+              "replicates": 105743,
+              "reason": null
             }
           },
           {
             "measure": "type_one_error",
-            "status": "pass",
+            "status": "inconclusive",
             "bound": {
-              "kind": "nominal_level",
+              "kind": "clopper_pearson",
               "confidence": 0.975,
-              "events": 497,
+              "events": 495,
               "trials": 20000,
-              "lower": 0.022736882526396635,
-              "upper": 0.027102731466144864
+              "nominalNotExact": true,
+              "lower": 0.0226411322974244,
+              "upper": 0.02699851518200644
+            },
+            "boundKind": "clopper_pearson",
+            "needed": {
+              "replicates": 1483568,
+              "reason": null
+            }
+          }
+        ],
+        "undecided": [
+          {
+            "index": 0,
+            "measure": "power",
+            "op": ">=",
+            "bound": 0.8,
+            "estimate": 0.8024,
+            "mcse": 0.005631238584894091,
+            "needed": {
+              "replicates": 105743,
+              "reason": null
+            }
+          },
+          {
+            "index": 1,
+            "measure": "type_one_error",
+            "op": "<=",
+            "bound": 0.025,
+            "estimate": 0.02475,
+            "mcse": 0.0010985772048427002,
+            "needed": {
+              "replicates": 1483568,
+              "reason": null
             }
           }
         ]
       },
-      "feasible": [
-        "c014"
-      ],
-      "inconclusive": [
-        "c013"
-      ],
       "finalists": [
         "c010",
         "c013",
@@ -1023,12 +1102,16 @@
             {
               "measure": "power",
               "status": "not_judged",
-              "bound": 0.8
+              "bound": 0.8,
+              "boundKind": null,
+              "needed": null
             },
             {
               "measure": "type_one_error",
               "status": "not_judged",
-              "bound": 0.025
+              "bound": 0.025,
+              "boundKind": null,
+              "needed": null
             }
           ]
         },
@@ -1046,12 +1129,16 @@
             {
               "measure": "power",
               "status": "not_judged",
-              "bound": 0.8
+              "bound": 0.8,
+              "boundKind": null,
+              "needed": null
             },
             {
               "measure": "type_one_error",
               "status": "not_judged",
-              "bound": 0.025
+              "bound": 0.025,
+              "boundKind": null,
+              "needed": null
             }
           ]
         },
@@ -1069,12 +1156,16 @@
             {
               "measure": "power",
               "status": "not_judged",
-              "bound": 0.8
+              "bound": 0.8,
+              "boundKind": null,
+              "needed": null
             },
             {
               "measure": "type_one_error",
               "status": "not_judged",
-              "bound": 0.025
+              "bound": 0.025,
+              "boundKind": null,
+              "needed": null
             }
           ]
         },
@@ -1092,12 +1183,16 @@
             {
               "measure": "power",
               "status": "not_judged",
-              "bound": 0.8
+              "bound": 0.8,
+              "boundKind": null,
+              "needed": null
             },
             {
               "measure": "type_one_error",
               "status": "not_judged",
-              "bound": 0.025
+              "bound": 0.025,
+              "boundKind": null,
+              "needed": null
             }
           ]
         },
@@ -1115,12 +1210,16 @@
             {
               "measure": "power",
               "status": "not_judged",
-              "bound": 0.8
+              "bound": 0.8,
+              "boundKind": null,
+              "needed": null
             },
             {
               "measure": "type_one_error",
               "status": "not_judged",
-              "bound": 0.025
+              "bound": 0.025,
+              "boundKind": null,
+              "needed": null
             }
           ]
         },
@@ -1138,12 +1237,16 @@
             {
               "measure": "power",
               "status": "not_judged",
-              "bound": 0.8
+              "bound": 0.8,
+              "boundKind": null,
+              "needed": null
             },
             {
               "measure": "type_one_error",
               "status": "not_judged",
-              "bound": 0.025
+              "bound": 0.025,
+              "boundKind": null,
+              "needed": null
             }
           ]
         },
@@ -1161,12 +1264,16 @@
             {
               "measure": "power",
               "status": "not_judged",
-              "bound": 0.8
+              "bound": 0.8,
+              "boundKind": null,
+              "needed": null
             },
             {
               "measure": "type_one_error",
               "status": "not_judged",
-              "bound": 0.025
+              "bound": 0.025,
+              "boundKind": null,
+              "needed": null
             }
           ]
         },
@@ -1184,12 +1291,16 @@
             {
               "measure": "power",
               "status": "not_judged",
-              "bound": 0.8
+              "bound": 0.8,
+              "boundKind": null,
+              "needed": null
             },
             {
               "measure": "type_one_error",
               "status": "not_judged",
-              "bound": 0.025
+              "bound": 0.025,
+              "boundKind": null,
+              "needed": null
             }
           ]
         },
@@ -1207,12 +1318,16 @@
             {
               "measure": "power",
               "status": "not_judged",
-              "bound": 0.8
+              "bound": 0.8,
+              "boundKind": null,
+              "needed": null
             },
             {
               "measure": "type_one_error",
               "status": "not_judged",
-              "bound": 0.025
+              "bound": 0.025,
+              "boundKind": null,
+              "needed": null
             }
           ]
         },
@@ -1230,12 +1345,16 @@
             {
               "measure": "power",
               "status": "not_judged",
-              "bound": 0.8
+              "bound": 0.8,
+              "boundKind": null,
+              "needed": null
             },
             {
               "measure": "type_one_error",
               "status": "not_judged",
-              "bound": 0.025
+              "bound": 0.025,
+              "boundKind": null,
+              "needed": null
             }
           ]
         },
@@ -1282,18 +1401,26 @@
                 "trials": 5000,
                 "lower": 0.7371446694925934,
                 "upper": 0.7613635028148795
-              }
+              },
+              "boundKind": "clopper_pearson",
+              "needed": null
             },
             {
               "measure": "type_one_error",
-              "status": "pass",
+              "status": "inconclusive",
               "bound": {
-                "kind": "nominal_level",
+                "kind": "clopper_pearson",
                 "confidence": 0.975,
                 "events": 496,
                 "trials": 20000,
+                "nominalNotExact": true,
                 "lower": 0.022689006259934336,
                 "upper": 0.027050624472730572
+              },
+              "boundKind": "clopper_pearson",
+              "needed": {
+                "replicates": 2322639,
+                "reason": null
               }
             }
           ]
@@ -1312,12 +1439,16 @@
             {
               "measure": "power",
               "status": "not_judged",
-              "bound": 0.8
+              "bound": 0.8,
+              "boundKind": null,
+              "needed": null
             },
             {
               "measure": "type_one_error",
               "status": "not_judged",
-              "bound": 0.025
+              "bound": 0.025,
+              "boundKind": null,
+              "needed": null
             }
           ]
         },
@@ -1335,12 +1466,16 @@
             {
               "measure": "power",
               "status": "not_judged",
-              "bound": 0.8
+              "bound": 0.8,
+              "boundKind": null,
+              "needed": null
             },
             {
               "measure": "type_one_error",
               "status": "not_judged",
-              "bound": 0.025
+              "bound": 0.025,
+              "boundKind": null,
+              "needed": null
             }
           ]
         },
@@ -1387,18 +1522,29 @@
                 "trials": 5000,
                 "lower": 0.7910877874901905,
                 "upper": 0.8133580303905443
+              },
+              "boundKind": "clopper_pearson",
+              "needed": {
+                "replicates": 105743,
+                "reason": null
               }
             },
             {
               "measure": "type_one_error",
-              "status": "pass",
+              "status": "inconclusive",
               "bound": {
-                "kind": "nominal_level",
+                "kind": "clopper_pearson",
                 "confidence": 0.975,
                 "events": 495,
                 "trials": 20000,
+                "nominalNotExact": true,
                 "lower": 0.0226411322974244,
                 "upper": 0.02699851518200644
+              },
+              "boundKind": "clopper_pearson",
+              "needed": {
+                "replicates": 1483568,
+                "reason": null
               }
             }
           ]
@@ -1446,18 +1592,26 @@
                 "trials": 5000,
                 "lower": 0.8272855790335796,
                 "upper": 0.8479184042677095
-              }
+              },
+              "boundKind": "clopper_pearson",
+              "needed": null
             },
             {
               "measure": "type_one_error",
-              "status": "pass",
+              "status": "inconclusive",
               "bound": {
-                "kind": "nominal_level",
+                "kind": "clopper_pearson",
                 "confidence": 0.975,
                 "events": 497,
                 "trials": 20000,
+                "nominalNotExact": true,
                 "lower": 0.022736882526396635,
                 "upper": 0.027102731466144864
+              },
+              "boundKind": "clopper_pearson",
+              "needed": {
+                "replicates": 4137248,
+                "reason": null
               }
             }
           ]
@@ -1465,16 +1619,16 @@
       ],
       "evaluated": 15,
       "usage": {
-        "cpuSeconds": 287.87299999999993,
+        "cpuSeconds": 241.037,
         "queueSeconds": 0,
-        "wallSeconds": 283.37199999999996,
+        "wallSeconds": 159.22699999999998,
         "replicatesCompleted": 79500,
         "modelCalls": 0,
         "units": 21,
-        "peakKb": 171768,
+        "peakKb": 172412,
         "queueIfSubmittedTogether": {
-          "total": 1971.598,
-          "max": 248.51999999999998
+          "total": 715.724,
+          "max": 128.718
         }
       },
       "units": [
@@ -1483,10 +1637,10 @@
           "stage": "screening",
           "method": "design.simulate",
           "replicates": 300,
-          "engineCpuSeconds": 3.211,
-          "wallSeconds": 8.149,
-          "peakKb": 128316,
-          "submittedAt": 0,
+          "engineCpuSeconds": 1.812,
+          "wallSeconds": 2.205,
+          "peakKb": 135544,
+          "submittedAt": 0.001,
           "queueIfSubmittedTogether": 0
         },
         {
@@ -1494,220 +1648,220 @@
           "stage": "screening",
           "method": "design.simulate",
           "replicates": 300,
-          "engineCpuSeconds": 3.711,
-          "wallSeconds": 9.001,
-          "peakKb": 127852,
-          "submittedAt": 0,
-          "queueIfSubmittedTogether": 8.149
+          "engineCpuSeconds": 2.051,
+          "wallSeconds": 2.265,
+          "peakKb": 135412,
+          "submittedAt": 0.001,
+          "queueIfSubmittedTogether": 2.205
         },
         {
           "unit": "c002:screening:alternative",
           "stage": "screening",
           "method": "design.simulate",
           "replicates": 300,
-          "engineCpuSeconds": 3.592,
-          "wallSeconds": 9.952,
-          "peakKb": 127676,
+          "engineCpuSeconds": 1.703,
+          "wallSeconds": 1.966,
+          "peakKb": 135544,
           "submittedAt": 0.001,
-          "queueIfSubmittedTogether": 17.15
+          "queueIfSubmittedTogether": 4.470000000000001
         },
         {
           "unit": "c003:screening:alternative",
           "stage": "screening",
           "method": "design.simulate",
           "replicates": 300,
-          "engineCpuSeconds": 3.846,
-          "wallSeconds": 11.513,
-          "peakKb": 128248,
+          "engineCpuSeconds": 1.829,
+          "wallSeconds": 2.21,
+          "peakKb": 135544,
           "submittedAt": 0.001,
-          "queueIfSubmittedTogether": 27.101999999999997
+          "queueIfSubmittedTogether": 6.436000000000001
         },
         {
           "unit": "c004:screening:alternative",
           "stage": "screening",
           "method": "design.simulate",
           "replicates": 300,
-          "engineCpuSeconds": 3.34,
-          "wallSeconds": 7.018,
-          "peakKb": 129640,
+          "engineCpuSeconds": 1.754,
+          "wallSeconds": 2.011,
+          "peakKb": 135288,
           "submittedAt": 0.001,
-          "queueIfSubmittedTogether": 38.614999999999995
+          "queueIfSubmittedTogether": 8.646
         },
         {
           "unit": "c005:screening:alternative",
           "stage": "screening",
           "method": "design.simulate",
           "replicates": 300,
-          "engineCpuSeconds": 3.486,
-          "wallSeconds": 7.093,
-          "peakKb": 134712,
+          "engineCpuSeconds": 1.872,
+          "wallSeconds": 2.127,
+          "peakKb": 135288,
           "submittedAt": 0.002,
-          "queueIfSubmittedTogether": 45.632999999999996
+          "queueIfSubmittedTogether": 10.657
         },
         {
           "unit": "c006:screening:alternative",
           "stage": "screening",
           "method": "design.simulate",
           "replicates": 300,
-          "engineCpuSeconds": 3.528,
-          "wallSeconds": 6.269,
-          "peakKb": 134972,
+          "engineCpuSeconds": 1.851,
+          "wallSeconds": 2.057,
+          "peakKb": 135544,
           "submittedAt": 0.002,
-          "queueIfSubmittedTogether": 52.726
+          "queueIfSubmittedTogether": 12.783999999999999
         },
         {
           "unit": "c007:screening:alternative",
           "stage": "screening",
           "method": "design.simulate",
           "replicates": 300,
-          "engineCpuSeconds": 3.614,
-          "wallSeconds": 7.47,
-          "peakKb": 129732,
-          "submittedAt": 0.003,
-          "queueIfSubmittedTogether": 58.995
+          "engineCpuSeconds": 1.803,
+          "wallSeconds": 1.985,
+          "peakKb": 135288,
+          "submittedAt": 0.002,
+          "queueIfSubmittedTogether": 14.841
         },
         {
           "unit": "c008:screening:alternative",
           "stage": "screening",
           "method": "design.simulate",
           "replicates": 300,
-          "engineCpuSeconds": 3.631,
-          "wallSeconds": 7.763,
-          "peakKb": 134728,
-          "submittedAt": 0.003,
-          "queueIfSubmittedTogether": 66.465
+          "engineCpuSeconds": 1.992,
+          "wallSeconds": 2.19,
+          "peakKb": 135416,
+          "submittedAt": 1.99,
+          "queueIfSubmittedTogether": 16.826
         },
         {
           "unit": "c009:screening:alternative",
           "stage": "screening",
           "method": "design.simulate",
           "replicates": 300,
-          "engineCpuSeconds": 3.268,
-          "wallSeconds": 5.259,
-          "peakKb": 134748,
-          "submittedAt": 0.003,
-          "queueIfSubmittedTogether": 74.22800000000001
+          "engineCpuSeconds": 2.012,
+          "wallSeconds": 2.256,
+          "peakKb": 135544,
+          "submittedAt": 4.182,
+          "queueIfSubmittedTogether": 19.016000000000002
         },
         {
           "unit": "c010:screening:alternative",
           "stage": "screening",
           "method": "design.simulate",
           "replicates": 300,
-          "engineCpuSeconds": 3.144,
-          "wallSeconds": 4.772,
-          "peakKb": 134900,
-          "submittedAt": 0.004,
-          "queueIfSubmittedTogether": 79.48700000000001
+          "engineCpuSeconds": 1.924,
+          "wallSeconds": 2.199,
+          "peakKb": 135416,
+          "submittedAt": 6.44,
+          "queueIfSubmittedTogether": 21.272000000000002
         },
         {
           "unit": "c011:screening:alternative",
           "stage": "screening",
           "method": "design.simulate",
           "replicates": 300,
-          "engineCpuSeconds": 3.645,
-          "wallSeconds": 5.349,
-          "peakKb": 134904,
-          "submittedAt": 0.004,
-          "queueIfSubmittedTogether": 84.25900000000001
+          "engineCpuSeconds": 2.174,
+          "wallSeconds": 2.301,
+          "peakKb": 135672,
+          "submittedAt": 8.642,
+          "queueIfSubmittedTogether": 23.471000000000004
         },
         {
           "unit": "c012:screening:alternative",
           "stage": "screening",
           "method": "design.simulate",
           "replicates": 300,
-          "engineCpuSeconds": 3.605,
-          "wallSeconds": 6.744,
-          "peakKb": 135156,
-          "submittedAt": 0.004,
-          "queueIfSubmittedTogether": 89.60800000000002
+          "engineCpuSeconds": 2.15,
+          "wallSeconds": 2.201,
+          "peakKb": 135416,
+          "submittedAt": 10.945,
+          "queueIfSubmittedTogether": 25.772000000000006
         },
         {
           "unit": "c013:screening:alternative",
           "stage": "screening",
           "method": "design.simulate",
           "replicates": 300,
-          "engineCpuSeconds": 3.341,
-          "wallSeconds": 5.067,
-          "peakKb": 134908,
-          "submittedAt": 0.005,
-          "queueIfSubmittedTogether": 96.35200000000002
+          "engineCpuSeconds": 1.983,
+          "wallSeconds": 2.123,
+          "peakKb": 135540,
+          "submittedAt": 13.148,
+          "queueIfSubmittedTogether": 27.973000000000006
         },
         {
           "unit": "c014:screening:alternative",
           "stage": "screening",
           "method": "design.simulate",
           "replicates": 300,
-          "engineCpuSeconds": 3.81,
-          "wallSeconds": 5.811,
-          "peakKb": 134776,
-          "submittedAt": 0.005,
-          "queueIfSubmittedTogether": 101.41900000000001
+          "engineCpuSeconds": 2.286,
+          "wallSeconds": 2.39,
+          "peakKb": 135156,
+          "submittedAt": 15.273,
+          "queueIfSubmittedTogether": 30.096000000000007
         },
         {
           "unit": "c010:final:alternative",
           "stage": "final",
           "method": "design.simulate",
           "replicates": 5000,
-          "engineCpuSeconds": 19.18,
-          "wallSeconds": 28.022,
-          "peakKb": 139252,
-          "submittedAt": 0.005,
-          "queueIfSubmittedTogether": 107.23000000000002
+          "engineCpuSeconds": 13.419,
+          "wallSeconds": 7.968,
+          "peakKb": 139636,
+          "submittedAt": 17.667,
+          "queueIfSubmittedTogether": 32.486000000000004
         },
         {
           "unit": "c010:final:null",
           "stage": "final",
           "method": "design.simulate",
           "replicates": 20000,
-          "engineCpuSeconds": 61.463,
-          "wallSeconds": 60.373,
-          "peakKb": 171768,
-          "submittedAt": 0.006,
-          "queueIfSubmittedTogether": 135.252
+          "engineCpuSeconds": 54.078,
+          "wallSeconds": 39.986,
+          "peakKb": 172412,
+          "submittedAt": 25.638,
+          "queueIfSubmittedTogether": 40.45400000000001
         },
         {
           "unit": "c013:final:alternative",
           "stage": "final",
           "method": "design.simulate",
           "replicates": 5000,
-          "engineCpuSeconds": 16.122,
-          "wallSeconds": 10.64,
-          "peakKb": 139256,
-          "submittedAt": 0.006,
-          "queueIfSubmittedTogether": 195.625
+          "engineCpuSeconds": 15.025,
+          "wallSeconds": 8.978,
+          "peakKb": 139768,
+          "submittedAt": 65.627,
+          "queueIfSubmittedTogether": 80.44
         },
         {
           "unit": "c013:final:null",
           "stage": "final",
           "method": "design.simulate",
           "replicates": 20000,
-          "engineCpuSeconds": 59.419,
-          "wallSeconds": 32.253,
-          "peakKb": 171384,
-          "submittedAt": 0.006,
-          "queueIfSubmittedTogether": 206.265
+          "engineCpuSeconds": 56.744,
+          "wallSeconds": 30.325,
+          "peakKb": 171896,
+          "submittedAt": 74.607,
+          "queueIfSubmittedTogether": 89.41799999999999
         },
         {
           "unit": "c014:final:alternative",
           "stage": "final",
           "method": "design.simulate",
           "replicates": 5000,
-          "engineCpuSeconds": 16.128,
-          "wallSeconds": 10.002,
-          "peakKb": 139384,
-          "submittedAt": 0.006,
-          "queueIfSubmittedTogether": 238.51799999999997
+          "engineCpuSeconds": 15.218,
+          "wallSeconds": 8.975,
+          "peakKb": 139512,
+          "submittedAt": 104.935,
+          "queueIfSubmittedTogether": 119.743
         },
         {
           "unit": "c014:final:null",
           "stage": "final",
           "method": "design.simulate",
           "replicates": 20000,
-          "engineCpuSeconds": 62.789,
-          "wallSeconds": 34.852,
-          "peakKb": 171516,
-          "submittedAt": 0.007,
-          "queueIfSubmittedTogether": 248.51999999999998
+          "engineCpuSeconds": 57.357,
+          "wallSeconds": 30.509,
+          "peakKb": 171896,
+          "submittedAt": 113.913,
+          "queueIfSubmittedTogether": 128.718
         }
       ]
     },
@@ -1717,6 +1871,7 @@
       "best": null,
       "feasible": [],
       "inconclusive": [],
+      "closestUndecided": null,
       "finalists": [
         "c000",
         "c001",
@@ -1747,15 +1902,15 @@
           "final": {
             "power": {
               "name": "power",
-              "value": 0.4916,
-              "mcse": 0.007070069872356284,
+              "value": 0.4732,
+              "mcse": 0.007060903058391327,
               "simulated": true,
               "source": "synthetic"
             },
             "type_one_error": {
               "name": "type_one_error",
-              "value": 0.0249,
-              "mcse": 0.0011018164547691234,
+              "value": 0.0254,
+              "mcse": 0.0011125385386583245,
               "simulated": true,
               "source": "synthetic"
             },
@@ -1774,22 +1929,30 @@
               "bound": {
                 "kind": "clopper_pearson",
                 "confidence": 0.975,
-                "events": 2458,
+                "events": 2366,
                 "trials": 5000,
-                "lower": 0.4776512363575559,
-                "upper": 0.5055585784667049
-              }
+                "lower": 0.45927994372903,
+                "upper": 0.4871513706165731
+              },
+              "boundKind": "clopper_pearson",
+              "needed": null
             },
             {
               "measure": "type_one_error",
-              "status": "pass",
+              "status": "inconclusive",
               "bound": {
-                "kind": "nominal_level",
+                "kind": "clopper_pearson",
                 "confidence": 0.975,
-                "events": 498,
+                "events": 508,
                 "trials": 20000,
-                "lower": 0.02278476109005631,
-                "upper": 0.027154836169018676
+                "nominalNotExact": true,
+                "lower": 0.023263671605044084,
+                "upper": 0.02767575867681968
+              },
+              "boundKind": "clopper_pearson",
+              "needed": {
+                "replicates": 594342,
+                "reason": null
               }
             }
           ]
@@ -1806,15 +1969,15 @@
           "final": {
             "power": {
               "name": "power",
-              "value": 0.5118,
-              "mcse": 0.007069098386640265,
+              "value": 0.5122,
+              "mcse": 0.007068962583010325,
               "simulated": true,
               "source": "synthetic"
             },
             "type_one_error": {
               "name": "type_one_error",
-              "value": 0.0256,
-              "mcse": 0.0011167954154633695,
+              "value": 0.02445,
+              "mcse": 0.001092066790539846,
               "simulated": true,
               "source": "synthetic"
             },
@@ -1833,22 +1996,30 @@
               "bound": {
                 "kind": "clopper_pearson",
                 "confidence": 0.975,
-                "events": 2559,
+                "events": 2561,
                 "trials": 5000,
-                "lower": 0.49784133831285426,
-                "upper": 0.5257448741780817
-              }
+                "lower": 0.49824137066169216,
+                "upper": 0.5261443744534928
+              },
+              "boundKind": "clopper_pearson",
+              "needed": null
             },
             {
               "measure": "type_one_error",
-              "status": "pass",
+              "status": "inconclusive",
               "bound": {
-                "kind": "nominal_level",
+                "kind": "clopper_pearson",
                 "confidence": 0.975,
-                "events": 512,
+                "events": 489,
                 "trials": 20000,
-                "lower": 0.023455298470436398,
-                "upper": 0.027884065198188118
+                "nominalNotExact": true,
+                "lower": 0.02235393728937199,
+                "upper": 0.026685810812562133
+              },
+              "boundKind": "clopper_pearson",
+              "needed": {
+                "replicates": 302900,
+                "reason": null
               }
             }
           ]
@@ -1865,15 +2036,15 @@
           "final": {
             "power": {
               "name": "power",
-              "value": 0.557,
-              "mcse": 0.007024969750824554,
+              "value": 0.5312,
+              "mcse": 0.007057287864328619,
               "simulated": true,
               "source": "synthetic"
             },
             "type_one_error": {
               "name": "type_one_error",
-              "value": 0.02425,
-              "mcse": 0.0010877025673409067,
+              "value": 0.02605,
+              "mcse": 0.0011263080728646138,
               "simulated": true,
               "source": "synthetic"
             },
@@ -1892,22 +2063,30 @@
               "bound": {
                 "kind": "clopper_pearson",
                 "confidence": 0.975,
-                "events": 2785,
+                "events": 2656,
                 "trials": 5000,
-                "lower": 0.5431013768423056,
-                "upper": 0.5708320185418094
-              }
+                "lower": 0.5172531408082495,
+                "upper": 0.5451104035090104
+              },
+              "boundKind": "clopper_pearson",
+              "needed": null
             },
             {
               "measure": "type_one_error",
-              "status": "pass",
+              "status": "inconclusive",
               "bound": {
-                "kind": "nominal_level",
+                "kind": "clopper_pearson",
                 "confidence": 0.975,
-                "events": 485,
+                "events": 521,
                 "trials": 20000,
-                "lower": 0.022162520905634836,
-                "upper": 0.02647729441558469
+                "nominalNotExact": true,
+                "lower": 0.02388658698419735,
+                "upper": 0.028352627162084837
+              },
+              "boundKind": "clopper_pearson",
+              "needed": {
+                "replicates": 88402,
+                "reason": null
               }
             }
           ]
@@ -1924,15 +2103,15 @@
           "final": {
             "power": {
               "name": "power",
-              "value": 0.5704,
-              "mcse": 0.007000626257700092,
+              "value": 0.5784,
+              "mcse": 0.006983601363193635,
               "simulated": true,
               "source": "synthetic"
             },
             "type_one_error": {
               "name": "type_one_error",
-              "value": 0.02485,
-              "mcse": 0.0011007378775167137,
+              "value": 0.023,
+              "mcse": 0.0010599764148319527,
               "simulated": true,
               "source": "synthetic"
             },
@@ -1951,22 +2130,30 @@
               "bound": {
                 "kind": "clopper_pearson",
                 "confidence": 0.975,
-                "events": 2852,
+                "events": 2892,
                 "trials": 5000,
-                "lower": 0.5565412348620375,
-                "upper": 0.5841764998865602
-              }
+                "lower": 0.5645699109859423,
+                "upper": 0.5921384733169011
+              },
+              "boundKind": "clopper_pearson",
+              "needed": null
             },
             {
               "measure": "type_one_error",
-              "status": "pass",
+              "status": "inconclusive",
               "bound": {
-                "kind": "nominal_level",
+                "kind": "clopper_pearson",
                 "confidence": 0.975,
-                "events": 497,
+                "events": 460,
                 "trials": 20000,
-                "lower": 0.022736882526396635,
-                "upper": 0.027102731466144864
+                "nominalNotExact": true,
+                "lower": 0.020967050397190906,
+                "upper": 0.02517318769429497
+              },
+              "boundKind": "clopper_pearson",
+              "needed": {
+                "replicates": 21581,
+                "reason": null
               }
             }
           ]
@@ -1978,20 +2165,20 @@
             "design.nControl": 125,
             "accrual.duration": 18
           },
-          "status": "evaluated",
-          "reason": null,
+          "status": "failed",
+          "reason": "cpu_budget_exhausted",
           "final": {
             "power": {
               "name": "power",
-              "value": 0.611,
-              "mcse": 0.006894621091836737,
+              "value": 0.6096,
+              "mcse": 0.006899099071617974,
               "simulated": true,
               "source": "synthetic"
             },
             "type_one_error": {
               "name": "type_one_error",
-              "value": 0.0247,
-              "mcse": 0.0010974951024947674,
+              "value": 0.02722222222222222,
+              "mcse": 0.0012129205534005326,
               "simulated": true,
               "source": "synthetic"
             },
@@ -2010,23 +2197,20 @@
               "bound": {
                 "kind": "clopper_pearson",
                 "confidence": 0.975,
-                "events": 3055,
+                "events": 3048,
                 "trials": 5000,
-                "lower": 0.5973251651569795,
-                "upper": 0.6245451079027025
-              }
+                "lower": 0.5959172114365501,
+                "upper": 0.6231546986205285
+              },
+              "boundKind": "clopper_pearson",
+              "needed": null
             },
             {
               "measure": "type_one_error",
-              "status": "pass",
-              "bound": {
-                "kind": "nominal_level",
-                "confidence": 0.975,
-                "events": 494,
-                "trials": 20000,
-                "lower": 0.022593260645709018,
-                "upper": 0.026946403587218976
-              }
+              "status": "not_judged",
+              "bound": 0.025,
+              "boundKind": null,
+              "needed": null
             }
           ]
         },
@@ -2042,15 +2226,8 @@
           "final": {
             "power": {
               "name": "power",
-              "value": 0.6254,
-              "mcse": 0.006845068882049325,
-              "simulated": true,
-              "source": "synthetic"
-            },
-            "type_one_error": {
-              "name": "type_one_error",
-              "value": 0.02722222222222222,
-              "mcse": 0.0017153286967001129,
+              "value": 0.6386666666666667,
+              "mcse": 0.012403535935518697,
               "simulated": true,
               "source": "synthetic"
             },
@@ -2065,20 +2242,17 @@
           "verdicts": [
             {
               "measure": "power",
-              "status": "fail",
-              "bound": {
-                "kind": "clopper_pearson",
-                "confidence": 0.975,
-                "events": 3127,
-                "trials": 5000,
-                "lower": 0.6118138164103513,
-                "upper": 0.6388396169776369
-              }
+              "status": "not_judged",
+              "bound": 0.8,
+              "boundKind": null,
+              "needed": null
             },
             {
               "measure": "type_one_error",
               "status": "not_judged",
-              "bound": 0.025
+              "bound": 0.025,
+              "boundKind": null,
+              "needed": null
             }
           ]
         },
@@ -2096,12 +2270,16 @@
             {
               "measure": "power",
               "status": "not_judged",
-              "bound": 0.8
+              "bound": 0.8,
+              "boundKind": null,
+              "needed": null
             },
             {
               "measure": "type_one_error",
               "status": "not_judged",
-              "bound": 0.025
+              "bound": 0.025,
+              "boundKind": null,
+              "needed": null
             }
           ]
         },
@@ -2119,12 +2297,16 @@
             {
               "measure": "power",
               "status": "not_judged",
-              "bound": 0.8
+              "bound": 0.8,
+              "boundKind": null,
+              "needed": null
             },
             {
               "measure": "type_one_error",
               "status": "not_judged",
-              "bound": 0.025
+              "bound": 0.025,
+              "boundKind": null,
+              "needed": null
             }
           ]
         },
@@ -2142,12 +2324,16 @@
             {
               "measure": "power",
               "status": "not_judged",
-              "bound": 0.8
+              "bound": 0.8,
+              "boundKind": null,
+              "needed": null
             },
             {
               "measure": "type_one_error",
               "status": "not_judged",
-              "bound": 0.025
+              "bound": 0.025,
+              "boundKind": null,
+              "needed": null
             }
           ]
         },
@@ -2165,12 +2351,16 @@
             {
               "measure": "power",
               "status": "not_judged",
-              "bound": 0.8
+              "bound": 0.8,
+              "boundKind": null,
+              "needed": null
             },
             {
               "measure": "type_one_error",
               "status": "not_judged",
-              "bound": 0.025
+              "bound": 0.025,
+              "boundKind": null,
+              "needed": null
             }
           ]
         },
@@ -2188,12 +2378,16 @@
             {
               "measure": "power",
               "status": "not_judged",
-              "bound": 0.8
+              "bound": 0.8,
+              "boundKind": null,
+              "needed": null
             },
             {
               "measure": "type_one_error",
               "status": "not_judged",
-              "bound": 0.025
+              "bound": 0.025,
+              "boundKind": null,
+              "needed": null
             }
           ]
         },
@@ -2211,12 +2405,16 @@
             {
               "measure": "power",
               "status": "not_judged",
-              "bound": 0.8
+              "bound": 0.8,
+              "boundKind": null,
+              "needed": null
             },
             {
               "measure": "type_one_error",
               "status": "not_judged",
-              "bound": 0.025
+              "bound": 0.025,
+              "boundKind": null,
+              "needed": null
             }
           ]
         },
@@ -2234,12 +2432,16 @@
             {
               "measure": "power",
               "status": "not_judged",
-              "bound": 0.8
+              "bound": 0.8,
+              "boundKind": null,
+              "needed": null
             },
             {
               "measure": "type_one_error",
               "status": "not_judged",
-              "bound": 0.025
+              "bound": 0.025,
+              "boundKind": null,
+              "needed": null
             }
           ]
         },
@@ -2257,12 +2459,16 @@
             {
               "measure": "power",
               "status": "not_judged",
-              "bound": 0.8
+              "bound": 0.8,
+              "boundKind": null,
+              "needed": null
             },
             {
               "measure": "type_one_error",
               "status": "not_judged",
-              "bound": 0.025
+              "bound": 0.025,
+              "boundKind": null,
+              "needed": null
             }
           ]
         },
@@ -2280,28 +2486,32 @@
             {
               "measure": "power",
               "status": "not_judged",
-              "bound": 0.8
+              "bound": 0.8,
+              "boundKind": null,
+              "needed": null
             },
             {
               "measure": "type_one_error",
               "status": "not_judged",
-              "bound": 0.025
+              "bound": 0.025,
+              "boundKind": null,
+              "needed": null
             }
           ]
         }
       ],
       "evaluated": 6,
       "usage": {
-        "cpuSeconds": 288.048,
+        "cpuSeconds": 242.45600000000002,
         "queueSeconds": 0,
-        "wallSeconds": 167.726,
-        "replicatesCompleted": 139000,
+        "wallSeconds": 139.04599999999996,
+        "replicatesCompleted": 124500,
         "modelCalls": 0,
-        "units": 12,
-        "peakKb": 176888,
+        "units": 11,
+        "peakKb": 175228,
         "queueIfSubmittedTogether": {
-          "total": 944.762,
-          "max": 156.679
+          "total": 703.3849999999999,
+          "max": 136.02499999999998
         }
       },
       "units": [
@@ -2310,9 +2520,9 @@
           "stage": "final",
           "method": "design.simulate",
           "replicates": 5000,
-          "engineCpuSeconds": 10.971,
-          "wallSeconds": 7.572,
-          "peakKb": 139508,
+          "engineCpuSeconds": 9.424,
+          "wallSeconds": 5.889,
+          "peakKb": 139896,
           "submittedAt": 0,
           "queueIfSubmittedTogether": 0
         },
@@ -2321,128 +2531,122 @@
           "stage": "final",
           "method": "design.simulate",
           "replicates": 20000,
-          "engineCpuSeconds": 40.542,
-          "wallSeconds": 24.067,
-          "peakKb": 173172,
-          "submittedAt": 0,
-          "queueIfSubmittedTogether": 7.572
+          "engineCpuSeconds": 36.712,
+          "wallSeconds": 20.678,
+          "peakKb": 175224,
+          "submittedAt": 5.892,
+          "queueIfSubmittedTogether": 5.889
         },
         {
           "unit": "c001:final:alternative",
           "stage": "final",
           "method": "design.simulate",
           "replicates": 5000,
-          "engineCpuSeconds": 10.689,
-          "wallSeconds": 7.431,
-          "peakKb": 139256,
-          "submittedAt": 0,
-          "queueIfSubmittedTogether": 31.639
+          "engineCpuSeconds": 9.654,
+          "wallSeconds": 6.505,
+          "peakKb": 139560,
+          "submittedAt": 26.573,
+          "queueIfSubmittedTogether": 26.567
         },
         {
           "unit": "c001:final:null",
           "stage": "final",
           "method": "design.simulate",
           "replicates": 20000,
-          "engineCpuSeconds": 38.06,
-          "wallSeconds": 21.237,
-          "peakKb": 171640,
-          "submittedAt": 0,
-          "queueIfSubmittedTogether": 39.07
+          "engineCpuSeconds": 35.678,
+          "wallSeconds": 19.749,
+          "peakKb": 175228,
+          "submittedAt": 33.079,
+          "queueIfSubmittedTogether": 33.072
         },
         {
           "unit": "c002:final:alternative",
           "stage": "final",
           "method": "design.simulate",
           "replicates": 5000,
-          "engineCpuSeconds": 10.447,
-          "wallSeconds": 6.875,
-          "peakKb": 139252,
-          "submittedAt": 0,
-          "queueIfSubmittedTogether": 60.307
+          "engineCpuSeconds": 9.301,
+          "wallSeconds": 5.812,
+          "peakKb": 139384,
+          "submittedAt": 52.831,
+          "queueIfSubmittedTogether": 52.821
         },
         {
           "unit": "c002:final:null",
           "stage": "final",
           "method": "design.simulate",
           "replicates": 20000,
-          "engineCpuSeconds": 38.992,
-          "wallSeconds": 21.768,
-          "peakKb": 176888,
-          "submittedAt": 0.001,
-          "queueIfSubmittedTogether": 67.182
+          "engineCpuSeconds": 36.869,
+          "wallSeconds": 20.394,
+          "peakKb": 171896,
+          "submittedAt": 58.647,
+          "queueIfSubmittedTogether": 58.632999999999996
         },
         {
           "unit": "c003:final:alternative",
           "stage": "final",
           "method": "design.simulate",
           "replicates": 5000,
-          "engineCpuSeconds": 11.574,
-          "wallSeconds": 7.693,
-          "peakKb": 139512,
-          "submittedAt": 0.001,
-          "queueIfSubmittedTogether": 88.95
+          "engineCpuSeconds": 11.829,
+          "wallSeconds": 7.597,
+          "peakKb": 139768,
+          "submittedAt": 79.044,
+          "queueIfSubmittedTogether": 79.02699999999999
         },
         {
           "unit": "c003:final:null",
           "stage": "final",
           "method": "design.simulate",
           "replicates": 20000,
-          "engineCpuSeconds": 42.63,
-          "wallSeconds": 23.389,
-          "peakKb": 172024,
-          "submittedAt": 0.001,
-          "queueIfSubmittedTogether": 96.643
+          "engineCpuSeconds": 40.775,
+          "wallSeconds": 22.367,
+          "peakKb": 172272,
+          "submittedAt": 86.644,
+          "queueIfSubmittedTogether": 86.62399999999998
         },
         {
           "unit": "c004:final:alternative",
           "stage": "final",
           "method": "design.simulate",
           "replicates": 5000,
-          "engineCpuSeconds": 11.142,
-          "wallSeconds": 6.756,
-          "peakKb": 139256,
-          "submittedAt": 0.001,
-          "queueIfSubmittedTogether": 120.032
+          "engineCpuSeconds": 11.058,
+          "wallSeconds": 6.745,
+          "peakKb": 139896,
+          "submittedAt": 109.015,
+          "queueIfSubmittedTogether": 108.99099999999999
         },
         {
           "unit": "c004:final:null",
           "stage": "final",
           "method": "design.simulate",
-          "replicates": 20000,
-          "engineCpuSeconds": 42.487,
-          "wallSeconds": 23.112,
+          "replicates": 18000,
+          "engineCpuSeconds": 37.27,
+          "wallSeconds": 20.289,
           "peakKb": 172408,
-          "submittedAt": 0.001,
-          "queueIfSubmittedTogether": 126.788
+          "submittedAt": 115.762,
+          "queueIfSubmittedTogether": 115.73599999999999
         },
         {
           "unit": "c005:final:alternative",
           "stage": "final",
           "method": "design.simulate",
-          "replicates": 5000,
-          "engineCpuSeconds": 11.132,
-          "wallSeconds": 6.779,
-          "peakKb": 139512,
-          "submittedAt": 0.002,
-          "queueIfSubmittedTogether": 149.9
-        },
-        {
-          "unit": "c005:final:null",
-          "stage": "final",
-          "method": "design.simulate",
-          "replicates": 9000,
-          "engineCpuSeconds": 19.382,
-          "wallSeconds": 11.047,
-          "peakKb": 133492,
-          "submittedAt": 0.002,
-          "queueIfSubmittedTogether": 156.679
+          "replicates": 1500,
+          "engineCpuSeconds": 3.886,
+          "wallSeconds": 3.021,
+          "peakKb": 136440,
+          "submittedAt": 136.053,
+          "queueIfSubmittedTogether": 136.02499999999998
         }
       ]
     },
     "random": {
       "arm": "random",
       "stop": "budget_exhausted",
-      "best": {
+      "best": null,
+      "feasible": [],
+      "inconclusive": [
+        "c001"
+      ],
+      "closestUndecided": {
         "key": "c001",
         "set": {
           "design.nTreat": 200,
@@ -2454,15 +2658,15 @@
         "final": {
           "power": {
             "name": "power",
-            "value": 0.8264,
-            "mcse": 0.005356548142227417,
+            "value": 0.8352,
+            "mcse": 0.005246731554024847,
             "simulated": true,
             "source": "synthetic"
           },
           "type_one_error": {
             "name": "type_one_error",
-            "value": 0.02655,
-            "mcse": 0.001136773889126593,
+            "value": 0.02575,
+            "mcse": 0.0011199762832310334,
             "simulated": true,
             "source": "synthetic"
           },
@@ -2481,30 +2685,48 @@
             "bound": {
               "kind": "clopper_pearson",
               "confidence": 0.975,
-              "events": 4132,
+              "events": 4176,
               "trials": 5000,
-              "lower": 0.8156116848820365,
-              "upper": 0.8368057928716963
-            }
+              "lower": 0.8246215844518372,
+              "upper": 0.84538547870294
+            },
+            "boundKind": "clopper_pearson",
+            "needed": null
           },
           {
             "measure": "type_one_error",
-            "status": "pass",
+            "status": "inconclusive",
             "bound": {
-              "kind": "nominal_level",
+              "kind": "clopper_pearson",
               "confidence": 0.975,
-              "events": 531,
+              "events": 515,
               "trials": 20000,
-              "lower": 0.02436599997359143,
-              "upper": 0.028873048596547962
+              "nominalNotExact": true,
+              "lower": 0.023599041736341114,
+              "upper": 0.028040272037110098
+            },
+            "boundKind": "clopper_pearson",
+            "needed": {
+              "replicates": 171326,
+              "reason": null
+            }
+          }
+        ],
+        "undecided": [
+          {
+            "index": 1,
+            "measure": "type_one_error",
+            "op": "<=",
+            "bound": 0.025,
+            "estimate": 0.02575,
+            "mcse": 0.0011199762832310334,
+            "needed": {
+              "replicates": 171326,
+              "reason": null
             }
           }
         ]
       },
-      "feasible": [
-        "c001"
-      ],
-      "inconclusive": [],
       "finalists": [
         "c000",
         "c001",
@@ -2535,15 +2757,15 @@
           "final": {
             "power": {
               "name": "power",
-              "value": 0.6864,
-              "mcse": 0.006561326695112811,
+              "value": 0.684,
+              "mcse": 0.006574861215265308,
               "simulated": true,
               "source": "synthetic"
             },
             "type_one_error": {
               "name": "type_one_error",
-              "value": 0.0255,
-              "mcse": 0.0011146692334499952,
+              "value": 0.0261,
+              "mcse": 0.0011273595256172718,
               "simulated": true,
               "source": "synthetic"
             },
@@ -2562,22 +2784,30 @@
               "bound": {
                 "kind": "clopper_pearson",
                 "confidence": 0.975,
-                "events": 3432,
+                "events": 3420,
                 "trials": 5000,
-                "lower": 0.673333959877088,
-                "upper": 0.6992480856700101
-              }
+                "lower": 0.6709088519382935,
+                "upper": 0.6968760043730327
+              },
+              "boundKind": "clopper_pearson",
+              "needed": null
             },
             {
               "measure": "type_one_error",
-              "status": "pass",
+              "status": "inconclusive",
               "bound": {
-                "kind": "nominal_level",
+                "kind": "clopper_pearson",
                 "confidence": 0.975,
-                "events": 510,
+                "events": 522,
                 "trials": 20000,
-                "lower": 0.023359480613524802,
-                "upper": 0.027779916349281814
+                "nominalNotExact": true,
+                "lower": 0.023934518732224047,
+                "upper": 0.0284046788303772
+              },
+              "boundKind": "clopper_pearson",
+              "needed": {
+                "replicates": 80699,
+                "reason": null
               }
             }
           ]
@@ -2594,15 +2824,15 @@
           "final": {
             "power": {
               "name": "power",
-              "value": 0.8264,
-              "mcse": 0.005356548142227417,
+              "value": 0.8352,
+              "mcse": 0.005246731554024847,
               "simulated": true,
               "source": "synthetic"
             },
             "type_one_error": {
               "name": "type_one_error",
-              "value": 0.02655,
-              "mcse": 0.001136773889126593,
+              "value": 0.02575,
+              "mcse": 0.0011199762832310334,
               "simulated": true,
               "source": "synthetic"
             },
@@ -2621,22 +2851,30 @@
               "bound": {
                 "kind": "clopper_pearson",
                 "confidence": 0.975,
-                "events": 4132,
+                "events": 4176,
                 "trials": 5000,
-                "lower": 0.8156116848820365,
-                "upper": 0.8368057928716963
-              }
+                "lower": 0.8246215844518372,
+                "upper": 0.84538547870294
+              },
+              "boundKind": "clopper_pearson",
+              "needed": null
             },
             {
               "measure": "type_one_error",
-              "status": "pass",
+              "status": "inconclusive",
               "bound": {
-                "kind": "nominal_level",
+                "kind": "clopper_pearson",
                 "confidence": 0.975,
-                "events": 531,
+                "events": 515,
                 "trials": 20000,
-                "lower": 0.02436599997359143,
-                "upper": 0.028873048596547962
+                "nominalNotExact": true,
+                "lower": 0.023599041736341114,
+                "upper": 0.028040272037110098
+              },
+              "boundKind": "clopper_pearson",
+              "needed": {
+                "replicates": 171326,
+                "reason": null
               }
             }
           ]
@@ -2653,15 +2891,15 @@
           "final": {
             "power": {
               "name": "power",
-              "value": 0.7744,
-              "mcse": 0.005911085179558827,
+              "value": 0.7788,
+              "mcse": 0.005869762516490765,
               "simulated": true,
               "source": "synthetic"
             },
             "type_one_error": {
               "name": "type_one_error",
-              "value": 0.02425,
-              "mcse": 0.0010877025673409067,
+              "value": 0.02555,
+              "mcse": 0.0011157328869402388,
               "simulated": true,
               "source": "synthetic"
             },
@@ -2680,22 +2918,30 @@
               "bound": {
                 "kind": "clopper_pearson",
                 "confidence": 0.975,
-                "events": 3872,
+                "events": 3894,
                 "trials": 5000,
-                "lower": 0.7625560958275122,
-                "upper": 0.7859226956377192
-              }
+                "lower": 0.7670344533397389,
+                "upper": 0.7902391617895528
+              },
+              "boundKind": "clopper_pearson",
+              "needed": null
             },
             {
               "measure": "type_one_error",
-              "status": "pass",
+              "status": "inconclusive",
               "bound": {
-                "kind": "nominal_level",
+                "kind": "clopper_pearson",
                 "confidence": 0.975,
-                "events": 485,
+                "events": 511,
                 "trials": 20000,
-                "lower": 0.022162520905634836,
-                "upper": 0.02647729441558469
+                "nominalNotExact": true,
+                "lower": 0.02340738843907572,
+                "upper": 0.027831991873504963
+              },
+              "boundKind": "clopper_pearson",
+              "needed": {
+                "replicates": 316171,
+                "reason": null
               }
             }
           ]
@@ -2707,20 +2953,20 @@
             "design.nControl": 150,
             "accrual.duration": 24
           },
-          "status": "evaluated",
-          "reason": null,
+          "status": "failed",
+          "reason": "cpu_budget_exhausted",
           "final": {
             "power": {
               "name": "power",
-              "value": 0.7132,
-              "mcse": 0.006396026266362577,
+              "value": 0.7036,
+              "mcse": 0.006458282124528163,
               "simulated": true,
               "source": "synthetic"
             },
             "type_one_error": {
               "name": "type_one_error",
-              "value": 0.02435,
-              "mcse": 0.0010898870927761278,
+              "value": 0.02426086956521739,
+              "mcse": 0.0014347331148019465,
               "simulated": true,
               "source": "synthetic"
             },
@@ -2739,23 +2985,20 @@
               "bound": {
                 "kind": "clopper_pearson",
                 "confidence": 0.975,
-                "events": 3566,
+                "events": 3518,
                 "trials": 5000,
-                "lower": 0.700442071227503,
-                "upper": 0.7257085723038224
-              }
+                "lower": 0.6907257424569899,
+                "upper": 0.7162361529615238
+              },
+              "boundKind": "clopper_pearson",
+              "needed": null
             },
             {
               "measure": "type_one_error",
-              "status": "pass",
-              "bound": {
-                "kind": "nominal_level",
-                "confidence": 0.975,
-                "events": 487,
-                "trials": 20000,
-                "lower": 0.02225822436446892,
-                "upper": 0.026581557333137745
-              }
+              "status": "not_judged",
+              "bound": 0.025,
+              "boundKind": null,
+              "needed": null
             }
           ]
         },
@@ -2771,15 +3014,8 @@
           "final": {
             "power": {
               "name": "power",
-              "value": 0.6082,
-              "mcse": 0.006903517364358549,
-              "simulated": true,
-              "source": "synthetic"
-            },
-            "type_one_error": {
-              "name": "type_one_error",
-              "value": 0.026,
-              "mcse": 0.0025161478493920027,
+              "value": 0.6,
+              "mcse": 0.021908902300206645,
               "simulated": true,
               "source": "synthetic"
             },
@@ -2794,20 +3030,17 @@
           "verdicts": [
             {
               "measure": "power",
-              "status": "fail",
-              "bound": {
-                "kind": "clopper_pearson",
-                "confidence": 0.975,
-                "events": 3041,
-                "trials": 5000,
-                "lower": 0.5945093746235723,
-                "upper": 0.6217641723988574
-              }
+              "status": "not_judged",
+              "bound": 0.8,
+              "boundKind": null,
+              "needed": null
             },
             {
               "measure": "type_one_error",
               "status": "not_judged",
-              "bound": 0.025
+              "bound": 0.025,
+              "boundKind": null,
+              "needed": null
             }
           ]
         },
@@ -2825,12 +3058,16 @@
             {
               "measure": "power",
               "status": "not_judged",
-              "bound": 0.8
+              "bound": 0.8,
+              "boundKind": null,
+              "needed": null
             },
             {
               "measure": "type_one_error",
               "status": "not_judged",
-              "bound": 0.025
+              "bound": 0.025,
+              "boundKind": null,
+              "needed": null
             }
           ]
         },
@@ -2848,12 +3085,16 @@
             {
               "measure": "power",
               "status": "not_judged",
-              "bound": 0.8
+              "bound": 0.8,
+              "boundKind": null,
+              "needed": null
             },
             {
               "measure": "type_one_error",
               "status": "not_judged",
-              "bound": 0.025
+              "bound": 0.025,
+              "boundKind": null,
+              "needed": null
             }
           ]
         },
@@ -2871,12 +3112,16 @@
             {
               "measure": "power",
               "status": "not_judged",
-              "bound": 0.8
+              "bound": 0.8,
+              "boundKind": null,
+              "needed": null
             },
             {
               "measure": "type_one_error",
               "status": "not_judged",
-              "bound": 0.025
+              "bound": 0.025,
+              "boundKind": null,
+              "needed": null
             }
           ]
         },
@@ -2894,12 +3139,16 @@
             {
               "measure": "power",
               "status": "not_judged",
-              "bound": 0.8
+              "bound": 0.8,
+              "boundKind": null,
+              "needed": null
             },
             {
               "measure": "type_one_error",
               "status": "not_judged",
-              "bound": 0.025
+              "bound": 0.025,
+              "boundKind": null,
+              "needed": null
             }
           ]
         },
@@ -2917,12 +3166,16 @@
             {
               "measure": "power",
               "status": "not_judged",
-              "bound": 0.8
+              "bound": 0.8,
+              "boundKind": null,
+              "needed": null
             },
             {
               "measure": "type_one_error",
               "status": "not_judged",
-              "bound": 0.025
+              "bound": 0.025,
+              "boundKind": null,
+              "needed": null
             }
           ]
         },
@@ -2940,12 +3193,16 @@
             {
               "measure": "power",
               "status": "not_judged",
-              "bound": 0.8
+              "bound": 0.8,
+              "boundKind": null,
+              "needed": null
             },
             {
               "measure": "type_one_error",
               "status": "not_judged",
-              "bound": 0.025
+              "bound": 0.025,
+              "boundKind": null,
+              "needed": null
             }
           ]
         },
@@ -2963,12 +3220,16 @@
             {
               "measure": "power",
               "status": "not_judged",
-              "bound": 0.8
+              "bound": 0.8,
+              "boundKind": null,
+              "needed": null
             },
             {
               "measure": "type_one_error",
               "status": "not_judged",
-              "bound": 0.025
+              "bound": 0.025,
+              "boundKind": null,
+              "needed": null
             }
           ]
         },
@@ -2986,12 +3247,16 @@
             {
               "measure": "power",
               "status": "not_judged",
-              "bound": 0.8
+              "bound": 0.8,
+              "boundKind": null,
+              "needed": null
             },
             {
               "measure": "type_one_error",
               "status": "not_judged",
-              "bound": 0.025
+              "bound": 0.025,
+              "boundKind": null,
+              "needed": null
             }
           ]
         },
@@ -3009,12 +3274,16 @@
             {
               "measure": "power",
               "status": "not_judged",
-              "bound": 0.8
+              "bound": 0.8,
+              "boundKind": null,
+              "needed": null
             },
             {
               "measure": "type_one_error",
               "status": "not_judged",
-              "bound": 0.025
+              "bound": 0.025,
+              "boundKind": null,
+              "needed": null
             }
           ]
         },
@@ -3032,28 +3301,32 @@
             {
               "measure": "power",
               "status": "not_judged",
-              "bound": 0.8
+              "bound": 0.8,
+              "boundKind": null,
+              "needed": null
             },
             {
               "measure": "type_one_error",
               "status": "not_judged",
-              "bound": 0.025
+              "bound": 0.025,
+              "boundKind": null,
+              "needed": null
             }
           ]
         }
       ],
       "evaluated": 5,
       "usage": {
-        "cpuSeconds": 288.67500000000007,
+        "cpuSeconds": 242.47700000000003,
         "queueSeconds": 0,
-        "wallSeconds": 165.65599999999998,
-        "replicatesCompleted": 109000,
+        "wallSeconds": 136.40200000000002,
+        "replicatesCompleted": 92000,
         "modelCalls": 0,
-        "units": 10,
-        "peakKb": 172276,
+        "units": 9,
+        "peakKb": 172280,
         "queueIfSubmittedTogether": {
-          "total": 787.576,
-          "max": 158.765
+          "total": 603.172,
+          "max": 134.323
         }
       },
       "units": [
@@ -3062,10 +3335,10 @@
           "stage": "final",
           "method": "design.simulate",
           "replicates": 5000,
-          "engineCpuSeconds": 13.064,
-          "wallSeconds": 7.87,
-          "peakKb": 139384,
-          "submittedAt": 0,
+          "engineCpuSeconds": 11.812,
+          "wallSeconds": 7.033,
+          "peakKb": 139512,
+          "submittedAt": 0.001,
           "queueIfSubmittedTogether": 0
         },
         {
@@ -3073,126 +3346,121 @@
           "stage": "final",
           "method": "design.simulate",
           "replicates": 20000,
-          "engineCpuSeconds": 47.027,
-          "wallSeconds": 25.437,
-          "peakKb": 172020,
-          "submittedAt": 0,
-          "queueIfSubmittedTogether": 7.87
+          "engineCpuSeconds": 45.847,
+          "wallSeconds": 25,
+          "peakKb": 172280,
+          "submittedAt": 7.035,
+          "queueIfSubmittedTogether": 7.033
         },
         {
           "unit": "c001:final:alternative",
           "stage": "final",
           "method": "design.simulate",
           "replicates": 5000,
-          "engineCpuSeconds": 14.752,
-          "wallSeconds": 8.871,
-          "peakKb": 139224,
-          "submittedAt": 0,
-          "queueIfSubmittedTogether": 33.307
+          "engineCpuSeconds": 14.698,
+          "wallSeconds": 8.775,
+          "peakKb": 139896,
+          "submittedAt": 32.037,
+          "queueIfSubmittedTogether": 32.033
         },
         {
           "unit": "c001:final:null",
           "stage": "final",
           "method": "design.simulate",
           "replicates": 20000,
-          "engineCpuSeconds": 60.034,
-          "wallSeconds": 33.767,
-          "peakKb": 171512,
-          "submittedAt": 0.001,
-          "queueIfSubmittedTogether": 42.178000000000004
+          "engineCpuSeconds": 60.544,
+          "wallSeconds": 33.243,
+          "peakKb": 171892,
+          "submittedAt": 40.814,
+          "queueIfSubmittedTogether": 40.808
         },
         {
           "unit": "c002:final:alternative",
           "stage": "final",
           "method": "design.simulate",
           "replicates": 5000,
-          "engineCpuSeconds": 14.175,
-          "wallSeconds": 8.463,
-          "peakKb": 139384,
-          "submittedAt": 0.001,
-          "queueIfSubmittedTogether": 75.94500000000001
+          "engineCpuSeconds": 13.925,
+          "wallSeconds": 8.417,
+          "peakKb": 139768,
+          "submittedAt": 74.059,
+          "queueIfSubmittedTogether": 74.051
         },
         {
           "unit": "c002:final:null",
           "stage": "final",
           "method": "design.simulate",
           "replicates": 20000,
-          "engineCpuSeconds": 54.262,
-          "wallSeconds": 29.758,
-          "peakKb": 171896,
-          "submittedAt": 0.001,
-          "queueIfSubmittedTogether": 84.408
+          "engineCpuSeconds": 55.276,
+          "wallSeconds": 30.176,
+          "peakKb": 172148,
+          "submittedAt": 82.478,
+          "queueIfSubmittedTogether": 82.468
         },
         {
           "unit": "c003:final:alternative",
           "stage": "final",
           "method": "design.simulate",
           "replicates": 5000,
-          "engineCpuSeconds": 12.689,
-          "wallSeconds": 7.885,
-          "peakKb": 139256,
-          "submittedAt": 0.002,
-          "queueIfSubmittedTogether": 114.166
+          "engineCpuSeconds": 11.859,
+          "wallSeconds": 7.168,
+          "peakKb": 139896,
+          "submittedAt": 112.656,
+          "queueIfSubmittedTogether": 112.644
         },
         {
           "unit": "c003:final:null",
           "stage": "final",
           "method": "design.simulate",
-          "replicates": 20000,
-          "engineCpuSeconds": 48.943,
-          "wallSeconds": 26.835,
-          "peakKb": 172276,
-          "submittedAt": 0.003,
-          "queueIfSubmittedTogether": 122.051
+          "replicates": 11500,
+          "engineCpuSeconds": 26.492,
+          "wallSeconds": 14.511,
+          "peakKb": 142456,
+          "submittedAt": 119.826,
+          "queueIfSubmittedTogether": 119.81200000000001
         },
         {
           "unit": "c004:final:alternative",
           "stage": "final",
           "method": "design.simulate",
-          "replicates": 5000,
-          "engineCpuSeconds": 13.545,
-          "wallSeconds": 9.879,
-          "peakKb": 139196,
-          "submittedAt": 0.003,
-          "queueIfSubmittedTogether": 148.886
-        },
-        {
-          "unit": "c004:final:null",
-          "stage": "final",
-          "method": "design.simulate",
-          "replicates": 4000,
-          "engineCpuSeconds": 10.184,
-          "wallSeconds": 6.891,
-          "peakKb": 125172,
-          "submittedAt": 0.004,
-          "queueIfSubmittedTogether": 158.765
+          "replicates": 500,
+          "engineCpuSeconds": 2.024,
+          "wallSeconds": 2.079,
+          "peakKb": 135672,
+          "submittedAt": 134.338,
+          "queueIfSubmittedTogether": 134.323
         }
       ]
     },
     "exhaustive": {
       "arm": "exhaustive",
-      "stop": "acceptable_precision",
-      "best": {
-        "key": "c014",
+      "stop": "inconclusive_at_precision",
+      "best": null,
+      "feasible": [],
+      "inconclusive": [
+        "c013",
+        "c014"
+      ],
+      "closestUndecided": {
+        "key": "c013",
         "set": {
           "design.nTreat": 200,
           "design.nControl": 200,
-          "accrual.duration": 24
+          "accrual.duration": 18
         },
         "status": "evaluated",
         "reason": null,
         "final": {
           "power": {
             "name": "power",
-            "value": 0.8382,
-            "mcse": 0.005208085252758446,
+            "value": 0.8042,
+            "mcse": 0.005611815392544555,
             "simulated": true,
             "source": "synthetic"
           },
           "type_one_error": {
             "name": "type_one_error",
-            "value": 0.0249,
-            "mcse": 0.0011018164547691234,
+            "value": 0.0257,
+            "mcse": 0.0011189171104241814,
             "simulated": true,
             "source": "synthetic"
           },
@@ -3207,36 +3475,67 @@
         "verdicts": [
           {
             "measure": "power",
-            "status": "pass",
+            "status": "inconclusive",
             "bound": {
               "kind": "clopper_pearson",
               "confidence": 0.975,
-              "events": 4191,
+              "events": 4021,
               "trials": 5000,
-              "lower": 0.8276955067740268,
-              "upper": 0.8483080025828906
+              "lower": 0.7929247729184554,
+              "upper": 0.815118922236554
+            },
+            "boundKind": "clopper_pearson",
+            "needed": {
+              "replicates": 34291,
+              "reason": null
             }
           },
           {
             "measure": "type_one_error",
-            "status": "pass",
+            "status": "inconclusive",
             "bound": {
-              "kind": "nominal_level",
+              "kind": "clopper_pearson",
               "confidence": 0.975,
-              "events": 498,
+              "events": 514,
               "trials": 20000,
-              "lower": 0.02278476109005631,
-              "upper": 0.027154836169018676
+              "nominalNotExact": true,
+              "lower": 0.023551125125288813,
+              "upper": 0.027988205273751815
+            },
+            "boundKind": "clopper_pearson",
+            "needed": {
+              "replicates": 196303,
+              "reason": null
+            }
+          }
+        ],
+        "undecided": [
+          {
+            "index": 0,
+            "measure": "power",
+            "op": ">=",
+            "bound": 0.8,
+            "estimate": 0.8042,
+            "mcse": 0.005611815392544555,
+            "needed": {
+              "replicates": 34291,
+              "reason": null
+            }
+          },
+          {
+            "index": 1,
+            "measure": "type_one_error",
+            "op": "<=",
+            "bound": 0.025,
+            "estimate": 0.0257,
+            "mcse": 0.0011189171104241814,
+            "needed": {
+              "replicates": 196303,
+              "reason": null
             }
           }
         ]
       },
-      "feasible": [
-        "c014"
-      ],
-      "inconclusive": [
-        "c013"
-      ],
       "finalists": [
         "c000",
         "c001",
@@ -3298,18 +3597,26 @@
                 "trials": 5000,
                 "lower": 0.45788289812159855,
                 "upper": 0.48575005209595545
-              }
+              },
+              "boundKind": "clopper_pearson",
+              "needed": null
             },
             {
               "measure": "type_one_error",
-              "status": "pass",
+              "status": "inconclusive",
               "bound": {
-                "kind": "nominal_level",
+                "kind": "clopper_pearson",
                 "confidence": 0.975,
                 "events": 492,
                 "trials": 20000,
+                "nominalNotExact": true,
                 "lower": 0.022497524301944155,
                 "upper": 0.02684217345812509
+              },
+              "boundKind": "clopper_pearson",
+              "needed": {
+                "replicates": 576095,
+                "reason": null
               }
             }
           ]
@@ -3357,18 +3664,26 @@
                 "trials": 5000,
                 "lower": 0.49804135337817834,
                 "upper": 0.5259446254249356
-              }
+              },
+              "boundKind": "clopper_pearson",
+              "needed": null
             },
             {
               "measure": "type_one_error",
-              "status": "pass",
+              "status": "inconclusive",
               "bound": {
-                "kind": "nominal_level",
+                "kind": "clopper_pearson",
                 "confidence": 0.975,
                 "events": 525,
                 "trials": 20000,
+                "nominalNotExact": true,
                 "lower": 0.02407832678167046,
                 "upper": 0.028560821064897962
+              },
+              "boundKind": "clopper_pearson",
+              "needed": {
+                "replicates": 62843,
+                "reason": null
               }
             }
           ]
@@ -3416,18 +3731,26 @@
                 "trials": 5000,
                 "lower": 0.5234613296182926,
                 "upper": 0.5512949699483072
-              }
+              },
+              "boundKind": "clopper_pearson",
+              "needed": null
             },
             {
               "measure": "type_one_error",
-              "status": "pass",
+              "status": "inconclusive",
               "bound": {
-                "kind": "nominal_level",
+                "kind": "clopper_pearson",
                 "confidence": 0.975,
                 "events": 489,
                 "trials": 20000,
+                "nominalNotExact": true,
                 "lower": 0.02235393728937199,
                 "upper": 0.026685810812562133
+              },
+              "boundKind": "clopper_pearson",
+              "needed": {
+                "replicates": 302900,
+                "reason": null
               }
             }
           ]
@@ -3475,18 +3798,26 @@
                 "trials": 5000,
                 "lower": 0.5370868244848397,
                 "upper": 0.5648535826508652
-              }
+              },
+              "boundKind": "clopper_pearson",
+              "needed": null
             },
             {
               "measure": "type_one_error",
-              "status": "pass",
+              "status": "inconclusive",
               "bound": {
-                "kind": "nominal_level",
+                "kind": "clopper_pearson",
                 "confidence": 0.975,
                 "events": 503,
                 "trials": 20000,
+                "nominalNotExact": true,
                 "lower": 0.023024188131282514,
                 "upper": 0.027415325558687503
+              },
+              "boundKind": "clopper_pearson",
+              "needed": {
+                "replicates": 4185906,
+                "reason": null
               }
             }
           ]
@@ -3534,18 +3865,26 @@
                 "trials": 5000,
                 "lower": 0.5830498849969801,
                 "upper": 0.6104369904713449
-              }
+              },
+              "boundKind": "clopper_pearson",
+              "needed": null
             },
             {
               "measure": "type_one_error",
-              "status": "pass",
+              "status": "inconclusive",
               "bound": {
-                "kind": "nominal_level",
+                "kind": "clopper_pearson",
                 "confidence": 0.975,
                 "events": 502,
                 "trials": 20000,
+                "nominalNotExact": true,
                 "lower": 0.022976298182196514,
                 "upper": 0.027363232208652194
+              },
+              "boundKind": "clopper_pearson",
+              "needed": {
+                "replicates": 9400046,
+                "reason": null
               }
             }
           ]
@@ -3593,18 +3932,26 @@
                 "trials": 5000,
                 "lower": 0.6247032420291605,
                 "upper": 0.6515352193916304
-              }
+              },
+              "boundKind": "clopper_pearson",
+              "needed": null
             },
             {
               "measure": "type_one_error",
-              "status": "pass",
+              "status": "inconclusive",
               "bound": {
-                "kind": "nominal_level",
+                "kind": "clopper_pearson",
                 "confidence": 0.975,
                 "events": 535,
                 "trials": 20000,
+                "nominalNotExact": true,
                 "lower": 0.024557823889317903,
                 "upper": 0.029081158609446073
+              },
+              "boundKind": "clopper_pearson",
+              "needed": {
+                "replicates": 32657,
+                "reason": null
               }
             }
           ]
@@ -3652,18 +3999,26 @@
                 "trials": 5000,
                 "lower": 0.6382078217846288,
                 "upper": 0.6648149619448391
-              }
+              },
+              "boundKind": "clopper_pearson",
+              "needed": null
             },
             {
               "measure": "type_one_error",
-              "status": "pass",
+              "status": "inconclusive",
               "bound": {
-                "kind": "nominal_level",
+                "kind": "clopper_pearson",
                 "confidence": 0.975,
                 "events": 520,
                 "trials": 20000,
+                "nominalNotExact": true,
                 "lower": 0.023838657380409883,
                 "upper": 0.02830057335551775
+              },
+              "boundKind": "clopper_pearson",
+              "needed": {
+                "replicates": 97282,
+                "reason": null
               }
             }
           ]
@@ -3711,18 +4066,26 @@
                 "trials": 5000,
                 "lower": 0.6650498082650207,
                 "upper": 0.6911418399060456
-              }
+              },
+              "boundKind": "clopper_pearson",
+              "needed": null
             },
             {
               "measure": "type_one_error",
-              "status": "pass",
+              "status": "inconclusive",
               "bound": {
-                "kind": "nominal_level",
+                "kind": "clopper_pearson",
                 "confidence": 0.975,
                 "events": 483,
                 "trials": 20000,
+                "nominalNotExact": true,
                 "lower": 0.022066826970045944,
                 "upper": 0.02637302200293487
+              },
+              "boundKind": "clopper_pearson",
+              "needed": {
+                "replicates": 125303,
+                "reason": null
               }
             }
           ]
@@ -3770,18 +4133,26 @@
                 "trials": 5000,
                 "lower": 0.7022646446340275,
                 "upper": 0.7274838887045834
-              }
+              },
+              "boundKind": "clopper_pearson",
+              "needed": null
             },
             {
               "measure": "type_one_error",
-              "status": "pass",
+              "status": "inconclusive",
               "bound": {
-                "kind": "nominal_level",
+                "kind": "clopper_pearson",
                 "confidence": 0.975,
                 "events": 512,
                 "trials": 20000,
+                "nominalNotExact": true,
                 "lower": 0.023455298470436398,
                 "upper": 0.027884065198188118
+              },
+              "boundKind": "clopper_pearson",
+              "needed": {
+                "replicates": 266178,
+                "reason": null
               }
             }
           ]
@@ -3829,18 +4200,26 @@
                 "trials": 5000,
                 "lower": 0.7067208535194087,
                 "upper": 0.7318225209208467
-              }
+              },
+              "boundKind": "clopper_pearson",
+              "needed": null
             },
             {
               "measure": "type_one_error",
-              "status": "pass",
+              "status": "inconclusive",
               "bound": {
-                "kind": "nominal_level",
+                "kind": "clopper_pearson",
                 "confidence": 0.975,
                 "events": 481,
                 "trials": 20000,
+                "nominalNotExact": true,
                 "lower": 0.021971142615442057,
                 "upper": 0.02626874003778354
+              },
+              "boundKind": "clopper_pearson",
+              "needed": {
+                "replicates": 99907,
+                "reason": null
               }
             }
           ]
@@ -3888,18 +4267,26 @@
                 "trials": 5000,
                 "lower": 0.7336929483668237,
                 "upper": 0.7580192162240609
-              }
+              },
+              "boundKind": "clopper_pearson",
+              "needed": null
             },
             {
               "measure": "type_one_error",
-              "status": "pass",
+              "status": "inconclusive",
               "bound": {
-                "kind": "nominal_level",
+                "kind": "clopper_pearson",
                 "confidence": 0.975,
                 "events": 507,
                 "trials": 20000,
+                "nominalNotExact": true,
                 "lower": 0.023215770434845934,
                 "upper": 0.027623676515936474
+              },
+              "boundKind": "clopper_pearson",
+              "needed": {
+                "replicates": 774795,
+                "reason": null
               }
             }
           ]
@@ -3947,18 +4334,26 @@
                 "trials": 5000,
                 "lower": 0.7719220732447802,
                 "upper": 0.7949458929147588
-              }
+              },
+              "boundKind": "clopper_pearson",
+              "needed": null
             },
             {
               "measure": "type_one_error",
-              "status": "pass",
+              "status": "inconclusive",
               "bound": {
-                "kind": "nominal_level",
+                "kind": "clopper_pearson",
                 "confidence": 0.975,
                 "events": 509,
                 "trials": 20000,
+                "nominalNotExact": true,
                 "lower": 0.02331157500005618,
                 "upper": 0.02772783861914227
+              },
+              "boundKind": "clopper_pearson",
+              "needed": {
+                "replicates": 470504,
+                "reason": null
               }
             }
           ]
@@ -4006,18 +4401,26 @@
                 "trials": 5000,
                 "lower": 0.761131550569055,
                 "upper": 0.7845488875490023
-              }
+              },
+              "boundKind": "clopper_pearson",
+              "needed": null
             },
             {
               "measure": "type_one_error",
-              "status": "pass",
+              "status": "inconclusive",
               "bound": {
-                "kind": "nominal_level",
+                "kind": "clopper_pearson",
                 "confidence": 0.975,
                 "events": 519,
                 "trials": 20000,
+                "nominalNotExact": true,
                 "lower": 0.023790729926823323,
                 "upper": 0.028248517404611068
+              },
+              "boundKind": "clopper_pearson",
+              "needed": {
+                "replicates": 107589,
+                "reason": null
               }
             }
           ]
@@ -4065,18 +4468,29 @@
                 "trials": 5000,
                 "lower": 0.7929247729184554,
                 "upper": 0.815118922236554
+              },
+              "boundKind": "clopper_pearson",
+              "needed": {
+                "replicates": 34291,
+                "reason": null
               }
             },
             {
               "measure": "type_one_error",
-              "status": "pass",
+              "status": "inconclusive",
               "bound": {
-                "kind": "nominal_level",
+                "kind": "clopper_pearson",
                 "confidence": 0.975,
                 "events": 514,
                 "trials": 20000,
+                "nominalNotExact": true,
                 "lower": 0.023551125125288813,
                 "upper": 0.027988205273751815
+              },
+              "boundKind": "clopper_pearson",
+              "needed": {
+                "replicates": 196303,
+                "reason": null
               }
             }
           ]
@@ -4124,18 +4538,26 @@
                 "trials": 5000,
                 "lower": 0.8276955067740268,
                 "upper": 0.8483080025828906
-              }
+              },
+              "boundKind": "clopper_pearson",
+              "needed": null
             },
             {
               "measure": "type_one_error",
-              "status": "pass",
+              "status": "inconclusive",
               "bound": {
-                "kind": "nominal_level",
+                "kind": "clopper_pearson",
                 "confidence": 0.975,
                 "events": 498,
                 "trials": 20000,
+                "nominalNotExact": true,
                 "lower": 0.02278476109005631,
                 "upper": 0.027154836169018676
+              },
+              "boundKind": "clopper_pearson",
+              "needed": {
+                "replicates": 9327059,
+                "reason": null
               }
             }
           ]
@@ -4143,16 +4565,16 @@
       ],
       "evaluated": 15,
       "usage": {
-        "cpuSeconds": 944.4430000000001,
+        "cpuSeconds": 884.0760000000001,
         "queueSeconds": 0,
-        "wallSeconds": 583.49,
+        "wallSeconds": 496.164,
         "replicatesCompleted": 375000,
         "modelCalls": 0,
         "units": 30,
-        "peakKb": 173560,
+        "peakKb": 175396,
         "queueIfSubmittedTogether": {
-          "total": 7089.089000000001,
-          "max": 505.24500000000006
+          "total": 6527.7530000000015,
+          "max": 467.693
         }
       },
       "units": [
@@ -4161,9 +4583,9 @@
           "stage": "final",
           "method": "design.simulate",
           "replicates": 5000,
-          "engineCpuSeconds": 10.378,
-          "wallSeconds": 6.617,
-          "peakKb": 139380,
+          "engineCpuSeconds": 10.139,
+          "wallSeconds": 6.43,
+          "peakKb": 139768,
           "submittedAt": 0,
           "queueIfSubmittedTogether": 0
         },
@@ -4172,319 +4594,319 @@
           "stage": "final",
           "method": "design.simulate",
           "replicates": 20000,
-          "engineCpuSeconds": 40.114,
-          "wallSeconds": 23.217,
-          "peakKb": 171256,
-          "submittedAt": 0,
-          "queueIfSubmittedTogether": 6.617
+          "engineCpuSeconds": 38.457,
+          "wallSeconds": 21.638,
+          "peakKb": 175096,
+          "submittedAt": 6.431,
+          "queueIfSubmittedTogether": 6.43
         },
         {
           "unit": "c001:final:alternative",
           "stage": "final",
           "method": "design.simulate",
           "replicates": 5000,
-          "engineCpuSeconds": 10.89,
-          "wallSeconds": 7.722,
-          "peakKb": 139256,
-          "submittedAt": 0,
-          "queueIfSubmittedTogether": 29.834
+          "engineCpuSeconds": 10.059,
+          "wallSeconds": 6.457,
+          "peakKb": 139688,
+          "submittedAt": 28.077,
+          "queueIfSubmittedTogether": 28.068
         },
         {
           "unit": "c001:final:null",
           "stage": "final",
           "method": "design.simulate",
           "replicates": 20000,
-          "engineCpuSeconds": 38.128,
-          "wallSeconds": 21.445,
-          "peakKb": 171512,
-          "submittedAt": 0.001,
-          "queueIfSubmittedTogether": 37.556
+          "engineCpuSeconds": 38.267,
+          "wallSeconds": 21.923,
+          "peakKb": 171940,
+          "submittedAt": 34.535,
+          "queueIfSubmittedTogether": 34.525
         },
         {
           "unit": "c002:final:alternative",
           "stage": "final",
           "method": "design.simulate",
           "replicates": 5000,
-          "engineCpuSeconds": 10.255,
-          "wallSeconds": 6.659,
-          "peakKb": 139512,
-          "submittedAt": 0.001,
-          "queueIfSubmittedTogether": 59.001
+          "engineCpuSeconds": 9.801,
+          "wallSeconds": 6.163,
+          "peakKb": 139636,
+          "submittedAt": 56.461,
+          "queueIfSubmittedTogether": 56.44799999999999
         },
         {
           "unit": "c002:final:null",
           "stage": "final",
           "method": "design.simulate",
           "replicates": 20000,
-          "engineCpuSeconds": 40.002,
-          "wallSeconds": 22.232,
-          "peakKb": 171512,
-          "submittedAt": 0.001,
-          "queueIfSubmittedTogether": 65.66
+          "engineCpuSeconds": 35.69,
+          "wallSeconds": 19.526,
+          "peakKb": 172024,
+          "submittedAt": 62.626,
+          "queueIfSubmittedTogether": 62.61099999999999
         },
         {
           "unit": "c003:final:alternative",
           "stage": "final",
           "method": "design.simulate",
           "replicates": 5000,
-          "engineCpuSeconds": 11.362,
-          "wallSeconds": 7.244,
-          "peakKb": 139384,
-          "submittedAt": 0.001,
-          "queueIfSubmittedTogether": 87.892
+          "engineCpuSeconds": 10.239,
+          "wallSeconds": 6.211,
+          "peakKb": 139896,
+          "submittedAt": 82.154,
+          "queueIfSubmittedTogether": 82.13699999999999
         },
         {
           "unit": "c003:final:null",
           "stage": "final",
           "method": "design.simulate",
           "replicates": 20000,
-          "engineCpuSeconds": 41.863,
-          "wallSeconds": 22.822,
-          "peakKb": 172280,
-          "submittedAt": 0.001,
-          "queueIfSubmittedTogether": 95.136
+          "engineCpuSeconds": 38.72,
+          "wallSeconds": 20.972,
+          "peakKb": 172404,
+          "submittedAt": 88.368,
+          "queueIfSubmittedTogether": 88.34799999999998
         },
         {
           "unit": "c004:final:alternative",
           "stage": "final",
           "method": "design.simulate",
           "replicates": 5000,
-          "engineCpuSeconds": 11.453,
-          "wallSeconds": 6.982,
-          "peakKb": 139128,
-          "submittedAt": 0.002,
-          "queueIfSubmittedTogether": 117.958
+          "engineCpuSeconds": 10.414,
+          "wallSeconds": 6.382,
+          "peakKb": 139768,
+          "submittedAt": 109.343,
+          "queueIfSubmittedTogether": 109.32
         },
         {
           "unit": "c004:final:null",
           "stage": "final",
           "method": "design.simulate",
           "replicates": 20000,
-          "engineCpuSeconds": 43.926,
-          "wallSeconds": 23.989,
-          "peakKb": 172024,
-          "submittedAt": 0.002,
-          "queueIfSubmittedTogether": 124.94
+          "engineCpuSeconds": 41.254,
+          "wallSeconds": 22.418,
+          "peakKb": 172536,
+          "submittedAt": 115.728,
+          "queueIfSubmittedTogether": 115.702
         },
         {
           "unit": "c005:final:alternative",
           "stage": "final",
           "method": "design.simulate",
           "replicates": 5000,
-          "engineCpuSeconds": 11.461,
-          "wallSeconds": 7.036,
-          "peakKb": 139512,
-          "submittedAt": 0.003,
-          "queueIfSubmittedTogether": 148.929
+          "engineCpuSeconds": 10.477,
+          "wallSeconds": 6.393,
+          "peakKb": 139636,
+          "submittedAt": 138.148,
+          "queueIfSubmittedTogether": 138.12
         },
         {
           "unit": "c005:final:null",
           "stage": "final",
           "method": "design.simulate",
           "replicates": 20000,
-          "engineCpuSeconds": 43.712,
-          "wallSeconds": 23.973,
-          "peakKb": 172276,
-          "submittedAt": 0.003,
-          "queueIfSubmittedTogether": 155.965
+          "engineCpuSeconds": 39.716,
+          "wallSeconds": 21.536,
+          "peakKb": 172280,
+          "submittedAt": 144.542,
+          "queueIfSubmittedTogether": 144.513
         },
         {
           "unit": "c006:final:alternative",
           "stage": "final",
           "method": "design.simulate",
           "replicates": 5000,
-          "engineCpuSeconds": 13.935,
-          "wallSeconds": 10.49,
-          "peakKb": 139348,
-          "submittedAt": 0.003,
-          "queueIfSubmittedTogether": 179.938
+          "engineCpuSeconds": 12.37,
+          "wallSeconds": 7.598,
+          "peakKb": 139764,
+          "submittedAt": 166.081,
+          "queueIfSubmittedTogether": 166.049
         },
         {
           "unit": "c006:final:null",
           "stage": "final",
           "method": "design.simulate",
           "replicates": 20000,
-          "engineCpuSeconds": 51.711,
-          "wallSeconds": 30.135,
-          "peakKb": 171944,
-          "submittedAt": 0.005,
-          "queueIfSubmittedTogether": 190.428
+          "engineCpuSeconds": 47.657,
+          "wallSeconds": 26.099,
+          "peakKb": 172280,
+          "submittedAt": 173.681,
+          "queueIfSubmittedTogether": 173.64700000000002
         },
         {
           "unit": "c007:final:alternative",
           "stage": "final",
           "method": "design.simulate",
           "replicates": 5000,
-          "engineCpuSeconds": 13.35,
-          "wallSeconds": 8.993,
-          "peakKb": 139472,
-          "submittedAt": 0.006,
-          "queueIfSubmittedTogether": 220.563
+          "engineCpuSeconds": 13.43,
+          "wallSeconds": 8.546,
+          "peakKb": 139512,
+          "submittedAt": 199.785,
+          "queueIfSubmittedTogether": 199.746
         },
         {
           "unit": "c007:final:null",
           "stage": "final",
           "method": "design.simulate",
           "replicates": 20000,
-          "engineCpuSeconds": 51.073,
-          "wallSeconds": 30.868,
-          "peakKb": 172152,
-          "submittedAt": 0.007,
-          "queueIfSubmittedTogether": 229.55599999999998
+          "engineCpuSeconds": 48.35,
+          "wallSeconds": 27.027,
+          "peakKb": 172280,
+          "submittedAt": 208.333,
+          "queueIfSubmittedTogether": 208.292
         },
         {
           "unit": "c008:final:alternative",
           "stage": "final",
           "method": "design.simulate",
           "replicates": 5000,
-          "engineCpuSeconds": 13.934,
-          "wallSeconds": 9.199,
-          "peakKb": 139256,
-          "submittedAt": 0.007,
-          "queueIfSubmittedTogether": 260.424
+          "engineCpuSeconds": 12.733,
+          "wallSeconds": 7.926,
+          "peakKb": 139512,
+          "submittedAt": 235.362,
+          "queueIfSubmittedTogether": 235.31900000000002
         },
         {
           "unit": "c008:final:null",
           "stage": "final",
           "method": "design.simulate",
           "replicates": 20000,
-          "engineCpuSeconds": 49.974,
-          "wallSeconds": 28.12,
-          "peakKb": 172280,
-          "submittedAt": 0.008,
-          "queueIfSubmittedTogether": 269.623
+          "engineCpuSeconds": 49.629,
+          "wallSeconds": 27.711,
+          "peakKb": 172664,
+          "submittedAt": 243.291,
+          "queueIfSubmittedTogether": 243.245
         },
         {
           "unit": "c009:final:alternative",
           "stage": "final",
           "method": "design.simulate",
           "replicates": 5000,
-          "engineCpuSeconds": 13.622,
-          "wallSeconds": 8.249,
-          "peakKb": 139128,
-          "submittedAt": 0.008,
-          "queueIfSubmittedTogether": 297.743
+          "engineCpuSeconds": 13.55,
+          "wallSeconds": 8.093,
+          "peakKb": 139768,
+          "submittedAt": 271.005,
+          "queueIfSubmittedTogether": 270.956
         },
         {
           "unit": "c009:final:null",
           "stage": "final",
           "method": "design.simulate",
           "replicates": 20000,
-          "engineCpuSeconds": 53.943,
-          "wallSeconds": 29.491,
-          "peakKb": 172144,
-          "submittedAt": 0.009,
-          "queueIfSubmittedTogether": 305.992
+          "engineCpuSeconds": 52.077,
+          "wallSeconds": 28.782,
+          "peakKb": 172280,
+          "submittedAt": 279.102,
+          "queueIfSubmittedTogether": 279.04900000000004
         },
         {
           "unit": "c010:final:alternative",
           "stage": "final",
           "method": "design.simulate",
           "replicates": 5000,
-          "engineCpuSeconds": 14.137,
-          "wallSeconds": 8.517,
-          "peakKb": 139388,
-          "submittedAt": 0.009,
-          "queueIfSubmittedTogether": 335.483
+          "engineCpuSeconds": 13.683,
+          "wallSeconds": 8.239,
+          "peakKb": 139640,
+          "submittedAt": 307.887,
+          "queueIfSubmittedTogether": 307.831
         },
         {
           "unit": "c010:final:null",
           "stage": "final",
           "method": "design.simulate",
           "replicates": 20000,
-          "engineCpuSeconds": 55.494,
-          "wallSeconds": 34.012,
-          "peakKb": 172280,
-          "submittedAt": 0.011,
-          "queueIfSubmittedTogether": 344
+          "engineCpuSeconds": 54.695,
+          "wallSeconds": 30.576,
+          "peakKb": 172452,
+          "submittedAt": 316.128,
+          "queueIfSubmittedTogether": 316.07
         },
         {
           "unit": "c011:final:alternative",
           "stage": "final",
           "method": "design.simulate",
           "replicates": 5000,
-          "engineCpuSeconds": 13.756,
-          "wallSeconds": 8.173,
-          "peakKb": 139304,
-          "submittedAt": 0.011,
-          "queueIfSubmittedTogether": 378.012
+          "engineCpuSeconds": 13.356,
+          "wallSeconds": 8.012,
+          "peakKb": 139768,
+          "submittedAt": 346.708,
+          "queueIfSubmittedTogether": 346.646
         },
         {
           "unit": "c011:final:null",
           "stage": "final",
           "method": "design.simulate",
           "replicates": 20000,
-          "engineCpuSeconds": 54.83,
-          "wallSeconds": 30.005,
-          "peakKb": 171768,
-          "submittedAt": 0.012,
-          "queueIfSubmittedTogether": 386.185
+          "engineCpuSeconds": 54.282,
+          "wallSeconds": 30.062,
+          "peakKb": 172280,
+          "submittedAt": 354.723,
+          "queueIfSubmittedTogether": 354.658
         },
         {
           "unit": "c012:final:alternative",
           "stage": "final",
           "method": "design.simulate",
           "replicates": 5000,
-          "engineCpuSeconds": 14.669,
-          "wallSeconds": 8.521,
-          "peakKb": 139512,
-          "submittedAt": 0.013,
-          "queueIfSubmittedTogether": 416.19
+          "engineCpuSeconds": 15.147,
+          "wallSeconds": 9.193,
+          "peakKb": 139896,
+          "submittedAt": 384.789,
+          "queueIfSubmittedTogether": 384.72
         },
         {
           "unit": "c012:final:null",
           "stage": "final",
           "method": "design.simulate",
           "replicates": 20000,
-          "engineCpuSeconds": 57.569,
-          "wallSeconds": 30.942,
-          "peakKb": 173560,
-          "submittedAt": 0.013,
-          "queueIfSubmittedTogether": 424.711
+          "engineCpuSeconds": 54.243,
+          "wallSeconds": 29.043,
+          "peakKb": 175396,
+          "submittedAt": 393.987,
+          "queueIfSubmittedTogether": 393.913
         },
         {
           "unit": "c013:final:alternative",
           "stage": "final",
           "method": "design.simulate",
           "replicates": 5000,
-          "engineCpuSeconds": 14.595,
-          "wallSeconds": 8.718,
-          "peakKb": 139512,
-          "submittedAt": 0.014,
-          "queueIfSubmittedTogether": 455.653
+          "engineCpuSeconds": 14.107,
+          "wallSeconds": 8.2,
+          "peakKb": 139768,
+          "submittedAt": 423.033,
+          "queueIfSubmittedTogether": 422.956
         },
         {
           "unit": "c013:final:null",
           "stage": "final",
           "method": "design.simulate",
           "replicates": 20000,
-          "engineCpuSeconds": 57.796,
-          "wallSeconds": 31.113,
-          "peakKb": 171816,
-          "submittedAt": 0.015,
-          "queueIfSubmittedTogether": 464.37100000000004
+          "engineCpuSeconds": 53.669,
+          "wallSeconds": 28.429,
+          "peakKb": 171900,
+          "submittedAt": 431.236,
+          "queueIfSubmittedTogether": 431.156
         },
         {
           "unit": "c014:final:alternative",
           "stage": "final",
           "method": "design.simulate",
           "replicates": 5000,
-          "engineCpuSeconds": 15.469,
-          "wallSeconds": 9.761,
-          "peakKb": 139508,
-          "submittedAt": 0.015,
-          "queueIfSubmittedTogether": 495.48400000000004
+          "engineCpuSeconds": 14.03,
+          "wallSeconds": 8.108,
+          "peakKb": 139764,
+          "submittedAt": 459.669,
+          "queueIfSubmittedTogether": 459.585
         },
         {
           "unit": "c014:final:null",
           "stage": "final",
           "method": "design.simulate",
           "replicates": 20000,
-          "engineCpuSeconds": 71.042,
-          "wallSeconds": 78.245,
-          "peakKb": 164596,
-          "submittedAt": 0.016,
-          "queueIfSubmittedTogether": 505.24500000000006
+          "engineCpuSeconds": 53.835,
+          "wallSeconds": 28.471,
+          "peakKb": 171900,
+          "submittedAt": 467.78,
+          "queueIfSubmittedTogether": 467.693
         }
       ]
     },
@@ -4494,29 +4916,25 @@
         "stop": "no_feasible_beneficial_candidate",
         "picked": null,
         "pickedSize": null,
-        "referenceSize": 400,
+        "referenceSize": null,
         "foundReferenceBest": false,
         "sizeAboveReference": null,
         "feasibleFound": false,
-        "cpuSeconds": 94.112,
-        "wallSeconds": 116.578,
+        "cpuSeconds": 61.668,
+        "wallSeconds": 37.623,
         "units": 2
       },
       {
         "arm": "staged",
-        "stop": "acceptable_precision",
-        "picked": {
-          "design.nTreat": 200,
-          "design.nControl": 200,
-          "accrual.duration": 24
-        },
-        "pickedSize": 400,
-        "referenceSize": 400,
-        "foundReferenceBest": true,
-        "sizeAboveReference": 0,
-        "feasibleFound": true,
-        "cpuSeconds": 287.87299999999993,
-        "wallSeconds": 283.37199999999996,
+        "stop": "inconclusive_at_precision",
+        "picked": null,
+        "pickedSize": null,
+        "referenceSize": null,
+        "foundReferenceBest": false,
+        "sizeAboveReference": null,
+        "feasibleFound": false,
+        "cpuSeconds": 241.037,
+        "wallSeconds": 159.22699999999998,
         "units": 21
       },
       {
@@ -4524,33 +4942,2425 @@
         "stop": "budget_exhausted",
         "picked": null,
         "pickedSize": null,
-        "referenceSize": 400,
+        "referenceSize": null,
         "foundReferenceBest": false,
         "sizeAboveReference": null,
         "feasibleFound": false,
-        "cpuSeconds": 288.048,
-        "wallSeconds": 167.726,
-        "units": 12
+        "cpuSeconds": 242.45600000000002,
+        "wallSeconds": 139.04599999999996,
+        "units": 11
       },
       {
         "arm": "random",
         "stop": "budget_exhausted",
+        "picked": null,
+        "pickedSize": null,
+        "referenceSize": null,
+        "foundReferenceBest": false,
+        "sizeAboveReference": null,
+        "feasibleFound": false,
+        "cpuSeconds": 242.47700000000003,
+        "wallSeconds": 136.40200000000002,
+        "units": 9
+      }
+    ],
+    "matchedBudgetCpuSeconds": 241.037
+  },
+  "level": {
+    "fixedLevel": {
+      "arm": "level-fixed",
+      "stop": "inconclusive_at_precision",
+      "best": null,
+      "feasible": [],
+      "inconclusive": [
+        "c000",
+        "c001",
+        "c002"
+      ],
+      "closestUndecided": {
+        "key": "c000",
+        "set": {
+          "design.nTreat": 200,
+          "design.nControl": 200,
+          "analysis.alpha": 0.025
+        },
+        "status": "evaluated",
+        "reason": null,
+        "final": {
+          "power": {
+            "name": "power",
+            "value": 0.8248,
+            "mcse": 0.005375964285595655,
+            "simulated": true,
+            "source": "synthetic"
+          },
+          "type_one_error": {
+            "name": "type_one_error",
+            "value": 0.02715,
+            "mcse": 0.0011491927057721868,
+            "simulated": true,
+            "source": "synthetic"
+          },
+          "expected_sample_size": {
+            "name": "expected_sample_size",
+            "value": 400,
+            "mcse": 0,
+            "simulated": true,
+            "source": "synthetic"
+          }
+        },
+        "verdicts": [
+          {
+            "measure": "power",
+            "status": "pass",
+            "bound": {
+              "kind": "clopper_pearson",
+              "confidence": 0.975,
+              "events": 4124,
+              "trials": 5000,
+              "lower": 0.8139745987001101,
+              "upper": 0.8352447711359234
+            },
+            "boundKind": "clopper_pearson",
+            "needed": null
+          },
+          {
+            "measure": "type_one_error",
+            "status": "inconclusive",
+            "bound": {
+              "kind": "clopper_pearson",
+              "confidence": 0.975,
+              "events": 543,
+              "trials": 20000,
+              "lower": 0.024941570379602068,
+              "upper": 0.02949728024001011
+            },
+            "boundKind": "clopper_pearson",
+            "needed": {
+              "replicates": 21951,
+              "reason": null
+            }
+          }
+        ],
+        "undecided": [
+          {
+            "index": 1,
+            "measure": "type_one_error",
+            "op": "<=",
+            "bound": 0.025,
+            "estimate": 0.02715,
+            "mcse": 0.0011491927057721868,
+            "needed": {
+              "replicates": 21951,
+              "reason": null
+            }
+          }
+        ]
+      },
+      "finalists": [
+        "c000",
+        "c001",
+        "c002"
+      ],
+      "candidates": [
+        {
+          "key": "c000",
+          "set": {
+            "design.nTreat": 200,
+            "design.nControl": 200,
+            "analysis.alpha": 0.025
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "power": {
+              "name": "power",
+              "value": 0.8248,
+              "mcse": 0.005375964285595655,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "type_one_error": {
+              "name": "type_one_error",
+              "value": 0.02715,
+              "mcse": 0.0011491927057721868,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "expected_sample_size": {
+              "name": "expected_sample_size",
+              "value": 400,
+              "mcse": 0,
+              "simulated": true,
+              "source": "synthetic"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "pass",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 4124,
+                "trials": 5000,
+                "lower": 0.8139745987001101,
+                "upper": 0.8352447711359234
+              },
+              "boundKind": "clopper_pearson",
+              "needed": null
+            },
+            {
+              "measure": "type_one_error",
+              "status": "inconclusive",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 543,
+                "trials": 20000,
+                "lower": 0.024941570379602068,
+                "upper": 0.02949728024001011
+              },
+              "boundKind": "clopper_pearson",
+              "needed": {
+                "replicates": 21951,
+                "reason": null
+              }
+            }
+          ]
+        },
+        {
+          "key": "c001",
+          "set": {
+            "design.nTreat": 225,
+            "design.nControl": 225,
+            "analysis.alpha": 0.025
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "power": {
+              "name": "power",
+              "value": 0.8776,
+              "mcse": 0.004635045630843346,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "type_one_error": {
+              "name": "type_one_error",
+              "value": 0.0229,
+              "mcse": 0.0010577237351974285,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "expected_sample_size": {
+              "name": "expected_sample_size",
+              "value": 450,
+              "mcse": 0,
+              "simulated": true,
+              "source": "synthetic"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "pass",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 4388,
+                "trials": 5000,
+                "lower": 0.8681944821490157,
+                "upper": 0.8865621424539409
+              },
+              "boundKind": "clopper_pearson",
+              "needed": null
+            },
+            {
+              "measure": "type_one_error",
+              "status": "inconclusive",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 458,
+                "trials": 20000,
+                "lower": 0.020871480576733797,
+                "upper": 0.02506879154472172
+              },
+              "boundKind": "clopper_pearson",
+              "needed": {
+                "replicates": 19491,
+                "reason": null
+              }
+            }
+          ]
+        },
+        {
+          "key": "c002",
+          "set": {
+            "design.nTreat": 250,
+            "design.nControl": 250,
+            "analysis.alpha": 0.025
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "power": {
+              "name": "power",
+              "value": 0.9044,
+              "mcse": 0.004158380453974841,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "type_one_error": {
+              "name": "type_one_error",
+              "value": 0.0247,
+              "mcse": 0.0010974951024947674,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "expected_sample_size": {
+              "name": "expected_sample_size",
+              "value": 500,
+              "mcse": 0,
+              "simulated": true,
+              "source": "synthetic"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "pass",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 4522,
+                "trials": 5000,
+                "lower": 0.8959119464173433,
+                "upper": 0.9124124367581914
+              },
+              "boundKind": "clopper_pearson",
+              "needed": null
+            },
+            {
+              "measure": "type_one_error",
+              "status": "inconclusive",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 494,
+                "trials": 20000,
+                "lower": 0.022593260645709018,
+                "upper": 0.026946403587218976
+              },
+              "boundKind": "clopper_pearson",
+              "needed": {
+                "replicates": 1028227,
+                "reason": null
+              }
+            }
+          ]
+        }
+      ],
+      "evaluated": 3,
+      "usage": {
+        "cpuSeconds": 231.276,
+        "queueSeconds": 0,
+        "wallSeconds": 127.03699999999999,
+        "replicatesCompleted": 75900,
+        "modelCalls": 0,
+        "units": 9,
+        "peakKb": 172536,
+        "queueIfSubmittedTogether": {
+          "total": 299.171,
+          "max": 93.103
+        }
+      },
+      "units": [
+        {
+          "unit": "c000:screening:alternative",
+          "stage": "screening",
+          "method": "design.simulate",
+          "replicates": 300,
+          "engineCpuSeconds": 1.934,
+          "wallSeconds": 2.019,
+          "peakKb": 135544,
+          "submittedAt": 0,
+          "queueIfSubmittedTogether": 0
+        },
+        {
+          "unit": "c001:screening:alternative",
+          "stage": "screening",
+          "method": "design.simulate",
+          "replicates": 300,
+          "engineCpuSeconds": 1.974,
+          "wallSeconds": 2.021,
+          "peakKb": 135416,
+          "submittedAt": 2.021,
+          "queueIfSubmittedTogether": 2.019
+        },
+        {
+          "unit": "c002:screening:alternative",
+          "stage": "screening",
+          "method": "design.simulate",
+          "replicates": 300,
+          "engineCpuSeconds": 2.046,
+          "wallSeconds": 2.069,
+          "peakKb": 135544,
+          "submittedAt": 4.045,
+          "queueIfSubmittedTogether": 4.04
+        },
+        {
+          "unit": "c000:final:alternative",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 5000,
+          "engineCpuSeconds": 14.566,
+          "wallSeconds": 8.411,
+          "peakKb": 139900,
+          "submittedAt": 6.115,
+          "queueIfSubmittedTogether": 6.109
+        },
+        {
+          "unit": "c000:final:null",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 20000,
+          "engineCpuSeconds": 54.704,
+          "wallSeconds": 28.992,
+          "peakKb": 172024,
+          "submittedAt": 14.528,
+          "queueIfSubmittedTogether": 14.52
+        },
+        {
+          "unit": "c001:final:alternative",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 5000,
+          "engineCpuSeconds": 15.015,
+          "wallSeconds": 8.613,
+          "peakKb": 139636,
+          "submittedAt": 43.523,
+          "queueIfSubmittedTogether": 43.512
+        },
+        {
+          "unit": "c001:final:null",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 20000,
+          "engineCpuSeconds": 59.914,
+          "wallSeconds": 31.618,
+          "peakKb": 172536,
+          "submittedAt": 52.138,
+          "queueIfSubmittedTogether": 52.125
+        },
+        {
+          "unit": "c002:final:alternative",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 5000,
+          "engineCpuSeconds": 16.452,
+          "wallSeconds": 9.36,
+          "peakKb": 139764,
+          "submittedAt": 83.758,
+          "queueIfSubmittedTogether": 83.743
+        },
+        {
+          "unit": "c002:final:null",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 20000,
+          "engineCpuSeconds": 64.671,
+          "wallSeconds": 33.934,
+          "peakKb": 172412,
+          "submittedAt": 93.12,
+          "queueIfSubmittedTogether": 93.103
+        }
+      ]
+    },
+    "searched": {
+      "arm": "level-searched",
+      "stop": "acceptable_precision",
+      "best": {
+        "key": "c001",
+        "set": {
+          "design.nTreat": 200,
+          "design.nControl": 200,
+          "analysis.alpha": 0.0235
+        },
+        "status": "evaluated",
+        "reason": null,
+        "final": {
+          "power": {
+            "name": "power",
+            "value": 0.8284,
+            "mcse": 0.0053320435107001895,
+            "simulated": true,
+            "source": "synthetic"
+          },
+          "type_one_error": {
+            "name": "type_one_error",
+            "value": 0.02265,
+            "mcse": 0.0010520688546858518,
+            "simulated": true,
+            "source": "synthetic"
+          },
+          "expected_sample_size": {
+            "name": "expected_sample_size",
+            "value": 400,
+            "mcse": 0,
+            "simulated": true,
+            "source": "synthetic"
+          }
+        },
+        "verdicts": [
+          {
+            "measure": "power",
+            "status": "pass",
+            "bound": {
+              "kind": "clopper_pearson",
+              "confidence": 0.975,
+              "events": 4142,
+              "trials": 5000,
+              "lower": 0.817658501454305,
+              "upper": 0.8387566105768092
+            },
+            "boundKind": "clopper_pearson",
+            "needed": null
+          },
+          {
+            "measure": "type_one_error",
+            "status": "pass",
+            "bound": {
+              "kind": "clopper_pearson",
+              "confidence": 0.975,
+              "events": 453,
+              "trials": 20000,
+              "lower": 0.020632601481039986,
+              "upper": 0.024807755858174158
+            },
+            "boundKind": "clopper_pearson",
+            "needed": null
+          }
+        ]
+      },
+      "feasible": [
+        "c001",
+        "c002"
+      ],
+      "inconclusive": [
+        "c000",
+        "c004"
+      ],
+      "closestUndecided": null,
+      "finalists": [
+        "c000",
+        "c001",
+        "c002",
+        "c004"
+      ],
+      "candidates": [
+        {
+          "key": "c000",
+          "set": {
+            "design.nTreat": 200,
+            "design.nControl": 200,
+            "analysis.alpha": 0.025
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "power": {
+              "name": "power",
+              "value": 0.8348,
+              "mcse": 0.005251837011941631,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "type_one_error": {
+              "name": "type_one_error",
+              "value": 0.02445,
+              "mcse": 0.001092066790539846,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "expected_sample_size": {
+              "name": "expected_sample_size",
+              "value": 400,
+              "mcse": 0,
+              "simulated": true,
+              "source": "synthetic"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "pass",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 4174,
+                "trials": 5000,
+                "lower": 0.8242118208659777,
+                "upper": 0.8449957159937127
+              },
+              "boundKind": "clopper_pearson",
+              "needed": null
+            },
+            {
+              "measure": "type_one_error",
+              "status": "inconclusive",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 489,
+                "trials": 20000,
+                "lower": 0.02235393728937199,
+                "upper": 0.026685810812562133
+              },
+              "boundKind": "clopper_pearson",
+              "needed": {
+                "replicates": 302900,
+                "reason": null
+              }
+            }
+          ]
+        },
+        {
+          "key": "c001",
+          "set": {
+            "design.nTreat": 200,
+            "design.nControl": 200,
+            "analysis.alpha": 0.0235
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "power": {
+              "name": "power",
+              "value": 0.8284,
+              "mcse": 0.0053320435107001895,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "type_one_error": {
+              "name": "type_one_error",
+              "value": 0.02265,
+              "mcse": 0.0010520688546858518,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "expected_sample_size": {
+              "name": "expected_sample_size",
+              "value": 400,
+              "mcse": 0,
+              "simulated": true,
+              "source": "synthetic"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "pass",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 4142,
+                "trials": 5000,
+                "lower": 0.817658501454305,
+                "upper": 0.8387566105768092
+              },
+              "boundKind": "clopper_pearson",
+              "needed": null
+            },
+            {
+              "measure": "type_one_error",
+              "status": "pass",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 453,
+                "trials": 20000,
+                "lower": 0.020632601481039986,
+                "upper": 0.024807755858174158
+              },
+              "boundKind": "clopper_pearson",
+              "needed": null
+            }
+          ]
+        },
+        {
+          "key": "c002",
+          "set": {
+            "design.nTreat": 200,
+            "design.nControl": 200,
+            "analysis.alpha": 0.022
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "power": {
+              "name": "power",
+              "value": 0.8228,
+              "mcse": 0.00540000296296215,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "type_one_error": {
+              "name": "type_one_error",
+              "value": 0.02125,
+              "mcse": 0.0010197655980665361,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "expected_sample_size": {
+              "name": "expected_sample_size",
+              "value": 400,
+              "mcse": 0,
+              "simulated": true,
+              "source": "synthetic"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "pass",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 4114,
+                "trials": 5000,
+                "lower": 0.8119286940500614,
+                "upper": 0.8332930402854974
+              },
+              "boundKind": "clopper_pearson",
+              "needed": null
+            },
+            {
+              "measure": "type_one_error",
+              "status": "pass",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 425,
+                "trials": 20000,
+                "lower": 0.019296125522658775,
+                "upper": 0.023344713062419448
+              },
+              "boundKind": "clopper_pearson",
+              "needed": null
+            }
+          ]
+        },
+        {
+          "key": "c003",
+          "set": {
+            "design.nTreat": 200,
+            "design.nControl": 200,
+            "analysis.alpha": 0.02
+          },
+          "status": "screened",
+          "reason": null,
+          "final": {},
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "not_judged",
+              "bound": 0.8,
+              "boundKind": null,
+              "needed": null
+            },
+            {
+              "measure": "type_one_error",
+              "status": "not_judged",
+              "bound": 0.025,
+              "boundKind": null,
+              "needed": null
+            }
+          ]
+        },
+        {
+          "key": "c004",
+          "set": {
+            "design.nTreat": 225,
+            "design.nControl": 225,
+            "analysis.alpha": 0.025
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "power": {
+              "name": "power",
+              "value": 0.8724,
+              "mcse": 0.0047184370293562265,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "type_one_error": {
+              "name": "type_one_error",
+              "value": 0.02475,
+              "mcse": 0.0010985772048427002,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "expected_sample_size": {
+              "name": "expected_sample_size",
+              "value": 450,
+              "mcse": 0,
+              "simulated": true,
+              "source": "synthetic"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "pass",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 4362,
+                "trials": 5000,
+                "lower": 0.8628342550683257,
+                "upper": 0.8815285852002823
+              },
+              "boundKind": "clopper_pearson",
+              "needed": null
+            },
+            {
+              "measure": "type_one_error",
+              "status": "inconclusive",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 495,
+                "trials": 20000,
+                "lower": 0.0226411322974244,
+                "upper": 0.02699851518200644
+              },
+              "boundKind": "clopper_pearson",
+              "needed": {
+                "replicates": 1483568,
+                "reason": null
+              }
+            }
+          ]
+        },
+        {
+          "key": "c005",
+          "set": {
+            "design.nTreat": 225,
+            "design.nControl": 225,
+            "analysis.alpha": 0.0235
+          },
+          "status": "screened",
+          "reason": null,
+          "final": {},
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "not_judged",
+              "bound": 0.8,
+              "boundKind": null,
+              "needed": null
+            },
+            {
+              "measure": "type_one_error",
+              "status": "not_judged",
+              "bound": 0.025,
+              "boundKind": null,
+              "needed": null
+            }
+          ]
+        },
+        {
+          "key": "c006",
+          "set": {
+            "design.nTreat": 225,
+            "design.nControl": 225,
+            "analysis.alpha": 0.022
+          },
+          "status": "screened",
+          "reason": null,
+          "final": {},
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "not_judged",
+              "bound": 0.8,
+              "boundKind": null,
+              "needed": null
+            },
+            {
+              "measure": "type_one_error",
+              "status": "not_judged",
+              "bound": 0.025,
+              "boundKind": null,
+              "needed": null
+            }
+          ]
+        },
+        {
+          "key": "c007",
+          "set": {
+            "design.nTreat": 225,
+            "design.nControl": 225,
+            "analysis.alpha": 0.02
+          },
+          "status": "screened",
+          "reason": null,
+          "final": {},
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "not_judged",
+              "bound": 0.8,
+              "boundKind": null,
+              "needed": null
+            },
+            {
+              "measure": "type_one_error",
+              "status": "not_judged",
+              "bound": 0.025,
+              "boundKind": null,
+              "needed": null
+            }
+          ]
+        },
+        {
+          "key": "c008",
+          "set": {
+            "design.nTreat": 250,
+            "design.nControl": 250,
+            "analysis.alpha": 0.025
+          },
+          "status": "screened",
+          "reason": null,
+          "final": {},
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "not_judged",
+              "bound": 0.8,
+              "boundKind": null,
+              "needed": null
+            },
+            {
+              "measure": "type_one_error",
+              "status": "not_judged",
+              "bound": 0.025,
+              "boundKind": null,
+              "needed": null
+            }
+          ]
+        },
+        {
+          "key": "c009",
+          "set": {
+            "design.nTreat": 250,
+            "design.nControl": 250,
+            "analysis.alpha": 0.0235
+          },
+          "status": "screened",
+          "reason": null,
+          "final": {},
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "not_judged",
+              "bound": 0.8,
+              "boundKind": null,
+              "needed": null
+            },
+            {
+              "measure": "type_one_error",
+              "status": "not_judged",
+              "bound": 0.025,
+              "boundKind": null,
+              "needed": null
+            }
+          ]
+        },
+        {
+          "key": "c010",
+          "set": {
+            "design.nTreat": 250,
+            "design.nControl": 250,
+            "analysis.alpha": 0.022
+          },
+          "status": "screened",
+          "reason": null,
+          "final": {},
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "not_judged",
+              "bound": 0.8,
+              "boundKind": null,
+              "needed": null
+            },
+            {
+              "measure": "type_one_error",
+              "status": "not_judged",
+              "bound": 0.025,
+              "boundKind": null,
+              "needed": null
+            }
+          ]
+        },
+        {
+          "key": "c011",
+          "set": {
+            "design.nTreat": 250,
+            "design.nControl": 250,
+            "analysis.alpha": 0.02
+          },
+          "status": "screened",
+          "reason": null,
+          "final": {},
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "not_judged",
+              "bound": 0.8,
+              "boundKind": null,
+              "needed": null
+            },
+            {
+              "measure": "type_one_error",
+              "status": "not_judged",
+              "bound": 0.025,
+              "boundKind": null,
+              "needed": null
+            }
+          ]
+        }
+      ],
+      "evaluated": 12,
+      "usage": {
+        "cpuSeconds": 312.528,
+        "queueSeconds": 0,
+        "wallSeconds": 184.42,
+        "replicatesCompleted": 103600,
+        "modelCalls": 0,
+        "units": 20,
+        "peakKb": 172408,
+        "queueIfSubmittedTogether": {
+          "total": 848.3760000000001,
+          "max": 152.821
+        }
+      },
+      "units": [
+        {
+          "unit": "c000:screening:alternative",
+          "stage": "screening",
+          "method": "design.simulate",
+          "replicates": 300,
+          "engineCpuSeconds": 1.875,
+          "wallSeconds": 1.964,
+          "peakKb": 135544,
+          "submittedAt": 0,
+          "queueIfSubmittedTogether": 0
+        },
+        {
+          "unit": "c001:screening:alternative",
+          "stage": "screening",
+          "method": "design.simulate",
+          "replicates": 300,
+          "engineCpuSeconds": 2.281,
+          "wallSeconds": 2.252,
+          "peakKb": 135416,
+          "submittedAt": 1.966,
+          "queueIfSubmittedTogether": 1.964
+        },
+        {
+          "unit": "c002:screening:alternative",
+          "stage": "screening",
+          "method": "design.simulate",
+          "replicates": 300,
+          "engineCpuSeconds": 1.966,
+          "wallSeconds": 2.173,
+          "peakKb": 135672,
+          "submittedAt": 4.221,
+          "queueIfSubmittedTogether": 4.215999999999999
+        },
+        {
+          "unit": "c003:screening:alternative",
+          "stage": "screening",
+          "method": "design.simulate",
+          "replicates": 300,
+          "engineCpuSeconds": 1.873,
+          "wallSeconds": 1.975,
+          "peakKb": 135544,
+          "submittedAt": 6.395,
+          "queueIfSubmittedTogether": 6.388999999999999
+        },
+        {
+          "unit": "c004:screening:alternative",
+          "stage": "screening",
+          "method": "design.simulate",
+          "replicates": 300,
+          "engineCpuSeconds": 1.953,
+          "wallSeconds": 2.033,
+          "peakKb": 135672,
+          "submittedAt": 8.372,
+          "queueIfSubmittedTogether": 8.363999999999999
+        },
+        {
+          "unit": "c005:screening:alternative",
+          "stage": "screening",
+          "method": "design.simulate",
+          "replicates": 300,
+          "engineCpuSeconds": 1.968,
+          "wallSeconds": 2.05,
+          "peakKb": 135544,
+          "submittedAt": 10.408,
+          "queueIfSubmittedTogether": 10.396999999999998
+        },
+        {
+          "unit": "c006:screening:alternative",
+          "stage": "screening",
+          "method": "design.simulate",
+          "replicates": 300,
+          "engineCpuSeconds": 1.99,
+          "wallSeconds": 2.107,
+          "peakKb": 135676,
+          "submittedAt": 12.46,
+          "queueIfSubmittedTogether": 12.447
+        },
+        {
+          "unit": "c007:screening:alternative",
+          "stage": "screening",
+          "method": "design.simulate",
+          "replicates": 300,
+          "engineCpuSeconds": 2.014,
+          "wallSeconds": 2.061,
+          "peakKb": 135672,
+          "submittedAt": 14.568,
+          "queueIfSubmittedTogether": 14.553999999999998
+        },
+        {
+          "unit": "c008:screening:alternative",
+          "stage": "screening",
+          "method": "design.simulate",
+          "replicates": 300,
+          "engineCpuSeconds": 1.999,
+          "wallSeconds": 2.009,
+          "peakKb": 135540,
+          "submittedAt": 16.632,
+          "queueIfSubmittedTogether": 16.615
+        },
+        {
+          "unit": "c009:screening:alternative",
+          "stage": "screening",
+          "method": "design.simulate",
+          "replicates": 300,
+          "engineCpuSeconds": 2.041,
+          "wallSeconds": 2.076,
+          "peakKb": 135544,
+          "submittedAt": 18.644,
+          "queueIfSubmittedTogether": 18.624
+        },
+        {
+          "unit": "c010:screening:alternative",
+          "stage": "screening",
+          "method": "design.simulate",
+          "replicates": 300,
+          "engineCpuSeconds": 2.176,
+          "wallSeconds": 2.184,
+          "peakKb": 135160,
+          "submittedAt": 20.721,
+          "queueIfSubmittedTogether": 20.7
+        },
+        {
+          "unit": "c011:screening:alternative",
+          "stage": "screening",
+          "method": "design.simulate",
+          "replicates": 300,
+          "engineCpuSeconds": 2.168,
+          "wallSeconds": 2.175,
+          "peakKb": 135672,
+          "submittedAt": 22.907,
+          "queueIfSubmittedTogether": 22.884
+        },
+        {
+          "unit": "c000:final:alternative",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 5000,
+          "engineCpuSeconds": 14.195,
+          "wallSeconds": 8.29,
+          "peakKb": 139896,
+          "submittedAt": 25.084,
+          "queueIfSubmittedTogether": 25.059
+        },
+        {
+          "unit": "c000:final:null",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 20000,
+          "engineCpuSeconds": 55.235,
+          "wallSeconds": 29.501,
+          "peakKb": 172020,
+          "submittedAt": 33.375,
+          "queueIfSubmittedTogether": 33.349000000000004
+        },
+        {
+          "unit": "c001:final:alternative",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 5000,
+          "engineCpuSeconds": 15.82,
+          "wallSeconds": 9.697,
+          "peakKb": 139636,
+          "submittedAt": 62.879,
+          "queueIfSubmittedTogether": 62.85000000000001
+        },
+        {
+          "unit": "c001:final:null",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 20000,
+          "engineCpuSeconds": 58.456,
+          "wallSeconds": 33.621,
+          "peakKb": 172280,
+          "submittedAt": 72.578,
+          "queueIfSubmittedTogether": 72.54700000000001
+        },
+        {
+          "unit": "c002:final:alternative",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 5000,
+          "engineCpuSeconds": 13.74,
+          "wallSeconds": 7.963,
+          "peakKb": 139380,
+          "submittedAt": 106.202,
+          "queueIfSubmittedTogether": 106.168
+        },
+        {
+          "unit": "c002:final:null",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 20000,
+          "engineCpuSeconds": 56.33,
+          "wallSeconds": 30.166,
+          "peakKb": 171896,
+          "submittedAt": 114.167,
+          "queueIfSubmittedTogether": 114.131
+        },
+        {
+          "unit": "c004:final:alternative",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 5000,
+          "engineCpuSeconds": 14.776,
+          "wallSeconds": 8.524,
+          "peakKb": 139640,
+          "submittedAt": 144.335,
+          "queueIfSubmittedTogether": 144.297
+        },
+        {
+          "unit": "c004:final:null",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 20000,
+          "engineCpuSeconds": 59.672,
+          "wallSeconds": 31.599,
+          "peakKb": 172408,
+          "submittedAt": 152.861,
+          "queueIfSubmittedTogether": 152.821
+        }
+      ]
+    },
+    "exhaustive": {
+      "arm": "level-exhaustive",
+      "stop": "acceptable_precision",
+      "best": {
+        "key": "c002",
+        "set": {
+          "design.nTreat": 200,
+          "design.nControl": 200,
+          "analysis.alpha": 0.022
+        },
+        "status": "evaluated",
+        "reason": null,
+        "final": {
+          "power": {
+            "name": "power",
+            "value": 0.8166,
+            "mcse": 0.005472923167741349,
+            "simulated": true,
+            "source": "synthetic"
+          },
+          "type_one_error": {
+            "name": "type_one_error",
+            "value": 0.02175,
+            "mcse": 0.0010314295298274139,
+            "simulated": true,
+            "source": "synthetic"
+          },
+          "expected_sample_size": {
+            "name": "expected_sample_size",
+            "value": 400,
+            "mcse": 0,
+            "simulated": true,
+            "source": "synthetic"
+          }
+        },
+        "verdicts": [
+          {
+            "measure": "power",
+            "status": "pass",
+            "bound": {
+              "kind": "clopper_pearson",
+              "confidence": 0.975,
+              "events": 4083,
+              "trials": 5000,
+              "lower": 0.805589520513533,
+              "upper": 0.8272395397011454
+            },
+            "boundKind": "clopper_pearson",
+            "needed": null
+          },
+          {
+            "measure": "type_one_error",
+            "status": "pass",
+            "bound": {
+              "kind": "clopper_pearson",
+              "confidence": 0.975,
+              "events": 435,
+              "trials": 20000,
+              "lower": 0.019773189223484616,
+              "upper": 0.023867476669574034
+            },
+            "boundKind": "clopper_pearson",
+            "needed": null
+          }
+        ]
+      },
+      "feasible": [
+        "c002",
+        "c006",
+        "c007",
+        "c010",
+        "c011"
+      ],
+      "inconclusive": [
+        "c000",
+        "c001",
+        "c003",
+        "c004",
+        "c005",
+        "c008",
+        "c009"
+      ],
+      "closestUndecided": null,
+      "finalists": [
+        "c000",
+        "c001",
+        "c002",
+        "c003",
+        "c004",
+        "c005",
+        "c006",
+        "c007",
+        "c008",
+        "c009",
+        "c010",
+        "c011"
+      ],
+      "candidates": [
+        {
+          "key": "c000",
+          "set": {
+            "design.nTreat": 200,
+            "design.nControl": 200,
+            "analysis.alpha": 0.025
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "power": {
+              "name": "power",
+              "value": 0.8314,
+              "mcse": 0.005294790647419404,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "type_one_error": {
+              "name": "type_one_error",
+              "value": 0.02475,
+              "mcse": 0.0010985772048427002,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "expected_sample_size": {
+              "name": "expected_sample_size",
+              "value": 400,
+              "mcse": 0,
+              "simulated": true,
+              "source": "synthetic"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "pass",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 4157,
+                "trials": 5000,
+                "lower": 0.8207296968483477,
+                "upper": 0.8416818652657894
+              },
+              "boundKind": "clopper_pearson",
+              "needed": null
+            },
+            {
+              "measure": "type_one_error",
+              "status": "inconclusive",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 495,
+                "trials": 20000,
+                "lower": 0.0226411322974244,
+                "upper": 0.02699851518200644
+              },
+              "boundKind": "clopper_pearson",
+              "needed": {
+                "replicates": 1483568,
+                "reason": null
+              }
+            }
+          ]
+        },
+        {
+          "key": "c001",
+          "set": {
+            "design.nTreat": 200,
+            "design.nControl": 200,
+            "analysis.alpha": 0.0235
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "power": {
+              "name": "power",
+              "value": 0.8248,
+              "mcse": 0.005375964285595655,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "type_one_error": {
+              "name": "type_one_error",
+              "value": 0.0234,
+              "mcse": 0.0010689349839910752,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "expected_sample_size": {
+              "name": "expected_sample_size",
+              "value": 400,
+              "mcse": 0,
+              "simulated": true,
+              "source": "synthetic"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "pass",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 4124,
+                "trials": 5000,
+                "lower": 0.8139745987001101,
+                "upper": 0.8352447711359234
+              },
+              "boundKind": "clopper_pearson",
+              "needed": null
+            },
+            {
+              "measure": "type_one_error",
+              "status": "inconclusive",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 468,
+                "trials": 20000,
+                "lower": 0.021349431935938162,
+                "upper": 0.025590670353601935
+              },
+              "boundKind": "clopper_pearson",
+              "needed": {
+                "replicates": 34292,
+                "reason": null
+              }
+            }
+          ]
+        },
+        {
+          "key": "c002",
+          "set": {
+            "design.nTreat": 200,
+            "design.nControl": 200,
+            "analysis.alpha": 0.022
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "power": {
+              "name": "power",
+              "value": 0.8166,
+              "mcse": 0.005472923167741349,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "type_one_error": {
+              "name": "type_one_error",
+              "value": 0.02175,
+              "mcse": 0.0010314295298274139,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "expected_sample_size": {
+              "name": "expected_sample_size",
+              "value": 400,
+              "mcse": 0,
+              "simulated": true,
+              "source": "synthetic"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "pass",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 4083,
+                "trials": 5000,
+                "lower": 0.805589520513533,
+                "upper": 0.8272395397011454
+              },
+              "boundKind": "clopper_pearson",
+              "needed": null
+            },
+            {
+              "measure": "type_one_error",
+              "status": "pass",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 435,
+                "trials": 20000,
+                "lower": 0.019773189223484616,
+                "upper": 0.023867476669574034
+              },
+              "boundKind": "clopper_pearson",
+              "needed": null
+            }
+          ]
+        },
+        {
+          "key": "c003",
+          "set": {
+            "design.nTreat": 200,
+            "design.nControl": 200,
+            "analysis.alpha": 0.02
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "power": {
+              "name": "power",
+              "value": 0.805,
+              "mcse": 0.005603124128555425,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "type_one_error": {
+              "name": "type_one_error",
+              "value": 0.01965,
+              "mcse": 0.00098142441125132,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "expected_sample_size": {
+              "name": "expected_sample_size",
+              "value": 400,
+              "mcse": 0,
+              "simulated": true,
+              "source": "synthetic"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "inconclusive",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 4025,
+                "trials": 5000,
+                "lower": 0.7937413258535,
+                "upper": 0.8159014257363526
+              },
+              "boundKind": "clopper_pearson",
+              "needed": {
+                "replicates": 24121,
+                "reason": null
+              }
+            },
+            {
+              "measure": "type_one_error",
+              "status": "pass",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 393,
+                "trials": 20000,
+                "lower": 0.017771515198701432,
+                "upper": 0.02166988287241664
+              },
+              "boundKind": "clopper_pearson",
+              "needed": null
+            }
+          ]
+        },
+        {
+          "key": "c004",
+          "set": {
+            "design.nTreat": 225,
+            "design.nControl": 225,
+            "analysis.alpha": 0.025
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "power": {
+              "name": "power",
+              "value": 0.872,
+              "mcse": 0.004724743379274688,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "type_one_error": {
+              "name": "type_one_error",
+              "value": 0.02655,
+              "mcse": 0.001136773889126593,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "expected_sample_size": {
+              "name": "expected_sample_size",
+              "value": 450,
+              "mcse": 0,
+              "simulated": true,
+              "source": "synthetic"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "pass",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 4360,
+                "trials": 5000,
+                "lower": 0.862422141890981,
+                "upper": 0.8811411760795889
+              },
+              "boundKind": "clopper_pearson",
+              "needed": null
+            },
+            {
+              "measure": "type_one_error",
+              "status": "inconclusive",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 531,
+                "trials": 20000,
+                "lower": 0.02436599997359143,
+                "upper": 0.028873048596547962
+              },
+              "boundKind": "clopper_pearson",
+              "needed": {
+                "replicates": 41325,
+                "reason": null
+              }
+            }
+          ]
+        },
+        {
+          "key": "c005",
+          "set": {
+            "design.nTreat": 225,
+            "design.nControl": 225,
+            "analysis.alpha": 0.0235
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "power": {
+              "name": "power",
+              "value": 0.8672,
+              "mcse": 0.0047992532752502235,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "type_one_error": {
+              "name": "type_one_error",
+              "value": 0.0244,
+              "mcse": 0.001090977543306919,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "expected_sample_size": {
+              "name": "expected_sample_size",
+              "value": 450,
+              "mcse": 0,
+              "simulated": true,
+              "source": "synthetic"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "pass",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 4336,
+                "trials": 5000,
+                "lower": 0.8574790652250102,
+                "upper": 0.8764899807282591
+              },
+              "boundKind": "clopper_pearson",
+              "needed": null
+            },
+            {
+              "measure": "type_one_error",
+              "status": "inconclusive",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 488,
+                "trials": 20000,
+                "lower": 0.022306079647228055,
+                "upper": 0.026633685249095568
+              },
+              "boundKind": "clopper_pearson",
+              "needed": {
+                "replicates": 254013,
+                "reason": null
+              }
+            }
+          ]
+        },
+        {
+          "key": "c006",
+          "set": {
+            "design.nTreat": 225,
+            "design.nControl": 225,
+            "analysis.alpha": 0.022
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "power": {
+              "name": "power",
+              "value": 0.8632,
+              "mcse": 0.004859748141622156,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "type_one_error": {
+              "name": "type_one_error",
+              "value": 0.0227,
+              "mcse": 0.0010532024971485778,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "expected_sample_size": {
+              "name": "expected_sample_size",
+              "value": 450,
+              "mcse": 0,
+              "simulated": true,
+              "source": "synthetic"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "pass",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 4316,
+                "trials": 5000,
+                "lower": 0.8533629582148858,
+                "upper": 0.872610855143994
+              },
+              "boundKind": "clopper_pearson",
+              "needed": null
+            },
+            {
+              "measure": "type_one_error",
+              "status": "pass",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 454,
+                "trials": 20000,
+                "lower": 0.02068037207181464,
+                "upper": 0.024859968207339683
+              },
+              "boundKind": "clopper_pearson",
+              "needed": null
+            }
+          ]
+        },
+        {
+          "key": "c007",
+          "set": {
+            "design.nTreat": 225,
+            "design.nControl": 225,
+            "analysis.alpha": 0.02
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "power": {
+              "name": "power",
+              "value": 0.8556,
+              "mcse": 0.004970888049433421,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "type_one_error": {
+              "name": "type_one_error",
+              "value": 0.02065,
+              "mcse": 0.0010055739033009955,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "expected_sample_size": {
+              "name": "expected_sample_size",
+              "value": 450,
+              "mcse": 0,
+              "simulated": true,
+              "source": "synthetic"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "pass",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 4278,
+                "trials": 5000,
+                "lower": 0.8455497897875803,
+                "upper": 0.8652330682329128
+              },
+              "boundKind": "clopper_pearson",
+              "needed": null
+            },
+            {
+              "measure": "type_one_error",
+              "status": "pass",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 413,
+                "trials": 20000,
+                "lower": 0.018724031418732773,
+                "upper": 0.02271701569258347
+              },
+              "boundKind": "clopper_pearson",
+              "needed": null
+            }
+          ]
+        },
+        {
+          "key": "c008",
+          "set": {
+            "design.nTreat": 250,
+            "design.nControl": 250,
+            "analysis.alpha": 0.025
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "power": {
+              "name": "power",
+              "value": 0.9092,
+              "mcse": 0.004063381842751183,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "type_one_error": {
+              "name": "type_one_error",
+              "value": 0.025,
+              "mcse": 0.001103970108290981,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "expected_sample_size": {
+              "name": "expected_sample_size",
+              "value": 500,
+              "mcse": 0,
+              "simulated": true,
+              "source": "synthetic"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "pass",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 4546,
+                "trials": 5000,
+                "lower": 0.9008950881381372,
+                "upper": 0.9170234720825949
+              },
+              "boundKind": "clopper_pearson",
+              "needed": null
+            },
+            {
+              "measure": "type_one_error",
+              "status": "inconclusive",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 500,
+                "trials": 20000,
+                "lower": 0.022880525081962283,
+                "upper": 0.027259038729912782
+              },
+              "boundKind": "clopper_pearson",
+              "needed": {
+                "replicates": null,
+                "reason": "estimate_at_bound"
+              }
+            }
+          ]
+        },
+        {
+          "key": "c009",
+          "set": {
+            "design.nTreat": 250,
+            "design.nControl": 250,
+            "analysis.alpha": 0.0235
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "power": {
+              "name": "power",
+              "value": 0.9032,
+              "mcse": 0.004181620738421886,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "type_one_error": {
+              "name": "type_one_error",
+              "value": 0.0235,
+              "mcse": 0.0010711617524911913,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "expected_sample_size": {
+              "name": "expected_sample_size",
+              "value": 500,
+              "mcse": 0,
+              "simulated": true,
+              "source": "synthetic"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "pass",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 4516,
+                "trials": 5000,
+                "lower": 0.8946671566873652,
+                "upper": 0.9112586794357558
+              },
+              "boundKind": "clopper_pearson",
+              "needed": null
+            },
+            {
+              "measure": "type_one_error",
+              "status": "inconclusive",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 470,
+                "trials": 20000,
+                "lower": 0.021445052564043082,
+                "upper": 0.02569501585283937
+              },
+              "boundKind": "clopper_pearson",
+              "needed": {
+                "replicates": 39180,
+                "reason": null
+              }
+            }
+          ]
+        },
+        {
+          "key": "c010",
+          "set": {
+            "design.nTreat": 250,
+            "design.nControl": 250,
+            "analysis.alpha": 0.022
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "power": {
+              "name": "power",
+              "value": 0.898,
+              "mcse": 0.004280093456923575,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "type_one_error": {
+              "name": "type_one_error",
+              "value": 0.02235,
+              "mcse": 0.0010452386689172957,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "expected_sample_size": {
+              "name": "expected_sample_size",
+              "value": 500,
+              "mcse": 0,
+              "simulated": true,
+              "source": "synthetic"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "pass",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 4490,
+                "trials": 5000,
+                "lower": 0.8892774375615831,
+                "upper": 0.9062546829410929
+              },
+              "boundKind": "clopper_pearson",
+              "needed": null
+            },
+            {
+              "measure": "type_one_error",
+              "status": "pass",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 447,
+                "trials": 20000,
+                "lower": 0.020346033489793774,
+                "upper": 0.024494426386639817
+              },
+              "boundKind": "clopper_pearson",
+              "needed": null
+            }
+          ]
+        },
+        {
+          "key": "c011",
+          "set": {
+            "design.nTreat": 250,
+            "design.nControl": 250,
+            "analysis.alpha": 0.02
+          },
+          "status": "evaluated",
+          "reason": null,
+          "final": {
+            "power": {
+              "name": "power",
+              "value": 0.892,
+              "mcse": 0.0043894418779612514,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "type_one_error": {
+              "name": "type_one_error",
+              "value": 0.02035,
+              "mcse": 0.0009983956505313914,
+              "simulated": true,
+              "source": "synthetic"
+            },
+            "expected_sample_size": {
+              "name": "expected_sample_size",
+              "value": 500,
+              "mcse": 0,
+              "simulated": true,
+              "source": "synthetic"
+            }
+          },
+          "verdicts": [
+            {
+              "measure": "power",
+              "status": "pass",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 4460,
+                "trials": 5000,
+                "lower": 0.883066887128493,
+                "upper": 0.9004724631620142
+              },
+              "boundKind": "clopper_pearson",
+              "needed": null
+            },
+            {
+              "measure": "type_one_error",
+              "status": "pass",
+              "bound": {
+                "kind": "clopper_pearson",
+                "confidence": 0.975,
+                "events": 407,
+                "trials": 20000,
+                "lower": 0.01843814596071222,
+                "upper": 0.022403005973866547
+              },
+              "boundKind": "clopper_pearson",
+              "needed": null
+            }
+          ]
+        }
+      ],
+      "evaluated": 12,
+      "usage": {
+        "cpuSeconds": 901.384,
+        "queueSeconds": 0,
+        "wallSeconds": 484.0449999999999,
+        "replicatesCompleted": 300000,
+        "modelCalls": 0,
+        "units": 24,
+        "peakKb": 175352,
+        "queueIfSubmittedTogether": {
+          "total": 5255.406999999998,
+          "max": 450.1859999999999
+        }
+      },
+      "units": [
+        {
+          "unit": "c000:final:alternative",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 5000,
+          "engineCpuSeconds": 14.108,
+          "wallSeconds": 8.209,
+          "peakKb": 139768,
+          "submittedAt": 0,
+          "queueIfSubmittedTogether": 0
+        },
+        {
+          "unit": "c000:final:null",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 20000,
+          "engineCpuSeconds": 55.174,
+          "wallSeconds": 29.49,
+          "peakKb": 171764,
+          "submittedAt": 8.212,
+          "queueIfSubmittedTogether": 8.209
+        },
+        {
+          "unit": "c001:final:alternative",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 5000,
+          "engineCpuSeconds": 14.072,
+          "wallSeconds": 8.14,
+          "peakKb": 139768,
+          "submittedAt": 37.705,
+          "queueIfSubmittedTogether": 37.699
+        },
+        {
+          "unit": "c001:final:null",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 20000,
+          "engineCpuSeconds": 55.076,
+          "wallSeconds": 29.143,
+          "peakKb": 172152,
+          "submittedAt": 45.847,
+          "queueIfSubmittedTogether": 45.839
+        },
+        {
+          "unit": "c002:final:alternative",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 5000,
+          "engineCpuSeconds": 16.905,
+          "wallSeconds": 9.628,
+          "peakKb": 139892,
+          "submittedAt": 74.992,
+          "queueIfSubmittedTogether": 74.982
+        },
+        {
+          "unit": "c002:final:null",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 20000,
+          "engineCpuSeconds": 54.185,
+          "wallSeconds": 28.658,
+          "peakKb": 175352,
+          "submittedAt": 84.622,
+          "queueIfSubmittedTogether": 84.61
+        },
+        {
+          "unit": "c003:final:alternative",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 5000,
+          "engineCpuSeconds": 14.036,
+          "wallSeconds": 8.159,
+          "peakKb": 139896,
+          "submittedAt": 113.282,
+          "queueIfSubmittedTogether": 113.268
+        },
+        {
+          "unit": "c003:final:null",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 20000,
+          "engineCpuSeconds": 54.39,
+          "wallSeconds": 28.883,
+          "peakKb": 172792,
+          "submittedAt": 121.443,
+          "queueIfSubmittedTogether": 121.427
+        },
+        {
+          "unit": "c004:final:alternative",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 5000,
+          "engineCpuSeconds": 15.325,
+          "wallSeconds": 8.772,
+          "peakKb": 139636,
+          "submittedAt": 150.328,
+          "queueIfSubmittedTogether": 150.31
+        },
+        {
+          "unit": "c004:final:null",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 20000,
+          "engineCpuSeconds": 59.694,
+          "wallSeconds": 31.455,
+          "peakKb": 172536,
+          "submittedAt": 159.103,
+          "queueIfSubmittedTogether": 159.082
+        },
+        {
+          "unit": "c005:final:alternative",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 5000,
+          "engineCpuSeconds": 15.094,
+          "wallSeconds": 8.638,
+          "peakKb": 139896,
+          "submittedAt": 190.56,
+          "queueIfSubmittedTogether": 190.53699999999998
+        },
+        {
+          "unit": "c005:final:null",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 20000,
+          "engineCpuSeconds": 60.336,
+          "wallSeconds": 32.069,
+          "peakKb": 172536,
+          "submittedAt": 199.2,
+          "queueIfSubmittedTogether": 199.17499999999998
+        },
+        {
+          "unit": "c006:final:alternative",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 5000,
+          "engineCpuSeconds": 15.178,
+          "wallSeconds": 8.691,
+          "peakKb": 139892,
+          "submittedAt": 231.271,
+          "queueIfSubmittedTogether": 231.24399999999997
+        },
+        {
+          "unit": "c006:final:null",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 20000,
+          "engineCpuSeconds": 59.402,
+          "wallSeconds": 31.273,
+          "peakKb": 172412,
+          "submittedAt": 239.964,
+          "queueIfSubmittedTogether": 239.93499999999997
+        },
+        {
+          "unit": "c007:final:alternative",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 5000,
+          "engineCpuSeconds": 14.872,
+          "wallSeconds": 8.537,
+          "peakKb": 140024,
+          "submittedAt": 271.239,
+          "queueIfSubmittedTogether": 271.20799999999997
+        },
+        {
+          "unit": "c007:final:null",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 20000,
+          "engineCpuSeconds": 59.523,
+          "wallSeconds": 31.379,
+          "peakKb": 172540,
+          "submittedAt": 279.778,
+          "queueIfSubmittedTogether": 279.74499999999995
+        },
+        {
+          "unit": "c008:final:alternative",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 5000,
+          "engineCpuSeconds": 17.604,
+          "wallSeconds": 9.88,
+          "peakKb": 139512,
+          "submittedAt": 311.159,
+          "queueIfSubmittedTogether": 311.12399999999997
+        },
+        {
+          "unit": "c008:final:null",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 20000,
+          "engineCpuSeconds": 65.041,
+          "wallSeconds": 34.143,
+          "peakKb": 172280,
+          "submittedAt": 321.041,
+          "queueIfSubmittedTogether": 321.00399999999996
+        },
+        {
+          "unit": "c009:final:alternative",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 5000,
+          "engineCpuSeconds": 16.217,
+          "wallSeconds": 9.192,
+          "peakKb": 139892,
+          "submittedAt": 355.186,
+          "queueIfSubmittedTogether": 355.14699999999993
+        },
+        {
+          "unit": "c009:final:null",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 20000,
+          "engineCpuSeconds": 64.396,
+          "wallSeconds": 33.775,
+          "peakKb": 172536,
+          "submittedAt": 364.381,
+          "queueIfSubmittedTogether": 364.33899999999994
+        },
+        {
+          "unit": "c010:final:alternative",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 5000,
+          "engineCpuSeconds": 16.054,
+          "wallSeconds": 9.123,
+          "peakKb": 139768,
+          "submittedAt": 398.158,
+          "queueIfSubmittedTogether": 398.1139999999999
+        },
+        {
+          "unit": "c010:final:null",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 20000,
+          "engineCpuSeconds": 64.269,
+          "wallSeconds": 33.749,
+          "peakKb": 172668,
+          "submittedAt": 407.284,
+          "queueIfSubmittedTogether": 407.2369999999999
+        },
+        {
+          "unit": "c011:final:alternative",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 5000,
+          "engineCpuSeconds": 16.112,
+          "wallSeconds": 9.2,
+          "peakKb": 139816,
+          "submittedAt": 441.035,
+          "queueIfSubmittedTogether": 440.98599999999993
+        },
+        {
+          "unit": "c011:final:null",
+          "stage": "final",
+          "method": "design.simulate",
+          "replicates": 20000,
+          "engineCpuSeconds": 64.321,
+          "wallSeconds": 33.859,
+          "peakKb": 172152,
+          "submittedAt": 450.237,
+          "queueIfSubmittedTogether": 450.1859999999999
+        }
+      ]
+    },
+    "scores": [
+      {
+        "arm": "level-fixed",
+        "stop": "inconclusive_at_precision",
+        "picked": null,
+        "pickedSize": null,
+        "referenceSize": 400,
+        "foundReferenceBest": false,
+        "sizeAboveReference": null,
+        "feasibleFound": false,
+        "cpuSeconds": 231.276,
+        "wallSeconds": 127.03699999999999,
+        "units": 9
+      },
+      {
+        "arm": "level-searched",
+        "stop": "acceptable_precision",
         "picked": {
           "design.nTreat": 200,
           "design.nControl": 200,
-          "accrual.duration": 24
+          "analysis.alpha": 0.0235
         },
         "pickedSize": 400,
         "referenceSize": 400,
         "foundReferenceBest": true,
         "sizeAboveReference": 0,
         "feasibleFound": true,
-        "cpuSeconds": 288.67500000000007,
-        "wallSeconds": 165.65599999999998,
-        "units": 10
+        "cpuSeconds": 312.528,
+        "wallSeconds": 184.42,
+        "units": 20
       }
-    ],
-    "matchedBudgetCpuSeconds": 287.87299999999993
+    ]
   },
-  "finishedAt": "2026-11-07T16:50:55.679Z"
+  "finishedAt": "2026-11-07T19:00:14.048Z"
 }

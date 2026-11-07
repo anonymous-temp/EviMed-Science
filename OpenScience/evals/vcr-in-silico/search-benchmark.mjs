@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// The design-search benchmark (plan T10, A19): 30 predeclared candidate designs in two families, searched by fixed arms at matched
+// The design-search benchmark (plan T10, A19): 42 predeclared candidate designs in three families, searched by fixed arms at matched
 // budgets on the local engine, with no model call. Every arm runs the platform's own decision code (`@evimed/domain`
 // vcrExperimentSearch: the same manifest validation, seeds, screening, bounds and stop reasons the hosted campaign uses); only the
 // transport differs: each unit is one `Rscript service/run_job.R` process, run serially, i.e. the shared host's one-job profile.
@@ -72,6 +72,33 @@ function survivalManifest({ label, screening, finalCount, cpuSeconds, order = nu
   };
 }
 
+/**
+ * The level family (F4): the survival family's design with the analysis level (`analysis.alpha`) as a search variable under the
+ * frozen 2.5% constraint. 12 simulated two-arm log-rank designs: patients per arm {200, 225, 250} x analysis level {2.5%, 2.35%, 2.2%, 2%}
+ * at 24 months of accrual. The log-rank test is asymptotic, so its type I error is held to the simulation's bound alone: a design tested at
+ * 2.5% sits on the constraint and can only be undecided; a lower level gives the simulated rate margin. `levels` narrows the family to
+ * the control campaign that may not lower the level.
+ */
+const LEVEL = { nPerArm: [200, 225, 250], levels: [0.025, 0.0235, 0.022, 0.02] };
+function levelManifest({ label, levels = LEVEL.levels, screening, finalCount, cpuSeconds }) {
+  const candidates = LEVEL.nPerArm.flatMap((n) => levels.map((alpha) => ({ set: { 'design.nTreat': n, 'design.nControl': n, 'analysis.alpha': alpha } })));
+  return {
+    question: `Fewest patients with power at least 80% at HR 0.70 and type I error held at 2.5% (${label})`,
+    objective: { measure: 'expected_sample_size', direction: 'minimize', truth: 'alternative' },
+    constraints: [
+      { measure: 'power', op: '>=', bound: 0.8, kind: 'design', truth: 'alternative' },
+      { measure: 'type_one_error', op: '<=', bound: 0.025, kind: 'error_control', truth: 'null' },
+    ],
+    space: { method: 'design.simulate', scenario: { design: { kind: 'two_arm_fixed', nTreat: 200, nControl: 200 }, endpoint: { type: 'time_to_event' },
+      truth: { hazardRatio: 0.7, controlMedian: 12 }, accrual: { kind: 'uniform', duration: 24, followup: 12 },
+      analysis: { method: 'logrank', alpha: 0.025, sided: 1 }, performance: ['power', 'type_one_error', 'expected_sample_size'] },
+    truths: [{ name: 'alternative', truth: { hazardRatio: 0.7, controlMedian: 12 } }, { name: 'null', truth: { hazardRatio: 1, controlMedian: 12 } }],
+    candidates },
+    stages: { screening: screening ? { replicates: screening } : null, final: { count: finalCount } },
+    budget: { maxCandidates: candidates.length, cpuSeconds, modelCalls: 0 },
+  };
+}
+
 /** A fixed permutation of 0..n-1 from a seed (the random arm's predeclared order). */
 function permutation(n, seed) {
   let a = seed >>> 0;
@@ -97,7 +124,8 @@ async function runUnit(scratch, unit, cpuSecondsLimit) {
   const cacheKey = `${unit.idempotencyKey}:${Math.max(1, Math.ceil(cpuSecondsLimit))}`;
   if (cache.has(cacheKey)) return { ...cache.get(cacheKey), cached: true };
   const value = await runUnitNow(scratch, unit, cpuSecondsLimit);
-  if (cacheFile) await fs.appendFile(cacheFile, `${JSON.stringify({ key: cacheKey, value })}\n`);
+  // a unit that did not succeed is a transient of this box (memory, a killed process) until proven otherwise: it is never frozen into the cache
+  if (cacheFile && value.outcome.state === 'succeeded') await fs.appendFile(cacheFile, `${JSON.stringify({ key: cacheKey, value })}\n`);
   return value;
 }
 
@@ -157,7 +185,7 @@ async function campaign(name, input, scratch) {
 /** What an arm decided and what it cost. */
 function summarize(name, manifest, state, units, wall) {
   const candidates = vcrCampaignCandidates(manifest);
-  const verdict = state.finalists ? vcrCampaignVerdict(manifest, state) : { best: null, feasible: [], inconclusive: [] };
+  const verdict = state.finalists ? vcrCampaignVerdict(manifest, state) : { best: null, feasible: [], inconclusive: [], undecided: [], bestUndecided: null };
   const describe = (key) => {
     const c = candidates.find((x) => x.key === key);
     const entry = state.candidates[key];
@@ -165,13 +193,15 @@ function summarize(name, manifest, state, units, wall) {
     return { key, set: c?.set ?? null, status: entry.status, reason: entry.reason ?? null,
       final: Object.fromEntries(['power', 'type_one_error', 'expected_sample_size', 'required_patients', 'required_events']
         .map((m) => [m, value('final', 'alternative', m) ?? value('final', 'null', m) ?? value('final', 'planned', m)]).filter(([, v]) => v)),
-      verdicts: vcrCandidateVerdicts(manifest, entry, 'final').map((v) => ({ measure: v.measure, status: v.status, bound: v.bound ?? null })) };
+      verdicts: vcrCandidateVerdicts(manifest, entry, 'final').map((v) => ({ measure: v.measure, status: v.status, bound: v.bound ?? null, boundKind: v.bound?.kind ?? null, needed: v.needed ?? null })) };
   };
   // the 1-job profile: the queue a unit would wait in had every unit of this arm been submitted at once to the shared queue
   let ahead = 0;
   const profile = units.map((u) => { const row = { ...u, queueIfSubmittedTogether: ahead }; ahead += u.wallSeconds; return row; });
   return {
     arm: name, stop: state.stop?.reason ?? null, best: verdict.best ? describe(verdict.best) : null, feasible: verdict.feasible, inconclusive: verdict.inconclusive,
+    // the closest design no constraint failed, when none passed everything (F4), with each undecided constraint's simulated value and error
+    closestUndecided: verdict.bestUndecided ? { ...describe(verdict.bestUndecided), undecided: verdict.undecided.find((u) => u.key === verdict.bestUndecided)?.constraints ?? [] } : null,
     finalists: state.finalists ?? [], candidates: candidates.map((c) => describe(c.key)),
     evaluated: candidates.filter((c) => Object.keys(state.candidates[c.key].evaluations).length).length,
     usage: { ...state.usage, units: units.length, wallSeconds: wall, peakKb: Math.max(0, ...units.map((u) => u.peakKb)),
@@ -201,7 +231,7 @@ if (option('--score')) {
   process.exit(0);
 }
 
-const families = (option('--families', 'analytic,survival') ?? '').split(',');
+const families = (option('--families', 'analytic,survival,level') ?? '').split(',');
 const scratch = await fs.mkdtemp(path.join(process.env.TMPDIR || os.tmpdir(), 'vcr-search-bench-'));
 const out = { revision: null, engine: { versions: { 'design.simulate': VCR_ENGINE_METHODS['design.simulate'].version, 'design.analytic': VCR_ENGINE_METHODS['design.analytic'].version },
   cores: Number(process.env.VCR_TEST_CORES ?? 2), concurrency: 1 }, startedAt: new Date().toISOString() };
@@ -225,6 +255,17 @@ try {
     s.matchedBudgetCpuSeconds = budget;
     out.survival = s;
   }
+  if (families.includes('level')) {
+    const l = {};
+    // the control: the same designs with the level fixed at the constraint's own 2.5%: undecided by construction (a rate at the bound)
+    l.fixedLevel = await campaign('level-fixed', levelManifest({ label: 'level fixed at 2.5%', levels: [0.025], screening: 300, finalCount: 3, cpuSeconds: 3600 }), scratch);
+    // the new campaign: the level is a variable, the constraint is what it was; 4 finalists so one of them can be each lower level
+    l.searched = await campaign('level-searched', levelManifest({ label: 'analysis level searched', screening: 300, finalCount: 4, cpuSeconds: 3600 }), scratch);
+    // every design at full precision: the answer the staged campaign is scored against
+    if (flag('--exhaustive')) l.exhaustive = await campaign('level-exhaustive', levelManifest({ label: 'exhaustive', screening: null, finalCount: 5, cpuSeconds: 100000 }), scratch);
+    l.scores = ['fixedLevel', 'searched'].map((name) => score(l[name], l.exhaustive ?? null));
+    out.level = l;
+  }
   out.finishedAt = new Date().toISOString();
 } finally {
   await fs.rm(scratch, { recursive: true, force: true });
@@ -232,4 +273,4 @@ try {
 const file = option('--out');
 if (file) await fs.writeFile(file, `${JSON.stringify(out, null, 2)}\n`);
 process.stdout.write(`${JSON.stringify({ analytic: out.analytic ? { stop: out.analytic.campaign.stop, best: out.analytic.campaign.best?.set, usage: out.analytic.campaign.usage } : null,
-  survival: out.survival?.scores ?? null }, null, 2)}\n`);
+  survival: out.survival?.scores ?? null, level: out.level?.scores ?? null }, null, 2)}\n`);
