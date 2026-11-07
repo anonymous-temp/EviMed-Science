@@ -51,8 +51,26 @@ export function vcrPersonStated(scenario, messages, sources = []) {
       source: { sessionId: latest.sessionId, messageSeq: latest.messageSeq,
         sha256: createHash('sha256').update(latest.text).digest('hex') }, verification: 'source_checked_interpretation_asserted' });
   }
-  return { schema: VCR_PERSON_STATED_SCHEMA, readable: Boolean(latest), paths: bindings.map(row => row.path), bindings };
+  // A number the model gave no binding for is still the person's when the same number is written in one of their authenticated messages
+  // (live D4: the model sent no sources, so the person's own alpha, hazard ratio and median read as assumptions). Numeric notation only:
+  // the digest is every distinct number token of the messages, and a fraction also reads as the percentage written for it.
+  const bound = new Set(bindings.map(row => row.path));
+  const digest = originals.length ? numberDigest(originals.map(entry => entry.text)) : '';
+  const matched = digest ? [...leaves].filter(([path, value]) => !bound.has(path) && humanQuoteNumber(digest, value)).map(([path]) => path) : [];
+  return { schema: VCR_PERSON_STATED_SCHEMA, readable: Boolean(latest), paths: bindings.map(row => row.path), bindings, ...(matched.length ? { matched } : {}) };
 }
+
+/** Every distinct number token of the texts, a percentage with its sign and a 「百分之」 with its words, so a match is
+ * made against a few hundred characters however long the person's messages are.
+ * @param {readonly string[]} texts */
+function numberDigest(texts) {
+  const found = new Set();
+  for (const text of texts) {
+    for (const match of text.replace(/\[\d+\]/g, '').replace(/(?<=\d)[·⋅∙](?=\d)/g, '.').matchAll(DIGEST_TOKEN)) found.add(match[0]);
+  }
+  return [...found].join(' ');
+}
+const DIGEST_TOKEN = /百分之\s*-?\d+(?:\.\d+)?|(?<![\w.])[+-]?\d{1,3}(?:,\d{3})+(?:\.\d+)?(?:\s*(?:%|％|percent\b))?|(?<![\w.,])[+-]?\d+(?:\.\d+)?(?!\d|\.\d)(?:\s*(?:%|％|percent\b))?/giu;
 
 /** Numeric notation only; never infer a parameter's meaning from words. A bare
  * count cannot become a fraction merely because the caller labels it one.
@@ -84,7 +102,9 @@ export function personMappingPremises(record) {
 export function personWord(record, paths, legacy) {
   if (!record || typeof record !== 'object' || ![1, VCR_PERSON_STATED_SCHEMA].includes(record.schema)) return legacy;
   if (record.readable !== true || !Array.isArray(record.paths)) return 'assumed';
-  if (record.schema === 2) return 'assumed';
   const wanted = Array.isArray(paths) ? paths : [paths];
+  // Schema 2: a model-bound meaning stays an assumption (the model's reading of the unit and context); a number the person wrote in their own
+  // message and the model bound nothing for is theirs (`matched`, exact numeric notation).
+  if (record.schema === 2) return wanted.length > 0 && Array.isArray(record.matched) && wanted.every(path => record.matched.includes(path)) ? 'given' : 'assumed';
   return wanted.length > 0 && wanted.every(path => record.paths.includes(path)) ? 'given' : 'assumed';
 }

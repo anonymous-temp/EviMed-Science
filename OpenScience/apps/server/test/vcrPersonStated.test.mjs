@@ -29,7 +29,10 @@ test('equal numbers with different meanings require distinct explicit parameter 
   assert.deepEqual(vcrPersonStated(scenario,[text]).paths,[],'unscoped strings are not authenticated sources');
   const record = vcrPersonStated(scenario,[human(text)],[binding('followupMonths',30,text,'month','follow-up duration')]);
   assert.deepEqual(record.paths,['followupMonths']);
-  assert.equal(personWord(record,'design.nTreat','given'),'assumed');
+  // D4 (2026-11-07): a number the person wrote and the model bound nothing for is theirs by its notation, so 30 patients reads as written
+  // beside the bound 30 months; the bound one keeps the model's reading of its meaning.
+  assert.equal(personWord(record,'design.nTreat','given'),'given');
+  assert.equal(personWord(record,'followupMonths','given'),'assumed');
   assert.equal(record.bindings[0].unit,'month');
   assert.equal(record.bindings[0].source.messageSeq,10);
   assert.equal(record.bindings[0].source.sha256.length,64);
@@ -44,9 +47,12 @@ test('repeated percentages, arms and table columns are never inferred from match
     binding('design.nControl',30,'对照30人','patients','control arm planned size'),
   ]);
   assert.deepEqual(record.paths,['truth.controlRate','design.nControl']);
-  assert.equal(personWord(record,'truth.treatmentRate','given'),'assumed');
-  assert.equal(personWord(record,'design.dropout','given'),'assumed');
-  assert.equal(personWord(record,'design.nTreat','given'),'assumed');
+  // Matching is by notation (D4): 30% is 0.3 wherever the scenario puts it, and a number absent from the messages is the model's.
+  assert.equal(personWord(record,'truth.treatmentRate','given'),'given');
+  assert.equal(personWord(record,'design.dropout','given'),'given');
+  assert.equal(personWord(record,'design.nTreat','given'),'given');
+  assert.equal(personWord(record,'truth.controlRate','given'),'assumed','bound by the model: its reading stays an assumption');
+  assert.equal(personWord(vcrPersonStated({truth:{controlRate:0.31}},[human(text)]),'truth.controlRate','given'),'assumed');
 });
 
 test('new human instructions supersede old provenance; ambiguous, cross-session or rewritten sources stay assumptions', () => {
@@ -182,4 +188,19 @@ test('source-checked model interpretation stays assumed and inspectable on resul
   assert.match(detail.reason,/对照组招募24人/);
   assert.match(detail.reason,/month/);
   assert.equal(detail.value,'follow-up duration');
+});
+
+test('no sources sent: numbers in the original human messages are recognised in code, wherever they stand in a long message (live D4)', () => {
+  const filler = '背景说明：'.repeat(80);
+  const text = `${filler}单侧显著性水平 2.5%，风险比 0.75，对照组中位生存 12 个月，入组 12 个月随访 18 个月，每年脱落率为 0。`;
+  assert.ok(text.indexOf('2.5%') > 160);
+  const scenario = {analysis:{alpha:0.025},truth:{hazardRatio:0.75,controlMedian:12},accrual:{followup:18},design:{nTreat:367}};
+  const record = vcrPersonStated(scenario,[human('先问别的',3),human(text,12)]);
+  for (const path of ['analysis.alpha','truth.hazardRatio','truth.controlMedian','accrual.followup']) assert.equal(personWord(record,path,'assumed'),'given',path);
+  assert.equal(personWord(record,'design.nTreat','assumed'),'assumed','a number nobody wrote');
+  assert.equal(personWord(record,['truth.hazardRatio','design.nTreat'],'assumed'),'assumed','a row is the person\'s only when every number is');
+  assert.deepEqual(record.paths,[],'no model binding was sent');
+  assert.equal(personWord(vcrPersonStated(scenario,null),'truth.hazardRatio','assumed'),'assumed','no readable original: never the strong word');
+  assert.equal(personWord(vcrPersonStated({truth:{controlMedian:1200}},[human('median 1,200 days')]),'truth.controlMedian','assumed'),'given');
+  assert.equal(personWord(vcrPersonStated({a:0.3},[human('对照30人')]),'a','assumed'),'assumed','a bare count is not a fraction');
 });
