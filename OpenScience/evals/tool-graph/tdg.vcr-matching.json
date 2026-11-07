@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-matching",
-  "version": "sha256:3f1ce5201c869e5a35bf0bdd4f9175307496aa4c94dcae262d94eb27e5aabc08",
+  "version": "sha256:c7a78837a46adf14bf8f11e80a2fa617456267ba9a4314023574ca56c3affa1b",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 31,
@@ -1668,7 +1668,12 @@
               "status",
               "cancel",
               "shape",
-              "validate"
+              "validate",
+              "search",
+              "search_status",
+              "search_cancel",
+              "compare",
+              "compare_status"
             ],
             "default": "start"
           },
@@ -1782,6 +1787,24 @@
             "pattern": "^[A-Za-z0-9_.:@-]+$"
           },
           "jobId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "pattern": "^[A-Za-z0-9_.:@-]+$"
+          },
+          "manifest": {
+            "type": "object"
+          },
+          "campaignId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "pattern": "^[A-Za-z0-9_.:@-]+$"
+          },
+          "experiment": {
+            "type": "object"
+          },
+          "experimentId": {
             "type": "string",
             "minLength": 1,
             "maxLength": 160,
