@@ -159,8 +159,13 @@ export function vcrModelPackOf(model) {
  */
 export function vcrModelApplicabilityAssessment(model, study) {
   const legacy = vcrModelApplicabilityIssues(model, study);
-  const use = assessModelUse(vcrModelPackOf(model), {
-    mode: study.mode ?? "conditional_forecast", population: study.population, endpoint: study.endpoint ?? study.endpointType ?? undefined,
+  const pack = vcrModelPackOf(model);
+  // a caller that names no use asks for the card's own: a conditional forecast where the card can run one (or says nothing), else the
+  // first mode it declares, so a card that only forecasts is not refused a use nobody asked of it (review stats P2-13)
+  const modes = Array.isArray(pack.executableModes) ? pack.executableModes.map(String) : null;
+  const mode = study.mode ?? (!modes || !modes.length || modes.includes("conditional_forecast") ? "conditional_forecast" : modes[0]);
+  const use = assessModelUse(pack, {
+    mode, population: study.population, endpoint: study.endpoint ?? study.endpointType ?? undefined,
     horizonHours: study.horizonHours, authorized: study.authorized,
   });
   const mechanism = object(model.card).mechanism ? vcrMechanisticRuntimeIssues(object(object(model.card).mechanism), study.installedPackages ?? []) : [];

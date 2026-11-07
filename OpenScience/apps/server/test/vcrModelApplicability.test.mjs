@@ -50,3 +50,10 @@ test("a mechanism package whose solver the runtime lock lacks is an execution is
   assert.equal(result.premises.some((i) => i.code === "runtime_unavailable"), false);
   assert.equal(VCR_MECHANISTIC_REQUIRED.length, 13);
 });
+
+test("a card that only forecasts is not refused when nobody named another use (review stats P2-13)", () => {
+  const model = { ...fitted, applicability: { endpoints: ["binary"] }, card: { executable: true, executableModes: ["factual_forecast"] } };
+  assert.deepEqual(vcrModelExecutionIssues(model, { endpointType: "binary", variables }), []);
+  assert.deepEqual(vcrModelExecutionIssues(model, { endpointType: "binary", variables, mode: "intervention_comparison" }).map((i) => i.code), ["intervention_input_unavailable"],
+    "a use that is named is still judged");
+});
