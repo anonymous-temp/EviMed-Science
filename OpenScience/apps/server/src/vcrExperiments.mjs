@@ -432,6 +432,10 @@ export function presentCampaign(row) {
   });
   const verdict = state.finalists ? vcrCampaignVerdict(manifest, state) : null;
   const usage = object(state.usage);
+  // the best design against the declared reference, on their final evaluations, with the error the coupling of the two runs allows
+  const finalOf = (/** @type {string | null} */ key) => (key ? object(object(object(state.candidates)[key]).evaluations)[`final:${manifest.objective?.truth}`] ?? null : null);
+  const versus = verdict?.best && verdict.reference && verdict.best !== verdict.reference && finalOf(verdict.best) && finalOf(verdict.reference)
+    ? vcrEvaluationContrast(finalOf(verdict.best), finalOf(verdict.reference), manifest.objective.measure) : null;
   const stop = state.stop ? { reason: state.stop.reason, text: VCR_CAMPAIGN_STOP_TEXT_ZH[/** @type {keyof typeof VCR_CAMPAIGN_STOP_TEXT_ZH} */ (state.stop.reason)] ?? null, at: state.stop.at ?? null } : null;
   const alpha = Number(object(object(manifest.space).scenario).analysis?.alpha ?? 0.025);
   const errorControl = list(manifest.constraints).filter((c) => c.kind === "error_control");
@@ -446,6 +450,8 @@ export function presentCampaign(row) {
       candidatesEvaluated: candidates.filter((c) => c.stage).length, candidatesPlanned: candidates.length } },
     candidates, finalists: list(state.finalists), best: verdict?.best ?? null, inconclusive: verdict?.inconclusive ?? [], feasible: verdict?.feasible ?? [],
     reference: verdict?.reference ?? null, improvement: verdict?.improvement ?? null,
+    againstReference: versus ? { coupling: versus.coupling, couplingText: COUPLING_TEXT_ZH[/** @type {keyof typeof COUPLING_TEXT_ZH} */ (versus.coupling)] ?? null,
+      difference: versus.difference == null ? null : measureValue({ name: manifest.objective.measure, value: versus.difference, mcse: versus.mcse ?? undefined, simulated: versus.mcse != null }, { kind: "experiment_candidate" }) } : null,
     inFlight: state.inFlight ? { unit: state.inFlight.unitKey, stage: object(state.inFlight.unit).stage ?? null } : null,
     cancelRequested: state.cancelRequested === true, stop,
     premises: finishPremises([
