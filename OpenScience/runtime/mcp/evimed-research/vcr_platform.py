@@ -130,7 +130,11 @@ POOLING_METHODS = ("single_study", "random_effects_dl", "random_effects_reml", "
 POOLING_CALIBRES = ("closest", "overall", "next_closest")
 # The empirical priors for the between-study spread a pooling may name (`packages/domain/src/vcrEvidencePriors.mjs`); a prior the run types in is not offered here.
 TAU_PRIOR_KINDS = ("turner_2015", "turner_2015_generic", "bartos_2023")
-SIMULATE_ACTIONS = ("start", "status", "cancel", "shape", "validate")
+# The virtual lab's actions (F4): the same operation the trial plugin's `virtual_trial_search` / `virtual_trial_compare` reach, so a study
+# conversation without that plugin runs a design search or a design comparison through this one tool. They take a frozen manifest or an
+# experiment and an id, never a job id; the lab answers them whole (a campaign advances on the platform, not in this call).
+LAB_ACTIONS = ("search", "search_status", "search_cancel", "compare", "compare_status")
+SIMULATE_ACTIONS = ("start", "status", "cancel", "shape", "validate", *LAB_ACTIONS)
 # The objects `vcr_write` takes whose configuration, scenario or definition carries the keys of a job kind's scenario (the
 # platform projects the object onto that kind's schema and refuses what it does not read): where to look a shape up before
 # writing one. `test_vcr_platform.py` holds every name to the domain's job kinds.
@@ -369,6 +373,10 @@ def _detailed_tool_definitions():
                     }, "additionalProperties": False},
                     "reconstructionResultId": ID,
                     "jobId": ID,
+                    "manifest": {"type": "object"},
+                    "campaignId": ID,
+                    "experiment": {"type": "object"},
+                    "experimentId": ID,
                     "sources": {"type": "array", "maxItems": 8, "description": (
                         "A number you read in a paper and wrote into the scenario: [{field: its path in the scenario, e.g. truth.controlMedian, "
                         "publication: PMID or DOI, quote: the sentence that prints it}]. For a user-stated parameter, optionally use "
@@ -1089,6 +1097,22 @@ def _control_plane_shape(kind: str):
     }
 
 
+# The lab's own shapes (F4), answered by `shape` with no kind so the tool description stays as short as it was. The keys inside a manifest
+# are the domain's `vcrCampaignManifest`; `test_vcr_platform.py` holds the words that matter (the frozen evaluator, the analysis level).
+LAB_SHAPES = {
+    "search": "action search with manifest {question, objective {measure, direction minimize|maximize, truth}, constraints [{measure, op <=|>=, bound, "
+              "kind error_control|design|safety, truth}], space {method design.simulate|design.dose|design.analytic|patients.progression, scenario, "
+              "truths [{name, truth}], and either variables [{path, values}] or candidates [{set}]}, stages {screening {replicates}, final {count}}, "
+              "budget {maxCandidates, cpuSeconds}}. Only design paths vary: the truth, endpoint, sidedness and what is measured are the evaluator. "
+              "An error-control bound is fixed and never relaxed; it passes only on its conservative bound, never on a point estimate. The analysis "
+              "level (analysis.alpha, design.simulate and patients.progression) may be a variable only at or below that bound, with an error-control "
+              "constraint stated: it is how a design gains margin under the same constraint. A changed manifest is a new campaign. Read with "
+              "search_status {campaignId}, stop with search_cancel {campaignId}.",
+    "compare": "action compare with experiment {question, arms [{name, resultId} | {name, method, scenario}], comparison {measures, reference}}: saved "
+               "design results attach by id and are never rerun. Read with compare_status {experimentId}.",
+}
+
+
 def shape(arguments: dict) -> dict:
     """``vcr_simulate`` action shape: what a job kind's scenario reads, rendered from the generated help. Asks the
     platform nothing, so it answers with the module off too."""
@@ -1103,6 +1127,7 @@ def shape(arguments: dict) -> dict:
                                          if help_["methods"].get(entry["method"], {}).get("endpoints") else "")
                           for name, entry in help_["kinds"].items()},
                 "objects": {name: list(kinds) for name, kinds in OBJECT_SHAPES.items()},
+                "lab": LAB_SHAPES,
             },
             "warnings": [],
             "next_actions": ["Call vcr_simulate with action shape and the kind you are about to write or queue."],
@@ -1270,6 +1295,8 @@ def simulate(arguments: dict) -> dict:
         raise VcrPlatformError("vcr_simulate_action_invalid", "action must be one of: %s." % ", ".join(SIMULATE_ACTIONS))
     if action == "shape":
         return shape(arguments)
+    if action in LAB_ACTIONS:
+        return lab(arguments, action)
     payload = {"action": action}
     if action in ("start", "validate"):
         kind = arguments.get("kind")
@@ -1299,6 +1326,61 @@ def simulate(arguments: dict) -> dict:
     if action in ("start", "status"):
         data = _wait_for_job(data)
     return _with_entry(_with_applied(_job_answer(data, action), data), data)
+
+
+# What each lab action takes: the one object that names the work, or the id that reads or stops it. The keys inside a manifest are the
+# lab's (`shape` with no kind answers them), not the scenario help's.
+_LAB_INPUT = {"search": "manifest", "compare": "experiment", "search_status": "campaignId", "search_cancel": "campaignId", "compare_status": "experimentId"}
+
+
+def lab(arguments: dict, action: str) -> dict:
+    """``vcr_simulate`` lab actions: freeze a design search or a comparison of named designs, read it, stop it. Nothing is computed
+    here: the platform evaluates every candidate on the engine, one unit at a time, and says why it stopped."""
+    key = _LAB_INPUT[action]
+    value = arguments.get(key)
+    if action in ("search", "compare"):
+        if not isinstance(value, dict) or not value:
+            raise VcrPlatformError("vcr_simulate_payload_invalid", "%s is the %s object; action shape with no kind says what it holds." % (
+                key, "frozen campaign" if action == "search" else "experiment of named arms and their comparison"))
+    elif not isinstance(value, str) or not value:
+        raise VcrPlatformError("vcr_simulate_payload_invalid", "%s is the id %s answered with." % (key, "search" if key == "campaignId" else "compare"))
+    try:
+        data = _post("simulate", {"action": action, key: value})
+    except VcrPlatformError as error:
+        if error.code in _absent_codes():
+            return _module_absent(error, "design search", "queue")
+        raise
+    return _lab_answer(data, action)
+
+
+def _lab_answer(data: dict, action: str) -> dict:
+    stop = data.get("stop") if isinstance(data.get("stop"), dict) else None
+    status = str(data.get("status") or "")
+    ident = str(data.get("id") or data.get("campaignId") or data.get("experimentId") or "")
+    running = status == "running" or (stop is None and data.get("kind") == "campaign" and status != "stopped")
+    if action in ("search", "compare") or running:
+        next_actions = [
+            "The platform evaluates every candidate on the engine without you; do not wait for it in this turn and never run a status loop. Tell the "
+            "researcher what was started, where it appears (the study's lab page) and how it is judged, then end the turn or go on with other work.",
+            "Give no number of your own for any candidate: the numbers, bounds and verdicts are the engine's and are read back with %s." % (
+                "search_status (campaignId)" if data.get("kind") == "campaign" or action.startswith("search") else "compare_status (experimentId)"),
+        ]
+    else:
+        next_actions = [
+            "Report the stop reason in the researcher's words, the best design with its final numbers and their error, which constraints were met, "
+            "undecided or not met, and the budget used; cite the fields, never retyped numbers.",
+        ]
+        undecided = data.get("undecided") if isinstance(data.get("undecided"), dict) else None
+        if undecided and undecided.get("advice"):
+            next_actions.append(
+                "The campaign stopped undecided: give the closest design and say what would decide it (undecided.advice) in your own sentence. The frozen "
+                "constraint never changes and a point estimate never passes it: a lower analysis level or more replicates is a NEW campaign the researcher asks for.")
+    return {
+        "status": "success",
+        "summary": "%s %s%s." % ("Design search" if data.get("kind") == "campaign" else "Design comparison", ident,
+                               " is running" if running else (" stopped: %s" % stop.get("reason") if stop else " is read")) if ident else "Done.",
+        "data": data, "warnings": [], "next_actions": next_actions,
+    }
 
 
 def _validate_answer(data: dict, kind) -> dict:

@@ -748,6 +748,51 @@ class VcrSimulateTests(_GatewayCase):
         self.assertEqual(_Gateway.seen[0]["path"], "/internal/vcr/v1/simulate")
         self.assertEqual(_Gateway.seen[0]["body"], {"action": "start", "kind": "design_simulation", "scenario": scenario, "subjectId": "scn_1"})
 
+    def test_the_lab_actions_reach_the_platform_whole_and_are_never_waited_for(self):
+        # F4: a study conversation without the native trial plugin runs a design search through this tool. The call carries the frozen
+        # manifest or an id and nothing else; the answer is the lab's own and no status loop is invited.
+        manifest = {"question": "smallest trial", "objective": {"measure": "expected_sample_size", "direction": "minimize", "truth": "alt"},
+                    "constraints": [{"measure": "type_one_error", "op": "<=", "bound": 0.025, "kind": "error_control", "truth": "null"}],
+                    "space": {"method": "design.simulate", "scenario": {}, "variables": [{"path": "analysis.alpha", "values": [0.02, 0.025]}]},
+                    "stages": {"final": {"count": 2}}, "budget": {"maxCandidates": 2, "cpuSeconds": 600}}
+        _Gateway.answers["simulate"] = (200, {"data": {"action": "search", "kind": "campaign", "id": "cmp_1", "status": "running", "stop": None}})
+        started = self.server.call_tool("vcr_simulate", {"action": "search", "manifest": manifest})
+        self.assertEqual(started["status"], "success")
+        self.assertEqual(_Gateway.seen[0]["path"], "/internal/vcr/v1/simulate")
+        self.assertEqual(_Gateway.seen[0]["body"], {"action": "search", "manifest": manifest})
+        self.assertIn("cmp_1 is running", started["summary"])
+        self.assertTrue(any("never run a status loop" in line for line in started["next_actions"]))
+        _Gateway.answers["simulate"] = (200, {"data": {"action": "search_status", "kind": "campaign", "id": "cmp_1", "status": "stopped",
+                                                       "stop": {"reason": "inconclusive_at_precision", "text": "x"}, "undecided": {"closest": None, "advice": ["a"]}}})
+        read = self.server.call_tool("vcr_simulate", {"action": "search_status", "campaignId": "cmp_1"})
+        self.assertEqual(_Gateway.seen[1]["body"], {"action": "search_status", "campaignId": "cmp_1"})
+        self.assertIn("stopped: inconclusive_at_precision", read["summary"])
+        self.assertTrue(any("NEW campaign" in line and "never changes" in line for line in read["next_actions"]), "an undecided stop never invites relaxing the constraint")
+        self.server.call_tool("vcr_simulate", {"action": "search_cancel", "campaignId": "cmp_1"})
+        self.assertEqual(_Gateway.seen[2]["body"], {"action": "search_cancel", "campaignId": "cmp_1"})
+        self.server.call_tool("vcr_simulate", {"action": "compare", "experiment": {"arms": []}})
+        self.server.call_tool("vcr_simulate", {"action": "compare_status", "experimentId": "exp_1"})
+        self.assertEqual([seen["body"]["action"] for seen in _Gateway.seen[3:]], ["compare", "compare_status"])
+        for bad in ({"action": "search"}, {"action": "search", "manifest": {}}, {"action": "search_status"}, {"action": "compare_status", "campaignId": "x"}):
+            with self.assertRaises(vcr_platform.VcrPlatformError):
+                vcr_platform.simulate(bad)
+
+    def test_the_lab_shapes_are_answered_by_shape_so_the_description_does_not_grow(self):
+        lab = vcr_platform.shape({})["data"]["lab"]
+        self.assertEqual(set(lab), {"search", "compare"})
+        for fragment in ("never relaxed", "analysis.alpha", "A changed manifest is a new campaign", "search_status {campaignId}"):
+            self.assertIn(fragment, lab["search"])
+        definitions = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}
+        properties = definitions["vcr_simulate"]["inputSchema"]["properties"]
+        self.assertEqual(properties["action"]["enum"][-5:], list(vcr_platform.LAB_ACTIONS))
+        for key in ("manifest", "campaignId", "experiment", "experimentId"):
+            self.assertIn(key, properties)
+        for word in ("manifest", "campaign", "search"):
+            self.assertNotIn(word, definitions["vcr_simulate"]["description"], "the lab is in the schema and in shape, not in what rides every request")
+        # the tool catalogue the root conversation sees: the five actions and four keys are the whole growth (13,159 -> 13,475 bytes compact)
+        import json
+        self.assertLess(len(json.dumps(list(definitions.values()), separators=(",", ":"))), 13_600)
+
     def test_shape_answers_through_the_tool_without_asking_the_platform_and_with_the_module_off(self):
         result = self.server.call_tool("vcr_simulate", {"action": "shape", "kind": "design_simulation"})
         self.assertEqual(result["status"], "success")

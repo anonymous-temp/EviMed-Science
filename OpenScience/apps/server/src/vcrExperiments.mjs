@@ -653,7 +653,7 @@ function undecidedView(manifest, verdict, candidates) {
           advice = `${at}：现有信息不足以估计需要多少次复核；增加复核次数才可能判断。`;
         }
         return { index: c.index, measure: c.measure, label, op: c.op, bound: c.bound, status: "inconclusive",
-          estimate: c.estimate == null ? null : measureValue({ name: c.measure, value: c.estimate, mcse: c.mcse ?? undefined, simulated: true }, { kind: "experiment_candidate" }),
+          estimate: c.estimate == null ? null : { name: c.measure, ...measureValue({ name: c.measure, value: c.estimate, mcse: c.mcse ?? undefined, simulated: true }, { kind: "experiment_candidate" }) },
           needed: needed ? { replicates: needed.replicates ?? null, reason: needed.reason ?? null } : null, advice };
       }) };
   });
