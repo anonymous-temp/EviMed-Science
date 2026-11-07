@@ -762,7 +762,9 @@ jobs:
             apps/server/test/vcrIntake.integration.test.mjs \
             apps/server/test/vcrKnowledgeEngine.integration.test.mjs \
             apps/server/test/vcrModelScience.integration.test.mjs \
-            apps/server/test/vcrTrainedModel.integration.test.mjs
+            apps/server/test/vcrTrainedModel.integration.test.mjs \
+            apps/server/test/vcrExperiments.integration.test.mjs \
+            apps/server/test/vcrDiseaseLab.integration.test.mjs
           NO_COLOR=1 node --test --test-reporter=spec --test-concurrency=1 \
             apps/server/test/resultReplayLifecycle.integration.test.mjs \
             2>&1 | tee "$RUNNER_TEMP/result-replay-five-paths.log"
