@@ -204,6 +204,11 @@ export class ControlPlaneDatabase {
     if (!Number.isSafeInteger(connectionTimeoutMillis) || connectionTimeoutMillis < 100 || connectionTimeoutMillis > 120_000) {
       throw configurationError("database_timeout_invalid", "The PostgreSQL connection timeout is invalid.");
     }
+    const idleInTransactionMs = Number(config.databaseIdleInTransactionMs ?? 0);
+    if (!Number.isSafeInteger(idleInTransactionMs) || idleInTransactionMs < 0 || idleInTransactionMs > 3_600_000
+      || (idleInTransactionMs > 0 && idleInTransactionMs < 1000)) {
+      throw configurationError("database_idle_in_transaction_invalid", "The PostgreSQL idle-in-transaction bound is invalid.");
+    }
     this.pool = pool ?? new Pool({
       connectionString: config.databaseUrl,
       max,
@@ -211,6 +216,10 @@ export class ControlPlaneDatabase {
       idleTimeoutMillis: 30_000,
       allowExitOnIdle: true,
       application_name: "evimed-science-control-plane",
+      // A startup parameter of every connection: PostgreSQL itself ends a session that holds a transaction open and does
+      // nothing for this long, releasing its locks. Nothing in the application waits that long between two statements of
+      // one transaction; a wait on the engine or another service belongs outside the transaction.
+      ...(idleInTransactionMs > 0 ? { idle_in_transaction_session_timeout: idleInTransactionMs } : {}),
     });
     this.ownsPool = !pool;
     this.ready = null;

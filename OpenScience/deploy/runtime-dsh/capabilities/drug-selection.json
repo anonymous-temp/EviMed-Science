@@ -78,14 +78,6 @@
     ]
   },
   "safetyClass": "clinical",
-  "autopilot": {
-    "taskTypes": [],
-    "costClass": "medium",
-    "unattendedInputs": [
-      "candidateDrugs",
-      "indication"
-    ]
-  },
   "budget": {
     "maxSteps": 120,
     "maxTokens": 4000000,

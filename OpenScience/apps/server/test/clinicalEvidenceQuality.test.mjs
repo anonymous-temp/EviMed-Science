@@ -3200,14 +3200,11 @@ test("every file the capability manifest requires is named by the run-side gate 
   // Two since 2026-09-17: the report and the matrix. The floor is what proves
   // the manifest was parsed at all, and an empty list would pass every loop.
   assert.ok(required.length >= 2, `expected the manifest's required outputs, found ${required.length}`);
-  const declaredOptional = outputs.filter((output) => output.required === false).map((output) => output.path);
-  assert.ok(declaredOptional.includes("agenda-delta.json"), "the manifest no longer lists the optional output this case leaves out below");
 
   const input = deepResearchPackage();
   const complete = new Map([
     ["clinical-evidence-report.md", input.reportText],
     ["clinical-evidence-matrix.json", JSON.stringify(input.matrix)],
-    ["agenda-delta.json", JSON.stringify({ claims: [], hypotheses: [] })],
   ]);
   const expectedOutputs = required.map((relative) => ({ path: relative, required: true }));
 
@@ -3225,21 +3222,6 @@ test("every file the capability manifest requires is named by the run-side gate 
     assert.ok(
       verdict.issues.some((entry) => String(entry.message).includes(relative)),
       `${relative} is missing and no issue names it — the run cannot fix what it is not told about`,
-    );
-  }
-
-  // The other half of the same invariant: a file the manifest does not demand
-  // is not demanded by the run-side gate either. Optional on one side and
-  // required on the other is the same two-gates-one-package drift.
-  const allOutputs = [...expectedOutputs, ...declaredOptional.map((relative) => ({ path: relative, required: false }))];
-  for (const relative of declaredOptional) {
-    const files = new Map(complete);
-    files.delete(relative);
-    const verdict = runGate({ contractKind: "clinical-evidence-report", files, expectedOutputs: allOutputs, sourceArtifacts: input.sourceArtifacts ?? {} });
-    assert.deepEqual(
-      verdict.issues.filter((entry) => entry.severity === "required").map((entry) => entry.message),
-      [],
-      `${relative} is optional and its absence withheld acceptance`,
     );
   }
 });

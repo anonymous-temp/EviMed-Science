@@ -1,6 +1,6 @@
 {
   "note": "content/write, mode create, wait true: a new file, embedded before the answer returns.",
-  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.1.1",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.3",
   "request": {
     "method": "POST",
     "path": "/api/v1/content/write",

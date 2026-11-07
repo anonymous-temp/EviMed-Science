@@ -280,3 +280,24 @@ vcr_case("N80h", c("AC-07", "AC-08", "AC-30"), function() {
        detail = sprintf("start model logit -5.2 + 2.2 x, 3,000 people: treated weights up to %.1f (mean %.2f, flagged), control weights up to %.1f (mean %.2f, not); grace 6 and horizon 5: limited (horizon_inside_grace_period) and the first arm's risk %.4f equals the Kaplan-Meier of the whole cohort %.4f; %d people treated before time zero are counted apart (%d never started) and limited; the size refusal of a clone-censor-weight design names the horizon and not followUpLimit, a sequence of trials still does",
                         sw1$max, sw1$mean, sw0$max, sw0$mean, vcr_measure_value(inside, "risk_treated_start"), km_all, d17$treatedBeforeTimeZero, d17$neverStarted))
 })
+
+vcr_case("N80i", c("AC-07", "AC-30"), function() {
+  # The cap protects what is allocated, which is people x horizon, not the person-periods that are followed. 4,000 people followed for one period and
+  # one followed for 30, a horizon of 30: 8,060 person-periods x 2 clone arms of follow-up, but the matrices of the weights and the at-risk indicators
+  # are 4,001 x 30 = 120,030 cells (about 63 bytes a cell across the matrices the design keeps: 60 million cells measured 3.8 GB). With the person-period
+  # cap at 10,000 and the allocation cap at ten times it (100,000 cells), the job is refused by name before anything is built; the same table with
+  # the cap at its default runs.
+  set.seed(20261105L, kind = VCR_RNG_KIND)
+  short <- .n80_world(4000L, utils::modifyList(.n80_par, list(Tmax = 1L)))
+  tall <- .n80_world(1L, utils::modifyList(.n80_par, list(Tmax = 30L))); tall$E[] <- Inf
+  a <- .n80_long(short, 1L); b <- .n80_long(tall, 30L); b$USUBJID <- "LONG"
+  long <- rbind(a, b)
+  sc <- list(covariates = list("x"), strategy = list(kind = "clone_censor_weight", gracePeriod = 3L), horizon = 30L, timeUnit = "weeks")
+  mk <- function(id) vcr_test_job("comparator.target_trial", sc, list(vcr_test_input(long, paste0("snp_", id, ":longitudinal"), "long")), seed = 4L, job_id = paste0("job_", id))
+  Sys.setenv(VCR_ENGINE_MAX_PERSON_PERIODS = "10000"); on.exit(Sys.unsetenv("VCR_ENGINE_MAX_PERSON_PERIODS"), add = TRUE)
+  refused <- vcr_test_run(mk("n80i1")); Sys.unsetenv("VCR_ENGINE_MAX_PERSON_PERIODS")
+  detail <- paste(vapply(refused$diagnostics$issues %||% refused$issues, function(x) x$detail %||% "", character(1)), collapse = " ")
+  cells <- 4001L * 30L
+  ok <- identical(refused$status, "failed") && "too_many_person_periods" %in% vcr_test_issue_codes(refused) && grepl(format(cells, big.mark = ",", scientific = FALSE), detail, fixed = TRUE)
+  list(pass = ok, detail = sprintf("4,001 people x a horizon of 30 = %s cells with a cap of 100,000 (rows followed: 8,060): status %s, codes %s", format(cells, big.mark = ","), refused$status, paste(vcr_test_issue_codes(refused), collapse = ",")))
+})

@@ -31,6 +31,7 @@ const TERMINAL_ERRORS = new Set([
   // 「重新分析」 starts over once it is done.
   "source_parser_payload_too_large", "source_parser_checksum_failed", "source_parser_rejected",
   "source_parser_auth_failed", "source_parser_quota_exhausted", "source_parser_unconfigured",
+  "source_parser_scope_denied", "source_parser_route_missing", "source_parser_document_unreadable",
   "source_not_found", "source_account_changed", "source_replacement_scope_invalid", "source_cleanup_unconfigured", "source_cleanup_platform_unsupported", "source_cleanup_path_invalid",
   "source_folder_not_found", "source_folder_invalid", "source_folder_conflict",
 ]);

@@ -225,3 +225,30 @@ vcr_case("N78e", c("AC-07", "AC-30"), function() {
        detail = sprintf("entropy balancing / propensity / doubly robust pooled and sourced imputed: %s; weighted Cox pooled with its E-value: %s; no key keeps the refusal naming it: %s; nothing missing runs plain and says so: %s; 6 observed values: imputation_not_possible: %s; 1.4.0 label refused the key: %s; cohort rule keeps %d analysed: %s; a controlled budget interruption pooled %d of %d (limited, stopped early): %s; at once: failed with the complete-case answer: %s",
                         paste(methods_ok, collapse = "/"), cox_ok, refusal_ok, none_ok, sparse_ok, old_ok, kept, cohort_ok, ip$completed %||% NA, m_big, part_ok, none_stop_ok))
 })
+
+vcr_case("N78f", c("AC-08", "AC-30"), function() {
+  # A two-level categorical column that is not coded 0/1 is imputed on its own levels. Sex coded 1/2 (and 2/3, -1/1) with 30% missing, half the people
+  # in each level: an imputed value is one of the levels, the share of the higher level among the imputed people is the logistic model's own
+  # (the simulation's known probability, averaged over people, within its Monte-Carlo error), and the same table coded 0/1 and recoded draws
+  # the same people under the same stream.
+  set.seed(20261105L, kind = VCR_RNG_KIND)
+  n <- 4000L; z <- stats::rnorm(n); sex01 <- stats::rbinom(n, 1L, stats::plogis(0.8 * z))
+  y <- 1 + 0.6 * sex01 + 0.5 * z + stats::rnorm(n, sd = 0.5)
+  miss <- stats::runif(n) < 0.30
+  run <- function(codes) {
+    D <- data.frame(sex = ifelse(miss, NA, codes[sex01 + 1L]), z = z)
+    streams <- vcr_stream_bank(31L)$take(1L)
+    vcr_with_stream(streams[[1L]], function(.) vcr_chained_impute(D, cbind(outcome = y), list(sex = .vcr_impute_kind(D$sex, TRUE)), 8L), 1L)$sex
+  }
+  r01 <- run(c(0, 1)); r12 <- run(c(1, 2)); r23 <- run(c(2, 3)); rm11 <- run(c(-1, 1))
+  in_levels <- all(r12[miss] %in% c(1, 2)) && all(r23[miss] %in% c(2, 3)) && all(rm11[miss] %in% c(-1, 1))
+  same <- all(r12 - 1 == r01) && all(r23 - 2 == r01) && all((rm11 + 1) / 2 == r01)
+  # the truth the model targets: P(sex = 1 | z, y) among the missing people, from a logistic fit on the complete rows
+  f <- stats::glm(sex01 ~ z + y, family = stats::binomial(), data = data.frame(sex01 = sex01, z = z, y = y)[!miss, ])
+  expect_share <- mean(stats::predict(f, newdata = data.frame(z = z, y = y)[miss, ], type = "response"))
+  got <- mean(r01[miss] == 1)
+  se <- sqrt(expect_share * (1 - expect_share) / sum(miss))
+  list(pass = in_levels && same && abs(got - expect_share) < 4 * se,
+       detail = sprintf("%d of %d missing; coded 1/2, 2/3 and -1/1 every imputed value is a level: %s; the 1/2, 2/3 and -1/1 codings draw the 0/1 coding's people: %s; share of the higher level among the imputed %.4f vs glm %.4f (se %.4f)",
+                        sum(miss), n, in_levels, same, got, expect_share, se))
+})

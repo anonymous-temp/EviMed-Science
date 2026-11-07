@@ -1,13 +1,11 @@
 import { VCR_LONGITUDINAL_ERROR_CODES } from './vcrLongitudinal.mjs';
 import { EVOLUTION_ERROR_MESSAGES } from './evolution.mjs';
 import { READINESS_ERROR_MESSAGES_ZH } from './readinessCodes.mjs';
-import { AGENDA_MIN_EPISODE_BUDGET_CNY, MIN_RUN_BUDGET_CNY } from './agenda.mjs';
 import { RESULT_WORKBENCH_ERROR_MESSAGES } from "./resultErrors.mjs";
 import { DOCUMENT_EXPORT_ERROR_MESSAGES } from "./documentExport.mjs";
 import { SOURCE_CHANGE_ERROR_MESSAGES } from "./sourceChange.mjs";
 import { CONNECTOR_MISSING_CODES } from "./connectorCredentials.mjs";
 import { DATA_SEMANTICS_ERROR_CODES, DATA_SEMANTICS_ERROR_MESSAGE_ZH } from "./dataSemantics.mjs";
-import { TASK_TOOL_ERROR_CODES, TASK_TOOL_ERROR_MESSAGE_ZH, TASK_TOOL_RUN_FIXES } from "./taskTools.mjs";
 import { EVIDENCE_CARD_ERROR_MESSAGES_ZH } from "./evidenceCard.mjs";
 import { EVIDENCE_UPKEEP_ERROR_MESSAGES_ZH } from "./evidenceUpkeep.mjs";
 import { GENE_EXPRESSION_ERROR_MESSAGE_ZH, GENE_EXPRESSION_LIMITATION_ERROR_CODES, GENE_EXPRESSION_LIMIT_MESSAGE_ZH, GENE_EXPRESSION_RUN_FIX_ERROR_CODES } from "./geneExpression.mjs";
@@ -262,11 +260,6 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   // did not have the recorded interpretation. The two codes a malformed call earns are the run's to fix and sit
   // in the terminal set below.
   ...DATA_SEMANTICS_ERROR_CODES.filter((code) => !DATA_SEMANTICS_RUN_FIXES.includes(code)),
-  // The two tools that schedule and change a task from a conversation (schedule_task / update_task → taskToolsGateway.mjs)
-  // not answering: the feature off, a project at its task limit, an outage, an execution (which may not make tasks).
-  // The conversation tells the researcher plainly and the page's own form still works. The codes a malformed call earns
-  // are the run's to fix and sit in the terminal set below.
-  ...TASK_TOOL_ERROR_CODES.filter((code) => !TASK_TOOL_RUN_FIXES.includes(code)),
   // NCBI Gene Expression Omnibus (gene_expression_series / gene_expression_differential, 2026-10-04): an input over one of
   // the six limits, identities that do not agree, a series with no matrix or one that cannot be read, an engine that is
   // not there. Each refuses that one retrieval or computation, the report says so, and the rest goes on. The codes a
@@ -677,9 +670,6 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   "kb_browse_request_invalid",
   "kb_browse_request_too_large",
   ...DATA_SEMANTICS_RUN_FIXES,
-  // And for a task tool: an instruction, title, schedule or id the run built wrongly, a task that is not this project's, a change
-  // that changes nothing.
-  ...TASK_TOOL_RUN_FIXES,
   // The same for a gene-expression call: an accession, group, path or output directory the run built wrongly, a capture it
   // edited, a result directory that already holds a different analysis (its own results are kept).
   ...GENE_EXPRESSION_RUN_FIX_ERROR_CODES,
@@ -1045,7 +1035,7 @@ export const CREDIT_ERROR_CODES = Object.freeze([
 /**
  * The refusals that say 「this account's allowance cannot pay for the start」: the
  * balance gate's own, on a real wallet and on a simulated one. They are the
- * codes work waits on — an autopilot episode is deferred, never failed, and a
+ * codes work waits on — a scheduled run is deferred, never failed, and a
  * programme step stays pending — so a place that waits for credits asks this
  * list rather than one literal, or the simulated refusal would be a failure there.
  */
@@ -1215,11 +1205,11 @@ export function runtimeStartRecovery(code, status) {
 
 /**
  * Codes a person meets outside a run's verdict: a refusal before anything
- * starts, and the autopilot verification episode's own outcomes.
+ * starts.
  *
  * These never reach `run.errorCode`, but they do reach a human — a 402 at the
- * moment they press Send, a 423 while their own proactive research holds the
- * runtime, a claim card saying an independent check could not be completed —
+ * moment they press Send, a 423 while a bounded run holds the
+ * runtime —
  * and each was previously rendered as its raw English identifier or swallowed
  * entirely.
  */
@@ -1278,16 +1268,6 @@ export const CONTROL_PLANE_ERROR_CODES = Object.freeze([
   'project_limit_reached',
   'default_project_protected',
   'illegal_state_transition',
-  'verification_run_failed',
-  'verification_result_missing',
-  'verification_result_unreadable',
-  'verification_result_schema_invalid',
-  'verification_verdict_invalid',
-  'verification_verdict_missing',
-  // A re-check that was cancelled together with its agenda, and the floor an
-  // agenda's per-episode cap is held to (`AGENDA_MIN_EPISODE_BUDGET_CNY`).
-  'verification_canceled_by_stop',
-  'autopilot_episode_budget_too_small',
 ])
 
 /**
@@ -1314,6 +1294,9 @@ const sourceIntakeErrorCodes = Object.freeze([
   'source_parser_input_too_large',
   'source_parser_checksum_failed',
   'source_parser_auth_failed',
+  'source_parser_scope_denied',
+  'source_parser_route_missing',
+  'source_parser_document_unreadable',
   'source_parser_quota_exhausted',
   'source_parser_rate_limited',
   'source_parser_unavailable',
@@ -1363,43 +1346,6 @@ const sourceIntakeErrorCodes = Object.freeze([
   'openlist_storage_missing',
   'openlist_credential_rejected',
   'openlist_permission_denied',
-])
-
-/**
- * Codes the scheduled research's material routes answer with
- * (`AutopilotService.addMaterials`): shown on a question's page where the
- * researcher adds a document to it. A source that is not this question's
- * project's, and one that is not there, answer the same way on purpose. Private
- * for the same reason as the intake list.
- */
-const autopilotMaterialErrorCodes = Object.freeze([
-  'autopilot_material_not_found',
-  'autopilot_materials_full',
-  // 2026-10-08: the task page's own reads and stops of one execution (`POST …/episodes/:id/cancel`). A task or an execution that is
-  // not there for this account; the page says so and goes back to its list.
-  'autopilot_agenda_not_found',
-  'autopilot_episode_not_found',
-  'autopilot_cancellation_failed',
-  // 2026-10-25: the deployment's scheduler is off. The page's own code, so it is not the conversation tool's sentence that sends the
-  // researcher to the very page they are on; saved tasks and their results stay readable.
-  'autopilot_scheduling_disabled',
-])
-
-/**
- * The two refusals a scheduled task's own spending caps raise before an episode
- * starts (`AutopilotService.assertAffordable`): what this task has spent in the
- * last 24 hours or 7 days has reached the 每日上限 or 每周上限 written on the
- * task. They are not the account's ceiling and must not read as one — on
- * 2026-10-04 a task with ¥3 a day was refused in the account's words because
- * the researcher's own other research that day had cost ¥16, and the task had
- * spent nothing. Shown on the page where the researcher presses 立即运行 or
- * sends a follow-up, and on an episode that was refused at dispatch because the
- * budget was spent in between; the weekly one is named first when both are
- * spent, since it frees later.
- */
-export const AUTOPILOT_BUDGET_ERROR_CODES = Object.freeze([
-  'autopilot_daily_budget_spent',
-  'autopilot_weekly_budget_spent',
 ])
 
 /**
@@ -2099,8 +2045,6 @@ export const ALL_ERROR_CODES = Object.freeze([...new Set([
   ...recoverableEvidenceSourceErrorCodes,
   ...terminalEvidenceSourceErrorCodes,
   ...sourceIntakeErrorCodes,
-  ...autopilotMaterialErrorCodes,
-  ...AUTOPILOT_BUDGET_ERROR_CODES,
   ...libraryErrorCodes,
   ...capsuleTransferErrorCodes,
   ...GEO_ROUTE_ERROR_CODES,
@@ -2883,20 +2827,6 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   project_limit_reached: '这个账户的项目数已达上限。每个项目都有独立的存储空间和研究运行时，上限用来保证服务器资源够用。可以先导出并删除不再需要的项目，再新建。',
   default_project_protected: '默认项目不能归档或删除。可以改名，或把不再需要的内容移到别的项目。',
 
-  // ——— The autopilot's independent-check episode ———
-  //
-  // "The check could not be completed" is not "the claim was refuted", and the
-  // two must never read alike: one is our infrastructure, the other is a
-  // finding about the user's own adopted conclusion.
-  verification_run_failed: '独立复核这一次没能跑完，因此还没有复核结论。这不代表原来的结论被推翻。',
-  verification_result_missing: '独立复核跑完了但没有写出结论文件，因此这次没有复核结果。原结论未被推翻。',
-  verification_result_unreadable: '独立复核的结论文件读不出来，因此这次没有复核结果。原结论未被推翻。',
-  verification_result_schema_invalid: '独立复核的结论文件格式与约定不符，这次不采信它。原结论未被推翻。',
-  verification_verdict_invalid: '独立复核给出的结论不在允许的取值范围内，这次不采信它。原结论未被推翻。',
-  verification_verdict_missing: '独立复核没有给出结论。原结论未被推翻。',
-  verification_canceled_by_stop: '任务被停止时，这条结论的独立复核还在进行，已随任务一起取消，所以没有复核结果。原结论未被推翻。'
-    + '重新启用任务不会补做这次复核；下一次研究会重新检查新的结论。',
-
   // ——— Knowledge-base intake: what a source card and an upload refusal say ———
   // The in-house parser's refusals reach a researcher on the source card, and
   // three of them (413, 415, 422) are final on the first answer, so each says
@@ -2914,6 +2844,9 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   source_parser_input_too_large: '文件超过可解析的大小上限，拆分后再上传即可。',
   source_parser_checksum_failed: '文件在传给解析服务的途中发生了变化，校验没有通过；重新分析一次即可。',
   source_parser_auth_failed: '文档解析服务没有接受本平台的密钥，需要管理员配置解析服务密钥；纯文本类资料不受影响。',
+  source_parser_scope_denied: '文档解析服务的密钥没有解析权限，需要管理员换一把有权限的密钥；PDF 和 Office 文件在服务恢复前由平台自行读出文字。',
+  source_parser_route_missing: '文档解析服务的接口地址已经变了，需要管理员更新配置；PDF 和 Office 文件在服务恢复前由平台自行读出文字。',
+  source_parser_document_unreadable: '解析服务读不出这份文件里的文字：文件可能已加密、已损坏，或者文字层无法使用（扫描件请上传清晰的图片版）。',
   source_parser_quota_exhausted: '文档解析服务的可用额度已经用完，需要管理员补充额度后再重新分析。',
   source_parser_rate_limited: '文档解析服务这会儿请求太多，稍后再重新分析。',
   source_parser_unavailable: '文档解析服务暂时连不上，稍后再重新分析。',
@@ -2958,21 +2891,6 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   library_unavailable: '个人资料库暂时不可用，稍后再试。',
   library_payload_invalid: '资料库请求的内容不完整，刷新页面后再试。',
   library_source_invalid: '没有找到这份资料，刷新知识库后再试。',
-  autopilot_material_not_found: '找不到这份资料，或它不属于这个研究问题所在的项目。先把文件加入这个项目的知识库，再关联到问题。',
-  autopilot_materials_full: '这个研究问题已关联了足够多的资料。先移除不再需要的，再添加新的。',
-  autopilot_agenda_not_found: '找不到这个定时任务。它可能已被删除，回到任务列表刷新后再看。',
-  autopilot_episode_not_found: '找不到这次执行。它可能已被清理，刷新任务页后再看。',
-  autopilot_cancellation_failed: '任务计划已暂停或删除，但部分运行尚未停止。请重试停止。',
-  autopilot_scheduling_disabled: '定时执行暂不可用，已保存的任务和历史结果仍可查看。',
-  autopilot_daily_budget_spent:
-    '这个任务近 24 小时的花费已达它自己设定的“每日上限”（或剩下的额度已不够支付一次运行），这次没有开始。这个上限只计这个任务自己的花费，账户里其他研究的花费不占用它。'
-    + '等预算随时间释放，或在“编辑任务”里调高每日上限即可。',
-  autopilot_weekly_budget_spent:
-    '这个任务近 7 天的花费已达它自己设定的“每周上限”（或剩下的额度已不够支付一次运行），这次没有开始。这个上限只计这个任务自己的花费，账户里其他研究的花费不占用它。'
-    + '等预算随时间释放，或在“编辑任务”里调高每周上限即可。',
-  autopilot_episode_budget_too_small:
-    `“单次上限”不能低于 ${AGENDA_MIN_EPISODE_BUDGET_CNY.toFixed(2)} 灵豆：一次模型调用要先预留约 1 灵豆才能发出，预算低于 ${MIN_RUN_BUDGET_CNY.toFixed(2)} 灵豆的研究一开始就会被拒绝。`
-    + '在“编辑任务”里调高单次上限即可，每日、每周上限也不能低于它。',
   library_item_not_found: '这份资料不在个人资料库里。',
   library_full: '个人资料库已满。先移出不再需要的资料，再加入新的。',
   library_source_removed: '这份资料在各个项目里都已删除，它的资料理解结果也随之删除，没有可以发布到记忆胶囊的内容；资料库里的正文副本仍然可以阅读和检索。',
@@ -3114,7 +3032,6 @@ export const ERROR_CODE_FAMILIES = Object.freeze([
   [/^quote_/, '引文核对这次没能完成；这只是一次查找，已写的报告不受影响。'],
   [/^evimed_evidence_/, '专有证据接口这次没能给出结果。'],
   [/^invalid_assessment/, '这次评估请求的格式不符合要求。'],
-  [/^verification_/, '独立复核这次没能给出结论。原来的结论未被推翻。'],
   // The specific family comes first: matching is in order, and an evidence
   // defect is not an engine failure — telling a reader to retry it would send
   // them to the wrong place.
@@ -3128,7 +3045,6 @@ export const ERROR_CODE_FAMILIES = Object.freeze([
   [/^kb_search_/, '资料库检索这次没能完成；运行会直接读取知识库里的文件继续。'],
   [/^kb_browse_/, '知识库目录这次没能打开；运行会改用资料库检索或直接读取知识库里的文件继续。'],
   [/^semantics_/, DATA_SEMANTICS_ERROR_MESSAGE_ZH],
-  [/^task_(?:tools_|limit_reached$|revision_conflict$|instruction_invalid$|title_invalid$|schedule_|materials_invalid$|id_invalid$|not_found$|update_empty$|paused_invalid$)/, TASK_TOOL_ERROR_MESSAGE_ZH],
   [/^frontier_(?:disabled$|search_)/, '前沿动态检索这次没能完成；回答会改用文献、指南和监管来源继续。'],
   // The engine protocol's per-field issues (`VCR_PROTOCOL_ISSUE_CODES`), last so
   // no earlier family can take one of them. Three families, because each is
@@ -3298,17 +3214,6 @@ const ERROR_CODE_OUTCOMES = Object.freeze({
   capsule_unavailable: 'upstream',
   review_unavailable: 'upstream',
   subagent_failed: 'upstream',
-  // The autopilot's independent check could not be completed. Ours, not the
-  // user's, and emphatically not a verdict about their adopted claim.
-  verification_run_failed: 'stopped',
-  verification_result_missing: 'stopped',
-  verification_result_unreadable: 'stopped',
-  verification_result_schema_invalid: 'stopped',
-  verification_verdict_invalid: 'stopped',
-  verification_verdict_missing: 'stopped',
-  verification_canceled_by_stop: 'stopped',
-  // A floor on a setting, raised by editing the task: a ceiling's sibling, not a verdict on any run.
-  autopilot_episode_budget_too_small: 'capped',
   illegal_state_transition: 'stopped',
   // Prefixed like a ceiling, but nothing was refused: the run went ahead and
   // the usage is recorded late. Calling it `capped` would tell a reader to wait
@@ -3371,12 +3276,6 @@ export function errorCodeOutcome(code) {
   // library and a publication already running are ceilings, and everything
   // else names a document that is not there to act on.
   if (text === 'library_full' || text === 'library_publish_busy') return 'capped'
-  // A question's material is a list the researcher keeps: a full list is a
-  // ceiling, and a source that is not there is nothing to act on.
-  if (text === 'autopilot_materials_full') return 'capped'
-  // A task's own spending cap is a ceiling like the account's, and frees the same way.
-  if (AUTOPILOT_BUDGET_ERROR_CODES.includes(text)) return 'capped'
-  if (autopilotMaterialErrorCodes.includes(text)) return 'upstream'
   if (libraryErrorCodes.includes(text)) return 'upstream'
   // Sharing a capsule refuses for what the pack holds or who it is for —
   // nothing to share yet, an account that is not here, a missing password —
@@ -3417,7 +3316,6 @@ export function errorCodeOutcome(code) {
   if (VCR_WRITE_ISSUE_CODES.includes(text) || VCR_MODULE_ERROR_CODES.includes(text) || VCR_PROTOCOL_ISSUE_CODES.includes(text)
     || VCR_ENGINE_ISSUE_CODES.includes(text)) return 'upstream'
   if (CREDIT_ERROR_CODES.includes(text) || /^credits_/.test(text) || /^usage_/.test(text)) return 'capped'
-  if (/^verification_/.test(text)) return 'stopped'
   if (/^(specialist|meta)_/.test(text)) return 'gated'
   if (/^runtime_/.test(text)) return 'stopped'
   if (text === 'superseded_by_dispatch') return 'stopped'
@@ -3486,7 +3384,6 @@ const ERROR_CODE_AUDIENCE_TABLE = (() => {
   const claim = (audience, codes) => { for (const code of codes) if (!table.has(code)) table.set(code, audience) }
   const keys = (/** @type {object} */ record) => Object.keys(record)
   const memoryGateway = CONTROL_PLANE_ERROR_CODES.filter((code) => code.startsWith('memory_gateway_'))
-  const verification = CONTROL_PLANE_ERROR_CODES.filter((code) => code.startsWith('verification_'))
 
   // The deployment's own wiring: a run that stops on one of these says nothing about anyone's work, and nobody who reads
   // it can mend it. Cut out of the runtime group they sit in.
@@ -3507,11 +3404,11 @@ const ERROR_CODE_AUDIENCE_TABLE = (() => {
     ...RUNTIME_ERROR_CODES, ...RUN_VERDICT_ERROR_CODES, ...SOCKET_TOOL_ERROR_CODES,
     ...repairableEvidencePackageErrorCodes, ...recoverableEvidenceSourceErrorCodes, ...terminalEvidenceSourceErrorCodes,
     ...VCR_GATEWAY_ERROR_CODES, ...VCR_WRITE_ISSUE_CODES, ...VCR_PROTOCOL_ISSUE_CODES, ...VCR_ENGINE_ISSUE_CODES,
-    ...MANAGED_BROWSER_ERROR_CODES, ...memoryGateway, ...verification,
+    ...MANAGED_BROWSER_ERROR_CODES, ...memoryGateway,
   ])
   claim('person', [
     ...keys(EVIMED_SEARCH_MESSAGES), ...keys(EVIMED_ACCOUNT_MESSAGES),
-    ...CREDIT_ERROR_CODES, ...ANALYSIS_ERROR_CODES, ...sourceIntakeErrorCodes, ...autopilotMaterialErrorCodes, ...AUTOPILOT_BUDGET_ERROR_CODES,
+    ...CREDIT_ERROR_CODES, ...ANALYSIS_ERROR_CODES, ...sourceIntakeErrorCodes,
     ...libraryErrorCodes, ...capsuleTransferErrorCodes, ...CAPSULE_SHARE_ERROR_CODES, ...EXTENSION_ERROR_CODES,
     ...GEO_ROUTE_ERROR_CODES, ...GEO_MEDIA_MARKET_ERROR_CODES, ...VCR_ROUTE_ERROR_CODES, ...VCR_MODULE_ERROR_CODES,
     ...EVIMED_CREDITS_ROUTE_ERROR_CODES, ...EVIDENCE_PUBLIC_ERROR_CODES, ...EVIDENCE_FLYWHEEL_ERROR_CODES,

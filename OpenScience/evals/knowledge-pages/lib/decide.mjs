@@ -131,3 +131,72 @@ export function decide(summary, arm = 'B') {
 
   return { open: !failed, inconclusive, reasons }
 }
+
+/**
+ * Non-inferiority of one arm to another, written on 2026-11-05 for arm G (the knowledge base browsed with list, grep and read)
+ * against A (`kb_search`), before any result of that comparison existed. The question is whether the arm can replace the control,
+ * not whether it beats it, so every margin is a loss it may not exceed.
+ */
+export const NON_INFERIORITY = Object.freeze({
+  minRepsPerCell: 3,
+  synthesis: Object.freeze({ meanAtLeast: -0.05, ciLowerAtLeast: -0.10 }),
+  single: Object.freeze({ meanAtLeast: -0.05, ciLowerAtLeast: -0.10 }),
+  citation: Object.freeze({ verifiedRateDropAtMost: 0.03 }),
+  judgeSanity: THRESHOLDS.judgeSanity,
+})
+
+/**
+ * @param {any} summary  the object `summarize` returns @param {string} arm @param {string} control
+ * @returns {{ open: boolean, inconclusive: boolean, reasons: string[] }}  `open`: the arm is non-inferior on every row
+ */
+export function decideNonInferior(summary, arm, control) {
+  const reasons = []
+  let failed = false
+  let inconclusive = false
+  const check = (ok, passText, failText) => {
+    if (ok) reasons.push(`pass: ${passText}`)
+    else { failed = true; reasons.push(`FAIL: ${failText}`) }
+  }
+  const byArm = summary?.coverageByArm
+  const cells = [arm, control].map((id) => byArm?.[id])
+  const complete = cells.every((cell) => cell && cell.expectedCells > 0 && cell.completeCells >= cell.expectedCells)
+  if (!complete || (summary.coverage?.minRepsPerCell ?? 0) < NON_INFERIORITY.minRepsPerCell) {
+    reasons.push(`FAIL: insufficient data - ${arm}: ${cells[0]?.completeCells ?? 0} of ${cells[0]?.expectedCells ?? '?'} cells, ${control}: ${cells[1]?.completeCells ?? 0} of ${cells[1]?.expectedCells ?? '?'} cells complete at ${summary?.coverage?.minRepsPerCell ?? '?'} judged repetitions (${NON_INFERIORITY.minRepsPerCell} required for every cell); the decision is withheld`)
+    return { open: false, inconclusive: true, reasons }
+  }
+  const sanity = summary.judgeSanity
+  if (!sanity) {
+    inconclusive = true
+    failed = true
+    reasons.push('FAIL: the judge sanity check has not been run')
+  } else {
+    check(sanity.referenceMean >= NON_INFERIORITY.judgeSanity.referenceMeanAtLeast && sanity.emptyMean <= NON_INFERIORITY.judgeSanity.emptyMeanAtMost,
+      `judge sanity - reference answers score ${fixed(sanity.referenceMean)}, empty answers ${fixed(sanity.emptyMean)}`,
+      `judge sanity - reference answers score ${fixed(sanity.referenceMean)} (need >= ${NON_INFERIORITY.judgeSanity.referenceMeanAtLeast}), empty answers ${fixed(sanity.emptyMean)} (need <= ${NON_INFERIORITY.judgeSanity.emptyMeanAtMost})`)
+  }
+  for (const kind of ['synthesis', 'single']) {
+    const diff = summary.categories?.[kind]?.diffs?.[`${arm}-${control}`]
+    if (!diff || diff.mean == null || diff.ciLow == null) {
+      inconclusive = true
+      failed = true
+      reasons.push(`FAIL: no ${kind} comparison ${arm} - ${control} could be computed`)
+      continue
+    }
+    const rule = NON_INFERIORITY[kind]
+    check(diff.mean >= rule.meanAtLeast && diff.ciLow >= rule.ciLowerAtLeast,
+      `${kind} ${arm} - ${control} is non-inferior (mean >= ${rule.meanAtLeast}, lower bound >= ${rule.ciLowerAtLeast}): ${interval(diff)}`,
+      `${kind} ${arm} - ${control} is inferior or not shown non-inferior (need mean >= ${rule.meanAtLeast} and lower bound >= ${rule.ciLowerAtLeast}): ${interval(diff)}`)
+  }
+  const own = summary.citations?.overall?.[arm]?.verifiedRate
+  const other = summary.citations?.overall?.[control]?.verifiedRate
+  if (own == null || other == null) {
+    inconclusive = true
+    failed = true
+    reasons.push(`FAIL: citation verified rate of ${arm} or ${control} could not be computed (no markers)`)
+  } else {
+    check(own >= other - NON_INFERIORITY.citation.verifiedRateDropAtMost,
+      `citation verified rate ${arm} ${fixed(own)} >= ${control} ${fixed(other)} - ${NON_INFERIORITY.citation.verifiedRateDropAtMost}`,
+      `citation verified rate ${arm} ${fixed(own)} is more than ${NON_INFERIORITY.citation.verifiedRateDropAtMost} below ${control} ${fixed(other)}`)
+  }
+  return { open: !failed, inconclusive, reasons }
+}

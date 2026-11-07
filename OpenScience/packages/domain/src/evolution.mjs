@@ -18,7 +18,7 @@ export const EVOLUTION_DATA_LEVELS = Object.freeze(['D0', 'D1', 'D2', 'D3', 'D4'
 export const EVOLUTION_VALIDATION_LEVELS = Object.freeze(['V0', 'V1', 'V2', 'V3', 'V4'])
 export const EVOLUTION_DECISION_CLASSES = Object.freeze(['A', 'B', 'C', 'D'])
 export const EVOLUTION_GAP_CODES = Object.freeze(['connector', 'extraction', 'method-missing', 'method-implementation', 'routing', 'skill-instruction', 'writing', 'model-capability', 'outside-product'])
-export const EVOLUTION_LEAD_SOURCES = Object.freeze(['literature', 'runtime-failure', 'autopilot', 'evaluation', 'dataset',
+export const EVOLUTION_LEAD_SOURCES = Object.freeze(['literature', 'runtime-failure', 'evaluation', 'dataset',
   // The platform's own modules saying they could not do something (flywheel F20, 2026-10-06): the evidence programme, 循证 GEO and 虚拟临床研究.
   // Every lead of these three is reduced to a closed code and closed entity keys (`evolutionLeadSources.mjs`), never a researcher's words.
   // `evidence-programme` is retired (the programme was deleted on 2026-10-29): no module files it, the name stays for the leads it filed.
@@ -27,7 +27,7 @@ export const EVOLUTION_ORIGINS = Object.freeze(['literature', 'tool-result', 'pl
 export const EVOLUTION_BUILD_FORMS = Object.freeze(['compose', 'extend', 'wrap', 'rewrite', 'new-capability'])
 export const EVOLUTION_CASE_GROUPS = Object.freeze(['development', 'confirmation', 'audit', 'prospective'])
 export const EVOLUTION_TOOL_STATES = Object.freeze(['staged', 'active', 'alias', 'retired'])
-export const EVOLUTION_JOB_KINDS = Object.freeze(['evolution-event', 'evolution-scout', 'evolution-build', 'evolution-evaluate', 'evolution-decision', 'evolution-digest', 'evolution-maintain', 'evolution-self-check', 'evolution-plan', 'evolution-mission', 'evolution-mission-heavy', 'evolution-meta', 'evolution-research', 'evolution-audit'])
+export const EVOLUTION_JOB_KINDS = Object.freeze(['evolution-event', 'evolution-scout', 'evolution-build', 'evolution-evaluate', 'evolution-decision', 'evolution-digest', 'evolution-maintain', 'evolution-plan', 'evolution-mission', 'evolution-mission-heavy', 'evolution-meta', 'evolution-research', 'evolution-audit'])
 /**
  * What a decision's option can do, as the control plane's executor knows it (`evolutionComposition.mjs`). This list is
  * closed, and it is what stops the engine: an option whose operation is not here is refused when it is chosen, by a

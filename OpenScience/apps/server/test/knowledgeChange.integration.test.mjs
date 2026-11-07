@@ -9,11 +9,10 @@ import { randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 import { METHOD_SKILL_SCHEMA, parseSkillFrontmatter } from "@evimed/domain";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
-import { AutopilotService } from "../src/autopilotService.mjs";
-import { KnowledgeChangeService, producingAgenda } from "../src/knowledgeChange.mjs";
+import { KnowledgeChangeService } from "../src/knowledgeChange.mjs";
 import { LearningService } from "../src/learningService.mjs";
 import { migrateProductStore } from "../src/productPersistence.mjs";
-import { ProductDocuments, ProductJobs } from "../src/productStore.mjs";
+import { ProductDocuments } from "../src/productStore.mjs";
 import { nativeSourceLinks } from "./helpers/nativeSourceLinks.mjs";
 import { ResultImpactService } from "../src/resultImpact.mjs";
 
@@ -189,55 +188,3 @@ test("Postgres: the memory lookup is one account's, and a failed one is unknown 
   assert.equal(degraded.items[0].payload.affected.memories.status, "unknown");
 });
 
-test("Postgres: the running agenda whose episode produced a result rechecks only what rests on the source; a paused or not started one starts nothing", options, async () => {
-  const f = await setup({ runId: "run-origin" });
-  const jobs = new ProductJobs(database);
-  let impacts;
-  const autopilot = new AutopilotService({ documents, jobs, authorizeContinuation: (...args) => impacts.assertContinuation(...args) });
-  const created = await autopilot.create(f.owner, { projectId: f.project, title: "Pooled effect upkeep", topics: ["pooled effect"], taskTypes: ["evidence-update"],
-    dailyBudgetCny: 20, weeklyBudgetCny: 80, maxEpisodeCny: 8, timeZone: "UTC", scheduleHour: 1 });
-  const origin = async () => {
-    const started = await autopilot.start(f.owner, created.id, { expectedRevision: (await autopilot.get(f.owner, created.id)).revision });
-    const { episode } = await autopilot.schedule(f.owner, started.id, { trigger: "manual", requestId: `origin-${randomUUID()}` });
-    await autopilot.markEpisodeDispatched(f.owner, episode.id, { runId: "run-origin", sessionId: "session-origin" });
-    return started;
-  };
-  const results = f.impacts.results;
-  impacts = new ResultImpactService({ documents, results, autopilot, knowledge: new KnowledgeChangeService({ native, methods: learning }),
-    authorizeContinuation: producingAgenda({ results, autopilot }), now: () => new Date("2026-10-04T12:00:00Z") });
-
-  // Not started: the agenda exists and has produced nothing yet, so no standing authorization exists.
-  const notStarted = await impacts.reconcileSourceUpdate(f.owner, { projectId: f.project, source: { id: DOI, doi: DOI }, status: correction() });
-  assert.equal(notStarted.items.length, 2);
-  assert.ok(notStarted.items.every(item => item.payload.continuation.status === "awaiting_user"));
-  const queued = async () => (await documents.list(f.owner, "episode", { projectId: f.project })).items.filter(row => row.payload.continuationBinding);
-  assert.equal((await queued()).length, 0);
-
-  // Running: the agenda whose episode produced the result is the authorization, and nothing asks again.
-  const running = await origin();
-  await impacts.reconcileSourceUpdate(f.owner, { projectId: f.project, source: { id: DOI, doi: DOI }, status: correction() });
-  const scheduled = (await impacts.list(f.owner, { projectId: f.project })).items;
-  assert.ok(scheduled.every(item => item.payload.continuation.status === "scheduled" && item.payload.continuation.agendaId === running.id), "both affected versions continue in the agenda that produced them");
-  const episodes = await queued();
-  assert.equal(episodes.length, 2);
-  for (const episode of episodes) {
-    const note = episode.payload.followUpNote;
-    assert.match(note, new RegExp(rv(1)), "the calculation that rests on the source is named");
-    assert.doesNotMatch(note, new RegExp(`${rv(3)}|${rv(4)}|${rv(5)}`), "no unaffected version is named");
-    assert.match(note, /does not by itself show the result's conclusion is wrong/);
-    assert.match(note, /leave every other result, calculation, memory and method as it is/);
-  }
-  // The versions nothing rests on were not touched.
-  assert.equal((await documents.list(f.owner, "result-impact", { projectId: f.project })).items.length, 2);
-
-  // Paused afterwards: a later change of the same kind starts nothing, and the researcher's own choice is still open.
-  const current = await autopilot.get(f.owner, running.id);
-  const paused = await documents.put(f.owner, "agenda", running.id, { ...current.payload, enabled: false, status: "paused", pauseReason: "Paused by the researcher." },
-    { expectedRevision: current.revision, projectId: f.project });
-  assert.equal(paused.payload.status, "paused");
-  const before = (await queued()).length;
-  const later = await impacts.reconcileSourceUpdate(f.owner, { projectId: f.project, source: { id: DOI, doi: DOI }, status: correction("retraction") });
-  assert.equal(later.items.length, 2);
-  assert.ok(later.items.every(item => item.payload.continuation.status === "awaiting_user"));
-  assert.equal((await queued()).length, before);
-});

@@ -4,16 +4,18 @@
  *
  * Hidden knowledge: why this is a script and not a hand-written fixture. A
  * fixture written from documentation inherits the documentation's errors and
- * then certifies them; the deployed test build already disagrees with its own
- * docs about error envelopes (`data: null`, no `error_code`). So every sample
- * the contract test replays is a verbatim answer from the server, recorded here.
+ * then certifies them. The fixtures of API.md v1.0.0 (2026-10-27) are written
+ * out from it and marked `documented` in `provenance.json` only because the new
+ * credential answered 401 when they were made; this script replaces the ones it
+ * can reach with verbatim answers (`documented: false`) and leaves the rest.
  *
- * Without a key it records the two answers that need none (health and the
- * missing-file refusal). With a key it also records a success from both
- * endpoints and the 415, 422 and 401 refusals. The deployed service has
- * answered without any key since at least 2026-09-22, so a keyless success is
- * the normal case in production; the key path stays for a server that turns
- * authentication on.
+ * Without a key it records `/health`. With a working key it also records a
+ * success from both engines and the 401 a key the service never issued gets.
+ * The empty-content, scope and quota answers need a particular document or key
+ * and stay documented until someone records them by hand.
+ *
+ * Nothing in this repository names the service's address: it is read from the
+ * environment, used, and not written to `provenance.json`.
  *
  * The key is read from the file `OPEN_SCIENCE_DOCUMENT_PARSER_TOKEN_FILE` names
  * and never printed, logged or written: a recording that contains it is refused
@@ -92,21 +94,15 @@ export async function recordParserContract({ baseUrl, token = "", outDir = defau
   };
   const samples = [
     { name: "health.json", request: "GET /health (no credential; the one route that takes none)", method: "GET", route: "/health" },
-    { name: "extract-missing-file.json", request: "POST /api/v1/extract/text/file, multipart with checksum only (no file part), no Authorization header",
-      method: "POST", route: "/api/v1/extract/text/file", body: () => form({ file: false }) },
   ];
   if (token) {
     samples.push(
-      { name: "extract-success.json", request: "POST /api/v1/extract/text/file, the one-page sample PDF, valid key", method: "POST",
-        route: "/api/v1/extract/text/file", body: () => form(), key: token },
-      { name: "parse-success.json", request: "POST /api/v1/parse/file, the one-page sample PDF, valid key", method: "POST",
-        route: "/api/v1/parse/file", body: () => form(), key: token },
-      { name: "extract-unsupported-format.json", request: "POST /api/v1/extract/text/file, format=exe, valid key", method: "POST",
-        route: "/api/v1/extract/text/file", body: () => form({ format: "exe" }), key: token },
-      { name: "extract-checksum-failed.json", request: "POST /api/v1/extract/text/file, a checksum that is not the file's, valid key", method: "POST",
-        route: "/api/v1/extract/text/file", body: () => form({ checksum: "0".repeat(64) }), key: token },
-      { name: "extract-unauthorized.json", request: "POST /api/v1/extract/text/file, the sample PDF, a key the service never issued", method: "POST",
-        route: "/api/v1/extract/text/file", body: () => form(), key: "sk-fake-key-the-service-never-issued" },
+      { name: "engine-a-pdf-success.json", request: "POST /api/v1/parse/engine-a/file, the one-page sample PDF, valid key", method: "POST",
+        route: "/api/v1/parse/engine-a/file", body: () => form(), key: token },
+      { name: "engine-b-success.json", request: "POST /api/v1/parse/engine-b/file, the one-page sample PDF, valid key", method: "POST",
+        route: "/api/v1/parse/engine-b/file", body: () => form(), key: token },
+      { name: "error-invalid-api-key.json", request: "POST /api/v1/parse/engine-a/file, the sample PDF, a key the service never issued", method: "POST",
+        route: "/api/v1/parse/engine-a/file", body: () => form(), key: "sk-fake-key-the-service-never-issued" },
     );
   }
   const recorded = [];
@@ -127,10 +123,10 @@ export async function recordParserContract({ baseUrl, token = "", outDir = defau
   const provenance = JSON.parse(await readFile(provenancePath, "utf8"));
   for (const sample of recorded) {
     await writeFile(path.join(outDir, sample.name), sample.body);
-    provenance.fixtures[sample.name] = { request: sample.request, status: sample.status, headers: sample.headers };
+    provenance.fixtures[sample.name] = { request: sample.request, status: sample.status, headers: sample.headers,
+      ...(sample.name === "health.json" ? {} : { documented: false }) };
   }
   provenance.observedAt = now().toISOString();
-  provenance.server = base;
   await writeFile(provenancePath, `${JSON.stringify(provenance, null, 2)}\n`);
   return recorded.map(({ name, status }) => ({ name, status }));
 }

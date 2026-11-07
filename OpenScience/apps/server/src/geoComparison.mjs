@@ -105,7 +105,14 @@ export function geoSamplingCoverage(rows, setVersion) {
         engines: [...new Set(rows.map(row => row.engine))], surface: surfaces.size === 1 ? rows[0].surface : { mode: 'mixed' },
         methodVersion: GEO_MEASUREMENT_METHOD_VERSION });
     if (!base) return null;
-    const mapping = [...configurations.entries()].sort(([left], [right]) => left.localeCompare(right));
+    // The sampling configuration is the way each engine was asked (surface and measurement contract), not which of its samples happened to
+    // answer: a failed or extra sample changes a denominator, never the method.
+    const byEngine = new Map();
+    for (const row of rows) {
+        const key = documentExportDigest([row.questionId, row.groupId ?? null, row.pool ?? null, row.engine, row.repeatIndex]);
+        (byEngine.get(row.engine) ?? byEngine.set(row.engine, new Set()).get(row.engine)).add(configurations.get(key));
+    }
+    const mapping = [...byEngine.entries()].map(([engine, set]) => [engine, [...set].sort()]).sort(([left], [right]) => left.localeCompare(right));
     return `${base};sampling=${createHash('sha256').update(documentExportDigest(mapping)).digest('hex')}`;
 }
 
@@ -122,14 +129,16 @@ export function geoMetricInputCoverage(selected, cell, setVersion) {
     if (rubric.applies && (parsers.includes(null) || parsers.length > 1)) return null;
     const base = geoSamplingCoverage(scope, setVersion);
     if (!base) return null;
-    const cohort = [...new Set(scope.map(row => documentExportDigest([geoComparisonKey(row), row.pool, row.groupId, row.repeatIndex ?? 0])))].sort();
     const hash = value => createHash('sha256').update(documentExportDigest(value)).digest('hex');
-    const questions = hash([...new Set(scope.map(row => row.questionId))].sort()).slice(0, 24);
     const composite = compositeBasis(selected, cell);
+    // The method of a composite is its pools, dimensions, weights and ingredient ids; the members behind each ingredient are data.
+    const compositeMethod = composite?.map(pool => ({ ...pool, dimensions: pool.dimensions.map(dimension => ({ ...dimension,
+        ingredients: dimension.ingredients.map(({ metricId }) => ({ metricId })) })) }));
     const usesOwned = metricId => /^M-0[89]/u.test(metricId);
     const ownedDependent = usesOwned(cell.metricId) || composite?.some(pool => pool.dimensions.some(dimension => dimension.ingredients.some(ingredient => usesOwned(ingredient.metricId))));
-    return `${base};questions=${questions};basis=${hash({ cell: geoComparisonCellKey(cell), cohort, members: memberKeys(selected, cell),
-        composite, rubric: rubric.versions, parsers, samplingMode: selected.metricOptions.samplingMode,
+    // The question set is the set version in the base; which questions happened to answer is the denominator, not the method.
+    return `${base};basis=${hash({ cell: geoComparisonCellKey(cell),
+        composite: compositeMethod, rubric: rubric.versions, parsers, samplingMode: selected.metricOptions.samplingMode,
         owned: ownedDependent ? selected.metricOptions.owned : undefined,
         competitors: cell.rival ? selected.metricOptions.competitors : undefined })}`;
 }

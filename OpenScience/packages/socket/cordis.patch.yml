@@ -218,13 +218,15 @@
 
 # Rows that joined the composition in 0.2.1, each decided the day the pin moved.
 #
-# Cron-like prompts the kernel itself runs (0.2.1 moved "automation tasks" back into the web app).
-# A scheduled prompt the control plane does not know about runs outside the run ledger, its budget and
-# its inbox; the platform's scheduled tasks are its own (`schedule_task`, a control-plane job). The
-# `schedule/*` namespace is denied on the proxy, and the sidebar page that would call it is hidden by
-# the hosted profile (`ui-schedule`, apps/server/src/dshProfilePatch.mjs).
+# The kernel's own automation tasks are the platform's scheduled tasks (owner, 2026-11-04: 「有官方的……就用官方的」;
+# new-conversation delivery arrived in 0.2.2). They live in `$DSH_HOME/storages` on the project's volume, one Host per
+# project, so "every Host task" means this project's. Three things around them are ours: the control plane wakes a stopped
+# runtime when a task falls due (`scheduleWake.mjs`), a delivered turn enters the ledger as automated (`agentRuns.mjs`), and
+# this row raises the floor between fresh conversations, because a `new` target has no concurrency cap of its own and each
+# delivery is a whole conversation the person pays for.
 - id: schedule
-  disabled: true
+  config:
+    newSessionIntervalSeconds: !!js Number(process.env.EVIMED_SCHEDULE_NEW_SESSION_INTERVAL_SECONDS || 900)
 
 # A `working_directory` tool on the host plane, which every agent inherits: it moves a session's
 # working directory to any existing directory, and nothing confines that move to the workspace. Work

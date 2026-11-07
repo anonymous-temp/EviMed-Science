@@ -28,14 +28,14 @@ export function minimumPositive(...values) {
  * answer is `null`, unless the ledger is required, when the call must not be made at all: a spend nobody records is the
  * defect metering exists for.
  *
- * @param {{ config: any, usageLedger: any, caller: any, attributeRun?: any, runPurpose?: any, runScope?: any,
+ * @param {{ config: any, usageLedger: any, caller: any, attributeRun?: any, runPurpose?: any,
  *   model: string, estimatedCost: number, fingerprint: unknown, at?: Date }} input
  *   `model` is what the row names — a model id, or a tool such as `deepseek-search`; `fingerprint` is hashed into the
  *   row's request fingerprint
  * @returns {Promise<{ id: string } | null>}
  * @throws {GatewaySpendRefusal}
  */
-export async function reserveGatewaySpend({ config, usageLedger, caller, attributeRun = null, runPurpose = null, runScope = null, model, estimatedCost, fingerprint, at = new Date() }) {
+export async function reserveGatewaySpend({ config, usageLedger, caller, attributeRun = null, runPurpose = null, model, estimatedCost, fingerprint, at = new Date() }) {
   if (!usageLedger) {
     if (config.requireDurableUsageLedger === true) throw new GatewaySpendRefusal("unrecordable", "its spend cannot be recorded right now.");
     return null;
@@ -60,16 +60,8 @@ export async function reserveGatewaySpend({ config, usageLedger, caller, attribu
   const attributed = caller.runId == null && attributeRun
     ? await attributeRun({ userId: caller.userId, projectId: caller.projectId, sessionId: null }).catch(() => null)
     : null;
-  let runId = caller.runId ?? attributed ?? null;
-  let runLimit = caller.runId != null ? Number(caller.runLimit) || 0 : (attributed ? Number(config.userRunSpendLimit) || 0 : 0);
-  // A scheduled execution in the researcher's own runtime is booked under its episode and held to its limit, as its model calls are
-  // (`autopilotEpisodeScope.mjs`). A scope that cannot be read makes the call unavailable rather than uncapped.
-  if (caller.runId == null && attributed && runScope) {
-    const scope = await runScope({ userId: caller.userId, projectId: caller.projectId, runId: attributed }).catch(() => {
-      throw new GatewaySpendRefusal("scope_unreadable", "the spending limit of this run cannot be read.");
-    });
-    if (scope) { runId = scope.usageRunId; runLimit = Number(scope.runLimit) || 0; }
-  }
+  const runId = caller.runId ?? attributed ?? null;
+  const runLimit = caller.runId != null ? Number(caller.runLimit) || 0 : (attributed ? Number(config.userRunSpendLimit) || 0 : 0);
   // Asking can fail (the run ledger is a file): the model gateway books `kernel` then rather
   // than costing the call, and so does this one — a call is never lost for a column it writes.
   const purpose = runPurpose && await runPurpose({ userId: caller.userId, projectId: caller.projectId, runId }).catch(() => "kernel") === "evolution" ? "evolution" : "web-search";

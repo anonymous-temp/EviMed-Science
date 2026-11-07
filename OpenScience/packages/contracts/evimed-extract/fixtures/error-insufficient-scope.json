@@ -1,0 +1,10 @@
+{
+  "code": 403,
+  "message": "API Key没有接口权限",
+  "uuid": "3A1B0C2D-0000-4000-8000-000000000004",
+  "timestamp": 1781164623,
+  "elapsed_ms": 2,
+  "data": {
+    "error_code": "insufficient_scope"
+  }
+}

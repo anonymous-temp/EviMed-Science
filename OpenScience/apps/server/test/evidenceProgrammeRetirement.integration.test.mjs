@@ -14,7 +14,7 @@ const list = (/** @type {readonly string[]} */ values) => values.map((value) => 
 // A database last migrated by a release between 2026-10-05 and 2026-10-24: the kind CHECKs name the programme's two kinds and lack
 // geo-plan-context, and the publisher holds the programme's decisions, jobs, agendas and a queued episode. The upgrade must get through the
 // CHECK rebuilds that re-add the constraint from the current lists, and must stop what the programme left running.
-test("an upgrade from a database holding programme rows migrates, and the retired programme's agendas and queue are stopped", options, async () => {
+test("an upgrade from a database holding programme rows migrates, and the scheduler's agendas, episodes and queue are gone before the CHECKs are rebuilt", options, async () => {
   const isolated = await createGeoTestDatabase(databaseUrl, "retire");
   /** @type {ControlPlaneDatabase | null} */ let old = null;
   /** @type {ControlPlaneDatabase | null} */ let upgraded = null;
@@ -27,9 +27,9 @@ test("an upgrade from a database holding programme rows migrates, and the retire
       INSERT INTO evimed_control.users(id,name,auth_type) VALUES ('alice','Alice','development') ON CONFLICT DO NOTHING;
       INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES ('${PUBLISHER}','${PROJECT}','Evidence',1048576),('alice','p1','P',1048576);
       ALTER TABLE evimed_product.documents DROP CONSTRAINT product_documents_kind_check;
-      ALTER TABLE evimed_product.documents ADD CONSTRAINT product_documents_kind_check CHECK (kind IN (${list([...withoutNew, "programme-decision"])}));
+      ALTER TABLE evimed_product.documents ADD CONSTRAINT product_documents_kind_check CHECK (kind IN (${list([...withoutNew, "programme-decision", "agenda", "episode", "digest"])}));
       ALTER TABLE evimed_product.jobs DROP CONSTRAINT product_jobs_kind_check;
-      ALTER TABLE evimed_product.jobs ADD CONSTRAINT product_jobs_kind_check CHECK (kind IN (${list([...PRODUCT_JOB_KINDS, "evidence-programme"])}));
+      ALTER TABLE evimed_product.jobs ADD CONSTRAINT product_jobs_kind_check CHECK (kind IN (${list([...PRODUCT_JOB_KINDS, "evidence-programme", "episode", "verify", "digest"])}));
       DELETE FROM evimed_product.schema_migrations WHERE name='${MARKER}';
       INSERT INTO evimed_product.documents(user_id,kind,id,project_id,payload) VALUES
         ('${PUBLISHER}','programme-decision','d1','${PROJECT}','{}'),
@@ -56,30 +56,19 @@ test("an upgrade from a database holding programme rows migrates, and the retire
     assert.equal(await count(`evimed_product.schema_migrations WHERE name='${MARKER}'`), 1);
     const check = (await upgraded.query("SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint WHERE conrelid='evimed_product.documents'::regclass AND conname='product_documents_kind_check'")).rows[0].def;
     assert.match(check, /geo-plan-context/);
-    assert.doesNotMatch(check, /programme-decision/);
+    assert.doesNotMatch(check, /programme-decision|'agenda'/);
 
-    const agendas = (await upgraded.query("SELECT id, revision, payload FROM evimed_product.documents WHERE kind='agenda' ORDER BY id")).rows;
-    const byId = Object.fromEntries(agendas.map((row) => [row.id, row]));
-    for (const id of ["a-programme", "a-topic"]) {
-      assert.equal(byId[id].payload.status, "stopped", `${id} is stopped`);
-      assert.equal(byId[id].payload.enabled, false);
-      assert.ok(byId[id].payload.archivedAt, `${id} is archived`);
-      assert.equal(byId[id].payload.stopSweep.status, "queued", "the autopilot's stop sweep settles what was running");
-      assert.equal(byId[id].revision, 2);
-    }
-    assert.deepEqual({ status: byId["a-own"].payload.status, revision: byId["a-own"].revision }, { status: "active", revision: 1 }, "a researcher's own agenda is untouched");
-
-    const episodes = Object.fromEntries((await upgraded.query("SELECT id, payload->>'status' AS status FROM evimed_product.documents WHERE kind='episode'")).rows.map((row) => [row.id, row.status]));
-    assert.deepEqual(episodes, { "e-queued": "canceled", "e-running": "running", "e-own": "queued" });
-    const jobs = Object.fromEntries((await upgraded.query("SELECT id, status FROM evimed_product.jobs ORDER BY id")).rows.map((row) => [row.id, row.status]));
-    assert.deepEqual(jobs, { "j-episode": "canceled", "j-own": "queued", "j-verify": "canceled" });
-    assert.equal(await count("evimed_product.revisions WHERE id IN ('a-programme','a-topic','e-queued') AND revision=2"), 3, "every changed document keeps its history row");
+    // The scheduler's own kinds left the vocabulary on 2026-11-05: a database this old gets its agendas, episodes and their jobs deleted
+    // before the first CHECK rebuild, the programme's and a researcher's alike, because the narrowed CHECK refuses a row of those kinds.
+    assert.equal(await count("evimed_product.documents WHERE kind IN ('agenda','episode','digest')"), 0, "the scheduler's documents are gone");
+    assert.equal(await count("evimed_product.jobs WHERE kind IN ('episode','verify','digest')"), 0, "the scheduler's jobs are gone");
+    assert.equal(await count("evimed_product.jobs"), 0);
 
     // Idempotent: a second process migrating again changes nothing.
     const again = new ControlPlaneDatabase({ databaseUrl: isolated.url, databasePoolMax: 2, databaseConnectionTimeoutMs: 2_000 });
     try {
       await migrateProductStore(again);
-      assert.equal((await again.query("SELECT revision FROM evimed_product.documents WHERE id='a-programme'")).rows[0].revision, 2);
+      assert.equal((await again.query("SELECT count(*)::int AS n FROM evimed_product.documents WHERE kind='agenda'")).rows[0].n, 0);
     } finally { await again.close(); }
   } finally {
     await old?.close().catch(() => {});

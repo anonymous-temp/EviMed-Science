@@ -343,7 +343,7 @@ test("a runtime reserved for another dispatch is not the export's run; the resea
   const mark = { key: "run:export:exp_9", dispatch_id: "vcr-run-export-exp_9-1", run_id: "run_7", detail: { purpose: "export", kind: "validation_pack", exportId: "exp_9" } };
   const { orchestrator } = slotHeldBy(mark);
   assert.equal((await orchestrator.exportDispatch("std_1", { runtimeRunId: "vcr-run-export-exp_9-1" }))?.exportId, "exp_9");
-  assert.equal(await orchestrator.exportDispatch("std_1", { runtimeRunId: "autopilot-episode-4" }), null);
+  assert.equal(await orchestrator.exportDispatch("std_1", { runtimeRunId: "other-run-4" }), null);
   assert.equal((await orchestrator.exportDispatch("std_1", { runtimeRunId: null }))?.exportId, "exp_9");
   assert.equal((await orchestrator.exportDispatch("std_1", {}))?.exportId, "exp_9");
 });

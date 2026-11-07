@@ -52,11 +52,6 @@ inputs:
   - kind
   - audience
   - outputLanguage
-autopilot:
-  taskTypes: []
-  costClass: medium
-  unattendedInputs:
-  - studyId
 estimatedMinutes:
 - 10
 - 60

@@ -57,9 +57,7 @@
  *
  * R13 (design reference v1.2, §21.3 V-6, V-7, V-11) brought the walk in step with the pages it changed, and everything it added was a
  * notice until a walk had measured it (since R19 a notice is a finding, below). The old forms are gone: a 信源 row opens a drawer, not its conditions in place; a
- * scheduled task is a page (`/app/autopilot/:taskId`, read after the first row is clicked: the layout's hooks, which pane is on, the
- * kernel frame's rectangle against the pane's, no text box or dialog of the page's own), not a drawer with a spend cap in ¥; a document is
- * a page whose original column is not narrower than 560 px, not a drawer; the 核对 column of the evidence matrix is ✓, ⚠ or blank. The first
+ * document is a page whose original column is not narrower than 560 px, not a drawer; the 核对 column of the evidence matrix is ✓, ⚠ or blank. The first
  * row of 问题与回答 (its groups opened first), 准确与安全 (its 看回答 link), the inbox, settings, 循证 GEO's home and the evidence zones'
  * home is clicked too, behind a guard that refuses every request that is not a read, and a page with nothing to click says "not
  * observable" and why instead of passing in silence. With the chat page the composer is read inside the kernel's frame at both widths
@@ -220,8 +218,6 @@ const WALK_TABLES = {
       {"view":"memory-received","route":"/app/memory?tab=received","pattern":"/app/memory","family":"memory","template":"T2","shapes":2,"rows":true},
       {"view":"memory-overview","route":"/app/memory/overview","pattern":"/app/memory/overview","family":"memory","template":"T4","budget":"data","budgetOverride":{"controls":11,"colors":8,"borders":7,"typePairs":6},"budgetNote":"the 记忆星图 (owner decision of 2026-10-31, root CLAUDE.md and DESIGN.md: 「展示效果尽量炫酷一些」, which reverses the plan of 2026-10-23 that no global graph leads the page) is a night window at the head of 总览, drawn where a real GPU and a wide screen can hold it, and it is the page's one exception to the grammar of the other pictures. Measured on the fixture walk of 2026-11-01 (Chromium, 1512 px, the sky drawn, the account's memories grouped into five topics): 11 kinds of control (the sky's legend chips, 24 px at 12 / 400, and the view switch 星图 / 关系 / 主题 at its corner, 40 px), 8 text colours (its three inks on the dark ground), 7 kinds of border (its frame, its labels and the legend's hairline, and the switch's hairline and its selected tab's 2 px underline in the night inks), 6 size × weight pairs (its headline at 20 / 400) and 3 kinds of section (the card that holds the sky and its listbox beside the tiles and the cards of charts). Where it cannot be drawn (no GPU, a phone, reduced motion, a lost context) the page is the relation graph and the topics in a card of its own and measures 10 kinds of control, 5 text colours, 4 kinds of border (the sidebar's rule, the frames, the view switch's hairline and its selected tab's underline: the pair the frontier zones' override counts too), 5 pairs and 2 kinds of section","shapes":3,"rows":true},
       {"view":"memory-shared-missing","route":"/app/memory/shared/impeccable-audit-missing","pattern":"/app/memory/shared/:token","family":"memory-record","template":"screen","rows":false},
-      {"view":"autopilot","route":"/app/autopilot","pattern":"/app/autopilot/:taskId?","family":"autopilot","template":"T2","shapes":2,"rows":true},
-      {"view":"autopilot-first","discovered":true,"pattern":"/app/autopilot/:taskId?","family":"autopilot","template":"T2","shapes":2,"rows":false,"rowsNote":"the first-use state of 定时任务, a project with no task (found from the account's own project list: the production walk's throwaway account has nothing, and so do the fixture's study projects): the examples fill the new-task form beside them and make nothing, and the form is read as it stands"},
       {"view":"active-research","route":"/app/active-research","pattern":"/app/active-research","family":"active-research","template":"T4","templateNote":"the observatory leads the page (owner, 2026-10-28), and the rest of the research on show is one band of three views under it (结果 / 记录 / 对话, module workspace plan of 2026-11-01, D2) with the activity strip over them while a run is going: a data page that carries a tab list, which T4 allows, and the connected workbench of DESIGN.md's October 20 exception (one object, its picture, its results, its history and its conversation). It is not a module page (T3): it has no step rail, and its tabs are views of one object, not steps","budget":"data","budgetOverride":{"borders":4},"budgetNote":"borders: the band of views adds the tab row's hairline and the selected tab's underline, 4 kinds on the fixture walk of 2026-11-01; otherwise the budget stays the data page's: the new composition (the queue, the row of the research's controls, the dark scene, the band of views) has not been measured on a live walk yet, and a number is not raised here to pass a walk nobody ran — raise it, with the measure, from the first fixture walk of this page","rows":false,"rowsNote":"Research rows select an execution in place; the generic walk row click expects navigation, while the selection is exercised by ActiveResearchPage tests."},
       {"view":"inbox","route":"/app/inbox","pattern":"/app/inbox","family":"inbox","template":"T1","shapes":2,"rows":true,"budgetOverride":{"controls":9},"budgetNote":"controls: each message row carries its selection checkbox (design system v3.1, 2026-10-26: select messages and mark them read together; the batch actions are in the toolbar only while something is ticked) — a 16 px native checkbox, one look, the ninth beside the shell's, the tabs, the source and kind chips and the rows; 9 on the fixture walk of 2026-10-26 (int/1026-fix)"},
       {"view":"search","route":"/app/search","pattern":"/app/search/:category?","family":"search","template":"T1","rows":false,"rowsNote":"the search home: a composer and three topic buttons that fill it; no list whose row opens anything"},
@@ -260,6 +256,7 @@ const WALK_TABLES = {
       {"pattern":"/app/home","template":"kernel","why":"the global entry opens the default project conversation; OPEN_SCIENCE_WALK_CHAT=1 walks this entry and verifies its final project"},
       {"pattern":"/app/chat/:sessionId?","template":"kernel","why":"the conversation is the kernel's own frame; OPEN_SCIENCE_WALK_CHAT=1 opens it"},
       {"pattern":"/app/handoff","template":"screen","why":"opens only with a hand-off in the address; without one it returns to the conversation"},
+      {"pattern":"/app/autopilot","template":"kernel","why":"a redirect to the conversation, where the kernel's own 定时任务 page is drawn in its frame; OPEN_SCIENCE_WALK_CHAT=1 opens the address and reads the frame (`chat-schedules`)"},
       {"pattern":"/app/runs","template":"screen","why":"a redirect to the newest run's conversation, decided at run time"},
       {"pattern":"/app/files/open","template":"screen","why":"a compiled file named by its place: it reads the file and goes to the document's page, which `files-reader` walks"},
       {"pattern":"/app/memory/map","template":"screen","why":"a redirect to 总览 (2026-10-27: the map's relation graph and topics are a panel of it): it carries over what it can and is decided by the address, and the router test holds each case"},
@@ -285,10 +282,11 @@ const WALK_TABLES = {
       {"view":"virtual-research@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk signs in as a throwaway account it registers and deletes (2026-10-25), so the account holds none of this page's data: no row, mark or object is there to open (the fixture walk reads the page with data); data, not a defect"},
       {"view":"files@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk signs in as a throwaway account it registers and deletes (2026-10-25), so the account holds none of this page's data: no row, mark or object is there to open (the fixture walk reads the page with data); data, not a defect"},
       {"view":"knowledge-graph@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk signs in as a throwaway account it registers and deletes (2026-10-25), so the account holds none of this page's data: no row, mark or object is there to open (the fixture walk reads the page with data); data, not a defect"},
+      {"view":"knowledge-pages@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk signs in as a throwaway account it registers and deletes (2026-10-25), so the account holds none of this page's data: no row, mark or object is there to open (the fixture walk reads the page with data); data, not a defect"},
+      {"view":"inbox@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk signs in as a throwaway account it registers and deletes (2026-10-25), so the account holds none of this page's data: no row, mark or object is there to open (the fixture walk reads the page with data); data, not a defect"},
       {"view":"memory@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk signs in as a throwaway account it registers and deletes (2026-10-25), so the account holds none of this page's data: no row, mark or object is there to open (the fixture walk reads the page with data); data, not a defect"},
       {"view":"memory-methods@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk signs in as a throwaway account it registers and deletes (2026-10-25), so the account holds none of this page's data: no row, mark or object is there to open (the fixture walk reads the page with data); data, not a defect"},
       {"view":"memory-overview@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk signs in as a throwaway account it registers and deletes (2026-10-25), so the account holds none of this page's data: no row, mark or object is there to open (the fixture walk reads the page with data); data, not a defect"},
-      {"view":"autopilot@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk signs in as a throwaway account it registers and deletes (2026-10-25), so the account holds none of this page's data: no row, mark or object is there to open (the fixture walk reads the page with data); data, not a defect"},
       {"view":"memory-overview@phone","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"on the throwaway account the production walk registers (2026-10-25) the overview is its one recipe under four tiles that read zero, so the headline sentence and the tiles have nothing to be compared on; the fixture walk compares them with data"}
     ]
   },
@@ -695,26 +693,6 @@ export async function discoverCalculationHistory(context, base, studies, failure
 }
 
 /**
- * The first project of the account whose scheduled-task list holds no task: the page 「定时任务」 is in its first-use state there (the
- * examples in the list column beside the new-task form), a state the account's own default project is not in once it has a task. The
- * production walk's throwaway account has nothing, so its default project is the answer; the fixture furnishes tasks in its default
- * project only, and its studies' projects hold none, which is how the first-use page is measured at all (a page that only an account
- * with no task ever meets failed the release walk on 2026-10-28 while the fixture walk, whose default project had tasks, passed).
- * A project whose page cannot be read, that is archived, or where scheduling is not available (the page is then its own state) is not it.
- * @param {any} context @param {string} base @param {string[]} [failures]
- * @returns {Promise<string | null>}
- */
-export async function discoverEmptyTaskProject(context, base, failures = []) {
-  const projects = await readData(context, base, "/api/projects", failures);
-  for (const project of (Array.isArray(projects) ? projects : []).slice(0, 12)) {
-    if (typeof project?.id !== "string" || !project.id || project.archivedAt) continue;
-    const page = await readData(context, base, `/api/autopilot/agendas?projectId=${encodeURIComponent(project.id)}`, failures);
-    if (page && page.available !== false && Array.isArray(page.items) && page.items.every((/** @type {any} */ item) => item?.payload?.archivedAt)) return project.id;
-  }
-  return null;
-}
-
-/**
  * The pages whose address holds an id the deployment's own lists name, read from the same GET endpoints the pages use: one GEO
  * project's seven tabs and an answer; the 虚拟临床研究 studies' seven tabs each; the 前沿动态 zone, card, author and event pages.
  * Each is None where the module is off for the account or the list is empty — the home pages are walked either way. A page left out
@@ -753,10 +731,6 @@ async function discoverRoutes(context, base, notices, failures, only = []) {
     routes.push(...VCR_TABS_WALK.map(([name, segment]) => /** @type {[string, string]} */ ([`${name}${suffix}`, `${at}${segment}`])));
   }
   if (primary && !second) skip("vcr-*@2", "the account has one study");
-
-  const emptyProject = await discoverEmptyTaskProject(context, base, failures);
-  if (emptyProject) routes.push(["autopilot-first", `/app/autopilot/new?project=${encodeURIComponent(emptyProject)}`]);
-  else skip("autopilot-first", "every project of the account already holds a scheduled task, or scheduling is not offered");
 
   const article = frontierItemRoute(await readData(context, base, "/api/frontier/items?limit=1", failures));
   if (article) routes.push(["frontier-item", article]);
@@ -1042,7 +1016,7 @@ export const EXPECTED_REFUSALS = {
 };
 
 /** The pages that open a conversation of the kernel as they land. */
-const LANDING_CONVERSATION_PAGES = new Set(["autopilot", "geo-overview"]);
+const LANDING_CONVERSATION_PAGES = new Set(["geo-overview"]);
 
 /**
  * The topic suggestions of the search home: a read the control plane answers by starting the project's runtime (`searchTopicsFor`),
@@ -1065,7 +1039,7 @@ export function unexpectedRefusals(name, httpErrors) {
   }
   const allowed = EXPECTED_REFUSALS[/** @type {keyof typeof EXPECTED_REFUSALS} */ (budgetKey(name))] ?? [];
   // A page that opens a conversation on landing asks for the kernel's frame, and the walk starts no runtime: that one call is refused by
-  // design. 定时任务 opens its first task, and GEO project work resumes its addressed conversation. Any other refusal still fails.
+  // design. GEO project work resumes its addressed conversation. Any other refusal still fails.
   const frame = LANDING_CONVERSATION_PAGES.has(budgetKey(name)) ? /^503 \/api\/runtime-ui\/frames(?:[/?#]|$)/ : null;
   // The report keeps the first 60 characters of a path, which a project id of 36 characters leaves ending in `/evimed-se`.
   const topics = TOPICS_UNAVAILABLE_BY_DESIGN.has(budgetKey(name)) ? /^503 \/api\/projects\/[^/]+\/evimed-/ : null;
@@ -1113,7 +1087,7 @@ export function assertWalkAuthenticated(url) {
 
 /**
  * A visible failed read is not a successfully loaded module without its chrome. The kernel's own frame is not one of the route's reads: a
- * page that opens a conversation on landing (定时任务 opens its first task beside the list, owner 2026-10-28) holds the frame's container
+ * page that opens a conversation on landing (GEO project work resumes its addressed conversation) holds the frame's container
  * (`data-session-surface`), and the walk starts no runtime, so what that container says about the runtime is not the page's load.
  */
 export function routeLoadProbe() {
@@ -1204,8 +1178,8 @@ export function rowClickVerdict(name, rows) {
  * popup — the first live walk of R10 failed both frontier pages on it, while the
  * link was a real one (2026-10-07).
  * `open` is a row that is already the open item of its master/detail list (`aria-current`): a page whose bare address opens its first
- * task beside the list (定时任务, 2026-10-28) has the list's first row open before the walk clicks it, and pressing it keeps it open —
- * what a row that is open already does.
+ * item beside the list has the list's first row open before the walk clicks it, and pressing it keeps it open — what a row that is open
+ * already does.
  * @param {{ dialog: boolean, path: string, expanded: number }} before
  * @param {{ dialog: boolean, path: string, expanded: number }} after
  * @param {number} popups tabs the click opened
@@ -2960,11 +2934,6 @@ export function probeFindings(name, viewportName, kind, r) {
  *  - `sourceDrawer` (R13, E-15): a 信源 row opens the site's drawer — a dialog holding `[data-geo-source-drawer]` — and no longer its
  *    three conditions in place. The drawer's wrapper is drawn the moment it opens, whatever the measurements hold, so it is read here;
  *    what is in it (the answers behind a row's three numbers) needs a measured round and is held by the page's own tests.
- *  - `taskPage` (R13, E-18): a task row is a link to the task's own page, `/app/autopilot/:taskId`, and no longer a drawer. The page is
- *    a list column and a main area whose pane is the kernel's conversation: the shell keeps one resident frame and places it over the
- *    pane, so the page itself draws no input box and no dialog for the conversation. Read: the layout and its hooks, which pane is on
- *    (`conversation`, `progress`, `waiting`, `no-conversation`, `never-run`), the pane's box and the frame's, the text inputs of the
- *    page's own DOM, the dialogs, and the task bar's text for a time-zone identifier.
  * @param {[string]} args
  */
 export function afterClickProbe([kind]) {
@@ -2977,106 +2946,7 @@ export function afterClickProbe([kind]) {
     const dialog = [...document.querySelectorAll("[role='dialog']")].find(visible);
     return { dialog: Boolean(dialog), drawers: dialog ? [...dialog.querySelectorAll("[data-geo-source-drawer]")].filter(visible).length : 0 };
   }
-  if (kind === "taskPage") {
-    const rect = (el) => {
-      if (!el) return null;
-      const box = el.getBoundingClientRect();
-      return { left: Math.round(box.left), top: Math.round(box.top), width: Math.round(box.width), height: Math.round(box.height) };
-    };
-    const layout = document.querySelector("[data-autopilot-layout]");
-    const main = document.querySelector("[data-task-main]");
-    const bar = document.querySelector("[data-task-bar]");
-    const pane = document.querySelector("[data-task-pane]");
-    const holder = document.querySelector("[data-task-frame]");
-    const frame = holder ? [...holder.querySelectorAll("iframe")].find(visible) ?? null : null;
-    const surface = document.querySelector("[data-session-surface]");
-    const barText = bar ? [...bar.querySelectorAll("p")].filter(visible).map(words).join(" ") : "";
-    const zones = typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone").filter((zone) => zone.includes("/")) : [];
-    return {
-      path: location.pathname,
-      layout: layout ? layout.getAttribute("data-autopilot-layout") : null,
-      list: Boolean(document.querySelector("[data-task-list]")),
-      main: Boolean(main),
-      bar: Boolean(bar),
-      // The open task's row is marked in a list beside the task; with the list not beside it there is no row to mark.
-      marked: [...document.querySelectorAll("[data-task-list] [data-task-id][aria-current='page']")].length,
-      pane: pane ? pane.getAttribute("data-task-pane") : null,
-      paneBox: rect(pane),
-      surface: surface ? surface.getAttribute("data-session-surface") : null,
-      holderBox: rect(holder),
-      frameBox: rect(frame),
-      // A box for typing that the page itself draws: the sidebar's search is the shell's, the list's search is not in the main area.
-      editors: [...document.querySelectorAll("textarea, [contenteditable='true'], [role='textbox']")].filter((el) => visible(el) && !el.closest("aside, nav")).length,
-      inputsInMain: main ? [...main.querySelectorAll("input")].filter((el) => visible(el) && !["checkbox", "radio", "hidden", "file", "button", "submit"].includes(el.getAttribute("type") ?? "")).length : 0,
-      dialogs: [...document.querySelectorAll("[role='dialog']")].filter(visible).length,
-      zoneIds: zones.filter((zone) => barText.includes(zone)).slice(0, 3),
-    };
-  }
   return null;
-}
-
-/** The pane's box and the frame's are one rectangle, to the pixel the shell rounds to. */
-const PANE_TOLERANCE_PX = 2;
-
-/**
- * Whether two boxes (`{ left, top, width, height }`) are the same rectangle, give or take the shell's rounding.
- * @param {{ left: number, top: number, width: number, height: number } | null} a @param {{ left: number, top: number, width: number, height: number } | null} b
- */
-export function sameBox(a, b, tolerance = PANE_TOLERANCE_PX) {
-  return Boolean(a && b) && ["left", "top", "width", "height"].every((key) => Math.abs(/** @type {any} */ (a)[key] - /** @type {any} */ (b)[key]) <= tolerance);
-}
-
-const boxText = (box) => (box ? `${box.width}×${box.height} at ${box.left},${box.top}` : "none");
-
-/**
- * The task page as a reader meets it right after a task's row was clicked (R13, V-11). The shell places the kernel's conversation over
- * the pane, so what the walk can hold the page to is where that frame is and what the page does not draw: every one of these is a
- * NOTICE (new in R13), each says "not observable" and why when the thing it looks at is not there — a throwaway account has no task,
- * a task that never ran has no conversation, and the walk starts no runtime, so the frame's container is placed but may hold no
- * iframe. The one failure is carried over from the drawer it replaces: a time zone is named, never shown by its identifier.
- * @param {string} name the report's page name @param {any} r what `afterClickProbe` returned for `taskPage`
- * @returns {{ failures: string[], notices: string[] }}
- */
-export function taskPageFindings(name, r) {
-  const current = `${name}@desktop`;
-  /** @type {string[]} */ const failures = [];
-  /** @type {string[]} */ const notices = [];
-  /** @type {string[]} */ const info = [];
-  if (!r) return { failures, notices, info };
-  // `/new` is the route's other page, the form for a new task: the first example of an account with no task opens it, and it is no task's page.
-  if (!/^\/app\/autopilot\/(?!new$)[^/]+$/.test(r.path ?? "")) {
-    notices.push(`${current}: not observable: the first row did not go to a task's own page (the address is ${r.path}), so the task page was not read`);
-    return { failures, notices, info };
-  }
-  if (!r.main) notices.push(`${current}: the task page has no main area (data-task-main)`);
-  if (!r.bar) notices.push(`${current}: the task page has no task bar (data-task-bar)`);
-  if (r.layout === "split") {
-    if (!r.list) notices.push(`${current}: the split layout has no task list beside the task (data-task-list)`);
-    else if (r.marked !== 1) notices.push(`${current}: ${r.marked} row(s) of the list are marked as the open task (aria-current=page; one)`);
-  } else if (r.layout === null) notices.push(`${current}: the task page declares no layout (data-autopilot-layout)`);
-  if (r.editors > 0 || r.inputsInMain > 0) {
-    notices.push(`${current}: the task page draws ${r.editors + r.inputsInMain} text box(es) of its own; the conversation's input is the kernel's, inside the frame`);
-  }
-  if (r.dialogs > 0) notices.push(`${current}: ${r.dialogs} dialog(s) open on the task page right after the task opened (the conversation is not in a dialog)`);
-  if (r.pane === null) notices.push(`${current}: not observable: the task's pane (data-task-pane) had not rendered, so the conversation's place was not read`);
-  else if (r.pane !== "conversation") notices.push(`${current}: not observable: the first task's pane reads ${r.pane}, so no conversation frame is placed over it`);
-  else {
-    if (r.surface !== "task") notices.push(`${current}: the conversation surface reads ${r.surface ?? "nothing"} while the task's conversation is on (task)`);
-    if (!r.holderBox) notices.push(`${current}: not observable: the pane reads conversation and no frame container (data-task-frame) is placed over it`);
-    else {
-      // The iframe when the runtime is up; otherwise its container, which the shell places at the same rectangle.
-      const box = r.frameBox ?? r.holderBox;
-      if (!sameBox(box, r.paneBox)) {
-        notices.push(`${current}: the kernel frame${r.frameBox ? "" : "'s container"} is ${boxText(box)} and the pane ${boxText(r.paneBox)} (the same rectangle)`);
-      } else if (!r.frameBox) {
-        // No walk starts a runtime, so this is so on every account: an INFO line of what was compared, not a gap of the account's data
-        // (a fixture walk accepts no gap, and no data could fill this one — r19-guards2).
-        info.push(`${current}: the frame's container is placed over the pane, and holds no iframe (the walk starts no runtime), so only the container was compared`);
-      }
-    }
-  }
-  if (r.zoneIds.length) failures.push(`${current}: the task bar names a time zone by its identifier: ${r.zoneIds.join(", ")}`);
-  return { failures, notices, info };
 }
 
 /**
@@ -3090,7 +2960,6 @@ export function afterClickFindings(name, kind, r) {
   if (!r) return { failures, notices };
   // The old form opened the conditions in place and failed on no detail; the drawer is the same thing in its R13 form.
   if (kind === "sourceDrawer" && r.drawers === 0) failures.push(`${current}: clicking the first source opened no drawer (a dialog holding data-geo-source-drawer)`);
-  if (kind === "taskPage") return taskPageFindings(name, r);
   return { failures, notices };
 }
 
@@ -3722,7 +3591,7 @@ export function rowProbe([action, index = 0]) {
 }
 
 /** What the first row of a page's first list opened to, and the probe that reads it (`afterClickProbe`). */
-export const AFTER_CLICK_KIND = { "geo-sources": "sourceDrawer", autopilot: "taskPage" };
+export const AFTER_CLICK_KIND = { "geo-sources": "sourceDrawer" };
 /**
  * The list whose first row the probe is about, where it is not the page's first: 循证 GEO's 信源 view draws its 「发现与处理」 findings
  * above the 信源 list once a round has findings (V3), and a finding's row opens its finding, not a site's drawer — the fixture walk of
@@ -3759,6 +3628,8 @@ export const STEP_TARGETS = {
   "address-state": "the choices of the inbox and the memory page in the address, kept through Back",
   "frontier-event-handoff": "the event page's hand-off of 深入研究 to the conversation",
   "chat-composer": "the composer inside the kernel's frame, at both widths",
+  "chat-schedules": "the sidebar's 定时任务 address, ended on the conversation page with the kernel's own 定时任务 page (its heading and 「新建」) drawn in the frame",
+  "chat-native-surface": "the conversation frame's native surfaces: the developer-tools preference the page reads (the 运行 tab), the thinking-strength seat, and the document viewer's chunk served (a PDF, Word, Excel or PowerPoint file opens)",
   "chat-cleanup-cover": "the answer the walk gives to a runtime start refused for a cleanup in progress",
 };
 
@@ -3801,11 +3672,6 @@ export function readerReady() {
 /** A PDF's viewer is in the original's column (the file is fetched before its frame is drawn). */
 export function pdfFrameReady() {
   return Boolean(document.querySelector("[data-reader-column='original'] iframe[title*='PDF']"));
-}
-
-/** A task's page has drawn its pane (the conversation's place, or what stands in for it). */
-export function taskPaneReady() {
-  return Boolean(document.querySelector("[data-task-pane]"));
 }
 
 /**
@@ -4011,7 +3877,6 @@ async function walkRowClicks(page, base, route, name, popups) {
       if (index === probeAt && kind) {
         // The probed list's first row is open: read what it opened to, before the next load closes it. A task's page draws its pane once
         // the task and its executions are read.
-        if (kind === "taskPage") await page.waitForFunction(taskPaneReady, undefined, { timeout: 6_000 }).catch(() => null);
         const opened = await page.evaluate(afterClickProbe, [kind]);
         rows[index].after = opened;
         const judged = afterClickFindings(name, kind, opened);
@@ -4559,6 +4424,8 @@ async function main() {
       if (chat.openMs > CHAT_OPEN_CEILING_MS && !chat.retriedAfterNetworkChange) failures.push(`${current}: the prewarmed conversation took ${Math.round(chat.openMs / 1000)} s to open (ceiling ${CHAT_OPEN_CEILING_MS / 1000} s)`);
       // The composer's room, chips and statistics at both widths (R13 E-17, A20), read through the frame that just loaded.
       if (chat.loaded) await recordStep(report, failures, notices, "chat-composer", () => walkComposer(page, operator));
+      if (chat.loaded) await recordStep(report, failures, notices, "chat-schedules", () => walkSchedules(page, base));
+      if (chat.loaded) await recordStep(report, failures, notices, "chat-native-surface", () => walkNativeSurface(page));
       // A start the control plane refuses for a cleanup in progress, answered by the walk (R11); it starts nothing.
       const waitMs = process.env.OPEN_SCIENCE_WALK_CLEANUP_WAIT_MS !== undefined ? Number(process.env.OPEN_SCIENCE_WALK_CLEANUP_WAIT_MS) || 0 : CLEANUP_WALK_WAIT_MS;
       allowRuntimeStart = false;
@@ -5367,6 +5234,128 @@ async function walkComposer(page, operator) {
   const a = composerFindings("desktop", desktop);
   const b = composerFindings("phone", phone);
   return { failures: [...a.failures, ...b.failures], notices: [...a.notices, ...b.notices], read: { desktop, phone } };
+}
+
+/**
+ * The kernel's 定时任务 page as the frame draws it, read inside the frame (handed to the browser as source text, so it names nothing of
+ * this module): the visible `h1`s and whether a button reading exactly 「新建」 is on screen.
+ */
+export function schedulesProbe() {
+  const visible = (/** @type {Element} */ el) => {
+    const box = el.getBoundingClientRect();
+    return box.width > 0 && box.height > 0 && (typeof (/** @type {any} */ (el)).checkVisibility !== "function" || /** @type {any} */ (el).checkVisibility());
+  };
+  return {
+    headings: [...document.querySelectorAll("h1")].filter(visible).map((el) => (el.textContent ?? "").replace(/\s+/g, " ").trim()),
+    newButton: [...document.querySelectorAll("button")].some((el) => visible(el) && (el.textContent ?? "").replace(/\s+/g, " ").trim() === "新建"),
+  };
+}
+
+/**
+ * 定时任务 is the kernel's Automation page, not a page of ours: `/app/autopilot` redirects to the conversation with an intent that asks
+ * the frame to show it. What the walk can hold is that the address ended on the conversation and that the frame drew the page: its
+ * `h1` reads 「定时任务」 and its 「新建」 button is on screen. Every verdict is a failure, and a frame that never appeared is one too
+ * (`read` null): a check that could not read the page never reads as a pass, and no task of the account is needed.
+ * @param {string} path the address the walk ended on @param {{ headings: string[], newButton: boolean } | null} read what `schedulesProbe` returned in the kernel's frame
+ * @returns {string[]} failures
+ */
+export function schedulesFindings(path, read) {
+  const current = "autopilot@desktop";
+  /** @type {string[]} */ const failures = [];
+  if (!/^\/app\/chat(?:\/|$)/.test(path)) failures.push(`${current}: /app/autopilot ended on ${path || "nothing"}, not on the conversation page (/app/chat)`);
+  if (!read) {
+    failures.push(`${current}: not observable: no kernel frame drew a page, so the 定时任务 page was not read`);
+    return failures;
+  }
+  if (!read.headings.includes("定时任务")) failures.push(`${current}: the kernel frame's h1 does not read 定时任务 (${read.headings.length ? read.headings.map((text) => `“${text}”`).join(", ") : "no visible h1"})`);
+  if (!read.newButton) failures.push(`${current}: the kernel frame draws no 「新建」 button on the 定时任务 page`);
+  return failures;
+}
+
+/**
+ * The sidebar's 定时任务 at the desktop width: open its address, wait for the kernel's frame to draw the page, read it. The frame needs
+ * the account's runtime, so this runs with the chat step, after the conversation has loaded; it reads and clicks nothing.
+ * @param {any} page @param {string} base
+ */
+async function walkSchedules(page, base) {
+  await page.goto(`${base}/app/autopilot`, { waitUntil: "domcontentloaded", timeout: 60_000 });
+  /** @type {{ headings: string[], newButton: boolean } | null} */ let read = null;
+  const deadline = Date.now() + 60_000;
+  while (Date.now() < deadline) {
+    await page.waitForTimeout(500);
+    for (const frame of page.frames()) {
+      if (!frame.url().includes("/__evimed/f/")) continue;
+      const seen = await frame.evaluate(schedulesProbe).catch(() => null);
+      if (seen) read = seen;
+    }
+    if (read?.headings.includes("定时任务") && read.newButton && /^\/app\/chat(?:\/|$)/.test(new URL(page.url()).pathname)) break;
+  }
+  return { failures: schedulesFindings(new URL(page.url()).pathname, read), read: { path: new URL(page.url()).pathname, ...(read ?? {}) } };
+}
+
+/**
+ * Runs inside the kernel's frame (serialized by `evaluate`, so it reads nothing of this module): what the page reads for its native
+ * surfaces, from the frame's own origin. `developerTools` is the shared `ui-settings` preference the page reads through the one
+ * settings read (false hides the conversation's 运行 tab, the changed-files card's diff and the interactive HTML preview);
+ * `effort` is the composer seat's accessible name; `documentChunk` is the document preview's PDF viewer chunk, which the shared
+ * asset route has to serve or a PDF, Word, Excel or PowerPoint file opens to a blank pane.
+ */
+export async function nativeSurfaceProbe() {
+  const base = location.pathname.replace(/\/$/, "");
+  /** @type {{ developerTools: boolean | null, effort: string | null, documentChunk: { status: number, type: string } | null }} */
+  const read = { developerTools: null, effort: null, documentChunk: null };
+  try {
+    const answer = await fetch(`${base}/api/settings/describe`, { method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ type: "client-request", rpcId: "walk-native-surface", method: "settings/describe", payload: { args: {} } }) });
+    const body = await answer.json();
+    const view = (body?.result?.value?.namespaces ?? []).find((/** @type {any} */ entry) => entry?.ns === "ui-settings");
+    read.developerTools = view ? view.value?.enabled === true : false;
+  } catch { /* stays null: not observable */ }
+  // The composer's controls mount after the frame's first paint; a read before that found nothing on production (2026-11-05)
+  // while the control was there ("思考强度，当前：高"). Wait for it, bounded, inside the page.
+  const findSeat = () => [...document.querySelectorAll("button[aria-label]")].map((el) => el.getAttribute("aria-label") ?? "").find((label) => label.includes("思考强度") || /model|模型/i.test(label));
+  let seat = findSeat();
+  for (let waited = 0; !seat && waited < 15_000; waited += 500) { await new Promise((resolve) => setTimeout(resolve, 500)); seat = findSeat(); }
+  read.effort = seat ?? null;
+  try {
+    const entry = /** @type {any} */ (globalThis).__DSH_BOOT__?.entries?.find((/** @type {any} */ item) => item?.id === "@deepseek-ai/dsh-client-ui-sidebar-documentpreview");
+    if (entry?.rev) {
+      const chunk = await fetch(`${location.origin}/__evimed/k/plugins/@deepseek-ai/dsh-client-ui-sidebar-documentpreview/client.pdf.js?rev=${entry.rev}`);
+      read.documentChunk = { status: chunk.status, type: chunk.headers.get("content-type") ?? "" };
+    }
+  } catch { /* stays null */ }
+  return read;
+}
+
+/**
+ * The verdicts on what `nativeSurfaceProbe` read. Every one is a failure and a probe that read nothing is one too.
+ * @param {{ developerTools: boolean | null, effort: string | null, documentChunk: { status: number, type: string } | null } | null} read
+ * @returns {string[]}
+ */
+export function nativeSurfaceFindings(read) {
+  if (!read) return ["chat@desktop: not observable: no kernel frame answered, so the native surfaces were not read"];
+  /** @type {string[]} */ const failures = [];
+  if (read.developerTools !== true) failures.push(`chat@desktop: the page reads the developer-tools preference as ${read.developerTools === null ? "unreadable" : "off"}, so a conversation has no native 运行 tab`);
+  if (read.effort === null) failures.push("chat@desktop: the composer draws no thinking-strength control");
+  else if (!read.effort.startsWith("思考强度") || /model|模型|deepseek/i.test(read.effort)) failures.push(`chat@desktop: the composer's control is not worded as the thinking strength (“${read.effort}”)`);
+  if (!read.documentChunk) failures.push("chat@desktop: not observable: the document preview's PDF viewer chunk was not requested");
+  else if (read.documentChunk.status !== 200 || !/javascript/i.test(read.documentChunk.type)) failures.push(`chat@desktop: the document preview's PDF viewer chunk answered ${read.documentChunk.status} ${read.documentChunk.type || "(no type)"}, so a PDF or Office file opens blank`);
+  return failures;
+}
+
+/**
+ * Read the kernel's native surfaces through the conversation frame that is already open (the chat step has loaded it): the
+ * developer-tools preference, the thinking-strength seat and the document viewer's chunk. Reads and clicks nothing.
+ * @param {any} page
+ */
+async function walkNativeSurface(page) {
+  /** @type {any} */ let read = null;
+  for (const frame of page.frames()) {
+    if (!frame.url().includes("/__evimed/f/")) continue;
+    const seen = await frame.evaluate(nativeSurfaceProbe).catch(() => null);
+    if (seen) read = seen;
+  }
+  return { failures: nativeSurfaceFindings(read), read: read ?? {} };
 }
 
 /** @param {any} page */

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { sourceCitationProse, sourceCitationReferences, locateSourceQuotation, agendaResultKind } from '../index.mjs'
+import { sourceCitationProse, sourceCitationReferences, locateSourceQuotation } from '../index.mjs'
 
 test('citation metadata stays off screen during streaming and in the preserved reply', () => {
   const marker = '<!-- evimed-source:{"sourceId":"src_' + 'a'.repeat(32) + '","quote":"The sentence."} -->'
@@ -29,9 +29,3 @@ test('quotations share the report check and acquire offsets and pages only from 
   assert.equal(locateSourceQuotation({ text, quote, pageMap: [{ page: 1, start: 0, end: 30 }, { page: 2, start: 30, end: 50 }] }).page, null)
 })
 
-test('no new evidence cannot be inferred from a missing, malformed or failed result', () => {
-  assert.equal(agendaResultKind({ status: 'succeeded', deltaSchemaVersion: 1, claims: [] }), 'no-new-evidence')
-  assert.equal(agendaResultKind({ status: 'succeeded', deltaSchemaVersion: 1 }), 'result')
-  assert.equal(agendaResultKind({ status: 'succeeded', deltaSchemaVersion: 1, claims: [], deltaErrorCode: 'unreadable' }), 'result')
-  assert.equal(agendaResultKind({ status: 'failed', deltaSchemaVersion: 1, claims: [] }), 'failed')
-})

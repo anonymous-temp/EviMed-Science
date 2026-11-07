@@ -15,10 +15,30 @@ const equalReading = (row, cell) => ["value", "numerator", "denominator"].every(
   row[key] == null ? cell[key] == null : cell[key] != null && Number.isFinite(Number(row[key])) && Number(row[key]) === cell[key])
   && ["status", "reason"].every(key => (row[key] ?? null) === (cell[key] ?? null));
 
+/**
+ * A stored cell's coverage is a pure function of its immutable calculation input, so it is derived once per process and kept: the
+ * project list and the page's poll read the same cells again and again, and re-deriving 26 rounds of provenance each time cost seconds.
+ * The key carries everything the derivation depends on besides the code, which changes only with a new process.
+ */
+const DERIVED_LIMIT = 20_000;
+const derived = new Map();
+const derivedKey = row => JSON.stringify([row.user_id, row.geo_project_id, row.round_id, row.id, row.computation_generation, row.method_version,
+  row.metric_id, row.scope, row.pool, row.engine, row.group_id, row.arm, row.variant, row.rival, row.value, row.numerator, row.denominator, row.status, row.reason]);
+const remember = (key, value) => { derived.delete(key); derived.set(key, value); if (derived.size > DERIVED_LIMIT) derived.delete(derived.keys().next().value); };
+/** Test hook: forget what was derived. */
+export const resetDerivedMetricCoverage = () => derived.clear();
+
 /** Batch across generations; a cell never borrows the newest snapshot of its round. @param {any} db @param {any[]} rows */
 export async function storedMetricCoverage(db, rows) {
-  const generations = [...new Set(rows.map(row => row.computation_generation).filter(Boolean))];
   const byId = new Map();
+  const pending = [];
+  for (const row of rows) {
+    if (!row.computation_generation) continue;
+    const key = derivedKey(row);
+    if (derived.has(key)) { const value = derived.get(key); if (value != null) byId.set(row.id, value); remember(key, value); } else pending.push(row);
+  }
+  rows = pending;
+  const generations = [...new Set(rows.map(row => row.computation_generation).filter(Boolean))];
   if (!generations.length) return byId;
   const snapshots = (await db.query(`SELECT i.*,r.set_version FROM evimed_geo.metric_input_snapshots i
     JOIN evimed_geo.rounds r ON r.id=i.round_id AND r.geo_project_id=i.geo_project_id AND r.user_id=i.user_id
@@ -40,7 +60,11 @@ export async function storedMetricCoverage(db, rows) {
     if (!input || input.snapshot.round_id !== row.round_id || input.snapshot.geo_project_id !== row.geo_project_id
       || input.snapshot.user_id !== row.user_id || row.method_version !== GEO_MEASUREMENT_METHOD_VERSION) continue;
     const cell = input.selected.computed.cells.find(candidate => geoComparisonCellKey(candidate) === geoComparisonCellKey(cellOf(row)));
-    if (cell && equalReading(row, cell)) byId.set(row.id, geoMetricInputCoverage(input.selected, cell, input.snapshot.payload.setVersion));
+    if (cell && equalReading(row, cell)) {
+      const coverage = geoMetricInputCoverage(input.selected, cell, input.snapshot.payload.setVersion);
+      remember(derivedKey(row), coverage);
+      if (coverage != null) byId.set(row.id, coverage);
+    }
   }
   return byId;
 }

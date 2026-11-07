@@ -1506,7 +1506,9 @@ async function probeToolPipeline(ctx) {
       execute: async () => ({ ok: true, data: { probe: true } }),
     })
     disposers.push(ctx.tools.register(tool))
-    await ctx.tools.execute({ callId: `probe-${Date.now()}`, name: probeName, arguments: {}, signal: AbortSignal.timeout(5000) })
+    // From 0.2.2 a call is a batch, run by the composition's executor row (`tool-executor-native`). A probe that kept the old shape reads as
+    // two silent seams, because the batch is refused before either fires.
+    await ctx.tools.execute({ calls: [{ type: 'tool-call', id: `probe-${Date.now()}`, name: probeName, arguments: '{}' }], signal: AbortSignal.timeout(5000) })
     return { policyFired, observedFired, error: null }
   } catch (error) {
     return { policyFired, observedFired, error: errorMessage(error) }

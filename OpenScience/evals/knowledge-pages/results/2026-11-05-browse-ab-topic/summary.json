@@ -1,0 +1,326 @@
+{
+  "schemaVersion": 1,
+  "runId": "2026-11-05-browse-ab-topic",
+  "generatedAt": "2026-11-05T02:16:38.022Z",
+  "config": {
+    "schemaVersion": 2,
+    "models": {
+      "answer": "deepseek-v4-flash",
+      "judge": "deepseek-v4-pro"
+    },
+    "thinking": "disabled",
+    "kbScope": "topic",
+    "temperature": {
+      "answer": 0.7,
+      "judge": 0
+    },
+    "retrieval": {
+      "engine": "bm25",
+      "topK": 5,
+      "maxToolCalls": 6
+    },
+    "browse": {
+      "maxToolCalls": 12
+    },
+    "prompts": {
+      "answerSystemSha256": "47ec74bd7e6c318042530c84e02be487abc2e909e6faf532cf9af51da15e0a24",
+      "answerSystemBrowseSha256": "d6d87ed21b32481a267bb9deb96f3102317492b4e579e953afc19213f76a40a5",
+      "decompositionSentence": "When a question spans several documents, first split it into sub-questions, search for each one separately, and then combine what you found into one answer.",
+      "judgeSystemSha256": "86679b886b48ce19dda39d5e4568c2bdbf6650cd9351d5e55f5aa726d6f7af58"
+    },
+    "thresholds": {
+      "minRepsPerCell": 3,
+      "synthesis": {
+        "bVsAprimeCiLowerAbove": 0,
+        "bVsAprimeMeanAtLeast": 0.05,
+        "bVsAMeanAbove": 0
+      },
+      "single": {
+        "meanAtLeast": -0.05,
+        "ciLowerAtLeast": -0.1
+      },
+      "citation": {
+        "verifiedRateDropAtMost": 0.03
+      },
+      "judgeSanity": {
+        "referenceMeanAtLeast": 0.9,
+        "emptyMeanAtMost": 0.1
+      }
+    },
+    "bootstrap": {
+      "iterations": 10000,
+      "seed": 20261012
+    },
+    "arms": {
+      "A": "kb_search only",
+      "Aprime": "kb_search + decomposition guidance",
+      "C": "upstream knowledge pages + kb_search",
+      "G": "browse only: list, grep, read; no kb_search"
+    }
+  },
+  "thresholds": {
+    "minRepsPerCell": 3,
+    "synthesis": {
+      "bVsAprimeCiLowerAbove": 0,
+      "bVsAprimeMeanAtLeast": 0.05,
+      "bVsAMeanAbove": 0
+    },
+    "single": {
+      "meanAtLeast": -0.05,
+      "ciLowerAtLeast": -0.1
+    },
+    "citation": {
+      "verifiedRateDropAtMost": 0.03
+    },
+    "judgeSanity": {
+      "referenceMeanAtLeast": 0.9,
+      "emptyMeanAtMost": 0.1
+    }
+  },
+  "bootstrap": {
+    "iterations": 10000,
+    "seed": 20261012,
+    "unit": "question (mean over its repetitions)",
+    "interval": "percentile 95%"
+  },
+  "coverage": {
+    "expectedCells": 54,
+    "completeCells": 0,
+    "minRepsPerCell": 3,
+    "judgedRuns": 74,
+    "runsRecorded": 74
+  },
+  "categories": {
+    "synthesis": {
+      "questions": 15,
+      "arms": {
+        "A": {
+          "questions": 0,
+          "runs": 22,
+          "correctness": null,
+          "tokensPerRun": 9990,
+          "toolCallsPerRun": 4.36,
+          "answerCostCnyPerRun": 0.02027
+        },
+        "G": {
+          "questions": 0,
+          "runs": 21,
+          "correctness": null,
+          "tokensPerRun": 12438,
+          "toolCallsPerRun": 7,
+          "answerCostCnyPerRun": 0.01911
+        }
+      },
+      "diffs": {
+        "G-A": {
+          "n": 0,
+          "mean": null,
+          "ciLow": null,
+          "ciHigh": null
+        }
+      }
+    },
+    "single": {
+      "questions": 12,
+      "arms": {
+        "A": {
+          "questions": 0,
+          "runs": 15,
+          "correctness": null,
+          "tokensPerRun": 3886,
+          "toolCallsPerRun": 1.8,
+          "answerCostCnyPerRun": 0.00628
+        },
+        "G": {
+          "questions": 0,
+          "runs": 16,
+          "correctness": null,
+          "tokensPerRun": 5705,
+          "toolCallsPerRun": 2.88,
+          "answerCostCnyPerRun": 0.00665
+        }
+      },
+      "diffs": {
+        "G-A": {
+          "n": 0,
+          "mean": null,
+          "ciLow": null,
+          "ciHigh": null
+        }
+      }
+    }
+  },
+  "citations": {
+    "overall": {
+      "A": {
+        "answers": 37,
+        "answersWithMarkers": 36,
+        "answersWithMarkersRate": 0.973,
+        "markerCount": 153,
+        "verified": 150,
+        "verifiedRate": 0.9804,
+        "markersPerAnswer": 4.14,
+        "pageCited": 0,
+        "byStatus": {
+          "verified": 150,
+          "quote_not_found": 3
+        }
+      },
+      "G": {
+        "answers": 37,
+        "answersWithMarkers": 36,
+        "answersWithMarkersRate": 0.973,
+        "markerCount": 138,
+        "verified": 134,
+        "verifiedRate": 0.971,
+        "markersPerAnswer": 3.73,
+        "pageCited": 0,
+        "byStatus": {
+          "verified": 134,
+          "quote_not_found": 1,
+          "quote_invalid": 3
+        }
+      }
+    },
+    "synthesis": {
+      "A": {
+        "answers": 22,
+        "answersWithMarkers": 21,
+        "answersWithMarkersRate": 0.9545,
+        "markerCount": 125,
+        "verified": 122,
+        "verifiedRate": 0.976,
+        "markersPerAnswer": 5.68,
+        "pageCited": 0,
+        "byStatus": {
+          "verified": 122,
+          "quote_not_found": 3
+        }
+      },
+      "G": {
+        "answers": 21,
+        "answersWithMarkers": 20,
+        "answersWithMarkersRate": 0.9524,
+        "markerCount": 106,
+        "verified": 102,
+        "verifiedRate": 0.9623,
+        "markersPerAnswer": 5.05,
+        "pageCited": 0,
+        "byStatus": {
+          "verified": 102,
+          "quote_not_found": 1,
+          "quote_invalid": 3
+        }
+      }
+    },
+    "single": {
+      "A": {
+        "answers": 15,
+        "answersWithMarkers": 15,
+        "answersWithMarkersRate": 1,
+        "markerCount": 28,
+        "verified": 28,
+        "verifiedRate": 1,
+        "markersPerAnswer": 1.87,
+        "pageCited": 0,
+        "byStatus": {
+          "verified": 28
+        }
+      },
+      "G": {
+        "answers": 16,
+        "answersWithMarkers": 16,
+        "answersWithMarkersRate": 1,
+        "markerCount": 32,
+        "verified": 32,
+        "verifiedRate": 1,
+        "markersPerAnswer": 2,
+        "pageCited": 0,
+        "byStatus": {
+          "verified": 32
+        }
+      }
+    },
+    "diffs": {
+      "G-A": {
+        "n": 27,
+        "mean": -0.0094,
+        "ciLow": -0.0653,
+        "ciHigh": 0.0275
+      }
+    }
+  },
+  "perTopic": {
+    "af-doac-warfarin": {
+      "A": {
+        "synthesis": null,
+        "single": null
+      },
+      "G": {
+        "synthesis": null,
+        "single": null
+      }
+    },
+    "sglt2-hf-ckd": {
+      "A": {
+        "synthesis": null,
+        "single": null
+      },
+      "G": {
+        "synthesis": null,
+        "single": null
+      }
+    },
+    "aspirin-primary-prevention": {
+      "A": {
+        "synthesis": null,
+        "single": null
+      },
+      "G": {
+        "synthesis": null,
+        "single": null
+      }
+    }
+  },
+  "compile": {
+    "perTopic": {},
+    "overall": null
+  },
+  "cost": {
+    "totalCny": 1.6924,
+    "byKind": {
+      "sanity": 0.1696,
+      "answer": 1.0477,
+      "judge": 0.4745
+    },
+    "calls": 362
+  },
+  "judgeSanity": {
+    "n": 27,
+    "referenceMean": 1,
+    "emptyMean": 0
+  },
+  "arms": [
+    "A",
+    "G"
+  ],
+  "coverageByArm": {
+    "A": {
+      "expectedCells": 27,
+      "completeCells": 0
+    },
+    "G": {
+      "expectedCells": 27,
+      "completeCells": 0
+    }
+  },
+  "decisions": {
+    "G_vs_A": {
+      "open": false,
+      "inconclusive": true,
+      "reasons": [
+        "FAIL: insufficient data - G: 0 of 27 cells, A: 0 of 27 cells complete at 3 judged repetitions (3 required for every cell); the decision is withheld"
+      ]
+    }
+  }
+}

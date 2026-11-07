@@ -17,7 +17,7 @@
 
 /**
  * A run the platform started rather than a person: marked automated at dispatch (a module's step, an evaluation or acceptance
- * harness, a platform job), a scheduled execution or a programme episode and its verification (`autopilot:…`,
+ * harness, a platform job), a scheduled task's turn, or a run of the retired scheduler still in an older ledger (route reasons `autopilot:…`,
  * `autopilot-verify…`), a module's run (`geo:`, `vcr:`), the platform's own work (`platform-…`), or a LoopX continuation.
  * The route reasons are minted by the control plane's dispatchers and never taken from a caller.
  * @param {any} run

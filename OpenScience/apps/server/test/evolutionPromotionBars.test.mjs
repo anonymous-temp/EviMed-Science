@@ -1,28 +1,16 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {readFile} from 'node:fs/promises';
 import {GEO_SPECIFIED_TOPICS} from '@evimed/domain';
 import {evolutionServiceFixture} from './helpers/evolutionServiceFixture.mjs';
 import {createEvolutionMissions,evolutionDeterministicChecks} from '../src/evolutionMissions.mjs';
 import {createEvolutionTaskPool} from '../src/evolutionTaskPool.mjs';
 import {createModuleEvolutionEvaluators} from '../src/moduleEvolutionEvaluators.mjs';
 
-// The promotion bars (review D-E19). Autopilot's decisions are checked against closed expected actions, a written checklist, so it is no longer a model
-// score that has to be calibrated and none ever was. Frontier and 循证 GEO are model-scored; the numbers they check by code count as the share of units
+// The promotion bars (review D-E19). Frontier and 循证 GEO are model-scored; the numbers they check by code count as the share of units
 // that pass against the incumbent's share, not as "every unit of one run came out perfect".
 
 // ---- the evaluators: what each unit reports
-const cases=JSON.parse(await readFile(new URL('../../../evals/autopilot-next-action/cases.json',import.meta.url),'utf8')).cases;
 const bound={userId:'operator',projectId:'evimed-evolution',missionId:'evolution-mission-test',pool:'confirmation',arm:'candidate',candidate:{},checkpointUnit:null};
-test('autopilot is a checklist: the share of expected actions met, with no judge to calibrate',async()=>{
- const batch=cases.slice(0,3);
- const decisions=new Map([[batch[0].id,batch[0].expect[0]],[batch[1].id,batch[1].expect[1]],[batch[2].id,{action:'run',taskType:'not-an-expected-type'}]]);
- const planner={config:{},model:'fake',decide:async({episodeId})=>({...decisions.get(episodeId.split(':').at(-1)),policyRevisionId:'revision'})};
- const result=await createModuleEvolutionEvaluators({planner}).autopilot({...bound,batch,pool:'development'});
- assert.deepEqual(result.units.map(unit=>unit.score),[1,1,0]);
- assert.equal(result.evidenceTier,'checklist');assert.equal(result.checkScope,'closed-expected-actions');assert.equal(result.evaluatorVersion,'autopilot-checklist-v1');
- assert.equal('deterministicChecksPassed' in result,false,'a checklist claims no deterministic-check flag of its own');
-});
 test('a frontier unit says whether its numbers were checked and right, and the run claims no "all passed"',async()=>{
  let right=true;
  const editor={config:{},model:'fake',edit:async()=>({output:{lane:'research'},numbers:{missing:right?[]:['12 of 100'],unitMismatches:[]},modelInput:'source text',modelInputSha256:'a'.repeat(64),verification:'passed',editorVersion:'edit-v1'})};

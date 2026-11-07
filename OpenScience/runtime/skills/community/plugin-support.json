@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "kernel": "@deepseek-ai/dsh@0.2.1-rc.5",
+  "kernel": "@deepseek-ai/dsh@0.2.2-rc.1",
   "management": "immutable-release",
   "nativePlugins": [
     "evimed-runtime-ui",

@@ -63,8 +63,7 @@ function releasesSettled(pending: readonly Promise<void>[], ms: number): Promise
  * The chat route (`SessionRoute`) is therefore a placeholder: this decides
  * which conversation is open, from the address alone.
  *
- * THE OTHER PLACES IT SHOWS (2026-10-08, 定时任务; 2026-10-14, 虚拟临床研究). A task's page (`/app/autopilot/:taskId`) is a
- * conversation too: the task bar over the kernel's conversation of one execution. So is a study's conversation view
+ * THE OTHER PLACES IT SHOWS (2026-10-14, 虚拟临床研究). A study's conversation view
  * (`/app/virtual-research/:studyId/chat`): the study's step bar over its one conversation. The page cannot render the frame —
  * moving an iframe in the tree reloads it, the cost this component exists to avoid — so it renders an empty pane and registers it
  * (`registerTaskPane`), and this places the same resident frame over that pane: positioned and sized to the pane's rectangle, kept

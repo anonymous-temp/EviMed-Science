@@ -495,12 +495,19 @@ test("AC-32 a person-period table mapped as the notes say (the outcome marked ou
   assert.equal(state.ordered, true);
 });
 
-test("the outcome flag is the lever: the same registry mapped without it is not sealed, so the notes must say to mark it (review RF2 P1-7)", options, async () => {
+test("a target trial's named outcome parameter is sealed whether or not the map flagged it: refused before the plan is frozen, the first read recorded after (review finding 3)", options, async () => {
   const study = await seedStudy({ intendedUse: "specified_analysis" });
   const snapshot = await seedRegistry(study, false);
-  assert.deepEqual(snapshot.sealedFields, []);
-  const read = await vcr.dataPlane.resolveSnapshotInputs({ studyId: study.id, snapshotId: snapshot.id, principal: OWNER, purpose: "vcr", jobKind: "target_trial_emulation" });
-  assert.deepEqual(read.outcomeFieldsRead, [], "the outcome was read before the plan and nothing recorded it: this is what the flag prevents");
+  assert.deepEqual(snapshot.sealedFields, [], "the unflagged map seals nothing when the snapshot is frozen");
+  const ask = (/** @type {Record<string, any>} */ extra = {}) => vcr.dataPlane.resolveSnapshotInputs({ studyId: study.id, snapshotId: snapshot.id, principal: OWNER, purpose: "vcr", jobKind: "target_trial_emulation", ...extra });
+  // the job names the parameter it takes as its outcome: its source column is sealed by that, and the refusal is the seal's
+  await assert.rejects(() => ask({ outcomeParameter: "outcome" }), (error) => error.status === 403 && [VCR_DATA_PLANE_CODES.snapshotWithheld, "vcr_field_sealed"].includes(error.code));
+  assert.equal((await vcr.store.studyById(study.id)).outcomeSeal.outcomeFirstReadAt, undefined, "a refused read is not a read");
+  await vcr.seal.freezePlan({ studyId: study.id, plan: { estimand: { variable: "event" }, endpoint: { type: "binary" }, analysis: { method: "comparator.target_trial" }, intendedUse: "specified_analysis" }, actor: OWNER });
+  const read = await ask({ outcomeParameter: "outcome" });
+  assert.deepEqual(read.outcomeFieldsRead, ["EVENT"], "the read of the outcome is on the record");
+  const state = await vcr.seal.sealState(study.id);
+  assert.ok(state.outcomeFirstReadAt && Date.parse(state.outcomeFirstReadAt) > Date.parse(state.planFrozenAt), "after the plan");
 });
 
 test("AC-32 the first outcome read is the first, whatever the interleaving: the seal is written under a lock", options, async () => {

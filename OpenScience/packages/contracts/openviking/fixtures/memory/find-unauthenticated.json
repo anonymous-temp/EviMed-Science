@@ -1,6 +1,6 @@
 {
   "note": "Trusted mode with a root key: identity headers without the key are refused.",
-  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.1.1",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.3",
   "request": {
     "method": "POST",
     "path": "/api/v1/search/find",

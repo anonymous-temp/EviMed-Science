@@ -1,6 +1,6 @@
 {
   "note": "A commit while memory_policy.self.enabled is false.",
-  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.1.1",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.3",
   "request": {
     "method": "POST",
     "path": "/api/v1/sessions/dsh-session_fixture0000000000000000000000000001/commit",
@@ -21,7 +21,7 @@
     "result": {
       "session_id": "dsh-session_fixture0000000000000000000000000001",
       "status": "accepted",
-      "task_id": "10362945-22f5-4a18-a1fc-ac8f5e51cc36",
+      "task_id": "697a34f9-2eec-4a52-991a-522c484abfcd",
       "archive_uri": "viking://user/fx-user-a/sessions/dsh-session_fixture0000000000000000000000000001/history/archive_003",
       "archived": true,
       "effective_enable_working_memory": false,

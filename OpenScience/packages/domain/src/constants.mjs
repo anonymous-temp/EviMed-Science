@@ -162,9 +162,6 @@ export const MAX_ACTIVE_LEARNED_METHODS = 50
 /** Resident capsule profile budget, in tokens (§19.7). */
 export const CAPSULE_PROFILE_TOKEN_BUDGET = 1500
 
-/** Agenda projection budget, in tokens (§24.4.1). */
-export const AGENDA_PROJECTION_TOKEN_BUDGET = 3000
-
 /** Default top-k for capsule recall assembly (§19.22 A2). */
 export const CAPSULE_RECALL_TOP_K = 8
 
@@ -177,32 +174,6 @@ export const OMISSION_RATE_TARGETS = Object.freeze({ deep: 0.05, structured: 0.1
 
 /** QA omission-audit sampling rate by depth (§26.7). */
 export const OMISSION_AUDIT_SAMPLE_RATES = Object.freeze({ deep: 1, structured: 0.2, index_only: 0, skip: 0 })
-
-/** Autopilot daily-plan scoring weights (§24.4.2). */
-export const AUTOPILOT_PRIORITY_WEIGHTS = Object.freeze({
-  userSignal: 4,
-  novelty: 2,
-  evidenceGap: 2,
-  freshness: 1,
-  cost: 1,
-})
-
-/** User signals feeding the autopilot priority score. */
-export const AUTOPILOT_USER_SIGNALS = Object.freeze({
-  followUp: 1,
-  adopt: 0.6,
-  upvote: 0.3,
-  reject: -1,
-})
-
-/** Episodes without a `gated`-or-better claim before a direction is halved, then parked. */
-export const AUTOPILOT_DIMINISHING_RETURN_EPISODES = 3
-
-/** Reproduction tolerance for a verification episode's numeric comparison (§24.4.4). */
-export const REPRODUCTION_RELATIVE_TOLERANCE = 1e-6
-
-/** Deterministic exploratory / confirmatory split of a registered dataset (§24.4.5). */
-export const DATASET_EXPLORATORY_FRACTION = 0.3
 
 /** Source weights used when computing a capsule fact's strength (§27.3). */
 export const CAPSULE_SOURCE_WEIGHTS = Object.freeze({

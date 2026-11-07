@@ -437,3 +437,38 @@ export function installRuntimeUiTransport(frame, target = globalThis) {
   target.addEventListener('pagehide', hooks.dispose, { once: true });
   return hooks;
 }
+
+/**
+ * `Math.sumPrecise` for the document preview's PDF viewer, in the page and in its worker.
+ *
+ * The kernel's PDF viewer (pdf.js 6.3 in `dsh-client-ui-sidebar-documentpreview`) sums glyph widths with `Math.sumPrecise`,
+ * which Chrome ships from version 147. Without it the worker logs `Math.sumPrecise is not a function` and draws every font
+ * with a substitute that maps no CJK glyph, so a Chinese PDF, and a Word, Excel or PowerPoint file the kernel converts to PDF
+ * for the pane, shows its text as scattered Latin and symbol characters (2026-11-05, Chromium 145: the page rendered
+ * correctly with this polyfill and garbled without it). The worker is made from a string, so its source is given the
+ * polyfill when it is wrapped in a Blob; no other Blob is touched. A browser that has the function is left alone.
+ *
+ * Deletable when the browsers the platform serves all ship `Math.sumPrecise`, or when upstream polyfills it itself.
+ * Self-contained like the installer above: it is serialized into the frame's bootstrap.
+ * @param {any} target Browser global, injectable for the contract test.
+ */
+export function installRuntimeUiPolyfills(target = globalThis) {
+  const polyfill = 'if(typeof Math.sumPrecise!=="function"){Object.defineProperty(Math,"sumPrecise",{configurable:true,writable:true,value:function(values){let sum=0,c=0;for(const x of values){const y=Number(x)-c,t=sum+y;c=(t-sum)-y;sum=t}return sum}})}';
+  if (typeof target.Math?.sumPrecise !== 'function') {
+    Object.defineProperty(target.Math, 'sumPrecise', { configurable: true, writable: true, value: function sumPrecise(/** @type {Iterable<any>} */ values) {
+      let sum = 0; let c = 0;
+      for (const x of values) { const y = Number(x) - c; const t = sum + y; c = (t - sum) - y; sum = t; }
+      return sum;
+    } });
+  }
+  const NativeBlob = target.Blob;
+  if (typeof NativeBlob !== 'function' || NativeBlob.__evimedSumPrecise) return;
+  const Patched = /** @type {any} */ (function Blob(/** @type {any[] | undefined} */ parts, /** @type {any} */ options) {
+    const worker = Array.isArray(parts) && typeof parts[0] === 'string' && parts[0].includes('pdfjsVersion')
+      && /\bMath\.sumPrecise\b/.test(parts.join(''));
+    return new NativeBlob(worker ? [`${polyfill};`, ...parts] : parts, options);
+  });
+  Patched.prototype = NativeBlob.prototype;
+  Object.defineProperty(Patched, '__evimedSumPrecise', { value: true });
+  target.Blob = Patched;
+}

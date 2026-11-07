@@ -169,7 +169,7 @@ export function cardIsComplete(card, source) {
 function opportunityOf(card) {
   const { payload } = card;
   return { source: 'self-research', kind: 'platform-mechanism', mechanismCardId: card.id, mechanismKey: payload.mechanismKey,
-    module: (payload.targetObjects ?? []).find((/** @type {string} */ value) => ['tools', 'frontier', 'geo', 'autopilot', 'sources', 'evidence', 'memory', 'runtime'].includes(value)) ?? 'memory',
+    module: (payload.targetObjects ?? []).find((/** @type {string} */ value) => ['tools', 'frontier', 'geo', 'sources', 'evidence', 'memory', 'runtime'].includes(value)) ?? 'memory',
     problem: payload.problem, estimatedCostCny: payload.estimatedCostCny, evidenceStatus: 'hypothesis', sourceRefs: [payload.source] };
 }
 

@@ -138,26 +138,6 @@ function boundTo(version, calculationId) {
     keys: [...new Set(items.map(item => item.calculation.key))].slice(0, 5) };
 }
 
-/**
- * What an agenda is asked to do about a source change: look at the result and at what was found to rest on the source,
- * and nothing else. The notice says the source changed; the note never says the conclusion is wrong.
- * @param {any} payload a result impact's payload
- */
-function continuationNote(payload) {
-  const affected = projectAffected(payload.affected);
-  const named = (list, label) => (list?.items?.length ? ` ${label}: ${list.items.map(item => item.versionId ?? item.id ?? item.recordId).join(", ")}${list.total > list.items.length ? ` and ${list.total - list.items.length} more` : ""}.` : "");
-  const scope = affected ? [
-    named(affected.calculations, "Calculations among its bound values that rest on the source (recompute only these and the printed values bound to them)"),
-    named(affected.dependents, "Results whose printed values are bound to this calculation"),
-    affected.methods.total ? ` ${affected.methods.total} learned method(s) are linked to it; they carry a label that the source changed.` : "",
-    affected.memories.total ? ` ${affected.memories.total} memory record(s) name the source and carry a label that it changed.` : "",
-  ].join("") : "";
-  return `Review source updates against immutable result ${payload.versionId}. Source: ${JSON.stringify(payload.source)}. Notices: ${JSON.stringify(payload.sourceStatus.updates)}.${scope}`
-    + " A notice means the source changed; it does not by itself show the result's conclusion is wrong."
-    + " Recheck only what rests on this source and leave every other result, calculation, memory and method as it is, without running it again."
-    + " Preserve the prior result. Identify affected conclusions; create a successor only for the affected analysis. State what changed, what was recomputed, and what remains uncertain.";
-}
-
 const byId = (left, right) => String(left.versionId ?? left.recordId ?? left.id).localeCompare(String(right.versionId ?? right.recordId ?? right.id));
 
 export class ResultImpactService {
@@ -166,17 +146,15 @@ export class ResultImpactService {
    * record says those lookups were not made. `sourceChanges` is the one record of what was published about a work after
    * it was published (`sourceChanges.mjs`, B5): every check is read together with it, so a retraction some other detector
    * recorded is not lost to a lookup that did not see it, and `reconcileSince` takes what was recorded since a position
-   * of its feed without asking anyone; absent, a check is exactly what the caller found. `authorizeContinuation(ownerId, impact)` answers which agenda the researcher
-   * already authorized for this result, if any (the running agenda whose episode produced it); at most
-   * `autoRecheckLimit` impacts of one check are continued that way, and the rest wait for the researcher's own choice.
-   * @param {{documents:any,results:any,autopilot?:any,notifications?:any,knowledge?:any,sourceChanges?:any,authorizeContinuation?:(userId:string,impact:any)=>Promise<string|null>,
-   *   autoRecheckLimit?:number,report?:(code:string)=>void,now?:()=>Date}} dependencies
+   * of its feed without asking anyone; absent, a check is exactly what the caller found.
+   * @param {{documents:any,results:any,notifications?:any,knowledge?:any,sourceChanges?:any,
+   *   report?:(code:string)=>void,now?:()=>Date}} dependencies
    */
-  constructor({ documents, results, autopilot = null, notifications = null, knowledge = null, sourceChanges = null, authorizeContinuation = null, autoRecheckLimit = 3,
+  constructor({ documents, results, notifications = null, knowledge = null, sourceChanges = null,
     report = () => {}, now = () => new Date() }) {
-    this.documents = documents; this.results = results; this.autopilot = autopilot; this.notifications = notifications; this.knowledge = knowledge;
+    this.documents = documents; this.results = results; this.notifications = notifications; this.knowledge = knowledge;
     this.sourceChanges = sourceChanges;
-    this.authorizeContinuation = authorizeContinuation; this.autoRecheckLimit = autoRecheckLimit; this.report = report; this.now = now;
+    this.report = report; this.now = now;
   }
 
   async list(userId, { projectId, versionId = null, limit = 50, cursor = null }) {
@@ -213,8 +191,7 @@ export class ResultImpactService {
     return { ...row, payload: { schemaVersion: row.payload.schemaVersion, recordType: "result-impact", versionId: row.payload.versionId,
       source: { id: "unavailable-source" }, sourceStatus: { state: "unavailable", checkedAt: null,
         reason: matchesSource.some(input => input.availability === "restricted") ? "restricted" : "source_unavailable", updates: [] },
-      effect: "source_gap", claimIds: [], coverage: "source_unavailable", historicalResultPreserved: true, recomputed: false,
-      continuation: { status: "unavailable", reason: "source_unavailable" } } };
+      effect: "source_gap", claimIds: [], coverage: "source_unavailable", historicalResultPreserved: true, recomputed: false } };
   }
 
   /** Integrate a trusted claim-verification projection. DOI and preserved path are separate recorded identities. */
@@ -417,7 +394,6 @@ export class ResultImpactService {
     const queue = [...ids];
     const queued = new Set(queue);
     const items = [];
-    let continued = 0;
     for (let position = 0; position < queue.length; position += 1) {
       const versionId = queue[position];
       const currentResult = await this.results.get(userId, projectId, versionId);
@@ -456,8 +432,7 @@ export class ResultImpactService {
           source: ref, sourceStatus: checked, changeKey, effect: checked.state === "changed" ? "potentially_affected" : "source_gap",
           claimIds: [...new Set(findings.map(finding => finding.elementId))],
           coverage: !named ? "calculation_bindings" : findings.length ? "recorded_claim_refs" : "result_inputs_only",
-          affected, historicalResultPreserved: true, recomputed: false, observedAt: this.now().toISOString(),
-          continuation: { status: "awaiting_user", reason: "authorization_required" } };
+          affected, historicalResultPreserved: true, recomputed: false, observedAt: this.now().toISOString() };
         try { row = await this.documents.put(ownerId, "result-impact", id, payload, { expectedRevision: 0, projectId }); }
         catch (error) {
           if (error?.code !== "product_revision_conflict") throw error;
@@ -466,7 +441,7 @@ export class ResultImpactService {
         }
       } else if (JSON.stringify(row.payload.affected ?? null) !== JSON.stringify(affected)) {
         // A later check of the same change finds what rests on it now: a memory written since, a method learnt since.
-        // Only the list moves; the continuation, the status and the preserved result are as they were.
+        // Only the list moves; the status and the preserved result are as they were.
         try { row = await this.documents.put(ownerId, "result-impact", id, { ...row.payload, affected }, { expectedRevision: row.revision, projectId }); }
         catch (error) { if (error?.code !== "product_revision_conflict") throw error; row = await this.documents.get(ownerId, "result-impact", id) ?? row; }
       }
@@ -474,15 +449,6 @@ export class ResultImpactService {
         await this.notifications?.create(ownerId, { noticeType: "notify", severity: "attention", projectId,
           title: "引用来源有更新", body: impactBody(checked, projectAffected(affected)),
           source: currentResult.producer?.runId ? { type: "run", id: currentResult.producer.runId } : { type: "system", id }, idempotencyKey: `result-impact:${id}` });
-        // The agenda the researcher already runs for this work may recheck it: no further approval, and no recheck for an
-        // agenda that is paused or not started. A failure here leaves the impact waiting for the researcher's own choice.
-        if (this.authorizeContinuation && row.payload.continuation.status !== "scheduled" && continued < this.autoRecheckLimit) {
-          continued += 1;
-          try {
-            const agendaId = await this.authorizeContinuation(ownerId, row);
-            if (agendaId) row = await this.continueImpact(ownerId, projectId, id, { agendaId });
-          } catch (error) { this.report(typeof error?.code === "string" ? error.code : "result_impact_continuation_failed"); row = await this.documents.get(ownerId, "result-impact", id) ?? row; }
-        }
       }
       items.push(await this.projectImpact(userId, projectId, row, { owner: userId === ownerId }));
     }
@@ -496,90 +462,5 @@ export class ResultImpactService {
         source: { type: "system", id }, idempotencyKey: `knowledge-change:${id}` });
     }
     return { items, scanned };
-  }
-
-  /** Explicit user continuation or a trusted existing consent resolver; existing agenda budgets still apply. */
-  async assertContinuation(userId, projectId, binding) {
-    try {
-      const project = await this.results.scope(userId, projectId);
-      const impact = await this.get(userId, projectId, binding.impactId);
-      if (project.userId !== userId || binding.requestedBy !== userId || binding.projectId !== projectId
-        || impact.payload.versionId !== binding.versionId || JSON.stringify(sourceReference(impact.payload.source)) !== JSON.stringify(sourceReference(binding.source))
-        || impact.payload.continuation.agendaId !== binding.agendaId
-        || !["preparing", "scheduled"].includes(impact.payload.continuation.status)) throw new HttpError(409, "result_impact_source_unavailable", "Continuation binding is no longer authorized.");
-    } catch (error) {
-      // Permission and deletion refusals are terminal; an infrastructure outage
-      // still propagates for the existing worker retry policy.
-      if (error?.code === "result_impact_source_unavailable") throw error;
-      if (![401, 403, 404].includes(error?.status) && !["result_not_found", "result_impact_not_found"].includes(error?.code)) throw error;
-      throw new HttpError(409, "result_impact_source_unavailable", "This source is no longer available for continuation.");
-    }
-  }
-
-  async readScheduledContinuation(userId, projectId, id, binding, scheduled) {
-    try {
-      await this.assertContinuation(userId, projectId, binding);
-      const impact = await this.get(userId, projectId, id);
-      if (impact.payload.continuation.status === "unavailable") throw new HttpError(409, "result_impact_source_unavailable", "This source is no longer available for continuation.");
-      return impact;
-    } catch (error) {
-      if (error?.code === "result_impact_source_unavailable" || [401, 403, 404].includes(error?.status)) {
-        await this.autopilot.stopContinuation(userId, scheduled.episode.id, binding, { jobId: scheduled.job?.id });
-      }
-      throw error;
-    }
-  }
-
-  async continueImpact(userId, projectId, id, { agendaId, expectedRevision = undefined }) {
-    const project = await this.results.scope(userId, projectId);
-    const ownerId = project.userId;
-    let impact = await this.get(userId, projectId, id);
-    if (userId !== ownerId) throw new HttpError(403, "result_impact_agenda_unauthorized", "Only the agenda owner can authorize research continuation.");
-    if (impact.payload.continuation.status === "unavailable") {
-      const stored = await this.documents.get(ownerId, "result-impact", id);
-      if (stored?.payload?.continuation?.episodeId && this.autopilot) {
-        const episode = await this.autopilot.getEpisode(ownerId, stored.payload.continuation.episodeId);
-        if (episode.payload.continuationBinding?.impactId === id) await this.autopilot.stopContinuation(ownerId, episode.id, episode.payload.continuationBinding);
-      }
-      throw new HttpError(409, "result_impact_source_unavailable", "This source is no longer available for continuation.");
-    }
-    if (impact.payload.continuation.agendaId && impact.payload.continuation.agendaId !== agendaId) throw new HttpError(409, "result_impact_continuation_conflict", "This impact already belongs to another agenda continuation.");
-    if (impact.payload.continuation.status === "scheduled") return impact;
-    if (impact.payload.effect !== "potentially_affected") throw new HttpError(409, "result_impact_not_changed", "An unavailable source is a gap, not evidence to recompute.");
-    if (!this.autopilot) throw new HttpError(503, "result_impact_continuation_unavailable", "Research continuation is unavailable.");
-    const agenda = await this.documents.get(ownerId, "agenda", agendaId);
-    if (!agenda || agenda.projectId !== projectId || !agenda.payload.enabled || agenda.payload.status !== "active" || agenda.payload.archivedAt) {
-      throw new HttpError(409, "result_impact_agenda_unauthorized", "An existing active agenda in this project is required.");
-    }
-    if (expectedRevision !== undefined && impact.revision !== expectedRevision) throw new HttpError(409, "product_revision_conflict", "The impact changed before continuation.");
-    if (impact.payload.continuation.status !== "preparing") {
-      try { impact = await this.documents.put(ownerId, "result-impact", id, { ...impact.payload,
-        continuation: { status: "preparing", agendaId, requestedBy: userId, requestedAt: this.now().toISOString() } },
-      { expectedRevision: impact.revision, projectId }); }
-      catch (error) {
-        if (error?.code !== "product_revision_conflict") throw error;
-        impact = await this.get(userId, projectId, id);
-        if (impact.payload.continuation.agendaId !== agendaId) throw new HttpError(409, "result_impact_continuation_conflict", "Another agenda owns this continuation.");
-      }
-    }
-    impact = await this.get(userId, projectId, id);
-    if (impact.payload.continuation.status === "unavailable") throw new HttpError(409, "result_impact_source_unavailable", "This source is no longer available for continuation.");
-    const note = continuationNote(impact.payload);
-    const continuationBinding = { impactId: id, versionId: impact.payload.versionId, source: impact.payload.source,
-      projectId, requestedBy: userId, agendaId };
-    const scheduled = await this.autopilot.schedule(ownerId, agenda.id, { trigger: "follow-up", requestId: id, note,
-      continuationBinding, expectedRevision: agenda.revision });
-    // schedule's persisted request identity makes retries safe if the process died before this CAS.
-    for (let attempt = 0; attempt < 4; attempt += 1) {
-      impact = await this.readScheduledContinuation(userId, projectId, id, continuationBinding, scheduled);
-      if (impact.payload.continuation.status === "scheduled") return impact;
-      try {
-        await this.documents.put(ownerId, "result-impact", id, { ...impact.payload,
-        continuation: { status: "scheduled", agendaId: agenda.id, episodeId: scheduled.episode.id, scheduledAt: this.now().toISOString() } },
-        { expectedRevision: impact.revision, projectId });
-        return await this.readScheduledContinuation(userId, projectId, id, continuationBinding, scheduled);
-      }
-      catch (error) { if (error?.code !== "product_revision_conflict" || attempt === 3) throw error; }
-    }
   }
 }

@@ -25,6 +25,14 @@ import { nativeMemoryFile } from "./openVikingSessions.mjs";
  *    undo restores from, so no consolidation is a change the person cannot take back in one step — and held to the same checks after
  *    the fact as any other write of the engine (`NativeMemoryWorker.ingestConsolidation`). A task the engine reports with errors and
  *    no change is a failure; one with errors and some change keeps the change and counts as completed (the errors are in the log).
+ *  - **One memory type at a time** (v0.5.3). The engine refuses a consolidation of the memories root itself
+ *    (`MEMORY_CONSOLIDATION_FAILED: memory write target must be inside a memory type directory`, measured 2026-11-05: an upstream defect
+ *    at the tag, where the runner accepts the root and its own write check refuses it), and completes one of a type directory. A pass
+ *    therefore walks the directories that hold files, one task at a time: a task that ends starts the next directory (sorted, those with at
+ *    least two files), and the last one closes the pass. The interval, the fingerprint and the lease count per account. A directory that
+ *    fails is reported and counted and the others still run. `profile.md` (one file at the root) and `observations/` are never asked for:
+ *    the first has nothing to merge, and the second is the notes `nativeMemoryObservations.mjs` counts one conversation to a line, which a
+ *    merge would turn into one; neither is a file `nativeMemoryFile` answers for. A root consolidation can return when upstream fixes it.
  *  - **Never blocking.** A task runs for minutes; the pass that submits it returns, and the passes after it ask the task how it is
  *    doing. One that outlives `TASK_TIMEOUT_MS` is cancelled and counted as failed; one the engine no longer holds is lost.
  *
@@ -48,6 +56,23 @@ export const TASK_TIMEOUT_MS = 2 * 60 * 60_000;
 /** The lease on an account while a pass looks at it and submits. */
 const LEASE_MS = 5 * 60_000;
 const DAY_MS = 24 * 60 * 60_000;
+
+/**
+ * The memory directories of an account that hold at least two files, sorted: the first path segment of each file the platform reads
+ * (`nativeMemoryFile` leaves out `evimed/`, `observations/` and the scaffolding; `profile.md` has no directory).
+ * @param {readonly { uri: string }[]} files @param {string} root
+ */
+export function consolidationDirectories(files, root) {
+  /** @type {Map<string, number>} */
+  const counts = new Map();
+  for (const file of files) {
+    const relPath = nativeMemoryFile(file.uri, root)?.relPath;
+    if (!relPath?.includes("/")) continue;
+    const segment = relPath.split("/")[0];
+    counts.set(segment, (counts.get(segment) ?? 0) + 1);
+  }
+  return [...counts].filter(([, count]) => count >= 2).map(([segment]) => segment).sort();
+}
 
 /** The soft hint the engine is given: what to keep, and what never to do. */
 export const CONSOLIDATION_INSTRUCTION = [
@@ -134,11 +159,18 @@ export class NativeMemoryConsolidation {
     // The same files in the same hour, the same key: asked twice (a restart between the answer and the note) is one task. The engine answers
     // a key it has seen with the task it made — a failed one too — so a retry, which waits at least the hour, is a new key.
     const hour = this.now().toISOString().slice(0, 13).replace(/\D/g, "");
+    const [first] = consolidationDirectories(files, root);
+    if (!first) { await this.overlay.noteConsolidationChecked(userId, this.now()); return "too_few"; }
+    await this.#submitDirectory(userId, root, first, `${fingerprint.slice(0, 24)}-${hour}`);
+    return "submitted";
+  }
+
+  /** @param {string} userId @param {string} root @param {string} segment @param {string} salt */
+  async #submitDirectory(userId, root, segment, salt) {
     const task = await this.resources.submitMemoryConsolidation(userId, {
-      to: root, instruction: CONSOLIDATION_INSTRUCTION, idempotencyKey: `nm-consolidate-${digest(userId).slice(0, 24)}-${fingerprint.slice(0, 24)}-${hour}`,
+      to: `${root}/${segment}`, instruction: CONSOLIDATION_INSTRUCTION, idempotencyKey: `nm-consolidate-${digest(userId).slice(0, 24)}-${digest(segment).slice(0, 8)}-${salt}`,
     });
     await this.overlay.noteConsolidationSubmitted(userId, task.taskId, this.now());
-    return "submitted";
   }
 
   /** @param {string} userId @param {Awaited<ReturnType<import("./nativeMemoryOverlay.mjs").NativeMemoryOverlay["consolidationState"]>>} state */
@@ -154,28 +186,45 @@ export class NativeMemoryConsolidation {
     if (!task.terminal) {
       if (state.startedAt && this.now().getTime() - Date.parse(state.startedAt) > TASK_TIMEOUT_MS) {
         await this.resources.cancelTask(userId, taskId).catch(() => null);
-        await this.overlay.noteConsolidationDone(userId, { succeeded: false, at: this.now() });
         recordNativeConsolidation("failed");
-        return "failed";
+        return this.#follow(userId, task.target, false);
       }
       return "submitted";
     }
     const result = task.result;
     const changed = result ? result.adds.length + result.updates.length + result.deletes.length : 0;
     if (task.status !== "completed" || !result || (result.errors.length && !changed)) {
-      this.report(`native memory consolidation: ${userId.slice(0, 8)}… ${task.status}: ${(task.error ?? result?.errors?.[0] ?? "no reason given").slice(0, 160)}`);
-      await this.overlay.noteConsolidationDone(userId, { succeeded: false, at: this.now() });
+      this.report(`native memory consolidation: ${userId.slice(0, 8)}… ${task.target?.split("/").pop() ?? "?"} ${task.status}: ${(task.error ?? result?.errors?.[0] ?? "no reason given").slice(0, 160)}`);
       recordNativeConsolidation("failed");
-      return "failed";
+      return this.#follow(userId, task.target, false);
     }
     if (result.errors.length) this.report(`native memory consolidation: ${userId.slice(0, 8)}… completed with ${result.errors.length} error(s): ${result.errors[0].slice(0, 160)}`);
     const counts = await this.ingest(userId, { taskId, adds: result.adds, updates: result.updates, deletes: result.deletes });
-    // The shape of what it left, so that the next one waits for the account's files to change from it.
-    const root = this.sessions.memoryRoot(userId);
-    const left = (await this.sessions.tree(userId, root, { levelLimit: 8 })).filter((node) => !node.isDir && nativeMemoryFile(node.uri, root));
-    await this.overlay.noteConsolidationDone(userId, { succeeded: true, fingerprint: filesFingerprint(left), at: this.now() });
     recordNativeConsolidatedFiles(counts);
     recordNativeConsolidation("completed");
-    return "completed";
+    return this.#follow(userId, task.target, true);
+  }
+
+  /**
+   * A directory's task is over: ask for the next directory with files (the one after it in the sorted order), or close the pass. The
+   * pass is recorded only when it closes, with the shape of what it left so that the next one waits for the files to change from it;
+   * it counts as succeeded when its last task did, and a pass that ended on a failure is asked again at the next due time.
+   * @param {string} userId @param {string | null} target the directory the finished task consolidated
+   * @param {boolean} succeeded
+   */
+  async #follow(userId, target, succeeded) {
+    const root = this.sessions.memoryRoot(userId);
+    const files = (await this.sessions.tree(userId, root, { levelLimit: 8 })).filter((node) => !node.isDir && nativeMemoryFile(node.uri, root));
+    const current = target?.startsWith(`${root}/`) ? target.slice(root.length + 1).split("/")[0] : null;
+    const next = current === null ? undefined : consolidationDirectories(files, root).find((segment) => segment > current);
+    if (next) {
+      // The lease only keeps two workers from asking for the same directory; a key seen before answers the task already made.
+      if (!await this.overlay.claimConsolidation(userId, LEASE_MS)) return "submitted";
+      const hour = this.now().toISOString().slice(0, 13).replace(/\D/g, "");
+      await this.#submitDirectory(userId, root, next, `${filesFingerprint(files).slice(0, 24)}-${hour}`);
+      return "submitted";
+    }
+    await this.overlay.noteConsolidationDone(userId, { succeeded, ...(succeeded ? { fingerprint: filesFingerprint(files) } : {}), at: this.now() });
+    return succeeded ? "completed" : "failed";
   }
 }

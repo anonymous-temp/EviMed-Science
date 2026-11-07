@@ -573,7 +573,7 @@ test("operator metrics endpoint requires a bearer token and exposes only low-car
       assert.match(body, /^# HELP open_science_up /m);
       assert.match(body, /^open_science_up 1$/m);
       assert.match(body, /^open_science_ready 1$/m);
-      assert.match(body, /^open_science_autopilot_planner_decisions_total\{result="run"\} 0$/m);
+      assert.match(body, /^open_science_scheduler_retirement_total\{outcome="documents_deleted"\} 0$/m);
       assert.match(body, /^open_science_readiness_check\{check="dataDir",code="ok"\} 1$/m);
       assert.match(body, /^open_science_process_memory_bytes\{kind="rss"\} \d+$/m);
       assert.match(body, /^open_science_http_active_requests 1$/m);
@@ -1853,7 +1853,44 @@ test("a required document parser is ready when it answers healthy, with or witho
       assert.equal(check.credential, "none");
       assert.equal("authenticated" in check, false, "no field that reads as \"cannot parse\"");
     }, { requireDocumentParser: true, documentParserUrl, documentParserToken: "" });
-    assert.ok(health.length >= 1 && health.every((request) => request.url === "/health" && request.authorization === undefined));
+    const healthRequests = health.filter((request) => request.url === "/health");
+    assert.ok(healthRequests.length >= 1 && healthRequests.every((request) => request.authorization === undefined), "the key is never sent to /health");
+  } finally {
+    await new Promise((resolve) => parser.close(resolve));
+  }
+});
+
+test("a parser that is down, refuses the key or has moved its routes is a warning on a green readiness check, with a named cause and a counter", async () => {
+  // The service answers /health 200 whatever the key is (2026-10-27), and its outage costs document text only: PDF, Word,
+  // slides and workbooks are read from the original bytes. So none of these may fail the platform's readiness.
+  const { createServer } = await import("node:http");
+  let mode = "good";
+  const requests = [];
+  const parser = createServer((request, response) => {
+    requests.push(`${request.method} ${request.url}`);
+    response.writeHead(request.url === "/health" ? 200 : mode === "key" ? 401 : mode === "route" ? 404 : 400, { "content-type": "application/json" });
+    response.end(JSON.stringify({ code: 200, message: "m", uuid: "u", timestamp: 1, elapsed_ms: 1, data: request.url === "/health" ? { status: "healthy" } : { error_code: "x" } }));
+  });
+  await new Promise((resolve) => parser.listen(0, "127.0.0.1", resolve));
+  try {
+    const documentParserUrl = `http://127.0.0.1:${parser.address().port}`;
+    for (const [next, warning, auth, route] of [["good", undefined, "ok", "ok"], ["key", "source_parser_auth_failed", "rejected", "ok"], ["route", "source_parser_route_missing", "unknown", "missing"]]) {
+      mode = next;
+      await withApp(async ({ base }) => {
+        const check = (await (await fetch(`${base}/api/ready`)).json()).data.checks.documentParser;
+        assert.equal(check.ok, true, `${next}: ${JSON.stringify(check)}`);
+        assert.equal(check.warning, warning);
+        assert.equal(check.state, warning ? "degraded" : "ready");
+        assert.deepEqual([check.auth, check.route, check.engine, check.localReader], [auth, route, "engine-a", true]);
+        assert.equal(JSON.stringify(check).includes("sk-readiness-secret"), false, "the key is never in a readiness body");
+      }, { requireDocumentParser: true, documentParserUrl, documentParserToken: "sk-readiness-secret" });
+    }
+    assert.ok(requests.includes("POST /api/v1/parse/engine-a/file"), "the probe goes to the configured engine's route");
+    // Not configured at all, but required: still green, and says why.
+    await withApp(async ({ base }) => {
+      const check = (await (await fetch(`${base}/api/ready`)).json()).data.checks.documentParser;
+      assert.deepEqual([check.ok, check.state, check.warning], [true, "degraded", "document_parser_unconfigured"]);
+    }, { requireDocumentParser: true, documentParserUrl: "", documentParserToken: "" });
   } finally {
     await new Promise((resolve) => parser.close(resolve));
   }

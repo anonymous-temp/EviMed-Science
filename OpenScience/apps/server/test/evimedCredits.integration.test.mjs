@@ -349,26 +349,6 @@ test("a charge outlives the project it was made in", options, async () => {
   assert.equal(row?.projectId, otherProject, "what it cost is a fact, and so is which project asked");
 });
 
-test("autopilot retry settlement charges the real owner once and never charges its unsent predecessor", options, async () => {
-  for (const suffix of ["", "-v1"]) for (const reversed of [false, true]) {
-    const logical = `episode-${randomUUID().replaceAll("-", "")}${suffix}`;
-    const runId = `run_${randomUUID()}`;
-    const oldId = `run_${randomUUID()}`;
-    const client = upstream();
-    const service = credits({ client, costs: { [logical]: 1.6, [runId]: 0.4 } });
-    const sent = { userId, projectId, runId, dispatchId: `${logical}-a2`, status: "succeeded", effectiveRouteReason: "autopilot:research" };
-    const old = { ...sent, runId: oldId, dispatchId: logical, status: "failed", dispatchStatus: "rejected", errorCode: "product_job_lease_lost" };
-    if (reversed) assert.equal((await service.settleRun(old)).credits, 0);
-    assert.deepEqual(await service.settleRun(sent), { status: "settled", credits: 200 });
-    assert.deepEqual(await service.settleRun(sent), { status: "settled", credits: 200, duplicate: true });
-    assert.equal((await service.settleRun(old)).credits, 0);
-    assert.equal(client.calls.length, 1);
-    assert.equal(client.calls[0].requestId, runId);
-    const saved = await service.settlementOf(userId, runId);
-    assert.equal(saved.credits, 200);
-  }
-});
-
 /**
  * A database that refuses any statement touching the platform wallet's tables. Those tables exist only where the wallet is
  * the platform's own and are never created for EviMed's, so on a live wallet nothing may read them — whether or not another
@@ -476,22 +456,6 @@ test('research task billing preserves fractional evidence and deduplicates child
   assert.equal(failedTask?.actualCny, '2.75000000');
   assert.equal(failedTask?.waivedCny, '2.75000000');
   assert.equal(client.calls.filter(call => call.requestId).length, 1);
-  // A failed physical attempt cannot consume the successful sibling's logical calls.
-  const logical = `episode-${randomUUID().replaceAll('-', '')}`;
-  const logicalRequestId = `usage_${randomUUID()}`;
-  await usage.recordSettled({ id: logicalRequestId, userId, projectId, runId: logical,
-    purpose: 'kernel', model: 'test-model', priceVersion: 'test-price-v1', currency: 'CNY',
-    requestFingerprint: 'c'.repeat(64), usage: { cacheHitTokens: 0, cacheMissTokens: 1, completionTokens: 1 },
-    actualCost: 4, priced: true });
-  const failedPhysicalId = `run_${randomUUID()}`;
-  assert.equal((await service.settleRun({ ...run, runId: failedPhysicalId, dispatchId: logical,
-    effectiveRouteReason: 'autopilot:research', status: 'failed' })).credits, 0);
-  const successful = { ...run, runId: `run_${randomUUID()}`, dispatchId: `${logical}-a2`, effectiveRouteReason: 'autopilot:research' };
-  assert.equal((await service.settleRun(successful)).credits, 4);
-  assert.equal((await service.settleRun({ ...successful, runId: `run_${randomUUID()}`, dispatchId: `${logical}-a3` })).duplicate, true);
-  const attributed = await database.query('SELECT * FROM evimed_credits.research_task_requests WHERE request_id=$1', [logicalRequestId]);
-  assert.notEqual(attributed.rows[0].run_id, failedPhysicalId);
-
   // Policy activation excludes old legacy aliases, and remains active if its flag rolls back.
   const oldAlias = `alias_${randomUUID()}`;
   const oldRunId = `run_${randomUUID()}`;
@@ -521,9 +485,6 @@ test('research task billing preserves fractional evidence and deduplicates child
     database, client, usageLedger: usage, evimedUserIdOf });
   assert.equal((await wrongRateRollback.settleRun({ ...run, runId: `run_${randomUUID()}` })).errorCode, 'evimed_credits_request_invalid');
   await assert.rejects(wrongRateRollback.ready(), error => error.code === 'evimed_credits_request_invalid' && error.status === 503);
-  assert.equal((await service.settleRun({ ...run, runId: `run_${randomUUID()}`, dispatchId: `${logical}-a4`,
-    effectiveRouteReason: 'autopilot:research', status: 'failed' })).credits, 0,
-    'a later failed callback still cannot revisit the successful logical charge');
 
   const disabled = new EvimedCreditsService({ config: { evimedCreditsEnabled: false, evimedCreditsPerCny: 1, researchBillingEnabled: true },
     database, client, usageLedger: usage, evimedUserIdOf });

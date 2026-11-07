@@ -1,8 +1,7 @@
 import { migrateProductStore } from './productPersistence.mjs';
 import { maintenanceAllowsClaims } from './maintenanceService.mjs';
 
-// Retained row identities are evidence, never runnable campaign inputs. Only experimental kinds: a self-check (a published tool on a
-// researcher's dataset), a maintain job (a retirement's completion, the metrics-only month) and a digest are serving, run by the serving
+// Retained row identities are evidence, never runnable campaign inputs. Only experimental kinds: a maintain job (a retirement's completion, the metrics-only month) and a digest are serving, run by the serving
 // worker, and a cancelled row would keep the idempotency key a serving path enqueues again (`productJobs.enqueue` returns the existing row).
 export const RETIRED_EVOLUTION_JOBS = Object.freeze(['evolution-scout', 'evolution-build', 'evolution-evaluate',
   'evolution-plan', 'evolution-mission', 'evolution-mission-heavy', 'evolution-meta', 'evolution-research', 'evolution-audit']);

@@ -52,9 +52,9 @@ test("a registration is the filing account's row: stamped, hashed, found again w
   assert.equal(await service.get(first.id, operator), null, "it is the account's, not the operator's, in the ledger");
   assert.equal((await service.get(first.id, alice)).payload.status, "waiting-publication");
   assert.equal((await service.list("prospective", operator)).some((row) => row.id === first.id), false, "the module's own prospective list does not see it");
-  const agenda = await registry.registerAgendaPrediction({ agendaId: "agenda-1", projectId: "vcr-study", accountId: bob, registryId: "NCT09999999", endpoint: "PFS", probability: 0.4, filedAt: "2026-10-06T07:00:00.000Z" });
-  assert.equal(agenda.status, "waiting-publication");
-  assert.equal((await service.get(agenda.id, bob)).payload.source, "agenda");
+  const second = await registry.register({ source: "vcr", studyId: "study-2", projectId: "vcr-study", accountId: bob, registryId: "NCT09999999", endpoint: "PFS", probability: 0.4, filedAt: "2026-10-06T07:00:00.000Z" });
+  assert.equal(second.status, "waiting-publication");
+  assert.equal((await service.get(second.id, bob)).payload.source, "vcr");
   await assert.rejects(() => registry.register(filing({ estimate: undefined, probability: undefined })), refused("prediction_invalid"));
   await assert.rejects(() => registry.register(filing({ projectId: "no-such-project" })));
 });

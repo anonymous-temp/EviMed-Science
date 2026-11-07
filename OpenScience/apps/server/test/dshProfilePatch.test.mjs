@@ -24,7 +24,7 @@ const input = {
   capsuleGatewayUrl: "https://open-science-web:8787/internal/capsule/v1",
   workloadTokenFile: "/runtime/secrets/workload-token",
   bundleVersion: "0.1.0",
-  dshVersion: "0.2.1-rc.5",
+  dshVersion: "0.2.2-rc.1",
   limits: { deliveryAttemptLimit: 3, maxParallelChildren: 30, maxSteps: 200, maxTokens: 4000000, evidenceStaleMinutes: 10 },
   flags: { hosted: true, askUser: false, review: false, capsule: true, requiredEnforcement: "full" },
 };
@@ -289,7 +289,10 @@ test("a running turn's steps fold into one work group: the profile sets the chat
   assert.ok(HOSTED_DISABLED_BROWSER_PANELS.includes("ui-settings-general"));
   assert.match(rendered, /- id: ui-settings-general\n {2}disabled: true/);
   assert.ok(RUNTIME_UI_DENIED_NAMESPACES.includes("settings"));
-  assert.deepEqual(RUNTIME_UI_READABLE_SETTINGS, ["ui-chat"]);
+  assert.deepEqual(RUNTIME_UI_READABLE_SETTINGS, ["ui-chat", "ui-settings"]);
+  // The second readable namespace is the developer-tools boolean; without it the page reads false and the 「运行」 tab never draws.
+  assert.match(rendered, /^- id: ui-settings\n {2}config:\n {4}enabled: true$/m);
+  assert.deepEqual(recorded.result.value.namespaces.find((view) => view.ns === "ui-settings").value, { enabled: true });
   // The chat itself stays mounted — folding is its behaviour, not ours.
   assert.doesNotMatch(rendered, /- id: ui-chat\n {2}disabled: true/);
 });

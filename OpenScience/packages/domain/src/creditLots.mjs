@@ -13,7 +13,7 @@
  * every side of it: a gifted lot expires at 24:00 Asia/Shanghai on its date.
  */
 
-import { agendaLocalDate } from './agendaSchedule.mjs'
+import { agendaLocalDate } from './displayDate.mjs'
 
 /** @type {readonly ['purchased', 'gifted']} */
 export const CREDIT_LOT_KINDS = Object.freeze(['purchased', 'gifted'])

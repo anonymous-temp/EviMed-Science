@@ -7,28 +7,29 @@
 import { createHash } from 'node:crypto'
 import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve as resolvePath } from 'node:path'
-import { answerQuestion, MAX_TOOL_CALLS, TOP_K } from './lib/answer.mjs'
+import { answerQuestion, answerQuestionBrowse, MAX_TOOL_CALLS, TOP_K } from './lib/answer.mjs'
+import { BROWSE_MAX_TOOL_CALLS, lineStats } from './lib/browse.mjs'
 import { checkAnswerCitations } from './lib/citations.mjs'
 import { ROOT, checkCorpus, loadCorpus, loadRunCorpus } from './lib/corpus.mjs'
 import { THRESHOLDS } from './lib/decide.mjs'
 import { judgeAnswer } from './lib/judge.mjs'
 import { buildKnowledgeBase, treesFor } from './lib/kb.mjs'
 import { BudgetExceeded, createLlm, readKeyFile, ledgerTotal } from './lib/llm.mjs'
-import { ANSWER_SYSTEM, ARMS, ARM_B_REMOVED, DECOMPOSITION_GUIDANCE, JUDGE_SYSTEM, sha256 } from './lib/prompts.mjs'
+import { ANSWER_SYSTEM, ANSWER_SYSTEM_BROWSE, ARMS, ARM_B_REMOVED, DECOMPOSITION_GUIDANCE, JUDGE_SYSTEM, sha256 } from './lib/prompts.mjs'
 import { RUN_TREES, appendJsonl, latestByKey, readJsonl, runKey, spentElsewhere, summarizeRunDirectory } from './lib/store.mjs'
 import { BOOTSTRAP_ITERATIONS, BOOTSTRAP_SEED } from './lib/stats.mjs'
-import { ARM_IDS, RUNNABLE_ARM_IDS, renderTable } from './lib/summary.mjs'
+import { ARM_IDS, DEFAULT_ARM_IDS, RUNNABLE_ARM_IDS, renderTable } from './lib/summary.mjs'
 import { adoptUpstreamTrees, readUpstreamTrees, upstreamTreeStats } from './lib/upstream.mjs'
 
 /**
  * Rough per-unit spend (CNY), used only by --dry-run to print an upper bound. From the spend of the 2026-10-12 runs (an
  * answer cost CNY 0.014 on average without pages and 0.016 with arm B's); arm C's passages are longer, hence the margin.
  */
-const ESTIMATE_CNY = { answerRun: 0.02, answerRunWithPages: 0.03, judge: 0.01, sanity: 0.01 }
+const ESTIMATE_CNY = { answerRunBrowse: 0.06, answerRun: 0.02, answerRunWithPages: 0.03, judge: 0.01, sanity: 0.01 }
 
 function parseArgs(argv) {
   const options = {
-    runId: null, stage: 'all', reps: 3, arms: [...RUNNABLE_ARM_IDS], topics: null, questionsPerTopic: null, budget: 15, totalCap: 20,
+    runId: null, stage: 'all', reps: 3, arms: [...DEFAULT_ARM_IDS], topics: null, questionsPerTopic: null, budget: 15, totalCap: 20,
     concurrency: 4, answerModel: 'deepseek-v4-flash', judgeModel: 'deepseek-v4-pro', thinking: 'disabled', temperature: 0.7,
     dryRun: false, forceConfig: false, kbScope: 'topic', reuseFrom: null, upstreamPages: null, resultsDir: join(ROOT, 'results'),
   }
@@ -134,7 +135,8 @@ async function main() {
     kbScope: options.kbScope,
     temperature: { answer: options.temperature, judge: 0 },
     retrieval: { engine: 'bm25', topK: TOP_K, maxToolCalls: MAX_TOOL_CALLS },
-    prompts: { answerSystemSha256: sha256(ANSWER_SYSTEM), decompositionSentence: DECOMPOSITION_GUIDANCE, judgeSystemSha256: sha256(JUDGE_SYSTEM) },
+    browse: { maxToolCalls: BROWSE_MAX_TOOL_CALLS },
+    prompts: { answerSystemSha256: sha256(ANSWER_SYSTEM), answerSystemBrowseSha256: sha256(ANSWER_SYSTEM_BROWSE), decompositionSentence: DECOMPOSITION_GUIDANCE, judgeSystemSha256: sha256(JUDGE_SYSTEM) },
     thresholds: THRESHOLDS,
     bootstrap: { iterations: BOOTSTRAP_ITERATIONS, seed: BOOTSTRAP_SEED },
     arms: Object.fromEntries(RUNNABLE_ARM_IDS.map((arm) => [arm, ARMS[arm].label])),
@@ -194,14 +196,15 @@ async function main() {
   if (options.dryRun) {
     const cells = corpus.reduce((sum, topic) => sum + topic.questions.length, 0)
     const skippedCells = corpus.filter((topic) => skippedTopics.includes(topic.id)).reduce((sum, topic) => sum + topic.questions.length, 0)
-    const plain = cells * options.arms.filter((arm) => !ARMS[arm].pages).length * options.reps
+    const browsing = cells * options.arms.filter((arm) => ARMS[arm].browse).length * options.reps
+    const plain = cells * options.arms.filter((arm) => !ARMS[arm].pages && !ARMS[arm].browse).length * options.reps
     const withPages = (cells - skippedCells) * options.arms.filter((arm) => ARMS[arm].pages).length * options.reps
     const sanityCalls = ['all', 'sanity'].includes(options.stage) && !sanityDone() && !reusableSanity() ? questionTotal * 2 : 0
-    const upper = plain * ESTIMATE_CNY.answerRun + withPages * ESTIMATE_CNY.answerRunWithPages + (plain + withPages) * ESTIMATE_CNY.judge + sanityCalls * ESTIMATE_CNY.sanity
+    const upper = browsing * ESTIMATE_CNY.answerRunBrowse + plain * ESTIMATE_CNY.answerRun + withPages * ESTIMATE_CNY.answerRunWithPages + (plain + withPages + browsing) * ESTIMATE_CNY.judge + sanityCalls * ESTIMATE_CNY.sanity
     const elsewhere = spentElsewhere(options.resultsDir, options.runId)
     console.log(JSON.stringify({
       runId: options.runId, kbScope: options.kbScope, topics: corpus.map((topic) => topic.id), questions: cells, arms: options.arms, reps: options.reps,
-      answerRuns: plain + withPages, judgeCalls: plain + withPages, judgeSanityCalls: sanityCalls,
+      answerRuns: plain + withPages + browsing, judgeCalls: plain + withPages + browsing, judgeSanityCalls: sanityCalls,
       ...(options.arms.includes('C') ? { upstreamPages: {
         exportDir, heldByRun,
         trees: Object.fromEntries(corpus.map((topic) => [topic.id, treeStats.get(topic.id).map((entry) => `${entry.tree}: ${entry.pages} pages, ${entry.besideClaims} source links beside claims, ${entry.present}/${entry.besideClaimsWithQuotation} quotations found in the named document`)])),
@@ -222,6 +225,12 @@ async function main() {
   mkdirSync(runDir, { recursive: true })
   writeFileSync(configPath, `${JSON.stringify({ core: config, plan, startedAt: new Date().toISOString() }, null, 2)}\n`, 'utf8')
   for (const topic of skippedTopics) console.log(`arm C skipped for ${topic}: ${pooled ? 'the pooled project needs a tree of every topic and one is missing' : `no tree under ${join(exportDir, topic)}/rep<N>/`}`)
+
+  if (options.arms.some((arm) => ARMS[arm].browse)) {
+    const stats = lineStats(corpus.flatMap((topic) => topic.documents))
+    writeFileSync(join(runDir, 'line-stats.json'), `${JSON.stringify(stats, null, 2)}\n`, 'utf8')
+    console.log(`documents for arm G: ${stats.documents} documents, ${stats.lines} lines (${stats.nonBlankLines} non-blank), non-blank line length p50 ${stats.p50}, p90 ${stats.p90}, max ${stats.max}`)
+  }
 
   const ledgerPath = join(runDir, 'calls.jsonl')
   const elsewhere = spentElsewhere(options.resultsDir, options.runId)
@@ -261,8 +270,9 @@ async function main() {
   const indexCache = new Map()
   /** One index per distinct knowledge base: the documents of a project and, for arm C, the trees of that repetition. */
   function indexFor(topic, arm, rep, chosen) {
+    const kind = ARMS[arm].browse ? 'browse:' : ''
     const pages = chosen ? Object.entries(chosen).map(([id, tree]) => `${id}:${tree.name}`).join(',') : 'docs'
-    const key = `${pooled ? 'pooled' : topic.id}/${pages}`
+    const key = `${kind}${pooled ? 'pooled' : topic.id}/${pages}`
     if (!indexCache.has(key)) indexCache.set(key, buildKnowledgeBase({ scope: options.kbScope, arm, topic, corpus, trees, rep }))
     return indexCache.get(key)
   }
@@ -290,7 +300,10 @@ async function main() {
       let record = latest.get(task.key)
       if (!record?.answered) {
         const started = Date.now()
-        const result = await answerQuestion({ llm, model: options.answerModel, arm, question: question.question, index: indexFor(topic, arm, task.rep, chosen), label: `answer:${task.key}`, temperature: options.temperature, thinking: options.thinking, seed: seedOf(task.key), meta: { key: task.key } })
+        const common = { llm, model: options.answerModel, question: question.question, label: `answer:${task.key}`, temperature: options.temperature, thinking: options.thinking, seed: seedOf(task.key), meta: { key: task.key } }
+        const result = ARMS[arm].browse
+          ? await answerQuestionBrowse({ ...common, store: indexFor(topic, arm, task.rep, chosen) })
+          : await answerQuestion({ ...common, arm, index: indexFor(topic, arm, task.rep, chosen) })
         record = {
           key: task.key, topic: topic.id, questionId: question.id, kind: question.kind, arm, rep: task.rep, stage: 'answered', answered: true,
           // Which tree of each topic the knowledge base held: trees are reused in order when a topic has fewer than there are repetitions.

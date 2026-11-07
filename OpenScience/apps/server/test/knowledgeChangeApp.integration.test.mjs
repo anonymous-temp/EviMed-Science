@@ -88,7 +88,6 @@ test("through the server: new bytes for a held file label what read the old docu
     assert.equal(found[0].payload.source.replacedBy, second.source.id);
     assert.equal(found[0].payload.sourceStatus.updates[0].kind, "replaced");
     assert.equal(found[0].payload.recomputed, false, "nothing was rerun");
-    assert.equal(found[0].payload.continuation.status, "awaiting_user", "no agenda produced it, so the researcher chooses");
     assert.equal(found[0].payload.affected.memories.status, "none", "no memory engine is composed here: there are no memory files to name the document");
 
     const notices = (await app.notificationService.list(user.id, { projectId: project.id })).items;

@@ -55,7 +55,7 @@ test('the serving cutover cancels only experiments, admitted as a claim is, and 
     const jobs = new ProductJobs(database);
     const scout = await jobs.enqueue(owner, 'evolution-scout', { action: 'daily-scan', day: '2026-10-26' }, { idempotencyKey: 'evolution:daily-scout:2026-10-26' });
     const serving = await Promise.all([
-      jobs.enqueue(owner, 'evolution-self-check', { waiterId: 'waiter', toolId: 'tool' }, { idempotencyKey: 'evolution:check:waiter:event:tool' }),
+      jobs.enqueue(owner, 'evolution-event', { eventId: 'event', eventOwnerId: owner }, { idempotencyKey: 'evolution:event:event' }),
       jobs.enqueue(owner, 'evolution-maintain', { month: '2026-10', metricsMonth: '2026-09' }, { idempotencyKey: 'evolution:monthly-v2:2026-10' }),
       jobs.enqueue(owner, 'evolution-maintain', { action: 'retirement-reconcile', toolId: 'tool' }, { idempotencyKey: 'evolution:retirement:tool:2026-10-26' }),
       jobs.enqueue(owner, 'evolution-digest', { day: '2026-10-26' }, { idempotencyKey: 'evolution:daily-digest:2026-10-26' })]);

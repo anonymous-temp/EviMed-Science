@@ -1211,7 +1211,7 @@ own PostgreSQL into a CSV source of the project. Two counters say how it is doin
   import is taken, 429), `network_denied` (the host is not in the allowlist, or its address is not the one allowed),
   `tls_failed` (the certificate does not verify: the chain, the name or the date), `login_failed` (the server refused the
   account or the database name), `too_privileged` (a superuser or a role that bypasses row security), `unreachable` (no
-  answer), `materials_full` (the question already holds twenty files and this is a new table), `selection_invalid`,
+  answer), `selection_invalid`,
   `failed` -- and which limit cut an import that was still made: `truncated` (rows, bytes or time), `cells_withheld` (a cell
   longer than the cell limit), `columns_dropped` (an unsupported type, or past the column cap). A rising `truncated` is the
   row limit being too small for the tables people bring, not an outage.
@@ -2007,7 +2007,7 @@ and recharge, membership, orders and refunds pages of the platform itself
 page request). The start is refused with `simulated_credits_exhausted` (402) when the
 allowance is empty or below the tool's estimate: before a run exists, never in the
 middle of one (a steer into a running turn is never refused). The gate covers the chat
-dispatch, autopilot episodes and checks, a channel question, a GEO or 虚拟临床研究 programme
+dispatch, a scheduled task's delivered turn, a channel question, a GEO or 虚拟临床研究 programme
 step (left pending until a top-up), and a turn typed into the kernel window; the
 platform's own learning and source-understanding runs are charged to nobody and asked
 of nobody (`test/balanceGateCoverage.test.mjs` names every way a run is dispatched).

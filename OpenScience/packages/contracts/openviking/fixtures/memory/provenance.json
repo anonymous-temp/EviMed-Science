@@ -1,11 +1,11 @@
 {
-  "dependencyVersion": "0.5.1.1",
-  "imageRef": "ghcr.io/volcengine/openviking:v0.5.1.1",
-  "imageDigest": "sha256:551b1ae00f59fd7b1a2434ecc10a4860be34aae8b7627f5f57240be355b23217",
+  "dependencyVersion": "0.5.3",
+  "imageRef": "ghcr.io/volcengine/openviking:v0.5.3",
+  "imageDigest": "sha256:57d3fd8873dbb78e5ccfdc57481006e6fbe765390ea18cd4a6b2f62da8aa104d",
   "sourceRepo": "https://github.com/volcengine/OpenViking",
-  "sourceCommitAtObservation": "tag v0.5.1.1",
-  "observedAt": "2026-10-23",
-  "observedOn": "an isolated v0.5.1.1 lab engine on a development host (its own volume and root key, reached through an ssh tunnel), in a throwaway account deleted afterwards (written here as `evimed`); it held only records written for this recording",
+  "sourceCommitAtObservation": "tag v0.5.3 (178a8cdfb41b51e7d24c4bf79a13cc54981e0ee8)",
+  "observedAt": "2026-11-05",
+  "observedOn": "a v0.5.3 engine (container ov053-rehearsal, the pinned image) holding a copy of the production volume, recorded on 2026-11-05 by record.mjs of branch codex/openviking-053-20261105 in throwaway accounts that were deleted afterwards (written as `evimed`, the production account's name). The engine's model calls went straight to the model provider and not through the platform's gateway, because the gateway's daily budget was spent that day; the embedding is the production pin's. The root key is a placeholder. No user memory or document of the copy was read or written.",
   "fixtureEvidence": "Every file beside this one is a verbatim exchange recorded by `packages/contracts/openviking/record.mjs` against that running server: `request` is what the script sent (the root key replaced by the placeholder `recorded-against-a-real-server`), `status` and `response` are what the server answered, re-indented and otherwise untouched. MCP answers are text/event-stream bodies and are kept as the raw text. `_index.json` lists every file with its route and status. Nothing was authored: a file whose status is an error is the error the server gave. Two files could not be recorded again and are the v0.5.0 recordings, `recordedFrom` saying so: `task-failed.json` and `archive-failed-marker-read.json` (a commit whose extraction fails because the model endpoint answers 402 needs a gateway that does).",
   "shape": "Unlike the three files the repository holds today (bare response bodies), each fixture here is `{ note, recordedFrom, request: { method, path, headers, body }, status, contentType, response }`. The five exchanges the product already depends on are re-recorded at v0.5.1.1 as health.json, find.json, find-unauthenticated.json, fs-ls.json, content-write-create.json / content-write-replace.json and fs-delete.json; their `response` is the bare body the existing contract test reads.",
   "configuration": {
@@ -37,6 +37,6 @@
     "A commit's task result and its memory_diff.json keep the v0.5.0 shapes: the key paths of task-completed.json, task-completed-no-operations.json, memory-diff-read.json and memory-diff-read-no-operations.json are the same as in the v0.5.0 recordings."
   ],
   "notRecorded": [
-    "task-failed.json and archive-failed-marker-read.json: an extraction whose model call is refused (402) needs a model gateway that refuses it; the lab's gateway is not this repository's to switch. They stay as recorded on v0.5.0."
+    "task-failed.json and archive-failed-marker-read.json: an extraction whose model call is refused (402) needs a model gateway that refuses it, and this recording went to the provider directly. They stay as recorded on v0.5.0. consolidation-task.json is recorded by `record.mjs <out> consolidation`, a separate step."
   ]
 }

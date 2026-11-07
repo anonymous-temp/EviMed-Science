@@ -95,7 +95,7 @@ export function formatDuration(ms: number | null | undefined): string {
 
 /**
  * A value as a local calendar date. A bare `YYYY-MM-DD` is a calendar day, not
- * an instant — an autopilot episode is dated in its agenda's own zone — so it
+ * an instant — a scheduled run is dated in its own zone — so it
  * is read as written rather than as UTC midnight, which the browser would move
  * to the day before west of Greenwich. `null` for a value that is not a date.
  */

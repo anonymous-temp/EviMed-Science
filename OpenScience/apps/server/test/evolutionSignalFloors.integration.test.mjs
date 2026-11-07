@@ -108,21 +108,3 @@ test('a researcher lead and an operator lead are queued at once at the default f
  mixed=await strict.addLead(lead(researchers[0],'writing','mixed-event'));
  assert.equal(mixed.payload.status,'queued');assert.equal(mixed.payload.operatorAccounts,1);assert.equal(mixed.payload.userAccounts,1);
 });
-test('resumed research finished in a window is counted per class at its own floor: a researcher counts alone, an operator only at the configured floor',options,async()=>{
- const from='2026-10-01T00:00:00.000Z',to='2026-11-01T00:00:00.000Z';
- const waiter=(userId,id)=>service.save('waiter',`floor-waiter-${id}`,{status:'resolved',projectId:'research',agendaId:id,completedResearchAt:'2026-10-05T00:00:00.000Z'},null,userId);
- const counterAt=floors=>createEvolutionGrowth({service,database,opportunity:async()=>{},floors,operatorIds:()=>operators});
- const counter=counterAt(evolutionAccountFloors({})),strict=counterAt(evolutionAccountFloors({evolutionOperatorSignalFloor:2}));
- assert.equal(await counter.completedAggregate(from,to),null,'no account finished one, so nothing is said');
- await waiter(owner,'op');
- assert.equal(await counter.completedAggregate(from,to),1,'the operator class counts on its own at the default floor of one');
- assert.equal(await strict.completedAggregate(from,to),null,'one operator is under a raised floor of two');
- await waiter(researchers[0],'u0');
- assert.equal(await counter.completedAggregate(from,to),2);
- assert.equal(await strict.completedAggregate(from,to),1,'the researcher counts at one; the operator still does not, and the researcher is not counted towards it');
- await waiter(secondOperator,'op2');
- assert.equal(await strict.completedAggregate(from,to),3,'two operators reach the raised floor');
- for(const [index,id] of researchers.slice(1).entries())await waiter(id,`u${index+1}`);
- assert.equal(await counter.completedAggregate(from,to),7,'both classes count in full');
- assert.equal(await strict.completedAggregate(from,to),7);
-});

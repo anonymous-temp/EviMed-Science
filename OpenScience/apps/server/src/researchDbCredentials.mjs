@@ -15,7 +15,7 @@ export function researchDbRequestId(value) {
 }
 /** @param {any} value */
 export function researchDbSnapshotFingerprint(value) {
-  return createHash('sha256').update(JSON.stringify([value.connectionId, value.agendaId, value.schema, value.table, value.columns])).digest('hex');
+  return createHash('sha256').update(JSON.stringify([value.connectionId, value.schema, value.table, value.columns])).digest('hex');
 }
 /** The isolated test injection: only under NODE_ENV=test, with an explicit flag and a fixture key.
  * @param {{environment:string|undefined,testOnly:boolean|undefined,database:any,testKey:unknown,maxConnections?:number}} input */

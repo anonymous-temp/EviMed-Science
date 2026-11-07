@@ -56,7 +56,7 @@ export const OPENVIKING_ENGINE_USER = "evimed-engine";
 
 /**
  * The Compile probe's whole footprint: an empty directory to read from and a directory it would write to, both under
- * the engine identity's own root. The compile fails on "no files" before any model is called, so nothing is written
+ * the engine identity's own root. On v0.5.1.1 the compile failed on "no files" before any model was called; on v0.5.3 a full run of an empty source ends with the runtime's own result after one planning call of the model (about 30 s, 34 k input tokens, recorded 2026-11-05), so nothing is written
  * to the second and no money is spent.
  */
 const COMPILE_PROBE_ROOT = `viking://user/${OPENVIKING_ENGINE_USER}/resources/evimed-compile-probe`;
@@ -101,6 +101,8 @@ export class OpenVikingEngine {
     this.last = null;
     /** Observable counters (principle 15). */
     this.counters = { checks: 0, failedChecks: 0, skillInstalls: 0, compileProbes: 0 };
+    /** The compile identity fact, once proven for an engine version. @type {{ version: unknown, fact: any } | null} */
+    this.identityProven = null;
     /** @type {ReturnType<typeof setInterval> | null} */
     this.timer = null;
     /** @type {Promise<unknown> | null} */
@@ -138,8 +140,14 @@ export class OpenVikingEngine {
       await read("memoryTemplates", () => this.#memoryTemplates());
       await read("skills", () => this.#skills());
       // The probe names an installed skill as its source, so it is only meaningful once the skills are there.
-      if (facts.skills.ok) await read("compileIdentity", () => this.#compileIdentity());
-      else facts.compileIdentity = { ok: false, code: "openviking_compile_unprobed" };
+      // Proven once per engine version in this process: on v0.5.3 a full run of the empty source costs one planning call of about
+      // 34k input tokens, and this check repeats every half hour. A pinned engine's identity handling does not change between reads.
+      if (!facts.skills.ok) facts.compileIdentity = { ok: false, code: "openviking_compile_unprobed" };
+      else if (this.identityProven?.version === facts.version.version) facts.compileIdentity = this.identityProven.fact;
+      else {
+        await read("compileIdentity", () => this.#compileIdentity());
+        if (facts.compileIdentity?.ok) this.identityProven = { version: facts.version.version, fact: facts.compileIdentity };
+      }
     }
     this.last = { checkedAt: this.now().toISOString(), facts };
     this.counters.checks += 1;
@@ -261,6 +269,22 @@ export class OpenVikingEngine {
         state = "installed-now";
       }
       if (installed == null) { skills[name] = { state: "missing" }; ok = false; code ||= "openviking_skill_missing"; continue; }
+      // A pin move leaves the previous pin's bytes in the engine (2026-11-05: v0.5.1.1's llm-wiki stayed after the move to
+      // v0.5.3, and knowledge read degraded until it was replaced by hand). Bytes a former pin installed are ours to replace;
+      // anything else that differs is someone's edit and is reported, not overwritten.
+      const replaces = this.pin.skills?.[name]?.replacesInstalledSha256;
+      if (installed !== pinned && Array.isArray(replaces) && replaces.includes(installed)) {
+        const text = await this.readSkill(name);
+        if (sha256(text) === String(this.pin.skills?.[name]?.upstreamSha256 ?? "")) {
+          await this.client.request({
+            method: "PUT", path: `/api/v1/skills/${encodeURIComponent(name)}`, openVikingUser: OPENVIKING_ENGINE_USER,
+            body: { data: text, target_uri: OPENVIKING_SKILLS_ROOT, wait: true }, timeoutMs: 60_000,
+          });
+          this.counters.skillInstalls += 1;
+          installed = await this.#installedSkillDigest(name);
+          state = "updated-now";
+        }
+      }
       if (installed !== pinned) { skills[name] = { state: "drifted", sha256: installed }; ok = false; code ||= "openviking_skill_drifted"; continue; }
       skills[name] = { state, sha256: installed };
     }
@@ -274,7 +298,7 @@ export class OpenVikingEngine {
    * at all (`configured`, `can_create`). It says so from configuration alone, so it proves nothing about what the
    * runtime does with a request: the second reading is one real submission whose source is an empty directory. The
    * server forwards the caller's account and user to the bot, which lists the directory as that user and ends the
-   * task with "Compile sources contain no files" before any model is called — measured on v0.5.1.1, in about 31 s
+   * task with "Compile sources contain no files" before any model is called — measured on v0.5.1.1, in about 31 s (v0.5.3: `args.mode: "full"`, and it ends completed with the runtime's `okf_version` result; an incremental one is settled by the server itself and proves nothing)
    * because the server looks at the bot every 30 s. A runtime that did not receive the identity ends it with a
    * refusal of its own instead (what v0.5.0 did without the shim). Each probe leaves one failed task record, which the
    * engine keeps for seven days — the reason this is read on a slow cadence and not on every readiness request.
@@ -296,7 +320,10 @@ export class OpenVikingEngine {
       submitted = await this.client.request({
         method: "POST", path: "/api/v1/compile", openVikingUser: OPENVIKING_ENGINE_USER,
         idempotencyKey: `evimed-compile-probe-${randomBytes(12).toString("hex")}`,
-        body: { from: [sources], to: `${COMPILE_PROBE_ROOT}/wiki`, skill: skillUri(OPENVIKING_SKILL_NAMES[0]) },
+        // `mode: "full"` since v0.5.3: a compile is incremental by default and the server settles an incremental compile of an empty
+        // source itself (completed in 0.04 s with `result: {}`, recorded 2026-11-05) without the Compile runtime ever reading the
+        // directory, which proves nothing about the identity it runs as. A full one is handed to the runtime.
+        body: { from: [sources], to: `${COMPILE_PROBE_ROOT}/wiki`, skill: skillUri(OPENVIKING_SKILL_NAMES[0]), args: { mode: "full" } },
       });
     } catch (error) {
       // 503 UNAVAILABLE at submission is the server saying it has no Compile runtime at all.
@@ -314,10 +341,18 @@ export class OpenVikingEngine {
           ? { ok: true }
           : { ok: false, code: "openviking_compile_probe_unexpected", reason: String(task.error ?? "").slice(0, 200) };
       }
-      // An empty source that is accepted and runs on means the runtime no longer ends it at once: stop it, and say so.
-      if (task.status === "completed" || /^compile: (?:agent|writing)/.test(String(task.stage ?? ""))) {
+      // A full compile of an empty source ends, since v0.5.3, with the runtime's own result (`okf_version`, nothing created, about 30 s
+      // and one planning call of the model, recorded 2026-11-05): the runtime listed the directory as the caller, which is the
+      // question. The server's own settlement of an incremental one is `result: {}`, and says nothing about the runtime.
+      if (task.status === "completed") {
+        return task.result && typeof task.result === "object" && typeof task.result.okf_version === "string"
+          ? { ok: true }
+          : { ok: false, code: "openviking_compile_probe_unexpected", reason: "the probe was completed without the Compile runtime reading the source" };
+      }
+      // A probe that runs on into writing pages is stopped, and said.
+      if (/^compile: (?:agent|writing)/.test(String(task.stage ?? ""))) {
         await this.client.request({ method: "POST", path: `/api/v1/tasks/${taskId}/cancel`, openVikingUser: OPENVIKING_ENGINE_USER }).catch(() => {});
-        return { ok: false, code: "openviking_compile_probe_unexpected", reason: `the probe ${task.status === "completed" ? "completed" : "ran"} on an empty source` };
+        return { ok: false, code: "openviking_compile_probe_unexpected", reason: "the probe ran on an empty source" };
       }
       await this.wait(COMPILE_PROBE_POLL_MS);
     }

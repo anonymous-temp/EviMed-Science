@@ -88,7 +88,7 @@ services:
   # is kept in it: there is no second memory engine to fall back to, and a
   # deployment that skipped it has memory off.
   evimed-openviking:
-    image: ${OPEN_SCIENCE_OPENVIKING_IMAGE:-ghcr.io/volcengine/openviking:v0.5.1.1@sha256:551b1ae00f59fd7b1a2434ecc10a4860be34aae8b7627f5f57240be355b23217}
+    image: ${OPEN_SCIENCE_OPENVIKING_IMAGE:-ghcr.io/volcengine/openviking:v0.5.3@sha256:57d3fd8873dbb78e5ccfdc57481006e6fbe765390ea18cd4a6b2f62da8aa104d}
     environment:
       # The built-in VikingBot is the runtime of Compile (the official
       # `llm-wiki` and `knowledge-graph` skills). It binds the container's
@@ -180,7 +180,7 @@ services:
   # data directory the server would otherwise have to be root to create, and
   # refuses to finish when a release file the server needs cannot be read.
   evimed-openviking-init:
-    image: ${OPEN_SCIENCE_OPENVIKING_IMAGE:-ghcr.io/volcengine/openviking:v0.5.1.1@sha256:551b1ae00f59fd7b1a2434ecc10a4860be34aae8b7627f5f57240be355b23217}
+    image: ${OPEN_SCIENCE_OPENVIKING_IMAGE:-ghcr.io/volcengine/openviking:v0.5.3@sha256:57d3fd8873dbb78e5ccfdc57481006e6fbe765390ea18cd4a6b2f62da8aa104d}
     user: "0:0"
     entrypoint: ["python", "-c"]
     command:
@@ -388,9 +388,6 @@ services:
       OPEN_SCIENCE_EVOLUTION_MAX_BUILD_ATTEMPTS: ${OPEN_SCIENCE_EVOLUTION_MAX_BUILD_ATTEMPTS:-3}
       OPEN_SCIENCE_EVOLUTION_MAX_JOB_ATTEMPTS: ${OPEN_SCIENCE_EVOLUTION_MAX_JOB_ATTEMPTS:-3}
       OPEN_SCIENCE_EVOLUTION_MAX_ARTIFACT_BYTES: ${OPEN_SCIENCE_EVOLUTION_MAX_ARTIFACT_BYTES:-2000000}
-      OPEN_SCIENCE_EVOLUTION_SELF_CHECK_MAX_BYTES: ${OPEN_SCIENCE_EVOLUTION_SELF_CHECK_MAX_BYTES:-4194304}
-      OPEN_SCIENCE_EVOLUTION_SELF_CHECK_MAX_ROWS: ${OPEN_SCIENCE_EVOLUTION_SELF_CHECK_MAX_ROWS:-10000}
-      OPEN_SCIENCE_EVOLUTION_SELF_CHECK_SAMPLE_ROWS: ${OPEN_SCIENCE_EVOLUTION_SELF_CHECK_SAMPLE_ROWS:-256}
       OPEN_SCIENCE_EVOLUTION_EXECUTION_MAX_CONCURRENCY: ${OPEN_SCIENCE_EVOLUTION_EXECUTION_MAX_CONCURRENCY:-1}
       OPEN_SCIENCE_EVOLUTION_EXECUTION_TIMEOUT_MS: ${OPEN_SCIENCE_EVOLUTION_EXECUTION_TIMEOUT_MS:-30000}
       OPEN_SCIENCE_EVOLUTION_TOOL_MAX_CONCURRENT_PER_PROJECT: ${OPEN_SCIENCE_EVOLUTION_TOOL_MAX_CONCURRENT_PER_PROJECT:-2}
@@ -474,11 +471,6 @@ services:
       # What a project's datasets mean (dataSemanticsService.mjs): the interpretation a repeat analysis starts from.
       # Value-less: unset, the code's default (on, with Postgres) holds.
       OPEN_SCIENCE_DATA_SEMANTICS_ENABLED:
-      # Scheduled tasks made and changed from a conversation (taskToolsGateway.mjs; `schedule_task` / `update_task`): the form's twin
-      # with the platform's default budget, and the most tasks one project may hold before the conversation is told to delete or
-      # pause one. Off, the runtime is given no route and the 定时任务 page is unchanged.
-      OPEN_SCIENCE_TASK_TOOLS_ENABLED: ${OPEN_SCIENCE_TASK_TOOLS_ENABLED:-true}
-      OPEN_SCIENCE_TASK_TOOLS_MAX_TASKS: ${OPEN_SCIENCE_TASK_TOOLS_MAX_TASKS:-30}
       # Truthful capability availability (availabilityModule.mjs): the collector's off switch and how often it
       # looks for runs the finish hook missed. A label, never a gate; value-less, so the code's default holds.
       OPEN_SCIENCE_AVAILABILITY_ENABLED:
@@ -504,6 +496,9 @@ services:
       OPEN_SCIENCE_SCREENING_BATCH_SIZE:
       OPEN_SCIENCE_RUNTIME_ASK_USER:
       OPEN_SCIENCE_RUNTIME_ASK_USER_MODE:
+      OPEN_SCIENCE_SCHEDULE_NEW_SESSION_INTERVAL_SECONDS:
+      OPEN_SCIENCE_SCHEDULE_WAKE_ENABLED:
+      OPEN_SCIENCE_SCHEDULE_WAKE_REST_AFTER_MS:
       OPEN_SCIENCE_LOOPX_ENABLED:
       OPEN_SCIENCE_RESEARCH_GOAL_WATCH_ENABLED:
       OPEN_SCIENCE_RESEARCH_GOAL_MAX_ROUNDS_WITHOUT_PROGRESS:
@@ -564,6 +559,8 @@ services:
       OPEN_SCIENCE_AUTH_SESSION_PURGE_BATCH:
       OPEN_SCIENCE_DATABASE_POOL_MAX:
       OPEN_SCIENCE_DATABASE_CONNECTION_TIMEOUT_MS:
+      # How long a control-plane connection may sit idle inside a transaction before PostgreSQL ends it (0 = no bound).
+      OPEN_SCIENCE_DATABASE_IDLE_IN_TRANSACTION_MS:
       # Which component ranks a recall. `openviking` is what this stack starts;
       # `builtin` is the term matcher, which needs nothing deployed and is what
       # a recall falls back to when the index is unreachable.
@@ -648,21 +645,6 @@ services:
       OPEN_SCIENCE_NATIVE_MEMORY_TURN_COMMIT_ATTEMPTS:
       OPEN_SCIENCE_NATIVE_MEMORY_TURN_COMMIT_CONCURRENCY:
       OPEN_SCIENCE_NATIVE_MEMORY_TURN_COMMIT_MAX_SCHEDULED:
-      # Autopilot's levers belong to the base stack, not to an overlay. Compose
-      # passes environment item by item, and these were listed only in
-      # `docker-compose.ingestion.yml` — so on a deployment without that overlay
-      # the server still defaulted autopilot on in production while an operator
-      # setting `OPEN_SCIENCE_AUTOPILOT_ENABLED=false` in `.env` changed nothing
-      # and was told nothing. A lever that cannot turn a subsystem off is worse
-      # than no lever. The ingestion overlay still pins it to "true", because
-      # the source pipeline it composes needs it.
-      OPEN_SCIENCE_AUTOPILOT_ENABLED: ${OPEN_SCIENCE_AUTOPILOT_ENABLED:-true}
-      OPEN_SCIENCE_AUTOPILOT_POLL_MS: ${OPEN_SCIENCE_AUTOPILOT_POLL_MS:-1000}
-      OPEN_SCIENCE_AUTOPILOT_LEASE_MS: ${OPEN_SCIENCE_AUTOPILOT_LEASE_MS:-300000}
-      # The planner that chooses each proactive episode's task type from the
-      # agenda's progress (N10). On unless switched off; off falls back to the
-      # date rotation, and every episode records it.
-      OPEN_SCIENCE_AUTOPILOT_PLANNER_ENABLED: ${OPEN_SCIENCE_AUTOPILOT_PLANNER_ENABLED:-true}
       # IM: Feishu bots, the channel port and the own-app reservations
       # (imService.mjs). Value-less: unset keeps config.mjs's defaults — the
       # module off, every reserved channel off, device sign-in off — so a
@@ -1051,7 +1033,7 @@ services:
       OPEN_SCIENCE_RUNTIME_CONTROLLER_POLL_MS: ${OPEN_SCIENCE_RUNTIME_CONTROLLER_POLL_MS:-500}
       OPEN_SCIENCE_RUNTIME_UI_FRAME_TTL_MS: ${OPEN_SCIENCE_RUNTIME_UI_FRAME_TTL_MS:-1800000}
       OPEN_SCIENCE_ALLOW_DIRECT_DOCKER_CONTROL: "false"
-      OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE: ${OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE:-open-science-runtime:dsh-0.2.1-rc.5-uv-0.11.26}
+      OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE: ${OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE:-open-science-runtime:dsh-0.2.2-rc.1-uv-0.11.26}
       OPEN_SCIENCE_UV_VERSION: ${OPEN_SCIENCE_UV_VERSION:-0.11.26}
       OPEN_SCIENCE_RUNTIME_REQUIRE_IMAGE_LOCAL: ${OPEN_SCIENCE_RUNTIME_REQUIRE_IMAGE_LOCAL:-true}
       OPEN_SCIENCE_RUNTIME_DATA_VOLUME: ${OPEN_SCIENCE_DATA_VOLUME:-open-science-data}
@@ -1325,7 +1307,6 @@ services:
       OPEN_SCIENCE_WEB_RENDER_IDLE_RELEASE_MS: ${OPEN_SCIENCE_WEB_RENDER_IDLE_RELEASE_MS:-300000}
       OPEN_SCIENCE_SOURCE_UPDATES_ENABLED: ${OPEN_SCIENCE_SOURCE_UPDATES_ENABLED:-true}
       OPEN_SCIENCE_SOURCE_UPDATES_TIMEOUT_MS: ${OPEN_SCIENCE_SOURCE_UPDATES_TIMEOUT_MS:-6000}
-      OPEN_SCIENCE_SOURCE_CHANGE_RECHECK_LIMIT: ${OPEN_SCIENCE_SOURCE_CHANGE_RECHECK_LIMIT:-3}
       # rt: runtime UX — warm the most recently used project's runtime at
       # sign-in. Value-less: unset keeps config.mjs's default, on.
       OPEN_SCIENCE_RUNTIME_WARM_ON_SIGN_IN:
@@ -2291,9 +2272,6 @@ services:
       OPEN_SCIENCE_EVOLUTION_MAX_BUILD_ATTEMPTS: ${OPEN_SCIENCE_EVOLUTION_MAX_BUILD_ATTEMPTS:-3}
       OPEN_SCIENCE_EVOLUTION_MAX_JOB_ATTEMPTS: ${OPEN_SCIENCE_EVOLUTION_MAX_JOB_ATTEMPTS:-3}
       OPEN_SCIENCE_EVOLUTION_MAX_ARTIFACT_BYTES: ${OPEN_SCIENCE_EVOLUTION_MAX_ARTIFACT_BYTES:-2000000}
-      OPEN_SCIENCE_EVOLUTION_SELF_CHECK_MAX_BYTES: ${OPEN_SCIENCE_EVOLUTION_SELF_CHECK_MAX_BYTES:-4194304}
-      OPEN_SCIENCE_EVOLUTION_SELF_CHECK_MAX_ROWS: ${OPEN_SCIENCE_EVOLUTION_SELF_CHECK_MAX_ROWS:-10000}
-      OPEN_SCIENCE_EVOLUTION_SELF_CHECK_SAMPLE_ROWS: ${OPEN_SCIENCE_EVOLUTION_SELF_CHECK_SAMPLE_ROWS:-256}
       OPEN_SCIENCE_EVOLUTION_EXECUTION_MAX_CONCURRENCY: ${OPEN_SCIENCE_EVOLUTION_EXECUTION_MAX_CONCURRENCY:-1}
       OPEN_SCIENCE_EVOLUTION_EXECUTION_TIMEOUT_MS: ${OPEN_SCIENCE_EVOLUTION_EXECUTION_TIMEOUT_MS:-30000}
       OPEN_SCIENCE_EVOLUTION_TOOL_MAX_CONCURRENT_PER_PROJECT: ${OPEN_SCIENCE_EVOLUTION_TOOL_MAX_CONCURRENT_PER_PROJECT:-2}
@@ -2319,7 +2297,7 @@ services:
       OPEN_SCIENCE_RUNTIME_MODE: ${OPEN_SCIENCE_RUNTIME_MODE:-kernel}
       OPEN_SCIENCE_RUNTIME_SANDBOX_MODE: ${OPEN_SCIENCE_RUNTIME_SANDBOX_MODE:-docker}
       OPEN_SCIENCE_RUNTIME_CONTAINER_BIN: ${OPEN_SCIENCE_RUNTIME_CONTAINER_BIN:-docker}
-      OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE: ${OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE:-open-science-runtime:dsh-0.2.1-rc.5-uv-0.11.26}
+      OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE: ${OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE:-open-science-runtime:dsh-0.2.2-rc.1-uv-0.11.26}
       OPEN_SCIENCE_UV_VERSION: ${OPEN_SCIENCE_UV_VERSION:-0.11.26}
       OPEN_SCIENCE_RUNTIME_REQUIRE_IMAGE_LOCAL: ${OPEN_SCIENCE_RUNTIME_REQUIRE_IMAGE_LOCAL:-true}
       OPEN_SCIENCE_RUNTIME_DATA_VOLUME: ${OPEN_SCIENCE_DATA_VOLUME:-open-science-data}
@@ -2377,6 +2355,9 @@ services:
       OPEN_SCIENCE_SCREENING_BATCH_SIZE:
       OPEN_SCIENCE_RUNTIME_ASK_USER:
       OPEN_SCIENCE_RUNTIME_ASK_USER_MODE:
+      OPEN_SCIENCE_SCHEDULE_NEW_SESSION_INTERVAL_SECONDS:
+      OPEN_SCIENCE_SCHEDULE_WAKE_ENABLED:
+      OPEN_SCIENCE_SCHEDULE_WAKE_REST_AFTER_MS:
       OPEN_SCIENCE_LOOPX_ENABLED:
       # The medical-search homepage topics: the web API serves them and the controller reads the image's version label.
       OPEN_SCIENCE_SEARCH_TOPICS_ENABLED:
@@ -2436,15 +2417,15 @@ services:
   # nothing else. While two kernels shipped this service built under a second
   # name, so the profile produced the image the control plane never launched.
   dsh-runtime-image:
-    image: ${OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE:-open-science-runtime:dsh-0.2.1-rc.5-uv-0.11.26}
+    image: ${OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE:-open-science-runtime:dsh-0.2.2-rc.1-uv-0.11.26}
     build:
       context: ../..
       dockerfile: deploy/runtime-dsh/Dockerfile
       args:
-        DSH_VERSION: ${OPEN_SCIENCE_DSH_VERSION:-0.2.1-rc.5}
-        DSH_CORDIS_VERSION: ${OPEN_SCIENCE_DSH_CORDIS_VERSION:-4.0.5}
+        DSH_VERSION: ${OPEN_SCIENCE_DSH_VERSION:-0.2.2-rc.1}
+        DSH_CORDIS_VERSION: ${OPEN_SCIENCE_DSH_CORDIS_VERSION:-4.1.0}
         SOCKET_VERSION: ${OPEN_SCIENCE_SOCKET_VERSION:-0.1.0}
-        NODE_VERSION: ${OPEN_SCIENCE_NODE_VERSION:-22.22.3}
+        NODE_VERSION: ${OPEN_SCIENCE_NODE_VERSION:-24.22.2}
         PNPM_VERSION: ${OPEN_SCIENCE_PNPM_VERSION:-11.7.0}
         UV_VERSION: ${OPEN_SCIENCE_UV_VERSION:-0.11.26}
         UV_SHA256_AMD64: ${OPEN_SCIENCE_UV_SHA256_AMD64:-6426a73c3837e6e2483ee344cbc00f36394d179afcba6183cb77437e67db4af0}

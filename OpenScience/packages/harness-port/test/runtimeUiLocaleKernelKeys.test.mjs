@@ -54,3 +54,17 @@ test('no kernel string that names the vendor as a verb or calls a sub-task a sub
     }
   }
 });
+
+test('the kernel calls its scheduled tasks 自动化任务 and the product has one word for them: every such string of its two namespaces is rephrased', () => {
+  const namespaces = ['schedule.catalog', 'schedule.manager'];
+  for (const namespace of namespaces) {
+    assert.ok(recorded.namespaces[namespace], `${namespace} is recorded from the pinned page`);
+    for (const [key, value] of Object.entries(recorded.namespaces[namespace])) {
+      if (typeof value !== 'string' || !/自动化任务/.test(value)) continue;
+      const own = EVIMED_DICTIONARIES[namespace]?.[key];
+      assert.equal(typeof own, 'string', `${namespace}:${key} = 「${value}」 needs the product's wording in runtimeUiLocale.mjs`);
+      assert.match(own, /定时任务/, `${namespace}:${key}`);
+    }
+    for (const [key, value] of Object.entries(EVIMED_DICTIONARIES[namespace] ?? {})) assert.doesNotMatch(value, /自动化任务/, `${namespace}:${key}`);
+  }
+});

@@ -3,39 +3,44 @@
   "result": {
     "matches": [
       {
-        "line": 19,
-        "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/concept/Alpha 协议.md",
-        "content": "来源：[Alpha 协议源文档](viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000001.md)（第 8 行、第 11 行）。"
-      },
-      {
-        "line": 43,
-        "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/concept/Alpha 协议.md",
-        "content": "- [Alpha 协议源文档](viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000001.md)"
-      },
-      {
         "line": 15,
+        "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/concept/Alpha 协议.md",
+        "content": "- **目标**：在设备之间同步时间（[Alpha 协议文档](viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000001.md)）。"
+      },
+      {
+        "line": 22,
+        "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/concept/Alpha 协议.md",
+        "content": "| 发布者 | Lumen 工作组 | [Alpha 协议文档](viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000001.md) |"
+      },
+      {
+        "line": 40,
+        "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/concept/Alpha 协议.md",
+        "content": "- [Alpha 协议文档](viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000001.md)"
+      },
+      {
+        "line": 23,
         "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/entity/Lumen 工作组.md",
-        "content": "- 发布物：Alpha 协议，一个用于设备间时间同步的轻量协议，2021 年发布（[Alpha 协议源文档](viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000001.md)）。"
+        "content": "- 发布 [Alpha 协议](../concept/Alpha%20协议.md)，一个用于设备间时间同步的轻量协议（[Alpha 协议文档](viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000001.md)）。"
       },
       {
-        "line": 31,
+        "line": 32,
         "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/entity/Lumen 工作组.md",
-        "content": "- [Alpha 协议源文档](viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000001.md)"
+        "content": "- [Alpha 协议文档](viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000001.md)"
       },
       {
-        "line": 19,
+        "line": 35,
         "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/entity/alphad.md",
-        "content": "事实来源：[Alpha 协议源文档](viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000001.md) 第 11 行（page 2）；[Beta 网关源文档](viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000002.md)。"
+        "content": "- [Alpha 协议文档](viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000001.md)"
       },
       {
-        "line": 34,
-        "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/entity/alphad.md",
-        "content": "- [Alpha 协议源文档](viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000001.md)"
+        "line": 29,
+        "uri": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki/index.md",
+        "content": "- [Alpha 协议文档](viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources/src_00000000000000000000000000000001.md)"
       }
     ],
-    "count": 6,
-    "match_count": 6,
-    "files_scanned": 3
+    "count": 7,
+    "match_count": 7,
+    "files_scanned": 4
   },
   "error": null,
   "telemetry": null,

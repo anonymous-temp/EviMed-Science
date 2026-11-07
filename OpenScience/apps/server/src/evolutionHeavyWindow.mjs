@@ -7,8 +7,8 @@ import { parseWindow, withinWindow } from './learningWorker.mjs';
  * module's bulk model spend, and nothing a researcher waits on: they run between 22:00 and 07:00 China time by default, which is 14:00 to 23:00
  * UTC. DeepSeek bills a half price outside its peak (weekdays 01:00-04:00 and 06:00-10:00 UTC; every other hour, and weekends, are off-peak), so the
  * window sits wholly inside the cheap hours and halves the cost of this work; it also leaves the daytime to researchers. Collection (the
- * plugin's, the signals', the events') and the light jobs (the plan, the decisions, the digest, maintenance, self-checks that wake a researcher's
- * agenda) run at any time. Written in China time, like every other schedule of this module (the digest hour, the Monday plan, the budget day).
+ * plugin's, the signals', the events') and the light jobs (the plan, the decisions, the digest, maintenance)
+ * run at any time. Written in China time, like every other schedule of this module (the digest hour, the Monday plan, the budget day).
  *
  * `OPEN_SCIENCE_EVOLUTION_HEAVY_WINDOW` is `HH:MM-HH:MM` (wrapping midnight), or `always`. Like the learning window, a value that cannot be read is no
  * window rather than a refusal: a typo costs the half price, not the feature. Absent from a hand-made config it is no window too.

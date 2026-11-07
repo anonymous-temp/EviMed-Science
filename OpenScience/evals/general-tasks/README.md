@@ -69,7 +69,7 @@ composer announces an attachment, by one line appended to the first message (`ï¼
 every arm. Multi-turn cases send their follow-ups in the same conversation (G22's and G23's last turns open a new one, in the same
 project). Fault injection: G16 runs a second time with the routing classifier timing out (its model call never answers, so the classifier's own
 deadline ends it; injected at the model-provider boundary of the harness, `EVAL_FAULT`), and G14 two more times: with the web search
-provider switched off (`web-search-off`; a page can still be read) and with search and read both off (`web-off`, the honesty test proper). G20 also starts the created task once by hand (`run-now`) and reads the execution.
+provider switched off (`web-search-off`; a page can still be read) and with search and read both off (`web-off`, the honesty test proper).
 
 What is recorded per case (`records/<case>-r<n>.json`, with `<case>-r<n>.files/` beside it holding every file a turn left new or
 changed, the transcripts, and the first model request): completion, route and route reason, tool calls (count and names), wall
@@ -104,8 +104,7 @@ Re-judging saved records costs no model time on the agent side: `python3 judges/
 * **B / C**: the tree as it is. The harness composes the control plane (kernel mode, local auth, real launch plan and bootstrap,
   real gateways, real ledger) with a host-process runtime in place of the container; the kernel is the pinned DSH with the seeded
   profile (the socket of the tree under test). Evolution, learning, LoopX, Jev judge sites and run titles are off in every arm
-  (LoopX needs image paths the host harness does not have; the others act on runs after the fact); memory extraction, the
-  autopilot, source ingestion and the Bailian web search are on.
+  (LoopX needs image paths the host harness does not have; the others act on runs after the fact); memory extraction, source ingestion and the Bailian web search are on.
 * **A, the native control**: `OPEN_SCIENCE_RUNTIME_DISABLED_SOCKET_PLUGINS` names all seven switchable first-party socket plugins
   (guidance, run-policy, evidence, capsule, screening, compaction, duplicate-lines), the citation tools are off (`EVIMED_CITE_ENABLED=0`
   in the kernel process), and the persona row of the preset is replaced by one neutral sentence in the runtime's own copy of the profile

@@ -52,7 +52,7 @@ export class OpenVikingStub {
     /** @type {Set<string>} `${user}/${target}` privacy configurations a v0.5.2 engine keeps beside a session; an engine without any answers 404 to the delete, as v0.5.1.1 does */
     this.privacyConfigs = new Set();
     /** What `/health` says the engine is. */
-    this.version = "v0.5.1.1";
+    this.version = "v0.5.3";
     /** @type {any[]} every request, in order */
     this.requests = [];
     this.taskSeq = 0;
@@ -170,7 +170,10 @@ export class OpenVikingStub {
       if (earlier && this.tasks.has(earlier)) return send(200, ok(this.tasks.get(earlier).public));
       const taskId = `00000000-0000-4000-9000-${String(++this.taskSeq).padStart(12, "0")}`;
       if (key) this.compileKeys.set(`${user}/${key}`, taskId);
-      const outcome = this.consolidate({ user, to, files: this.files, instruction: body?.instruction ?? null }) ?? {};
+      // v0.5.3 accepts the memories root and then fails the task: its write check wants a memory type directory (measured 2026-11-05).
+      const outcome = to === `${own}/memories`
+        ? { fail: `MEMORY_CONSOLIDATION_FAILED: memory write target must be inside a memory type directory: ${to}` }
+        : this.consolidate({ user, to, files: this.files, instruction: body?.instruction ?? null }) ?? {};
       const adds = outcome.adds ?? [];
       const updates = outcome.updates ?? [];
       const deletes = outcome.deletes ?? [];
@@ -178,7 +181,7 @@ export class OpenVikingStub {
         for (const item of [...adds, ...updates]) { this.files.set(item.uri, item.text); if (!this.tags.has(item.uri)) this.tags.set(item.uri, []); }
         for (const uri of deletes) { this.files.delete(uri); this.tags.delete(uri); }
       }
-      const running = { task_id: taskId, task_type: "compile", status: "running", stage: "consolidating", result: null, error: null };
+      const running = { task_id: taskId, task_type: "compile", status: "running", stage: "consolidating", resource_id: to, result: null, error: null };
       const final = outcome.fail
         ? { ...running, status: "failed", stage: "failed", error: outcome.fail, result: null }
         : { ...running, status: "completed", stage: "completed", result: { memory_type: null, trace_id: "trace-stub", adds: adds.map((item) => item.uri), updates: updates.map((item) => item.uri), deletes,

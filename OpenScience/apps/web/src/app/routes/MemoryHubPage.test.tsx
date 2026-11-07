@@ -162,7 +162,7 @@ describe("记忆胶囊", () => {
         record({ id: "rec_4", kind: "behavior", key: "behavior.gone", value: "已忘记的一条", summary: "已忘记的一条", status: "archived" }),
         record({ id: "rec_5", kind: "run_summary", scope: "project", scopeId: "prj_1", key: "run.session.ses_x", value: "{}", summary: "做过的一次研究" }),
       ],
-      groups: {}, activeCount: 5, pendingCount: 0, episodeCount: 1,
+      groups: {}, activeCount: 5, pendingCount: 0,
       conversations: { ses_9: "阿司匹林一级预防" },
       usage: { rec_1: { count: 7, lastUsedAt: "2026-09-18T00:00:00Z" } },
     });
@@ -327,7 +327,7 @@ describe("记忆胶囊", () => {
 
   it("opens on 关于你 for an account with only a project's memories: it is a row of that list, under 项目记忆, naming its project", async () => {
     // Nothing about the person yet; the shell's own project has facts.
-    fetchMemoryProfile.mockResolvedValue({ records: [record({ id: "rec_3", kind: "project_fact", scope: "project", scopeId: "prj_1", key: "project.fact.scope", value: "纳入范围覆盖疳证与小儿厌食症。", summary: "纳入范围覆盖疳证与小儿厌食症。" })], groups: {}, activeCount: 1, pendingCount: 0, episodeCount: 0, conversations: {}, usage: {} });
+    fetchMemoryProfile.mockResolvedValue({ records: [record({ id: "rec_3", kind: "project_fact", scope: "project", scopeId: "prj_1", key: "project.fact.scope", value: "纳入范围覆盖疳证与小儿厌食症。", summary: "纳入范围覆盖疳证与小儿厌食症。" })], groups: {}, activeCount: 1, pendingCount: 0, conversations: {}, usage: {} });
     fetchMyCapsule.mockResolvedValue({ capsule: null, capsules: [], entries: [], forgotten: [] });
     open();
     const row = await screen.findByRole("button", { name: /纳入范围覆盖疳证/ });
@@ -360,7 +360,7 @@ describe("记忆胶囊", () => {
       expect(await screen.findByRole("link", { name: /做法/ })).toBeInTheDocument();
       expect(screen.queryByText("还没有关于你的记忆")).toBeNull();
       expect(screen.queryByRole("button", { name: /药学背景/ })).toBeNull();
-      await act(async () => { release({ records: [record()], groups: {}, activeCount: 1, pendingCount: 0, episodeCount: 0, conversations: {}, usage: {} }); });
+      await act(async () => { release({ records: [record()], groups: {}, activeCount: 1, pendingCount: 0, conversations: {}, usage: {} }); });
       expect(await screen.findByRole("button", { name: /药学背景/ })).toBeInTheDocument();
     });
 
@@ -372,7 +372,7 @@ describe("记忆胶囊", () => {
   });
 
   it("opens on 做法 when only what was learned is there, and stays on 关于你 when a read failed rather than guess it empty", async () => {
-    fetchMemoryProfile.mockResolvedValue({ records: [], groups: {}, activeCount: 0, pendingCount: 0, episodeCount: 0, conversations: {}, usage: {} });
+    fetchMemoryProfile.mockResolvedValue({ records: [], groups: {}, activeCount: 0, pendingCount: 0, conversations: {}, usage: {} });
     fetchMyCapsule.mockResolvedValue({ capsule: null, capsules: [], entries: [], forgotten: [] });
     const first = open();
     expect(await screen.findByRole("button", { name: /提交前给成品做最后把关/ })).toBeInTheDocument();
@@ -386,7 +386,7 @@ describe("记忆胶囊", () => {
 
   it("an address that names a tab is obeyed, and a tab the researcher clicked before the data came is not moved", async () => {
     const user = userEvent.setup();
-    fetchMemoryProfile.mockResolvedValue({ records: [], groups: {}, activeCount: 0, pendingCount: 0, episodeCount: 0, conversations: {}, usage: {} });
+    fetchMemoryProfile.mockResolvedValue({ records: [], groups: {}, activeCount: 0, pendingCount: 0, conversations: {}, usage: {} });
     fetchMyCapsule.mockResolvedValue({ capsule: null, capsules: [], entries: [], forgotten: [] });
     const named = open("?tab=methods");
     expect(await screen.findByRole("button", { name: /提交前给成品做最后把关/ })).toBeInTheDocument();

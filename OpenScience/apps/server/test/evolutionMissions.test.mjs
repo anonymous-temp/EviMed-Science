@@ -101,15 +101,15 @@ test('measurement integrity requires every frozen original and equivalent unit e
 test('module activation is idempotent and never replaces a newer incompatible baseline',async()=>{
  const f=evolutionServiceFixture(),missions=createEvolutionMissions({service:f.service,policy:{},map:{},taskPool:{},signals:{},config:{}});
  const {createHash}=await import('node:crypto');const {canonicalJson}=await import('@evimed/domain');
- const candidate={id:'module-candidate',policy:{plannerInstructions:'A bounded planner.'}};
+ const candidate={id:'module-candidate',policy:{editInstructions:'A bounded planner.'}};
  const hash=createHash('sha256').update(canonicalJson(candidate)).digest('hex');
  await f.service.save('mission','publish-mission',{baseline:{revisionId:'default:old'}});
- await f.service.save('candidate-verdict','module-verdict',{promote:true,confirmatory:true,receiptValid:true,firstAttempt:true,moduleId:'autopilot',candidateId:candidate.id,candidateHash:hash,missionId:'publish-mission'});
- const first=await missions.publish('autopilot',candidate,{verdictId:'module-verdict'});
- const repeated=await missions.publish('autopilot',candidate,{verdictId:'module-verdict'});assert.deepEqual(repeated,first);
- const active=await f.service.get('evolution-module-policy-autopilot');assert.equal(active.revision,1);
+ await f.service.save('candidate-verdict','module-verdict',{promote:true,confirmatory:true,receiptValid:true,firstAttempt:true,moduleId:'frontier',candidateId:candidate.id,candidateHash:hash,missionId:'publish-mission'});
+ const first=await missions.publish('frontier',candidate,{verdictId:'module-verdict'});
+ const repeated=await missions.publish('frontier',candidate,{verdictId:'module-verdict'});assert.deepEqual(repeated,first);
+ const active=await f.service.get('evolution-module-policy-frontier');assert.equal(active.revision,1);
  await f.service.save('module-policy',active.id,{...active.payload,revisionId:'newer',candidateId:'newer',verdictId:'newer'},active);
- assert.equal((await missions.publish('autopilot',candidate,{verdictId:'module-verdict'})).reason,'baseline-changed-reconfirmation-required');
+ assert.equal((await missions.publish('frontier',candidate,{verdictId:'module-verdict'})).reason,'baseline-changed-reconfirmation-required');
  assert.equal((await f.service.get(active.id)).payload.candidateId,'newer');
 });
 test('code-only module missions produce review inputs without claiming a promotion',async()=>{
@@ -125,28 +125,28 @@ test('a repair requires an independent executed public failure receipt rather th
  const {validEvolutionFailureReproduction,evolutionFailureReproductionHash}=await import('../src/evolutionMissions.mjs');
  const {createHash}=await import('node:crypto'),{canonicalJson}=await import('@evimed/domain');
  const baseline={revisionId:'default:base',policy:{}};
- const identity={missionId:'mission',moduleId:'autopilot',baseline};
- const record={recordType:'evolution-failure-reproduction',missionId:'mission',moduleId:'autopilot',baselineHash:createHash('sha256').update(canonicalJson(baseline)).digest('hex'),scope:'public',independent:true,executed:true,baselineFailed:true,referenceVerified:true,taskId:'public-regression',sourceRoot:'public-study',sourceHash:'a'.repeat(64),executionReceiptHash:'b'.repeat(64)};
+ const identity={missionId:'mission',moduleId:'geo',baseline};
+ const record={recordType:'evolution-failure-reproduction',missionId:'mission',moduleId:'geo',baselineHash:createHash('sha256').update(canonicalJson(baseline)).digest('hex'),scope:'public',independent:true,executed:true,baselineFailed:true,referenceVerified:true,taskId:'public-regression',sourceRoot:'public-study',sourceHash:'a'.repeat(64),executionReceiptHash:'b'.repeat(64)};
  record.receiptHash=evolutionFailureReproductionHash(record);assert.equal(validEvolutionFailureReproduction(record,identity),true);
  assert.equal(validEvolutionFailureReproduction({...record,scope:'tenant'},identity),false);
  assert.equal(validEvolutionFailureReproduction({...record,executed:false},identity),false);
  assert.equal(validEvolutionFailureReproduction(record,{...identity,baseline:{...baseline,revisionId:'changed'}}),false);
- const f=evolutionServiceFixture();await f.service.save('mission','repair-mission',{moduleId:'autopilot',status:'ready',dependencies:[],sources:['repair'],kind:'research',preparedCandidateState:{candidate:{policy:{plannerInstructions:'Changed'},proposal:{opportunityKind:'repair',failureReproduced:true}},baseline}});
- const missions=createEvolutionMissions({service:f.service,policy:{},map:{},taskPool:{},signals:{},config:{},adapters:{autopilot:{enabled:true}}});
+ const f=evolutionServiceFixture();await f.service.save('mission','repair-mission',{moduleId:'geo',status:'ready',dependencies:[],sources:['repair'],kind:'research',preparedCandidateState:{candidate:{policy:{plannerInstructions:'Changed'},proposal:{opportunityKind:'repair',failureReproduced:true}},baseline}});
+ const missions=createEvolutionMissions({service:f.service,policy:{},map:{},taskPool:{},signals:{},config:{},adapters:{geo:{enabled:true}}});
  assert.equal((await missions.run({missionId:'repair-mission'})).payload.reason,'repair-failure-reproduction-required');
 });
 test('smoke budget deferral preserves the prepared proposal and completed first answers',async()=>{
  const f=evolutionServiceFixture(),pool=createEvolutionTaskPool({service:f.service}),calls=new Map();let proposals=0,stop=true;
- for(const id of ['a','b'])await pool.add({id,moduleId:'autopilot',sourceRoot:`public:${id}`,sourceHash:id.repeat(64),scope:'public',pool:'development',baselineKnownCorrect:true});
- const candidate={policy:{plannerInstructions:'Revised planner.'},proposal:{components:['plannerInstructions'],mechanisms:['m'],change:'Change the planner.',reason:'Improve bounded planning.',rollbackVersion:'default',predictedBenefits:[],possibleHarms:[],costChange:0}};
- const adapter={enabled:true,propose:async()=>{proposals++;return candidate;},prepare:async value=>({status:'prepared',candidate:value,baseline:{policy:{plannerInstructions:'Baseline'},revisionId:'default:baseline'}}),smoke:async input=>{
+ for(const id of ['a','b'])await pool.add({id,moduleId:'frontier',sourceRoot:`public:${id}`,sourceHash:id.repeat(64),scope:'public',pool:'development',baselineKnownCorrect:true});
+ const candidate={policy:{editInstructions:'Revised planner.'},proposal:{components:['editInstructions'],mechanisms:['m'],change:'Change the planner.',reason:'Improve bounded planning.',rollbackVersion:'default',predictedBenefits:[],possibleHarms:[],costChange:0}};
+ const adapter={enabled:true,propose:async()=>{proposals++;return candidate;},prepare:async value=>({status:'prepared',candidate:value,baseline:{policy:{editInstructions:'Baseline'},revisionId:'default:baseline'}}),smoke:async input=>{
   for(const item of input.batch)await input.checkpointUnit(item.id,async()=>{
    if(input.arm==='candidate'&&stop){stop=false;throw Object.assign(Error('unpaid'),{code:'usage_budget_exceeded',status:402});}
    const key=`${input.arm}:${item.id}`;calls.set(key,(calls.get(key)??0)+1);return{score:1};
   });return{passed:true};
  }};
- await f.service.save('mission','smoke-mission',{moduleId:'autopilot',kind:'research',status:'ready',dependencies:[],round:1,maxRounds:10,epoch:'epoch',successConditions:{},sources:[]});
- const missions=createEvolutionMissions({service:f.service,policy:{},map:{},taskPool:pool,signals:{},config:{},screen:async()=>({passed:true}),adapters:{autopilot:adapter}});
+ await f.service.save('mission','smoke-mission',{moduleId:'frontier',kind:'research',status:'ready',dependencies:[],round:1,maxRounds:10,epoch:'epoch',successConditions:{},sources:[]});
+ const missions=createEvolutionMissions({service:f.service,policy:{},map:{},taskPool:pool,signals:{},config:{},screen:async()=>({passed:true}),adapters:{frontier:adapter}});
  const waiting=await missions.run({missionId:'smoke-mission'});assert.equal(waiting.payload.reason,'development-budget');assert.ok(waiting.payload.preparedCandidateState);
  const resumed=await missions.run({missionId:'smoke-mission'});assert.equal(resumed.payload.status,'waiting_confirmation');assert.equal(proposals,1);assert.equal(calls.size,4);assert.ok([...calls.values()].every(count=>count===1));assert.ok(resumed.payload.candidate.frozenAt);
 });
@@ -203,9 +203,9 @@ test('a mission parked past its resource window ends deferred; its opportunity k
  assert.equal((await f.service.get('availability')).payload.deferred,false);
 });
 test('a repair that cannot reproduce its failure is deferred when its window has passed, whatever woke nothing in the meantime',async()=>{
- const {f,missions}=planner({autopilot:{enabled:true}});
- await opportunity(missions,'repair-opportunity','autopilot',{failures:5});
- await f.service.save('mission','repair-parked',{moduleId:'autopilot',kind:'research',status:'waiting_resource',reason:'repair-failure-reproduction-required',opportunityId:'repair-opportunity',week:'2026-09-14',
+ const {f,missions}=planner({geo:{enabled:true}});
+ await opportunity(missions,'repair-opportunity','geo',{failures:5});
+ await f.service.save('mission','repair-parked',{moduleId:'geo',kind:'research',status:'waiting_resource',reason:'repair-failure-reproduction-required',opportunityId:'repair-opportunity',week:'2026-09-14',
   createdAt:f.service.now().toISOString(),wakeConditions:[],dependencies:[],budget:{category:'research',reservedCny:10}});
  f.advance(13*86400000);await missions.plan({week:'2026-10-12'});
  assert.equal((await f.service.get('repair-parked')).payload.status,'waiting_resource','inside its window it is left alone');
@@ -240,9 +240,6 @@ test('a mission opened for a job ends with the job whatever kind the job has, an
  assert.equal((await missions.recordJob(scout,{status:'complete'})).payload.status,'complete','the kinds that always ended with their job still do');
  const budgeted=await missions.ensureJob({id:'job-audit',kind:'evolution-audit',payload:{moduleId:'tools'}});
  assert.equal((await missions.recordJob(budgeted,{status:'waiting_resource'})).payload.status,'ready','a job that reports it is waiting leaves its mission open');
- // A measurement that came out `failed` is a result of a job that succeeded (a self-check's verdict), not a failed job.
- const check=await missions.ensureJob({id:'job-check',kind:'evolution-self-check',payload:{moduleId:'tools'}});
- assert.equal((await missions.recordJob(check,{payload:{status:'failed'}})).payload.status,'complete');
  const broken=await missions.ensureJob({id:'job-meta',kind:'evolution-meta',payload:{}});
  const failed=await missions.recordJob(broken,{jobFailed:true,code:'evolution_job_failed'});
  assert.deepEqual([failed.payload.status,failed.payload.reason,failed.payload.completed],['failed','evolution_job_failed',undefined]);
@@ -258,7 +255,7 @@ test('a mission opened for a job ends with the job whatever kind the job has, an
 });
 
 // The budget reallocation of 2026-10-12. Live (2026-10-06 to 12) every job mission borrowed what the policy's category shares had not used: 99% of 109 CNY went to 37
-// scouting runs that all ended waiting for material, and the loops of frontier, geo and autopilot together spent 0.38.
+// scouting runs that all ended waiting for material, and the loops of frontier and geo together spent 0.38.
 const budgeted=(config={})=>{
  const f=evolutionServiceFixture(),P=DEFAULT_EVOLUTION_POLICY;
  const missions=createEvolutionMissions({service:f.service,policy:{assignedPolicy:async()=>({id:'P',policy:P}),current:async()=>({policy:P})},map:{rebuild:async()=>({counts:{}})},taskPool:{},signals:{aggregate:async()=>[]},
@@ -309,9 +306,19 @@ test('a mission funded for a new day follows the same scouting share as a new on
  const refused=await missions.fund(b);assert.equal(refused.payload.status,'waiting_budget');assert.equal(refused.payload.reason,'daily-funding-unavailable');
 });
 test('the weekly plan pays each module out of the loops\' reserve in equal parts, so every enabled module can be funded in one pass',async()=>{
- const {f,missions}=planner(Object.fromEntries(['tools','frontier','geo','autopilot','sources','evidence','memory','runtime'].map(id=>[id,{enabled:true}])),{config:{evolutionScoutBudgetShare:0.2,evolutionModuleLoopBudgetShare:0.5,evolutionDailyBudgetCny:100}});
+ const {f,missions}=planner(Object.fromEntries(['tools','frontier','geo','sources','evidence','memory','runtime'].map(id=>[id,{enabled:true}])),{config:{evolutionScoutBudgetShare:0.2,evolutionModuleLoopBudgetShare:0.5,evolutionDailyBudgetCny:100}});
  const planned=await missions.plan({week:'2026-10-05'});
- assert.equal(planned.missions.length,8,'all eight modules get their mission');
+ assert.equal(planned.missions.length,7,'all seven modules get their mission');
  const rows=await Promise.all(planned.missions.map(id=>f.service.get(id)));
- assert.ok(rows.every(row=>row.payload.budget.reservedCny===6.25),'a half of 100 CNY over eight modules is 6.25 each');
+ assert.ok(rows.every(row=>Math.abs(row.payload.budget.reservedCny-50/7)<1e-6),'a half of 100 CNY over seven modules is 50/7 each');
+});
+test('a stored mission of the retired autopilot module is skipped by name, left as it is and counted',async()=>{
+ const {schedulerRetirementMetricFamilies,resetSchedulerRetirementMetrics}=await import('../src/schedulerRetirementMetrics.mjs');
+ resetSchedulerRetirementMetrics();
+ const fixture=await make();
+ await fixture.f.service.save('mission','old-autopilot',{moduleId:'autopilot',status:'ready',dependencies:[]});
+ const row=await fixture.missions.run({missionId:'old-autopilot'});
+ assert.equal(row.payload.status,'ready');assert.equal(row.payload.moduleId,'autopilot');
+ const count=schedulerRetirementMetricFamilies()[0].series.find(series=>series.labels.outcome==='mission_skipped').value;
+ assert.equal(count,1);
 });

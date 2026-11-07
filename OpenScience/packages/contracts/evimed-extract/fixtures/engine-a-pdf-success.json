@@ -1,0 +1,25 @@
+{
+  "code": 200,
+  "message": "success",
+  "uuid": "C78339AE-7D25-4948-8826-2641556A5A06",
+  "timestamp": 1781164619,
+  "elapsed_ms": 1000,
+  "data": {
+    "content": "[Page 1]\n文档正文第一页。\n\n[Page 2]\n第二页：利伐沙班 15 mg qd。",
+    "format": "pdf",
+    "media_type": "application/pdf",
+    "parse_info": {
+      "parser": "native-pdf",
+      "parser_version": "13",
+      "page_count": 2,
+      "ocr_pages": [],
+      "warnings": [
+        {
+          "code": "pdf_ocr_empty_page",
+          "message": "该页 OCR 未识别到文本",
+          "source_number": 2
+        }
+      ]
+    }
+  }
+}
