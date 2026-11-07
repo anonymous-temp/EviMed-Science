@@ -48,6 +48,8 @@ import { borrowingPremises } from "./vcrBorrowing.mjs";
 const PRIORITY = Object.freeze([
   // a use the model was never validated for turns every number below it, so it ranks first
   "use:use_not_validated",
+  // what the people of a population are and what a computation may do with them, then the control of a comparison
+  "binding:readiness", "binding:stale_model", "binding:stale_population", "origin:simulated", "origin:model_predicted", "origin:reconstructed", "origin:aggregate",
   "effect", "control", "dropout", "correlation", "similarity", "sampling", "accrual", "alpha", "assurance",
   // a comparison: how suitable it is, how far the target trial is emulated, what an indirect comparison leaves unadjusted, what a
   // borrowed prior rests on, how strong an unmeasured confounder would have to be
@@ -64,6 +66,7 @@ const PRIORITY = Object.freeze([
   // what the model behind the result was and was not validated for (a sentence each, never a number)
   "use:population_outside_validation", "use:endpoint_outside_validation", "use:horizon_beyond_validation", "use:no_independent_data", "use:provenance_missing",
   "progression:model.amplitude", "progression:model.betweenPersonSd", "progression:treatment.slowing", "progression:baseline.sd", "progression:residualSd",
+  "binding:origin", "binding:members", "origin:not_stated", "origin:transport",
 ]);
 
 /**

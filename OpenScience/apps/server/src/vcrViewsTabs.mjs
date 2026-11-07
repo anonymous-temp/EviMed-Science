@@ -49,10 +49,11 @@ import {
 import { vcrObjectNode } from "./vcrStore.mjs";
 import { VCR_UNSUPPORTED_COMPARATOR_ROUTES } from "./vcrService.mjs";
 import { constraintRows, generatedProfileRows } from "./vcrPopulationProfileView.mjs";
+import { bindingUseFindings, populationBindingPremises, populationBindingView } from "./vcrPopulationBinding.mjs";
 import { decidedShare } from "./vcrMatching.mjs";
 import { phaseLabel, registryStatusLabel } from "./vcrPatientTrials.mjs";
 import { reportSchedule } from "./vcrScheduleView.mjs";
-import { vcrPremises } from "./vcrPremises.mjs";
+import { finishPremises, vcrPremises } from "./vcrPremises.mjs";
 import { presentPopulationCheck } from "./vcrPopulationCheck.mjs";
 import { presentConfirmatoryDesigns } from "./vcrConfirmatory.mjs";
 import { presentDoseDesigns } from "./vcrDoseFinding.mjs";
@@ -438,6 +439,8 @@ export function presentPopulationTab(bundle) {
       reasons.set(key, found);
     }
   }
+  const binding = current ? populationBindingView(current, { patientSets: bundle.patientSets, models: bundle.models, populations, diagnostics, counts: heldCounts,
+    endpointType: bundle.definition?.endpointType ?? null }) : null;
   const first = steps[0];
   const total = numeric(first?.remaining) ?? numeric(current?.counts?.realPatients);
   return {
@@ -471,7 +474,15 @@ export function presentPopulationTab(bundle) {
     check: current ? presentPopulationCheck(allResultsOf(bundle).find((/** @type {any} */ entry) => entry.kind === "population_check" && entry.subjectId === current.id && !entry.supersededBy),
       { currentResultId: current.resultId ?? null }) : null,
     // 「这个结论的前提」 of a generated population: how its variables relate, how far it is the source trial's, how far its parameters moved.
-    premises: current ? vcrPremises("population", { kind: current.kind, diagnostics }) : [],
+    premises: current ? finishPremises([
+      ...vcrPremises("population", { kind: current.kind, diagnostics, modelUse: bindingUseFindings(binding, bundle.models) }),
+      ...populationBindingPremises(binding),
+    ]) : [],
+    binding: binding ? {
+      origin: binding.origin, originLabel: binding.originLabel, readiness: binding.readiness, model: binding.bound?.title ?? null,
+      staleResults: binding.bindings.filter((entry) => entry.state !== "current").length + binding.earlier.length,
+      members: binding.members,
+    } : null,
     counts: current ? countsView(result?.counts && Object.keys(result.counts).length ? result.counts : current.counts, { tier: study.dataTier }) : null,
     conclusion: result?.conclusion ?? null,
     headline: outcome && total !== null && outcome.eligible !== null && outcome.insufficient !== null

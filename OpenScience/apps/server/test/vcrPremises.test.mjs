@@ -265,8 +265,9 @@ test("the population page and the comparator page carry the same block", () => {
   const result = { id: "res_pop", version: 1, kind: "population", conclusion: "estimable", counts: {}, measures: [], createdAt: "2026-11-01T11:00:00.000Z",
     diagnostics: { correlationVerification: "independence_assumed", columnSources: { age: "aggregate", "(correlation)": "assumed" }, parameterDraws: 1 } };
   const tab = presentPopulationTab({ ...emptyBundle(), populations: [population], results: [result], allResults: [result] });
-  assert.deepEqual(tab.premises.map((row) => row.key), ["correlation", "similarity", "sampling"]);
-  assert.equal(tab.premises[0].value, "假设相互独立");
+  // a generated population also says what it is and what a computation may do with it (T07): the two binding rows join the same block
+  assert.deepEqual(tab.premises.map((row) => row.key), ["binding:readiness", "correlation", "similarity", "sampling", "binding:origin"]);
+  assert.equal(tab.premises.find((row) => row.key === "correlation").value, "假设相互独立");
   assert.deepEqual(presentPopulationTab({ ...emptyBundle(), populations: [{ ...population, kind: "real" }], results: [result], allResults: [result] }).premises, []);
   assert.deepEqual(presentComparatorTab(emptyBundle()).premises, []);
 });
