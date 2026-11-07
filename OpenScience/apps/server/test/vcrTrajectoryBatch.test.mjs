@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { createForecastProviders } from '../src/vcrForecastProvider.mjs';
-import { actionContext, assertReconciled, convertUnit, loggedActionSchedule, reconcileSubjects, trajectoryPremises, uncertaintyProvenance } from '../src/vcrTrajectoryBatch.mjs';
+import { actionContext, assertReconciled, convertUnit, loggedActionSchedule, projectBatch, providerInputSpec, reconcileSubjects, trajectoryPremises, uncertaintyProvenance } from '../src/vcrTrajectoryBatch.mjs';
 
 const endpoint = {code:'HbA1c',type:'continuous',unit:'%'};
 const permission = {schema:1,status:'approved',dataClass:'synthetic',purpose:'vcr',destinations:['https://forecast.example.org']};
@@ -174,4 +174,16 @@ test('the identity is enforced in code, units convert only inside one dimension,
   const { counts } = reconcileSubjects({subjects:['a','b','c'],horizonsDays:[30,60],rows:[{subjectKey:'a',horizonDays:30},{subjectKey:'a',horizonDays:60},{subjectKey:'b',horizonDays:30}],
     validationRejected:[{subjectKey:'b',horizonDays:60,codes:['point_out_of_range']}],batches:[{keys:['a','b'],outcome:'done'}],unprocessedReason:'canceled'});
   assert.deepEqual(counts,{submitted:3,admitted:3,completed:2,rejected:0,failed:0,unprocessed:1,partial:1});
+});
+
+test('a newer endpoint value in a unit that cannot be converted never leaves an older one to be read as the latest (review stats P2-16)',() => {
+  const endpoint = {code:'CREA',unit:'mg/L'};
+  const spec = providerInputSpec({inputCodes:['CREA']},endpoint);
+  const obs = (subjectKey,value,unit,at) => ({subjectKey,code:'CREA',value,unit,occurredAt:at,availableAt:at,kind:'measurement'});
+  const events = [obs('a',9,'mg/L','2025-11-01T00:00:00Z'),obs('a',140,'umol/L','2025-12-20T00:00:00Z'),
+    obs('b',140,'umol/L','2025-11-01T00:00:00Z'),obs('b',9,'mg/L','2025-12-20T00:00:00Z')];
+  const out = projectBatch({events,keys:['a','b'],origin:'2026-01-01T00:00:00Z',spec,endpoint,context:actionContext({})});
+  assert.deepEqual(out.rejected,[{subjectKey:'a',reason:'unit_not_convertible'}],'a: the newest value cannot be read, so the older one is not sent as the latest');
+  assert.deepEqual(out.sendKeys,['b'],'b: an older unreadable value leaves the newest one standing');
+  assert.equal(out.unitDropped,2);
 });

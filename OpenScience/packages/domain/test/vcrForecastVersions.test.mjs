@@ -52,3 +52,13 @@ test('real people under the small-cell floor: a date keeps its identity and lose
   assert.ok(Number.isFinite(big.observedMean));
   assert.deepEqual([big.newerCloser,big.olderCloser],[null,null],'two people whose older forecast was closer are two people');
 });
+
+test('two forecasts made on different action schedules name the schedule as what changed (review stats P2-14)',async () => {
+  const { compareForecasts } = await import('../index.mjs');
+  const a = {...prediction('2026-01-01T00:00:00.000Z',[30],{a:7,b:8}),actionSchedule:[{code:'Metformin',atDay:7}]};
+  const b = {...prediction('2026-01-01T00:00:00.000Z',[30],{a:6.5,b:7.5}),actionSchedule:[{code:'Metformin',atDay:28}]};
+  const compared = compareForecasts(a,b,{mode:'scenario',bootstrap:0});
+  assert.deepEqual(compared.changedFactors,['actions']);
+  assert.deepEqual(compareForecasts(prediction('2026-01-01T00:00:00.000Z',[30],{a:7}),{...prediction('2026-01-01T00:00:00.000Z',[30],{a:7}),actionSchedule:[]},{bootstrap:0}).changedFactors,[],
+    'a record that kept no schedule had none');
+});

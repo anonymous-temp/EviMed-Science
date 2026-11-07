@@ -132,7 +132,7 @@ export function projectBatch({ events, keys, origin, spec, endpoint, context }) 
   const cutoff = Date.parse(origin);
   const wanted = new Set(keys);
   /** @type {Map<string, any[]>} */ const bySubject = new Map(keys.map(key => [key, []]));
-  /** @type {Map<string, {dropped:number, unitDropped:number}>} */ const trace = new Map(keys.map(key => [key, { dropped: 0, unitDropped: 0 }]));
+  /** @type {Map<string, {dropped:number, unitDropped:number, latestDropped:number}>} */ const trace = new Map(keys.map(key => [key, { dropped: 0, unitDropped: 0, latestDropped: -Infinity }]));
   for (const e of events) {
     if (!wanted.has(e.subjectKey) || e.conflict || !spec.codes.has(e.code)) continue;
     const at = Date.parse(e.occurredAt), seen = Date.parse(e.availableAt);
@@ -142,7 +142,12 @@ export function projectBatch({ events, keys, origin, spec, endpoint, context }) 
     const target = e.code === endpoint.code ? endpoint.unit : spec.actionUnits[e.code];
     if (target && unit !== target) {
       const converted = convertUnit(Number(value), String(unit ?? ''), target);
-      if (converted == null) { /** @type {any} */ (trace.get(e.subjectKey)).unitDropped++; continue; }
+      if (converted == null) {
+        const t = /** @type {any} */ (trace.get(e.subjectKey));
+        t.unitDropped++;
+        if (e.code === endpoint.code) t.latestDropped = Math.max(t.latestDropped, at);
+        continue;
+      }
       value = converted; unit = target;
     }
     bySubject.get(e.subjectKey)?.push({ subjectKey: e.subjectKey, code: e.code, value, unit, occurredAt: e.occurredAt, availableAt: e.availableAt,
@@ -154,6 +159,10 @@ export function projectBatch({ events, keys, origin, spec, endpoint, context }) 
     const own = bySubject.get(key) ?? [], t = /** @type {any} */ (trace.get(key));
     const endpointKept = own.some(e => e.code === endpoint.code);
     if (!endpointKept && t.unitDropped) { rejected.push({ subjectKey: key, reason: 'unit_not_convertible' }); continue; }
+    // a newer endpoint value in a unit that cannot be converted would leave an older one to be read as the latest: the person is not
+    // sent rather than sent a stale value (review stats P2-16)
+    const latestKept = Math.max(-Infinity, ...own.filter(e => e.code === endpoint.code).map(e => Date.parse(e.occurredAt)));
+    if (t.latestDropped > latestKept) { rejected.push({ subjectKey: key, reason: 'unit_not_convertible' }); continue; }
     const scheduled = context.actions.filter(a => !a.subjectKey || a.subjectKey === key);
     const unitBad = scheduled.find(a => a.dose && spec.actionUnits[a.code] && convertUnit(a.dose.value, a.dose.unit, spec.actionUnits[a.code]) == null);
     if (unitBad) { rejected.push({ subjectKey: key, reason: 'action_unit_not_convertible' }); continue; }
@@ -165,7 +174,9 @@ export function projectBatch({ events, keys, origin, spec, endpoint, context }) 
   }
   const refused = new Set(rejected.map(r => r.subjectKey));
   return { events: [...bySubject.entries()].filter(([key]) => !refused.has(key)).flatMap(([, rows]) => rows), actions: actions.filter(a => !refused.has(a.subjectKey)),
-    sendKeys: keys.filter(key => !refused.has(key)), rejected, leakageDropped: [...trace.values()].reduce((n, t) => n + t.dropped, 0) };
+    sendKeys: keys.filter(key => !refused.has(key)), rejected, leakageDropped: [...trace.values()].reduce((n, t) => n + t.dropped, 0),
+    // the observations left out because their unit could not be converted, counted (stats P2-16)
+    unitDropped: [...trace.values()].reduce((n, t) => n + t.unitDropped, 0) };
 }
 
 /** How a row's uncertainty is named; a deterministic model with none says `unavailable`.

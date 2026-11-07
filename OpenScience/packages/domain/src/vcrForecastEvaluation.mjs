@@ -315,8 +315,11 @@ export function compareForecasts(first, second, options = {}) {
       meanDifference: mean(values), lower: quantile(boot,.025), upper: quantile(boot,.975),
       intervalMeaning: 'between_subject_sampling', modelUncertainty: 'not_estimated' }
   })
+  // the action schedule a conditional forecast or a replay was made on is a factor too (stats P2-14); a record that kept none had none
+  const schedule = (/** @type {any} */ p) => JSON.stringify(Array.isArray(p.actionSchedule) ? p.actionSchedule : [])
   const changedFactors = [first.historyId !== second.historyId && 'history',first.origin !== second.origin && 'origin',
-    JSON.stringify(first.model) !== JSON.stringify(second.model) && 'model',JSON.stringify(first.scenario) !== JSON.stringify(second.scenario) && 'scenario'].filter(Boolean)
+    JSON.stringify(first.model) !== JSON.stringify(second.model) && 'model',JSON.stringify(first.scenario) !== JSON.stringify(second.scenario) && 'scenario',
+    schedule(first) !== schedule(second) && 'actions'].filter(Boolean)
   return { available: groups.some((/** @type {any} */ g) => g.subjects > 0), code:shared.length ? null : 'shared_target_missing', groups, mode,
     endpoint:first.endpoint, origins:[first.origin,second.origin], histories:[first.historyId,second.historyId],models:[first.model ?? null,second.model ?? null],
     changedFactors, attribution:changedFactors.length > 1 ? 'multiple_factors_changed' : 'descriptive_comparison',
