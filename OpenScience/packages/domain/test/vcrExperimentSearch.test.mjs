@@ -370,3 +370,12 @@ test('an improvement over the reference is decided on the bound of the contrast,
   assert.ok(state.stop.verdict.improvementBound.lower < 0.02 && state.stop.verdict.improvement > 0.02)
   assert.equal(state.stop.verdict.selection.finalists, 2)
 })
+
+test('an analytic pre-check eliminates only in the world the objective is judged in (review stats P2-4)', () => {
+  const stages = (/** @type {any} */ truth) => ({ analytic: { scenario: { design: { kind: 'two_arm_fixed' }, endpoint: { type: 'time_to_event' }, truth,
+    analysis: { alpha: 0.025, power: 0.8, sided: 1 }, accrual: { duration: 12, followup: 12 } },
+  eliminate: [{ measure: 'required_patients', exceeds: ['design.nTreat', 'design.nControl'], tolerance: 0.05 }] }, screening: { replicates: 500 }, final: { count: 2 } })
+  const smaller = vcrCampaignManifest(manifestOf({ stages: stages({ hazardRatio: 0.8, controlMedian: 12 }) }))
+  assert.ok(smaller.issues.some((issue) => issue.code === 'campaign_analytic_truth_mismatch' && issue.field === 'stages.analytic.scenario.truth.hazardRatio'))
+  assert.deepEqual(vcrCampaignManifest(manifestOf({ stages: stages({ hazardRatio: 0.7, controlMedian: 12 }) })).issues, [])
+})

@@ -257,19 +257,30 @@ export class VcrExperiments {
    * with nothing in flight. Run by the completion loop; a bounded number per call.
    */
   async repair() {
-    const rows = await this.store.rows(`SELECT id, study_id, state FROM ${SCHEMA}.experiments WHERE kind = 'campaign' AND status = 'running'
-      ORDER BY updated_at LIMIT $1`, [Number(this.config.vcrCompletionReconcileBatch ?? 20)]);
+    // Only campaigns that need work: nothing in flight, a decided unit with no job, or a unit whose job ended. One waiting on a running
+    // or budget-held job is not read at all, and one that could not be moved goes to the back of the queue, so a crashed campaign is
+    // never starved behind parked ones (review eng P2-1).
+    const rows = await this.store.rows(`SELECT e.id, e.study_id, e.state FROM ${SCHEMA}.experiments e
+      LEFT JOIN ${SCHEMA}.jobs j ON j.id = e.state->'inFlight'->>'jobId'
+      WHERE e.kind = 'campaign' AND e.status = 'running'
+        AND (jsonb_typeof(e.state->'inFlight') IS DISTINCT FROM 'object' OR e.state->'inFlight'->>'jobId' IS NULL OR j.id IS NULL
+          OR j.state IN ('succeeded', 'failed', 'canceled'))
+      ORDER BY e.updated_at LIMIT $1`, [Number(this.config.vcrCompletionReconcileBatch ?? 20)]);
     let repaired = 0;
     for (const row of rows) {
       const flight = object(object(row.state).inFlight);
       try {
         if (flight.jobId) {
           const job = await this.store.one(`SELECT state FROM ${SCHEMA}.jobs WHERE id = $1`, [flight.jobId]);
-          if (!job || !TERMINAL.has(String(job.state))) continue;
-          await this.#settle(String(row.study_id), String(row.id), String(flight.unitKey), String(flight.jobId));
+          if (job && !TERMINAL.has(String(job.state))) continue;
+          if (job) await this.#settle(String(row.study_id), String(row.id), String(flight.unitKey), String(flight.jobId));
         }
         await this.advance(String(row.study_id), String(row.id));
-        repaired += 1;
+        // repaired only when the campaign moved: a unit queued, or a stop recorded; an enqueue that failed again is not a repair
+        const after = await this.store.one(`SELECT status, state FROM ${SCHEMA}.experiments WHERE id = $1`, [row.id]);
+        const moved = after && (after.status !== "running" || object(object(after.state).inFlight).jobId);
+        if (moved) repaired += 1;
+        else await this.store.query(`UPDATE ${SCHEMA}.experiments SET updated_at = now() WHERE id = $1 AND status = 'running'`, [row.id]);
       } catch (error) { this.report(String(/** @type {any} */ (error)?.code ?? "vcr_experiment_repair_failed")); }
     }
     this.counters.repaired += repaired;

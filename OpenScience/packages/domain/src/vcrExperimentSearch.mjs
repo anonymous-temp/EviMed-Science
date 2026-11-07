@@ -315,6 +315,14 @@ export function vcrCampaignManifest(input) {
     if (!Object.keys(analytic.scenario).length) bad('campaign_value_invalid', 'stages.analytic.scenario', 'The analytic pre-check states its scenario.')
     if (!analytic.eliminate.length) bad('campaign_value_invalid', 'stages.analytic.eliminate', 'The analytic pre-check states what it eliminates.')
     analytic.apply.forEach((path, i) => { if (!PATH.test(path) || frozenPath('design.analytic', path)) bad('campaign_value_invalid', `stages.analytic.apply[${i}]`, 'Only searched design paths are carried into the analytic check.') })
+    // the pre-check eliminates in the world the objective is judged in, never one of its own: a smaller effect there would remove designs
+    // the simulation finds feasible, and they would never be simulated (review stats P2-4)
+    const world = object(truths.find((entry) => entry.name === objective.truth)?.truth)
+    for (const [key, value] of Object.entries(object(analytic.scenario.truth))) {
+      if (Object.hasOwn(world, key) && canonicalScenarioJson(world[key]) !== canonicalScenarioJson(value)) {
+        bad('campaign_analytic_truth_mismatch', `stages.analytic.scenario.truth.${key}`, `The analytic pre-check states ${key} = ${JSON.stringify(value)}; the objective's truth "${objective.truth}" states ${JSON.stringify(world[key])}.`)
+      }
+    }
     analytic.eliminate.forEach((rule, i) => {
       if (!Object.hasOwn(VCR_CAMPAIGN_METHODS['design.analytic'].measures, rule.measure)) bad('campaign_measure_unknown', `stages.analytic.eliminate[${i}].measure`, 'An analytic rule reads a measure design.analytic produces.')
       if (!rule.exceeds.length || rule.exceeds.some((path) => !PATH.test(path))) bad('campaign_value_invalid', `stages.analytic.eliminate[${i}].exceeds`, 'A rule names the candidate paths whose sum must reach the analytic value.')
