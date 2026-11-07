@@ -26,6 +26,10 @@
 #   the simulation has to agree with to within its error.
 # - **The first visit is time zero.** It is the baseline. A schedule that starts anywhere else is refused by name, since the curve is
 #   defined as change from there.
+# - **A fifth family is another file.** `beta_logit` (1.1.0, plan T06) is a published drug-disease-trial model with its own parameter set
+#   (Alzheimer disease, ADAS-cog 11), a logit-linear latent and a beta observation: none of the closed forms above holds for it (they are linear in
+#   the amplitude with a normal residual), so the handler hands such a job to `patients_progression_beta_logit.R` before reading anything else,
+#   and a job of the four families runs exactly the code it ran at 1.0.0 (N101l holds their output hashes to that release's).
 # ---------------------------------------------------------------------------
 
 .VCR_PROGRESSION_FAMILIES <- c("linear", "exponential", "logistic", "emax")
@@ -134,6 +138,7 @@ vcr_progression_simulate <- function(par, baseline_mean, baseline_sd, residual_s
 # --- the handler --------------------------------------------------------------------------------------------------
 
 vcr_job_patients_progression <- function(job, output_dir = NULL, cancel_file = NULL, progress = NULL) {
+  if (identical(job[["scenario"]][["model"]][["family"]], "beta_logit")) return(vcr_job_patients_progression_beta_logit(job, output_dir, cancel_file, progress))
   sc <- job[["scenario"]]
   model <- sc[["model"]]; par <- .vcr_progression_params(model)
   val <- function(x, default = NULL) if (is.null(x)) default else as.numeric(x[["value"]])
@@ -145,6 +150,7 @@ vcr_job_patients_progression <- function(job, output_dir = NULL, cancel_file = N
   at_time <- vcr_scalar(an[["visit"]], max(visits))
   at <- match(TRUE, abs(visits - at_time) < 1e-9)
   if (is.na(at) || at < 2L) vcr_abort("scenario_value_invalid", "scenario.analysis.visit", "The analysis visit is one of the scheduled visits after the first.")
+  if (identical(kind, "ancova")) vcr_abort("scenario_value_invalid", "scenario.analysis.kind", "The analysis of covariance is the beta_logit family's; these four families are analysed by the change or by the per-person slope.")
   if (identical(kind, "slope") && length(visits) < 3L) vcr_abort("scenario_value_invalid", "scenario.visits", "A slope needs at least three visits.")
   p <- list(baseline_mean = val(sc[["baseline"]][["mean"]]), baseline_sd = val(sc[["baseline"]][["sd"]]), residual_sd = val(sc[["residualSd"]]), rho = rho, visits = visits,
             n1 = as.integer(sc[["design"]][["nTreat"]]), n0 = as.integer(sc[["design"]][["nControl"]]), alpha = alpha, at = at, is_null = !(slowing > 0),

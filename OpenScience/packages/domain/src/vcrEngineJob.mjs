@@ -106,7 +106,12 @@ export const VCR_ENGINE_METHODS = Object.freeze({
   // calibration, the correlation with the outcome and the PROCOVA savings under the discounts. The equation is the shape model.prognostic_apply takes. `ranger` and `survival` are the runtime; the checks are closed forms and known-truth simulations.
   'model.prognostic_train': { version: '1.0.0', endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['coxph, glm and lm refits on the held-out folds by hand', 'design.procova for the sample-size ratios', 'a known-truth simulation of the out-of-fold discrimination, calibration and correlation']), modelTier: 'data' },
   // A population-level disease-progression simulator from a published model family (algorithm round P4): linear, exponential, logistic or Emax progression, treatment as the clock slowed, power by simulation with its error. No disease is built in.
-  'patients.progression': { version: '1.0.0', endpoints: frozen(['continuous']), crossChecks: frozen(['the moments of the outcome at every visit in closed form', 'the closed-form power of the same test (noncentral t with Welch degrees of freedom)']), modelTier: 'scenario' },
+  // 1.1.0 (plan T06, 2026-11-07): the `beta_logit` family, the CAMD/C-Path ADAS-cog 11 drug-disease-trial model of mild and moderate Alzheimer disease executed with the posterior its authors released in
+  // adsim 3.0 (a parameter file in the engine); a stated symptomatic and/or disease-modifying effect, placebo, dropout and three kinds of uncertainty. The four other families are unchanged.
+  'patients.progression': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['continuous']), crossChecks: frozen(['the moments of the outcome at every visit in closed form', 'the closed-form power of the same test (noncentral t with Welch degrees of freedom)',
+    'EMA qualification opinion 2013 Table 7: the covariate model (ApoE4 alleles, sex, age by genotype)', 'EMA qualification opinion 2013 Table 9: the expected ADAS-cog 11 intercept by baseline MMSE in a new study',
+    'EMA qualification opinion 2013 Table 11: the expected one-year change by baseline MMSE, sex and ApoE4 in a new study', 'EMA qualification opinion 2013 Table 8 medians of dropout, under a stated covariate reading',
+    'adsim 3.0 training manual: three printed numbers (Listings 2.6, 2.8 and 4.6)', 'closed forms of the beta observation, the Bateman placebo integral and the symptomatic and disease-modifying terms']), modelTier: 'scenario' },
   'model.prognostic_apply': { version: '1.2.0', compatibleVersions: frozen(['1.0.0', '1.1.0']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['closed-form published equation evaluation']), modelTier: null },
   'profile.snapshot': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen([]), crossChecks: frozen(['every printed figure recomputed from its definition (means, spreads, type-7 quantiles, counts)']), modelTier: null },
   'cohort.build': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen([]), crossChecks: frozen([]), modelTier: null },
@@ -925,6 +930,8 @@ function legacyDesignVersionMatches(job) {
     if ((job.method === 'population.synthpop' || job.method === 'population.quality') && usesQualityBeyond1_0_0(job.scenario) && !versionAtLeast(job.methodVersion, '1.1.0')) return false
     // and evidence.pool 1.1.0 the informative prior for the heterogeneity
     if (job.method === 'evidence.pool' && job.scenario?.tauPrior !== undefined) return false
+    // and patients.progression 1.1.0 the beta_logit family and its analysis of covariance
+    if (job.method === 'patients.progression' && (job.scenario?.model?.family === 'beta_logit' || job.scenario?.analysis?.kind === 'ancova') && !versionAtLeast(job.methodVersion, '1.1.0')) return false
     // and the weighting comparators 1.4.0 (AIPW 1.3.0) the propensity trimming, and AIPW 1.3.0 the time-to-event outcome
     const trimSince = /** @type {Record<string, string>} */ (TRIMMING_SINCE)[job.method]
     if (trimSince && job.scenario?.trim !== undefined && !versionAtLeast(job.methodVersion, trimSince)) return false

@@ -30,15 +30,24 @@
       "modelTier": "data"
     },
     "patients.progression": {
-      "version": "1.0.0",
+      "version": "1.1.0",
       "endpoints": [
         "continuous"
       ],
       "crossChecks": [
         "the moments of the outcome at every visit in closed form",
-        "the closed-form power of the same test (noncentral t with Welch degrees of freedom)"
+        "the closed-form power of the same test (noncentral t with Welch degrees of freedom)",
+        "EMA qualification opinion 2013 Table 7: the covariate model (ApoE4 alleles, sex, age by genotype)",
+        "EMA qualification opinion 2013 Table 9: the expected ADAS-cog 11 intercept by baseline MMSE in a new study",
+        "EMA qualification opinion 2013 Table 11: the expected one-year change by baseline MMSE, sex and ApoE4 in a new study",
+        "EMA qualification opinion 2013 Table 8 medians of dropout, under a stated covariate reading",
+        "adsim 3.0 training manual: three printed numbers (Listings 2.6, 2.8 and 4.6)",
+        "closed forms of the beta observation, the Bateman placebo integral and the symptomatic and disease-modifying terms"
       ],
-      "modelTier": "scenario"
+      "modelTier": "scenario",
+      "compatibleVersions": [
+        "1.0.0"
+      ]
     },
     "model.prognostic_apply": {
       "version": "1.2.0",
@@ -1790,7 +1799,8 @@
                 "linear",
                 "exponential",
                 "logistic",
-                "emax"
+                "emax",
+                "beta_logit"
               ],
               "req": true
             },
@@ -1845,6 +1855,12 @@
                   "t": "string",
                   "maxLength": 300
                 }
+              },
+              "when": {
+                "path": "model.family",
+                "notIn": [
+                  "beta_logit"
+                ]
               },
               "req": true
             },
@@ -1995,6 +2011,47 @@
                 ]
               },
               "req": true
+            },
+            "parameterSet": {
+              "t": "object",
+              "fields": {
+                "id": {
+                  "t": "string",
+                  "values": [
+                    "camd-adas-cog-11"
+                  ],
+                  "req": true
+                },
+                "version": {
+                  "t": "string",
+                  "values": [
+                    "adsim-3.0"
+                  ],
+                  "req": true
+                }
+              },
+              "when": {
+                "path": "model.family",
+                "in": [
+                  "beta_logit"
+                ]
+              },
+              "req": true
+            },
+            "uncertainty": {
+              "t": "string",
+              "values": [
+                "new_study",
+                "typical_study",
+                "posterior_draws"
+              ],
+              "default": "new_study",
+              "when": {
+                "path": "model.family",
+                "in": [
+                  "beta_logit"
+                ]
+              }
             }
           },
           "req": true
@@ -2050,6 +2107,12 @@
               "req": true
             }
           },
+          "when": {
+            "path": "model.family",
+            "notIn": [
+              "beta_logit"
+            ]
+          },
           "req": true
         },
         "residualSd": {
@@ -2073,6 +2136,12 @@
               "t": "string",
               "maxLength": 300
             }
+          },
+          "when": {
+            "path": "model.family",
+            "notIn": [
+              "beta_logit"
+            ]
           },
           "req": true
         },
@@ -2098,6 +2167,210 @@
               "t": "string",
               "maxLength": 300
             }
+          },
+          "when": {
+            "path": "model.family",
+            "notIn": [
+              "beta_logit"
+            ]
+          }
+        },
+        "population": {
+          "t": "object",
+          "fields": {
+            "mmseRange": {
+              "t": "object",
+              "fields": {
+                "value": {
+                  "t": "array",
+                  "items": {
+                    "t": "number",
+                    "min": 0,
+                    "max": 30
+                  },
+                  "min": 2,
+                  "max": 2,
+                  "req": true
+                },
+                "basis": {
+                  "t": "string",
+                  "values": [
+                    "literature",
+                    "assumed",
+                    "data"
+                  ],
+                  "req": true
+                },
+                "citation": {
+                  "t": "string",
+                  "maxLength": 300
+                }
+              }
+            },
+            "ageBounds": {
+              "t": "object",
+              "fields": {
+                "value": {
+                  "t": "array",
+                  "items": {
+                    "t": "number",
+                    "min": 0,
+                    "max": 130
+                  },
+                  "min": 2,
+                  "max": 2,
+                  "req": true
+                },
+                "basis": {
+                  "t": "string",
+                  "values": [
+                    "literature",
+                    "assumed",
+                    "data"
+                  ],
+                  "req": true
+                },
+                "citation": {
+                  "t": "string",
+                  "maxLength": 300
+                }
+              }
+            },
+            "apoe4": {
+              "t": "object",
+              "fields": {
+                "value": {
+                  "t": "array",
+                  "items": {
+                    "t": "number",
+                    "min": 0,
+                    "max": 1
+                  },
+                  "min": 3,
+                  "max": 3,
+                  "req": true
+                },
+                "basis": {
+                  "t": "string",
+                  "values": [
+                    "literature",
+                    "assumed",
+                    "data"
+                  ],
+                  "req": true
+                },
+                "citation": {
+                  "t": "string",
+                  "maxLength": 300
+                }
+              }
+            },
+            "femaleShare": {
+              "t": "object",
+              "fields": {
+                "value": {
+                  "t": "number",
+                  "min": 0,
+                  "max": 1,
+                  "req": true
+                },
+                "basis": {
+                  "t": "string",
+                  "values": [
+                    "literature",
+                    "assumed",
+                    "data"
+                  ],
+                  "req": true
+                },
+                "citation": {
+                  "t": "string",
+                  "maxLength": 300
+                }
+              }
+            },
+            "ageMeanByApoe4": {
+              "t": "object",
+              "fields": {
+                "value": {
+                  "t": "array",
+                  "items": {
+                    "t": "number",
+                    "gt": 0,
+                    "max": 130
+                  },
+                  "min": 3,
+                  "max": 3,
+                  "req": true
+                },
+                "basis": {
+                  "t": "string",
+                  "values": [
+                    "literature",
+                    "assumed",
+                    "data"
+                  ],
+                  "req": true
+                },
+                "citation": {
+                  "t": "string",
+                  "maxLength": 300
+                }
+              }
+            },
+            "ageSd": {
+              "t": "object",
+              "fields": {
+                "value": {
+                  "t": "number",
+                  "gt": 0,
+                  "req": true
+                },
+                "basis": {
+                  "t": "string",
+                  "values": [
+                    "literature",
+                    "assumed",
+                    "data"
+                  ],
+                  "req": true
+                },
+                "citation": {
+                  "t": "string",
+                  "maxLength": 300
+                }
+              }
+            }
+          },
+          "when": {
+            "path": "model.family",
+            "in": [
+              "beta_logit"
+            ]
+          }
+        },
+        "placebo": {
+          "t": "boolean",
+          "default": true,
+          "when": {
+            "path": "model.family",
+            "in": [
+              "beta_logit"
+            ]
+          }
+        },
+        "dropoutModel": {
+          "t": "string",
+          "values": [
+            "parameter_set",
+            "none"
+          ],
+          "default": "parameter_set",
+          "when": {
+            "path": "model.family",
+            "in": [
+              "beta_logit"
+            ]
           }
         },
         "treatment": {
@@ -2126,10 +2399,203 @@
                   "maxLength": 300
                 }
               },
+              "when": {
+                "path": "model.family",
+                "notIn": [
+                  "beta_logit"
+                ]
+              },
               "req": true
+            },
+            "symptomatic": {
+              "t": "object",
+              "fields": {
+                "pointsAt": {
+                  "t": "object",
+                  "fields": {
+                    "value": {
+                      "t": "number",
+                      "gt": -70,
+                      "lt": 70,
+                      "req": true
+                    },
+                    "basis": {
+                      "t": "string",
+                      "values": [
+                        "literature",
+                        "assumed",
+                        "data"
+                      ],
+                      "req": true
+                    },
+                    "citation": {
+                      "t": "string",
+                      "maxLength": 300
+                    }
+                  }
+                },
+                "atWeek": {
+                  "t": "number",
+                  "gt": 0
+                },
+                "referenceAdas": {
+                  "t": "number",
+                  "gt": 0,
+                  "lt": 70
+                },
+                "logitEmax": {
+                  "t": "object",
+                  "fields": {
+                    "value": {
+                      "t": "number",
+                      "req": true
+                    },
+                    "basis": {
+                      "t": "string",
+                      "values": [
+                        "literature",
+                        "assumed",
+                        "data"
+                      ],
+                      "req": true
+                    },
+                    "citation": {
+                      "t": "string",
+                      "maxLength": 300
+                    }
+                  }
+                },
+                "et50Weeks": {
+                  "t": "object",
+                  "fields": {
+                    "value": {
+                      "t": "number",
+                      "gt": 0,
+                      "req": true
+                    },
+                    "basis": {
+                      "t": "string",
+                      "values": [
+                        "literature",
+                        "assumed",
+                        "data"
+                      ],
+                      "req": true
+                    },
+                    "citation": {
+                      "t": "string",
+                      "maxLength": 300
+                    }
+                  },
+                  "req": true
+                },
+                "washoutHalfLifeWeeks": {
+                  "t": "object",
+                  "fields": {
+                    "value": {
+                      "t": "number",
+                      "gt": 0,
+                      "req": true
+                    },
+                    "basis": {
+                      "t": "string",
+                      "values": [
+                        "literature",
+                        "assumed",
+                        "data"
+                      ],
+                      "req": true
+                    },
+                    "citation": {
+                      "t": "string",
+                      "maxLength": 300
+                    }
+                  }
+                }
+              },
+              "exactlyOne": [
+                [
+                  "pointsAt",
+                  "logitEmax"
+                ]
+              ],
+              "requires": {
+                "pointsAt": [
+                  "atWeek",
+                  "referenceAdas"
+                ]
+              },
+              "when": {
+                "path": "model.family",
+                "in": [
+                  "beta_logit"
+                ]
+              }
+            },
+            "diseaseModifying": {
+              "t": "object",
+              "fields": {
+                "fraction": {
+                  "t": "object",
+                  "fields": {
+                    "value": {
+                      "t": "number",
+                      "min": 0,
+                      "lt": 1,
+                      "req": true
+                    },
+                    "basis": {
+                      "t": "string",
+                      "values": [
+                        "literature",
+                        "assumed",
+                        "data"
+                      ],
+                      "req": true
+                    },
+                    "citation": {
+                      "t": "string",
+                      "maxLength": 300
+                    }
+                  },
+                  "req": true
+                }
+              },
+              "when": {
+                "path": "model.family",
+                "in": [
+                  "beta_logit"
+                ]
+              }
+            },
+            "doseBegin": {
+              "t": "number",
+              "min": 0,
+              "default": 0,
+              "when": {
+                "path": "model.family",
+                "in": [
+                  "beta_logit"
+                ]
+              }
+            },
+            "doseEnd": {
+              "t": "number",
+              "gt": 0,
+              "when": {
+                "path": "model.family",
+                "in": [
+                  "beta_logit"
+                ]
+              }
             }
           },
-          "req": true
+          "reqWhen": {
+            "path": "model.family",
+            "notIn": [
+              "beta_logit"
+            ]
+          }
         },
         "analysis": {
           "t": "object",
@@ -2138,7 +2604,8 @@
               "t": "string",
               "values": [
                 "change",
-                "slope"
+                "slope",
+                "ancova"
               ],
               "default": "change"
             },

@@ -7100,6 +7100,128 @@
       }
     },
     {
+      "name": "generate_progression #5: beta_logit, the CAMD ADAS-cog 11 Alzheimer model, a 30% disease-modifying effect over 78 weeks",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "generate_progression",
+        "method": "patients.progression",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "continuous",
+            "unit": "points"
+          },
+          "design": {
+            "nTreat": 200,
+            "nControl": 200
+          },
+          "timeUnit": "weeks",
+          "visits": [
+            0,
+            13,
+            26,
+            52,
+            78
+          ],
+          "model": {
+            "family": "beta_logit",
+            "parameterSet": {
+              "id": "camd-adas-cog-11",
+              "version": "adsim-3.0"
+            }
+          },
+          "treatment": {
+            "diseaseModifying": {
+              "fraction": {
+                "value": 0.3,
+                "basis": "assumed"
+              }
+            }
+          }
+        },
+        "inputs": []
+      }
+    },
+    {
+      "name": "generate_progression #6: beta_logit, a symptomatic effect stated in points, the typical study, an analysis of covariance",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "generate_progression",
+        "method": "patients.progression",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "continuous",
+            "unit": "points"
+          },
+          "design": {
+            "nTreat": 200,
+            "nControl": 200
+          },
+          "timeUnit": "weeks",
+          "visits": [
+            0,
+            13,
+            26,
+            52,
+            78
+          ],
+          "model": {
+            "family": "beta_logit",
+            "parameterSet": {
+              "id": "camd-adas-cog-11",
+              "version": "adsim-3.0"
+            },
+            "uncertainty": "typical_study"
+          },
+          "treatment": {
+            "symptomatic": {
+              "pointsAt": {
+                "value": -2.5,
+                "basis": "assumed"
+              },
+              "atWeek": 24,
+              "referenceAdas": 25,
+              "et50Weeks": {
+                "value": 1,
+                "basis": "assumed"
+              },
+              "washoutHalfLifeWeeks": {
+                "value": 1,
+                "basis": "assumed"
+              }
+            }
+          },
+          "population": {
+            "mmseRange": {
+              "value": [
+                14,
+                26
+              ],
+              "basis": "assumed"
+            },
+            "femaleShare": {
+              "value": 0.6,
+              "basis": "data"
+            }
+          },
+          "analysis": {
+            "kind": "ancova",
+            "visit": 26
+          }
+        },
+        "inputs": []
+      }
+    },
+    {
       "name": "non-inferiority: a lower adverse-event rate is better, the margin is above the control rate",
       "job": {
         "jobId": "job_1",
@@ -30033,6 +30155,352 @@
       "expected": [
         "scenario_value_invalid@scenario.endpoint.type",
         "endpoint_not_supported@scenario.endpoint.type"
+      ]
+    },
+    {
+      "name": "a beta_logit progression labelled 1.0.0, which did not have it",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "generate_progression",
+        "method": "patients.progression",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "continuous",
+            "unit": "points"
+          },
+          "design": {
+            "nTreat": 200,
+            "nControl": 200
+          },
+          "timeUnit": "weeks",
+          "visits": [
+            0,
+            13,
+            26,
+            52,
+            78
+          ],
+          "model": {
+            "family": "beta_logit",
+            "parameterSet": {
+              "id": "camd-adas-cog-11",
+              "version": "adsim-3.0"
+            }
+          },
+          "treatment": {
+            "diseaseModifying": {
+              "fraction": {
+                "value": 0.3,
+                "basis": "assumed"
+              }
+            }
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "method_version_mismatch@methodVersion"
+      ]
+    },
+    {
+      "name": "a linear progression analysed by covariance under the 1.0.0 label",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "generate_progression",
+        "method": "patients.progression",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "continuous",
+            "unit": "points"
+          },
+          "design": {
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "timeUnit": "months",
+          "visits": [
+            0,
+            6,
+            12,
+            18
+          ],
+          "model": {
+            "family": "linear",
+            "slope": {
+              "value": 0.12,
+              "basis": "literature",
+              "citation": "a published progression model"
+            },
+            "betweenPersonSd": {
+              "value": 0.08,
+              "basis": "literature"
+            }
+          },
+          "baseline": {
+            "mean": {
+              "value": 3,
+              "basis": "data"
+            },
+            "sd": {
+              "value": 1.2,
+              "basis": "data"
+            }
+          },
+          "residualSd": {
+            "value": 0.7,
+            "basis": "literature"
+          },
+          "treatment": {
+            "slowing": {
+              "value": 0.25,
+              "basis": "assumed"
+            }
+          },
+          "analysis": {
+            "kind": "ancova",
+            "visit": 18
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "method_version_mismatch@methodVersion"
+      ]
+    },
+    {
+      "name": "a beta_logit progression that states the four families' residual SD",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "generate_progression",
+        "method": "patients.progression",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "continuous",
+            "unit": "points"
+          },
+          "design": {
+            "nTreat": 200,
+            "nControl": 200
+          },
+          "timeUnit": "weeks",
+          "visits": [
+            0,
+            13,
+            26,
+            52,
+            78
+          ],
+          "model": {
+            "family": "beta_logit",
+            "parameterSet": {
+              "id": "camd-adas-cog-11",
+              "version": "adsim-3.0"
+            }
+          },
+          "treatment": {
+            "diseaseModifying": {
+              "fraction": {
+                "value": 0.3,
+                "basis": "assumed"
+              }
+            }
+          },
+          "residualSd": {
+            "value": 0.7,
+            "basis": "assumed"
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_field_unknown@scenario.residualSd"
+      ]
+    },
+    {
+      "name": "a beta_logit progression of a parameter set the engine does not have",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "generate_progression",
+        "method": "patients.progression",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "continuous",
+            "unit": "points"
+          },
+          "design": {
+            "nTreat": 200,
+            "nControl": 200
+          },
+          "timeUnit": "weeks",
+          "visits": [
+            0,
+            13,
+            26,
+            52,
+            78
+          ],
+          "model": {
+            "family": "beta_logit",
+            "parameterSet": {
+              "id": "ito-2010",
+              "version": "adsim-3.0"
+            }
+          },
+          "treatment": {
+            "diseaseModifying": {
+              "fraction": {
+                "value": 0.3,
+                "basis": "assumed"
+              }
+            }
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.model.parameterSet.id"
+      ]
+    },
+    {
+      "name": "a beta_logit symptomatic effect stated twice",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "generate_progression",
+        "method": "patients.progression",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "continuous",
+            "unit": "points"
+          },
+          "design": {
+            "nTreat": 200,
+            "nControl": 200
+          },
+          "timeUnit": "weeks",
+          "visits": [
+            0,
+            13,
+            26,
+            52,
+            78
+          ],
+          "model": {
+            "family": "beta_logit",
+            "parameterSet": {
+              "id": "camd-adas-cog-11",
+              "version": "adsim-3.0"
+            }
+          },
+          "treatment": {
+            "symptomatic": {
+              "pointsAt": {
+                "value": -2.5,
+                "basis": "assumed"
+              },
+              "atWeek": 24,
+              "referenceAdas": 25,
+              "et50Weeks": {
+                "value": 1,
+                "basis": "assumed"
+              },
+              "washoutHalfLifeWeeks": {
+                "value": 1,
+                "basis": "assumed"
+              },
+              "logitEmax": {
+                "value": -0.17,
+                "basis": "assumed"
+              }
+            }
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.treatment.symptomatic.logitEmax"
+      ]
+    },
+    {
+      "name": "a beta_logit MMSE range of one score",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "generate_progression",
+        "method": "patients.progression",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "continuous",
+            "unit": "points"
+          },
+          "design": {
+            "nTreat": 200,
+            "nControl": 200
+          },
+          "timeUnit": "weeks",
+          "visits": [
+            0,
+            13,
+            26,
+            52,
+            78
+          ],
+          "model": {
+            "family": "beta_logit",
+            "parameterSet": {
+              "id": "camd-adas-cog-11",
+              "version": "adsim-3.0"
+            }
+          },
+          "treatment": {
+            "diseaseModifying": {
+              "fraction": {
+                "value": 0.3,
+                "basis": "assumed"
+              }
+            }
+          },
+          "population": {
+            "mmseRange": {
+              "value": [
+                21
+              ],
+              "basis": "assumed"
+            }
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.population.mmseRange.value"
       ]
     },
     {

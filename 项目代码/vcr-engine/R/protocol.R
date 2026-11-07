@@ -1321,6 +1321,8 @@ vcr_job_at_least <- function(job, from) {
     if (job[["method"]] %in% c("population.synthpop","population.quality") && .vcrp_uses_quality_beyond_1_0_0(job$scenario) && utils::compareVersion(job$methodVersion,"1.1.0")<0) return(FALSE)
     # and evidence.pool 1.1.0 the informative prior for the heterogeneity
     if (identical(job[["method"]],"evidence.pool") && !is.null(.vcrp_get(job$scenario,"tauPrior"))) return(FALSE)
+    # and patients.progression 1.1.0 the beta_logit family and its analysis of covariance
+    if (identical(job[["method"]],"patients.progression") && (identical(.vcrp_get(.vcrp_get(job$scenario,"model"),"family"),"beta_logit") || identical(.vcrp_get(.vcrp_get(job$scenario,"analysis"),"kind"),"ancova")) && utils::compareVersion(job$methodVersion,"1.1.0")<0) return(FALSE)
     # and the weighting comparators 1.4.0 (AIPW 1.3.0) the propensity trimming, and AIPW 1.3.0 the time-to-event outcome
     trim_since <- c("comparator.propensity_weight" = "1.4.0", "comparator.weighted_cox" = "1.4.0", "comparator.aipw" = "1.3.0")[job[["method"]]]
     if (!is.na(trim_since) && !is.null(.vcrp_get(job$scenario,"trim")) && utils::compareVersion(job$methodVersion, trim_since) < 0) return(FALSE)

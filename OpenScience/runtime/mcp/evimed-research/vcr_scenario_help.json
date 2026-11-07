@@ -205,7 +205,9 @@
       "endpoints": ["continuous"],
       "notes": [
         "A population-level simulator of the average course of a continuous score and how widely people scatter around it, from a model family the run takes from a publication: linear (slope), exponential (slope and acceleration), logistic (amplitude, midpoint, steepness) or emax (amplitude, halfTime). Every number is { value, basis: literature | assumed | data, citation? }: the source of a value is a premise the page shows, and nothing is built in: no disease, no parameter. The first visit is time zero, the baseline. The between-person spread (betweenPersonSd) is on the progression amplitude, correlated with the baseline by `correlation` (default 0).",
-        "The treatment slows the clock: a treated person follows the same curve with time scaled by 1 - slowing. The result is the exact mean curve and spread by arm at every visit, and the power of the analysis (a Welch t-test of the change from baseline to `visit`, or of each person's least-squares slope over all the visits) by simulation with its Monte Carlo error, with the closed-form power of the same test beside it. With no slowing the same number is the type I error. It is a population-level curve and not a prediction for a person."
+        "The treatment slows the clock: a treated person follows the same curve with time scaled by 1 - slowing. The result is the exact mean curve and spread by arm at every visit, and the power of the analysis (a Welch t-test of the change from baseline to `visit`, or of each person's least-squares slope over all the visits) by simulation with its Monte Carlo error, with the closed-form power of the same test beside it. With no slowing the same number is the type I error. It is a population-level curve and not a prediction for a person.",
+        "family \"beta_logit\" (1.1.0) is a published model whose numbers are in the engine: parameterSet camd-adas-cog-11 / adsim-3.0 is the CAMD drug-disease-trial model of mild and moderate Alzheimer disease on ADAS-cog 11 (0 to 70, higher is worse), run with the 1,600 posterior draws its authors released; timeUnit must be \"weeks\" and the first visit 0. State no slope, spread, baseline, residual or slowing: those are the other families'. population overrides the entry (mmseRange, default 16 to 26) and the covariate model (apoe4 shares for 0/1/2 alleles, femaleShare, ageMeanByApoe4, ageSd, ageBounds), each with its basis. placebo (default true) and dropoutModel (\"parameter_set\" or \"none\") switch those parts of the model.",
+        "The drug is a hypothesis the run states, never a prediction for a compound: treatment.symptomatic is a difference in points (treated less untreated, negative is better) at atWeek for a person at referenceAdas, or a logitEmax, with et50Weeks and, when doseEnd is before the last visit, washoutHalfLifeWeeks; treatment.diseaseModifying.fraction is the share of the study's mean decline removed while on drug (kept after the dose ends). uncertainty: \"new_study\" draws one study per simulated trial (default), \"typical_study\" none, \"posterior_draws\" a posterior draw and then a study. analysis.kind \"change\" (Welch) or \"ancova\" (change on arm and baseline), among the people still observed at the visit. The curves are calculated for a typical study; the power is simulated. Report the premises the result lists (the parameters reproduce the EMA 2013 qualification opinion Tables 7, 9 and 11, not Table 10 or Figures 15-16; no regulatory status transfers); never recompute a number."
       ],
       "rows": [
         {"path":"endpoint","type":"object","required":true},
@@ -217,7 +219,7 @@
         {"path":"timeUnit","type":"string","values":["days","weeks","months","years"],"required":true,"fieldRole":"defaultable"},
         {"path":"visits","type":"list","count":{"min":3,"max":40},"items":{"type":"number","min":0},"increasing":true,"required":true,"fieldRole":"research_fact"},
         {"path":"model","type":"object","required":true},
-        {"path":"model.family","type":"string","values":["linear","exponential","logistic","emax"],"required":true,"fieldRole":"defaultable"},
+        {"path":"model.family","type":"string","values":["linear","exponential","logistic","emax","beta_logit"],"required":true,"fieldRole":"defaultable"},
         {"path":"model.slope","type":"object","required":true,"when":[{"path":"model.family","in":["linear","exponential"]}]},
         {"path":"model.slope.value","type":"number","required":true,"when":[{"path":"model.family","in":["linear","exponential"]}],"fieldRole":"research_fact"},
         {
@@ -229,10 +231,24 @@
           "fieldRole": "defaultable"
         },
         {"path":"model.slope.citation","type":"string","maxLength":300,"when":[{"path":"model.family","in":["linear","exponential"]}],"fieldRole":"defaultable"},
-        {"path":"model.betweenPersonSd","type":"object","required":true},
-        {"path":"model.betweenPersonSd.value","type":"number","min":0,"required":true,"fieldRole":"research_fact"},
-        {"path":"model.betweenPersonSd.basis","type":"string","values":["literature","assumed","data"],"required":true,"fieldRole":"defaultable"},
-        {"path":"model.betweenPersonSd.citation","type":"string","maxLength":300,"fieldRole":"defaultable"},
+        {"path":"model.betweenPersonSd","type":"object","required":true,"when":[{"path":"model.family","notIn":["beta_logit"]}]},
+        {
+          "path": "model.betweenPersonSd.value",
+          "type": "number",
+          "min": 0,
+          "required": true,
+          "when": [{"path":"model.family","notIn":["beta_logit"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "model.betweenPersonSd.basis",
+          "type": "string",
+          "values": ["literature","assumed","data"],
+          "required": true,
+          "when": [{"path":"model.family","notIn":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {"path":"model.betweenPersonSd.citation","type":"string","maxLength":300,"when":[{"path":"model.family","notIn":["beta_logit"]}],"fieldRole":"defaultable"},
         {"path":"model.acceleration","type":"object","required":true,"when":[{"path":"model.family","in":["exponential"]}]},
         {"path":"model.acceleration.value","type":"number","required":true,"when":[{"path":"model.family","in":["exponential"]}],"fieldRole":"research_fact"},
         {
@@ -288,32 +304,483 @@
           "fieldRole": "defaultable"
         },
         {"path":"model.halfTime.citation","type":"string","maxLength":300,"when":[{"path":"model.family","in":["emax"]}],"fieldRole":"defaultable"},
-        {"path":"baseline","type":"object","required":true},
-        {"path":"baseline.mean","type":"object","required":true},
-        {"path":"baseline.mean.value","type":"number","required":true,"fieldRole":"research_fact"},
-        {"path":"baseline.mean.basis","type":"string","values":["literature","assumed","data"],"required":true,"fieldRole":"defaultable"},
-        {"path":"baseline.mean.citation","type":"string","maxLength":300,"fieldRole":"defaultable"},
-        {"path":"baseline.sd","type":"object","required":true},
-        {"path":"baseline.sd.value","type":"number","min":0,"required":true,"fieldRole":"research_fact"},
-        {"path":"baseline.sd.basis","type":"string","values":["literature","assumed","data"],"required":true,"fieldRole":"defaultable"},
-        {"path":"baseline.sd.citation","type":"string","maxLength":300,"fieldRole":"defaultable"},
-        {"path":"residualSd","type":"object","required":true},
-        {"path":"residualSd.value","type":"number","min":0,"required":true,"fieldRole":"research_fact"},
-        {"path":"residualSd.basis","type":"string","values":["literature","assumed","data"],"required":true,"fieldRole":"defaultable"},
-        {"path":"residualSd.citation","type":"string","maxLength":300,"fieldRole":"defaultable"},
-        {"path":"correlation","type":"object"},
-        {"path":"correlation.value","type":"number","min":-1,"max":1,"required":true,"within":"correlation","fieldRole":"research_fact"},
-        {"path":"correlation.basis","type":"string","values":["literature","assumed","data"],"required":true,"within":"correlation","fieldRole":"defaultable"},
-        {"path":"correlation.citation","type":"string","maxLength":300,"within":"correlation","fieldRole":"defaultable"},
-        {"path":"treatment","type":"object","required":true},
-        {"path":"treatment.slowing","type":"object","required":true},
-        {"path":"treatment.slowing.value","type":"number","min":0,"lt":1,"required":true,"fieldRole":"research_fact"},
-        {"path":"treatment.slowing.basis","type":"string","values":["literature","assumed","data"],"required":true,"fieldRole":"defaultable"},
-        {"path":"treatment.slowing.citation","type":"string","maxLength":300,"fieldRole":"defaultable"},
+        {"path":"model.parameterSet","type":"object","required":true,"when":[{"path":"model.family","in":["beta_logit"]}]},
+        {
+          "path": "model.parameterSet.id",
+          "type": "string",
+          "values": ["camd-adas-cog-11"],
+          "required": true,
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "model.parameterSet.version",
+          "type": "string",
+          "values": ["adsim-3.0"],
+          "required": true,
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "model.uncertainty",
+          "type": "string",
+          "values": ["new_study","typical_study","posterior_draws"],
+          "default": "new_study",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {"path":"baseline","type":"object","required":true,"when":[{"path":"model.family","notIn":["beta_logit"]}]},
+        {"path":"baseline.mean","type":"object","required":true,"when":[{"path":"model.family","notIn":["beta_logit"]}]},
+        {"path":"baseline.mean.value","type":"number","required":true,"when":[{"path":"model.family","notIn":["beta_logit"]}],"fieldRole":"research_fact"},
+        {
+          "path": "baseline.mean.basis",
+          "type": "string",
+          "values": ["literature","assumed","data"],
+          "required": true,
+          "when": [{"path":"model.family","notIn":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {"path":"baseline.mean.citation","type":"string","maxLength":300,"when":[{"path":"model.family","notIn":["beta_logit"]}],"fieldRole":"defaultable"},
+        {"path":"baseline.sd","type":"object","required":true,"when":[{"path":"model.family","notIn":["beta_logit"]}]},
+        {"path":"baseline.sd.value","type":"number","min":0,"required":true,"when":[{"path":"model.family","notIn":["beta_logit"]}],"fieldRole":"research_fact"},
+        {
+          "path": "baseline.sd.basis",
+          "type": "string",
+          "values": ["literature","assumed","data"],
+          "required": true,
+          "when": [{"path":"model.family","notIn":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {"path":"baseline.sd.citation","type":"string","maxLength":300,"when":[{"path":"model.family","notIn":["beta_logit"]}],"fieldRole":"defaultable"},
+        {"path":"residualSd","type":"object","required":true,"when":[{"path":"model.family","notIn":["beta_logit"]}]},
+        {"path":"residualSd.value","type":"number","min":0,"required":true,"when":[{"path":"model.family","notIn":["beta_logit"]}],"fieldRole":"research_fact"},
+        {
+          "path": "residualSd.basis",
+          "type": "string",
+          "values": ["literature","assumed","data"],
+          "required": true,
+          "when": [{"path":"model.family","notIn":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {"path":"residualSd.citation","type":"string","maxLength":300,"when":[{"path":"model.family","notIn":["beta_logit"]}],"fieldRole":"defaultable"},
+        {"path":"correlation","type":"object","when":[{"path":"model.family","notIn":["beta_logit"]}]},
+        {
+          "path": "correlation.value",
+          "type": "number",
+          "min": -1,
+          "max": 1,
+          "required": true,
+          "within": "correlation",
+          "when": [{"path":"model.family","notIn":["beta_logit"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "correlation.basis",
+          "type": "string",
+          "values": ["literature","assumed","data"],
+          "required": true,
+          "within": "correlation",
+          "when": [{"path":"model.family","notIn":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "correlation.citation",
+          "type": "string",
+          "maxLength": 300,
+          "within": "correlation",
+          "when": [{"path":"model.family","notIn":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {"path":"population","type":"object","when":[{"path":"model.family","in":["beta_logit"]}]},
+        {"path":"population.mmseRange","type":"object","within":"population","when":[{"path":"model.family","in":["beta_logit"]}]},
+        {
+          "path": "population.mmseRange.value",
+          "type": "list",
+          "count": {"min":2,"max":2},
+          "items": {"type":"number","min":0,"max":30},
+          "required": true,
+          "within": "population.mmseRange",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "population.mmseRange.basis",
+          "type": "string",
+          "values": ["literature","assumed","data"],
+          "required": true,
+          "within": "population.mmseRange",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "population.mmseRange.citation",
+          "type": "string",
+          "maxLength": 300,
+          "within": "population.mmseRange",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {"path":"population.ageBounds","type":"object","within":"population","when":[{"path":"model.family","in":["beta_logit"]}]},
+        {
+          "path": "population.ageBounds.value",
+          "type": "list",
+          "count": {"min":2,"max":2},
+          "items": {"type":"number","min":0,"max":130},
+          "required": true,
+          "within": "population.ageBounds",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "population.ageBounds.basis",
+          "type": "string",
+          "values": ["literature","assumed","data"],
+          "required": true,
+          "within": "population.ageBounds",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "population.ageBounds.citation",
+          "type": "string",
+          "maxLength": 300,
+          "within": "population.ageBounds",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {"path":"population.apoe4","type":"object","within":"population","when":[{"path":"model.family","in":["beta_logit"]}]},
+        {
+          "path": "population.apoe4.value",
+          "type": "list",
+          "count": {"min":3,"max":3},
+          "items": {"type":"number","min":0,"max":1},
+          "required": true,
+          "within": "population.apoe4",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "population.apoe4.basis",
+          "type": "string",
+          "values": ["literature","assumed","data"],
+          "required": true,
+          "within": "population.apoe4",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "population.apoe4.citation",
+          "type": "string",
+          "maxLength": 300,
+          "within": "population.apoe4",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {"path":"population.femaleShare","type":"object","within":"population","when":[{"path":"model.family","in":["beta_logit"]}]},
+        {
+          "path": "population.femaleShare.value",
+          "type": "number",
+          "min": 0,
+          "max": 1,
+          "required": true,
+          "within": "population.femaleShare",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "population.femaleShare.basis",
+          "type": "string",
+          "values": ["literature","assumed","data"],
+          "required": true,
+          "within": "population.femaleShare",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "population.femaleShare.citation",
+          "type": "string",
+          "maxLength": 300,
+          "within": "population.femaleShare",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {"path":"population.ageMeanByApoe4","type":"object","within":"population","when":[{"path":"model.family","in":["beta_logit"]}]},
+        {
+          "path": "population.ageMeanByApoe4.value",
+          "type": "list",
+          "count": {"min":3,"max":3},
+          "items": {"type":"number","max":130,"gt":0},
+          "required": true,
+          "within": "population.ageMeanByApoe4",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "population.ageMeanByApoe4.basis",
+          "type": "string",
+          "values": ["literature","assumed","data"],
+          "required": true,
+          "within": "population.ageMeanByApoe4",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "population.ageMeanByApoe4.citation",
+          "type": "string",
+          "maxLength": 300,
+          "within": "population.ageMeanByApoe4",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {"path":"population.ageSd","type":"object","within":"population","when":[{"path":"model.family","in":["beta_logit"]}]},
+        {
+          "path": "population.ageSd.value",
+          "type": "number",
+          "gt": 0,
+          "required": true,
+          "within": "population.ageSd",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "population.ageSd.basis",
+          "type": "string",
+          "values": ["literature","assumed","data"],
+          "required": true,
+          "within": "population.ageSd",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "population.ageSd.citation",
+          "type": "string",
+          "maxLength": 300,
+          "within": "population.ageSd",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {"path":"placebo","type":"boolean","default":true,"when":[{"path":"model.family","in":["beta_logit"]}],"fieldRole":"defaultable"},
+        {
+          "path": "dropoutModel",
+          "type": "string",
+          "values": ["parameter_set","none"],
+          "default": "parameter_set",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {"path":"treatment","type":"object","requiredWhen":[{"path":"model.family","notIn":["beta_logit"]}]},
+        {"path":"treatment.slowing","type":"object","required":true,"within":"treatment","when":[{"path":"model.family","notIn":["beta_logit"]}]},
+        {
+          "path": "treatment.slowing.value",
+          "type": "number",
+          "min": 0,
+          "lt": 1,
+          "required": true,
+          "within": "treatment",
+          "when": [{"path":"model.family","notIn":["beta_logit"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "treatment.slowing.basis",
+          "type": "string",
+          "values": ["literature","assumed","data"],
+          "required": true,
+          "within": "treatment",
+          "when": [{"path":"model.family","notIn":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "treatment.slowing.citation",
+          "type": "string",
+          "maxLength": 300,
+          "within": "treatment",
+          "when": [{"path":"model.family","notIn":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {"path":"treatment.symptomatic","type":"object","within":"treatment","when":[{"path":"model.family","in":["beta_logit"]}]},
+        {"path":"treatment.symptomatic.pointsAt","type":"object","within":"treatment.symptomatic","when":[{"path":"model.family","in":["beta_logit"]}]},
+        {
+          "path": "treatment.symptomatic.pointsAt.value",
+          "type": "number",
+          "gt": -70,
+          "lt": 70,
+          "required": true,
+          "within": "treatment.symptomatic.pointsAt",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "treatment.symptomatic.pointsAt.basis",
+          "type": "string",
+          "values": ["literature","assumed","data"],
+          "required": true,
+          "within": "treatment.symptomatic.pointsAt",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "treatment.symptomatic.pointsAt.citation",
+          "type": "string",
+          "maxLength": 300,
+          "within": "treatment.symptomatic.pointsAt",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "treatment.symptomatic.atWeek",
+          "type": "number",
+          "gt": 0,
+          "within": "treatment.symptomatic",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "treatment.symptomatic.referenceAdas",
+          "type": "number",
+          "gt": 0,
+          "lt": 70,
+          "within": "treatment.symptomatic",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "research_fact"
+        },
+        {"path":"treatment.symptomatic.logitEmax","type":"object","within":"treatment.symptomatic","when":[{"path":"model.family","in":["beta_logit"]}]},
+        {
+          "path": "treatment.symptomatic.logitEmax.value",
+          "type": "number",
+          "required": true,
+          "within": "treatment.symptomatic.logitEmax",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "treatment.symptomatic.logitEmax.basis",
+          "type": "string",
+          "values": ["literature","assumed","data"],
+          "required": true,
+          "within": "treatment.symptomatic.logitEmax",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "treatment.symptomatic.logitEmax.citation",
+          "type": "string",
+          "maxLength": 300,
+          "within": "treatment.symptomatic.logitEmax",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {"path":"treatment.symptomatic.et50Weeks","type":"object","required":true,"within":"treatment.symptomatic","when":[{"path":"model.family","in":["beta_logit"]}]},
+        {
+          "path": "treatment.symptomatic.et50Weeks.value",
+          "type": "number",
+          "gt": 0,
+          "required": true,
+          "within": "treatment.symptomatic",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "treatment.symptomatic.et50Weeks.basis",
+          "type": "string",
+          "values": ["literature","assumed","data"],
+          "required": true,
+          "within": "treatment.symptomatic",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "treatment.symptomatic.et50Weeks.citation",
+          "type": "string",
+          "maxLength": 300,
+          "within": "treatment.symptomatic",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {"path":"treatment.symptomatic.washoutHalfLifeWeeks","type":"object","within":"treatment.symptomatic","when":[{"path":"model.family","in":["beta_logit"]}]},
+        {
+          "path": "treatment.symptomatic.washoutHalfLifeWeeks.value",
+          "type": "number",
+          "gt": 0,
+          "required": true,
+          "within": "treatment.symptomatic.washoutHalfLifeWeeks",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "treatment.symptomatic.washoutHalfLifeWeeks.basis",
+          "type": "string",
+          "values": ["literature","assumed","data"],
+          "required": true,
+          "within": "treatment.symptomatic.washoutHalfLifeWeeks",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "treatment.symptomatic.washoutHalfLifeWeeks.citation",
+          "type": "string",
+          "maxLength": 300,
+          "within": "treatment.symptomatic.washoutHalfLifeWeeks",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {"path":"treatment.diseaseModifying","type":"object","within":"treatment","when":[{"path":"model.family","in":["beta_logit"]}]},
+        {
+          "path": "treatment.diseaseModifying.fraction",
+          "type": "object",
+          "required": true,
+          "within": "treatment.diseaseModifying",
+          "when": [{"path":"model.family","in":["beta_logit"]}]
+        },
+        {
+          "path": "treatment.diseaseModifying.fraction.value",
+          "type": "number",
+          "min": 0,
+          "lt": 1,
+          "required": true,
+          "within": "treatment.diseaseModifying",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "treatment.diseaseModifying.fraction.basis",
+          "type": "string",
+          "values": ["literature","assumed","data"],
+          "required": true,
+          "within": "treatment.diseaseModifying",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "treatment.diseaseModifying.fraction.citation",
+          "type": "string",
+          "maxLength": 300,
+          "within": "treatment.diseaseModifying",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "treatment.doseBegin",
+          "type": "number",
+          "min": 0,
+          "default": 0,
+          "within": "treatment",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {"path":"treatment.doseEnd","type":"number","gt":0,"within":"treatment","when":[{"path":"model.family","in":["beta_logit"]}],"fieldRole":"defaultable"},
         {"path":"analysis","type":"object"},
-        {"path":"analysis.kind","type":"string","values":["change","slope"],"default":"change","within":"analysis","fieldRole":"defaultable"},
+        {"path":"analysis.kind","type":"string","values":["change","slope","ancova"],"default":"change","within":"analysis","fieldRole":"defaultable"},
         {"path":"analysis.visit","type":"number","min":0,"within":"analysis","fieldRole":"defaultable"},
         {"path":"analysis.alpha","type":"number","gt":0,"lt":1,"default":0.05,"within":"analysis","fieldRole":"defaultable"}
+      ],
+      "rules": [
+        {"kind":"exactlyOne","keys":["treatment.symptomatic.pointsAt","treatment.symptomatic.logitEmax"],"when":[{"path":"model.family","in":["beta_logit"]}]},
+        {
+          "kind": "requires",
+          "key": "treatment.symptomatic.pointsAt",
+          "needs": ["treatment.symptomatic.atWeek","treatment.symptomatic.referenceAdas"],
+          "when": [{"path":"model.family","in":["beta_logit"]}]
+        }
       ],
       "examples": [
         {
@@ -352,6 +819,22 @@
             "correlation": {"value":0.2,"basis":"assumed"},
             "treatment": {"slowing":{"value":0.3,"basis":"assumed"}},
             "analysis": {"kind":"slope"}
+          }
+        },
+        {
+          "label": "mild to moderate Alzheimer disease on ADAS-cog 11 (the CAMD model with its released parameters): a hypothetical drug 2.5 points better at week 24 plus 30% slower decline, 78 weeks, 200 per arm",
+          "scenario": {
+            "endpoint": {"type":"continuous","unit":"points"},
+            "design": {"nTreat":200,"nControl":200},
+            "timeUnit": "weeks",
+            "visits": [0,13,26,39,52,65,78],
+            "model": {"family":"beta_logit","parameterSet":{"id":"camd-adas-cog-11","version":"adsim-3.0"},"uncertainty":"new_study"},
+            "population": {"mmseRange":{"value":[16,26],"basis":"assumed"}},
+            "treatment": {
+              "symptomatic": {"pointsAt":{"value":-2.5,"basis":"assumed"},"atWeek":24,"referenceAdas":25,"et50Weeks":{"value":1,"basis":"assumed"}},
+              "diseaseModifying": {"fraction":{"value":0.3,"basis":"assumed"}}
+            },
+            "analysis": {"kind":"change","visit":78}
           }
         }
       ]
@@ -3089,7 +3572,10 @@
         {"path":"costs.perPatient","type":"number","min":0,"within":"costs","fieldRole":"defaultable"},
         {"path":"costs.perSite","type":"number","min":0,"within":"costs","fieldRole":"defaultable"},
         {"path":"costs.perMonth","type":"number","min":0,"within":"costs","fieldRole":"defaultable"},
-        {"path":"costs.sites","type":"integer","min":0,"within":"costs","fieldRole":"defaultable"}
+        {"path":"costs.sites","type":"integer","min":0,"within":"costs","fieldRole":"defaultable"},
+        {"path":"evaluation","type":"object"},
+        {"path":"evaluation.version","type":"integer","min":1,"max":1,"required":true,"within":"evaluation","fieldRole":"research_fact"},
+        {"path":"evaluation.screeningReplicates","type":"integer","min":200,"max":4999,"unit":"replicates","within":"evaluation","fieldRole":"defaultable"}
       ],
       "rules": [
         {
@@ -3662,6 +4148,27 @@
         "randomized_selection: the lowest dose is the candidate and a higher dose replaces it when its observed response rate is at least design.margin higher; correct means the lowest dose strictly within the margin of the best true rate. With design.perArm the result is the table at that size; without it the engine searches for the size per dose at which every scenario reaches design.targetProbability (default 0.9) and returns both the first such size and the first from which every larger size does (a count cut-off makes the probability saw-tooth). It is a selection rule of the kind the randomised dose-optimisation literature uses, not a copy of a published decision table."
       ],
       "rows": [
+        {"path":"evaluation","type":"object","when":[{"path":"design.kind","notIn":["randomized_selection"]}]},
+        {
+          "path": "evaluation.version",
+          "type": "integer",
+          "min": 1,
+          "max": 1,
+          "required": true,
+          "within": "evaluation",
+          "when": [{"path":"design.kind","notIn":["randomized_selection"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "evaluation.screeningReplicates",
+          "type": "integer",
+          "min": 200,
+          "max": 9999,
+          "unit": "replicates",
+          "within": "evaluation",
+          "when": [{"path":"design.kind","notIn":["randomized_selection"]}],
+          "fieldRole": "defaultable"
+        },
         {"path":"design","type":"object","required":true},
         {"path":"design.kind","type":"string","values":["three_plus_three","boin","keyboard","crm","randomized_selection"],"required":true,"fieldRole":"defaultable"},
         {
@@ -6740,9 +7247,12 @@
     }
   },
   "longitudinal": {
-    "forecast.trajectories": {"required":["historyId","providerId","endpoint","horizonsDays"],"optional":["scenario","samples","modelVersion"]},
+    "forecast.trajectories": {
+      "required": ["historyId","providerId","endpoint","horizonsDays"],
+      "optional": ["scenario","samples","modelVersion","predictionMode","actions","actionSource","actionHistoryId","priorPredictionId"]
+    },
     "forecast.evaluate": {"required":["predictionId","outcomeHistoryId"],"optional":["windowDays","eventCodes","followupCode","bootstrap","split","trainingOverlap","riskSet","groupBy"]},
-    "forecast.compare": {"required":["predictionId","otherPredictionId"],"optional":["bootstrap","mode"]},
+    "forecast.compare": {"required":["predictionId","otherPredictionId"],"optional":["bootstrap","mode","outcomeHistoryId"]},
     "forecast.trial_benchmark": {"required":["benchmarkId"],"optional":["bootstrap"]}
   }
 }

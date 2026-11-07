@@ -175,6 +175,10 @@ VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "model_prognostic_train")
 VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "patients_progression")
 # --- end progression ---
 
+# --- its beta_logit family (plan T06, 2026-11-07): the CAMD ADAS-cog 11 Alzheimer model with adsim 3.0's posterior; the numbers are R/models/*.json, never sourced ---
+VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "patients_progression_beta_logit")
+# --- end beta_logit ---
+
 #' Startup self-check: the local registry and the domain must agree, exactly.
 vcr_engine_self_check <- function() {
   d <- vcr_domain()

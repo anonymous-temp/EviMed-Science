@@ -797,6 +797,16 @@ const PROGNOSTIC_TERM = object({
 const PROGRESSION_PARAM = (/** @type {Record<string, any>} */ range = {}) => object({
   value: req(number(range)), basis: req(string({ values: ['literature', 'assumed', 'data'] })), citation: string({ maxLength: 300 }),
 })
+/**
+ * The four families with a unit shape, and the published model whose numbers are a parameter set of the engine (`patients.progression` 1.1.0). The
+ * four's fields are gated as "not beta_logit", so a scenario of any other family (an unknown one included) is judged exactly as at 1.0.0.
+ */
+const PROGRESSION_SHAPES = isNot('model.family', 'beta_logit')
+const BETA_LOGIT = is('model.family', 'beta_logit')
+/** A list of `n` numbers stated with where they came from (a range, three shares, three means). */
+const PROGRESSION_LIST = (/** @type {Record<string, any>} */ range, /** @type {number} */ n) => object({
+  value: req(array(number(range), { min: n, max: n })), basis: req(string({ values: ['literature', 'assumed', 'data'] })), citation: string({ maxLength: 300 }),
+})
 const PROGNOSTIC_TERMS = req(array(PROGNOSTIC_TERM, { min: 1, max: 100 }));
 const PROGNOSTIC_MODEL = { t: 'variant', on: 'family', variants: {
   linear: { intercept: req(number()), residualSd: number({ gt: 0 }), terms: PROGNOSTIC_TERMS },
@@ -864,28 +874,56 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
   // (`basis`: the literature with its citation, an assumption, or the person's data); the change of a person at time t is amplitude_i * u(t), u the family's unit shape
   // (linear t, exponential (exp(k t) - 1) / k, logistic S(k (t - t50)) - S(-k t50), Emax t / (T50 + t)), the amplitude (the slope, or the plateau) varying between people
   // as N(mean, sd) with correlation `correlation` to the baseline; a treated person follows the same curve with time scaled by 1 - slowing. The first visit is time zero.
+  // 1.1.0 (plan T06): `beta_logit`, a published drug-disease-trial model whose numbers are a parameter set in the engine (`parameterSet`, today the CAMD ADAS-cog 11 model of
+  // mild and moderate Alzheimer disease from adsim 3.0): the four families' amplitude, baseline, residual and slowing are theirs alone, and beta_logit states instead the
+  // population it is run on (each override with its basis), the placebo and dropout switches, and a symptomatic effect (points at a week for a reference score, or a logit
+  // Emax) and/or a disease-modifying share of the mean slope, both hypotheses the run states; the engine runs it in weeks, the unit its parameters were estimated in.
   'patients.progression': object({
     endpoint: req(object({ type: req(string({ values: ['continuous'] })), unit: string({ maxLength: 40 }) })),
     design: req(object({ nTreat: req(integer({ min: 2, max: 100_000 })), nControl: req(integer({ min: 2, max: 100_000 })) })),
     timeUnit: req(string({ values: [...VCR_TIME_UNITS] })),
     visits: req(array(number({ min: 0 }), { min: 3, max: 40, increasing: true })),
     model: req(object({
-      family: req(string({ values: ['linear', 'exponential', 'logistic', 'emax'] })),
+      family: req(string({ values: ['linear', 'exponential', 'logistic', 'emax', 'beta_logit'] })),
       // the amplitude is the slope (linear, exponential: initial slope, with `acceleration` k) or the plateau (logistic: `midpoint` and `steepness`; emax: `halfTime`)
       slope: req(gated(PROGRESSION_PARAM(), is('model.family', 'linear', 'exponential'))),
       // the between-person SD of that amplitude, whatever the family
-      betweenPersonSd: req(PROGRESSION_PARAM({ min: 0 })),
+      betweenPersonSd: req(gated(PROGRESSION_PARAM({ min: 0 }), PROGRESSION_SHAPES)),
       acceleration: req(gated(PROGRESSION_PARAM(), is('model.family', 'exponential'))),
       amplitude: req(gated(PROGRESSION_PARAM(), is('model.family', 'logistic', 'emax'))),
       midpoint: req(gated(PROGRESSION_PARAM(), is('model.family', 'logistic'))),
       steepness: req(gated(PROGRESSION_PARAM({ gt: 0 }), is('model.family', 'logistic'))),
       halfTime: req(gated(PROGRESSION_PARAM({ gt: 0 }), is('model.family', 'emax'))),
+      parameterSet: req(gated(object({ id: req(string({ values: ['camd-adas-cog-11'] })), version: req(string({ values: ['adsim-3.0'] })) }), BETA_LOGIT)),
+      // one study drawn per simulated trial (adsim's default), the typical study at the posterior medians, or a posterior draw and then a study per trial
+      uncertainty: gated(string({ values: ['new_study', 'typical_study', 'posterior_draws'], default: 'new_study' }), BETA_LOGIT),
     })),
-    baseline: req(object({ mean: req(PROGRESSION_PARAM()), sd: req(PROGRESSION_PARAM({ min: 0 })) })),
-    residualSd: req(PROGRESSION_PARAM({ min: 0 })),
-    correlation: PROGRESSION_PARAM({ min: -1, max: 1 }),
-    treatment: req(object({ slowing: req(PROGRESSION_PARAM({ min: 0, lt: 1 })) })),
-    analysis: object({ kind: string({ values: ['change', 'slope'], default: 'change' }), visit: number({ min: 0 }), alpha: number({ gt: 0, lt: 1, default: 0.05 }) }),
+    baseline: req(gated(object({ mean: req(PROGRESSION_PARAM()), sd: req(PROGRESSION_PARAM({ min: 0 })) }), PROGRESSION_SHAPES)),
+    residualSd: req(gated(PROGRESSION_PARAM({ min: 0 }), PROGRESSION_SHAPES)),
+    correlation: gated(PROGRESSION_PARAM({ min: -1, max: 1 }), PROGRESSION_SHAPES),
+    // the people a beta_logit trial enrols: baseline MMSE drawn uniformly over a range (default 16 to 26) and the parameter set's covariate model unless overridden
+    population: gated(object({
+      mmseRange: PROGRESSION_LIST({ min: 0, max: 30 }, 2), ageBounds: PROGRESSION_LIST({ min: 0, max: 130 }, 2), apoe4: PROGRESSION_LIST({ min: 0, max: 1 }, 3),
+      femaleShare: PROGRESSION_PARAM({ min: 0, max: 1 }), ageMeanByApoe4: PROGRESSION_LIST({ gt: 0, max: 130 }, 3), ageSd: PROGRESSION_PARAM({ gt: 0 }),
+    }), BETA_LOGIT),
+    placebo: gated(boolean({ default: true }), BETA_LOGIT),
+    // who leaves: the parameter set's Weibull model (age and MMSE, not arm or outcome), or nobody
+    dropoutModel: gated(string({ values: ['parameter_set', 'none'], default: 'parameter_set' }), BETA_LOGIT),
+    treatment: {
+      ...object({
+        slowing: req(gated(PROGRESSION_PARAM({ min: 0, lt: 1 }), PROGRESSION_SHAPES)),
+        // a change in points (treated less untreated; negative is better) at `atWeek` for a person at `referenceAdas`, or the logit Emax itself
+        symptomatic: gated(object({
+          pointsAt: PROGRESSION_PARAM({ gt: -70, lt: 70 }), atWeek: number({ gt: 0 }), referenceAdas: number({ gt: 0, lt: 70 }), logitEmax: PROGRESSION_PARAM(),
+          et50Weeks: req(PROGRESSION_PARAM({ gt: 0 })), washoutHalfLifeWeeks: PROGRESSION_PARAM({ gt: 0 }),
+        }, { exactlyOne: [['pointsAt', 'logitEmax']], requires: { pointsAt: ['atWeek', 'referenceAdas'] } }), BETA_LOGIT),
+        // the share of the study's covariate-adjusted mean slope taken away while on drug, held after the dose ends
+        diseaseModifying: gated(object({ fraction: req(PROGRESSION_PARAM({ min: 0, lt: 1 })) }), BETA_LOGIT),
+        doseBegin: gated(number({ min: 0, default: 0 }), BETA_LOGIT), doseEnd: gated(number({ gt: 0 }), BETA_LOGIT),
+      }),
+      reqWhen: PROGRESSION_SHAPES,
+    },
+    analysis: object({ kind: string({ values: ['change', 'slope', 'ancova'], default: 'change' }), visit: number({ min: 0 }), alpha: number({ gt: 0, lt: 1, default: 0.05 }) }),
   }),
 
   'profile.snapshot': object({}),
