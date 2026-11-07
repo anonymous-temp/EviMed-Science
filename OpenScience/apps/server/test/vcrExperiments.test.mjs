@@ -180,7 +180,7 @@ test('a rate near its bound is told how many more replicates would decide it, an
   const { manifest } = vcrCampaignManifest({ ...input, space: { ...input.space, variables: [...input.space.variables, { path: 'analysis.alpha', values: [0.02, 0.025] }] },
     budget: { ...input.budget, maxCandidates: 200 } });
   assert.ok(manifest, 'the analysis level is accepted as a variable');
-  const row = (needed) => ({ id: 'cmp_3', kind: 'campaign', identity: ID, manifest, status: 'stopped', created_at: '2026-11-07T00:00:00Z', updated_at: '2026-11-07T00:10:00Z',
+  const row = () => ({ id: 'cmp_3', kind: 'campaign', identity: ID, manifest, status: 'stopped', created_at: '2026-11-07T00:00:00Z', updated_at: '2026-11-07T00:10:00Z',
     state: { ...vcrCampaignInitialState(manifest), finalists: [], stop: { reason: 'inconclusive_at_precision' } } });
   const view = presentCampaign(row());
   const alpha = view.premises.find((premise) => premise.key === 'alpha');

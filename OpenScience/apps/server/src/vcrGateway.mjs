@@ -2838,12 +2838,19 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
           if (LAB_ACTIONS.includes(request.action)) {
             const lab = /** @type {any} */ (request);
             if (!vcr.experiments || !study.id) throw gatewayError(503, "vcr_gateway_unavailable", "虚拟实验室在本部署尚未接入：这一步暂不可用。");
-            const who = { userId: study.userId, origin };
+            // a campaign remembers the conversation that started it (never a programme run's): its stop wakes that conversation once
+            const who = { userId: study.userId, origin: study.completionOrigin ?? null };
             const answer = lab.action === "search" ? await vcr.experiments.startCampaign(study, lab.payload, who)
               : lab.action === "compare" ? await vcr.experiments.startExperiment(study, lab.payload, who)
               : lab.action === "search_cancel" ? await vcr.experiments.cancel(study, lab.ref, { actor: "runtime" })
               : await vcr.experiments.view(study, lab.ref);
             if (["search", "compare"].includes(lab.action)) await nameWhatItHolds(vcr, study);
+            // the originating run reading its campaign after it stopped is the notice: nothing is sent to that conversation again
+            if (answer?.kind === "campaign" && answer.stop && origin && !origin.programme) {
+              await vcr.store.query(`UPDATE evimed_vcr.experiments SET state = state || jsonb_build_object('originTerminalObservation', $4::jsonb)
+                WHERE id = $1 AND study_id = $5 AND status = 'stopped' AND origin->>'runId' = $2 AND origin->>'rootSessionId' = $3`,
+              [answer.id, origin.runId, origin.rootSessionId, JSON.stringify({ runId: origin.runId, rootSessionId: origin.rootSessionId, callId: origin.callId, state: answer.stop.reason === "user_cancellation" ? "canceled" : answer.stop.reason === "persistent_model_failure" ? "failed" : "succeeded", resultKey: "campaign" }), study.id]);
+            }
             // What a run reads of an experiment passes the small-cell boundary like every other read (review eng P0-1). The frozen
             // stage sizes and budget are the manifest the run itself sent, never people, and are given back as they were.
             if (typeof vcr.service.forModel !== "function") throw gatewayError(503, "vcr_gateway_unavailable", "这份读取结果无法确认不含小样本格子，已整体拒绝。");

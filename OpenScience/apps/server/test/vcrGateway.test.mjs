@@ -1989,6 +1989,24 @@ test('in-flight dedupe requires identical frozen human and publication sources, 
 // call's shape is checked before any study is opened, and the answer carries the entry to the trial page.
 // ---------------------------------------------------------------------------
 
+test("the run that started a campaign reading it after it stopped is its notice; a running read or another run's read is not (F4)", async () => {
+  const { call, made } = conversationCalls("https://evimed.example");
+  /** @type {any[]} */ const updates = [];
+  made.vcr.store.query = async (/** @type {string} */ sql, /** @type {any[]} */ values) => { updates.push([sql.includes("originTerminalObservation"), values]); return { rowCount: 1 }; };
+  let stop = /** @type {any} */ (null);
+  made.vcr.experiments = { async view(/** @type {any} */ _study, /** @type {string} */ id) { return { id, kind: "campaign", status: stop ? "stopped" : "running", stop }; } };
+  await call("simulate", { action: "search_status", campaignId: "cmp_1" });
+  assert.equal(updates.length, 0, "a campaign still running is not observed");
+  stop = { reason: "inconclusive_at_precision" };
+  assert.equal((await call("simulate", { action: "search_status", campaignId: "cmp_1" })).status, 200);
+  assert.equal(updates.length, 1);
+  const [marked, values] = updates[0];
+  assert.equal(marked, true);
+  assert.equal(values[0], "cmp_1");
+  assert.deepEqual(JSON.parse(values[3]), { runId: "run_1", rootSessionId: values[2], callId: JSON.parse(values[3]).callId, state: "succeeded", resultKey: "campaign" });
+  assert.equal(values[4], "std_task", "the update names the study and the origin's run: another run's read does not match it");
+});
+
 test("the lab's actions reach the experiments package with the study and the origin; a malformed call is refused by shape", async () => {
   const { call, made } = conversationCalls("https://evimed.example");
   /** @type {any[]} */ const asked = [];
