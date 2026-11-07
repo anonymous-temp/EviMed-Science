@@ -99,4 +99,14 @@ describe("这个结论的前提", () => {
     ]);
     expect(readPremises(undefined)).toEqual([]);
   });
+
+  it("shows a premise that is one sentence like any other row, with no change draft and no second panel", () => {
+    const sentence = premise("use:use_not_validated", { label: "模型的适用范围", value: "这个模型尚未验证过这种治疗比较；结果表示在所列模型假设下可能怎样变化。" });
+    const { container } = render(<VcrPremises premises={[sentence, premise("effect", { label: "真实效应（风险比）", value: "0.7" })]} onChange={vi.fn()} />);
+    const row = container.querySelector("[data-vcr-premise='use:use_not_validated']") as HTMLElement;
+    expect(within(row).getByText(sentence.value)).toBeInTheDocument();
+    expect(row.querySelector("[data-vcr-premise-change]")).toBeNull();
+    expect(container.querySelector("[data-vcr-premise-change='effect']")).not.toBeNull();
+    expect(container.querySelectorAll("[data-vcr-premises]").length).toBe(1);
+  });
 });

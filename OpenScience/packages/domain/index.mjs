@@ -2082,15 +2082,36 @@ export {
   VCR_FORECAST_MODEL_INTERFACES,
   VCR_HORIZON_UNIT_DAYS,
   VCR_HOSTED_MODEL_INTERFACES,
+  VCR_MECHANISTIC_ENGINES,
+  VCR_MECHANISTIC_REQUIRED,
   VCR_MODEL_INTERFACES,
   VCR_MODEL_INTERFACE_LABELS_ZH,
   VCR_MODEL_TRIPOD_FIELDS,
   VCR_MODEL_TRIPOD_MAX_CHARS,
   vcrEventHistoryScopeIssues,
+  vcrMechanisticRuntimeIssues,
   vcrModelCardIssues,
   vcrModelInterfaceOf,
   vcrModelTripod,
 } from './src/vcrModelInterfaces.mjs'
+
+// vcrModelUse — can a model be run for a question (execution issues) and what the reader is told about the answer (premises)
+export {
+  VCR_EXECUTION_ISSUE_CODES,
+  VCR_PREDICTION_MODES,
+  VCR_PREMISE_CODES,
+  VCR_UNIT_DIMENSIONS,
+  assessModelUse,
+  vcrUnitsConvertible,
+} from './src/vcrModelUse.mjs'
+
+// vcrExperiment — the immutable experiment version record and the canonical bytes its identity is the hash of
+export {
+  VCR_EXPERIMENT_FIELDS,
+  vcrExperimentCanonical,
+  vcrExperimentIssues,
+  vcrExperimentRecord,
+} from './src/vcrExperiment.mjs'
 
 // vcrTimeUnits — the one closed table of time units (the model cards' horizon table), the spellings a source writes them in, and
 // the conversions: evidence in mixed units is converted before it is pooled, and a scenario's unit is stated, taken from its

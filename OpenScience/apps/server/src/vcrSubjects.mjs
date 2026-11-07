@@ -27,7 +27,7 @@ import { lineageNode, VCR_JOB_METHODS, validateScenario, canonicalScenarioJson, 
 import { HttpError } from "./security.mjs";
 import { VCR_SUBJECT_KINDS, vcrJobObjectKind } from "./vcrJobs.mjs";
 import { VCR_OBJECT_NODE_KINDS } from "./vcrStore.mjs";
-import { vcrModelApplicabilityIssues, vcrPopulationVariables } from "./vcrModelApplicability.mjs";
+import { vcrModelExecutionIssues, vcrPopulationVariables } from "./vcrModelApplicability.mjs";
 import { vcrCohortInputIssue } from "./vcrSnapshotBinding.mjs";
 
 /** @param {unknown} value @returns {Record<string, any>} */
@@ -462,7 +462,7 @@ export async function prepareVcrSubjectPopulation({ store, study, kind, subject,
   if (!population) throw new VcrSubjectError("vcr_model_not_applicable", "The exact selected population is unavailable.");
   if (sourceModel) {
     const model = list(await store.models(String(study.userId))).find(entry => entry.id === sourceModel.id && entry.version === sourceModel.version);
-    if (!model || vcrModelApplicabilityIssues(model, { endpointType: object(scenario.endpoint).type, variables: vcrPopulationVariables(population) }).length) {
+    if (!model || vcrModelExecutionIssues(model, { endpointType: object(scenario.endpoint).type, variables: vcrPopulationVariables(population) }).length) {
       throw new VcrSubjectError("vcr_model_not_applicable", "The source model does not cover this endpoint and selected population.");
     }
   }

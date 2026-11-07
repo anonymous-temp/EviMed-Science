@@ -402,3 +402,15 @@ test("D1: a hazard ratio that changes over time is the effect premise, in the wo
   assert.equal(rows({ hazardRatio: 0.7, controlMedian: 12 }).find((row) => row.key === "effect").label, "真实效应（风险比）");
   assert.equal(rows({ treatmentHazardRatios: { breaks: [6], ratios: [1] }, controlMedian: 12 }).find((row) => row.key === "effect"), undefined);
 });
+
+test("a premise with no number is one sentence in the same block: never dropped, never a number, and the five-decisive limit still holds", () => {
+  const rows = vcrPremises("trial", trialInput({ modelUse: [
+    { code: "use_not_validated" }, { code: "horizon_beyond_validation" }, { code: "no_such_finding" },
+  ] }));
+  const use = rows.filter((row) => row.key.startsWith("use:"));
+  assert.deepEqual(use.map((row) => row.key), ["use:use_not_validated", "use:horizon_beyond_validation"]);
+  assert.equal(use[0].value, "这个模型尚未验证过这种用途；结果表示在所列模型假设下可能怎样变化。");
+  assert.equal(use[0].decisive, true);
+  assert.ok(rows.filter((row) => row.decisive).length <= VCR_PREMISES_DECISIVE_MAX);
+  for (const row of use) assert.doesNotMatch(row.value, /use_not_validated|horizon_beyond|job|tool|[0-9]+(\.[0-9]+)?%/);
+});

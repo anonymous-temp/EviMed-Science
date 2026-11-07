@@ -16,6 +16,10 @@ import { DRAFT_PREFIX } from "./vcrActionWords";
  * draft into the conversation's own composer, prefilled with the premise's name (`premiseDraft`), which the researcher completes
  * and sends. Pressing it sends nothing.
  *
+ * A premise with no number behind it (a model used beyond what it was validated for, key `use:*`) is a row whose value is one plain
+ * sentence, in this same block and under the same five-row limit: no badge, no second panel. It has nothing to type a new value
+ * into, so it carries no change draft.
+ *
  * A default is the quiet fact the block is for (a dropout of 0 nobody wrote), so 默认 is the one source drawn in the attention tone.
  */
 export const premiseDraft = (premise: Pick<VcrPremise, "label" | "value">): string => `改“${premise.label}”（现在是 ${premise.value}）为：`;
@@ -28,7 +32,7 @@ function PremiseRow({ premise, onChange }: { premise: VcrPremise; onChange: ((pr
       <span className="text-caption text-text-3 max-sm:col-span-2">{premise.label}</span>
       <span className="min-w-0 text-ui text-text max-sm:col-start-1">{premise.value}</span>
       <Tag tone={TONES[premise.source]}>{VCR_PREMISE_SOURCE_LABELS_ZH[premise.source]}</Tag>
-      {onChange
+      {onChange && !premise.key.startsWith("use:")
         ? (
           <Button size="sm" variant="text" actionKind="draft" data-vcr-premise-change={premise.key} onClick={() => onChange(premise)} aria-label={`${DRAFT_PREFIX}调整：${premise.label}`}>
             <PenLine size={16} aria-hidden="true" />{`${DRAFT_PREFIX}调整`}

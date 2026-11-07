@@ -1272,7 +1272,8 @@ test("C3-09 a model answers only for what it declares it covers: the endpoint, t
   const refused = /** @type {any} */ (vcrBuildStages({ kind: "patient_set", row: patientRow }, { ...context, populations: [population], models: [fitted] }));
   assert.equal(refused.ok, false);
   assert.equal(refused.refused.code, "vcr_model_not_applicable");
-  assert.deepEqual(refused.refused.paths, ["creatinine", "age"]);
+  // age reaching outside the fitted 40–80 is a premise of the answer now (in silico plan T03), not a reason to refuse it
+  assert.deepEqual(refused.refused.paths, ["creatinine"]);
   assert.match(refused.refused.message, /fitted-os/);
   // An explicitly selected missing model is refused; it never becomes a different generator.
   const unknown = /** @type {any} */ (vcrBuildStages({ kind: "patient_set", row: { ...patientRow, modelId: "absent" } }, { ...context, populations: [population], models: [fitted] }));

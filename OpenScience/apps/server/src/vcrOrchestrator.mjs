@@ -71,7 +71,7 @@ import {
 import { HttpError, randomId } from "./security.mjs";
 import { readVcrReviewExportProof } from "./vcrReview.mjs";
 import { studyReviewDigest } from "./studyReview.mjs";
-import { vcrModelApplicabilityIssues, vcrPopulationVariables } from "./vcrModelApplicability.mjs";
+import { vcrModelApplicabilityIssues, vcrModelExecutionIssues, vcrPopulationVariables } from "./vcrModelApplicability.mjs";
 import { vcrModelDesignBinding, readVcrModelDesignResult } from "./vcrModelDesign.mjs";
 import { isModelDocumentKind } from "./vcrModelDocuments.mjs";
 import { VCR_COMPARISON_RESULT_KIND, VCR_SCHEMA } from "./vcrPersistence.mjs";
@@ -1213,7 +1213,7 @@ export function vcrBuildStages(item, context) {
     if (requestedEndpoint && requestedEndpoint !== endpoint) return { ok: false, refused: { code: "vcr_model_not_applicable", message: "请求终点与所选预后方程不同；不会替换终点后计算。" } };
     const population = populationId ? (context.populations ?? []).find(candidate => candidate.id === populationId) : null;
     if (populationId && !population) return { ok: false, refused: { code: "vcr_model_not_applicable", message: "选定的人群版本不可用；不会改用整个快照。" } };
-    const issues = vcrModelApplicabilityIssues(model, { endpointType: endpoint, variables: vcrPopulationVariables(population) });
+    const issues = vcrModelExecutionIssues(model, { endpointType: endpoint, variables: vcrPopulationVariables(population) });
     if (issues.length) return { ok: false, refused: { code: "vcr_model_not_applicable", paths: issues.map(issue => issue.field), message: "所选模型未覆盖目标队列的终点或变量范围。" } };
     const definedRules = population?.kind === "real" ? population.definition?.rules : null;
     if (definedRules && request.cohortRules && !isDeepStrictEqual(definedRules, request.cohortRules)) return { ok: false, refused: { code: "vcr_model_not_applicable", message: "请求筛选条件与选定队列版本不同；先保存对应队列版本。" } };
@@ -1295,7 +1295,7 @@ export function vcrBuildStages(item, context) {
         Object.assign(scenario, { ...expected, ...scenario, truth: { ...object(scenario.truth), ...object(expected.truth) } });
       }
       const population = row.populationId ? (context.populations ?? []).find((entry) => entry.id === row.populationId) : null;
-      const issues = named ? vcrModelApplicabilityIssues(named, { endpointType: String(type), variables: vcrPopulationVariables(population) }) : [];
+      const issues = named ? vcrModelExecutionIssues(named, { endpointType: String(type), variables: vcrPopulationVariables(population) }) : [];
       if (issues.length) {
         return { ok: false, refused: { code: "vcr_model_not_applicable", paths: issues.map((issue) => issue.field),
           message: `模型「${named?.name}」的适用范围没有覆盖这个研究：${issues.map((issue) => issue.text).join("；")}。换一个适用的模型，或先补齐这些条件。` } };

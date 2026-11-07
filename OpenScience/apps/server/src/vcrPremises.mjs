@@ -14,7 +14,10 @@
  *   `PRIORITY`. Every other premise is in the list too, not decisive, and the page folds them into one disclosure. The code
  *   ranks; it never writes a sentence about how much a premise matters.
  * - **A premise carries a value, or it is not a premise.** There is no banner here and no general caveat: a row exists because a
- *   number stands behind it, and each row has one way to change it (the page's 调整 draft into the native conversation, prefilled
+ *   value stands behind it. The value is usually a number; a scientific limit that has none (a use the model was never validated
+ *   for, a horizon beyond its validation) is a row whose value is one plain sentence (`modelUsePremises`), never dropped by this
+ *   rule and never turned into a made-up number, in the same block and under the same five-decisive limit — no badge, no second
+ *   panel. Each row has one way to change it (the page's 调整 draft into the native conversation, prefilled
  *   with the row's label).
  * - **A default is a premise.** A dropout of 0 the researcher never wrote is the commonest silent assumption of a survival design;
  *   it is listed as 默认 and, for survival, as decisive.
@@ -25,6 +28,7 @@
  */
 
 import { VCR_EFFECT_DISCOUNT_LABEL_ZH, VCR_EFFECT_DISCOUNT_LIMITS_ZH, VCR_ESTIMAND_LABELS_ZH, VCR_MIN_CELL_SIZE, VCR_PREMISES_DECISIVE_MAX, VCR_PREMISE_SOURCES } from "@evimed/domain";
+import { VCR_USE_TEXT_ZH } from "./vcrModelApplicability.mjs";
 import { personWord, personMappingPremises } from "./vcrPersonStated.mjs";
 import { imputationPremise } from "./vcrImputationView.mjs";
 import { targetTrialPremises } from "./vcrTargetTrialView.mjs";
@@ -42,6 +46,8 @@ import { borrowingPremises } from "./vcrBorrowing.mjs";
  * ranks after every listed one and is never decisive.
  */
 const PRIORITY = Object.freeze([
+  // a use the model was never validated for turns every number below it, so it ranks first
+  "use:use_not_validated",
   "effect", "control", "dropout", "correlation", "similarity", "sampling", "accrual", "alpha", "assurance",
   // a comparison: how suitable it is, how far the target trial is emulated, what an indirect comparison leaves unadjusted, what a
   // borrowed prior rests on, how strong an unmeasured confounder would have to be
@@ -55,6 +61,8 @@ const PRIORITY = Object.freeze([
   // a trained prognostic model: the data, the cross-fitting, the correlation, the discounts
   "prognosticTraining", "prognosticFolds", "prognosticRho", "prognosticDiscount", "prognosticForest",
   // a progression simulation: its parameters, in the order a conclusion turns on them
+  // what the model behind the result was and was not validated for (a sentence each, never a number)
+  "use:population_outside_validation", "use:endpoint_outside_validation", "use:horizon_beyond_validation", "use:no_independent_data", "use:provenance_missing",
   "progression:model.amplitude", "progression:model.betweenPersonSd", "progression:treatment.slowing", "progression:baseline.sd", "progression:residualSd",
 ]);
 
@@ -94,7 +102,21 @@ export function finishPremises(rows, personStated = null) {
  */
 export function vcrPremises(view, input) {
   const rows = view === "trial" ? trialPremises(input) : view === "population" ? populationPremises(input) : comparatorPremises(input);
-  return finishPremises(rows, input.personStated);
+  return finishPremises([...rows, ...modelUsePremises(input.modelUse)], input.personStated);
+}
+
+/**
+ * What the domain's use check found about the model behind a result, as premises: each is a sentence, not a number, and is a row of
+ * the same block. A use the model was never validated for is decisive (the conclusion is only as far as the model reaches); the
+ * rest are plain rows the page folds. A finding without a known sentence is not shown: there is nothing to say about it.
+ * @param {unknown} findings `[{ code }]` as `assessModelUse` returns them
+ * @returns {Array<Partial<VcrPremise>>}
+ */
+export function modelUsePremises(findings) {
+  return list(findings).map(object).flatMap((finding) => {
+    const value = /** @type {Record<string, string>} */ (VCR_USE_TEXT_ZH)[String(finding.code)];
+    return value ? [{ key: `use:${finding.code}`, label: "模型的适用范围", value, source: /** @type {const} */ ("assumed"), decisive: finding.code === "use_not_validated" }] : [];
+  });
 }
 
 // --- values ---------------------------------------------------------------------------------------------------------------------
