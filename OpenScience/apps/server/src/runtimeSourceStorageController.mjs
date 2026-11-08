@@ -3,7 +3,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
-import { spawn, spawnSync } from 'node:child_process';
+import { spawn, execFile } from 'node:child_process';
 import { sourceStorageHelperProgram } from '@evimed/harness-port/source-conversation-storage';
 import { canonicalJson } from '@evimed/domain';
 import { dockerRuntimeMount, assertDockerDataVolumeSupport } from './dockerMounts.mjs';
@@ -83,7 +83,7 @@ export function sourceStorageHelperPlan(config, image, paths, operation, project
   args.push('--entrypoint=node', image.imageId, '--input-type=module', '--eval', sourceStorageHelperProgram());
   return { command: config.runtimeContainerBin, args };
 }
-async function executeHelper(config, input) {
+async function executeHelper(config, input, onAbnormal = () => {}) {
   assertDockerDataVolumeSupport(config);
   const plan = sourceStorageHelperPlan(config, input.image, input.paths, input.operation, input.project);
   return new Promise((resolve, reject) => {
@@ -92,25 +92,32 @@ async function executeHelper(config, input) {
     const timeout = setTimeout(stop, 60000);
     child.stdout.on('data', chunk => { bytes += chunk.length; if (bytes > 2 * 1024 * 1024) stop(); else output += chunk; });
     child.stderr.on('data', chunk => { bytes += chunk.length; if (bytes > 2 * 1024 * 1024) stop(); });
-    child.once('error', () => { clearTimeout(timeout); reject(fail('runtime_source_helper_unavailable', 503)); });
+    child.once('error', () => { clearTimeout(timeout); onAbnormal(input.project); reject(fail('runtime_source_helper_unavailable', 503)); });
     child.stdin.on('error', () => {});
-    child.once('close', code => {
+    child.once('close', async code => {
       clearTimeout(timeout);
-      try { cleanupSourceHelpers(config, input.project); const result = JSON.parse(output); if (failed || code !== 0 || result.ok !== true || !result.data) throw fail(); resolve(result.data); }
+      // A killed Docker CLI can leave its container alive; only an abnormal end needs the label scan.
+      if (failed || code !== 0) onAbnormal(input.project);
+      try { if (failed || code !== 0) await cleanupSourceHelpers(config, input.project); const result = JSON.parse(output); if (failed || code !== 0 || result.ok !== true || !result.data) throw fail(); resolve(result.data); }
       catch { reject(fail('runtime_source_helper_unavailable', 503)); }
     });
     child.stdin.end(JSON.stringify({ operation: input.operation, sessionId: input.sessionId, frozen: input.frozen }));
   });
 }
+/** The Docker CLI without blocking the controller's event loop. @returns {Promise<{ status: number, stdout: string, stderr: string }>} */
+function dockerRun(bin, args, timeout) {
+  return new Promise(resolve => execFile(bin, args, { encoding: 'utf8', timeout, maxBuffer: 65536 }, (error, stdout, stderr) =>
+    resolve({ status: error ? (typeof error.code === 'number' ? error.code : 1) : 0, stdout: String(stdout ?? ''), stderr: String(stderr ?? '') })));
+}
 /** A killed Docker CLI can leave its container alive. The same project mutex
- * covers this check and every start, including after a controller restart. */
-function cleanupSourceHelpers(config, project) {
-  const result = spawnSync(config.runtimeContainerBin, ['ps', '--all', '--filter', 'label=io.open-science.source-maintenance=1',
-    '--filter', `label=io.open-science.source-owner=${project.userId}`, '--filter', `label=io.open-science.source-project=${project.id}`, '--format', '{{.ID}}'], { encoding: 'utf8', timeout: 5000, maxBuffer: 65536 });
+ * covers this check and a source maintenance, including after a controller restart. */
+async function cleanupSourceHelpers(config, project, run = dockerRun) {
+  const result = await run(config.runtimeContainerBin, ['ps', '--all', '--filter', 'label=io.open-science.source-maintenance=1',
+    '--filter', `label=io.open-science.source-owner=${project.userId}`, '--filter', `label=io.open-science.source-project=${project.id}`, '--format', '{{.ID}}'], 5000);
   if (result.status !== 0) throw fail('runtime_source_helper_unavailable', 503);
   const ids = result.stdout.trim().split(/\s+/).filter(Boolean); if (ids.length > 32 || ids.some(id => !/^[a-f0-9]{12,64}$/.test(id))) throw fail('runtime_source_helper_unavailable', 503);
   for (const id of ids) {
-    const removed = spawnSync(config.runtimeContainerBin, ['rm', '--force', id], { encoding: 'utf8', timeout: 10000 });
+    const removed = await run(config.runtimeContainerBin, ['rm', '--force', id], 10000);
     if (removed.status !== 0 && !/no such (?:object|container)/i.test(removed.stderr)) throw fail('runtime_source_helper_unavailable', 503);
   }
 }
@@ -118,8 +125,19 @@ function cleanupSourceHelpers(config, project) {
  * the fixed helper above, under the runtime controller's project mutex.
  * @param {any} config @param {any} hooks */
 export function createSourceStorageController(config, hooks) {
-  const execute = hooks.execute ?? (input => executeHelper(config, input));
-  const cleanup = hooks.execute ? async () => {} : project => cleanupSourceHelpers(config, project);
+  const key = project => `${project.userId}\u0000${project.id}`;
+  // Projects whose source maintenance ended abnormally in this process: only those can have left a helper container behind, so
+  // only their next runtime start looks (capture and purge always look, and fail closed).
+  const dirty = new Set();
+  const rawExecute = hooks.execute ?? (input => executeHelper(config, input, project => { dirty.add(key(project)); }));
+  const execute = async input => { try { return await rawExecute(input); } catch (error) { dirty.add(key(input.project)); throw error; } };
+  const run = hooks.dockerRun ?? dockerRun;
+  const cleanup = hooks.execute && !hooks.dockerRun ? async () => {} : async project => { await cleanupSourceHelpers(config, project, run); dirty.delete(key(project)); };
+  /** A runtime start never fails for the scan: a slow or absent Docker answer lets the start proceed. */
+  async function beforeStart(project) {
+    if (!dirty.has(key(project))) return;
+    try { await cleanup(project); } catch { /* fail open: a start is never refused for it */ }
+  }
   async function image() { const result = await hooks.inspectImage(); if (result.kernelVersion !== config.dshVersion || result.kernel && result.kernel !== 'dsh') throw fail('runtime_source_kernel_mismatch', 503); return result; }
   async function observe(project, sessionId, incarnation, contextReference, inspected) {
     const roots = await storageRoots(config, project, incarnation, contextReference), copies = [];
@@ -132,7 +150,7 @@ export function createSourceStorageController(config, hooks) {
     return { roots, copies, root: present[0]?.root ?? { id: sessionId, absent: true } };
   }
   return {
-    beforeStart: cleanup,
+    beforeStart,
     async capture(project, payload) {
       await cleanup(project);
       const sessionId = safeId(payload.sessionId, 'conversation id'), inspected = await image();

@@ -111,3 +111,31 @@ test('raw sources without a cache directory receive a durable receipt mount befo
   const frozen = await service.capture(f.project, { sessionId: 'a', contextReference: null, incarnation });
   await service.purge(f.project, frozen); assert.equal(purged, true);
 });
+
+test('a runtime start never scans Docker unless a maintenance ended abnormally, and a slow Docker never fails it', async t => {
+  const { createSourceStorageController } = await load(); const f = await fixture(t); const scans = []; let docker = async () => ({ status: 0, stdout: '', stderr: '' });
+  let failHelper = false;
+  const service = createSourceStorageController(f.config, {
+    inspectImage: async () => ({ imageId: 'sha256:pinned', kernelVersion: 'test-pin', kernel: 'dsh' }), runtimeStatus: async () => ({ state: 'missing' }),
+    dockerRun: async (...args) => { scans.push(args); return docker(...args); },
+    execute: async input => { if (failHelper) throw new Error('helper died'); return { root, sessions: [root] }; },
+  });
+  await service.beforeStart(f.project);
+  assert.equal(scans.length, 0, 'no maintenance happened: no scan');
+  await service.capture(f.project, { sessionId: 'a', contextReference: null, incarnation });
+  const afterCapture = scans.length; // capture scans (fail closed) before its helper
+  await service.beforeStart(f.project); assert.equal(scans.length, afterCapture, 'a clean maintenance leaves nothing to scan for');
+  docker = async () => ({ status: 1, stdout: '', stderr: 'dockerd slow' });
+  failHelper = true; await assert.rejects(service.capture(f.project, { sessionId: 'a', contextReference: null, incarnation }));
+  // The capture itself failed closed on the scan (503); the start does not.
+  await assert.doesNotReject(service.beforeStart(f.project));
+});
+
+test('capture and purge still refuse when the helper scan cannot run', async t => {
+  const { createSourceStorageController } = await load(); const f = await fixture(t);
+  const service = createSourceStorageController(f.config, {
+    inspectImage: async () => ({ imageId: 'sha256:pinned', kernelVersion: 'test-pin', kernel: 'dsh' }), runtimeStatus: async () => ({ state: 'missing' }),
+    dockerRun: async () => ({ status: 1, stdout: '', stderr: 'down' }), execute: async () => ({ root, sessions: [root] }),
+  });
+  await assert.rejects(service.capture(f.project, { sessionId: 'a', contextReference: null, incarnation }), { code: 'runtime_source_helper_unavailable' });
+});
