@@ -30,10 +30,15 @@ export function frontierNavView(pathname: string, search: string): FrontierNavVi
   return pathname.startsWith("/app/frontier/zones") || pathname.startsWith("/app/frontier/authors") ? "zones" : null;
 }
 
-/** The rows: 精选 is the page's address with no view, the others name theirs. */
+/**
+ * The rows: 精选 is the page's address with no view, the others name theirs. 简报 pressed on its weekly stays on the weekly, as
+ * the tab did: the period chip is the way between the two.
+ */
 export function frontierDirectoryRows(pathname: string, search: string): ModuleDirectoryRow[] {
   const active = frontierNavView(pathname, search);
-  return VIEWS.map(view => ({ key: view.key, label: view.label, icon: view.icon, to: view.key === "selected" ? "/app/frontier" : `/app/frontier?view=${view.key}`, current: active === view.key }));
+  const weekly = active === "daily" && new URLSearchParams(search).get("view") === "weekly";
+  return VIEWS.map(view => ({ key: view.key, label: view.label, icon: view.icon,
+    to: view.key === "daily" && weekly ? `${pathname}${search}` : view.key === "selected" ? "/app/frontier" : `/app/frontier?view=${view.key}`, current: active === view.key }));
 }
 
 /** Anatomy: the seven views of 前沿动态 nested under its sidebar row (see ModuleDirectoryNav). Verification: FrontierWorkspaceNav.test.tsx. */

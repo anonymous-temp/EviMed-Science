@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WebApiError } from "@/lib/apiClient";
 import { useProjectStore } from "@/lib/projects";
 import { nativeProfile, nativeSettings } from "@/components/memory/__fixtures__/memoryProfiles";
+import { MemoryWorkspaceNav } from "@/components/memory/MemoryWorkspaceNav";
 import { MemoryHubPage } from "./MemoryHubPage";
 
 const api = vi.hoisted(() => ({
@@ -29,6 +30,7 @@ vi.mock("@/components/markdown-viewer/MarkdownViewer", () => ({ MarkdownViewer: 
 function open(search = "") {
   return render(
     <MemoryRouter initialEntries={[`/app/memory${search}`]}>
+      <MemoryWorkspaceNav overviewOffered={false} />
       <Routes><Route path="/app/memory" element={<MemoryHubPage />} /></Routes>
     </MemoryRouter>,
   );
@@ -57,8 +59,6 @@ describe("the memory page of an account whose memory is kept as files", () => {
     const row = within(preferences).getByText("回答结构").closest("li")!;
     expect(row).toHaveTextContent("先给结论，再给依据；表格不超过五列");
     expect(within(preferences).getByText("meta analysis method")).toBeInTheDocument();
-    // The list counts every row of the capsule that is about the person (five) and the project's two, which are its last group.
-    expect(screen.getByRole("link", { name: /关于你/ })).toHaveTextContent("7");
   });
 
   it("lists the project's files as the last group of 关于你, each row naming its project in plain text", async () => {

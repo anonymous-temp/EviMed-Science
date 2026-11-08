@@ -5,8 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { WebStructuredMemory } from "@/lib/apiClient";
 import { useProjectStore } from "@/lib/projects";
 import { expectComposed } from "@/test/expectComposed";
-import { precedes } from "@/test/compositionFixtures";
 import { MemoryHubPage } from "./MemoryHubPage";
+import { MemoryWorkspaceNav } from "@/components/memory/MemoryWorkspaceNav";
 
 const fetchMemoryProfile = vi.fn();
 const searchMemories = vi.fn();
@@ -111,6 +111,7 @@ const entry = (patch: Record<string, unknown> = {}) => ({
 function open(search = "") {
   return render(
     <MemoryRouter initialEntries={[`/app/memory${search}`]}>
+      <MemoryWorkspaceNav overviewOffered={map.feature === "on"} />
       <Routes><Route path="/app/memory" element={<MemoryHubPage />} /></Routes>
     </MemoryRouter>,
   );
@@ -128,6 +129,7 @@ function openInHistory(search = "") {
   return render(
     <MemoryRouter initialEntries={["/away", `/app/memory${search}`]} initialIndex={1}>
       <Where />
+      <MemoryWorkspaceNav overviewOffered={map.feature === "on"} />
       <Routes>
         <Route path="/app/memory" element={<MemoryHubPage />} />
         <Route path="/away" element={<p>别处</p>} />
@@ -136,8 +138,8 @@ function openInHistory(search = "") {
   );
 }
 const where = () => screen.getByTestId("where").textContent;
-/** The left column's links, as the frame draws them: places, not a tab list. */
-const nav = () => screen.getByRole("navigation", { name: "记忆" });
+/** The sidebar's nested directory, as the shell draws it: places, not a tab list. */
+const nav = () => screen.getByRole("navigation", { name: "记忆胶囊的内容" });
 const navLinks = () => within(nav()).getAllByRole("link");
 /** The page's own width as the frame measures it (jsdom has no layout): 0 until a test gives it room. */
 let room = 0;
@@ -187,24 +189,17 @@ describe("记忆胶囊", () => {
   });
   afterEach(() => { cleanup(); vi.clearAllMocks(); vi.restoreAllMocks(); room = 0; useProjectStore.setState({ projects: [], currentId: "default" }); });
 
-  it("is one page: the section's heading on the right, the title, the memory switch, the navigation and the two actions in the left column, and no account name", async () => {
-    room = 1200;
+  it("is one page: the section's heading with the capsule's controls in its header, the navigation in the sidebar's directory, and no account name", async () => {
     open();
     const heading = await screen.findByRole("heading", { name: "关于你", level: 1 });
     const [banner] = screen.getAllByRole("banner");
     expect(banner).toContainElement(heading);
-    // The header of the section holds its heading and nothing of the capsule's controls.
-    expect(within(banner).queryByRole("switch")).toBeNull();
-    expect(within(banner).queryByRole("button", { name: "记忆设置" })).toBeNull();
-    const column = document.querySelector<HTMLElement>("[data-memory-nav]")!;
-    expect(column).toHaveAttribute("data-memory-nav", "column");
-    expect(column).toHaveTextContent("记忆胶囊");
-    expect(await within(column).findByRole("switch", { name: "记忆" })).toHaveAttribute("aria-checked", "true");
-    expect(within(column).getByRole("button", { name: "记住这一条" })).toHaveClass("bg-surface-2");
-    expect(within(column).getByRole("button", { name: "记忆设置" })).toBeInTheDocument();
-    // Top to bottom: the switch, the navigation, then the button and the menu at the foot.
-    const order = [within(column).getByRole("switch"), nav(), within(column).getByRole("button", { name: "记住这一条" }), within(column).getByRole("button", { name: "记忆设置" })];
-    for (const [before, after] of order.slice(1).map((item, index) => [order[index]!, item] as const)) expect(precedes(before, after)).toBe(true);
+    // The header of the section holds its heading and the capsule's controls: the switch, the button and the menu.
+    expect(await within(banner).findByRole("switch", { name: "记忆" })).toHaveAttribute("aria-checked", "true");
+    expect(within(banner).getByRole("button", { name: "记住这一条" })).toBeInTheDocument();
+    expect(within(banner).getByRole("button", { name: "记忆设置" })).toBeInTheDocument();
+    expect(banner).not.toContainElement(nav());
+    expect(document.querySelector("[data-memory-nav]")).toBeNull();
     expect(within(banner).queryByLabelText("记忆持有人")).toBeNull();
     for (const gone of ["最近变化", "记下的内容", "EviMed 眼中的你", "方法学习", "能力经验", "查看做法", "效果待观察", "完成对照评估", "推断"]) {
       expect(screen.queryByText(gone)).toBeNull();
@@ -229,6 +224,7 @@ describe("记忆胶囊", () => {
     map.feature = "on";
     render(
       <MemoryRouter initialEntries={["/app/memory?tab=self"]}>
+        <MemoryWorkspaceNav overviewOffered={map.feature === "on"} />
         <Routes>
           <Route path="/app/memory" element={<MemoryHubPage />} />
           <Route path="/app/memory/overview" element={<p>总览页</p>} />
@@ -248,7 +244,7 @@ describe("记忆胶囊", () => {
 
   it("opens the overview on the unqualified memory landing address", async () => {
     map.feature = "on";
-    render(<MemoryRouter initialEntries={["/app/memory"]}><Routes>
+    render(<MemoryRouter initialEntries={["/app/memory"]}><MemoryWorkspaceNav overviewOffered={map.feature === "on"} /><Routes>
       <Route path="/app/memory" element={<MemoryHubPage />} />
       <Route path="/app/memory/overview" element={<p>总览首页</p>} />
     </Routes></MemoryRouter>);
@@ -260,6 +256,7 @@ describe("记忆胶囊", () => {
     map.feature = "on";
     render(
       <MemoryRouter initialEntries={["/app/memory?tab=self"]}>
+        <MemoryWorkspaceNav overviewOffered={map.feature === "on"} />
         <Routes>
           <Route path="/app/memory" element={<MemoryHubPage />} />
           <Route path="/app/memory/overview" element={<p>总览页</p>} />
@@ -303,8 +300,7 @@ describe("记忆胶囊", () => {
   it("has the search box in the one toolbar row of the sticky band, the navigation outside it, and each section is one list", async () => {
     open();
     await screen.findByRole("button", { name: /药学背景/ });
-    // 关于你 counts what its list holds: the four about the person and the two that carry a project.
-    expect(navLinks().map((item) => item.textContent)).toEqual(["关于你6", "做法1", "收到的2"]);
+    expect(navLinks().map((item) => item.textContent)).toEqual(["关于你", "做法", "收到的"]);
     const search = screen.getByRole("searchbox", { name: "搜索记忆" });
     const band = document.querySelector("[data-page-chrome]")!;
     expect(band.querySelector("[data-toolbar]")).toContainElement(search);
@@ -338,18 +334,18 @@ describe("记忆胶囊", () => {
   });
 
   describe("each read is drawn as it arrives (the walk's memory page that took 30 s on the owner's data)", () => {
-    it("lists the memories while the methods are still being read, and gives 做法 its number when they arrive", async () => {
+    it("lists the memories while the methods are still being read, and 做法 when they arrive", async () => {
       let release: (methods: unknown[]) => void = () => {};
       listAllMethods.mockImplementation(() => new Promise((resolve) => { release = resolve; }));
       open();
       // The memories are in: their list is open and listed, and the slowest read has not been waited for.
       expect(await screen.findByRole("button", { name: /药学背景/ })).toBeInTheDocument();
-      expect(screen.getByRole("link", { name: /关于你/ })).toHaveAttribute("aria-current", "page");
-      // 做法 is still being read: it has no number, which is not a zero.
-      expect(screen.getByRole("link", { name: "做法" })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "关于你", level: 1 })).toBeInTheDocument();
+      // 做法 is still being read: the list does not wait for it, and nothing says it failed.
       expect(screen.queryByText("没有读到全部记忆。")).toBeNull();
       await act(async () => { release([method]); });
-      expect(await screen.findByRole("link", { name: /做法\s*[1-9]/ })).toBeInTheDocument();
+      await userEvent.click(screen.getByRole("link", { name: "做法" }));
+      expect(await screen.findByRole("button", { name: new RegExp(method.title) })).toBeInTheDocument();
     });
 
     it("keeps the list under the section that is waiting for its own reads, and never lands on a list before it can tell which holds something", async () => {
@@ -530,7 +526,7 @@ describe("记忆胶囊", () => {
   });
 
   // R19 (plan §3 S10): the page held to the framework's assertions, on each of its sections.
-  describe("composed as a page of the framework, beside a left column", () => {
+  describe("composed as a page of the framework", () => {
     it.each(["self", "methods"])("%s: the search is the one toolbar in the sticky band, the list is the body, and there is no tab list at all", async (tab) => {
       const { container } = open(`?tab=${tab}`);
       await screen.findByRole("switch", { name: "记忆" });
@@ -563,39 +559,7 @@ describe("记忆胶囊", () => {
     });
   });
 
-  describe("the left column", () => {
-    it("stands beside the section when the page has room for both: its own scroll, its own place, the section's scroll is the page's", async () => {
-      room = 1100;
-      const { container } = open();
-      await screen.findByRole("switch", { name: "记忆" });
-      const frame = container.querySelector("[data-memory-frame]")!;
-      expect(frame).toHaveAttribute("data-memory-frame", "split");
-      const column = frame.querySelector<HTMLElement>("[data-memory-nav]")!;
-      expect(column).toHaveAttribute("data-memory-nav", "column");
-      expect(column).toHaveClass("overflow-y-auto", "w-60", "shrink-0");
-      expect(frame.querySelector("[data-page-body]")!.closest(".overflow-y-auto")).not.toBe(column);
-      expect(precedes(column, frame.querySelector("[data-page-header]")!)).toBe(true);
-    });
-
-    it("folds into one row above the section when the page has not room for both, with the same controls once", async () => {
-      room = 700;
-      const { container } = open();
-      await screen.findByRole("switch", { name: "记忆" });
-      const frame = container.querySelector("[data-memory-frame]")!;
-      expect(frame).toHaveAttribute("data-memory-frame", "folded");
-      const row = frame.querySelector<HTMLElement>("[data-memory-nav]")!;
-      expect(row).toHaveAttribute("data-memory-nav", "row");
-      expect(row).not.toHaveClass("w-60");
-      expect(precedes(row, frame.querySelector("[data-page-header]")!)).toBe(true);
-      // One set of controls, wherever they stand.
-      expect(screen.getAllByRole("switch", { name: "记忆" })).toHaveLength(1);
-      expect(screen.getAllByRole("button", { name: "记住这一条" })).toHaveLength(1);
-      expect(screen.getAllByRole("button", { name: "记忆设置" })).toHaveLength(1);
-      expect(row).toContainElement(screen.getByRole("switch", { name: "记忆" }));
-      expect(row).toContainElement(nav());
-      expect(navLinks().map((link) => link.getAttribute("aria-current"))).toEqual(["page", null, null]);
-    });
-
+  describe("the sidebar's directory", () => {
     it.each([["self", "关于你"], ["methods", "做法"], ["received", "收到的"]])("is on every list, with %s in force", async (tab, name) => {
       open(`?tab=${tab}`);
       await screen.findByRole("switch", { name: "记忆" });
@@ -620,6 +584,7 @@ describe("记忆胶囊", () => {
       map.feature = feature;
       return render(
         <MemoryRouter initialEntries={[`/app/memory?tab=${tab}`]}>
+          <MemoryWorkspaceNav overviewOffered={map.feature === "on"} />
           <Routes>
             <Route path="/app/memory" element={<><MemoryHubPage /><Where /></>} />
             <Route path="/app/memory/overview" element={<><p>总览页</p><Where /></>} />
@@ -647,7 +612,7 @@ describe("记忆胶囊", () => {
       openOld("loading");
       expect(await screen.findByTestId("where")).toHaveTextContent("/app/memory?tab=growth");
       expect(screen.queryByText("总览页")).toBeNull();
-      expect(screen.queryByRole("link", { name: "关于你" })).toBeNull();
+      expect(screen.queryByRole("heading", { name: "关于你" })).toBeNull();
     });
 
     it("sends it to the first list where the deployment draws no map, and never leaves a tab that is not there", async () => {
@@ -662,6 +627,7 @@ describe("记忆胶囊", () => {
     function openOld(search: string) {
       return render(
         <MemoryRouter initialEntries={[`/app/memory${search}`]}>
+          <MemoryWorkspaceNav overviewOffered={false} />
           <Routes><Route path="/app/memory" element={<><MemoryHubPage /><Where /></>} /></Routes>
         </MemoryRouter>,
       );
@@ -766,13 +732,13 @@ describe("记忆胶囊", () => {
     expect(await screen.findByRole("dialog", { name: "分享与导入" })).toBeInTheDocument();
   });
 
-  it("carries no number on a list with nothing in it", async () => {
+  it("lists the three sections without numbers, empty or not", async () => {
     fetchMemoryProfile.mockResolvedValue({ records: [], groups: {}, activeCount: 0, pendingCount: 0, conversations: {}, usage: {} });
     fetchMyCapsule.mockResolvedValue({ capsule: null, capsules: [], entries: [], forgotten: [] });
     listAllMethods.mockResolvedValue([]);
     open();
     await screen.findByText("还没有关于你的记忆");
-    expect(navLinks().map((item) => item.textContent)).toEqual(["关于你", "做法", "收到的2"]);
+    expect(navLinks().map((item) => item.textContent)).toEqual(["关于你", "做法", "收到的"]);
   });
 
   it("says what will appear on a tab that is empty, and nothing is a 「还没有记忆」 for a tab that could not be read", async () => {
@@ -856,7 +822,7 @@ describe("记忆胶囊", () => {
     await waitFor(() => expect(where()).toBe("/app/memory?tab=methods&q=%E6%8A%8A%E5%85%B3"));
     // Typing replaced the entry; the link pushed one: a single Back leaves for the page before it.
     await act(async () => { await router.navigate!(-1); });
-    expect(where()).toBe("/app/memory");
+    expect(where()).toBe("/app/memory?tab=self");
     expect(screen.getByRole("link", { name: /^关于你/ })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("searchbox", { name: "搜索记忆" })).toHaveValue("");
   });
@@ -874,15 +840,15 @@ describe("记忆胶囊", () => {
     openInHistory();
     await user.click(await screen.findByRole("button", { name: /药学背景/ }));
     expect(await screen.findByRole("dialog", { name: "背景" })).toBeInTheDocument();
-    expect(where()).toBe("/app/memory?open=record%3Arec_1");
+    expect(where()).toBe("/app/memory?tab=self&open=record%3Arec_1");
     await act(async () => { await router.navigate!(-1); });
     expect(screen.queryByRole("dialog")).toBeNull();
-    expect(where()).toBe("/app/memory");
+    expect(where()).toBe("/app/memory?tab=self");
     await act(async () => { await router.navigate!(1); });
     const drawer = await screen.findByRole("dialog", { name: "背景" });
     await user.click(within(drawer).getByRole("button", { name: "关闭" }));
     expect(screen.queryByRole("dialog")).toBeNull();
-    expect(where()).toBe("/app/memory");
+    expect(where()).toBe("/app/memory?tab=self");
     // The close popped the entry the open pushed: one Back more leaves the page, it does not land on the same list again.
     await act(async () => { await router.navigate!(-1); });
     expect(where()).toBe("/away");
@@ -893,17 +859,17 @@ describe("记忆胶囊", () => {
     openInHistory(`?open=${encodeURIComponent("record:rec_1")}`);
     const drawer = await screen.findByRole("dialog", { name: "背景" });
     await user.click(within(drawer).getByRole("button", { name: "关闭" }));
-    expect(where()).toBe("/app/memory");
+    expect(where()).toBe("/app/memory?tab=self");
     const box = screen.getByRole("searchbox", { name: "搜索记忆" });
     await user.type(box, "背景");
-    await waitFor(() => expect(where()).toBe("/app/memory?q=%E8%83%8C%E6%99%AF"));
+    await waitFor(() => expect(where()).toBe("/app/memory?tab=self&q=%E8%83%8C%E6%99%AF"));
     await user.click(screen.getByRole("button", { name: "清除搜索" }));
     expect(box).toHaveValue("");
-    expect(where()).toBe("/app/memory");
+    expect(where()).toBe("/app/memory?tab=self");
     await user.type(box, "背景");
     await user.keyboard("{Escape}");
     expect(box).toHaveValue("");
-    expect(where()).toBe("/app/memory");
+    expect(where()).toBe("/app/memory?tab=self");
   });
 
   it("comes back to the place in the list the reader had scrolled to after a visit elsewhere", async () => {
@@ -940,7 +906,7 @@ describe("记忆胶囊", () => {
       const list = await screen.findByRole("list", { name: "收到的胶囊" });
       const link = within(nav()).getByRole("link", { name: /收到的/ });
       expect(link).toHaveAttribute("aria-current", "page");
-      expect(link.textContent).toBe("收到的2");
+      expect(link.textContent).toBe("收到的");
       // A person's own pack first, the platform's starter packs after it; one switch each, named after its pack.
       expect(within(list).getAllByRole("listitem").map((row) => within(row).getByRole("switch").getAttribute("aria-label"))).toEqual([
         "启用“李主任的工作方式”", "启用“日常文稿”", "启用“文献检索与引用”",

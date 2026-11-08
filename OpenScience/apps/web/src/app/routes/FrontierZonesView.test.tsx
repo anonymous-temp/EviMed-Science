@@ -6,6 +6,7 @@ import type { FrontierStatus } from "@/lib/frontierClient";
 import { WebApiError } from "@/lib/apiClient";
 import { expectComposed } from "@/test/expectComposed";
 import { topicDefinition, topicDirectory, topicPreview, topicZone } from "@/components/frontier/__fixtures__/zoneDirectory";
+import { FrontierWorkspaceNav } from "@/components/frontier/FrontierWorkspaceNav";
 import { FrontierPage } from "./FrontierPage";
 
 const client = vi.hoisted(() => ({
@@ -37,7 +38,7 @@ function mount(path = "/app/frontier?view=zones") {
   return render(
     <MemoryRouter initialEntries={[path]}>
       <Routes>
-        <Route path="/app/frontier" element={<><FrontierPage /><Where /></>} />
+        <Route path="/app/frontier" element={<><FrontierWorkspaceNav /><FrontierPage /><Where /></>} />
         <Route path="/app/frontier/zones/*" element={<ZoneStub />} />
         <Route path="*" element={<Where />} />
       </Routes>
@@ -59,13 +60,13 @@ beforeEach(() => {
 describe("证据专区 opens in place", () => {
   it("is a tab of the feed page: the same band and tab row, the view first in that row, the specialty and the search, the address ?view=zones", async () => {
     mount("/app/frontier");
-    await userEvent.click(await screen.findByRole("tab", { name: "证据专区" }));
+    await userEvent.click(await screen.findByRole("link", { name: "证据专区" }));
     expect(where()).toBe("/app/frontier?view=zones");
     expect(await screen.findByRole("link", { name: "GLP-1 受体激动剂减重" })).toHaveAttribute("href", "/app/frontier/zones/zone_glp1");
-    const facts = expectComposed(document.body, { tablists: 1, stepRail: false, toolbar: true });
+    const facts = expectComposed(document.body, { tablists: 0, stepRail: false, toolbar: true });
     expect(screen.getByRole("heading", { level: 1, name: "前沿动态" })).toBeInTheDocument();
     const row = facts.toolbars[0];
-    expect(within(row).getByRole("tab", { name: "证据专区" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("link", { name: "证据专区" })).toHaveAttribute("aria-current", "page");
     // 推荐 · 我的 · 大家建的 first among the view's controls, 推荐 pressed.
     expect(within(row).getByRole("button", { name: "推荐" })).toHaveAttribute("aria-pressed", "true");
     expect(within(row).getByRole("button", { name: "我的" })).toHaveAttribute("aria-pressed", "false");
@@ -115,7 +116,7 @@ describe("证据专区 opens in place", () => {
     expect(where()).toBe("/app/frontier?view=zones");
     // Another view lets go of the zones' view.
     await userEvent.click(screen.getByRole("button", { name: "我的" }));
-    await userEvent.click(screen.getByRole("tab", { name: "全部" }));
+    await userEvent.click(screen.getByRole("link", { name: "全部" }));
     expect(where()).toBe("/app/frontier?view=all");
   });
 
@@ -209,7 +210,7 @@ describe("证据专区 opens in place", () => {
     expect(await screen.findByText("暂无证据专区")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "新建专区" })).toBeNull();
     expect(screen.getByRole("heading", { level: 1, name: "前沿动态" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "证据专区" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("link", { name: "证据专区" })).toHaveAttribute("aria-current", "page");
   });
 
   it("ends a search for a group's name with 「新建专区：…」, which opens the editor with the name in it", async () => {

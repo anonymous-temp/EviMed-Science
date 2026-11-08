@@ -168,6 +168,11 @@ function MemoryHub() {
   // pressed is theirs; otherwise the page opens on the first list that has something in it, when the data is in.
   const [chosen, setChosen] = useState(() => params.has("record") || params.has("method"));
   const landed = chosen || named !== null;
+  // Where the page chose the list itself, the address says which, in place: the sidebar's directory marks the section from the address.
+  useEffect(() => {
+    if (!landed || named !== null) return;
+    setParams((current) => { const next = new URLSearchParams(current); next.set("tab", pickedTab); return next; }, { replace: true });
+  }, [landed, named, pickedTab, setParams]);
 
   // 「刚记住了 … 撤销」 for what changed by itself since the last visit.
   useMemoryWritePrompt();

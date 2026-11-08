@@ -27,3 +27,8 @@ it("marks nothing on a reading page", () => {
   open("/app/frontier/items/i1");
   expect(screen.queryAllByRole("link").filter(link => link.getAttribute("aria-current"))).toEqual([]);
 });
+it("keeps the weekly when 简报 is pressed on it", () => {
+  open("/app/frontier?view=weekly&week=2026-09-21");
+  expect(screen.getByRole("link", { name: "简报" })).toHaveAttribute("href", "/app/frontier?view=weekly&week=2026-09-21");
+  expect(screen.getByRole("link", { name: "简报" })).toHaveAttribute("aria-current", "page");
+});
