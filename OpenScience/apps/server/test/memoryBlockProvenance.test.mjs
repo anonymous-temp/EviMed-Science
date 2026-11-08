@@ -66,7 +66,11 @@ test("a memory block states provenance as one closed attribute per memory and in
   // The attribute: one word of a closed vocabulary on every memory, ASCII, nothing explained beside it.
   const tokens = [...text.matchAll(/<evimed-memory [^>]*origin="([^"]*)"/g)].map((match) => match[1]);
   assert.equal(tokens.length, list.length);
-  assert.deepEqual([...new Set(tokens)].sort(), [...Object.values(ORIGIN_TEXT), "unrecorded"].sort(), "every origin is one of the closed words");
+  // The vocabulary grew with the attribution round (engine, imported, mixed, document, assistant, opinion, unknown): the fixture's memories
+  // need not carry all of them, but every word in the block is one of the closed list and the ones it does carry are all there.
+  const closed = new Set([...Object.values(ORIGIN_TEXT), "unrecorded"]);
+  assert.ok([...new Set(tokens)].every((token) => closed.has(token)), "every origin is one of the closed words");
+  for (const word of ["user", "user-edited", "inferred", "platform", "unrecorded"]) assert.ok(tokens.includes(word), word);
   for (const token of tokens) assert.match(token, /^[a-z-]+$/);
 });
 

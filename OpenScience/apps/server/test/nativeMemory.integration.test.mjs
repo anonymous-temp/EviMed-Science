@@ -77,7 +77,7 @@ test("a memory file is a record, the profile is a document of lines, and counts 
   const lines = profilePage.records.filter((record) => record.document);
   assert.equal(lines.length, 2);
   assert.equal(lines[0].document.uri, profile);
-  assert.ok(lines.some((record) => record.value === "Works as a pharmacist in a hospital" && record.lastConfirmedAt === "2026-09-01T00:00:00.000Z"), "an as-of date is the line's confirmation, not its text");
+  assert.ok(lines.some((record) => record.value === "Works as a pharmacist in a hospital" && record.lastConfirmedAt === null), "an as-of date is not the line's text, and since the attribution round (a record's producer evidence is per statement and never a confirmation) it is no confirmation either");
   const preference = profilePage.records.find((record) => record.uri === language);
   assert.equal(preference.kind, "preference");
   assert.equal(preference.nativeType, "preferences");
