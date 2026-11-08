@@ -6141,11 +6141,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       },notify:async(origin,taskId)=>{await notificationService?.create(origin.userId,{noticeType:'notify',projectId:origin.projectId,title:'患者匹配需要继续',body:'已保存当前结果，可回到原对话继续。',source:{type:'thread',id:origin.rootSessionId},idempotencyKey:`matching-attention:${taskId}`});},
       report:code=>process.stderr.write(`patient matching continuation: ${code}\n`),
     });
+    // Gate G1 (2026-11-08): a project-scoped study's matching runs on the plugin in the study's own conversation, as a conversation study's
+    // does; only a deployment without the plugin's catalogue (no dispatch descriptor) keeps the batch judge.
     installPatientMatchingLegacyBridge({vcr,adapter:patientMatchingAdapter,documents:productDocuments,resolveOrigin:async study=>{
-      if(study.scope!=='conversation'||!study.conversationSessionId)return null;
+      const sessionId=study.scope==='conversation'?study.conversationSessionId:(await resolveStudyConversation(study,{create:true}).catch(()=>null))?.sessionId;
+      if(!sessionId)return null;
       const project=await sourceProject({userId:study.userId,projectId:study.projectId}),descriptor=await patientMatchingDispatchDescriptor({lifecycle:patientMatchingLifecycle,runtime:runtimeManager,project});
-      const original=(await agentRuns.list(project)).find(run=>run.sessionId===study.conversationSessionId);
-      return descriptor?{userId:study.userId,projectId:study.projectId,rootSessionId:study.conversationSessionId,pluginGeneration:descriptor.generation,runId:study.executionOrigin?.runId??original?.id??null}:null;
+      const original=(await agentRuns.list(project)).find(run=>run.sessionId===sessionId);
+      return descriptor?{userId:study.userId,projectId:study.projectId,rootSessionId:sessionId,pluginGeneration:descriptor.generation,runId:study.executionOrigin?.runId??original?.id??null}:null;
     }});
   }
   const patientMatchingGatewayHandler=createPatientMatchingGatewayHandler(config,runtimeManager,{vcr,adapter:patientMatchingAdapter,

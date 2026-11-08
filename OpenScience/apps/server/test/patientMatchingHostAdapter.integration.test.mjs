@@ -469,3 +469,14 @@ test('older records outside the window are retrieved per criterion and found by 
   assert.deepEqual((await search({query:'quantum chromodynamics'})).data.passages,[],'no filler when nothing matches');
  }finally{vcr.evidence.judgmentRecord=original;}
 });
+
+test('a project study\'s own conversation resolves to that study, so its matching runs on the plugin there (gate G1)', options, async () => {
+  const own = await vcr.store.createStudy({ userId: 'owner', projectId: 'project', name: 'Project study', dataTier: 'T0' });
+  assert.notEqual(own.scope, 'conversation');
+  await vcr.store.setConversationSession(own.id, 'study-own-session');
+  const found = await vcr.store.taskContext({ userId: 'owner', projectId: 'project', rootSessionId: 'study-own-session' });
+  assert.equal(found.id, own.id)
+  assert.equal(found.conversationSessionId, 'study-own-session')
+  const conversational = await vcr.store.taskContext({ userId: 'owner', projectId: 'project', rootSessionId: 'another-session' });
+  assert.equal(conversational.scope, 'conversation', 'any other conversation keeps its own conversation study')
+});

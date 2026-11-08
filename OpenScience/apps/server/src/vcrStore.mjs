@@ -487,6 +487,9 @@ export class VcrStore extends VcrStoreBase {
     if (![userId, projectId, rootSessionId].every(value => typeof value === 'string' && /^[A-Za-z0-9_-]{1,160}$/.test(value))) {
       throw new TypeError('Invalid conversation research scope.');
     }
+    // A project study's own conversation is that study's context (gate G1: its matching runs on the plugin in that conversation).
+    const own = await this.one(`SELECT * FROM ${VCR_SCHEMA}.studies WHERE user_id=$1 AND project_id=$2 AND scope<>'conversation' AND conversation_session_id=$3 AND deleted_at IS NULL ORDER BY created_at LIMIT 1`,[userId,projectId,rootSessionId]);
+    if (own) return vcrStudyFromRow(own);
     const existing = await this.one(`SELECT * FROM ${VCR_SCHEMA}.studies WHERE user_id=$1 AND project_id=$2 AND scope='conversation' AND conversation_session_id=$3`,[userId,projectId,rootSessionId]);
     if (existing?.deleted_at) throw new HttpError(410,'vcr_task_context_deleted','This conversation research context was deleted.');
     if (existing) return vcrStudyFromRow(existing);

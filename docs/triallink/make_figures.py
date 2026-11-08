@@ -143,7 +143,7 @@ def leaderboard(data, out):
 
 
 def architecture(out):
-    """One pipeline, three stages: retrieval (two searches fused), ranking (two readings fused) and the criterion-level assessment."""
+    """One pipeline, three stages: retrieval (two searches fused), ranking (three orders fused) and the criterion-level assessment."""
     fig, ax = plt.subplots(figsize=(11.5, 4.4), facecolor=SURFACE)
     ax.set_facecolor(SURFACE)
     ax.set_xlim(0, 120)
@@ -161,34 +161,36 @@ def architecture(out):
         ax.add_patch(FancyArrowPatch((x0, y0), (x1, y1), arrowstyle="-|>", mutation_scale=11, color=INK_2, linewidth=1.2,
                                      linestyle="--" if dashed else "-", shrinkA=0, shrinkB=0))
 
-    def stage(x, number, name, left, right, merged, note):
+    def stage(x, number, name, chips, merged, note):
         box(x, 6, 36, 33, panel, edge=panel)
         text(x + 18, 36, f"{number}  {name}", size=10.5, weight="bold", color=ACCENT)
-        box(x + 1.5, 20, 15.5, 12, chip); text(x + 9.25, 26, left)
-        box(x + 19, 20, 15.5, 12, chip); text(x + 26.75, 26, right)
+        width = (33 - 1.5 * (len(chips) - 1)) / len(chips)
+        for index, chip_text in enumerate(chips):
+            left = x + 1.5 + index * (width + 1.5)
+            box(left, 20, width, 12, chip); text(left + width / 2, 26, chip_text, size=9 if len(chips) == 2 else 8.2)
+            arrow(left + width / 2, 20, left + width / 2, 15.5)
         box(x + 1.5, 8, 33, 7.5, chip, edge=ACCENT, lw=1.4); text(x + 18, 11.75, merged)
-        arrow(x + 9.25, 20, x + 9.25, 15.5)
-        arrow(x + 26.75, 20, x + 26.75, 15.5)
         text(x + 18, 2.8, note, size=8.5, color=INK_2)
 
     text(1, 43.3, "Linemach: from a patient record to ranked, assessed clinical trials", size=12.5, weight="bold", ha="left")
     box(1, 17, 10.5, 10, chip)
     text(6.25, 22, "Patient\nrecord", size=9.5, weight="bold")
-    stage(15, 1, "Retrieval", "Keyword search\ncondition + 32\nranked terms", "Semantic search\nQwen3.7 text\nembedding",
+    text(6.25, 13.2, "long records:\na dated profile\nsummary", size=7.3, color=INK_2)
+    stage(15, 1, "Retrieval", ["Keyword search\ncondition first,\nthen 32 ranked\nterms", "Semantic search\nQwen3.7 text\nembedding"],
           "Rank fusion, age/sex filter: top 300", "Live: ClinicalTrials.gov · EU CTIS · ChiCTR")
-    stage(55, 2, "Ranking", "Relevance\nreranker\nQwen3.7 rerank", "Eligibility-fit\nscorer\nJev 1.14, 5 levels",
-          "Rank fusion of the two orders (k = 60)", "Whole trial record; no general reasoning model")
+    stage(55, 2, "Ranking", ["Eligibility\nreranker\nQwen3.7\nrerank", "Fit reading\nJev 1.14\n5 levels", "Graded\nreading\nJev 1.14"],
+          "Weighted rank fusion of three orders (k = 60)", "Whole trial record; no general reasoning model")
     box(95, 27, 23.5, 10, chip, edge=ACCENT, lw=1.4)
     text(106.75, 32, "Ranked trials", size=9.5, weight="bold")
-    box(95, 6, 23.5, 16, panel, edge=panel)
-    text(106.75, 19.5, "3  Assessment", size=10.5, weight="bold", color=ACCENT)
-    text(106.75, 12, "Each inclusion and exclusion\ncriterion: met, not met or\nnot enough information\nDeepSeek V4.1 Flash agent", size=8.3)
+    box(95, 2, 23.5, 20.5, panel, edge=panel)
+    text(106.75, 20, "3  Assessment", size=10.5, weight="bold", color=ACCENT)
+    text(106.75, 10.8, "Each criterion: met, not met or\nnot enough information, from\ncited, dated record passages;\ncomposite criteria and time\nwindows computed in code;\ncited evidence re-checked;\nopen questions for the clinician\nDeepSeek V4.1 Flash agent", size=7.4)
     arrow(11.5, 22, 15, 22)
     arrow(51, 22, 55, 22)
     ax.plot([91, 93, 93], [22, 22, 32], color=INK_2, linewidth=1.2, solid_joinstyle="miter")
     arrow(93, 32, 95, 32)
-    arrow(106.75, 27, 106.75, 22.2, dashed=True)
-    text(111.6, 24.6, "trials the\nclinician opens", size=7.5, color=INK_2)
+    arrow(106.75, 27, 106.75, 22.7, dashed=True)
+    text(111.6, 24.8, "trials the\nclinician opens", size=7.5, color=INK_2)
     fig.tight_layout(pad=0.4)
     for suffix in ("svg", "png"):
         fig.savefig(HERE / f"{out}.{suffix}", dpi=200, facecolor=SURFACE, metadata={"Date": None} if suffix == "svg" else None)
