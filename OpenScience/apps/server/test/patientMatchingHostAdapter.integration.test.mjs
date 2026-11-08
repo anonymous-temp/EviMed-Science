@@ -377,3 +377,39 @@ test('native output capacity partitions by24sourceclauses while preserving the w
   const next=(await invoke('ExecutionPort','assess',{phase:'prepare',taskId:p.task.taskId})).data;assert.deepEqual(next.task.selectedPairs,[{subjectKey:context.subjectKey,trialId:ids[2]}]);
  }finally{vcr.evidence.judgmentRecord=original;}
 });
+test('concurrent lanes of one call hold disjoint pairs, and a lane names only a task its own call opened',options,async()=>{
+ const original=vcr.evidence.judgmentRecord,ids=['NCT00000901','NCT00000902','NCT00000903'];
+ vcr.evidence.judgmentRecord=async({registryId})=>({status:'ok',trial:{registryId,registry:'clinicaltrials.gov',title:registryId,summary:'Synthetic registration',eligibility:'Inclusion Criteria:\n'+Array.from({length:20},(_,index)=>`* Age at least18years; clause${index+1}.`).join('\n'),conditions:[],interventions:[]}});
+ try{
+  messages.set(++messageSeq,'Another public synthetic patient is58years old.');const context=(await invoke('PatientDataPort','context',{messageSeq})).data;
+  const call={...origin,callId:'lanes-call',rootCallId:'lanes-call'};
+  const first=(await invoke('ExecutionPort','assess',{phase:'prepare',taskId:context.taskId,registryIds:ids},call)).data;
+  assert.equal(first.kind,'prepared');
+  const second=(await invoke('ExecutionPort','assess',{phase:'prepare',taskId:first.task.taskId,lane:1},call)).data;
+  const third=(await invoke('ExecutionPort','assess',{phase:'prepare',taskId:first.task.taskId,lane:2},call)).data;
+  const held=[first,second,third].map(item=>item.task.selectedPairs.map(pair=>pair.trialId));
+  assert.deepEqual(held.flat().sort(),ids,'every pair is held by exactly one lane');
+  assert.equal(new Set([first,second,third].map(item=>item.executionId)).size,3);
+  assert.equal((await invoke('ExecutionPort','assess',{phase:'prepare',taskId:first.task.taskId,lane:3},call)).data.kind,'busy');
+  assert.equal((await invoke('ExecutionPort','assess',{phase:'prepare',taskId:first.task.taskId,lane:1},call)).data.executionId,second.executionId,'a lane keeps its own prepared execution');
+  await assert.rejects(invoke('ExecutionPort','assess',{phase:'prepare',taskId:first.task.taskId,lane:1}),{code:'patient_matching_lane_invalid'},'another call cannot open a lane on this task');
+  await assert.rejects(invoke('ExecutionPort','assess',{phase:'prepare',lane:1},call),{code:'patient_matching_lane_invalid'});
+  await assert.rejects(invoke('ExecutionPort','assess',{phase:'prepare',taskId:first.task.taskId,lane:99},call),{code:'patient_matching_lane_invalid'});
+  const commit=prepared=>invoke('ResultPort','save',{phase:'commit',taskId:prepared.task.taskId,executionId:prepared.executionId,profileDigest:prepared.profileDigest,decisions:[decisionOf(prepared)],native:{childId:'lane-child',messageId:'lane-message',stopReason:'completed'},diagnostics:[]},call);
+  for(const prepared of [third,first,second])await commit(prepared);
+  const done=(await invoke('ExecutionPort','assess',{phase:'prepare',taskId:first.task.taskId,lane:0},call)).data;
+  assert.equal(done.kind,'saved-result');assert.equal(done.result.counts.complete,3);
+ }finally{vcr.evidence.judgmentRecord=original;}
+});
+test('the transport admits a lane preparation naming only its task and a bounded lane, and nothing else beside the original arguments', options, async () => {
+  const handler = createPatientMatchingGatewayHandler(config,{assertActiveModelGatewayToken:()=>({userId:'owner',projectId:'project'})},{vcr,adapter:{dispatch:async()=>({status:'complete',summary:'stub',data:{kind:'busy'},artifacts:[]})},resolveInvocation:async(_identity,body)=>({...origin,tool:'match_assess',args:{taskId:'task-x'},callId:body.invocation.callId})});
+  async function call(input) {
+    const body={abi:'patient-matching.host.v1',port:'ExecutionPort',operation:'assess',input,invocation:{callId:'c'}};
+    const req=Readable.from([Buffer.from(JSON.stringify(body))]); Object.assign(req,{method:'POST',url:'/internal/patient-matching/v1/port',headers:{authorization:'Bearer test'}});
+    let status;await handler(req,{writeHead:code=>{status=code;},end:()=>{}});return status;
+  }
+  assert.equal(await call({phase:'prepare',taskId:'task-x'}),200,'the original arguments');
+  assert.equal(await call({phase:'prepare',taskId:'task-x',lane:3}),200,'a lane of the same task');
+  for(const input of [{phase:'prepare',taskId:'task-y',lane:1},{phase:'prepare',taskId:'task-x',lane:16},{phase:'prepare',taskId:'task-x',lane:-1},{phase:'prepare',taskId:'task-x',lane:'1'},
+    {phase:'prepare',taskId:'task-x',lane:1,registryIds:['NCT00000001']},{phase:'prepare',lane:1}])assert.equal(await call(input),403,JSON.stringify(input));
+});

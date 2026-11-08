@@ -51,7 +51,7 @@ test('actual native call and original arguments are preserved while ports bind s
 test('Flash overrides a Pro parent and child tools are evidence and exact compute only', async () => {
   const s = setup(); await s.handle('match_assess', { taskId: 'task-a' }, call)
   const a = s.activations[0]
-  assert.deepEqual(a.request.agentOptions, { provider: 'deepseek', model: 'deepseek-flash', reasoningEffort: 'high', maxTokens: 8000 })
+  assert.deepEqual(a.request.agentOptions, { provider: 'deepseek-official', model: 'deepseek-flash', reasoningEffort: 'high', maxTokens: 8000 })
   assert.equal(a.delivery, 'caller')
   assert.equal(a.request.maxDepth, 1)
   assert.match(a.request.prompt[0].text, /UNTRUSTED_MATCHING_DATA/)
@@ -243,4 +243,61 @@ test('a refused child start saves no invented failed clinical attempt', async ()
 test('discovery accepts a focused query at200 characters and rejects201',()=>{
   assert.equal(validateArguments('match_discover',{taskId:'t',query:'x'.repeat(200)}).query.length,200)
   assert.throws(()=>validateArguments('match_discover',{taskId:'t',query:'x'.repeat(201)}))
+})
+test('one call runs a task\'s executions in concurrent lanes, keeps host writes in order and answers with the last saved result', async () => {
+  const f = fixture(), writes = [], prepares = []
+  let open = 0, widest = 0, hostBusy = 0, overlapped = false, served = 0
+  const executionFor = id => ({ ...f.prepared, kind: 'prepared', executionId: id })
+  const host = { abi: HOST_ABI, ports: Object.fromEntries(Object.entries(HOST_PORT_METHODS).map(([port, methods]) => [port, Object.fromEntries(methods.map(method => [method, async envelope => {
+    if (port === 'IdentityPort' && method === 'resolve') return f.scope
+    if (port === 'IdentityPort') return { allowed: true, scope: f.scope }
+    const write = (port === 'ExecutionPort' && envelope.input.phase === 'prepare') || port === 'ResultPort'
+    if (write) { if (hostBusy) overlapped = true; hostBusy++; await new Promise(resolve => setTimeout(resolve, 2)); hostBusy-- }
+    if (port === 'ExecutionPort' && envelope.input.phase === 'prepare') {
+      prepares.push(envelope.input)
+      return { status: 'complete', summary: 'Frozen', data: served < 3 ? executionFor(`exec-${served++}`) : { kind: 'busy', taskId: 'task-a' }, artifacts: [] }
+    }
+    if (port === 'ExecutionPort') return { status: 'complete', summary: 'Frozen', data: executionFor(envelope.input.executionId), artifacts: [] }
+    if (port === 'ResultPort') { writes.push(envelope.input); return { status: 'complete', summary: 'Saved', data: { resultId: `result-${writes.length}` }, artifacts: [] } }
+    return { status: 'complete', summary: 'Host result', data: {}, artifacts: [] }
+  }]))])) }
+  const ctx = { on: () => () => {}, get: name => name === 'agents' ? { get: () => ({}) } : undefined, subagents: { async startActivation(input) {
+    const executionId = /exec-\d+/.exec(JSON.stringify(input.request.prompt))[0]
+    open++; widest = Math.max(widest, open)
+    const decision = { ...f.decision, producer: { ...f.decision.producer, executionId } }
+    return { childId: input.childId, messageId: `message-${executionId}`, result: new Promise(resolve => setTimeout(() => { open--; resolve({ stopReason: 'completed', structured: { decisions: [decision] } }) }, 20)), async dispose() {} }
+  } } }
+  const result = await createMatchingHandler({ host, ctx })('match_assess', { taskId: 'task-a' }, call)
+  assert.equal(widest, 3, 'the three prepared executions ran at the same time')
+  assert.deepEqual(writes.map(write => write.executionId).sort(), ['exec-0', 'exec-1', 'exec-2'])
+  assert.equal(overlapped, false, 'no prepare or commit overlapped another host write')
+  assert.deepEqual(prepares[0], { taskId: 'task-a', phase: 'prepare' }, 'the first preparation carries the original arguments')
+  assert.ok(prepares.slice(1).every(input => Object.keys(input).sort().join() === 'lane,phase,taskId' && input.taskId === 'task-a'))
+  assert.equal(result.status, 'complete')
+  assert.equal(result.data.executions, 3)
+  assert.match(result.data.resultId, /^result-\d$/)
+})
+test('a child answer that fails the decision schema is asked once more on the same execution', async () => {
+  const f = fixture()
+  let starts = 0
+  const ctx = { on: () => () => {}, get: name => name === 'agents' ? { get: () => ({}) } : undefined, subagents: { async startActivation(input) {
+    starts++
+    const outcome = starts === 1 ? { stopReason: 'completed', structured: { wrong: true } } : { stopReason: 'completed', structured: { decisions: [f.decision] } }
+    return { childId: input.childId, messageId: `message-${starts}`, result: Promise.resolve(outcome), async dispose() {} }
+  } } }
+  const writes = []
+  const host = { abi: HOST_ABI, ports: Object.fromEntries(Object.entries(HOST_PORT_METHODS).map(([port, methods]) => [port, Object.fromEntries(methods.map(method => [method, async envelope => {
+    if (port === 'IdentityPort' && method === 'resolve') return f.scope
+    if (port === 'IdentityPort') return { allowed: true, scope: f.scope }
+    if (port === 'ExecutionPort') return { status: 'complete', summary: 'Frozen', data: f.prepared, artifacts: [] }
+    if (port === 'ResultPort') { writes.push(envelope.input); return { status: 'complete', summary: 'Saved', data: { resultId: 'persisted-real' }, artifacts: [] } }
+    return { status: 'complete', summary: 'Host result', data: {}, artifacts: [] }
+  }]))])) }
+  const result = await createMatchingHandler({ host, ctx })('match_assess', { taskId: 'task-a' }, call)
+  assert.equal(starts, 2)
+  assert.equal(writes.length, 1)
+  assert.equal(writes[0].phase, 'commit')
+  assert.deepEqual(writes[0].decisions, [f.decision])
+  assert.ok(writes[0].diagnostics.includes('native_response_retried'))
+  assert.equal(result.data.resultId, 'persisted-real')
 })

@@ -1,7 +1,7 @@
 /** Authenticated native host transport. Responses implement the core ABI directly. */
 import { HOST_ABI, HOST_PORT_METHODS, canonicalJson, assertScope } from '@evimed/patient-matching-core';
 import { HttpError, sendJson, sendError } from './security.mjs';
-import { patientMatchingScope } from './patientMatchingHostAdapter.mjs';
+import { MATCHING_LANES_MAX, patientMatchingScope } from './patientMatchingHostAdapter.mjs';
 
 export const PATIENT_MATCHING_GATEWAY_PATH = '/internal/patient-matching/v1/port';
 const route = Object.freeze({ match_context: ['PatientDataPort', 'context'], match_discover: ['RegistryPort', 'search'], match_evidence: ['KnowledgePort', 'search'], match_compute: ['ExecutionPort', 'compute'], match_assess: ['ExecutionPort', 'assess'], match_job: ['JobPort', 'get'], match_results: ['ResultPort', 'get'], match_correct: ['PatientDataPort', 'correct'], match_report: ['ExecutionPort', 'report'] });
@@ -21,6 +21,12 @@ function validateOperation(body, origin) {
   if (tool === 'match_assess') {
     const input = body.input;
     if (body.port === 'ExecutionPort' && body.operation === 'assess' && input.phase === 'prepare') {
+      // A further concurrent execution of the same call names only its task and lane; the host binds it to a task this call opened.
+      if (Object.hasOwn(input, 'lane')) {
+        if (Object.keys(input).some(key => !['phase','taskId','lane'].includes(key)) || typeof input.taskId !== 'string' || !Number.isSafeInteger(input.lane)
+          || input.lane < 0 || input.lane >= MATCHING_LANES_MAX || (args.taskId && args.taskId !== input.taskId)) denied();
+        return;
+      }
       const { phase: _phase, ...selection } = input;
       if (!same(selection,args)) denied();
       return;

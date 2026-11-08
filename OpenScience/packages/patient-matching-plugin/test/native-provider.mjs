@@ -37,5 +37,5 @@ export function apply(ctx) {
       yield { type: 'finish', reason: { kind: block.type === 'tool-call' ? 'tool-calls' : 'stop' } }
     },
   }
-  ctx.effect(() => ctx.llm.registerAdapter(['deepseek'], adapter))
+  ctx.effect(() => ctx.llm.registerAdapter(['deepseek-official'], adapter))
 }

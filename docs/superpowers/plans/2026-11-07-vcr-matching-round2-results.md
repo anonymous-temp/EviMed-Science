@@ -1,6 +1,6 @@
 # Patient matching, round 2: the measured ranking architecture and every leaderboard
 
-**Date:** 2026-11-07. **Branch:** `codex/vcr-match-delivery-20261104`. **Plugin:** core and native bundle 0.1.2 (worker 0.1.0 unchanged). Not published, not deployed.
+**Date:** 2026-11-07. **Branch:** `codex/vcr-match-delivery-20261104`. **Plugin:** core and native bundle 0.1.3 (2026-11-08; 0.1.2 was superseded before any release; worker 0.1.0 unchanged). Not published, not deployed.
 
 **Owner direction (2026-11-07):** the earlier stop on leaderboards held only until the architecture was settled; Jev goes in; find the best architecture by experiment; use the current retrieval (Qwen3.7 hybrid) and build the TREC index for the leaderboards; delete what is unused; commit and push; list every result table and every compared system for the external technical report.
 
@@ -339,7 +339,7 @@ A read-only trace of every importer of the old path decided what could go now; t
 |---|---|---|
 | Native clinical child on C, n2c2 and the incident cases; 20-candidate latency (target P50 2 min) | not run in this round; discovery stages measured (rerank 2.6 s per 100 trials, Jev 0.25 s per pair with eight in flight, dense and lexical under 2 s) | a reference-host configuration on this machine (≈CNY 10 of Flash) |
 | G1: the plugin serves project-scoped studies and ships everywhere; then delete the batch judge, `match_judge`, the old reranker, `legacy-matching.md`, old eval drivers, prompt builders | old path still live | the deployment decision; one real-session check that a programme run binds the project study |
-| Publication and deployment of plugin 0.1.2 (worker 0.1.0 unchanged) | native smoke and status smoke pass offline on the pinned kernel (DSH 0.2.1-rc.5, zero model calls; bundle SHA256 4f301473…c30d2d with fast-uri 3.1.9, receipts in the assets) | owner |
+| Publication and deployment of plugin 0.1.3 (worker 0.1.0 unchanged) | native smoke and status smoke pass offline on the pinned kernel (DSH 0.2.1-rc.5, zero model calls; bundle SHA256 3a6b26ea…f9fdc, receipts `native-*-smoke-0.1.3.json` in the assets) | owner |
 | Operator step after the release | — | `node scripts/ops/vcr-retire-unread-tables.mjs --apply` (five tables) |
 | ~~Production trial index~~ | not needed (owner, 2026-11-08): production searches ClinicalTrials.gov (official API), CTIS and ChiCTR (EviMed evidence API) live; the dense branch stays optional and off without a manifest | — |
 

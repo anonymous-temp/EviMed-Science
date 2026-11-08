@@ -31,6 +31,8 @@ import { MCP_SERVER_NAME } from "@evimed/domain";
 
 /** The reference name the kernel resolves the workload token through. */
 export const WORKLOAD_TOKEN_REF = "EVIMED_WORKLOAD_TOKEN";
+/** The provider id the `llm-deepseek` row registers in the kernel: a child or agent that names a provider must name this one. */
+export const KERNEL_DEEPSEEK_PROVIDER = "deepseek-official";
 
 /** The one composition. */
 export const EVIMED_PRESET = "evimed-universal";
@@ -241,7 +243,7 @@ export function renderProfilePatch(input) {
     "",
     "- id: agent-default-model",
     "  config:",
-    "    provider: deepseek-official",
+    `    provider: ${KERNEL_DEEPSEEK_PROVIDER}`,
     `    model: ${yamlScalar(input.model)}`,
     "",
     "# Session logs live on the project's own data volume, so they are backed up,",

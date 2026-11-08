@@ -48,7 +48,7 @@ host.listen(0, '127.0.0.1'); await once(host, 'listening')
 const env = { ...process.env, DSH_HOME: join(temporary, 'dsh'), HOME: join(temporary, 'home'), DSH_TELEMETRY: '0', EVIMED_PATIENT_MATCHING_ENABLED: '1', EVIMED_PATIENT_MATCHING_HOST_ENDPOINT: `http://127.0.0.1:${host.address().port}/internal/patient-matching/v1/port`, EVIMED_PATIENT_MATCHING_TOKEN_FILE: tokenFile, MATCHING_PROOF_FIXTURE: fixtureFile, MATCHING_PROOF_LOG: logFile }
 await mkdir(env.HOME, { recursive: true }); await mkdir(join(temporary, 'workspace'))
 const patch = join(temporary, 'synthetic.patch.yml')
-await writeFile(patch, `- id: agent-default-model\n  config:\n    provider: deepseek\n    model: synthetic-parent\n- id: llm-deepseek\n  disabled: true\n- id: llm-deepseek-account\n  disabled: true\n- id: llm-pi-ai\n  disabled: true\n- id: session-title-llm\n  disabled: true\n- insert:\n    - id: matching-synthetic-provider\n      name: '${fileURLToPath(new URL('./native-provider.mjs', import.meta.url))}'\n`)
+await writeFile(patch, `- id: agent-default-model\n  config:\n    provider: deepseek-official\n    model: synthetic-parent\n- id: llm-deepseek\n  disabled: true\n- id: llm-deepseek-account\n  disabled: true\n- id: llm-pi-ai\n  disabled: true\n- id: session-title-llm\n  disabled: true\n- insert:\n    - id: matching-synthetic-provider\n      name: '${fileURLToPath(new URL('./native-provider.mjs', import.meta.url))}'\n`)
 function command(args, overrides = {}) {
   const output = spawnSync(dsh, args, { env: { ...env, ...overrides }, encoding: 'utf8', timeout: 60000, cwd: join(temporary, 'workspace') })
   assert.equal(output.status, 0, output.stderr || output.stdout); return output.stdout

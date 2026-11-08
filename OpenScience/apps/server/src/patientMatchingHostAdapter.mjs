@@ -1,5 +1,6 @@
 /** First-party production host. The native plugin owns reasoning; this adapter owns
  * identity, current grants, preserved inputs and erasure-aware persistence. */
+import { KERNEL_DEEPSEEK_PROVIDER } from './dshProfilePatch.mjs';
 import { randomUUID } from 'node:crypto';
 import { HOST_ABI, assertScope, canonicalJson, contentDigest, profileIdentity, pairIdentity, projectMatchingResult, validateMatchingTask, validatePairDecision, validateEvidenceBundle, validateClinicalContext, validateTrialProfile, validateComputationReceipt, validateToolResponse } from '@evimed/patient-matching-core';
 import { calculateClinicalScore, calculatorLibraryIdentity } from '@evimed/patient-matching-worker';
@@ -21,13 +22,17 @@ const same = (a, b) => canonicalJson(a) === canonicalJson(b);
 const registryOf = value => /^ChiCTR/i.test(String(value)) ? 'chictr' : /^\d{4}-\d{6}-\d{2}(?:-\d{2})?$/.test(String(value)) ? 'ctis' : 'clinicaltrials.gov';
 export const patientMatchingScope = origin => ({ tenantId: origin.userId, actorId: origin.userId, projectId: origin.projectId, conversationId: origin.rootSessionId });
 
+/** The most concurrent executions one match_assess call may hold (the plugin runs ASSESS_LANES of them). */
+export const MATCHING_LANES_MAX = 16;
+
 /** @param {{vcr:any,documents:any,config?:any,modelPorts?:any,indexPorts?:any,calculate?:any,writeArtifact?:any,onPending?:any,onCancel?:any,knowledge?:any,discover?:any}} dependencies */
 export function createPatientMatchingHostAdapter({ vcr, documents, config = {}, modelPorts = null, indexPorts = null, calculate = calculateClinicalScore, writeArtifact = null, onPending = null, onCancel = null, knowledge = null, discover = null }) {
   const repository = new PatientMatchingRepository(documents);
   const targets = judgmentTargets({ evidence: vcr.evidence, matchStore: vcr.matchStore, pages: vcr.registryPages });
   const modelProfile = config.patientMatchingProfile ?? patientMatchingConfiguration(config);
   if(modelProfile.reasoningModel!=='deepseek-flash'||modelProfile.proEscalation!==false)throw new HttpError(503,'patient_matching_flash_required','Patient matching requires DeepSeek V4.1 Flash.');
-  const reasoning = Object.freeze({ provider: 'deepseek', model: modelProfile.reasoningModel, reasoningEffort: 'high', maxTokens: 16000 });
+  // The managed child names the provider the production kernel mounts; `deepseek` had no adapter there (replay, 2026-11-08: NO_ADAPTER).
+  const reasoning = Object.freeze({ provider: KERNEL_DEEPSEEK_PROVIDER, model: modelProfile.reasoningModel, reasoningEffort: 'high', maxTokens: 16000 });
   const profileDigest = profileIdentity({ modelProfile, reasoning });
   const evidenceLedgers=new Map();
   function ledger(taskId) {
@@ -158,8 +163,13 @@ export function createPatientMatchingHostAdapter({ vcr, documents, config = {}, 
   }
   async function prepare(origin, input) {
     const scope = patientMatchingScope(origin), study = await studyFor(origin, true);
+    // A lane is one of the concurrent executions a single match_assess call runs (plugin ASSESS_LANES): it names the task the call's
+    // first preparation opened and takes pairs no other lane of the same call holds.
+    const lane = Object.hasOwn(input, 'lane') ? input.lane : null;
+    if (lane !== null && (!Number.isSafeInteger(lane) || lane < 0 || lane >= MATCHING_LANES_MAX || !input.taskId)) deny('patient_matching_lane_invalid');
     let row;
     if (input.taskId) row = (await owned(origin, input.taskId)).row;
+    if (lane !== null && (!row?.payload.selectedPairs.length || !row.payload.executions.some(item => item.rootCallId === origin.callId))) deny('patient_matching_lane_invalid');
     if (!row || !row.payload.selectedPairs.length) {
       const protocolVersionId=input.protocolVersionId??row?.payload.protocolVersionId;
       let registryIds = input.registryIds ?? [], collection = null, collectionRevision = null, searchReceipt=null;
@@ -189,7 +199,11 @@ export function createPatientMatchingHostAdapter({ vcr, documents, config = {}, 
     if (previous && (previous.rootCallId !== origin.callId || (previous.epoch ?? 0) !== (meta.continuationEpoch ?? 0))) deny('patient_matching_execution_superseded');
     const saved = await rowsOf(meta, study), current = saved.length ? await resultOf(origin, meta.taskId) : null;
     const done = current ? attemptedPairs(meta,current,saved) : new Set();
-    let pairs = previous?.pairs ?? meta.selectedPairs.filter(pair => !done.has(pairIdentity(pair))).slice(0, 100);
+    const laneOf = (/** @type {any} */ item) => item.lane ?? 0, ownLane = lane ?? 0, epoch = meta.continuationEpoch ?? 0;
+    const busy = new Set(meta.executions.filter(item => item.state === 'prepared' && item.rootCallId === origin.callId && (item.epoch ?? 0) === epoch && laneOf(item) !== ownLane)
+      .flatMap(item => item.pairs.map(pairIdentity)));
+    let pairs = previous?.pairs ?? meta.selectedPairs.filter(pair => !done.has(pairIdentity(pair)) && !busy.has(pairIdentity(pair))).slice(0, 100);
+    if (!pairs.length && busy.size) return response({ kind: 'busy', taskId: meta.taskId }, 'Every remaining pair is being assessed by another lane of this call.');
     if (!pairs.length) return response({kind:'saved-result',result:await resultOf(origin,meta.taskId)}, 'All selected matching pairs have been saved.');
     if(!previous){
       // The structured child response has a token bound too. Partition work by source
@@ -209,9 +223,9 @@ export function createPatientMatchingHostAdapter({ vcr, documents, config = {}, 
     }
     const task = taskOf(meta, pairs, material.sources);
     if (previous && (!same(task.sources, previous.sources) || previous.profileDigest !== profileDigest)) deny('patient_matching_source_changed', 'A preserved input changed during assessment; start a new assessment.');
-    const execution = previous ?? { executionId: id('pm_exec'), pairs, sources: task.sources, profileDigest, state: 'prepared', rootCallId: origin.callId, epoch:meta.continuationEpoch??0 };
+    const execution = previous ?? { executionId: id('pm_exec'), pairs, sources: task.sources, profileDigest, state: 'prepared', rootCallId: origin.callId, epoch:meta.continuationEpoch??0, lane: ownLane };
     if (!previous) {
-      const held = meta.executions.find(item => item.rootCallId === origin.callId && item.state === 'prepared' && (item.epoch??0)===(meta.continuationEpoch??0));
+      const held = meta.executions.find(item => item.rootCallId === origin.callId && item.state === 'prepared' && (item.epoch??0)===(meta.continuationEpoch??0) && laneOf(item) === ownLane);
       if (held) { if (!same(held.sources, execution.sources)) deny('patient_matching_source_changed'); execution.executionId = held.executionId; }
       else await repository.put(scope, meta.taskId, { ...meta, executions: [...meta.executions, execution] }, row.revision);
     }
