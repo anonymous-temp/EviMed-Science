@@ -438,6 +438,65 @@ listed; nothing was run anew.
   n2c2, fine-tuned). NIH-TrialBench has no comparators beyond the four TrialGPT 2.0 reports; no other system on the criterion
   annotations was found.
 
+### 4.7 Round 3 (2026-11-08 night): the algorithm audit's sixteen items and the execution gaps
+
+An audit of every stage against the code and the literature (TrialGPT 1.0/2.0, Kusa et al. JBI 2023, Pradeep et al. SIGIR 2022,
+IELAB and DoSSIER at TREC 2023, TrialMatchAI, Wornow et al., Chen et al., Beattie et al., PRISM, MAKAR) found these defects, all
+fixed on this branch:
+
+| Stage | Found in the code | Now |
+|---|---|---|
+| Ranking input | discovery cut `query + passages` at 8,000 characters — the **oldest** records of a multi-record patient — for the dense query, the rerank query and Jev | the whole text when ≤ 6,000 characters (benchmark vignettes unchanged byte for byte); else a dated profile summary (one Flash call, cached per record), else the newest whole sentences |
+| Rerank request | query tokens × 300 documents far above DashScope's 120k-token recommendation for long records | batches under the bound, three in flight |
+| Rerank view | 240 characters of inclusion and 240 of exclusion per trial | the whole record (12,000 characters) with the eligibility instruction: rerank-only nDCG@10 on the 78 development patients 0.602 → 0.638 |
+| Registry search | age, sex and region never passed; every phrase one page of about 31 results, the condition included | `match_discover` takes age/sex/region (the profile's when the tool gives none); the condition asks 200 deep, terms share the rest |
+| Jev trial text | eligibility last, cut at 24,000 characters | the summary shortens first; eligibility stays whole |
+| Patient passages | one sentence each, no section, no date; older records past 80,000 characters unreachable | each passage carries its record index, record date (format-detected, incl. 2023年4月7日) and section heading; ~1,000-token chunks; the newest records whole plus, per criterion, the top three BM25 chunks from older records |
+| `match_evidence` | substring sort, returned 20 unrelated sentences when nothing matched | BM25 over the whole record, up to eight phrasings fused by RRF, empty when nothing matches |
+| Child prompt | the frozen execution as a JSON string of JSON: a 72-character sentence cost about 460, the record was repeated per trial, per-execution fields came first so DeepSeek's prefix cache never held it; the model copied scope, digests, sources and producer back | plain text: the record once by record/date/section, then trials (criteria with their premises), then pairs; the child writes the clinical fields only and code completes the saved decision |
+| Composite criteria and time windows | judged in one verdict by the model | optional parts + rule (all/any/atLeast n) and timing (event date, reference date, window); code counts parts and days |
+| Over-inference | no check that a cited sentence supports a verdict | a verification child was built, measured and removed (below); composite parts and time windows in code address the n2c2 over-reading |
+| Missing information | free-text unresolved facts only | `missingFact` per unknown criterion; `openQuestions` groups them across pairs; the skill asks the clinician once and reassesses only the affected pairs |
+| TREC 2023 retrieval (internal board) | whole-record index incl. exclusion text; templated topics queried as written | inclusion-only and criterion-level FTS tables (frozen collections) and a narrative rewrite with synonyms: eligible recall@300 0.154 → 0.223 (37 topics) |
+
+**Measured on the boards (same scorers as before):**
+
+| Board | Before round 3 | Round 3 (final code) |
+|---|---|---|
+| A, all 183 patients, official scorer: nDCG@10 / P@10 / MRR / MAP | 0.787 / 0.723 / 0.853 / 0.637 (triallink-2) | **0.792 / 0.724 / 0.849 / 0.637** (triallink-3) |
+| A, SIGIR / TREC 2021 / TREC 2022 nDCG@10 | 0.659 / 0.883 / 0.819 | **0.663** / **0.890** / **0.824** |
+| A, held-out 105 | 0.841 | **0.848** |
+| A, TrialGPT 1.0 candidates (top-500): nDCG@10 / P@10 | 0.788 / 0.715 | **0.796** / **0.720** |
+| B, NIH-TrialBench recall@10, institute macro / all cases | 95.2% / 85.7% | **95.9% / 88.1%** (candidates: a relevance rerank's top 300 of the 1,373-trial corpus) |
+| C, physician-decided criteria / all criteria / false favourable | 92.0% / 75.6% / 138 | **92.2%** / **77.8%** / **117** |
+| n2c2 development patients (40): micro / macro F1 | 0.930 / 0.876 | **0.941 / 0.894**; input tokens per patient ≈19.5k (≈86k before) |
+| n2c2 official test (86), one complete pass of the final code (a re-run) | 0.918 (0.9104 + 2 patients completed later) | **0.919** [0.905, 0.934], macro 0.825; ADVANCED-CAD accuracy 0.71 → 0.78, MI-6MOS F1 0.93 → 0.84; CNY 10.2 (26.2 before) |
+| Incidents | 17/17 | **17/17** |
+| TREC 2023 lexical eligible recall@300 (internal) | 0.154 | **0.223** |
+
+Ranking policy `triallink-3` (rerank 1, fit 1, graded 0.5) was chosen on the development patients only; MRR is level with TrialGPT 2.0
+(0.849 against a bar label of 0.85).
+
+**Tried and removed.** A verification child that read back every cited met / not-met judgment against its sentences. First version
+(every cited judgment, no guide): Board C decided rows 86.8% — it turned 26 physician-confirmed "not excluded" answers (absences,
+which no sentence establishes) into unknown. Second (present findings only): 89.9%. Third (with the task's guide), ablated on the
+development boards against the same code without it: Board C decided 91.8% / 92.2% off, all rows 76.7% / 77.8%, false favourable
+124 / 117; n2c2 development micro-F1 0.933 / 0.941, cost CNY 7.55 / 4.58. No measured gain, so it is gone (principle 11).
+
+**Decisions.** Production keeps no trial index of its own (owner, 2026-11-08): semantic order comes from the whole-record reranker
+over the live registry union; the dense channel stays for frozen collections. The Chinese path: Chinese terms when the record is
+Chinese (skill), CJK bigrams in the record index, Chinese record dates read, the profile summary in English headings (Qwen and Jev
+read both languages); a ChiCTR record that cannot be read is ranked from its listing alone and says so.
+
+**Execution gaps.** Plugin and core 0.1.7, native and status smokes pass on the pinned kernel (zero paid calls; receipts beside the
+artefact). Gate G1: a project-scoped study's matching now runs on the plugin in the study's own conversation (taskContext resolves
+that conversation to the study; 2,130 VCR tests pass against PostgreSQL); the batch judge stays only where no plugin catalogue is
+deployed and is deleted once every deployment has it. Retiring the unread tables online was checked and not done: production holds
+six of the eight, all empty, but the live release still writes `matching_extractions` and deletes from `candidate_trial_judgments`
+during account erasure, so they are dropped after this release goes live (`scripts/ops/vcr-retire-unread-tables.mjs --apply`).
+Component latency: Jev with both readings 265 ms median per call against 262 ms for the fit alone (tokens +14%); the whole-record
+rerank 9.0 s per 100 documents per request, three requests in flight.
+
 ## 4.4 Gaps recorded at the owner's review (2026-11-08 evening)
 
 | Gap | What is known | Next |

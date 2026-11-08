@@ -1,6 +1,6 @@
 # Linemach: benchmark results
 
-**Linemach `triallink-2` · November 2026**
+**Linemach `triallink-3` · November 2026**
 
 Linemach is a patient-to-trial matching system: one pipeline from a patient record to a ranked list of clinical trials, with a
 criterion-by-criterion eligibility assessment of the trials a clinician opens. This report gives its results on the public benchmarks the
@@ -12,26 +12,28 @@ field reports on, one capability at a time, beside every published system with a
 
 | Capability | Benchmark | Linemach | Position among listed systems | Strongest listed comparator |
 |---|---|---|---|---|
-| Patient-to-trial ranking | SIGIR + TREC 2021/2022, 183 patients, every judged trial (TrialGPT 2.0 protocol) | nDCG@10 **0.787**, P@10 **0.723**, MRR **0.853**, MAP **0.637** | **1st of 7** on all four | TrialGPT 2.0 · GPT-5.4: 0.76, 0.70, 0.85, 0.60 |
-| — on retrieved candidates | the same patients, judged trials in TrialGPT-Retrieval's top 500 (TrialGPT 1.0 protocol) | nDCG@10 **0.788**, P@10 **0.715** | **1st of 8** on both | TrialGPT 1.0 · GPT-4: 0.728, 0.669 |
-| — per cohort | TREC 2021 / TREC 2022 / SIGIR | 0.883 / 0.819 / 0.659 | **1st of 5** / **1st of 5** / 2nd of 5 | 0.84 / 0.78 / 0.66 |
-| Target-trial retrieval | NIH-TrialBench, 126 vignettes | recall@10 **95.2%** | **1st of 5** | TrialGPT 2.0: 70% |
-| Criterion-level eligibility | TrialGPT annotations: the 722 criteria physicians decided | accuracy **92.0%** | **1st of 2** systems; physicians 89.0–93.1% | TrialGPT 1.0 · GPT-4: 87.4% |
-| Cohort selection | n2c2 cohort selection, official test | micro-F1 **0.918** | **1st of 14** | Hybrid NLP system (post-challenge): 0.911; rule-based challenge winner 0.910 |
+| Patient-to-trial ranking | SIGIR + TREC 2021/2022, 183 patients, every judged trial (TrialGPT 2.0 protocol) | nDCG@10 **0.792**, P@10 **0.724**, MRR 0.849, MAP **0.637** | **1st of 7** on nDCG@10, P@10 and MAP; MRR level with the leader | TrialGPT 2.0 · GPT-5.4: 0.76, 0.70, 0.85, 0.60 |
+| — on retrieved candidates | the same patients, judged trials in TrialGPT-Retrieval's top 500 (TrialGPT 1.0 protocol) | nDCG@10 **0.796**, P@10 **0.720** | **1st of 8** on both | TrialGPT 1.0 · GPT-4: 0.728, 0.669 |
+| — per cohort | TREC 2021 / TREC 2022 / SIGIR | 0.890 / 0.824 / 0.663 | **1st of 5** on all three | 0.84 / 0.78 / 0.66 |
+| Target-trial retrieval | NIH-TrialBench, 126 vignettes | recall@10 **95.9%** | **1st of 5** | TrialGPT 2.0: 70% |
+| Criterion-level eligibility | TrialGPT annotations: the 722 criteria physicians decided | accuracy **92.2%** | **1st of 2** systems; physicians 89.0–93.1% | TrialGPT 1.0 · GPT-4: 87.4% |
+| Cohort selection | n2c2 cohort selection, official test | micro-F1 **0.919** | **1st of 14** | Hybrid NLP system (post-challenge): 0.911; rule-based challenge winner 0.910 |
 
-- On the TrialGPT 2.0 protocol Linemach ranks first on all four metrics the paper reports. Its nDCG@10 interval (0.756–0.817) overlaps
-  TrialGPT 2.0 with GPT-5.4 (0.76); published systems report point estimates only, so no paired test is possible. On the 105 patients held
-  out from all development it scores nDCG@10 0.841. On the SIGIR cohort it scores 0.659 against 0.66 (a value read from a bar label).
+- On the TrialGPT 2.0 protocol Linemach ranks first on nDCG@10, P@10 and MAP; on MRR it scores 0.849 against 0.85 (a bar label), level
+  at two decimals. Its nDCG@10 interval (0.762–0.822) overlaps TrialGPT 2.0 with GPT-5.4 (0.76); published systems report point
+  estimates only, so no paired test is possible. On the 105 patients held out from all development it scores nDCG@10 0.848, and on the
+  SIGIR cohort 0.663 against 0.66.
 - On the TrialGPT 1.0 protocol (the candidates its retrieval returned) Linemach leads all seven systems that paper compares — five
   biomedical encoders and TrialGPT with GPT-3.5 and GPT-4 — by 0.06 nDCG@10 or more.
-- On the criteria the physicians decided, Linemach is ahead of GPT-4 by 4.6 points (+0.3 to +9.1) and inside the range of the three
+- On the criteria the physicians decided, Linemach is ahead of GPT-4 by 4.8 points (+0.3 to +9.9) and inside the range of the three
   physicians who built the labels (89.0%, 90.7%, 93.1%, each scored against the consensus). Over all 1,015 criteria it agrees
-  75.6% against GPT-4's 87.3%: on the 293 criteria labelled "not enough information", 255 labels are GPT-4's own answer, kept by
+  77.8% against GPT-4's 87.3%: on the 293 criteria labelled "not enough information", 255 labels are GPT-4's own answer, kept by
   annotators who labelled with GPT-4's predictions in view.
-- On n2c2 cohort selection (official test) Linemach scores micro-F1 0.918, above every system of the challenge (winner 0.910), the best
-  post-challenge system we found (0.911) and fine-tuned open models (MedGemma-27b with retrieval, 0.891).
-- No Linemach component was trained or fine-tuned on any benchmark. Ranking costs about CNY 0.29 (USD 0.04) per patient for some 410
-  candidate trials.
+- On n2c2 cohort selection (official test, one complete pass of the final code) Linemach scores micro-F1 0.919, above every system of the
+  challenge (winner 0.910), the best post-challenge system we found (0.911) and fine-tuned open models (MedGemma-27b with retrieval,
+  0.891).
+- No Linemach component was trained or fine-tuned on any benchmark. Ranking costs about CNY 0.38 (USD 0.05) per patient for some 410
+  candidate trials; the criterion-level assessment about CNY 0.12 per n2c2 patient.
 
 ## 1. The system
 
@@ -64,10 +66,11 @@ Linemach has three stages.
   (`eval_trialgpt_rankings_qrels.py`, `eval_nih_trialbench_target_recall_at10.py`); n2c2 uses the challenge's unchanged `track1_eval.py`.
 - **Development and test data.** Ranking choices were made on 78 development patients (all 58 SIGIR patients and the first ten topics of
   each TREC year); the other 105 were read only after the design was fixed. NIH-TrialBench was used for testing only. The criterion-level
-  assessment was developed on the TrialGPT annotations and on the n2c2 training split. The n2c2 official test was first run on
-  2026-11-08 (micro-F1 0.894); the result above is a re-run after fixes to how long records are read and the move to the official
-  guidelines (two patients whose decisions had not saved were completed after a fix to evidence identifiers), so the test set has been
-  seen. The ranking weights were chosen on the development patients, SIGIR included.
+  assessment was developed on the TrialGPT annotations and on the n2c2 training split. Design choices for the assessment (including
+  removing a verification pass that did not help) were made on Board C and the n2c2 training split's 40 development patients. The n2c2
+  official test was first run on 2026-11-08 (micro-F1 0.894) and read again in later rounds; the result above is one complete pass of
+  the final code, so it is a re-run on a test set that has been seen. The ranking weights were chosen on the development patients,
+  SIGIR included.
 - **Uncertainty.** 95% intervals are percentile bootstraps over patients (10,000 resamples; 2,000 for n2c2).
 - **Comparators.** Every comparator number is copied from the cited source, or computed from released predictions where stated. TrialGPT
   2.0 gives its results as bar charts; its values are read from the bar labels. TrialGPT 2.0 reports NIH-TrialBench only with its default
@@ -234,7 +237,7 @@ official test · 86 patients × 13 criteria · micro-F1
 
 | Rank | System | Micro-F1 | Source |
 |---|---|---|---|
-| 1 | **Linemach** | **0.918 (0.905–0.931)** | this report |
+| 1 | **Linemach** | **0.919 (0.905–0.934)** | this report |
 | 2 | Hybrid NLP, post-challenge | 0.911 | Vydiswaran et al., JAMIA 2019 (reimplemented system) |
 | 3 | Rule-based (challenge #1) | 0.91 | Stubbs et al., JAMIA 2019, Table 2 |
 | 4 | Hybrid NLP (MetaMap + cTAKES) | 0.908 | Stubbs et al., JAMIA 2019, Table 2 |
@@ -250,7 +253,7 @@ official test · 86 patients × 13 criteria · micro-F1
 | 14 | Llama-3.1-8b + LoRA | 0.867 | Chen et al., arXiv 2604.05190, Table 3 (full context) |
 | – | 47-team median (reference) | 0.823 | Stubbs et al., JAMIA 2019 |
 
-Official evaluator (track1_eval.py), Linemach given the n2c2 annotation guidelines. An answer neither met nor not met is read as the guidelines label an unmentioned criterion: not met, except ENGLISH and MAKES-DECISIONS (met). The 2 of 86 patients whose decisions had not saved were completed after the evidence-identifier fix; macro-F1 0.832. The challenge systems and the LoRA models were built on the n2c2 training split; no Linemach component was trained on it. Challenge systems are named by method (Stubbs et al., Table 2); the figure shows the first seven, the table all ten.
+Official evaluator (track1_eval.py), Linemach given the n2c2 annotation guidelines. An answer neither met nor not met is read as the guidelines label an unmentioned criterion: not met, except ENGLISH and MAKES-DECISIONS (met). One complete pass of the final code over all 86 patients (the test set had been read in earlier rounds, so this is a re-run, not a held-out result); macro-F1 0.825. The challenge systems and the LoRA models were built on the n2c2 training split; no Linemach component was trained on it. Challenge systems are named by method (Stubbs et al., Table 2); the figure shows the first seven, the table all ten.
 
 #### Criterion-level · physician-decided criteria (%)
 
@@ -259,12 +262,12 @@ TrialGPT annotations · the 722 of 1,015 criteria the physicians decided (includ
 | Rank | System | Accuracy (%) | Source |
 |---|---|---|---|
 | – | Physician A | 93.1 | Jin et al., Nat Commun 2024, Fig. 3c–d (the physician's per-label matrix weighted by the released gold counts, ±0.5 point) |
-| 1 | **Linemach** | **92.0 (89.1–94.4)** | this report |
+| 1 | **Linemach** | **92.2 (89.4–94.6)** | this report |
 | – | Physician C | 90.7 | Jin et al., Nat Commun 2024, Fig. 3c–d (the physician's per-label matrix weighted by the released gold counts, ±0.5 point) |
 | – | Physician B | 89.0 | Jin et al., Nat Commun 2024, Fig. 3c–d (the physician's per-label matrix weighted by the released gold counts, ±0.5 point) |
 | 2 | TrialGPT 1.0 · GPT-4 | 87.4 | TrialGPT released predictions (Jin et al., Nat Commun 2024), scored on the same rows |
 
-Paired difference Linemach − GPT-4: +4.6 points (+0.3 to +9.1, patient bootstrap). GPT-4 is scored from TrialGPT's released predictions on the same rows. Each physician's accuracy on these rows is rebuilt from that physician's confusion matrices in TrialGPT 1.0 (proportions per gold label, two decimals) weighted by the released gold counts; the same rebuild gives GPT-4 87.7% against its exact 87.4%, and reproduces the paper's whole-set range (88.6–90.1% against 88.7–90.0%).
+Paired difference Linemach − GPT-4: +4.8 points (+0.3 to +9.9, patient bootstrap). GPT-4 is scored from TrialGPT's released predictions on the same rows. Each physician's accuracy on these rows is rebuilt from that physician's confusion matrices in TrialGPT 1.0 (proportions per gold label, two decimals) weighted by the released gold counts; the same rebuild gives GPT-4 87.7% against its exact 87.4%, and reproduces the paper's whole-set range (88.6–90.1% against 88.7–90.0%).
 
 #### Criterion-level · all criteria (%)
 
@@ -275,18 +278,19 @@ TrialGPT annotations · 1,015 criteria · 53 patients · label agreement %
 | – | Physician (highest) | 90.0 | Jin et al., Nat Commun 2024 |
 | – | Physician (lowest) | 88.7 | Jin et al., Nat Commun 2024 |
 | 1 | TrialGPT 1.0 · GPT-4 | 87.3 | Jin et al., Nat Commun 2024 |
-| 2 | **Linemach** | **75.6 (71.0–79.7)** | this report |
+| 2 | **Linemach** | **77.8 (73.5–81.7)** | this report |
 
-On the 293 criteria the gold labels "not enough information", 255 labels are GPT-4's own answer kept by the annotators, who labelled with GPT-4's predictions in view; GPT-4 matches 87.0% of those rows, Linemach 35.2%. Linemach was given TrialGPT's own task definition (which asks for as few "not enough information" answers as possible).
+On the 293 criteria the gold labels "not enough information", 255 labels are GPT-4's own answer kept by the annotators, who labelled with GPT-4's predictions in view; GPT-4 matches 87.0% of those rows, Linemach 42.3%. Linemach was given TrialGPT's own task definition (which asks for as few "not enough information" answers as possible).
 
 <!-- tables:end -->
 
 ## 4. Cost and speed
 
-Measured on the ranking board (some 410 candidates per patient): Qwen3.7 rerank CNY 0.08 per patient, 2.6 s per 100 trials; Jev 1.14
-(fit and graded readings in one request) about CNY 0.21 per patient, about 0.3 s per trial with eight in flight. A product search ranks 300 candidates. The criterion-by-criterion
-assessment of 20 trials for one patient takes a median of 79 s (90th percentile 117 s; five patients, measured end to
-end on the production agent runtime), with the trials' criteria split across up to 12 concurrent Flash agents.
+Measured on the ranking board (some 410 candidates per patient): Qwen3.7 rerank over the whole record about CNY 0.17 per patient, 9.0 s
+per 100 trials per request with three requests in flight; Jev 1.14 (fit and graded readings in one request) about CNY 0.21 per patient,
+265 ms per call (262 ms for the fit alone) with eight in flight. A product search ranks 300 candidates. The criterion-level assessment
+of an n2c2 patient (13 criteria, multi-record files) reads about 19,500 input tokens and costs about CNY 0.12 (86 test patients
+CNY 10.2); the plain-text prompt cut the input from about 86,000 tokens.
 
 ## 5. Reproduce
 

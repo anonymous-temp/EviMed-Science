@@ -1,7 +1,7 @@
 {
  "system": {
   "name": "Linemach",
-  "version": "triallink-2",
+  "version": "triallink-3",
   "date": "2026-11",
   "components": [
    "Qwen3.7 text embedding",
@@ -21,12 +21,12 @@
    "rows": [
     {
      "label": "Linemach",
-     "value": 0.787,
+     "value": 0.792,
      "source": "this report",
      "kind": "ours",
      "ci95": [
-      0.756,
-      0.817
+      0.762,
+      0.822
      ]
     },
     {
@@ -82,10 +82,10 @@
    "rows": [
     {
      "label": "Linemach",
-     "value": 0.723,
+     "value": 0.724,
      "ci95": [
-      0.691,
-      0.754
+      0.692,
+      0.756
      ],
      "source": "this report",
      "kind": "ours"
@@ -140,10 +140,10 @@
    "rows": [
     {
      "label": "Linemach",
-     "value": 0.853,
+     "value": 0.849,
      "ci95": [
-      0.811,
-      0.895
+      0.806,
+      0.889
      ],
      "source": "this report",
      "kind": "ours"
@@ -200,7 +200,7 @@
      "kind": "ours",
      "ci95": [
       0.608,
-      0.665
+      0.666
      ]
     },
     {
@@ -253,10 +253,10 @@
    "rows": [
     {
      "label": "Linemach",
-     "value": 0.788,
+     "value": 0.796,
      "ci95": [
-      0.756,
-      0.817
+      0.765,
+      0.824
      ],
      "source": "this report",
      "kind": "ours"
@@ -319,10 +319,10 @@
    "rows": [
     {
      "label": "Linemach",
-     "value": 0.715,
+     "value": 0.72,
      "ci95": [
-      0.683,
-      0.747
+      0.688,
+      0.752
      ],
      "source": "this report",
      "kind": "ours"
@@ -385,12 +385,12 @@
    "rows": [
     {
      "label": "Linemach",
-     "value": 0.659,
+     "value": 0.663,
      "source": "this report",
      "kind": "ours",
      "ci95": [
-      0.598,
-      0.716
+      0.604,
+      0.72
      ]
     },
     {
@@ -431,12 +431,12 @@
    "rows": [
     {
      "label": "Linemach",
-     "value": 0.883,
+     "value": 0.89,
      "source": "this report",
      "kind": "ours",
      "ci95": [
-      0.847,
-      0.914
+      0.853,
+      0.923
      ]
     },
     {
@@ -477,12 +477,12 @@
    "rows": [
     {
      "label": "Linemach",
-     "value": 0.819,
+     "value": 0.824,
      "source": "this report",
      "kind": "ours",
      "ci95": [
-      0.756,
-      0.876
+      0.761,
+      0.88
      ]
     },
     {
@@ -523,10 +523,10 @@
    "rows": [
     {
      "label": "Linemach",
-     "value": 95.2,
+     "value": 95.9,
      "source": "this report",
      "kind": "ours",
-     "note": "85.7% over all 126 cases (79.4–91.3)"
+     "note": "88.1% over all 126 cases (81.7–93.7)"
     },
     {
      "label": "TrialGPT 2.0",
@@ -556,8 +556,8 @@
    "short": "NIH-TrialBench",
    "title_zh": "NIH-TrialBench · 前 10 召回（%）",
    "subtitle_zh": "126 个病例，病例对应的试验进入前 10 的比例，按 11 个研究所宏平均（与 TrialGPT 2.0 口径一致）",
-   "note_zh": "TrialGPT 2.0 论文只用默认底座 GPT-4.1 报告了 NIH-TrialBench（原文：\"Unless otherwise specified, all main analyses used GPT-4.1\"）；GPT-5.4 和 Gemini 只跑了三个公开队列。Linemach 按全部 126 例计算为 85.7%（79.4–91.3）。",
-   "note": "TrialGPT 2.0 reports NIH-TrialBench only with its default backbone, GPT-4.1 (\"Unless otherwise specified, all main analyses used GPT-4.1\"); its GPT-5.4 and Gemini runs cover the three public cohorts only. Linemach over all 126 cases: 85.7% (79.4–91.3)."
+   "note_zh": "TrialGPT 2.0 论文只用默认底座 GPT-4.1 报告了 NIH-TrialBench（原文：\"Unless otherwise specified, all main analyses used GPT-4.1\"）；GPT-5.4 和 Gemini 只跑了三个公开队列。Linemach 按全部 126 例计算为 88.1%（81.7–93.7）。候选：在 1,373 个试验的 NIH 试验库上先做一次相关性重排，取前 300 个代替检索；Linemach 再按产品中的方式排序。",
+   "note": "TrialGPT 2.0 reports NIH-TrialBench only with its default backbone, GPT-4.1 (\"Unless otherwise specified, all main analyses used GPT-4.1\"); its GPT-5.4 and Gemini runs cover the three public cohorts only. Linemach over all 126 cases: 88.1% (81.7–93.7). Candidates: the 300 trials of the 1,373-trial NIH corpus a relevance rerank of the whole corpus put first stand in for retrieval; Linemach ranks them as in the product."
   },
   {
    "id": "n2c2",
@@ -568,12 +568,12 @@
    "rows": [
     {
      "label": "Linemach",
-     "value": 0.918,
+     "value": 0.919,
      "source": "this report",
      "kind": "ours",
      "ci95": [
       0.905,
-      0.931
+      0.934
      ]
     },
     {
@@ -667,8 +667,8 @@
    "short": "n2c2",
    "title_zh": "n2c2 队列筛选 · micro-F1",
    "subtitle_zh": "官方测试集，86 位患者 × 13 条标准，micro-F1",
-   "note": "Official evaluator (track1_eval.py), Linemach given the n2c2 annotation guidelines. An answer neither met nor not met is read as the guidelines label an unmentioned criterion: not met, except ENGLISH and MAKES-DECISIONS (met). The 2 of 86 patients whose decisions had not saved were completed after the evidence-identifier fix; macro-F1 0.832. The challenge systems and the LoRA models were built on the n2c2 training split; no Linemach component was trained on it. Challenge systems are named by method (Stubbs et al., Table 2); the figure shows the first seven, the table all ten.",
-   "note_zh": "官方评分脚本（track1_eval.py），Linemach 使用 n2c2 官方标注指南。既非\"符合\"也非\"不符合\"的回答，按指南对未提及标准的标注方式计：不符合，ENGLISH 和 MAKES-DECISIONS 两条计为符合。86 位患者中有 2 位的结论起初未能保存，在证据编号修复后补齐；macro-F1 0.832。挑战赛各系统和 LoRA 模型都在 n2c2 训练集上构建，Linemach 没有任何部件在其上训练。挑战赛系统按方法命名（Stubbs 等，表 2）；图中列出前七名，表格列出全部前十。",
+   "note": "Official evaluator (track1_eval.py), Linemach given the n2c2 annotation guidelines. An answer neither met nor not met is read as the guidelines label an unmentioned criterion: not met, except ENGLISH and MAKES-DECISIONS (met). One complete pass of the final code over all 86 patients (the test set had been read in earlier rounds, so this is a re-run, not a held-out result); macro-F1 0.825. The challenge systems and the LoRA models were built on the n2c2 training split; no Linemach component was trained on it. Challenge systems are named by method (Stubbs et al., Table 2); the figure shows the first seven, the table all ten.",
+   "note_zh": "官方评分脚本（track1_eval.py），Linemach 使用 n2c2 官方标注指南。既非\"符合\"也非\"不符合\"的回答，按指南对未提及标准的标注方式计：不符合，ENGLISH 和 MAKES-DECISIONS 两条计为符合。最终代码对全部 86 位患者一次跑完（测试集在之前几轮已读过，因此这是重跑结果，不是留出集结果）；macro-F1 0.825。挑战赛各系统和 LoRA 模型都在 n2c2 训练集上构建，Linemach 没有任何部件在其上训练。挑战赛系统按方法命名（Stubbs 等，表 2）；图中列出前七名，表格列出全部前十。",
    "span": 2
   },
   {
@@ -680,15 +680,15 @@
    "subtitle_zh": "TrialGPT 标注集中医生给出明确结论的 722 条（共 1,015 条），一致率（%）；Linemach 使用 TrialGPT 自己的任务定义",
    "metric": "Accuracy (%)",
    "scale": 100,
-   "note": "Paired difference Linemach − GPT-4: +4.6 points (+0.3 to +9.1, patient bootstrap). GPT-4 is scored from TrialGPT's released predictions on the same rows. Each physician's accuracy on these rows is rebuilt from that physician's confusion matrices in TrialGPT 1.0 (proportions per gold label, two decimals) weighted by the released gold counts; the same rebuild gives GPT-4 87.7% against its exact 87.4%, and reproduces the paper's whole-set range (88.6–90.1% against 88.7–90.0%).",
-   "note_zh": "配对差值 Linemach − GPT-4：+4.6 个百分点（+0.3 至 +9.1，按患者自助法）。GPT-4 的成绩由 TrialGPT 公开的预测在同一批条目上计算。每位医生在这批条目上的一致率，由 TrialGPT 1.0 论文中该医生的混淆矩阵（按金标准标签的比例，两位小数）乘以公开的金标准条目数还原；同样的还原对 GPT-4 得到 87.7%（精确值 87.4%），对全部条目得到 88.6–90.1%（论文为 88.7–90.0%）。",
+   "note": "Paired difference Linemach − GPT-4: +4.8 points (+0.3 to +9.9, patient bootstrap). GPT-4 is scored from TrialGPT's released predictions on the same rows. Each physician's accuracy on these rows is rebuilt from that physician's confusion matrices in TrialGPT 1.0 (proportions per gold label, two decimals) weighted by the released gold counts; the same rebuild gives GPT-4 87.7% against its exact 87.4%, and reproduces the paper's whole-set range (88.6–90.1% against 88.7–90.0%).",
+   "note_zh": "配对差值 Linemach − GPT-4：+4.8 个百分点（+0.3 至 +9.9，按患者自助法）。GPT-4 的成绩由 TrialGPT 公开的预测在同一批条目上计算。每位医生在这批条目上的一致率，由 TrialGPT 1.0 论文中该医生的混淆矩阵（按金标准标签的比例，两位小数）乘以公开的金标准条目数还原；同样的还原对 GPT-4 得到 87.7%（精确值 87.4%），对全部条目得到 88.6–90.1%（论文为 88.7–90.0%）。",
    "rows": [
     {
      "label": "Linemach",
-     "value": 92.0,
+     "value": 92.2,
      "ci95": [
-      89.1,
-      94.4
+      89.4,
+      94.6
      ],
      "source": "this report",
      "kind": "ours"
@@ -729,16 +729,16 @@
    "subtitle": "TrialGPT annotations · 1,015 criteria · 53 patients · label agreement %",
    "metric": "Accuracy (%)",
    "scale": 100,
-   "note": "On the 293 criteria the gold labels \"not enough information\", 255 labels are GPT-4's own answer kept by the annotators, who labelled with GPT-4's predictions in view; GPT-4 matches 87.0% of those rows, Linemach 35.2%. Linemach was given TrialGPT's own task definition (which asks for as few \"not enough information\" answers as possible).",
+   "note": "On the 293 criteria the gold labels \"not enough information\", 255 labels are GPT-4's own answer kept by the annotators, who labelled with GPT-4's predictions in view; GPT-4 matches 87.0% of those rows, Linemach 42.3%. Linemach was given TrialGPT's own task definition (which asks for as few \"not enough information\" answers as possible).",
    "rows": [
     {
      "label": "Linemach",
-     "value": 75.6,
+     "value": 77.8,
      "source": "this report",
      "kind": "ours",
      "ci95": [
-      71.0,
-      79.7
+      73.5,
+      81.7
      ],
      "note": "same run as the panel above"
     },
@@ -764,7 +764,7 @@
    "short": "Criterion-level",
    "title_zh": "逐条判断 · 全部标准（%）",
    "subtitle_zh": "TrialGPT 标注集，1,015 条标准，53 位患者，标签一致率（%）",
-   "note_zh": "金标准标为\"信息不足\"的 293 条中，有 255 条就是 GPT-4 自己的回答被标注员保留下来（标注员是看着 GPT-4 的预测做标注的）；在这些条目上 GPT-4 吻合 87.0%，Linemach 35.2%。Linemach 使用的是 TrialGPT 自己的任务定义（要求尽量少答\"信息不足\"）。",
+   "note_zh": "金标准标为\"信息不足\"的 293 条中，有 255 条就是 GPT-4 自己的回答被标注员保留下来（标注员是看着 GPT-4 的预测做标注的）；在这些条目上 GPT-4 吻合 87.0%，Linemach 42.3%。Linemach 使用的是 TrialGPT 自己的任务定义（要求尽量少答\"信息不足\"）。",
    "figure": false
   }
  ],
