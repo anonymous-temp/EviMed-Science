@@ -449,3 +449,23 @@ test('a long record starts its execution from its newest passages, and a study\'
   assert.deepEqual(prepared.task.guide,{title:'Benchmark labels',text:'Label each criterion with the benchmark\'s four labels.'});
  }finally{vcr.evidence.judgmentRecord=original;vcr.store.taskContext=originalContext;}
 });
+test('older records outside the window are retrieved per criterion and found by match_evidence phrasings',options,async()=>{
+ const original=vcr.evidence.judgmentRecord,ids=['NCT00000922'];
+ vcr.evidence.judgmentRecord=async({registryId})=>({status:'ok',trial:{registryId,registry:'clinicaltrials.gov',title:registryId,summary:'Synthetic registration',eligibility:'Inclusion Criteria:\n* Prior myocardial infarction.',conditions:[],interventions:[]}});
+ try{
+  const filler=Array.from({length:2600},(_,index)=>`Routine observation number ${index+1} is recorded here.`).join(' ');
+  messages.set(++messageSeq,`Record date: 2080-02-03\nPAST HISTORY:\nPrior myocardial infarction treated with a stent.\n${filler}\nRecord date: 2093-04-07\nThe newest observation closes the record.`);
+  const context=(await invoke('PatientDataPort','context',{messageSeq})).data;
+  const call={...origin,callId:'old-record-call',rootCallId:'old-record-call'};
+  const prepared=(await invoke('ExecutionPort','assess',{phase:'prepare',taskId:context.taskId,registryIds:ids},call)).data;
+  const passages=prepared.evidenceBundles[0].patientPassages;
+  assert.ok(passages.some(passage=>/Prior myocardial infarction treated/.test(passage.text)),'the criterion text retrieves the old chunk');
+  assert.ok(passages.some(passage=>passage.section==='PAST HISTORY'&&passage.recordDate==='2080-02-03'&&passage.recordIndex===1));
+  assert.deepEqual(passages.map(passage=>passage.evidenceId),[...passages.map(passage=>passage.evidenceId)].sort((a,b)=>{const[x,y]=[a,b].map(id=>id.slice(2).split('.').map(Number));return x[0]-y[0]||x[1]-y[1];}),'chronological order');
+  const search=queries=>invoke('PatientDataPort','read',{taskId:context.taskId,source:'patient',action:'search',...queries},call);
+  const found=(await search({query:'MI',queries:['myocardial infarction','heart attack']})).data.passages;
+  assert.ok(found.length>=1&&/myocardial infarction/.test(found[0].text));
+  assert.equal(found[0].recordIndex,1);assert.equal(found[0].recordDate,'2080-02-03');
+  assert.deepEqual((await search({query:'quantum chromodynamics'})).data.passages,[],'no filler when nothing matches');
+ }finally{vcr.evidence.judgmentRecord=original;}
+});

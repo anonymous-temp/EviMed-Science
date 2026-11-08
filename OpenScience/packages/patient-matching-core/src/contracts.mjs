@@ -140,6 +140,10 @@ export function validateEvidenceBundle(bundle) {
       span(passage.span, `${path}.span`)
       check(passage.span.end - passage.span.start === passage.text.length, `${path}.span`, 'UTF-16 span length differs from text')
       if (collection === 'patientPassages') identifier(passage.subjectKey, `${path}.subjectKey`)
+      // Optional passage context (patient passages): position among the records, the record's date and the nearest heading.
+      if (passage.recordIndex !== undefined) integer(passage.recordIndex, `${path}.recordIndex`, 1)
+      if (passage.recordDate !== undefined && passage.recordDate !== null) check(typeof passage.recordDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(passage.recordDate), `${path}.recordDate`, 'expected an ISO date or null')
+      if (passage.section !== undefined && passage.section !== null) check(typeof passage.section === 'string' && passage.section.length > 0 && passage.section.length <= 60, `${path}.section`, 'expected a heading of at most 60 characters or null')
     })
   }
   unique([...bundle.patientPassages, ...bundle.knowledgePassages], 'evidenceBundle.passages', (passage) => passage.evidenceId)
