@@ -146,3 +146,26 @@ test('the stamp backfill reports that it did nothing when the project table is m
   const { backfillProjectStamps } = await import('../src/nativeMemoryPersistence.mjs');
   assert.equal(await backfillProjectStamps({ query: async () => ({ rows: [{ ok: false }] }) }), false);
 });
+
+test('a shared writer inside a caller\'s transaction keeps a cleanup out until that transaction ends, and a cleanup turns such a writer away', options, async t => {
+  const { database } = await fixture(t);
+  const inside = gate(), finish = gate();
+  // the caller (a prompt admission, a source-sync epoch) holds one pooled connection in a transaction for its whole length
+  const caller = database.transaction(async (client) => database.withTransactionClient(client, async () => {
+    const answer = await withNativeMemoryWrite(database, 'fence-a', async () => { inside.open(); await finish.promise; return 'scoped write'; });
+    return answer;
+  }));
+  await inside.promise;
+  await assert.rejects(withNativeMemoryWrite(database, 'fence-a', async () => 'x', { exclusive: true }), { status: 409, code: 'memory_source_cleanup_busy' },
+    'a cleanup is refused while a scoped shared writer\'s transaction is open');
+  finish.open();
+  assert.equal(await caller, 'scoped write');
+  assert.equal(await withNativeMemoryWrite(database, 'fence-a', async () => 'cleaned', { exclusive: true }), 'cleaned', 'the cleanup runs once the caller committed');
+  // and the other way round: while a cleanup holds the account, a scoped writer is turned away
+  const cleaning = gate(), done = gate();
+  const cleanup = withNativeMemoryWrite(database, 'fence-a', async () => { cleaning.open(); await done.promise; }, { exclusive: true });
+  await cleaning.promise;
+  await assert.rejects(database.transaction(async (client) => database.withTransactionClient(client, () => withNativeMemoryWrite(database, 'fence-a', async () => 'y'))),
+    { status: 409, code: 'memory_source_cleanup_busy' });
+  done.open(); await cleanup;
+});

@@ -32,6 +32,12 @@ async function admit(database, userId, kind, leaseId, ttlMs) {
       const blocking = await client.query(
         `SELECT 1 FROM evimed_memory.native_writer_leases WHERE user_id=$1 AND ($2='exclusive' OR kind='exclusive') LIMIT 1`, [userId, kind]);
       if (blocking.rows.length) throw busy();
+      // A shared writer inside a caller's transaction holds no lease row; it holds this key shared for the caller's whole transaction
+      // instead. A cleanup tries it exclusively, in the same short transaction as its row, and is refused while any such writer runs.
+      if (kind === 'exclusive') {
+        const free = await client.query('SELECT pg_try_advisory_xact_lock(hashtextextended($1,0)) AS ok', [`native-memory-scoped:${userId}`]);
+        if (!free.rows[0]?.ok) throw busy();
+      }
       await client.query(
         `INSERT INTO evimed_memory.native_writer_leases (user_id, lease_id, kind, expires_at) VALUES ($1,$2,$3, clock_timestamp() + ($4 || ' milliseconds')::interval)`,
         [userId, leaseId, kind, String(ttlMs)]);
@@ -65,12 +71,16 @@ export async function withNativeMemoryWrite(database, userId, operation, { exclu
     return operation();
   }
   // Inside a caller's transaction (a prompt admission or a runtime start holds one for its whole length, on one pooled connection) a lease
-  // would need a second connection, and with the pool taken by such callers nothing could ever be admitted. A shared writer there only
-  // looks for a live exclusive lease on the caller's own client; the cleanup's idleness check and the admission's own look at the lease
-  // keep the two apart, and an exclusive request always takes a real lease.
+  // would need a second connection, and with the pool taken by such callers nothing could ever be admitted. A shared writer there holds
+  // `native-memory-scoped:<user>` shared on the caller's own client and then looks for a live exclusive lease; a cleanup's admission tries
+  // that key exclusively before it inserts its row, so the two never run together. An exclusive request always takes a real lease.
   let scoped = null;
   try { scoped = typeof database.transactionScope === 'function' ? database.transactionScope() : null; } catch { scoped = null; }
   if (scoped && !exclusive) {
+    // Taken first and only tried, never waited on: it is shared, so writers never block one another, and a cleanup that holds it
+    // exclusively (only inside its short admission) turns this writer away with the usual 409. Held until the caller's transaction ends.
+    const got = await database.query('SELECT pg_try_advisory_xact_lock_shared(hashtextextended($1,0)) AS ok', [`native-memory-scoped:${userId}`]);
+    if (!got.rows[0]?.ok) throw busy();
     const present = await database.query("SELECT to_regclass('evimed_memory.native_writer_leases') IS NOT NULL AS present");
     if (present.rows[0]?.present) {
       const cleaning = await database.query("SELECT 1 FROM evimed_memory.native_writer_leases WHERE user_id=$1 AND kind='exclusive' AND expires_at>clock_timestamp() LIMIT 1", [userId]);
