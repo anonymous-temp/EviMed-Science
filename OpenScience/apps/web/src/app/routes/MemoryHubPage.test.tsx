@@ -327,7 +327,7 @@ describe("记忆胶囊", () => {
     fetchMyCapsule.mockResolvedValue({ capsule: null, capsules: [], entries: [], forgotten: [] });
     open();
     const row = await screen.findByRole("button", { name: /纳入范围覆盖疳证/ });
-    expect(screen.getByRole("link", { name: /关于你/ })).toHaveAttribute("aria-current", "page");
+    await waitFor(() => expect(screen.getByRole("link", { name: /关于你/ })).toHaveAttribute("aria-current", "page"));
     expect(screen.getByRole("heading", { level: 2 })).toHaveTextContent("项目记忆");
     expect(row.closest("li")).toHaveTextContent("疳证 Meta 文献检索");
     expect(screen.queryByText("还没有关于你的记忆")).toBeNull();
@@ -387,14 +387,14 @@ describe("记忆胶囊", () => {
     fetchMyCapsule.mockResolvedValue({ capsule: null, capsules: [], entries: [], forgotten: [] });
     const named = open("?tab=methods");
     expect(await screen.findByRole("button", { name: /提交前给成品做最后把关/ })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /做法/ })).toHaveAttribute("aria-current", "page");
+    await waitFor(() => expect(screen.getByRole("link", { name: /做法/ })).toHaveAttribute("aria-current", "page"));
     named.unmount();
     open("?tab=self");
     expect(await screen.findByText("还没有关于你的记忆")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /关于你/ })).toHaveAttribute("aria-current", "page");
+    await waitFor(() => expect(screen.getByRole("link", { name: /关于你/ })).toHaveAttribute("aria-current", "page"));
     await user.click(screen.getByRole("link", { name: /做法/ }));
     expect(await screen.findByRole("button", { name: /提交前给成品做最后把关/ })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /做法/ })).toHaveAttribute("aria-current", "page");
+    await waitFor(() => expect(screen.getByRole("link", { name: /做法/ })).toHaveAttribute("aria-current", "page"));
   });
 
   it("starts on 关于你: facts about the person under small headers by kind, newest first, as bare sentences", async () => {
@@ -642,7 +642,7 @@ describe("记忆胶囊", () => {
       openOld(search);
       expect(await screen.findByRole("button", { name: /药学背景/ })).toBeInTheDocument();
       expect(screen.getByTestId("where")).toHaveTextContent(/^\/app\/memory\?tab=self$/);
-      expect(screen.getByRole("link", { name: /^关于你/ })).toHaveAttribute("aria-current", "page");
+      await waitFor(() => expect(screen.getByRole("link", { name: /^关于你/ })).toHaveAttribute("aria-current", "page"));
       // The project's memories are there, under their own group.
       expect(within(screen.getByRole("list", { name: "项目记忆" })).getAllByRole("listitem")).toHaveLength(2);
     });
@@ -789,25 +789,25 @@ describe("记忆胶囊", () => {
   it("opens the tab a link asks for: the skills page's ?tab=methods, and the old /app/capsules redirect", async () => {
     open("?tab=methods");
     expect(await screen.findByRole("button", { name: /提交前给成品做最后把关/ })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /^做法/ })).toHaveAttribute("aria-current", "page");
+    await waitFor(() => expect(screen.getByRole("link", { name: /^做法/ })).toHaveAttribute("aria-current", "page"));
     cleanup();
     open("?tab=capsules");
     expect(await screen.findByRole("button", { name: /药学背景/ })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /^关于你/ })).toHaveAttribute("aria-current", "page");
+    await waitFor(() => expect(screen.getByRole("link", { name: /^关于你/ })).toHaveAttribute("aria-current", "page"));
   });
 
   it("opens the memory an inbox notice names, in its drawer, on the list it belongs to: a project's memory is a row of 关于你", async () => {
     open("?record=rec_6");
     const drawer = await screen.findByRole("dialog", { name: "项目事实" });
     expect(within(drawer).getByText("信尔美为处方药，需冷链。")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /^关于你/ })).toHaveAttribute("aria-current", "page");
+    await waitFor(() => expect(screen.getByRole("link", { name: /^关于你/ })).toHaveAttribute("aria-current", "page"));
   });
 
   it("opens the learned method a skill-catalogue link names, in its drawer, and says when it is not in the list", async () => {
     open(`?method=${encodeURIComponent(method.id)}`);
     const drawer = await screen.findByRole("dialog", { name: "提交前给成品做最后把关" });
     expect(within(drawer).getByText(/先复制一份/)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /^做法/ })).toHaveAttribute("aria-current", "page");
+    await waitFor(() => expect(screen.getByRole("link", { name: /^做法/ })).toHaveAttribute("aria-current", "page"));
     cleanup();
     open("?method=method%3Amissing");
     expect(await screen.findByText("当前列表中没有找到这条做法。")).toBeInTheDocument();
@@ -824,7 +824,7 @@ describe("记忆胶囊", () => {
     // Typing replaced the entry; the link pushed one: a single Back leaves for the page before it.
     await act(async () => { await router.navigate!(-1); });
     expect(where()).toBe("/app/memory?tab=self");
-    expect(screen.getByRole("link", { name: /^关于你/ })).toHaveAttribute("aria-current", "page");
+    await waitFor(() => expect(screen.getByRole("link", { name: /^关于你/ })).toHaveAttribute("aria-current", "page"));
     expect(screen.getByRole("searchbox", { name: "搜索记忆" })).toHaveValue("");
   });
 
@@ -832,7 +832,7 @@ describe("记忆胶囊", () => {
     openInHistory(`?tab=self&open=${encodeURIComponent("record:rec_6")}&q=${encodeURIComponent("冷链")}`);
     const drawer = await screen.findByRole("dialog", { name: "项目事实" });
     expect(within(drawer).getByText("信尔美为处方药，需冷链。")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /^关于你/ })).toHaveAttribute("aria-current", "page");
+    await waitFor(() => expect(screen.getByRole("link", { name: /^关于你/ })).toHaveAttribute("aria-current", "page"));
     expect(screen.getByRole("searchbox", { name: "搜索记忆" })).toHaveValue("冷链");
   });
 
