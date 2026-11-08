@@ -1,6 +1,6 @@
 {
   "name": "@evimed/patient-matching-core",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "type": "module",
   "description": "Independent patient matching contracts, host ABI, source identities and shared result projection.",
   "license": "MIT",

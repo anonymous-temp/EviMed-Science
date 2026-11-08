@@ -14,7 +14,7 @@ const result=(status,data)=>({status,summary:'Candidate discovery completed with
  * A long record (over 6,000 characters with the query) stands for itself as a profile summary (`models.profile`, cached per record) or, without one, as its newest sentences; its age and sex filter the registry search unless the tool gave them.
  * @param {{vcr:any,models:any,index?:any,jevEnabled?:boolean,depth?:number,jevDepth?:number,rankView?:string,assertCurrent?:(envelope:any)=>Promise<any>}} dependencies
  */
-export function createPatientMatchingDiscovery({vcr,models,index=null,jevEnabled=true,depth=300,jevDepth=depth,rankView='balanced',assertCurrent=async()=>{}}){
+export function createPatientMatchingDiscovery({vcr,models,index=null,jevEnabled=true,depth=300,jevDepth=depth,rankView='trial-record',assertCurrent=async()=>{}}){
   const viewId=rankingViewId(rankView);
   /** @type {Map<string,{text:string,age:number|null,sex:string|null}>} */ const profiles=new Map();
   const stageDepth=Math.min(500,Math.max(20,Math.trunc(Number(depth)||300))),scoredDepth=Math.min(stageDepth,Math.max(0,Math.trunc(Number(jevDepth)||0)));

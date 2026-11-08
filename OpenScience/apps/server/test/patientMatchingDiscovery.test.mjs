@@ -110,7 +110,7 @@ test('a short record is the query and passages joined, byte for byte', async () 
 test('the configured rank view reaches the rerank documents and the saved profile id', async () => {
  let saved, text;
  const vcr = { service: { runtimeRead: async (_s, kind, input) => kind === 'candidates' ? { candidates: [{ registryId: 'NCT00000001' }, { registryId: 'NCT00000002' }] } : { record: { title: input.registryId, eligibilityText: 'Inclusion Criteria:\n- ' + 'x'.repeat(3000) } } }, candidateSearches: { save: async (_s, value) => { saved = value; return 's'; } } };
- await createPatientMatchingDiscovery({ vcr, jevEnabled: false, rankView: 'eligibility-full', models: { embeddingProfileDigest: 'p', rerank: async e => { text = e.input.candidates[0].text; return { status: 'partial', data: {} }; } } })({ scope, origin, study: {}, meta: { taskId: 't', selectedPairs: [] }, input: { query: 'q' } });
- assert.equal(saved.rerank.view.profile, 'eligibility-full-v1');
+ await createPatientMatchingDiscovery({ vcr, jevEnabled: false, rankView: 'trial-record', models: { embeddingProfileDigest: 'p', rerank: async e => { text = e.input.candidates[0].text; return { status: 'partial', data: {} }; } } })({ scope, origin, study: {}, meta: { taskId: 't', selectedPairs: [] }, input: { query: 'q' } });
+ assert.equal(saved.rerank.view.profile, 'trial-record-12k-v1');
  assert.ok(text.length > 3000);
 });

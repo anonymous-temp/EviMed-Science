@@ -1166,7 +1166,7 @@ function vcrSettings(overrides) {
     patientMatchingEvidenceDense: overrides.patientMatchingEvidenceDense ?? boolEnv("OPEN_SCIENCE_PATIENT_MATCHING_EVIDENCE_DENSE", false),
     patientMatchingJevEnabled: overrides.patientMatchingJevEnabled ?? boolEnv("OPEN_SCIENCE_PATIENT_MATCHING_JEV_ENABLED", true),
     patientMatchingDiscoveryDepth: integer("patientMatchingDiscoveryDepth", "OPEN_SCIENCE_PATIENT_MATCHING_DISCOVERY_DEPTH", 300, 20, 500),
-    patientMatchingRankView: ["balanced", "eligibility-full"].includes(String(overrides.patientMatchingRankView ?? process.env.OPEN_SCIENCE_PATIENT_MATCHING_RANK_VIEW ?? "").trim()) ? String(overrides.patientMatchingRankView ?? process.env.OPEN_SCIENCE_PATIENT_MATCHING_RANK_VIEW).trim() : "balanced",
+    patientMatchingRankView: ["balanced", "trial-record"].includes(String(overrides.patientMatchingRankView ?? process.env.OPEN_SCIENCE_PATIENT_MATCHING_RANK_VIEW ?? "").trim()) ? String(overrides.patientMatchingRankView ?? process.env.OPEN_SCIENCE_PATIENT_MATCHING_RANK_VIEW).trim() : "trial-record",
     patientMatchingJevDepth: integer("patientMatchingJevDepth", "OPEN_SCIENCE_PATIENT_MATCHING_JEV_DEPTH", 300, 0, 500),
     patientMatchingTrialIndexManifest: String(overrides.patientMatchingTrialIndexManifest ?? process.env.OPEN_SCIENCE_PATIENT_MATCHING_TRIAL_INDEX_MANIFEST ?? ''),
     patientMatchingCataloguePath: String(overrides.patientMatchingCataloguePath ?? process.env.OPEN_SCIENCE_PATIENT_MATCHING_CATALOGUE ?? ''),
