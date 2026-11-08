@@ -8943,7 +8943,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     void Promise.resolve(managedBrowser.pause?.()).catch(() => {
       process.stderr.write("managed browser pause: cleanup remains unconfirmed\n");
     });
-    for (const worker of [pluginApplyWorker, personalSkillWorker, hostedExtensions?.preparation, hostedExtensions?.worker, memoryIndexWorker, nativeMemoryWorker, sourceWorker, knowledgePagesWorker, sourceSyncWorker, learningWorker, im.worker, kbIndex, frontier?.worker, review?.worker,
+    for (const worker of [pluginApplyWorker, personalSkillWorker, hostedExtensions?.preparation, hostedExtensions?.worker, memoryIndexWorker, nativeMemoryWorker, sourceDeletion, sourceWorker, knowledgePagesWorker, sourceSyncWorker, learningWorker, im.worker, kbIndex, frontier?.worker, review?.worker,
       geo?.worker, vcr?.worker, evolution?.worker, credits?.worker, documentExportWorker, resultReplayWorker, availability.worker]) {
       if (worker?.timer) clearInterval(worker.timer);
       if (worker) worker.timer = null;
