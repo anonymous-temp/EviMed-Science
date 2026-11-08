@@ -202,11 +202,12 @@ test('backfill keeps equal session names in personal and shared namespaces separ
   f.service.contexts.forProject = async project => project.id === 'shared' ? shared : f.context;
   await f.service.backfill();
   const sharedSearch = () => f.service.search({ user: { id: f.userId }, project: { id: 'shared', userId: f.userId }, query: '过敏' });
-  assert.equal((await search(f)).length, 1); assert.equal((await sharedSearch()).length, 1);
+  assert.equal((await search(f)).length, 1);
+  // A shared GEO namespace is never raw-indexed (it would admit every member's words as the owner's).
+  assert.deepEqual(await sharedSearch(), []);
+  assert.equal((await f.database.query('SELECT state FROM evimed_memory.history_archives WHERE archive_uri=$1', [accepted.archive_uri])).rows[0].state, 'excluded');
   await f.overlay.reject(f.userId, `${namespace.engineUser}:notes`, `${shared.userRoot}/memories/notes/a.md`, ['青霉素过敏'], { origin: 'edit' });
-  assert.deepEqual(await sharedSearch(), []); assert.equal((await search(f)).length, 1);
-  await f.overlay.unreject(f.userId, `${namespace.engineUser}:notes`, ['青霉素过敏']);
-  assert.equal((await sharedSearch()).length, 1, 'explicit owner restore releases that namespace rejection');
+  assert.equal((await search(f)).length, 1);
 });
 
 test('short removed Chinese text is dropped as a whole history hit while unrelated retained facts remain searchable', options, async t => {
@@ -395,4 +396,13 @@ test('a withdrawn chunk whose removal was proven is re-checked a few times, not 
   }
   const row = (await f.database.query("SELECT max(sweeps)::int AS sweeps FROM evimed_memory.history_chunks WHERE state='withdrawn'")).rows[0];
   assert.ok(row.sweeps >= 1 && row.sweeps <= 3, `sweeps stop at the cap (${row.sweeps})`);
+});
+
+test('a shared GEO namespace is never indexed as raw history, and nothing is returned for it', options, async t => {
+  const f = await setup(t); const shared = { ...f.context, kind: 'geo-project' };
+  await f.service.ingestArchive(f.commit, shared);
+  assert.equal(f.files.size, 0);
+  assert.deepEqual((await f.database.query('SELECT state,reason FROM evimed_memory.history_archives WHERE archive_uri=$1', [f.commit.archiveUri])).rows, [{ state: 'excluded', reason: 'shared_namespace' }], 'terminal, so the backfill never claims it again');
+  f.service.contexts = { async forProject() { return shared; } };
+  assert.deepEqual(await search(f), []);
 });

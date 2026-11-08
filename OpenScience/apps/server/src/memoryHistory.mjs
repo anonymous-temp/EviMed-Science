@@ -118,6 +118,13 @@ export class MemoryHistory {
 
   async ingestArchive(commit, context) {
     if (!this.enabled || !this.ledger || !context?.ownerCreatedAt) return;
+    // A shared 循证 GEO namespace holds its members' conversations under the owner's identity; raw history would index and admit
+    // every member's words as the owner's, past member isolation and the context provenance rules. It is never indexed.
+    if (context.kind === 'geo-project') {
+      await this.ledger.startArchive(commit, context);
+      await this.ledger.finishArchive(commit, context, 'excluded', { reason: 'shared_namespace' });
+      return;
+    }
     const progress = await this.ledger.startArchive(commit, context);
     if (['complete','excluded','withdrawn'].includes(progress.state)) return;
     try {
@@ -225,7 +232,7 @@ export class MemoryHistory {
   async search({ user, project, query, limit = 5 }) {
     if (!this.enabled || !query?.trim()) return [];
     const context = await this.contexts.forProject(project);
-    if (context.ownerId !== user.id) return [];
+    if (context.ownerId !== user.id || context.kind === 'geo-project') return [];
     const source = await this.resolveSource({ userId: user.id, projectId: project.id, engineSession: null }, context);
     if (!source?.projectCreatedAt || source.projectId !== project.id) return [];
     // Only the verified ordinary default conversation expands to the account's
