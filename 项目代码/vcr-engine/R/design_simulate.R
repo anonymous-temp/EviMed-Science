@@ -1038,6 +1038,8 @@ vcr_maxcombo_strong_null <- function(job, sc, cancel_file = NULL, spent = 0, com
   sc2 <- sc
   sc2$truth[["hazardRatio"]] <- NULL; sc2$truth[["null"]] <- NULL
   sc2$truth$treatmentHazardRatios <- list(breaks = breaks, ratios = c(harm, 1))
+  # a type I error is an error constraint, not a screened quantity: like the boundaries, it runs on the full null floor the CPU plan below counts
+  sc2[["evaluation"]] <- NULL
   reps <- as.integer(max(vcr_scalar(job$replicates, 0), vcr_domain()$limits$replicatesNullMin))
   plan <- vcr_strong_null_plan(spent, completed, reps, vcr_scalar(job$cpuSecondsLimit, Inf), vcr_cpu_remaining())
   if (!plan$run) return(list(measures = list(), diagnostics = list(computed = FALSE, reason = "what the design's own replicates left of the CPU budget would not finish it")))

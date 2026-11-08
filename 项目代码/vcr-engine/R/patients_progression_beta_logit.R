@@ -117,10 +117,11 @@ vcr_beta_logit_new_study <- function(par) {
 #' `aucPlacebo`.
 vcr_beta_logit_placebo <- function(par, t) par[["placeboBeta"]] * (exp(-par[["kel"]] * t) - exp(-par[["keq"]] * t))
 
-#' A symptomatic effect stated as `points` (treated less untreated, negative is better) at `at_week` for a person at `reference_adas`, turned into
-#' the logit Emax of an Emax curve with `et50` (adsim's `gLogitDelta` with xi = 1).
-vcr_beta_logit_emax_from_points <- function(points, at_week, reference_adas, et50) {
-  (stats::qlogis((reference_adas + points) / 70) - stats::qlogis(reference_adas / 70)) * (at_week + et50) / at_week
+#' A symptomatic effect stated as `points` (treated less untreated, negative is better) after `on_weeks` weeks on drug for a person at
+#' `reference_adas`, turned into the logit Emax of an Emax curve with `et50` (adsim's `gLogitDelta` with xi = 1). The curve runs on the time on
+#' drug, so a statement made at study week w of a dose that began at week b is converted at w - b.
+vcr_beta_logit_emax_from_points <- function(points, on_weeks, reference_adas, et50) {
+  (stats::qlogis((reference_adas + points) / 70) - stats::qlogis(reference_adas / 70)) * (on_weeks + et50) / on_weeks
 }
 
 #' The drug's two terms at the times `t` for a treatment `tr` (`emax`, `et50`, `halfLife`, `fraction`, `begin`, `end`): the symptomatic one on
@@ -358,11 +359,13 @@ vcr_beta_logit_moments <- function(par, study, times, drug = NULL, placebo = TRU
     if (length(et50) != 1L || !(et50 > 0)) vcr_abort("scenario_value_invalid", "scenario.treatment.symptomatic.et50Weeks", "The time to half the symptomatic effect is a positive number of weeks.")
     if (!is.null(sym[["pointsAt"]])) {
       pts <- .vcr_bl_value(sym[["pointsAt"]]); at <- vcr_scalar(sym[["atWeek"]]); ref <- vcr_scalar(sym[["referenceAdas"]])
-      if (is.null(at) || !(at > 0)) vcr_abort("scenario_value_invalid", "scenario.treatment.symptomatic.atWeek", "The week the symptomatic effect is stated at is after week 0.")
+      if (is.null(at) || !(at > begin) || !(at <= end)) {
+        vcr_abort("scenario_value_invalid", "scenario.treatment.symptomatic.atWeek", "The study week the symptomatic effect is stated at lies after the dose begins and no later than it ends.")
+      }
       if (is.null(ref) || !(ref > 0 && ref < 70) || !(ref + pts > 0 && ref + pts < 70)) {
         vcr_abort("scenario_value_invalid", "scenario.treatment.symptomatic.referenceAdas", "The reference score and the score with the effect added both lie strictly between 0 and 70.")
       }
-      out$emax <- vcr_beta_logit_emax_from_points(pts, at, ref, et50)
+      out$emax <- vcr_beta_logit_emax_from_points(pts, at - begin, ref, et50)
     } else {
       out$emax <- .vcr_bl_value(sym[["logitEmax"]])
     }
@@ -465,7 +468,9 @@ vcr_job_patients_progression_beta_logit <- function(job, output_dir = NULL, canc
   assume <- function(key, value, basis) assumed[[length(assumed) + 1L]] <<- list(key = key, value = value, basis = basis)
   if (is.null(population$mmseRange)) assume("population.mmseRange", c(16, 26), "default: baseline MMSE drawn uniformly from 16 to 26, the parameter set's own entry range")
   if (is.null(population$apoe4) || is.null(population$femaleShare) || is.null(population$ageMeanByApoe4) || is.null(population$ageSd)) {
-    assume("population.covariates", c(par$apoe, par$female, par$ageMean, par$ageSd), "default: ApoE4 alleles, sex and age by genotype from the parameter set's covariate model at its medians")
+    assume("population.covariates", c(par$apoe, par$female, par$ageMean, par$ageSd), if (identical(uncertainty, "posterior_draws"))
+      "default: ApoE4 alleles, sex and age by genotype from each simulated trial's own posterior draw of the covariate model; the values shown are the parameter set's medians"
+    else "default: ApoE4 alleles, sex and age by genotype from the parameter set's covariate model at its medians")
   }
   if (is.null(model[["uncertainty"]])) assume("model.uncertainty", uncertainty, "default: one new study drawn per simulated trial")
   if (is.null(sc[["placebo"]])) assume("placebo", TRUE, "default: the placebo response applies to every arm from week 0")

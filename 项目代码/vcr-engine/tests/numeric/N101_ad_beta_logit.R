@@ -270,7 +270,9 @@ vcr_case("N101k", c("AC-04", "AC-27"), function() {
     beyond_scale = list(.n101_sc(treatment = list(symptomatic = list(pointsAt = .n101_P(50), atWeek = 24, referenceAdas = 25, et50Weeks = .n101_P(1)))), "scenario_value_invalid@scenario.treatment.symptomatic.referenceAdas"),
     apoe = list(.n101_sc(population = list(apoe4 = .n101_P(c(0.5, 0.4, 0.2)))), "scenario_value_invalid@scenario.population.apoe4"),
     late_start = list(.n101_sc(visits = c(4, 13, 26)), "scenario_value_invalid@scenario.visits"),
-    dose_order = list(.n101_sc(treatment = c(sym(washoutHalfLifeWeeks = .n101_P(1)), list(doseBegin = 30, doseEnd = 26))), "scenario_value_invalid@scenario.treatment.doseEnd"))
+    dose_order = list(.n101_sc(treatment = c(sym(washoutHalfLifeWeeks = .n101_P(1)), list(doseBegin = 30, doseEnd = 26))), "scenario_value_invalid@scenario.treatment.doseEnd"),
+    stated_before_dose = list(.n101_sc(treatment = c(sym(), list(doseBegin = 24))), "scenario_value_invalid@scenario.treatment.symptomatic.atWeek"),
+    stated_after_dose = list(.n101_sc(treatment = c(sym(washoutHalfLifeWeeks = .n101_P(1)), list(doseEnd = 20))), "scenario_value_invalid@scenario.treatment.symptomatic.atWeek"))
   got <- vapply(cases, function(x) .n101_issue(.n101_run(x[[1]], 10113L)), character(1))
   want <- vapply(cases, function(x) x[[2]], character(1))
   old_label <- .n101_issue(.n101_run(.n101_sc(), 10113L, label = "1.0.0"))
@@ -323,4 +325,18 @@ vcr_case("N101m", c("AC-04", "AC-28"), function() {
   list(pass = ok, detail = sprintf("a one-second CPU budget: status %s with %s, %d of %d trials kept (whole batches of 500), type I error %.4f (MCSE %.4f) from those",
                                    r$status, paste(codes, collapse = ", "), pg$trials %||% NA_integer_, pg$trialsRequested %||% NA_integer_,
                                    if (length(t1)) t1[[1]]$value else NA_real_, if (length(t1)) t1[[1]]$mcse else NA_real_))
+})
+
+vcr_case("N101n", c("AC-04"), function() {
+  # a symptomatic effect stated at a study week is that effect at that week for a person at the reference score, whenever the dose began:
+  # the Emax curve runs on the time on drug, so the statement is converted at the week less the dose's start
+  stated <- function(begin) {
+    tr <- .vcr_bl_treatment(list(doseBegin = begin, doseEnd = 78, symptomatic = list(pointsAt = .n101_P(-2.5), atWeek = 24, referenceAdas = 25,
+                                                                                     et50Weeks = .n101_P(8))), 78)
+    sx <- vcr_beta_logit_drug(tr, 24)$symptomatic
+    70 * stats::plogis(stats::qlogis(25 / 70) + sx) - 25
+  }
+  at0 <- stated(0); at12 <- stated(12)
+  ok <- abs(at0 + 2.5) < 1e-9 && abs(at12 + 2.5) < 1e-9
+  list(pass = ok, detail = sprintf("-2.5 points stated at study week 24 for a person at 25, ET50 8 weeks: %.6f with the dose from week 0, %.6f with the dose from week 12", at0, at12))
 })
