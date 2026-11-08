@@ -163,7 +163,7 @@ process.exit(2);
 `;
 
 /** A host with one built release, a live stack and a docker that is a script. */
-async function host({ restartDoesNotHelp = false, imageDigestMatches = true, walkExit = undefined, walkEnv = undefined, ready = undefined, managedBrowser = false, releaseId = `evimed-${NEW}-1` } = {}) {
+async function host({ restartDoesNotHelp = false, imageDigestMatches = true, walkExit = undefined, walkEnv = undefined, ready = undefined, managedBrowser = false, releaseId = `evimed-${NEW}-1`, productionState = "ok" } = {}) {
   const root = await mkdtemp(path.join(await realpath(tmpdir()), "release-switch-"));
   const rel = path.join(root, "releases", NEW, "OpenScience");
   const web = path.join(rel, "deploy/web");
@@ -172,6 +172,11 @@ async function host({ restartDoesNotHelp = false, imageDigestMatches = true, wal
   for (const script of ["configure-monitoring.mjs", "check-runtime-skill-digests.mjs", "result-replay-deployment.mjs", "prepare-host-ops-dependencies.mjs"]) {
     await copyFile(path.join(repoRoot, "scripts/ops", script), path.join(rel, "scripts/ops", script));
   }
+  // The production-state check (configure-production-state.mjs --check) reads the host's secrets; here it is a stand-in that answers
+  // as the real one does when the stored engine configuration follows the release, or not.
+  await writeFile(path.join(rel, "scripts/ops/configure-production-state.mjs"), productionState === "ok"
+    ? "process.stdout.write('production state check ok\\n');\n"
+    : "process.stderr.write('production_state_openviking_conf_mismatch: OpenViking configuration does not match what this deployment renders\\n'); process.exit(1);\n");
   await mkdir(path.join(rel, "packages/domain"), { recursive: true });
   await writeFile(path.join(rel, "packages/domain/package.json"), JSON.stringify({
     name: "@evimed/domain", type: "module", exports: { ".": "./index.mjs" },
@@ -417,6 +422,20 @@ test("the walk is mounted with every file it imports, and an old ui-walk.env can
     }
     assert.match(walk, /-e OPEN_SCIENCE_WALK_USER= -e OPEN_SCIENCE_WALK_PASSWORD_FILE= /, "the settings that name an account are emptied, so the production walk registers its own");
     assert.ok(walk.indexOf("--env-file") < walk.indexOf("-e OPEN_SCIENCE_WALK_USER="), "after the file, which they override");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("a stored engine configuration that does not follow the release stops the switch before anything moves (2026-11-08)", { skip }, async () => {
+  const { root } = await host({ productionState: "mismatch" });
+  try {
+    const refused = await runSwitch(root, ["--no-prune"]);
+    assert.notEqual(refused.code, 0, refused.stdout + refused.stderr);
+    assert.match(refused.stdout, /production state does not follow/);
+    assert.doesNotMatch(refused.stdout, /=== current -> /, "current did not move");
+    const calls = (await readFile(path.join(root, "docker.log"), "utf8").catch(() => "")).split("\n");
+    assert.equal(calls.some((line) => line.includes(" up -d ")), false, "nothing was recreated");
   } finally {
     await rm(root, { recursive: true, force: true });
   }
