@@ -179,7 +179,8 @@ function startRefusal(error: unknown): "room" | "cleanup" | null {
  * said 「对话暂时打不开」 (2026-10-04). The shell says what is happening and
  * opens the conversation again by itself, a few times, before it calls it one.
  */
-const PREPARING_CODE = "plugin_apply_in_progress";
+// A conversation source being cleaned up keeps a project's prompts out for a few seconds the same way (`memory_source_cleanup_busy`).
+const PREPARING_CODES: ReadonlySet<string> = new Set(["plugin_apply_in_progress", "memory_source_cleanup_busy"]);
 const PREPARING_LINE = "正在准备运行环境";
 const PREPARING_RETRY_MS = 2_000;
 const PREPARING_RETRY_LIMIT = 5;
@@ -466,7 +467,7 @@ export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwne
   const coverHanded = useRef<{ key: string; text: string } | null>(null);
   const coverFollowUp = useRef<{ requestId: string; owner: string; sessionId: string; opening: string } | null>(null);
   // The runtime's settings are being applied, so the opening is tried again by
-  // itself (`PREPARING_CODE`): said on the cover instead of an alert, until the
+  // itself (`PREPARING_CODES`): said on the cover instead of an alert, until the
   // conversation opens or the tries run out.
   const [preparing, setPreparing] = useState(false);
   const preparingRetries = useRef(0);
@@ -824,7 +825,7 @@ export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwne
       // then blamed a slow cold start for a ceiling the server had already
       // named (2026-09-15 walk, A8).
       if (message?.type === "evimed.runtime-ui.notice" && message.version === 1 && typeof message.code === "string") {
-        if (message.code === PREPARING_CODE && preparingRetries.current < PREPARING_RETRY_LIMIT) {
+        if (typeof message.code === "string" && PREPARING_CODES.has(message.code) && preparingRetries.current < PREPARING_RETRY_LIMIT) {
           // An apply under way: open the conversation again once it has had a moment.
           preparingRetries.current += 1;
           setPreparing(true);
