@@ -270,7 +270,7 @@ test('a deleted-source commit with no diff and no proof of failure stays pending
   const f=await fixture(t), ledger=new ConversationSourceDeletionLedger(f.database);
   const archive=await f.commitConversation('a',[{role:'user',text:'A scan found this archive; the engine may still write a diff.'}],{projectId:'default'});
   f.stub.files.delete(`${archive.archive_uri}/memory_diff.json`);
-  for(const [id,task] of f.stub.tasks)f.stub.tasks.delete(id);
+  for(const id of [...f.stub.tasks.keys()])f.stub.tasks.delete(id);
   await f.database.query("UPDATE evimed_memory.native_commits SET created_at=clock_timestamp()-interval '3 hours',task_id=NULL WHERE user_id=$1 AND archive_uri=$2",[f.userId,archive.archive_uri]);
   const stamp=(await f.database.query('SELECT created_at::text AS stamp FROM evimed_control.users WHERE id=$1',[f.userId])).rows[0].stamp;
   await ledger.put({id:crypto.randomUUID(),userId:f.userId,projectId:'default',accountCreatedAt:stamp,projectCreatedAt:f.projectCreatedAt,rootSessionId:'session_a',sessionIds:['session_a'],frozen:{root:{id:'session_a'}},memoryUserRoot:f.sessions.userRoot(f.userId)});
