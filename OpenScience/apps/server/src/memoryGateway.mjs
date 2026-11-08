@@ -1168,7 +1168,9 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         },
       };
       const deletionVersion = sourceDeletion ? await sourceDeletion.version(user.id) : null;
-      const answer = await withNativeMemoryWrite(overlay?.database,user.id,()=>handlers[route](ctx));
+      // Only the routes that write are fenced; a read never takes the owner's fence and no connection is held while it runs.
+      const writes = route === 'sessionCreate' || route === 'messageWrite' || route === 'commit';
+      const answer = writes ? await withNativeMemoryWrite(overlay?.database,user.id,()=>handlers[route](ctx)) : await handlers[route](ctx);
       if (sourceDeletion && await sourceDeletion.version(user.id) !== deletionVersion) throw new HttpError(503, 'memory_gateway_source_changed', 'The source privacy state changed during this request.');
       recordGatewayRequest(route, answer.outcome);
       send(answer);

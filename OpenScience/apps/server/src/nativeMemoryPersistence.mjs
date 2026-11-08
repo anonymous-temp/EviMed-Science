@@ -257,6 +257,14 @@ CREATE TABLE IF NOT EXISTS evimed_memory.native_imports (
   expires_at timestamptz(3) NOT NULL
 );
 CREATE INDEX IF NOT EXISTS native_imports_user_idx ON evimed_memory.native_imports (user_id, created_at DESC);
+-- Writer leases of the owner fence (nativeMemoryWriteFence.mjs): held as rows, never as a transaction across an engine call.
+CREATE TABLE IF NOT EXISTS evimed_memory.native_writer_leases (
+  user_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,
+  lease_id text NOT NULL,
+  kind text NOT NULL CHECK (kind IN ('shared','exclusive')),
+  expires_at timestamptz(3) NOT NULL,
+  PRIMARY KEY (user_id, lease_id)
+);
 -- Authority stamps are captured from trusted project/context rows, separately from a memory's display scope.
 ALTER TABLE evimed_memory.native_commits ADD COLUMN IF NOT EXISTS project_created_at text;
 ALTER TABLE evimed_memory.native_sessions ADD COLUMN IF NOT EXISTS project_created_at text;
