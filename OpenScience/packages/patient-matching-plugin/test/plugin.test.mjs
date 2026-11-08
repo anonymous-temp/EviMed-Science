@@ -323,3 +323,27 @@ test('a lane preparation the host refuses never rejects the call: the saved exec
   assert.equal(result.status, 'partial')
   assert.ok(result.data.nativeDiagnostics.some(item => /^lane 1: /.test(item)))
 })
+test('pairs whose decisions cannot be saved are sent back once with what was wrong, by identity, and the repaired ones are committed', async () => {
+  const f = fixture(), writes = [], prompts = []
+  const broken = { ...f.decision, criteria: f.decision.criteria.map(criterion => ({ ...criterion, evidenceIds: ['invented-evidence'] })) }
+  const host = { abi: HOST_ABI, ports: Object.fromEntries(Object.entries(HOST_PORT_METHODS).map(([port, methods]) => [port, Object.fromEntries(methods.map(method => [method, async envelope => {
+    if (port === 'IdentityPort' && method === 'resolve') return f.scope
+    if (port === 'IdentityPort') return { allowed: true, scope: f.scope }
+    if (port === 'ExecutionPort') return { status: 'complete', summary: 'Frozen', data: f.prepared, artifacts: [] }
+    if (port === 'ResultPort') { writes.push(envelope.input); return { status: 'complete', summary: 'Saved', data: { resultId: 'persisted-real' }, artifacts: [] } }
+    return { status: 'complete', summary: 'Host result', data: {}, artifacts: [] }
+  }]))])) }
+  const ctx = { on: () => () => {}, get: name => name === 'agents' ? { get: () => ({}) } : undefined, subagents: { async startActivation(input) {
+    prompts.push(JSON.stringify(input.request.prompt))
+    const decisions = prompts.length === 1 ? [broken] : [f.decision]
+    return { childId: input.childId, messageId: `message-${prompts.length}`, result: Promise.resolve({ stopReason: 'completed', structured: { decisions } }), async dispose() {} }
+  } } }
+  const result = await createMatchingHandler({ host, ctx })('match_assess', { taskId: 'task-a' }, call)
+  assert.equal(prompts.length, 2, 'one repair child')
+  assert.match(prompts[1], /REPAIR: the previous answer could not be saved for 1 pair/)
+  assert.match(prompts[1], /cites evidence invented-evidence that is not in its evidence bundle/)
+  assert.doesNotMatch(prompts[1].split('REPAIR:')[1], /Patient reported symptoms/, 'the repair note names identities, never data text')
+  assert.equal(writes.length, 1); assert.equal(writes[0].phase, 'commit'); assert.deepEqual(writes[0].decisions, [f.decision])
+  assert.ok(writes[0].diagnostics.includes('native_repair_requested:1'))
+  assert.equal(result.data.resultId, 'persisted-real')
+})

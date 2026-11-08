@@ -1,107 +1,660 @@
 {
-  "system": {
-    "name": "TrialLink",
-    "version": "triallink-1",
-    "organization": "EviMed",
-    "date": "2026-11",
-    "models": ["Qwen3.7 text embedding", "Qwen3.7 text rerank", "Jev 1.14", "DeepSeek V4.1 Flash"]
-  },
-  "boards": [
-    {
-      "id": "patient-to-trial-ranking",
-      "title": "Patient-to-trial ranking (SIGIR 2016 + TREC CT 2021 + TREC CT 2022)",
-      "unit": "183 patients, 75,061 judged patient-trial pairs; macro average over the three cohorts",
-      "scorer": "TrialGPT 2.0 eval_trialgpt_rankings_qrels.py (K=10, max-rel 2, MRR threshold 2)",
-      "metrics": ["ndcg@10", "p@10", "mrr", "map"],
-      "rows": [
-        {"system": "TrialLink", "organization": "EviMed", "models": "TrialLink (triallink-1)",
-         "scores": {"ndcg@10": 0.775, "p@10": 0.710, "mrr": 0.820, "map": 0.617},
-         "ci95": {"ndcg@10": [0.743, 0.806], "p@10": [0.676, 0.743], "mrr": [0.776, 0.863], "map": [0.588, 0.645]},
-         "cohorts": {"sigir": {"ndcg@10": 0.628, "p@10": 0.466, "mrr": 0.631, "map": 0.514},
-                     "trec_2021": {"ndcg@10": 0.880, "p@10": 0.865, "mrr": 0.924, "map": 0.694},
-                     "trec_2022": {"ndcg@10": 0.815, "p@10": 0.797, "mrr": 0.906, "map": 0.642}},
-         "heldOut": {"patients": 105, "ndcg@10": 0.839, "ci95": [0.794, 0.880], "p@10": 0.823, "mrr": 0.907, "map": 0.671},
-         "source": "this report"},
-        {"system": "TrialGPT 2.0", "organization": "NCBI/NLM, NIH", "models": "GPT-5.4",
-         "scores": {"ndcg@10": 0.76, "p@10": 0.70, "mrr": 0.85, "map": 0.60},
-         "cohorts": {"sigir": {"ndcg@10": 0.66, "p@10": 0.50}, "trec_2021": {"ndcg@10": 0.84, "p@10": 0.82}, "trec_2022": {"ndcg@10": 0.78, "p@10": 0.77}},
-         "source": "TrialGPT 2.0, arXiv 2609.01202v2, Supplementary Fig. 3c"},
-        {"system": "TrialGPT 2.0", "organization": "NCBI/NLM, NIH", "models": "Gemini-3.1-pro-preview",
-         "scores": {"ndcg@10": 0.76, "p@10": 0.69, "mrr": 0.84, "map": 0.56},
-         "source": "TrialGPT 2.0, arXiv 2609.01202v2, Supplementary Fig. 3"},
-        {"system": "TrialGPT 1.0", "organization": "NCBI/NLM, NIH", "models": "GPT-5.4",
-         "scores": {"ndcg@10": 0.74, "p@10": 0.67, "mrr": 0.84, "map": 0.55},
-         "cohorts": {"sigir": {"ndcg@10": 0.62, "p@10": 0.45}, "trec_2021": {"ndcg@10": 0.83, "p@10": 0.82}, "trec_2022": {"ndcg@10": 0.75, "p@10": 0.73}},
-         "source": "re-run in TrialGPT 2.0, arXiv 2609.01202v2, Supplementary Fig. 3c"},
-        {"system": "TrialGPT 2.0", "organization": "NCBI/NLM, NIH", "models": "GPT-4.1",
-         "scores": {"ndcg@10": 0.72, "p@10": 0.66, "mrr": 0.80, "map": 0.54},
-         "cohorts": {"sigir": {"ndcg@10": 0.64, "p@10": 0.48, "mrr": 0.67, "map": 0.47}, "trec_2021": {"ndcg@10": 0.79, "p@10": 0.78, "mrr": 0.90, "map": 0.59}, "trec_2022": {"ndcg@10": 0.72, "p@10": 0.72, "mrr": 0.83, "map": 0.56}},
-         "source": "TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d"},
-        {"system": "TrialGPT 1.0", "organization": "NCBI/NLM, NIH", "models": "Gemini-3.1-pro-preview",
-         "scores": {"ndcg@10": 0.72, "p@10": 0.67, "mrr": 0.78, "map": 0.55},
-         "source": "re-run in TrialGPT 2.0, arXiv 2609.01202v2, Supplementary Fig. 3"},
-        {"system": "TrialGPT 1.0", "organization": "NCBI/NLM, NIH", "models": "GPT-4.1",
-         "scores": {"ndcg@10": 0.68, "p@10": 0.63, "mrr": 0.73, "map": 0.49},
-         "cohorts": {"sigir": {"ndcg@10": 0.58, "p@10": 0.42, "mrr": 0.67, "map": 0.46}, "trec_2021": {"ndcg@10": 0.76, "p@10": 0.77, "mrr": 0.76, "map": 0.53}, "trec_2022": {"ndcg@10": 0.70, "p@10": 0.71, "mrr": 0.77, "map": 0.49}},
-         "source": "re-run in TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d"}
-      ]
-    },
-    {
-      "id": "nih-trialbench",
-      "title": "NIH-TrialBench target-trial retrieval",
-      "unit": "126 patient vignettes, 11 NIH institutes; recall@10 macro-averaged over institutes",
-      "scorer": "TrialGPT 2.0 eval_nih_trialbench_target_recall_at10.py (K=10)",
-      "metrics": ["recall@10 macro", "recall@10 all cases", "mrr"],
-      "rows": [
-        {"system": "TrialLink", "organization": "EviMed", "models": "TrialLink (triallink-1)",
-         "scores": {"recall@10 macro": 0.960, "recall@10 all cases": 0.897, "mrr": 0.604},
-         "ci95": {"recall@10 all cases": [0.841, 0.944], "mrr": [0.537, 0.670]}, "source": "this report"},
-        {"system": "TrialGPT 2.0", "organization": "NCBI/NLM, NIH", "models": "GPT-4.1", "scores": {"recall@10 macro": 0.70}, "source": "TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5c"},
-        {"system": "TrialGPT 1.0", "organization": "NCBI/NLM, NIH", "models": "GPT-4.1", "scores": {"recall@10 macro": 0.54}, "source": "same"},
-        {"system": "ChatGPT-5.5 Thinking (web interface)", "organization": "OpenAI", "models": "GPT-5.5", "scores": {"recall@10 macro": 0.43}, "source": "same"},
-        {"system": "Gemini-3.5 Flash Extended Thinking (web interface)", "organization": "Google", "models": "Gemini-3.5 Flash", "scores": {"recall@10 macro": 0.21}, "source": "same"}
-      ]
-    },
-    {
-      "id": "trec-ct",
-      "title": "TREC Clinical Trials Track, full collection",
-      "unit": "2021: 75 topics, 375,580 trials; 2022: 50 topics, same collection; 2023: 37 judged topics of 40, 451,538 trials",
-      "scorer": "official qrels; nDCG@10 with gains 2/1/0, P@10 and RR on eligible trials; an unjudged trial counts as not relevant",
-      "metrics": ["ndcg@10", "p@10", "rr"],
-      "years": {
-        "2021": [
-          {"system": "TDMINER (manual run)", "type": "official, manual", "scores": {"ndcg@10": 0.715, "p@10": 0.576, "rr": 0.834}, "source": "TDMINER, TREC 2021 notebook"},
-          {"system": "h2oloo monoT5 (University of Waterloo)", "type": "official, best automatic", "scores": {"ndcg@10": 0.712, "p@10": 0.593, "rr": 0.816}, "source": "Pradeep et al., SIGIR 2022, Table 3"},
-          {"system": "damoebrtog (Alibaba DAMO)", "type": "official", "scores": {"ndcg@10": 0.595, "p@10": 0.409, "rr": 0.608}, "source": "Pradeep et al., SIGIR 2022, Table 3"},
-          {"system": "TrialLink", "type": "this report", "scores": {"ndcg@10": 0.559, "p@10": 0.488, "rr": 0.741}, "ci95": {"ndcg@10": [0.491, 0.624]}, "judgedAt10": 0.600},
-          {"system": "CSIROmed_inc (CSIRO)", "type": "official", "scores": {"ndcg@10": 0.532, "p@10": 0.317}, "source": "Pradeep et al., SIGIR 2022, Table 3"},
-          {"system": "BM25+ with entities and age/sex filter (Kusa et al.)", "type": "post-track", "scores": {"ndcg@10": 0.513, "p@10": 0.337, "rr": 0.604}, "source": "Kusa et al., J Biomed Inform 2023, Table 4"},
-          {"system": "ChatGPT query generation + RM3 (Peikos et al.)", "type": "post-track", "scores": {"ndcg@10": 0.512, "p@10": 0.323, "rr": 0.541}, "source": "Peikos et al., arXiv 2306.02077, Table 15"},
-          {"system": "BM25 on the patient note", "type": "baseline", "scores": {"ndcg@10": 0.469, "p@10": 0.264, "rr": 0.471}, "source": "Peikos et al., arXiv 2306.02077"},
-          {"system": "Track median (automatic runs)", "type": "reference", "scores": {"ndcg@10": 0.304, "p@10": 0.161, "rr": 0.294}, "source": "Pradeep et al., SIGIR 2022"}
-        ],
-        "2022": [
-          {"system": "GPT-4-turbo eligibility rerank of a top-500 (Jullien et al.)", "type": "post-track", "scores": {"ndcg@10": 0.693, "p@10": 0.718, "rr": 0.769}, "source": "Jullien et al., arXiv 2409.18998, Table 2"},
-          {"system": "GPT-4 judgement of a cross-encoder top-20 (IELAB)", "type": "post-track", "scores": {"ndcg@10": 0.659, "p@10": 0.568}, "source": "IELAB, TREC 2023 notebook, Table 1"},
-          {"system": "h2oloo frocchio_monot5_e (University of Waterloo)", "type": "official, best run", "scores": {"ndcg@10": 0.613, "p@10": 0.508, "rr": 0.726}, "source": "TREC 2022 Clinical Trials overview, Table 4"},
-          {"system": "TCRR-Bio (Kusa et al.)", "type": "post-track", "scores": {"ndcg@10": 0.604, "p@10": 0.482, "rr": 0.672}, "source": "Kusa et al., J Biomed Inform 2023, Table 5"},
-          {"system": "TrialLink", "type": "this report", "scores": {"ndcg@10": 0.585, "p@10": 0.526, "rr": 0.809}, "ci95": {"ndcg@10": [0.508, 0.660]}, "judgedAt10": 0.676},
-          {"system": "DoSSIER_5", "type": "official, 2nd team", "scores": {"ndcg@10": 0.556, "p@10": 0.456}, "source": "TREC 2022 Clinical Trials overview, Table 4"},
-          {"system": "ChatGPT query generation + RM3 (Peikos et al.)", "type": "post-track", "scores": {"ndcg@10": 0.509, "p@10": 0.372, "rr": 0.623}, "source": "Peikos et al., arXiv 2306.02077, Table 15"},
-          {"system": "CSIROmed monobert500 (CSIRO)", "type": "official", "scores": {"ndcg@10": 0.491, "p@10": 0.362}, "source": "TREC 2022 Clinical Trials overview"},
-          {"system": "Track median", "type": "reference", "scores": {"ndcg@10": 0.392, "p@10": 0.258, "rr": 0.411}, "source": "Kusa et al., J Biomed Inform 2023, Table 5"}
-        ],
-        "2023": [
-          {"system": "CSIROmed qe_prr_ft (CSIRO)", "type": "official", "scores": {"ndcg@10": 0.738, "p@10": 0.527, "rr": 0.667}, "source": "CSIROmed, TREC 2023 notebook, Table 1"},
-          {"system": "IELAB GPT-4 rerank of a top-20", "type": "official", "scores": {"ndcg@10": 0.736, "p@10": 0.511}, "source": "IELAB, TREC 2023 notebook, Table 2"},
-          {"system": "DoSSIER_3", "type": "official", "scores": {"ndcg@10": 0.684, "p@10": 0.584, "rr": 0.642}, "source": "DoSSIER, TREC 2023 notebook, Table 2"},
-          {"system": "IELAB CE_weighted", "type": "official", "scores": {"ndcg@10": 0.672, "p@10": 0.443}, "source": "IELAB, TREC 2023 notebook"},
-          {"system": "CSIROmed BM25 baseline", "type": "official", "scores": {"ndcg@10": 0.619, "p@10": 0.330, "rr": 0.563}, "source": "CSIROmed, TREC 2023 notebook"},
-          {"system": "IELAB dense retrieval", "type": "official", "scores": {"ndcg@10": 0.577, "p@10": 0.324}, "source": "IELAB, TREC 2023 notebook"},
-          {"system": "TrialLink", "type": "this report", "scores": {"ndcg@10": 0.504, "p@10": 0.451, "rr": 0.778}, "ci95": {"ndcg@10": [0.433, 0.573]}, "judgedAt10": 0.524},
-          {"system": "Track median", "type": "reference", "scores": {"ndcg@10": 0.648, "p@10": 0.394, "rr": 0.538}, "source": "DoSSIER and CSIROmed, TREC 2023 notebooks"}
-        ]
-      }
-    }
+ "system": {
+  "name": "TrialLink",
+  "version": "triallink-1",
+  "organization": "EviMed",
+  "date": "2026-11",
+  "components": [
+   "Qwen3.7 text embedding",
+   "Qwen3.7 text rerank",
+   "Jev 1.14",
+   "DeepSeek V4.1 Flash"
   ]
+ },
+ "protocol": "Comparator values are copied from the cited sources; TrialGPT 2.0 values are read from its figure bar labels. 95% intervals are patient-level percentile bootstraps (10,000 resamples). No TrialLink component was trained on any benchmark.",
+ "capabilities": [
+  {
+   "id": "ranking-ndcg",
+   "title": "Patient-to-trial ranking · nDCG@10",
+   "subtitle": "SIGIR 2016 + TREC 2021/2022 · 183 patients · judged trials",
+   "metric": "nDCG@10",
+   "scale": 1,
+   "rows": [
+    {
+     "label": "TrialLink",
+     "value": 0.775,
+     "source": "this report",
+     "kind": "ours",
+     "ci95": [
+      0.743,
+      0.806
+     ]
+    },
+    {
+     "label": "TrialGPT 2.0 · GPT-5.4",
+     "value": 0.76,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c",
+     "kind": "published",
+     "organization": "NCBI/NLM"
+    },
+    {
+     "label": "TrialGPT 2.0 · Gemini-3.1-pro",
+     "value": 0.76,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3",
+     "kind": "published",
+     "organization": "NCBI/NLM"
+    },
+    {
+     "label": "TrialGPT 1.0 · GPT-5.4",
+     "value": 0.74,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c",
+     "kind": "published",
+     "organization": "NCBI/NLM"
+    },
+    {
+     "label": "TrialGPT 2.0 · GPT-4.1",
+     "value": 0.72,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d",
+     "kind": "published",
+     "organization": "NCBI/NLM"
+    },
+    {
+     "label": "TrialGPT 1.0 · Gemini-3.1-pro",
+     "value": 0.72,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3",
+     "kind": "published",
+     "organization": "NCBI/NLM"
+    },
+    {
+     "label": "TrialGPT 1.0 · GPT-4.1",
+     "value": 0.68,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d",
+     "kind": "published",
+     "organization": "NCBI/NLM"
+    }
+   ],
+   "short": "Ranking nDCG@10",
+   "title_zh": "患者–试验排序 · nDCG@10",
+   "subtitle_zh": "SIGIR 2016 + TREC 2021/2022，183 位患者，只排已评判试验（TrialGPT 2.0 协议与官方评分脚本）"
+  },
+  {
+   "id": "ranking-map",
+   "title": "Patient-to-trial ranking · MAP",
+   "subtitle": "same 183 patients · graded MAP, official evaluator",
+   "metric": "MAP",
+   "scale": 1,
+   "rows": [
+    {
+     "label": "TrialLink",
+     "value": 0.617,
+     "source": "this report",
+     "kind": "ours",
+     "ci95": [
+      0.588,
+      0.645
+     ]
+    },
+    {
+     "label": "TrialGPT 2.0 · GPT-5.4",
+     "value": 0.6,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 2.0 · Gemini-3.1-pro",
+     "value": 0.56,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 1.0 · GPT-5.4",
+     "value": 0.55,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 1.0 · Gemini-3.1-pro",
+     "value": 0.55,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 2.0 · GPT-4.1",
+     "value": 0.54,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 1.0 · GPT-4.1",
+     "value": 0.49,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d",
+     "kind": "published"
+    }
+   ],
+   "short": "Ranking MAP",
+   "title_zh": "患者–试验排序 · MAP",
+   "subtitle_zh": "同一批 183 位患者，分级 MAP（官方评分脚本）"
+  },
+  {
+   "id": "cohort-sigir",
+   "title": "SIGIR 2016 cohort",
+   "subtitle": "58 patients · judged trials · nDCG@10",
+   "metric": "nDCG@10",
+   "scale": 1,
+   "rows": [
+    {
+     "label": "TrialLink",
+     "value": 0.628,
+     "source": "this report",
+     "kind": "ours",
+     "ci95": [
+      0.567,
+      0.686
+     ]
+    },
+    {
+     "label": "TrialGPT 2.0 · GPT-5.4",
+     "value": 0.66,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 2.0 · GPT-4.1",
+     "value": 0.64,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 1.0 · GPT-5.4",
+     "value": 0.62,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 1.0 · GPT-4.1",
+     "value": 0.58,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d",
+     "kind": "published"
+    }
+   ],
+   "short": "SIGIR cohort",
+   "title_zh": "SIGIR 2016 队列",
+   "subtitle_zh": "58 位患者，已评判试验，nDCG@10"
+  },
+  {
+   "id": "cohort-trec2021",
+   "title": "TREC 2021 cohort",
+   "subtitle": "75 patients · judged trials · nDCG@10",
+   "metric": "nDCG@10",
+   "scale": 1,
+   "rows": [
+    {
+     "label": "TrialLink",
+     "value": 0.88,
+     "source": "this report",
+     "kind": "ours",
+     "ci95": [
+      0.844,
+      0.912
+     ]
+    },
+    {
+     "label": "TrialGPT 2.0 · GPT-5.4",
+     "value": 0.84,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 1.0 · GPT-5.4",
+     "value": 0.83,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 2.0 · GPT-4.1",
+     "value": 0.79,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 1.0 · GPT-4.1",
+     "value": 0.76,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d",
+     "kind": "published"
+    }
+   ],
+   "short": "TREC 2021 cohort",
+   "title_zh": "TREC 2021 队列",
+   "subtitle_zh": "75 位患者，已评判试验，nDCG@10"
+  },
+  {
+   "id": "cohort-trec2022",
+   "title": "TREC 2022 cohort",
+   "subtitle": "50 patients · judged trials · nDCG@10",
+   "metric": "nDCG@10",
+   "scale": 1,
+   "rows": [
+    {
+     "label": "TrialLink",
+     "value": 0.815,
+     "source": "this report",
+     "kind": "ours",
+     "ci95": [
+      0.747,
+      0.877
+     ]
+    },
+    {
+     "label": "TrialGPT 2.0 · GPT-5.4",
+     "value": 0.78,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 1.0 · GPT-5.4",
+     "value": 0.75,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 2.0 · GPT-4.1",
+     "value": 0.72,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 1.0 · GPT-4.1",
+     "value": 0.7,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d",
+     "kind": "published"
+    }
+   ],
+   "short": "TREC 2022 cohort",
+   "title_zh": "TREC 2022 队列",
+   "subtitle_zh": "50 位患者，已评判试验，nDCG@10"
+  },
+  {
+   "id": "nih-trialbench",
+   "title": "NIH-TrialBench",
+   "subtitle": "126 vignettes · target trial in top 10 · % (institute macro)",
+   "metric": "Recall@10 (%)",
+   "scale": 100,
+   "rows": [
+    {
+     "label": "TrialLink",
+     "value": 96.0,
+     "source": "this report",
+     "kind": "ours",
+     "note": "89.7% over all 126 cases (84.1–94.4)"
+    },
+    {
+     "label": "TrialGPT 2.0 · GPT-4.1",
+     "value": 70,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5c",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 1.0 · GPT-4.1",
+     "value": 54,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5c",
+     "kind": "published"
+    },
+    {
+     "label": "ChatGPT-5.5 Thinking (web)",
+     "value": 43,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5c",
+     "kind": "published"
+    },
+    {
+     "label": "Gemini-3.5 Flash Ext. Thinking (web)",
+     "value": 21,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5c",
+     "kind": "published"
+    }
+   ],
+   "short": "NIH-TrialBench",
+   "title_zh": "NIH-TrialBench 目标试验检索",
+   "subtitle_zh": "126 个病例，病例对应的试验进入前 10 的比例，按 11 个研究所宏平均（与 TrialGPT 2.0 口径一致）",
+   "note_zh": "TrialLink 按全部 126 例计算为 89.7%（84.1–94.4）。"
+  },
+  {
+   "id": "trec-2021",
+   "title": "TREC CT 2021",
+   "subtitle": "full collection · 375,580 trials · 75 topics · nDCG@10",
+   "metric": "nDCG@10",
+   "scale": 1,
+   "note": "TrialLink top-10 judged 60%: unjudged trials count as not relevant, so its score is a lower bound.",
+   "rows": [
+    {
+     "label": "TrialLink",
+     "value": 0.559,
+     "source": "this report",
+     "kind": "ours",
+     "ci95": [
+      0.491,
+      0.624
+     ]
+    },
+    {
+     "label": "TDMINER (manual run)",
+     "value": 0.715,
+     "source": "TDMINER, TREC 2021 notebook",
+     "kind": "manual"
+    },
+    {
+     "label": "h2oloo monoT5",
+     "value": 0.712,
+     "source": "Pradeep et al., SIGIR 2022, Table 3",
+     "kind": "published"
+    },
+    {
+     "label": "Alibaba DAMO",
+     "value": 0.595,
+     "source": "Pradeep et al., SIGIR 2022, Table 3",
+     "kind": "published"
+    },
+    {
+     "label": "CSIROmed",
+     "value": 0.532,
+     "source": "Pradeep et al., SIGIR 2022, Table 3",
+     "kind": "published"
+    },
+    {
+     "label": "Kusa et al. (BM25+)",
+     "value": 0.513,
+     "source": "Kusa et al., JBI 2023, Table 4",
+     "kind": "published"
+    },
+    {
+     "label": "Peikos et al. (ChatGPT+RM3)",
+     "value": 0.512,
+     "source": "Peikos et al., arXiv 2306.02077, Table 15",
+     "kind": "published"
+    },
+    {
+     "label": "BM25 on the note",
+     "value": 0.469,
+     "source": "Peikos et al., arXiv 2306.02077",
+     "kind": "baseline"
+    },
+    {
+     "label": "Track median",
+     "value": 0.304,
+     "source": "Pradeep et al., SIGIR 2022",
+     "kind": "reference"
+    }
+   ],
+   "short": "TREC CT 2021 full",
+   "title_zh": "TREC CT 2021 全库检索",
+   "subtitle_zh": "375,580 个试验，75 个题目，nDCG@10",
+   "note_zh": "TrialLink 前 10 中 60% 被评判过；未评判的试验按不相关计分，所以这是下限。"
+  },
+  {
+   "id": "trec-2022",
+   "title": "TREC CT 2022",
+   "subtitle": "full collection · 375,580 trials · 50 topics · nDCG@10",
+   "metric": "nDCG@10",
+   "scale": 1,
+   "note": "TrialLink top-10 judged 68% (lower bound). Its P@10 0.526 and RR 0.809 are above the best official run (0.508, 0.726).",
+   "rows": [
+    {
+     "label": "TrialLink",
+     "value": 0.585,
+     "source": "this report",
+     "kind": "ours",
+     "ci95": [
+      0.508,
+      0.66
+     ]
+    },
+    {
+     "label": "Jullien et al. (GPT-4-turbo)",
+     "value": 0.693,
+     "source": "Jullien et al., arXiv 2409.18998, Table 2",
+     "kind": "published"
+    },
+    {
+     "label": "IELAB (GPT-4)",
+     "value": 0.659,
+     "source": "IELAB, TREC 2023 notebook, Table 1",
+     "kind": "published"
+    },
+    {
+     "label": "h2oloo (official #1)",
+     "value": 0.613,
+     "source": "TREC 2022 overview, Table 4",
+     "kind": "published"
+    },
+    {
+     "label": "Kusa et al. (TCRR-Bio)",
+     "value": 0.604,
+     "source": "Kusa et al., JBI 2023, Table 5",
+     "kind": "published"
+    },
+    {
+     "label": "DoSSIER (official #2)",
+     "value": 0.556,
+     "source": "TREC 2022 overview, Table 4",
+     "kind": "published"
+    },
+    {
+     "label": "Peikos et al. (ChatGPT+RM3)",
+     "value": 0.509,
+     "source": "Peikos et al., arXiv 2306.02077, Table 15",
+     "kind": "published"
+    },
+    {
+     "label": "CSIROmed",
+     "value": 0.491,
+     "source": "TREC 2022 overview",
+     "kind": "published"
+    },
+    {
+     "label": "Track median",
+     "value": 0.392,
+     "source": "Kusa et al., JBI 2023, Table 5",
+     "kind": "reference"
+    }
+   ],
+   "short": "TREC CT 2022 full",
+   "title_zh": "TREC CT 2022 全库检索",
+   "subtitle_zh": "375,580 个试验，50 个题目，nDCG@10",
+   "note_zh": "TrialLink 前 10 中 68% 被评判过（下限）。它的 P@10 0.526 和 RR 0.809 高于官方最好提交（0.508、0.726）。"
+  },
+  {
+   "id": "trec-2023",
+   "title": "TREC CT 2023",
+   "subtitle": "full collection · 451,538 trials · 37 topics · nDCG@10",
+   "metric": "nDCG@10",
+   "scale": 1,
+   "note": "TrialLink top-10 judged 52% (lower bound). Its P@10 0.451 is above the track median 0.394 and its RR 0.778 is the highest listed.",
+   "rows": [
+    {
+     "label": "TrialLink",
+     "value": 0.504,
+     "source": "this report",
+     "kind": "ours",
+     "ci95": [
+      0.433,
+      0.573
+     ]
+    },
+    {
+     "label": "CSIROmed (fine-tuned GPT-3.5)",
+     "value": 0.738,
+     "source": "CSIROmed, TREC 2023 notebook, Table 1",
+     "kind": "published"
+    },
+    {
+     "label": "IELAB (GPT-4)",
+     "value": 0.736,
+     "source": "IELAB, TREC 2023 notebook, Table 2",
+     "kind": "published"
+    },
+    {
+     "label": "DoSSIER",
+     "value": 0.684,
+     "source": "DoSSIER, TREC 2023 notebook, Table 2",
+     "kind": "published"
+    },
+    {
+     "label": "IELAB cross-encoder",
+     "value": 0.672,
+     "source": "IELAB, TREC 2023 notebook",
+     "kind": "published"
+    },
+    {
+     "label": "CSIROmed BM25",
+     "value": 0.619,
+     "source": "CSIROmed, TREC 2023 notebook",
+     "kind": "baseline"
+    },
+    {
+     "label": "IELAB dense",
+     "value": 0.577,
+     "source": "IELAB, TREC 2023 notebook",
+     "kind": "published"
+    },
+    {
+     "label": "Track median",
+     "value": 0.648,
+     "source": "DoSSIER and CSIROmed, TREC 2023 notebooks",
+     "kind": "reference"
+    }
+   ],
+   "short": "TREC CT 2023 full",
+   "title_zh": "TREC CT 2023 全库检索",
+   "subtitle_zh": "451,538 个试验，37 个有评判的题目，nDCG@10",
+   "note_zh": "TrialLink 前 10 中 52% 被评判过（下限）。它的 P@10 0.451 高于赛道中位数 0.394，RR 0.778 为所列最高。"
+  },
+  {
+   "id": "criterion",
+   "title": "Criterion-level eligibility",
+   "subtitle": "TrialGPT annotations · 1,015 criteria · 53 patients · accuracy %",
+   "metric": "Accuracy (%)",
+   "scale": 100,
+   "note": "Annotators labelled with GPT-4's predictions in view, so the reference favours GPT-4.",
+   "rows": [
+    {
+     "label": "TrialLink",
+     "value": 76.7,
+     "source": "this report",
+     "kind": "ours",
+     "ci95": [
+      73.3,
+      79.9
+     ],
+     "note": "778 of 1,015 rows; the module was revised on this set (development set for the criterion module)."
+    },
+    {
+     "label": "TrialGPT 1.0 · GPT-4",
+     "value": 87.3,
+     "source": "Jin et al., Nat Commun 2024",
+     "kind": "published"
+    },
+    {
+     "label": "Physician (highest)",
+     "value": 90.0,
+     "source": "Jin et al., Nat Commun 2024",
+     "kind": "human"
+    },
+    {
+     "label": "Physician (lowest)",
+     "value": 88.7,
+     "source": "Jin et al., Nat Commun 2024",
+     "kind": "human"
+    }
+   ],
+   "short": "Criterion-level",
+   "title_zh": "逐条入排标准判断",
+   "subtitle_zh": "TrialGPT 标注集，1,015 条标准，53 位患者，标签一致率（%）",
+   "note_zh": "标注员是看着 GPT-4 的预测做标注的，金标准偏向 GPT-4。"
+  },
+  {
+   "id": "n2c2",
+   "title": "n2c2 2018 cohort selection",
+   "subtitle": "official test · 86 patients × 13 criteria · micro-F1",
+   "metric": "Micro-F1",
+   "scale": 1,
+   "rows": [
+    {
+     "label": "TrialLink",
+     "value": 0.894,
+     "source": "this report",
+     "kind": "ours",
+     "ci95": [
+      0.876,
+      0.912
+     ],
+     "note": "single run after the module was frozen; macro-F1 0.801; 4 of 86 patients saved no answer and count as defaults."
+    },
+    {
+     "label": "GPT-4 zero-shot (Wornow et al.)",
+     "value": 0.93,
+     "source": "Wornow et al., arXiv 2402.05125, Table 1",
+     "kind": "published"
+    },
+    {
+     "label": "Graz (official #1, rules)",
+     "value": 0.91,
+     "source": "Stubbs et al., JAMIA 2019, Table 2",
+     "kind": "published"
+    },
+    {
+     "label": "U Michigan",
+     "value": 0.9075,
+     "source": "Stubbs et al., JAMIA 2019, Table 2",
+     "kind": "published"
+    },
+    {
+     "label": "Sorbonne Université",
+     "value": 0.9069,
+     "source": "Stubbs et al., JAMIA 2019, Table 2",
+     "kind": "published"
+    },
+    {
+     "label": "MedGemma-27b + RAG + LoRA",
+     "value": 0.8905,
+     "source": "Chen et al., arXiv 2604.05190, Table 3",
+     "kind": "published"
+    },
+    {
+     "label": "GPT-3.5",
+     "value": 0.82,
+     "source": "Wornow et al., arXiv 2402.05125, Table 3",
+     "kind": "published"
+    },
+    {
+     "label": "Mixtral-8x7B",
+     "value": 0.79,
+     "source": "Wornow et al., arXiv 2402.05125, Table 1",
+     "kind": "published"
+    },
+    {
+     "label": "Llama-2-70b",
+     "value": 0.67,
+     "source": "Wornow et al., arXiv 2402.05125, Table 1",
+     "kind": "published"
+    },
+    {
+     "label": "47-team median",
+     "value": 0.8227,
+     "source": "Stubbs et al., JAMIA 2019",
+     "kind": "reference"
+    }
+   ],
+   "short": "n2c2 2018",
+   "title_zh": "n2c2 2018 队列筛选",
+   "subtitle_zh": "官方测试集，86 位患者 × 13 条标准，micro-F1",
+   "note": "Official evaluator (track1_eval.py). A criterion answered neither met nor not met is read as not met, except ENGLISH and MAKES-DECISIONS (read as met): the reading named before scoring.",
+   "note_zh": "官方评分脚本（track1_eval.py）。既非\"符合\"也非\"不符合\"的回答按\"不符合\"计，ENGLISH 和 MAKES-DECISIONS 两条按\"符合\"计——这是评分前就定下的口径。"
+  }
+ ],
+ "final": {
+  "id": "relative",
+  "title": "TrialLink vs best published system",
+  "subtitle": "TrialLink ÷ best published system in each panel × 100 (dashed line = 100)",
+  "title_zh": "TrialLink 相对已发表最好系统",
+  "subtitle_zh": "各子榜 TrialLink ÷ 已发表最好系统 × 100（虚线 = 100）"
+ }
 }

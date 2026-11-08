@@ -329,6 +329,33 @@ change; the silence rule itself was decided on 2026-11-04 and is not tuned here.
 (whose annotators saw GPT-4's predictions), so criterion-level agreement is not part of the external leaderboard. The n2c2 official test
 was not run: its one use waits until the child's silence handling is settled. Spend: CNY 13.8 billed (off-peak) for both passes.
 
+#### Fourth pass (2026-11-08 afternoon): the errors analysed, fixed and run again
+
+Error classes of the second pass (274 of 1,015 Board C rows): 89 silent exclusions answered "not enough information" where the gold says
+"not excluded"; 48 the other way; 23 rows of pairs lost to answers citing unknown evidence ids or the wrong criterion kind; 18 "not
+applicable" answered "not excluded"; 18 "excluded" with a silent basis. Fixes: a pair whose decision cannot be saved is sent back once with
+what was wrong, by identity (unknown evidence id, criterion kind, missing criteria) — the platform's repair-in-place rule; the persona says
+silence never makes a patient excluded and names "not applicable". Board C is from here the criterion module's development set.
+
+| Measure | Pass 2 | Pass 4 |
+|---|---|---|
+| Board C agreement | 73.0% | **76.7% [73.3, 79.9]** (GPT-4 87.3%; paired −10.6 [−15.2, −5.9]) |
+| Rows: wrong → right / right → wrong / still wrong | — | 87 / 50 / 187 |
+| Missing rows (pairs not saved) | 19 | 1 |
+| "Excluded" from silence | 11 | 1 |
+| False favourable (narrow / wide) | 68 / 88 | 88 / 107 (GPT-4 15 / 16) |
+| Incidents | 17/17 | 17/17 |
+| 20-candidate assessment, 5 SIGIR cases | P50 81 s, P90 148 s; 5/100 pairs lost | **P50 79 s, P90 117 s; 0/100 lost** |
+
+Most of the 50 newly wrong rows are silent exclusions the gold calls "not enough information" and the child now calls "not excluded"; the
+gold is inconsistent on silent items (both directions above), so no single rule removes both kinds.
+
+**n2c2 2018 Track 1, official test, run once on the frozen module (bundle 0.1.3, sha256 1739fa83…):** micro-F1 **0.894 [0.876, 0.912]**
+under reading (c), named 2026-11-05 before any test scoring; macro-F1 0.801; accuracy (a) 0.745; unknown share 0.175 (142 "not enough
+information", 52 no answer: 4 of 86 patients saved no decision because their answers kept citing unknown evidence ids after the repair).
+The previous batch judge scored 0.922 on the same test (11-05). Ledger CNY 24.79 at full price for 86 patients (≈ 86,000 input tokens per
+call: whole multi-record files), billed at half off-peak.
+
 ### 4.3 Criterion-level and cohort boards (the previous judge)
 
 These measure the clinical judgment, not ranking. They were scored on 2026-11-05 with the previous batch judge (Flash, trial-level fit plus criterion stage), which still serves project-scoped studies; the native child's Board C result is in §4.2.
@@ -356,9 +383,9 @@ A read-only trace of every importer of the old path decided what could go now; t
 
 | Item | State | Needs |
 |---|---|---|
-| Native clinical child | done 2026-11-08 (§4.2): starts on the production kernel, P50 81 s, incidents 17/17, Board C 73.0% | open: 5% of pairs lost to answers citing unknown evidence ids (retry covers schema failures only); false favourable labels doubled under the silence rule; n2c2 once the silence handling is settled |
+| Native clinical child | done 2026-11-08 (§4.2): P50 79 s, incidents 17/17, Board C 76.7%, n2c2 0.894 (run once) | open: on long multi-record files 4 of 86 patients still saved no decision after the repair (unknown evidence ids); false favourable labels above GPT-4's (88 vs 15) under the silence rule |
 | G1: the plugin serves project-scoped studies and ships everywhere; then delete the batch judge, `match_judge`, the old reranker, `legacy-matching.md`, old eval drivers, prompt builders | old path still live | the deployment decision; one real-session check that a programme run binds the project study |
-| Publication and deployment of plugin 0.1.3 (worker 0.1.0 unchanged) | native smoke and status smoke pass offline on the pinned kernel (DSH 0.2.1-rc.5, zero model calls; bundle SHA256 b39d79c0…, receipts `native-*-smoke-0.1.3.json` in the assets) | owner |
+| Publication and deployment of plugin 0.1.3 (worker 0.1.0 unchanged) | native smoke and status smoke pass offline on the pinned kernel (DSH 0.2.1-rc.5, zero model calls; bundle SHA256 1739fa83…, receipts `native-*-smoke-0.1.3.json` in the assets) | owner |
 | Operator step after the release | — | `node scripts/ops/vcr-retire-unread-tables.mjs --apply` (five tables) |
 | ~~Production trial index~~ | not needed (owner, 2026-11-08): production searches ClinicalTrials.gov (official API), CTIS and ChiCTR (EviMed evidence API) live; the dense branch stays optional and off without a manifest | — |
 

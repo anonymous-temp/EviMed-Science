@@ -3,27 +3,29 @@
 **EviMed · 2026 年 11 月 · TrialLink `triallink-1`**
 
 TrialLink 是 EviMed 的患者–临床试验匹配系统：从一份病历出发，检索并排出合适的临床试验，再对医生打开的试验逐条判断入排标准。
-本文给出它在领域通用的公开基准上的成绩，并列出每个基准上能找到可比数字的全部已发表系统。
+本文按能力逐项给出它在领域通用公开基准上的成绩，并列出每个基准上能找到可比数字的全部已发表系统。
 
-## 核心结果
+![TrialLink 榜单](fig1-leaderboard.png)
 
-| 基准 | TrialLink | 已发表的最好对比系统 |
-|---|---|---|
-| 患者–试验排序：SIGIR 2016 + TREC CT 2021 + TREC CT 2022（183 位患者，TrialGPT 2.0 评测协议） | **nDCG@10 0.775**，P@10 0.710，MAP 0.617 | TrialGPT 2.0（GPT-5.4）：0.76、0.70、0.60 |
-| — 其中开发全程未使用的 105 位留出患者 | **nDCG@10 0.839** | 未报告 |
-| NIH-TrialBench：目标试验进入前 10（126 个病例，11 个 NIH 研究所） | **96.0%** | TrialGPT 2.0：70% |
-| TREC CT 2022 全库检索（50 个题目，375,580 个试验） | nDCG@10 0.585；**P@10 0.526；RR 0.809** | 官方最好提交：0.613；0.508；0.726 |
-| TREC CT 2021 全库检索（75 个题目） | nDCG@10 0.559 | 官方最好自动提交：0.712 |
-| TREC CT 2023 全库检索（40 个题目中有评判的 37 个，451,538 个试验） | nDCG@10 0.504（下限，见 3.3） | 官方最好提交：0.738 |
+## TrialLink 的位置
 
-- 在 TrialGPT 2.0 基准上，TrialLink 的 nDCG@10、P@10 和 MAP 是已报告结果中最高的。它的 nDCG@10 95% 置信区间（0.743–0.806）
-  与 TrialGPT 2.0（GPT-5.4）的 0.76 有重叠；已发表系统只给点估计，无法做配对检验。
-- TrialLink 的任何组件都没有在任何基准数据上训练或微调，所有模型按发布原样使用。
-- 排序成本约每位患者 0.24 元人民币（约 0.03 美元），每位患者约 410 个候选试验。
+| 能力 | 基准 | TrialLink | 在所列系统中的位置 | 已发表最好系统 |
+|---|---|---|---|---|
+| 患者–试验排序 | SIGIR 2016 + TREC 2021/2022，183 位患者（TrialGPT 2.0 协议） | nDCG@10 **0.775**，MAP **0.617** | 两项均 **第 1（共 7）** | TrialGPT 2.0 · GPT-5.4：0.76、0.60 |
+| — 分队列 | TREC 2021 / TREC 2022 / SIGIR 2016 | 0.880 / 0.815 / 0.628 | **第 1（共 5）** / **第 1（共 5）** / 第 3（共 5） | 0.84 / 0.78 / 0.66 |
+| 目标试验检索 | NIH-TrialBench，126 个病例 | 前 10 召回 **96.0%** | **第 1（共 5）** | TrialGPT 2.0：70% |
+| 全库检索 | TREC CT 2021 / 2022 / 2023 | nDCG@10 0.559 / 0.585 / 0.504（下限） | 第 3（共 6）/ 第 5（共 8）/ 第 6（共 6） | 0.712 / 0.693 / 0.738 |
+| 逐条入排标准判断 | TrialGPT 标注集，1,015 条标准 | 一致率 76.7% | 第 2（共 2） | TrialGPT 1.0 · GPT-4：87.3% |
+| 队列筛选 | n2c2 2018 Track 1 官方测试集 | micro-F1 0.894 | 第 5（共 9） | GPT-4 零样本：0.93 |
 
-![患者–试验排序 nDCG@10](fig1-ranking.png)
-
-![NIH-TrialBench 前 10 召回](fig2-nih-trialbench.png)
+- 凡是"为患者给候选试验排序"的任务，TrialLink 都排第一：TrialGPT 2.0 基准的 nDCG@10 和 MAP、两个 TREC 队列、NIH-TrialBench。
+  它在 TrialGPT 2.0 基准上的 nDCG@10 置信区间（0.743–0.806）与 TrialGPT 2.0（GPT-5.4）的 0.76 有重叠；已发表系统只给点估计，
+  无法做配对检验。在开发全程未使用的 105 位患者上，nDCG@10 为 0.839。
+- TREC 全库检索的官方分数是下限：TREC 只评判了参赛提交检索到的试验，TrialLink 前 10 中有 32%–48% 从未被评判、按不相关计分。
+  它在 TREC 2022 上只计符合试验的 P@10 和 RR 高于官方最好提交。
+- 逐条判断和 n2c2 衡量的是评估环节的临床判断，这里 TrialLink 落后于基于 GPT-4 的系统；n2c2 的 0.894 高于 47 支参赛队伍中位数
+  （0.823），比挑战赛冠军（0.910）低 0.016。
+- TrialLink 的任何组件都没有在任何基准数据上训练或微调。排序成本约每位患者 0.24 元人民币（约 0.03 美元），每位患者约 410 个候选试验。
 
 ## 1. 系统组成
 
@@ -41,131 +43,199 @@ TrialLink 分三个阶段。
 
 ## 2. 评测协议
 
-- **基准与评分脚本**：患者–试验排序和 NIH-TrialBench 使用 TrialGPT 2.0 公开的数据和官方评分脚本
-  （`eval_trialgpt_rankings_qrels.py`、`eval_nih_trialbench_target_recall_at10.py`）。TREC CT 使用官方相关性判定和赛道指标，
-  未被评判的试验按不相关计。
-- **两种 P@10**：TrialGPT 2.0 基准的 P@10 是分级的（被排除或可能符合的试验计半分），沿用该论文定义；TREC CT 的 P@10 只计符合的
-  试验，沿用赛道定义。两者不可直接比较。
-- **开发集与留出集**：所有设计选择只在 78 位开发患者上做出（全部 58 位 SIGIR 患者，以及每年 TREC 的前 10 个题目）。排序基准的其余
-  105 位患者在设计定稿前从未读取，单独报告。NIH-TrialBench 只用于测试。TREC CT 的检索选择只在每年前 10 个题目上做出。
-- **不确定性**：95% 置信区间为按患者的百分位自助法（10,000 次重抽样，在各队列内抽样后取宏平均）。
-- **对比系统**：所有对比数字均摘自所列来源。TrialGPT 2.0 论文以柱状图给出结果、没有数值表，数值读自柱状图标注（两位小数）。
+- **基准与评分脚本**：排序与 NIH-TrialBench 使用 TrialGPT 2.0 公开的数据和官方脚本（`eval_trialgpt_rankings_qrels.py`、
+  `eval_nih_trialbench_target_recall_at10.py`）；TREC CT 使用官方相关性判定和赛道指标，未评判的试验按不相关计；n2c2 使用挑战赛
+  原样的 `track1_eval.py`。
+- **两种 P@10**：TrialGPT 2.0 基准的 P@10 是分级的（被排除或可能符合的试验计半分）；TREC CT 的 P@10 只计符合的试验。两者不可比。
+- **开发集与留出集**：排序设计只在 78 位开发患者上做出（全部 58 位 SIGIR 患者和每年 TREC 的前 10 个题目），其余 105 位患者在设计
+  定稿后才读取；NIH-TrialBench 只用于测试。逐条评估环节在 TrialGPT 标注集上修订过，所以该集是它的开发集；随后在冻结的系统上只跑
+  一次 n2c2 官方测试集，按评分前定下的口径计分。
+- **不确定性**：95% 置信区间为按患者的百分位自助法（排序和 TREC 10,000 次，n2c2 2,000 次）。
+- **对比系统**：所有对比数字均摘自所列来源；TrialGPT 2.0 以柱状图给出结果，数值读自柱状图标注。图中最后一个子图是各子榜
+  TrialLink 成绩除以该子榜已发表最好系统。
 
-## 3. 榜单
+## 3. 分能力榜单
 
-### 3.1 患者–试验排序（TrialGPT 2.0 协议）
+由 [`leaderboard.json`](leaderboard.json) 生成。TrialLink 与已发表系统参与排名；人工提交、医生、基线和赛道中位数列在旁边，不参与排名。
 
-183 位患者——SIGIR 2016（58）、TREC CT 2021（75）、TREC CT 2022（50）——共 75,061 个已评判的患者–试验对。每个系统对患者的全部
-已评判试验排序；总分为三个队列平均值的平均。
+<!-- tables:start -->
 
-| 排名 | 系统 | 机构 | 底座模型 | nDCG@10 | P@10（分级） | MRR | MAP |
-|---|---|---|---|---|---|---|---|
-| 1 | **TrialLink** | EviMed | TrialLink | **0.775**（0.743–0.806） | **0.710**（0.676–0.743） | 0.820（0.776–0.863） | **0.617**（0.588–0.645） |
-| 2 | TrialGPT 2.0 | NCBI/NLM, NIH | GPT-5.4 | 0.76 | 0.70 | 0.85 | 0.60 |
-| 2 | TrialGPT 2.0 | NCBI/NLM, NIH | Gemini-3.1-pro-preview | 0.76 | 0.69 | 0.84 | 0.56 |
-| 4 | TrialGPT 1.0 | NCBI/NLM, NIH | GPT-5.4 | 0.74 | 0.67 | 0.84 | 0.55 |
-| 5 | TrialGPT 2.0 | NCBI/NLM, NIH | GPT-4.1 | 0.72 | 0.66 | 0.80 | 0.54 |
-| 5 | TrialGPT 1.0 | NCBI/NLM, NIH | Gemini-3.1-pro-preview | 0.72 | 0.67 | 0.78 | 0.55 |
-| 7 | TrialGPT 1.0 | NCBI/NLM, NIH | GPT-4.1 | 0.68 | 0.63 | 0.73 | 0.49 |
+#### 患者–试验排序 · nDCG@10
 
-按 nDCG@10 排名。TrialGPT 各行来源：arXiv 2609.01202v2 图 5d（GPT-4.1）与补充图 3（GPT-5.4、Gemini-3.1-pro-preview）；
-TrialGPT 1.0 各行是该论文的重跑结果。
+SIGIR 2016 + TREC 2021/2022，183 位患者，只排已评判试验（TrialGPT 2.0 协议与官方评分脚本）
 
-**分队列**（nDCG@10 / P@10）：
-
-| 系统 | SIGIR 2016 | TREC CT 2021 | TREC CT 2022 |
+| 排名 | 系统 | nDCG@10 | 来源 |
 |---|---|---|---|
-| **TrialLink** | 0.628 / 0.466 | **0.880 / 0.865** | **0.815 / 0.797** |
-| TrialGPT 2.0 · GPT-5.4 | **0.66 / 0.50** | 0.84 / 0.82 | 0.78 / 0.77 |
-| TrialGPT 2.0 · GPT-4.1 | 0.64 / 0.48 | 0.79 / 0.78 | 0.72 / 0.72 |
-| TrialGPT 1.0 · GPT-5.4 | 0.62 / 0.45 | 0.83 / 0.82 | 0.75 / 0.73 |
-| TrialGPT 1.0 · GPT-4.1 | 0.58 / 0.42 | 0.76 / 0.77 | 0.70 / 0.71 |
+| 1 | **TrialLink** | **0.775 (0.743–0.806)** | 本报告 |
+| 2 | TrialGPT 2.0 · GPT-5.4 | 0.76 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
+| 2 | TrialGPT 2.0 · Gemini-3.1-pro | 0.76 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3 |
+| 4 | TrialGPT 1.0 · GPT-5.4 | 0.74 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
+| 5 | TrialGPT 2.0 · GPT-4.1 | 0.72 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d |
+| 5 | TrialGPT 1.0 · Gemini-3.1-pro | 0.72 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3 |
+| 7 | TrialGPT 1.0 · GPT-4.1 | 0.68 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d |
 
-TrialLink 在两个 TREC 队列上领先，在 SIGIR 上落后；SIGIR 的评分含义是"是否会转介"，而不是"是否符合"。
+#### 患者–试验排序 · MAP
 
-**留出患者**：在开发期间从未读取的 105 位患者上（TREC CT 2021 65 位、TREC CT 2022 40 位），TrialLink 的 nDCG@10 为 0.839
-（0.794–0.880），P@10 0.823，MRR 0.907，MAP 0.671。
+同一批 183 位患者，分级 MAP（官方评分脚本）
 
-### 3.2 NIH-TrialBench：目标试验检索
+| 排名 | 系统 | MAP | 来源 |
+|---|---|---|---|
+| 1 | **TrialLink** | **0.617 (0.588–0.645)** | 本报告 |
+| 2 | TrialGPT 2.0 · GPT-5.4 | 0.60 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
+| 3 | TrialGPT 2.0 · Gemini-3.1-pro | 0.56 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3 |
+| 4 | TrialGPT 1.0 · GPT-5.4 | 0.55 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
+| 4 | TrialGPT 1.0 · Gemini-3.1-pro | 0.55 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3 |
+| 6 | TrialGPT 2.0 · GPT-4.1 | 0.54 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d |
+| 7 | TrialGPT 1.0 · GPT-4.1 | 0.49 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d |
 
-126 个根据 NIH 试验撰写的病例，覆盖 11 个研究所；每个病例在自己的检索空间中排序，病例所对应的试验进入前 10 即为命中。召回率按
-研究所宏平均，与 TrialGPT 2.0 的报告口径一致。
+#### SIGIR 2016 队列
 
-| 排名 | 系统 | 机构 | 前 10 召回（研究所宏平均） | 前 10 召回（全部 126 例） | MRR |
-|---|---|---|---|---|---|
-| 1 | **TrialLink** | EviMed | **96.0%** | 89.7%（84.1–94.4） | 0.604 |
-| 2 | TrialGPT 2.0（GPT-4.1） | NCBI/NLM, NIH | 70% | – | – |
-| 3 | TrialGPT 1.0（GPT-4.1） | NCBI/NLM, NIH | 54% | – | – |
-| 4 | ChatGPT-5.5 Thinking 网页版 | OpenAI | 43% | – | – |
-| 5 | Gemini-3.5 Flash Extended Thinking 网页版 | Google | 21% | – | – |
+58 位患者，已评判试验，nDCG@10
 
-对比系统来源：arXiv 2609.01202v2 图 5c。
+| 排名 | 系统 | nDCG@10 | 来源 |
+|---|---|---|---|
+| 1 | TrialGPT 2.0 · GPT-5.4 | 0.66 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
+| 2 | TrialGPT 2.0 · GPT-4.1 | 0.64 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d |
+| 3 | **TrialLink** | **0.628 (0.567–0.686)** | 本报告 |
+| 4 | TrialGPT 1.0 · GPT-5.4 | 0.62 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
+| 5 | TrialGPT 1.0 · GPT-4.1 | 0.58 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d |
 
-### 3.3 TREC 临床试验赛道：全库检索
+#### TREC 2021 队列
 
-赛道本身的任务：在冻结的 ClinicalTrials.gov 全量快照中，找出患者符合条件的试验。nDCG@10 的增益为 2（符合）、1（被排除）、0；
-P@10 和倒数排名（RR）只计符合的试验。
+75 位患者，已评判试验，nDCG@10
 
-**如何读 TrialLink 的 TREC 分数**：TREC 只评判了参赛提交检索到的试验。赛后构建的系统会找到没有任何提交检索到的试验，这些试验从未
-被评判，按不相关计分。官方提交的前 10 都经过评判；TrialLink 前 10 中被评判过的比例为 60%（2021）、68%（2022）和 52%（2023），
-所以它的官方分数是下限。
+| 排名 | 系统 | nDCG@10 | 来源 |
+|---|---|---|---|
+| 1 | **TrialLink** | **0.880 (0.844–0.912)** | 本报告 |
+| 2 | TrialGPT 2.0 · GPT-5.4 | 0.84 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
+| 3 | TrialGPT 1.0 · GPT-5.4 | 0.83 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
+| 4 | TrialGPT 2.0 · GPT-4.1 | 0.79 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d |
+| 5 | TrialGPT 1.0 · GPT-4.1 | 0.76 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d |
 
-**2021**（75 个题目，375,580 个试验）
+#### TREC 2022 队列
 
-| 排名 | 系统 | 类别 | nDCG@10 | P@10 | RR |
-|---|---|---|---|---|---|
-| – | TDMINER | 官方提交，人工 | 0.715 | 0.576 | 0.834 |
-| 1 | h2oloo monoT5（滑铁卢大学） | 官方，最好自动提交 | 0.712 | 0.593 | 0.816 |
-| 2 | damoebrtog（阿里达摩院） | 官方 | 0.595 | 0.409 | 0.608 |
-| 3 | **TrialLink** | 本报告 | **0.559**（0.491–0.624） | 0.488 | 0.741 |
-| 4 | CSIROmed_inc（CSIRO） | 官方 | 0.532 | 0.317 | – |
-| 5 | BM25+、实体与年龄性别过滤（Kusa 等） | 赛后 | 0.513 | 0.337 | 0.604 |
-| 6 | ChatGPT 生成检索式 + RM3（Peikos 等） | 赛后 | 0.512 | 0.323 | 0.541 |
-| 7 | 病历原文 BM25 | 基线 | 0.469 | 0.264 | 0.471 |
-| – | 赛道中位数（自动提交） | 参考 | 0.304 | 0.161 | 0.294 |
+50 位患者，已评判试验，nDCG@10
 
-**2022**（50 个题目，375,580 个试验）
+| 排名 | 系统 | nDCG@10 | 来源 |
+|---|---|---|---|
+| 1 | **TrialLink** | **0.815 (0.747–0.877)** | 本报告 |
+| 2 | TrialGPT 2.0 · GPT-5.4 | 0.78 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
+| 3 | TrialGPT 1.0 · GPT-5.4 | 0.75 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
+| 4 | TrialGPT 2.0 · GPT-4.1 | 0.72 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d |
+| 5 | TrialGPT 1.0 · GPT-4.1 | 0.70 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d |
 
-| 排名 | 系统 | 类别 | nDCG@10 | P@10 | RR |
-|---|---|---|---|---|---|
-| 1 | GPT-4-turbo 对前 500 按资格重排（Jullien 等） | 赛后 | 0.693 | 0.718 | 0.769 |
-| 2 | GPT-4 判读交叉编码器前 20（IELAB） | 赛后 | 0.659 | 0.568 | – |
-| 3 | h2oloo frocchio_monot5_e（滑铁卢大学） | 官方，最好提交 | 0.613 | 0.508 | 0.726 |
-| 4 | TCRR-Bio（Kusa 等） | 赛后 | 0.604 | 0.482 | 0.672 |
-| 5 | **TrialLink** | 本报告 | **0.585**（0.508–0.660） | 0.526 | **0.809** |
-| 6 | DoSSIER_5 | 官方，第二名队伍 | 0.556 | 0.456 | – |
-| 7 | ChatGPT 生成检索式 + RM3（Peikos 等） | 赛后 | 0.509 | 0.372 | 0.623 |
-| 8 | CSIROmed monobert500（CSIRO） | 官方 | 0.491 | 0.362 | – |
-| – | 赛道中位数 | 参考 | 0.392 | 0.258 | 0.411 |
+#### NIH-TrialBench 目标试验检索
 
-在官方提交中，TrialLink 的 nDCG@10 位于第一和第二名队伍之间，P@10 和 RR 高于官方最好提交；RR 是所列全部系统中最高的。
+126 个病例，病例对应的试验进入前 10 的比例，按 11 个研究所宏平均（与 TrialGPT 2.0 口径一致）
 
-**2023**（40 个题目中有评判的 37 个，451,538 个试验）
+| 排名 | 系统 | Recall@10 (%) | 来源 |
+|---|---|---|---|
+| 1 | **TrialLink** | **96.0** | 本报告 |
+| 2 | TrialGPT 2.0 · GPT-4.1 | 70.0 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5c |
+| 3 | TrialGPT 1.0 · GPT-4.1 | 54.0 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5c |
+| 4 | ChatGPT-5.5 Thinking (web) | 43.0 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5c |
+| 5 | Gemini-3.5 Flash Ext. Thinking (web) | 21.0 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5c |
 
-| 排名 | 系统 | 类别 | nDCG@10 | P@10 | RR |
-|---|---|---|---|---|---|
-| 1 | CSIROmed qe_prr_ft（CSIRO） | 官方 | 0.738 | 0.527 | 0.667 |
-| 2 | IELAB GPT-4 重排前 20 | 官方 | 0.736 | 0.511 | – |
-| 3 | DoSSIER_3 | 官方 | 0.684 | 0.584 | 0.642 |
-| 4 | IELAB CE_weighted | 官方 | 0.672 | 0.443 | – |
-| 5 | CSIROmed BM25 基线 | 官方 | 0.619 | 0.330 | 0.563 |
-| 6 | IELAB 稠密检索 | 官方 | 0.577 | 0.324 | – |
-| 7 | **TrialLink** | 本报告 | **0.504**（0.433–0.573） | 0.451 | **0.778** |
-| – | 赛道中位数 | 参考 | 0.648 | 0.394 | 0.538 |
+TrialLink 按全部 126 例计算为 89.7%（84.1–94.4）。
 
-2023 年受评判覆盖影响最大：TrialLink 前 10 中有一半试验从未被评判。它的 P@10 高于赛道中位数，RR 是所列系统中最高的。
+#### TREC CT 2021 全库检索
+
+375,580 个试验，75 个题目，nDCG@10
+
+| 排名 | 系统 | nDCG@10 | 来源 |
+|---|---|---|---|
+| – | TDMINER (manual run) (人工提交) | 0.715 | TDMINER, TREC 2021 notebook |
+| 1 | h2oloo monoT5 | 0.712 | Pradeep et al., SIGIR 2022, Table 3 |
+| 2 | Alibaba DAMO | 0.595 | Pradeep et al., SIGIR 2022, Table 3 |
+| 3 | **TrialLink** | **0.559 (0.491–0.624)** | 本报告 |
+| 4 | CSIROmed | 0.532 | Pradeep et al., SIGIR 2022, Table 3 |
+| 5 | Kusa et al. (BM25+) | 0.513 | Kusa et al., JBI 2023, Table 4 |
+| 6 | Peikos et al. (ChatGPT+RM3) | 0.512 | Peikos et al., arXiv 2306.02077, Table 15 |
+| – | BM25 on the note (基线) | 0.469 | Peikos et al., arXiv 2306.02077 |
+| – | Track median (参考线) | 0.304 | Pradeep et al., SIGIR 2022 |
+
+TrialLink 前 10 中 60% 被评判过；未评判的试验按不相关计分，所以这是下限。
+
+#### TREC CT 2022 全库检索
+
+375,580 个试验，50 个题目，nDCG@10
+
+| 排名 | 系统 | nDCG@10 | 来源 |
+|---|---|---|---|
+| 1 | Jullien et al. (GPT-4-turbo) | 0.693 | Jullien et al., arXiv 2409.18998, Table 2 |
+| 2 | IELAB (GPT-4) | 0.659 | IELAB, TREC 2023 notebook, Table 1 |
+| 3 | h2oloo (official #1) | 0.613 | TREC 2022 overview, Table 4 |
+| 4 | Kusa et al. (TCRR-Bio) | 0.604 | Kusa et al., JBI 2023, Table 5 |
+| 5 | **TrialLink** | **0.585 (0.508–0.660)** | 本报告 |
+| 6 | DoSSIER (official #2) | 0.556 | TREC 2022 overview, Table 4 |
+| 7 | Peikos et al. (ChatGPT+RM3) | 0.509 | Peikos et al., arXiv 2306.02077, Table 15 |
+| 8 | CSIROmed | 0.491 | TREC 2022 overview |
+| – | Track median (参考线) | 0.392 | Kusa et al., JBI 2023, Table 5 |
+
+TrialLink 前 10 中 68% 被评判过（下限）。它的 P@10 0.526 和 RR 0.809 高于官方最好提交（0.508、0.726）。
+
+#### TREC CT 2023 全库检索
+
+451,538 个试验，37 个有评判的题目，nDCG@10
+
+| 排名 | 系统 | nDCG@10 | 来源 |
+|---|---|---|---|
+| 1 | CSIROmed (fine-tuned GPT-3.5) | 0.738 | CSIROmed, TREC 2023 notebook, Table 1 |
+| 2 | IELAB (GPT-4) | 0.736 | IELAB, TREC 2023 notebook, Table 2 |
+| 3 | DoSSIER | 0.684 | DoSSIER, TREC 2023 notebook, Table 2 |
+| 4 | IELAB cross-encoder | 0.672 | IELAB, TREC 2023 notebook |
+| – | Track median (参考线) | 0.648 | DoSSIER and CSIROmed, TREC 2023 notebooks |
+| – | CSIROmed BM25 (基线) | 0.619 | CSIROmed, TREC 2023 notebook |
+| 5 | IELAB dense | 0.577 | IELAB, TREC 2023 notebook |
+| 6 | **TrialLink** | **0.504 (0.433–0.573)** | 本报告 |
+
+TrialLink 前 10 中 52% 被评判过（下限）。它的 P@10 0.451 高于赛道中位数 0.394，RR 0.778 为所列最高。
+
+#### 逐条入排标准判断
+
+TrialGPT 标注集，1,015 条标准，53 位患者，标签一致率（%）
+
+| 排名 | 系统 | Accuracy (%) | 来源 |
+|---|---|---|---|
+| – | Physician (highest) (医生) | 90.0 | Jin et al., Nat Commun 2024 |
+| – | Physician (lowest) (医生) | 88.7 | Jin et al., Nat Commun 2024 |
+| 1 | TrialGPT 1.0 · GPT-4 | 87.3 | Jin et al., Nat Commun 2024 |
+| 2 | **TrialLink** | **76.7 (73.3–79.9)** | 本报告 |
+
+标注员是看着 GPT-4 的预测做标注的，金标准偏向 GPT-4。
+
+#### n2c2 2018 队列筛选
+
+官方测试集，86 位患者 × 13 条标准，micro-F1
+
+| 排名 | 系统 | Micro-F1 | 来源 |
+|---|---|---|---|
+| 1 | GPT-4 zero-shot (Wornow et al.) | 0.93 | Wornow et al., arXiv 2402.05125, Table 1 |
+| 2 | Graz (official #1, rules) | 0.91 | Stubbs et al., JAMIA 2019, Table 2 |
+| 3 | U Michigan | 0.908 | Stubbs et al., JAMIA 2019, Table 2 |
+| 4 | Sorbonne Université | 0.907 | Stubbs et al., JAMIA 2019, Table 2 |
+| 5 | **TrialLink** | **0.894 (0.876–0.912)** | 本报告 |
+| 6 | MedGemma-27b + RAG + LoRA | 0.891 | Chen et al., arXiv 2604.05190, Table 3 |
+| – | 47-team median (参考线) | 0.823 | Stubbs et al., JAMIA 2019 |
+| 7 | GPT-3.5 | 0.82 | Wornow et al., arXiv 2402.05125, Table 3 |
+| 8 | Mixtral-8x7B | 0.79 | Wornow et al., arXiv 2402.05125, Table 1 |
+| 9 | Llama-2-70b | 0.67 | Wornow et al., arXiv 2402.05125, Table 1 |
+
+官方评分脚本（track1_eval.py）。既非"符合"也非"不符合"的回答按"不符合"计，ENGLISH 和 MAKES-DECISIONS 两条按"符合"计——这是评分前就定下的口径。
+
+<!-- tables:end -->
 
 ## 4. 成本与速度
 
 在排序基准上实测（每位患者约 410 个候选）：Qwen3.7 重排每位患者 0.08 元，每 100 个试验 2.6 秒；Jev 1.14 评分每位患者 0.16 元，
-8 路并发时每个试验 0.25 秒。产品中一次检索排序 300 个候选。对一位患者的 20 个试验逐条判断入排标准，
-中位耗时 81 秒（90% 分位 148 秒；5 位患者，在生产智能体运行环境中端到端实测），各试验的标准分给至多 12 个 Flash 智能体并行判断。
+8 路并发时每个试验 0.25 秒。产品中一次检索排序 300 个候选。对一位患者的 20 个试验逐条判断入排标准，中位耗时 79 秒
+（90% 分位 117 秒；5 位患者，在生产智能体运行环境中端到端实测），各试验的标准分给至多 12 个 Flash 智能体并行判断。
 
 ## 5. 复现
 
-评测代码：`OpenScience/evals/vcr-matching-boards/`（运行器、评分器和榜单生成器）。基准数据和官方评分脚本：TrialGPT 2.0 代码库
-（提交 `1c5f9eb`）和 TREC 临床试验赛道 2021–2023 的相关性判定。本页全部数字见 [`leaderboard.json`](leaderboard.json)，
-`make_figures.py` 绘制本页图表。
+评测代码：`OpenScience/evals/vcr-matching-boards/`（运行器、官方评分脚本，以及在真实智能体内核上运行评估环节的 `native_replay.mjs`）。
+基准数据：TrialGPT 2.0 代码库（提交 `1c5f9eb`）、TREC 临床试验赛道 2021–2023 相关性判定、n2c2 2018 Track 1 数据。本页全部数字见
+[`leaderboard.json`](leaderboard.json)，`make_figures.py` 由它绘制图表并生成上面的表格。
 
 ## 参考文献
 

@@ -1,63 +1,134 @@
-"""Draw the TrialLink report's figures: the architecture, and the two headline boards from leaderboard.json (the tables in README.md
-carry every number).
+"""Draw the TrialLink report's figures from leaderboard.json: the architecture (fig0) and the leaderboard, one panel per benchmark with
+TrialLink first and every published system beside it, plus a final panel of TrialLink against the best published system (fig1).
 
-    python3 make_figures.py   # writes fig0-architecture, fig1-ranking and fig2-nih-trialbench (.svg and .png) beside this file
+    python3 make_figures.py   # writes fig0-architecture and fig1-leaderboard (.svg and .png) beside this file
 """
 import json
+import textwrap
+from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 
 import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
-from matplotlib.patches import FancyArrowPatch, FancyBboxPatch  # noqa: E402
+from matplotlib.colors import LinearSegmentedColormap  # noqa: E402
+from matplotlib.patches import FancyArrowPatch, FancyBboxPatch, Patch, Rectangle  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 SURFACE, INK, INK_2, MUTED, GRID, AXIS = "#fcfcfb", "#0b0b0b", "#52514e", "#898781", "#e1e0d9", "#c3c2b7"
 ACCENT, OTHER = "#2a78d6", "#898781"  # TrialLink in the accent, every comparator in one recessive tone
-plt.rcParams.update({"font.family": "DejaVu Sans", "font.size": 10, "svg.fonttype": "none"})
+plt.rcParams.update({"font.family": "DejaVu Sans", "font.size": 10, "svg.fonttype": "none", "svg.hashsalt": "triallink"})
 
 
-def bars(rows, title, subtitle, xlabel, xmax, fmt, out):
-    """Horizontal bars from a zero baseline, best first; value at the tip; the TrialLink interval as a thin whisker."""
-    rows = sorted(rows, key=lambda r: -r["value"])
-    n = len(rows)
-    fig, ax = plt.subplots(figsize=(8.2, 0.42 * n + 1.5), facecolor=SURFACE)
+# Bar fills: a vertical gradient per kind, saturated at the top as in common model-card leaderboards.
+FILLS = {
+    "ours": ("#bcd2f3", "#2a64d6"),
+    "published": ("#f1f0ec", "#a9a8a1"),
+    "manual": ("#f4f3f0", "#c9c8c1"),
+    "human": ("#f4f3f0", "#c9c8c1"),
+    "baseline": ("#f7f7f5", "#d6d5cf"),
+    "reference": ("#f7f7f5", "#d6d5cf"),
+}
+
+
+def gradient_bar(ax, x, width, value, kind):
+    low, high = FILLS.get(kind, FILLS["published"])
+    cmap = LinearSegmentedColormap.from_list(kind, [low, high])
+    clip = Rectangle((x - width / 2, 0), width, value, transform=ax.transData, facecolor="none", edgecolor="none")
+    ax.add_patch(clip)
+    image = ax.imshow([[0], [1]], cmap=cmap, origin="lower", aspect="auto", extent=(x - width / 2, x + width / 2, 0, value), zorder=2, interpolation="bicubic")
+    image.set_clip_path(clip)
+
+
+def fmt_value(value, scale, ours=False):
+    """TrialLink's own score at a fixed precision; a published score as its source gives it, shown to at most three decimals (the JSON
+    keeps the exact value)."""
+    if scale == 100:
+        return f"{value:.1f}"
+    if ours:
+        return f"{value:.3f}"
+    shown = Decimal(str(value)).quantize(Decimal("0.001"), rounding=ROUND_HALF_UP)
+    text = f"{shown:f}".rstrip("0")
+    return text if len(text.split(".")[1]) >= 2 else f"{value:.2f}"
+
+
+def panel(ax, cap):
+    rows = cap["rows"]
+    ours = [r for r in rows if r["kind"] == "ours"]
+    others = sorted([r for r in rows if r["kind"] != "ours"], key=lambda r: -(r["value"] or 0))
+    rows = ours + others
+    top = max(r["value"] or 0 for r in rows)
     ax.set_facecolor(SURFACE)
-    ax.set_xlim(0, xmax)
-    ax.set_ylim(n - 0.4, -0.6)
-    height = 0.52
-    for i, row in enumerate(rows):
-        color = ACCENT if row["self"] else OTHER
-        v = row["value"]
-        ax.barh(i, v, height=height, color=color, linewidth=0)
-        tip = v
-        if row.get("ci"):
-            lo, hi = row["ci"]
-            ax.plot([lo, hi], [i, i], color=INK_2, linewidth=1.2, solid_capstyle="butt")
-            ax.plot([lo, lo], [i - 0.13, i + 0.13], color=INK_2, linewidth=1.2)
-            ax.plot([hi, hi], [i - 0.13, i + 0.13], color=INK_2, linewidth=1.2)
-            tip = max(tip, hi)
-        ax.text(tip + xmax * 0.012, i, fmt(v, row), va="center", ha="left", color=INK, fontsize=10,
-                fontweight="bold" if row["self"] else "normal")
-    ax.set_yticks(range(n))
-    ax.set_yticklabels([r["label"] for r in rows])
-    for label, row in zip(ax.get_yticklabels(), rows):
-        label.set_color(INK)
-        label.set_fontweight("bold" if row["self"] else "normal")
-    ax.tick_params(axis="y", length=0, pad=8)
-    ax.tick_params(axis="x", colors=MUTED, length=0)
-    ax.xaxis.grid(True, color=GRID, linewidth=0.8)
+    ax.set_xlim(-0.6, len(rows) - 0.4)
+    ax.set_ylim(0, top * 1.22)
+    for i, r in enumerate(rows):
+        if r["value"] is None:
+            ax.text(i, top * 0.05, "pending", rotation=90, ha="center", va="bottom", color=INK_2, fontsize=8)
+            continue
+        gradient_bar(ax, i, 0.68, r["value"], r["kind"])
+        ax.text(i, r["value"] + top * 0.025, fmt_value(r["value"], cap["scale"], r["kind"] == "ours"), ha="center", va="bottom", fontsize=8.6,
+                color=INK, fontweight="bold" if r["kind"] == "ours" else "normal")
+    ax.set_xticks(range(len(rows)))
+    ax.set_xticklabels([textwrap.fill(r["label"], 16) for r in rows], rotation=55, ha="right", rotation_mode="anchor", fontsize=7.2)
+    for label, r in zip(ax.get_xticklabels(), rows):
+        label.set_color(INK if r["kind"] == "ours" else INK_2)
+        label.set_fontweight("bold" if r["kind"] == "ours" else "normal")
+    ax.tick_params(axis="x", length=0, pad=3)
+    ax.tick_params(axis="y", colors=MUTED, labelsize=7.5, length=0)
+    ax.yaxis.grid(True, color=GRID, linewidth=0.6)
     ax.set_axisbelow(True)
-    for side in ("top", "right", "bottom"):
+    for side in ("top", "right", "left"):
         ax.spines[side].set_visible(False)
-    ax.spines["left"].set_color(AXIS)
-    ax.set_xlabel(xlabel, color=INK_2)
-    fig.text(0.012, 0.975, title, ha="left", va="top", fontsize=12.5, fontweight="bold", color=INK)
-    fig.text(0.012, 0.975 - 0.32 / fig.get_figheight(), subtitle, ha="left", va="top", fontsize=9.5, color=INK_2)
-    fig.tight_layout(rect=(0, 0, 1, 1 - 0.62 / fig.get_figheight()))
+    ax.spines["bottom"].set_color(AXIS)
+    ax.text(0, 1.13, cap["title"], transform=ax.transAxes, fontsize=11, fontweight="bold", color=INK, ha="left", va="bottom")
+    ax.text(0, 1.03, textwrap.fill(cap["subtitle"], 58), transform=ax.transAxes, fontsize=7.6, color=INK_2, ha="left", va="bottom")
+
+
+def relative_panel(ax, caps, final):
+    rows = []
+    for cap in caps:
+        ours = next(r for r in cap["rows"] if r["kind"] == "ours")
+        best = max((r["value"] for r in cap["rows"] if r["kind"] == "published" and r["value"] is not None), default=None)
+        if ours["value"] is not None and best:
+            rows.append({"label": cap["short"], "value": round(ours["value"] / best * 100, 1), "kind": "ours"})
+    ax.set_facecolor(SURFACE)
+    ax.set_xlim(-0.6, len(rows) - 0.4)
+    ax.set_ylim(0, max(r["value"] for r in rows) * 1.18)
+    for i, r in enumerate(rows):
+        gradient_bar(ax, i, 0.68, r["value"], "ours" if r["value"] >= 100 else "published")
+        ax.text(i, r["value"] + 2, f"{r['value']:.0f}", ha="center", va="bottom", fontsize=8.2, color=INK, fontweight="bold" if r["value"] >= 100 else "normal")
+    ax.axhline(100, color=INK_2, linewidth=0.9, linestyle=(0, (4, 3)), zorder=3)
+    ax.set_xticks(range(len(rows)))
+    ax.set_xticklabels([textwrap.fill(r["label"], 16) for r in rows], rotation=55, ha="right", rotation_mode="anchor", fontsize=7.2, color=INK_2)
+    ax.tick_params(axis="x", length=0, pad=3)
+    ax.tick_params(axis="y", colors=MUTED, labelsize=7.5, length=0)
+    ax.yaxis.grid(True, color=GRID, linewidth=0.6)
+    ax.set_axisbelow(True)
+    for side in ("top", "right", "left"):
+        ax.spines[side].set_visible(False)
+    ax.spines["bottom"].set_color(AXIS)
+    ax.text(0, 1.13, final["title"], transform=ax.transAxes, fontsize=11, fontweight="bold", color=INK, ha="left", va="bottom")
+    ax.text(0, 1.03, textwrap.fill(final["subtitle"], 58), transform=ax.transAxes, fontsize=7.6, color=INK_2, ha="left", va="bottom")
+    return rows
+
+
+def leaderboard(data, out):
+    caps = data["capabilities"]
+    cols, rows_n = 4, -(-(len(caps) + 1) // 4)
+    fig, axes = plt.subplots(rows_n, cols, figsize=(19, 5.0 * rows_n), facecolor=SURFACE)
+    flat = axes.ravel()
+    for ax, cap in zip(flat, caps):
+        panel(ax, cap)
+    relative_panel(flat[len(caps)], caps, data["final"])
+    for ax in flat[len(caps) + 1:]:
+        ax.axis("off")
+    handles = [Patch(facecolor=FILLS["ours"][1], label="TrialLink (EviMed)"), Patch(facecolor=FILLS["published"][1], label="Published system"),
+               Patch(facecolor=FILLS["manual"][1], label="Manual run / physicians"), Patch(facecolor=FILLS["reference"][1], label="Median or baseline")]
+    fig.legend(handles=handles, loc="lower center", ncol=4, frameon=False, fontsize=10, bbox_to_anchor=(0.5, 0.004))
+    fig.tight_layout(rect=(0.01, 0.03, 0.99, 0.99), h_pad=4.2, w_pad=2.2)
     for suffix in ("svg", "png"):
-        fig.savefig(HERE / f"{out}.{suffix}", dpi=200, facecolor=SURFACE)
+        fig.savefig(HERE / f"{out}.{suffix}", dpi=150, facecolor=SURFACE, metadata={"Date": None} if suffix == "svg" else None)
     plt.close(fig)
 
 
@@ -110,25 +181,61 @@ def architecture(out):
     text(111.6, 24.6, "trials the\nclinician opens", size=7.5, color=INK_2)
     fig.tight_layout(pad=0.4)
     for suffix in ("svg", "png"):
-        fig.savefig(HERE / f"{out}.{suffix}", dpi=200, facecolor=SURFACE)
+        fig.savefig(HERE / f"{out}.{suffix}", dpi=200, facecolor=SURFACE, metadata={"Date": None} if suffix == "svg" else None)
     plt.close(fig)
+RANKED = ("ours", "published")
+HEADERS = {
+    "en": ("Rank", "System", "Score", "Source", "this report", "not ranked: {kind}"),
+    "zh": ("排名", "系统", "成绩", "来源", "本报告", "不参与排名：{kind}"),
+}
+KIND_WORDS = {"en": {"manual": "manual run", "human": "physician", "baseline": "baseline", "reference": "reference"},
+              "zh": {"manual": "人工提交", "human": "医生", "baseline": "基线", "reference": "参考线"}}
+
+
+def table(cap, lang):
+    """One capability's rows, best first; TrialLink and published systems are ranked, the rest are listed beside them unranked."""
+    rank_h, system_h, score_h, source_h, own, unranked = HEADERS[lang]
+    rows = sorted(cap["rows"], key=lambda r: -(r["value"] if r["value"] is not None else -1))
+    lines = [f"| {rank_h} | {system_h} | {cap['metric']} | {source_h} |", "|---|---|---|---|"]
+    ranked = [r["value"] for r in rows if r["kind"] in RANKED and r["value"] is not None]
+    for r in rows:
+        # Equal scores share a rank (1 + how many ranked systems score strictly higher), as Arena-style boards do.
+        place = str(1 + sum(v > r["value"] for v in ranked)) if r["kind"] in RANKED and r["value"] is not None else "–"
+        value = "pending" if r["value"] is None else fmt_value(r["value"], cap["scale"], r["kind"] == "ours")
+        if r["kind"] == "ours" and r.get("ci95") and r["value"] is not None:
+            lo, hi = r["ci95"]
+            value += f" ({fmt_value(lo, cap['scale'], True)}–{fmt_value(hi, cap['scale'], True)})"
+        name = f"**{r['label']}**" if r["kind"] == "ours" else r["label"]
+        if r["kind"] not in RANKED:
+            name += f" ({KIND_WORDS[lang][r['kind']]})"
+        lines.append(f"| {place} | {name} | {'**' + value + '**' if r['kind'] == 'ours' else value} | {own if r['kind'] == 'ours' else r['source']} |")
+    return "\n".join(lines)
+
+
+def write_tables(data):
+    """Replace the generated block in each README with tables rendered from leaderboard.json."""
+    for name, lang in (("README.md", "en"), ("README.zh-CN.md", "zh")):
+        path = HERE / name
+        text = path.read_text()
+        start, end = "<!-- tables:start -->", "<!-- tables:end -->"
+        if start not in text:
+            continue
+        blocks = []
+        for cap in data["capabilities"]:
+            title = cap.get("title_zh", cap["title"]) if lang == "zh" else cap["title"]
+            subtitle = cap.get("subtitle_zh", cap["subtitle"]) if lang == "zh" else cap["subtitle"]
+            note = cap.get("note_zh" if lang == "zh" else "note")
+            blocks.append(f"#### {title}\n\n{subtitle}\n\n{table(cap, lang)}" + (f"\n\n{note}" if note else ""))
+        head, rest = text.split(start, 1)
+        _, tail = rest.split(end, 1)
+        path.write_text(f"{head}{start}\n\n" + "\n\n".join(blocks) + f"\n\n{end}{tail}")
+
 
 def main():
     data = json.loads((HERE / "leaderboard.json").read_text())
-    boards = {b["id"]: b for b in data["boards"]}
     architecture("fig0-architecture")
-    ranking = [{"label": "TrialLink (EviMed)" if r["system"] == "TrialLink" else f"{r['system']} · {r['models']}",
-                "value": r["scores"]["ndcg@10"], "self": r["system"] == "TrialLink", "ci": r.get("ci95", {}).get("ndcg@10")}
-               for r in boards["patient-to-trial-ranking"]["rows"]]
-    bars(ranking, "Patient-to-trial ranking: nDCG@10",
-         "SIGIR 2016 + TREC CT 2021/2022 · 183 patients · TrialGPT 2.0 evaluator · whisker: TrialLink 95% CI",
-         "nDCG@10 (macro over three cohorts)", 1.0, lambda v, row: f"{v:.3f}" if row["self"] else f"{v:.2f}", "fig1-ranking")
-    nih = [{"label": "TrialLink (EviMed)" if r["system"] == "TrialLink" else (f"{r['system']} · {r['models']}" if r["system"].startswith("TrialGPT") else r["system"]),
-            "value": r["scores"]["recall@10 macro"] * 100, "self": r["system"] == "TrialLink"}
-           for r in boards["nih-trialbench"]["rows"]]
-    bars(nih, "NIH-TrialBench: target trial in the top 10",
-         "126 patient vignettes · 11 NIH institutes · recall@10 macro-averaged over institutes, as TrialGPT 2.0 reports it",
-         "Recall@10 (%)", 100, lambda v, row: f"{v:.1f}%" if row["self"] else f"{v:.0f}%", "fig2-nih-trialbench")
+    leaderboard(data, "fig1-leaderboard")
+    write_tables(data)
 
 
 if __name__ == "__main__":
