@@ -456,3 +456,9 @@ The owner approved `docs/superpowers/plans/2026-11-04-memory-capsule-proving-pla
 - The plan explicitly authorizes method-on/off experiments in the isolated lab, superseding the earlier paid-ablation prohibition. It does not withhold methods from real users. Active code-skill caching, hierarchical selection, turn attribution, framework instructions and custom compaction follow their stated measured comparison before activation.
 - Preserve the native kernel and OpenViking boundaries. Keep experimental worlds and training-camp orchestration under `evals/`, without fixed-role product workflows or runtime provider keys. Publish a new official library only after its required comparisons; an unrun comparison remains pending.
 - Freeze baseline sources and development/confirmation pools, retain every denominator and original answer, and use the existing automated/throwaway-account protocol. Do not describe a stub-engine check, adapted source, or an old benchmark score as live product acceptance.
+
+## Owner decisions adopted 2026-11-08
+
+- Modules whose pages have peer views (前沿动态, 医学检索, 知识库, 记忆胶囊) show them as nested second-level directories under their sidebar row while the module is current, as VCR and GEO do; the in-page view switchers they replace are removed and every old address still lands on its view.
+- 科研工具 is retired (no sidebar row; `/app/capabilities` goes to the assistant): the professional workflows are reached by asking in the conversation, where the classifier routes, or by `/<capability-id>`.
+- The plugin and skill market is retired: 「技能与插件」 shows only what is added and is managed from 设置; there is no 发现 catalogue and no sidebar row.
