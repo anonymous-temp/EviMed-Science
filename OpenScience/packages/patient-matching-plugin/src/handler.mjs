@@ -57,17 +57,26 @@ async function assess(client, input, call, ctx, startChild, onPrepared) {
   call.signal?.throwIfAborted()
   const started = Date.now(), outcomes = []
   let stop = false
+  const laneDiagnostics = []
+  // Neither a lane's preparation nor its execution may reject past this function: a rejection escaping a tool handler ends the
+  // kernel process (replay 2026-11-08). A lane that cannot prepare or save simply stops; the task's next call resumes its pairs.
   const next = async lane => {
     if (stop || call.signal?.aborted || Date.now() - started > LANE_START_WINDOW_MS) return null
-    const response = await serial(() => client.call('ExecutionPort', 'assess', { phase: 'prepare', taskId, lane }))
-    if (response.status !== 'complete' || response.data?.kind !== 'prepared') return null
-    return validatePrepared(response.data, client.scope, { taskId })
+    try {
+      const response = await serial(() => client.call('ExecutionPort', 'assess', { phase: 'prepare', taskId, lane }))
+      if (response.status !== 'complete' || response.data?.kind !== 'prepared') return null
+      return validatePrepared(response.data, client.scope, { taskId })
+    } catch (error) { laneDiagnostics.push(`lane ${lane}: ${message(error)}`); return null }
   }
   const runLane = async (lane, prepared) => {
-    for (let current = prepared; current; current = await next(lane)) {
-      const outcome = await runExecution(client, current, call, ctx, startChild, serial)
+    for (let current = prepared; current;) {
+      let outcome
+      try { outcome = await runExecution(client, current, call, ctx, startChild, serial) }
+      catch (error) { outcome = fail('A native execution could not complete; its pairs remain for the next call.', [message(error)]) }
       outcomes.push(outcome)
       if (['cancelled', 'denied', 'unsupported'].includes(outcome.status)) { stop = true; return }
+      if (!['complete', 'partial'].includes(outcome.status) && outcome.data?.failureCheckpoint?.saved !== true) return
+      current = await next(lane)
     }
   }
   const lanes = [runLane(0, first)]
@@ -76,17 +85,17 @@ async function assess(client, input, call, ctx, startChild, onPrepared) {
     if (!prepared) break
     lanes.push(runLane(lane, prepared))
   }
-  await Promise.all(lanes)
-  return mergeOutcomes(outcomes)
+  await Promise.allSettled(lanes)
+  return mergeOutcomes(outcomes, laneDiagnostics)
 }
 /** One answer for the call: the last saved result (it carries every saved row of the task) with every execution's diagnostics. */
-function mergeOutcomes(outcomes) {
-  if (outcomes.length === 1) return outcomes[0]
+function mergeOutcomes(outcomes, laneDiagnostics = []) {
+  if (outcomes.length === 1 && !laneDiagnostics.length) return outcomes[0]
   const cancelled = outcomes.find(item => item.status === 'cancelled')
   if (cancelled) return cancelled
   const saved = [...outcomes].reverse().find(item => ['complete', 'partial'].includes(item.status) && item.data) ?? outcomes[outcomes.length - 1]
-  const diagnostics = outcomes.flatMap(item => item.data?.nativeDiagnostics ?? item.data?.diagnostics ?? []).slice(0, 50)
-  const clean = outcomes.every(item => item.status === 'complete')
+  const diagnostics = [...laneDiagnostics, ...outcomes.flatMap(item => item.data?.nativeDiagnostics ?? item.data?.diagnostics ?? [])].slice(0, 50)
+  const clean = !laneDiagnostics.length && outcomes.every(item => item.status === 'complete')
   return { ...saved, status: clean ? saved.status : saved.status === 'complete' ? 'partial' : saved.status,
     summary: `${outcomes.length} native executions ran concurrently; ${outcomes.filter(item => item.status === 'complete').length} completed cleanly.`,
     data: { ...saved.data, executions: outcomes.length, ...(clean ? {} : { nativeDiagnostics: diagnostics }) } }

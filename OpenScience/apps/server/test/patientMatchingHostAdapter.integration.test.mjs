@@ -413,3 +413,20 @@ test('the transport admits a lane preparation naming only its task and a bounded
   for(const input of [{phase:'prepare',taskId:'task-y',lane:1},{phase:'prepare',taskId:'task-x',lane:16},{phase:'prepare',taskId:'task-x',lane:-1},{phase:'prepare',taskId:'task-x',lane:'1'},
     {phase:'prepare',taskId:'task-x',lane:1,registryIds:['NCT00000001']},{phase:'prepare',lane:1}])assert.equal(await call(input),403,JSON.stringify(input));
 });
+test('a lane that still holds an unsaved execution is handed it again, never a wider selection beside it',options,async()=>{
+ const original=vcr.evidence.judgmentRecord,ids=['NCT00000911','NCT00000912','NCT00000913','NCT00000914'],clauses={NCT00000913:21,NCT00000914:4};
+ vcr.evidence.judgmentRecord=async({registryId})=>({status:'ok',trial:{registryId,registry:'clinicaltrials.gov',title:registryId,summary:'Synthetic registration',eligibility:'Inclusion Criteria:\n'+Array.from({length:clauses[registryId]??20},(_,index)=>`* Age at least18years; clause${index+1}.`).join('\n'),conditions:[],interventions:[]}});
+ try{
+  messages.set(++messageSeq,'A third public synthetic patient is49years old.');const context=(await invoke('PatientDataPort','context',{messageSeq})).data;
+  const call={...origin,callId:'held-lane-call',rootCallId:'held-lane-call'};
+  const first=(await invoke('ExecutionPort','assess',{phase:'prepare',taskId:context.taskId,registryIds:ids},call)).data;
+  const second=(await invoke('ExecutionPort','assess',{phase:'prepare',taskId:first.task.taskId,lane:1},call)).data;
+  const third=(await invoke('ExecutionPort','assess',{phase:'prepare',taskId:first.task.taskId,lane:2},call)).data;
+  assert.deepEqual([first,second,third].map(item=>item.task.selectedPairs.map(pair=>pair.trialId)),[[ids[0]],[ids[1]],[ids[2]]]);
+  const commit=prepared=>invoke('ResultPort','save',{phase:'commit',taskId:prepared.task.taskId,executionId:prepared.executionId,profileDigest:prepared.profileDigest,decisions:prepared.task.selectedPairs.map((_,index)=>decisionOf(prepared,index)),native:{childId:'lane-child',messageId:'lane-message',stopReason:'completed'},diagnostics:[]},call);
+  await commit(first);await commit(third);
+  const again=(await invoke('ExecutionPort','assess',{phase:'prepare',taskId:first.task.taskId,lane:1},call)).data;
+  assert.equal(again.executionId,second.executionId);
+  assert.deepEqual(again.task.selectedPairs,second.task.selectedPairs,'the held pairs, not the held pair plus the small trial now free');
+ }finally{vcr.evidence.judgmentRecord=original;}
+});

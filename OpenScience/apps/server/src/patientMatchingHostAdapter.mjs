@@ -202,10 +202,12 @@ export function createPatientMatchingHostAdapter({ vcr, documents, config = {}, 
     const laneOf = (/** @type {any} */ item) => item.lane ?? 0, ownLane = lane ?? 0, epoch = meta.continuationEpoch ?? 0;
     const busy = new Set(meta.executions.filter(item => item.state === 'prepared' && item.rootCallId === origin.callId && (item.epoch ?? 0) === epoch && laneOf(item) !== ownLane)
       .flatMap(item => item.pairs.map(pairIdentity)));
-    let pairs = previous?.pairs ?? meta.selectedPairs.filter(pair => !done.has(pairIdentity(pair)) && !busy.has(pairIdentity(pair))).slice(0, 100);
+    // A lane that still holds an unsaved prepared execution is handed that execution again, never a second selection beside it.
+    const heldByLane = previous ? null : meta.executions.find(item => item.rootCallId === origin.callId && item.state === 'prepared' && (item.epoch ?? 0) === epoch && laneOf(item) === ownLane) ?? null;
+    let pairs = previous?.pairs ?? heldByLane?.pairs ?? meta.selectedPairs.filter(pair => !done.has(pairIdentity(pair)) && !busy.has(pairIdentity(pair))).slice(0, 100);
     if (!pairs.length && busy.size) return response({ kind: 'busy', taskId: meta.taskId }, 'Every remaining pair is being assessed by another lane of this call.');
     if (!pairs.length) return response({kind:'saved-result',result:await resultOf(origin,meta.taskId)}, 'All selected matching pairs have been saved.');
-    if(!previous){
+    if(!previous&&!heldByLane){
       // The structured child response has a token bound too. Partition work by source
       // clause count, never by a clinical label or a retrieval score.
       const selected=[],profiles=new Map();let clauses=0;
@@ -218,7 +220,7 @@ export function createPatientMatchingHostAdapter({ vcr, documents, config = {}, 
       pairs=selected;
     }
     let material = await materials(study, pairs, meta, scope,origin);
-    if(!previous)while(pairs.length>1&&Buffer.byteLength(JSON.stringify({context:[...material.people.values()].map(person=>person.context),trialProfiles:[...material.trials.values()].map(item=>item.profile),evidenceBundles:material.bundles}))>6*1024*1024){
+    if(!previous&&!heldByLane)while(pairs.length>1&&Buffer.byteLength(JSON.stringify({context:[...material.people.values()].map(person=>person.context),trialProfiles:[...material.trials.values()].map(item=>item.profile),evidenceBundles:material.bundles}))>6*1024*1024){
       pairs=pairs.slice(0,Math.max(1,Math.floor(pairs.length/2)));material=await materials(study,pairs,meta,scope,origin);
     }
     const task = taskOf(meta, pairs, material.sources);

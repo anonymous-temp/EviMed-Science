@@ -301,3 +301,25 @@ test('a child answer that fails the decision schema is asked once more on the sa
   assert.ok(writes[0].diagnostics.includes('native_response_retried'))
   assert.equal(result.data.resultId, 'persisted-real')
 })
+test('a lane preparation the host refuses never rejects the call: the saved executions stand and the refusal is a diagnostic', async () => {
+  const f = fixture(), writes = []
+  let served = 0
+  const host = { abi: HOST_ABI, ports: Object.fromEntries(Object.entries(HOST_PORT_METHODS).map(([port, methods]) => [port, Object.fromEntries(methods.map(method => [method, async envelope => {
+    if (port === 'IdentityPort' && method === 'resolve') return f.scope
+    if (port === 'IdentityPort') return { allowed: true, scope: f.scope }
+    if (port === 'ExecutionPort' && envelope.input.phase === 'prepare') {
+      if (envelope.input.lane === 1) throw Object.assign(new Error('patient_matching_source_changed'), { code: 'patient_matching_source_changed' })
+      return { status: 'complete', summary: 'Frozen', data: served++ === 0 ? { ...f.prepared, kind: 'prepared' } : { kind: 'busy', taskId: 'task-a' }, artifacts: [] }
+    }
+    if (port === 'ExecutionPort') return { status: 'complete', summary: 'Frozen', data: f.prepared, artifacts: [] }
+    if (port === 'ResultPort') { writes.push(envelope.input); return { status: 'complete', summary: 'Saved', data: { resultId: 'persisted-real' }, artifacts: [] } }
+    return { status: 'complete', summary: 'Host result', data: {}, artifacts: [] }
+  }]))])) }
+  const ctx = { on: () => () => {}, get: name => name === 'agents' ? { get: () => ({}) } : undefined, subagents: { async startActivation(input) {
+    return { childId: input.childId, messageId: 'message-a', result: Promise.resolve({ stopReason: 'completed', structured: { decisions: [f.decision] } }), async dispose() {} }
+  } } }
+  const result = await createMatchingHandler({ host, ctx })('match_assess', { taskId: 'task-a' }, call)
+  assert.equal(writes.filter(write => write.phase === 'commit').length, 1)
+  assert.equal(result.status, 'partial')
+  assert.ok(result.data.nativeDiagnostics.some(item => /^lane 1: /.test(item)))
+})
