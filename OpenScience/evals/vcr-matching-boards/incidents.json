@@ -95,7 +95,7 @@
     "source": "no data is not a positive: a silent exclusion the screening checks anyway",
     "note": "A 58-year-old man with newly diagnosed multiple myeloma.\nHe has bone pain and anaemia.",
     "trial": { "title": "A first-line regimen in myeloma", "brief_summary": "Progression-free survival.", "raw_criteria": "Inclusion Criteria:\n\n* Newly diagnosed multiple myeloma\n\nExclusion Criteria:\n\n* Known HIV infection", "minimum_age": "18 Years", "maximum_age": "", "sex": "ALL", "condition": ["Multiple Myeloma"] },
-    "expect": { "clauses": [{ "contains": "hiv", "labels": ["not excluded"] }], "verdictNot": ["ineligible"] }
+    "expect": { "clauses": [{ "contains": "hiv", "labels": ["not excluded", "not enough information"] }], "verdictNot": ["ineligible"] }
   },
   {
     "id": "time-window-passed",

@@ -347,3 +347,28 @@ test('pairs whose decisions cannot be saved are sent back once with what was wro
   assert.ok(writes[0].diagnostics.includes('native_repair_requested:1'))
   assert.equal(result.data.resultId, 'persisted-real')
 })
+test('the requester\'s assessment guide reaches the child as its own section ahead of the untrusted data, and no guide adds nothing', async () => {
+  for (const guide of [undefined, { title: 'Benchmark label definitions', text: 'Use the labels exactly as this guide defines them.' }]) {
+    const f = fixture(), prompts = []
+    const prepared = guide ? { ...f.prepared, task: { ...f.prepared.task, guide } } : f.prepared
+    const host = { abi: HOST_ABI, ports: Object.fromEntries(Object.entries(HOST_PORT_METHODS).map(([port, methods]) => [port, Object.fromEntries(methods.map(method => [method, async envelope => {
+      if (port === 'IdentityPort' && method === 'resolve') return f.scope
+      if (port === 'IdentityPort') return { allowed: true, scope: f.scope }
+      if (port === 'ExecutionPort') return { status: 'complete', summary: 'Frozen', data: prepared, artifacts: [] }
+      if (port === 'ResultPort') return { status: 'complete', summary: 'Saved', data: { resultId: 'persisted-real' }, artifacts: [] }
+      return { status: 'complete', summary: 'Host result', data: {}, artifacts: [] }
+    }]))])) }
+    const ctx = { on: () => () => {}, get: name => name === 'agents' ? { get: () => ({}) } : undefined, subagents: { async startActivation(input) {
+      prompts.push(input.request.prompt.map(part => part.text ?? '').join(''))
+      return { childId: input.childId, messageId: 'm', result: Promise.resolve({ stopReason: 'completed', structured: { decisions: [f.decision] } }), async dispose() {} }
+    } } }
+    await createMatchingHandler({ host, ctx })('match_assess', { taskId: 'task-a' }, call)
+    const prompt = prompts[0]
+    if (!guide) assert.doesNotMatch(prompt, /ASSESSMENT_GUIDE/)
+    else {
+      assert.ok(prompt.indexOf('ASSESSMENT_GUIDE (Benchmark label definitions):\nUse the labels exactly as this guide defines them.\nEND_ASSESSMENT_GUIDE') > 0)
+      assert.ok(prompt.indexOf('END_ASSESSMENT_GUIDE') < prompt.indexOf('UNTRUSTED_MATCHING_DATA_JSON_STRING'))
+    }
+    assert.doesNotMatch(prompt, /good note would almost certainly record|Silence never makes/, 'no silence rule of the platform\'s')
+  }
+})

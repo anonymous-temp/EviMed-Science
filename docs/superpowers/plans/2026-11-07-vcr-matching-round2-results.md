@@ -356,6 +356,34 @@ information", 52 no answer: 4 of 86 patients saved no decision because their ans
 The previous batch judge scored 0.922 on the same test (11-05). Ledger CNY 24.79 at full price for 86 patients (≈ 86,000 input tokens per
 call: whole multi-record files), billed at half off-peak.
 
+#### Fifth pass (2026-11-08 evening, owner review): no platform rule, each benchmark's own configuration
+
+The silence rule, "silence never excludes" and the "not applicable" wording are out of the child's persona (owner: no hard-added rules;
+a comparison gives every system the same configuration). A task may now carry an **assessment guide** (`task.guide`, core contract): the
+study's own labelling conventions, from the study settings, absent by default and handed to the child as a trusted section. A benchmark
+supplies its own task definition there: TrialGPT's criterion-level instructions (public domain, the text GPT-4 was given) and the n2c2
+annotation guidelines, sections 2 and 4 (read locally, not committed). Second class fixed: an execution started from the first 18,000
+characters of the record, so the newest records of half the n2c2 patients were out of view; the window is now 80,000 characters, the
+oldest passages giving way first.
+
+| Measure | Pass 4 (platform rule) | Pass 5 (benchmark's own task definition) |
+|---|---|---|
+| Board C, all 1,015 rows | 76.7% | 75.6% [71.0, 79.7] (GPT-4 87.3%) |
+| Board C, the 722 rows physicians decided | 83.8% | **92.0% [89.1, 94.4]** (GPT-4 87.4% [82.6, 91.3]; paired +4.6 [+0.3, +9.1]) |
+| Board C, the 293 rows the gold calls "not enough information" | 59.0% | 35.2% (GPT-4 87.0%: 255 of these labels are GPT-4's own answer) |
+| Incidents | 17/17 | 17/17 |
+| n2c2 training split, 40 development patients | — | micro-F1 0.930 [0.905, 0.953], macro 0.876; unknown share 1.5%; 40/40 saved |
+| n2c2 official test, **re-run** after the fixes (the test had been read twice before) | 0.894 (first TrialLink run) | **0.9104 [0.894, 0.926]**, macro 0.825; unknown share 3.6%; 2 of 86 patients saved no decision |
+
+The two unsaved patients' answers kept citing evidence ids the host does not know, even after the repair: the ids were 64-character
+hashes, miscopied on long records. Third class fixed: evidence ids are now short and readable (`e:<record>.<sentence>`, knowledge
+`kb:` + 12 hex). Re-run alone, both patients saved in one call each; counted in, micro-F1 would be 0.918 [0.905, 0.931] (mixed versions,
+diagnostic only). The remaining n2c2 errors on the development patients are false "met" answers with an inferred basis on composite
+criteria (ADVANCED-CAD 10, MAJOR-DIABETES 5, DIETSUPP-2MOS 5 of 39), and they do cite evidence: an over-reading of cited facts that no
+grounding check catches and no rule is added for. The incident "silent exclusion" now accepts "not enough information" beside "not
+excluded" (it encoded the removed rule; what it guards — silence never makes a patient ineligible — holds): 17/17. Spend for the fifth
+pass: ledger CNY 46.0 at full price (≈ CNY 23 billed off-peak).
+
 ### 4.3 Criterion-level and cohort boards (the previous judge)
 
 These measure the clinical judgment, not ranking. They were scored on 2026-11-05 with the previous batch judge (Flash, trial-level fit plus criterion stage), which still serves project-scoped studies; the native child's Board C result is in §4.2.
@@ -367,6 +395,17 @@ These measure the clinical judgment, not ranking. They were scored on 2026-11-05
 
 The n2c2 official test has been read once by the previous judge; a replay with the native child would be a second system on the same test, not an untouched holdout.
 
+
+## 4.4 Gaps recorded at the owner's review (2026-11-08 evening)
+
+| Gap | What is known | Next |
+|---|---|---|
+| A hard-coded silence rule in the clinical child's persona | Added 11-08 (judge per criterion whether a good note would record a fact; silence never excludes; "not applicable" named). It raised Board C 59.4% → 76.7% but doubled false favourable labels (88 vs GPT-4's 15), and it is a rule of ours, not a configuration the comparators had | Remove it (owner: no hard-added rules; a comparison must give every system the same configuration). A benchmark's own task definition (its label guide) is the configuration every system gets |
+| Criterion-level below GPT-4 | 76.7% vs 87.3% (annotators saw GPT-4's predictions); 23 → 1 rows lost after repair | Error classes per label; give the child the benchmark's own label definitions the way TrialGPT's prompt carried them; re-run |
+| n2c2 0.894 below GPT-4 0.93 and below our earlier batch judge 0.922 | 4 of 86 patients saved no decision (long multi-record files; answers cite evidence ids the host does not know even after the repair); unknown share 0.175 (142 "not enough information"); the test has now been read twice (batch judge 11-05, TrialLink 11-08) | Error analysis by criterion; fix the evidence-id class for long files; develop on the n2c2 training split; any further test run is reported as a re-run, not a held-out result |
+| TREC CT full-collection scores look implausibly low | 2021/2022/2023 nDCG@10 0.559/0.585/0.504; J@10 0.60/0.68/0.52; eligible recall@300 0.56/0.60/0.21. Audit 11-08: not an ingestion fault (TREC 2023 topics are short templates, median 115 characters in 7 fields, and all of it was read), and the scorer agrees with trec_eval; but a plain BM25 over the template text scored 0.619 officially (CSIROmed baseline) against our 0.504 and our lexical stage's 0.275, so query writing built for free-text notes underperforms on templated topics. | Not in the external figure. Next: a whole-topic lexical channel beside the written terms, measured on dev topics, then rerank and Jev on what it adds (cheap: the rankers' saved answers cover most candidates) |
+| NIH-TrialBench comparator is GPT-4.1 | TrialGPT 2.0 reports NIH-TrialBench only with its default backbone ("Unless otherwise specified, all main analyses used GPT-4.1"); GPT-5.4/Gemini appear only for the three public cohorts (Supp. Fig. 3) | Label it so; no GPT-5.4 NIH number exists |
+| Old datasets and comparators | SIGIR (the only version, 2016), n2c2 cohort selection (the only edition, 2018) and 2024-era comparators (GPT-3.5, Mixtral, Llama-2) | Name datasets without years where there is one edition; keep current and leading comparators |
 
 ## 5. What was deleted (owner: 「没用的和历史的都不留」)
 
@@ -385,7 +424,7 @@ A read-only trace of every importer of the old path decided what could go now; t
 |---|---|---|
 | Native clinical child | done 2026-11-08 (§4.2): P50 79 s, incidents 17/17, Board C 76.7%, n2c2 0.894 (run once) | open: on long multi-record files 4 of 86 patients still saved no decision after the repair (unknown evidence ids); false favourable labels above GPT-4's (88 vs 15) under the silence rule |
 | G1: the plugin serves project-scoped studies and ships everywhere; then delete the batch judge, `match_judge`, the old reranker, `legacy-matching.md`, old eval drivers, prompt builders | old path still live | the deployment decision; one real-session check that a programme run binds the project study |
-| Publication and deployment of plugin 0.1.3 (worker 0.1.0 unchanged) | native smoke and status smoke pass offline on the pinned kernel (DSH 0.2.1-rc.5, zero model calls; bundle SHA256 1739fa83…, receipts `native-*-smoke-0.1.3.json` in the assets) | owner |
+| Publication and deployment of plugin 0.1.3 (worker 0.1.0 unchanged) | native smoke and status smoke pass offline on the pinned kernel (DSH 0.2.1-rc.5, zero model calls; bundle SHA256 41704e90…, receipts `native-*-smoke-0.1.3.json` in the assets) | owner |
 | Operator step after the release | — | `node scripts/ops/vcr-retire-unread-tables.mjs --apply` (five tables) |
 | ~~Production trial index~~ | not needed (owner, 2026-11-08): production searches ClinicalTrials.gov (official API), CTIS and ChiCTR (EviMed evidence API) live; the dense branch stays optional and off without a manifest | — |
 

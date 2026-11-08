@@ -430,3 +430,22 @@ test('a lane that still holds an unsaved execution is handed it again, never a w
   assert.deepEqual(again.task.selectedPairs,second.task.selectedPairs,'the held pairs, not the held pair plus the small trial now free');
  }finally{vcr.evidence.judgmentRecord=original;}
 });
+test('a long record starts its execution from its newest passages, and a study\'s own assessment guide reaches the task',options,async()=>{
+ const original=vcr.evidence.judgmentRecord,ids=['NCT00000921'];
+ vcr.evidence.judgmentRecord=async({registryId})=>({status:'ok',trial:{registryId,registry:'clinicaltrials.gov',title:registryId,summary:'Synthetic registration',eligibility:'Inclusion Criteria:\n* Age at least18years.',conditions:[],interventions:[]}});
+ const originalContext=vcr.store.taskContext.bind(vcr.store);
+ vcr.store.taskContext=async(...args)=>{const study=await originalContext(...args);return study&&{...study,settings:{matchingGuide:'Label each criterion with the benchmark\'s four labels.',matchingGuideTitle:'Benchmark labels'}};};
+ try{
+  const lines=Array.from({length:2600},(_,index)=>`Synthetic observation number ${index+1} is recorded here.`);
+  messages.set(++messageSeq,`A long public synthetic patient is57years old. ${lines.join(' ')} The newest observation closes the record.`);
+  const context=(await invoke('PatientDataPort','context',{messageSeq})).data;
+  const call={...origin,callId:'long-record-call',rootCallId:'long-record-call'};
+  const prepared=(await invoke('ExecutionPort','assess',{phase:'prepare',taskId:context.taskId,registryIds:ids},call)).data;
+  const texts=prepared.evidenceBundles[0].patientPassages.map(passage=>passage.text).join(' ');
+  assert.match(texts,/The newest observation closes the record/,'the newest passage is in the window');
+  assert.ok(prepared.evidenceBundles[0].patientPassages.every(passage=>/^e:\d+\.\d+$/.test(passage.evidenceId)),'short record.sentence evidence ids');
+  assert.doesNotMatch(texts,/Synthetic observation number 1 is recorded/,'the oldest passages give way first');
+  assert.ok(prepared.evidenceBundles[0].patientPassages.reduce((sum,passage)=>sum+passage.text.length,0)<=80_000);
+  assert.deepEqual(prepared.task.guide,{title:'Benchmark labels',text:'Label each criterion with the benchmark\'s four labels.'});
+ }finally{vcr.evidence.judgmentRecord=original;vcr.store.taskContext=originalContext;}
+});

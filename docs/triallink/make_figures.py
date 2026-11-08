@@ -81,8 +81,7 @@ def panel(ax, cap):
     for side in ("top", "right", "left"):
         ax.spines[side].set_visible(False)
     ax.spines["bottom"].set_color(AXIS)
-    ax.text(0, 1.13, cap["title"], transform=ax.transAxes, fontsize=11, fontweight="bold", color=INK, ha="left", va="bottom")
-    ax.text(0, 1.03, textwrap.fill(cap["subtitle"], 58), transform=ax.transAxes, fontsize=7.6, color=INK_2, ha="left", va="bottom")
+    ax.text(0, 1.04, cap["title"], transform=ax.transAxes, fontsize=11, fontweight="bold", color=INK, ha="left", va="bottom")
 
 
 def relative_panel(ax, caps, final):
@@ -108,24 +107,26 @@ def relative_panel(ax, caps, final):
     for side in ("top", "right", "left"):
         ax.spines[side].set_visible(False)
     ax.spines["bottom"].set_color(AXIS)
-    ax.text(0, 1.13, final["title"], transform=ax.transAxes, fontsize=11, fontweight="bold", color=INK, ha="left", va="bottom")
-    ax.text(0, 1.03, textwrap.fill(final["subtitle"], 58), transform=ax.transAxes, fontsize=7.6, color=INK_2, ha="left", va="bottom")
+    ax.text(0, 1.04, final["title"], transform=ax.transAxes, fontsize=11, fontweight="bold", color=INK, ha="left", va="bottom")
     return rows
 
 
 def leaderboard(data, out):
-    caps = data["capabilities"]
-    cols, rows_n = 4, -(-(len(caps) + 1) // 4)
-    fig, axes = plt.subplots(rows_n, cols, figsize=(19, 5.0 * rows_n), facecolor=SURFACE)
+    caps = [cap for cap in data["capabilities"] if cap.get("figure", True)]
+    cols = 3 if len(caps) + 1 <= 9 else 4
+    rows_n = -(-(len(caps) + 1) // cols)
+    fig, axes = plt.subplots(rows_n, cols, figsize=(5.2 * cols, 4.7 * rows_n), facecolor=SURFACE)
     flat = axes.ravel()
     for ax, cap in zip(flat, caps):
         panel(ax, cap)
     relative_panel(flat[len(caps)], caps, data["final"])
     for ax in flat[len(caps) + 1:]:
         ax.axis("off")
-    handles = [Patch(facecolor=FILLS["ours"][1], label="TrialLink (EviMed)"), Patch(facecolor=FILLS["published"][1], label="Published system"),
-               Patch(facecolor=FILLS["manual"][1], label="Manual run / physicians"), Patch(facecolor=FILLS["reference"][1], label="Median or baseline")]
-    fig.legend(handles=handles, loc="lower center", ncol=4, frameon=False, fontsize=10, bbox_to_anchor=(0.5, 0.004))
+    kinds = {r["kind"] for cap in caps for r in cap["rows"]}
+    legend = [("ours", "TrialLink"), ("published", "Published system"), ("human", "Physicians"), ("reference", "Median or baseline")]
+    handles = [Patch(facecolor=FILLS[kind][1], label=label) for kind, label in legend
+               if kind in kinds or (kind == "reference" and "baseline" in kinds)]
+    fig.legend(handles=handles, loc="lower center", ncol=4, frameon=False, fontsize=10.5, bbox_to_anchor=(0.5, 0.004))
     fig.tight_layout(rect=(0.01, 0.03, 0.99, 0.99), h_pad=4.2, w_pad=2.2)
     for suffix in ("svg", "png"):
         fig.savefig(HERE / f"{out}.{suffix}", dpi=150, facecolor=SURFACE, metadata={"Date": None} if suffix == "svg" else None)

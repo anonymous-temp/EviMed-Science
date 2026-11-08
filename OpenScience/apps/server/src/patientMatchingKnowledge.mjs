@@ -46,7 +46,7 @@ export function createPatientMatchingKnowledge({sources,index,sourceScope}){
     windows.sort((a,b)=>b.score-a.score||a.span.start-b.span.start);
     const passages=[],nextRead=[];
     for(const window of windows.slice(0,limit)){
-      const {current,span,text}=window,passage={evidenceId:`kb:${profileIdentity([current.source,span.start,span.end]).slice(7)}`,source:current.source,span,text};
+      const {current,span,text}=window,passage={evidenceId:`kb:${profileIdentity([current.source,span.start,span.end]).slice(7,19)}`,source:current.source,span,text};
       verifyEvidencePassage(passage,{source:current.source,sourceText:current.text});passages.push(passage);
       if(span.end<current.text.length)nextRead.push({taskId:input.taskId,source:'knowledge',action:'read',sourceId:current.source.sourceId,offset:span.end,maxChars});
     }

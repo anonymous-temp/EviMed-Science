@@ -6,7 +6,7 @@ import {
   validatePairDecision, validateCriterionMapping, validateEvidenceBundle, verifyEvidencePassage,
   validateTrialProfile, validateComputationReceipt, projectMatchingResult, validateMatchingResult,
   reportInputFromResult, pairIdentity, planReassessment, createHostClient, validateHostPorts,
-  metricInputFromResults, canonicalJson,
+  metricInputFromResults, canonicalJson, validateMatchingTask,
 } from '../index.mjs'
 
 const scope = { tenantId: 'tenant-a', projectId: 'project-a', actorId: 'actor-a', conversationId: 'conversation-a' }
@@ -362,4 +362,13 @@ test('computed decisions require a preserved complete computation receipt at the
   assert.throws(()=>validatePairDecision(d,{evidenceBundle:bundle}),errorCode('missing_computation'));
   bundle.computations=[{schemaVersion:'1',scope,receiptId:'calc-a',calculator:{id:'bmi',version:'1',digest:profileDigest},state:'complete',operands:[{name:'weight',value:80,unit:'kg',source,evidenceId:'e1'}],missingInputs:[],exactCheck:'verified',cacheIdentity:profileDigest,result:{value:20,unit:'kg/m2'}}];
   validatePairDecision(d,{evidenceBundle:bundle});
+})
+
+test('a task may carry the requester\'s assessment guide, bounded, and no guide is the default', () => {
+  const base = { schemaVersion: '1', taskId: 'task-g', direction: 'specified-pair', objective: 'Assess', scope: { tenantId: 't', projectId: 'p', actorId: 'a', conversationId: 'c' },
+    pluginGeneration: 'g', sources: [], selectedPairs: [{ subjectKey: 's', trialId: 't1' }], budgets: { maxPairs: 1, maxEvidenceReads: 1, maxModelCalls: 1 } }
+  assert.doesNotThrow(() => validateMatchingTask(base))
+  assert.doesNotThrow(() => validateMatchingTask({ ...base, guide: { title: 'Benchmark label definitions', text: 'Use the four labels as defined.' } }))
+  assert.throws(() => validateMatchingTask({ ...base, guide: { title: 'Too long', text: 'x'.repeat(12001) } }), /12000/)
+  assert.throws(() => validateMatchingTask({ ...base, guide: { title: 'Extra', text: 'ok', rule: 'no' } }))
 })

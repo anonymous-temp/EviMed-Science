@@ -44,6 +44,14 @@ export function validateMatchingTask(task) {
   integer(task.budgets.maxModelCalls, 'task.budgets.maxModelCalls')
   check(task.selectedPairs.length <= task.budgets.maxPairs, 'task.selectedPairs', 'selected scope exceeds pair budget', 'budget_exceeded')
   if (task.direction === 'specified-pair') check(task.selectedPairs.length === 1, 'task.selectedPairs', 'specified-pair task needs exactly one pair')
+  // The requester's assessment guide: labelling conventions configured for the study (or a benchmark's own task definition),
+  // never a rule of the platform's. Absent by default.
+  if (task.guide !== undefined) {
+    object(task.guide, 'task.guide', ['title', 'text'])
+    text(task.guide.title, 'task.guide.title')
+    text(task.guide.text, 'task.guide.text')
+    check(task.guide.text.length <= 12000, 'task.guide.text', 'assessment guide exceeds 12000 characters', 'budget_exceeded')
+  }
   return task
 }
 

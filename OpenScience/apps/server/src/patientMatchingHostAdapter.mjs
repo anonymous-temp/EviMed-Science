@@ -24,6 +24,8 @@ export const patientMatchingScope = origin => ({ tenantId: origin.userId, actorI
 
 /** The most concurrent executions one match_assess call may hold (the plugin runs ASSESS_LANES of them). */
 export const MATCHING_LANES_MAX = 16;
+/** How much of a patient's record an execution starts with (characters, about 20,000 tokens); the child reads further with match_evidence. */
+export const INITIAL_EVIDENCE_CHARACTERS = 80_000;
 
 /** @param {{vcr:any,documents:any,config?:any,modelPorts?:any,indexPorts?:any,calculate?:any,writeArtifact?:any,onPending?:any,onCancel?:any,knowledge?:any,discover?:any}} dependencies */
 export function createPatientMatchingHostAdapter({ vcr, documents, config = {}, modelPorts = null, indexPorts = null, calculate = calculateClinicalScore, writeArtifact = null, onPending = null, onCancel = null, knowledge = null, discover = null }) {
@@ -47,9 +49,14 @@ export function createPatientMatchingHostAdapter({ vcr, documents, config = {}, 
     const scope = patientMatchingScope(origin), study = await studyFor(origin, true), taskId = id('matchTask');
     return repository.put(scope, taskId, { taskId, scope, studyId: study.id, pluginGeneration: origin.pluginGeneration,
       direction: 'patient-to-trials', selectedPairs, protocolVersionId: null, collection: null, collectionRevision: null,
-      rowIds: [], executions: [], state: 'pending',continuationEpoch:0, profileDigest, origin: { userId: origin.userId, projectId: origin.projectId, rootSessionId: origin.rootSessionId, runId: origin.runId,pluginGeneration:origin.pluginGeneration }, ...extra });
+      rowIds: [], executions: [], state: 'pending',continuationEpoch:0, profileDigest, ...(assessmentGuide(study) ? { guide: assessmentGuide(study) } : {}), origin: { userId: origin.userId, projectId: origin.projectId, rootSessionId: origin.rootSessionId, runId: origin.runId,pluginGeneration:origin.pluginGeneration }, ...extra });
   }
 
+  /** The study's own assessment guide (labelling conventions the researcher configured), if any; the platform adds none. */
+  function assessmentGuide(study) {
+    const text = typeof study?.settings?.matchingGuide === 'string' ? study.settings.matchingGuide.trim().slice(0, 12000) : '';
+    return text ? { title: String(study.settings.matchingGuideTitle ?? 'Assessment guide').slice(0, 200), text } : null;
+  }
   async function studyFor(origin, create = false) {
     const study = await vcr.store.taskContext(origin, { create });
     if (!study || study.userId !== origin.userId || study.projectId !== origin.projectId || study.conversationSessionId !== origin.rootSessionId) deny();
@@ -70,8 +77,10 @@ export function createPatientMatchingHostAdapter({ vcr, documents, config = {}, 
     for (const [index, record] of note.records.entries()) {
       const source = { sourceId: record.documentId ?? `table:${subjectKey}:${index}`, revision: note.hash, digest: contentDigest(record.text), kind: 'patient' };
       sources.push(source);
-      for (const sentence of record.sentences) {
-        const evidenceId = `e:${profileIdentity([source, sentence.start, sentence.end]).slice(7)}`;
+      // Short, readable ids (record.sentence), unique within the patient: the child copies them into every decision, and 64-character
+      // hashes were miscopied on long records (replay 2026-11-08: patients whose decisions never saved, even after the repair).
+      for (const [sentenceIndex, sentence] of record.sentences.entries()) {
+        const evidenceId = `e:${index + 1}.${sentenceIndex + 1}`;
         passages.push({ evidenceId, subjectKey, source, text: sentence.text, span: { start: sentence.start, end: sentence.end } });
       }
     }
@@ -100,8 +109,12 @@ export function createPatientMatchingHostAdapter({ vcr, documents, config = {}, 
       if (!people.has(pair.subjectKey)) people.set(pair.subjectKey, await patient(study, pair.subjectKey, scope));
       if (!trials.has(pair.trialId)) trials.set(pair.trialId, await trial(study, pair, meta, scope));
       const person = people.get(pair.subjectKey), target = trials.get(pair.trialId);
+      // The whole record when it fits the window; past it the oldest passages give way first, because "now" is the newest record
+      // (replay 2026-11-08: a first-18,000-characters window hid the newest records of half the n2c2 patients).
       let characters=0;
-      const initial=person.passages.filter(passage=>{if(characters+passage.text.length>18000)return false;characters+=passage.text.length;return true;});
+      const keep=new Set();
+      for(const passage of [...person.passages].reverse()){if(characters+passage.text.length>INITIAL_EVIDENCE_CHARACTERS)break;characters+=passage.text.length;keep.add(passage.evidenceId);}
+      const initial=person.passages.filter(passage=>keep.has(passage.evidenceId));
       const held=ledger(meta.taskId),ids=new Set(initial.map(passage=>passage.evidenceId));
       const passages=person.passages.filter(passage=>ids.has(passage.evidenceId)||held.evidenceIds.has(passage.evidenceId));
       const limitations=[...person.context.coverage.limitations,...(passages.length<person.passages.length?['Only an initial evidence window is shown; use match_evidence for other relevant passages.']:[])];
@@ -115,7 +128,7 @@ export function createPatientMatchingHostAdapter({ vcr, documents, config = {}, 
   function taskOf(meta, pairs, sources) {
     const task = { schemaVersion: '1', taskId: meta.taskId, scope: meta.scope, direction: meta.direction === 'specified-pair' && pairs.length !== 1 ? 'patient-to-trials' : meta.direction,
       objective: 'Assess the selected patient and trial pairs from their preserved sources.', pluginGeneration: meta.pluginGeneration, selectedPairs: pairs, sources,
-      budgets: { maxPairs: Math.max(1, pairs.length), maxEvidenceReads: 32, maxModelCalls: 16 } };
+      budgets: { maxPairs: Math.max(1, pairs.length), maxEvidenceReads: 32, maxModelCalls: 16 }, ...(meta.guide ? { guide: meta.guide } : {}) };
     validateMatchingTask(task); return task;
   }
   async function rowsOf(meta, study) {

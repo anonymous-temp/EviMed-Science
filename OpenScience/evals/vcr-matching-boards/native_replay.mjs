@@ -11,7 +11,8 @@
  *   node native_replay.mjs --board latency --cases <A-sigir/cases.jsonl> --orders <final orders jsonl> --limit 5 --pairs 20 ...
  *   node native_replay.mjs --board incidents --cases incidents.json ...
  *
- * Common: --dsh <kernel bin> --artifact <plugin tarball> --key-file <deepseek key> --cap-cny 25 --parallel 3. The DeepSeek key stays in
+ * Common: --dsh <kernel bin> --artifact <plugin tarball> --key-file <deepseek key> --cap-cny 25 --parallel 3 [--guide-file <the benchmark's
+ * own task definition, read locally> --guide-title <its name>]: the same configuration the benchmark's other systems were given. The DeepSeek key stays in
  * this process: the kernel is given a placeholder and a loopback base URL, and this process forwards each child request to the official
  * endpoint with the key, keeping a spend ledger (`<out>/spend.jsonl`, shared by every board through --ledger) and refusing a request when
  * the cap is reached or it is the full-price window. Resumable: a case whose result file exists is not run again.
@@ -62,7 +63,8 @@ function createRun({ id, patients, protocols = [], trials = [], plan, maxCalls }
 const docsOf = (row) => row.docs ?? [{ docId: row.docId, text: row.text, visibleAt: '2026-01-01T00:00:00.000Z' }];
 
 /** The host adapter's dependencies, reading the run a request belongs to. */
-function createStores(runs) {
+/** The benchmark's own task definition, handed to the child the way a study's assessment guide is (`--guide-file`); none by default. */
+function createStores(runs, guide = null) {
   const ledger = new Map();
   const runOf = (studyId) => runs.get(String(studyId).replace(/^study-/u, ''));
   const documents = {
@@ -84,7 +86,8 @@ function createStores(runs) {
       async taskContext(origin) {
         const run = [...runs.values()].find((item) => item.rootSessionId === origin.rootSessionId);
         if (!run) return null;
-        return { id: `study-${run.id}`, userId: run.userId, projectId: run.projectId, conversationSessionId: run.rootSessionId };
+        return { id: `study-${run.id}`, userId: run.userId, projectId: run.projectId, conversationSessionId: run.rootSessionId,
+          ...(guide ? { settings: { matchingGuide: guide.text, matchingGuideTitle: guide.title } } : {}) };
       },
       transaction: serial,
       database: { withTransactionClient: (_client, fn) => fn() },
@@ -468,7 +471,7 @@ async function main() {
     board: { type: 'string' }, cases: { type: 'string' }, out: { type: 'string' }, work: { type: 'string' }, dsh: { type: 'string' }, artifact: { type: 'string' },
     'key-file': { type: 'string' }, 'cap-cny': { type: 'string', default: '25' }, ledger: { type: 'string' }, parallel: { type: 'string', default: '3' },
     limit: { type: 'string' }, pairs: { type: 'string', default: '20' }, orders: { type: 'string' }, collection: { type: 'string' }, 'timeout-min': { type: 'string', default: '45' },
-    'stop-file': { type: 'string' }, 'billing-factor': { type: 'string', default: '1' } } });
+    'stop-file': { type: 'string' }, 'guide-file': { type: 'string' }, 'guide-title': { type: 'string' }, 'billing-factor': { type: 'string', default: '1' } } });
   const o = { ...values, limit: values.limit ? Number(values.limit) : null, pairs: Number(values.pairs), parallel: Number(values.parallel) };
   for (const name of ['board', 'cases', 'out', 'work', 'dsh', 'artifact', 'key-file']) if (!o[name]) throw new Error(`--${name} is required`);
   fs.mkdirSync(o.out, { recursive: true });
@@ -481,7 +484,8 @@ async function main() {
   const token = fs.readFileSync(tokenFile, 'utf8').trim();
   const profile = prepareProfile({ dsh: o.dsh, artifact: o.artifact, work: o.work });
   const runs = new Map();
-  const { vcr, documents } = createStores(runs);
+  const guide = o['guide-file'] ? { title: o['guide-title'] ?? 'Benchmark task definition', text: fs.readFileSync(o['guide-file'], 'utf8').trim() } : null;
+  const { vcr, documents } = createStores(runs, guide);
   const adapter = createPatientMatchingHostAdapter({ vcr, documents, config: {} });
   const { server, spent, guard } = createServer({ runs, adapter, documents, token, key, ledgerFile, capCny: Number(o['cap-cny']), stopFile: o['stop-file'], billingFactor: Number(o['billing-factor']) });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));

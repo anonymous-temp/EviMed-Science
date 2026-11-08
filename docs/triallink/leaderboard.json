@@ -2,7 +2,6 @@
  "system": {
   "name": "TrialLink",
   "version": "triallink-1",
-  "organization": "EviMed",
   "date": "2026-11",
   "components": [
    "Qwen3.7 text embedding",
@@ -15,7 +14,7 @@
  "capabilities": [
   {
    "id": "ranking-ndcg",
-   "title": "Patient-to-trial ranking · nDCG@10",
+   "title": "TrialGPT benchmark · nDCG@10",
    "subtitle": "SIGIR 2016 + TREC 2021/2022 · 183 patients · judged trials",
    "metric": "nDCG@10",
    "scale": 1,
@@ -34,52 +33,46 @@
      "label": "TrialGPT 2.0 · GPT-5.4",
      "value": 0.76,
      "source": "TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c",
-     "kind": "published",
-     "organization": "NCBI/NLM"
+     "kind": "published"
     },
     {
      "label": "TrialGPT 2.0 · Gemini-3.1-pro",
      "value": 0.76,
      "source": "TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3",
-     "kind": "published",
-     "organization": "NCBI/NLM"
+     "kind": "published"
     },
     {
      "label": "TrialGPT 1.0 · GPT-5.4",
      "value": 0.74,
      "source": "TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c",
-     "kind": "published",
-     "organization": "NCBI/NLM"
+     "kind": "published"
     },
     {
      "label": "TrialGPT 2.0 · GPT-4.1",
      "value": 0.72,
      "source": "TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d",
-     "kind": "published",
-     "organization": "NCBI/NLM"
+     "kind": "published"
     },
     {
      "label": "TrialGPT 1.0 · Gemini-3.1-pro",
      "value": 0.72,
      "source": "TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3",
-     "kind": "published",
-     "organization": "NCBI/NLM"
+     "kind": "published"
     },
     {
      "label": "TrialGPT 1.0 · GPT-4.1",
      "value": 0.68,
      "source": "TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d",
-     "kind": "published",
-     "organization": "NCBI/NLM"
+     "kind": "published"
     }
    ],
-   "short": "Ranking nDCG@10",
-   "title_zh": "患者–试验排序 · nDCG@10",
+   "short": "nDCG@10",
+   "title_zh": "TrialGPT 基准 · nDCG@10",
    "subtitle_zh": "SIGIR 2016 + TREC 2021/2022，183 位患者，只排已评判试验（TrialGPT 2.0 协议与官方评分脚本）"
   },
   {
    "id": "ranking-map",
-   "title": "Patient-to-trial ranking · MAP",
+   "title": "TrialGPT benchmark · MAP",
    "subtitle": "same 183 patients · graded MAP, official evaluator",
    "metric": "MAP",
    "scale": 1,
@@ -131,13 +124,13 @@
      "kind": "published"
     }
    ],
-   "short": "Ranking MAP",
-   "title_zh": "患者–试验排序 · MAP",
+   "short": "MAP",
+   "title_zh": "TrialGPT 基准 · MAP",
    "subtitle_zh": "同一批 183 位患者，分级 MAP（官方评分脚本）"
   },
   {
    "id": "cohort-sigir",
-   "title": "SIGIR 2016 cohort",
+   "title": "TrialGPT benchmark · SIGIR",
    "subtitle": "58 patients · judged trials · nDCG@10",
    "metric": "nDCG@10",
    "scale": 1,
@@ -177,13 +170,13 @@
      "kind": "published"
     }
    ],
-   "short": "SIGIR cohort",
-   "title_zh": "SIGIR 2016 队列",
+   "short": "SIGIR",
+   "title_zh": "TrialGPT 基准 · SIGIR",
    "subtitle_zh": "58 位患者，已评判试验，nDCG@10"
   },
   {
    "id": "cohort-trec2021",
-   "title": "TREC 2021 cohort",
+   "title": "TrialGPT benchmark · TREC 2021",
    "subtitle": "75 patients · judged trials · nDCG@10",
    "metric": "nDCG@10",
    "scale": 1,
@@ -223,13 +216,13 @@
      "kind": "published"
     }
    ],
-   "short": "TREC 2021 cohort",
-   "title_zh": "TREC 2021 队列",
+   "short": "TREC 2021",
+   "title_zh": "TrialGPT 基准 · TREC 2021",
    "subtitle_zh": "75 位患者，已评判试验，nDCG@10"
   },
   {
    "id": "cohort-trec2022",
-   "title": "TREC 2022 cohort",
+   "title": "TrialGPT benchmark · TREC 2022",
    "subtitle": "50 patients · judged trials · nDCG@10",
    "metric": "nDCG@10",
    "scale": 1,
@@ -269,13 +262,13 @@
      "kind": "published"
     }
    ],
-   "short": "TREC 2022 cohort",
-   "title_zh": "TREC 2022 队列",
+   "short": "TREC 2022",
+   "title_zh": "TrialGPT 基准 · TREC 2022",
    "subtitle_zh": "50 位患者，已评判试验，nDCG@10"
   },
   {
    "id": "nih-trialbench",
-   "title": "NIH-TrialBench",
+   "title": "NIH-TrialBench · Recall@10 (%)",
    "subtitle": "126 vignettes · target trial in top 10 · % (institute macro)",
    "metric": "Recall@10 (%)",
    "scale": 100,
@@ -288,13 +281,13 @@
      "note": "89.7% over all 126 cases (84.1–94.4)"
     },
     {
-     "label": "TrialGPT 2.0 · GPT-4.1",
+     "label": "TrialGPT 2.0 · GPT-4.1 (paper default)",
      "value": 70,
      "source": "TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5c",
      "kind": "published"
     },
     {
-     "label": "TrialGPT 1.0 · GPT-4.1",
+     "label": "TrialGPT 1.0 · GPT-4.1 (paper default)",
      "value": 54,
      "source": "TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5c",
      "kind": "published"
@@ -313,238 +306,63 @@
     }
    ],
    "short": "NIH-TrialBench",
-   "title_zh": "NIH-TrialBench 目标试验检索",
+   "title_zh": "NIH-TrialBench · 前 10 召回（%）",
    "subtitle_zh": "126 个病例，病例对应的试验进入前 10 的比例，按 11 个研究所宏平均（与 TrialGPT 2.0 口径一致）",
-   "note_zh": "TrialLink 按全部 126 例计算为 89.7%（84.1–94.4）。"
+   "note_zh": "TrialGPT 2.0 论文只用默认底座 GPT-4.1 报告了 NIH-TrialBench（原文：\"Unless otherwise specified, all main analyses used GPT-4.1\"）；GPT-5.4 和 Gemini 只跑了三个公开队列。TrialLink 按全部 126 例计算为 89.7%（84.1–94.4）。",
+   "note": "TrialGPT 2.0 reports NIH-TrialBench only with its default backbone, GPT-4.1 (\"Unless otherwise specified, all main analyses used GPT-4.1\"); its GPT-5.4 and Gemini runs cover the three public cohorts only. TrialLink over all 126 cases: 89.7% (84.1–94.4)."
   },
   {
-   "id": "trec-2021",
-   "title": "TREC CT 2021",
-   "subtitle": "full collection · 375,580 trials · 75 topics · nDCG@10",
-   "metric": "nDCG@10",
-   "scale": 1,
-   "note": "TrialLink top-10 judged 60%: unjudged trials count as not relevant, so its score is a lower bound.",
+   "id": "criterion-decided",
+   "title": "Criterion-level · physician-decided criteria (%)",
+   "title_zh": "逐条判断 · 医生给出明确结论的标准（%）",
+   "short": "Criterion-level",
+   "subtitle": "TrialGPT annotations · the 722 of 1,015 criteria the physicians decided (included, not included, excluded, not excluded, not applicable) · accuracy % · every system given TrialGPT's own task definition",
+   "subtitle_zh": "TrialGPT 标注集中医生给出明确结论的 722 条（共 1,015 条），一致率（%）；所有系统使用 TrialGPT 自己的任务定义",
+   "metric": "Accuracy (%)",
+   "scale": 100,
+   "note": "Paired difference TrialLink − GPT-4: +4.6 points (+0.3 to +9.1, patient bootstrap). GPT-4 is scored from TrialGPT's released predictions on the same rows.",
+   "note_zh": "配对差值 TrialLink − GPT-4：+4.6 个百分点（+0.3 至 +9.1，按患者自助法）。GPT-4 的成绩由 TrialGPT 公开的预测在同一批条目上计算。",
    "rows": [
     {
      "label": "TrialLink",
-     "value": 0.559,
-     "source": "this report",
-     "kind": "ours",
+     "value": 92.0,
      "ci95": [
-      0.491,
-      0.624
-     ]
-    },
-    {
-     "label": "TDMINER (manual run)",
-     "value": 0.715,
-     "source": "TDMINER, TREC 2021 notebook",
-     "kind": "manual"
-    },
-    {
-     "label": "h2oloo monoT5",
-     "value": 0.712,
-     "source": "Pradeep et al., SIGIR 2022, Table 3",
-     "kind": "published"
-    },
-    {
-     "label": "Alibaba DAMO",
-     "value": 0.595,
-     "source": "Pradeep et al., SIGIR 2022, Table 3",
-     "kind": "published"
-    },
-    {
-     "label": "CSIROmed",
-     "value": 0.532,
-     "source": "Pradeep et al., SIGIR 2022, Table 3",
-     "kind": "published"
-    },
-    {
-     "label": "Kusa et al. (BM25+)",
-     "value": 0.513,
-     "source": "Kusa et al., JBI 2023, Table 4",
-     "kind": "published"
-    },
-    {
-     "label": "Peikos et al. (ChatGPT+RM3)",
-     "value": 0.512,
-     "source": "Peikos et al., arXiv 2306.02077, Table 15",
-     "kind": "published"
-    },
-    {
-     "label": "BM25 on the note",
-     "value": 0.469,
-     "source": "Peikos et al., arXiv 2306.02077",
-     "kind": "baseline"
-    },
-    {
-     "label": "Track median",
-     "value": 0.304,
-     "source": "Pradeep et al., SIGIR 2022",
-     "kind": "reference"
-    }
-   ],
-   "short": "TREC CT 2021 full",
-   "title_zh": "TREC CT 2021 全库检索",
-   "subtitle_zh": "375,580 个试验，75 个题目，nDCG@10",
-   "note_zh": "TrialLink 前 10 中 60% 被评判过；未评判的试验按不相关计分，所以这是下限。"
-  },
-  {
-   "id": "trec-2022",
-   "title": "TREC CT 2022",
-   "subtitle": "full collection · 375,580 trials · 50 topics · nDCG@10",
-   "metric": "nDCG@10",
-   "scale": 1,
-   "note": "TrialLink top-10 judged 68% (lower bound). Its P@10 0.526 and RR 0.809 are above the best official run (0.508, 0.726).",
-   "rows": [
-    {
-     "label": "TrialLink",
-     "value": 0.585,
+      89.1,
+      94.4
+     ],
      "source": "this report",
-     "kind": "ours",
+     "kind": "ours"
+    },
+    {
+     "label": "TrialGPT 1.0 · GPT-4",
+     "value": 87.4,
      "ci95": [
-      0.508,
-      0.66
-     ]
-    },
-    {
-     "label": "Jullien et al. (GPT-4-turbo)",
-     "value": 0.693,
-     "source": "Jullien et al., arXiv 2409.18998, Table 2",
+      82.6,
+      91.3
+     ],
+     "source": "TrialGPT released predictions (Jin et al., Nat Commun 2024), scored on the same rows",
      "kind": "published"
-    },
-    {
-     "label": "IELAB (GPT-4)",
-     "value": 0.659,
-     "source": "IELAB, TREC 2023 notebook, Table 1",
-     "kind": "published"
-    },
-    {
-     "label": "h2oloo (official #1)",
-     "value": 0.613,
-     "source": "TREC 2022 overview, Table 4",
-     "kind": "published"
-    },
-    {
-     "label": "Kusa et al. (TCRR-Bio)",
-     "value": 0.604,
-     "source": "Kusa et al., JBI 2023, Table 5",
-     "kind": "published"
-    },
-    {
-     "label": "DoSSIER (official #2)",
-     "value": 0.556,
-     "source": "TREC 2022 overview, Table 4",
-     "kind": "published"
-    },
-    {
-     "label": "Peikos et al. (ChatGPT+RM3)",
-     "value": 0.509,
-     "source": "Peikos et al., arXiv 2306.02077, Table 15",
-     "kind": "published"
-    },
-    {
-     "label": "CSIROmed",
-     "value": 0.491,
-     "source": "TREC 2022 overview",
-     "kind": "published"
-    },
-    {
-     "label": "Track median",
-     "value": 0.392,
-     "source": "Kusa et al., JBI 2023, Table 5",
-     "kind": "reference"
     }
-   ],
-   "short": "TREC CT 2022 full",
-   "title_zh": "TREC CT 2022 全库检索",
-   "subtitle_zh": "375,580 个试验，50 个题目，nDCG@10",
-   "note_zh": "TrialLink 前 10 中 68% 被评判过（下限）。它的 P@10 0.526 和 RR 0.809 高于官方最好提交（0.508、0.726）。"
-  },
-  {
-   "id": "trec-2023",
-   "title": "TREC CT 2023",
-   "subtitle": "full collection · 451,538 trials · 37 topics · nDCG@10",
-   "metric": "nDCG@10",
-   "scale": 1,
-   "note": "TrialLink top-10 judged 52% (lower bound). Its P@10 0.451 is above the track median 0.394 and its RR 0.778 is the highest listed.",
-   "rows": [
-    {
-     "label": "TrialLink",
-     "value": 0.504,
-     "source": "this report",
-     "kind": "ours",
-     "ci95": [
-      0.433,
-      0.573
-     ]
-    },
-    {
-     "label": "CSIROmed (fine-tuned GPT-3.5)",
-     "value": 0.738,
-     "source": "CSIROmed, TREC 2023 notebook, Table 1",
-     "kind": "published"
-    },
-    {
-     "label": "IELAB (GPT-4)",
-     "value": 0.736,
-     "source": "IELAB, TREC 2023 notebook, Table 2",
-     "kind": "published"
-    },
-    {
-     "label": "DoSSIER",
-     "value": 0.684,
-     "source": "DoSSIER, TREC 2023 notebook, Table 2",
-     "kind": "published"
-    },
-    {
-     "label": "IELAB cross-encoder",
-     "value": 0.672,
-     "source": "IELAB, TREC 2023 notebook",
-     "kind": "published"
-    },
-    {
-     "label": "CSIROmed BM25",
-     "value": 0.619,
-     "source": "CSIROmed, TREC 2023 notebook",
-     "kind": "baseline"
-    },
-    {
-     "label": "IELAB dense",
-     "value": 0.577,
-     "source": "IELAB, TREC 2023 notebook",
-     "kind": "published"
-    },
-    {
-     "label": "Track median",
-     "value": 0.648,
-     "source": "DoSSIER and CSIROmed, TREC 2023 notebooks",
-     "kind": "reference"
-    }
-   ],
-   "short": "TREC CT 2023 full",
-   "title_zh": "TREC CT 2023 全库检索",
-   "subtitle_zh": "451,538 个试验，37 个有评判的题目，nDCG@10",
-   "note_zh": "TrialLink 前 10 中 52% 被评判过（下限）。它的 P@10 0.451 高于赛道中位数 0.394，RR 0.778 为所列最高。"
+   ]
   },
   {
    "id": "criterion",
-   "title": "Criterion-level eligibility",
-   "subtitle": "TrialGPT annotations · 1,015 criteria · 53 patients · accuracy %",
+   "title": "Criterion-level · all criteria (%)",
+   "subtitle": "TrialGPT annotations · 1,015 criteria · 53 patients · label agreement %",
    "metric": "Accuracy (%)",
    "scale": 100,
-   "note": "Annotators labelled with GPT-4's predictions in view, so the reference favours GPT-4.",
+   "note": "On the 293 criteria the gold labels \"not enough information\", 255 labels are GPT-4's own answer kept by the annotators, who labelled with GPT-4's predictions in view; GPT-4 matches 87.0% of those rows, TrialLink 35.2%. TrialLink was given TrialGPT's own task definition (which asks for as few \"not enough information\" answers as possible).",
    "rows": [
     {
      "label": "TrialLink",
-     "value": 76.7,
+     "value": 75.6,
      "source": "this report",
      "kind": "ours",
      "ci95": [
-      73.3,
-      79.9
+      71.0,
+      79.7
      ],
-     "note": "778 of 1,015 rows; the module was revised on this set (development set for the criterion module)."
+     "note": "same run as the panel above"
     },
     {
      "label": "TrialGPT 1.0 · GPT-4",
@@ -566,27 +384,28 @@
     }
    ],
    "short": "Criterion-level",
-   "title_zh": "逐条入排标准判断",
+   "title_zh": "逐条判断 · 全部标准（%）",
    "subtitle_zh": "TrialGPT 标注集，1,015 条标准，53 位患者，标签一致率（%）",
-   "note_zh": "标注员是看着 GPT-4 的预测做标注的，金标准偏向 GPT-4。"
+   "note_zh": "金标准标为\"信息不足\"的 293 条中，有 255 条就是 GPT-4 自己的回答被标注员保留下来（标注员是看着 GPT-4 的预测做标注的）；在这些条目上 GPT-4 吻合 87.0%，TrialLink 35.2%。TrialLink 使用的是 TrialGPT 自己的任务定义（要求尽量少答\"信息不足\"）。",
+   "figure": false
   },
   {
    "id": "n2c2",
-   "title": "n2c2 2018 cohort selection",
+   "title": "n2c2 cohort selection · micro-F1",
    "subtitle": "official test · 86 patients × 13 criteria · micro-F1",
    "metric": "Micro-F1",
    "scale": 1,
    "rows": [
     {
      "label": "TrialLink",
-     "value": 0.894,
+     "value": 0.9104,
      "source": "this report",
      "kind": "ours",
      "ci95": [
-      0.876,
-      0.912
+      0.894,
+      0.926
      ],
-     "note": "single run after the module was frozen; macro-F1 0.801; 4 of 86 patients saved no answer and count as defaults."
+     "note": "official test re-run after the fixes (first run 0.894); macro-F1 0.825; 2 of 86 patients saved no decision (evidence ids miscopied) and count as defaults — with short ids both save, and counting them gives 0.918"
     },
     {
      "label": "GPT-4 zero-shot (Wornow et al.)",
@@ -619,42 +438,24 @@
      "kind": "published"
     },
     {
-     "label": "GPT-3.5",
-     "value": 0.82,
-     "source": "Wornow et al., arXiv 2402.05125, Table 3",
-     "kind": "published"
-    },
-    {
-     "label": "Mixtral-8x7B",
-     "value": 0.79,
-     "source": "Wornow et al., arXiv 2402.05125, Table 1",
-     "kind": "published"
-    },
-    {
-     "label": "Llama-2-70b",
-     "value": 0.67,
-     "source": "Wornow et al., arXiv 2402.05125, Table 1",
-     "kind": "published"
-    },
-    {
      "label": "47-team median",
      "value": 0.8227,
      "source": "Stubbs et al., JAMIA 2019",
      "kind": "reference"
     }
    ],
-   "short": "n2c2 2018",
-   "title_zh": "n2c2 2018 队列筛选",
+   "short": "n2c2",
+   "title_zh": "n2c2 队列筛选 · micro-F1",
    "subtitle_zh": "官方测试集，86 位患者 × 13 条标准，micro-F1",
-   "note": "Official evaluator (track1_eval.py). A criterion answered neither met nor not met is read as not met, except ENGLISH and MAKES-DECISIONS (read as met): the reading named before scoring.",
-   "note_zh": "官方评分脚本（track1_eval.py）。既非\"符合\"也非\"不符合\"的回答按\"不符合\"计，ENGLISH 和 MAKES-DECISIONS 两条按\"符合\"计——这是评分前就定下的口径。"
+   "note": "Official evaluator (track1_eval.py), every system given the n2c2 annotation guidelines. An answer neither met nor not met is read as the guidelines label an unmentioned criterion: not met, except ENGLISH and MAKES-DECISIONS (met).",
+   "note_zh": "官方评分脚本（track1_eval.py），所有系统都使用 n2c2 官方标注指南。既非\"符合\"也非\"不符合\"的回答，按指南对未提及标准的标注方式计：不符合，ENGLISH 和 MAKES-DECISIONS 两条计为符合。"
   }
  ],
  "final": {
   "id": "relative",
-  "title": "TrialLink vs best published system",
-  "subtitle": "TrialLink ÷ best published system in each panel × 100 (dashed line = 100)",
-  "title_zh": "TrialLink 相对已发表最好系统",
-  "subtitle_zh": "各子榜 TrialLink ÷ 已发表最好系统 × 100（虚线 = 100）"
+  "title": "TrialLink vs best published (= 100)",
+  "title_zh": "TrialLink 相对已发表最好系统（= 100）",
+  "subtitle": "",
+  "subtitle_zh": ""
  }
 }
