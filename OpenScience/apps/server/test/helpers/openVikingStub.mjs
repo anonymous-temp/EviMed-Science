@@ -10,12 +10,14 @@
 // a user being deleted answers 412; `fs/tree` pages with `has_more`.
 import { once } from "node:events";
 import { createServer } from "node:http";
+import { OPENVIKING_MEMORY_TYPES } from "../../src/openVikingLayout.mjs";
 
 const ok = (result, extra = {}) => ({ status: "ok", result, error: null, telemetry: null, profile: null, ...extra });
 const fail = (code, message) => ({ status: "error", result: null, error: { code, message }, telemetry: null, profile: null });
 
 const BUILT_IN_TYPES = ["cases", "entities", "events", "experiences", "identity", "preferences", "profile", "soul", "trajectories"];
-export const STUB_MEMORY_TYPES = ["corrections", "decisions", "entities", "follow_ups", "observations", "preferences", "profile", "project_context", "project_facts", "recent_work"];
+// the deployment's own layout: a stub that lists fewer types than the mounted templates makes every policy sync look stale
+export const STUB_MEMORY_TYPES = [...OPENVIKING_MEMORY_TYPES];
 
 export class OpenVikingStub {
   /**

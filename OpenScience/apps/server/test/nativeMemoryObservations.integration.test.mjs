@@ -162,13 +162,14 @@ test("a paused account is not written to: the note stays and is looked at again"
   assert.equal((await f.worker.observations.promote(f.userId)).promoted, 1, "resumed, the second pass promotes it");
 });
 
-test("the engine's own check after a write holds for a note: an identifier in it is taken out", options, async (t) => {
+test("the engine's own check after a write holds for a note: an identifier in it is taken out, a contact the person gave stays", options, async (t) => {
   const f = await scene(t, { extract: () => ({}) });
   const uri = `${f.root}/observations/contact.md`;
-  f.stub.extract = () => ({ adds: [{ uri, memory_type: "observations", after: "- 回复发到 zhang.wei@example.com\n- 报告带透视表" }] });
+  // an identity-document number is never kept; an e-mail address the person gave is a contact they may want kept (owner, 2026-11-04)
+  f.stub.extract = () => ({ adds: [{ uri, memory_type: "observations", after: "- 身份证号 110101199001011237\n- 回复发到 zhang.wei@example.com\n- 报告带透视表" }] });
   await f.commitConversation("a", [{ role: "user", text: "报告带透视表，回复发到我邮箱。" }]);
   await f.worker.processCommits({ userId: f.userId });
-  assert.equal(f.stub.files.get(uri), "- 报告带透视表", "the line with an e-mail address is gone");
+  assert.equal(f.stub.files.get(uri), "- 回复发到 zhang.wei@example.com\n- 报告带透视表", "the line with an identity number is gone, the contact stays");
 });
 
 // ------------------------------------------------------------------------------------------------------------ recent work

@@ -176,7 +176,7 @@ test("errors with no change are a failure, errors with some change keep the chan
 
 test("what a consolidation writes is held to the checks after the fact: an identifier, and a line the person removed that a merge brought back", options, async (t) => {
   const f = await account(t, { consolidate: ({ user }) => ({ updates: [
-    { uri: `viking://user/${user}/memories/entities/person/p0.md`, text: "Fact number 0 about the person's work.\nReach them at someone@example.org." },
+    { uri: `viking://user/${user}/memories/entities/person/p0.md`, text: "Fact number 0 about the person's work.\nTheir identity card is 110101199001011237." },
     { uri: `viking://user/${user}/memories/entities/person/p2.md`, text: "Fact number 2 about the person's work.\nPrefers tables for comparisons of every kind." },
   ] }) });
   // The person removed a line earlier; a merge puts it back.
@@ -186,7 +186,7 @@ test("what a consolidation writes is held to the checks after the fact: an ident
   // The overlay's last reading of the file the merge will rewrite is what it was before.
   await f.tick(); await f.tick();
   assert.equal(await f.tick(), "completed");
-  assert.equal(await f.sessions.read(f.userId, f.uris[0]), "Fact number 0 about the person's work.", "the e-mail address is taken out");
+  assert.equal(await f.sessions.read(f.userId, f.uris[0]), "Fact number 0 about the person's work.", "the identity number is taken out");
   const checked = (await f.overlay.revisionsOf(f.userId, f.uris[0])).find((revision) => revision.actor === "platform");
   assert.match(checked.reason, /identifier_shape/);
   assert.equal(nativeMemoryCounters().checkActions.identifier_shape, 1);
