@@ -166,7 +166,9 @@ is the highest listed.
 ## 4. Cost and speed
 
 Measured on the ranking board (some 410 candidates per patient): Qwen3.7 rerank CNY 0.08 per patient, 2.6 s per 100 trials; Jev 1.14
-scoring CNY 0.16 per patient, 0.25 s per trial with eight in flight. A product search ranks 300 candidates.
+scoring CNY 0.16 per patient, 0.25 s per trial with eight in flight. A product search ranks 300 candidates. The criterion-by-criterion
+assessment of 20 trials for one patient takes a median of 81 s (90th percentile 148 s; five patients, measured end to end on the
+production agent runtime), with the trials' criteria split across up to 12 concurrent Flash agents.
 
 ## 5. Reproduce
 

@@ -231,6 +231,15 @@ node --test --experimental-test-coverage OpenScience/evals/vcr-matching-boards/n
 This establishes export plumbing readiness only. No full English SIGIR or full-corpus TREC native-plugin campaign has been
 run by this change, and no performance improvement or clinical-validation result is implied.
 
+## Native clinical child on the real kernel (2026-11-08)
+
+`native_replay.mjs` measures TrialLink's criterion-level module as it runs: the plugin bundle installed in the pinned DSH kernel, its
+managed Flash child started by `match_assess`, answered by the production host adapter over the plugin's HTTP transport; only the stores
+under the adapter are in memory with the frozen inputs, and the root conversation is a stand-in that issues `match_assess`
+(`native_replay_parent.mjs`). The DeepSeek key stays in the runner, which forwards the child's requests, keeps a spend ledger and refuses
+the full-price window. Boards: `--board c` (clause labels for `score.py c`), `--board latency` (20 candidates per case in TrialLink's
+order), `--board incidents`. The replay profile must carry the socket's child-capacity row (30); the kernel default (8) refuses lanes.
+
 ## What the numbers can and cannot be compared with
 
 - TrialGPT 2.0 scored every judged pair of the qrels pools. TrialGPT 1.0's reported 0.7275 and 0.6688 are on the judged pairs

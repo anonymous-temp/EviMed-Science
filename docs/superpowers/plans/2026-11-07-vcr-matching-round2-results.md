@@ -310,9 +310,28 @@ The whole-record BM25 list is what the TREC pools are made of (its top ten is al
 
 This board asks for the one trial a vignette describes, which is a relevance question: the Jev fusion that wins on eligibility ranking (Boards A and E) costs 1.3 points of institute-macro recall here, mostly in NCI cases where several trials take the same patient. Every EviMed arm is above TrialGPT 2.0's 70%.
 
-### 4.2 Criterion-level and cohort boards (the previous judge; the native clinical child is not yet replayed)
+### 4.2 The native clinical child on the real kernel (2026-11-08)
 
-These measure the clinical judgment, not ranking. They were scored on 2026-11-05 with the previous batch judge (Flash, trial-level fit plus criterion stage), which still serves project-scoped studies. The V3 native clinical child has not been replayed on them in this round (its frozen replay harness needs a private configuration prepared on the machine that ran V3); this is listed under remaining work.
+The criterion-level module of TrialLink — the plugin's managed Flash child — measured on the pinned kernel (DSH 0.2.1-rc.5) with the
+production host adapter (`evals/vcr-matching-boards/native_replay.mjs`; frozen inputs, a stand-in root that only calls `match_assess`).
+
+| Measure | First run (0.1.2) | After the fixes (0.1.3) |
+|---|---|---|
+| Child starts on the production provider composition | no: `NO_ADAPTER` for `deepseek` (measured through an alias row) | yes, `deepseek-official` (434 calls, all HTTP 200) |
+| 20-candidate assessment, wall time from first prepare to last save (5 SIGIR cases) | P50 549 s, P90 575 s (6–12 executions in sequence) | **P50 81 s, P90 148 s** (6–12 executions concurrently, child capacity 30) |
+| Incident cases | 16/17 (silent exclusion) | **17/17** |
+| Board C label agreement (1,015 rows, 53 patients) | 59.4% [54.7, 64.2] | 73.0% [68.9, 76.9] |
+| Pairs lost in the latency cases | 6/100 (schema failure, not retried) | 5/100 (an answer citing evidence ids the host does not know; not retried) |
+
+Board C after the change: inclusion 79.8% (was 83.4%), exclusion 69.3% (was 46.4%); gold "not excluded" answered "not enough
+information" fell from 286 to 92 rows, while false favourable labels rose from 33 to 68 (GPT-4: 15). Board C had been read before the
+change; the silence rule itself was decided on 2026-11-04 and is not tuned here. The previous batch judge scored 79.1% and GPT-4 87.3%
+(whose annotators saw GPT-4's predictions), so criterion-level agreement is not part of the external leaderboard. The n2c2 official test
+was not run: its one use waits until the child's silence handling is settled. Spend: CNY 13.8 billed (off-peak) for both passes.
+
+### 4.3 Criterion-level and cohort boards (the previous judge)
+
+These measure the clinical judgment, not ranking. They were scored on 2026-11-05 with the previous batch judge (Flash, trial-level fit plus criterion stage), which still serves project-scoped studies; the native child's Board C result is in §4.2.
 
 | Board | Metric | EviMed (previous judge, 11-05) | Comparators |
 |---|---|---|---|
@@ -337,7 +356,7 @@ A read-only trace of every importer of the old path decided what could go now; t
 
 | Item | State | Needs |
 |---|---|---|
-| Native clinical child on C, n2c2 and the incident cases; 20-candidate latency (target P50 2 min) | not run in this round; discovery stages measured (rerank 2.6 s per 100 trials, Jev 0.25 s per pair with eight in flight, dense and lexical under 2 s) | a reference-host configuration on this machine (≈CNY 10 of Flash) |
+| Native clinical child | done 2026-11-08 (§4.2): starts on the production kernel, P50 81 s, incidents 17/17, Board C 73.0% | open: 5% of pairs lost to answers citing unknown evidence ids (retry covers schema failures only); false favourable labels doubled under the silence rule; n2c2 once the silence handling is settled |
 | G1: the plugin serves project-scoped studies and ships everywhere; then delete the batch judge, `match_judge`, the old reranker, `legacy-matching.md`, old eval drivers, prompt builders | old path still live | the deployment decision; one real-session check that a programme run binds the project study |
 | Publication and deployment of plugin 0.1.3 (worker 0.1.0 unchanged) | native smoke and status smoke pass offline on the pinned kernel (DSH 0.2.1-rc.5, zero model calls; bundle SHA256 b39d79c0…, receipts `native-*-smoke-0.1.3.json` in the assets) | owner |
 | Operator step after the release | — | `node scripts/ops/vcr-retire-unread-tables.mjs --apply` (five tables) |
