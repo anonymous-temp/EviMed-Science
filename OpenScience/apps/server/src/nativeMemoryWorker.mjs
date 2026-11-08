@@ -553,7 +553,20 @@ export class NativeMemoryWorker {
         return true;
       }
     }
-    if(!sourceAllowed)return false;
+    if(!sourceAllowed) {
+      // The source conversation was deleted and the engine wrote no diff: a commit that failed, whose task ended without one, or that was
+      // lost is terminal. Left pending it would hide the account's whole memory and fail every cleanup retry.
+      let terminal = await sessions.read(commit.userId, `${commit.archiveUri}/.failed.json`) !== null;
+      if (!terminal && commit.taskId) {
+        const task = await sessions.task(commit.userId, commit.taskId);
+        if (['failed', 'cancelled', 'canceled'].includes(String(task?.status ?? '').toLowerCase())) terminal = true;
+        else if (task?.status === 'running' || task?.status === 'pending') return false;
+      }
+      if (!terminal && Date.now() - Date.parse(String(commit.createdAt)) > LOST_AFTER_MS) terminal = true;
+      if (!terminal) return false;
+      await this.overlay.abandonCommit(commit.userId, commit.archiveUri, 'source_conversation_deleted');
+      return true;
+    }
     const failed = await sessions.read(commit.userId, `${commit.archiveUri}/.failed.json`);
     let reason = failed !== null ? "the extraction failed" : "";
     // Why, as far as the engine's own marker says (v0.5.2 fails an extraction whose output ran out of room as `budget_exhausted` and does not retry it).

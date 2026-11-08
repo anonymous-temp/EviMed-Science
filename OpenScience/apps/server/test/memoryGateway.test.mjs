@@ -32,7 +32,7 @@ function fixedAdmission(answer = {}) {
   return { asked, admit: async (caller) => { asked.push(caller.engineSessionId ?? null); return { ...base, ...(typeof answer === "function" ? answer(caller) : answer) }; } };
 }
 
-async function fixture(t, { admission = fixedAdmission(), config = {}, overlay = null, stubOptions = {}, memoryTool = null, capsuleSearch = null, historySearch = null, sourceDeletion = null, sourceReceipt = null, timeoutMs = 4_000, project = {} } = {}) {
+async function fixture(t, { admission = fixedAdmission(), config = {}, overlay = null, stubOptions = {}, memoryTool = null, capsuleSearch = null, historySearch = null, sourceDeletion = null, sourceReceipt = null, sourceReceiptFailed = null, timeoutMs = 4_000, project = {} } = {}) {
   resetNativeMemoryMetrics();
   const stub = await startOpenVikingStub(t, stubOptions);
   const client = new OpenVikingClient({ openVikingUrl: stub.url, openVikingApiKey: stub.apiKey, openVikingAccount: "evimed" });
@@ -42,7 +42,7 @@ async function fixture(t, { admission = fixedAdmission(), config = {}, overlay =
     config: { memoryEngineEnabled: true, memoryEnabled: true, ...config },
     runtimeManager: { assertActiveEviMedWorkloadToken: async (token) => { if (token === TOKEN) return { userId: USER, projectId: "p1" }; throw new Error("no"); } },
     store: { userById: async (id) => (id === USER ? { id } : null), requireProject: async (_user, id) => ({ id, userId: USER, ...project }) },
-    sessions, admission, overlay, memoryTool, capsuleSearch, historySearch, sourceDeletion, sourceReceipt,
+    sessions, admission, overlay, memoryTool, capsuleSearch, historySearch, sourceDeletion, sourceReceipt, sourceReceiptFailed,
   });
   const server = createServer((req, res) => { void handler(req, res, (failure) => failures.push(failure)); });
   server.listen(0, "127.0.0.1");
@@ -986,10 +986,12 @@ test('native content is not disclosed until its trusted source receipt is stored
   await ready;assert.equal(settled,false);release();const result=await reading;assert.equal(result.status,200);assert.match(result.text,/Private source context/);
 });
 
-test('required source receipt failures block both REST and MCP source text',async t=>{
-  const {call,mcp,stub}=await fixture(t,{overlay:{configured:true,sensitiveUris:async()=>[],noteRecalled:async()=>{}},sourceReceipt:async()=>{throw Error('receipt unavailable');}});
-  const uri=stub.seedMemory(OV_USER,'notes/receipt.md','PRIVATE_RECEIPT_CANARY',{type:'notes'});
+test('a source receipt that cannot be stored degrades: the recall is returned, the run is told to learn nothing from it and the failure is counted',async t=>{
+  /** @type {any[]} */ const failed=[];
+  const {call,mcp,stub}=await fixture(t,{overlay:{configured:true,sensitiveUris:async()=>[],noteRecalled:async()=>{}},sourceReceipt:async()=>{throw Error('receipt unavailable');},sourceReceiptFailed:async request=>{failed.push(request.sessionId);}});
+  const uri=stub.seedMemory(OV_USER,'notes/receipt.md','RECEIPT_CANARY',{type:'notes'});
   const rest=await call('GET',`/api/v1/content/read?uri=${encodeURIComponent(uri)}`),rpc=await mcp({jsonrpc:'2.0',id:1,method:'tools/call',params:{name:'read',arguments:{uris:[uri]}}});
-  for(const result of [rest,rpc]){expectFailure(result);}
-  function expectFailure(result){assert.ok(result.status>=400);assert.doesNotMatch(result.text,/PRIVATE_RECEIPT_CANARY/);}
+  for(const result of [rest,rpc]){assert.equal(result.status,200);assert.match(result.text,/RECEIPT_CANARY/);}
+  assert.equal(failed.length,2,'the failure hook ran once per recall');
+  assert.equal(nativeMemoryCounters().recallNotes.receipt_failed,2);
 });

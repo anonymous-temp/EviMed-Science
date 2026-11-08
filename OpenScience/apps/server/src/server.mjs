@@ -5229,7 +5229,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (nativeMemoryContexts && memoryHistory) {
         const deletionContext = await nativeMemoryContexts.forProject(project);
         for (const sessionId of row.sessionIds) await memoryHistory.removeConversation({ ...deletionContext, projectId: project.id, projectCreatedAt: row.projectCreatedAt }, sessionId);
-        await memoryHistory.drainDeletes();
+        await memoryHistory.drainDeletes(project.userId);
       }
       const history=await sourceDeletion.contributionsFor(row);
       await sourceDeletionLedger.rememberHistory(row,history);
@@ -5280,6 +5280,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           if((commit.state==='pending'||commit.state==='failed')&&!commit.nativeIngestedAt&&!commit.ingestedAt) {
             const task=commit.taskId?await sourceView.sessions.task(project.userId,commit.taskId):null;
             if(!task || !['completed','failed','cancelled','canceled'].includes(String(task.status).toLowerCase()))throw new HttpError(409,'memory_source_cleanup_busy','The source extraction has no terminal native proof.');
+            // A task that ended failed or cancelled wrote no diff: there is nothing of it to remove, and it is terminal.
+            if(['failed','cancelled','canceled'].includes(String(task.status).toLowerCase()))continue;
             throw new HttpError(409,'memory_source_lineage_unverified','The source extraction has no completed native ingestion receipt.');
           }
         }
@@ -5314,6 +5316,12 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       const records=await nativeMemory.records(user.id,{files});
       const originalSources=records.map(record=>({id:record.id,contentDigest:record.contentHash,sourcePrivacy:record.sourcePrivacy,attribution:record.attribution}));
       if(originalSources.length)await agentRuns.recordLearning(project,active[0].id,{originalSources});
+    },
+    sourceReceiptFailed:async({project,sessionId})=>{
+      if(!sessionId)return;
+      const active=(await agentRuns.list(project)).filter(run=>run.sessionId===sessionId&&run.status==='running');
+      if(active.length!==1)return;
+      await agentRuns.recordLearning(project,active[0].id,{originalSources:[{id:'memory-receipt-unavailable',contentDigest:'0'.repeat(64),sourcePrivacy:{schemaVersion:1,classification:'unclassified',reasons:['source-receipt-unavailable']},attribution:{schemaVersion:1,origins:['unknown'],confirmed:false}}]});
     },
     overlay: nativeMemoryOverlay.configured ? nativeMemoryOverlay : null,
     // The capsule's half of a search (`memoryGateway.mjs`, item 9): the notes kept for the project, the packs in force, the zones it follows.

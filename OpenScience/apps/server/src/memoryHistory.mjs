@@ -299,8 +299,9 @@ export class MemoryHistory {
   async reset(userId) { await this.ledger.fence(userId, { permanent: false }); }
   async deleteProject(userId, projectId) { await this.ledger.fence(userId, { projectId, permanent: true }); }
   async eraseAccount(userId) { await this.ledger.fence(userId, { permanent: true }); }
-  async drainDeletes() {
-    for (const row of await this.ledger.pendingDeletes()) {
+  /** @param {string | null} [ownerId] only this account's chunks, as a source cleanup asks; every account's for the worker */
+  async drainDeletes(ownerId = null) {
+    for (const row of await this.ledger.pendingDeletes(ownerId)) {
       // Cleanup works after account deletion: namespace identity and opaque URI
       // were persisted before removing the owner. No live authority is inferred.
       try {

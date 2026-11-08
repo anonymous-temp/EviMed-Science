@@ -168,12 +168,12 @@ export class MemoryHistoryLedger {
   // write can land after deletion, including after its writer crashed. The
   // fair hourly sweep checks these exact addresses again, never a new root.
   async cleaned(uri) { await this.database.query('UPDATE evimed_memory.history_chunks SET cleaned_at=clock_timestamp(),lease_until=NULL WHERE uri=$1', [uri]); }
-  async pendingDeletes() {
+  async pendingDeletes(ownerId = null) {
     await this.migrate();
     const result = await this.database.query(`UPDATE evimed_memory.history_chunks SET lease_until=clock_timestamp()+interval '30 seconds',updated_at=clock_timestamp(),
         sweeps=CASE WHEN cleaned_at IS NULL THEN 0 ELSE sweeps+1 END
-      WHERE uri IN (SELECT uri FROM evimed_memory.history_chunks WHERE state='withdrawn' AND (cleaned_at IS NULL OR (cleaned_at<clock_timestamp()-interval '1 hour' AND sweeps<3))
-        AND (lease_until IS NULL OR lease_until<clock_timestamp()) ORDER BY updated_at LIMIT 100 FOR UPDATE SKIP LOCKED) RETURNING *`);
+      WHERE uri IN (SELECT uri FROM evimed_memory.history_chunks WHERE state='withdrawn' AND ($1::text IS NULL OR owner_id=$1) AND (cleaned_at IS NULL OR (cleaned_at<clock_timestamp()-interval '1 hour' AND sweeps<3))
+        AND (lease_until IS NULL OR lease_until<clock_timestamp()) ORDER BY updated_at LIMIT 100 FOR UPDATE SKIP LOCKED) RETURNING *`, [ownerId]);
     return result.rows;
   }
   async discoverArchives(limit = 100) {

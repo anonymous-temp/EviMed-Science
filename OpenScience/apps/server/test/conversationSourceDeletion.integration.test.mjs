@@ -249,3 +249,19 @@ test('a completed deletion is never selected or downgraded, and a failed cleanup
   await f.database.query("UPDATE evimed_source_deletion.conversations SET next_attempt_at=clock_timestamp()-interval '1 second' WHERE id=$1",[retry.id]);
   assert.ok((await ledger.pending()).some(r=>r.id===retry.id));
 });
+
+test('deleting a conversation whose extraction failed abandons its commit: other memory stays visible and nothing waits on it', options, async t => {
+  const f=await fixture(t,{extract:()=>({fail:'budget_exhausted'})}), ledger=new ConversationSourceDeletionLedger(f.database);
+  const archive=await f.commitConversation('a',[{role:'user',text:'Private source whose extraction ran out of budget.'}],{projectId:'default'});
+  const unrelated=f.seed('profile.md','# Profile\n- Unrelated preference.',{type:'profile'});
+  await f.overlay.upsertFile({userId:f.userId,uri:unrelated,memoryType:'profile',body:'# Profile\n- Unrelated preference.'});
+  const stamp=(await f.database.query('SELECT created_at::text AS stamp FROM evimed_control.users WHERE id=$1',[f.userId])).rows[0].stamp;
+  await ledger.put({id:crypto.randomUUID(),userId:f.userId,projectId:'default',accountCreatedAt:stamp,projectCreatedAt:f.projectCreatedAt,rootSessionId:'session_a',sessionIds:['session_a'],frozen:{root:{id:'session_a'}},memoryUserRoot:f.sessions.userRoot(f.userId)});
+  f.overlay.sourceDeletion={ledger};
+  assert.equal((await f.overlay.commit(f.userId,archive.archive_uri)).state,'pending');
+  assert.ok((await ledger.hiddenMemoryUris(f.userId)).includes(f.sessions.userRoot(f.userId)),'while it is pending the root is held back');
+  await f.worker.processCommits({userId:f.userId});
+  assert.equal((await f.overlay.commit(f.userId,archive.archive_uri)).state,'abandoned','a failed extraction of a deleted source is terminal');
+  assert.deepEqual(await ledger.hiddenMemoryUris(f.userId),[],'the account\'s other memory is visible again');
+  assert.equal(await f.overlay.hasUnprovenNativeWrites(f.userId),false);
+});
