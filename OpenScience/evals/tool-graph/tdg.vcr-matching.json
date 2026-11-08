@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-matching",
-  "version": "sha256:5ab399842dc16ba3a9eaf54931ec56b1503ec6a5a000603635f7532a0e10d6c4",
+  "version": "sha256:f012df6eebea6ffd0ebddaef7fe6638a2c128014c570c8dcd2d4505692aa66b5",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 39,
@@ -802,6 +802,26 @@
           "maximum": 100,
           "description": "Maximum candidates."
         },
+        "age": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 130,
+          "description": "Patient age in years when the record states it; filters out trials that cannot take that age."
+        },
+        "sex": {
+          "type": "string",
+          "enum": [
+            "male",
+            "female"
+          ],
+          "description": "Patient sex when the record states it; filters out trials for the other sex."
+        },
+        "region": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "Country to search in, in the registry's English spelling (China, United States); omit to search everywhere."
+        },
         "trialIds": {
           "type": "array",
           "items": {
@@ -861,6 +881,16 @@
           "maxLength": 4000,
           "description": "Evidence question."
         },
+        "queries": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "description": "Further phrasings of the same question searched together: synonyms, abbreviations and the other language, for example \"myocardial infarction\", \"MI\", \"STEMI\", \"heart attack\". Patient search covers the whole record, not only the passages already shown."
+        },
         "sourceId": {
           "type": "string",
           "minLength": 1,
@@ -904,7 +934,7 @@
         "limit": {
           "type": "integer",
           "minimum": 1,
-          "maximum": 20,
+          "maximum": 50,
           "description": "Maximum passages."
         }
       },
