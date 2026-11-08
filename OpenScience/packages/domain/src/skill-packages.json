@@ -1222,12 +1222,12 @@
       "id": "capability/vcr-matching",
       "name": "vcr-matching",
       "origin": "capability",
-      "version": "1.9.0",
+      "version": "1.10.0",
       "source": {"kind":"release"},
-      "digest": "sha256:e4ec9197fe0885c257c4b1f1bcf04769ba6b34c9178f7dfceab53a280b0ee4a1",
+      "digest": "sha256:7d9a6fb8dddc844740f29d0edfad21f49dd31e0ef6c6cd264ff4ef873c1257e2",
       "digestAlgorithm": "release-directory-v1",
       "references": [
-        {"path":"capability.yaml","sha256":"7f17c564817ab9d88f34b81ac2efc3aeada782a1bf61c025280a5d6487527f0c"},
+        {"path":"capability.yaml","sha256":"2117af3da13ae01a9b58e59fe9d5b42866403d562fa456c787ba9415956a5f6a"},
         {"path":"references/legacy-matching.md","sha256":"e20816938dc79be93e9c669c9ff91dd85786664b00bb5e8fe6bd48a0488bc17e"}
       ],
       "dependencies": [

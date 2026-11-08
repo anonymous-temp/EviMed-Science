@@ -1,6 +1,6 @@
 {
   "id": "vcr-matching",
-  "version": "1.9.0",
+  "version": "1.10.0",
   "title": "Virtual Clinical Research — Patient Matching",
   "description": "Use the installed patient-matching plugin for source-backed eligibility assessment in either direction, native evidence and calculation, saved results and reports. Clinical eligibility and recommendation remain separate; missing evidence remains explicit.",
   "whenToUse": "Virtual Clinical Research (虚拟临床研究): Use for a requested eligibility assessment deliverable, protocol-to-patient matching or patient-to-trial matching. A single case can start from the original human message or attachment in global conversation. No study form, full protocol or PICO is required for patient-to-trial search.",
