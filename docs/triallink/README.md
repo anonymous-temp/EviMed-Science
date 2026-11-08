@@ -39,15 +39,21 @@ Linemach has three stages.
 
 ![Linemach architecture](fig0-architecture.png)
 
-1. **Retrieval.** A keyword search over the patient's condition and up to 32 ranked English search terms written from the record,
-   fused by reciprocal rank with a dense semantic search (Qwen3.7 text embedding, 1024 dimensions); trials are kept or dropped by the
-   age and sex their registry record states; the first 300 go on. In the product the keyword search runs live against
-   ClinicalTrials.gov, the EU CTIS and ChiCTR.
-2. **Ranking.** Three orders of the candidates, each from the whole registry record: a relevance reranker (Qwen3.7 text rerank, half
-   weight), and two readings by Jev 1.14 in one request — a five-level eligibility fit and a five-level graded reading taken as its
-   expected benchmark gain — fused by weighted reciprocal rank (k = 60). Ranking makes no call to a general reasoning model.
+1. **Retrieval.** A keyword search over the patient's condition (asked deepest, up to 200 trials) and up to 32 ranked English
+   search terms written from the record (Chinese terms too when the record is Chinese), fused by reciprocal rank with a dense semantic
+   search (Qwen3.7 text embedding, 1024 dimensions); trials are kept or dropped by the age and sex their registry record states; the
+   first 300 go on. A long record stands for itself as a dated profile summary (one Flash call, cached per record). In the product the
+   keyword search runs live against ClinicalTrials.gov, the EU CTIS and ChiCTR.
+2. **Ranking.** Three orders of the candidates, each from the whole registry record: an eligibility reranker (Qwen3.7 text rerank over
+   the record's first 12,000 characters, half weight), and two readings by Jev 1.14 in one request — a five-level eligibility fit and a
+   five-level graded reading taken as its expected benchmark gain — fused by weighted reciprocal rank (k = 60). Ranking makes no call to
+   a general reasoning model.
 3. **Assessment.** For the trials a clinician selects, a DeepSeek V4.1 Flash agent judges each inclusion and exclusion criterion against
-   cited passages of the record (met, not met, not enough information). The assessment explains the ranking; it does not reorder it.
+   cited passages of the record (met, not met, not enough information). It reads the newest records whole and, from older records, the
+   passages retrieved for each criterion, each passage with its record date and section; it can search the whole record. A criterion
+   that combines conditions is answered part by part and a time window by its dates, and code counts the parts and the days; every
+   judgment that cites evidence is checked once against the cited sentences. The facts that keep criteria open are listed for the
+   clinician. The assessment explains the ranking; it does not reorder it.
 
 ## 2. Evaluation protocol
 
