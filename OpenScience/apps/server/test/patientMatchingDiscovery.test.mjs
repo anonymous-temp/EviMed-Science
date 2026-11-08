@@ -24,12 +24,12 @@ test('long or blank discovery questions stop before source/model work and preser
  assert.equal(reads,0);assert.equal(models,0);
 });
 test('discovery asks the lexical branch for the condition and its ranked terms, and saves the rerank and Jev orders fused', async () => {
- let asked, saved;
+ let asked, saved, prefetched;
  const ids = ['NCT00000001', 'NCT00000002', 'NCT00000003'];
- const vcr = { service: { runtimeRead: async (_study, kind, input) => {
-   if (kind === 'candidates') { asked = input; return { candidates: ids.map(registryId => ({ registryId, title: registryId })), registries: [{ status: 'ok' }] }; }
+ const vcr = { service: { runtimeRead: async (_study, kind, input, options) => {
+   if (kind === 'candidates') { asked = { ...input, listMax: options?.listMax }; return { candidates: ids.map(registryId => ({ registryId, title: registryId })), registries: [{ status: 'ok' }] }; }
    return { record: { title: input.registryId, eligibilityText: `criteria of ${input.registryId}` } };
- } }, candidateSearches: { save: async (_study, value) => { saved = value; return 'search'; } } };
+ }, prefetchRegistryRecords: async (wanted) => { prefetched = wanted; return { prefetched: wanted.length, missing: 0 }; } }, candidateSearches: { save: async (_study, value) => { saved = value; return 'search'; } } };
  const models = { embeddingProfileDigest: 'profile',
    rerank: async () => ({ status: 'complete', data: { order: [...ids], model: 'qwen3.7-text-rerank' } }),
    jevFit: async (envelope) => {
@@ -42,10 +42,12 @@ test('discovery asks the lexical branch for the condition and its ranked terms, 
    input: { query: 'non-small cell lung cancer', terms: ['EGFR exon 19 deletion', 'osimertinib', '', 'EGFR exon 19 deletion'], limit: 3 }, patient: { sources: [], passages: [{ text: 'record' }] } });
  assert.deepEqual(asked.terms, ['EGFR exon 19 deletion', 'osimertinib']);
  assert.equal(asked.limit, 50);
+ assert.deepEqual(prefetched, ids, 'live ClinicalTrials.gov records are read in one batch before the single reads');
+ assert.equal(asked.listMax, 50, 'the live search hands over its whole kept list up to the depth, not a run-sized page');
  assert.deepEqual(saved.rerank.rerankOrder, ids);
  assert.deepEqual(saved.rerank.jev.order, [ids[1], ids[2], ids[0]]);
  assert.deepEqual(saved.rerank.finalOrder, [ids[1], ids[0], ids[2]], 'rank fusion: the second candidate leads both orders on the sum, the first keeps its rerank lead over the third');
- assert.equal(saved.rerank.policy, 'rrf-qwen-jev-v1');
+ assert.equal(saved.rerank.policy, 'triallink-1');
  assert.deepEqual(answer.data.candidates.map(row => row.registryId), saved.rerank.finalOrder);
 });
 test('without Jev the rerank order stands, and a failed Jev answer never fails discovery', async () => {

@@ -1258,6 +1258,14 @@ export function createVcrEvidencePipeline({ store, registry = null, trialCorpus 
     };
   };
 
+  // Whole ClinicalTrials.gov records a ranking read in batches (`prefetchRecords`), kept a quarter of an hour so the single reads of the same
+  // discovery that follow are served here, not by one paced registry request each. Live registry only; a frozen collection reads its snapshot.
+  const RECORD_CACHE_MS = 15 * 60_000, RECORD_CACHE_MAX = 2_000;
+  /** @type {Map<string, { built: any, at: number }>} */
+  const recordCache = new Map();
+  /** @param {string} id */
+  const cachedRecord = (id) => { const hit = recordCache.get(id); return hit && now().getTime() - hit.at < RECORD_CACHE_MS ? hit.built : null; };
+
   /**
    * One registry record, fetched and built — or the failure to. `userId` is whose
    * own EviMed key the ChiCTR seat may fall back to where the deployment has none.
@@ -1279,6 +1287,10 @@ export function createVcrEvidencePipeline({ store, registry = null, trialCorpus 
       }
     }
     if (!registry) return { failure: { status: REGISTRY_UNAVAILABLE, reason: "registry_not_configured" } };
+    if (!["chictr", "ctis"].includes(registryName)) {
+      const cached = cachedRecord(String(registryId ?? "").trim().toUpperCase());
+      if (cached) return { built: cached };
+    }
     const wanted = String(registryId ?? "").trim().toLowerCase();
     const fetched = registryName === "chictr"
       ? await registry.searchChictr({ query: String(registryId ?? ""), limit: 5, userId })
@@ -2123,6 +2135,33 @@ export function createVcrEvidencePipeline({ store, registry = null, trialCorpus 
     /** @param {any} study @param {Record<string, any>} [filter] @param {number} [limitMax] @param {AbortSignal} [signal] */
     async candidatesFor(study, filter = {}, limitMax = 20, signal) {
       return pipeline.patientCandidates({ userId: String(study?.userId ?? ""), filter, limitMax, signal, study });
+    },
+
+    /**
+     * Read many live ClinicalTrials.gov records in batches ahead of their single reads (patient-matching discovery ranks a few hundred whole
+     * records). Best effort and never throws: a record the batch did not bring is read singly as before.
+     * @param {string[]} registryIds
+     */
+    async prefetchRecords(registryIds = []) {
+      if (!registry || typeof registry.records !== "function") return { prefetched: 0, missing: 0 };
+      const wanted = [...new Set((Array.isArray(registryIds) ? registryIds : []).map((id) => String(id ?? "").trim().toUpperCase()).filter((id) => /^NCT\d{8}$/.test(id)))]
+        .filter((id) => !cachedRecord(id));
+      if (!wanted.length) return { prefetched: 0, missing: 0 };
+      try {
+        const answer = await registry.records(wanted);
+        const at = now().getTime();
+        for (const item of answer?.items ?? []) {
+          const id = String(item?.precedent?.registryId ?? "");
+          if (!id) continue;
+          recordCache.delete(id);
+          recordCache.set(id, { built: item, at });
+        }
+        while (recordCache.size > RECORD_CACHE_MAX) recordCache.delete(/** @type {string} */ (recordCache.keys().next().value));
+        return { prefetched: (answer?.items ?? []).length, missing: (answer?.missing ?? []).length };
+      } catch (error) {
+        logger?.warn?.("vcr.evidence.registry_prefetch_failed", { reason: String(/** @type {any} */ (error)?.code ?? "request_failed") });
+        return { prefetched: 0, missing: wanted.length };
+      }
     },
 
     /** @param {any} study @param {Record<string, any>} [filter] @param {AbortSignal} [signal] */

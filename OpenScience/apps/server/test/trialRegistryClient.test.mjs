@@ -734,3 +734,18 @@ test("ChiCTR takes the EviMed key like every connector: the deployment's first, 
   const failing = createTrialRegistryClient({ fetchImpl, sleep: noSleep, chictrAdapter: broken });
   assert.equal((await failing.searchChictr({ query: "x", userId: "alice" })).reason, "registry_not_configured");
 });
+
+test("records reads many ClinicalTrials.gov records a hundred per request, each built as record builds it, and names what the registry did not return", async () => {
+  const { fetchImpl, seen } = upstream((url) => (url.includes("filter.ids=") ? { body: { studies: [FLAURA] } } : { status: 500 }));
+  const client = createTrialRegistryClient({ fetchImpl, now: () => new Date(AT), sleep: noSleep });
+  const ids = ["NCT02296125", ...Array.from({ length: 120 }, (_, at) => `NCT${String(10000000 + at)}`), "not-an-id", "nct02296125"];
+  const answer = await client.records(ids);
+  assert.equal(seen.length, 2, "121 distinct ids are two requests of at most a hundred");
+  assert.match(seen[0], /\/studies\?filter\.ids=NCT02296125,NCT10000000,.*&pageSize=100&format=json$/);
+  assert.equal(answer.status, "ok");
+  assert.deepEqual(answer.items.map((item) => item.precedent.registryId), ["NCT02296125"], "a record the chunk did not ask for is not taken twice");
+  assert.deepEqual(answer.items[0].precedent, (await createTrialRegistryClient({ fetchImpl: upstream(() => ({ body: FLAURA })).fetchImpl, now: () => new Date(AT), sleep: noSleep }).record("NCT02296125")).precedent);
+  assert.equal(answer.missing.length, 120);
+  const down = await createTrialRegistryClient({ fetchImpl: upstream(() => ({ status: 503 })).fetchImpl, now: () => new Date(AT), sleep: noSleep, maxAttempts: 1 }).records(["NCT02296125"]);
+  assert.deepEqual([down.status, down.items.length, down.missing], [REGISTRY_UNAVAILABLE, 0, ["NCT02296125"]]);
+});

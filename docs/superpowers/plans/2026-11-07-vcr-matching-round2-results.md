@@ -4,6 +4,8 @@
 
 **Owner direction (2026-11-07):** the earlier stop on leaderboards held only until the architecture was settled; Jev goes in; find the best architecture by experiment; use the current retrieval (Qwen3.7 hybrid) and build the TREC index for the leaderboards; delete what is unused; commit and push; list every result table and every compared system for the external technical report.
 
+**2026-11-08:** the architecture is named **TrialLink** (policy id `triallink-1`, formerly `rrf-qwen-jev-v1`; same function). The external, publishable leaderboard is [docs/triallink](../../triallink/README.md): TrialLink's production configuration (Jev 1.14) against published systems only. This document stays the internal record with every arm.
+
 Machine-readable tables: [assets](2026-11-07-vcr-matching-round2-assets/). Earlier evidence stays where it was: [V1 diagnosis](2026-11-05-vcr-matching-next-phase.md), [V3 design](2026-11-05-vcr-matching-plugin-v3.md), [V3 execution](2026-11-05-vcr-matching-plugin-v3-execution.md).
 
 ## 1. The architecture the experiments chose
@@ -15,7 +17,7 @@ patient record
   → reciprocal-rank fusion of the recall lists (depth 300 by default, at most 500)
   → Qwen3.7 text rerank of the fused list (relevance order)
   → Jev five-level typed fit of each candidate's whole record (eligibility-aware order)
-  → final order = reciprocal-rank fusion of the rerank order and the Jev order   (policy rrf-qwen-jev-v1, k = 60)
+  → final order = reciprocal-rank fusion of the rerank order and the Jev order   (TrialLink policy triallink-1, k = 60)
   → native DSH managed Flash child: criterion-level eligibility, evidence and calculation tools, for the pairs the user assesses
 ```
 
@@ -339,7 +341,9 @@ A read-only trace of every importer of the old path decided what could go now; t
 | G1: the plugin serves project-scoped studies and ships everywhere; then delete the batch judge, `match_judge`, the old reranker, `legacy-matching.md`, old eval drivers, prompt builders | old path still live | the deployment decision; one real-session check that a programme run binds the project study |
 | Publication and deployment of plugin 0.1.2 (worker 0.1.0 unchanged) | native smoke and status smoke pass offline on the pinned kernel (DSH 0.2.1-rc.5, zero model calls; bundle SHA256 4f301473…c30d2d with fast-uri 3.1.9, receipts in the assets) | owner |
 | Operator step after the release | — | `node scripts/ops/vcr-retire-unread-tables.mjs --apply` (five tables) |
-| Production trial index (ClinicalTrials.gov + ChiCTR, Qwen3.7, 1024-d) | the TREC snapshots were indexed for the benchmark only | operator build with `deploy/patient-matching/build-trial-index.mjs` |
+| ~~Production trial index~~ | not needed (owner, 2026-11-08): production searches ClinicalTrials.gov (official API), CTIS and ChiCTR (EviMed evidence API) live; the dense branch stays optional and off without a manifest | — |
+
+**Fixed 2026-11-08 (production retrieval).** The live registry search handed discovery one run-sized page (20, `OPEN_SCIENCE_VCR_CANDIDATE_SEARCH_MAX`), so production ranked 20 candidates where the boards ranked 300. Discovery now reads the whole kept list up to its depth (`runtimeRead(..., { listMax })`, the control plane's own option; the runtime's reads keep their page), and reads the ClinicalTrials.gov records it ranks in batches of 100 (`filter.ids`, one request per hundred, a 15-minute cache in front of the single reads) instead of one paced request per trial (300 × 250 ms).
 
 ## Appendix A. Every compared system and its source
 

@@ -1641,6 +1641,35 @@ export function createTrialRegistryClient({
     },
 
     /**
+     * Many ClinicalTrials.gov records in one request per hundred (`filter.ids`), each built exactly as `record` builds it. A ranking that
+     * reads a few hundred whole records would otherwise spend one paced request on each; the registry limits a caller's rate.
+     * `items` holds the records the registry returned; an id it did not return is in `missing`, never invented.
+     * @param {string[]} registryIds
+     */
+    async records(registryIds) {
+      const ids = [...new Set((Array.isArray(registryIds) ? registryIds : []).map((id) => text(id).toUpperCase()).filter((id) => /^NCT\d{8}$/.test(id)))];
+      if (!origin || typeof fetchImpl !== "function") return { ...unavailable("registry_not_configured"), items: [], missing: ids };
+      /** @type {any[]} */
+      const items = [];
+      let failure = null;
+      for (let at = 0; at < ids.length; at += 100) {
+        const chunk = ids.slice(at, at + 100);
+        counters.records += chunk.length;
+        const answer = await getJson(`${origin}/studies?filter.ids=${chunk.map(encodeURIComponent).join(",")}&pageSize=${chunk.length}&format=json`, Date.now() + timeoutMs, { lane: "clinicaltrials.gov" });
+        if (!answer.ok) { failure = answer.reason; continue; }
+        const retrievedAt = now().toISOString();
+        for (const study of Array.isArray(answer.body?.studies) ? answer.body.studies : []) {
+          const built = ctgovPrecedent(study, { retrievedAt });
+          if (built.precedent.registryId && chunk.includes(built.precedent.registryId)) items.push({ status: "ok", ...built });
+        }
+        observed("clinicaltrials.gov", "available", null, retrievedAt);
+      }
+      const found = new Set(items.map((item) => item.precedent.registryId));
+      if (failure && !items.length) observed("clinicaltrials.gov", "unavailable", failure);
+      return { status: items.length || !failure ? "ok" : REGISTRY_UNAVAILABLE, ...(failure ? { reason: failure } : {}), items, missing: ids.filter((id) => !found.has(id)) };
+    },
+
+    /**
      * Candidate EU CTIS trials, one page. Like `search`, a query and not a
      * judgment; and like it, an answer the registry did not give is
      * `registry_unavailable` with a reason and never an empty list.

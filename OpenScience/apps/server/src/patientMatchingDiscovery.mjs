@@ -5,7 +5,7 @@ import {maskIdentifiers} from '@evimed/domain';
 import {patientMatchingRankingDocument,MATCHING_RANKING_VIEW} from './patientMatchingRankingText.mjs';
 const result=(status,data)=>({status,summary:'Candidate discovery completed with recorded coverage and order.',data,artifacts:[]});
 /**
- * Ranking (policy `rrf-qwen-jev-v1`, measured on Board A and Board E 2026-11-07): lexical registry recall over the condition and its ranked
+ * TrialLink ranking (policy `triallink-1`, measured on Board A and Board E 2026-11-07): lexical registry recall over the condition and its ranked
  * terms, the plugin's dense index, fused; Qwen3.7 reranks the fused list and Jev scores each candidate's whole record on a five-level fit;
  * the saved order is the reciprocal-rank fusion of the two. `depth` bounds every stage (at most 500, the reranker's request bound).
  * @param {{vcr:any,models:any,index?:any,jevEnabled?:boolean,depth?:number,jevDepth?:number,assertCurrent?:(envelope:any)=>Promise<any>}} dependencies
@@ -20,7 +20,7 @@ export function createPatientMatchingDiscovery({vcr,models,index=null,jevEnabled
     const subjectKey=meta.contextSubjectKey??meta.selectedPairs[0]?.subjectKey??null;
     const terms=[...new Set((Array.isArray(input.terms)?input.terms:[]).map(term=>String(term??'').trim()).filter(term=>term&&[...term].length<=200))].slice(0,32);
     const filter={condition:query,...(terms.length?{terms}:{}),...(subjectKey?{subjectKey}:{}),limit:stageDepth,...(meta.collection?{collection:meta.collection}:{} )};
-    const incoming=await vcr.service.runtimeRead(study,'candidates',filter,{ownerView:true});
+    const incoming=await vcr.service.runtimeRead(study,'candidates',filter,{ownerView:true,listMax:stageDepth});
     const candidates=new Map((incoming.candidates??[]).map(row=>[row.registryId,row]));
     const objective=(query+'\n'+(patient?.passages??[]).map(passage=>passage.text).join('\n')).slice(0,8000);
     const envelope={scope,origin,signal:origin.signal,input:{taskId:meta.taskId,query:objective,limit:stageDepth,patientSources:patient?.sources??[]}};
@@ -30,6 +30,7 @@ export function createPatientMatchingDiscovery({vcr,models,index=null,jevEnabled
     const exact=[...new Set(input.trialIds??[])];
     const collection=meta.collection??incoming.collection?.id,collectionRevision=meta.collectionRevision??incoming.collection?.revision;
     const registryIds=[...new Set([...candidates.keys(),...exact,...denseIds])].slice(0,stageDepth*2),sourceFailures=[];
+    if(!collection&&typeof vcr.service.prefetchRegistryRecords==='function')await vcr.service.prefetchRegistryRecords(registryIds.filter(id=>/^NCT\d{8}$/.test(id))).catch(()=>null);
     let nextRecord=0;
     await Promise.all(Array.from({length:Math.min(4,registryIds.length)},async()=>{
       for(;;){const at=nextRecord++;if(at>=registryIds.length)break;const registryId=registryIds[at];

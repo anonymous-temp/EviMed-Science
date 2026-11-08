@@ -1681,6 +1681,15 @@ export class VcrService {
   }
 
   /**
+   * Patient-matching discovery reads a few hundred live ClinicalTrials.gov records: one batched request per hundred first (best effort).
+   * @param {string[]} registryIds
+   */
+  async prefetchRegistryRecords(registryIds) {
+    const evidence = this.packages?.evidence;
+    return typeof evidence?.prefetchRecords === "function" ? evidence.prefetchRecords(registryIds) : { prefetched: 0, missing: 0 };
+  }
+
+  /**
    * What a run may read. **Aggregates and structure only**: no row of any
    * person ever appears here, and a cell speaking for fewer than
    * `minCell` people is suppressed by the domain's `suppressForModel` before it
@@ -1690,11 +1699,13 @@ export class VcrService {
    * the person's own record, so it is judged and audited per read and answers
    * with a pseudonymous key and nothing that names anyone.
    *
-   * `options.ownerView` is {@link forModel}'s: set only by the gateway for the study owner's own conversation.
+   * `options.ownerView` is {@link forModel}'s: set only by the gateway for the study owner's own conversation. `options.listMax` is the
+   * control plane's own and never the runtime's (the gateway passes only `signal` and `ownerView`): patient-matching discovery reads a live
+   * search's whole kept list, up to its ranking depth, where a run reads it a page at a time.
    *
-   * @param {any} study @param {string} what @param {Record<string, any>} [filter] @param {{ signal?: AbortSignal, ownerView?: boolean }} [options]
+   * @param {any} study @param {string} what @param {Record<string, any>} [filter] @param {{ signal?: AbortSignal, ownerView?: boolean, listMax?: number }} [options]
    */
-  async runtimeRead(study, what, filter = {}, { signal, ownerView = false } = {}) {
+  async runtimeRead(study, what, filter = {}, { signal, ownerView = false, listMax = 0 } = {}) {
     if (!VCR_READ_WHATS.includes(what)) {
       throw failure(400, "vcr_read_what_invalid", `what must be one of: ${VCR_READ_WHATS.join(", ")}.`);
     }
@@ -1703,14 +1714,14 @@ export class VcrService {
     if (what === 'data_intake') return { available: false, code: 'vcr_invocation_unavailable', message: 'Original upload intake requires the verified current conversation.' };
     if (!study.id && !['trial_registry_record','models','library','candidates'].includes(what)
       && !(what === 'matching' && ['contract', 'terminology'].includes(filter.kind))) return { available:true,empty:true,study:null,scope:'conversation' };
-    const payload = await this.#runtimeRead(study, what, filter, signal, ownerView);
+    const payload = await this.#runtimeRead(study, what, filter, signal, ownerView, listMax);
     // This one projection has already verified the entire generated lineage; synthetic counts are not patient disclosure cells.
     if (what === "generated_records") return stripPlaneAddresses(payload);
     return this.forModel(payload, { publishedFigures: VCR_PUBLISHED_FIGURE_READS.includes(what), projection:what, ownerView });
   }
 
   /** @param {any} study @param {string} what @param {Record<string, any>} filter @param {AbortSignal} [signal] @param {boolean} [ownerView] */
-  async #runtimeRead(study, what, filter, signal, ownerView = false) {
+  async #runtimeRead(study, what, filter, signal, ownerView = false, listMax = 0) {
     if (what === "followup_history") return this.followupHistoryForRuntime(study);
     // Only the gateway has the verified native root invocation needed to locate a selected patient's context.
     if (what === "patient_context") return { candidates: [], nextBeforeSeq: null };
@@ -1891,7 +1902,7 @@ export class VcrService {
         if (!evidence?.candidatesFor) {
           return { available: false, code: "registry_unavailable", message: "试验登记检索未接入：这一步暂不可用，其余步骤照常。" };
         }
-        const max = Number(this.config?.vcrCandidateSearchMax) > 0 ? Number(this.config.vcrCandidateSearchMax) : 20;
+        const max = Number(listMax) > 0 ? Math.min(500, Math.trunc(Number(listMax))) : Number(this.config?.vcrCandidateSearchMax) > 0 ? Number(this.config.vcrCandidateSearchMax) : 20;
         const answer = await evidence.candidatesFor(study, filter, max, signal);
         return answer;
       }

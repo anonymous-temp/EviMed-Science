@@ -1,0 +1,265 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+  "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg xmlns:xlink="http://www.w3.org/1999/xlink" width="590.4pt" height="319.68pt" viewBox="0 0 590.4 319.68" xmlns="http://www.w3.org/2000/svg" version="1.1">
+ <metadata>
+  <rdf:RDF xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:cc="http://creativecommons.org/ns#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+   <cc:Work>
+    <dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/>
+    <dc:date>2026-11-08T02:22:06.523788</dc:date>
+    <dc:format>image/svg+xml</dc:format>
+    <dc:creator>
+     <cc:Agent>
+      <dc:title>Matplotlib v3.10.3, https://matplotlib.org/</dc:title>
+     </cc:Agent>
+    </dc:creator>
+   </cc:Work>
+  </rdf:RDF>
+ </metadata>
+ <defs>
+  <style type="text/css">*{stroke-linejoin: round; stroke-linecap: butt}</style>
+ </defs>
+ <g id="figure_1">
+  <g id="patch_1">
+   <path d="M 0 319.68 
+L 590.4 319.68 
+L 590.4 0 
+L 0 0 
+z
+" style="fill: #fcfcfb"/>
+  </g>
+  <g id="axes_1">
+   <g id="patch_2">
+    <path d="M 205.73 281.22 
+L 571.68 281.22 
+L 571.68 55.44 
+L 205.73 55.44 
+z
+" style="fill: #fcfcfb"/>
+   </g>
+   <g id="matplotlib.axis_1">
+    <g id="xtick_1">
+     <g id="line2d_1">
+      <path d="M 205.73 281.22 
+L 205.73 55.44 
+" clip-path="url(#p4252cce391)" style="fill: none; stroke: #e1e0d9; stroke-width: 0.8; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_2"/>
+     <g id="text_1">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #898781" x="205.73" y="292.318437" transform="rotate(-0 205.73 292.318437)">0.0</text>
+     </g>
+    </g>
+    <g id="xtick_2">
+     <g id="line2d_3">
+      <path d="M 278.92 281.22 
+L 278.92 55.44 
+" clip-path="url(#p4252cce391)" style="fill: none; stroke: #e1e0d9; stroke-width: 0.8; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_4"/>
+     <g id="text_2">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #898781" x="278.92" y="292.318437" transform="rotate(-0 278.92 292.318437)">0.2</text>
+     </g>
+    </g>
+    <g id="xtick_3">
+     <g id="line2d_5">
+      <path d="M 352.11 281.22 
+L 352.11 55.44 
+" clip-path="url(#p4252cce391)" style="fill: none; stroke: #e1e0d9; stroke-width: 0.8; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_6"/>
+     <g id="text_3">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #898781" x="352.11" y="292.318437" transform="rotate(-0 352.11 292.318437)">0.4</text>
+     </g>
+    </g>
+    <g id="xtick_4">
+     <g id="line2d_7">
+      <path d="M 425.3 281.22 
+L 425.3 55.44 
+" clip-path="url(#p4252cce391)" style="fill: none; stroke: #e1e0d9; stroke-width: 0.8; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_8"/>
+     <g id="text_4">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #898781" x="425.3" y="292.318437" transform="rotate(-0 425.3 292.318437)">0.6</text>
+     </g>
+    </g>
+    <g id="xtick_5">
+     <g id="line2d_9">
+      <path d="M 498.49 281.22 
+L 498.49 55.44 
+" clip-path="url(#p4252cce391)" style="fill: none; stroke: #e1e0d9; stroke-width: 0.8; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_10"/>
+     <g id="text_5">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #898781" x="498.49" y="292.318437" transform="rotate(-0 498.49 292.318437)">0.8</text>
+     </g>
+    </g>
+    <g id="xtick_6">
+     <g id="line2d_11">
+      <path d="M 571.68 281.22 
+L 571.68 55.44 
+" clip-path="url(#p4252cce391)" style="fill: none; stroke: #e1e0d9; stroke-width: 0.8; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_12"/>
+     <g id="text_6">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #898781" x="571.68" y="292.318437" transform="rotate(-0 571.68 292.318437)">1.0</text>
+     </g>
+    </g>
+    <g id="text_7">
+     <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #52514e" x="388.705" y="305.996562" transform="rotate(-0 388.705 305.996562)">nDCG@10 (macro over three cohorts)</text>
+    </g>
+   </g>
+   <g id="matplotlib.axis_2">
+    <g id="ytick_1">
+     <g id="line2d_13"/>
+     <g id="text_8">
+      <text style="font-weight: 700; font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: end; fill: #0b0b0b" x="197.73" y="78.054219" transform="rotate(-0 197.73 78.054219)">TrialLink (EviMed)</text>
+     </g>
+    </g>
+    <g id="ytick_2">
+     <g id="line2d_14"/>
+     <g id="text_9">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: end; fill: #0b0b0b" x="197.73" y="109.412552" transform="rotate(-0 197.73 109.412552)">TrialGPT 2.0 · GPT-5.4</text>
+     </g>
+    </g>
+    <g id="ytick_3">
+     <g id="line2d_15"/>
+     <g id="text_10">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: end; fill: #0b0b0b" x="197.73" y="140.770885" transform="rotate(-0 197.73 140.770885)">TrialGPT 2.0 · Gemini-3.1-pro-preview</text>
+     </g>
+    </g>
+    <g id="ytick_4">
+     <g id="line2d_16"/>
+     <g id="text_11">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: end; fill: #0b0b0b" x="197.73" y="172.129219" transform="rotate(-0 197.73 172.129219)">TrialGPT 1.0 · GPT-5.4</text>
+     </g>
+    </g>
+    <g id="ytick_5">
+     <g id="line2d_17"/>
+     <g id="text_12">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: end; fill: #0b0b0b" x="197.73" y="203.487552" transform="rotate(-0 197.73 203.487552)">TrialGPT 2.0 · GPT-4.1</text>
+     </g>
+    </g>
+    <g id="ytick_6">
+     <g id="line2d_18"/>
+     <g id="text_13">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: end; fill: #0b0b0b" x="197.73" y="234.845885" transform="rotate(-0 197.73 234.845885)">TrialGPT 1.0 · Gemini-3.1-pro-preview</text>
+     </g>
+    </g>
+    <g id="ytick_7">
+     <g id="line2d_19"/>
+     <g id="text_14">
+      <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: end; fill: #0b0b0b" x="197.73" y="266.204219" transform="rotate(-0 197.73 266.204219)">TrialGPT 1.0 · GPT-4.1</text>
+     </g>
+    </g>
+   </g>
+   <g id="patch_3">
+    <path d="M 205.73 66.101833 
+L 489.34125 66.101833 
+L 489.34125 82.408167 
+L 205.73 82.408167 
+z
+" clip-path="url(#p4252cce391)" style="fill: #2a78d6"/>
+   </g>
+   <g id="patch_4">
+    <path d="M 205.73 97.460167 
+L 483.852 97.460167 
+L 483.852 113.7665 
+L 205.73 113.7665 
+z
+" clip-path="url(#p4252cce391)" style="fill: #898781"/>
+   </g>
+   <g id="patch_5">
+    <path d="M 205.73 128.8185 
+L 483.852 128.8185 
+L 483.852 145.124833 
+L 205.73 145.124833 
+z
+" clip-path="url(#p4252cce391)" style="fill: #898781"/>
+   </g>
+   <g id="patch_6">
+    <path d="M 205.73 160.176833 
+L 476.533 160.176833 
+L 476.533 176.483167 
+L 205.73 176.483167 
+z
+" clip-path="url(#p4252cce391)" style="fill: #898781"/>
+   </g>
+   <g id="patch_7">
+    <path d="M 205.73 191.535167 
+L 469.214 191.535167 
+L 469.214 207.8415 
+L 205.73 207.8415 
+z
+" clip-path="url(#p4252cce391)" style="fill: #898781"/>
+   </g>
+   <g id="patch_8">
+    <path d="M 205.73 222.8935 
+L 469.214 222.8935 
+L 469.214 239.199833 
+L 205.73 239.199833 
+z
+" clip-path="url(#p4252cce391)" style="fill: #898781"/>
+   </g>
+   <g id="patch_9">
+    <path d="M 205.73 254.251833 
+L 454.576 254.251833 
+L 454.576 270.558167 
+L 205.73 270.558167 
+z
+" clip-path="url(#p4252cce391)" style="fill: #898781"/>
+   </g>
+   <g id="line2d_20">
+    <path d="M 477.63085 74.255 
+L 500.6857 74.255 
+" clip-path="url(#p4252cce391)" style="fill: none; stroke: #52514e; stroke-width: 1.2"/>
+   </g>
+   <g id="line2d_21">
+    <path d="M 477.63085 70.178417 
+L 477.63085 78.331583 
+" clip-path="url(#p4252cce391)" style="fill: none; stroke: #52514e; stroke-width: 1.2; stroke-linecap: square"/>
+   </g>
+   <g id="line2d_22">
+    <path d="M 500.6857 70.178417 
+L 500.6857 78.331583 
+" clip-path="url(#p4252cce391)" style="fill: none; stroke: #52514e; stroke-width: 1.2; stroke-linecap: square"/>
+   </g>
+   <g id="patch_10">
+    <path d="M 205.73 281.22 
+L 205.73 55.44 
+" style="fill: none; stroke: #c3c2b7; stroke-width: 0.8; stroke-linejoin: miter; stroke-linecap: square"/>
+   </g>
+   <g id="text_15">
+    <text style="font-weight: 700; font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #0b0b0b" x="505.0771" y="77.014375" transform="rotate(-0 505.0771 77.014375)">0.775</text>
+   </g>
+   <g id="text_16">
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #0b0b0b" x="488.2434" y="108.372708" transform="rotate(-0 488.2434 108.372708)">0.76</text>
+   </g>
+   <g id="text_17">
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #0b0b0b" x="488.2434" y="139.731042" transform="rotate(-0 488.2434 139.731042)">0.76</text>
+   </g>
+   <g id="text_18">
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #0b0b0b" x="480.9244" y="171.089375" transform="rotate(-0 480.9244 171.089375)">0.74</text>
+   </g>
+   <g id="text_19">
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #0b0b0b" x="473.6054" y="202.447708" transform="rotate(-0 473.6054 202.447708)">0.72</text>
+   </g>
+   <g id="text_20">
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #0b0b0b" x="473.6054" y="233.806042" transform="rotate(-0 473.6054 233.806042)">0.72</text>
+   </g>
+   <g id="text_21">
+    <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #0b0b0b" x="458.9674" y="265.164375" transform="rotate(-0 458.9674 265.164375)">0.68</text>
+   </g>
+  </g>
+  <g id="text_22">
+   <text style="font-weight: 700; font-size: 12.5px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #0b0b0b" x="7.0848" y="17.490047" transform="rotate(-0 7.0848 17.490047)">Patient-to-trial ranking: nDCG@10</text>
+  </g>
+  <g id="text_23">
+   <text style="font-size: 9.5px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #52514e" x="7.0848" y="38.250516" transform="rotate(-0 7.0848 38.250516)">SIGIR 2016 + TREC CT 2021/2022 · 183 patients · TrialGPT 2.0 evaluator · whisker: TrialLink 95% CI</text>
+  </g>
+ </g>
+ <defs>
+  <clipPath id="p4252cce391">
+   <rect x="205.73" y="55.44" width="365.95" height="225.78"/>
+  </clipPath>
+ </defs>
+</svg>

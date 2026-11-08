@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * The plugin's own ranking function (`composeRanking`, policy rrf-qwen-jev-v1) applied to saved provider answers, so a board scores the
+ * The plugin's own ranking function (`composeRanking`, TrialLink policy triallink-1) applied to saved provider answers, so a board scores the
  * order the product would save: Qwen3.7 rerank scores give the rerank order (ties keep the candidate list's order, as the model port
  * does) and Jev's five-level fit scores give the second order. Writes judgments.jsonl per cohort for `score.py a` or a run file for E.
  *

@@ -18,7 +18,7 @@ test('the trial record keeps the benchmark field order and the whole eligibility
 });
 
 test('rank fusion follows the measured policy and never invents or drops a candidate', () => {
-  assert.equal(RANKING_POLICY.id, 'rrf-qwen-jev-v1');
+  assert.equal(RANKING_POLICY.id, 'triallink-1');
   const rerankOrder = ['a', 'b', 'c', 'd'];
   const fused = composeRanking({ rerankOrder, jevScores: [{ registryId: 'd', score: 3.9 }, { registryId: 'a', score: 0.1 }, { registryId: 'b', score: 2 }, { registryId: 'c', score: 2 }, { registryId: 'zz', score: 4 }] });
   assert.deepEqual(fused.jevOrder, ['d', 'b', 'c', 'a']);

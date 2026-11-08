@@ -4,7 +4,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { REGISTRY_UNAVAILABLE, chictrPrecedent, ctisListItem } from "../src/trialRegistryClient.mjs";
+import { REGISTRY_UNAVAILABLE, chictrPrecedent, ctgovPrecedent, ctisListItem } from "../src/trialRegistryClient.mjs";
+import { FLAURA } from "./vcrEvidenceFixtures.mjs";
 import {
   CANDIDATES_NOT_COVERED, ageBands, ageFit, candidateRequest, chictrCandidate, coverageSentence, ctgovCandidate, ctisCandidate,
   filterCandidates, interleave, mergeCandidates, regionFit, registryOutcome, sexFit, sexOf,
@@ -275,6 +276,31 @@ test("candidates is a read of its own, a registry search that needs no study, an
   assert.equal(answer.registries[0].searched[0].total, 2);
   const raw = await evidence.candidatesFor({ userId: "u1" }, { condition: "lung cancer" }, 3);
   assert.deepEqual(answer, JSON.parse(JSON.stringify(raw)));
+  // The control plane's own discovery reads the whole kept list up to its ranking depth; the runtime's read keeps the deployment's page.
+  const whole = await service.runtimeRead({ id: null, userId: "u1", projectId: "prj_1", scope: "conversation" }, "candidates", { condition: "lung cancer", limit: 300 }, { listMax: 300 });
+  assert.equal(whole.candidates.length, whole.retrieved, "nothing the search kept is cut by the run's page size");
+  assert.ok(whole.candidates.length > 3);
   const absent = await new VcrService({ store: {}, config: {} }).runtimeRead({ id: null, userId: "u1", scope: "conversation" }, "candidates", { condition: "x" });
   assert.deepEqual([absent.available, absent.code], [false, "registry_unavailable"]);
+});
+
+test("a ranking's batch read serves the record reads that follow; a record the batch did not bring is read singly", async () => {
+  const calls = { records: [], record: [] };
+  const built = ctgovPrecedent(FLAURA, { retrievedAt: AT });
+  const registry = {
+    async records(ids) { calls.records.push(ids); return { status: "ok", items: [{ status: "ok", ...built }], missing: ids.filter((id) => id !== built.precedent.registryId) }; },
+    async record(id) { calls.record.push(id); return { status: "ok", ...built }; },
+  };
+  const pipeline = createVcrEvidencePipeline({ store: {}, registry, now: () => NOW });
+  assert.deepEqual(await pipeline.prefetchRecords(["NCT02296125", "NCT07300001", "ChiCTR2400000031", "nct02296125"]), { prefetched: 1, missing: 1 });
+  assert.deepEqual(calls.records, [["NCT02296125", "NCT07300001"]], "ClinicalTrials.gov ids only, each once");
+  const read = await pipeline.readRegistryRecord({ registry: "clinicaltrials.gov", registryId: "NCT02296125" });
+  assert.equal(read.available, true);
+  assert.equal(read.registryId, "NCT02296125");
+  assert.equal(calls.record.length, 0, "served from the batch, no request of its own");
+  await pipeline.readRegistryRecord({ registry: "clinicaltrials.gov", registryId: "NCT07300001" });
+  assert.deepEqual(calls.record, ["NCT07300001"]);
+  assert.deepEqual(await pipeline.prefetchRecords(["NCT02296125"]), { prefetched: 0, missing: 0 }, "a fresh record is not asked for again");
+  const service = new VcrService({ store: {}, config: {}, evidence: pipeline });
+  assert.deepEqual(await service.prefetchRegistryRecords(["NCT02296125"]), { prefetched: 0, missing: 0 });
 });
