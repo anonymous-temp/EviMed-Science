@@ -55,11 +55,26 @@ test('scope deletion persists before physical deletion and a raced writer cannot
   await f.service.ingestArchive(f.commit, f.context); assert.equal(f.files.size, 0);
 });
 
-test('index failure leaves the native commit pending and is recoverable on a later settle', options, async t => {
+test('an index failure never holds the native commit: it settles first and the backfill retries the archive', options, async t => {
   const f = await setup(t); f.worker.history = f.service; f.worker.memoryContexts = { forUri: async () => f.context, assertKnown: async () => {} }; f.failWrites(true);
-  await f.worker.processCommits({ userId: f.userId }); assert.equal((await f.overlay.openCommits({ userId: f.userId }))[0].state, 'pending');
-  f.failWrites(false); await f.worker.processCommits({ userId: f.userId }); assert.equal((await search(f)).length, 1);
-  assert.equal((await f.overlay.openCommits({ userId: f.userId })).length, 0);
+  await f.worker.processCommits({ userId: f.userId });
+  assert.equal((await f.overlay.openCommits({ userId: f.userId })).length, 0, 'the commit is completed although the index failed');
+  const state = async () => (await f.database.query('SELECT state,attempts,next_attempt_at>clock_timestamp() AS waiting FROM evimed_memory.history_archives WHERE archive_uri=$1', [f.commit.archiveUri])).rows[0];
+  assert.equal((await state()).state, 'unavailable'); assert.equal((await state()).waiting, true, 'a failure waits out a backoff');
+  f.failWrites(false); f.service.contexts.forUri = async () => f.context;
+  await f.database.query("UPDATE evimed_memory.history_archives SET next_attempt_at=clock_timestamp()-interval '1 second' WHERE archive_uri=$1", [f.commit.archiveUri]);
+  await f.service.backfill(); assert.equal((await search(f)).length, 1);
+});
+
+test('an unproven source is terminal for history, and repeated failures back off to a long pause', options, async t => {
+  const f = await setup(t); f.service.resolveSource = async () => null;
+  await f.service.ingestArchive(f.commit, f.context);
+  const row = async () => (await f.database.query('SELECT state,reason FROM evimed_memory.history_archives WHERE archive_uri=$1', [f.commit.archiveUri])).rows[0];
+  assert.deepEqual(await row(), { state: 'excluded', reason: 'memory_history_source_unproven' });
+  await f.database.query("UPDATE evimed_memory.history_archives SET state='unavailable',attempts=8 WHERE archive_uri=$1", [f.commit.archiveUri]);
+  await f.ledger.finishArchive(f.commit, f.context, 'unavailable', { reason: 'memory_history_index_unavailable' });
+  const paused = (await f.database.query("SELECT next_attempt_at>clock_timestamp()+interval '6 days' AS long FROM evimed_memory.history_archives WHERE archive_uri=$1", [f.commit.archiveUri])).rows[0];
+  assert.equal(paused.long, true);
 });
 
 test('native reset and project deletion fence indexed history before touching engine bytes', options, async t => {
@@ -367,6 +382,17 @@ test('an untyped resource error resembling a capacity reason remains a retryable
   f.worker.memoryContexts={forUri:async()=>f.context,assertKnown:async()=>{}};
   f.resources.writeHistory=async()=>{throw Object.assign(new Error('provider unavailable'),{code:'memory_history_archive_too_large'});};
   await f.worker.processCommits({userId:f.userId});
-  assert.equal((await f.overlay.commit(f.userId,f.commit.archiveUri)).state,'pending');
+  assert.equal((await f.overlay.commit(f.userId,f.commit.archiveUri)).state,'completed','the commit settles before the optional index');
   const coverage=await f.service.coverage(f.userId);assert.equal(coverage.unavailable,1);assert.equal(coverage.partial,0);
+});
+
+test('a withdrawn chunk whose removal was proven is re-checked a few times, not hourly forever', options, async t => {
+  const f = await setup(t); await f.service.ingestArchive(f.commit, f.context);
+  await f.service.removeConversation(f.context, 'session_a');
+  for (let pass = 0; pass < 6; pass++) {
+    await f.database.query("UPDATE evimed_memory.history_chunks SET cleaned_at=cleaned_at-interval '2 hours',lease_until=NULL WHERE state='withdrawn' AND cleaned_at IS NOT NULL");
+    await f.service.drainDeletes();
+  }
+  const row = (await f.database.query("SELECT max(sweeps)::int AS sweeps FROM evimed_memory.history_chunks WHERE state='withdrawn'")).rows[0];
+  assert.ok(row.sweeps >= 1 && row.sweeps <= 3, `sweeps stop at the cap (${row.sweeps})`);
 });

@@ -142,7 +142,8 @@ export class MemoryHistory {
     // the first-party conversation and all exclusion classes on every retry.
     const resolved = await this.resolveSource(commit, context);
     const source = resolved ? { ...resolved, conversationTitle: historyTitle(resolved.conversationTitle), projectTitle: historyTitle(resolved.projectTitle ?? resolved.project?.name,'Project') } : null;
-    if (!source || source.sessionId !== platformSessionOf(commit.engineSession) || !source.projectId || !source.projectCreatedAt) throw new Error('memory_history_source_unproven');
+    // An unproven source is terminal: nothing was written for it and a retry would prove nothing more.
+    if (!source || source.sessionId !== platformSessionOf(commit.engineSession) || !source.projectId || !source.projectCreatedAt) return { state: 'excluded', reason: 'memory_history_source_unproven' };
     if (!await this.eligible(context, source)) { await this.removeConversation({ ...context, projectId: source.projectId, projectCreatedAt: source.projectCreatedAt }, source.sessionId); return { state: 'withdrawn', reason: 'conversation_excluded' }; }
     if (commit.createdAt && Date.parse(commit.createdAt) < Date.parse(source.projectCreatedAt)) return { state: 'withdrawn', reason: 'project_incarnation_changed' };
     const raw = await context.sessions.read(commit.userId, `${commit.archiveUri}/messages.jsonl`);

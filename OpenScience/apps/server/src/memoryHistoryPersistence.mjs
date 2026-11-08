@@ -38,8 +38,16 @@ CREATE TABLE IF NOT EXISTS evimed_memory.history_archives (
 CREATE INDEX IF NOT EXISTS history_archives_due ON evimed_memory.history_archives(next_attempt_at,updated_at)
   WHERE state IN ('queued','indexing','unavailable','partial');
 ALTER TABLE evimed_memory.history_fences ADD COLUMN IF NOT EXISTS project_created_at text NOT NULL DEFAULT '';
-ALTER TABLE evimed_memory.history_fences DROP CONSTRAINT IF EXISTS history_fences_pkey;
-ALTER TABLE evimed_memory.history_fences ADD PRIMARY KEY(owner_id,owner_created_at,project_id,project_created_at,session_id);
+-- The key is rebuilt only while it still has the old shape (before project_created_at joined it), never at every start.
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid=c.conrelid AND a.attnum=ANY(c.conkey)
+      WHERE c.conrelid='evimed_memory.history_fences'::regclass AND c.contype='p' AND a.attname='project_created_at') THEN
+    ALTER TABLE evimed_memory.history_fences DROP CONSTRAINT IF EXISTS history_fences_pkey;
+    ALTER TABLE evimed_memory.history_fences ADD PRIMARY KEY(owner_id,owner_created_at,project_id,project_created_at,session_id);
+  END IF;
+END $$;
+-- A withdrawn chunk's address is re-checked a few times after its removal (a slow engine write can still land), not hourly forever.
+ALTER TABLE evimed_memory.history_chunks ADD COLUMN IF NOT EXISTS sweeps integer NOT NULL DEFAULT 0;
 `;
 
 /** Exact URI authority and durable cleanup obligations, never raw messages. */
@@ -162,8 +170,9 @@ export class MemoryHistoryLedger {
   async cleaned(uri) { await this.database.query('UPDATE evimed_memory.history_chunks SET cleaned_at=clock_timestamp(),lease_until=NULL WHERE uri=$1', [uri]); }
   async pendingDeletes() {
     await this.migrate();
-    const result = await this.database.query(`UPDATE evimed_memory.history_chunks SET lease_until=clock_timestamp()+interval '30 seconds',updated_at=clock_timestamp()
-      WHERE uri IN (SELECT uri FROM evimed_memory.history_chunks WHERE state='withdrawn' AND (cleaned_at IS NULL OR cleaned_at<clock_timestamp()-interval '1 hour')
+    const result = await this.database.query(`UPDATE evimed_memory.history_chunks SET lease_until=clock_timestamp()+interval '30 seconds',updated_at=clock_timestamp(),
+        sweeps=CASE WHEN cleaned_at IS NULL THEN 0 ELSE sweeps+1 END
+      WHERE uri IN (SELECT uri FROM evimed_memory.history_chunks WHERE state='withdrawn' AND (cleaned_at IS NULL OR (cleaned_at<clock_timestamp()-interval '1 hour' AND sweeps<3))
         AND (lease_until IS NULL OR lease_until<clock_timestamp()) ORDER BY updated_at LIMIT 100 FOR UPDATE SKIP LOCKED) RETURNING *`);
     return result.rows;
   }
@@ -213,7 +222,10 @@ export class MemoryHistoryLedger {
   async finishArchive(commit, context, state, { reason = '', messages = 0, chunks = 0 } = {}) {
     await this.migrate();
     await this.database.query(`UPDATE evimed_memory.history_archives SET state=$4,reason=$5,message_count=$6,indexed_chunks=$7,
-      lease_until=NULL,next_attempt_at=clock_timestamp()+CASE WHEN $4='partial' THEN interval '1 day' ELSE interval '1 minute' END,
+      lease_until=NULL,next_attempt_at=clock_timestamp()+CASE WHEN $4='partial' THEN interval '1 day'
+        WHEN $4='unavailable' AND attempts>=8 THEN interval '7 days'
+        WHEN $4='unavailable' THEN LEAST(interval '1 day',interval '1 minute'*power(2,LEAST(attempts,10)))
+        ELSE interval '1 minute' END,
       updated_at=clock_timestamp() WHERE owner_id=$1 AND owner_created_at=$2 AND archive_uri=$3 AND state<>'withdrawn'`,
     [context.ownerId,context.ownerCreatedAt,commit.archiveUri,state,String(reason).slice(0,100),messages,chunks]);
   }

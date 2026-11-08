@@ -544,10 +544,12 @@ export class NativeMemoryWorker {
         // what it refused. A task that is gone (the engine keeps them a day) or unreadable leaves the diff's own account.
         const task = operations === 0 && commit.taskId ? await sessions.task(commit.userId, commit.taskId).catch(() => null) : null;
         const extraction = extractionFacts(diff, task);
-        if (this.history) await this.history.ingestArchive(commit, context);
         await this.overlay.completeCommit(commit.userId, commit.archiveUri, { operations, extraction });
         recordNativeCommit(operations ? "ingested" : "empty");
         recordNativeExtraction(operations, extraction);
+        // Raw-history indexing is optional and best effort: the commit is settled first, so an index that cannot be written never
+        // holds the commit queue; the history backfill retries the archive with a backoff and an attempt cap.
+        if (this.history) { try { await this.history.ingestArchive(commit, context); } catch { /* recorded on the archive's own ledger row */ } }
         return true;
       }
     }
