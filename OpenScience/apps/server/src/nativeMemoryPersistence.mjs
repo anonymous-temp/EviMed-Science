@@ -265,6 +265,38 @@ ALTER TABLE evimed_memory.native_revisions ADD COLUMN IF NOT EXISTS source_proje
 ALTER TABLE evimed_memory.native_revisions ADD COLUMN IF NOT EXISTS source_project_created_at text;
 `;
 
+const BACKFILL_BATCH = 2000;
+
+/**
+ * Rows written before the incarnation stamps existed carry NULL. Each is stamped from the project row it names, only when that
+ * row is older than the memory row (a project recreated under the same id keeps the older rows unstamped). Idempotent, batched
+ * in short statements of its own: one run stamps what is left and a second finds nothing.
+ * @param {any} database
+ */
+export async function backfillProjectStamps(database) {
+  const present = await database.query("SELECT to_regclass('evimed_control.projects') IS NOT NULL AS ok");
+  if (!present.rows[0]?.ok) return;
+  const steps = [
+    ["evimed_memory.native_sessions", "project_id", "project_created_at", "created_at", "user_id, engine_session"],
+    ["evimed_memory.native_commits", "project_id", "project_created_at", "created_at", "user_id, archive_uri"],
+    ["evimed_memory.native_line_origins", "project_id", "project_created_at", "added_at", "user_id, uri, fingerprint"],
+    ["evimed_memory.native_revisions", "source_project_id", "source_project_created_at", "changed_at", "id"],
+  ];
+  for (const [table, idColumn, stampColumn, atColumn, key] of steps) {
+    const keyList = key.split(", ");
+    const keyMatch = keyList.map(column => `t.${column}=b.${column}`).join(" AND ");
+    const userColumn = "t.user_id";
+    for (;;) {
+      const done = await database.query(`WITH b AS (
+          SELECT ${keyList.map(column => `t.${column}`).join(", ")}, p.created_at::text AS stamp
+          FROM ${table} t JOIN evimed_control.projects p ON p.user_id=${userColumn} AND p.id=t.${idColumn}
+          WHERE t.${stampColumn} IS NULL AND t.${atColumn}>=p.created_at LIMIT ${BACKFILL_BATCH})
+        UPDATE ${table} t SET ${stampColumn}=b.stamp FROM b WHERE ${keyMatch} AND t.${stampColumn} IS NULL`);
+      if (!done.rowCount) break;
+    }
+  }
+}
+
 /** @param {any} database */
 export async function migrateNativeMemory(database) {
   if (migrations.has(database)) return migrations.get(database);
@@ -273,7 +305,7 @@ export async function migrateNativeMemory(database) {
     await client.query(sql);
     // A word a list above gained after the table was created is otherwise refused by every existing database (vocabularyChecks.mjs).
     await refreshVocabularyChecks(client, sql, "evimed_memory");
-  });
+  }).then(() => backfillProjectStamps(database));
   migrations.set(database, attempt);
   try { await attempt; }
   catch (error) { migrations.delete(database); throw error; }

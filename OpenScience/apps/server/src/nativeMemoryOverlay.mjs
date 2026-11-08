@@ -944,8 +944,9 @@ export class NativeMemoryOverlay {
   async noteSession(userId, engineSession, projectId,projectCreatedAt=undefined) {
     if(projectCreatedAt===undefined)projectCreatedAt=projectId?(await this.#query('SELECT created_at::text AS created FROM evimed_control.projects WHERE user_id=$1 AND id=$2',[owner(userId),projectId])).rows[0]?.created??null:null;
     const result=await this.#query(`INSERT INTO evimed_memory.native_sessions AS held (user_id, engine_session, project_id,project_created_at) VALUES ($1, $2, $3,$4)
-      ON CONFLICT (user_id, engine_session) DO UPDATE SET project_id=held.project_id
-      WHERE held.project_id IS NOT DISTINCT FROM EXCLUDED.project_id AND held.project_created_at::timestamptz IS NOT DISTINCT FROM EXCLUDED.project_created_at::timestamptz RETURNING project_id`,
+      ON CONFLICT (user_id, engine_session) DO UPDATE SET project_id=held.project_id, project_created_at=COALESCE(held.project_created_at,EXCLUDED.project_created_at)
+      -- A binding made before the incarnation stamp existed (NULL) takes the incoming one; a stamped one must match exactly.
+      WHERE held.project_id IS NOT DISTINCT FROM EXCLUDED.project_id AND (held.project_created_at IS NULL OR held.project_created_at::timestamptz IS NOT DISTINCT FROM EXCLUDED.project_created_at::timestamptz) RETURNING project_id`,
     [owner(userId), String(engineSession), projectId,projectCreatedAt]);
     if(!result.rows.length)throw new HttpError(403,'memory_scope_denied','The native session belongs to another project incarnation.');
   }
@@ -954,6 +955,8 @@ export class NativeMemoryOverlay {
   async assertSessionScope(userId,engineSession,projectId,projectCreatedAt=undefined) {
     if(projectCreatedAt===undefined)projectCreatedAt=(await this.#query('SELECT created_at::text AS created FROM evimed_control.projects WHERE user_id=$1 AND id=$2',[owner(userId),projectId])).rows[0]?.created??null;
     const result=await this.#query('SELECT 1 FROM evimed_memory.native_sessions WHERE user_id=$1 AND engine_session=$2 AND project_id=$3 AND project_created_at::timestamptz IS NOT DISTINCT FROM $4::timestamptz',[owner(userId),engineSession,projectId,projectCreatedAt]);
+    // A binding written before the stamp existed takes the project's current one (the same exact-project rule, written once).
+    if(!result.rows.length&&projectCreatedAt)result.rows=(await this.#query('UPDATE evimed_memory.native_sessions SET project_created_at=$4 WHERE user_id=$1 AND engine_session=$2 AND project_id=$3 AND project_created_at IS NULL RETURNING 1',[owner(userId),engineSession,projectId,projectCreatedAt])).rows;
     if(!result.rows.length)throw new HttpError(403,'memory_scope_denied','The native session scope is unavailable.');
   }
 
