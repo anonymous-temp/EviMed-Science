@@ -259,7 +259,7 @@ CREATE TABLE IF NOT EXISTS evimed_memory.native_imports (
 CREATE INDEX IF NOT EXISTS native_imports_user_idx ON evimed_memory.native_imports (user_id, created_at DESC);
 -- Writer leases of the owner fence (nativeMemoryWriteFence.mjs): held as rows, never as a transaction across an engine call.
 CREATE TABLE IF NOT EXISTS evimed_memory.native_writer_leases (
-  user_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,
+  user_id text NOT NULL,
   lease_id text NOT NULL,
   kind text NOT NULL CHECK (kind IN ('shared','exclusive')),
   expires_at timestamptz(3) NOT NULL,

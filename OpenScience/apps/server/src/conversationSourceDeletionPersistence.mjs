@@ -116,8 +116,10 @@ export class ConversationSourceDeletionLedger {
       AND (COALESCE(o.project_created_at,CASE WHEN original.created_at<=o.added_at THEN original.project_created_at END)::timestamptz=d.project_created_at OR COALESCE(o.project_created_at,CASE WHEN original.created_at<=o.added_at THEN original.project_created_at END) IS NULL AND LEAST(o.added_at,original.created_at)>=d.project_created_at AND (d.current_project_created_at IS NULL OR d.current_project_created_at<=d.project_created_at OR LEAST(o.added_at,original.created_at)<d.current_project_created_at))
       WHERE (left(o.engine_session,4)='dsh-' AND d.session_ids ? substring(o.engine_session from 5)) OR EXISTS (
         SELECT 1 FROM sources s WHERE s.deletion_id=d.id AND s.archive_uri=o.archive_uri AND s.engine_session=o.engine_session)
+      -- Only a commit still in flight (pending, or failed and owed a replay) can yet write lines of the deleted conversation and holds
+      -- the root back; completed, replayed (its successor is a row of this chain) and abandoned are terminal and hide nothing.
       UNION SELECT d.native_root AS uri FROM sources s JOIN deleted d ON s.deletion_id=d.id
-      WHERE s.native_ingested_at IS NULL AND s.ingested_at IS NULL AND s.state<>'completed'
+      WHERE s.native_ingested_at IS NULL AND s.ingested_at IS NULL AND s.state IN ('pending','failed')
       UNION SELECT f.uri FROM deleted d JOIN evimed_memory.native_files f ON f.user_id=d.user_id AND left(f.uri,length(d.native_root)+1)=d.native_root||'/'
       JOIN LATERAL(SELECT r.id,r.actor,r.reason FROM evimed_memory.native_revisions r WHERE r.user_id=f.user_id AND r.uri=f.uri ORDER BY r.id DESC LIMIT 1) latest ON latest.actor='user' AND latest.reason LIKE 'undo%'
       WHERE (d.cleaned_revision_id IS NULL OR latest.id<=d.cleaned_revision_id)

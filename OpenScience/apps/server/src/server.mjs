@@ -5275,12 +5275,13 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         const visited=new Set();
         for(let index=0;index<commits.length;index++) {
           const commit=commits[index];if(visited.has(commit.archiveUri))continue;visited.add(commit.archiveUri);
-          if(commit.state!=='completed'&&!commit.nativeIngestedAt&&!commit.ingestedAt) {
+          // The replay chain is followed before a commit is judged; replayed and abandoned are terminal.
+          if(commit.replayedAs){const replay=await nativeMemoryOverlay.commit(project.userId,commit.replayedAs);if(replay)commits.push(replay);}
+          if((commit.state==='pending'||commit.state==='failed')&&!commit.nativeIngestedAt&&!commit.ingestedAt) {
             const task=commit.taskId?await sourceView.sessions.task(project.userId,commit.taskId):null;
             if(!task || !['completed','failed','cancelled','canceled'].includes(String(task.status).toLowerCase()))throw new HttpError(409,'memory_source_cleanup_busy','The source extraction has no terminal native proof.');
             throw new HttpError(409,'memory_source_lineage_unverified','The source extraction has no completed native ingestion receipt.');
           }
-          if(commit.replayedAs){const replay=await nativeMemoryOverlay.commit(project.userId,commit.replayedAs);if(replay)commits.push(replay);}
         }
         await nativeMemory.removeConversationSource(project.userId, project.id, row.sessionIds, { userRoot: nativeRoot,cleanedRevisionId:row.cleanedRevisionId,projectCreatedAt:row.projectCreatedAt });
         }

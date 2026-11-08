@@ -216,3 +216,20 @@ test('the native owner fence spans gateway admission through binding and final c
   finally{release();await writing;}
   assert.equal((await writing).status,200);assert.equal(await withNativeMemoryWrite(f.database,f.userId,async()=>true,{exclusive:true}),true);
 });
+
+test('a deleted conversation with a failed, replayed and abandoned extraction hides none of the account\'s unrelated memory', options, async t => {
+  const f=await fixture(t), original=await f.commitConversation('a',[{role:'user',text:'Private source.'}],{projectId:'default'});
+  const replay=await f.commitConversation('replay',[{role:'user',text:'Private source.'}],{projectId:'default',engineSession:'evimed-replay-source'});
+  await f.overlay.markReplayed(f.userId,original.archive_uri,replay.archive_uri);
+  await f.database.query("UPDATE evimed_memory.native_commits SET state='abandoned' WHERE user_id=$1 AND archive_uri=$2",[f.userId,replay.archive_uri]);
+  const unrelated=f.seed('profile.md','# Profile\n- Unrelated preference.',{type:'profile'});
+  await f.overlay.upsertFile({userId:f.userId,uri:unrelated,memoryType:'profile',body:'# Profile\n- Unrelated preference.'});
+  const ledger=new ConversationSourceDeletionLedger(f.database), stamp=(await f.database.query('SELECT created_at::text AS stamp FROM evimed_control.users WHERE id=$1',[f.userId])).rows[0].stamp;
+  await ledger.put({id:crypto.randomUUID(),userId:f.userId,projectId:'default',accountCreatedAt:stamp,projectCreatedAt:f.projectCreatedAt,rootSessionId:'session_a',sessionIds:['session_a'],frozen:{root:{id:'session_a'}},memoryUserRoot:f.sessions.userRoot(f.userId)});
+  assert.equal((await f.overlay.commit(f.userId,original.archive_uri)).state,'replayed');
+  assert.deepEqual(await ledger.hiddenMemoryUris(f.userId),[], 'terminal commits hide neither the root nor an unrelated file');
+  assert.equal(await f.overlay.hasUnprovenNativeWrites(f.userId),false,'replayed and abandoned are terminal');
+  // A commit genuinely in flight is still unproven.
+  await f.commitConversation('b',[{role:'user',text:'Still extracting.'}],{projectId:'default'});
+  assert.equal(await f.overlay.hasUnprovenNativeWrites(f.userId),true);
+});

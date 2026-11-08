@@ -431,9 +431,9 @@ export class NativeMemoryOverlay {
     return result.rows.map(publicCommit);
   }
 
-  /** Complete coverage: an unbounded outbox cannot be declared quiet from its first page. */
+  /** Complete coverage: an unbounded outbox cannot be declared quiet from its first page. Replayed and abandoned commits are terminal (a replay's successor is a row of its own). */
   async hasUnprovenNativeWrites(userId) {
-    const result=await this.#query("SELECT 1 FROM evimed_memory.native_commits WHERE user_id=$1 AND state<>'completed' AND native_ingested_at IS NULL AND ingested_at IS NULL LIMIT 1",[owner(userId)]);
+    const result=await this.#query("SELECT 1 FROM evimed_memory.native_commits WHERE user_id=$1 AND state IN ('pending','failed') AND native_ingested_at IS NULL AND ingested_at IS NULL LIMIT 1",[owner(userId)]);
     return result.rows.length>0;
   }
   /** Native extraction ingestion is separate from the optional raw-history indexing outbox. */
