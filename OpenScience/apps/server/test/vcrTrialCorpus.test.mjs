@@ -229,3 +229,70 @@ test("a frozen collection takes the same reranker and receipt as the live regist
   const paged = await pipeline.candidatesFor(study, { ...filter, summary: undefined, cursor: plain.nextCursor }, 20);
   assert.equal(paged.candidates[0].rank, 51);
 });
+
+/** Three trials: the first states diabetes only as an exclusion, the second as an inclusion, the third is about something else. */
+async function layeredFixture(t, { layered }) {
+  const path = await mkdtemp(join(tmpdir(), "vcr-trial-corpus-r3-"));
+  t.after(() => rm(path, { recursive: true, force: true }));
+  const databasePath = join(path, "trials.sqlite");
+  const db = new DatabaseSync(databasePath);
+  db.exec(`
+    CREATE TABLE documents (id INTEGER PRIMARY KEY, nct_id TEXT UNIQUE, xml_sha256 TEXT, payload_sha256 TEXT, payload BLOB, archive TEXT);
+    CREATE VIRTUAL TABLE terms USING fts5(title,condition,summary,description,eligibility,content='',tokenize='porter unicode61');
+    ${layered ? `
+    CREATE VIRTUAL TABLE terms_b USING fts5(title,condition,summary,description,inclusion,content='',tokenize='porter unicode61');
+    CREATE TABLE criteria(id INTEGER PRIMARY KEY, doc INTEGER NOT NULL);
+    CREATE VIRTUAL TABLE terms_c USING fts5(text,content='',tokenize='porter unicode61');` : ""}
+  `);
+  const trials = [
+    { title: "Melanoma Study", condition: "Melanoma", inclusion: ["Stage III melanoma"], exclusion: ["Uncontrolled diabetes"] },
+    { title: "Kidney Study", condition: "Kidney disease", inclusion: ["Type 2 diabetes with kidney disease", "Age 18 or older"], exclusion: ["Pregnancy"] },
+    { title: "Asthma Study", condition: "Asthma", inclusion: ["Persistent asthma"], exclusion: [] },
+  ];
+  let criterion = 0;
+  for (const [index, trial] of trials.entries()) {
+    const id = index + 1;
+    const eligibility = `Inclusion Criteria:\n${trial.inclusion.map((line) => `- ${line}`).join("\n")}\n\nExclusion Criteria:\n${trial.exclusion.map((line) => `- ${line}`).join("\n")}`;
+    const payload = { nct_id: trialId(id), title: trial.title, condition: trial.condition, eligibility, summary: "", detailed_description: "",
+      minimum_age: "18 Years", gender: "All", overall_status: "Completed", xml_sha256: hash(`xml ${id}`) };
+    const bytes = Buffer.from(JSON.stringify(payload));
+    db.prepare("INSERT INTO documents VALUES (?, ?, ?, ?, ?, ?)").run(id, payload.nct_id, payload.xml_sha256, hash(bytes), deflateSync(bytes), "a.zip");
+    db.prepare("INSERT INTO terms(rowid, title, condition, summary, description, eligibility) VALUES (?, ?, ?, ?, ?, ?)").run(id, trial.title, trial.condition, "", "", eligibility);
+    if (layered) {
+      db.prepare("INSERT INTO terms_b(rowid, title, condition, summary, description, inclusion) VALUES (?, ?, ?, ?, ?, ?)").run(id, trial.title, trial.condition, "", "", trial.inclusion.join("\n"));
+      for (const line of trial.inclusion) {
+        criterion += 1;
+        db.prepare("INSERT INTO criteria VALUES (?, ?)").run(criterion, id);
+        db.prepare("INSERT INTO terms_c(rowid, text) VALUES (?, ?)").run(criterion, `${trial.title} | ${trial.condition} | ${line}`);
+      }
+    }
+  }
+  db.close();
+  const manifestPath = join(path, "manifest.json");
+  await writeFile(manifestPath, JSON.stringify({ version: 1, id: "layered-1", sourceVersion: "release-1", snapshotDate: "2023-05-08",
+    databasePath: "trials.sqlite", databaseSha256: hash(await readFile(databasePath)) }));
+  return manifestPath;
+}
+
+const frozenRequest = (condition) => ({ condition, terms: [], summary: null, age: null, sex: null, region: null, scope: "any", limit: 10 });
+
+test("a collection with the inclusion and criterion tables searches both and leaves out exclusion text; one without them reads as before", async (t) => {
+  const layered = createVcrTrialCorpus(await layeredFixture(t, { layered: true }));
+  t.after(() => layered.close());
+  const plain = createVcrTrialCorpus(await layeredFixture(t, { layered: false }));
+  t.after(() => plain.close());
+
+  const rich = await layered.collect(frozenRequest("diabetes"));
+  assert.equal(rich.retrieval.index, "inclusion-trial+criterion");
+  assert.deepEqual(rich.retrieval.retrievedIds, [trialId(2)]);
+
+  const old = await plain.collect(frozenRequest("diabetes"));
+  assert.equal(old.retrieval.index, "full-record");
+  assert.deepEqual([...old.retrieval.retrievedIds].sort(), [trialId(1), trialId(2)]);
+
+  // Exclusion-only wording finds nothing, and phrases of the run still fuse across the two indexes.
+  const byCriterion = await layered.collect(frozenRequest("pregnancy"));
+  assert.deepEqual(byCriterion.retrieval.retrievedIds, []);
+  const both = await layered.collect({ ...frozenRequest("kidney"), terms: ["asthma"] });
+  assert.deepEqual(both.retrieval.retrievedIds.slice(0, 2), [trialId(2), trialId(3)]);
+});
