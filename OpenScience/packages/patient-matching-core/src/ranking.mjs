@@ -48,19 +48,35 @@ export function expectedGradedGain(probabilities) {
 const text = (value) => (typeof value === 'string' ? value.trim() : '')
 const list = (value) => (Array.isArray(value) ? value.map((item) => (typeof item === 'string' ? item : item?.name ?? '')).filter(Boolean).join('; ') : text(value))
 
-/** The whole trial record the Jev fit reads, in the field order the benchmark used; nothing is cut below the provider's input bound. */
+/**
+ * The whole trial record the Jev fit reads, in the field order the benchmark used. Under `limit` nothing is cut. Over it, the brief summary is
+ * shortened first and then the interventions, so the eligibility criteria stay whole whenever they fit; only then is the text cut at `limit`.
+ */
 export function trialRecordText(record, { limit = 24000 } = {}) {
   const raw = record?.record ?? record ?? {}
   const sex = text(raw.sexStated ?? raw.sex ?? raw.gender), low = text(raw.ageStated ?? raw.minimumAge ?? raw.minimum_age), high = text(raw.maximumAge ?? raw.maximum_age)
   const takes = [sex && `sex ${sex}`, low && `minimum age ${low}`, high && `maximum age ${high}`].filter(Boolean).join('; ')
   const eligibility = text(raw.eligibility ?? raw.eligibilityText)
-  const lines = [`Title: ${text(raw.title)}`, `Target conditions: ${list(raw.conditions ?? raw.condition)}`]
-  const interventions = list(raw.interventions)
-  if (interventions) lines.push(`Interventions: ${interventions}`)
-  lines.push(`Brief summary: ${text(raw.summary ?? raw.briefSummary ?? raw.brief_summary)}`)
-  if (takes) lines.push(`The registry says the trial takes: ${takes}`)
-  lines.push(`Eligibility Criteria (raw):\n${eligibility && !['in_record', 'not_in_listing'].includes(eligibility) ? eligibility : 'the registry record carries none'}`)
-  return lines.join('\n').slice(0, limit)
+  let interventions = list(raw.interventions)
+  let summary = text(raw.summary ?? raw.briefSummary ?? raw.brief_summary)
+  const build = () => {
+    const lines = [`Title: ${text(raw.title)}`, `Target conditions: ${list(raw.conditions ?? raw.condition)}`]
+    if (interventions) lines.push(`Interventions: ${interventions}`)
+    lines.push(`Brief summary: ${summary}`)
+    if (takes) lines.push(`The registry says the trial takes: ${takes}`)
+    lines.push(`Eligibility Criteria (raw):\n${eligibility && !['in_record', 'not_in_listing'].includes(eligibility) ? eligibility : 'the registry record carries none'}`)
+    return lines.join('\n')
+  }
+  let out = build()
+  if (out.length > limit) {
+    summary = summary.slice(0, Math.max(0, summary.length - (out.length - limit)))
+    out = build()
+  }
+  if (out.length > limit) {
+    interventions = interventions.slice(0, Math.max(0, interventions.length - (out.length - limit)))
+    out = build()
+  }
+  return out.slice(0, limit)
 }
 
 /**

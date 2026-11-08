@@ -1164,6 +1164,7 @@ function vcrSettings(overrides) {
     // per candidate, bounded by the depth. Off keeps the rerank order alone. The depth bounds lexical, dense, fused, rerank and Jev stages.
     patientMatchingJevEnabled: overrides.patientMatchingJevEnabled ?? boolEnv("OPEN_SCIENCE_PATIENT_MATCHING_JEV_ENABLED", true),
     patientMatchingDiscoveryDepth: integer("patientMatchingDiscoveryDepth", "OPEN_SCIENCE_PATIENT_MATCHING_DISCOVERY_DEPTH", 300, 20, 500),
+    patientMatchingRankView: ["balanced", "eligibility-full"].includes(String(overrides.patientMatchingRankView ?? process.env.OPEN_SCIENCE_PATIENT_MATCHING_RANK_VIEW ?? "").trim()) ? String(overrides.patientMatchingRankView ?? process.env.OPEN_SCIENCE_PATIENT_MATCHING_RANK_VIEW).trim() : "balanced",
     patientMatchingJevDepth: integer("patientMatchingJevDepth", "OPEN_SCIENCE_PATIENT_MATCHING_JEV_DEPTH", 300, 0, 500),
     patientMatchingTrialIndexManifest: String(overrides.patientMatchingTrialIndexManifest ?? process.env.OPEN_SCIENCE_PATIENT_MATCHING_TRIAL_INDEX_MANIFEST ?? ''),
     patientMatchingCataloguePath: String(overrides.patientMatchingCataloguePath ?? process.env.OPEN_SCIENCE_PATIENT_MATCHING_CATALOGUE ?? ''),
