@@ -3,8 +3,11 @@
  * table (id, nct_id, xml_sha256, payload_sha256, zlib JSON payload, archive) and
  * contentless FTS5 terms table (title, condition, summary, description,
  * eligibility), joined by rowid. The legacy xml_sha256 column carries the
- * digest of the source record in the declared format. Seal it without a WAL dependency
- * and publish it immutably with the manifest. All file and SQL work runs off
+ * digest of the source record in the declared format. A collection may also carry the round-3 tables
+ * (`evals/vcr-matching-boards/index_r3.mjs`): `terms_b` (one row per trial, inclusion criteria only), `criteria` and
+ * `terms_c` (one row per inclusion criterion, prefixed with its trial's title and conditions). When all three
+ * are there the first stage searches both and fuses them; without them the reader works as it always did.
+ * Seal it without a WAL dependency and publish it immutably with the manifest. All file and SQL work runs off
  * the control-plane event loop.
  */
 import { createHash } from "node:crypto";
@@ -21,6 +24,9 @@ const ID = /^[A-Za-z0-9_.:@-]{1,160}$/;
 const SHA = /^[a-f0-9]{64}$/;
 const NCT = /^NCT[0-9]{8}$/;
 const PAGE_SIZE = 50;
+const RRF_K = 60;
+/** Criterion rows read per phrase before they are aggregated to trials. */
+const CRITERION_ROWS = 2_000;
 const STOP = new Set("a an and are as at be been being but by for from had has have having he her here hers herself him himself his how i if in into is it its itself me more most my myself of on once only or other our ours ourselves out over own same she should so some such than that the their theirs them themselves then there these they this those through to too under until up very was we were what when where which while who whom why will with you your yours yourself yourselves".split(" "));
 
 /** @param {string | Buffer} value */
@@ -108,6 +114,10 @@ async function openIndex(manifest) {
   try {
     if (fileStamp(path) !== stamp) throw failure("trial_collection_index_changed");
     const ranking = db.prepare("SELECT d.id, d.nct_id, bm25(terms) AS distance FROM terms JOIN documents d ON d.id=terms.rowid WHERE terms MATCH ? ORDER BY distance, d.nct_id LIMIT ?");
+    const have = new Set(db.prepare("SELECT name FROM sqlite_master WHERE name IN ('terms_b', 'terms_c', 'criteria')").all().map((row) => String(row.name)));
+    const layered = have.size === 3;
+    const rankingB = layered ? db.prepare("SELECT d.id, d.nct_id, bm25(terms_b) AS distance FROM terms_b JOIN documents d ON d.id=terms_b.rowid WHERE terms_b MATCH ? ORDER BY distance, d.nct_id LIMIT ?") : null;
+    const rankingC = layered ? db.prepare("SELECT k.doc AS id, bm25(terms_c) AS distance FROM terms_c JOIN criteria k ON k.id=terms_c.rowid WHERE terms_c MATCH ? ORDER BY distance, k.id LIMIT ?") : null;
     const count = db.prepare("SELECT count(*) AS count FROM terms WHERE terms MATCH ?");
     const byRow = db.prepare("SELECT nct_id, xml_sha256, payload_sha256, payload FROM documents WHERE id = ?");
     const byId = db.prepare("SELECT nct_id, xml_sha256, payload_sha256, payload FROM documents WHERE nct_id = ?");
@@ -133,13 +143,45 @@ async function openIndex(manifest) {
         const totalMatched = all ? Number(count.get(all)?.count) : 0;
         /** @type {Map<string, { id: number, nct: string, score: number }>} */
         const scores = new Map();
-        for (const [queryIndex, [query]] of queries.entries()) {
-          for (const [rank, row] of ranking.all(query, FROZEN_CANDIDATE_LIMIT).entries()) {
-            const nct = String(row.nct_id);
-            const hit = scores.get(nct) ?? { id: Number(row.id), nct, score: 0 };
-            hit.score += fusionScore(rank, queryIndex);
-            scores.set(nct, hit);
+        /** Every phrase searched by `ranked`, the hits fused by TrialGPT's weights: the trials in fused order. */
+        const fused = (/** @type {(query: string) => Array<{ id: number, nct: string }>} */ ranked) => {
+          /** @type {Map<string, { id: number, nct: string, score: number }>} */
+          const lists = new Map();
+          for (const [queryIndex, [query]] of queries.entries()) {
+            for (const [rank, row] of ranked(query).entries()) {
+              const hit = lists.get(row.nct) ?? { id: row.id, nct: row.nct, score: 0 };
+              hit.score += fusionScore(rank, queryIndex);
+              lists.set(row.nct, hit);
+            }
           }
+          return [...lists.values()].sort((a, b) => b.score - a.score || a.nct.localeCompare(b.nct));
+        };
+        if (layered && rankingB && rankingC) {
+          // Round 3: the trial-level index without exclusion text and the criterion-level index, each fused across phrases, then RRF (k = 60) between the two.
+          const trialLevel = fused((query) => rankingB.all(query, FROZEN_CANDIDATE_LIMIT).map((row) => ({ id: Number(row.id), nct: String(row.nct_id) })));
+          const criterionLevel = fused((query) => {
+            /** @type {Map<number, { max: number, sum: number, n: number }>} */
+            const byTrial = new Map();
+            let top = 0;
+            for (const row of rankingC.all(query, CRITERION_ROWS)) {
+              const relative = (-Number(row.distance)) / (top ||= (-Number(row.distance)) || 1);
+              const entry = byTrial.get(Number(row.id)) ?? { max: 0, sum: 0, n: 0 };
+              entry.max = Math.max(entry.max, relative); entry.sum += relative; entry.n += 1;
+              byTrial.set(Number(row.id), entry);
+            }
+            return [...byTrial.entries()].map(([id, entry]) => ({ id, score: entry.max + entry.sum / entry.n }))
+              .sort((a, b) => b.score - a.score || a.id - b.id).slice(0, FROZEN_CANDIDATE_LIMIT)
+              .map(({ id }) => ({ id, nct: String(byRow.get(id)?.nct_id) }));
+          });
+          for (const list of [trialLevel, criterionLevel]) {
+            for (const [rank, row] of list.entries()) {
+              const hit = scores.get(row.nct) ?? { id: row.id, nct: row.nct, score: 0 };
+              hit.score += 1 / (RRF_K + rank + 1);
+              scores.set(row.nct, hit);
+            }
+          }
+        } else {
+          for (const row of fused((query) => ranking.all(query, FROZEN_CANDIDATE_LIMIT).map((hit) => ({ id: Number(hit.id), nct: String(hit.nct_id) })))) scores.set(row.nct, row);
         }
         const ordered = [...scores.values()].sort((a, b) => b.score - a.score || a.nct.localeCompare(b.nct));
         const leftOut = { status: 0, age: 0, sex: 0, region: 0 };
@@ -177,7 +219,7 @@ async function openIndex(manifest) {
       order: "BM25 with reciprocal-rank fusion across queries (TrialGPT's weights: earlier queries count for more). Retrieval rank does not judge eligibility.",
       found: result.eligible, leftOut: result.leftOut,
       retrieval: {
-        method: "fts5-bm25-rrf", totalMatched: result.totalMatched, fusionPool: result.fusionPool, eligibleInFusionPool: result.eligible,
+        method: "fts5-bm25-rrf", index: layered ? "inclusion-trial+criterion" : "full-record", totalMatched: result.totalMatched, fusionPool: result.fusionPool, eligibleInFusionPool: result.eligible,
         limit: request.limit, truncated: result.totalMatched > result.fusionPool || result.eligible > request.limit,
         retrievedIds: result.candidates.map((/** @type {any} */ candidate) => candidate.registryId),
       },

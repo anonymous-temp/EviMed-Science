@@ -324,3 +324,8 @@ not a human label, and the 363 TREC 2021 pairs (`test_clean_tagged.jsonl`, built
 is ready for files the owner obtains. The mapping from our verdict: eligible to eligible; ineligible and insufficient to ineligible; `possible` reported both
 ways (`possible_is_eligible`, `possible_is_ineligible`); a pair without a verdict is reported both left out and as ineligible. Their reported numbers
 (VERDICT F1 0.863 on 539 SIGIR pairs by their own judges' gold; 0.828 on TREC 2021 with GPT-5-mini) are their authors' own and not paired with ours.
+
+
+## Round 3: inclusion-only and criterion-level lexical indexes (TREC 2023)
+
+`index_r3.mjs` adds `terms_b` (trial-level FTS5 with the inclusion criteria only, exclusion text left out) and `criteria` + `terms_c` (one FTS5 row per inclusion criterion, prefixed with its trial's title and conditions) to a collection database from its own `documents` payloads; `--seal <collection.json>` re-hashes the file and rewrites the manifest. `vcrTrialCorpus.mjs` uses them when all three are present (both indexes searched, fused by RRF k=60) and reads an older collection exactly as before. `rewrite_e.mjs` writes the narrative + synonyms rewrite of a questionnaire topic (one Flash call per topic, off-peak, spend cap); `recall_r3.mjs` measures the variants (eligible recall@300/500, all-relevant recall@500, lexical nDCG@10) on dev and test. Results: `docs/superpowers/plans/` round-3 notes and `vm-data/r3/board-e-2023.md`.
