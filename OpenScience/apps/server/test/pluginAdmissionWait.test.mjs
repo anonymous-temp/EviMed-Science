@@ -22,9 +22,11 @@ function lockedDatabase(busyFor,nativeBusyFor=0) {
     async transaction(work) {
       state.transactions += 1;
       return work({
-        async query(sql,values=[]) {
-          if (/pg_try_advisory_xact_lock_shared/.test(sql) && String(values[0]).startsWith('native-memory-writer:')) {
-            state.nativeAsked++;return {rows:[{acquired:state.nativeAsked>nativeBusyFor}],rowCount:1};
+        async query(sql) {
+          // The account's native memory is held by a source cleanup as an exclusive lease row, which admission looks at and never locks.
+          if (/to_regclass\('evimed_memory\.native_writer_leases'\)/.test(sql)) return {rows:[{present:true}],rowCount:1};
+          if (/FROM evimed_memory\.native_writer_leases/.test(sql)) {
+            state.nativeAsked++;return {rows:state.nativeAsked>nativeBusyFor?[]:[{}],rowCount:1};
           }
           if (/pg_try_advisory_xact_lock_shared/.test(sql)) {
             state.asked += 1;

@@ -384,3 +384,21 @@ test('a save during retry revision discovery rolls back stale job rearming', { .
   assert.equal((await service.get(owner,p)).phase,'pending');
   assert.deepEqual((await service.history(owner,p)).items.map(item=>item.revision),[2,1]);
 });
+
+test('a held prompt admission does not park a fenced memory write, and a live exclusive lease keeps prompt admission out', options, async()=>{
+  const { withNativeMemoryWrite } = await import('../src/nativeMemoryWriteFence.mjs');
+  let entered, release;
+  const enteredPromise=new Promise(r=>{entered=r;}); const released=new Promise(r=>{release=r;});
+  const admission=service.withAdmission(project,async()=>{entered();await released;});
+  await enteredPromise;
+  // The admission's transaction lasts a whole runtime start; the fence takes its own short lock and never waits on it.
+  assert.equal(await withNativeMemoryWrite(db,owner,async()=>'written'),'written');
+  assert.equal(await withNativeMemoryWrite(db,owner,async()=>'cleaned',{exclusive:true}),'cleaned');
+  release(); await admission;
+  const cleaning=withNativeMemoryWrite(db,owner,async()=>{
+    const impatient=new PluginService(db,{admissionWaitMs:300});
+    await assert.rejects(impatient.withAdmission(project,async()=>assert.fail('must not dispatch'),{prompt:true}),{code:'plugin_apply_in_progress'});
+  },{exclusive:true});
+  await cleaning;
+  assert.equal(await service.withAdmission(project,async()=>'dispatched',{prompt:true}),'dispatched','after the cleanup the prompt is admitted');
+});

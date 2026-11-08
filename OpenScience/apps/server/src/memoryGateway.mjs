@@ -350,6 +350,7 @@ const rpcError = (/** @type {unknown} */ id, /** @type {number} */ code, /** @ty
  *   admission: { admit: (caller: { user: any, project: any, engineSessionId?: string | null, at?: number | null }) => Promise<import("./memoryAdmission.mjs").MemoryAdmission> },
  *   sourceDeletion?: any,
  *   sourceReceipt?: ((request:any)=>Promise<void>) | null,
+ *   sourceReceiptFailed?: ((request:any)=>Promise<void>) | null,
  *   overlay?: import("./nativeMemoryOverlay.mjs").NativeMemoryOverlay | null,
  *   memoryTool?: { forget: (user: any, project: any, uri: string, options?: any) => Promise<{ removed: boolean }> } | null,
  *   capsuleSearch?: ((request: { user: any, project: any, query: string, limit: number, contextPolicy?:any }) => Promise<Record<string, any>[]>) | null,
@@ -362,7 +363,7 @@ const rpcError = (/** @type {unknown} */ id, /** @type {number} */ code, /** @ty
  * @returns {((req: any, res: any, onFailure?: (failure: any) => void) => Promise<void>) & { commitSession: MemoryGatewayCommitSession }}
  *   the request handler, with the one function the control plane commits a conversation by (`nativeTurnCommit.mjs`)
  */
-export function createMemoryGatewayHandler({ config, runtimeManager, store, sessions, admission, sourceDeletion = null, sourceReceipt = null, overlay = null, memoryTool = null, memoryContexts = null, rememberJournal = null, capsuleSearch = null, historySearch = null, now = () => Date.now() }) {
+export function createMemoryGatewayHandler({ config, runtimeManager, store, sessions, admission, sourceDeletion = null, sourceReceipt = null, sourceReceiptFailed = null, overlay = null, memoryTool = null, memoryContexts = null, rememberJournal = null, capsuleSearch = null, historySearch = null, now = () => Date.now() }) {
   const enabled = config.memoryEngineEnabled === true && config.memoryEnabled !== false && Boolean(sessions?.configured);
   const maxBodyBytes = Math.max(1_024, Number(config.memoryGatewayMaxBodyBytes) || 1_048_576);
   const ratePerMinute = Math.max(0, Number(config.memoryGatewayRatePerMinute ?? 600) || 0);
@@ -386,7 +387,12 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
     const root = `${ctx.userRoot}/memories`;
     const files = /** @type {string[]} */ ([...new Set(uris.filter((uri) => typeof uri === "string" && Boolean(nativeMemoryFile(/** @type {string} */ (uri), root))))]);
     if (!files.length) return;
-    if(sourceReceipt){const admitted=await ctx.admit(null);try{await sourceReceipt({user:ctx.user,project:ctx.project,sessionId:admitted.sessionId,uris:files,context:ctx.memoryContext});}catch{throw new HttpError(503,"memory_scope_denied","The memory source receipt could not be stored.");}}
+    if(sourceReceipt){const admitted=await ctx.admit(null);try{await sourceReceipt({user:ctx.user,project:ctx.project,sessionId:admitted.sessionId,uris:files,context:ctx.memoryContext});}catch{
+      // The recall itself succeeded and is returned. What cannot be proven is where its memories came from, so the run's learning fails
+      // closed: its record carries an unclassified source, which the distillation refuses (`methodSourceAllowsLearning`). Counted.
+      recordRecallNote("receipt_failed");
+      try{await sourceReceiptFailed?.({user:ctx.user,project:ctx.project,sessionId:admitted.sessionId,context:ctx.memoryContext});}catch{ /* the count above stands */ }
+    }}
     void Promise.resolve().then(() => overlay.noteRecalled(userId, files)).then(() => recordRecallNote("noted"), () => recordRecallNote("failed"));
   }
 
@@ -1168,7 +1174,8 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         },
       };
       const deletionVersion = sourceDeletion ? await sourceDeletion.version(user.id) : null;
-      // Only the routes that write are fenced; a read never takes the owner's fence and no connection is held while it runs.
+      // Only the routes that write are fenced here; a read never takes the owner's fence. `mcp` is fenced where it writes: its remember and forget
+      // calls go through the engine client (every non-GET request) and the store, each of which takes the fence itself.
       const writes = route === 'sessionCreate' || route === 'messageWrite' || route === 'commit';
       const answer = writes ? await withNativeMemoryWrite(overlay?.database,user.id,()=>handlers[route](ctx)) : await handlers[route](ctx);
       if (sourceDeletion && await sourceDeletion.version(user.id) !== deletionVersion) throw new HttpError(503, 'memory_gateway_source_changed', 'The source privacy state changed during this request.');

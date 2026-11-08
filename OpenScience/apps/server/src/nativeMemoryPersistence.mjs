@@ -257,6 +257,11 @@ CREATE TABLE IF NOT EXISTS evimed_memory.native_imports (
   expires_at timestamptz(3) NOT NULL
 );
 CREATE INDEX IF NOT EXISTS native_imports_user_idx ON evimed_memory.native_imports (user_id, created_at DESC);
+-- One row per one-time data migration that has finished (the project-stamp backfill), so a start does not repeat it.
+CREATE TABLE IF NOT EXISTS evimed_memory.native_markers (
+  name text PRIMARY KEY,
+  done_at timestamptz(3) NOT NULL DEFAULT clock_timestamp()
+);
 -- Writer leases of the owner fence (nativeMemoryWriteFence.mjs): held as rows, never as a transaction across an engine call.
 CREATE TABLE IF NOT EXISTS evimed_memory.native_writer_leases (
   user_id text NOT NULL,
@@ -308,12 +313,20 @@ export async function backfillProjectStamps(database) {
 /** @param {any} database */
 export async function migrateNativeMemory(database) {
   if (migrations.has(database)) return migrations.get(database);
-  const attempt = database.transaction(async (/** @type {any} */ client) => {
+  // The memo says the DDL is done, so it never runs inside a caller's transaction: a rollback there could undo what the memo records.
+  const outside = (/** @type {() => Promise<any>} */ work) => typeof database.withoutTransactionClient === "function" ? database.withoutTransactionClient(work) : work();
+  const attempt = outside(() => database.transaction(async (/** @type {any} */ client) => {
     await client.query("SELECT pg_advisory_xact_lock(hashtext('evimed-memory-native-v1'))");
     await client.query(sql);
     // A word a list above gained after the table was created is otherwise refused by every existing database (vocabularyChecks.mjs).
     await refreshVocabularyChecks(client, sql, "evimed_memory");
-  }).then(() => backfillProjectStamps(database));
+  })).then(() => outside(async () => {
+    // The stamp backfill scans four tables: once it has finished, a marker row says so and later starts skip it.
+    const done = await database.query("SELECT 1 FROM evimed_memory.native_markers WHERE name='project-stamps-v1'");
+    if (done.rows.length) return;
+    await backfillProjectStamps(database);
+    await database.query("INSERT INTO evimed_memory.native_markers(name) VALUES('project-stamps-v1') ON CONFLICT DO NOTHING");
+  }));
   migrations.set(database, attempt);
   try { await attempt; }
   catch (error) { migrations.delete(database); throw error; }
