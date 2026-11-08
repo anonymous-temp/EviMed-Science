@@ -202,7 +202,6 @@ const WALK_TABLES = {
       {"view":"frontier-event","discovered":true,"pattern":"/app/frontier/events/:eventId","family":"frontier-event","template":"T5","budget":"frontier","rows":false},
       {"view":"frontier-congress","discovered":true,"pattern":"/app/frontier/congress/:congressId","family":"frontier-congress","template":"T5","budget":"frontier","budgetOverride":{"typePairs":6},"budgetNote":"a congress hub (c3-track), as the topic page: 12/400 meta, 14/400 the dates and caveats, 16/400 the day's 「AI 速递」, 16/600 the items' titles, 18/600 the days' headings, 24/600 the title — 6 pairs (fixture walk 2026-10-25)","rows":false},
       {"view":"frontier-topic","discovered":true,"pattern":"/app/frontier/topics/:topicId","family":"frontier-topic","template":"T5","budget":"frontier","budgetOverride":{"typePairs":6},"budgetNote":"a hot-event topic's reading page: 12/400 meta, 14/400 the question and the peg, 16/400 the cited overview, 16/600 the items' titles, 18/600 the three section headings, 24/600 the title — 6 pairs (c2-leads 2026-10-25, measured with the walk's functions at both sizes)","rows":false},
-      {"view":"capabilities","route":"/app/capabilities","pattern":"/app/capabilities","family":"capabilities","template":"T1","shapes":2,"rows":false},
       {"view":"method-workbench","route":"/app/capabilities/methods/comparator.evalue","pattern":"/app/capabilities/methods/:methodId","family":"data","template":"T4","budget":"data","rows":false},
       {"view":"calculation-history","discovered":true,"pattern":"/app/capabilities/calculations/:studyId/:tab?","family":"calculation-workbench","template":"T1","rows":true},
       {"view":"geo","route":"/app/geo","pattern":"/app/geo","family":"geo-home","template":"T1","collection":"geo-project-cards","budget":"data","shapes":2,"rows":true},
@@ -229,7 +228,6 @@ const WALK_TABLES = {
       {"view":"account-projects","route":"/app/account?tab=projects","pattern":"/app/account","family":"settings","template":"T6","rows":false},
       {"view":"account-notifications","route":"/app/account?tab=notifications","pattern":"/app/account","family":"settings","template":"T6","rows":false},
       {"view":"ops","route":"/app/ops","pattern":"/app/ops","family":"ops","template":"T4","budgetOverride":{"colors":6},"budgetNote":"the 前沿标签 card's 撤回 and 显示更多 are text buttons in text-2, which no other card of the page draws while it is healthy: 6 on the live walk of evimed-e22de8a9736e-1 (2026-10-24)","rows":false},
-      {"view":"extensions-discover","route":"/app/extensions/discover","pattern":"/app/extensions/:tab/:itemId?","family":"extensions","template":"T1","budget":"extension","shapes":2,"rows":false},
       {"view":"extensions-installed","route":"/app/extensions/installed","pattern":"/app/extensions/:tab/:itemId?","family":"extensions","template":"T1","budget":"extension","shapes":2,"rows":true},
       {"view":"extensions-plugin-missing","route":"/app/extensions/plugins/impeccable-audit-missing","pattern":"/app/extensions/:tab/:itemId?","family":"extensions","template":"T1","budget":"extension","rows":false},
       {"view":"extensions-skill-missing","route":"/app/extensions/skills/impeccable-audit-missing","pattern":"/app/extensions/:tab/:itemId?","family":"extensions","template":"T1","budget":"extension","rows":false},
@@ -2462,19 +2460,11 @@ export function pageProbe([kind, arg]) {
     const widths = all("[data-row-title]").filter((el) => visible(el) && outside(el)).slice(0, 5).map((el) => Math.round(el.getBoundingClientRect().width));
     return { widths, min: widths.length ? Math.min(...widths) : null };
   }
-  if (kind === "capabilityCards") {
-    const stateWords = ["可运行", "已安装", "未验证"];
-    const spans = all("button span").filter(visible);
-    return {
-      hits: [...new Set(spans.map(words).filter((text) => stateWords.includes(text)))],
-      wraps: spans.filter((el) => el.classList.contains("mt-auto") && el.getBoundingClientRect().height > 1.9 * (parseFloat(getComputedStyle(el).lineHeight) || 16)).length,
-    };
-  }
   if (kind === "memoryTabs") {
-    // The page's sections are the links of the left column's navigation (总览 · 关于你 · 做法 · 收到的), the one in force `aria-current="page"` — not a
-    // tab list since 2026-10-28. The map was a section until 2026-10-27 and is part of 总览 now, and 项目 went when a project became a label.
+    // The page's sections are the links of the global sidebar's nested 记忆胶囊 directory (总览 · 关于你 · 做法 · 收到的, since 2026-11-08; before that the
+    // page's left column), the one in force `aria-current="page"` — not a tab list since 2026-10-28. The directory carries no counts, so they read 0. The map was a section until 2026-10-27 and is part of 总览 now, and 项目 went when a project became a label.
     const names = ["总览", "关于你", "做法", "收到的"];
-    const tabs = all("nav[aria-label='记忆'] a").filter(visible).map((el) => {
+    const tabs = all("nav[aria-label='记忆胶囊的内容'] a").filter(visible).map((el) => {
       const text = words(el);
       const name = names.find((candidate) => text.startsWith(candidate)) ?? text;
       return { name, count: Number(/^\s*(\d+)/.exec(text.slice(name.length))?.[1] ?? 0), selected: el.getAttribute("aria-current") === "page" };
@@ -2500,7 +2490,7 @@ export function pageProbe([kind, arg]) {
     const rowList = all("main ul[aria-label]").filter((el) => visible(el) && (el.getAttribute("aria-label") === "最近变化" || el.getAttribute("aria-label") === "需要看一眼的记忆"))[0] ?? null;
     return {
       headline: all("[data-headline]").filter(visible).map(words)[0] ?? null,
-      tabs: all("nav[aria-label='记忆'] a").filter(visible).map(words),
+      tabs: all("nav[aria-label='记忆胶囊的内容'] a").filter(visible).map(words),
       canvases: all("[data-chart]").filter(visible).length,
       figures: all("[data-chart]").filter(visible).map((el) => ({ kind: el.getAttribute("data-chart"), named: Boolean(el.querySelector("[role='img'][aria-label]")) })),
       // The star map, where this browser draws it (a browser with no real GPU gets the relation graph, and then there is nothing to read here).
@@ -2609,7 +2599,6 @@ export const PAGE_PROBES = {
   frontier: [["firstRowTop", ["phone"]]],
   "calculation-history": [["calculationHistory", ["desktop", "phone"]]],
   "virtual-research": [["rowWidth", ["phone"]]],
-  capabilities: [["capabilityCards", ["desktop"]]],
   memory: [["memoryTabs", ["desktop"]]],
   "memory-methods": [["memoryTabs", ["desktop"]]],
   "memory-shared-missing": [["sharedMissing", ["desktop", "phone"]]],
@@ -2837,10 +2826,6 @@ export function probeFindings(name, viewportName, kind, r) {
       break;
     case "rowWidth":
       if (viewportName === "phone" && r.min !== null && r.min < 160) failures.push(`${current}: a study row's title is ${r.min} px wide (at least 160)`);
-      break;
-    case "capabilityCards":
-      if (r.hits.length) failures.push(`${current}: the tool cards still say ${r.hits.join(", ")}`);
-      if (r.wraps > 0) notices.push(`${current}: ${r.wraps} card footer(s) take two lines`);
       break;
     case "memoryTabs": {
       const selected = r.tabs.find((tab) => tab.selected);
@@ -4783,7 +4768,7 @@ export function addressAct([kind, first = "", second = ""]) {
     target = [...document.querySelectorAll("[role='tab']")].find((el) => visible(el) && words(el).startsWith(first)) ?? null;
   } else if (kind === "nav") {
     // The memory page's sections are the links of the left column's navigation (since 2026-10-28), named 记忆.
-    target = [...document.querySelectorAll("nav[aria-label='记忆'] a")].find((el) => visible(el) && words(el).startsWith(first)) ?? null;
+    target = [...document.querySelectorAll("nav[aria-label='记忆胶囊的内容'] a")].find((el) => visible(el) && words(el).startsWith(first)) ?? null;
   } else if (kind === "link") {
     target = [...document.querySelectorAll("aside a")].find((el) => visible(el) && el.getAttribute("href") === first) ?? null;
   }
@@ -4811,8 +4796,8 @@ export function addressProbe([kind]) {
     return { ...base, found: Boolean(list), selected: selected[0] ?? null };
   }
   if (kind === "memory" || kind === "memory-overview") {
-    // The lists use their own navigation. The overview uses the capsule heading and category entries in its wider layout.
-    const list = [...document.querySelectorAll("nav[aria-label='记忆']")].find(visible);
+    // The lists use the sidebar's nested 记忆胶囊 directory. The overview uses the capsule heading and category entries in its wider layout.
+    const list = [...document.querySelectorAll("nav[aria-label='记忆胶囊的内容']")].find(visible);
     const tabs = list ? [...list.querySelectorAll("a")].filter(visible) : [];
     const selected = tabs.find((el) => el.getAttribute("aria-current") === "page");
     const overview = kind === "memory-overview" && [...document.querySelectorAll("[data-memory-frame='overview']")].some(visible);
@@ -4851,7 +4836,7 @@ export function memoryReady(wanted) {
   const visible = (el) => el.getBoundingClientRect().width > 0 && el.getBoundingClientRect().height > 0;
   if (!main || location.pathname !== (wanted.overview ? "/app/memory/overview" : "/app/memory")) return false;
   const overview = wanted.overview && [...main.querySelectorAll("[data-memory-frame='overview']")].some(visible);
-  const selected = [...main.querySelectorAll("nav[aria-label='记忆'] [aria-current='page']")].find(visible);
+  const selected = [...document.querySelectorAll("nav[aria-label='记忆胶囊的内容'] [aria-current='page']")].find(visible);
   if (overview ? wanted.selected && wanted.selected !== "总览" : !selected || (wanted.selected && !selected.textContent?.trim().startsWith(wanted.selected))) return false;
   const box = [...main.querySelectorAll("input")].find((el) => el.getAttribute("aria-label") === "搜索记忆" && visible(el));
   // The 收到的 list has no search: its one action is in the toolbar, and the box is not there to wait for.
@@ -4973,7 +4958,7 @@ async function walkAddressState(page, base) {
     let reload = null;
     if (first && first.found && !pressed.includes(false) && !(c.fill && first.query === null)) {
       // Leave by the sidebar (another page of the same shell), and come back by the browser's Back.
-      if (await page.evaluate(addressAct, ["link", "/app/capabilities"])) {
+      if (await page.evaluate(addressAct, ["link", "/app/autopilot"])) {
         await page.waitForTimeout(1_500);
         away = await page.evaluate(() => location.pathname);
         await page.goBack();

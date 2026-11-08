@@ -385,13 +385,13 @@ test("overview addressed state checks the range and the query through Back and r
   await page.goto("http://overview.walk/app/memory/overview?range=30d&q=" + encodeURIComponent("探针"));
   await page.waitForFunction(memoryReady, { overview: true, selected: "总览", query: "探针" });
   const first = await page.evaluate(addressProbe, ["memory-overview"]);
-  await page.goto("http://overview.walk/app/capabilities");
+  await page.goto("http://overview.walk/app/autopilot");
   await page.goBack();
   const back = await page.evaluate(addressProbe, ["memory-overview"]);
   await page.reload();
   const reload = await page.evaluate(addressProbe, ["memory-overview"]);
   const chosen = ADDRESS_CASES.find((entry) => entry.page === "memory-overview");
-  const read = { pressed: [true], first, away: "/app/capabilities", back, reload };
+  const read = { pressed: [true], first, away: "/app/autopilot", back, reload };
   assert.deepEqual(addressStateFindings(chosen, read), { failures: [], notices: [] });
   assert.ok(addressStateFindings(chosen, { ...read, reload: { ...reload, search: "", query: "" } }).notices.length >= 2);
   await page.unroute("http://overview.walk/**");

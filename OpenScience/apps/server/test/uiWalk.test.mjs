@@ -452,7 +452,7 @@ test("a page over its section budget fails, one inside it does not, and a page w
   // Measured at the desktop width, like the rest of the style budget.
   assert.deepEqual(pageFindings("files", "phone", clean({ sectionShapes: stacked }), []).failures, []);
   // The pages R10 rebuilt are all held to one, and the study's tabs to three.
-  for (const name of ["files", "memory", "frontier", "capabilities", "extensions-discover", "extensions-installed", "virtual-research", "vcr-overview"]) {
+  for (const name of ["files", "memory", "frontier", "extensions-installed", "virtual-research", "vcr-overview"]) {
     assert.ok(Number.isInteger(SECTION_SHAPES_BY_PAGE[name]), `${name} has a section budget`);
   }
 });
@@ -640,7 +640,6 @@ function probe(kind, arg, search) {
     case "eventGroups": return wrong ? { primary: false, other: false, none: false } : { primary: true, other: true, none: false };
     case "firstRowTop": return { top: wrong ? 620 : 276 };
     case "rowWidth": return wrong ? { widths: [96], min: 96 } : { widths: [300], min: 300 };
-    case "capabilityCards": return wrong ? { hits: ["可运行"], wraps: 2 } : { hits: [], wraps: 0 };
     case "memoryTabs": {
       const names = { self: "关于你", methods: "做法", received: "收到的" };
       const selected = wrong ? "关于你" : names[tab] || "做法";
@@ -1511,8 +1510,6 @@ test("the walk clicks the first row of each list on the pages R10 rebuilt, at th
   // One click per page view that has a list: the page walked at the desktop width, never the phone's.
   assert.deepEqual(report.pages["files@desktop"].rowClicks, [{ label: "资料清单", shown: true }]);
   assert.equal(report.pages["files@phone"].rowClicks, undefined);
-  // 科研工具's cards start a conversation, so the walk does not click them.
-  assert.equal(report.pages["capabilities@desktop"].rowClicks, undefined);
 });
 
 test("a row that shows nothing when clicked fails the page it is on, on every page that is clicked", async () => {
@@ -1909,7 +1906,7 @@ test("clickNamed presses the control of that name inside the scope and nothing e
 const read = (blocks, kind, arg, options) => inPage(node("body", {}, [node("main", {}, blocks)]), () => pageProbe([kind, arg]), options);
 /** One link of the memory page's navigation (the left column), the one in force carrying `aria-current`. */
 const tab = (name, count, selected) => node("a", { attrs: { href: "/app/memory", ...(selected ? { "aria-current": "page" } : {}) } }, [node("span", { text: name }), ...(count ? [node("span", { text: String(count) })] : [])]);
-const memoryNav = (links) => node("nav", { attrs: { "aria-label": "记忆" } }, [node("ul", {}, links.map((link) => node("li", {}, [link])))]);
+const memoryNav = (links) => node("nav", { attrs: { "aria-label": "记忆胶囊的内容" } }, [node("ul", {}, links.map((link) => node("li", {}, [link])))]);
 
 test("the page probes read what a fix left behind: the empty 关注, the memory tabs, the bell, the Feishu rows", () => {
   // The folded progress rail (`geoRail`) is not read here any more: the rail is the page's band since R19, and the composition check reads it.
@@ -1921,7 +1918,7 @@ test("the page probes read what a fix left behind: the empty 关注, the memory 
   assert.deepEqual(read([node("button", { text: "添加关注" }), node("button", { attrs: { "aria-pressed": "false" }, text: "药物" }), node("p", { text: "没有结果" })], "followingEmpty"), { adds: 1, chips: 1, noResults: true });
   assert.deepEqual(read([node("p", { text: "暂无一手材料，以下均为转述报道。" })], "eventGroups"), { primary: true, other: false, none: true });
 
-  // The page's sections are the links of the left column's navigation, 总览 · 关于你 · 做法 · 收到的, since 2026-10-28 (not a tab list, and 项目 went with its tab).
+  // The page's sections are the links of the sidebar's nested directory (since 2026-11-08, the page's left column before), 总览 · 关于你 · 做法 · 收到的, since 2026-10-28 (not a tab list, and 项目 went with its tab).
   const tabs = memoryNav([tab("关于你", 0, true), tab("做法", 15, false), tab("收到的", 0, false)]);
   assert.deepEqual(read([tabs], "memoryTabs"), {
     tabs: [{ name: "关于你", count: 0, selected: true }, { name: "做法", count: 15, selected: false }, { name: "收到的", count: 0, selected: false }],
@@ -1974,8 +1971,6 @@ test("a page probe is judged on what it exists to guard, and a probe that read n
   assert.deepEqual(one("frontier", "phone", "firstRowTop", { top: null }).notices, []);
   assert.deepEqual(one("virtual-research", "phone", "rowWidth", { widths: [120], min: 120 }).failures, ["virtual-research@phone: a study row's title is 120 px wide (at least 160)"]);
   assert.deepEqual(one("virtual-research", "phone", "rowWidth", { widths: [], min: null }).failures, []);
-  assert.deepEqual(one("capabilities", "desktop", "capabilityCards", { hits: ["可运行", "已安装"], wraps: 1 }), {
-    failures: ["capabilities@desktop: the tool cards still say 可运行, 已安装"], notices: ["capabilities@desktop: 1 card footer(s) take two lines"] });
 
   const tabs = (selected, counts) => ({ tabs: ["关于你", "做法", "收到的"].map((name, index) => ({ name, count: counts[index], selected: name === selected })) });
   assert.deepEqual(one("memory", "desktop", "memoryTabs", tabs("做法", [0, 15, 0])).failures, ["memory@desktop: the address names 关于你 and the page opens on 做法"]);
@@ -2334,7 +2329,6 @@ test("a page that regresses on what R11 fixed fails the walk and names the page 
   assert.ok((await failures({ FAKE_PROBE: "sharedMissing" })).failures.includes("memory-shared-missing@desktop: 重试 is offered for a share that does not exist"));
   assert.ok((await failures({ FAKE_PROBE: "missingRecord" })).failures.includes("extensions-skill-missing@desktop: 「操作未完成」 on a record that is not there"));
   assert.ok((await failures({ FAKE_PROBE: "readingFolds" })).failures.includes("frontier-evidence@desktop: the fold 编写与核查 is open at first sight"));
-  assert.ok((await failures({ FAKE_PROBE: "capabilityCards" })).failures.includes("capabilities@desktop: the tool cards still say 可运行"));
   assert.ok((await failures({ FAKE_BACK: "stay" })).failures.includes("extensions-skill-missing@desktop: 回到技能列表 goes to /app/extensions/skills/impeccable-audit-missing (/app/extensions/installed)"));
   const after = await failures({ FAKE_AFTER: "bad" });
   assert.ok(after.failures.includes("geo-sources@desktop: clicking the first source opened no drawer (a dialog holding data-geo-source-drawer)"));
@@ -2596,10 +2590,10 @@ test("the daily of a day nobody published is read for the day it names, the cloc
 
 /** The inbox's filter chips and the memory page's navigation and search box, as the pages draw them. */
 const listPage = ({ pressed = "未读 3", selected = "做法 5", query = "探针", search = true, dialog = false } = {}) => node("body", {}, [
-  node("aside", {}, [node("a", { attrs: { href: "/app/capabilities" }, text: "科研工具" }), node("a", { attrs: { href: "/app/inbox" }, text: "收件箱" })]),
+  node("aside", {}, [node("a", { attrs: { href: "/app/autopilot" }, text: "定时任务" }), node("a", { attrs: { href: "/app/inbox" }, text: "收件箱" })]),
   node("main", {}, [
     node("div", { attrs: { role: "tablist", "aria-label": "消息视图" } }, [node("button", { attrs: { role: "tab", "aria-selected": String(pressed === "全部") }, text: "全部" }), node("button", { attrs: { role: "tab", "aria-selected": String(pressed.startsWith("未读")) }, text: pressed.startsWith("未读") ? pressed : "未读" })]),
-    node("nav", { attrs: { "aria-label": "记忆" } }, [node("ul", {}, ["关于你", "做法 5", "收到的 3"].map((name) => node("li", {}, [node("a", { attrs: { href: "/app/memory", ...(name === selected ? { "aria-current": "page" } : {}) }, text: name })])))]),
+    node("nav", { attrs: { "aria-label": "记忆胶囊的内容" } }, [node("ul", {}, ["关于你", "做法 5", "收到的 3"].map((name) => node("li", {}, [node("a", { attrs: { href: "/app/memory", ...(name === selected ? { "aria-current": "page" } : {}) }, text: name })])))]),
     ...(search ? [node("input", { attrs: { "aria-label": "搜索记忆" }, value: query })] : []),
     ...(dialog ? [node("div", { attrs: { role: "dialog" } })] : []),
   ]),
@@ -2623,11 +2617,11 @@ test("where a list page keeps its place is read from the address and from what i
     assert.equal(addressAct(["tab", "做法"]), false);
     assert.equal(addressAct(["nav", "项目"]), false);
     assert.equal(addressAct(["tab", "不存在"]), false);
-    assert.equal(addressAct(["link", "/app/capabilities"]), true);
+    assert.equal(addressAct(["link", "/app/autopilot"]), true);
     assert.equal(addressAct(["link", "/app/nowhere"]), false);
     assert.equal(addressAct(["other"]), false);
   });
-  assert.deepEqual(descendants(body).filter((el) => el.clicks > 0).map((el) => el.text), ["科研工具", "未读 3", "做法 5"]);
+  assert.deepEqual(descendants(body).filter((el) => el.clicks > 0).map((el) => el.text), ["定时任务", "未读 3", "做法 5"]);
   assert.deepEqual(ADDRESS_CASES.map((c) => c.page), ["inbox", "memory", "memory-overview"]);
   assert.equal(addressStateHolds({ selected: "未读" }, { selected: "未读 3" }), true);
   assert.equal(addressStateHolds({ query: "探针" }, { query: "探针 " }), false);
@@ -2637,7 +2631,7 @@ test("where a list page keeps its place is read from the address and from what i
   const inbox = ADDRESS_CASES[0];
   const memory = ADDRESS_CASES[1];
   const shown = { path: "/app/inbox", search: "?filter=unread", dialog: false, found: true, selected: "未读 3" };
-  const good = { pressed: [true], first: shown, away: "/app/capabilities", back: shown, reload: shown };
+  const good = { pressed: [true], first: shown, away: "/app/autopilot", back: shown, reload: shown };
   assert.deepEqual(addressStateFindings(inbox, good), { failures: [], notices: [] });
   assert.deepEqual(addressStateFindings(inbox, { ...good, first: { ...shown, search: "" } }).notices, [
     "inbox@desktop: the choice is not in the address after it was made: filter=unread is not in “”",
@@ -2657,10 +2651,10 @@ test("where a list page keeps its place is read from the address and from what i
   assert.deepEqual(addressStateFindings(inbox, { pressed: [], first: { ...shown, found: false }, away: null, back: null, reload: null }).notices,
     ["inbox@desktop: not observable: the page's list controls were not found, so what it keeps in its address was not read"]);
   const kept = { path: "/app/memory", search: "?tab=methods&q=%E6%8E%A2%E9%92%88", dialog: false, found: true, selected: "做法 5", query: "探针" };
-  assert.deepEqual(addressStateFindings(memory, { pressed: [true], first: kept, away: "/app/capabilities", back: kept, reload: kept }), { failures: [], notices: [] });
+  assert.deepEqual(addressStateFindings(memory, { pressed: [true], first: kept, away: "/app/autopilot", back: kept, reload: kept }), { failures: [], notices: [] });
   assert.deepEqual(addressStateFindings(memory, { pressed: [true], first: { ...kept, query: null }, away: null, back: null, reload: null }).notices,
     ["memory@desktop: not observable: a control of the case was not on the page (found, search box missing), so the choice was not made"]);
-  assert.deepEqual(addressStateFindings(memory, { pressed: [true], first: { ...kept, search: "?tab=methods" }, away: "/app/capabilities", back: { ...kept, search: "?tab=methods" }, reload: { ...kept, search: "?tab=methods" } }).notices,
+  assert.deepEqual(addressStateFindings(memory, { pressed: [true], first: { ...kept, search: "?tab=methods" }, away: "/app/autopilot", back: { ...kept, search: "?tab=methods" }, reload: { ...kept, search: "?tab=methods" } }).notices,
     ["memory@desktop: the choice is not in the address after it was made: q=探针 is not in “?tab=methods”"]);
 
   // A row that opens in a drawer: in the address while open, and Back closes it.
@@ -2710,7 +2704,7 @@ test("the walk tries the address of the inbox and the memory page, the event's h
   assert.equal(report.notices.filter((notice) => /^(inbox|memory|frontier-event)@desktop: /.test(notice) && /address|hand-off|draft|Back/.test(notice)).length, 0, report.notices.join("\n"));
   // Both cases were made, then Back, then the address again; the memory row was opened and Back closed it.
   assert.deepEqual(log.filter((entry) => entry.act).map((entry) => entry.act),
-    [["tab", "未读"], ["link", "/app/capabilities"], ["nav", "做法"], ["link", "/app/capabilities"], ["chip", "时间范围", "近 30 天"], ["link", "/app/capabilities"]]);
+    [["tab", "未读"], ["link", "/app/autopilot"], ["nav", "做法"], ["link", "/app/autopilot"], ["chip", "时间范围", "近 30 天"], ["link", "/app/autopilot"]]);
   assert.deepEqual(log.filter((entry) => entry.fill).map((entry) => [entry.fill, entry.value]).filter(([name]) => name === "搜索记忆"), [["搜索记忆", "探针"], ["搜索记忆", "探针"]], "the memory page's search and the overview's, which share the box's name");
   assert.deepEqual(Object.keys(report.steps["address-state"]), ["target", "inbox", "memory", "memory-overview", "memory-landing", "memory-row-coverage", "memory-open"]);
   assert.equal(report.steps["frontier-event-handoff"].after.path, "/app/chat");
