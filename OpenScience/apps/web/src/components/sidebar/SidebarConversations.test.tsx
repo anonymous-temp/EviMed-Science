@@ -257,6 +257,24 @@ it("recomputes module ownership when the selected project changes without refetc
   expect(mocks.listProjects).toHaveBeenCalledTimes(reads);
 });
 
+it("keeps the module while another conversation's list reloads, and names it in a GEO project's own scope", async () => {
+  mocks.currentId = "p1";
+  const onCurrentModule = vi.fn();
+  const view = render(<MemoryRouter initialEntries={["/app/chat/a"]}><SidebarConversations geoId={null} geo vcr={false} onCurrentModule={onCurrentModule} /><Link to="/app/chat/b">另一个</Link><Link to="/app/geo/g1/visibility">项目</Link></MemoryRouter>);
+  await waitFor(() => expect(onCurrentModule).toHaveBeenLastCalledWith("geo"));
+  onCurrentModule.mockClear();
+  const gate = deferred<unknown[]>(); mocks.projects.mockReturnValue(gate.promise);
+  await userEvent.click(screen.getByRole("link", { name: "另一个" }));
+  await waitFor(() => expect(mocks.projects).toHaveBeenCalledTimes(2));
+  expect(onCurrentModule).not.toHaveBeenCalledWith(null);
+  await act(async () => gate.resolve([]));
+  await waitFor(() => expect(onCurrentModule).toHaveBeenLastCalledWith("geo"));
+  view.unmount();
+  const scoped = vi.fn();
+  render(<MemoryRouter initialEntries={["/app/geo/g1/visibility"]}><SidebarConversations geoId="g1" geo vcr={false} onCurrentModule={scoped} /></MemoryRouter>);
+  await waitFor(() => expect(scoped).toHaveBeenCalledWith("geo"));
+});
+
 const study = (id: string, projectId: string, name: string, extra = {}) => ({ id, projectId, name, originatingSessionId: undefined, purpose: "programme", createdAt: "2026-03-01T00:00:00Z", ...extra });
 it("groups conversations by research, keeps two sessions of one research as two rows and leaves other conversations flat", async () => {
   mocks.projects.mockResolvedValue([{ id: "p2", name: "Project of A" }, { id: "p3", name: "Paper" }]);

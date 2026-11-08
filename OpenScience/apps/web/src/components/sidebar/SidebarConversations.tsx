@@ -89,10 +89,17 @@ export function SidebarConversations({ geoId, geo, vcr, onCurrentModule }: { geo
   const lastBase = useRef(base);
   const liveBase = useRef(base); liveBase.current = base;
   const onModule = useRef(onCurrentModule); onModule.current = onCurrentModule;
+  // The module the open project belongs to. In a project's own scope the address says it (a GEO project, a study); in the account's
+  // list it is read from the lists, and the previous answer stands until a read has completed: a reload (another conversation
+  // opened) or a failed read must not blank the module's directory.
   useEffect(() => {
-    if (scope !== "all") return;
+    if (geoId) { onModule.current("geo"); return; }
+    if (studyId) { onModule.current("vcr"); return; }
+    if (scope !== "all" || view.loading) return;
+    const known = view.geoProjectIds.length > 0 || view.vcrProjectIds.length > 0;
+    if (!known && view.failed.length) return;
     onModule.current(view.geoProjectIds.includes(currentProjectId) ? "geo" : view.vcrProjectIds.includes(currentProjectId) ? "vcr" : null);
-  }, [scope, currentProjectId, view.geoProjectIds, view.vcrProjectIds]);
+  }, [geoId, studyId, scope, currentProjectId, view.loading, view.failed, view.geoProjectIds, view.vcrProjectIds]);
   const [search, setSearch] = useState({ generation, value: "" });
   const query = search.generation === generation ? search.value : "";
   const [management, setManagement] = useState(false);
