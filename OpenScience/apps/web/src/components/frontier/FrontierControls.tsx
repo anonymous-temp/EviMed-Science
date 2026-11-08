@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 import type { FrontierHotBoard, FrontierHotWindow } from "@/lib/frontierClient";
-import type { TabItem } from "@/components/ui/Tabs";
 import type { PageActionPlan } from "@/components/layout/HeaderActions";
 import type { ToolbarAction, ToolbarFilter, ToolbarProps, ToolbarSearch, ToolbarToken } from "@/components/ui/Toolbar";
 import { feedFilters, tagToken, type ChosenTag, type FrontierFilterValue, type HotTags } from "./FrontierFilters";
@@ -11,20 +10,6 @@ import { hotWindowFilter } from "./FrontierHot";
  * (`?view=following&follow=foryou`, owner 2026-10-25: 「那就是订阅关注吧」); an older `?view=foryou` opens it.
  */
 export type PageView = "selected" | "hot" | "daily" | "all" | "following" | "weekly" | "zones" | "track";
-
-/**
- * The peer views (owner, 2026-10-25): the three lists of items, which share 「筛选」, first — everyone's selection, everything, the
- * reader's own — then the ranking of events, the issues and the zones, each with its few controls.
- */
-export const FRONTIER_VIEWS: readonly TabItem<PageView>[] = [
-  { value: "selected", label: "精选" },
-  { value: "all", label: "全部" },
-  { value: "following", label: "关注" },
-  { value: "hot", label: "热榜" },
-  { value: "track", label: "追踪" },
-  { value: "daily", label: "简报" },
-  { value: "zones", label: "证据专区" },
-];
 
 /**
  * The page's own action: only 证据专区 has one, 「新建专区」 for a reader who may make a zone. It is the header's primary and not the
@@ -40,7 +25,8 @@ export type FollowChoice = { kind: "foryou" } | { kind: "all" } | { kind: "follo
 
 /**
  * The page's controls, as the `Toolbar` of the page shell takes it (owner, 2026-10-25: 「不要横着罗列着，顶上弄好几行」): one row on
- * every view — the views at the left, the open view's controls at its right and the search last (`oneRow`):
+ * every view — the open view's controls and the search last. The seven views themselves are the global sidebar's nested directory
+ * (`FrontierWorkspaceNav`, 2026-11-08), not a control of this row:
  *
  *  - 精选 / 全部, and 关注 while it lists items: what is applied as tokens (the chosen tag with its 「关注」), then 「筛选」, which holds
  *    the feed's filters (`feedFilters`); while searching, 「按时间」;
@@ -52,8 +38,7 @@ export type FollowChoice = { kind: "foryou" } | { kind: "all" } | { kind: "follo
  *    at every width.
  *
  * The followed things are 关注's own column on a wide screen; on a phone they are the first section of the 「筛选」 sheet
- * (`followList`), and the one follow the list is narrowed to is a token (「只看：肿瘤」). On a phone the views scroll beside the
- * 「筛选」 and search icons; 热榜's window and 简报's 日报 | 周报 stay in sight on the line under them (`pinned`). The search is the
+ * (`followList`), and the one follow the list is narrowed to is a token (「只看：肿瘤」). On a phone 热榜's window and 简报's 日报 | 周报 stay in sight on the line under them (`pinned`). The search is the
  * feed's, in every view; in 证据专区 it searches the zones. The row is in the shell's sticky band, so it stays at the top while a feed
  * of six thousand pixels scrolls under it.
  */
@@ -154,14 +139,6 @@ export function frontierToolbar({
   }
   return {
     label: "动态筛选与搜索",
-    views: {
-      label: "动态视图",
-      items: FRONTIER_VIEWS,
-      value: view === "weekly" ? "daily" : view,
-      // The 简报 tab is the daily and the weekly: pressing it on the weekly stays there.
-      onChange: (next) => { if (!(next === "daily" && view === "weekly")) onView(next as PageView); },
-      panelId: "frontier-view",
-    },
     filters: controls,
     navigation,
     tokens,
@@ -171,7 +148,6 @@ export function frontierToolbar({
     search,
     summary,
     actions,
-    oneRow: true,
     searchShortcut: true,
   };
 }

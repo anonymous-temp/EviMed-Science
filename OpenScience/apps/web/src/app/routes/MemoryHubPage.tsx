@@ -17,10 +17,11 @@ import { Button } from "@/components/ui/Button";
 import { List } from "@/components/ui/ListRow";
 import { FactDrawer } from "@/components/memory/FactDrawer";
 import { ForgottenDrawer } from "@/components/memory/ForgottenDrawer";
-import { MEMORY_OVERVIEW_ADDRESS, memoryTabAddress, MemoryFrame, type MemoryTab } from "@/components/memory/MemoryFrame";
+import { MemoryFrame } from "@/components/memory/MemoryFrame";
+import { MEMORY_OVERVIEW_ADDRESS, memoryTabAddress, type MemoryTab } from "@/components/memory/memoryTabs";
 import { GroupSection, MemoryListRow, PendingMemoryRows } from "@/components/memory/MemoryRows";
 import { MethodDrawer } from "@/components/memory/PracticeDrawer";
-import { enabledPackCount, ReceivedTab } from "@/components/memory/ReceivedTab";
+import { ReceivedTab } from "@/components/memory/ReceivedTab";
 import { readHandover } from "@/components/memory/handover";
 import { factItems, factRowSummary, OTHER_PROJECT_LABEL, practiceItems, type FactItem, type PracticeItem } from "@/components/memory/memoryItems";
 import { ImportDialog } from "@/components/memory/ImportDialog";
@@ -115,7 +116,7 @@ export function MemoryHubPage() {
     next.delete("project");
     return <Navigate to={`/app/memory?${next.toString()}`} replace />;
   }
-  return <MemoryHub overviewOn={feature === "on"} />;
+  return <MemoryHub />;
 }
 
 /**
@@ -141,7 +142,7 @@ function ReceivedPanel({ packs, onShare, onImport, onChanged }: {
   return <ReceivedTab packs={packs} handover={handover.data} onShare={onShare} onChanged={onChanged} />;
 }
 
-function MemoryHub({ overviewOn }: { overviewOn: boolean }) {
+function MemoryHub() {
   const [params, setParams] = useSearchParams();
   const currentProjectId = useProjectStore((state) => state.currentId);
   // The list the address names, else the one the page picked for the researcher once the data was in (below).
@@ -264,14 +265,7 @@ function MemoryHub({ overviewOn }: { overviewOn: boolean }) {
     setChosen(true);
   }, [landed, data, readIn, everyFact, everyPractice]);
 
-  // A list with nothing in it carries no number: 「做法 0」 is a statistic about an empty list, which its empty state already says.
-  // The list's own reads decide when its number is drawn, and until the page has chosen where to land no list is: it would be the wrong one.
   const loading = (name: MemoryTab) => !readIn(SOURCES_OF[name]);
-  const counts: Record<MemoryTab, number | undefined> = {
-    self: loading("self") ? undefined : facts.length,
-    methods: loading("methods") ? undefined : practices.length,
-    received: loading("received") ? undefined : enabledPackCount(data.received ?? []),
-  };
   const scrollAnchor = usePageScroll(readIn(SOURCES_OF[tab]) && landed);
 
   const opened: FactItem | PracticeItem | null = openKey
@@ -349,8 +343,6 @@ function MemoryHub({ overviewOn }: { overviewOn: boolean }) {
   return (
     <MemoryFrame
       tab={tab}
-      counts={counts}
-      overview={overviewOn}
       controls={{
         onReset: reload,
         onShare: () => openShare("export"),

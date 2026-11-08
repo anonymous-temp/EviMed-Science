@@ -1,13 +1,11 @@
 import { Fragment, useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import {
-  Bot,
   Brain,
   FolderTree,
   Newspaper,
   Orbit,
   PanelLeft,
-  Plug,
   Radar,
   Search,
   Settings,
@@ -22,8 +20,14 @@ import { SIDEBAR_MAX, SIDEBAR_MIN, useUiStore } from "@/lib/store";
 import { InboxBell } from "@/components/sidebar/InboxBell";
 import { SidebarConversations } from "@/components/sidebar/SidebarConversations";
 import { useFrontierFeature } from "@/lib/frontierFeature";
+import { knowledgePagesOffered } from "@/lib/sourceClient";
+import { memoryMapOffered } from "@/lib/memoryMapFeature";
 import { useGeoFeature } from "@/lib/geoClient";
 import { GeoWorkspaceNav, geoWorkspaceId } from "@/components/geo/GeoWorkspaceNav";
+import { FrontierWorkspaceNav } from "@/components/frontier/FrontierWorkspaceNav";
+import { SearchWorkspaceNav } from "@/components/search/SearchWorkspaceNav";
+import { KnowledgeWorkspaceNav } from "@/components/sources/KnowledgeWorkspaceNav";
+import { MemoryWorkspaceNav } from "@/components/memory/MemoryWorkspaceNav";
 import { VcrWorkspaceNav } from "@/components/vcr/VcrWorkspaceNav";
 import { useVcrFeature } from "@/lib/vcrClient";
 import { useVcrFinishedToasts } from "@/components/vcr/useVcrFinishedToasts";
@@ -64,12 +68,10 @@ interface NavItem {
  */
 const NAV: NavItem[] = [
   { to: "/app/home", label: "新对话", icon: <SquarePen size={16} aria-hidden="true" /> },
-  { to: "/app/capabilities", label: "科研工具", icon: <Bot size={16} aria-hidden="true" /> },
   { to: "/app/active-research", label: "主动科研", icon: <Telescope size={16} aria-hidden="true" /> },
   { to: "/app/files", label: "知识库", icon: <FolderTree size={16} aria-hidden="true" /> },
   { to: "/app/memory", label: "记忆胶囊", icon: <Brain size={16} aria-hidden="true" /> },
   { to: "/app/autopilot", label: "定时任务", icon: <Orbit size={16} aria-hidden="true" /> },
-  { to: "/app/extensions/discover", label: "插件与技能", icon: <Plug size={16} aria-hidden="true" /> },
 ];
 
 /**
@@ -92,7 +94,7 @@ const GEO_NAV: NavItem = { to: "/app/geo", label: "循证 GEO", icon: <Radar siz
 
 /**
  * The rows in order: the frontier feed after 「新对话」, then 「虚拟临床研究」 and
- * 「循证 GEO」 after 「科研工具」 and 「主动科研」, in that order — the two boards sit together,
+ * 「循证 GEO」 after 「主动科研」, in that order — the two boards sit together,
  * and the one this account may not have simply is not there.
  */
 function navRows({ frontier, vcr, geo, search }: { frontier: boolean; vcr: boolean; geo: boolean; search: boolean }): NavItem[] {
@@ -111,7 +113,6 @@ function navRows({ frontier, vcr, geo, search }: { frontier: boolean; vcr: boole
  * is not on screen).
  */
 export function isCurrent(to: string, pathname: string, projectModule: "geo" | "vcr" | null): boolean {
-  if (to === "/app/extensions/discover") return pathname.startsWith("/app/extensions");
   const chatting = pathname === "/app/home" || pathname.startsWith("/app/chat");
   if (to === "/app/home") return chatting && projectModule === null;
   if (to === VCR_NAV.to) return pathname.startsWith(to) || (chatting && projectModule === "vcr");
@@ -150,12 +151,17 @@ export function Sidebar() {
   // for an operator beside the gear.
   const [operator, setOperator] = useState(false);
   const [search, setSearch] = useState(false);
+  // The offers the nested directories of 知识库 and 记忆胶囊 follow, read from the same `/api/me` as the rest of this column.
+  const [pagesOffered, setPagesOffered] = useState(false);
+  const [overviewOffered, setOverviewOffered] = useState(false);
   useEffect(() => {
     let live = true;
-    void fetchWebMe().then((me) => { if (live && me) { setAccountName(me.user.name); setOperator(me.operator === true); setSearch(me.features?.evimedSearch === true); } }).catch(() => {});
+    void fetchWebMe().then((me) => { if (live && me) { setAccountName(me.user.name); setOperator(me.operator === true); setSearch(me.features?.evimedSearch === true); setPagesOffered(knowledgePagesOffered(me)); setOverviewOffered(memoryMapOffered(me)); } }).catch(() => {});
     return () => { live = false; };
   }, []);
   const rows = navRows({ frontier, vcr, geo, search });
+  // 设置 holds the account and, since 2026-11-08, 技能与插件 (`/app/extensions`).
+  const settingsCurrent = location.pathname.startsWith("/app/account") || location.pathname.startsWith("/app/extensions");
 
   const onDividerPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -225,9 +231,9 @@ export function Sidebar() {
         <nav aria-label="工作台" className="flex shrink-0 flex-col px-3">
           {rows.map((item) => (
             <Fragment key={item.to}>
-            {(item.to === "/app/home" || item.to === "/app/capabilities" || item.to === "/app/files" || item.to === "/app/autopilot") && (
+            {(item.to === "/app/home" || item.to === "/app/active-research" || item.to === "/app/files" || item.to === "/app/autopilot") && (
               <h2 className={cn("px-2 pb-1 text-meta font-normal text-text-3", item.to === "/app/home" ? "pt-1" : "pt-3")}>
-                {item.to === "/app/home" ? "工作台" : item.to === "/app/capabilities" ? "研究" : item.to === "/app/files" ? "资料与记忆" : "自动化与扩展"}
+                {item.to === "/app/home" ? "工作台" : item.to === "/app/active-research" ? "研究" : item.to === "/app/files" ? "资料与记忆" : "自动化"}
               </h2>
             )}
             <NavRow
@@ -237,7 +243,11 @@ export function Sidebar() {
               active={isCurrent(item.to, location.pathname, projectModule)}
               freshState={item.to === "/app/home" ? () => ({ globalEntry: crypto.randomUUID() }) : undefined}
             />
-            {item.to === VCR_NAV.to && vcr && (location.pathname === VCR_NAV.to || location.pathname.startsWith(`${VCR_NAV.to}/`) || projectModule === "vcr") && <VcrWorkspaceNav />}
+            {item.to === FRONTIER_NAV.to && isCurrent(item.to, location.pathname, projectModule) && <FrontierWorkspaceNav />}
+            {item.to === SEARCH_NAV.to && isCurrent(item.to, location.pathname, projectModule) && <SearchWorkspaceNav />}
+            {item.to === "/app/files" && isCurrent(item.to, location.pathname, projectModule) && <KnowledgeWorkspaceNav pagesOffered={pagesOffered} />}
+            {item.to === "/app/memory" && isCurrent(item.to, location.pathname, projectModule) && <MemoryWorkspaceNav overviewOffered={overviewOffered} />}
+            {item.to === VCR_NAV.to && vcr && isCurrent(item.to, location.pathname, projectModule) && <VcrWorkspaceNav />}
             {item.to === GEO_NAV.to && geoProjectId && <GeoWorkspaceNav geoId={geoProjectId} />}
             </Fragment>
           ))}
@@ -285,8 +295,8 @@ export function Sidebar() {
               <Link
                 to="/app/account"
                 aria-label="设置"
-                aria-current={location.pathname.startsWith("/app/account") ? "page" : undefined}
-                className={iconButtonClasses({ active: location.pathname.startsWith("/app/account") })}
+                aria-current={settingsCurrent ? "page" : undefined}
+                className={iconButtonClasses({ active: settingsCurrent })}
               >
                 <Settings size={16} aria-hidden="true" />
               </Link>

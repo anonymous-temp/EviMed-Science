@@ -63,6 +63,9 @@ export function useEvimedSearchState() {
   const [detailState, setDetailState] = useState<Resource<EvimedSearchDetail>>({ key: "", status: "loading" });
   const rootRef = useRef<HTMLDivElement>(null);
   const composing = useRef(false);
+  // Set while the arrival at a category is being replaced by the address it was left at: nothing is read for the address that is going.
+  const redirecting = useRef(false);
+  const lastView = useRef({ category, query, draft: "" });
   const memory = useRef({
     query, epoch: 0, controller: null as AbortController | null,
     facetController: null as AbortController | null,
@@ -119,12 +122,29 @@ export function useEvimedSearchState() {
     if (store.query !== query) clearRound(query);
     const previous = store.views.get(category);
     const editing = !query && editingDraft.current?.category === category ? editingDraft.current : null;
+    // The category is switched by the sidebar's directory, a plain link (2026-11-08): arriving at another category with the same
+    // keyword, the page it was left at (its filters and page) comes back, and before the first search the typed draft goes along.
+    redirecting.current = false;
+    const left = lastView.current;
+    lastView.current = { category, query, draft: editing?.value ?? draft };
+    if (left.category !== category && !editing) {
+      if (!query && !left.query) {
+        store.views.set(category, { query: "", search: "", draft: left.draft });
+        setDraftState({ category, query: "", value: left.draft });
+        return;
+      }
+      if (query && left.query === query && previous?.query === query && previous.search !== listSearch && listSearch === new URLSearchParams({ q: query }).toString()) {
+        redirecting.current = true;
+        navigate(`/app/search/${category}?${previous.search}`, { replace: true });
+        return;
+      }
+    }
     store.views.set(category, { query, search: listSearch, draft: editing?.value ?? draft });
     if (editing || draftState.category !== category || draftState.query !== query) {
       setDraftState({ category, query, value: editing?.value ?? (previous?.query === query ? previous.draft : query) });
       editingDraft.current = null;
     }
-  }, [category, clearRound, draft, draftState.category, draftState.query, listSearch, query, store]);
+  }, [category, clearRound, draft, draftState.category, draftState.query, listSearch, navigate, query, store]);
 
   useEffect(() => {
     const clearSession = () => {
@@ -147,7 +167,7 @@ export function useEvimedSearchState() {
   }, [category, clearRound, navigate]);
 
   useEffect(() => {
-    if (!query && !detailRef) return undefined;
+    if (redirecting.current || (!query && !detailRef)) return undefined;
     const controller = new AbortController();
     const epoch = store.epoch;
     store.controller = controller;
@@ -198,7 +218,7 @@ export function useEvimedSearchState() {
 
   // Refinement metadata does not delay results, or reload when paging, sorting or selecting a year interval.
   useEffect(() => {
-    if (!query || detailRef) return undefined;
+    if (redirecting.current || !query || detailRef) return undefined;
     const hit = cached(store.facets, facetKey);
     if (hit) {
       const entry = store.facets.get(facetKey)!;
@@ -307,22 +327,6 @@ export function useEvimedSearchState() {
     store.facetController?.abort();
     setParams({});
   }
-  function switchCategory(value: string) {
-    const nextCategory = evimedSearchCategory(value);
-    if (nextCategory === category) return;
-    captureScroll();
-    store.views.set(category, { query, search: listSearch, draft });
-    if (!query) {
-      // Before the first search, categories scope the same input rather than restoring result-page drafts.
-      store.views.set(nextCategory, { query: "", search: "", draft });
-      setDraftState({ category: nextCategory, query: "", value: draft });
-      navigate(`/app/search/${nextCategory}`);
-      return;
-    }
-    const target = store.views.get(nextCategory);
-    const search = target?.query === query ? target.search : new URLSearchParams(query ? { q: query } : {}).toString();
-    navigate(`/app/search/${nextCategory}${search ? `?${search}` : ""}`);
-  }
   function selectItems(items: EvimedSearchItem[], selected: boolean) {
     const selection = new Map((store.selected.get(selectionKey) ?? []).map(item => [item.id, item]));
     for (const item of items) {
@@ -356,7 +360,7 @@ export function useEvimedSearchState() {
   return {
     selectedItems, selectItems, clearSelection: () => { store.selected.delete(selectionKey); setSelectionVersion(value => value + 1); }, updateCollected,
     rootRef, category, params: listParams, query, page, detailRef, language, sort, source, scholarly, filters, facets, facetsBusy,
-    draft, setDraft, composing, result, state, readerState, busy, update, submit, clearSearch, editSearch, switchCategory,
+    draft, setDraft, composing, result, state, readerState, busy, update, submit, clearSearch, editSearch,
     resetFilters: () => update(Object.fromEntries([...EVIMED_SEARCH_FILTER_KEYS, "page"].map(key => [key, null]))),
     retryFacets: () => { store.facets.delete(facetKey); setFacetRevision(value => value + 1); },
     retrySearch: () => refresh(false), retryCurrent: () => refresh(false),

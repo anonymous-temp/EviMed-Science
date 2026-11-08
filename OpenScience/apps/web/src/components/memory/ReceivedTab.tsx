@@ -36,11 +36,6 @@ export function orderedPacks(packs: readonly ReceivedCapsule[]): ReceivedCapsule
     || String(right.importedAt ?? "").localeCompare(String(left.importedAt ?? "")) || left.id.localeCompare(right.id));
 }
 
-/** How many packs are in force: the number on the tab and on the dashboard's tile. */
-export function enabledPackCount(packs: readonly ReceivedCapsule[]): number {
-  return packs.filter((pack) => pack.enabled && !pack.takenDown).length;
-}
-
 /**
  * What is in a pack, in a drawer: who it is from and what it says it holds (the card its sender signed), what it brings by kind, the
  * first methods in their own words and, when a newer snapshot replaced it, what changed. A pack taken down says so. The drawer reads

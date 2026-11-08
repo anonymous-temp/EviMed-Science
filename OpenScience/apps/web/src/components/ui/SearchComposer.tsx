@@ -1,19 +1,16 @@
-import { forwardRef, useCallback, useEffect, useId, useImperativeHandle, useLayoutEffect, useRef, type TextareaHTMLAttributes } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, type TextareaHTMLAttributes } from "react";
 import { ArrowUp, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { IconButton } from "@/components/ui/IconButton";
 import { Textarea } from "@/components/ui/Input";
-import { Tabs, type TabItem } from "@/components/ui/Tabs";
 
-/** One query surface: category tabs above the editor and its submit action below. */
+/** One query surface: the editor and its submit action below. The category is the sidebar's directory (2026-11-08), not a control here. */
 export const SearchComposer = forwardRef<HTMLTextAreaElement, Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, "onSubmit"> & {
   label: string;
-  categories: { label: string; items: readonly TabItem[]; value: string; onChange(value: string): void };
   onSubmit(): void;
   onClear(): void;
-}>(function SearchComposer({ label, categories, onSubmit, onClear, onKeyDown, ...props }, ref) {
+}>(function SearchComposer({ label, onSubmit, onClear, onKeyDown, ...props }, ref) {
   const input = useRef<HTMLTextAreaElement>(null);
-  const panelId = useId();
   useImperativeHandle(ref, () => input.current as HTMLTextAreaElement);
   const filled = Boolean(String(props.value ?? "").trim());
   const resize = useCallback(() => {
@@ -29,10 +26,7 @@ export const SearchComposer = forwardRef<HTMLTextAreaElement, Omit<TextareaHTMLA
   }, [resize]);
   return (
     <div data-search-composer="" className="rounded-composer border border-border-control bg-surface shadow-e1 transition-colors duration-fast focus-within:border-focus focus-within:outline focus-within:outline-2 focus-within:-outline-offset-2 focus-within:outline-focus">
-      <div className="px-4 pt-2 md:px-6 md:pt-3">
-        <Tabs {...categories} panelId={panelId} animatedIndicator />
-      </div>
-      <div id={panelId} role="tabpanel" aria-labelledby={`${panelId}-tab-${categories.value}`}>
+      <div>
         <div className="px-4 pb-2 pt-4 md:px-6">
           <Textarea ref={input} aria-label={label} aria-multiline="true" rows={2}
             className="min-h-20 max-h-60 resize-none overflow-y-auto rounded-none border-0 bg-transparent p-0 text-ui focus:outline-transparent focus-visible:outline-transparent"
