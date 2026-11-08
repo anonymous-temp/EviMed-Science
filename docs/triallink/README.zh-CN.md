@@ -16,7 +16,7 @@ TrialLink 是一个患者–临床试验匹配系统：从一份病历出发，�
 | — 分队列 | TREC 2021 / TREC 2022 / SIGIR | 0.883 / 0.819 / 0.659 | **第 1（共 5）** / **第 1（共 5）** / 第 2（共 5） | 0.84 / 0.78 / 0.66 |
 | 目标试验检索 | NIH-TrialBench，126 个病例 | 前 10 召回 **95.2%** | **第 1（共 5）** | TrialGPT 2.0：70% |
 | 逐条入排标准判断 | TrialGPT 标注集中医生给出明确结论的 722 条 | 一致率 **92.0%** | 系统中 **第 1（共 2）**；三位医生 89.0–93.1% | TrialGPT 1.0 · GPT-4：87.4% |
-| 队列筛选 | n2c2 队列筛选官方测试集 | micro-F1 **0.918** | **第 1（共 14）** | 密歇根大学（赛后系统）：0.911；挑战赛冠军 0.910 |
+| 队列筛选 | n2c2 队列筛选官方测试集 | micro-F1 **0.918** | **第 1（共 14）** | 混合 NLP 系统（赛后）：0.911；挑战赛冠军（规则系统）0.910 |
 
 - 在 TrialGPT 2.0 协议上，TrialLink 在论文报告的四项指标上都排第一。它的 nDCG@10 置信区间（0.756–0.817）与 TrialGPT 2.0（GPT-5.4）
   的 0.76 有重叠；已发表系统只给点估计，无法做配对检验。在开发全程未使用的 105 位患者上，nDCG@10 为 0.841。SIGIR 队列上为 0.659，
@@ -207,8 +207,8 @@ SIGIR 2016 + TREC 2021/2022，183 位患者，只排 TrialGPT 检索前 500 中�
 | 1 | **TrialLink** | **95.2** | 本报告 |
 | 2 | TrialGPT 2.0 | 70.0 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5c |
 | 3 | TrialGPT 1.0 | 54.0 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5c |
-| 4 | ChatGPT-5.5 Thinking (web) | 43.0 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5c |
-| 5 | Gemini-3.5 Flash Ext. Thinking (web) | 21.0 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5c |
+| 4 | GPT-5.5 | 43.0 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5c |
+| 5 | Gemini 3.5 Flash | 21.0 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5c |
 
 TrialGPT 2.0 论文只用默认底座 GPT-4.1 报告了 NIH-TrialBench（原文："Unless otherwise specified, all main analyses used GPT-4.1"）；GPT-5.4 和 Gemini 只跑了三个公开队列。TrialLink 按全部 126 例计算为 85.7%（79.4–91.3）。
 
@@ -219,22 +219,22 @@ TrialGPT 2.0 论文只用默认底座 GPT-4.1 报告了 NIH-TrialBench（原文�
 | 排名 | 系统 | Micro-F1 | 来源 |
 |---|---|---|---|
 | 1 | **TrialLink** | **0.918 (0.905–0.931)** | 本报告 |
-| 2 | U Michigan (post-challenge) | 0.911 | Vydiswaran et al., JAMIA 2019 (reimplemented system) |
-| 3 | Graz (official #1, rules) | 0.91 | Stubbs et al., JAMIA 2019, Table 2 |
-| 4 | U Michigan (official #2) | 0.908 | Stubbs et al., JAMIA 2019, Table 2 |
-| 5 | Sorbonne Université | 0.907 | Stubbs et al., JAMIA 2019, Table 2 |
-| 6 | Med Data Quest | 0.903 | Stubbs et al., JAMIA 2019, Table 2 |
-| 7 | Cincinnati Children's | 0.903 | Stubbs et al., JAMIA 2019, Table 2 |
-| 8 | Arizona State U | 0.90 | Stubbs et al., JAMIA 2019, Table 2 |
-| 9 | UNSW / NCI | 0.891 | Stubbs et al., JAMIA 2019, Table 2 |
+| 2 | Hybrid NLP, post-challenge | 0.911 | Vydiswaran et al., JAMIA 2019 (reimplemented system) |
+| 3 | Rule-based (challenge #1) | 0.91 | Stubbs et al., JAMIA 2019, Table 2 |
+| 4 | Hybrid NLP (MetaMap + cTAKES) | 0.908 | Stubbs et al., JAMIA 2019, Table 2 |
+| 5 | Rules + semi-supervised | 0.907 | Stubbs et al., JAMIA 2019, Table 2 |
+| 6 | Three-stage rule-based | 0.903 | Stubbs et al., JAMIA 2019, Table 2 |
+| 7 | cTAKES + regex hybrid | 0.903 | Stubbs et al., JAMIA 2019, Table 2 |
+| 8 | Rules + word2vec | 0.90 | Stubbs et al., JAMIA 2019, Table 2 |
+| 9 | 280-rule system | 0.891 | Stubbs et al., JAMIA 2019, Table 2 |
 | 10 | MedGemma-27b + RAG + LoRA | 0.891 | Chen et al., arXiv 2604.05190, Table 3 |
-| 11 | Harbin Inst. of Technology | 0.886 | Stubbs et al., JAMIA 2019, Table 2 |
-| 12 | U Utah | 0.884 | Stubbs et al., JAMIA 2019, Table 2 |
-| 13 | Taitung / TMU / UNSW | 0.877 | Stubbs et al., JAMIA 2019, Table 2 |
+| 11 | Rules + CNN-highway-LSTM | 0.886 | Stubbs et al., JAMIA 2019, Table 2 |
+| 12 | Trie rule processor | 0.884 | Stubbs et al., JAMIA 2019, Table 2 |
+| 13 | Rules + SVM | 0.877 | Stubbs et al., JAMIA 2019, Table 2 |
 | 14 | Llama-3.1-8b + LoRA | 0.867 | Chen et al., arXiv 2604.05190, Table 3 (full context) |
 | – | 47-team median (参考线) | 0.823 | Stubbs et al., JAMIA 2019 |
 
-官方评分脚本（track1_eval.py），TrialLink 使用 n2c2 官方标注指南。既非"符合"也非"不符合"的回答，按指南对未提及标准的标注方式计：不符合，ENGLISH 和 MAKES-DECISIONS 两条计为符合。86 位患者中有 2 位的结论起初未能保存，在证据编号修复后补齐；macro-F1 0.832。挑战赛各系统和 LoRA 模型都在 n2c2 训练集上构建，TrialLink 没有任何部件在其上训练。图中列出前七名队伍，表格列出全部前十。
+官方评分脚本（track1_eval.py），TrialLink 使用 n2c2 官方标注指南。既非"符合"也非"不符合"的回答，按指南对未提及标准的标注方式计：不符合，ENGLISH 和 MAKES-DECISIONS 两条计为符合。86 位患者中有 2 位的结论起初未能保存，在证据编号修复后补齐；macro-F1 0.832。挑战赛各系统和 LoRA 模型都在 n2c2 训练集上构建，TrialLink 没有任何部件在其上训练。挑战赛系统按方法命名（Stubbs 等，表 2）；图中列出前七名，表格列出全部前十。
 
 #### 逐条判断 · 医生给出明确结论的标准（%）
 

@@ -17,7 +17,7 @@ field reports on, one capability at a time, beside every published system with a
 | — per cohort | TREC 2021 / TREC 2022 / SIGIR | 0.883 / 0.819 / 0.659 | **1st of 5** / **1st of 5** / 2nd of 5 | 0.84 / 0.78 / 0.66 |
 | Target-trial retrieval | NIH-TrialBench, 126 vignettes | recall@10 **95.2%** | **1st of 5** | TrialGPT 2.0: 70% |
 | Criterion-level eligibility | TrialGPT annotations: the 722 criteria physicians decided | accuracy **92.0%** | **1st of 2** systems; physicians 89.0–93.1% | TrialGPT 1.0 · GPT-4: 87.4% |
-| Cohort selection | n2c2 cohort selection, official test | micro-F1 **0.918** | **1st of 14** | U Michigan (post-challenge): 0.911; challenge winner 0.910 |
+| Cohort selection | n2c2 cohort selection, official test | micro-F1 **0.918** | **1st of 14** | Hybrid NLP system (post-challenge): 0.911; rule-based challenge winner 0.910 |
 
 - On the TrialGPT 2.0 protocol TrialLink ranks first on all four metrics the paper reports. Its nDCG@10 interval (0.756–0.817) overlaps
   TrialGPT 2.0 with GPT-5.4 (0.76); published systems report point estimates only, so no paired test is possible. On the 105 patients held
@@ -218,8 +218,8 @@ Scored with the same official script as the panels above, restricted to the cand
 | 1 | **TrialLink** | **95.2** | this report |
 | 2 | TrialGPT 2.0 | 70.0 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5c |
 | 3 | TrialGPT 1.0 | 54.0 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5c |
-| 4 | ChatGPT-5.5 Thinking (web) | 43.0 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5c |
-| 5 | Gemini-3.5 Flash Ext. Thinking (web) | 21.0 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5c |
+| 4 | GPT-5.5 | 43.0 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5c |
+| 5 | Gemini 3.5 Flash | 21.0 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5c |
 
 TrialGPT 2.0 reports NIH-TrialBench only with its default backbone, GPT-4.1 ("Unless otherwise specified, all main analyses used GPT-4.1"); its GPT-5.4 and Gemini runs cover the three public cohorts only. TrialLink over all 126 cases: 85.7% (79.4–91.3).
 
@@ -230,22 +230,22 @@ official test · 86 patients × 13 criteria · micro-F1
 | Rank | System | Micro-F1 | Source |
 |---|---|---|---|
 | 1 | **TrialLink** | **0.918 (0.905–0.931)** | this report |
-| 2 | U Michigan (post-challenge) | 0.911 | Vydiswaran et al., JAMIA 2019 (reimplemented system) |
-| 3 | Graz (official #1, rules) | 0.91 | Stubbs et al., JAMIA 2019, Table 2 |
-| 4 | U Michigan (official #2) | 0.908 | Stubbs et al., JAMIA 2019, Table 2 |
-| 5 | Sorbonne Université | 0.907 | Stubbs et al., JAMIA 2019, Table 2 |
-| 6 | Med Data Quest | 0.903 | Stubbs et al., JAMIA 2019, Table 2 |
-| 7 | Cincinnati Children's | 0.903 | Stubbs et al., JAMIA 2019, Table 2 |
-| 8 | Arizona State U | 0.90 | Stubbs et al., JAMIA 2019, Table 2 |
-| 9 | UNSW / NCI | 0.891 | Stubbs et al., JAMIA 2019, Table 2 |
+| 2 | Hybrid NLP, post-challenge | 0.911 | Vydiswaran et al., JAMIA 2019 (reimplemented system) |
+| 3 | Rule-based (challenge #1) | 0.91 | Stubbs et al., JAMIA 2019, Table 2 |
+| 4 | Hybrid NLP (MetaMap + cTAKES) | 0.908 | Stubbs et al., JAMIA 2019, Table 2 |
+| 5 | Rules + semi-supervised | 0.907 | Stubbs et al., JAMIA 2019, Table 2 |
+| 6 | Three-stage rule-based | 0.903 | Stubbs et al., JAMIA 2019, Table 2 |
+| 7 | cTAKES + regex hybrid | 0.903 | Stubbs et al., JAMIA 2019, Table 2 |
+| 8 | Rules + word2vec | 0.90 | Stubbs et al., JAMIA 2019, Table 2 |
+| 9 | 280-rule system | 0.891 | Stubbs et al., JAMIA 2019, Table 2 |
 | 10 | MedGemma-27b + RAG + LoRA | 0.891 | Chen et al., arXiv 2604.05190, Table 3 |
-| 11 | Harbin Inst. of Technology | 0.886 | Stubbs et al., JAMIA 2019, Table 2 |
-| 12 | U Utah | 0.884 | Stubbs et al., JAMIA 2019, Table 2 |
-| 13 | Taitung / TMU / UNSW | 0.877 | Stubbs et al., JAMIA 2019, Table 2 |
+| 11 | Rules + CNN-highway-LSTM | 0.886 | Stubbs et al., JAMIA 2019, Table 2 |
+| 12 | Trie rule processor | 0.884 | Stubbs et al., JAMIA 2019, Table 2 |
+| 13 | Rules + SVM | 0.877 | Stubbs et al., JAMIA 2019, Table 2 |
 | 14 | Llama-3.1-8b + LoRA | 0.867 | Chen et al., arXiv 2604.05190, Table 3 (full context) |
 | – | 47-team median (reference) | 0.823 | Stubbs et al., JAMIA 2019 |
 
-Official evaluator (track1_eval.py), TrialLink given the n2c2 annotation guidelines. An answer neither met nor not met is read as the guidelines label an unmentioned criterion: not met, except ENGLISH and MAKES-DECISIONS (met). The 2 of 86 patients whose decisions had not saved were completed after the evidence-identifier fix; macro-F1 0.832. The challenge systems and the LoRA models were built on the n2c2 training split; no TrialLink component was trained on it. The figure shows the first seven teams; the table lists all ten.
+Official evaluator (track1_eval.py), TrialLink given the n2c2 annotation guidelines. An answer neither met nor not met is read as the guidelines label an unmentioned criterion: not met, except ENGLISH and MAKES-DECISIONS (met). The 2 of 86 patients whose decisions had not saved were completed after the evidence-identifier fix; macro-F1 0.832. The challenge systems and the LoRA models were built on the n2c2 training split; no TrialLink component was trained on it. Challenge systems are named by method (Stubbs et al., Table 2); the figure shows the first seven, the table all ten.
 
 #### Criterion-level · physician-decided criteria (%)
 

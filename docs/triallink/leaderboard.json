@@ -541,13 +541,13 @@
      "kind": "published"
     },
     {
-     "label": "ChatGPT-5.5 Thinking (web)",
+     "label": "GPT-5.5",
      "value": 43,
      "source": "TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5c",
      "kind": "published"
     },
     {
-     "label": "Gemini-3.5 Flash Ext. Thinking (web)",
+     "label": "Gemini 3.5 Flash",
      "value": 21,
      "source": "TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5c",
      "kind": "published"
@@ -577,49 +577,49 @@
      ]
     },
     {
-     "label": "U Michigan (post-challenge)",
+     "label": "Hybrid NLP, post-challenge",
      "value": 0.9111,
      "source": "Vydiswaran et al., JAMIA 2019 (reimplemented system)",
      "kind": "published"
     },
     {
-     "label": "Graz (official #1, rules)",
+     "label": "Rule-based (challenge #1)",
      "value": 0.91,
      "source": "Stubbs et al., JAMIA 2019, Table 2",
      "kind": "published"
     },
     {
-     "label": "U Michigan (official #2)",
+     "label": "Hybrid NLP (MetaMap + cTAKES)",
      "value": 0.9075,
      "source": "Stubbs et al., JAMIA 2019, Table 2",
      "kind": "published"
     },
     {
-     "label": "Sorbonne Université",
+     "label": "Rules + semi-supervised",
      "value": 0.9069,
      "source": "Stubbs et al., JAMIA 2019, Table 2",
      "kind": "published"
     },
     {
-     "label": "Med Data Quest",
+     "label": "Three-stage rule-based",
      "value": 0.9028,
      "source": "Stubbs et al., JAMIA 2019, Table 2",
      "kind": "published"
     },
     {
-     "label": "Cincinnati Children's",
+     "label": "cTAKES + regex hybrid",
      "value": 0.9026,
      "source": "Stubbs et al., JAMIA 2019, Table 2",
      "kind": "published"
     },
     {
-     "label": "Arizona State U",
+     "label": "Rules + word2vec",
      "value": 0.9003,
      "source": "Stubbs et al., JAMIA 2019, Table 2",
      "kind": "published"
     },
     {
-     "label": "UNSW / NCI",
+     "label": "280-rule system",
      "value": 0.8913,
      "source": "Stubbs et al., JAMIA 2019, Table 2",
      "kind": "published"
@@ -631,21 +631,21 @@
      "kind": "published"
     },
     {
-     "label": "Harbin Inst. of Technology",
+     "label": "Rules + CNN-highway-LSTM",
      "value": 0.8855,
      "source": "Stubbs et al., JAMIA 2019, Table 2",
      "kind": "published",
      "figure": false
     },
     {
-     "label": "U Utah",
+     "label": "Trie rule processor",
      "value": 0.8837,
      "source": "Stubbs et al., JAMIA 2019, Table 2",
      "kind": "published",
      "figure": false
     },
     {
-     "label": "Taitung / TMU / UNSW",
+     "label": "Rules + SVM",
      "value": 0.8765,
      "source": "Stubbs et al., JAMIA 2019, Table 2",
      "kind": "published",
@@ -667,8 +667,8 @@
    "short": "n2c2",
    "title_zh": "n2c2 队列筛选 · micro-F1",
    "subtitle_zh": "官方测试集，86 位患者 × 13 条标准，micro-F1",
-   "note": "Official evaluator (track1_eval.py), TrialLink given the n2c2 annotation guidelines. An answer neither met nor not met is read as the guidelines label an unmentioned criterion: not met, except ENGLISH and MAKES-DECISIONS (met). The 2 of 86 patients whose decisions had not saved were completed after the evidence-identifier fix; macro-F1 0.832. The challenge systems and the LoRA models were built on the n2c2 training split; no TrialLink component was trained on it. The figure shows the first seven teams; the table lists all ten.",
-   "note_zh": "官方评分脚本（track1_eval.py），TrialLink 使用 n2c2 官方标注指南。既非\"符合\"也非\"不符合\"的回答，按指南对未提及标准的标注方式计：不符合，ENGLISH 和 MAKES-DECISIONS 两条计为符合。86 位患者中有 2 位的结论起初未能保存，在证据编号修复后补齐；macro-F1 0.832。挑战赛各系统和 LoRA 模型都在 n2c2 训练集上构建，TrialLink 没有任何部件在其上训练。图中列出前七名队伍，表格列出全部前十。",
+   "note": "Official evaluator (track1_eval.py), TrialLink given the n2c2 annotation guidelines. An answer neither met nor not met is read as the guidelines label an unmentioned criterion: not met, except ENGLISH and MAKES-DECISIONS (met). The 2 of 86 patients whose decisions had not saved were completed after the evidence-identifier fix; macro-F1 0.832. The challenge systems and the LoRA models were built on the n2c2 training split; no TrialLink component was trained on it. Challenge systems are named by method (Stubbs et al., Table 2); the figure shows the first seven, the table all ten.",
+   "note_zh": "官方评分脚本（track1_eval.py），TrialLink 使用 n2c2 官方标注指南。既非\"符合\"也非\"不符合\"的回答，按指南对未提及标准的标注方式计：不符合，ENGLISH 和 MAKES-DECISIONS 两条计为符合。86 位患者中有 2 位的结论起初未能保存，在证据编号修复后补齐；macro-F1 0.832。挑战赛各系统和 LoRA 模型都在 n2c2 训练集上构建，TrialLink 没有任何部件在其上训练。挑战赛系统按方法命名（Stubbs 等，表 2）；图中列出前七名，表格列出全部前十。",
    "span": 2
   },
   {

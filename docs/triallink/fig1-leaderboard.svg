@@ -2086,16 +2086,13 @@ z
     <g id="xtick_63">
      <g id="line2d_187"/>
      <g id="text_193">
-      <text style="font-size: 7.2px; font-family: 'DejaVu Sans'; fill: #52514e" transform="translate(607.244809 958.027156) rotate(-55)">ChatGPT-5.5</text>
-      <text style="font-size: 7.2px; font-family: 'DejaVu Sans'; fill: #52514e" transform="translate(608.635997 970.096743) rotate(-55)">Thinking (web)</text>
+      <text style="font-size: 7.2px; font-family: 'DejaVu Sans'; text-anchor: end; fill: #52514e" x="632.788606" y="921.546834" transform="rotate(-55 632.788606 921.546834)">GPT-5.5</text>
      </g>
     </g>
     <g id="xtick_64">
      <g id="line2d_188"/>
      <g id="text_194">
-      <text style="font-size: 7.2px; font-family: 'DejaVu Sans'; fill: #52514e" transform="translate(656.186499 971.342575) rotate(-55)">Gemini-3.5 Flash</text>
-      <text style="font-size: 7.2px; font-family: 'DejaVu Sans'; fill: #52514e" transform="translate(670.678674 964.702013) rotate(-55)">Ext. Thinking</text>
-      <text style="font-size: 7.2px; font-family: 'DejaVu Sans'; fill: #52514e" transform="translate(692.499866 947.594531) rotate(-55)">(web)</text>
+      <text style="font-size: 7.2px; font-family: 'DejaVu Sans'; text-anchor: end; fill: #52514e" x="691.053852" y="921.546834" transform="rotate(-55 691.053852 921.546834)">Gemini 3.5 Flash</text>
      </g>
     </g>
    </g>
@@ -2259,54 +2256,56 @@ z
     <g id="xtick_66">
      <g id="line2d_202"/>
      <g id="text_208">
-      <text style="font-size: 7.2px; font-family: 'DejaVu Sans'; fill: #52514e" transform="translate(864.264026 954.180623) rotate(-55)">U Michigan</text>
-      <text style="font-size: 7.2px; font-family: 'DejaVu Sans'; fill: #52514e" transform="translate(860.052949 974.251073) rotate(-55)">(post-challenge)</text>
+      <text style="font-size: 7.2px; font-family: 'DejaVu Sans'; fill: #52514e" transform="translate(862.970253 956.028322) rotate(-55)">Hybrid NLP,</text>
+      <text style="font-size: 7.2px; font-family: 'DejaVu Sans'; fill: #52514e" transform="translate(863.275445 969.648872) rotate(-55)">post-challenge</text>
      </g>
     </g>
     <g id="xtick_67">
      <g id="line2d_203"/>
      <g id="text_209">
-      <text style="font-size: 7.2px; font-family: 'DejaVu Sans'; fill: #52514e" transform="translate(916.501052 958.960682) rotate(-55)">Graz (official</text>
-      <text style="font-size: 7.2px; font-family: 'DejaVu Sans'; fill: #52514e" transform="translate(928.823818 955.418358) rotate(-55)">#1, rules)</text>
+      <text style="font-size: 7.2px; font-family: 'DejaVu Sans'; fill: #52514e" transform="translate(919.752585 954.317011) rotate(-55)">Rule-based</text>
+      <text style="font-size: 7.2px; font-family: 'DejaVu Sans'; fill: #52514e" transform="translate(918.645274 969.954825) rotate(-55)">(challenge #1)</text>
      </g>
     </g>
     <g id="xtick_68">
      <g id="line2d_204"/>
      <g id="text_210">
-      <text style="font-size: 7.2px; font-family: 'DejaVu Sans'; fill: #52514e" transform="translate(975.432145 954.180623) rotate(-55)">U Michigan</text>
-      <text style="font-size: 7.2px; font-family: 'DejaVu Sans'; fill: #52514e" transform="translate(980.585922 960.876675) rotate(-55)">(official #2)</text>
+      <text style="font-size: 7.2px; font-family: 'DejaVu Sans'; fill: #52514e" transform="translate(975.450858 954.153898) rotate(-55)">Hybrid NLP</text>
+      <text style="font-size: 7.2px; font-family: 'DejaVu Sans'; fill: #52514e" transform="translate(979.532836 962.380638) rotate(-55)">(MetaMap +</text>
+      <text style="font-size: 7.2px; font-family: 'DejaVu Sans'; fill: #52514e" transform="translate(994.642537 954.858157) rotate(-55)">cTAKES)</text>
      </g>
     </g>
     <g id="xtick_69">
      <g id="line2d_205"/>
      <g id="text_211">
-      <text style="font-size: 7.2px; font-family: 'DejaVu Sans'; fill: #52514e" transform="translate(1034.096094 949.782083) rotate(-55)">Sorbonne</text>
-      <text style="font-size: 7.2px; font-family: 'DejaVu Sans'; fill: #52514e" transform="translate(1039.54218 956.060675) rotate(-55)">Université</text>
+      <text style="font-size: 7.2px; font-family: 'DejaVu Sans'; fill: #52514e" transform="translate(1025.288111 962.361187) rotate(-55)">Rules + semi-</text>
+      <text style="font-size: 7.2px; font-family: 'DejaVu Sans'; fill: #52514e" transform="translate(1037.936095 958.354404) rotate(-55)">supervised</text>
      </g>
     </g>
     <g id="xtick_70">
      <g id="line2d_206"/>
      <g id="text_212">
-      <text style="font-size: 7.2px; font-family: 'DejaVu Sans'; text-anchor: end; fill: #52514e" x="1109.450688" y="921.546834" transform="rotate(-55 1109.450688 921.546834)">Med Data Quest</text>
+      <text style="font-size: 7.2px; font-family: 'DejaVu Sans'; fill: #52514e" transform="translate(1084.67025 956.936967) rotate(-55)">Three-stage</text>
+      <text style="font-size: 7.2px; font-family: 'DejaVu Sans'; fill: #52514e" transform="translate(1094.095092 957.533306) rotate(-55)">rule-based</text>
      </g>
     </g>
     <g id="xtick_71">
      <g id="line2d_207"/>
      <g id="text_213">
-      <text style="font-size: 7.2px; font-family: 'DejaVu Sans'; fill: #52514e" transform="translate(1144.436972 950.963505) rotate(-55)">Cincinnati</text>
-      <text style="font-size: 7.2px; font-family: 'DejaVu Sans'; fill: #52514e" transform="translate(1151.172314 955.400849) rotate(-55)">Children's</text>
+      <text style="font-size: 7.2px; font-family: 'DejaVu Sans'; fill: #52514e" transform="translate(1132.030944 968.68115) rotate(-55)">cTAKES + regex</text>
+      <text style="font-size: 7.2px; font-family: 'DejaVu Sans'; fill: #52514e" transform="translate(1158.489071 944.951438) rotate(-55)">hybrid</text>
      </g>
     </g>
     <g id="xtick_72">
      <g id="line2d_208"/>
      <g id="text_214">
-      <text style="font-size: 7.2px; font-family: 'DejaVu Sans'; text-anchor: end; fill: #52514e" x="1220.618806" y="921.546834" transform="rotate(-55 1220.618806 921.546834)">Arizona State U</text>
+      <text style="font-size: 7.2px; font-family: 'DejaVu Sans'; text-anchor: end; fill: #52514e" x="1220.618806" y="921.546834" transform="rotate(-55 1220.618806 921.546834)">Rules + word2vec</text>
      </g>
     </g>
     <g id="xtick_73">
      <g id="line2d_209"/>
      <g id="text_215">
-      <text style="font-size: 7.2px; font-family: 'DejaVu Sans'; text-anchor: end; fill: #52514e" x="1276.202865" y="921.546834" transform="rotate(-55 1276.202865 921.546834)">UNSW / NCI</text>
+      <text style="font-size: 7.2px; font-family: 'DejaVu Sans'; text-anchor: end; fill: #52514e" x="1276.202865" y="921.546834" transform="rotate(-55 1276.202865 921.546834)">280-rule system</text>
      </g>
     </g>
     <g id="xtick_74">
