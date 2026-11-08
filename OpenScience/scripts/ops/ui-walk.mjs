@@ -5337,10 +5337,12 @@ export function nativeSurfaceFindings(read) {
  */
 async function walkNativeSurface(page) {
   /** @type {any} */ let read = null;
+  // A page can hold more than one native frame (the conversation's and another surface's): the read that found the composer's seat
+  // is the conversation's, and a later frame without one must not replace it (2026-11-08: the seat was on screen, the walk said none).
   for (const frame of page.frames()) {
     if (!frame.url().includes("/__evimed/f/")) continue;
     const seen = await frame.evaluate(nativeSurfaceProbe).catch(() => null);
-    if (seen) read = seen;
+    if (seen && (!read || !read.effort || seen.effort)) read = seen;
   }
   return { failures: nativeSurfaceFindings(read), read: read ?? {} };
 }
