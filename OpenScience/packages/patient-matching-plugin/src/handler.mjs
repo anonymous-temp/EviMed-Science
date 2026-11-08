@@ -250,9 +250,11 @@ async function runExecution(client, prepared, call, ctx, startChild, serial) {
       // Every met or not-met criterion that cites evidence is read back against the cited sentences once; an unsupported one is left
       // unknown (2026-11-08: over-reading of cited facts was the largest error class, and no code check sees it).
       const items = verificationItems(decisions, refreshed)
-      if (items.length && !budgetSpent() && !call.signal?.aborted) {
+      // An evaluation switch only (ablation on the development boards); a deployment never sets it.
+      const verify = process.env.EVIMED_PATIENT_MATCHING_VERIFY !== 'off'
+      if (verify && items.length && !budgetSpent() && !call.signal?.aborted) {
         const nonce = contentDigest(canonicalJson({ verify: prepared.executionId })).slice(-10)
-        const verified = await startOne(renderVerificationPrompt(items, nonce), { schema: verificationSchema(items.length), tools: [], persona: VERIFIER_PERSONA, label: 'Patient matching verification', agentOptions: { ...prepared.reasoning, reasoningEffort: 'low' } })
+        const verified = await startOne(renderVerificationPrompt(items, nonce, prepared.task.guide ?? null), { schema: verificationSchema(items.length), tools: [], persona: VERIFIER_PERSONA, label: 'Patient matching verification', agentOptions: { ...prepared.reasoning, reasoningEffort: 'low' } })
         if (verified.outcome.structured && Array.isArray(verified.outcome.structured.items)) {
           const downgraded = applyVerification(decisions, items, verified.outcome.structured)
           diagnostics.push(`verification_checked:${items.length}`)
