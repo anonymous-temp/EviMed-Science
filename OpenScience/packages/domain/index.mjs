@@ -2838,3 +2838,4 @@ export { dnsKey, registrableDomain } from './src/geoDomains.mjs'
 export { RESEARCH_NATIVE_BUNDLES, researchNativeReceiptDigest, researchNativeArtifactDigest } from './src/researchNativeBundles.mjs'
 export { nativeResearchRowIsAdmitted, nativeResearchToolProfileHolds } from './src/researchNativeBundles.mjs'
 export { privateByDefault } from "./src/memoryPrivacy.mjs";
+export { methodSourceIdentifierShapesIn } from './src/methodSourcePrivacy.mjs'
