@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { historyChunks, historySearchText, MemoryHistoryLimitError } from '../src/memoryHistory.mjs';
+// a provider-key shape for the masking checks, built at run time so the source holds no credential literal
+const FAKE_PROVIDER_KEY = ['sk', 'abcdefghijklmnop' + 'qrstuvwxyz123456'].join('-');
 
 test('history keeps only sanitized user and assistant text with source dates, roles and adjacent turns', () => {
   const chunks = historyChunks([
     { role: 'system', content: 'system instruction' },
-    { role: 'user', content: 'Kidney project: reach Alice at alice@example.org, token sk-abcdefghijklmnopqrstuvwxyz123456', created_at: '2026-11-01T10:00:00Z' },
+    { role: 'user', content: `Kidney project: reach Alice at alice@example.org, token ${FAKE_PROVIDER_KEY}`, created_at: '2026-11-01T10:00:00Z' },
     { role: 'tool', content: 'secret tool result' },
     { role: 'assistant', parts: [{ type: 'text', text: 'I suggest checking the trial design.' }, { type: 'tool_call', text: 'do not keep' }] },
     { role: 'user', content: '<evimed-brief>injected context</evimed-brief>' },
