@@ -584,6 +584,7 @@ describe("虚拟患者 · a spline survival fit made in the conversation", () =>
     const block = await found(container, "[data-vcr-premises]");
     expect(block).toHaveTextContent("这个模型尚未验证过这种用途");
     expect(container.querySelectorAll("[data-vcr-premises]")).toHaveLength(1);
-    expect(screen.getByRole("table", { name: "患者" })).toBeInTheDocument();
+    // the premises block can be drawn before the people's table: wait for the table rather than read it in the same tick
+    expect(await screen.findByRole("table", { name: "患者" })).toBeInTheDocument();
   });
 });
