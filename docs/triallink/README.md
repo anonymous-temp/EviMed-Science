@@ -290,7 +290,9 @@ Measured on the ranking board (some 410 candidates per patient): Qwen3.7 rerank 
 per 100 trials per request with three requests in flight; Jev 1.14 (fit and graded readings in one request) about CNY 0.21 per patient,
 265 ms per call (262 ms for the fit alone) with eight in flight. A product search ranks 300 candidates. The criterion-level assessment
 of an n2c2 patient (13 criteria, multi-record files) reads about 19,500 input tokens and costs about CNY 0.12 (86 test patients
-CNY 10.2); the plain-text prompt cut the input from about 86,000 tokens.
+CNY 10.2); the plain-text prompt cut the input from about 86,000 tokens. Assessing 20 trials for one patient takes a median of
+120 s (five SIGIR patients on the pinned kernel, slowest 158 s, 12 executions in flight); before this round 79 s — the child now searches the
+record before leaving a decisive criterion unknown, about 3.7 model calls per execution against 2.
 
 ## 5. Reproduce
 

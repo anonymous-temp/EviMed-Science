@@ -494,7 +494,8 @@ that conversation to the study; 2,130 VCR tests pass against PostgreSQL); the ba
 deployed and is deleted once every deployment has it. Retiring the unread tables online was checked and not done: production holds
 six of the eight, all empty, but the live release still writes `matching_extractions` and deletes from `candidate_trial_judgments`
 during account erasure, so they are dropped after this release goes live (`scripts/ops/vcr-retire-unread-tables.mjs --apply`).
-Component latency: Jev with both readings 265 ms median per call against 262 ms for the fit alone (tokens +14%); the whole-record
+Assessment latency (latency board, 5 SIGIR patients × 20 trials, final code): median 120 s, slowest 158 s, 100/100 pairs, about 3.7
+model calls per execution (79 s and 2 before: the child now searches the record before leaving a decisive criterion unknown). Component latency: Jev with both readings 265 ms median per call against 262 ms for the fit alone (tokens +14%); the whole-record
 rerank 9.0 s per 100 documents per request, three requests in flight.
 
 ## 4.4 Gaps recorded at the owner's review (2026-11-08 evening)
