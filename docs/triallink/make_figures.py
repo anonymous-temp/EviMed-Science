@@ -26,7 +26,7 @@ FILLS = {
     "ours": ("#bcd2f3", "#2a64d6"),
     "published": ("#f1f0ec", "#a9a8a1"),
     "manual": ("#f4f3f0", "#c9c8c1"),
-    "human": ("#f4f3f0", "#c9c8c1"),
+    "human": ("#f6f1e8", "#c9ae7c"),
     "baseline": ("#f7f7f5", "#d6d5cf"),
     "reference": ("#f7f7f5", "#d6d5cf"),
 }
@@ -54,7 +54,7 @@ def fmt_value(value, scale, ours=False):
 
 
 def panel(ax, cap):
-    rows = cap["rows"]
+    rows = [r for r in cap["rows"] if r.get("figure", True)]
     ours = [r for r in rows if r["kind"] == "ours"]
     others = sorted([r for r in rows if r["kind"] != "ours"], key=lambda r: -(r["value"] or 0))
     rows = ours + others
@@ -113,15 +113,24 @@ def relative_panel(ax, caps, final):
 
 def leaderboard(data, out):
     caps = [cap for cap in data["capabilities"] if cap.get("figure", True)]
-    cols = 3 if len(caps) + 1 <= 9 else 4
-    rows_n = -(-(len(caps) + 1) // cols)
-    fig, axes = plt.subplots(rows_n, cols, figsize=(5.2 * cols, 4.7 * rows_n), facecolor=SURFACE)
-    flat = axes.ravel()
-    for ax, cap in zip(flat, caps):
-        panel(ax, cap)
-    relative_panel(flat[len(caps)], caps, data["final"])
-    for ax in flat[len(caps) + 1:]:
-        ax.axis("off")
+    cols = 3 if sum(cap.get("span", 1) for cap in caps) + 1 <= 9 else 4
+    # Panels flow left to right; a panel with many systems may span two columns, and the summary takes the rest of the last row
+    # (at least two columns, so its labels stay legible).
+    slots, row, col = [], 0, 0
+    for cap in caps:
+        span = cap.get("span", 1)
+        if col + span > cols:
+            row, col = row + 1, 0
+        slots.append((row, col, span))
+        col += span
+    if cols - col < 2:
+        row, col = row + 1, 0
+    rows_n = row + 1
+    fig = plt.figure(figsize=(5.2 * cols, 4.7 * rows_n), facecolor=SURFACE)
+    grid = fig.add_gridspec(rows_n, cols)
+    for cap, (r, c, span) in zip(caps, slots):
+        panel(fig.add_subplot(grid[r, c:c + span]), cap)
+    relative_panel(fig.add_subplot(grid[row, col:]), caps, data["final"])
     kinds = {r["kind"] for cap in caps for r in cap["rows"]}
     legend = [("ours", "TrialLink"), ("published", "Published system"), ("human", "Physicians"), ("reference", "Median or baseline")]
     handles = [Patch(facecolor=FILLS[kind][1], label=label) for kind, label in legend
@@ -207,7 +216,7 @@ def table(cap, lang):
             lo, hi = r["ci95"]
             value += f" ({fmt_value(lo, cap['scale'], True)}–{fmt_value(hi, cap['scale'], True)})"
         name = f"**{r['label']}**" if r["kind"] == "ours" else r["label"]
-        if r["kind"] not in RANKED:
+        if r["kind"] not in RANKED and KIND_WORDS["en"][r["kind"]] not in r["label"].lower():
             name += f" ({KIND_WORDS[lang][r['kind']]})"
         lines.append(f"| {place} | {name} | {'**' + value + '**' if r['kind'] == 'ours' else value} | {own if r['kind'] == 'ours' else r['source']} |")
     return "\n".join(lines)

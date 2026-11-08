@@ -1,6 +1,6 @@
 # TrialLink: benchmark results
 
-**TrialLink `triallink-1` · November 2026**
+**TrialLink `triallink-2` · November 2026**
 
 TrialLink is a patient-to-trial matching system: one pipeline from a patient record to a ranked list of clinical trials, with a
 criterion-by-criterion eligibility assessment of the trials a clinician opens. This report gives its results on the public benchmarks the
@@ -12,19 +12,24 @@ field reports on, one capability at a time, beside every published system with a
 
 | Capability | Benchmark | TrialLink | Position among listed systems | Strongest listed comparator |
 |---|---|---|---|---|
-| Patient-to-trial ranking | SIGIR + TREC 2021/2022, 183 patients (TrialGPT 2.0 protocol) | nDCG@10 **0.787**, P@10 **0.723**, MRR **0.853**, MAP **0.637** | **1st of 7** on all four | TrialGPT 2.0 · GPT-5.4: 0.76, 0.70, 0.85, 0.60 |
+| Patient-to-trial ranking | SIGIR + TREC 2021/2022, 183 patients, every judged trial (TrialGPT 2.0 protocol) | nDCG@10 **0.787**, P@10 **0.723**, MRR **0.853**, MAP **0.637** | **1st of 7** on all four | TrialGPT 2.0 · GPT-5.4: 0.76, 0.70, 0.85, 0.60 |
+| — on retrieved candidates | the same patients, judged trials in TrialGPT-Retrieval's top 500 (TrialGPT 1.0 protocol) | nDCG@10 **0.788**, P@10 **0.715** | **1st of 8** on both | TrialGPT 1.0 · GPT-4: 0.728, 0.669 |
 | — per cohort | TREC 2021 / TREC 2022 / SIGIR | 0.883 / 0.819 / 0.659 | **1st of 5** / **1st of 5** / 2nd of 5 | 0.84 / 0.78 / 0.66 |
 | Target-trial retrieval | NIH-TrialBench, 126 vignettes | recall@10 **95.2%** | **1st of 5** | TrialGPT 2.0: 70% |
-| Criterion-level eligibility | TrialGPT annotations: the 722 criteria physicians decided | accuracy **92.0%** | **1st of 2** | TrialGPT 1.0 · GPT-4: 87.4% |
-| Cohort selection | n2c2 cohort selection, official test | micro-F1 **0.918** | **1st of 5** | Graz (challenge winner): 0.910 |
+| Criterion-level eligibility | TrialGPT annotations: the 722 criteria physicians decided | accuracy **92.0%** | **1st of 2** systems; physicians 89.0–93.1% | TrialGPT 1.0 · GPT-4: 87.4% |
+| Cohort selection | n2c2 cohort selection, official test | micro-F1 **0.918** | **1st of 14** | U Michigan (post-challenge): 0.911; challenge winner 0.910 |
 
 - On the TrialGPT 2.0 protocol TrialLink ranks first on all four metrics the paper reports. Its nDCG@10 interval (0.756–0.817) overlaps
   TrialGPT 2.0 with GPT-5.4 (0.76); published systems report point estimates only, so no paired test is possible. On the 105 patients held
   out from all development it scores nDCG@10 0.841. On the SIGIR cohort it scores 0.659 against 0.66 (a value read from a bar label).
-- On the criteria the physicians decided, TrialLink is ahead of GPT-4 by 4.6 points (+0.3 to +9.1). Over all 1,015 criteria it agrees
+- On the TrialGPT 1.0 protocol (the candidates its retrieval returned) TrialLink leads all seven systems that paper compares — five
+  biomedical encoders and TrialGPT with GPT-3.5 and GPT-4 — by 0.06 nDCG@10 or more.
+- On the criteria the physicians decided, TrialLink is ahead of GPT-4 by 4.6 points (+0.3 to +9.1) and inside the range of the three
+  physicians who built the labels (89.0%, 90.7%, 93.1%, each scored against the consensus). Over all 1,015 criteria it agrees
   75.6% against GPT-4's 87.3%: on the 293 criteria labelled "not enough information", 255 labels are GPT-4's own answer, kept by
   annotators who labelled with GPT-4's predictions in view.
-- On n2c2 cohort selection (official test) TrialLink scores micro-F1 0.918, above every system of the challenge (winner 0.910).
+- On n2c2 cohort selection (official test) TrialLink scores micro-F1 0.918, above every system of the challenge (winner 0.910), the best
+  post-challenge system we found (0.911) and fine-tuned open models (MedGemma-27b with retrieval, 0.891).
 - No TrialLink component was trained or fine-tuned on any benchmark. Ranking costs about CNY 0.29 (USD 0.04) per patient for some 410
   candidate trials.
 
@@ -50,7 +55,7 @@ TrialLink has three stages.
   TrialGPT's criterion-level instructions for the TrialGPT annotations, and the n2c2 annotation guidelines (the notion of "now", and how
   an unmentioned criterion is labelled) for n2c2. TrialLink receives them as the study's assessment guide; the platform adds no labelling
   rule of its own.
-- **Benchmarks and scorers.** The TrialGPT benchmark and NIH-TrialBench use TrialGPT 2.0's released data and official scripts
+- **Benchmarks and scorers.** The patient-to-trial ranking boards and NIH-TrialBench use TrialGPT 2.0's released data and official scripts
   (`eval_trialgpt_rankings_qrels.py`, `eval_nih_trialbench_target_recall_at10.py`); n2c2 uses the challenge's unchanged `track1_eval.py`.
 - **Development and test data.** Ranking choices were made on 78 development patients (all 58 SIGIR patients and the first ten topics of
   each TREC year); the other 105 were read only after the design was fixed. NIH-TrialBench was used for testing only. The criterion-level
@@ -62,6 +67,14 @@ TrialLink has three stages.
 - **Comparators.** Every comparator number is copied from the cited source, or computed from released predictions where stated. TrialGPT
   2.0 gives its results as bar charts; its values are read from the bar labels. TrialGPT 2.0 reports NIH-TrialBench only with its default
   backbone, GPT-4.1. The final panel of the figure divides TrialLink's score by the best published system in each panel.
+- **Two ranking protocols, kept apart.** TrialGPT 2.0 ranks every judged trial of a patient; TrialGPT 1.0 ranked only the judged trials
+  among the top 500 its retrieval returned, and released those candidates. The two are separate panels, each scored with the same official
+  script (whose nDCG@10 and graded P@10 are the definitions TrialGPT 1.0 gives); TrialLink's ranking of all judged trials is restricted to
+  TrialGPT 1.0's candidates for the second. TrialMatchAI (Nat Commun 2026) ranks every judged trial of a TREC year with eligible-only
+  relevance, and LLM-Match (2025) reports only AUROC on these pairs; neither is on either axis, so neither is listed.
+- **Physicians.** TrialGPT 1.0 publishes each physician's confusion matrix against the consensus (proportions per gold label). Weighted by
+  the released gold counts they give each physician's accuracy on the criteria the physicians decided; the same rebuild gives GPT-4 87.7%
+  against its exact 87.4% and the paper's whole-set range within 0.1 point, so the physician values carry about ±0.5 point.
 
 ## 3. Leaderboards by capability
 
@@ -72,7 +85,7 @@ physicians and medians are listed beside them.
 
 #### Patient-to-trial ranking · nDCG@10
 
-SIGIR 2016 + TREC 2021/2022 · 183 patients · judged trials
+SIGIR 2016 + TREC 2021/2022 · 183 patients · every judged trial ranked (TrialGPT 2.0 protocol, official evaluator)
 
 | Rank | System | nDCG@10 | Source |
 |---|---|---|---|
@@ -126,9 +139,43 @@ same 183 patients · graded MAP, official evaluator
 | 6 | TrialGPT 2.0 · GPT-4.1 | 0.54 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d |
 | 7 | TrialGPT 1.0 · GPT-4.1 | 0.49 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d |
 
+#### Patient-to-trial ranking · top-500 · nDCG@10
+
+SIGIR 2016 + TREC 2021/2022 · 183 patients · the judged trials among TrialGPT-Retrieval's top 500 (TrialGPT 1.0 protocol) · mean of the three cohorts
+
+| Rank | System | nDCG@10 | Source |
+|---|---|---|---|
+| 1 | **TrialLink** | **0.788 (0.756–0.817)** | this report |
+| 2 | TrialGPT 1.0 · GPT-4 | 0.728 | Jin et al., Nat Commun 2024, Table 2 |
+| 3 | TrialGPT 1.0 · GPT-3.5 | 0.54 | Jin et al., Nat Commun 2024, Table 2 |
+| 4 | BioLinkBERT (NLI-trained) | 0.48 | Jin et al., Nat Commun 2024, Table 2 |
+| 5 | PubMedBERT (NLI-trained) | 0.433 | Jin et al., Nat Commun 2024, Table 2 |
+| 6 | SciFive (NLI-trained) | 0.427 | Jin et al., Nat Commun 2024, Table 2 |
+| 7 | SapBERT (NLI-trained) | 0.415 | Jin et al., Nat Commun 2024, Table 2 |
+| 8 | BioBERT (NLI-trained) | 0.409 | Jin et al., Nat Commun 2024, Table 2 |
+
+Scored with the same official script as the panels above, restricted to the candidates TrialGPT 1.0 released (its retrieved_trials.json: 3,141 / 15,437 / 12,682 judged pairs); TrialLink's ranking of all judged trials is restricted to them. The script's nDCG@10 (linear gain) and P@10 (sum of grades / (2 × 10)) are the definitions TrialGPT 1.0 gives. The five encoders were trained on natural-language-inference data and applied to the cohorts without cohort training, as in the source. TrialGPT 1.0 · GPT-4 is its feature combination, the paper's headline configuration (its best single features reach 0.7281 nDCG@10 and 0.6724 P@10). Not placed on these axes: TrialMatchAI (Nat Commun 2026) ranks every judged trial of a TREC year with eligible-only relevance, and LLM-Match (2025) reports only AUROC on these pairs.
+
+#### Patient-to-trial ranking · top-500 · P@10
+
+SIGIR 2016 + TREC 2021/2022 · 183 patients · the judged trials among TrialGPT-Retrieval's top 500 (TrialGPT 1.0 protocol) · mean of the three cohorts
+
+| Rank | System | P@10 (graded) | Source |
+|---|---|---|---|
+| 1 | **TrialLink** | **0.715 (0.683–0.747)** | this report |
+| 2 | TrialGPT 1.0 · GPT-4 | 0.669 | Jin et al., Nat Commun 2024, Table 2 |
+| 3 | TrialGPT 1.0 · GPT-3.5 | 0.512 | Jin et al., Nat Commun 2024, Table 2 |
+| 4 | BioLinkBERT (NLI-trained) | 0.428 | Jin et al., Nat Commun 2024, Table 2 |
+| 5 | PubMedBERT (NLI-trained) | 0.387 | Jin et al., Nat Commun 2024, Table 2 |
+| 6 | SciFive (NLI-trained) | 0.379 | Jin et al., Nat Commun 2024, Table 2 |
+| 7 | BioBERT (NLI-trained) | 0.375 | Jin et al., Nat Commun 2024, Table 2 |
+| 8 | SapBERT (NLI-trained) | 0.374 | Jin et al., Nat Commun 2024, Table 2 |
+
+Scored with the same official script as the panels above, restricted to the candidates TrialGPT 1.0 released (its retrieved_trials.json: 3,141 / 15,437 / 12,682 judged pairs); TrialLink's ranking of all judged trials is restricted to them. The script's nDCG@10 (linear gain) and P@10 (sum of grades / (2 × 10)) are the definitions TrialGPT 1.0 gives. The five encoders were trained on natural-language-inference data and applied to the cohorts without cohort training, as in the source. TrialGPT 1.0 · GPT-4 is its feature combination, the paper's headline configuration (its best single features reach 0.7281 nDCG@10 and 0.6724 P@10). Not placed on these axes: TrialMatchAI (Nat Commun 2026) ranks every judged trial of a TREC year with eligible-only relevance, and LLM-Match (2025) reports only AUROC on these pairs.
+
 #### SIGIR cohort · nDCG@10
 
-58 patients · judged trials · nDCG@10
+58 patients · every judged trial ranked · nDCG@10
 
 | Rank | System | nDCG@10 | Source |
 |---|---|---|---|
@@ -140,7 +187,7 @@ same 183 patients · graded MAP, official evaluator
 
 #### TREC 2021 cohort · nDCG@10
 
-75 patients · judged trials · nDCG@10
+75 patients · every judged trial ranked · nDCG@10
 
 | Rank | System | nDCG@10 | Source |
 |---|---|---|---|
@@ -152,7 +199,7 @@ same 183 patients · graded MAP, official evaluator
 
 #### TREC 2022 cohort · nDCG@10
 
-50 patients · judged trials · nDCG@10
+50 patients · every judged trial ranked · nDCG@10
 
 | Rank | System | nDCG@10 | Source |
 |---|---|---|---|
@@ -176,30 +223,6 @@ same 183 patients · graded MAP, official evaluator
 
 TrialGPT 2.0 reports NIH-TrialBench only with its default backbone, GPT-4.1 ("Unless otherwise specified, all main analyses used GPT-4.1"); its GPT-5.4 and Gemini runs cover the three public cohorts only. TrialLink over all 126 cases: 85.7% (79.4–91.3).
 
-#### Criterion-level · physician-decided criteria (%)
-
-TrialGPT annotations · the 722 of 1,015 criteria the physicians decided (included, not included, excluded, not excluded, not applicable) · accuracy % · every system given TrialGPT's own task definition
-
-| Rank | System | Accuracy (%) | Source |
-|---|---|---|---|
-| 1 | **TrialLink** | **92.0 (89.1–94.4)** | this report |
-| 2 | TrialGPT 1.0 · GPT-4 | 87.4 | TrialGPT released predictions (Jin et al., Nat Commun 2024), scored on the same rows |
-
-Paired difference TrialLink − GPT-4: +4.6 points (+0.3 to +9.1, patient bootstrap). GPT-4 is scored from TrialGPT's released predictions on the same rows.
-
-#### Criterion-level · all criteria (%)
-
-TrialGPT annotations · 1,015 criteria · 53 patients · label agreement %
-
-| Rank | System | Accuracy (%) | Source |
-|---|---|---|---|
-| – | Physician (highest) (physician) | 90.0 | Jin et al., Nat Commun 2024 |
-| – | Physician (lowest) (physician) | 88.7 | Jin et al., Nat Commun 2024 |
-| 1 | TrialGPT 1.0 · GPT-4 | 87.3 | Jin et al., Nat Commun 2024 |
-| 2 | **TrialLink** | **75.6 (71.0–79.7)** | this report |
-
-On the 293 criteria the gold labels "not enough information", 255 labels are GPT-4's own answer kept by the annotators, who labelled with GPT-4's predictions in view; GPT-4 matches 87.0% of those rows, TrialLink 35.2%. TrialLink was given TrialGPT's own task definition (which asks for as few "not enough information" answers as possible).
-
 #### n2c2 cohort selection · micro-F1
 
 official test · 86 patients × 13 criteria · micro-F1
@@ -207,13 +230,49 @@ official test · 86 patients × 13 criteria · micro-F1
 | Rank | System | Micro-F1 | Source |
 |---|---|---|---|
 | 1 | **TrialLink** | **0.918 (0.905–0.931)** | this report |
-| 2 | Graz (official #1, rules) | 0.91 | Stubbs et al., JAMIA 2019, Table 2 |
-| 3 | U Michigan | 0.908 | Stubbs et al., JAMIA 2019, Table 2 |
-| 4 | Sorbonne Université | 0.907 | Stubbs et al., JAMIA 2019, Table 2 |
-| 5 | MedGemma-27b + RAG + LoRA | 0.891 | Chen et al., arXiv 2604.05190, Table 3 |
+| 2 | U Michigan (post-challenge) | 0.911 | Vydiswaran et al., JAMIA 2019 (reimplemented system) |
+| 3 | Graz (official #1, rules) | 0.91 | Stubbs et al., JAMIA 2019, Table 2 |
+| 4 | U Michigan (official #2) | 0.908 | Stubbs et al., JAMIA 2019, Table 2 |
+| 5 | Sorbonne Université | 0.907 | Stubbs et al., JAMIA 2019, Table 2 |
+| 6 | Med Data Quest | 0.903 | Stubbs et al., JAMIA 2019, Table 2 |
+| 7 | Cincinnati Children's | 0.903 | Stubbs et al., JAMIA 2019, Table 2 |
+| 8 | Arizona State U | 0.90 | Stubbs et al., JAMIA 2019, Table 2 |
+| 9 | UNSW / NCI | 0.891 | Stubbs et al., JAMIA 2019, Table 2 |
+| 10 | MedGemma-27b + RAG + LoRA | 0.891 | Chen et al., arXiv 2604.05190, Table 3 |
+| 11 | Harbin Inst. of Technology | 0.886 | Stubbs et al., JAMIA 2019, Table 2 |
+| 12 | U Utah | 0.884 | Stubbs et al., JAMIA 2019, Table 2 |
+| 13 | Taitung / TMU / UNSW | 0.877 | Stubbs et al., JAMIA 2019, Table 2 |
+| 14 | Llama-3.1-8b + LoRA | 0.867 | Chen et al., arXiv 2604.05190, Table 3 (full context) |
 | – | 47-team median (reference) | 0.823 | Stubbs et al., JAMIA 2019 |
 
-Official evaluator (track1_eval.py), every system given the n2c2 annotation guidelines. An answer neither met nor not met is read as the guidelines label an unmentioned criterion: not met, except ENGLISH and MAKES-DECISIONS (met).
+Official evaluator (track1_eval.py), TrialLink given the n2c2 annotation guidelines. An answer neither met nor not met is read as the guidelines label an unmentioned criterion: not met, except ENGLISH and MAKES-DECISIONS (met). The 2 of 86 patients whose decisions had not saved were completed after the evidence-identifier fix; macro-F1 0.832. The challenge systems and the LoRA models were built on the n2c2 training split; no TrialLink component was trained on it. The figure shows the first seven teams; the table lists all ten.
+
+#### Criterion-level · physician-decided criteria (%)
+
+TrialGPT annotations · the 722 of 1,015 criteria the physicians decided (included, not included, excluded, not excluded, not applicable) · accuracy % · TrialLink given TrialGPT's own task definition
+
+| Rank | System | Accuracy (%) | Source |
+|---|---|---|---|
+| – | Physician A | 93.1 | Jin et al., Nat Commun 2024, Fig. 3c–d (the physician's per-label matrix weighted by the released gold counts, ±0.5 point) |
+| 1 | **TrialLink** | **92.0 (89.1–94.4)** | this report |
+| – | Physician C | 90.7 | Jin et al., Nat Commun 2024, Fig. 3c–d (the physician's per-label matrix weighted by the released gold counts, ±0.5 point) |
+| – | Physician B | 89.0 | Jin et al., Nat Commun 2024, Fig. 3c–d (the physician's per-label matrix weighted by the released gold counts, ±0.5 point) |
+| 2 | TrialGPT 1.0 · GPT-4 | 87.4 | TrialGPT released predictions (Jin et al., Nat Commun 2024), scored on the same rows |
+
+Paired difference TrialLink − GPT-4: +4.6 points (+0.3 to +9.1, patient bootstrap). GPT-4 is scored from TrialGPT's released predictions on the same rows. Each physician's accuracy on these rows is rebuilt from that physician's confusion matrices in TrialGPT 1.0 (proportions per gold label, two decimals) weighted by the released gold counts; the same rebuild gives GPT-4 87.7% against its exact 87.4%, and reproduces the paper's whole-set range (88.6–90.1% against 88.7–90.0%).
+
+#### Criterion-level · all criteria (%)
+
+TrialGPT annotations · 1,015 criteria · 53 patients · label agreement %
+
+| Rank | System | Accuracy (%) | Source |
+|---|---|---|---|
+| – | Physician (highest) | 90.0 | Jin et al., Nat Commun 2024 |
+| – | Physician (lowest) | 88.7 | Jin et al., Nat Commun 2024 |
+| 1 | TrialGPT 1.0 · GPT-4 | 87.3 | Jin et al., Nat Commun 2024 |
+| 2 | **TrialLink** | **75.6 (71.0–79.7)** | this report |
+
+On the 293 criteria the gold labels "not enough information", 255 labels are GPT-4's own answer kept by the annotators, who labelled with GPT-4's predictions in view; GPT-4 matches 87.0% of those rows, TrialLink 35.2%. TrialLink was given TrialGPT's own task definition (which asks for as few "not enough information" answers as possible).
 
 <!-- tables:end -->
 
@@ -235,7 +294,9 @@ Every number on this page is in [`leaderboard.json`](leaderboard.json); `make_fi
 
 - TrialGPT 2.0. *Towards Responsible AI-Assisted Clinical Trial Matching: Practical Considerations, Multicenter Evaluation, and
   Real-World Deployment.* arXiv 2609.01202v2 (2026), Fig. 5c–d and Supplementary Fig. 3.
-- Jin Q. et al. *Matching patients to clinical trials with large language models* (TrialGPT). Nature Communications 15, 9074 (2024).
+- Jin Q. et al. *Matching patients to clinical trials with large language models* (TrialGPT). Nature Communications 15, 9074 (2024),
+  Table 2 (ranking on retrieved candidates) and Fig. 3c–d (criterion-level confusion matrices of the physicians and GPT-4).
 - Stubbs A. et al. *Cohort selection for clinical trials: n2c2 2018 shared task track 1.* JAMIA 26(11), 2019, Table 2.
-- Wornow M. et al. *Zero-shot clinical trial patient matching with LLMs.* arXiv 2402.05125, Table 1.
-- Chen et al. arXiv 2604.05190, Table 3 (MedGemma-27b with retrieval and LoRA on n2c2 cohort selection).
+- Vydiswaran V.G.V. et al. *Hybrid bag of approaches to characterize selection criteria for cohort identification.* JAMIA 26(11), 2019.
+- Chen et al. arXiv 2604.05190, Table 3 (MedGemma-27b and Llama-3.1-8b with LoRA on n2c2 cohort selection).
+- Not listed, different measure: Abdallah M. et al., *TrialMatchAI*, Nature Communications (2026); Li X. et al., *LLM-Match*, arXiv 2503.13281 (2025).

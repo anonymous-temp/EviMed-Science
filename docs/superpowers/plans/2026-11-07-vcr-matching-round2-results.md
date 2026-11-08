@@ -417,6 +417,27 @@ was not used in the choice. External figure (owner, same night): NIH comparators
 only with GPT-4.1, see §4.4), GPT-4 zero-shot (Wornow et al., 0.93) removed from the n2c2 panel at the owner's request — it remains the
 best published n2c2 result and is kept here —, TrialLink's n2c2 shown as 0.918 (the two unsaved patients completed after the id fix).
 
+### 4.6 Comparators widened (2026-11-08 night, owner: 「全是 trialgpt，就没别的模型了吗」)
+
+Every system the TrialGPT papers compare, and every later system found on the same test sets, was checked for protocol before it was
+listed; nothing was run anew.
+
+- **TrialGPT 1.0 protocol** (its Table 2: the judged trials among TrialGPT-Retrieval's top 500, the candidates it released in
+  `retrieved_trials.json`; the official script's linear-gain nDCG@10 and graded P@10 are the paper's own definitions). Board A already
+  scored this subset: TrialLink 0.788 [0.756, 0.817] / 0.715 [0.683, 0.747] against TrialGPT · GPT-4 0.7275 / 0.6688, TrialGPT · GPT-3.5
+  0.5395 / 0.5115 and five NLI-trained encoders (BioLinkBERT 0.4797 best). Two new panels. AUROC is left out: the paper does not say
+  which labels are positive.
+- **Criterion level, physicians on the decided rows.** TrialGPT 1.0 Fig. 3c–d gives each physician's confusion matrix (proportions per
+  gold label); weighted by the released gold counts: physicians 93.1 / 90.7 / 89.0% on the 722 decided rows (TrialLink 92.0%). Check:
+  the same rebuild gives GPT-4 87.7% (exact 87.4%), the paper's per-type accuracies within 0.004, and its whole-set range within 0.1.
+- **n2c2**: Stubbs et al. Table 2 top ten (0.91 … 0.8765), Vydiswaran et al. post-challenge 0.9111, Chen et al. Llama-3.1-8b + LoRA
+  0.8671 beside MedGemma 0.8905; TrialLink first of 14. Wornow et al.'s rows stay out with its GPT-4 (owner), so its weaker zero-shot
+  rows are not listed alone.
+- **Not listed, different measure**: TrialMatchAI (Nat Commun 2026: every judged trial of a TREC year as the pool, eligible-only
+  relevance, nDCG@10 0.7232 averaged over TREC 2021/2022) and LLM-Match (arXiv 2503.13281: AUROC on TrialGPT 1.0's pairs; macro-F1 on
+  n2c2, fine-tuned). NIH-TrialBench has no comparators beyond the four TrialGPT 2.0 reports; no other system on the criterion
+  annotations was found.
+
 ## 4.4 Gaps recorded at the owner's review (2026-11-08 evening)
 
 | Gap | What is known | Next |
