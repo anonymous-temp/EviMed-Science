@@ -47,6 +47,14 @@
   stats::quantile(vals, c(0.5, 0.05, 0.95), names = FALSE)
 }
 .n101_close <- function(got, want, tol) all(abs(got - want) <= tol)
+#' A typical-study patients.progression job at one population, dispatched like any job (so this case is a reference of the method itself, not
+#' only of the model's functions): its reported curves are compared with the function the table checks below were made on.
+.n101_job_at <- function(population, seed, placebo = NULL) {
+  sc <- .n101_sc(n = 50L, visits = c(0, 13, 26, 52), uncertainty = "typical_study",
+                 population = lapply(population, function(v) .n101_P(v)))
+  if (!is.null(placebo)) sc$placebo <- placebo
+  .n101_run(sc, seed, replicates = 1000L)
+}
 
 vcr_case("N101a", c("AC-04"), function() {
   set <- .n101_set()
@@ -62,8 +70,13 @@ vcr_case("N101a", c("AC-04"), function() {
   l46 <- vcr_beta_logit_emax_from_points(-1.4, 12, 22.5, 1)
   # Romero et al. 2015 Table 1: the donepezil ET50 is 1.62 weeks
   et50 <- set$medians[["et50[1]"]]
-  ok <- file_ok && medians_gap < 1e-12 && abs(l26 - 7.2415) <= 5e-5 && abs(l28 - 3.509151) <= 5e-7 && abs(l46 - (-0.1010641)) <= 5e-8 && abs(et50 - 1.62) <= 0.005
-  list(pass = ok, detail = sprintf("parameter file SHA-256 %s (adsim 3.0 posterior.rda %s, archive SHA-1 %s), %d draws x %d columns, the stored medians equal the draws' to %.1e; training manual Listing 2.6 phiEta x 70/4 = %.5f (printed 7.2415), Listing 2.8 residual SD at 25 = %.7f (printed 3.509151), Listing 4.6 gLogitDelta(-1.4, 12, 22.5, 1) = %.8f (printed -0.1010641); donepezil ET50 %.4f weeks (Romero 2015: 1.62)",
+  # the method runs on that file: a dispatched job names it and its 1,600 draws
+  job <- .n101_job_at(list(mmseRange = c(21, 21), apoe4 = c(1, 0, 0), femaleShare = 0), 10101L)
+  used <- job$diagnostics$progression$parameterSet
+  dispatched_ok <- identical(job$status, "succeeded") && identical(used$fileSha256, set$fileSha256) && identical(as.integer(used$draws), 1600L)
+  ok <- file_ok && dispatched_ok && medians_gap < 1e-12 && abs(l26 - 7.2415) <= 5e-5 && abs(l28 - 3.509151) <= 5e-7 && abs(l46 - (-0.1010641)) <= 5e-8 && abs(et50 - 1.62) <= 0.005
+  list(pass = ok, detail = sprintf("a dispatched job %s on parameter file %s with %s draws; parameter file SHA-256 %s (adsim 3.0 posterior.rda %s, archive SHA-1 %s), %d draws x %d columns, the stored medians equal the draws' to %.1e; training manual Listing 2.6 phiEta x 70/4 = %.5f (printed 7.2415), Listing 2.8 residual SD at 25 = %.7f (printed 3.509151), Listing 4.6 gLogitDelta(-1.4, 12, 22.5, 1) = %.8f (printed -0.1010641); donepezil ET50 %.4f weeks (Romero 2015: 1.62)",
+                                   job$status, substr(used$fileSha256 %||% "none", 1, 12), used$draws %||% NA,
                                    substr(set$fileSha256, 1, 12), substr(set$source$sourceSha256, 1, 12), substr(set$source$archiveSha1, 1, 12), nrow(set$draws), ncol(set$draws), medians_gap, l26, l28, l46, et50))
 })
 
@@ -100,8 +113,16 @@ vcr_case("N101c", c("AC-04"), function() {
   table9 <- list(`16` = c(32.2, 29.6, 34.9), `21` = c(22.3, 20.0, 24.8), `26` = c(14.2, 12.4, 16.1))
   got <- lapply(c(16, 21, 26), function(b) .n101_new_study_quantiles(list(mmseRange = c(b, b), apoe4 = c(1, 0, 0), femaleShare = 0),
     function(par, study) vcr_beta_logit_moments(par, study, 0, NULL, FALSE, FALSE, n_age = 1L)$mean, 4L, 10103L + b))
-  ok <- all(mapply(function(g, w) abs(g[1] - w[1]) <= 0.15 && all(abs(g[2:3] - w[2:3]) <= 0.35), got, table9))
-  list(pass = ok, detail = paste0("EMA qualification opinion 2013 Table 9, intercept of a new study (tolerance 0.15 for a median, 0.35 for a bound): ",
+  # the method reports its baseline with that function: a dispatched typical-study job at MMSE 21, no ApoE4 allele, male
+  pop <- list(mmseRange = c(21, 21), apoe4 = c(1, 0, 0), femaleShare = 0)
+  job <- .n101_job_at(pop, 10121L)
+  par <- vcr_beta_logit_par(.n101_set()$medians, pop)
+  own <- vcr_beta_logit_moments(par, vcr_beta_logit_typical_study(par), c(0, 13, 26, 52), NULL, TRUE, TRUE)$mean[1]
+  reported <- job$diagnostics$progression$curves[[1]]$control$mean$value %||% NA_real_
+  dispatched_ok <- identical(job$status, "succeeded") && is.finite(reported) && abs(reported - own) <= 5e-5
+  ok <- dispatched_ok && all(mapply(function(g, w) abs(g[1] - w[1]) <= 0.15 && all(abs(g[2:3] - w[2:3]) <= 0.35), got, table9))
+  list(pass = ok, detail = paste0(sprintf("a dispatched typical-study job reports a baseline of %.4f at MMSE 21, the function's %.4f; ", reported, own),
+       "EMA qualification opinion 2013 Table 9, intercept of a new study (tolerance 0.15 for a median, 0.35 for a bound): ",
        paste(mapply(function(b, g, w) sprintf("MMSE %s %.2f [%.2f, %.2f] (table %.1f [%.1f, %.1f])", b, g[1], g[2], g[3], w[1], w[2], w[3]), names(table9), got, table9), collapse = "; ")))
 })
 
@@ -115,8 +136,16 @@ vcr_case("N101d", c("AC-04"), function() {
     .n101_new_study_quantiles(list(mmseRange = c(rw[[1]], rw[[1]]), apoe4 = one, femaleShare = rw[[2]]),
       function(par, study) vcr_beta_logit_moments(par, study, c(0, 52), NULL, FALSE, FALSE)$change[2], 4L, 10110L + i)
   })
-  ok <- all(mapply(function(g, rw) abs(g[1] - rw[[4]][1]) <= 0.15 && all(abs(g[2:3] - rw[[4]][2:3]) <= 0.35), got, rows))
-  list(pass = ok, detail = paste0("EMA qualification opinion 2013 Table 11, one-year change of a new study (tolerance 0.15 for a median, 0.35 for a bound): ",
+  # the method reports its one-year change with that function: a dispatched typical-study job at MMSE 21, no allele, male, no placebo term
+  pop <- list(mmseRange = c(21, 21), apoe4 = c(1, 0, 0), femaleShare = 0)
+  job <- .n101_job_at(pop, 10131L, placebo = FALSE)
+  par <- vcr_beta_logit_par(.n101_set()$medians, pop)
+  own <- vcr_beta_logit_moments(par, vcr_beta_logit_typical_study(par), c(0, 13, 26, 52), NULL, FALSE, TRUE)$change[4]
+  reported <- job$diagnostics$progression$curves[[4]]$change$control$value %||% NA_real_
+  dispatched_ok <- identical(job$status, "succeeded") && is.finite(reported) && abs(reported - own) <= 5e-5
+  ok <- dispatched_ok && all(mapply(function(g, rw) abs(g[1] - rw[[4]][1]) <= 0.15 && all(abs(g[2:3] - rw[[4]][2:3]) <= 0.35), got, rows))
+  list(pass = ok, detail = paste0(sprintf("a dispatched typical-study job reports a one-year change of %.4f at MMSE 21 without placebo, the function's %.4f; ", reported, own),
+       "EMA qualification opinion 2013 Table 11, one-year change of a new study (tolerance 0.15 for a median, 0.35 for a bound): ",
        paste(mapply(function(rw, g) sprintf("%d/%s/%d %.2f [%.2f, %.2f] (table %.2f [%.2f, %.2f])", rw[[1]], if (rw[[2]] == 1) "F" else "M", rw[[3]], g[1], g[2], g[3], rw[[4]][1], rw[[4]][2], rw[[4]][3]), rows, got), collapse = "; ")))
 })
 
