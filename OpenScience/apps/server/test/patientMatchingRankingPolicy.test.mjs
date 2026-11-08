@@ -18,12 +18,12 @@ test('the trial record keeps the benchmark field order and the whole eligibility
 });
 
 test('rank fusion follows the measured policy and never invents or drops a candidate', () => {
-  assert.equal(RANKING_POLICY.id, 'triallink-2');
-  assert.deepEqual(RANKING_POLICY.weights, { rerank: 0.5, fit: 1, graded: 1 });
+  assert.equal(RANKING_POLICY.id, 'triallink-3');
+  assert.deepEqual(RANKING_POLICY.weights, { rerank: 1, fit: 1, graded: 0.5 });
   const rerankOrder = ['a', 'b', 'c', 'd'];
   const fused = composeRanking({ rerankOrder, jevScores: [{ registryId: 'd', score: 3.9 }, { registryId: 'a', score: 0.1 }, { registryId: 'b', score: 2 }, { registryId: 'c', score: 2 }, { registryId: 'zz', score: 4 }] });
   assert.deepEqual(fused.jevOrder, ['d', 'b', 'c', 'a']);
-  assert.deepEqual(fused.finalOrder, ['d', 'b', 'a', 'c'], 'half-weight rerank: the fit leader d overtakes the rerank leader a');
+  assert.deepEqual(fused.finalOrder, ['b', 'a', 'd', 'c'], 'equal rerank and fit weights: b, second in both, leads; a and d tie and keep the rerank order');
   assert.deepEqual(composeRanking({ rerankOrder }).finalOrder, rerankOrder);
   assert.throws(() => composeRanking({ rerankOrder: ['a', 'a'] }));
 });
@@ -38,7 +38,9 @@ test('the graded reading enters as the expected benchmark gain of its level prob
   const rerankOrder = ['a', 'b', 'c'];
   const jevScores = [{ registryId: 'a', score: 1 }, { registryId: 'b', score: 3 }, { registryId: 'c', score: 2 }];
   assert.deepEqual(composeRanking({ rerankOrder, jevScores }).finalOrder, ['b', 'a', 'c'], 'no graded answers: rerank and fit alone');
-  const withGraded = composeRanking({ rerankOrder, jevScores, gradedGains: [{ registryId: 'c', gain: 2 }, { registryId: 'b', gain: 1.5 }, { registryId: 'a', gain: 0 }] });
+  const split = [{ registryId: 'c', score: 3 }, { registryId: 'a', score: 2 }, { registryId: 'b', score: 1 }]
+  assert.deepEqual(composeRanking({ rerankOrder, jevScores: split }).finalOrder, ['a', 'c', 'b'], 'rerank and fit disagree: a leads by the rerank')
+  const withGraded = composeRanking({ rerankOrder, jevScores: split, gradedGains: [{ registryId: 'c', gain: 2 }, { registryId: 'b', gain: 1.5 }, { registryId: 'a', gain: 0 }] });
   assert.deepEqual(withGraded.gradedOrder, ['c', 'b', 'a']);
-  assert.deepEqual(withGraded.finalOrder, ['b', 'c', 'a'], 'the graded gain lifts c above the rerank-favoured a');
+  assert.deepEqual(withGraded.finalOrder, ['c', 'a', 'b'], 'the half-weight graded gain decides between a and c');
 });

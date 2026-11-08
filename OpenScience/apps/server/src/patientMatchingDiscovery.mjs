@@ -8,7 +8,7 @@ import {patientRankingText,recordIsLong} from './patientMatchingProfile.mjs';
 const PROFILE_CACHE_ENTRIES=64;
 const result=(status,data)=>({status,summary:'Candidate discovery completed with recorded coverage and order.',data,artifacts:[]});
 /**
- * TrialLink ranking (policy `triallink-2`, chosen on the development patients 2026-11-08): lexical registry recall over the condition and its ranked
+ * TrialLink ranking (policy `triallink-3`, chosen on the development patients 2026-11-08): lexical registry recall over the condition and its ranked
  * terms, the plugin's dense index, fused; Qwen3.7 reranks the fused list and Jev reads each candidate's whole record twice in one request (a five-level fit and a five-level graded reading);
  * the saved order is the weighted reciprocal-rank fusion of the rerank, the fit and the graded reading's expected gain. `depth` bounds every stage (at most 500, the reranker's request bound).
  * A long record (over 6,000 characters with the query) stands for itself as a profile summary (`models.profile`, cached per record) or, without one, as its newest sentences; its age and sex filter the registry search unless the tool gave them.
