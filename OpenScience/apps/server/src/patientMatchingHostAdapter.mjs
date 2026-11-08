@@ -12,6 +12,7 @@ import { nativeDecisionProjection } from './patientMatchingProjection.mjs';
 import { renderPatientMatchingReport } from './patientMatchingReport.mjs';
 import { patientMatchingOutputSchema } from './patientMatchingOutputSchema.mjs';
 import { segmentCriteria } from '@evimed/domain';
+import { WINDOW_CHARACTERS, LruCache, buildRecordIndex, denseChunkRanking, initialEvidenceIds, searchRecordIndex, sentenceContexts } from './patientMatchingRecordIndex.mjs';
 
 const id = prefix => `${prefix}_${randomUUID().replaceAll('-', '')}`;
 const deny = (code = 'patient_matching_scope_mismatch', message = 'The operation is outside the current matching task.') => { throw new HttpError(403, code, message); };
@@ -24,11 +25,15 @@ export const patientMatchingScope = origin => ({ tenantId: origin.userId, actorI
 
 /** The most concurrent executions one match_assess call may hold (the plugin runs ASSESS_LANES of them). */
 export const MATCHING_LANES_MAX = 16;
-/** How much of a patient's record an execution starts with (characters, about 20,000 tokens); the child reads further with match_evidence. */
-export const INITIAL_EVIDENCE_CHARACTERS = 80_000;
+/** How much of a patient's record an execution starts with (characters): the newest records whole up to this size (about 15,000 tokens),
+ * plus passages retrieved per criterion from older records (`RETRIEVED_CHARACTERS`, patientMatchingRecordIndex.mjs); the child searches the whole record with match_evidence. */
+export const INITIAL_EVIDENCE_CHARACTERS = WINDOW_CHARACTERS;
+/** The most phrasings one match_evidence search takes, and the most passages it returns. */
+export const EVIDENCE_QUERIES_MAX = 8;
+export const EVIDENCE_LIMIT_MAX = 50;
 
-/** @param {{vcr:any,documents:any,config?:any,modelPorts?:any,indexPorts?:any,calculate?:any,writeArtifact?:any,onPending?:any,onCancel?:any,knowledge?:any,discover?:any}} dependencies */
-export function createPatientMatchingHostAdapter({ vcr, documents, config = {}, modelPorts = null, indexPorts = null, calculate = calculateClinicalScore, writeArtifact = null, onPending = null, onCancel = null, knowledge = null, discover = null }) {
+/** @param {{vcr:any,documents:any,config?:any,modelPorts?:any,indexPorts?:any,calculate?:any,writeArtifact?:any,onPending?:any,onCancel?:any,knowledge?:any,discover?:any,evidenceEmbed?:((texts:string[])=>Promise<number[][]>)|null}} dependencies */
+export function createPatientMatchingHostAdapter({ vcr, documents, config = {}, modelPorts = null, indexPorts = null, calculate = calculateClinicalScore, writeArtifact = null, onPending = null, onCancel = null, knowledge = null, discover = null, evidenceEmbed = null }) {
   const repository = new PatientMatchingRepository(documents);
   const targets = judgmentTargets({ evidence: vcr.evidence, matchStore: vcr.matchStore, pages: vcr.registryPages });
   const modelProfile = config.patientMatchingProfile ?? patientMatchingConfiguration(config);
@@ -37,6 +42,18 @@ export function createPatientMatchingHostAdapter({ vcr, documents, config = {}, 
   const reasoning = Object.freeze({ provider: KERNEL_DEEPSEEK_PROVIDER, model: modelProfile.reasoningModel, reasoningEffort: 'high', maxTokens: 16000 });
   const profileDigest = profileIdentity({ modelProfile, reasoning });
   const evidenceLedgers=new Map();
+  // One search index per patient revision; the dense channel (embedder given and patientMatchingEvidenceDense on) is off by default.
+  const recordIndexes=new LruCache(32);
+  const denseOn=config.patientMatchingEvidenceDense===true&&typeof evidenceEmbed==='function';
+  /** The dense channel: the sentences of the five chunks nearest the phrasings, in chunk order. */
+  async function denseSentenceRanking(/** @type {any} */ index,/** @type {string[]} */ queries){
+    const position=new Map(index.passages.map((/** @type {any} */ item,/** @type {number} */ at)=>[item.evidenceId,at]));
+    return (await denseChunkRanking(index,queries,/** @type {any} */ (evidenceEmbed))).slice(0,5).flatMap(at=>index.chunks[at].evidenceIds.map((/** @type {string} */ eid)=>position.get(eid)));
+  }
+  function indexOf(subjectKey,person){
+    const key=`${subjectKey}:${person.note.hash}`;
+    return recordIndexes.get(key)??recordIndexes.set(key,buildRecordIndex(person.passages));
+  }
   function ledger(taskId) {
     if(!evidenceLedgers.has(taskId)) {
       while(evidenceLedgers.size>=128)evidenceLedgers.delete(evidenceLedgers.keys().next().value);
@@ -79,9 +96,10 @@ export function createPatientMatchingHostAdapter({ vcr, documents, config = {}, 
       sources.push(source);
       // Short, readable ids (record.sentence), unique within the patient: the child copies them into every decision, and 64-character
       // hashes were miscopied on long records (replay 2026-11-08: patients whose decisions never saved, even after the repair).
+      const contexts = sentenceContexts(record, index + 1);
       for (const [sentenceIndex, sentence] of record.sentences.entries()) {
         const evidenceId = `e:${index + 1}.${sentenceIndex + 1}`;
-        passages.push({ evidenceId, subjectKey, source, text: sentence.text, span: { start: sentence.start, end: sentence.end } });
+        passages.push({ evidenceId, subjectKey, source, text: sentence.text, span: { start: sentence.start, end: sentence.end }, ...contexts[sentenceIndex] });
       }
     }
     const context = { schemaVersion: '1', scope, contextId: `context:${subjectKey}`, subjectKey, revision: note.hash, sources, observations: [], coverage: { state: note.unreadable ? 'partial' : 'complete', limitations: note.unreadable ? ['Some patient documents cannot currently be read.'] : [] } };
@@ -101,6 +119,10 @@ export function createPatientMatchingHostAdapter({ vcr, documents, config = {}, 
     validateTrialProfile(profile);
     return { target, profile, source };
   }
+  /** Every passage the model is given is recorded as read from its document. */
+  async function recordReads(study,person,passages){
+    for(const passage of passages){const record=person.note.records.find(/** @param {any} item */ item=>item.documentId===passage.source.sourceId);if(record)await vcr.documents.recordWindow?.(study,record.documentId,record.text,passage.span.start,passage.span.end);}
+  }
   async function materials(study, pairs, meta, scope,origin=meta.origin) {
     const people = new Map(), trials = new Map(), bundles = [];
     const heldKnowledge=[...ledger(meta.taskId).knowledgePassages.values()];
@@ -109,16 +131,13 @@ export function createPatientMatchingHostAdapter({ vcr, documents, config = {}, 
       if (!people.has(pair.subjectKey)) people.set(pair.subjectKey, await patient(study, pair.subjectKey, scope));
       if (!trials.has(pair.trialId)) trials.set(pair.trialId, await trial(study, pair, meta, scope));
       const person = people.get(pair.subjectKey), target = trials.get(pair.trialId);
-      // The whole record when it fits the window; past it the oldest passages give way first, because "now" is the newest record
-      // (replay 2026-11-08: a first-18,000-characters window hid the newest records of half the n2c2 patients).
-      let characters=0;
-      const keep=new Set();
-      for(const passage of [...person.passages].reverse()){if(characters+passage.text.length>INITIAL_EVIDENCE_CHARACTERS)break;characters+=passage.text.length;keep.add(passage.evidenceId);}
-      const initial=person.passages.filter(passage=>keep.has(passage.evidenceId));
-      const held=ledger(meta.taskId),ids=new Set(initial.map(passage=>passage.evidenceId));
+      // The newest records whole while they fit the window ("now" is the newest record; replay 2026-11-08: a first-18,000-characters window hid
+      // the newest records of half the n2c2 patients), plus, per criterion, the best-matching chunks of the older records (BM25 on the criterion text).
+      const {window,retrieved}=initialEvidenceIds(indexOf(pair.subjectKey,person),target.profile.criteria.map(/** @param {any} criterion */ criterion=>criterion.text));
+      const held=ledger(meta.taskId),ids=new Set([...window,...retrieved]);
       const passages=person.passages.filter(passage=>ids.has(passage.evidenceId)||held.evidenceIds.has(passage.evidenceId));
-      const limitations=[...person.context.coverage.limitations,...(passages.length<person.passages.length?['Only an initial evidence window is shown; use match_evidence for other relevant passages.']:[])];
-      for(const passage of passages){const record=person.note.records.find(item=>item.documentId===passage.source.sourceId);if(record)await vcr.documents.recordWindow?.(study,record.documentId,record.text,passage.span.start,passage.span.end);}
+      const limitations=[...person.context.coverage.limitations,...(passages.length<person.passages.length?['The window holds the newest records plus passages retrieved per criterion from older records; match_evidence searches the whole record.']:[])];
+      await recordReads(study,person,passages);
       const bundle = { schemaVersion: '1', scope, bundleId: `bundle:${profileIdentity([pair, person.sources, target.source]).slice(7)}`, sources: uniqSources([...person.sources, target.source,...heldKnowledge.map(passage=>passage.source)]), patientPassages: passages, knowledgePassages: heldKnowledge, limitations,
         computations:[...held.computations.values()].filter(item=>item.subjectKey===pair.subjectKey&&item.receipt.operands.every(operand=>person.sources.some(source=>same(source,operand.source)))).map(item=>item.receipt) };
       validateEvidenceBundle(bundle); bundles.push(bundle);
@@ -427,13 +446,25 @@ export function createPatientMatchingHostAdapter({ vcr, documents, config = {}, 
         return result;
       }
       if (port === 'KnowledgePort' && input.source !== 'patient') return unsupported('knowledge');
-      const material = await materials(study, pairs.slice(0, 100), meta, scope,origin);
-      let passages = [...material.people.values()].flatMap(person=>person.passages);
-      passages = [...new Map(passages.map(passage => [passage.evidenceId, passage])).values()].filter(passage => (!input.evidenceId || passage.evidenceId === input.evidenceId) && (!input.sourceId || passage.source.sourceId === input.sourceId));
-      if (input.query) passages.sort((a, b) => Number(b.text.toLowerCase().includes(input.query.toLowerCase())) - Number(a.text.toLowerCase().includes(input.query.toLowerCase())));
-      const selected=passages.slice(0,input.limit??20),held=ledger(meta.taskId);
-      for(const passage of selected)held.evidenceIds.add(passage.evidenceId);
-      return response({ passages:selected });
+      // Search the whole record, not the window: ranked sentences for every phrasing given, nothing when nothing matches.
+      const queries=[...new Set([input.query,...(Array.isArray(input.queries)?input.queries:[])].filter(item=>typeof item==='string').map(item=>item.trim().slice(0,200)).filter(Boolean))].slice(0,EVIDENCE_QUERIES_MAX);
+      const limit=Math.min(Math.max(1,Number.isInteger(input.limit)?input.limit:20),EVIDENCE_LIMIT_MAX);
+      const matches=passage=>(!input.evidenceId||passage.evidenceId===input.evidenceId)&&(!input.sourceId||passage.source.sourceId===input.sourceId);
+      const selected=[],held=ledger(meta.taskId);
+      for(const subjectKey of [...new Set(pairs.slice(0,100).map(pair=>pair.subjectKey))]){
+        const person=await patient(study,subjectKey,scope),index=indexOf(subjectKey,person);
+        let found;
+        if(!queries.length)found=person.passages.filter(matches).slice(0,limit);
+        else{
+          const extraRankings=denseOn?[await denseSentenceRanking(index,queries)]:[];
+          found=/** @type {any[]} */ (searchRecordIndex(index,queries,{limit:index.passages.length,unit:'sentence',extraRankings})).filter(matches).slice(0,limit);
+        }
+        await recordReads(study,person,found);
+        selected.push(...found);
+      }
+      const returned=selected.slice(0,limit);
+      for(const passage of returned)held.evidenceIds.add(passage.evidenceId);
+      return response({ passages:returned });
     }
     if (port === 'ExecutionPort' && operation === 'compute') {
       if (!meta.selectedPairs.some(pair => pair.subjectKey === input.subjectKey)) deny();
