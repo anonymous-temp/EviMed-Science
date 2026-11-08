@@ -88,7 +88,6 @@ describe("search boxes can be cleared", () => {
     ]));
     expect(all.map((box) => box.path)).toEqual(expect.arrayContaining([
       "app/routes/MemoryHubPage.tsx",
-      "app/routes/CapabilitiesPage.tsx",
       "app/routes/FrontierPage.tsx",
     ]));
   });

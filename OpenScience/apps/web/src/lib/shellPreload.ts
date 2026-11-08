@@ -16,7 +16,6 @@ import { holdStaleChunkReload } from "@/lib/staleChunk";
 /** The pages the sidebar opens, most used first. Their imports are the router's own, so a page already fetched costs nothing. */
 const PAGES: ReadonlyArray<() => Promise<unknown>> = [
   () => import("@/app/routes/FrontierPage"),
-  () => import("@/app/routes/CapabilitiesPage"),
   () => import("@/app/routes/KnowledgePage"),
   () => import("@/app/routes/MemoryHubPage"),
   () => import("@/app/virtual-research/VcrHomePage"),

@@ -406,7 +406,7 @@ it.each([400, 404, 0])("keeps rejection/unknown intent %s on cancel and clears o
   expect(key).toBeTruthy();
   await user.click(screen.getByRole("button", { name: "前往已添加列表核查" }));
   expect(await screen.findByRole("button", { name: "继续核查普通导入" })).toBeInTheDocument();
-  expect(screen.getByRole("heading", { name: "插件与技能" })).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "技能与插件" })).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "继续核查普通导入" }));
   await user.click(screen.getByRole("button", { name: "已核查，放弃本次确认" }));
   expect(screen.getByRole("alertdialog")).toHaveTextContent("不删除已保存的技能");

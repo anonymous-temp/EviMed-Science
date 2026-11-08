@@ -896,7 +896,7 @@ export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwne
         const routes: Record<string, string> = {
           // The materials of the project on screen: a bare /app/files is the account's, which the frame's rail did not mean.
           "new-task": "/app/chat", knowledge: listPath({ scope: projectId, kind: null, q: "" }),
-          memory: "/app/memory", capabilities: "/app/capabilities", account: "/app/account",
+          memory: "/app/memory", capabilities: "/app/home", account: "/app/account",
           geo: "/app/geo", "virtual-research": "/app/virtual-research", autopilot: "/app/autopilot",
         };
         const to = routes[String(message.destination)];
