@@ -199,7 +199,7 @@ export class ConversationSourceDeletionService {
           const guard = () => this.ledger.assertIdentity(row);
           await guard(); await this.removeHistory(project, row);
           const result = row.sourceRemoved === true ? { sourceRemoved: true } : await this.runtime.purgeConversationSource(project, row.frozen, guard);
-          if (result?.sourceRemoved !== true) { await this.ledger.update(row, { cleanup: 'pending', reason: result?.reason ?? 'runtime_busy' }); return; }
+          if (result?.sourceRemoved !== true) { await this.ledger.update(row, { cleanup: 'pending', reason: result?.reason ?? 'runtime_busy', backoff: true }); return; }
           if (Array.isArray(result.removedSessionIds) && this.ledger.extendSessions) {
             row.sessionIds = await this.ledger.extendSessions(row, result.removedSessionIds);
           }
@@ -208,7 +208,7 @@ export class ConversationSourceDeletionService {
           await this.removeDerived(project, row);
           await this.ledger.update(row, { sourceRemoved: true, cleanup: 'complete', reason: null });
         });
-      } catch(error) { await this.ledger.update(row, { cleanup: 'pending', reason: error?.code==='memory_source_lineage_unverified'?'native_lineage_unverified':['memory_source_cleanup_busy','memory_source_body_changed'].includes(error?.code)?'account_memory_busy':'cleanup_unavailable' }); }
+      } catch(error) { await this.ledger.update(row, { cleanup: 'pending', backoff: true, reason: error?.code==='memory_source_lineage_unverified'?'native_lineage_unverified':['memory_source_cleanup_busy','memory_source_body_changed'].includes(error?.code)?'account_memory_busy':'cleanup_unavailable' }); }
     }
   }
   start() { if (this.timer) return; this.timer = setInterval(() => { void this.drain().catch(() => {}); }, 5000); this.timer.unref(); }

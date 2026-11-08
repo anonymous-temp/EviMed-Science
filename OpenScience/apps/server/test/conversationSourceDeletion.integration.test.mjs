@@ -233,3 +233,19 @@ test('a deleted conversation with a failed, replayed and abandoned extraction hi
   await f.commitConversation('b',[{role:'user',text:'Still extracting.'}],{projectId:'default'});
   assert.equal(await f.overlay.hasUnprovenNativeWrites(f.userId),true);
 });
+
+test('a completed deletion is never selected or downgraded, and a failed cleanup waits out its backoff', options, async t => {
+  const f=await fixture(t), ledger=new ConversationSourceDeletionLedger(f.database);
+  const stamp=(await f.database.query('SELECT created_at::text AS stamp FROM evimed_control.users WHERE id=$1',[f.userId])).rows[0].stamp;
+  const put=id=>ledger.put({id:crypto.randomUUID(),userId:f.userId,projectId:'default',accountCreatedAt:stamp,projectCreatedAt:f.projectCreatedAt,rootSessionId:id,sessionIds:[id],frozen:{root:{id}},memoryUserRoot:f.sessions.userRoot(f.userId)});
+  const done=await put('done'), retry=await put('retry');
+  await ledger.update(done,{cleanup:'complete',sourceRemoved:true});
+  await f.database.query("UPDATE evimed_source_deletion.conversations SET updated_at=clock_timestamp()-interval '1 hour' WHERE id=$1",[done.id]);
+  {const ids=(await ledger.pending()).map(r=>r.id);assert.ok(ids.includes(retry.id));assert.ok(!ids.includes(done.id),'a complete row old enough to look stale is not selected');}
+  const kept=await ledger.update(done,{cleanup:'pending',reason:'account_memory_busy',backoff:true});
+  assert.equal(kept.cleanup,'complete','a busy account cannot downgrade a completed row');
+  await ledger.update(retry,{cleanup:'pending',reason:'cleanup_unavailable',backoff:true});
+  assert.ok(!(await ledger.pending()).some(r=>r.id===retry.id),'the failed cleanup waits for its next attempt');
+  await f.database.query("UPDATE evimed_source_deletion.conversations SET next_attempt_at=clock_timestamp()-interval '1 second' WHERE id=$1",[retry.id]);
+  assert.ok((await ledger.pending()).some(r=>r.id===retry.id));
+});

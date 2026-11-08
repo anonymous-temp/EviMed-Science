@@ -15,7 +15,10 @@ ALTER TABLE evimed_source_deletion.conversations ADD COLUMN IF NOT EXISTS memory
 ALTER TABLE evimed_source_deletion.conversations ADD COLUMN IF NOT EXISTS history_prints jsonb NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE evimed_source_deletion.conversations ADD COLUMN IF NOT EXISTS native_roots jsonb NOT NULL DEFAULT '[]'::jsonb;
 ALTER TABLE evimed_source_deletion.conversations ADD COLUMN IF NOT EXISTS lineage_roots jsonb NOT NULL DEFAULT '[]'::jsonb;
-ALTER TABLE evimed_source_deletion.conversations ADD COLUMN IF NOT EXISTS cleaned_revision_id bigint;`;
+ALTER TABLE evimed_source_deletion.conversations ADD COLUMN IF NOT EXISTS cleaned_revision_id bigint;
+-- A cleanup that could not finish waits out a backoff before the next attempt; a complete one is never selected again.
+ALTER TABLE evimed_source_deletion.conversations ADD COLUMN IF NOT EXISTS attempts integer NOT NULL DEFAULT 0;
+ALTER TABLE evimed_source_deletion.conversations ADD COLUMN IF NOT EXISTS next_attempt_at timestamptz;`;
 const stamp = value => typeof value === 'string' ? value : new Date(value).toISOString();
 const identityColumns = "*, account_created_at::text AS account_created_at, project_created_at::text AS project_created_at";
 const rowOf = r => r ? { id: r.id, userId: r.user_id, accountCreatedAt: stamp(r.account_created_at), projectId: r.project_id,
@@ -163,7 +166,8 @@ export class ConversationSourceDeletionLedger {
     return rowOf(result.rows[0]);
     });
   }
-  async pending() { await this.migrate(); return (await this.database.query(`SELECT ${identityColumns} FROM evimed_source_deletion.conversations WHERE cleanup='pending' OR updated_at < clock_timestamp()-interval '60 seconds' ORDER BY updated_at LIMIT 30`)).rows.map(rowOf); }
+  /** Only cleanups still owed and past their backoff; a complete row is never selected again. */
+  async pending() { await this.migrate(); return (await this.database.query(`SELECT ${identityColumns} FROM evimed_source_deletion.conversations WHERE cleanup='pending' AND (next_attempt_at IS NULL OR next_attempt_at<=clock_timestamp()) ORDER BY updated_at LIMIT 30`)).rows.map(rowOf); }
   /** Only the privileged maintenance result may extend the deleted managed-child closure. */
   async extendSessions(row, ids) {
     const sessionIds = [...new Set([...row.sessionIds, ...ids.map(id => safeId(id, 'managed source session'))])];
@@ -171,9 +175,16 @@ export class ConversationSourceDeletionLedger {
     await this.database.query('UPDATE evimed_source_deletion.conversations SET session_ids=$2,updated_at=clock_timestamp() WHERE id=$1', [row.id, JSON.stringify(sessionIds)]);
     return sessionIds;
   }
+  /** A complete row is final: a busy account can neither downgrade it nor move its backoff. A retry (`backoff`) waits 5 s doubling to 15 min. */
   async update(row, change) {
-    const result = await this.database.query(`UPDATE evimed_source_deletion.conversations SET cleanup=$2,source_removed=$3,reason=$4,cleaned_revision_id=CASE WHEN $2='complete' THEN COALESCE(cleaned_revision_id,(SELECT COALESCE(max(id),0) FROM evimed_memory.native_revisions WHERE user_id=conversations.user_id)) ELSE cleaned_revision_id END,updated_at=clock_timestamp() WHERE id=$1 RETURNING ${identityColumns}`,
-      [row.id, change.cleanup ?? row.cleanup, change.sourceRemoved ?? row.sourceRemoved, change.reason ?? null]); return rowOf(result.rows[0]);
+    const next = change.cleanup ?? row.cleanup, backoff = change.backoff === true;
+    const result = await this.database.query(`UPDATE evimed_source_deletion.conversations SET cleanup=$2,source_removed=$3,reason=$4,cleaned_revision_id=CASE WHEN $2='complete' THEN COALESCE(cleaned_revision_id,(SELECT COALESCE(max(id),0) FROM evimed_memory.native_revisions WHERE user_id=conversations.user_id)) ELSE cleaned_revision_id END,
+      attempts=CASE WHEN $2='complete' THEN 0 WHEN $5::boolean THEN attempts+1 ELSE attempts END,
+      next_attempt_at=CASE WHEN $2='complete' THEN NULL WHEN $5::boolean THEN clock_timestamp()+LEAST(interval '15 minutes',interval '5 seconds'*power(2,LEAST(attempts,10))) ELSE NULL END,
+      updated_at=clock_timestamp() WHERE id=$1 AND cleanup<>'complete' RETURNING ${identityColumns}`,
+      [row.id, next, change.sourceRemoved ?? row.sourceRemoved, change.reason ?? null, backoff]);
+    if (result.rows[0]) return rowOf(result.rows[0]);
+    return rowOf((await this.database.query(`SELECT ${identityColumns} FROM evimed_source_deletion.conversations WHERE id=$1`, [row.id])).rows[0]);
   }
   async assertIdentity(row) {
     const current = await this.scope({ userId: row.userId, id: row.projectId });

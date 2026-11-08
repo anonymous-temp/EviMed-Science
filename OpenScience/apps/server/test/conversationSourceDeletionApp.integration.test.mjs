@@ -45,6 +45,9 @@ test('owned source DELETE is wired through durable state, source privacy, metada
   assert.ok((await overlay.sensitiveUris(user.id)).includes(uri),'native recall uses the same immediate source privacy fence');
   assert.equal((await fetch(`${base}/api/projects/unknown/conversations/source_a/source`,{method:'DELETE',headers})).status,404);
   await app.sourceDeletion.drain(); assert.equal((await (await fetch(target,{headers})).json()).data.cleanup,'pending');
+  const waiting=(await app.sourceDeletion.ledger.database.query("SELECT next_attempt_at FROM evimed_source_deletion.conversations WHERE cleanup='pending' AND next_attempt_at IS NOT NULL")).rows.length;
+  assert.ok(waiting>0,'a cleanup that could not finish waits out a backoff');
+  await app.sourceDeletion.ledger.database.query("UPDATE evimed_source_deletion.conversations SET next_attempt_at=NULL WHERE cleanup='pending'");
   physical=true; await app.sourceDeletion.drain();
   const completed=(await (await fetch(target,{headers})).json()).data;
   assert.equal(completed.sourceRemoved,true);assert.equal(completed.cleanup,'complete',JSON.stringify(completed));
