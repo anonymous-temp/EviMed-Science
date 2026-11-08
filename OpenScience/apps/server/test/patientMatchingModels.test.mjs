@@ -123,3 +123,47 @@ test('one full judged candidate pool is ranked in a single request without mixin
  const candidates=Array.from({length:153},(_,index)=>({registryId:`NCT${String(index).padStart(8,'0')}`,text:'Adult clinical trial source'}));
  const result=await f.ports.rerank({scope,input:{query:'adult lung cancer',candidates}});assert.equal(result.status,'complete');assert.equal(result.data.order.length,153);assert.equal(result.data.order[0],candidates[152].registryId);assert.equal(requests,1);assert.equal(result.data.scores.length,153);
 });
+
+test('a pool over the token bound is ranked in consecutive batches that merge into one order, and one failed batch keeps the incoming order', async () => {
+ let requests = 0, failAt = -1;
+ const f = fixture(async (_url, options) => {
+  requests++; const body = JSON.parse(options.body);
+  if (requests === failAt) return new Response('{}', { status: 500 });
+  return Response.json({ results: body.documents.map((text, index) => ({ index, relevance_score: Number(text.slice(0, 3)) / 1000 })), usage: { total_tokens: 10 } });
+ });
+ const candidates = Array.from({ length: 30 }, (_, index) => ({ registryId: `NCT${String(index).padStart(8, '0')}`, text: String(index).padStart(3, '0') + 'x'.repeat(30000 - 3) }));
+ const query = 'q'.repeat(6000);
+ const done = await f.ports.rerank({ scope, input: { query, candidates } });
+ assert.equal(done.status, 'complete');
+ assert.ok(done.data.requests > 1 && done.data.requests === requests);
+ assert.equal(done.data.order[0], candidates[29].registryId);
+ assert.equal(done.data.scores.length, 30);
+ assert.deepEqual([...done.data.order].sort(), candidates.map(row => row.registryId));
+ failAt = requests + 2;
+ const failed = await f.ports.rerank({ scope, input: { query, candidates } });
+ assert.deepEqual([failed.status, failed.data.fallback, failed.data.order], ['partial', true, candidates.map(row => row.registryId)]);
+});
+
+test('rerankBatches bounds documents at 500 and keeps small pools in one request', async () => {
+ const { rerankBatches } = await import('../src/patientMatchingModels.mjs');
+ assert.deepEqual(rerankBatches('q', Array(10).fill('d')), [{ from: 0, to: 10 }]);
+ assert.deepEqual(rerankBatches('q', Array(500).fill('d')), [{ from: 0, to: 500 }]);
+ assert.deepEqual(rerankBatches('q', []), []);
+});
+
+test('the profile call is one DeepSeek Flash request through the gateway helper, over masked newest text, and parsed defensively', async () => {
+ let call; const actions = [];
+ const ports = createPatientMatchingModelPorts({ config: { deepseekBaseUrl: 'https://api.deepseek.com' }, authorize: async (envelope, action) => { actions.push(action); return { userId: 'user-a', projectId: 'project-a', runId: 'run-a' }; },
+  callModelImpl: async (_deps, request) => { call = request; return { choices: [{ message: { content: 'Here: {"profile":"Demographics: 61 male","age":61,"sex":"male"}' } }] }; } });
+ const passages = ['Old note. ' + 'a'.repeat(70000), 'Phone 13812345678 seen. Latest note.'];
+ const value = await ports.profile({ scope, input: { taskId: 't', passages } });
+ assert.deepEqual([value.status, value.data.text, value.data.age, value.data.sex], ['complete', 'Demographics: 61 male', 61, 'male']);
+ assert.deepEqual([call.purpose, call.module, call.operation, call.userId, call.projectId, call.runId], ['kernel', 'patient-matching', 'patient-matching-profile', 'user-a', 'project-a', 'run-a']);
+ assert.equal(call.body.model, 'deepseek-flash');
+ assert.deepEqual(call.body.response_format, { type: 'json_object' });
+ const sent = call.body.messages[1].content;
+ assert.ok(sent.length <= 60000 && sent.endsWith('Latest note.') && !sent.includes('13812345678') && !sent.includes('Old note'));
+ assert.equal(actions[0].destination, 'https://api.deepseek.com');
+ const bad = createPatientMatchingModelPorts({ config: {}, authorize: async () => ({ userId: 'user-a', projectId: 'project-a' }), callModelImpl: async () => ({ choices: [{ message: { content: 'no json' } }] }) });
+ assert.equal((await bad.profile({ scope, input: { passages } })).status, 'failed');
+});

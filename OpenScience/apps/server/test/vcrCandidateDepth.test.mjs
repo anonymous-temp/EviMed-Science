@@ -272,6 +272,17 @@ test("retrieval alone: a failed first page is an unavailable phrase, a later pag
   stop.abort();
   const aborted = await retrieveCandidates({ queries: [{ kind: "condition", text: "a" }], asks, registries: ["r"], retrieveMax: 500, pageSizes: { r: 100 }, deadlineAt: Date.now() + 5_000, signal: stop.signal });
   assert.equal(aborted.results.r[0].status, "not_reached");
-  assert.deepEqual([retrievalDepth(1, 500), retrievalDepth(5, 500), retrievalDepth(32, 500)], [200, 200, 32]);
-  assert.equal(retrievalDepth(100, 500), 20, "never fewer than 20 a phrase");
+  assert.deepEqual([retrievalDepth(2, 500), retrievalDepth(5, 500), retrievalDepth(33, 500)], [200, 188, 24]);
+  assert.equal(retrievalDepth(200, 500), 20, "never fewer than 20 a term");
+  assert.deepEqual([retrievalDepth(33, 500, "condition"), retrievalDepth(1, 500, "condition"), retrievalDepth(33, 100, "condition")], [200, 200, 100], "the condition keeps its depth whatever the terms");
+});
+
+test("the condition query reads deeper than the terms when there are many phrases", async () => {
+  const sizes = {};
+  const asks = { r: async (/** @type {any} */ query, /** @type {any} */ page) => { sizes[query.text] = (sizes[query.text] ?? 0) + 1; return { status: "ok", total: 900, items: Array.from({ length: page.limit }, (_, at) => ({ registryId: `${query.text}${page.pageToken ?? 0}-${at}` })), nextPageToken: String((Number(page.pageToken) || 0) + 1) }; } };
+  const queries = [{ kind: "condition", text: "c" }, ...Array.from({ length: 32 }, (_, at) => ({ kind: "term", text: `t${at}` }))];
+  const read = await retrieveCandidates({ queries, asks, registries: ["r"], retrieveMax: 500, pageSizes: { r: 100 }, deadlineAt: Date.now() + 5_000 });
+  assert.equal(read.results.r[0].items.length, 200);
+  assert.equal(read.results.r[1].items.length, 24);
+  assert.equal(read.depth, 24);
 });

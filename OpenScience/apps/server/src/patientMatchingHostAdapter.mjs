@@ -427,7 +427,7 @@ export function createPatientMatchingHostAdapter({ vcr, documents, config = {}, 
         const subjectKey=meta.contextSubjectKey ?? meta.selectedPairs[0]?.subjectKey;
         const person=subjectKey?await patient(study,subjectKey,scope):null;
         if(discover)return discover({scope,origin,study,meta,input,patient:person});
-        return response(await vcr.service.runtimeRead(study, 'candidates', { condition: input.query, ...(subjectKey?{subjectKey}:{}), limit: input.limit ?? 20 }, { ownerView: true }));
+        return response(await vcr.service.runtimeRead(study, 'candidates', { condition: input.query, ...(subjectKey?{subjectKey}:{}), ...(input.age!==undefined?{age:input.age}:{}), ...(input.sex?{sex:input.sex}:{}), ...(input.region?{region:input.region}:{}), limit: input.limit ?? 20 }, { ownerView: true }));
       }
       if (operation === 'read') {
         if (!meta.selectedPairs.some(pair => pair.trialId === input.registryId)) deny();

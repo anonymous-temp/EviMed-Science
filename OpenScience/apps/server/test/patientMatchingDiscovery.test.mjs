@@ -60,3 +60,57 @@ test('without Jev the rerank order stands, and a failed Jev answer never fails d
  assert.deepEqual(failed.data.candidates.map(row => row.registryId), [ids[1], ids[0]]);
  assert.equal(failed.data.rerank.jev.state, 'failed');
 });
+function longRecordFixture(models, extra = {}) {
+ const asked = [];
+ const vcr = { service: { runtimeRead: async (_s, kind, input) => { if (kind === 'candidates') { asked.push(input); return { candidates: [{ registryId: 'NCT00000001' }, { registryId: 'NCT00000002' }], registries: [{ status: 'ok' }] }; } return { record: { title: input.registryId } }; } }, candidateSearches: { save: async () => 'search' } };
+ return { asked, discover: createPatientMatchingDiscovery({ vcr, models: { embeddingProfileDigest: 'profile', rerank: async () => ({ status: 'partial', data: {} }), ...models }, jevEnabled: false, ...extra }) };
+}
+const run = (discover, input, patient) => discover({ scope, origin, study: {}, meta: { taskId: 't', contextSubjectKey: 'person', selectedPairs: [] }, input: { query: 'lung cancer', ...input }, patient });
+const longPatient = () => ({ sources: [], note: { hash: 'h1' }, passages: [{ text: 'OLDEST visit. ' + 'Filler sentence one. '.repeat(400) }, { text: 'Newest visit: progression on osimertinib. Age 61.' }] });
+
+test('a long record is ranked by its profile summary, which also supplies age and sex, and the profile is cached per record', async () => {
+ let profiles = 0, rankQuery;
+ const { discover, asked } = longRecordFixture({ profile: async e => { profiles++; assert.deepEqual(e.input.patientSources, []); return { status: 'complete', data: { text: 'Demographics: 61 male', age: 61, sex: 'male' } }; }, rerank: async e => { rankQuery = e.input.query; return { status: 'partial', data: {} }; } });
+ await run(discover, {}, longPatient());
+ assert.equal(rankQuery, 'lung cancer\nDemographics: 61 male');
+ assert.equal(asked[0].age, 61); assert.equal(asked[0].sex, 'male');
+ await run(discover, {}, longPatient());
+ assert.equal(profiles, 1, 'the same record is summarised once');
+});
+
+test('the tool\'s age, sex and region win over the profile and reach the registry filter', async () => {
+ const { discover, asked } = longRecordFixture({ profile: async () => ({ status: 'complete', data: { text: 'P', age: 61, sex: 'male' } }) });
+ await run(discover, { age: 40, sex: 'female', region: 'China' }, longPatient());
+ assert.deepEqual([asked[0].age, asked[0].sex, asked[0].region], [40, 'female', 'China']);
+ const short = longRecordFixture({});
+ await run(short.discover, {}, { sources: [], passages: [{ text: 'short' }] });
+ assert.equal('age' in short.asked[0] || 'sex' in short.asked[0] || 'region' in short.asked[0], false);
+});
+
+test('a failed profile falls back to the newest whole sentences and never fails discovery', async () => {
+ let rankQuery;
+ const { discover } = longRecordFixture({ profile: async () => { throw new Error('down'); }, rerank: async e => { rankQuery = e.input.query; return { status: 'partial', data: {} }; } });
+ const answer = await run(discover, {}, longPatient());
+ assert.equal(answer.status, 'complete');
+ assert.ok(rankQuery.length <= 6000);
+ assert.match(rankQuery, /Newest visit: progression on osimertinib\. Age 61\.$/);
+ assert.doesNotMatch(rankQuery, /OLDEST/);
+ const noPort = longRecordFixture({ rerank: async e => { rankQuery = e.input.query; return { status: 'partial', data: {} }; } });
+ await run(noPort.discover, {}, longPatient());
+ assert.match(rankQuery, /Newest visit/);
+});
+
+test('a short record is the query and passages joined, byte for byte', async () => {
+ let rankQuery;
+ const { discover } = longRecordFixture({ profile: async () => { throw new Error('must not be asked'); }, rerank: async e => { rankQuery = e.input.query; return { status: 'partial', data: {} }; } });
+ await run(discover, {}, { sources: [], passages: [{ text: 'first' }, { text: 'second' }] });
+ assert.equal(rankQuery, 'lung cancer\nfirst\nsecond');
+});
+
+test('the configured rank view reaches the rerank documents and the saved profile id', async () => {
+ let saved, text;
+ const vcr = { service: { runtimeRead: async (_s, kind, input) => kind === 'candidates' ? { candidates: [{ registryId: 'NCT00000001' }, { registryId: 'NCT00000002' }] } : { record: { title: input.registryId, eligibilityText: 'Inclusion Criteria:\n- ' + 'x'.repeat(3000) } } }, candidateSearches: { save: async (_s, value) => { saved = value; return 's'; } } };
+ await createPatientMatchingDiscovery({ vcr, jevEnabled: false, rankView: 'eligibility-full', models: { embeddingProfileDigest: 'p', rerank: async e => { text = e.input.candidates[0].text; return { status: 'partial', data: {} }; } } })({ scope, origin, study: {}, meta: { taskId: 't', selectedPairs: [] }, input: { query: 'q' } });
+ assert.equal(saved.rerank.view.profile, 'eligibility-full-v1');
+ assert.ok(text.length > 3000);
+});

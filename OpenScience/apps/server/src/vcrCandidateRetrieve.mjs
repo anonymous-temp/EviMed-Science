@@ -12,8 +12,8 @@
  *   started when it passes is `not_reached` and said so, a phrase whose later pages were not read keeps the pages it has.
  * - **One registry's failure is its own.** The three registries run side by side; a page that fails costs the rest of its phrase and
  *   nothing else, and a thrown error is an unavailable page, never an exception.
- * - **Depth per phrase is the share a fused list of `retrieveMax` needs**, twice over so the filters and the duplicates leave enough: 200
- *   for a few phrases, down to 20 for 32.
+ * - **Depth per phrase is the share a fused list of `retrieveMax` needs**, one and a half times over so the filters and the duplicates leave
+ *   enough: the condition (always first) reads up to 200 whatever the number of terms, and each term 200 for a few phrases, down to 20.
  *
  * @module vcrCandidateRetrieve
  */
@@ -22,11 +22,14 @@
 const PAGES_MAX = 8;
 
 /**
- * How many results of one phrase to read from one registry, for a search of `queries` phrases that keeps `retrieveMax` trials.
- * @param {number} queries @param {number} retrieveMax
+ * How many results of one phrase to read from one registry, for a search of `queries` phrases (the condition and its terms) that keeps
+ * `retrieveMax` trials. The condition query gets up to 200 whatever the number of terms; each term shares 1.5 times `retrieveMax`.
+ * @param {number} queries @param {number} retrieveMax @param {string} [kind]
  */
-export function retrievalDepth(queries, retrieveMax) {
-  return Math.max(20, Math.min(200, Math.ceil((2 * retrieveMax) / Math.max(1, queries))));
+export function retrievalDepth(queries, retrieveMax, kind = "term") {
+  if (kind === "condition") return Math.max(1, Math.min(200, retrieveMax));
+  const terms = Math.max(1, queries - 1);
+  return Math.min(200, Math.max(20, Math.ceil((1.5 * retrieveMax) / terms)));
 }
 
 /**
@@ -42,7 +45,10 @@ export function retrievalDepth(queries, retrieveMax) {
  * @returns {Promise<{ results: Record<string, QueryResult[]>, depth: number, requests: number, reachedAll: boolean }>}
  */
 export async function retrieveCandidates({ queries, asks, registries, retrieveMax, pageSizes, deadlineAt, concurrency = 3, now = Date.now, signal }) {
-  const depth = retrievalDepth(queries.length, retrieveMax);
+  /** @param {{ kind: string }} query */
+  const depthOf = (query) => retrievalDepth(queries.length, retrieveMax, query.kind);
+  // The depth the answer reports: a term's when there are terms, otherwise the condition's.
+  const depth = queries.length > 1 ? retrievalDepth(queries.length, retrieveMax) : retrievalDepth(1, retrieveMax, "condition");
   let requests = 0;
   /** @type {Record<string, QueryResult[]>} */
   const results = {};
@@ -53,7 +59,8 @@ export async function retrieveCandidates({ queries, asks, registries, retrieveMa
     /** @type {QueryResult} */
     const out = { query: query.text, kind: query.kind, status: "not_reached", reason: "search_deadline", total: null, pages: 0, items: [], retrievedAt: null, truncated: null };
     results[registry][at] = out;
-    const size = Math.max(1, Math.min(pageSizes[registry] ?? 100, depth));
+    const queryDepth = depthOf(query);
+    const size = Math.max(1, Math.min(pageSizes[registry] ?? 100, queryDepth));
     /** @type {string | null} */
     let pageToken = null;
     for (let page = 0; page < PAGES_MAX; page += 1) {
@@ -81,7 +88,7 @@ export async function retrieveCandidates({ queries, asks, registries, retrieveMa
       if (answer.retrievedAt && (!out.retrievedAt || answer.retrievedAt > out.retrievedAt)) out.retrievedAt = String(answer.retrievedAt);
       out.items.push(...items);
       // The registry has no more, or enough has been read, or this page was empty: stop.
-      if (!answer.nextPageToken || !items.length || out.items.length >= depth || (out.total !== null && out.items.length >= out.total)) return;
+      if (!answer.nextPageToken || !items.length || out.items.length >= queryDepth || (out.total !== null && out.items.length >= out.total)) return;
       pageToken = String(answer.nextPageToken);
     }
     out.truncated = "pages_limit";
