@@ -1,5 +1,5 @@
-"""Draw the TrialLink report's figures from leaderboard.json: the architecture (fig0) and the leaderboard, one panel per benchmark with
-TrialLink first and every published system beside it, plus a final panel of TrialLink against the best published system (fig1).
+"""Draw the Linemach report's figures from leaderboard.json: the architecture (fig0) and the leaderboard, one panel per benchmark with
+Linemach first and every published system beside it, plus a final panel of Linemach against the best published system (fig1).
 
     python3 make_figures.py   # writes fig0-architecture and fig1-leaderboard (.svg and .png) beside this file
 """
@@ -17,7 +17,7 @@ from matplotlib.patches import FancyArrowPatch, FancyBboxPatch, Patch, Rectangle
 
 HERE = Path(__file__).resolve().parent
 SURFACE, INK, INK_2, MUTED, GRID, AXIS = "#fcfcfb", "#0b0b0b", "#52514e", "#898781", "#e1e0d9", "#c3c2b7"
-ACCENT, OTHER = "#2a78d6", "#898781"  # TrialLink in the accent, every comparator in one recessive tone
+ACCENT, OTHER = "#2a78d6", "#898781"  # Linemach in the accent, every comparator in one recessive tone
 plt.rcParams.update({"font.family": "DejaVu Sans", "font.size": 10, "svg.fonttype": "none", "svg.hashsalt": "triallink"})
 
 
@@ -42,7 +42,7 @@ def gradient_bar(ax, x, width, value, kind):
 
 
 def fmt_value(value, scale, ours=False):
-    """TrialLink's own score at a fixed precision; a published score as its source gives it, shown to at most three decimals (the JSON
+    """Linemach's own score at a fixed precision; a published score as its source gives it, shown to at most three decimals (the JSON
     keeps the exact value)."""
     if scale == 100:
         return f"{value:.1f}"
@@ -132,7 +132,7 @@ def leaderboard(data, out):
         panel(fig.add_subplot(grid[r, c:c + span]), cap)
     relative_panel(fig.add_subplot(grid[row, col:]), caps, data["final"])
     kinds = {r["kind"] for cap in caps for r in cap["rows"]}
-    legend = [("ours", "TrialLink"), ("published", "Published system"), ("human", "Physicians"), ("reference", "Median or baseline")]
+    legend = [("ours", "Linemach"), ("published", "Published system"), ("human", "Physicians"), ("reference", "Median or baseline")]
     handles = [Patch(facecolor=FILLS[kind][1], label=label) for kind, label in legend
                if kind in kinds or (kind == "reference" and "baseline" in kinds)]
     fig.legend(handles=handles, loc="lower center", ncol=4, frameon=False, fontsize=10.5, bbox_to_anchor=(0.5, 0.004))
@@ -171,7 +171,7 @@ def architecture(out):
         arrow(x + 26.75, 20, x + 26.75, 15.5)
         text(x + 18, 2.8, note, size=8.5, color=INK_2)
 
-    text(1, 43.3, "TrialLink: from a patient record to ranked, assessed clinical trials", size=12.5, weight="bold", ha="left")
+    text(1, 43.3, "Linemach: from a patient record to ranked, assessed clinical trials", size=12.5, weight="bold", ha="left")
     box(1, 17, 10.5, 10, chip)
     text(6.25, 22, "Patient\nrecord", size=9.5, weight="bold")
     stage(15, 1, "Retrieval", "Keyword search\ncondition + 32\nranked terms", "Semantic search\nQwen3.7 text\nembedding",
@@ -203,7 +203,7 @@ KIND_WORDS = {"en": {"manual": "manual run", "human": "physician", "baseline": "
 
 
 def table(cap, lang):
-    """One capability's rows, best first; TrialLink and published systems are ranked, the rest are listed beside them unranked."""
+    """One capability's rows, best first; Linemach and published systems are ranked, the rest are listed beside them unranked."""
     rank_h, system_h, score_h, source_h, own, unranked = HEADERS[lang]
     rows = sorted(cap["rows"], key=lambda r: -(r["value"] if r["value"] is not None else -1))
     lines = [f"| {rank_h} | {system_h} | {cap['metric']} | {source_h} |", "|---|---|---|---|"]

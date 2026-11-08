@@ -1,15 +1,15 @@
-# TrialLink 基准测试结果
+# Linemach 基准测试结果
 
-**TrialLink `triallink-2` · 2026 年 11 月**
+**Linemach `triallink-2` · 2026 年 11 月**
 
-TrialLink 是一个患者–临床试验匹配系统：从一份病历出发，检索并排出合适的临床试验，再对医生打开的试验逐条判断入排标准。
+Linemach 是一个患者–临床试验匹配系统：从一份病历出发，检索并排出合适的临床试验，再对医生打开的试验逐条判断入排标准。
 本文按能力逐项给出它在领域通用公开基准上的成绩，并列出每个基准上有可比数字的全部已发表系统。
 
-![TrialLink 榜单](fig1-leaderboard.png)
+![Linemach 榜单](fig1-leaderboard.png)
 
-## TrialLink 的位置
+## Linemach 的位置
 
-| 能力 | 基准 | TrialLink | 在所列系统中的位置 | 所列最强对比系统 |
+| 能力 | 基准 | Linemach | 在所列系统中的位置 | 所列最强对比系统 |
 |---|---|---|---|---|
 | 患者–试验排序 | SIGIR + TREC 2021/2022，183 位患者，全部已评判试验（TrialGPT 2.0 协议） | nDCG@10 **0.787**，P@10 **0.723**，MRR **0.853**，MAP **0.637** | 四项均 **第 1（共 7）** | TrialGPT 2.0 · GPT-5.4：0.76、0.70、0.85、0.60 |
 | — 检索候选上 | 同一批患者，TrialGPT 检索前 500 中已评判的试验（TrialGPT 1.0 协议） | nDCG@10 **0.788**，P@10 **0.715** | 两项均 **第 1（共 8）** | TrialGPT 1.0 · GPT-4：0.728、0.669 |
@@ -18,23 +18,23 @@ TrialLink 是一个患者–临床试验匹配系统：从一份病历出发，�
 | 逐条入排标准判断 | TrialGPT 标注集中医生给出明确结论的 722 条 | 一致率 **92.0%** | 系统中 **第 1（共 2）**；三位医生 89.0–93.1% | TrialGPT 1.0 · GPT-4：87.4% |
 | 队列筛选 | n2c2 队列筛选官方测试集 | micro-F1 **0.918** | **第 1（共 14）** | 混合 NLP 系统（赛后）：0.911；挑战赛冠军（规则系统）0.910 |
 
-- 在 TrialGPT 2.0 协议上，TrialLink 在论文报告的四项指标上都排第一。它的 nDCG@10 置信区间（0.756–0.817）与 TrialGPT 2.0（GPT-5.4）
+- 在 TrialGPT 2.0 协议上，Linemach 在论文报告的四项指标上都排第一。它的 nDCG@10 置信区间（0.756–0.817）与 TrialGPT 2.0（GPT-5.4）
   的 0.76 有重叠；已发表系统只给点估计，无法做配对检验。在开发全程未使用的 105 位患者上，nDCG@10 为 0.841。SIGIR 队列上为 0.659，
   对方为 0.66（读自柱状图标注）。
-- 在 TrialGPT 1.0 协议上（只排其检索返回的候选），TrialLink 领先该论文比较的全部 7 个系统——5 个生物医学编码器模型，以及使用
+- 在 TrialGPT 1.0 协议上（只排其检索返回的候选），Linemach 领先该论文比较的全部 7 个系统——5 个生物医学编码器模型，以及使用
   GPT-3.5 和 GPT-4 的 TrialGPT——nDCG@10 至少高 0.06。
-- 在医生给出明确结论的标准上，TrialLink 比 GPT-4 高 4.6 个百分点（+0.3 至 +9.1），并落在制作这批标签的三位医生之间（89.0%、90.7%、
+- 在医生给出明确结论的标准上，Linemach 比 GPT-4 高 4.6 个百分点（+0.3 至 +9.1），并落在制作这批标签的三位医生之间（89.0%、90.7%、
   93.1%，各自对照共识标签计）。按全部 1,015 条计，一致率 75.6%，GPT-4 为
   87.3%：金标准标为"信息不足"的 293 条中，有 255 条就是 GPT-4 自己的回答，被看着 GPT-4 预测做标注的标注员保留了下来。
 - n2c2 队列筛选（官方测试集）：micro-F1 0.918，高于挑战赛全部参赛系统（冠军 0.910）、我们找到的最好赛后系统（0.911）和微调过的开源
   模型（带检索的 MedGemma-27b，0.891）。
-- TrialLink 的任何组件都没有在任何基准数据上训练或微调。排序成本约每位患者 0.29 元人民币（约 0.04 美元），每位患者约 410 个候选试验。
+- Linemach 的任何组件都没有在任何基准数据上训练或微调。排序成本约每位患者 0.29 元人民币（约 0.04 美元），每位患者约 410 个候选试验。
 
 ## 1. 系统组成
 
-TrialLink 分三个阶段。
+Linemach 分三个阶段。
 
-![TrialLink 架构](fig0-architecture.png)
+![Linemach 架构](fig0-architecture.png)
 
 1. **检索**：用病情和从病历中写出的至多 32 个按重要性排序的英文检索词做关键词检索，与稠密语义检索（Qwen3.7 文本向量，1024
    维）按倒数排名融合；按登记记录写明的年龄、性别筛选；保留前 300 个。产品中关键词检索实时查询 ClinicalTrials.gov、欧盟 CTIS
@@ -47,7 +47,7 @@ TrialLink 分三个阶段。
 ## 2. 评测协议
 
 - **所有系统同一配置**：每个基准都按它自己的任务定义运行，也就是其他系统拿到的那一份——TrialGPT 标注集用 TrialGPT 的逐条判断
-  说明，n2c2 用官方标注指南（"现在"的定义、病历未提及的标准如何标注）。TrialLink 把它们作为研究的评估指南读入，平台本身不加任何
+  说明，n2c2 用官方标注指南（"现在"的定义、病历未提及的标准如何标注）。Linemach 把它们作为研究的评估指南读入，平台本身不加任何
   标注规则。
 - **基准与评分脚本**：患者–试验排序各榜和 NIH-TrialBench 使用 TrialGPT 2.0 公开的数据和官方脚本（`eval_trialgpt_rankings_qrels.py`、
   `eval_nih_trialbench_target_recall_at10.py`）；n2c2 使用挑战赛原样的 `track1_eval.py`。
@@ -57,9 +57,9 @@ TrialLink 分三个阶段。
   后补齐），测试集已经被看过。排序权重在开发患者（含 SIGIR）上选定。
 - **不确定性**：95% 置信区间为按患者的百分位自助法（10,000 次；n2c2 为 2,000 次）。
 - **对比系统**：所有对比数字均摘自所列来源，或注明由公开预测计算。TrialGPT 2.0 以柱状图给出结果，数值读自柱状图标注；它只用
-  默认底座 GPT-4.1 报告了 NIH-TrialBench。图中最后一个子图是各子榜 TrialLink 成绩除以该子榜已发表最好系统。
+  默认底座 GPT-4.1 报告了 NIH-TrialBench。图中最后一个子图是各子榜 Linemach 成绩除以该子榜已发表最好系统。
 - **两种排序协议分开比较**：TrialGPT 2.0 对患者的全部已评判试验排序；TrialGPT 1.0 只排其检索前 500 中已评判的试验，并公开了这批
-  候选。两者分成不同子图，都用同一官方评分脚本（其 nDCG@10 与分级 P@10 与 TrialGPT 1.0 给出的定义一致）；第二种协议下，TrialLink
+  候选。两者分成不同子图，都用同一官方评分脚本（其 nDCG@10 与分级 P@10 与 TrialGPT 1.0 给出的定义一致）；第二种协议下，Linemach
   对全部已评判试验的排序限定到 TrialGPT 1.0 的候选上。TrialMatchAI（Nat Commun 2026）在一个 TREC 年度的全部已评判试验中排序且只把
   "符合"计为相关，LLM-Match（2025）在这些配对上只报告 AUROC，都不在这两种口径上，因此不列入。
 - **医生**：TrialGPT 1.0 公布了每位医生对照共识标签的混淆矩阵（按金标准标签的比例）。乘以公开的金标准条目数，即得每位医生在医生给出
@@ -68,7 +68,7 @@ TrialLink 分三个阶段。
 
 ## 3. 分能力榜单
 
-由 [`leaderboard.json`](leaderboard.json) 生成。TrialLink 与已发表系统参与排名（同分并列）；医生和中位数列在旁边，不参与排名。
+由 [`leaderboard.json`](leaderboard.json) 生成。Linemach 与已发表系统参与排名（同分并列）；医生和中位数列在旁边，不参与排名。
 
 <!-- tables:start -->
 
@@ -78,7 +78,7 @@ SIGIR 2016 + TREC 2021/2022，183 位患者，对全部已评判试验排序（T
 
 | 排名 | 系统 | nDCG@10 | 来源 |
 |---|---|---|---|
-| 1 | **TrialLink** | **0.787 (0.756–0.817)** | 本报告 |
+| 1 | **Linemach** | **0.787 (0.756–0.817)** | 本报告 |
 | 2 | TrialGPT 2.0 · GPT-5.4 | 0.76 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
 | 2 | TrialGPT 2.0 · Gemini-3.1-pro | 0.76 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3 |
 | 4 | TrialGPT 1.0 · GPT-5.4 | 0.74 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
@@ -92,7 +92,7 @@ SIGIR 2016 + TREC 2021/2022，183 位患者，对全部已评判试验排序（T
 
 | 排名 | 系统 | P@10 (graded) | 来源 |
 |---|---|---|---|
-| 1 | **TrialLink** | **0.723 (0.691–0.754)** | 本报告 |
+| 1 | **Linemach** | **0.723 (0.691–0.754)** | 本报告 |
 | 2 | TrialGPT 2.0 · GPT-5.4 | 0.70 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
 | 3 | TrialGPT 2.0 · Gemini-3.1-pro | 0.69 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3 |
 | 4 | TrialGPT 1.0 · GPT-5.4 | 0.67 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
@@ -106,7 +106,7 @@ SIGIR 2016 + TREC 2021/2022，183 位患者，对全部已评判试验排序（T
 
 | 排名 | 系统 | MRR | 来源 |
 |---|---|---|---|
-| 1 | **TrialLink** | **0.853 (0.811–0.895)** | 本报告 |
+| 1 | **Linemach** | **0.853 (0.811–0.895)** | 本报告 |
 | 2 | TrialGPT 2.0 · GPT-5.4 | 0.85 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
 | 3 | TrialGPT 2.0 · Gemini-3.1-pro | 0.84 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3 |
 | 3 | TrialGPT 1.0 · GPT-5.4 | 0.84 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
@@ -120,7 +120,7 @@ SIGIR 2016 + TREC 2021/2022，183 位患者，对全部已评判试验排序（T
 
 | 排名 | 系统 | MAP | 来源 |
 |---|---|---|---|
-| 1 | **TrialLink** | **0.637 (0.608–0.665)** | 本报告 |
+| 1 | **Linemach** | **0.637 (0.608–0.665)** | 本报告 |
 | 2 | TrialGPT 2.0 · GPT-5.4 | 0.60 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
 | 3 | TrialGPT 2.0 · Gemini-3.1-pro | 0.56 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3 |
 | 4 | TrialGPT 1.0 · GPT-5.4 | 0.55 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
@@ -134,7 +134,7 @@ SIGIR 2016 + TREC 2021/2022，183 位患者，只排 TrialGPT 检索前 500 中�
 
 | 排名 | 系统 | nDCG@10 | 来源 |
 |---|---|---|---|
-| 1 | **TrialLink** | **0.788 (0.756–0.817)** | 本报告 |
+| 1 | **Linemach** | **0.788 (0.756–0.817)** | 本报告 |
 | 2 | TrialGPT 1.0 · GPT-4 | 0.728 | Jin et al., Nat Commun 2024, Table 2 |
 | 3 | TrialGPT 1.0 · GPT-3.5 | 0.54 | Jin et al., Nat Commun 2024, Table 2 |
 | 4 | BioLinkBERT (NLI-trained) | 0.48 | Jin et al., Nat Commun 2024, Table 2 |
@@ -143,7 +143,7 @@ SIGIR 2016 + TREC 2021/2022，183 位患者，只排 TrialGPT 检索前 500 中�
 | 7 | SapBERT (NLI-trained) | 0.415 | Jin et al., Nat Commun 2024, Table 2 |
 | 8 | BioBERT (NLI-trained) | 0.409 | Jin et al., Nat Commun 2024, Table 2 |
 
-与上方各面板使用同一官方评分脚本，只保留 TrialGPT 1.0 公开的候选（其 retrieved_trials.json：3,141 / 15,437 / 12,682 个已评判配对）；TrialLink 对全部已评判试验的排序限定到这些候选上。脚本的 nDCG@10（线性增益）与 P@10（等级之和 / (2 × 10)）与 TrialGPT 1.0 给出的定义一致。五个编码器模型在自然语言推理数据上训练，未在这些队列上训练，与原文一致。TrialGPT 1.0 · GPT-4 取其特征组合，即论文的主配置（其最佳单一特征为 nDCG@10 0.7281、P@10 0.6724）。未放进这两张图：TrialMatchAI（Nat Commun 2026）在一个 TREC 年度的全部已评判试验中排序且只把"符合"计为相关，LLM-Match（2025）在这些配对上只报告 AUROC，度量不同。
+与上方各面板使用同一官方评分脚本，只保留 TrialGPT 1.0 公开的候选（其 retrieved_trials.json：3,141 / 15,437 / 12,682 个已评判配对）；Linemach 对全部已评判试验的排序限定到这些候选上。脚本的 nDCG@10（线性增益）与 P@10（等级之和 / (2 × 10)）与 TrialGPT 1.0 给出的定义一致。五个编码器模型在自然语言推理数据上训练，未在这些队列上训练，与原文一致。TrialGPT 1.0 · GPT-4 取其特征组合，即论文的主配置（其最佳单一特征为 nDCG@10 0.7281、P@10 0.6724）。未放进这两张图：TrialMatchAI（Nat Commun 2026）在一个 TREC 年度的全部已评判试验中排序且只把"符合"计为相关，LLM-Match（2025）在这些配对上只报告 AUROC，度量不同。
 
 #### 患者–试验排序 · 检索前 500 · P@10
 
@@ -151,7 +151,7 @@ SIGIR 2016 + TREC 2021/2022，183 位患者，只排 TrialGPT 检索前 500 中�
 
 | 排名 | 系统 | P@10 (graded) | 来源 |
 |---|---|---|---|
-| 1 | **TrialLink** | **0.715 (0.683–0.747)** | 本报告 |
+| 1 | **Linemach** | **0.715 (0.683–0.747)** | 本报告 |
 | 2 | TrialGPT 1.0 · GPT-4 | 0.669 | Jin et al., Nat Commun 2024, Table 2 |
 | 3 | TrialGPT 1.0 · GPT-3.5 | 0.512 | Jin et al., Nat Commun 2024, Table 2 |
 | 4 | BioLinkBERT (NLI-trained) | 0.428 | Jin et al., Nat Commun 2024, Table 2 |
@@ -160,7 +160,7 @@ SIGIR 2016 + TREC 2021/2022，183 位患者，只排 TrialGPT 检索前 500 中�
 | 7 | BioBERT (NLI-trained) | 0.375 | Jin et al., Nat Commun 2024, Table 2 |
 | 8 | SapBERT (NLI-trained) | 0.374 | Jin et al., Nat Commun 2024, Table 2 |
 
-与上方各面板使用同一官方评分脚本，只保留 TrialGPT 1.0 公开的候选（其 retrieved_trials.json：3,141 / 15,437 / 12,682 个已评判配对）；TrialLink 对全部已评判试验的排序限定到这些候选上。脚本的 nDCG@10（线性增益）与 P@10（等级之和 / (2 × 10)）与 TrialGPT 1.0 给出的定义一致。五个编码器模型在自然语言推理数据上训练，未在这些队列上训练，与原文一致。TrialGPT 1.0 · GPT-4 取其特征组合，即论文的主配置（其最佳单一特征为 nDCG@10 0.7281、P@10 0.6724）。未放进这两张图：TrialMatchAI（Nat Commun 2026）在一个 TREC 年度的全部已评判试验中排序且只把"符合"计为相关，LLM-Match（2025）在这些配对上只报告 AUROC，度量不同。
+与上方各面板使用同一官方评分脚本，只保留 TrialGPT 1.0 公开的候选（其 retrieved_trials.json：3,141 / 15,437 / 12,682 个已评判配对）；Linemach 对全部已评判试验的排序限定到这些候选上。脚本的 nDCG@10（线性增益）与 P@10（等级之和 / (2 × 10)）与 TrialGPT 1.0 给出的定义一致。五个编码器模型在自然语言推理数据上训练，未在这些队列上训练，与原文一致。TrialGPT 1.0 · GPT-4 取其特征组合，即论文的主配置（其最佳单一特征为 nDCG@10 0.7281、P@10 0.6724）。未放进这两张图：TrialMatchAI（Nat Commun 2026）在一个 TREC 年度的全部已评判试验中排序且只把"符合"计为相关，LLM-Match（2025）在这些配对上只报告 AUROC，度量不同。
 
 #### SIGIR 队列 · nDCG@10
 
@@ -169,7 +169,7 @@ SIGIR 2016 + TREC 2021/2022，183 位患者，只排 TrialGPT 检索前 500 中�
 | 排名 | 系统 | nDCG@10 | 来源 |
 |---|---|---|---|
 | 1 | TrialGPT 2.0 · GPT-5.4 | 0.66 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
-| 2 | **TrialLink** | **0.659 (0.598–0.716)** | 本报告 |
+| 2 | **Linemach** | **0.659 (0.598–0.716)** | 本报告 |
 | 3 | TrialGPT 2.0 · GPT-4.1 | 0.64 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d |
 | 4 | TrialGPT 1.0 · GPT-5.4 | 0.62 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
 | 5 | TrialGPT 1.0 · GPT-4.1 | 0.58 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d |
@@ -180,7 +180,7 @@ SIGIR 2016 + TREC 2021/2022，183 位患者，只排 TrialGPT 检索前 500 中�
 
 | 排名 | 系统 | nDCG@10 | 来源 |
 |---|---|---|---|
-| 1 | **TrialLink** | **0.883 (0.847–0.914)** | 本报告 |
+| 1 | **Linemach** | **0.883 (0.847–0.914)** | 本报告 |
 | 2 | TrialGPT 2.0 · GPT-5.4 | 0.84 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
 | 3 | TrialGPT 1.0 · GPT-5.4 | 0.83 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
 | 4 | TrialGPT 2.0 · GPT-4.1 | 0.79 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d |
@@ -192,7 +192,7 @@ SIGIR 2016 + TREC 2021/2022，183 位患者，只排 TrialGPT 检索前 500 中�
 
 | 排名 | 系统 | nDCG@10 | 来源 |
 |---|---|---|---|
-| 1 | **TrialLink** | **0.819 (0.756–0.876)** | 本报告 |
+| 1 | **Linemach** | **0.819 (0.756–0.876)** | 本报告 |
 | 2 | TrialGPT 2.0 · GPT-5.4 | 0.78 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
 | 3 | TrialGPT 1.0 · GPT-5.4 | 0.75 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
 | 4 | TrialGPT 2.0 · GPT-4.1 | 0.72 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d |
@@ -204,13 +204,13 @@ SIGIR 2016 + TREC 2021/2022，183 位患者，只排 TrialGPT 检索前 500 中�
 
 | 排名 | 系统 | Recall@10 (%) | 来源 |
 |---|---|---|---|
-| 1 | **TrialLink** | **95.2** | 本报告 |
+| 1 | **Linemach** | **95.2** | 本报告 |
 | 2 | TrialGPT 2.0 | 70.0 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5c |
 | 3 | TrialGPT 1.0 | 54.0 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5c |
 | 4 | GPT-5.5 | 43.0 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5c |
 | 5 | Gemini 3.5 Flash | 21.0 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5c |
 
-TrialGPT 2.0 论文只用默认底座 GPT-4.1 报告了 NIH-TrialBench（原文："Unless otherwise specified, all main analyses used GPT-4.1"）；GPT-5.4 和 Gemini 只跑了三个公开队列。TrialLink 按全部 126 例计算为 85.7%（79.4–91.3）。
+TrialGPT 2.0 论文只用默认底座 GPT-4.1 报告了 NIH-TrialBench（原文："Unless otherwise specified, all main analyses used GPT-4.1"）；GPT-5.4 和 Gemini 只跑了三个公开队列。Linemach 按全部 126 例计算为 85.7%（79.4–91.3）。
 
 #### n2c2 队列筛选 · micro-F1
 
@@ -218,7 +218,7 @@ TrialGPT 2.0 论文只用默认底座 GPT-4.1 报告了 NIH-TrialBench（原文�
 
 | 排名 | 系统 | Micro-F1 | 来源 |
 |---|---|---|---|
-| 1 | **TrialLink** | **0.918 (0.905–0.931)** | 本报告 |
+| 1 | **Linemach** | **0.918 (0.905–0.931)** | 本报告 |
 | 2 | Hybrid NLP, post-challenge | 0.911 | Vydiswaran et al., JAMIA 2019 (reimplemented system) |
 | 3 | Rule-based (challenge #1) | 0.91 | Stubbs et al., JAMIA 2019, Table 2 |
 | 4 | Hybrid NLP (MetaMap + cTAKES) | 0.908 | Stubbs et al., JAMIA 2019, Table 2 |
@@ -234,21 +234,21 @@ TrialGPT 2.0 论文只用默认底座 GPT-4.1 报告了 NIH-TrialBench（原文�
 | 14 | Llama-3.1-8b + LoRA | 0.867 | Chen et al., arXiv 2604.05190, Table 3 (full context) |
 | – | 47-team median (参考线) | 0.823 | Stubbs et al., JAMIA 2019 |
 
-官方评分脚本（track1_eval.py），TrialLink 使用 n2c2 官方标注指南。既非"符合"也非"不符合"的回答，按指南对未提及标准的标注方式计：不符合，ENGLISH 和 MAKES-DECISIONS 两条计为符合。86 位患者中有 2 位的结论起初未能保存，在证据编号修复后补齐；macro-F1 0.832。挑战赛各系统和 LoRA 模型都在 n2c2 训练集上构建，TrialLink 没有任何部件在其上训练。挑战赛系统按方法命名（Stubbs 等，表 2）；图中列出前七名，表格列出全部前十。
+官方评分脚本（track1_eval.py），Linemach 使用 n2c2 官方标注指南。既非"符合"也非"不符合"的回答，按指南对未提及标准的标注方式计：不符合，ENGLISH 和 MAKES-DECISIONS 两条计为符合。86 位患者中有 2 位的结论起初未能保存，在证据编号修复后补齐；macro-F1 0.832。挑战赛各系统和 LoRA 模型都在 n2c2 训练集上构建，Linemach 没有任何部件在其上训练。挑战赛系统按方法命名（Stubbs 等，表 2）；图中列出前七名，表格列出全部前十。
 
 #### 逐条判断 · 医生给出明确结论的标准（%）
 
-TrialGPT 标注集中医生给出明确结论的 722 条（共 1,015 条），一致率（%）；TrialLink 使用 TrialGPT 自己的任务定义
+TrialGPT 标注集中医生给出明确结论的 722 条（共 1,015 条），一致率（%）；Linemach 使用 TrialGPT 自己的任务定义
 
 | 排名 | 系统 | Accuracy (%) | 来源 |
 |---|---|---|---|
 | – | Physician A | 93.1 | Jin et al., Nat Commun 2024, Fig. 3c–d (the physician's per-label matrix weighted by the released gold counts, ±0.5 point) |
-| 1 | **TrialLink** | **92.0 (89.1–94.4)** | 本报告 |
+| 1 | **Linemach** | **92.0 (89.1–94.4)** | 本报告 |
 | – | Physician C | 90.7 | Jin et al., Nat Commun 2024, Fig. 3c–d (the physician's per-label matrix weighted by the released gold counts, ±0.5 point) |
 | – | Physician B | 89.0 | Jin et al., Nat Commun 2024, Fig. 3c–d (the physician's per-label matrix weighted by the released gold counts, ±0.5 point) |
 | 2 | TrialGPT 1.0 · GPT-4 | 87.4 | TrialGPT released predictions (Jin et al., Nat Commun 2024), scored on the same rows |
 
-配对差值 TrialLink − GPT-4：+4.6 个百分点（+0.3 至 +9.1，按患者自助法）。GPT-4 的成绩由 TrialGPT 公开的预测在同一批条目上计算。每位医生在这批条目上的一致率，由 TrialGPT 1.0 论文中该医生的混淆矩阵（按金标准标签的比例，两位小数）乘以公开的金标准条目数还原；同样的还原对 GPT-4 得到 87.7%（精确值 87.4%），对全部条目得到 88.6–90.1%（论文为 88.7–90.0%）。
+配对差值 Linemach − GPT-4：+4.6 个百分点（+0.3 至 +9.1，按患者自助法）。GPT-4 的成绩由 TrialGPT 公开的预测在同一批条目上计算。每位医生在这批条目上的一致率，由 TrialGPT 1.0 论文中该医生的混淆矩阵（按金标准标签的比例，两位小数）乘以公开的金标准条目数还原；同样的还原对 GPT-4 得到 87.7%（精确值 87.4%），对全部条目得到 88.6–90.1%（论文为 88.7–90.0%）。
 
 #### 逐条判断 · 全部标准（%）
 
@@ -259,9 +259,9 @@ TrialGPT 标注集，1,015 条标准，53 位患者，标签一致率（%）
 | – | Physician (highest) | 90.0 | Jin et al., Nat Commun 2024 |
 | – | Physician (lowest) | 88.7 | Jin et al., Nat Commun 2024 |
 | 1 | TrialGPT 1.0 · GPT-4 | 87.3 | Jin et al., Nat Commun 2024 |
-| 2 | **TrialLink** | **75.6 (71.0–79.7)** | 本报告 |
+| 2 | **Linemach** | **75.6 (71.0–79.7)** | 本报告 |
 
-金标准标为"信息不足"的 293 条中，有 255 条就是 GPT-4 自己的回答被标注员保留下来（标注员是看着 GPT-4 的预测做标注的）；在这些条目上 GPT-4 吻合 87.0%，TrialLink 35.2%。TrialLink 使用的是 TrialGPT 自己的任务定义（要求尽量少答"信息不足"）。
+金标准标为"信息不足"的 293 条中，有 255 条就是 GPT-4 自己的回答被标注员保留下来（标注员是看着 GPT-4 的预测做标注的）；在这些条目上 GPT-4 吻合 87.0%，Linemach 35.2%。Linemach 使用的是 TrialGPT 自己的任务定义（要求尽量少答"信息不足"）。
 
 <!-- tables:end -->
 

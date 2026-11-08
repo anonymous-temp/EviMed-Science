@@ -1,6 +1,6 @@
 {
  "system": {
-  "name": "TrialLink",
+  "name": "Linemach",
   "version": "triallink-2",
   "date": "2026-11",
   "components": [
@@ -10,7 +10,7 @@
    "DeepSeek V4.1 Flash"
   ]
  },
- "protocol": "Comparator values are copied from the cited sources; TrialGPT 2.0 values are read from its figure bar labels. Each panel compares systems on one test set, one candidate pool and one scorer; the two ranking protocols (every judged trial, as in TrialGPT 2.0; the judged trials in TrialGPT-Retrieval's top 500, as in TrialGPT 1.0) are separate panels. 95% intervals are patient-level percentile bootstraps (10,000 resamples). No TrialLink component was trained on any benchmark.",
+ "protocol": "Comparator values are copied from the cited sources; TrialGPT 2.0 values are read from its figure bar labels. Each panel compares systems on one test set, one candidate pool and one scorer; the two ranking protocols (every judged trial, as in TrialGPT 2.0; the judged trials in TrialGPT-Retrieval's top 500, as in TrialGPT 1.0) are separate panels. 95% intervals are patient-level percentile bootstraps (10,000 resamples). No Linemach component was trained on any benchmark.",
  "capabilities": [
   {
    "id": "ranking-ndcg",
@@ -20,7 +20,7 @@
    "scale": 1,
    "rows": [
     {
-     "label": "TrialLink",
+     "label": "Linemach",
      "value": 0.787,
      "source": "this report",
      "kind": "ours",
@@ -81,7 +81,7 @@
    "subtitle_zh": "同一批 183 位患者，分级 P@10（被排除或可能符合的试验计半分），官方评分脚本",
    "rows": [
     {
-     "label": "TrialLink",
+     "label": "Linemach",
      "value": 0.723,
      "ci95": [
       0.691,
@@ -139,7 +139,7 @@
    "subtitle_zh": "同一批 183 位患者，第一个符合试验的倒数排名，官方评分脚本",
    "rows": [
     {
-     "label": "TrialLink",
+     "label": "Linemach",
      "value": 0.853,
      "ci95": [
       0.811,
@@ -194,7 +194,7 @@
    "scale": 1,
    "rows": [
     {
-     "label": "TrialLink",
+     "label": "Linemach",
      "value": 0.637,
      "source": "this report",
      "kind": "ours",
@@ -252,7 +252,7 @@
    "scale": 1,
    "rows": [
     {
-     "label": "TrialLink",
+     "label": "Linemach",
      "value": 0.788,
      "ci95": [
       0.756,
@@ -307,8 +307,8 @@
    "short": "nDCG@10 (top-500)",
    "title_zh": "患者–试验排序 · 检索前 500 · nDCG@10",
    "subtitle_zh": "SIGIR 2016 + TREC 2021/2022，183 位患者，只排 TrialGPT 检索前 500 中已评判的试验（TrialGPT 1.0 协议），三个队列取平均",
-   "note": "Scored with the same official script as the panels above, restricted to the candidates TrialGPT 1.0 released (its retrieved_trials.json: 3,141 / 15,437 / 12,682 judged pairs); TrialLink's ranking of all judged trials is restricted to them. The script's nDCG@10 (linear gain) and P@10 (sum of grades / (2 × 10)) are the definitions TrialGPT 1.0 gives. The five encoders were trained on natural-language-inference data and applied to the cohorts without cohort training, as in the source. TrialGPT 1.0 · GPT-4 is its feature combination, the paper's headline configuration (its best single features reach 0.7281 nDCG@10 and 0.6724 P@10). Not placed on these axes: TrialMatchAI (Nat Commun 2026) ranks every judged trial of a TREC year with eligible-only relevance, and LLM-Match (2025) reports only AUROC on these pairs.",
-   "note_zh": "与上方各面板使用同一官方评分脚本，只保留 TrialGPT 1.0 公开的候选（其 retrieved_trials.json：3,141 / 15,437 / 12,682 个已评判配对）；TrialLink 对全部已评判试验的排序限定到这些候选上。脚本的 nDCG@10（线性增益）与 P@10（等级之和 / (2 × 10)）与 TrialGPT 1.0 给出的定义一致。五个编码器模型在自然语言推理数据上训练，未在这些队列上训练，与原文一致。TrialGPT 1.0 · GPT-4 取其特征组合，即论文的主配置（其最佳单一特征为 nDCG@10 0.7281、P@10 0.6724）。未放进这两张图：TrialMatchAI（Nat Commun 2026）在一个 TREC 年度的全部已评判试验中排序且只把\"符合\"计为相关，LLM-Match（2025）在这些配对上只报告 AUROC，度量不同。"
+   "note": "Scored with the same official script as the panels above, restricted to the candidates TrialGPT 1.0 released (its retrieved_trials.json: 3,141 / 15,437 / 12,682 judged pairs); Linemach's ranking of all judged trials is restricted to them. The script's nDCG@10 (linear gain) and P@10 (sum of grades / (2 × 10)) are the definitions TrialGPT 1.0 gives. The five encoders were trained on natural-language-inference data and applied to the cohorts without cohort training, as in the source. TrialGPT 1.0 · GPT-4 is its feature combination, the paper's headline configuration (its best single features reach 0.7281 nDCG@10 and 0.6724 P@10). Not placed on these axes: TrialMatchAI (Nat Commun 2026) ranks every judged trial of a TREC year with eligible-only relevance, and LLM-Match (2025) reports only AUROC on these pairs.",
+   "note_zh": "与上方各面板使用同一官方评分脚本，只保留 TrialGPT 1.0 公开的候选（其 retrieved_trials.json：3,141 / 15,437 / 12,682 个已评判配对）；Linemach 对全部已评判试验的排序限定到这些候选上。脚本的 nDCG@10（线性增益）与 P@10（等级之和 / (2 × 10)）与 TrialGPT 1.0 给出的定义一致。五个编码器模型在自然语言推理数据上训练，未在这些队列上训练，与原文一致。TrialGPT 1.0 · GPT-4 取其特征组合，即论文的主配置（其最佳单一特征为 nDCG@10 0.7281、P@10 0.6724）。未放进这两张图：TrialMatchAI（Nat Commun 2026）在一个 TREC 年度的全部已评判试验中排序且只把\"符合\"计为相关，LLM-Match（2025）在这些配对上只报告 AUROC，度量不同。"
   },
   {
    "id": "ranking500-p10",
@@ -318,7 +318,7 @@
    "scale": 1,
    "rows": [
     {
-     "label": "TrialLink",
+     "label": "Linemach",
      "value": 0.715,
      "ci95": [
       0.683,
@@ -373,8 +373,8 @@
    "short": "P@10 (top-500)",
    "title_zh": "患者–试验排序 · 检索前 500 · P@10",
    "subtitle_zh": "SIGIR 2016 + TREC 2021/2022，183 位患者，只排 TrialGPT 检索前 500 中已评判的试验（TrialGPT 1.0 协议），三个队列取平均",
-   "note": "Scored with the same official script as the panels above, restricted to the candidates TrialGPT 1.0 released (its retrieved_trials.json: 3,141 / 15,437 / 12,682 judged pairs); TrialLink's ranking of all judged trials is restricted to them. The script's nDCG@10 (linear gain) and P@10 (sum of grades / (2 × 10)) are the definitions TrialGPT 1.0 gives. The five encoders were trained on natural-language-inference data and applied to the cohorts without cohort training, as in the source. TrialGPT 1.0 · GPT-4 is its feature combination, the paper's headline configuration (its best single features reach 0.7281 nDCG@10 and 0.6724 P@10). Not placed on these axes: TrialMatchAI (Nat Commun 2026) ranks every judged trial of a TREC year with eligible-only relevance, and LLM-Match (2025) reports only AUROC on these pairs.",
-   "note_zh": "与上方各面板使用同一官方评分脚本，只保留 TrialGPT 1.0 公开的候选（其 retrieved_trials.json：3,141 / 15,437 / 12,682 个已评判配对）；TrialLink 对全部已评判试验的排序限定到这些候选上。脚本的 nDCG@10（线性增益）与 P@10（等级之和 / (2 × 10)）与 TrialGPT 1.0 给出的定义一致。五个编码器模型在自然语言推理数据上训练，未在这些队列上训练，与原文一致。TrialGPT 1.0 · GPT-4 取其特征组合，即论文的主配置（其最佳单一特征为 nDCG@10 0.7281、P@10 0.6724）。未放进这两张图：TrialMatchAI（Nat Commun 2026）在一个 TREC 年度的全部已评判试验中排序且只把\"符合\"计为相关，LLM-Match（2025）在这些配对上只报告 AUROC，度量不同。"
+   "note": "Scored with the same official script as the panels above, restricted to the candidates TrialGPT 1.0 released (its retrieved_trials.json: 3,141 / 15,437 / 12,682 judged pairs); Linemach's ranking of all judged trials is restricted to them. The script's nDCG@10 (linear gain) and P@10 (sum of grades / (2 × 10)) are the definitions TrialGPT 1.0 gives. The five encoders were trained on natural-language-inference data and applied to the cohorts without cohort training, as in the source. TrialGPT 1.0 · GPT-4 is its feature combination, the paper's headline configuration (its best single features reach 0.7281 nDCG@10 and 0.6724 P@10). Not placed on these axes: TrialMatchAI (Nat Commun 2026) ranks every judged trial of a TREC year with eligible-only relevance, and LLM-Match (2025) reports only AUROC on these pairs.",
+   "note_zh": "与上方各面板使用同一官方评分脚本，只保留 TrialGPT 1.0 公开的候选（其 retrieved_trials.json：3,141 / 15,437 / 12,682 个已评判配对）；Linemach 对全部已评判试验的排序限定到这些候选上。脚本的 nDCG@10（线性增益）与 P@10（等级之和 / (2 × 10)）与 TrialGPT 1.0 给出的定义一致。五个编码器模型在自然语言推理数据上训练，未在这些队列上训练，与原文一致。TrialGPT 1.0 · GPT-4 取其特征组合，即论文的主配置（其最佳单一特征为 nDCG@10 0.7281、P@10 0.6724）。未放进这两张图：TrialMatchAI（Nat Commun 2026）在一个 TREC 年度的全部已评判试验中排序且只把\"符合\"计为相关，LLM-Match（2025）在这些配对上只报告 AUROC，度量不同。"
   },
   {
    "id": "cohort-sigir",
@@ -384,7 +384,7 @@
    "scale": 1,
    "rows": [
     {
-     "label": "TrialLink",
+     "label": "Linemach",
      "value": 0.659,
      "source": "this report",
      "kind": "ours",
@@ -430,7 +430,7 @@
    "scale": 1,
    "rows": [
     {
-     "label": "TrialLink",
+     "label": "Linemach",
      "value": 0.883,
      "source": "this report",
      "kind": "ours",
@@ -476,7 +476,7 @@
    "scale": 1,
    "rows": [
     {
-     "label": "TrialLink",
+     "label": "Linemach",
      "value": 0.819,
      "source": "this report",
      "kind": "ours",
@@ -522,7 +522,7 @@
    "scale": 100,
    "rows": [
     {
-     "label": "TrialLink",
+     "label": "Linemach",
      "value": 95.2,
      "source": "this report",
      "kind": "ours",
@@ -556,8 +556,8 @@
    "short": "NIH-TrialBench",
    "title_zh": "NIH-TrialBench · 前 10 召回（%）",
    "subtitle_zh": "126 个病例，病例对应的试验进入前 10 的比例，按 11 个研究所宏平均（与 TrialGPT 2.0 口径一致）",
-   "note_zh": "TrialGPT 2.0 论文只用默认底座 GPT-4.1 报告了 NIH-TrialBench（原文：\"Unless otherwise specified, all main analyses used GPT-4.1\"）；GPT-5.4 和 Gemini 只跑了三个公开队列。TrialLink 按全部 126 例计算为 85.7%（79.4–91.3）。",
-   "note": "TrialGPT 2.0 reports NIH-TrialBench only with its default backbone, GPT-4.1 (\"Unless otherwise specified, all main analyses used GPT-4.1\"); its GPT-5.4 and Gemini runs cover the three public cohorts only. TrialLink over all 126 cases: 85.7% (79.4–91.3)."
+   "note_zh": "TrialGPT 2.0 论文只用默认底座 GPT-4.1 报告了 NIH-TrialBench（原文：\"Unless otherwise specified, all main analyses used GPT-4.1\"）；GPT-5.4 和 Gemini 只跑了三个公开队列。Linemach 按全部 126 例计算为 85.7%（79.4–91.3）。",
+   "note": "TrialGPT 2.0 reports NIH-TrialBench only with its default backbone, GPT-4.1 (\"Unless otherwise specified, all main analyses used GPT-4.1\"); its GPT-5.4 and Gemini runs cover the three public cohorts only. Linemach over all 126 cases: 85.7% (79.4–91.3)."
   },
   {
    "id": "n2c2",
@@ -567,7 +567,7 @@
    "scale": 1,
    "rows": [
     {
-     "label": "TrialLink",
+     "label": "Linemach",
      "value": 0.918,
      "source": "this report",
      "kind": "ours",
@@ -667,8 +667,8 @@
    "short": "n2c2",
    "title_zh": "n2c2 队列筛选 · micro-F1",
    "subtitle_zh": "官方测试集，86 位患者 × 13 条标准，micro-F1",
-   "note": "Official evaluator (track1_eval.py), TrialLink given the n2c2 annotation guidelines. An answer neither met nor not met is read as the guidelines label an unmentioned criterion: not met, except ENGLISH and MAKES-DECISIONS (met). The 2 of 86 patients whose decisions had not saved were completed after the evidence-identifier fix; macro-F1 0.832. The challenge systems and the LoRA models were built on the n2c2 training split; no TrialLink component was trained on it. Challenge systems are named by method (Stubbs et al., Table 2); the figure shows the first seven, the table all ten.",
-   "note_zh": "官方评分脚本（track1_eval.py），TrialLink 使用 n2c2 官方标注指南。既非\"符合\"也非\"不符合\"的回答，按指南对未提及标准的标注方式计：不符合，ENGLISH 和 MAKES-DECISIONS 两条计为符合。86 位患者中有 2 位的结论起初未能保存，在证据编号修复后补齐；macro-F1 0.832。挑战赛各系统和 LoRA 模型都在 n2c2 训练集上构建，TrialLink 没有任何部件在其上训练。挑战赛系统按方法命名（Stubbs 等，表 2）；图中列出前七名，表格列出全部前十。",
+   "note": "Official evaluator (track1_eval.py), Linemach given the n2c2 annotation guidelines. An answer neither met nor not met is read as the guidelines label an unmentioned criterion: not met, except ENGLISH and MAKES-DECISIONS (met). The 2 of 86 patients whose decisions had not saved were completed after the evidence-identifier fix; macro-F1 0.832. The challenge systems and the LoRA models were built on the n2c2 training split; no Linemach component was trained on it. Challenge systems are named by method (Stubbs et al., Table 2); the figure shows the first seven, the table all ten.",
+   "note_zh": "官方评分脚本（track1_eval.py），Linemach 使用 n2c2 官方标注指南。既非\"符合\"也非\"不符合\"的回答，按指南对未提及标准的标注方式计：不符合，ENGLISH 和 MAKES-DECISIONS 两条计为符合。86 位患者中有 2 位的结论起初未能保存，在证据编号修复后补齐；macro-F1 0.832。挑战赛各系统和 LoRA 模型都在 n2c2 训练集上构建，Linemach 没有任何部件在其上训练。挑战赛系统按方法命名（Stubbs 等，表 2）；图中列出前七名，表格列出全部前十。",
    "span": 2
   },
   {
@@ -676,15 +676,15 @@
    "title": "Criterion-level · physician-decided criteria (%)",
    "title_zh": "逐条判断 · 医生给出明确结论的标准（%）",
    "short": "Criterion-level",
-   "subtitle": "TrialGPT annotations · the 722 of 1,015 criteria the physicians decided (included, not included, excluded, not excluded, not applicable) · accuracy % · TrialLink given TrialGPT's own task definition",
-   "subtitle_zh": "TrialGPT 标注集中医生给出明确结论的 722 条（共 1,015 条），一致率（%）；TrialLink 使用 TrialGPT 自己的任务定义",
+   "subtitle": "TrialGPT annotations · the 722 of 1,015 criteria the physicians decided (included, not included, excluded, not excluded, not applicable) · accuracy % · Linemach given TrialGPT's own task definition",
+   "subtitle_zh": "TrialGPT 标注集中医生给出明确结论的 722 条（共 1,015 条），一致率（%）；Linemach 使用 TrialGPT 自己的任务定义",
    "metric": "Accuracy (%)",
    "scale": 100,
-   "note": "Paired difference TrialLink − GPT-4: +4.6 points (+0.3 to +9.1, patient bootstrap). GPT-4 is scored from TrialGPT's released predictions on the same rows. Each physician's accuracy on these rows is rebuilt from that physician's confusion matrices in TrialGPT 1.0 (proportions per gold label, two decimals) weighted by the released gold counts; the same rebuild gives GPT-4 87.7% against its exact 87.4%, and reproduces the paper's whole-set range (88.6–90.1% against 88.7–90.0%).",
-   "note_zh": "配对差值 TrialLink − GPT-4：+4.6 个百分点（+0.3 至 +9.1，按患者自助法）。GPT-4 的成绩由 TrialGPT 公开的预测在同一批条目上计算。每位医生在这批条目上的一致率，由 TrialGPT 1.0 论文中该医生的混淆矩阵（按金标准标签的比例，两位小数）乘以公开的金标准条目数还原；同样的还原对 GPT-4 得到 87.7%（精确值 87.4%），对全部条目得到 88.6–90.1%（论文为 88.7–90.0%）。",
+   "note": "Paired difference Linemach − GPT-4: +4.6 points (+0.3 to +9.1, patient bootstrap). GPT-4 is scored from TrialGPT's released predictions on the same rows. Each physician's accuracy on these rows is rebuilt from that physician's confusion matrices in TrialGPT 1.0 (proportions per gold label, two decimals) weighted by the released gold counts; the same rebuild gives GPT-4 87.7% against its exact 87.4%, and reproduces the paper's whole-set range (88.6–90.1% against 88.7–90.0%).",
+   "note_zh": "配对差值 Linemach − GPT-4：+4.6 个百分点（+0.3 至 +9.1，按患者自助法）。GPT-4 的成绩由 TrialGPT 公开的预测在同一批条目上计算。每位医生在这批条目上的一致率，由 TrialGPT 1.0 论文中该医生的混淆矩阵（按金标准标签的比例，两位小数）乘以公开的金标准条目数还原；同样的还原对 GPT-4 得到 87.7%（精确值 87.4%），对全部条目得到 88.6–90.1%（论文为 88.7–90.0%）。",
    "rows": [
     {
-     "label": "TrialLink",
+     "label": "Linemach",
      "value": 92.0,
      "ci95": [
       89.1,
@@ -729,10 +729,10 @@
    "subtitle": "TrialGPT annotations · 1,015 criteria · 53 patients · label agreement %",
    "metric": "Accuracy (%)",
    "scale": 100,
-   "note": "On the 293 criteria the gold labels \"not enough information\", 255 labels are GPT-4's own answer kept by the annotators, who labelled with GPT-4's predictions in view; GPT-4 matches 87.0% of those rows, TrialLink 35.2%. TrialLink was given TrialGPT's own task definition (which asks for as few \"not enough information\" answers as possible).",
+   "note": "On the 293 criteria the gold labels \"not enough information\", 255 labels are GPT-4's own answer kept by the annotators, who labelled with GPT-4's predictions in view; GPT-4 matches 87.0% of those rows, Linemach 35.2%. Linemach was given TrialGPT's own task definition (which asks for as few \"not enough information\" answers as possible).",
    "rows": [
     {
-     "label": "TrialLink",
+     "label": "Linemach",
      "value": 75.6,
      "source": "this report",
      "kind": "ours",
@@ -764,14 +764,14 @@
    "short": "Criterion-level",
    "title_zh": "逐条判断 · 全部标准（%）",
    "subtitle_zh": "TrialGPT 标注集，1,015 条标准，53 位患者，标签一致率（%）",
-   "note_zh": "金标准标为\"信息不足\"的 293 条中，有 255 条就是 GPT-4 自己的回答被标注员保留下来（标注员是看着 GPT-4 的预测做标注的）；在这些条目上 GPT-4 吻合 87.0%，TrialLink 35.2%。TrialLink 使用的是 TrialGPT 自己的任务定义（要求尽量少答\"信息不足\"）。",
+   "note_zh": "金标准标为\"信息不足\"的 293 条中，有 255 条就是 GPT-4 自己的回答被标注员保留下来（标注员是看着 GPT-4 的预测做标注的）；在这些条目上 GPT-4 吻合 87.0%，Linemach 35.2%。Linemach 使用的是 TrialGPT 自己的任务定义（要求尽量少答\"信息不足\"）。",
    "figure": false
   }
  ],
  "final": {
   "id": "relative",
-  "title": "TrialLink vs strongest listed system (= 100)",
-  "title_zh": "TrialLink 相对所列最强系统（= 100）",
+  "title": "Linemach vs strongest listed system (= 100)",
+  "title_zh": "Linemach 相对所列最强系统（= 100）",
   "subtitle": "",
   "subtitle_zh": ""
  }

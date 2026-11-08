@@ -1,16 +1,16 @@
-# TrialLink: benchmark results
+# Linemach: benchmark results
 
-**TrialLink `triallink-2` · November 2026**
+**Linemach `triallink-2` · November 2026**
 
-TrialLink is a patient-to-trial matching system: one pipeline from a patient record to a ranked list of clinical trials, with a
+Linemach is a patient-to-trial matching system: one pipeline from a patient record to a ranked list of clinical trials, with a
 criterion-by-criterion eligibility assessment of the trials a clinician opens. This report gives its results on the public benchmarks the
 field reports on, one capability at a time, beside every published system with a comparable number.
 
-![TrialLink leaderboard](fig1-leaderboard.png)
+![Linemach leaderboard](fig1-leaderboard.png)
 
-## Where TrialLink stands
+## Where Linemach stands
 
-| Capability | Benchmark | TrialLink | Position among listed systems | Strongest listed comparator |
+| Capability | Benchmark | Linemach | Position among listed systems | Strongest listed comparator |
 |---|---|---|---|---|
 | Patient-to-trial ranking | SIGIR + TREC 2021/2022, 183 patients, every judged trial (TrialGPT 2.0 protocol) | nDCG@10 **0.787**, P@10 **0.723**, MRR **0.853**, MAP **0.637** | **1st of 7** on all four | TrialGPT 2.0 · GPT-5.4: 0.76, 0.70, 0.85, 0.60 |
 | — on retrieved candidates | the same patients, judged trials in TrialGPT-Retrieval's top 500 (TrialGPT 1.0 protocol) | nDCG@10 **0.788**, P@10 **0.715** | **1st of 8** on both | TrialGPT 1.0 · GPT-4: 0.728, 0.669 |
@@ -19,25 +19,25 @@ field reports on, one capability at a time, beside every published system with a
 | Criterion-level eligibility | TrialGPT annotations: the 722 criteria physicians decided | accuracy **92.0%** | **1st of 2** systems; physicians 89.0–93.1% | TrialGPT 1.0 · GPT-4: 87.4% |
 | Cohort selection | n2c2 cohort selection, official test | micro-F1 **0.918** | **1st of 14** | Hybrid NLP system (post-challenge): 0.911; rule-based challenge winner 0.910 |
 
-- On the TrialGPT 2.0 protocol TrialLink ranks first on all four metrics the paper reports. Its nDCG@10 interval (0.756–0.817) overlaps
+- On the TrialGPT 2.0 protocol Linemach ranks first on all four metrics the paper reports. Its nDCG@10 interval (0.756–0.817) overlaps
   TrialGPT 2.0 with GPT-5.4 (0.76); published systems report point estimates only, so no paired test is possible. On the 105 patients held
   out from all development it scores nDCG@10 0.841. On the SIGIR cohort it scores 0.659 against 0.66 (a value read from a bar label).
-- On the TrialGPT 1.0 protocol (the candidates its retrieval returned) TrialLink leads all seven systems that paper compares — five
+- On the TrialGPT 1.0 protocol (the candidates its retrieval returned) Linemach leads all seven systems that paper compares — five
   biomedical encoders and TrialGPT with GPT-3.5 and GPT-4 — by 0.06 nDCG@10 or more.
-- On the criteria the physicians decided, TrialLink is ahead of GPT-4 by 4.6 points (+0.3 to +9.1) and inside the range of the three
+- On the criteria the physicians decided, Linemach is ahead of GPT-4 by 4.6 points (+0.3 to +9.1) and inside the range of the three
   physicians who built the labels (89.0%, 90.7%, 93.1%, each scored against the consensus). Over all 1,015 criteria it agrees
   75.6% against GPT-4's 87.3%: on the 293 criteria labelled "not enough information", 255 labels are GPT-4's own answer, kept by
   annotators who labelled with GPT-4's predictions in view.
-- On n2c2 cohort selection (official test) TrialLink scores micro-F1 0.918, above every system of the challenge (winner 0.910), the best
+- On n2c2 cohort selection (official test) Linemach scores micro-F1 0.918, above every system of the challenge (winner 0.910), the best
   post-challenge system we found (0.911) and fine-tuned open models (MedGemma-27b with retrieval, 0.891).
-- No TrialLink component was trained or fine-tuned on any benchmark. Ranking costs about CNY 0.29 (USD 0.04) per patient for some 410
+- No Linemach component was trained or fine-tuned on any benchmark. Ranking costs about CNY 0.29 (USD 0.04) per patient for some 410
   candidate trials.
 
 ## 1. The system
 
-TrialLink has three stages.
+Linemach has three stages.
 
-![TrialLink architecture](fig0-architecture.png)
+![Linemach architecture](fig0-architecture.png)
 
 1. **Retrieval.** A keyword search over the patient's condition and up to 32 ranked English search terms written from the record,
    fused by reciprocal rank with a dense semantic search (Qwen3.7 text embedding, 1024 dimensions); trials are kept or dropped by the
@@ -53,7 +53,7 @@ TrialLink has three stages.
 
 - **Same configuration for every system.** Each benchmark is run with its own task definition, the one its other systems were given:
   TrialGPT's criterion-level instructions for the TrialGPT annotations, and the n2c2 annotation guidelines (the notion of "now", and how
-  an unmentioned criterion is labelled) for n2c2. TrialLink receives them as the study's assessment guide; the platform adds no labelling
+  an unmentioned criterion is labelled) for n2c2. Linemach receives them as the study's assessment guide; the platform adds no labelling
   rule of its own.
 - **Benchmarks and scorers.** The patient-to-trial ranking boards and NIH-TrialBench use TrialGPT 2.0's released data and official scripts
   (`eval_trialgpt_rankings_qrels.py`, `eval_nih_trialbench_target_recall_at10.py`); n2c2 uses the challenge's unchanged `track1_eval.py`.
@@ -66,10 +66,10 @@ TrialLink has three stages.
 - **Uncertainty.** 95% intervals are percentile bootstraps over patients (10,000 resamples; 2,000 for n2c2).
 - **Comparators.** Every comparator number is copied from the cited source, or computed from released predictions where stated. TrialGPT
   2.0 gives its results as bar charts; its values are read from the bar labels. TrialGPT 2.0 reports NIH-TrialBench only with its default
-  backbone, GPT-4.1. The final panel of the figure divides TrialLink's score by the best published system in each panel.
+  backbone, GPT-4.1. The final panel of the figure divides Linemach's score by the best published system in each panel.
 - **Two ranking protocols, kept apart.** TrialGPT 2.0 ranks every judged trial of a patient; TrialGPT 1.0 ranked only the judged trials
   among the top 500 its retrieval returned, and released those candidates. The two are separate panels, each scored with the same official
-  script (whose nDCG@10 and graded P@10 are the definitions TrialGPT 1.0 gives); TrialLink's ranking of all judged trials is restricted to
+  script (whose nDCG@10 and graded P@10 are the definitions TrialGPT 1.0 gives); Linemach's ranking of all judged trials is restricted to
   TrialGPT 1.0's candidates for the second. TrialMatchAI (Nat Commun 2026) ranks every judged trial of a TREC year with eligible-only
   relevance, and LLM-Match (2025) reports only AUROC on these pairs; neither is on either axis, so neither is listed.
 - **Physicians.** TrialGPT 1.0 publishes each physician's confusion matrix against the consensus (proportions per gold label). Weighted by
@@ -78,7 +78,7 @@ TrialLink has three stages.
 
 ## 3. Leaderboards by capability
 
-Generated from [`leaderboard.json`](leaderboard.json). TrialLink and published systems are ranked (equal scores share a rank);
+Generated from [`leaderboard.json`](leaderboard.json). Linemach and published systems are ranked (equal scores share a rank);
 physicians and medians are listed beside them.
 
 <!-- tables:start -->
@@ -89,7 +89,7 @@ SIGIR 2016 + TREC 2021/2022 · 183 patients · every judged trial ranked (TrialG
 
 | Rank | System | nDCG@10 | Source |
 |---|---|---|---|
-| 1 | **TrialLink** | **0.787 (0.756–0.817)** | this report |
+| 1 | **Linemach** | **0.787 (0.756–0.817)** | this report |
 | 2 | TrialGPT 2.0 · GPT-5.4 | 0.76 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
 | 2 | TrialGPT 2.0 · Gemini-3.1-pro | 0.76 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3 |
 | 4 | TrialGPT 1.0 · GPT-5.4 | 0.74 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
@@ -103,7 +103,7 @@ same 183 patients · graded P@10 (an excluded or potentially eligible trial coun
 
 | Rank | System | P@10 (graded) | Source |
 |---|---|---|---|
-| 1 | **TrialLink** | **0.723 (0.691–0.754)** | this report |
+| 1 | **Linemach** | **0.723 (0.691–0.754)** | this report |
 | 2 | TrialGPT 2.0 · GPT-5.4 | 0.70 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
 | 3 | TrialGPT 2.0 · Gemini-3.1-pro | 0.69 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3 |
 | 4 | TrialGPT 1.0 · GPT-5.4 | 0.67 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
@@ -117,7 +117,7 @@ same 183 patients · reciprocal rank of the first eligible trial, official evalu
 
 | Rank | System | MRR | Source |
 |---|---|---|---|
-| 1 | **TrialLink** | **0.853 (0.811–0.895)** | this report |
+| 1 | **Linemach** | **0.853 (0.811–0.895)** | this report |
 | 2 | TrialGPT 2.0 · GPT-5.4 | 0.85 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
 | 3 | TrialGPT 2.0 · Gemini-3.1-pro | 0.84 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3 |
 | 3 | TrialGPT 1.0 · GPT-5.4 | 0.84 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
@@ -131,7 +131,7 @@ same 183 patients · graded MAP, official evaluator
 
 | Rank | System | MAP | Source |
 |---|---|---|---|
-| 1 | **TrialLink** | **0.637 (0.608–0.665)** | this report |
+| 1 | **Linemach** | **0.637 (0.608–0.665)** | this report |
 | 2 | TrialGPT 2.0 · GPT-5.4 | 0.60 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
 | 3 | TrialGPT 2.0 · Gemini-3.1-pro | 0.56 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3 |
 | 4 | TrialGPT 1.0 · GPT-5.4 | 0.55 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
@@ -145,7 +145,7 @@ SIGIR 2016 + TREC 2021/2022 · 183 patients · the judged trials among TrialGPT-
 
 | Rank | System | nDCG@10 | Source |
 |---|---|---|---|
-| 1 | **TrialLink** | **0.788 (0.756–0.817)** | this report |
+| 1 | **Linemach** | **0.788 (0.756–0.817)** | this report |
 | 2 | TrialGPT 1.0 · GPT-4 | 0.728 | Jin et al., Nat Commun 2024, Table 2 |
 | 3 | TrialGPT 1.0 · GPT-3.5 | 0.54 | Jin et al., Nat Commun 2024, Table 2 |
 | 4 | BioLinkBERT (NLI-trained) | 0.48 | Jin et al., Nat Commun 2024, Table 2 |
@@ -154,7 +154,7 @@ SIGIR 2016 + TREC 2021/2022 · 183 patients · the judged trials among TrialGPT-
 | 7 | SapBERT (NLI-trained) | 0.415 | Jin et al., Nat Commun 2024, Table 2 |
 | 8 | BioBERT (NLI-trained) | 0.409 | Jin et al., Nat Commun 2024, Table 2 |
 
-Scored with the same official script as the panels above, restricted to the candidates TrialGPT 1.0 released (its retrieved_trials.json: 3,141 / 15,437 / 12,682 judged pairs); TrialLink's ranking of all judged trials is restricted to them. The script's nDCG@10 (linear gain) and P@10 (sum of grades / (2 × 10)) are the definitions TrialGPT 1.0 gives. The five encoders were trained on natural-language-inference data and applied to the cohorts without cohort training, as in the source. TrialGPT 1.0 · GPT-4 is its feature combination, the paper's headline configuration (its best single features reach 0.7281 nDCG@10 and 0.6724 P@10). Not placed on these axes: TrialMatchAI (Nat Commun 2026) ranks every judged trial of a TREC year with eligible-only relevance, and LLM-Match (2025) reports only AUROC on these pairs.
+Scored with the same official script as the panels above, restricted to the candidates TrialGPT 1.0 released (its retrieved_trials.json: 3,141 / 15,437 / 12,682 judged pairs); Linemach's ranking of all judged trials is restricted to them. The script's nDCG@10 (linear gain) and P@10 (sum of grades / (2 × 10)) are the definitions TrialGPT 1.0 gives. The five encoders were trained on natural-language-inference data and applied to the cohorts without cohort training, as in the source. TrialGPT 1.0 · GPT-4 is its feature combination, the paper's headline configuration (its best single features reach 0.7281 nDCG@10 and 0.6724 P@10). Not placed on these axes: TrialMatchAI (Nat Commun 2026) ranks every judged trial of a TREC year with eligible-only relevance, and LLM-Match (2025) reports only AUROC on these pairs.
 
 #### Patient-to-trial ranking · top-500 · P@10
 
@@ -162,7 +162,7 @@ SIGIR 2016 + TREC 2021/2022 · 183 patients · the judged trials among TrialGPT-
 
 | Rank | System | P@10 (graded) | Source |
 |---|---|---|---|
-| 1 | **TrialLink** | **0.715 (0.683–0.747)** | this report |
+| 1 | **Linemach** | **0.715 (0.683–0.747)** | this report |
 | 2 | TrialGPT 1.0 · GPT-4 | 0.669 | Jin et al., Nat Commun 2024, Table 2 |
 | 3 | TrialGPT 1.0 · GPT-3.5 | 0.512 | Jin et al., Nat Commun 2024, Table 2 |
 | 4 | BioLinkBERT (NLI-trained) | 0.428 | Jin et al., Nat Commun 2024, Table 2 |
@@ -171,7 +171,7 @@ SIGIR 2016 + TREC 2021/2022 · 183 patients · the judged trials among TrialGPT-
 | 7 | BioBERT (NLI-trained) | 0.375 | Jin et al., Nat Commun 2024, Table 2 |
 | 8 | SapBERT (NLI-trained) | 0.374 | Jin et al., Nat Commun 2024, Table 2 |
 
-Scored with the same official script as the panels above, restricted to the candidates TrialGPT 1.0 released (its retrieved_trials.json: 3,141 / 15,437 / 12,682 judged pairs); TrialLink's ranking of all judged trials is restricted to them. The script's nDCG@10 (linear gain) and P@10 (sum of grades / (2 × 10)) are the definitions TrialGPT 1.0 gives. The five encoders were trained on natural-language-inference data and applied to the cohorts without cohort training, as in the source. TrialGPT 1.0 · GPT-4 is its feature combination, the paper's headline configuration (its best single features reach 0.7281 nDCG@10 and 0.6724 P@10). Not placed on these axes: TrialMatchAI (Nat Commun 2026) ranks every judged trial of a TREC year with eligible-only relevance, and LLM-Match (2025) reports only AUROC on these pairs.
+Scored with the same official script as the panels above, restricted to the candidates TrialGPT 1.0 released (its retrieved_trials.json: 3,141 / 15,437 / 12,682 judged pairs); Linemach's ranking of all judged trials is restricted to them. The script's nDCG@10 (linear gain) and P@10 (sum of grades / (2 × 10)) are the definitions TrialGPT 1.0 gives. The five encoders were trained on natural-language-inference data and applied to the cohorts without cohort training, as in the source. TrialGPT 1.0 · GPT-4 is its feature combination, the paper's headline configuration (its best single features reach 0.7281 nDCG@10 and 0.6724 P@10). Not placed on these axes: TrialMatchAI (Nat Commun 2026) ranks every judged trial of a TREC year with eligible-only relevance, and LLM-Match (2025) reports only AUROC on these pairs.
 
 #### SIGIR cohort · nDCG@10
 
@@ -180,7 +180,7 @@ Scored with the same official script as the panels above, restricted to the cand
 | Rank | System | nDCG@10 | Source |
 |---|---|---|---|
 | 1 | TrialGPT 2.0 · GPT-5.4 | 0.66 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
-| 2 | **TrialLink** | **0.659 (0.598–0.716)** | this report |
+| 2 | **Linemach** | **0.659 (0.598–0.716)** | this report |
 | 3 | TrialGPT 2.0 · GPT-4.1 | 0.64 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d |
 | 4 | TrialGPT 1.0 · GPT-5.4 | 0.62 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
 | 5 | TrialGPT 1.0 · GPT-4.1 | 0.58 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d |
@@ -191,7 +191,7 @@ Scored with the same official script as the panels above, restricted to the cand
 
 | Rank | System | nDCG@10 | Source |
 |---|---|---|---|
-| 1 | **TrialLink** | **0.883 (0.847–0.914)** | this report |
+| 1 | **Linemach** | **0.883 (0.847–0.914)** | this report |
 | 2 | TrialGPT 2.0 · GPT-5.4 | 0.84 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
 | 3 | TrialGPT 1.0 · GPT-5.4 | 0.83 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
 | 4 | TrialGPT 2.0 · GPT-4.1 | 0.79 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d |
@@ -203,7 +203,7 @@ Scored with the same official script as the panels above, restricted to the cand
 
 | Rank | System | nDCG@10 | Source |
 |---|---|---|---|
-| 1 | **TrialLink** | **0.819 (0.756–0.876)** | this report |
+| 1 | **Linemach** | **0.819 (0.756–0.876)** | this report |
 | 2 | TrialGPT 2.0 · GPT-5.4 | 0.78 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
 | 3 | TrialGPT 1.0 · GPT-5.4 | 0.75 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
 | 4 | TrialGPT 2.0 · GPT-4.1 | 0.72 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d |
@@ -215,13 +215,13 @@ Scored with the same official script as the panels above, restricted to the cand
 
 | Rank | System | Recall@10 (%) | Source |
 |---|---|---|---|
-| 1 | **TrialLink** | **95.2** | this report |
+| 1 | **Linemach** | **95.2** | this report |
 | 2 | TrialGPT 2.0 | 70.0 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5c |
 | 3 | TrialGPT 1.0 | 54.0 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5c |
 | 4 | GPT-5.5 | 43.0 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5c |
 | 5 | Gemini 3.5 Flash | 21.0 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5c |
 
-TrialGPT 2.0 reports NIH-TrialBench only with its default backbone, GPT-4.1 ("Unless otherwise specified, all main analyses used GPT-4.1"); its GPT-5.4 and Gemini runs cover the three public cohorts only. TrialLink over all 126 cases: 85.7% (79.4–91.3).
+TrialGPT 2.0 reports NIH-TrialBench only with its default backbone, GPT-4.1 ("Unless otherwise specified, all main analyses used GPT-4.1"); its GPT-5.4 and Gemini runs cover the three public cohorts only. Linemach over all 126 cases: 85.7% (79.4–91.3).
 
 #### n2c2 cohort selection · micro-F1
 
@@ -229,7 +229,7 @@ official test · 86 patients × 13 criteria · micro-F1
 
 | Rank | System | Micro-F1 | Source |
 |---|---|---|---|
-| 1 | **TrialLink** | **0.918 (0.905–0.931)** | this report |
+| 1 | **Linemach** | **0.918 (0.905–0.931)** | this report |
 | 2 | Hybrid NLP, post-challenge | 0.911 | Vydiswaran et al., JAMIA 2019 (reimplemented system) |
 | 3 | Rule-based (challenge #1) | 0.91 | Stubbs et al., JAMIA 2019, Table 2 |
 | 4 | Hybrid NLP (MetaMap + cTAKES) | 0.908 | Stubbs et al., JAMIA 2019, Table 2 |
@@ -245,21 +245,21 @@ official test · 86 patients × 13 criteria · micro-F1
 | 14 | Llama-3.1-8b + LoRA | 0.867 | Chen et al., arXiv 2604.05190, Table 3 (full context) |
 | – | 47-team median (reference) | 0.823 | Stubbs et al., JAMIA 2019 |
 
-Official evaluator (track1_eval.py), TrialLink given the n2c2 annotation guidelines. An answer neither met nor not met is read as the guidelines label an unmentioned criterion: not met, except ENGLISH and MAKES-DECISIONS (met). The 2 of 86 patients whose decisions had not saved were completed after the evidence-identifier fix; macro-F1 0.832. The challenge systems and the LoRA models were built on the n2c2 training split; no TrialLink component was trained on it. Challenge systems are named by method (Stubbs et al., Table 2); the figure shows the first seven, the table all ten.
+Official evaluator (track1_eval.py), Linemach given the n2c2 annotation guidelines. An answer neither met nor not met is read as the guidelines label an unmentioned criterion: not met, except ENGLISH and MAKES-DECISIONS (met). The 2 of 86 patients whose decisions had not saved were completed after the evidence-identifier fix; macro-F1 0.832. The challenge systems and the LoRA models were built on the n2c2 training split; no Linemach component was trained on it. Challenge systems are named by method (Stubbs et al., Table 2); the figure shows the first seven, the table all ten.
 
 #### Criterion-level · physician-decided criteria (%)
 
-TrialGPT annotations · the 722 of 1,015 criteria the physicians decided (included, not included, excluded, not excluded, not applicable) · accuracy % · TrialLink given TrialGPT's own task definition
+TrialGPT annotations · the 722 of 1,015 criteria the physicians decided (included, not included, excluded, not excluded, not applicable) · accuracy % · Linemach given TrialGPT's own task definition
 
 | Rank | System | Accuracy (%) | Source |
 |---|---|---|---|
 | – | Physician A | 93.1 | Jin et al., Nat Commun 2024, Fig. 3c–d (the physician's per-label matrix weighted by the released gold counts, ±0.5 point) |
-| 1 | **TrialLink** | **92.0 (89.1–94.4)** | this report |
+| 1 | **Linemach** | **92.0 (89.1–94.4)** | this report |
 | – | Physician C | 90.7 | Jin et al., Nat Commun 2024, Fig. 3c–d (the physician's per-label matrix weighted by the released gold counts, ±0.5 point) |
 | – | Physician B | 89.0 | Jin et al., Nat Commun 2024, Fig. 3c–d (the physician's per-label matrix weighted by the released gold counts, ±0.5 point) |
 | 2 | TrialGPT 1.0 · GPT-4 | 87.4 | TrialGPT released predictions (Jin et al., Nat Commun 2024), scored on the same rows |
 
-Paired difference TrialLink − GPT-4: +4.6 points (+0.3 to +9.1, patient bootstrap). GPT-4 is scored from TrialGPT's released predictions on the same rows. Each physician's accuracy on these rows is rebuilt from that physician's confusion matrices in TrialGPT 1.0 (proportions per gold label, two decimals) weighted by the released gold counts; the same rebuild gives GPT-4 87.7% against its exact 87.4%, and reproduces the paper's whole-set range (88.6–90.1% against 88.7–90.0%).
+Paired difference Linemach − GPT-4: +4.6 points (+0.3 to +9.1, patient bootstrap). GPT-4 is scored from TrialGPT's released predictions on the same rows. Each physician's accuracy on these rows is rebuilt from that physician's confusion matrices in TrialGPT 1.0 (proportions per gold label, two decimals) weighted by the released gold counts; the same rebuild gives GPT-4 87.7% against its exact 87.4%, and reproduces the paper's whole-set range (88.6–90.1% against 88.7–90.0%).
 
 #### Criterion-level · all criteria (%)
 
@@ -270,9 +270,9 @@ TrialGPT annotations · 1,015 criteria · 53 patients · label agreement %
 | – | Physician (highest) | 90.0 | Jin et al., Nat Commun 2024 |
 | – | Physician (lowest) | 88.7 | Jin et al., Nat Commun 2024 |
 | 1 | TrialGPT 1.0 · GPT-4 | 87.3 | Jin et al., Nat Commun 2024 |
-| 2 | **TrialLink** | **75.6 (71.0–79.7)** | this report |
+| 2 | **Linemach** | **75.6 (71.0–79.7)** | this report |
 
-On the 293 criteria the gold labels "not enough information", 255 labels are GPT-4's own answer kept by the annotators, who labelled with GPT-4's predictions in view; GPT-4 matches 87.0% of those rows, TrialLink 35.2%. TrialLink was given TrialGPT's own task definition (which asks for as few "not enough information" answers as possible).
+On the 293 criteria the gold labels "not enough information", 255 labels are GPT-4's own answer kept by the annotators, who labelled with GPT-4's predictions in view; GPT-4 matches 87.0% of those rows, Linemach 35.2%. Linemach was given TrialGPT's own task definition (which asks for as few "not enough information" answers as possible).
 
 <!-- tables:end -->
 
