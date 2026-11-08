@@ -23,14 +23,16 @@ const pin = { version: versions.openviking.version, skills: versions.openviking.
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
 
 /**
- * The two types added on 2026-10-25 (`observations`, `recent_work`) are not in a recording made on 2026-10-23 and 2026-10-13: the lab it
- * ran on mounted eight templates. Their template routes answer as the recorded `corrections` route does (a type the deployment adds:
- * 400 "not editable", or 404 on the server that mounts no directory), and the recorded user's settings read back the ten. That is an
- * authored extension of a recording, said here and nowhere else; it goes when `record.mjs engine` is run again on a lab with the ten templates.
+ * A recording lists the types its lab mounted: eight on 2026-10-13/23, ten on the v0.5.3 re-recording of 2026-11-05 (`observations` and
+ * `recent_work` came on 2026-10-25), while the layout now has twelve (`people` and `notes`, the 2026-11-04 memory plan). The types a recording
+ * lacks are answered as its recorded `corrections` route is (a type the deployment adds: 400 "not editable", or 404 on the server that mounts
+ * no directory), and a recorded user's settings that list a prefix of the layout read back the whole layout. That is an authored extension of
+ * a recording, said here and nowhere else; it goes when `record.mjs engine` is run again on a lab with the twelve templates.
  * @param {any} recording
  */
 function extendedByTheNewTypes(recording) {
-  const added = OPENVIKING_MEMORY_TYPES.slice(8);
+  const recorded = new Set(recording.exchanges.map((/** @type {any} */ exchange) => /\/memory-templates\/([^/]+)$/.exec(exchange.path ?? "")?.[1]).filter(Boolean));
+  const added = OPENVIKING_MEMORY_TYPES.filter((type) => !recorded.has(type));
   const exchanges = [];
   for (const exchange of recording.exchanges) {
     exchanges.push(exchange);
@@ -38,9 +40,9 @@ function extendedByTheNewTypes(recording) {
       for (const type of added) exchanges.push({ ...exchange, path: exchange.path.replace(/corrections$/, type), response: JSON.parse(JSON.stringify(exchange.response ?? null).replaceAll("corrections", type)) });
     }
     const policy = exchange.response?.result?.memory_policy;
-    if (/\/settings$/.test(exchange.path ?? "") && Array.isArray(policy?.memory_types) && policy.memory_types.length === 8) {
-      policy.memory_types = [...OPENVIKING_MEMORY_TYPES].sort();
-    }
+    const prefix = Array.isArray(policy?.memory_types) && [8, 10].includes(policy.memory_types.length)
+      && JSON.stringify([...policy.memory_types].sort()) === JSON.stringify([...OPENVIKING_MEMORY_TYPES.slice(0, policy.memory_types.length)].sort());
+    if (/\/settings$/.test(exchange.path ?? "") && prefix) policy.memory_types = [...OPENVIKING_MEMORY_TYPES].sort();
   }
   return { ...recording, exchanges };
 }

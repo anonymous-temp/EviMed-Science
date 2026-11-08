@@ -139,10 +139,10 @@ class AdapterTests(unittest.TestCase):
     def test_the_kinds_are_the_services_own_and_a_recall_can_ask_for_every_one(self):
         # The enum carried `method`, `constraint` and `background`, which the service refuses: a recall for "method" answered 400.
         # The node test `agentMemoryMcp.test.mjs` holds this tuple equal to the domain's, in order.
-        self.assertEqual(len(server.FACT_KINDS), 14)
+        self.assertEqual(len(server.FACT_KINDS), 16)
         for kind in ("method", "constraint", "background"):
             self.assertNotIn(kind, server.FACT_KINDS)
-        for kind in ("profile", "method_preference", "writing_style", "tooling", "tension"):
+        for kind in ("profile", "person", "note", "method_preference", "writing_style", "tooling", "tension"):
             self.assertIn(kind, server.FACT_KINDS)
         recall, note = server.TOOLS
         self.assertEqual(recall["inputSchema"]["properties"]["factKinds"]["items"]["enum"], list(server.FACT_KINDS))
