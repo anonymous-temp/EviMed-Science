@@ -115,6 +115,7 @@ export function projectMatchingResult({ task, resultId, revision, decisions, cur
   strings(reportRefs, 'reportRefs')
   const counts = countsOf(rows)
   const state = stateOf(counts)
+  const openQuestions = openQuestionsOf(rows)
   return structuredClone({
     schemaVersion: '1', projectionVersion: PROJECTION_VERSION, resultId, revision,
     taskId: task.taskId, direction: task.direction, scope: task.scope,
@@ -123,7 +124,35 @@ export function projectMatchingResult({ task, resultId, revision, decisions, cur
     selectedPairs: task.selectedPairs, rows: ordered, finalOrder: ordered.map(pairIdentity),
     stageOrders, ranking: resolvedRanking, counts, state, reportRefs,
     invalidationPrecision: invalidationPrecisionOf(rows, refreshContext.affectedPairs),
+    openQuestions,
   })
+}
+
+/**
+ * The facts whose absence keeps criteria unknown, grouped across pairs so the person can be asked once for what decides the most
+ * trials. Grouping is by the fact's normalised wording; the model writes each `missingFact` as a short clinical noun phrase.
+ * @param {any[]} rows
+ * @returns {Array<{ fact: string, pairs: number, trials: string[], subjects: string[], criteria: Array<{ trialId: string, criterionId: string }> }>}
+ */
+export function openQuestionsOf(rows) {
+  const groups = new Map()
+  const add = (fact, row, criterionId) => {
+    const wording = String(fact ?? '').trim().replace(/\s+/g, ' ')
+    if (!wording) return
+    const key = wording.toLowerCase().replace(/[.;:,!?。；：，]+$/u, '')
+    const group = groups.get(key) ?? { fact: wording, pairKeys: new Set(), trials: new Set(), subjects: new Set(), criteria: [] }
+    group.pairKeys.add(pairIdentity(row)); group.trials.add(row.trialId); group.subjects.add(row.subjectKey)
+    if (criterionId) group.criteria.push({ trialId: row.trialId, criterionId })
+    groups.set(key, group)
+  }
+  for (const row of rows) {
+    if (row.state !== 'complete' && row.state !== 'stale') continue
+    for (const criterion of row.criteria ?? []) if (criterion.verdict === 'unknown' && criterion.missingFact) add(criterion.missingFact, row, criterion.criterionId)
+  }
+  return [...groups.values()]
+    .map((group) => ({ fact: group.fact, pairs: group.pairKeys.size, trials: [...group.trials], subjects: [...group.subjects], criteria: group.criteria.slice(0, 50) }))
+    .sort((a, b) => b.pairs - a.pairs || a.fact.localeCompare(b.fact))
+    .slice(0, 12)
 }
 
 /** Read a saved artifact without rerunning clinical judgment or changing its saved order.

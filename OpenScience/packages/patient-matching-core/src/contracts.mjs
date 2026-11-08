@@ -1,5 +1,6 @@
 import { array, check, digest, identifier, integer, object, oneOf, schema, strings, text, unique } from './validation.mjs'
 import { assertScope, contentDigest, sourceIdentity, validateScope, validateSourceRef, validateSourceRefs } from './identity.mjs'
+import { validateCriterionLogic } from './criterionLogic.mjs'
 
 export const CLINICAL_ELIGIBILITY = Object.freeze(['eligible', 'ineligible', 'uncertain', 'not-assessed'])
 export const WORK_STATES = Object.freeze(['complete', 'pending', 'failed', 'unsupported'])
@@ -90,6 +91,8 @@ export function validateTrialProfile(profile) {
     oneOf(criterion.kind, ['inclusion', 'exclusion', 'unclassified'], `${path}.kind`)
     text(criterion.text, `${path}.text`)
     span(criterion.span, `${path}.span`)
+    // The words that introduce a group of bullets ("Cohort 2 must also have:") travel with each bullet as its premise.
+    if (criterion.premise !== undefined) check(typeof criterion.premise === 'string' && criterion.premise.trim().length > 0 && criterion.premise.length <= 500, `${path}.premise`, 'expected text of at most 500 characters')
   })
   unique(profile.criteria, 'trialProfile.criteria', (criterion) => criterion.criterionId)
   const ids = new Set(profile.criteria.map((criterion) => criterion.criterionId))
@@ -263,6 +266,7 @@ export function validatePairDecision(decision, { task, trialProfile, evidenceBun
     strings(criterion.evidenceIds, `${path}.evidenceIds`)
     strings(criterion.assumptions, `${path}.assumptions`)
     text(criterion.reason, `${path}.reason`)
+    validateCriterionLogic(criterion, path)
   })
   unique(decision.criteria, 'decision.criteria', (criterion) => criterion.criterionId)
   validateSourceRefs(decision.sourceRefs, 'decision.sourceRefs')
@@ -312,7 +316,7 @@ export function validatePairDecision(decision, { task, trialProfile, evidenceBun
       check(computations.some(receipt => { validateComputationReceipt(receipt); assertScope(decision.scope, receipt.scope); return receipt.state === 'complete' }), 'decision.criteria.basis', 'computed judgment requires a preserved complete computation', 'missing_computation')
     }
     const evidence = new Map([...evidenceBundle.patientPassages, ...evidenceBundle.knowledgePassages].map((passage) => [passage.evidenceId, passage]))
-    for (const criterion of decision.criteria) for (const id of criterion.evidenceIds) {
+    for (const criterion of decision.criteria) for (const id of [...criterion.evidenceIds, ...(criterion.parts ?? []).flatMap((part) => part.evidenceIds)]) {
       const passage = evidence.get(id)
       check(passage, 'decision.criteria.evidenceIds', 'unknown evidence identity', 'invalid_id_mapping')
       check(passage.subjectKey === undefined || passage.subjectKey === decision.subjectKey, 'decision.criteria.evidenceIds', 'evidence belongs to another subject', 'scope_mismatch')

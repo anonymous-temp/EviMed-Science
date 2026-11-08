@@ -97,7 +97,7 @@ export function createPatientMatchingHostAdapter({ vcr, documents, config = {}, 
     const text = `${prefix}${target.eligibility}`;
     const source = { sourceId: `${meta.protocolVersionId ? 'protocol' : 'registry'}:${pair.trialId}`, revision: target.hash, digest: contentDigest(text), kind: meta.protocolVersionId ? 'protocol' : 'registry' };
     const profile = { schemaVersion: '1', scope, trialId: pair.trialId, source, profileDigest: profileIdentity({ source, targetHash: target.hash }), title: target.title, summary: target.summary, demographics: target.takes ?? '', conditions:target.conditions,interventions:target.interventions,preservedText: text,
-      criteria: target.clauses.map(clause => ({ criterionId: clause.criterionId ?? `criterion:${clause.number}`, kind: ['inclusion','exclusion'].includes(clause.kind) ? clause.kind : 'unclassified', text: clause.text, span: { start: prefix.length + clause.start, end: prefix.length + clause.end } })), arms: [] };
+      criteria: target.clauses.map(clause => ({ criterionId: clause.criterionId ?? `criterion:${clause.number}`, kind: ['inclusion','exclusion'].includes(clause.kind) ? clause.kind : 'unclassified', text: clause.text, span: { start: prefix.length + clause.start, end: prefix.length + clause.end }, ...(typeof clause.lead === 'string' && clause.lead.trim() ? { premise: clause.lead.trim().slice(0, 500) } : {}) })), arms: [] };
     validateTrialProfile(profile);
     return { target, profile, source };
   }

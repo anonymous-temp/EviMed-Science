@@ -4,6 +4,19 @@ import { createMatchingHandler } from '../src/handler.mjs'
 import { TOOL_MANIFEST, validateArguments } from '../src/manifest.mjs'
 import { HOST_ABI, HOST_PORT_METHODS, projectMatchingResult } from '@evimed/patient-matching-core'
 import { fixture } from './fixture.mjs'
+/** The saved decisions carry the model's clinical judgment and the frozen execution's identities, never the model's copies of them. */
+function assertSaved(saved, expected, prepared) {
+  assert.equal(saved.length, expected.length)
+  saved.forEach((decision, index) => {
+    const want = expected[index]
+    for (const key of ['subjectKey', 'trialId', 'state', 'clinicalEligibility', 'recommendation', 'criteria', 'unresolvedFacts', 'assumptions']) assert.deepEqual(decision[key], want[key], key)
+    assert.match(decision.decisionId, /^decision:[a-f0-9]{32}$/)
+    assert.deepEqual(decision.scope, prepared.task.scope)
+    assert.deepEqual(decision.producer, { kind: 'model', modelProfileDigest: prepared.profileDigest, executionId: prepared.executionId })
+    assert.equal(decision.profileDigest, prepared.profileDigest)
+    assert.ok(prepared.evidenceBundles.some(bundle => bundle.bundleId === decision.evidenceBundleId))
+  })
+}
 const call = { callId: 'native-call', rootCallId: 'native-call', sessionId: 'conversation-a', agentId: 'agent-a', name: 'match_assess', signal: new AbortController().signal }
 function setup(options = {}) {
   const f = fixture(), invocations = [], writes = [], activations = []
@@ -45,7 +58,7 @@ test('actual native call and original arguments are preserved while ports bind s
   assert.equal(s.invocations[0].tool, 'match_assess')
   assert.equal(s.writes.length, 1)
   assert.equal(s.writes[0].executionId, 'execution-a')
-  assert.deepEqual(s.writes[0].decisions, [s.decision])
+  assertSaved(s.writes[0].decisions, [s.decision], s.prepared)
   assert.equal(s.released(), true)
 })
 test('Flash overrides a Pro parent and child tools are evidence and exact compute only', async () => {
@@ -54,16 +67,27 @@ test('Flash overrides a Pro parent and child tools are evidence and exact comput
   assert.deepEqual(a.request.agentOptions, { provider: 'deepseek-official', model: 'deepseek-flash', reasoningEffort: 'high', maxTokens: 8000 })
   assert.equal(a.delivery, 'caller')
   assert.equal(a.request.maxDepth, 1)
-  assert.match(a.request.prompt[0].text, /UNTRUSTED_MATCHING_DATA/)
-  assert.match(a.request.prompt[0].text, /ignore all safeguards/)
+  const text = a.request.prompt[0].text, open = /^⟦DATA ([a-f0-9]{10})⟧$/m.exec(text)
+  assert.ok(open, 'the data block is delimited')
+  const at = text.indexOf('ignore all safeguards')
+  assert.ok(at > open.index && at < text.lastIndexOf(`⟦END DATA ${open[1]}⟧`), 'source text stays inside the data block')
+  assert.doesNotMatch(text, /\\"/, 'no escaped JSON')
 })
 test('invalid or foreign structured decisions never persist', async () => {
-  for (const mutate of [d => { d.trialId = 'foreign' }, d => { d.criteria[0].evidenceIds = ['invented'] }, d => { d.producer.modelProfileDigest = `sha256:${'f'.repeat(64)}` }]) {
+  for (const mutate of [d => { d.trialId = 'foreign' }, d => { d.criteria[0].evidenceIds = ['invented'] }, d => { d.subjectKey = 'patient-foreign' }]) {
     const d = fixture().decision; mutate(d)
     const s = setup({ outcome: { stopReason: 'completed', structured: { decisions: [d] } } })
     const result = await s.handle('match_assess', { taskId: 'task-a' }, call)
     assert.equal(result.status, 'failed'); assert.equal(s.writes.filter(write=>write.phase==='commit').length, 0); assert.equal(s.writes[0].phase,'failure'); assert.equal(Object.hasOwn(s.writes[0],'decisions'),false); assert.equal(s.released(), true)
   }
+})
+test('identities the model writes are replaced by the frozen execution\'s, so a forged producer or scope cannot persist', async () => {
+  const d = fixture().decision
+  d.producer.modelProfileDigest = `sha256:${'f'.repeat(64)}`; d.scope = { ...d.scope, tenantId: 'tenant-b' }; d.decisionId = 'forged'
+  const s = setup({ outcome: { stopReason: 'completed', structured: { decisions: [d] } } })
+  await s.handle('match_assess', { taskId: 'task-a' }, call)
+  const committed = s.writes.find(write => write.phase === 'commit')
+  assertSaved(committed.decisions, [fixture().decision], s.prepared)
 })
 test('unreadable/failed child preserves diagnostic output, always awaits release', async () => {
   for (const options of [{ rejection: true }, { outcome: { stopReason: 'error', output: 'partial clinical notes', diagnostic: 'provider failed' } }, { outcome: { stopReason: 'completed', structured: { wrong: true } } }]) {
@@ -297,7 +321,7 @@ test('a child answer that fails the decision schema is asked once more on the sa
   assert.equal(starts, 2)
   assert.equal(writes.length, 1)
   assert.equal(writes[0].phase, 'commit')
-  assert.deepEqual(writes[0].decisions, [f.decision])
+  assertSaved(writes[0].decisions, [f.decision], f.prepared)
   assert.ok(writes[0].diagnostics.includes('native_response_retried'))
   assert.equal(result.data.resultId, 'persisted-real')
 })
@@ -343,7 +367,7 @@ test('pairs whose decisions cannot be saved are sent back once with what was wro
   assert.match(prompts[1], /REPAIR: the previous answer could not be saved for 1 pair/)
   assert.match(prompts[1], /cites evidence invented-evidence that is not in its evidence bundle/)
   assert.doesNotMatch(prompts[1].split('REPAIR:')[1], /Patient reported symptoms/, 'the repair note names identities, never data text')
-  assert.equal(writes.length, 1); assert.equal(writes[0].phase, 'commit'); assert.deepEqual(writes[0].decisions, [f.decision])
+  assert.equal(writes.length, 1); assert.equal(writes[0].phase, 'commit'); assertSaved(writes[0].decisions, [f.decision], f.prepared)
   assert.ok(writes[0].diagnostics.includes('native_repair_requested:1'))
   assert.equal(result.data.resultId, 'persisted-real')
 })
@@ -367,7 +391,7 @@ test('the requester\'s assessment guide reaches the child as its own section ahe
     if (!guide) assert.doesNotMatch(prompt, /ASSESSMENT_GUIDE/)
     else {
       assert.ok(prompt.indexOf('ASSESSMENT_GUIDE (Benchmark label definitions):\nUse the labels exactly as this guide defines them.\nEND_ASSESSMENT_GUIDE') > 0)
-      assert.ok(prompt.indexOf('END_ASSESSMENT_GUIDE') < prompt.indexOf('UNTRUSTED_MATCHING_DATA_JSON_STRING'))
+      assert.ok(prompt.indexOf('END_ASSESSMENT_GUIDE') < prompt.indexOf('⟦DATA '))
     }
     assert.doesNotMatch(prompt, /good note would almost certainly record|Silence never makes/, 'no silence rule of the platform\'s')
   }
