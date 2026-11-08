@@ -66,7 +66,8 @@ test('the child answers the clinical fields only, and code completes a decision 
   const schema = modelResponseSchema(prepared.outputSchema)
   const item = schema.properties.decisions.items
   assert.deepEqual(item.required, ['subjectKey', 'trialId', 'clinicalEligibility', 'recommendation', 'criteria', 'unresolvedFacts', 'assumptions'])
-  assert.deepEqual(item.properties.criteria.items.required, ['criterionId', 'kind', 'verdict', 'basis', 'evidenceIds', 'reason', 'assumptions', 'missingFact', 'parts', 'rule', 'timing'])
+  assert.deepEqual(item.properties.criteria.items.required, ['criterionId', 'kind', 'verdict', 'basis', 'evidenceIds', 'reason', 'assumptions'])
+  assert.ok(['missingFact', 'parts', 'rule', 'timing'].every(key => item.properties.criteria.items.properties[key]), 'the logic fields are offered, optional')
   const answer = { subjectKey: 'patient-a', trialId: 'trial-b', clinicalEligibility: 'uncertain', recommendation: { priority: null, rationale: 'r' }, unresolvedFacts: [], assumptions: [],
     criteria: [{ criterionId: 'b1', kind: 'inclusion', verdict: 'satisfied', basis: 'stated', evidenceIds: ['e:2.2'], reason: 'r', assumptions: [], missingFact: '', parts: [], rule: null, timing: null },
       { criterionId: 'b2', kind: 'exclusion', verdict: 'unknown', basis: 'silent', evidenceIds: [], reason: 'r', assumptions: [], missingFact: 'Date of myocardial infarction', parts: [], rule: null, timing: null }] }
@@ -120,4 +121,15 @@ test('a decision id is stable for the same execution and pair', () => {
   assert.equal(completeDecision(answer, prepared).decisionId, completeDecision(answer, prepared).decisionId)
   assert.notEqual(completeDecision(answer, prepared).decisionId, completeDecision(answer, { ...prepared, executionId: 'execution-b' }).decisionId)
   assert.ok(contentDigest('x'))
+})
+
+test('an exclusion judged not met is never read back, and malformed logic is dropped instead of costing the pair', () => {
+  const { prepared } = twoTrials()
+  const decision = completeDecision({ subjectKey: 'patient-a', trialId: 'trial-b', clinicalEligibility: 'eligible', recommendation: { priority: null, rationale: 'r' }, unresolvedFacts: [], assumptions: [], criteria: [
+    { criterionId: 'b1', kind: 'inclusion', verdict: 'satisfied', basis: 'stated', evidenceIds: ['e:2.2'], reason: 'r', assumptions: [], rule: { kind: 'atLeast', count: 0 }, parts: [{ text: 'x', verdict: 'maybe' }] },
+    { criterionId: 'b2', kind: 'exclusion', verdict: 'not-satisfied', basis: 'inferred', evidenceIds: ['e:2.1'], reason: 'No recent MI documented', assumptions: [] },
+  ] }, prepared)
+  assert.equal(decision.criteria[0].rule, undefined); assert.equal(decision.criteria[0].parts, undefined)
+  validatePairDecision(decision, { task: prepared.task, trialProfile: prepared.trialProfiles[1], evidenceBundle: prepared.evidenceBundles[1] })
+  assert.deepEqual(verificationItems([decision], prepared).map(item => item.criterionIndex), [0])
 })

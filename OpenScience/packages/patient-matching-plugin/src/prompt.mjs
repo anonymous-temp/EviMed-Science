@@ -1,4 +1,4 @@
-import { contentDigest, canonicalJson, pairIdentity, deriveCriterionVerdict } from '@evimed/patient-matching-core'
+import { contentDigest, canonicalJson, pairIdentity, deriveCriterionVerdict, validateCriterionLogic } from '@evimed/patient-matching-core'
 
 /**
  * What the native clinical child reads and writes (2026-11-08 review).
@@ -159,6 +159,8 @@ export function renderAssessmentPrompt(prepared, { persona }) {
 /** Fields of a decision the model writes; the rest of the saved decision is completed by code. */
 const MODEL_DECISION_FIELDS = ['subjectKey', 'trialId', 'clinicalEligibility', 'recommendation', 'criteria', 'unresolvedFacts', 'assumptions']
 const MODEL_CRITERION_FIELDS = ['criterionId', 'kind', 'verdict', 'basis', 'evidenceIds', 'reason', 'assumptions', 'missingFact', 'parts', 'rule', 'timing']
+/** Optional for the model: a criterion without them keeps the plain verdict (Board C replay 2026-11-08: making them required cost a pair to the schema). */
+const OPTIONAL_CRITERION_FIELDS = new Set(['missingFact', 'parts', 'rule', 'timing'])
 
 /**
  * The response schema the child answers in, derived from the host's decision contract: the clinical fields only, every field required
@@ -172,7 +174,7 @@ export function modelResponseSchema(schema) {
   if (!decision?.properties || !criterion?.properties) return schema
   const criterionFields = MODEL_CRITERION_FIELDS.filter((key) => criterion.properties[key])
   const decisionFields = MODEL_DECISION_FIELDS.filter((key) => decision.properties[key])
-  const modelCriterion = { type: 'object', additionalProperties: false, required: criterionFields, properties: Object.fromEntries(criterionFields.map((key) => [key, criterion.properties[key]])) }
+  const modelCriterion = { type: 'object', additionalProperties: false, required: criterionFields.filter((key) => !OPTIONAL_CRITERION_FIELDS.has(key)), properties: Object.fromEntries(criterionFields.map((key) => [key, criterion.properties[key]])) }
   const properties = Object.fromEntries(decisionFields.map((key) => [key, key === 'criteria' ? { ...decision.properties.criteria, items: modelCriterion } : decision.properties[key]]))
   properties.subjectKey = { type: 'string', description: 'The subjectKey of the PAIR, exactly as shown.' }
   properties.trialId = { type: 'string', description: 'The trialId of the PAIR, exactly as shown.' }
@@ -198,6 +200,11 @@ export function completeDecision(answer, prepared) {
     if (row.rule === null) delete row.rule
     if (row.timing === null) delete row.timing
     if (row.missingFact === '') delete row.missingFact
+    // Malformed logic never costs the pair: it is dropped and the model's plain verdict stands.
+    try { validateCriterionLogic(row, 'criterion') } catch {
+      for (const key of ['parts', 'rule', 'timing']) delete row[key]
+      if (row.missingFact !== undefined && (typeof row.missingFact !== 'string' || row.missingFact.length > 300)) delete row.missingFact
+    }
     return row
   })
   return {
@@ -265,7 +272,11 @@ export function verificationItems(decisions, prepared) {
     if (!profile || !bundle) continue
     const passages = new Map([...bundle.patientPassages, ...bundle.knowledgePassages].map((passage) => [passage.evidenceId, passage]))
     for (const [criterionIndex, criterion] of decision.criteria.entries()) {
-      if (!['satisfied', 'not-satisfied'].includes(criterion.verdict) || !['stated', 'inferred'].includes(criterion.basis) || !criterion.evidenceIds.length) continue
+      // Only claims that a finding is present (or contradicted) are read back: an exclusion judged not met is an absence, which no
+      // sentence establishes and the task's labelling conventions govern (Board C replay 2026-11-08: reading those back turned 26
+      // physician-confirmed "not excluded" answers into unknown).
+      if (!['satisfied', 'not-satisfied'].includes(criterion.verdict) || (criterion.kind === 'exclusion' && criterion.verdict === 'not-satisfied')) continue
+      if (!['stated', 'inferred'].includes(criterion.basis) || !criterion.evidenceIds.length) continue
       const source = profile.criteria.find((item) => item.criterionId === criterion.criterionId)
       const cited = criterion.evidenceIds.map((id) => passages.get(id)).filter(Boolean)
       if (!source || !cited.length) continue
