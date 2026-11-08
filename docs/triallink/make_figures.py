@@ -184,7 +184,7 @@ def architecture(out):
     text(106.75, 32, "Ranked trials", size=9.5, weight="bold")
     box(95, 2, 23.5, 20.5, panel, edge=panel)
     text(106.75, 20, "3  Assessment", size=10.5, weight="bold", color=ACCENT)
-    text(106.75, 10.8, "Each criterion: met, not met or\nnot enough information, from\ncited, dated record passages;\ncomposite criteria and time\nwindows computed in code;\ncited evidence re-checked;\nopen questions for the clinician\nDeepSeek V4.1 Flash agent", size=7.4)
+    text(106.75, 10.8, "Each criterion: met, not met or\nnot enough information, from\ncited, dated record passages;\ncomposite criteria and time\nwindows computed in code;\nopen questions for the clinician\nDeepSeek V4.1 Flash agent", size=7.4)
     arrow(11.5, 22, 15, 22)
     arrow(51, 22, 55, 22)
     ax.plot([91, 93, 93], [22, 22, 32], color=INK_2, linewidth=1.2, solid_joinstyle="miter")

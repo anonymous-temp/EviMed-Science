@@ -51,9 +51,8 @@ Linemach has three stages.
 3. **Assessment.** For the trials a clinician selects, a DeepSeek V4.1 Flash agent judges each inclusion and exclusion criterion against
    cited passages of the record (met, not met, not enough information). It reads the newest records whole and, from older records, the
    passages retrieved for each criterion, each passage with its record date and section; it can search the whole record. A criterion
-   that combines conditions is answered part by part and a time window by its dates, and code counts the parts and the days; every
-   judgment that cites evidence is checked once against the cited sentences. The facts that keep criteria open are listed for the
-   clinician. The assessment explains the ranking; it does not reorder it.
+   that combines conditions is answered part by part and a time window by its dates, and code counts the parts and the days. The facts
+   that keep criteria open are listed for the clinician. The assessment explains the ranking; it does not reorder it.
 
 ## 2. Evaluation protocol
 
@@ -95,7 +94,7 @@ SIGIR 2016 + TREC 2021/2022 · 183 patients · every judged trial ranked (TrialG
 
 | Rank | System | nDCG@10 | Source |
 |---|---|---|---|
-| 1 | **Linemach** | **0.787 (0.756–0.817)** | this report |
+| 1 | **Linemach** | **0.792 (0.762–0.822)** | this report |
 | 2 | TrialGPT 2.0 · GPT-5.4 | 0.76 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
 | 2 | TrialGPT 2.0 · Gemini-3.1-pro | 0.76 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3 |
 | 4 | TrialGPT 1.0 · GPT-5.4 | 0.74 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
@@ -109,7 +108,7 @@ same 183 patients · graded P@10 (an excluded or potentially eligible trial coun
 
 | Rank | System | P@10 (graded) | Source |
 |---|---|---|---|
-| 1 | **Linemach** | **0.723 (0.691–0.754)** | this report |
+| 1 | **Linemach** | **0.724 (0.692–0.756)** | this report |
 | 2 | TrialGPT 2.0 · GPT-5.4 | 0.70 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
 | 3 | TrialGPT 2.0 · Gemini-3.1-pro | 0.69 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3 |
 | 4 | TrialGPT 1.0 · GPT-5.4 | 0.67 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
@@ -123,8 +122,8 @@ same 183 patients · reciprocal rank of the first eligible trial, official evalu
 
 | Rank | System | MRR | Source |
 |---|---|---|---|
-| 1 | **Linemach** | **0.853 (0.811–0.895)** | this report |
-| 2 | TrialGPT 2.0 · GPT-5.4 | 0.85 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
+| 1 | TrialGPT 2.0 · GPT-5.4 | 0.85 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
+| 2 | **Linemach** | **0.849 (0.806–0.889)** | this report |
 | 3 | TrialGPT 2.0 · Gemini-3.1-pro | 0.84 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3 |
 | 3 | TrialGPT 1.0 · GPT-5.4 | 0.84 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
 | 5 | TrialGPT 2.0 · GPT-4.1 | 0.80 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d |
@@ -137,7 +136,7 @@ same 183 patients · graded MAP, official evaluator
 
 | Rank | System | MAP | Source |
 |---|---|---|---|
-| 1 | **Linemach** | **0.637 (0.608–0.665)** | this report |
+| 1 | **Linemach** | **0.637 (0.608–0.666)** | this report |
 | 2 | TrialGPT 2.0 · GPT-5.4 | 0.60 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
 | 3 | TrialGPT 2.0 · Gemini-3.1-pro | 0.56 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3 |
 | 4 | TrialGPT 1.0 · GPT-5.4 | 0.55 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
@@ -151,7 +150,7 @@ SIGIR 2016 + TREC 2021/2022 · 183 patients · the judged trials among TrialGPT-
 
 | Rank | System | nDCG@10 | Source |
 |---|---|---|---|
-| 1 | **Linemach** | **0.788 (0.756–0.817)** | this report |
+| 1 | **Linemach** | **0.796 (0.765–0.824)** | this report |
 | 2 | TrialGPT 1.0 · GPT-4 | 0.728 | Jin et al., Nat Commun 2024, Table 2 |
 | 3 | TrialGPT 1.0 · GPT-3.5 | 0.54 | Jin et al., Nat Commun 2024, Table 2 |
 | 4 | BioLinkBERT (NLI-trained) | 0.48 | Jin et al., Nat Commun 2024, Table 2 |
@@ -168,7 +167,7 @@ SIGIR 2016 + TREC 2021/2022 · 183 patients · the judged trials among TrialGPT-
 
 | Rank | System | P@10 (graded) | Source |
 |---|---|---|---|
-| 1 | **Linemach** | **0.715 (0.683–0.747)** | this report |
+| 1 | **Linemach** | **0.720 (0.688–0.752)** | this report |
 | 2 | TrialGPT 1.0 · GPT-4 | 0.669 | Jin et al., Nat Commun 2024, Table 2 |
 | 3 | TrialGPT 1.0 · GPT-3.5 | 0.512 | Jin et al., Nat Commun 2024, Table 2 |
 | 4 | BioLinkBERT (NLI-trained) | 0.428 | Jin et al., Nat Commun 2024, Table 2 |
@@ -185,8 +184,8 @@ Scored with the same official script as the panels above, restricted to the cand
 
 | Rank | System | nDCG@10 | Source |
 |---|---|---|---|
-| 1 | TrialGPT 2.0 · GPT-5.4 | 0.66 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
-| 2 | **Linemach** | **0.659 (0.598–0.716)** | this report |
+| 1 | **Linemach** | **0.663 (0.604–0.720)** | this report |
+| 2 | TrialGPT 2.0 · GPT-5.4 | 0.66 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
 | 3 | TrialGPT 2.0 · GPT-4.1 | 0.64 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d |
 | 4 | TrialGPT 1.0 · GPT-5.4 | 0.62 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
 | 5 | TrialGPT 1.0 · GPT-4.1 | 0.58 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d |
@@ -197,7 +196,7 @@ Scored with the same official script as the panels above, restricted to the cand
 
 | Rank | System | nDCG@10 | Source |
 |---|---|---|---|
-| 1 | **Linemach** | **0.883 (0.847–0.914)** | this report |
+| 1 | **Linemach** | **0.890 (0.853–0.923)** | this report |
 | 2 | TrialGPT 2.0 · GPT-5.4 | 0.84 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
 | 3 | TrialGPT 1.0 · GPT-5.4 | 0.83 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
 | 4 | TrialGPT 2.0 · GPT-4.1 | 0.79 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d |
@@ -209,7 +208,7 @@ Scored with the same official script as the panels above, restricted to the cand
 
 | Rank | System | nDCG@10 | Source |
 |---|---|---|---|
-| 1 | **Linemach** | **0.819 (0.756–0.876)** | this report |
+| 1 | **Linemach** | **0.824 (0.761–0.880)** | this report |
 | 2 | TrialGPT 2.0 · GPT-5.4 | 0.78 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
 | 3 | TrialGPT 1.0 · GPT-5.4 | 0.75 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
 | 4 | TrialGPT 2.0 · GPT-4.1 | 0.72 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d |
@@ -221,13 +220,13 @@ Scored with the same official script as the panels above, restricted to the cand
 
 | Rank | System | Recall@10 (%) | Source |
 |---|---|---|---|
-| 1 | **Linemach** | **95.2** | this report |
+| 1 | **Linemach** | **95.9** | this report |
 | 2 | TrialGPT 2.0 | 70.0 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5c |
 | 3 | TrialGPT 1.0 | 54.0 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5c |
 | 4 | GPT-5.5 | 43.0 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5c |
 | 5 | Gemini 3.5 Flash | 21.0 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5c |
 
-TrialGPT 2.0 reports NIH-TrialBench only with its default backbone, GPT-4.1 ("Unless otherwise specified, all main analyses used GPT-4.1"); its GPT-5.4 and Gemini runs cover the three public cohorts only. Linemach over all 126 cases: 85.7% (79.4–91.3).
+TrialGPT 2.0 reports NIH-TrialBench only with its default backbone, GPT-4.1 ("Unless otherwise specified, all main analyses used GPT-4.1"); its GPT-5.4 and Gemini runs cover the three public cohorts only. Linemach over all 126 cases: 88.1% (81.7–93.7). Candidates: the 300 trials of the 1,373-trial NIH corpus a relevance rerank of the whole corpus put first stand in for retrieval; Linemach ranks them as in the product.
 
 #### n2c2 cohort selection · micro-F1
 

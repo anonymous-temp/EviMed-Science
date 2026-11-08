@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { contentDigest, validatePairDecision } from '@evimed/patient-matching-core'
-import { renderAssessmentPrompt, modelResponseSchema, completeDecision, applyCriterionLogic, verificationItems, renderVerificationPrompt, applyVerification } from '../src/prompt.mjs'
+import { renderAssessmentPrompt, modelResponseSchema, completeDecision, applyCriterionLogic } from '../src/prompt.mjs'
 import { fixture } from './fixture.mjs'
 
 const { patientMatchingOutputSchema } = await import('../../../apps/server/src/patientMatchingOutputSchema.mjs')
@@ -97,24 +97,6 @@ test('code counts the parts of a composite criterion and the days of a time wind
   validatePairDecision(decision, { task: prepared.task, trialProfile: prepared.trialProfiles[1], evidenceBundle: prepared.evidenceBundles[1] })
 })
 
-test('verification reads each cited judgment against its sentences and leaves an unsupported one unknown', () => {
-  const { prepared } = twoTrials()
-  const decision = completeDecision({ subjectKey: 'patient-a', trialId: 'trial-b', clinicalEligibility: 'ineligible', recommendation: { priority: null, rationale: 'r' }, unresolvedFacts: [], assumptions: [], criteria: [
-    { criterionId: 'b1', kind: 'inclusion', verdict: 'satisfied', basis: 'stated', evidenceIds: ['e:2.2'], reason: 'MI documented', assumptions: [], missingFact: '', parts: [], rule: null, timing: null },
-    { criterionId: 'b2', kind: 'exclusion', verdict: 'satisfied', basis: 'inferred', evidenceIds: ['e:2.3'], reason: 'Stroke history', assumptions: [], missingFact: '', parts: [], rule: null, timing: null },
-  ] }, prepared)
-  const items = verificationItems([decision], prepared)
-  assert.equal(items.length, 2)
-  const prompt = renderVerificationPrompt(items, 'abcdef0123')
-  assert.match(prompt, /\[e:2\.3\] \(2069-04-07, FAMILY HISTORY\) Father had a stroke at 60\./)
-  assert.match(prompt, /ITEM 2\. exclusion criterion: MI within 6 months/)
-  assert.equal(applyVerification([decision], items, { items: [{ item: 1, support: 'supported' }, { item: 2, support: 'unsupported' }] }), 1)
-  assert.equal(decision.criteria[0].verdict, 'satisfied')
-  assert.equal(decision.criteria[1].verdict, 'unknown')
-  assert.equal(decision.clinicalEligibility, 'uncertain', 'the only ground for ineligibility was the unsupported judgment')
-  validatePairDecision(decision, { task: prepared.task, trialProfile: prepared.trialProfiles[1], evidenceBundle: prepared.evidenceBundles[1] })
-})
-
 test('a decision id is stable for the same execution and pair', () => {
   const { prepared } = twoTrials()
   const answer = { subjectKey: 'patient-a', trialId: 'trial-a', clinicalEligibility: 'uncertain', recommendation: { priority: null, rationale: 'r' }, unresolvedFacts: [], assumptions: [], criteria: [] }
@@ -123,7 +105,7 @@ test('a decision id is stable for the same execution and pair', () => {
   assert.ok(contentDigest('x'))
 })
 
-test('an exclusion judged not met is never read back, and malformed logic is dropped instead of costing the pair', () => {
+test('malformed logic is dropped instead of costing the pair', () => {
   const { prepared } = twoTrials()
   const decision = completeDecision({ subjectKey: 'patient-a', trialId: 'trial-b', clinicalEligibility: 'eligible', recommendation: { priority: null, rationale: 'r' }, unresolvedFacts: [], assumptions: [], criteria: [
     { criterionId: 'b1', kind: 'inclusion', verdict: 'satisfied', basis: 'stated', evidenceIds: ['e:2.2'], reason: 'r', assumptions: [], rule: { kind: 'atLeast', count: 0 }, parts: [{ text: 'x', verdict: 'maybe' }] },
@@ -131,5 +113,4 @@ test('an exclusion judged not met is never read back, and malformed logic is dro
   ] }, prepared)
   assert.equal(decision.criteria[0].rule, undefined); assert.equal(decision.criteria[0].parts, undefined)
   validatePairDecision(decision, { task: prepared.task, trialProfile: prepared.trialProfiles[1], evidenceBundle: prepared.evidenceBundles[1] })
-  assert.deepEqual(verificationItems([decision], prepared).map(item => item.criterionIndex), [0])
 })

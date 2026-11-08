@@ -44,8 +44,7 @@ Linemach 分三个阶段。
    不调用通用推理大模型。
 3. **逐条评估**：对医生选中的试验，由 DeepSeek V4.1 Flash 智能体对照病历中引用的原文，逐条判断每项入选和排除标准（符合、不符合、
    信息不足）。它完整读最新的几份病历，并读按每条标准从较早病历中检索出的段落，每段都带病历日期和章节；还可以检索整份病历。组合
-   条件的标准逐项回答、时间窗标准按日期回答，计数和日期计算由代码完成；每个引用了证据的判断都会对照被引原文再核对一次。仍无法判定的
-   标准所缺的事实会汇总列给医生。评估用来解释排序，不改变排序。
+   条件的标准逐项回答、时间窗标准按日期回答，计数和日期计算由代码完成。仍无法判定的标准所缺的事实会汇总列给医生。评估用来解释排序，不改变排序。
 
 ## 2. 评测协议
 
@@ -81,7 +80,7 @@ SIGIR 2016 + TREC 2021/2022，183 位患者，对全部已评判试验排序（T
 
 | 排名 | 系统 | nDCG@10 | 来源 |
 |---|---|---|---|
-| 1 | **Linemach** | **0.787 (0.756–0.817)** | 本报告 |
+| 1 | **Linemach** | **0.792 (0.762–0.822)** | 本报告 |
 | 2 | TrialGPT 2.0 · GPT-5.4 | 0.76 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
 | 2 | TrialGPT 2.0 · Gemini-3.1-pro | 0.76 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3 |
 | 4 | TrialGPT 1.0 · GPT-5.4 | 0.74 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
@@ -95,7 +94,7 @@ SIGIR 2016 + TREC 2021/2022，183 位患者，对全部已评判试验排序（T
 
 | 排名 | 系统 | P@10 (graded) | 来源 |
 |---|---|---|---|
-| 1 | **Linemach** | **0.723 (0.691–0.754)** | 本报告 |
+| 1 | **Linemach** | **0.724 (0.692–0.756)** | 本报告 |
 | 2 | TrialGPT 2.0 · GPT-5.4 | 0.70 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
 | 3 | TrialGPT 2.0 · Gemini-3.1-pro | 0.69 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3 |
 | 4 | TrialGPT 1.0 · GPT-5.4 | 0.67 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
@@ -109,8 +108,8 @@ SIGIR 2016 + TREC 2021/2022，183 位患者，对全部已评判试验排序（T
 
 | 排名 | 系统 | MRR | 来源 |
 |---|---|---|---|
-| 1 | **Linemach** | **0.853 (0.811–0.895)** | 本报告 |
-| 2 | TrialGPT 2.0 · GPT-5.4 | 0.85 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
+| 1 | TrialGPT 2.0 · GPT-5.4 | 0.85 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
+| 2 | **Linemach** | **0.849 (0.806–0.889)** | 本报告 |
 | 3 | TrialGPT 2.0 · Gemini-3.1-pro | 0.84 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3 |
 | 3 | TrialGPT 1.0 · GPT-5.4 | 0.84 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
 | 5 | TrialGPT 2.0 · GPT-4.1 | 0.80 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d |
@@ -123,7 +122,7 @@ SIGIR 2016 + TREC 2021/2022，183 位患者，对全部已评判试验排序（T
 
 | 排名 | 系统 | MAP | 来源 |
 |---|---|---|---|
-| 1 | **Linemach** | **0.637 (0.608–0.665)** | 本报告 |
+| 1 | **Linemach** | **0.637 (0.608–0.666)** | 本报告 |
 | 2 | TrialGPT 2.0 · GPT-5.4 | 0.60 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
 | 3 | TrialGPT 2.0 · Gemini-3.1-pro | 0.56 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3 |
 | 4 | TrialGPT 1.0 · GPT-5.4 | 0.55 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
@@ -137,7 +136,7 @@ SIGIR 2016 + TREC 2021/2022，183 位患者，只排 TrialGPT 检索前 500 中�
 
 | 排名 | 系统 | nDCG@10 | 来源 |
 |---|---|---|---|
-| 1 | **Linemach** | **0.788 (0.756–0.817)** | 本报告 |
+| 1 | **Linemach** | **0.796 (0.765–0.824)** | 本报告 |
 | 2 | TrialGPT 1.0 · GPT-4 | 0.728 | Jin et al., Nat Commun 2024, Table 2 |
 | 3 | TrialGPT 1.0 · GPT-3.5 | 0.54 | Jin et al., Nat Commun 2024, Table 2 |
 | 4 | BioLinkBERT (NLI-trained) | 0.48 | Jin et al., Nat Commun 2024, Table 2 |
@@ -154,7 +153,7 @@ SIGIR 2016 + TREC 2021/2022，183 位患者，只排 TrialGPT 检索前 500 中�
 
 | 排名 | 系统 | P@10 (graded) | 来源 |
 |---|---|---|---|
-| 1 | **Linemach** | **0.715 (0.683–0.747)** | 本报告 |
+| 1 | **Linemach** | **0.720 (0.688–0.752)** | 本报告 |
 | 2 | TrialGPT 1.0 · GPT-4 | 0.669 | Jin et al., Nat Commun 2024, Table 2 |
 | 3 | TrialGPT 1.0 · GPT-3.5 | 0.512 | Jin et al., Nat Commun 2024, Table 2 |
 | 4 | BioLinkBERT (NLI-trained) | 0.428 | Jin et al., Nat Commun 2024, Table 2 |
@@ -171,8 +170,8 @@ SIGIR 2016 + TREC 2021/2022，183 位患者，只排 TrialGPT 检索前 500 中�
 
 | 排名 | 系统 | nDCG@10 | 来源 |
 |---|---|---|---|
-| 1 | TrialGPT 2.0 · GPT-5.4 | 0.66 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
-| 2 | **Linemach** | **0.659 (0.598–0.716)** | 本报告 |
+| 1 | **Linemach** | **0.663 (0.604–0.720)** | 本报告 |
+| 2 | TrialGPT 2.0 · GPT-5.4 | 0.66 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
 | 3 | TrialGPT 2.0 · GPT-4.1 | 0.64 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d |
 | 4 | TrialGPT 1.0 · GPT-5.4 | 0.62 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
 | 5 | TrialGPT 1.0 · GPT-4.1 | 0.58 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d |
@@ -183,7 +182,7 @@ SIGIR 2016 + TREC 2021/2022，183 位患者，只排 TrialGPT 检索前 500 中�
 
 | 排名 | 系统 | nDCG@10 | 来源 |
 |---|---|---|---|
-| 1 | **Linemach** | **0.883 (0.847–0.914)** | 本报告 |
+| 1 | **Linemach** | **0.890 (0.853–0.923)** | 本报告 |
 | 2 | TrialGPT 2.0 · GPT-5.4 | 0.84 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
 | 3 | TrialGPT 1.0 · GPT-5.4 | 0.83 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
 | 4 | TrialGPT 2.0 · GPT-4.1 | 0.79 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d |
@@ -195,7 +194,7 @@ SIGIR 2016 + TREC 2021/2022，183 位患者，只排 TrialGPT 检索前 500 中�
 
 | 排名 | 系统 | nDCG@10 | 来源 |
 |---|---|---|---|
-| 1 | **Linemach** | **0.819 (0.756–0.876)** | 本报告 |
+| 1 | **Linemach** | **0.824 (0.761–0.880)** | 本报告 |
 | 2 | TrialGPT 2.0 · GPT-5.4 | 0.78 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
 | 3 | TrialGPT 1.0 · GPT-5.4 | 0.75 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
 | 4 | TrialGPT 2.0 · GPT-4.1 | 0.72 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d |
@@ -207,13 +206,13 @@ SIGIR 2016 + TREC 2021/2022，183 位患者，只排 TrialGPT 检索前 500 中�
 
 | 排名 | 系统 | Recall@10 (%) | 来源 |
 |---|---|---|---|
-| 1 | **Linemach** | **95.2** | 本报告 |
+| 1 | **Linemach** | **95.9** | 本报告 |
 | 2 | TrialGPT 2.0 | 70.0 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5c |
 | 3 | TrialGPT 1.0 | 54.0 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5c |
 | 4 | GPT-5.5 | 43.0 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5c |
 | 5 | Gemini 3.5 Flash | 21.0 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5c |
 
-TrialGPT 2.0 论文只用默认底座 GPT-4.1 报告了 NIH-TrialBench（原文："Unless otherwise specified, all main analyses used GPT-4.1"）；GPT-5.4 和 Gemini 只跑了三个公开队列。Linemach 按全部 126 例计算为 85.7%（79.4–91.3）。
+TrialGPT 2.0 论文只用默认底座 GPT-4.1 报告了 NIH-TrialBench（原文："Unless otherwise specified, all main analyses used GPT-4.1"）；GPT-5.4 和 Gemini 只跑了三个公开队列。Linemach 按全部 126 例计算为 88.1%（81.7–93.7）。候选：在 1,373 个试验的 NIH 试验库上先做一次相关性重排，取前 300 个代替检索；Linemach 再按产品中的方式排序。
 
 #### n2c2 队列筛选 · micro-F1
 
