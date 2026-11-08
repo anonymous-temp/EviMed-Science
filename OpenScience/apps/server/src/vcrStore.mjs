@@ -48,7 +48,7 @@ import { VCR_BENCHMARK_ONLY_USE_CEILING, VCR_RESULT_KIND_TABS, vcrBenchmarkBasis
 import { DISPLAY_TIME_ZONE, VCR_CONVERSATION_STUDY_NAME, VCR_CONVERSATION_TASK_NAMES_ZH, VCR_DRAFT_STUDY_NAME, VCR_LEGACY_DEFAULT_STUDY_NAME, VCR_STUDY_NAME_FROM_QUESTION_MAX, maskIdentifierSpans } from "@evimed/domain";
 
 import { HttpError } from "./security.mjs";
-import { VCR_COMPARISON_RESULT_KIND, VCR_SCHEMA } from "./vcrPersistence.mjs";
+import { VCR_COMPARISON_RESULT_KIND, VCR_EXPERIMENT_CANDIDATE_KIND, VCR_SCHEMA } from "./vcrPersistence.mjs";
 import { VcrStoreBase, vcrId } from "./vcrStoreBase.mjs";
 import { addRegulatoryContact, regulatoryContacts } from "./vcrRegulatory.mjs";
 import { carryScheduleForward, saveScheduleVisits, visitsFromRows } from "./vcrSchedule.mjs";
@@ -1578,18 +1578,28 @@ export class VcrStore extends VcrStoreBase {
     return resultFromRow(await this.one(`SELECT * FROM ${VCR_SCHEMA}.results WHERE study_id = $1 AND id = $2`, [studyId, id]));
   }
 
-  /** Current results (nothing superseded), newest first. @param {string} studyId @param {string | null} [kind] */
+  /**
+   * Current results (nothing superseded), newest first. A design search files one `experiment_candidate` result per candidate and none is
+   * ever superseded, so a single campaign would push the study's own results out of the newest 200: candidates are read by the lab through
+   * their own experiment, and here only when asked for by kind. @param {string} studyId @param {string | null} [kind]
+   */
   async results(studyId, kind = null) {
     const rows = await this.rows(`SELECT * FROM ${VCR_SCHEMA}.results
-      WHERE study_id = $1 AND superseded_by IS NULL AND ($2::text IS NULL OR kind = $2) AND kind <> $3
-      ORDER BY created_at DESC LIMIT 200`, [studyId, kind, VCR_COMPARISON_RESULT_KIND]);
+      WHERE study_id = $1 AND superseded_by IS NULL AND ($2::text IS NULL OR kind = $2) AND kind <> $3 AND ($2::text IS NOT NULL OR kind <> $4)
+      ORDER BY created_at DESC LIMIT 200`, [studyId, kind, VCR_COMPARISON_RESULT_KIND, VCR_EXPERIMENT_CANDIDATE_KIND]);
     return rows.map(resultFromRow);
   }
 
-  /** Every result of a study including superseded ones (the package's history). @param {string} studyId */
+  /** Every result of a study including superseded ones (the package's history), design-search candidates aside. @param {string} studyId */
   async allResults(studyId) {
-    return (await this.rows(`SELECT * FROM ${VCR_SCHEMA}.results WHERE study_id = $1 AND kind <> $2 ORDER BY created_at DESC LIMIT 500`,
-      [studyId, VCR_COMPARISON_RESULT_KIND])).map(resultFromRow);
+    return (await this.rows(`SELECT * FROM ${VCR_SCHEMA}.results WHERE study_id = $1 AND kind <> $2 AND kind <> $3 ORDER BY created_at DESC LIMIT 500`,
+      [studyId, VCR_COMPARISON_RESULT_KIND, VCR_EXPERIMENT_CANDIDATE_KIND])).map(resultFromRow);
+  }
+
+  /** The result one execution wrote, whatever its kind. @param {string} studyId @param {string} executionId */
+  async resultForExecution(studyId, executionId) {
+    return resultFromRow(await this.one(`SELECT * FROM ${VCR_SCHEMA}.results WHERE study_id = $1 AND execution_id = $2 ORDER BY created_at DESC LIMIT 1`,
+      [studyId, String(executionId)]));
   }
 
   // --- forecasts (AC-23) ---------------------------------------------------------------

@@ -59,6 +59,8 @@ export const VCR_SCHEMA = "evimed_vcr";
  * library's own reader asks for it by name.
  */
 export const VCR_COMPARISON_RESULT_KIND = "definition_comparison";
+/** A design-search candidate's result (`vcrExperiments.mjs`): filed per candidate, never superseded, read through its experiment. */
+export const VCR_EXPERIMENT_CANDIDATE_KIND = "experiment_candidate";
 
 /**
  * What a column of a source is *for* in the study: `VCR_FIELD_ROLES` in `@evimed/domain`

@@ -1904,6 +1904,16 @@ export function whenHolds(when, root) {
 }
 
 /**
+ * Whether a design-search precision block (`evaluation`) may ride on this scenario: the method's schema has one and its gate holds — a
+ * dose design of kind `randomized_selection` has none, and the job queue would refuse the field as unknown.
+ * @param {string} method @param {any} scenario
+ */
+export function vcrEvaluationAllowed(method, scenario) {
+  const node = /** @type {any} */ (VCR_SCENARIO_SCHEMAS)[method]?.fields?.evaluation
+  return Boolean(node) && whenHolds(node.when, scenario)
+}
+
+/**
  * @typedef {{ root: any, inputIds: ReadonlySet<string> | null, issues: VcrScenarioIssue[], suppressExpression: boolean }} WalkContext
  */
 

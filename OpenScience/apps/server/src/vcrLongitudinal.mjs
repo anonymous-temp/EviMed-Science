@@ -369,7 +369,9 @@ export function createVcrLongitudinal({store,dataStore,dataPlane,matchStore,acce
       // Old version, new version and what was observed afterwards, on the people and dates all three share.
       const observed = scenario.outcomeHistoryId
         ? await runForecastCalculation('forecast.compare_observed',[first.content,second.content,(await read(scenario.outcomeHistoryId)).content,{seed:job.seed,
-          dataClass:first.content.dataClass,windowDays:scenario.windowDays}],{timeoutMs:job.cpuSecondsLimit*1000,isCanceled}) : null;
+          dataClass:first.content.dataClass,windowDays:scenario.windowDays,
+          // the deployment's small-cell threshold, not the domain default: these groups reach the model's reads of the comparison
+          ...(Number.isInteger(Number(config.vcrMinCellSize)) && Number(config.vcrMinCellSize) >= 2 ? {minCell:Number(config.vcrMinCellSize)} : {})}],{timeoutMs:job.cpuSecondsLimit*1000,isCanceled}) : null;
       const comparison = {...computed,predictionIds:[first.row.id,second.row.id],...(observed ? {observed} : {}),...accuracyOf([first,second])};
       saved = longitudinalArtifactView(await artifacts.save(study,'comparison',comparison,comparison,
         {snapshotIds:[...new Set([...first.row.snapshot_ids,...second.row.snapshot_ids])],sourceIds:[...new Set([...first.row.source_ids,...second.row.source_ids])],bindings:[...(first.row.bindings ?? []),...(second.row.bindings ?? [])],parentId:first.row.id}));

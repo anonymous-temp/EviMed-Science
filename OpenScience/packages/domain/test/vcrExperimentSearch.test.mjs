@@ -325,6 +325,22 @@ test('an analytic pre-check eliminates sizes below the closed-form requirement b
   assert.ok(!units.some((unit) => unit.stage === 'screening' && unit.candidate === 'c000'))
 })
 
+test('an analytic rule naming a path no candidate has is refused, and never eliminates by counting it as 0', () => {
+  const stages = (/** @type {string[]} */ exceeds) => ({ analytic: { scenario: { design: { kind: 'two_arm_fixed' }, endpoint: { type: 'time_to_event' },
+    truth: { hazardRatio: 0.7, controlMedian: 12 }, analysis: { alpha: 0.025, power: 0.8, sided: 1 }, accrual: { duration: 12, followup: 12 } },
+  eliminate: [{ measure: 'required_patients', exceeds, tolerance: 0.05 }] }, screening: { replicates: 500 }, final: { count: 2 } })
+  const refused = vcrCampaignManifest(manifestOf({ constraints: [{ measure: 'power', op: '>=', bound: 0.8, kind: 'design', truth: 'alternative' }], stages: stages(['design.n']) }))
+  assert.ok(refused.issues.some((/** @type {any} */ issue) => issue.field === 'stages.analytic.eliminate[0].exceeds[0]'), JSON.stringify(refused.issues))
+})
+
+test('a design-search precision block is attached only where the method takes one', async () => {
+  const { vcrEvaluationAllowed } = await import('../src/vcrScenarioSchemas.mjs')
+  assert.equal(vcrEvaluationAllowed('design.dose', { design: { kind: 'randomized_selection' } }), false)
+  assert.equal(vcrEvaluationAllowed('design.dose', { design: { kind: 'boin' } }), true)
+  assert.equal(vcrEvaluationAllowed('design.simulate', BASE), true)
+  assert.equal(vcrEvaluationAllowed('design.analytic', BASE), false)
+})
+
 test('contrasts follow the coupling the runs really had', () => {
   const bits = (/** @type {any} */ pattern) => pattern.match(/.{1,8}/g).map((/** @type {any} */ byte) => Number.parseInt(byte.padEnd(8, '0').split('').reverse().join(''), 2).toString(16).padStart(2, '0')).join('')
   const a = { seed: 5, drawSignature: 'x', replicates: 16, rejects: bits('1111000011110000'), measures: [{ name: 'power', value: 0.5, mcse: 0.125, simulated: true }] }

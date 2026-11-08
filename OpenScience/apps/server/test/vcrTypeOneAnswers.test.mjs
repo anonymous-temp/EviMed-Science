@@ -36,6 +36,7 @@ function gateway({ jobs = {}, results = [nullCheck, nullDesign, powered] } = {})
     async studyByControlProject() { return study; },
     async results() { return results; },
     async allResults() { return results; },
+    async resultForExecution(_study, executionId) { return (results).find((row) => row?.executionId === executionId) ?? null; },
     async staleMarks() { return []; },
     async one() { return { id: "exe_null" }; },
     async rows(/** @type {string} */ sql, /** @type {any[]} */ values) {

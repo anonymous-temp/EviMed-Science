@@ -15,7 +15,7 @@ const study = { id: "std_1", userId: "u1", projectId: "prj_1", name: "n", scope:
 function gateway() {
   const store = {
     async studyByRuntimeDispatch() { return study; }, async studyByControlProject() { return study; },
-    async results() { return [run]; }, async allResults() { return [run]; }, async staleMarks() { return []; },
+    async results() { return [run]; }, async allResults() { return [run]; }, async resultForExecution(_study, executionId) { return ([run]).find((row) => row?.executionId === executionId) ?? null; }, async staleMarks() { return []; },
     async one() { return { id: "exe_ad" }; }, async rows() { return []; },
   };
   const done = { id: "job_ad", state: "succeeded", kind: "generate_progression", method: "patients.progression", methodVersion: "1.1.0", progress: {}, cpuSecondsUsed: 30, error: null };

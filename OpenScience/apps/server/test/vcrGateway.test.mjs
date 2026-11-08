@@ -2071,7 +2071,7 @@ test("live D8: a finished type I simulation is handed over with its verdict on t
     const { handler } = fixture({
       jobs: { ...base.vcr.jobs, async get() { return done; }, async configuration() { return { scenario, inputRefs: [], scenarioHash: "h" }; } },
       store: { ...base.vcr.store, async one() { return { id: "exe_1" }; },
-        async allResults() { return [{ id: "res_1", version: 1, kind: "trial_scenario", executionId: "exe_1", conclusion: "estimable", measures: [measure], diagnostics: {} }]; } },
+        async resultForExecution(_study, executionId) { return executionId === "exe_1" ? { id: "res_1", version: 1, kind: "trial_scenario", executionId: "exe_1", conclusion: "estimable", measures: [measure], diagnostics: {} } : null; } },
     });
     const res = response();
     await handler(request("/internal/vcr/v1/simulate", { action: "status", jobId: "job_1" }), res);

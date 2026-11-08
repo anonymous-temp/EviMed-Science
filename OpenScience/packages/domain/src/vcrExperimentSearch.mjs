@@ -40,6 +40,7 @@ import { canonicalScenarioJson, vcrIsNullScenario } from './vcrEngineJob.mjs'
 import { VCR_JOB_METHODS, VCR_ENGINE_METHODS } from './vcrEngineJob.mjs'
 import { VCR_REPLICATES_ALT_MIN } from './vcrVocabulary.mjs'
 import { vcrDiseaseHypothesis } from './vcrExperiment.mjs'
+import { vcrEvaluationAllowed } from './vcrScenarioSchemas.mjs'
 
 /** @param {unknown} value @returns {Record<string, any>} */
 const object = (value) => (value && typeof value === 'object' && !Array.isArray(value) ? /** @type {Record<string, any>} */ (value) : {})
@@ -52,7 +53,7 @@ export const VCR_CAMPAIGN_SCHEMA_VERSION = 1
 /** Why a campaign stopped (plan section 9). Exactly one is recorded. */
 export const VCR_CAMPAIGN_STOP_REASONS = Object.freeze([
   'budget_exhausted', 'acceptable_precision', 'no_useful_improvement', 'unsupported_candidate', 'persistent_model_failure',
-  'user_cancellation', 'no_feasible_beneficial_candidate', 'inconclusive_at_precision',
+  'user_cancellation', 'no_feasible_beneficial_candidate', 'inconclusive_at_precision', 'study_unavailable',
 ])
 /**
  * The tests whose size is exact under the simulated model, by the name a final evaluation records (`nominalControl`). Only these may
@@ -351,6 +352,9 @@ export function vcrCampaignManifest(input) {
     analytic.eliminate.forEach((rule, i) => {
       if (!Object.hasOwn(VCR_CAMPAIGN_METHODS['design.analytic'].measures, rule.measure)) bad('campaign_measure_unknown', `stages.analytic.eliminate[${i}].measure`, 'An analytic rule reads a measure design.analytic produces.')
       if (!rule.exceeds.length || rule.exceeds.some((path) => !PATH.test(path))) bad('campaign_value_invalid', `stages.analytic.eliminate[${i}].exceeds`, 'A rule names the candidate paths whose sum must reach the analytic value.')
+      // a path no candidate has would count as 0 and eliminate every candidate, reported as "nothing feasible" (review P2): refuse it here
+      const held = (/** @type {string} */ path) => Number.isFinite(Number(getPath(base, path))) || variables.some((entry) => entry.path === path) || explicit.some((entry) => Object.hasOwn(entry.set, path))
+      rule.exceeds.forEach((path, j) => { if (PATH.test(path) && !held(path)) bad('campaign_value_invalid', `stages.analytic.eliminate[${i}].exceeds[${j}]`, `"${path}" is in neither the base scenario nor the candidates.`) })
       if (!(typeof rule.tolerance === 'number' && rule.tolerance >= 0 && rule.tolerance < 0.5)) bad('campaign_value_invalid', `stages.analytic.eliminate[${i}].tolerance`, 'A tolerance is from 0 to 0.5.')
     })
   }
@@ -455,7 +459,7 @@ export function vcrCandidateScenario(manifest, candidate, truthName, stage) {
   const truth = list(manifest.space?.truths).find((entry) => entry.name === truthName)
   const info = /** @type {Record<string, any>} */ (VCR_CAMPAIGN_METHODS)[manifest.space.method]
   if (truth) scenario[info?.truthField ?? 'truth'] = clone(truth.truth)
-  if (!info?.exact && info?.precisionBlock !== false) {
+  if (!info?.exact && info?.precisionBlock !== false && vcrEvaluationAllowed(manifest.space.method, scenario)) {
     scenario.evaluation = stage === 'screening'
       ? { version: VCR_SCREENING.version, screeningReplicates: manifest.stages.screening.replicates }
       : { version: VCR_SCREENING.version }
@@ -776,7 +780,8 @@ function stageTruths(manifest, stage) {
 function objectiveOf(manifest, entry, stage) {
   const evaluation = object(entry.evaluations)[`${stage}:${manifest.objective.truth}`]
   const measure = vcrEvaluationMeasure(evaluation, manifest.objective.measure)
-  return evaluation?.state === 'succeeded' && measure ? { value: Number(measure.value), mcse: measure.mcse ?? null } : null
+  // a measure with no finite value ranks nowhere: NaN would compare false both ways and could sort first as the best
+  return evaluation?.state === 'succeeded' && measure && measure.value != null && Number.isFinite(Number(measure.value)) ? { value: Number(measure.value), mcse: measure.mcse ?? null } : null
 }
 
 /** Better first, then the space order. @param {Record<string, any>} manifest */
@@ -937,7 +942,10 @@ export function vcrCampaignAdvance(manifest, state, { identity }) {
       if (done.state !== 'succeeded') { entry.status = 'eliminated'; entry.reason = 'analytic_check_failed'; continue }
       for (const rule of manifest.stages.analytic.eliminate) {
         const needed = vcrEvaluationMeasure(done, rule.measure)
-        const total = rule.exceeds.reduce((/** @type {number} */ sum, /** @type {string} */ path) => sum + Number(getPath(vcrCandidateScenario(manifest, candidate, manifest.objective.truth, 'final'), path) ?? 0), 0)
+        const final = vcrCandidateScenario(manifest, candidate, manifest.objective.truth, 'final')
+        const parts = rule.exceeds.map((/** @type {string} */ path) => getPath(final, path))
+        // a part the candidate does not have decides nothing: the rule keeps the candidate rather than counting the part as 0
+        const total = parts.every((/** @type {any} */ part) => part != null && Number.isFinite(Number(part))) ? parts.reduce((/** @type {number} */ sum, /** @type {any} */ part) => sum + Number(part), 0) : NaN
         if (needed && Number.isFinite(total) && total < Number(needed.value) * (1 - rule.tolerance)) {
           entry.status = 'eliminated'; entry.reason = `analytic_below:${rule.measure}`; break
         }

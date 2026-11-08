@@ -41,7 +41,7 @@ import {
   VCR_ENGINE_METHODS, VCR_CAMPAIGN_METHODS, VCR_JOB_METHODS, vcrCampaignAdvance, vcrCampaignCandidates, vcrCampaignCanonical,
   vcrCampaignInitialState, vcrCampaignManifest, vcrCampaignRecord, vcrCampaignVerdict, vcrCampaignDrawKey, vcrCampaignSeed, vcrCandidateVerdicts,
   vcrDesignExperiment, vcrDesignExperimentCanonical, vcrDiseaseHypothesis, vcrEvaluationContrast, vcrEvaluationMeasure, vcrExperimentAlignment,
-  VCR_DISEASE_EXPERIMENT_ALIGNED_FIELDS,
+  VCR_DISEASE_EXPERIMENT_ALIGNED_FIELDS, vcrEvaluationAllowed,
 } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
 import { finishPremises } from "./vcrPremises.mjs";
@@ -80,6 +80,8 @@ export const VCR_CAMPAIGN_STOP_TEXT_ZH = Object.freeze({
   // what would decide it differs by constraint (more replicates, or none at all), so the one sentence here says only what happened;
   // the advice is `undecided.advice` of the campaign view, from each undecided constraint's `needed`
   inconclusive_at_precision: "没有方案被确认不满足约束，但有方案在现有复核次数下无法确定是否满足。",
+  // the study was paused, archived or deleted while the campaign ran: its next unit cannot be queued, so the campaign ends here
+  study_unavailable: "研究已暂停、归档或删除，计算已停止；已完成的方案保留。",
 });
 export const VCR_CANDIDATE_STATUS_TEXT_ZH = Object.freeze({
   pending: "待评估", screened: "已初筛", finalist: "入围复核", evaluated: "已复核", eliminated: "已排除", failed: "计算失败", unsupported: "无法计算",
@@ -199,8 +201,19 @@ export class VcrExperiments {
             issues: codes.length ? codes : [String(/** @type {any} */ (error)?.code ?? "candidate_unsupported")] });
           continue;
         }
+        const code = String(/** @type {any} */ (error)?.code ?? "");
+        if ((status === 404 && code === "vcr_study_not_found") || (status === 409 && code === "vcr_study_paused")) {
+          // the study will not take this unit now or on any later tick: stop with a closed reason instead of retrying it forever
+          await this.store.transaction(async (/** @type {any} */ client) => {
+            const held = (await client.query(`SELECT * FROM ${SCHEMA}.experiments WHERE id = $1 AND study_id = $2 FOR UPDATE`, [id, studyId])).rows[0];
+            if (!held || held.status !== "running") return;
+            await save(client, held, { ...object(held.state), inFlight: null, stop: { reason: "study_unavailable", verdict: null, at: this.now().toISOString() } }, "stopped");
+          });
+          this.counters.stopped += 1;
+          return;
+        }
         this.counters.enqueueFailed += 1;
-        this.report(String(/** @type {any} */ (error)?.code ?? "vcr_experiment_enqueue_failed"));
+        this.report(code || "vcr_experiment_enqueue_failed");
         return;
       }
       this.counters.units += 1;
@@ -364,7 +377,7 @@ export class VcrExperiments {
         const kind = Object.entries(/** @type {Record<string, string>} */ (VCR_JOB_METHODS)).find(([, method]) => method === arm.method)?.[0];
         const campaignInfo = /** @type {Record<string, any>} */ (VCR_CAMPAIGN_METHODS)[arm.method];
         const runsWithBlock = Boolean(campaignInfo) && campaignInfo.exact !== true && campaignInfo.precisionBlock !== false;
-        const scenario = runsWithBlock ? { ...arm.scenario, evaluation: { version: 1 } } : arm.scenario;
+        const scenario = runsWithBlock && vcrEvaluationAllowed(arm.method, arm.scenario) ? { ...arm.scenario, evaluation: { version: 1 } } : arm.scenario;
         // arms that draw identically share a seed, so their comparison can be paired; the engine's draw signature confirms it
         const drawKey = arm.method === "design.simulate" ? vcrCampaignDrawKey({ space: { method: arm.method, scenario: arm.scenario } }, { key: arm.name, set: {} }) : `own:${arm.name}`;
         try {

@@ -109,6 +109,10 @@ test('a campaign screens, re-checks its finalists at the floor on new streams an
   const results = await vcr.store.rows("SELECT kind, subject_id, measures FROM evimed_vcr.results WHERE subject_id LIKE $1", [`${started.id}:%`]);
   assert.equal(results.length, jobs.length);
   assert.ok(results.every((row) => row.kind === 'experiment_candidate'));
+  // candidates are filed out of the study's own result lists (review P1: a campaign pushed the real results out of the newest 200)
+  assert.ok(!(await vcr.store.results(study.id)).some((row) => row.kind === 'experiment_candidate'));
+  assert.ok(!(await vcr.store.allResults(study.id)).some((row) => row.kind === 'experiment_candidate'));
+  assert.equal((await vcr.store.results(study.id, 'experiment_candidate')).length, results.length);
   const screenRows = results.filter((row) => row.subject_id.includes(':screening:'));
   assert.ok(screenRows.every((row) => row.measures.every((m) => m.precision === 'screening')), 'a screening number is labelled');
   assert.ok(results.filter((row) => row.subject_id.includes(':final:')).every((row) => row.measures.every((m) => m.precision === undefined)));
@@ -251,6 +255,25 @@ test('a unit cancelled from outside, or the study stopped, stops the campaign an
   const stopped = await experiments.view(study, decided.id);
   assert.equal(stopped.stop?.reason, 'user_cancellation');
   assert.equal(submitted - before, 0, 'the decided unit was never started');
+});
+
+test('a campaign whose study was paused under it stops with its own reason instead of retrying the unit forever', options, async () => {
+  const held = await experiments.startCampaign(study, manifest({ question: 'paused under it' }), { userId: origin.userId });
+  const queued = (await vcr.store.one('SELECT state FROM evimed_vcr.experiments WHERE id = $1', [held.id])).state.inFlight.jobId;
+  // the unit was decided and its job lost; the study is paused before the campaign queues it again
+  await vcr.store.query(`UPDATE evimed_vcr.jobs SET state = 'canceled', finished_at = now() WHERE id = $1`, [queued]);
+  await vcr.store.query(`UPDATE evimed_vcr.experiments SET state = jsonb_set(state, '{inFlight,jobId}', 'null'::jsonb) WHERE id = $1`, [held.id]);
+  const status = (await vcr.store.one('SELECT status FROM evimed_vcr.studies WHERE id = $1', [study.id])).status;
+  await vcr.store.query(`UPDATE evimed_vcr.studies SET status = 'paused' WHERE id = $1`, [study.id]);
+  try {
+    await experiments.repair();
+    const view = await experiments.view(study, held.id);
+    assert.equal(view.status, 'stopped');
+    assert.equal(view.stop?.reason, 'study_unavailable');
+    assert.match(view.stop?.text ?? '', /暂停/);
+  } finally {
+    await vcr.store.query(`UPDATE evimed_vcr.studies SET status = $2 WHERE id = $1`, [study.id, status]);
+  }
 });
 
 test('a comparison asked for a measure the designs do not carry says so, keeps the others, and the list reads the experiment\'s own status (D13, D12)', options, async () => {

@@ -2338,6 +2338,7 @@ export {
   VCR_TWO_ARM_ANALYSIS_METHODS,
   validateScenario,
   vcrAppliedDefaults,
+  vcrEvaluationAllowed,
   vcrNoClosedFormFields,
   vcrNullTruth,
   whenHolds,

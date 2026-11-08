@@ -2409,7 +2409,7 @@ async function loadPoolJob(store, study, jobId, parameter) {
   const about = object(object(row.checkpoint).parameter ? row.checkpoint : {});
   if (parameter && about.parameter && about.parameter !== parameter) return { error: `这个作业合并的是「${about.parameter}」，不是「${parameter}」。` };
   const execution = await store.one("SELECT id FROM evimed_vcr.executions WHERE job_id = $1 ORDER BY created_at DESC LIMIT 1", [jobId]);
-  const result = execution ? (await store.allResults(study.id)).find((/** @type {any} */ entry) => entry.executionId === String(execution.id)) ?? null : null;
+  const result = execution ? await store.resultForExecution(study.id, String(execution.id)) : null;
   if (!result) return { error: "这个作业没有留下结果。" };
   return { result, evidenceIds: list(object(row.scenario).studies).map((/** @type {any} */ entry) => String(entry?.studyId ?? "")).filter(Boolean) };
 }
@@ -2919,7 +2919,7 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
             ? await vcr.store.one("SELECT id FROM evimed_vcr.executions WHERE job_id = $1 ORDER BY created_at DESC LIMIT 1", [job.id])
             : null;
           const result = execution
-            ? (await vcr.store.allResults(study.id)).find((/** @type {any} */ row) => row.executionId === String(execution.id)) ?? null
+            ? await vcr.store.resultForExecution(study.id, String(execution.id))
             : null;
           const pooling = result && job.method === "evidence.pool"
             ? poolingSummary(result, object(await vcr.store.one("SELECT checkpoint FROM evimed_vcr.jobs WHERE id = $1", [job.id]).then((/** @type {any} */ row) => row?.checkpoint))) : null;
