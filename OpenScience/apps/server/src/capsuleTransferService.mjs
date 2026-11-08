@@ -294,6 +294,16 @@ async function exportableMethods(client, userId, rows) {
   return marked.size ? rows.filter((row) => !marked.has(row.payload?.provenance?.runId)) : rows;
 }
 
+/**
+ * A capsule fact the person stated or wrote themselves (origin `explicit` or `manual`) and that carries no privacy of its own is
+ * ordinary: the sender's default and the recipient's mount must agree on it, and a person, an inferred note and anything with no
+ * provable origin stay as `sourcePrivacyOf` reads them. @param {any} payload
+ */
+function ownStatement(payload) {
+  if (payload?.sourcePrivacy || !["explicit", "manual"].includes(payload?.origin)) return payload;
+  return { ...payload, sourcePrivacy: { schemaVersion: 1, classification: "ordinary", reasons: ["own-statement"] } };
+}
+
 function receivedSourcePrivacy(entry,preview) {
   if(preview.sourceAttestation==='hosted-exact-snapshot'&&entry.sourcePrivacy?.schemaVersion===1)return sourcePrivacyOf(entry);
   return sourcePrivacyOf({sourcePrivacy:{schemaVersion:1,classification:'unclassified'},originalSources:[entry]});
@@ -454,7 +464,11 @@ export class CapsuleTransferService {
       const workstyle = [
         ...facts.rows.filter((row) => !privateByDefault(row.payload) && row.payload.sensitive !== true).map((row) => ({ ...row, entryId: `fact:${row.id}` })),
         ...methods.rows.map((row) => ({ id: row.id, entryId: `method:${row.id}`, revision: row.revision, payload: {
-          factKind: "method_preference", origin: "system", content: learnedMethodText(row.payload) } })),
+          // A learned method is distilled by the platform from the researcher's own runs, and distillation refuses a run that was handed
+          // anything but ordinary memory (`methodSourceAllowsLearning`): the method is ordinary by construction, which is what lets a
+          // hosted delivery attest it and a recipient mount it.
+          factKind: "method_preference", origin: "system", content: learnedMethodText(row.payload),
+          sourcePrivacy: { schemaVersion: 1, classification: "ordinary", reasons: ["own-method"] } } })),
         ...selectedNative.filter((row) => !KNOWLEDGE.includes(row.payload.factKind)).map((row) => ({ ...row, entryId: `native:${row.id}` })),
       ];
       const knowledge = selectedNative.filter((row) => KNOWLEDGE.includes(row.payload.factKind)).map((row) => ({ ...row, entryId: `native:${row.id}` }));
@@ -531,7 +545,7 @@ export class CapsuleTransferService {
     // a `preference` for sharing its directory's name.
     const eligible = records.filter((row) => (["people", "notes"].includes(row.nativeType) || !PROJECT_MEMORY_TYPES.includes(row.nativeType) || (row.scope === "project" && Boolean(row.scopeId)))
       && kinds.includes(row.kind) && row.status === "active" && !row.share
-      && CAPSULE_FACT_ORIGINS.includes(row.origin) && ["user", "project"].includes(row.scope)
+      && CAPSULE_FACT_ORIGINS.includes(row.origin) && !["inferred", "assistant", "document", "opinion"].includes(row.origin) && ["user", "project"].includes(row.scope)
       && row.kind === PAGE_KIND_OF_TYPE[row.nativeType] && row.version === versionOfHash(row.contentHash));
     const facts = eligible.filter((row) => !row.sensitive)
       .map((row) => {
@@ -751,7 +765,7 @@ export class CapsuleTransferService {
       const id = randomUUID(); const place = location(fact.payload.factKind); const content = checkedText(fact.payload.content);
       return { id, version: fact.revision, factKind: fact.payload.factKind, layer: place.layer, content, sha256: digest(content), path: place.path ?? `methods/${id}/SKILL.md`,
         origin: CAPSULE_FACT_ORIGINS.includes(fact.payload.origin) ? fact.payload.origin : "unknown",
-        attribution:fact.payload.attribution??{schemaVersion:1,origins:[fact.payload.origin??"unknown"],confirmed:false},sourcePrivacy:sourcePrivacyOf(fact.payload) };
+        attribution:fact.payload.attribution??{schemaVersion:1,origins:[fact.payload.origin??"unknown"],confirmed:false},sourcePrivacy:sourcePrivacyOf(ownStatement(fact.payload)) };
     });
     const card = await this.#card(userId, entries, previous, input.card);
     const files = renderedFiles(snapshotId, entries);

@@ -1540,7 +1540,10 @@ export class NativeMemoryStore {
       const record = (/** @type {Record<string, any>} */ over) => ({
         scope: base.scope, scopeId: base.scopeId, kind, origin: "unknown", status: "archived", confidence: null, importance: 0.5, sensitive: false, evidenceCount: 0,
         createdAt: revision.changedAt, updatedAt: revision.changedAt, lastConfirmedAt: revision.changedAt, expiresAt: null, supersededBy: null, invalidSince: null, validFrom: null,
-        evidence: [], revisions: [], nativeType: place.type, uri: revision.uri, forgottenRevision: revision.id, ...(actOf(revision.reason) ? { act: actOf(revision.reason) } : {}), ...over,
+        evidence: [], revisions: [], nativeType: place.type, uri: revision.uri, forgottenRevision: revision.id,
+        // What the owner (the page, the key or the conversation's forget tool) took out of their own memory is theirs to see and undo; a people
+        // file stays private by its type and a shared namespace's lines are never marked as the owner's.
+        sourcePrivacy: sourcePrivacyOf({ nativeType: place.type, sourcePrivacy: ['user', 'conversation'].includes(revision.actor) && context.kind !== 'geo-project' ? { schemaVersion: 1, classification: 'ordinary', reasons: ['own-forget'] } : undefined }), ...(actOf(revision.reason) ? { act: actOf(revision.reason) } : {}), ...over,
       });
       if (revision.change === "deleted") {
         if (live.has(revision.uri)) continue;

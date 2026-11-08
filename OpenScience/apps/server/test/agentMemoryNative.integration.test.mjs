@@ -351,13 +351,19 @@ const fixture = async (t) => {
   const key = (await minted.json()).data;
   const bearer = { "content-type": "application/json", authorization: `Bearer ${key.key ?? key.token ?? key.secret}` };
   return { app, base, bearer, user, stub, sessions, engineUser: sessions.engineUser(user.id),
-    seed: (/** @type {string} */ rel, /** @type {string} */ text, /** @type {any} */ extra) => stub.seedMemory(sessions.engineUser(user.id), rel, text, extra) };
+    // A file with no provable origin is private by default; these are the person's own words, as the memory page writes them: a
+    // revision of the person's own edit is the origin the platform can prove.
+    seed: async (/** @type {string} */ rel, /** @type {string} */ text, /** @type {any} */ extra) => {
+      const uri = stub.seedMemory(sessions.engineUser(user.id), rel, text, extra);
+      await app.nativeMemory.overlay.addRevision({ userId: user.id, uri, memoryType: extra?.type ?? 'preferences', change: 'updated', actor: 'user', before: '', after: text, projectId: null });
+      return uri;
+    } };
 };
 
 test("a key reads the engine's files as records and as a recall", options, async (t) => {
   const { base, bearer, seed } = await fixture(t);
-  seed("preferences/citation.md", "Use AMA citations for every reference.", { type: "preferences" });
-  seed("preferences/units.md", "Metric units only.", { type: "preferences" });
+  await seed("preferences/citation.md", "Use AMA citations for every reference.", { type: "preferences" });
+  await seed("preferences/units.md", "Metric units only.", { type: "preferences" });
 
   const listed = await fetch(`${base}${API}/records`, { headers: bearer });
   assert.equal(listed.status, 200);
@@ -373,7 +379,7 @@ test("a key reads the engine's files as records and as a recall", options, async
 
 test("a forget through the key removes the file from the engine, and the undo it names puts the file back", options, async (t) => {
   const { base, bearer, user, sessions, seed } = await fixture(t);
-  const uri = seed("preferences/citation.md", "Use AMA citations for every reference.", { type: "preferences" });
+  const uri = await seed("preferences/citation.md", "Use AMA citations for every reference.", { type: "preferences" });
   const [record] = (await (await fetch(`${base}${API}/records`, { headers: bearer })).json()).data;
 
   const forgotten = await fetch(`${base}${API}/records/${encodeURIComponent(record.id)}/forget`, { method: "POST", headers: bearer, body: JSON.stringify({ expectedVersion: record.version }) });

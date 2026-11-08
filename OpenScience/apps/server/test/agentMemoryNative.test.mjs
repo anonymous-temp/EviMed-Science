@@ -30,7 +30,7 @@ function request(path, body = undefined, method = body === undefined ? "GET" : "
 const nativeRecord = (overrides = {}) => ({
   id: "nm_0123456789abcdef01234567", scope: "user", scopeId: "", kind: "preference", key: "preferences/self/引用格式.md", value: "<!-- MEMORY_FIELDS {} -->\n- 参考文献一律用 AMA 格式。",
   summary: "引用格式", origin: "explicit", status: "active", confidence: 1, importance: 0.5, sensitive: false, version: 77, revisions: [],
-  createdAt: "2026-10-20T00:00:00Z", updatedAt: "2026-10-21T00:00:00Z", nativeType: "preferences", ...overrides,
+  createdAt: "2026-10-20T00:00:00Z", updatedAt: "2026-10-21T00:00:00Z", nativeType: "preferences", sourcePrivacy: { schemaVersion: 1, classification: "ordinary", reasons: ["own-conversation"] }, ...overrides,
 });
 
 /**

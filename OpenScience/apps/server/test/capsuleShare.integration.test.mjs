@@ -368,7 +368,7 @@ test("an archive that carries anything but the declared text entries is refused 
   const entry = { id: randomUUID(), version: 1, factKind: "method_preference", layer: "methods", content: entries[0].payload.content, path: "", origin: "explicit" };
   entry.path = `methods/${entry.id}/SKILL.md`;
   entry.sha256 = (await import("node:crypto")).createHash("sha256").update(entry.content).digest("hex");
-  const files = renderCapsuleTransferFiles(snapshotId, [entry]);
+  const files = renderCapsuleTransferFiles(snapshotId, [entry], 1);
   /** @param {{ path: string, mime: string, content: string }[]} extra */
   const archive = async (extra) => {
     const container = await packCapsule({ capsuleId: snapshotId, version: 1, createdAt: new Date().toISOString(),

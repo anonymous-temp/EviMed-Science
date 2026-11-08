@@ -28,9 +28,10 @@ function fixture({ unavailable = false, foreign = false, many = false, extra = [
     read: async (_user, uri) => held.find(([name]) => `${root}/${name}` === uri)?.[1],
   };
   const overlay = { configured: true, files: async () => new Map([[`${root}/project_facts/sensitive.md`, { sensitive: true }]]),
-    revisionsOfMany: async () => new Map([[`${root}/preferences/writing.md`, [{ actor: "user", change: "updated", changedAt: "2026-10-21", before: "Old preference", after: "Keep result tables concise." }]]]), sources: async () => [],
+    // Every held file was written by the person on the memory page (the origin the platform can prove); a file with none is private by default.
+    revisionsOfMany: async (_owner, uris) => new Map(uris.map((uri) => [uri, [{ actor: "user", change: "updated", changedAt: "2026-10-21", before: uri.endsWith("preferences/writing.md") ? "Old preference" : "", after: held.find(([name]) => `${root}/${name}` === uri)?.[1] ?? "" }]])), sources: async () => [],
     // The lines the person forgot or deleted, which no earlier version shows (the real overlay's read; this account has forgotten none).
-    forgottenLines: async () => [] };
+    forgottenLines: async () => [], attributionCommits: async () => new Map() };
   const nativeMemory = new NativeMemoryStore({ sessions, overlay });
   const reads = [];
   const client = { query: async (sql) => {
@@ -52,7 +53,7 @@ test("native selected export uses full authoritative bodies, manual origin and e
   const { service, body, reads } = fixture();
   const defaults = await service.exportPreview(userId, "own-capsule");
   assert.deepEqual(defaults.entries.map(({ content }) => content), ["Keep result tables concise."]);
-  assert.equal(defaults.entries[0].origin, "explicit");
+  assert.equal(defaults.entries[0].origin, "manual");
   const full = await service.exportPreview(userId, "own-capsule", { scopes: ["workstyle", "+profile", "+knowledge"] });
   assert.equal(full.entries.length, 3);
   assert.ok(full.entries.some(({ content }) => content === body));
@@ -83,7 +84,7 @@ test("native export excludes inferred, borrowed, retired and conversation record
     const records = nativeMemory.records.bind(nativeMemory);
     nativeMemory.records = async (...args) => (await records(...args)).map((row) => ({ ...row, ...refused }));
     const preview = await service.exportPreview(userId, "own-capsule", { scopes: ["workstyle", "+profile", "+knowledge"] });
-    assert.equal(preview.empty, true);
+    assert.equal(preview.empty, true, JSON.stringify(refused));
   }
 });
 
