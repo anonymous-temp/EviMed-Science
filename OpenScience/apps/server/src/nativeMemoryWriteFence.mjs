@@ -64,6 +64,20 @@ export async function withNativeMemoryWrite(database, userId, operation, { exclu
     if (current.lost) throw busy();
     return operation();
   }
+  // Inside a caller's transaction (a prompt admission or a runtime start holds one for its whole length, on one pooled connection) a lease
+  // would need a second connection, and with the pool taken by such callers nothing could ever be admitted. A shared writer there only
+  // looks for a live exclusive lease on the caller's own client; the cleanup's idleness check and the admission's own look at the lease
+  // keep the two apart, and an exclusive request always takes a real lease.
+  let scoped = null;
+  try { scoped = typeof database.transactionScope === 'function' ? database.transactionScope() : null; } catch { scoped = null; }
+  if (scoped && !exclusive) {
+    const present = await database.query("SELECT to_regclass('evimed_memory.native_writer_leases') IS NOT NULL AS present");
+    if (present.rows[0]?.present) {
+      const cleaning = await database.query("SELECT 1 FROM evimed_memory.native_writer_leases WHERE user_id=$1 AND kind='exclusive' AND expires_at>clock_timestamp() LIMIT 1", [userId]);
+      if (cleaning.rows.length) throw busy();
+    }
+    return operation();
+  }
   const leaseId = randomUUID();
   await admit(database, userId, kind, leaseId, leaseMs);
   /** @type {Lease} */
