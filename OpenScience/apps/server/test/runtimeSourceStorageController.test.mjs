@@ -118,7 +118,7 @@ test('a runtime start never scans Docker unless a maintenance ended abnormally, 
   const service = createSourceStorageController(f.config, {
     inspectImage: async () => ({ imageId: 'sha256:pinned', kernelVersion: 'test-pin', kernel: 'dsh' }), runtimeStatus: async () => ({ state: 'missing' }),
     dockerRun: async (...args) => { scans.push(args); return docker(...args); },
-    execute: async input => { if (failHelper) throw new Error('helper died'); return { root, sessions: [root] }; },
+    execute: async _input => { if (failHelper) throw new Error('helper died'); return { root, sessions: [root] }; },
   });
   await service.beforeStart(f.project);
   assert.equal(scans.length, 0, 'no maintenance happened: no scan');

@@ -83,7 +83,8 @@ export function sourceStorageHelperPlan(config, image, paths, operation, project
   args.push('--entrypoint=node', image.imageId, '--input-type=module', '--eval', sourceStorageHelperProgram());
   return { command: config.runtimeContainerBin, args };
 }
-async function executeHelper(config, input, onAbnormal = () => {}) {
+/** @param {any} config @param {any} input @param {(project: any) => void} [onAbnormal] */
+async function executeHelper(config, input, onAbnormal = (_project) => {}) {
   assertDockerDataVolumeSupport(config);
   const plan = sourceStorageHelperPlan(config, input.image, input.paths, input.operation, input.project);
   return new Promise((resolve, reject) => {
