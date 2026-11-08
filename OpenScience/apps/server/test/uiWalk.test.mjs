@@ -2191,7 +2191,7 @@ test("the new-skill mode is a section of the main area that takes focus, names a
   assert.equal(read(main(form), { search: "?compose=create" }).focused, false);
   assert.equal(read(main(form)).address, null);
   const drawn = node("div", { attrs: { role: "dialog" } }, [form]);
-  const inDialog = read(node("body", {}, [node("main", {}, [node("h1", { text: "插件与技能" })]), drawn]), { search: "?compose=create" });
+  const inDialog = read(node("body", {}, [node("main", {}, [node("h1", { text: "技能与插件" })]), drawn]), { search: "?compose=create" });
   assert.equal(inDialog.inMain, false);
   assert.equal(inDialog.dialogs, 1);
   assert.equal(inDialog.title, false);
@@ -2200,7 +2200,7 @@ test("the new-skill mode is a section of the main area that takes focus, names a
   assert.deepEqual(read(node("body", {}, [node("main", {}, []), node("div", { attrs: { role: "dialog" } }, [node("p", { text: "x" })])])), { section: false, dialogs: 1, address: null });
 
   const add = node("button", { text: "添加技能" });
-  const listPage = node("body", {}, [node("main", {}, [node("h1", { text: "插件与技能" }), add])]);
+  const listPage = node("body", {}, [node("main", {}, [node("h1", { text: "技能与插件" }), add])]);
   assert.deepEqual(inPage(listPage, () => skillReturnProbe(), { focus: add }), { left: true, address: null, list: true, focusReturned: true, confirming: false });
   assert.deepEqual(inPage(listPage, () => skillReturnProbe()), { left: true, address: null, list: true, focusReturned: false, confirming: false });
   const stillThere = inPage(node("body", {}, [node("main", {}, [node("h1", { text: "新建技能" }), form])]), () => skillReturnProbe(), { search: "?compose=create" });

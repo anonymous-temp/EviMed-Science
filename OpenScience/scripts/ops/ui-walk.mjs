@@ -3096,7 +3096,8 @@ export function skillReturnProbe() {
   return {
     left: ![...document.querySelectorAll("section[aria-label='新建技能']")].some(visible),
     address: new URLSearchParams(location.search).get("compose"),
-    list: Boolean(add) && [...document.querySelectorAll("h1")].some((el) => visible(el) && words(el) === "插件与技能"),
+    // the page is titled 技能与插件 since the November 8 navigation (the plugin market retired, management under 设置)
+    list: Boolean(add) && [...document.querySelectorAll("h1")].some((el) => visible(el) && words(el) === "技能与插件"),
     focusReturned: Boolean(add && active === add),
     confirming: [...document.querySelectorAll("[role='dialog']")].some(visible),
   };
@@ -5300,7 +5301,8 @@ export async function nativeSurfaceProbe() {
   // while the control was there ("思考强度，当前：高"). Wait for it, bounded, inside the page.
   const findSeat = () => [...document.querySelectorAll("button[aria-label]")].map((el) => el.getAttribute("aria-label") ?? "").find((label) => label.includes("思考强度") || /model|模型/i.test(label));
   let seat = findSeat();
-  for (let waited = 0; !seat && waited < 15_000; waited += 500) { await new Promise((resolve) => setTimeout(resolve, 500)); seat = findSeat(); }
+  // a new conversation draws the seat once its session's model list is in: about 30 s on production (2026-11-06/08), so the bound is 45 s
+  for (let waited = 0; !seat && waited < 45_000; waited += 500) { await new Promise((resolve) => setTimeout(resolve, 500)); seat = findSeat(); }
   read.effort = seat ?? null;
   try {
     const entry = /** @type {any} */ (globalThis).__DSH_BOOT__?.entries?.find((/** @type {any} */ item) => item?.id === "@deepseek-ai/dsh-client-ui-sidebar-documentpreview");
