@@ -342,6 +342,21 @@ const PROJECT_EXTRA_TYPES = Object.freeze(["decisions", "project_facts", "follow
 const PROJECT_EXTRA_LINES = 6;
 const PROJECT_EXTRA_LINE_CHARS = 160;
 
+
+/**
+ * The producer of a record's source privacy (plan §3.4): nothing else sets `sourcePrivacy` on a native file. A `people` file is
+ * private (decided by `sourcePrivacyOf` itself from the type). A line the engine extracted from the owner's own conversation, that
+ * the owner wrote or confirmed on the memory page, or that came in through the person's own import is ordinary; a shared GEO
+ * namespace (other members' words), a sensitive file and any line with no provable origin stay unclassified.
+ * @param {any} file @param {string[]} origins the producers of the statement(s): engine, manual, imported, unknown
+ * @returns {{ schemaVersion: 1, classification: 'ordinary', reasons: string[] } | undefined}
+ */
+function ownerSourcePrivacy(file, origins) {
+  if (file.namespaceId || file.sensitive === true) return undefined;
+  if (!origins.length || !origins.every(origin => ['engine', 'manual', 'imported'].includes(origin))) return undefined;
+  return { schemaVersion: 1, classification: 'ordinary', reasons: [origins.includes('imported') ? 'own-import' : origins.includes('manual') ? 'own-edit' : 'own-conversation'] };
+}
+
 /**
  * One row for each of the project's decisions, working facts and open items: the lines of its files, the most recently changed file first,
  * each cut short, six at most to a row. A project with none has no row.
@@ -597,7 +612,7 @@ export class NativeMemoryStore {
     });
     const distinct=[...new Set(kinds.length?kinds:['unknown'])];
     return {origin:distinct.length===1?distinct[0]:'mixed',confidence:null,lastConfirmedAt:null,
-      attribution:{schemaVersion:1,origins:distinct,confirmed:false},sourcePrivacy:sourcePrivacyOf({nativeType:file.type,sourcePrivacy:file.sourcePrivacy})};
+      attribution:{schemaVersion:1,origins:distinct,confirmed:false},sourcePrivacy:sourcePrivacyOf({nativeType:file.type,sourcePrivacy:file.sourcePrivacy??ownerSourcePrivacy(file,distinct)})};
   }
 
   /**
