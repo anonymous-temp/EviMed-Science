@@ -100,9 +100,10 @@ export interface CapsuleCard { title?: string; author?: string; summary?: string
  * sender unticks it by and whether it is `included`; `excluded` says, one plain sentence per reason, what the rules keep out of the
  * pack (the assistant's notes nobody confirmed, what a document yielded, what is marked sensitive, what was shared with the person).
  */
+export interface PrivateMemorySelection { id: string; sha256: string }
 export interface CapsuleExportPreview {
   scopes: string[]; empty: boolean; tooMany: boolean; card: CapsuleCard | null;
-  entries: Array<{ id?: string; included?: boolean; factKind: string; layer: string; origin: string; content: string }>;
+  entries: Array<{ id?: string; included?: boolean; requiresSelection?: boolean; sha256?: string; factKind: string; layer: string; origin: string; content: string }>;
   excluded?: Array<{ reason: string; count: number; text: string }>;
 }
 /** The automatic scan a shared pack passes before it can take effect (capsuleScan.mjs). */
@@ -130,14 +131,14 @@ export function listCapsuleExports(id: string, cursor?: string | null) {
  * delivery names them, opened by them without a password), or both. `reached` says how many of the names the file was sealed for.
  * `excludeEntryIds` are the entries the sender unticked in the preview.
  */
-export interface CapsuleExportInput { password?: string; recipientNames?: string[]; scopes: string[]; supersedes?: string; card?: CapsuleCard; excludeEntryIds?: string[] }
+export interface CapsuleExportInput { password?: string; recipientNames?: string[]; scopes: string[]; supersedes?: string; card?: CapsuleCard; excludeEntryIds?: string[]; includePrivateEntries?: PrivateMemorySelection[] }
 export function exportCapsule(id: string, input: CapsuleExportInput) {
   return productRequest<{ archive: string; filename: string; snapshot: CapsuleExportSnapshot; reached?: { requested: number; sealed: number } }>(`/capsules/${encodeURIComponent(id)}/exports`, "POST", input);
 }
 export function revokeCapsuleExport(id: string, snapshot: CapsuleExportSnapshot) {
   return productRequest<CapsuleExportSnapshot>(`/capsules/${encodeURIComponent(id)}/exports/${encodeURIComponent(snapshot.id)}`, "DELETE", { expectedRevision: snapshot.revision });
 }
-export function previewCapsuleExport(id: string, input: { scopes: string[]; excludeEntryIds?: string[] }) {
+export function previewCapsuleExport(id: string, input: { scopes: string[]; excludeEntryIds?: string[]; includePrivateEntries?: PrivateMemorySelection[] }) {
   return productRequest<CapsuleExportPreview>(`/capsules/${encodeURIComponent(id)}/exports/preview`, "POST", input);
 }
 export function previewCapsuleImport(input: { archive: string; password?: string }) {

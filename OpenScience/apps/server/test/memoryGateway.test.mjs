@@ -135,17 +135,19 @@ test("only the person's and the assistant's own text reaches the engine: platfor
   await post({ role: "assistant", parts: [{ type: "tool", tool_name: "mcp__evimed__kb_search", tool_input: { query: "y" } }] });
   // 5. a mid-run correction keeps the words and loses the wrapper
   await post({ role: "user", content: "<evimed-correction>不对，主要终点是大出血，不是死亡</evimed-correction>" });
-  // 6. identifier shapes are masked at the door
-  await post({ role: "user", content: "我的手机号是 13800138000，以后周报周四发。" });
+  // 6. useful contacts stay; government IDs and assigned secrets are still masked at the door.
+  await post({ role: "user", content: "我的手机号是 13800138000，邮箱 contact@example.org，以后周报周四发。" });
+  await post({ role: "user", content: "身份证 110101199001011237，password: secret123" });
   const forwarded = stub.sent("POST", `/api/v1/sessions/${SESSION}/messages`).map((request) => request.body);
   assert.deepEqual(forwarded, [
     { role: "user", parts: [{ type: "text", text: "以后回答先给结论再给依据。" }], created_at: "2026-10-13T01:00:00.000Z" },
     { role: "user", parts: [{ type: "text", text: "不对，主要终点是大出血，不是死亡" }] },
-    { role: "user", parts: [{ type: "text", text: "我的手机号是 [已省略]，以后周报周四发。" }] },
+    { role: "user", parts: [{ type: "text", text: "我的手机号是 13800138000，邮箱 contact@example.org，以后周报周四发。" }] },
+    { role: "user", parts: [{ type: "text", text: "身份证 [已省略]，password: [已省略]" }] },
   ]);
   const counters = nativeMemoryCounters();
   assert.deepEqual({ forwarded: counters.messages.forwarded, platform: counters.messages.platform_context, noText: counters.messages.no_text, masked: counters.masked.messages },
-    { forwarded: 3, platform: 2, noText: 1, masked: 1 });
+    { forwarded: 4, platform: 2, noText: 1, masked: 1 });
   const invalid = await post({ role: "system", content: "x" });
   assert.equal(invalid.status, 400);
   assert.equal(invalid.json.error.code, "memory_gateway_body_invalid");
@@ -350,11 +352,11 @@ test("remember passes the same door as a captured message and its commit enters 
   const overlay = { configured: true, account: async () => ({ registeredAt: "x" }), noteRegistered: async () => {}, recordCommit: async (commit) => { recorded.push(commit); }, sensitiveUris: async () => [] };
   const { stub, mcp } = await fixture(t, { overlay });
   const answer = await mcp({ jsonrpc: "2.0", id: 6, method: "tools/call", params: { name: "remember", arguments: { messages: [
-    { role: "user", content: "记住：图纸尺寸单位一律用毫米，联系电话 13900139000。" },
+    { role: "user", content: "记住：图纸尺寸单位一律用毫米，联系电话 13900139000，邮箱 drawings@example.org，身份证 110101199001011237。" },
     { role: "user", content: "<evimed-brief>平台简报</evimed-brief>" },
   ] } } });
   assert.match(answer.messages[0].result.content[0].text, /Submitted 1 message/);
-  assert.deepEqual(stub.sent("POST", "/mcp").at(-1).body.params.arguments.messages, [{ role: "user", content: "记住：图纸尺寸单位一律用毫米，联系电话 [已省略]。" }]);
+  assert.deepEqual(stub.sent("POST", "/mcp").at(-1).body.params.arguments.messages, [{ role: "user", content: "记住：图纸尺寸单位一律用毫米，联系电话 13900139000，邮箱 drawings@example.org，身份证 [已省略]。" }]);
   assert.equal(recorded.length, 1);
   assert.equal(recorded[0].origin, "tool");
   assert.match(recorded[0].archiveUri, new RegExp(`^${ROOT}/sessions/mcp-store-[0-9]+/history/archive_001$`));
@@ -849,3 +851,82 @@ test("a search of the engine over-fetches when other projects' files are hidden,
   await wide.call("POST", "/api/v1/search/search", { query: "项目简介", limit: 20 });
   assert.deepEqual(wideAsked, [80]);
 });
+
+for (const [content, safe] of [
+  ["密码是甲乙丙", "密码是[已省略]"],
+  ["password: !", "password: [已省略]"],
+  ["验证码是：123456", "验证码是：[已省略]"],
+  ["验证码: A1B2C3", "验证码: [已省略]"],
+]) {
+  test(`captured structured secret is redacted before the engine receives it: ${safe}`, async (t) => {
+    for (const role of ["user", "assistant"]) {
+      assert.deepEqual(filterCapturedMessage({ role, content }), {
+        forward: { role, parts: [{ type: "text", text: safe }] }, masked: true,
+      });
+    }
+    const { stub, call } = await fixture(t);
+    await call("POST", "/api/v1/sessions", { session_id: SESSION });
+    const response = await call("POST", `/api/v1/sessions/${SESSION}/messages`, { role: "user", content });
+    assert.equal(response.status, 200);
+    assert.deepEqual(stub.sent("POST", `/api/v1/sessions/${SESSION}/messages`).map((request) => request.body), [
+      { role: "user", parts: [{ type: "text", text: safe }] },
+    ]);
+  });
+}
+
+for (const [content, safe] of [
+  ["password: ab;cD9!", "password: [已省略]"],
+  ["password: ab,cD9!", "password: [已省略]"],
+  ["password: 'ab;c D9!'", "password: [已省略]"],
+  ['password: "ab,c D9!"', "password: [已省略]"],
+  ["密码是“甲;乙 丙!”", "密码是[已省略]"],
+  ["password: ab;cD9!, then run it", "password: [已省略], then run it"],
+  ["password: ab,cD9!; then run it", "password: [已省略]; then run it"],
+  ["password: !, then run it", "password: [已省略], then run it"],
+]) {
+  test(`captured punctuation-bearing secret reaches the engine fully redacted: ${content}`, async (t) => {
+    for (const role of ["user", "assistant"]) {
+      assert.deepEqual(filterCapturedMessage({ role, content }), {
+        forward: { role, parts: [{ type: "text", text: safe }] }, masked: true,
+      });
+    }
+    const { stub, call } = await fixture(t);
+    await call("POST", "/api/v1/sessions", { session_id: SESSION });
+    const response = await call("POST", `/api/v1/sessions/${SESSION}/messages`, { role: "user", content });
+    assert.equal(response.status, 200);
+    assert.deepEqual(stub.sent("POST", `/api/v1/sessions/${SESSION}/messages`).map((request) => request.body), [
+      { role: "user", parts: [{ type: "text", text: safe }] },
+    ]);
+  });
+}
+
+test("secret grammar leaves useful medical values and contacts unchanged", () => {
+  for (const content of [
+    "HbA1c 8.2%, metformin 500 mg; review on 2026-12-01",
+    "eGFR 38 mL/min/1.73m²，电话 13800138000，邮箱 anna@example.com",
+  ]) {
+    assert.deepEqual(filterCapturedMessage({ role: "user", content }), {
+      forward: { role: "user", parts: [{ type: "text", text: content }] }, masked: false,
+    });
+  }
+});
+
+for (const [content, safe] of [
+  [String.raw`password: "ab\" cD9!"`, "password: [已省略]"],
+  [String.raw`password: 'ab\' cD9!'`, "password: [已省略]"],
+  ['password: "ab cD9!', "password: [已省略]"],
+  ['password: "ab\ncD9!"', "password: [已省略]"],
+  [String.raw`password: "ab\" cD9!", then proceed`, "password: [已省略], then proceed"],
+]) {
+  test(`captured quoted secret has no suffix at the engine: ${JSON.stringify(content)}`, async (t) => {
+    assert.deepEqual(filterCapturedMessage({ role: "user", content }), {
+      forward: { role: "user", parts: [{ type: "text", text: safe }] }, masked: true,
+    });
+    const { stub, call } = await fixture(t);
+    await call("POST", "/api/v1/sessions", { session_id: SESSION });
+    assert.equal((await call("POST", `/api/v1/sessions/${SESSION}/messages`, { role: "user", content })).status, 200);
+    assert.deepEqual(stub.sent("POST", `/api/v1/sessions/${SESSION}/messages`).map((request) => request.body), [
+      { role: "user", parts: [{ type: "text", text: safe }] },
+    ]);
+  });
+}

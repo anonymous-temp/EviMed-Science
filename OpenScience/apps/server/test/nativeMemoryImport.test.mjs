@@ -106,3 +106,15 @@ test("offers sent at once cannot all pass the hourly count, and two confirms at 
   assert.deepEqual(handed, [["回答尽量简短"]], "handed over once");
 });
 
+
+test("new imports classify own health, people and contact details as ordinary while retaining attribution", () => {
+  const prompt = importRequestBody("test-model", []).messages[0].content;
+  assert.match(prompt, /health.*ordinary/is);
+  assert.match(prompt, /people.*ordinary/is);
+  assert.doesNotMatch(prompt, /personal data of anyone else|their own health.*`on_request`/);
+  assert.match(prompt, /attribution/i);
+  const source = ["我对青霉素过敏", "我姐姐 Anna 是护士，邮箱 anna@example.com，电话 13800138000", "资料里写 HbA1c 8.2%"];
+  assert.deepEqual(parseImport(answer(source.map((text, index) => ({ line: index + 1, text, tier: "ordinary" }))), source), {
+    offered: source.map((text) => ({ text, tier: "ordinary" })), leftOut: 0,
+  });
+});

@@ -2,8 +2,8 @@
   "id": "c23-tool-result-narrated",
   "class": "refuse-tool-result-narrated",
   "observedIn": "written for the memory-capsule rectification on 2026-10-23 (research G §6, C23); every name, number and identifier is invented",
-  "expected": "Nothing is written: a version the assistant read from a web page is not a fact about the person, and asking about Node.js does not make them a Node.js user.",
-  "decidable": true,
+  "expected": "A useful tool-sourced version fact may be kept with source, date and uncertainty; asking about Node does not establish the user's stack.",
+  "decidable": false,
   "replay": {
     "synthetic": true,
     "projectId": "default",
@@ -26,10 +26,12 @@
     ]
   },
   "expect": {
-    "noTextContains": [
-      "Node",
-      "22"
-    ],
-    "atMostRecords": 0
-  }
+    "noRecordOfKinds": [
+      "profile",
+      "preference"
+    ]
+  },
+  "evaluationSplit": "development",
+  "policyRevision": "2026-11-04",
+  "judge": "Does the memory preserve useful information with the origin, limited scope, uncertainty and current-vs-historical distinction described in expected, without promoting a claim to an established fact or permission?"
 }

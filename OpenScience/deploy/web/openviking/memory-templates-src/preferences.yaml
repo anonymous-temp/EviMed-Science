@@ -19,7 +19,7 @@ description: |
     "只有 WPS，没有 Office"). A tool or database the user names as theirs is their vocabulary
     and is kept by name.
   - Ordinary standing habits and interests they state for everyday help (a diet preference,
-    how they get around), without the sensitive reason.
+    how they get around), including useful reasons they gave.
   Each line says what it applies to, in the user's words (for whom, which document, which
   language: "给门诊患者写的科普材料一律用初中生读得懂的话", not "材料用通俗的话").
   A preference that lays out a document or an answer (an order of parts, a fixed template, a
@@ -37,7 +37,7 @@ description: |
   unless they say it is how they always want it, a mood, a question, a stance on a contested
   question, a fact about a project (-> PROJECT_CONTEXT), something the user said the assistant
   got wrong or an approach they confirmed (-> CORRECTIONS), and a trait guessed from what
-  they asked for.
+  they asked for. Useful limited-scope context and attributed opinions belong in NOTES.
 
   __NEVER_KEEP__
 

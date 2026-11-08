@@ -270,7 +270,7 @@ services:
         release = pathlib.Path('/input/openviking')
         templates = release / 'memory-templates'
         needed = [templates]
-        needed += [templates / (name + '.yaml') for name in ('profile', 'preferences', 'entities', 'corrections', 'project_context', 'decisions', 'follow_ups', 'project_facts', 'observations', 'recent_work')]
+        needed += [templates / (name + '.yaml') for name in ('profile', 'preferences', 'entities', 'corrections', 'project_context', 'decisions', 'follow_ups', 'project_facts', 'observations', 'recent_work', 'people', 'notes')]
         for path in needed:
             try:
                 mode = os.stat(path).st_mode

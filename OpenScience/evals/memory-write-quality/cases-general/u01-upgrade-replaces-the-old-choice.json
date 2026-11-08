@@ -2,8 +2,8 @@
   "id": "u01-upgrade-replaces-the-old-choice",
   "class": "keep-upgrade-replaces",
   "observedIn": "written for the memory-capsule rectification on 2026-10-23 (research G §6, upgrade); every name, number and identifier is invented",
-  "expected": "A later choice replaces the earlier one: the citation style is AMA afterwards and no line still says Vancouver.",
-  "decidable": true,
+  "expected": "The current citation style is AMA. Prior Vancouver may remain as explicitly dated history, never a competing current default.",
+  "decidable": false,
   "replay": {
     "synthetic": true,
     "projectId": "default",
@@ -40,9 +40,9 @@
     ],
     "requireTextContains": [
       "AMA"
-    ],
-    "noTextContains": [
-      "Vancouver"
     ]
-  }
+  },
+  "evaluationSplit": "development",
+  "policyRevision": "2026-11-04",
+  "judge": "Does the memory preserve useful information with the origin, limited scope, uncertainty and current-vs-historical distinction described in expected, without promoting a claim to an established fact or permission?"
 }

@@ -23,6 +23,8 @@ async function fixture(t, { operator = false, subscriptionsEnabled = true, share
   const sharedFromOf = { "pack-link": { channel: "link" }, "pack-file": { channel: "file" }, "pack-delivery": { channel: "delivery" }, "pack-platform": { channel: "official" } };
   const own = (user, id) => { if (id !== "mine") throw new HttpError(404, "capsule_not_found", "The capsule is unavailable."); };
   const transferService = {
+    export: async (user, id, body) => { own(user, id); calls.push(["export", user, id, body]); return { snapshot: { id: "s" } }; },
+    exportPreview: async (user, id, body) => { own(user, id); calls.push(["exportPreview", user, id, body]); return {}; },
     assertOwnCapsule: async (user, id) => own(user, id),
     snapshot: async (user, capsuleId, snapshotId) => { own(user, capsuleId); return { id: snapshotId }; },
     methodPack: async (user, id) => { own(user, id); calls.push(["methodPack", user, id]); return { zip: new Uint8Array([80, 75, 5, 6, ...new Array(18).fill(0)]), count: 1, scripts: 0, filename: "evimed-methods.zip" }; },
@@ -34,7 +36,7 @@ async function fixture(t, { operator = false, subscriptionsEnabled = true, share
     deliver: async (user, id, body) => { own(user, id); calls.push(["deliver", user, id, body]); return { delivered: 0, notDelivered: 1, snapshot: null }; },
     sent: async (user, filter) => { calls.push(["sent", user, filter]); return []; },
     takeDown: async (input) => { calls.push(["takeDown", input]); return { snapshots: 1, copies: 2, withdrawn: 0 }; },
-    createLink: async (user, id) => { own(user, id); return { token: "t", link: { id: "l" }, snapshot: { id: "s" } }; },
+    createLink: async (user, id, body) => { own(user, id); calls.push(["createLink", user, id, body]); return { token: "t", link: { id: "l" }, snapshot: { id: "s" } }; },
     afterRevoke: async () => ({}),
   };
   const subscriptions = { enabled: subscriptionsEnabled,
@@ -270,5 +272,17 @@ test("each lever is documented in .env.example and passed value-less by the web 
     assert.equal(lines.length, 1, `${name} appears once in .env.example`);
     assert.equal(lines[0][1], String(defaults[key]), `${name} in .env.example is the code's default`);
     assert.match(compose, new RegExp(`^\\s+${name}:\\s*$`, "m"), `${name} is passed by compose`);
+  }
+});
+
+
+test("all four share routes forward the same explicit private entry selection", async t => {
+  const { base, headers, calls } = await fixture(t);
+  const includePrivateEntries = [{ id: "native:nm_aaaaaaaaaaaaaaaaaaaaaaaa", sha256: "a".repeat(64) }];
+  for (const [suffix, call, extra] of [["exports/preview", "exportPreview", {}], ["exports", "export", { password: "test" }], ["deliveries", "deliver", { recipients: ["Alice"] }], ["links", "createLink", {}]]) {
+    const body = { scopes: ["workstyle"], includePrivateEntries, ...extra };
+    const result = await fetch(`${base}/api/capsules/mine/${suffix}`, { method: "POST", headers, body: JSON.stringify(body) });
+    assert.ok(result.status < 300, `${suffix}: ${result.status}`);
+    assert.deepEqual(calls.find(row => row[0] === call)[3], body);
   }
 });

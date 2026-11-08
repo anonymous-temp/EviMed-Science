@@ -55,6 +55,8 @@ export const MEMORY_SEGMENT_OF_TYPE = Object.freeze({
   follow_ups: "follow_ups",
   project_facts: "project_facts",
   recent_work: "recent_work",
+  people: "people",
+  notes: "notes",
 });
 
 /**
@@ -74,7 +76,7 @@ export const MEMORY_TYPE_OF_SEGMENT = Object.freeze(Object.fromEntries(
   Object.entries(MEMORY_SEGMENT_OF_TYPE).map(([type, segment]) => [segment, type])));
 
 /** The types whose files belong to one piece of work, and carry the `project=<id>` tag of the conversation that wrote them. */
-export const PROJECT_MEMORY_TYPES = Object.freeze(["project_context", "decisions", "follow_ups", "project_facts", "recent_work"]);
+export const PROJECT_MEMORY_TYPES = Object.freeze(["project_context", "decisions", "follow_ups", "project_facts", "recent_work", "people", "notes"]);
 
 /** The subtree of `memories/` that is not native memory: the derived recall index of PostgreSQL's records and the
  *  capsule facts (`userMemoryRoot`). Native recall and the memory page never read it. */

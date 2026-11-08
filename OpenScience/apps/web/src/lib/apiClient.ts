@@ -575,6 +575,8 @@ export type WebStructuredMemoryKind =
   | "decision"
   | "correction"
   | "follow_up"
+  | "person"
+  | "note"
   | "run_summary";
 
 export interface WebStructuredMemory {

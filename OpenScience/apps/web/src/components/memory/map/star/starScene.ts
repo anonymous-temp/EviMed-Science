@@ -60,7 +60,7 @@ function tokenColour(name: string): THREE.Color {
   return new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue(`--star-${name}`).trim() || "white");
 }
 const FAMILY_TOKEN: Readonly<Record<StarFamily, string>> = {
-  about: "about", preference: "preference", correction: "correction", fact: "fact", decision: "decision", method: "method", document: "document", entity: "entity",
+  person: "entity", note: "document", about: "about", preference: "preference", correction: "correction", fact: "fact", decision: "decision", method: "method", document: "document", entity: "entity",
 };
 
 /** The lines that say something, by the token of each. */

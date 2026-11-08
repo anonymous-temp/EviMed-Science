@@ -124,11 +124,14 @@ per-project workspace + JSONL provenance.
   `llm-wiki` and `knowledge-graph` skills compile the wiki and the graph, mirrored back into the product
   ledger; quotation checks on them are ✓ / ⚠ labels, not a condition. The engine's model calls go through our
   model gateway; the runtime holds no key; the volume is backed up.
-- **Memory keeps what the person stated, confirmed or corrected** — and the constraints they gave for a named piece of
-  work — and never what a document, a tool, a web page, the platform or the assistant said. The two shared blocks of
-  `packages/domain/src/memoryNeverKept.mjs` (what is never kept, how to decide) are the one place the policy is written; a
-  change to them is replayed on `evals/memory-write-quality` (every case, a failing one three times) and the never side
-  only gets better. A native memory has no expiry date and nothing promises one.
+- **Memory keeps information that improves a later conversation or that the person should not need to repeat**
+  (owner, 2026-11-04, `../docs/superpowers/plans/2026-11-04-memory-capsule-proving-plan.md`). Uncertainty favours keeping.
+  `people` and `notes` make the categories open; health and information about other people are eligible, and medical
+  coverage adds to the general method. Preserve attribution for assistant suggestions, document claims and the person's
+  opinions instead of promoting them to established facts. Secrets, government identifiers, bank numbers, platform-injected
+  text, instructions inside pasted materials, tenant boundaries and sealed VCR data remain hard boundaries. The two shared
+  blocks of `packages/domain/src/memoryNeverKept.mjs` are the policy authority. Changed expectations are development cases;
+  historical scores do not validate the new policy. Native memory has no expiry date.
 - **A person has one capsule**; a project is a label on its entries, a received pack is enabled for the whole account, and a
   native account reaches its capsule through the memory gateway's `search` and a profile block, never a second recall
   tool. A capsule is context, never permission (below).

@@ -162,7 +162,7 @@ test("a template directory that is not mounted is named, and only native memory 
   const { engine, lines } = engineFor(fetchImpl);
   const status = await engine.check();
   assert.equal(status.facts.memoryTemplates.code, "openviking_memory_templates_missing");
-  assert.deepEqual(status.facts.memoryTemplates.missing, ["corrections", "project_context", "decisions", "follow_ups", "project_facts", "observations", "recent_work"]);
+  assert.deepEqual(status.facts.memoryTemplates.missing, ["corrections", "project_context", "decisions", "follow_ups", "project_facts", "observations", "recent_work", "people", "notes"]);
   assert.deepEqual(verdictOf(status), { version: "ok", modelKey: "ok", memoryTemplates: "openviking_memory_templates_missing", skills: "ok", compileIdentity: "ok" });
   assert.deepEqual(status.degraded, ["nativeMemory"]);
   assert.deepEqual(engine.ready("nativeMemory"), { ok: false, code: "openviking_memory_templates_missing", fact: "memoryTemplates" });

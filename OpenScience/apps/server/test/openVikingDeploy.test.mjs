@@ -142,7 +142,7 @@ test("the memory templates are a release directory mounted read-only where the l
   assert.ok(!release.includes("identity_shim.py") && !release.includes("entrypoint.sh"), "the identity shim and its wrapper are deleted, not left beside the release");
 });
 
-test("the memory templates are the eight types, rendered from their one source, and the allowlist names exactly them", async () => {
+test("the memory templates are the registered types, rendered from their one source, and the allowlist names exactly them", async () => {
   const directory = path.join(root, "deploy/web/openviking/memory-templates");
   const files = (await readdir(directory)).sort();
   assert.deepEqual(files, OPENVIKING_MEMORY_TYPES.map((type) => `${type}.yaml`).sort());
@@ -154,7 +154,7 @@ test("the memory templates are the eight types, rendered from their one source, 
     assert.equal(text, fromSource[name], `${name} is not what memory-templates-src renders; run its build.mjs`);
     assert.equal(YAML.parse(text).memory_type, name.replace(/\.yaml$/, ""));
     assert.ok(!text.includes("__NEVER_KEEP__"));
-    assert.ok(text.includes("Never write any of the following into a memory"), `${name} does not carry the never-kept rules`);
+    assert.ok(text.includes("Never keep passwords, API keys"), `${name} does not carry the never-kept rules`);
     // The examples and section labels are partly Chinese; without this block the model copied them into an English
     // user's memories (2 of 3 live runs). `{{ language }}` is the language the engine detected in the user's messages.
     assert.ok(!text.includes("__LANGUAGE__"));

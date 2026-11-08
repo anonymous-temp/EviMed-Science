@@ -2,9 +2,9 @@
   "id": "m01-misconception-in-passing",
   "class": "refuse-misconception",
   "observedIn": "written for the memory-capsule next round on 2026-10-25 (the evals package; B-landscape I-3, I-6, I-10 and the owner decisions of that day); every name, number and identifier is invented",
-  "expected": "Nothing is written: a popular misbelief stated in passing (only a tenth of the brain is used) is neither a fact about the world nor a trait of the person, and the assistant's correction is not their statement either.",
-  "decidable": true,
-  "judge": "Does any written line say the person believes only part of the brain is used, or state it as true? None may.",
+  "expected": "A useful belief and its correction may be retained with their separate origins; the brain claim is not established fact or a writing rule.",
+  "decidable": false,
+  "judge": "Does the memory preserve useful information with the origin, limited scope, uncertainty and current-vs-historical distinction described in expected, without promoting a claim to an established fact or permission?",
   "replay": {
     "synthetic": true,
     "projectId": "default",
@@ -22,10 +22,13 @@
     ]
   },
   "expect": {
-    "noTextContains": [
-      "10%",
-      "大脑"
+    "requireTextContains": [
+      "10%"
     ],
-    "atMostRecords": 0
-  }
+    "noRecordOfKinds": [
+      "preference"
+    ]
+  },
+  "evaluationSplit": "development",
+  "policyRevision": "2026-11-04"
 }
