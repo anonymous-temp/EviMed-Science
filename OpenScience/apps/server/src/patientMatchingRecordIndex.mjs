@@ -25,6 +25,8 @@ const DATE_PATTERNS = [
   { pattern: /(?<!\d)(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?!\d)/u, parts: (/** @type {string[]} */ m) => [+m[1], +m[2], +m[3]] },
   { pattern: /(?<!\d)(\d{1,2})\/(\d{1,2})\/(\d{4})(?!\d)/u, parts: (/** @type {string[]} */ m) => [+m[3], +m[1], +m[2]] },
   { pattern: /(?<!\d)(\d{1,2})\.(\d{1,2})\.(\d{4})(?!\d)/u, parts: (/** @type {string[]} */ m) => [+m[3], +m[2], +m[1]] },
+  // Chinese records write 2023年4月7日 (2026-11-08 check of the Chinese path).
+  { pattern: /(?<!\d)(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*[日号]/u, parts: (/** @type {string[]} */ m) => [+m[1], +m[2], +m[3]] },
 ];
 /** The first date in the first lines of a record, by format only; null when none (never guessed).
  * @param {string} text */

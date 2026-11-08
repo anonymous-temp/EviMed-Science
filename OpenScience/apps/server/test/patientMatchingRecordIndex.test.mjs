@@ -118,3 +118,9 @@ test('the LRU keeps its capacity and the most recently used entry', () => {
   cache.set('a', 1); cache.set('b', 2); cache.get('a'); cache.set('c', 3);
   assert.equal(cache.get('b'), undefined); assert.equal(cache.get('a'), 1); assert.equal(cache.get('c'), 3);
 });
+
+test('a Chinese record date is read by its format', () => {
+  assert.equal(recordDateOf('入院记录\n记录日期：2023年4月7日\n主诉：咳嗽'), '2023-04-07');
+  assert.equal(recordDateOf('出院小结 2023 年 12 月 1 号'), '2023-12-01');
+  assert.equal(recordDateOf('2023年13月1日'), null);
+});

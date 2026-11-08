@@ -162,7 +162,9 @@ export function createPatientMatchingModelPorts({ config, usageLedger = null, au
         const query=envelope.input.query,instruct=RERANK_INSTRUCT;
         const batches=rerankBatches(query,rows.map(row=>row.text));
         /** @type {Array<{index:number,relevance_score:number}>} */ const merged=[];
-        for(const {from,to} of batches){
+        // Up to three batches in flight: a whole-record view of 300 candidates is three to six requests of about four seconds each.
+        let nextBatch=0;
+        const askBatch=async(/** @type {{from:number,to:number}} */ {from,to})=>{
           envelope.signal?.throwIfAborted();
           const documents=rows.slice(from,to).map(row=>row.text),count=to-from;
           const body=profile.rerankApiBase.includes('/services/rerank/')?{model:profile.rerankModel,input:{query,documents},parameters:{top_n:count,return_documents:false,instruct}}:{model:profile.rerankModel,query,documents,top_n:count,instruct};
@@ -171,7 +173,8 @@ export function createPatientMatchingModelPorts({ config, usageLedger = null, au
           if (!Array.isArray(ranked) || ranked.length !== count || new Set(ranked.map(row => row.index)).size !== count
             || ranked.some(row => !Number.isInteger(row.index) || row.index < 0 || row.index >= count || !Number.isFinite(row.relevance_score))) throw failure('patient_matching_rerank_invalid');
           for(const row of ranked)merged.push({index:from+row.index,relevance_score:row.relevance_score});
-        }
+        };
+        await Promise.all(Array.from({length:Math.min(3,batches.length)},async()=>{for(let at=nextBatch++;at<batches.length;at=nextBatch++)await askBatch(batches[at]);}));
         const order = [...merged].sort((a, b) => b.relevance_score - a.relevance_score || a.index - b.index).map(row => rows[row.index].registryId);
         const byIndex=new Map(merged.map(row=>[row.index,row.relevance_score]));
         return reply('complete', 'Matching candidate order saved.', { order, scores:rows.map((row,index)=>({registryId:row.registryId,score:byIndex.get(index)})),model: profile.rerankModel, requests:batches.length,fallback: false });
