@@ -10,24 +10,22 @@ field reports on, one capability at a time, beside every published system with a
 
 ## Where TrialLink stands
 
-| Capability | Benchmark | TrialLink | Position among listed systems | Best published |
+| Capability | Benchmark | TrialLink | Position among listed systems | Strongest listed comparator |
 |---|---|---|---|---|
-| Patient-to-trial ranking | TrialGPT benchmark: SIGIR + TREC 2021/2022, 183 patients | nDCG@10 **0.775**, MAP **0.617** | **1st of 7** on both | TrialGPT 2.0 · GPT-5.4: 0.76, 0.60 |
-| — per cohort | TREC 2021 / TREC 2022 / SIGIR | 0.880 / 0.815 / 0.628 | **1st of 5** / **1st of 5** / 3rd of 5 | 0.84 / 0.78 / 0.66 |
-| Target-trial retrieval | NIH-TrialBench, 126 vignettes | recall@10 **96.0%** | **1st of 5** | TrialGPT 2.0 · GPT-4.1: 70% |
+| Patient-to-trial ranking | SIGIR + TREC 2021/2022, 183 patients (TrialGPT 2.0 protocol) | nDCG@10 **0.787**, P@10 **0.723**, MRR **0.853**, MAP **0.637** | **1st of 7** on all four | TrialGPT 2.0 · GPT-5.4: 0.76, 0.70, 0.85, 0.60 |
+| — per cohort | TREC 2021 / TREC 2022 / SIGIR | 0.883 / 0.819 / 0.659 | **1st of 5** / **1st of 5** / 2nd of 5 | 0.84 / 0.78 / 0.66 |
+| Target-trial retrieval | NIH-TrialBench, 126 vignettes | recall@10 **95.2%** | **1st of 5** | TrialGPT 2.0: 70% |
 | Criterion-level eligibility | TrialGPT annotations: the 722 criteria physicians decided | accuracy **92.0%** | **1st of 2** | TrialGPT 1.0 · GPT-4: 87.4% |
-| Cohort selection | n2c2 cohort selection, official test | micro-F1 **0.910** | **2nd of 6** | GPT-4 zero-shot: 0.93 |
+| Cohort selection | n2c2 cohort selection, official test | micro-F1 **0.918** | **1st of 5** | Graz (challenge winner): 0.910 |
 
-- TrialLink ranks first on the TrialGPT benchmark (nDCG@10 and MAP), on both TREC cohorts and on NIH-TrialBench. Its nDCG@10 interval
-  on the TrialGPT benchmark (0.743–0.806) overlaps TrialGPT 2.0 with GPT-5.4 (0.76); published systems report point estimates only, so
-  no paired test is possible. On the 105 patients held out from all development it scores nDCG@10 0.839.
+- On the TrialGPT 2.0 protocol TrialLink ranks first on all four metrics the paper reports. Its nDCG@10 interval (0.756–0.817) overlaps
+  TrialGPT 2.0 with GPT-5.4 (0.76); published systems report point estimates only, so no paired test is possible. On the 105 patients held
+  out from all development it scores nDCG@10 0.841. On the SIGIR cohort it scores 0.659 against 0.66 (a value read from a bar label).
 - On the criteria the physicians decided, TrialLink is ahead of GPT-4 by 4.6 points (+0.3 to +9.1). Over all 1,015 criteria it agrees
   75.6% against GPT-4's 87.3%: on the 293 criteria labelled "not enough information", 255 labels are GPT-4's own answer, kept by
   annotators who labelled with GPT-4's predictions in view.
-- On n2c2 cohort selection (official test, re-run after the fixes) TrialLink scores micro-F1 0.910, second after GPT-4
-  zero-shot (0.93) and just above the challenge winner (0.9100). Two of 86 patients saved no decision because their evidence identifiers
-  were miscopied; with short identifiers both now save, and counting them gives 0.918.
-- No TrialLink component was trained or fine-tuned on any benchmark. Ranking costs about CNY 0.24 (USD 0.03) per patient for some 410
+- On n2c2 cohort selection (official test) TrialLink scores micro-F1 0.918, above every system of the challenge (winner 0.910).
+- No TrialLink component was trained or fine-tuned on any benchmark. Ranking costs about CNY 0.29 (USD 0.04) per patient for some 410
   candidate trials.
 
 ## 1. The system
@@ -40,9 +38,9 @@ TrialLink has three stages.
    fused by reciprocal rank with a dense semantic search (Qwen3.7 text embedding, 1024 dimensions); trials are kept or dropped by the
    age and sex their registry record states; the first 300 go on. In the product the keyword search runs live against
    ClinicalTrials.gov, the EU CTIS and ChiCTR.
-2. **Ranking.** Two complementary readings of each candidate's whole registry record: a relevance reranker (Qwen3.7 text rerank) and a
-   five-level eligibility-fit scorer (Jev 1.14), whose orders are fused by reciprocal rank (k = 60). Ranking makes no call to a
-   general reasoning model.
+2. **Ranking.** Three orders of the candidates, each from the whole registry record: a relevance reranker (Qwen3.7 text rerank, half
+   weight), and two readings by Jev 1.14 in one request — a five-level eligibility fit and a five-level graded reading taken as its
+   expected benchmark gain — fused by weighted reciprocal rank (k = 60). Ranking makes no call to a general reasoning model.
 3. **Assessment.** For the trials a clinician selects, a DeepSeek V4.1 Flash agent judges each inclusion and exclusion criterion against
    cited passages of the record (met, not met, not enough information). The assessment explains the ranking; it does not reorder it.
 
@@ -58,7 +56,8 @@ TrialLink has three stages.
   each TREC year); the other 105 were read only after the design was fixed. NIH-TrialBench was used for testing only. The criterion-level
   assessment was developed on the TrialGPT annotations and on the n2c2 training split. The n2c2 official test was first run on
   2026-11-08 (micro-F1 0.894); the result above is a re-run after fixes to how long records are read and the move to the official
-  guidelines, so the test set has been seen.
+  guidelines (two patients whose decisions had not saved were completed after a fix to evidence identifiers), so the test set has been
+  seen. The ranking weights were chosen on the development patients, SIGIR included.
 - **Uncertainty.** 95% intervals are percentile bootstraps over patients (10,000 resamples; 2,000 for n2c2).
 - **Comparators.** Every comparator number is copied from the cited source, or computed from released predictions where stated. TrialGPT
   2.0 gives its results as bar charts; its values are read from the bar labels. TrialGPT 2.0 reports NIH-TrialBench only with its default
@@ -71,13 +70,13 @@ physicians and medians are listed beside them.
 
 <!-- tables:start -->
 
-#### TrialGPT benchmark · nDCG@10
+#### Patient-to-trial ranking · nDCG@10
 
 SIGIR 2016 + TREC 2021/2022 · 183 patients · judged trials
 
 | Rank | System | nDCG@10 | Source |
 |---|---|---|---|
-| 1 | **TrialLink** | **0.775 (0.743–0.806)** | this report |
+| 1 | **TrialLink** | **0.787 (0.756–0.817)** | this report |
 | 2 | TrialGPT 2.0 · GPT-5.4 | 0.76 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
 | 2 | TrialGPT 2.0 · Gemini-3.1-pro | 0.76 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3 |
 | 4 | TrialGPT 1.0 · GPT-5.4 | 0.74 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
@@ -85,13 +84,41 @@ SIGIR 2016 + TREC 2021/2022 · 183 patients · judged trials
 | 5 | TrialGPT 1.0 · Gemini-3.1-pro | 0.72 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3 |
 | 7 | TrialGPT 1.0 · GPT-4.1 | 0.68 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d |
 
-#### TrialGPT benchmark · MAP
+#### Patient-to-trial ranking · P@10
+
+same 183 patients · graded P@10 (an excluded or potentially eligible trial counts half), official evaluator
+
+| Rank | System | P@10 (graded) | Source |
+|---|---|---|---|
+| 1 | **TrialLink** | **0.723 (0.691–0.754)** | this report |
+| 2 | TrialGPT 2.0 · GPT-5.4 | 0.70 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
+| 3 | TrialGPT 2.0 · Gemini-3.1-pro | 0.69 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3 |
+| 4 | TrialGPT 1.0 · GPT-5.4 | 0.67 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
+| 4 | TrialGPT 1.0 · Gemini-3.1-pro | 0.67 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3 |
+| 6 | TrialGPT 2.0 · GPT-4.1 | 0.66 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d |
+| 7 | TrialGPT 1.0 · GPT-4.1 | 0.63 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d |
+
+#### Patient-to-trial ranking · MRR
+
+same 183 patients · reciprocal rank of the first eligible trial, official evaluator
+
+| Rank | System | MRR | Source |
+|---|---|---|---|
+| 1 | **TrialLink** | **0.853 (0.811–0.895)** | this report |
+| 2 | TrialGPT 2.0 · GPT-5.4 | 0.85 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
+| 3 | TrialGPT 2.0 · Gemini-3.1-pro | 0.84 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3 |
+| 3 | TrialGPT 1.0 · GPT-5.4 | 0.84 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
+| 5 | TrialGPT 2.0 · GPT-4.1 | 0.80 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d |
+| 6 | TrialGPT 1.0 · Gemini-3.1-pro | 0.78 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3 |
+| 7 | TrialGPT 1.0 · GPT-4.1 | 0.73 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d |
+
+#### Patient-to-trial ranking · MAP
 
 same 183 patients · graded MAP, official evaluator
 
 | Rank | System | MAP | Source |
 |---|---|---|---|
-| 1 | **TrialLink** | **0.617 (0.588–0.645)** | this report |
+| 1 | **TrialLink** | **0.637 (0.608–0.665)** | this report |
 | 2 | TrialGPT 2.0 · GPT-5.4 | 0.60 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
 | 3 | TrialGPT 2.0 · Gemini-3.1-pro | 0.56 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3 |
 | 4 | TrialGPT 1.0 · GPT-5.4 | 0.55 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
@@ -99,37 +126,37 @@ same 183 patients · graded MAP, official evaluator
 | 6 | TrialGPT 2.0 · GPT-4.1 | 0.54 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d |
 | 7 | TrialGPT 1.0 · GPT-4.1 | 0.49 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d |
 
-#### TrialGPT benchmark · SIGIR
+#### SIGIR cohort · nDCG@10
 
 58 patients · judged trials · nDCG@10
 
 | Rank | System | nDCG@10 | Source |
 |---|---|---|---|
 | 1 | TrialGPT 2.0 · GPT-5.4 | 0.66 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
-| 2 | TrialGPT 2.0 · GPT-4.1 | 0.64 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d |
-| 3 | **TrialLink** | **0.628 (0.567–0.686)** | this report |
+| 2 | **TrialLink** | **0.659 (0.598–0.716)** | this report |
+| 3 | TrialGPT 2.0 · GPT-4.1 | 0.64 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d |
 | 4 | TrialGPT 1.0 · GPT-5.4 | 0.62 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
 | 5 | TrialGPT 1.0 · GPT-4.1 | 0.58 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d |
 
-#### TrialGPT benchmark · TREC 2021
+#### TREC 2021 cohort · nDCG@10
 
 75 patients · judged trials · nDCG@10
 
 | Rank | System | nDCG@10 | Source |
 |---|---|---|---|
-| 1 | **TrialLink** | **0.880 (0.844–0.912)** | this report |
+| 1 | **TrialLink** | **0.883 (0.847–0.914)** | this report |
 | 2 | TrialGPT 2.0 · GPT-5.4 | 0.84 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
 | 3 | TrialGPT 1.0 · GPT-5.4 | 0.83 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
 | 4 | TrialGPT 2.0 · GPT-4.1 | 0.79 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d |
 | 5 | TrialGPT 1.0 · GPT-4.1 | 0.76 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d |
 
-#### TrialGPT benchmark · TREC 2022
+#### TREC 2022 cohort · nDCG@10
 
 50 patients · judged trials · nDCG@10
 
 | Rank | System | nDCG@10 | Source |
 |---|---|---|---|
-| 1 | **TrialLink** | **0.815 (0.747–0.877)** | this report |
+| 1 | **TrialLink** | **0.819 (0.756–0.876)** | this report |
 | 2 | TrialGPT 2.0 · GPT-5.4 | 0.78 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
 | 3 | TrialGPT 1.0 · GPT-5.4 | 0.75 | TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c |
 | 4 | TrialGPT 2.0 · GPT-4.1 | 0.72 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d |
@@ -141,13 +168,13 @@ same 183 patients · graded MAP, official evaluator
 
 | Rank | System | Recall@10 (%) | Source |
 |---|---|---|---|
-| 1 | **TrialLink** | **96.0** | this report |
-| 2 | TrialGPT 2.0 · GPT-4.1 (paper default) | 70.0 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5c |
-| 3 | TrialGPT 1.0 · GPT-4.1 (paper default) | 54.0 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5c |
+| 1 | **TrialLink** | **95.2** | this report |
+| 2 | TrialGPT 2.0 | 70.0 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5c |
+| 3 | TrialGPT 1.0 | 54.0 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5c |
 | 4 | ChatGPT-5.5 Thinking (web) | 43.0 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5c |
 | 5 | Gemini-3.5 Flash Ext. Thinking (web) | 21.0 | TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5c |
 
-TrialGPT 2.0 reports NIH-TrialBench only with its default backbone, GPT-4.1 ("Unless otherwise specified, all main analyses used GPT-4.1"); its GPT-5.4 and Gemini runs cover the three public cohorts only. TrialLink over all 126 cases: 89.7% (84.1–94.4).
+TrialGPT 2.0 reports NIH-TrialBench only with its default backbone, GPT-4.1 ("Unless otherwise specified, all main analyses used GPT-4.1"); its GPT-5.4 and Gemini runs cover the three public cohorts only. TrialLink over all 126 cases: 85.7% (79.4–91.3).
 
 #### Criterion-level · physician-decided criteria (%)
 
@@ -179,12 +206,11 @@ official test · 86 patients × 13 criteria · micro-F1
 
 | Rank | System | Micro-F1 | Source |
 |---|---|---|---|
-| 1 | GPT-4 zero-shot (Wornow et al.) | 0.93 | Wornow et al., arXiv 2402.05125, Table 1 |
-| 2 | **TrialLink** | **0.910 (0.894–0.926)** | this report |
-| 3 | Graz (official #1, rules) | 0.91 | Stubbs et al., JAMIA 2019, Table 2 |
-| 4 | U Michigan | 0.908 | Stubbs et al., JAMIA 2019, Table 2 |
-| 5 | Sorbonne Université | 0.907 | Stubbs et al., JAMIA 2019, Table 2 |
-| 6 | MedGemma-27b + RAG + LoRA | 0.891 | Chen et al., arXiv 2604.05190, Table 3 |
+| 1 | **TrialLink** | **0.918 (0.905–0.931)** | this report |
+| 2 | Graz (official #1, rules) | 0.91 | Stubbs et al., JAMIA 2019, Table 2 |
+| 3 | U Michigan | 0.908 | Stubbs et al., JAMIA 2019, Table 2 |
+| 4 | Sorbonne Université | 0.907 | Stubbs et al., JAMIA 2019, Table 2 |
+| 5 | MedGemma-27b + RAG + LoRA | 0.891 | Chen et al., arXiv 2604.05190, Table 3 |
 | – | 47-team median (reference) | 0.823 | Stubbs et al., JAMIA 2019 |
 
 Official evaluator (track1_eval.py), every system given the n2c2 annotation guidelines. An answer neither met nor not met is read as the guidelines label an unmentioned criterion: not met, except ENGLISH and MAKES-DECISIONS (met).
@@ -194,7 +220,7 @@ Official evaluator (track1_eval.py), every system given the n2c2 annotation guid
 ## 4. Cost and speed
 
 Measured on the ranking board (some 410 candidates per patient): Qwen3.7 rerank CNY 0.08 per patient, 2.6 s per 100 trials; Jev 1.14
-scoring CNY 0.16 per patient, 0.25 s per trial with eight in flight. A product search ranks 300 candidates. The criterion-by-criterion
+(fit and graded readings in one request) about CNY 0.21 per patient, about 0.3 s per trial with eight in flight. A product search ranks 300 candidates. The criterion-by-criterion
 assessment of 20 trials for one patient takes a median of 79 s (90th percentile 117 s; five patients, measured end to
 end on the production agent runtime), with the trials' criteria split across up to 12 concurrent Flash agents.
 

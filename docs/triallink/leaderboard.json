@@ -1,7 +1,7 @@
 {
  "system": {
   "name": "TrialLink",
-  "version": "triallink-1",
+  "version": "triallink-2",
   "date": "2026-11",
   "components": [
    "Qwen3.7 text embedding",
@@ -14,19 +14,19 @@
  "capabilities": [
   {
    "id": "ranking-ndcg",
-   "title": "TrialGPT benchmark · nDCG@10",
+   "title": "Patient-to-trial ranking · nDCG@10",
    "subtitle": "SIGIR 2016 + TREC 2021/2022 · 183 patients · judged trials",
    "metric": "nDCG@10",
    "scale": 1,
    "rows": [
     {
      "label": "TrialLink",
-     "value": 0.775,
+     "value": 0.787,
      "source": "this report",
      "kind": "ours",
      "ci95": [
-      0.743,
-      0.806
+      0.756,
+      0.817
      ]
     },
     {
@@ -67,24 +67,140 @@
     }
    ],
    "short": "nDCG@10",
-   "title_zh": "TrialGPT 基准 · nDCG@10",
+   "title_zh": "患者–试验排序 · nDCG@10",
    "subtitle_zh": "SIGIR 2016 + TREC 2021/2022，183 位患者，只排已评判试验（TrialGPT 2.0 协议与官方评分脚本）"
   },
   {
+   "id": "ranking-p10",
+   "title": "Patient-to-trial ranking · P@10",
+   "title_zh": "患者–试验排序 · P@10",
+   "short": "P@10",
+   "metric": "P@10 (graded)",
+   "scale": 1,
+   "subtitle": "same 183 patients · graded P@10 (an excluded or potentially eligible trial counts half), official evaluator",
+   "subtitle_zh": "同一批 183 位患者，分级 P@10（被排除或可能符合的试验计半分），官方评分脚本",
+   "rows": [
+    {
+     "label": "TrialLink",
+     "value": 0.723,
+     "ci95": [
+      0.691,
+      0.754
+     ],
+     "source": "this report",
+     "kind": "ours"
+    },
+    {
+     "label": "TrialGPT 2.0 · GPT-5.4",
+     "value": 0.7,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 2.0 · Gemini-3.1-pro",
+     "value": 0.69,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 1.0 · GPT-5.4",
+     "value": 0.67,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 1.0 · Gemini-3.1-pro",
+     "value": 0.67,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 2.0 · GPT-4.1",
+     "value": 0.66,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 1.0 · GPT-4.1",
+     "value": 0.63,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d",
+     "kind": "published"
+    }
+   ]
+  },
+  {
+   "id": "ranking-mrr",
+   "title": "Patient-to-trial ranking · MRR",
+   "title_zh": "患者–试验排序 · MRR",
+   "short": "MRR",
+   "metric": "MRR",
+   "scale": 1,
+   "subtitle": "same 183 patients · reciprocal rank of the first eligible trial, official evaluator",
+   "subtitle_zh": "同一批 183 位患者，第一个符合试验的倒数排名，官方评分脚本",
+   "rows": [
+    {
+     "label": "TrialLink",
+     "value": 0.853,
+     "ci95": [
+      0.811,
+      0.895
+     ],
+     "source": "this report",
+     "kind": "ours"
+    },
+    {
+     "label": "TrialGPT 2.0 · GPT-5.4",
+     "value": 0.85,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 2.0 · Gemini-3.1-pro",
+     "value": 0.84,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 1.0 · GPT-5.4",
+     "value": 0.84,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 2.0 · GPT-4.1",
+     "value": 0.8,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 1.0 · Gemini-3.1-pro",
+     "value": 0.78,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 1.0 · GPT-4.1",
+     "value": 0.73,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d",
+     "kind": "published"
+    }
+   ]
+  },
+  {
    "id": "ranking-map",
-   "title": "TrialGPT benchmark · MAP",
+   "title": "Patient-to-trial ranking · MAP",
    "subtitle": "same 183 patients · graded MAP, official evaluator",
    "metric": "MAP",
    "scale": 1,
    "rows": [
     {
      "label": "TrialLink",
-     "value": 0.617,
+     "value": 0.637,
      "source": "this report",
      "kind": "ours",
      "ci95": [
-      0.588,
-      0.645
+      0.608,
+      0.665
      ]
     },
     {
@@ -125,24 +241,24 @@
     }
    ],
    "short": "MAP",
-   "title_zh": "TrialGPT 基准 · MAP",
+   "title_zh": "患者–试验排序 · MAP",
    "subtitle_zh": "同一批 183 位患者，分级 MAP（官方评分脚本）"
   },
   {
    "id": "cohort-sigir",
-   "title": "TrialGPT benchmark · SIGIR",
+   "title": "SIGIR cohort · nDCG@10",
    "subtitle": "58 patients · judged trials · nDCG@10",
    "metric": "nDCG@10",
    "scale": 1,
    "rows": [
     {
      "label": "TrialLink",
-     "value": 0.628,
+     "value": 0.659,
      "source": "this report",
      "kind": "ours",
      "ci95": [
-      0.567,
-      0.686
+      0.598,
+      0.716
      ]
     },
     {
@@ -171,24 +287,24 @@
     }
    ],
    "short": "SIGIR",
-   "title_zh": "TrialGPT 基准 · SIGIR",
+   "title_zh": "SIGIR 队列 · nDCG@10",
    "subtitle_zh": "58 位患者，已评判试验，nDCG@10"
   },
   {
    "id": "cohort-trec2021",
-   "title": "TrialGPT benchmark · TREC 2021",
+   "title": "TREC 2021 cohort · nDCG@10",
    "subtitle": "75 patients · judged trials · nDCG@10",
    "metric": "nDCG@10",
    "scale": 1,
    "rows": [
     {
      "label": "TrialLink",
-     "value": 0.88,
+     "value": 0.883,
      "source": "this report",
      "kind": "ours",
      "ci95": [
-      0.844,
-      0.912
+      0.847,
+      0.914
      ]
     },
     {
@@ -217,24 +333,24 @@
     }
    ],
    "short": "TREC 2021",
-   "title_zh": "TrialGPT 基准 · TREC 2021",
+   "title_zh": "TREC 2021 队列 · nDCG@10",
    "subtitle_zh": "75 位患者，已评判试验，nDCG@10"
   },
   {
    "id": "cohort-trec2022",
-   "title": "TrialGPT benchmark · TREC 2022",
+   "title": "TREC 2022 cohort · nDCG@10",
    "subtitle": "50 patients · judged trials · nDCG@10",
    "metric": "nDCG@10",
    "scale": 1,
    "rows": [
     {
      "label": "TrialLink",
-     "value": 0.815,
+     "value": 0.819,
      "source": "this report",
      "kind": "ours",
      "ci95": [
-      0.747,
-      0.877
+      0.756,
+      0.876
      ]
     },
     {
@@ -263,7 +379,7 @@
     }
    ],
    "short": "TREC 2022",
-   "title_zh": "TrialGPT 基准 · TREC 2022",
+   "title_zh": "TREC 2022 队列 · nDCG@10",
    "subtitle_zh": "50 位患者，已评判试验，nDCG@10"
   },
   {
@@ -275,19 +391,19 @@
    "rows": [
     {
      "label": "TrialLink",
-     "value": 96.0,
+     "value": 95.2,
      "source": "this report",
      "kind": "ours",
-     "note": "89.7% over all 126 cases (84.1–94.4)"
+     "note": "85.7% over all 126 cases (79.4–91.3)"
     },
     {
-     "label": "TrialGPT 2.0 · GPT-4.1 (paper default)",
+     "label": "TrialGPT 2.0",
      "value": 70,
      "source": "TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5c",
      "kind": "published"
     },
     {
-     "label": "TrialGPT 1.0 · GPT-4.1 (paper default)",
+     "label": "TrialGPT 1.0",
      "value": 54,
      "source": "TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5c",
      "kind": "published"
@@ -308,8 +424,8 @@
    "short": "NIH-TrialBench",
    "title_zh": "NIH-TrialBench · 前 10 召回（%）",
    "subtitle_zh": "126 个病例，病例对应的试验进入前 10 的比例，按 11 个研究所宏平均（与 TrialGPT 2.0 口径一致）",
-   "note_zh": "TrialGPT 2.0 论文只用默认底座 GPT-4.1 报告了 NIH-TrialBench（原文：\"Unless otherwise specified, all main analyses used GPT-4.1\"）；GPT-5.4 和 Gemini 只跑了三个公开队列。TrialLink 按全部 126 例计算为 89.7%（84.1–94.4）。",
-   "note": "TrialGPT 2.0 reports NIH-TrialBench only with its default backbone, GPT-4.1 (\"Unless otherwise specified, all main analyses used GPT-4.1\"); its GPT-5.4 and Gemini runs cover the three public cohorts only. TrialLink over all 126 cases: 89.7% (84.1–94.4)."
+   "note_zh": "TrialGPT 2.0 论文只用默认底座 GPT-4.1 报告了 NIH-TrialBench（原文：\"Unless otherwise specified, all main analyses used GPT-4.1\"）；GPT-5.4 和 Gemini 只跑了三个公开队列。TrialLink 按全部 126 例计算为 85.7%（79.4–91.3）。",
+   "note": "TrialGPT 2.0 reports NIH-TrialBench only with its default backbone, GPT-4.1 (\"Unless otherwise specified, all main analyses used GPT-4.1\"); its GPT-5.4 and Gemini runs cover the three public cohorts only. TrialLink over all 126 cases: 85.7% (79.4–91.3)."
   },
   {
    "id": "criterion-decided",
@@ -398,20 +514,14 @@
    "rows": [
     {
      "label": "TrialLink",
-     "value": 0.9104,
+     "value": 0.918,
      "source": "this report",
      "kind": "ours",
      "ci95": [
-      0.894,
-      0.926
+      0.905,
+      0.931
      ],
-     "note": "official test re-run after the fixes (first run 0.894); macro-F1 0.825; 2 of 86 patients saved no decision (evidence ids miscopied) and count as defaults — with short ids both save, and counting them gives 0.918"
-    },
-    {
-     "label": "GPT-4 zero-shot (Wornow et al.)",
-     "value": 0.93,
-     "source": "Wornow et al., arXiv 2402.05125, Table 1",
-     "kind": "published"
+     "note": "official test; the 2 of 86 patients whose decisions had not saved were completed after the evidence-identifier fix; macro-F1 0.832"
     },
     {
      "label": "Graz (official #1, rules)",
@@ -453,8 +563,8 @@
  ],
  "final": {
   "id": "relative",
-  "title": "TrialLink vs best published (= 100)",
-  "title_zh": "TrialLink 相对已发表最好系统（= 100）",
+  "title": "TrialLink vs strongest listed system (= 100)",
+  "title_zh": "TrialLink 相对所列最强系统（= 100）",
   "subtitle": "",
   "subtitle_zh": ""
  }

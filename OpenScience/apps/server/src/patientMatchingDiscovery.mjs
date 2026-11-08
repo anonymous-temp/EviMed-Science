@@ -5,9 +5,9 @@ import {maskIdentifiers} from '@evimed/domain';
 import {patientMatchingRankingDocument,MATCHING_RANKING_VIEW} from './patientMatchingRankingText.mjs';
 const result=(status,data)=>({status,summary:'Candidate discovery completed with recorded coverage and order.',data,artifacts:[]});
 /**
- * TrialLink ranking (policy `triallink-1`, measured on Board A and Board E 2026-11-07): lexical registry recall over the condition and its ranked
- * terms, the plugin's dense index, fused; Qwen3.7 reranks the fused list and Jev scores each candidate's whole record on a five-level fit;
- * the saved order is the reciprocal-rank fusion of the two. `depth` bounds every stage (at most 500, the reranker's request bound).
+ * TrialLink ranking (policy `triallink-2`, chosen on the development patients 2026-11-08): lexical registry recall over the condition and its ranked
+ * terms, the plugin's dense index, fused; Qwen3.7 reranks the fused list and Jev reads each candidate's whole record twice in one request (a five-level fit and a five-level graded reading);
+ * the saved order is the weighted reciprocal-rank fusion of the rerank, the fit and the graded reading's expected gain. `depth` bounds every stage (at most 500, the reranker's request bound).
  * @param {{vcr:any,models:any,index?:any,jevEnabled?:boolean,depth?:number,jevDepth?:number,assertCurrent?:(envelope:any)=>Promise<any>}} dependencies
  */
 export function createPatientMatchingDiscovery({vcr,models,index=null,jevEnabled=true,depth=300,jevDepth=depth,assertCurrent=async()=>{}}){
@@ -48,12 +48,13 @@ export function createPatientMatchingDiscovery({vcr,models,index=null,jevEnabled
     const rerankOrder=ranked?.status==='complete'?validatePermutation(ranked.data.order,fused.map(row=>row.registryId)):fused.map(row=>row.registryId);
     const scoredIds=jevEnabled&&scoredDepth>0&&typeof models.jevFit==='function'?rerankOrder.slice(0,scoredDepth):[];
     const fit=scoredIds.length>1?await models.jevFit({...envelope,input:{...envelope.input,candidates:scoredIds.map(id=>({registryId:id,text:trialRecordText(candidates.get(id))}))}}):null;
-    const composed=composeRanking({rerankOrder,jevScores:(fit?.data?.scores??[]).filter(row=>row.score!==null)});
+    const scored=(fit?.data?.scores??[]).filter(row=>row.score!==null);
+    const composed=composeRanking({rerankOrder,jevScores:scored,gradedGains:scored.filter(row=>Number.isFinite(row.gradedGain)).map(row=>({registryId:row.registryId,gain:row.gradedGain}))});
     const order=composed.finalOrder;
     const ordered=order.map((id,at)=>({...candidates.get(id),rank:at+1}));
     const rerank={state:ranked?.status??'skipped',applied:ranked?.status==='complete',model:ranked?.data?.model??null,profileDigest:profileIdentity({embedding:models.embeddingProfileDigest,ranking:ranked?.data?.model??null}),
       view:{profile:MATCHING_RANKING_VIEW,truncated:views.filter(view=>view.truncated).length,fullRecordsUnavailable:sourceFailures},incomingOrder:fused.map(row=>row.registryId),rerankOrder,finalOrder:order,policy:RANKING_POLICY.id,
-      jev:fit?{state:fit.status,model:fit.data?.model??null,rubric:fit.data?.rubric??null,scored:scoredIds.length,answered:fit.data?.answered??0,order:composed.jevOrder,code:fit.data?.code??null}:{state:'skipped',scored:0,answered:0},
+      jev:fit?{state:fit.status,model:fit.data?.model??null,rubric:fit.data?.rubric??null,scored:scoredIds.length,answered:fit.data?.answered??0,order:composed.jevOrder,gradedOrder:composed.gradedOrder,code:fit.data?.code??null}:{state:'skipped',scored:0,answered:0},
       indexGeneration:dense?.data?.generation??null,indexStatus:dense?.status??'unconfigured',clinicalEligibility:'not-assessed'};
     await assertCurrent(envelope);
     const searchId=await vcr.candidateSearches.save(study,{subjectKey,request:{condition:maskIdentifiers(query),summary:{digest:profileIdentity(objective)},limit},registries:incoming.registries??[],rerank,collection:incoming.collection??null,found:ordered.length,items:ordered});

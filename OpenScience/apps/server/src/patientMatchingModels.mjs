@@ -1,7 +1,7 @@
 /** Provider-key boundary for matching algorithms. Clinical decisions remain native Flash executions. */
 import { createHash, randomUUID } from 'node:crypto';
 import { priceUsage, REFERENCE_PRICE_LIST } from '@evimed/domain';
-import { JEV_FIT_INSTRUCTIONS, JEV_FIT_LEVELS, profileIdentity } from '@evimed/patient-matching-core';
+import { JEV_FIT_INSTRUCTIONS, JEV_FIT_LEVELS, JEV_GRADED_LEVELS, expectedGradedGain, profileIdentity } from '@evimed/patient-matching-core';
 import { patientMatchingConfiguration } from './patientMatchingConfiguration.mjs';
 import { callJev } from './jevModel.mjs';
 import { closeUnsettledReservation } from './usageLedger.mjs';
@@ -137,7 +137,7 @@ export function createPatientMatchingModelPorts({ config, usageLedger = null, au
           const current = await authorize(envelope, { destination: new URL(endpoint).origin, operation: 'priority' });
           if (current?.userId !== actor.userId || current?.projectId !== actor.projectId) throw failure('patient_matching_model_access_denied');
         };
-        const questions = { fit: { type: 'score', instructions: JEV_FIT_INSTRUCTIONS, criteria: [...JEV_FIT_LEVELS] } };
+        const questions = { fit: { type: 'score', instructions: JEV_FIT_INSTRUCTIONS, criteria: [...JEV_FIT_LEVELS] }, graded: { type: 'score', instructions: JEV_FIT_INSTRUCTIONS, criteria: [...JEV_GRADED_LEVELS] } };
         const scores = new Array(rows.length);
         let next = 0, model = null;
         await Promise.all(Array.from({ length: Math.min(8, rows.length) }, async () => {
@@ -151,7 +151,8 @@ export function createPatientMatchingModelPorts({ config, usageLedger = null, au
               if (value?.type !== 'score' || !Number.isFinite(value.score) || value.score < 0 || value.score > JEV_FIT_LEVELS.length - 1
                 || (value.confidence != null && (!Number.isFinite(value.confidence) || value.confidence < 0 || value.confidence > 1))) throw failure('patient_matching_priority_invalid');
               model = answer.model ?? model;
-              scores[at] = { registryId: row.registryId, score: value.score, confidence: value.confidence ?? null };
+              // The graded reading rides in the same request; its expected gain is the third order of the ranking, absent when the answer has none.
+              scores[at] = { registryId: row.registryId, score: value.score, confidence: value.confidence ?? null, gradedGain: answer.answers?.graded?.type === 'score' ? expectedGradedGain(answer.answers.graded.probabilities) : null };
             } catch (error) {
               if (envelope.signal?.aborted) throw error;
               scores[at] = { registryId: row.registryId, score: null, code: /^(?:patient_matching_|jev_|judge_|usage_)[a-z0-9_]+$/.test(error?.code ?? '') ? error.code : 'patient_matching_priority_failed' };
@@ -160,7 +161,7 @@ export function createPatientMatchingModelPorts({ config, usageLedger = null, au
         }));
         const answered = scores.filter(row => row.score !== null).length;
         return reply(answered === rows.length ? 'complete' : answered ? 'partial' : 'failed', answered ? 'Typed fit scores saved for ranking; they do not establish eligibility.' : 'Typed fit scores are unavailable; the rerank order stands.',
-          { model: model ?? profile.triageModel, rubric: 'jev-fit-5-v1', scores, answered });
+          { model: model ?? profile.triageModel, rubric: 'jev-fit-graded-5-v2', scores, answered });
       } catch (error) { return reply('failed', 'Typed fit scores are unavailable; the rerank order stands.', { code: /^(?:patient_matching_|jev_|judge_|usage_)[a-z0-9_]+$/.test(error?.code??'') ? error.code : 'patient_matching_priority_failed' }); }
     },
   };

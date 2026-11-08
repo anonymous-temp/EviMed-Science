@@ -63,12 +63,16 @@ test('typed fit asks Jev once per candidate with the pinned profile and the five
       assert.equal(call.questions.fit.type, 'score');
       assert.equal(call.questions.fit.criteria.length, 5);
       seen.push(call.state.trial_record);
-      return { answers: { fit: { type: 'score', score: call.state.trial_record === 'Trial B' ? 3.6 : 0.4, confidence: 0.7 } }, model: 'jev-1.14.0' };
+      assert.equal(call.questions.graded.type, 'score', 'the graded reading rides in the same request');
+      assert.equal(call.questions.graded.criteria.length, 5);
+      return { answers: { fit: { type: 'score', score: call.state.trial_record === 'Trial B' ? 3.6 : 0.4, confidence: 0.7 }, ...(call.state.trial_record === 'Trial B' ? { graded: { type: 'score', score: 3.5, probabilities: { 3: 0.5, 4: 0.5 } } } : {}) }, model: 'jev-1.14.0' };
     },
   });
   const result = await ports.jevFit({ scope, input: { query: 'patient passages', candidates: [{ registryId: 'A', text: 'Trial A' }, { registryId: 'B', text: 'Trial B' }] } });
   assert.equal(result.status, 'complete');
   assert.deepEqual(result.data.scores.map(row => [row.registryId, row.score]), [['A', 0.4], ['B', 3.6]]);
+  assert.deepEqual(result.data.scores.map(row => [row.registryId, row.gradedGain]), [['A', null], ['B', 1.75]], 'expected gain of the graded probabilities; none when the answer has none');
+  assert.equal(result.data.rubric, 'jev-fit-graded-5-v2');
   assert.deepEqual(seen.sort(), ['Trial A', 'Trial B']);
   assert.equal(config.reviewJevModel, 'jev-1.13.0');
 });

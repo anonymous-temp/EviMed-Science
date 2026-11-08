@@ -396,6 +396,27 @@ These measure the clinical judgment, not ranking. They were scored on 2026-11-05
 The n2c2 official test has been read once by the previous judge; a replay with the native child would be a second system on the same test, not an untouched holdout.
 
 
+## 4.5 Ranking policy triallink-2 (2026-11-08 night): the SIGIR gap
+
+SIGIR (all 58 patients are development) trailed TrialGPT 2.0 · GPT-5.4 (0.628 vs 0.66). Every fusion of the saved answers was compared
+on the development patients (`vm-data/r2/sigir/fusions.py`): Jev's graded reading (off-topic < excluded < doubtful prerequisite <
+plausible < strong), already asked in the v2 runs, ranks SIGIR better than the fit alone, and taken as the expected benchmark gain of its
+level probabilities (gains 0/1/1/1.5/2) with the Qwen rerank at half weight it lifts SIGIR without losing TREC. Flash on every pair as a
+fourth order adds little (SIGIR 0.669, development macro lower) at four times the cost, so it is not used. Product: `RANKING_POLICY`
+`triallink-2` (weights rerank 0.5, fit 1, graded 1), `expectedGradedGain`, the graded question in the same Jev request (≈ +30% tokens).
+
+| Official evaluator, 183 patients | triallink-1 | **triallink-2** |
+|---|---|---|
+| nDCG@10 / P@10 / MRR / MAP | 0.775 / 0.710 / 0.820 / 0.617 | **0.787 / 0.723 / 0.853 / 0.637** (TrialGPT 2.0 · GPT-5.4: 0.76 / 0.70 / 0.85 / 0.60) |
+| SIGIR / TREC 2021 / TREC 2022 nDCG@10 | 0.628 / 0.880 / 0.815 | **0.659** / 0.883 / 0.819 |
+| Held-out 105, nDCG@10 | 0.839 | 0.841 |
+| NIH-TrialBench recall@10, institute macro / all cases | 96.0% / 89.7% | 95.2% / 85.7% |
+
+The graded reading favours trials a patient fits over the one trial a vignette was written from, so NIH-TrialBench drops slightly; it
+was not used in the choice. External figure (owner, same night): NIH comparators named without a backbone (TrialGPT 2.0 reports NIH
+only with GPT-4.1, see §4.4), GPT-4 zero-shot (Wornow et al., 0.93) removed from the n2c2 panel at the owner's request — it remains the
+best published n2c2 result and is kept here —, TrialLink's n2c2 shown as 0.918 (the two unsaved patients completed after the id fix).
+
 ## 4.4 Gaps recorded at the owner's review (2026-11-08 evening)
 
 | Gap | What is known | Next |

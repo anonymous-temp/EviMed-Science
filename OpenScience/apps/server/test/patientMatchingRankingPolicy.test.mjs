@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { test } from 'node:test';
-import { JEV_FIT_INSTRUCTIONS, JEV_FIT_LEVELS, RANKING_POLICY, composeRanking, trialRecordText } from '@evimed/patient-matching-core';
+import { JEV_FIT_INSTRUCTIONS, JEV_FIT_LEVELS, JEV_GRADED_LEVELS, JEV_GRADED_GAINS, RANKING_POLICY, composeRanking, expectedGradedGain, trialRecordText } from '@evimed/patient-matching-core';
 
 const harness = fs.readFileSync(new URL('../../../evals/vcr-matching-boards/jev_arm.py', import.meta.url), 'utf8');
 
 test('the product Jev rubric is the one the benchmark measured, word for word', () => {
-  for (const level of JEV_FIT_LEVELS) assert.ok(harness.includes(JSON.stringify(level)), `level not in jev_arm.py: ${level.slice(0, 40)}`);
+  for (const level of [...JEV_FIT_LEVELS, ...JEV_GRADED_LEVELS]) assert.ok(harness.includes(JSON.stringify(level)), `level not in jev_arm.py: ${level.slice(0, 40)}`);
   for (const sentence of JEV_FIT_INSTRUCTIONS.split(/(?<=\.) /)) assert.ok(harness.includes(sentence), `instruction not in jev_arm.py: ${sentence.slice(0, 40)}`);
 });
 
@@ -18,11 +18,27 @@ test('the trial record keeps the benchmark field order and the whole eligibility
 });
 
 test('rank fusion follows the measured policy and never invents or drops a candidate', () => {
-  assert.equal(RANKING_POLICY.id, 'triallink-1');
+  assert.equal(RANKING_POLICY.id, 'triallink-2');
+  assert.deepEqual(RANKING_POLICY.weights, { rerank: 0.5, fit: 1, graded: 1 });
   const rerankOrder = ['a', 'b', 'c', 'd'];
   const fused = composeRanking({ rerankOrder, jevScores: [{ registryId: 'd', score: 3.9 }, { registryId: 'a', score: 0.1 }, { registryId: 'b', score: 2 }, { registryId: 'c', score: 2 }, { registryId: 'zz', score: 4 }] });
   assert.deepEqual(fused.jevOrder, ['d', 'b', 'c', 'a']);
-  assert.deepEqual(fused.finalOrder, ['b', 'a', 'd', 'c']);
+  assert.deepEqual(fused.finalOrder, ['d', 'b', 'a', 'c'], 'half-weight rerank: the fit leader d overtakes the rerank leader a');
   assert.deepEqual(composeRanking({ rerankOrder }).finalOrder, rerankOrder);
   assert.throws(() => composeRanking({ rerankOrder: ['a', 'a'] }));
+});
+
+test('the graded reading enters as the expected benchmark gain of its level probabilities, a third order of the fusion', () => {
+  assert.deepEqual(JEV_GRADED_GAINS, [0, 1, 1, 1.5, 2]);
+  assert.equal(expectedGradedGain({ 0: 0.5, 4: 0.5 }), 1);
+  assert.equal(expectedGradedGain([0, 0, 0, 1, 0]), 1.5);
+  assert.equal(expectedGradedGain({ 0: 0.2, 1: 0.2, 2: 0.2, 3: 0.2, 4: 0.2 }), (0 + 1 + 1 + 1.5 + 2) / 5);
+  assert.equal(expectedGradedGain(null), null);
+  assert.equal(expectedGradedGain({ 7: 1 }), null);
+  const rerankOrder = ['a', 'b', 'c'];
+  const jevScores = [{ registryId: 'a', score: 1 }, { registryId: 'b', score: 3 }, { registryId: 'c', score: 2 }];
+  assert.deepEqual(composeRanking({ rerankOrder, jevScores }).finalOrder, ['b', 'a', 'c'], 'no graded answers: rerank and fit alone');
+  const withGraded = composeRanking({ rerankOrder, jevScores, gradedGains: [{ registryId: 'c', gain: 2 }, { registryId: 'b', gain: 1.5 }, { registryId: 'a', gain: 0 }] });
+  assert.deepEqual(withGraded.gradedOrder, ['c', 'b', 'a']);
+  assert.deepEqual(withGraded.finalOrder, ['b', 'c', 'a'], 'the graded gain lifts c above the rerank-favoured a');
 });

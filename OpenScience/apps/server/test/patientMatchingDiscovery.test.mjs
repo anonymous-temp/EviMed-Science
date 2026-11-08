@@ -47,7 +47,7 @@ test('discovery asks the lexical branch for the condition and its ranked terms, 
  assert.deepEqual(saved.rerank.rerankOrder, ids);
  assert.deepEqual(saved.rerank.jev.order, [ids[1], ids[2], ids[0]]);
  assert.deepEqual(saved.rerank.finalOrder, [ids[1], ids[0], ids[2]], 'rank fusion: the second candidate leads both orders on the sum, the first keeps its rerank lead over the third');
- assert.equal(saved.rerank.policy, 'triallink-1');
+ assert.equal(saved.rerank.policy, 'triallink-2');
  assert.deepEqual(answer.data.candidates.map(row => row.registryId), saved.rerank.finalOrder);
 });
 test('without Jev the rerank order stands, and a failed Jev answer never fails discovery', async () => {
