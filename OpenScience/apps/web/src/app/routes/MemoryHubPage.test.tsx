@@ -875,6 +875,8 @@ describe("记忆胶囊", () => {
   it("comes back to the place in the list the reader had scrolled to after a visit elsewhere", async () => {
     const { container } = openInHistory();
     await screen.findByRole("button", { name: /药学背景/ });
+    // The page writes the list it landed on into the address (in place) before a reader has anything to scroll: wait for that entry.
+    await waitFor(() => expect(where()).toContain("tab=self"));
     // The section's own scroll (the page's), not the left column's.
     const scroller = () => container.querySelector("[data-page-body]")!.closest<HTMLElement>(".overflow-y-auto")!;
     scroller().scrollTop = 180;
