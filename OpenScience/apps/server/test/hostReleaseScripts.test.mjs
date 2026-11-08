@@ -45,6 +45,14 @@ test("the switch moves `current` first and runs compose through it", async () =>
   assert.doesNotMatch(text, /cd "\$\{?REL\}?/, "compose must never run from the release directory");
 });
 
+test("the switch refuses a release whose production state (the engine's rendered configuration) does not follow it, before current moves", async () => {
+  const text = await code("host-release-switch.sh");
+  const checked = text.indexOf('configure-production-state.mjs" --check');
+  const moved = text.indexOf('require("node:fs").renameSync(process.argv[1], process.argv[2])');
+  assert.ok(checked > 0 && moved > checked, "the check runs while the old release is still in front");
+  assert.match(text.slice(checked, checked + 600), /exit 1/);
+});
+
 test("old releases leave through release-retention, which refuses what a container still names", async () => {
   const text = await code("host-release-switch.sh");
   assert.match(text, /release-retention\.mjs prune "\$\{ROOT\}\/releases" --keep 2 --images --apply/);

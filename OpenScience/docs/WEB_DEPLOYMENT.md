@@ -1247,6 +1247,13 @@ What the deployment adds to the service (`deploy/web/docker-compose.yml`, `deplo
 empty directory ends, about 30 s later, with "Compile sources contain no files": the bot ran the task as the caller, and no model was
 called). A failed fact is named, lists the feature it degrades under `degraded`, and never fails readiness or a conversation.
 
+A change of the memory layout is a change of `ov.conf` too: `server.user_config_defaults.memory_policy.memory_types` is the
+layout's list, rendered by `pnpm configure:production-state`, and an engine left on the old list answers a registered user's settings
+with it, so the engine check reads `memoryTemplates=openviking_memory_types_mismatch` and native memory is off behind a green readiness
+(2026-11-08, `people` and `notes`). `host-release-switch.sh` therefore runs `configure-production-state.mjs --check` before `current`
+moves and stops by name; move the stored file aside, run `configure-production-state.mjs` from the new release (every secret is reused,
+only the rendering changes) and switch again.
+
 Moving v0.5.0 to v0.5.1.1 (the pin PR of 2026-10-23; the engine's task store has no migration code, and a volume written by v0.5.1.1
 is not readable by v0.5.0, so the way back is the backup and the previous pin, never a downgrade in place): take a verified backup of
 the volume (`scripts/ops/openviking-backup.mjs`, engine frozen, restore drilled); drain before the switch — no knowledge round running
