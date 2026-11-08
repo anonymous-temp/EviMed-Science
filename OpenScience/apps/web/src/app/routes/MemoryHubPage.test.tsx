@@ -372,12 +372,13 @@ describe("记忆胶囊", () => {
     fetchMyCapsule.mockResolvedValue({ capsule: null, capsules: [], entries: [], forgotten: [] });
     const first = open();
     expect(await screen.findByRole("button", { name: /提交前给成品做最后把关/ })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /做法/ })).toHaveAttribute("aria-current", "page");
+    // The page writes the list it chose into the address once it lands, and the directory marks it from there: one render later.
+    await waitFor(() => expect(screen.getByRole("link", { name: /做法/ })).toHaveAttribute("aria-current", "page"));
     first.unmount();
     fetchMemoryProfile.mockRejectedValue(new Error("down"));
     open();
     expect(await screen.findByText("没有读到全部记忆。")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /关于你/ })).toHaveAttribute("aria-current", "page");
+    await waitFor(() => expect(screen.getByRole("link", { name: /关于你/ })).toHaveAttribute("aria-current", "page"));
   });
 
   it("an address that names a tab is obeyed, and a tab the researcher clicked before the data came is not moved", async () => {
