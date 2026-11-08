@@ -1867,7 +1867,7 @@ function skillContentDelivered(output, name) {
  * the kernel still settling the turn that just ended, a plugin configuration
  * being applied — and a refused repair costs the run its whole package.
  */
-const TRANSIENT_REPAIR_REFUSALS = new Set(["runtime_session_error", "plugin_apply_in_progress"]);
+const TRANSIENT_REPAIR_REFUSALS = new Set(["runtime_session_error", "plugin_apply_in_progress", "memory_source_cleanup_busy"]);
 
 /**
  * Send one repair prompt, again after a short wait when the refusal can be

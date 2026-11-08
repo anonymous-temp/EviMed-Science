@@ -288,7 +288,7 @@ const BACKFILL_BATCH = 2000;
  */
 export async function backfillProjectStamps(database) {
   const present = await database.query("SELECT to_regclass('evimed_control.projects') IS NOT NULL AS ok");
-  if (!present.rows[0]?.ok) return;
+  if (!present.rows[0]?.ok) return false;
   const steps = [
     ["evimed_memory.native_sessions", "project_id", "project_created_at", "created_at", "user_id, engine_session"],
     ["evimed_memory.native_commits", "project_id", "project_created_at", "created_at", "user_id, archive_uri"],
@@ -308,6 +308,7 @@ export async function backfillProjectStamps(database) {
       if (!done.rowCount) break;
     }
   }
+  return true;
 }
 
 /** @param {any} database */
@@ -324,7 +325,8 @@ export async function migrateNativeMemory(database) {
     // The stamp backfill scans four tables: once it has finished, a marker row says so and later starts skip it.
     const done = await database.query("SELECT 1 FROM evimed_memory.native_markers WHERE name='project-stamps-v1'");
     if (done.rows.length) return;
-    await backfillProjectStamps(database);
+    // No project table yet (a database that has not been migrated): nothing was backfilled, so nothing is marked done.
+    if (!(await backfillProjectStamps(database))) return;
     await database.query("INSERT INTO evimed_memory.native_markers(name) VALUES('project-stamps-v1') ON CONFLICT DO NOTHING");
   }));
   migrations.set(database, attempt);

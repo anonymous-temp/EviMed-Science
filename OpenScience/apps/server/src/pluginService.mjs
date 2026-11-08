@@ -603,7 +603,7 @@ export class PluginService {
         // while one is live. It looks, and never takes a lock the fence waits on: this transaction lasts a whole runtime start.
         if ((await client.query("SELECT to_regclass('evimed_memory.native_writer_leases') IS NOT NULL AS present")).rows[0]?.present) {
           const cleaning = await client.query("SELECT 1 FROM evimed_memory.native_writer_leases WHERE user_id=$1 AND kind='exclusive' AND expires_at>clock_timestamp() LIMIT 1", [project.userId]);
-          if (cleaning.rows.length) return { applying: true };
+          if (cleaning.rows.length) return { applying: true, cleaning: true };
         }
         await this.scope(project.userId, project, client);
         const store = { projectKey, client, open: true, borrowers: new Set() };
@@ -622,7 +622,11 @@ export class PluginService {
       });
       if (outcome.applying) {
         const remaining = deadline - Date.now();
-        if (remaining <= 0) throw new HttpError(423, "plugin_apply_in_progress", "Plugin settings are being applied; retry shortly.");
+        if (remaining <= 0) {
+          // A prompt kept out by an account's source cleanup says so: it is not a plugin apply, and the person should retry in a moment.
+          if (outcome.cleaning) throw Object.assign(new HttpError(409, "memory_source_cleanup_busy", "Memory is being cleaned up for a deleted conversation; retry shortly."), { definitivelyRejected: true });
+          throw new HttpError(423, "plugin_apply_in_progress", "Plugin settings are being applied; retry shortly.");
+        }
         await new Promise((resolve) => setTimeout(resolve, Math.min(remaining, ADMISSION_POLL_MS[Math.min(asked, ADMISSION_POLL_MS.length - 1)])));
         continue;
       }

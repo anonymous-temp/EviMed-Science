@@ -518,7 +518,8 @@ export class NativeMemoryWorker {
         this.#assertDiffContext(commit, diff, context);
         if(!sourceAllowed) {
           const task=commit.taskId?await sessions.task(commit.userId,commit.taskId):null;
-          if(task&&task.status!=='completed')return false;
+          // A failed or cancelled task that still wrote a diff is ingested as cleanup authority too; only a task still working waits.
+          if(task&&!['completed','failed','cancelled','canceled'].includes(String(task.status).toLowerCase()))return false;
           // Keep the exact typed effects as cleanup authority; no deleted source is judged, recalled or promoted as learning.
           await this.ingest(commit,diff,{context,sourceDeleted:true});
           await this.overlay.noteNativeIngested(commit.userId,commit.archiveUri);
@@ -554,15 +555,16 @@ export class NativeMemoryWorker {
       }
     }
     if(!sourceAllowed) {
-      // The source conversation was deleted and the engine wrote no diff: a commit that failed, whose task ended without one, or that was
-      // lost is terminal. Left pending it would hide the account's whole memory and fail every cleanup retry.
+      // The source conversation was deleted and the engine wrote no diff: a commit that is proven failed (the marker, or a failed or
+      // cancelled task) is terminal. Left pending it would hide the account's whole memory and fail every cleanup retry.
       let terminal = await sessions.read(commit.userId, `${commit.archiveUri}/.failed.json`) !== null;
       if (!terminal && commit.taskId) {
         const task = await sessions.task(commit.userId, commit.taskId);
         if (['failed', 'cancelled', 'canceled'].includes(String(task?.status ?? '').toLowerCase())) terminal = true;
         else if (task?.status === 'running' || task?.status === 'pending') return false;
       }
-      if (!terminal && Date.now() - Date.parse(String(commit.createdAt)) > LOST_AFTER_MS) terminal = true;
+      // Positive proof only: a marker or a failed/cancelled task. A timer alone is not proof (an archive found by a scan has no task id and
+      // the engine may still write a diff), so such a commit stays pending until the engine says something.
       if (!terminal) return false;
       await this.overlay.abandonCommit(commit.userId, commit.archiveUri, 'source_conversation_deleted');
       return true;

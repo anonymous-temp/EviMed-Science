@@ -391,7 +391,9 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       // The recall itself succeeded and is returned. What cannot be proven is where its memories came from, so the run's learning fails
       // closed: its record carries an unclassified source, which the distillation refuses (`methodSourceAllowsLearning`). Counted.
       recordRecallNote("receipt_failed");
-      try{await sourceReceiptFailed?.({user:ctx.user,project:ctx.project,sessionId:admitted.sessionId,context:ctx.memoryContext});}catch{ /* the count above stands */ }
+      // When even that cannot be recorded (no hook, or it throws) a run could learn with no record of its sources: the recall is refused.
+      try{if(typeof sourceReceiptFailed!=='function')throw new Error('no hook');await sourceReceiptFailed({user:ctx.user,project:ctx.project,sessionId:admitted.sessionId,context:ctx.memoryContext});}
+      catch{throw new HttpError(503,"memory_scope_denied","The memory source receipt could not be stored.");}
     }}
     void Promise.resolve().then(() => overlay.noteRecalled(userId, files)).then(() => recordRecallNote("noted"), () => recordRecallNote("failed"));
   }

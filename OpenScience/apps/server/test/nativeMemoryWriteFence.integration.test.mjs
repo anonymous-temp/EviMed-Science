@@ -112,9 +112,37 @@ test('the native migration runs outside a caller\'s transaction and the stamp ba
   await database.migrate();
   const { migrateNativeMemory } = await import('../src/nativeMemoryPersistence.mjs');
   const { migrateMemorySettings } = await import('../src/memorySettingsPersistence.mjs');
-  await migrateMemorySettings(database);
-  await assert.rejects(database.transaction(async () => { await migrateNativeMemory(database); throw new Error('caller rolls back'); }), /caller rolls back/);
+  await assert.rejects(database.transaction(async () => { await migrateMemorySettings(database); await migrateNativeMemory(database); throw new Error('caller rolls back'); }), /caller rolls back/);
   const present = await database.query("SELECT to_regclass('evimed_memory.native_markers') IS NOT NULL AS ok, to_regclass('evimed_memory.native_writer_leases') IS NOT NULL AS leases");
   assert.deepEqual(present.rows[0], { ok: true, leases: true }, 'the memoised DDL survives the caller\'s rollback');
   assert.equal((await database.query("SELECT count(*)::int AS n FROM evimed_memory.native_markers WHERE name='project-stamps-v1'")).rows[0].n, 1);
+});
+
+test('an exclusive lease that lapsed is lost whatever re-admission answers, and a lost shared holder stops before its next write', options, async t => {
+  const { database } = await fixture(t);
+  const lapse = "UPDATE evimed_memory.native_writer_leases SET expires_at=clock_timestamp()-interval '1 second' WHERE user_id='fence-a'";
+  // Expired but not yet swept: the renewal does not count it as renewed, and the cleanup cannot complete.
+  const started = gate(), finish = gate();
+  const cleanup = withNativeMemoryWrite(database, 'fence-a', async () => { started.open(); await finish.promise; return 'done'; }, { exclusive: true, leaseMs: 4000 });
+  await started.promise; await database.query(lapse);
+  await new Promise(resolve => setTimeout(resolve, 1300));
+  finish.open();
+  await assert.rejects(cleanup, { status: 409, code: 'memory_source_cleanup_busy' }, 'a cleanup whose lease lapsed is retried later, not completed');
+  // A shared holder whose lease was lost (re-admission refused by a cleanup that came in) stops at its next engine write.
+  const inside = gate(), proceed = gate(); let afterLoss;
+  const writer = withNativeMemoryWrite(database, 'fence-a', async () => {
+    inside.open(); await proceed.promise;
+    afterLoss = await withNativeMemoryWrite(database, 'fence-a', async () => 'wrote').catch(error => error.code);
+  }, { leaseMs: 4000 });
+  await inside.promise;
+  await database.query("DELETE FROM evimed_memory.native_writer_leases WHERE user_id='fence-a'");
+  await database.query("INSERT INTO evimed_memory.native_writer_leases(user_id,lease_id,kind,expires_at) VALUES('fence-a','cleanup','exclusive',clock_timestamp()+interval '1 minute')");
+  await new Promise(resolve => setTimeout(resolve, 1300));
+  proceed.open(); await writer;
+  assert.equal(afterLoss, 'memory_source_cleanup_busy');
+});
+
+test('the stamp backfill reports that it did nothing when the project table is missing, so no marker is written for it', async () => {
+  const { backfillProjectStamps } = await import('../src/nativeMemoryPersistence.mjs');
+  assert.equal(await backfillProjectStamps({ query: async () => ({ rows: [{ ok: false }] }) }), false);
 });

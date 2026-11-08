@@ -397,7 +397,7 @@ test('a held prompt admission does not park a fenced memory write, and a live ex
   release(); await admission;
   const cleaning=withNativeMemoryWrite(db,owner,async()=>{
     const impatient=new PluginService(db,{admissionWaitMs:300});
-    await assert.rejects(impatient.withAdmission(project,async()=>assert.fail('must not dispatch'),{prompt:true}),{code:'plugin_apply_in_progress'});
+    await assert.rejects(impatient.withAdmission(project,async()=>assert.fail('must not dispatch'),{prompt:true}),{code:'memory_source_cleanup_busy'});
   },{exclusive:true});
   await cleaning;
   assert.equal(await service.withAdmission(project,async()=>'dispatched',{prompt:true}),'dispatched','after the cleanup the prompt is admitted');

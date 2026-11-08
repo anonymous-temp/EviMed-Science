@@ -5252,7 +5252,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     },
     removeDerived: async (project, row) => {
       if(!nativeMemory.configured)throw new HttpError(503,'memory_source_cleanup_unavailable','Native memory cleanup cannot be proved while the engine is unavailable.');
-      if (nativeMemory.configured) await withNativeMemoryWrite(productDatabase,project.userId,async()=>{
+      // Idleness is looked at before the exclusive lease is taken: while that lease is live prompts are kept out, so a retry against an
+      // account that is still working must not block it. It is looked at again under the lease, where it can no longer change by a prompt.
+      const assertAccountIdle=async()=>{
         const owner=await store.userById(project.userId);
         if(!owner)throw new HttpError(409,'memory_source_cleanup_busy','The source owner cannot be verified.');
         for(const candidate of await store.listProjects(owner)) {
@@ -5260,6 +5262,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           if(await runtimeManager.idleVerdict(owned)!=='idle' || await runtimeManager.hasRunningRuns(owned)!==false
             || await runtimeManager.pluginRuntimeBusy(owned)!==false || await runtimeManager.pluginService?.hasPendingPrompts(owned)!==false)throw new HttpError(409,'memory_source_cleanup_busy','Other account work is still using memory.');
         }
+      };
+      if (nativeMemory.configured) await assertAccountIdle();
+      if (nativeMemory.configured) await withNativeMemoryWrite(productDatabase,project.userId,async()=>{
+        await assertAccountIdle();
         const views=await nativeMemoryContexts.all(project.userId);
         for(const view of views)await nativeMemoryWorker.scanArchives(project.userId,{context:view});
         if((await productDatabase.query("SELECT 1 FROM evimed_memory.native_reset_tombstones WHERE user_id=$1 AND state IN ('open','unknown') LIMIT 1",[project.userId])).rows.length)throw new HttpError(409,'memory_source_cleanup_busy','A prior native reset has no terminal write proof.');
@@ -5281,7 +5287,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             const task=commit.taskId?await sourceView.sessions.task(project.userId,commit.taskId):null;
             if(!task || !['completed','failed','cancelled','canceled'].includes(String(task.status).toLowerCase()))throw new HttpError(409,'memory_source_cleanup_busy','The source extraction has no terminal native proof.');
             // A task that ended failed or cancelled wrote no diff: there is nothing of it to remove, and it is terminal.
-            if(['failed','cancelled','canceled'].includes(String(task.status).toLowerCase()))continue;
+            // Only when it left no diff: a failed task that wrote one still needs its diff ingested (the worker does, as cleanup authority).
+            if(['failed','cancelled','canceled'].includes(String(task.status).toLowerCase())&&await sourceView.sessions.read(project.userId,`${commit.archiveUri}/memory_diff.json`)===null)continue;
             throw new HttpError(409,'memory_source_lineage_unverified','The source extraction has no completed native ingestion receipt.');
           }
         }

@@ -995,3 +995,12 @@ test('a source receipt that cannot be stored degrades: the recall is returned, t
   assert.equal(failed.length,2,'the failure hook ran once per recall');
   assert.equal(nativeMemoryCounters().recallNotes.receipt_failed,2);
 });
+
+test('when the failure itself cannot be recorded on the run the recall is refused, so a run never learns with no record of its sources',async t=>{
+  for(const hook of [null,async()=>{throw Error('ledger unavailable');}]){
+    const {call,stub}=await fixture(t,{overlay:{configured:true,sensitiveUris:async()=>[],noteRecalled:async()=>{}},sourceReceipt:async()=>{throw Error('receipt unavailable');},sourceReceiptFailed:hook});
+    const uri=stub.seedMemory(OV_USER,'notes/receipt2.md','RECEIPT_CANARY_2',{type:'notes'});
+    const rest=await call('GET',`/api/v1/content/read?uri=${encodeURIComponent(uri)}`);
+    assert.equal(rest.status,503);assert.doesNotMatch(rest.text,/RECEIPT_CANARY_2/);
+  }
+});

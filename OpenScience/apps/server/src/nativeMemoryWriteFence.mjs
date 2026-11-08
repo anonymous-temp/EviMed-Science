@@ -60,19 +60,27 @@ export async function withNativeMemoryWrite(database, userId, operation, { exclu
   // so it is refused. Work detached from a lease that has been released takes a fence of its own.
   if (current && !current.released) {
     if (exclusive && current.kind === 'shared') throw busy();
+    // Every engine write goes through here (writeAdmission): a holder whose lease was lost stops before its next write.
+    if (current.lost) throw busy();
     return operation();
   }
   const leaseId = randomUUID();
   await admit(database, userId, kind, leaseId, leaseMs);
   /** @type {Lease} */
   const lease = { id: leaseId, userId, kind, released: false, lost: false };
-  // A long operation renews its lease so that it never reads as crashed. A renewal that finds no row was swept (it expired while this
-  // process could not reach the database): the lease is re-admitted under the same rules, and flagged lost when that is refused.
+  // A long operation renews its lease so that it never reads as crashed. A renewal that finds the row missing or already expired means
+  // the lease lapsed (this process could not reach the database in time): another writer, or a cleanup, may have been admitted beside it.
+  // A shared lease is taken again under the same rules and is lost only when that is refused; an exclusive one is lost whatever
+  // re-admission answers, because it can no longer say that no writer ran beside it.
   const renew = setInterval(() => {
     void database.withoutTransactionClient(() => database.query(
-      `UPDATE evimed_memory.native_writer_leases SET expires_at=clock_timestamp() + ($3 || ' milliseconds')::interval WHERE user_id=$1 AND lease_id=$2`,
+      `UPDATE evimed_memory.native_writer_leases SET expires_at=clock_timestamp() + ($3 || ' milliseconds')::interval WHERE user_id=$1 AND lease_id=$2 AND expires_at>clock_timestamp()`,
       [userId, leaseId, String(leaseMs)])).then(async (/** @type {any} */ result) => {
-      if (result.rowCount === 0 && !lease.released) await admit(database, userId, kind, leaseId, leaseMs).catch(() => { lease.lost = true; });
+      if (result.rowCount !== 0 || lease.released) return;
+      if (exclusive) lease.lost = true;
+      await admit(database, userId, kind, leaseId, leaseMs).catch(() => { lease.lost = true; });
+      // The operation ended while the lease was being taken again: nothing may be left behind.
+      if (lease.released) await release(database, userId, leaseId).catch(() => {});
     }).catch(() => {});
   }, Math.max(1000, Math.floor(leaseMs / 4)));
   renew.unref?.();
