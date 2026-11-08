@@ -507,13 +507,22 @@ describe("虚拟患者 · the second view, 轨迹预测", () => {
     expect(await screen.findByRole("table", { name: "逐人预测去向" })).toBeInTheDocument();
   });
 
-  it("opens on the batch prediction when the entrance's address says individual and a prediction exists; a plain address keeps the patients", async () => {
+  it("opens on the batch prediction when the entrance's address asks for it and a prediction exists; the patient list's own address and a patient record keep the patients", async () => {
     const prediction = { id: "pred-1", kind: "prediction", createdAt: "2026-01-02", hash: "h", summary: { origin: "2026-01-01", historyId: "history-1", endpoint: { code: "x", unit: "%", type: "continuous" }, horizonsDays: [30], accepted: 8, invalidRows: 0, model: { name: "m", version: "1" }, accounting: { submitted: 10, admitted: 10, completed: 8, rejected: 2, failed: 0, unprocessed: 0, partial: 0 }, versionNumber: 1, premises: [] } };
     installVcrServer(network.productRequest, { [tab("longitudinal")]: longitudinal([history, prediction]), [`GET /vcr/studies/${STUDY_ID}/longitudinal/pred-1/subjects?offset=0&limit=50`]: { id: "pred-1", total: 10, matching: 0, offset: 0, limit: 50, more: false, lines: [], trajectories: {}, actionContext: null } });
     const plain = draw();
     await screen.findByRole("table", { name: "患者" });
     plain.unmount();
-    draw(ev201(), "/?level=individual");
+    // the population selector, the overview link and the old /patients address all carry level=individual: the list stays
+    const list = draw(ev201(), "/?level=individual");
+    await screen.findByRole("table", { name: "患者" });
+    list.unmount();
+    // a patient's record opens the list with its drawer, even beside the entrance's view
+    const record = draw(ev201(), "/?level=individual&view=forecast&patient=P7");
+    await screen.findByRole("table", { name: "患者" });
+    expect(screen.queryByLabelText("患者轨迹预测")).toBeNull();
+    record.unmount();
+    draw(ev201(), "/?level=individual&view=forecast");
     expect(await screen.findByLabelText("患者轨迹预测")).toBeInTheDocument();
     expect(screen.queryByRole("table", { name: "患者" })).toBeNull();
   });

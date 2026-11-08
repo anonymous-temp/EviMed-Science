@@ -239,3 +239,18 @@ it('words an arm that could not be calculated, an attached preliminary result is
   expect(screen.getAllByText('初筛（只用于排序）').length).toBeGreaterThan(0);
   expect(document.body.textContent).not.toMatch(/invalid_parameters|units_not_convertible|\[object Object\]/);
 });
+
+it('words the gap to the reference by its sign: a best design worse than an infeasible reference is "more", not "less"', async () => {
+  // minimize sample size; the reference (n=100) was infeasible, the best feasible design needs 60 more: improvement = sign × (best − reference) = -60
+  serve([entry('cmp1', 'campaign')], { cmp1: campaign({ objective: { measure: 'expected_sample_size', direction: 'minimize', truth: 'alt', label: '样本量' }, improvement: -60 }) });
+  draw();
+  expect(await screen.findByText((_, el) => el?.getAttribute('data-note') === '' && /比参照方案多 60/.test(el.textContent ?? ''))).toBeInTheDocument();
+  expect(screen.queryByText((_, el) => el?.getAttribute('data-note') === '' && /比参照方案少/.test(el.textContent ?? ''))).toBeNull();
+});
+
+it('names a varied design field in words, never as the generic 参数', async () => {
+  serve([entry('cmp1', 'campaign')], { cmp1: campaign({ candidates: [candidate(0, { set: { 'design.nTreat': 120, 'design.nControl': 120 } })], finalists: [], best: 'c0', feasible: ['c0'], inconclusive: [] }) });
+  draw();
+  expect(await screen.findAllByText(/干预组人数 120，对照组人数 120/)).not.toHaveLength(0);
+  expect(screen.queryByText(/参数 120/)).toBeNull();
+});

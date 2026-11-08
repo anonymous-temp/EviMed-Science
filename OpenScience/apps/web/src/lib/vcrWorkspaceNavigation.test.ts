@@ -31,7 +31,7 @@ describe("VCR entrances", () => {
   });
   it("keeps context in the explicitly addressed study only", () => {
     const from = { pathname: "/app/virtual-research/std_1/population", search: "?session=ses_1&conversation=open&level=cohort&step=population&private=drop" };
-    expect(vcrWorkspaceDestinationPath("patient-trajectory", from)).toBe("/app/virtual-research/std_1/population?session=ses_1&conversation=open&level=individual");
+    expect(vcrWorkspaceDestinationPath("patient-trajectory", from)).toBe("/app/virtual-research/std_1/population?session=ses_1&conversation=open&level=individual&view=forecast");
     expect(vcrContextPath("/app/virtual-research/std_2/trial", from)).toBe("/app/virtual-research/std_2/trial");
     expect(vcrWorkspaceDestinationPath("virtual-lab", { pathname: "/app/chat/ses_1", search: from.search })).toBe("/app/virtual-research?area=virtual-lab");
   });
@@ -39,7 +39,7 @@ describe("VCR entrances", () => {
     const path = vcrWorkspaceDestinationPath("patient-trajectory", { pathname: "/app/virtual-research/std_1/chat", search: "?result=trial&session=ses_1&conversation=open" });
     const url = new URL(path, "https://vcr.invalid");
     expect(url.pathname).toBe("/app/virtual-research/std_1/chat");
-    expect(Object.fromEntries(url.searchParams)).toEqual({ session: "ses_1", conversation: "open", level: "individual", result: "population" });
+    expect(Object.fromEntries(url.searchParams)).toEqual({ session: "ses_1", conversation: "open", level: "individual", view: "forecast", result: "population" });
     expect(vcrWorkspaceCurrentArea(url.pathname, url.search)).toBe("patient-trajectory");
     expect(vcrWorkspaceCurrentArea(url.pathname, "?result=population&level=cohort")).toBe("virtual-population");
     expect(vcrWorkspaceCurrentArea(url.pathname, "?result=comparator")).toBe("synthetic-control");

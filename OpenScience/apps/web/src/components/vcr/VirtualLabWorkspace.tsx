@@ -22,6 +22,7 @@ import { VcrToolbarActions, type VcrToolbarAction } from "./VcrToolbarActions";
 import { VcrTabError, useVcrLoad } from "./vcrTabKit";
 import { VcrTabSkeleton } from "./VcrStates";
 import { methodFieldText } from "./vcrMethodFieldText";
+import { fieldLabel, hasFieldLabel } from "./vcrScenarioFieldLabels";
 import { mcseText, numberText, valueText } from "./vcrText";
 
 /**
@@ -70,11 +71,29 @@ function scalarText(value: unknown): string {
   return typeof value === "number" ? numberText(value) : String(value);
 }
 
+/**
+ * The direction of the best design against the reference. `improvement` is sign × (best − reference) with the sign of the objective, so it is
+ * negative when the best feasible design is worse than the reference (an infeasible reference often is): the word follows the value.
+ */
+function improvementWord(direction: string, improvement: number): string {
+  const minimize = direction === "min" || direction === "minimize";
+  const better = improvement >= 0;
+  return minimize === better ? "比参照方案少 " : "比参照方案多 ";
+}
+
+/** A varied path's name: the method's own words, then the shared field vocabulary, and only then the generic 「参数」. */
+function candidatePathLabel(method: string, path: string): string {
+  const own = methodFieldText(method, path, {}, {}, "").label;
+  if (own) return own;
+  const key = path.split(".").at(-1)?.replace(/\[\d*\]$/, "") ?? "";
+  return hasFieldLabel(key) ? fieldLabel(key) : "参数";
+}
+
 /** What a candidate is, in the words of the method's own fields (never the raw path). */
 function setText(method: string, set: Record<string, unknown>): string {
   const entries = Object.entries(set);
   if (!entries.length) return "";
-  return entries.map(([path, value]) => `${methodFieldText(method, path, {}, {}, "参数").label} ${scalarText(value)}`).join("，");
+  return entries.map(([path, value]) => `${candidatePathLabel(method, path)} ${scalarText(value)}`).join("，");
 }
 
 /** A candidate's constraints, one line each: the limit, the verdict and the conservative bound it was judged on. */
@@ -154,7 +173,7 @@ function CampaignView({ studyId, view, reload }: { studyId: string; view: VcrCam
             : view.undecided?.closest ? [`没有方案确认满足全部约束；最接近的是 #${view.undecided.closest.index + 1}${view.undecided.closest.objective ? `，${view.objective.label} ${valueText(view.undecided.closest.objective)}` : ""}，还有 ${view.undecided.closest.constraints.length} 个约束无法确定。`] : [])]} />
         {view.againstReference?.difference
           ? <Note result={["与参照方案比，差值 ", { n: `${valueText(view.againstReference.difference)}${mcseSuffix(view.againstReference.difference)}` }, view.againstReference.couplingText ? `；${view.againstReference.couplingText}。` : "。"]} />
-          : view.improvement != null && view.reference && <Note result={[view.objective.direction === "min" || view.objective.direction === "minimize" ? "比参照方案少 " : "比参照方案多 ", { n: `${numberText(Math.abs(view.improvement))}${(best?.objective.final ?? best?.objective.screening)?.unit ?? ""}` }, `（${view.objective.label}）。`]} />}
+          : view.improvement != null && view.reference && <Note result={[improvementWord(view.objective.direction, view.improvement), { n: `${numberText(Math.abs(view.improvement))}${(best?.objective.final ?? best?.objective.screening)?.unit ?? ""}` }, `（${view.objective.label}）。`]} />}
       </div>
 
       <FactList rows={facts} />

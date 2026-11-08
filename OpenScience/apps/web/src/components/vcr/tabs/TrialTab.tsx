@@ -25,7 +25,7 @@ import { FactList, type Fact } from "@/components/ui/FactList";
 import { Headline } from "@/components/ui/Headline";
 import { Textarea } from "@/components/ui/Input";
 import { List, ListRow } from "@/components/ui/ListRow";
-import type { NotePart } from "@/components/ui/Note";
+import { Note, type NotePart } from "@/components/ui/Note";
 import { Tag } from "@/components/ui/Tag";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { EmptyState } from "@/components/cards/EmptyState";
@@ -110,30 +110,41 @@ export function TrialTab({ studyId, study }: { studyId: string; study: VcrStudy 
   const object = params.get("object");
   const { state, reload } = useVcrLoad(`${studyId}:trial:${object ?? ""}`, () => getVcrTrial(studyId, object ? { object } : undefined));
   // The lab's experiments and design searches (虚拟实验室) are a record of this step too: a study that has any gets a 「实验」 view, and
-  // one that has only those opens on it. A lab that cannot be read is no experiments, never an error on the designs.
-  const [labCount, setLabCount] = useState(0);
+  // one that has only those opens on it. The view waits for both reads, so a study holding only experiments never flashes the empty designs
+  // state first; a lab that cannot be read leaves the designs as they are and says so with a retry.
+  const [labCount, setLabCount] = useState<number | null>(null);
+  const [labFailed, setLabFailed] = useState(false);
+  const [labRead, setLabRead] = useState(0);
   const [showLab, setShowLab] = useState<boolean | null>(null);
   // The record the person chose when leaving the lab: the designs view mounts fresh, so it must open on that record and not on 方案.
   const [leftFor, setLeftFor] = useState<Exclude<TrialView, "lab">>("designs");
   // The conversation creates experiments while this page is open: read the count again when it settles.
   useEffect(() => {
     let live = true;
-    const read = () => { Promise.resolve().then(() => listVcrLabExperiments(studyId)).then((answer) => { if (live) setLabCount(answer.experiments.length); }, () => undefined); };
+    const read = () => {
+      Promise.resolve().then(() => listVcrLabExperiments(studyId)).then(
+        (answer) => { if (live) { setLabCount(answer.experiments.length); setLabFailed(false); } },
+        () => { if (live) { setLabCount((held) => held ?? 0); setLabFailed(true); } });
+    };
     read();
     window.addEventListener(CONVERSATION_SETTLED_EVENT, read);
     return () => { live = false; window.removeEventListener(CONVERSATION_SETTLED_EVENT, read); };
-  }, [studyId]);
-  if (state.kind === "loading") return <VcrTabSkeleton />;
+  }, [studyId, labRead]);
+  if (state.kind === "loading" || (state.kind === "ready" && labCount === null)) return <VcrTabSkeleton />;
   if (state.kind === "error") return <VcrTabError message={state.message} onRetry={reload} />;
-  const lab = showLab ?? (labCount > 0 && !trialHasDesigns(state.data));
-  if (lab && labCount > 0) {
-    const chips = trialViews(state.data, study, labCount);
+  const count = labCount ?? 0;
+  const lab = showLab ?? (count > 0 && !trialHasDesigns(state.data));
+  if (lab && count > 0) {
+    const chips = trialViews(state.data, study, count);
     return (
       <VirtualLabWorkspace studyId={studyId} canRun={study.abilities.includes("run")}
         switcher={{ kind: "chips", label: "记录", neutral: chips[0].value, value: "lab", onChange: (next) => { if (next !== "lab") { setLeftFor(next as Exclude<TrialView, "lab">); setShowLab(false); } }, options: chips }} />
     );
   }
-  return <TrialView studyId={studyId} study={study} data={state.data} reload={reload} labCount={labCount} initialView={leftFor} onShowLab={() => setShowLab(true)} />;
+  return <>
+    {labFailed && <Note action={<Button size="sm" variant="secondary" onClick={() => setLabRead((n) => n + 1)}>重试</Button>}>虚拟实验室的记录暂时无法读取；下面的方案不受影响。</Note>}
+    <TrialView studyId={studyId} study={study} data={state.data} reload={reload} labCount={count} initialView={leftFor} onShowLab={() => setShowLab(true)} />
+  </>;
 }
 
 /** Whether the step holds a design or a forecast of its own. */

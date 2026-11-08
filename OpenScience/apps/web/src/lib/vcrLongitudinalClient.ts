@@ -7,6 +7,8 @@ export type TrajectoryStatus = 'completed' | 'rejected' | 'failed' | 'unprocesse
 export interface TrajectorySubjectLine {
   subjectKey: string; status: TrajectoryStatus; reason: string | null; horizonsRequested: number; horizonsAccepted: number;
   partial?: boolean; draws?: number; uncertainty?: TrajectoryUncertainty;
+  /** The person's place in submission order (1-based), the same under every filter and page; absent from an older server. */
+  ordinal?: number;
 }
 export interface TrajectoryPoint { horizonDays: number; point: number; sd: number | null; quantiles: Array<{ p: number; value: number }>; draws: number; uncertainty?: string }
 export interface TrajectorySubjectPage {

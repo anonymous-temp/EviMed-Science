@@ -456,7 +456,9 @@ export function createVcrLongitudinal({store,dataStore,dataPlane,matchStore,acce
         lines = reconcileSubjects({subjects,horizonsDays:held.content.horizonsDays,rows:held.content.rows,validationRejected:held.content.rejected ?? [],
           batches:[{keys:subjects,outcome:'done'}]}).lines;
       }
-      const shown = lines.filter((/** @type {any} */ l) => (!filter.status || l.status === filter.status) && (!filter.reason || l.reason === filter.reason));
+      // each line keeps its place in submission order, so a person reads as the same 「患者 N」 under every filter and page
+      const shown = lines.map((/** @type {any} */ l, /** @type {number} */ i) => ({...l,ordinal:i + 1}))
+        .filter((/** @type {any} */ l) => (!filter.status || l.status === filter.status) && (!filter.reason || l.reason === filter.reason));
       const limit = Math.min(200,Math.max(1,Math.floor(Number(filter.limit) || 50))), offset = Math.max(0,Math.floor(Number(filter.offset) || 0));
       const page = shown.slice(offset,offset+limit);
       const keys = new Set(page.map((/** @type {any} */ l) => l.subjectKey));

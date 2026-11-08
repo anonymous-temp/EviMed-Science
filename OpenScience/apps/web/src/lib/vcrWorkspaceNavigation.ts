@@ -9,7 +9,8 @@ export type VcrWorkspaceArea = typeof VCR_WORKSPACE_AREAS[number];
 const AREA_ALIASES: Record<string, VcrWorkspaceArea> = { "virtual-cohort": "virtual-population", "virtual-patient": "patient-trajectory", "virtual-trial": "virtual-lab" };
 const resultDestinations = {
   "virtual-population": { tab: "population", level: "cohort" },
-  "patient-trajectory": { tab: "population", level: "individual" },
+  // the entrance names its view: `level=individual` alone is also the patient list's address (the selector, the overview, old /patients)
+  "patient-trajectory": { tab: "population", level: "individual", view: "forecast" },
   "synthetic-control": { tab: "comparator" },
   "virtual-lab": { tab: "trial" },
   "patient-matching": { tab: "matching" },
@@ -63,8 +64,8 @@ function entranceDestinationPath(area: VcrWorkspaceArea, from: { pathname: strin
   const studyId = studyIdFromPath(from.pathname);
   if (area === "records" || !studyId) return vcrWorkspaceAreaPath(area);
   const destination = resultDestinations[area];
-  const level = "level" in destination ? `?level=${destination.level}` : "";
-  return vcrContextPath(`${VCR_HOME_PATH}/${encodeURIComponent(studyId)}/${destination.tab}${level}`, from);
+  const query = new URLSearchParams({ ...("level" in destination ? { level: destination.level } : {}), ...("view" in destination ? { view: destination.view } : {}) });
+  return vcrContextPath(`${VCR_HOME_PATH}/${encodeURIComponent(studyId)}/${destination.tab}${query.size ? `?${query}` : ""}`, from);
 }
 
 /** Libraries, drafts, the archive and a study preview do not masquerade as an entrance. */

@@ -78,14 +78,16 @@ const shortName = (name: string) => (name.length > 14 ? `${name.slice(0, 13)}…
 export function PatientsTab({ studyId, study, onStudyChanged }: { studyId: string; study: VcrStudy; onStudyChanged?: () => void }) {
   const { state, reload } = useVcrLoad(`${studyId}:patients`, () => getVcrPatients(studyId));
   const longitudinal = useLongitudinal(studyId);
-  // The 患者轨迹预测 entrance lands here with `level=individual`: a study that holds a batch prediction opens on it, and so does one that has
-  // no generated patients to show. A choice made on the page stands over both.
+  // The 患者轨迹预测 entrance lands here with `view=forecast`: a study that holds a batch prediction opens on it, and so does one that has
+  // no generated patients to show. `level=individual` alone is the patient list's own address, and a patient's record (`patient=`) always
+  // opens the list with its drawer. A choice made on the page stands over all of them.
   const [entrance] = useSearchParams();
   const [chosen, setView] = useState<"patients" | "forecast" | null>(null);
   const forecastData = longitudinal.state.kind === "ready" && longitudinal.state.data.available !== false ? longitudinal.state.data : null;
   const holdsPrediction = Boolean(forecastData?.records.some((record) => record.kind === "prediction"));
   const noPatients = study.steps.patients?.status === "none";
-  const view = chosen ?? (holdsPrediction && (entrance.get("level") === "individual" || noPatients) ? "forecast" : "patients");
+  const askedForecast = entrance.get("view") === "forecast" && !entrance.get("patient");
+  const view = chosen ?? (holdsPrediction && !entrance.get("patient") && (askedForecast || noPatients) ? "forecast" : "patients");
   const shown = view;
   const switcher: ToolbarChips = {
       kind: "chips",

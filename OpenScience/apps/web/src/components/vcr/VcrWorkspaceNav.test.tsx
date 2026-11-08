@@ -16,7 +16,7 @@ it("preserves pending native intent and the same study conversation through resu
   const state = { runtimeUiIntent: prepareRuntimeUiIntent({ kind: "open", projectId: "p1", sessionId: "s1", requestId: "vcr-pending", draft: "Continue this research", owner: sessionOwner() }) };
   render(<MemoryRouter initialEntries={[{ pathname: "/app/virtual-research/std_1/chat", search: "?session=s1&conversation=open&result=trial", state }]}><Workspace /></MemoryRouter>);
   await userEvent.click(screen.getByRole("link", { name: "患者轨迹预测" }));
-  expect(screen.getByLabelText("Location")).toHaveTextContent("/app/virtual-research/std_1/chat?session=s1&conversation=open&level=individual&result=population");
+  expect(screen.getByLabelText("Location")).toHaveTextContent("/app/virtual-research/std_1/chat?session=s1&conversation=open&level=individual&view=forecast&result=population");
   expect(JSON.parse(screen.getByLabelText("State").textContent!)).toEqual(state);
   expect(screen.getByRole("link", { name: "患者轨迹预测" })).toHaveAttribute("aria-current", "page");
 });

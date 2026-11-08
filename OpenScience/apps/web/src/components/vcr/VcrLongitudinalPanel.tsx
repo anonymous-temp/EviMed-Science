@@ -50,7 +50,7 @@ export function hasLongitudinal(data: VcrLongitudinalData | null | undefined): b
  * here. Templates and imports are the toolbar's 「⋯」: a button that cannot act (a prediction file with no history to attach it to)
  * is not in it.
  */
-export function VcrLongitudinalPanel({ studyId, canRun, canManage = false, data, onReload, switcher, extraFilters = [] }: {
+export function VcrLongitudinalPanel({ studyId, canRun, canManage = false, data, onReload, switcher, extraFilters = [], selectedPrediction, onSelectPrediction }: {
   studyId: string;
   canRun: boolean;
   /** The reader may confirm the compute budget (`manage_study`): a job past it waits for them. */
@@ -62,10 +62,15 @@ export function VcrLongitudinalPanel({ studyId, canRun, canManage = false, data,
   switcher?: ToolbarChips | null;
   /** Filters of a surface that hosts this panel (the batch workspace's status chips), drawn in the same one toolbar row after the switch. */
   extraFilters?: readonly ToolbarChips[];
+  /** A host that has its own 「预测版本」 (the batch workspace) holds the choice, so the page never shows two versions at once. */
+  selectedPrediction?: string;
+  onSelectPrediction?: (id: string) => void;
 }) {
   const frame = useStudyFrame();
   const [historyId, setHistoryId] = useState('');
-  const [selectedId, setSelectedId] = useState('');
+  const [ownSelected, setOwnSelected] = useState('');
+  const selectedId = selectedPrediction ?? ownSelected;
+  const setSelectedId = (id: string) => { setOwnSelected(id); onSelectPrediction?.(id); };
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState(false);

@@ -92,7 +92,13 @@ export function PatientTrajectoryWorkspace({ studyId, canRun, canManage = false,
       low: p.quantiles.length ? p.quantiles[0]?.value ?? null : null, high: p.quantiles.length ? p.quantiles[p.quantiles.length - 1]?.value ?? null : null })) }] : [];
 
   // A person is “患者 N”, N in submission order; the pseudonymous key is never what a reader sees.
-  const orderOf = (key: string) => { const index = lines.findIndex(line => line.subjectKey === key); return index < 0 ? null : (shown?.offset ?? 0) + index + 1; };
+  // The server's ordinal is the person's place among everyone submitted; a page position under a filter is not (a filtered page's third row is
+  // not the third person), so without it the position is read only on the unfiltered list.
+  const orderOf = (key: string) => {
+    const index = lines.findIndex(line => line.subjectKey === key);
+    if (index < 0) return null;
+    return lines[index]?.ordinal ?? (status === 'all' ? (shown?.offset ?? 0) + index + 1 : null);
+  };
   const personName = (key: string) => `患者 ${orderOf(key) ?? ''}`.trim();
   // The uncertainty column exists only when some person's forecast carries one; otherwise the premise already says the model gave none.
   const anyUncertainty = lines.some(line => line.status === 'completed' && line.uncertainty?.available);
@@ -153,8 +159,8 @@ export function PatientTrajectoryWorkspace({ studyId, canRun, canManage = false,
             emptyText="没有符合这个状态的人。" highlight={line => line.subjectKey === person}
             footnote={shown ? `第 ${shown.offset + 1}–${shown.offset + lines.length} 人，共 ${shown.matching} 人` : undefined} />}
         {shown && (shown.more || shown.offset > 0) && <div className="flex gap-2">
-          <Button variant="secondary" size="sm" disabled={shown.offset === 0} onClick={() => setOffset(Math.max(0, shown.offset - PAGE))}>上一页</Button>
-          <Button variant="secondary" size="sm" disabled={!shown.more} onClick={() => setOffset(shown.offset + PAGE)}>下一页</Button>
+          <Button variant="secondary" size="sm" disabled={shown.offset === 0} onClick={() => { setPerson(''); setOffset(Math.max(0, shown.offset - PAGE)); }}>上一页</Button>
+          <Button variant="secondary" size="sm" disabled={!shown.more} onClick={() => { setPerson(''); setOffset(shown.offset + PAGE); }}>下一页</Button>
         </div>}
       </div>
     </Section>
@@ -168,7 +174,8 @@ export function PatientTrajectoryWorkspace({ studyId, canRun, canManage = false,
     </Section>}
 
     <Disclosure summary="输入历史、预测版本与验证">
-      <VcrLongitudinalPanel studyId={studyId} canRun={canRun} canManage={canManage} data={data} onReload={onReload} switcher={switcher} extraFilters={[statusChips]} />
+      <VcrLongitudinalPanel studyId={studyId} canRun={canRun} canManage={canManage} data={data} onReload={onReload} switcher={switcher} extraFilters={[statusChips]}
+        selectedPrediction={selected?.id} onSelectPrediction={id => { setChosen(id); setOffset(0); setPerson(''); }} />
     </Disclosure>
   </section>;
 }
