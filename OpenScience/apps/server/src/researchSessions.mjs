@@ -202,6 +202,7 @@ export class ResearchSessionStore {
   constructor(agentRegistry, { stateStore = null } = {}) {
     this.agentRegistry = Promise.resolve(agentRegistry);
     this.stateStore = stateStore;
+    /** @type {any} */ this.sourceDeletion = null;
     /**
      * Told when a conversation is bound to a specialist, so the binding reaches the runtime as a file
      * (`runtimeManager.writeSessionBinding`). Set by the server once the runtime manager exists; never fails a binding.
@@ -212,14 +213,21 @@ export class ResearchSessionStore {
 
   async list(project) {
     if (typeof this.stateStore?.listResearchSessions === "function") {
-      return this.stateStore.listResearchSessions(project);
+      return this.visible(project, await this.stateStore.listResearchSessions(project));
     }
     const state = await readState(project);
-    return [...state.sessions].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+    return this.visible(project, [...state.sessions].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)));
+  }
+
+  async visible(project, rows) {
+    if (!this.sourceDeletion) return rows;
+    const hidden = new Set(await this.sourceDeletion.ledger.deletedIds(project));
+    return rows.filter(row => !hidden.has(row.sessionId));
   }
 
   async get(project, rawSessionId) {
     const sessionId = safeId(rawSessionId, "research session id");
+    await this.sourceDeletion?.assertAvailable(project, sessionId);
     if (typeof this.stateStore?.getResearchSession === "function") {
       return this.stateStore.getResearchSession(project, sessionId);
     }
@@ -238,6 +246,7 @@ export class ResearchSessionStore {
 
   async putRecord(project, rawSessionId, input) {
     const sessionId = safeId(rawSessionId, "research session id");
+    await this.sourceDeletion?.assertAvailable(project, sessionId);
     const registry = await this.agentRegistry;
     const request = validateInputContract(input);
     if (typeof this.stateStore?.putResearchSession === "function") {
@@ -306,6 +315,7 @@ export class ResearchSessionStore {
   /** Set the canonical object this conversation came from, without changing its tool binding. */
   async setOriginReference(project, rawSessionId, value) {
     const sessionId = safeId(rawSessionId, "research session id");
+    await this.sourceDeletion?.assertAvailable(project, sessionId);
     const reference = conversationReference(value);
     if (!reference) throw new HttpError(400, "invalid_request", "Invalid conversation reference.");
     if (!(await this.get(project, sessionId))) await this.putRecord(project, sessionId, { mode: "open-domain" });
@@ -332,6 +342,7 @@ export class ResearchSessionStore {
    */
   async setSourceScope(project, rawSessionId, sourceIds, mode = undefined) {
     const sessionId = safeId(rawSessionId, "research session id");
+    await this.sourceDeletion?.assertAvailable(project, sessionId);
     const scope = requestedSourceScope(sourceIds, mode);
     if (!(await this.get(project, sessionId))) await this.putRecord(project, sessionId, { mode: "open-domain" });
     if (typeof this.stateStore?.setResearchSessionSourceScope === "function") {

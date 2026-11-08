@@ -199,7 +199,7 @@ test("amending the body resets everything measured about the old one", async () 
     body: `${BODY}\n\nOne more sentence.`,
     provenance: { runId: "run_2" },
   });
-  assert.equal(amended.payload.status, "candidate");
+  assert.equal(amended.payload.status, "approved");
   assert.deepEqual(amended.payload.learning.counts, { eligible: 0, loaded: 0, invoked: 0, succeeded: 0, read: 0 });
   assert.notEqual(amended.payload.contentDigest, created.payload.contentDigest);
 
@@ -208,6 +208,41 @@ test("amending the body resets everything measured about the old one", async () 
     () => learning.amendMethod("u1", created.id, { expectedRevision: 1, frontmatter: frontmatter(), body: BODY }),
     (error) => error.code === "product_revision_conflict",
   );
+});
+
+test('an eligible amended body remains immediately available without waiting for an hourly approval', async () => {
+  const { learning } = service(), original = await create(learning);
+  const amended = await learning.amendMethod('u1', original.id, { expectedRevision: original.revision, frontmatter: frontmatter(), body: `${BODY}\n\nA supported refinement.` });
+  assert.equal(amended.payload.status, 'approved');
+  assert.equal(amended.payload.statusReason, effectiveStatusReason(amended.payload));
+  assert.ok((await learning.approvedMethods('u1')).some(row => row.id === amended.id && row.payload.contentDigest === amended.payload.contentDigest));
+});
+
+test('a body amendment never reverses a recorded stop', async () => {
+  const { learning } = service(), original = await create(learning);
+  const retired = await learning.retire('u1', original.id, { expectedRevision: original.revision, reason: 'Stopped by the owner.' });
+  const amended = await learning.amendMethod('u1', original.id, { expectedRevision: retired.revision, frontmatter: frontmatter(), body: `${BODY}\n\nA later refinement.` });
+  assert.equal(amended.payload.status, 'retired');
+  assert.equal(amended.payload.statusReason, retired.payload.statusReason);
+  assert.equal(amended.payload.statusChangedAt, retired.payload.statusChangedAt);
+  assert.equal((await learning.approvedMethods('u1')).some(row => row.id === amended.id), false);
+});
+
+test('concurrent amendments of conflicting methods cannot both take effect across service instances', async () => {
+  const { learning, documents } = realisticService();
+  const other = new LearningService({ documents });
+  const left = await create(learning, { frontmatter: frontmatter({ name: 'left' }) });
+  const right = await create(other, { frontmatter: frontmatter({ name: 'right' }) });
+  await learning.recordRelations('u1', left.id, [{ type: 'conflicts_with', target: right.id, evidence: 'Opposite instructions.', proposedBy: 'consolidate:test' }], () => true);
+  await other.recordRelations('u1', right.id, [{ type: 'conflicts_with', target: left.id, evidence: 'Opposite instructions.', proposedBy: 'consolidate:test' }], () => true);
+  for (let round = 0; round < 2; round++) {
+    const [a, b] = await Promise.all([learning.getMethod('u1', left.id), other.getMethod('u1', right.id)]);
+    const amended = await Promise.all([
+      learning.amendMethod('u1', a.id, { expectedRevision: a.revision, frontmatter: a.payload.frontmatter, body: `${BODY}\n\nLeft refinement ${round}.` }),
+      other.amendMethod('u1', b.id, { expectedRevision: b.revision, frontmatter: b.payload.frontmatter, body: `${BODY}\n\nRight refinement ${round}.` }),
+    ]);
+    assert.ok(amended.filter(row => row.payload.status === 'approved').length <= 1, 'one conflict authority covers both status snapshots and writes');
+  }
 });
 
 test("rollback saves an earlier revision forward and never deletes the one it replaces", async () => {
@@ -318,12 +353,12 @@ test("nothing that generates a method can assert its status, and a conflict is t
 test("a conflict withholds a method only while the method it conflicts with is in force (review L-3)", async () => {
   const { learning } = service();
   const conflict = (target) => ({ type: "conflicts_with", target, evidence: "两条方法对同一步给出相反要求", proposedBy: "consolidate:job_1" });
-  const waiting = async (name, against) => {
-    // A method that carries a recorded conflict and has just been amended: back to `candidate`, relations kept.
+  const waiting = async (name, against, expectedStatus = "candidate") => {
+    // An amended body retains its conflicts and is judged against counterparts currently in force.
     const made = await create(learning, { frontmatter: frontmatter({ name }) });
     const related = await learning.recordRelations("u1", made.id, against.map(conflict), () => true);
     const amended = await learning.amendMethod("u1", made.id, { expectedRevision: related.revision, frontmatter: frontmatter({ name }), body: `${BODY}\n\nA later thought on ${name}.` });
-    assert.equal(amended.payload.status, "candidate");
+    assert.equal(amended.payload.status, expectedStatus);
     return amended;
   };
   const refuses = (document) => assert.rejects(() => learning.approve("u1", document.id, { expectedRevision: document.revision }),
@@ -344,10 +379,10 @@ test("a conflict withholds a method only while the method it conflicts with is i
   await refuses(await learning.amendMethod("u1", mine.id, { expectedRevision: approved.revision, frontmatter: frontmatter({ name: "mine" }), body: `${BODY}\n\nAnother thought.` }));
 
   // A counterpart that is gone, or only a candidate itself, is not in force either.
-  assert.equal((await learning.approve("u1", (await waiting("ghost-facing", ["method:learned:ghost"])).id, { expectedRevision: 3 })).payload.status, "approved");
+  assert.equal((await learning.approve("u1", (await waiting("ghost-facing", ["method:learned:ghost"], "approved")).id, { expectedRevision: 3 })).payload.status, "approved");
 
-  // Of two methods that contradict each other and wait, the one the pass reaches first takes effect and the other then waits.
-  const left = await waiting("left", ["method:learned:right"]);
+  // Of two conflicting methods, the first eligible amendment takes effect and the other waits.
+  const left = await waiting("left", ["method:learned:right"], "approved");
   const right = await waiting("right", [left.id]);
   assert.equal(right.payload.status, "candidate");
   assert.equal((await learning.approve("u1", left.id, { expectedRevision: left.revision })).payload.status, "approved", "its rival is only a candidate");

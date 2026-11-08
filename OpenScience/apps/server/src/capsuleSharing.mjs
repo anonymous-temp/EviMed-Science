@@ -223,8 +223,9 @@ export class CapsuleSharing {
     }
     let preview = null;
     try {
-      const { archive } = await this.transfers.snapshotArchive(row.owner_id, row.snapshot_id);
+      const { archive,record } = await this.transfers.snapshotArchive(row.owner_id, row.snapshot_id);
       preview = await this.transfers.preview(userId, { archive }, context);
+      await this.transfers.assertSnapshotActive(row.owner_id,row.snapshot_id,record.revision);
     } catch (error) {
       // The snapshot was revoked under it: the delivery is closed as withdrawn rather than left looking open.
       if (/** @type {any} */ (error)?.code !== "capsule_snapshot_revoked") throw error;
@@ -314,8 +315,11 @@ export class CapsuleSharing {
 
   /** @param {string} userId @param {Awaited<ReturnType<CapsuleShareLinks['redeem']>>} redeemed @param {any} context */
   async #linkPreview(userId, redeemed, context) {
-    const { archive } = await this.#linkArchive(redeemed);
-    return this.transfers.preview(userId, { archive, password: redeemed.secret }, context);
+    const { archive,record } = await this.#linkArchive(redeemed);
+    const preview=await this.transfers.preview(userId, { archive, password: redeemed.secret }, context);
+    try { await this.transfers.assertSnapshotActive(redeemed.link.ownerId,redeemed.link.snapshotId,record.revision); }
+    catch(error) { if(error.code!=='capsule_snapshot_revoked')throw error; recordShareRefused('link_revoked'); throw new HttpError(410,'capsule_share_link_revoked','This share link can no longer be used.'); }
+    return preview;
   }
 
   /** @param {Awaited<ReturnType<CapsuleShareLinks['redeem']>>} redeemed */

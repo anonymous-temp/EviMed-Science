@@ -1,3 +1,4 @@
+import { withLearnedLibrary, deferLearnedLibraryObserver } from './learnedLibraryAuthority.mjs';
 /**
  * The method ledger: where a learned method lives, how it changes, and the one
  * rule that no caller may talk its way past.
@@ -272,6 +273,7 @@ export class LearningService {
   #mountChanged(userId, methodId = null) {
     // A shared GEO project's learning write is told once its scope is settled (`GeoContextProvenance.deferMountChange`).
     if (this.contextProvenance?.deferMountChange(() => this.#mountChanged(userId, methodId))) return;
+    if (deferLearnedLibraryObserver(this.documents, userId, () => this.#mountChanged(userId, methodId))) return;
     try { Promise.resolve(this.onMountChange?.(userId)).catch(() => {}); } catch { /* told, never asked */ }
     if (methodId) try { Promise.resolve(this.onTookEffect?.(userId, methodId)).catch(() => {}); } catch { /* told, never asked */ }
   }
@@ -357,6 +359,10 @@ export class LearningService {
    * @param {{projectId?: string|null, frontmatter: any, body: string, files?: any, provenance: any, dependencies?: any[], mountedTools?: readonly string[], display?: unknown, steps?: unknown, scope?: unknown}} input
    */
   async createCandidate(userId, input) {
+    return withLearnedLibrary(this.documents, userId, () => this.#createCandidate(userId, input));
+  }
+
+  async #createCandidate(userId, input) {
     const digest = this.#validated({ ...input, resolveDigest: await this.#digestResolver(userId, sourceProjectOf(input.provenance, null)) });
     const name = String(input.frontmatter?.name ?? "");
     const id = learnedMethodId(name);
@@ -425,8 +431,8 @@ export class LearningService {
   /**
    * Replace a method's body, which resets everything measured about the old one.
    *
-   * A revised method goes back to `candidate` even if it was effective, and its
-   * counters go to zero. That is the whole point of keying counts to
+   * A revised method is judged immediately under the same promotion rule as a
+   * new one, while a recorded stop stays stopped. Its counters go to zero. That is the point of keying counts to
    * `(method, contentDigest)`: the alternative is EvoDS's, where a rewrite
    * inherits its predecessor's confidence and the authors left a comment saying
    * they knew.
@@ -435,6 +441,10 @@ export class LearningService {
    * @param {{expectedRevision: number, frontmatter: any, body: string, files?: any, provenance?: any, dependencies?: any[], mountedTools?: readonly string[], display?: unknown, steps?: unknown, scope?: unknown}} input
    */
   async amendMethod(userId, methodId, input) {
+    return withLearnedLibrary(this.documents, userId, () => this.#amendMethod(userId, methodId, input));
+  }
+
+  async #amendMethod(userId, methodId, input) {
     let current;
     if (this.contextProvenance) {
       const projectId = sourceProjectOf(input.provenance,null);
@@ -458,7 +468,7 @@ export class LearningService {
       sourceProjectIds: [...methodSourceProjects(current.payload.provenance), ...methodSourceProjects(input.provenance)] });
     const payload = {
       ...current.payload,
-      status: bodyChanged ? "candidate" : current.payload.status,
+      status: bodyChanged && current.payload.status !== 'retired' ? "candidate" : current.payload.status,
       frontmatter: input.frontmatter,
       body: input.body,
       ...(input.files ? { files: input.files } : { files: undefined }),
@@ -483,6 +493,13 @@ export class LearningService {
       updatedAt: at,
     };
     if (payload.files === undefined) delete payload.files;
+    if (bodyChanged && current.payload.status !== 'retired') {
+      const verdict = promotionVerdict(methodRecordFrom({ id: methodId, payload }), { isApproved: await this.#inForce(userId, payload) });
+      payload.status = verdict.status;
+      if (verdict.status === 'approved') payload.statusReason = effectiveStatusReason(payload);
+      else delete payload.statusReason;
+      payload.statusChangedAt = at;
+    }
     await (this.contextProvenance ? this.contextProvenance.write.bind(this.contextProvenance) : this.documents.put.bind(this.documents))(userId, "method", methodId, payload, { expectedRevision: input.expectedRevision });
     this.#mountChanged(userId, methodId);
     return this.getMethod(userId, methodId);
@@ -570,6 +587,10 @@ export class LearningService {
    * @param {{expectedRevision: number}} input
    */
   async approve(userId, methodId, input) {
+    return withLearnedLibrary(this.documents, userId, () => this.#approve(userId, methodId, input));
+  }
+
+  async #approve(userId, methodId, input) {
     const document = await this.getMethod(userId, methodId);
     // The verdict reads the method's own conflicts and nothing else (since 2026-09-20).
     const verdict = promotionVerdict(methodRecordFrom(document), { isApproved: await this.#inForce(userId, document.payload) });
@@ -625,6 +646,10 @@ export class LearningService {
    * @param {string} userId @param {string} methodId @param {{expectedRevision: number, reason?: string, link?: unknown}} input
    */
   async retire(userId, methodId, input) {
+    return withLearnedLibrary(this.documents, userId, () => this.#retire(userId, methodId, input));
+  }
+
+  async #retire(userId, methodId, input) {
     const document = await this.getMethod(userId, methodId);
     return this.#setStatus(userId, methodId, "retired", input.expectedRevision, document, input.reason, input.link);
   }
@@ -645,6 +670,10 @@ export class LearningService {
    * @returns {Promise<{ retired: string[], kept: number }>}
    */
   async retireProjectMethods(userId, projectId, { transactionClient = null } = {}) {
+    return withLearnedLibrary(this.documents, userId, () => this.#retireProjectMethods(userId, projectId, { transactionClient }), { transactionClient });
+  }
+
+  async #retireProjectMethods(userId, projectId, { transactionClient = null } = {}) {
     /** @type {string[]} */
     const retired = [];
     let kept = 0;
@@ -765,6 +794,10 @@ export class LearningService {
    * @param {string} userId @param {string} methodId @param {{expectedRevision: number, targetRevision?: number, targetDigest?: string, link?: unknown}} input
    */
   async rollback(userId, methodId, input) {
+    return withLearnedLibrary(this.documents, userId, () => this.#rollback(userId, methodId, input));
+  }
+
+  async #rollback(userId, methodId, input) {
     const current = await this.getMethod(userId, methodId);
     const saved = await this.#savedRevisions(userId, methodId);
     const digestOf = (/** @type {any} */ entry) => String(entry?.payload?.contentDigest ?? "");
@@ -1036,6 +1069,10 @@ export class LearningService {
    * @param {(id: string) => boolean} [exists]
    */
   async recordRelations(userId, methodId, relations, exists) {
+    return withLearnedLibrary(this.documents, userId, () => this.#recordRelations(userId, methodId, relations, exists));
+  }
+
+  async #recordRelations(userId, methodId, relations, exists) {
     const document = await this.getMethod(userId, methodId);
     let learning = document.payload.learning;
     for (const relation of relations ?? []) {

@@ -1,3 +1,5 @@
+import { sourcePrivacyOf } from '@evimed/domain';
+import { sourceReceiptState } from './memorySourceReceipts.mjs';
 import {RuntimePromptStops} from './runtimePromptStops.mjs';
 import { mergeInputAttribution } from "./geoNativeInputs.mjs";
 import { PLATFORM_SKILL_GENERATION_MAX_PINS } from './platformSkillLimits.mjs';
@@ -28,7 +30,7 @@ import {
   validateClinicalEvidencePackage,
 } from "./clinicalEvidenceQuality.mjs";
 import { delegatedChildrenOf, socketToolResult, transcriptToLedgerMessages } from "./dshRuntimeAdapter.mjs";
-import { readVerifiedRunTranscript } from "./runTranscripts.mjs";
+import { transcriptPath, readVerifiedRunTranscript } from "./runTranscripts.mjs";
 import {
   clinicalSafetyCautionNotice,
   describedQualityNotices,
@@ -852,6 +854,7 @@ function foldEvents(events) {
         ...(event.platformSkillGeneration ? { platformSkillGeneration: normalizePlatformSkillGeneration(event.platformSkillGeneration) } : {}),
         ...(event.personalSkillGeneration ? { personalSkillGeneration: normalizePersonalSkillGeneration(event.personalSkillGeneration) } : {}),
         ...(event.recalledMemories ? { recalledMemories: normalizeRecalledMemories(event.recalledMemories) } : {}),
+        ...(event.originalSources?sourceReceiptState(event.originalSources,{trusted:true,inheritedPrivacy:event.sourcePrivacy}):{}),
         // The web pages the run read (contract X5), and how many in all when
         // the list was capped (webReadPages.mjs).
         ...(event.pagesRead ? { pagesRead: normalizePagesRead(event.pagesRead) } : {}),
@@ -1059,7 +1062,7 @@ function normalizePersonalSkillGeneration(value) {
  * store, where deleting it deletes it. What a reader needs here is "three
  * things you told us were used", with a link to go read them.
  */
-function normalizeRecalledMemories(value) {
+function normalizeRecalledMemories(value, trusted=false) {
   if (!Array.isArray(value)) return undefined;
   const rows = [];
   for (const item of value) {
@@ -1070,6 +1073,7 @@ function normalizeRecalledMemories(value) {
       id,
       kind: typeof item.kind === "string" ? item.kind.trim().slice(0, 48) : "note",
       scope: typeof item.scope === "string" ? item.scope.trim().slice(0, 16) : "user",
+      ...(Array.isArray(item.originalSources)?sourceReceiptState(item.originalSources,{trusted,inheritedPrivacy:item.sourcePrivacy}):{}),
     }));
   }
   // 40, not the 16 a dispatch's recall alone fits in: the recall tool adds to
@@ -4441,6 +4445,7 @@ export function isResearcherRun(run) {
 export class AgentRunStore {
   constructor(researchSessions, options = {}) {
     this.researchSessions = researchSessions;
+    /** @type {any} */ this.sourceDeletion = null;
     this.nativeInputs = options.nativeInputs ?? null;
     this.authorizeReservation = options.authorizeReservation ?? (async () => {});
     this.agentRegistry = Promise.resolve(options.agentRegistry);
@@ -4756,10 +4761,11 @@ export class AgentRunStore {
    * @param {any} project @returns {Promise<string | null>}
    */
   async lastSessionId(project) {
+    const deletedSources = new Set(this.sourceDeletion ? await this.sourceDeletion.ledger.deletedIds(project) : []);
     let latest = null;
     let at = "";
     for (const run of foldEvents(parseEvents(await readLedgerText(project, this.maxBytes))).values()) {
-      if (!isResearcherRun(run)) continue;
+      if (!isResearcherRun(run) || deletedSources.has(run.sessionId)) continue;
       const moved = [run.lastProgressAt, run.finishedAt, run.startedAt].filter((value) => typeof value === "string").sort().at(-1) ?? "";
       if (moved > at) {
         at = moved;
@@ -4779,8 +4785,9 @@ export class AgentRunStore {
    * @returns {Promise<Record<string, any>[]>}
    */
   async researcherRuns(project, { includeManaged = false } = {}) {
+    const deletedSources = new Set(this.sourceDeletion ? await this.sourceDeletion.ledger.deletedIds(project) : []);
     return [...foldEvents(parseEvents(await readLedgerText(project, this.maxBytes))).values()]
-      .filter(includeManaged ? isResearcherOwnedWork : isResearcherRun);
+      .filter(includeManaged ? isResearcherOwnedWork : isResearcherRun).filter(run => !deletedSources.has(run.sessionId));
   }
 
   /**
@@ -4868,9 +4875,42 @@ export class AgentRunStore {
     return { runCount: runs.length, lastActivityAt: last };
   }
 
+  /** Erase source-only ledger words and transcript snapshots while retaining file inventory and operational receipts.
+   * @param {any} project @param {string[]} sessionIds */
+  async removeConversationSource(project, sessionIds) {
+    const deleted = new Set(sessionIds);
+    return withProjectStorageMutation(project, async () => {
+      const events = parseEvents(await readLedgerText(project, this.maxBytes));
+      const targets = [...foldEvents(events).values()].filter(run => deleted.has(run.sessionId));
+      if (targets.some(run => run.status === 'running')) throw new HttpError(409, 'runtime_busy', 'The source still has active work.');
+      const ids = new Set(targets.map(run => run.id));
+      const keep = new Set(['event','id','at','createdAt','startedAt','finishedAt','durationMs','status','dispatchId','dispatchStatus',
+        'sessionId','mode','agentId','agentVersion','runtimeAgent','effectiveAgentId','effectiveAgentVersion','effectiveRuntimeAgent','effectiveRouteReason',
+        'model','accountCreatedAt','automated','kernelRequestIds','requestIds','nativeTurn','kind','messages','toolCalls','lastProgressAt',
+        'artifacts','unverifiedArtifacts','outputFiles','presentedFiles','errorCode','errorSubCode','canceledBy','verification','usage',
+        'transcriptSha256','inventorySha256']);
+      const cleaned = events.filter(event => !ids.has(event.id) || !['native-workflow','notice'].includes(event.event)).map(event => !ids.has(event.id) ? event
+        : Object.fromEntries(Object.entries(event).filter(([key]) => keep.has(key))));
+      for (const run of targets) {
+        const file = transcriptPath(project, run.id);
+        await assertNoSymlinkPath(project.rootDir, file, { allowMissingTail: true });
+        await rm(file, { force: true });
+        this.dispatchedBriefs.delete(run.id); this.progressTrackers.delete(run.id);
+        const previous = events.find(event => event.id === run.id && event.event === 'notice' && event.deleted === true);
+        cleaned.push({ event: 'notice', id: run.id, at: previous?.at ?? this.now().toISOString(), qualityNotices: [], deleted: true });
+      }
+      foldEvents(cleaned); // Validate the rewritten ledger before replacing its bytes.
+      const text = cleaned.map(event => JSON.stringify(event)).join('\n') + (cleaned.length ? '\n' : '');
+      if (Buffer.byteLength(text) > this.maxBytes) throw new HttpError(413, 'agent_runs_too_large', 'The source ledger exceeds its size limit.');
+      await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), text, { encoding: 'utf8', mode: 0o600 });
+      return [...ids];
+    });
+  }
+
   async list(project) {
     const events = parseEvents(await readLedgerText(project, this.maxBytes));
     const runs = [...foldEvents(events).values()];
+    const deletedSources = new Set(this.sourceDeletion ? await this.sourceDeletion.ledger.deletedIds(project) : []);
     // `phase` is a projection, never a stored field (§7.1.1): computed fresh on
     // every read from the same four ledger values every other reader already
     // sees, plus a diagnostic walk of this run's own events that counts an
@@ -4878,6 +4918,8 @@ export class AgentRunStore {
     return runs
       .map((run) => {
         const history = runPhaseHistory(events, run.id);
+        if (deletedSources.has(run.sessionId)) return { ...run, deleted: true, question: null, title: 'Conversation removed',
+          steers: [], goal: null, nativeWorkflow: null, deliverables: [], progress: undefined, qualityNotices: [], transcript: undefined };
         return {
           ...run,
           phase: history.phase,
@@ -5491,7 +5533,7 @@ export class AgentRunStore {
    * reason a run fails.
    * @param {any} project
    * @param {string} rawRunId
-   * @param {{platformSkillGeneration?: any, personalSkillGeneration?: any, transcript?: any, methodsLoaded?: any[], methodsInvoked?: any[], mountedSkills?: string[], recalledMemories?: {id: string, kind?: string, scope?: string}[], appendRecalledMemories?: {id: string, kind?: string, scope?: string}[], repairRounds?: {content?: number, structural?: number}, compaction?: any[], appendCompaction?: any, pagesRead?: any[], pagesReadTotal?: number}} patch
+   * @param {{platformSkillGeneration?: any, personalSkillGeneration?: any, transcript?: any, methodsLoaded?: any[], methodsInvoked?: any[], mountedSkills?: string[], originalSources?:any[], recalledMemories?: {id: string, kind?: string, scope?: string,originalSources?:any[]}[], appendRecalledMemories?: {id: string, kind?: string, scope?: string}[], repairRounds?: {content?: number, structural?: number}, compaction?: any[], appendCompaction?: any, pagesRead?: any[], pagesReadTotal?: number}} patch
    */
   /** Recorded by the trusted manager immediately before its first native prompt; never retroactive. @param {any} project @param {string} runId @param {string} at */
   async recordRuntimeEgressDispatch(project,runId,at){
@@ -5523,8 +5565,11 @@ export class AgentRunStore {
         ? [...(current.recalledMemories ?? []), ...patch.appendRecalledMemories]
           .filter((item, index, all) => all.findIndex((other) => other?.id === item?.id) === index)
         : patch.recalledMemories;
+      const original=[...(current.originalSources??[]),...(patch.originalSources??[]),...(recalled??[]).flatMap(item=>item.originalSources??[])];
+      const aggregates=[...(current.sourcePrivacy?[{sourcePrivacy:current.sourcePrivacy}]:[]),...(recalled??[]).filter(item=>item.sourcePrivacy).map(item=>({sourcePrivacy:item.sourcePrivacy}))];
       const event = {
         event: "learning",
+        ...(original.length?sourceReceiptState(original,{trusted:true,inheritedPrivacy:aggregates.length?sourcePrivacyOf({originalSources:aggregates}):null}):{}),
         id: runId,
         at: this.now().toISOString(),
         ...(current.promptDispatchStartedAt ? { promptDispatchStartedAt: current.promptDispatchStartedAt } : {}),
@@ -5554,7 +5599,7 @@ export class AgentRunStore {
         // would put their values in a file in the project workspace, where
         // deleting the memory would not delete them.
         ...(recalled
-          ? { recalledMemories: normalizeRecalledMemories(recalled) ?? [] }
+          ? { recalledMemories: normalizeRecalledMemories(recalled,true) ?? [] }
           : current.recalledMemories ? { recalledMemories: current.recalledMemories } : {}),
         ...(patch.repairRounds
           ? { repairRounds: { content: patch.repairRounds.content ?? 0, structural: patch.repairRounds.structural ?? 0 } }
@@ -7849,6 +7894,7 @@ export class AgentRunStore {
    */
   async adoptRuntimeSession(project, sessionId, routed = {}) {
     const id = safeId(sessionId, "runtime session id");
+    await this.sourceDeletion?.assertAvailable(project, id);
     if (routed.transcript) return this.adoptRuntimeTurns(project, id, routed.transcript, routed.routeTurn, { forkedFrom: routed.forkedFrom ?? null });
     const existing = (await this.list(project)).find((run) => run.sessionId === id);
     if (existing) return existing;

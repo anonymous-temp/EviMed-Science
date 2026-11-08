@@ -133,7 +133,7 @@ test("the lesson is one per script: three runs of two conversations, and nothing
   assert.equal(scriptLessonFor({ hash: "a".repeat(32), run, recurrence: recurrence(5, SCRIPT_CONVERSATIONS - 1) }), null, "three runs of one conversation are one conversation's habit");
   const lesson = scriptLessonFor({ hash: "a".repeat(32), run, recurrence: recurrence(SCRIPT_RUNS, SCRIPT_CONVERSATIONS) });
   assert.equal(lesson?.trigger, "script");
-  assert.equal(lesson?.idempotencyKey, `distill:script:${"a".repeat(32)}`, "keyed on the script, so a fourth sighting queues nothing new");
+  assert.equal(lesson?.idempotencyKey, `distill:script:scoped-v1:${"a".repeat(32)}`, "keyed on the script, so a fourth sighting queues nothing new");
   assert.deepEqual([lesson?.payload.scope, lesson?.payload.capabilityId, lesson?.payload.scriptHash, lesson?.payload.runs, lesson?.payload.conversations], ["conversation", null, "a".repeat(32), 3, 2]);
   assert.equal(scriptLessonFor({ hash: "a".repeat(32), run: null, recurrence: recurrence(9, 9) }), null);
   assert.equal(scriptLessonFor({ hash: "a".repeat(32), run, recurrence: { ...recurrence(3, 2), scope: "meta-analysis" } })?.payload.capabilityId, "meta-analysis");
@@ -158,7 +158,19 @@ function usesDouble() {
 }
 
 /** @param {string} source */
-const transcriptOf = (source) => ({ header: {}, messages: [{ sessionId: "s", role: "assistant", parts: [{ type: "tool", tool: "bash", status: "completed", input: { command: `python3 - <<'EOF'\n${source}\nEOF` } }] }] });
+const transcriptOf = (source, sessionId = "c") => ({ header: { sessions: [{ sessionId, parentSessionId: null, seedEndSeq: -1 }] }, messages: [{ sessionId, role: "user", source: "user", sourceRequestId: "current-input", seq: 1, turnStartSeq: 0, parts: [{ type: "text", text: "Analyze the data" }] }, { sessionId, seq: 2, turnStartSeq: 0, role: "assistant", parts: [{ type: "tool", tool: "bash", status: "completed", input: { command: `python3 - <<'EOF'\n${source}\nEOF` } }] }] });
+
+test('a repeated script in an earlier turn is not an occurrence of the current run', options, async () => {
+  const uses = usesDouble();
+  const oldTool = { ...transcriptOf(CLEAN).messages[1], sessionId: 'c', seq: 2, turnStartSeq: 0 };
+  const saved = { header: { runId: 'current', sessions: [{ sessionId: 'c', parentSessionId: null, seedEndSeq: -1 }] }, messages: [
+    { sessionId: 'c', seq: 1, turnStartSeq: 0, role: 'user', source: 'user', sourceRequestId: 'old', parts: [{ type: 'text', text: 'Previous analysis' }] }, oldTool,
+    { sessionId: 'c', seq: 11, turnStartSeq: 10, role: 'user', source: 'user', sourceRequestId: 'now', parts: [{ type: 'text', text: 'A new question without code' }] },
+  ] };
+  const lessons = new ScriptLessons({ uses: /** @type {any} */ (uses), execute, readTranscript: async () => saved });
+  assert.deepEqual(await lessons.afterSettle({ userId: 'u1', id: 'p' }, { id: 'current', sessionId: 'c', kernelRequestIds: ['now'] }), { recorded: 0, queued: [] });
+  assert.equal(uses.rows.length, 0);
+});
 
 test("the same program in three runs of two conversations queues one lesson; the third run of one conversation, a repeat of one run and a one-liner do not", options, async () => {
   const uses = usesDouble();
@@ -171,8 +183,8 @@ test("the same program in three runs of two conversations queues one lesson; the
     onOutcome: (outcome, times = 1) => counts.set(outcome, (counts.get(outcome) ?? 0) + times),
   });
   const settle = async (/** @type {string} */ runId, /** @type {string} */ sessionId, /** @type {string} */ source, project = "p") => {
-    transcripts.set(runId, transcriptOf(source));
-    return lessons.afterSettle({ userId: "u1", id: project }, { id: runId, sessionId, finishedAt: "2026-10-25T10:00:00.000Z" });
+    transcripts.set(runId, transcriptOf(source, sessionId));
+    return lessons.afterSettle({ userId: "u1", id: project }, { id: runId, sessionId, kernelRequestIds: ["current-input"], finishedAt: "2026-10-25T10:00:00.000Z" });
   };
   assert.deepEqual((await settle("run_1", "conv_a", CLEAN)).queued, []);
   assert.deepEqual((await settle("run_2", "conv_a", CLEAN_AGAIN)).queued, [], "two runs of one conversation");
@@ -199,17 +211,17 @@ test("a snippet that carries a credential is dropped before anything is stored, 
   const make = (/** @type {any} */ run) => new ScriptLessons({ uses: /** @type {any} */ (uses), execute: run, queue: () => async () => true,
     readTranscript: async (_project, runId) => transcripts.get(runId) ?? null, onOutcome: (outcome, times = 1) => counts.set(outcome, (counts.get(outcome) ?? 0) + times) });
   transcripts.set("run_s", transcriptOf(`${CLEAN}\nkey = "${secret}"`));
-  assert.deepEqual(await make(execute).afterSettle({ userId: "u1", id: "p" }, { id: "run_s", sessionId: "c" }), { recorded: 0, queued: [] });
+  assert.deepEqual(await make(execute).afterSettle({ userId: "u1", id: "p" }, { id: "run_s", sessionId: "c", kernelRequestIds: ["current-input"] }), { recorded: 0, queued: [] });
   assert.equal(counts.get("sensitive"), 1);
   assert.equal(uses.rows.length, 0);
   assert.equal(sensitiveSource(secret), true);
   assert.equal(sensitiveSource(CLEAN), false);
 
   transcripts.set("run_u", transcriptOf(CLEAN));
-  assert.deepEqual(await make(async () => { throw Object.assign(new Error("busy"), { code: "runtime_capacity_full" }); }).afterSettle({ userId: "u1", id: "p" }, { id: "run_u", sessionId: "c" }), { recorded: 0, queued: [] });
+  assert.deepEqual(await make(async () => { throw Object.assign(new Error("busy"), { code: "runtime_capacity_full" }); }).afterSettle({ userId: "u1", id: "p" }, { id: "run_u", sessionId: "c", kernelRequestIds: ["current-input"] }), { recorded: 0, queued: [] });
   assert.equal(counts.get("executor_unavailable"), 1);
   assert.equal(uses.rows.length, 0, "no hash is guessed in Node");
-  assert.deepEqual(await make(null).afterSettle({ userId: "u1", id: "p" }, { id: "run_u", sessionId: "c" }), { recorded: 0, queued: [] }, "no executor composed");
+  assert.deepEqual(await make(null).afterSettle({ userId: "u1", id: "p" }, { id: "run_u", sessionId: "c", kernelRequestIds: ["current-input"] }), { recorded: 0, queued: [] }, "no executor composed");
   assert.deepEqual(await make(execute).afterSettle({ userId: "u1", id: "p" }, { id: "run_gone", sessionId: "c" }), { recorded: 0, queued: [] });
   assert.equal(counts.get("no_transcript"), 1);
 });

@@ -587,9 +587,11 @@ export interface WebStructuredMemory {
   key: string;
   value: string;
   summary: string;
-  origin: "explicit" | "inferred" | "system" | "manual";
+  origin: "explicit" | "inferred" | "system" | "manual" | "engine" | "unknown" | "imported" | "mixed" | "assistant" | "document" | "opinion";
+  attribution?: { schemaVersion: 1; origins: string[]; confirmed: boolean };
+  sourcePrivacy?: { schemaVersion: 1; classification: "private" | "unclassified" | "ordinary"; reasons: string[] };
   status: "active" | "pending" | "superseded" | "archived";
-  confidence: number;
+  confidence: number | null;
   importance: number;
   sensitive: boolean;
   evidenceCount: number;

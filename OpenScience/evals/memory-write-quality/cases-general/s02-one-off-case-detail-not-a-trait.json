@@ -4,7 +4,7 @@
   "observedIn": "written for the memory-capsule next round on 2026-10-25 (the evals package; B-landscape I-3, I-6, I-10 and the owner decisions of that day); every name, number and identifier is invented",
   "expected": "Keep this patient's age, 3-hour chest pain and V1–V4 ST elevation verbatim under a separate person label; infer no clinician identity or confirmed diagnosis.",
   "decidable": true,
-  "judge": "Does any written line describe this patient, or say the person manages acute chest pain as a speciality? None may.",
+  "judge": "Are these case details attributed to a separate patient, with no inferred clinician identity or confirmed diagnosis?",
   "replay": {
     "synthetic": true,
     "projectId": "default",

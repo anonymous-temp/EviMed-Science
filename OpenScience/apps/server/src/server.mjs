@@ -1,3 +1,4 @@
+import { finished } from 'node:stream/promises';
 import { createPersonalLibraryRoutes, createPersonalLibraryWriter } from "./personalLibraryIntake.mjs";
 import {RuntimePromptStops} from './runtimePromptStops.mjs';
 import {withSessionPromptAdmission} from './runtimePromptAdmission.mjs';
@@ -477,6 +478,12 @@ import { OpenVikingSessions } from "./openVikingSessions.mjs";
 import { NativeMemoryOverlay } from "./nativeMemoryOverlay.mjs";
 import { NativeMemoryStore, nativeConversationTitleKey } from "./nativeMemoryStore.mjs";
 import { NativeMemoryImport } from "./nativeMemoryImport.mjs";
+import { withNativeMemoryWrite } from './nativeMemoryWriteFence.mjs';
+import { ConversationSourceDeletionLedger } from './conversationSourceDeletionPersistence.mjs';
+import { ConversationSourceDeletionService } from './conversationSourceDeletionService.mjs';
+import { createConversationSourceDeletionRoutes } from './conversationSourceDeletionRoutes.mjs';
+import { nativeFileId } from './nativeMemoryStore.mjs';
+import { MemoryHistory, MemoryHistoryLedger, historyTitle } from './memoryHistory.mjs';
 import { NativeMemoryWorker } from "./nativeMemoryWorker.mjs";
 import { NativeTurnCommit } from "./nativeTurnCommit.mjs";
 import { createRejectionJudge } from "./nativeMemoryRejections.mjs";
@@ -1368,6 +1375,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const openVikingSessions = overrides.openVikingSessions ?? new OpenVikingSessions(openVikingClient, {
     timeoutMs: config.memoryGatewayTimeoutMs, fastTimeoutMs: Math.round(Number(config.memoryGatewayTimeoutMs ?? 4_000) / 3),
   });
+  if (productDatabase) {
+    openVikingClient.writeAdmission=(userId,operation)=>withNativeMemoryWrite(productDatabase,userId,operation);
+    openVikingSessions.client.writeAdmission=(userId,operation)=>withNativeMemoryWrite(productDatabase,userId,operation);
+  }
   const nativeMemoryOverlay = overrides.nativeMemoryOverlay ?? new NativeMemoryOverlay({ database: productDatabase });
   // The registered memory namespaces of an account: its own, and each shared GEO project's (`geoNativeMemoryContext.mjs`).
   const nativeMemoryContexts = productDatabase && sharedContextPolicies ? new GeoNativeMemoryContext({ database: productDatabase,
@@ -1779,6 +1790,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     config, memorySettings, nativeMemory, nativeMemoryImport, store, context, audit, decodeRouteComponent,
     // 「重置记忆」 clears what the page shows: the methods and capsule notes live in the product ledger.
     resetProduct: productDatabase ? userId => resetLearnedMemory(productDatabase, userId) : null,
+    resetHistory: userId => memoryHistory?.reset(userId),
     // A pause for recall turned on under a live runtime: the methods it mounted at launch leave with the idle ones.
     releasePausedRuntimes: userId => runtimeManager.releasePausedMethodRuntimes(userId),
     // 项目 tab: what a project's own runs did and delivered, read from its ledger like the usage 明细 reads the month's.
@@ -1799,7 +1811,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
    *  @param {string} ownerId @param {string | null} [only] */
   const deleteAgentSubjects = (ownerId, only = null) => deleteSubjectAccounts(
     { apiKeys: agentApiKeys, store, memoryIndexing, capsuleTransfers: capsuleTransferService,
-      nativeMemory: { erase: async (/** @type {string} */ userId) => { if (await nativeMemoryHeldBy(userId)) await nativeMemory.eraseAccount(userId); } } }, ownerId, { only });
+      nativeMemory: { erase: async (/** @type {string} */ userId) => { await memoryHistory?.eraseAccount(userId); if (await nativeMemoryHeldBy(userId)) await nativeMemory.eraseAccount(userId); } } }, ownerId, { only });
   const agentKeyRoutes = createAgentKeyRoutes({ config, apiKeys: agentApiKeys, context, audit });
   // 「知识页」 (knowledgePageService.mjs): composed further down, once the run ledger and the runtime exist. The hooks below reach it
   // through these, so a deployment without it (or with it switched off) behaves as it always did.
@@ -2623,6 +2635,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     let methodsStopped = 0;
     // The conversations' own memory state goes with the project; the capsule index's copies are owed a withdrawal in the capsule's
     // own transaction below, and the index is never waited on (`memoryIndexWithdrawals.mjs`).
+    await memoryHistory?.deleteProject(user.id, project.id);
     if (memorySettings.configured) await memorySettings.deleteProjectState(user.id, project.id);
     // The engine's own memories of this project and the sessions of its conversations (`NativeMemoryStore.deleteProject`).
     if (await nativeMemoryHeldBy(user.id)) await nativeMemory.deleteProject(user.id, project.id);
@@ -4314,6 +4327,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // because from a user's point of view they are one story: "it is running",
     // "the second deliverable came back with three fixes", "it finished".
     onRunStateChanged: (project, run) => {
+      if(sourceDeletion?.knownDeleted(project,run.sessionId))runEvents.revoke(run.id);
       runEvents.publish(run.id, "run/state", {
         state: run.status,
         artifactRoles: run.artifactRoles ?? {}, stepActions: run.stepActions ?? {}, availableActions: run.availableActions ?? [], stalled: run.stalled === true,
@@ -4637,12 +4651,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             // The call sequence itself, not only the pairs it implies: what the learning loop's trajectory digest reads as the order of
             // the work's tools (`readToolTraces`, in `MethodDistillationRuns`).
             const traced = await persistToolTraces({ project, run, sessions });
-            if (written.edges || traced.traces) {
-              await securityAudit(config, "run.tool.edges", "ok", {
-                userId: project.userId, projectId: project.id, runId: run.id,
-                code: `edges:${written.edges} traces:${traced.traces} steps:${traced.steps}`,
-              });
-            }
+            await securityAudit(config, "run.tool.edges", "ok", {
+              userId: project.userId, projectId: project.id, runId: run.id,
+              code: `edges:${written.edges} traces:${traced.traces} steps:${traced.steps}`,
+            });
           } catch (error) {
             await securityAudit(config, "run.tool.edges", "failed", {
               userId: project.userId, projectId: project.id, runId: run.id,
@@ -5115,6 +5127,17 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // through here. Who is learned from and read for is one decision (`memoryAdmission.mjs`), asked per request.
   const memoryAdmission = createMemoryAdmission({
     config, memorySettings,
+    sourceDeleted: async (project, sessionId, engineSessionId) => {
+      if (!sourceDeletion) return false;
+      if (sessionId) return Boolean(await sourceDeletion.ledger.get(project, sessionId));
+      if (!engineSessionId?.startsWith('evimed-replay-')) return false;
+      const replayContext = await nativeMemoryContexts.forProject(project);
+      for (const commit of await nativeMemoryOverlay.commitsOfSession(project.userId, engineSessionId, { userRoot: replayContext.userRoot })) {
+        const source = await nativeMemoryOverlay.conversationOf(project.userId, engineSessionId, commit.archiveUri);
+        if (source && await sourceDeletion.ledger.get(project, source)) return true;
+      }
+      return false;
+    },
     engineReady: openVikingEngine ? () => openVikingEngine.ready("nativeMemory") : null,
     conversations: {
       running: (project) => agentRuns.activeRuns(project),
@@ -5124,12 +5147,173 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     internalAgent: async (agentId) => (await agentRegistry)?.get?.(agentId)?.visibility === "internal",
     clinicalContext: vcrPrivacyStore ? (userId, projectId, runs) => vcrPrivacyStore.hasClinicalContext(userId, projectId, runs) : null,
   });
+  // The same memory-search tool may append dated original conversation context.
+  // Its registry is metadata only; raw text stays in a private engine Resource
+  // root, separate from KB sources/compilation and every capsule egress surface.
+  const historyLedger = productDatabase ? new MemoryHistoryLedger({ database: productDatabase, overlay: nativeMemoryOverlay, client: openVikingClient }) : null;
+  const memoryHistory = historyLedger && nativeMemoryContexts ? new MemoryHistory({ config, ledger: historyLedger, contexts: nativeMemoryContexts,
+    resolveSource: async (commit, memoryContext) => {
+      const user = await store.userById(memoryContext.ownerId);
+      if (!user) return null;
+      const projectId = commit.projectId ?? memoryContext.projectId;
+      if (!projectId || memoryContext.kind === 'geo-project' && projectId !== memoryContext.projectId) return null;
+      const project = await store.requireProject(user, projectId);
+      if (project.userId !== memoryContext.ownerId) return null;
+      await nativeMemoryContexts.assertLive({ ...memoryContext, projectId });
+      const row = (await productDatabase.query('SELECT created_at::text AS stamp FROM evimed_control.projects WHERE user_id=$1 AND id=$2', [memoryContext.ownerId, projectId])).rows[0];
+      if (!row) return null;
+      const base = { projectId, projectCreatedAt: row.stamp, project };
+      if (!commit.engineSession) return base;
+      const sessionId = platformSessionOf(commit.engineSession);
+      if (!sessionId) return null;
+      if (memoryContext.kind === 'geo-project') {
+        const bound = await nativeMemoryContexts.session(memoryContext, commit.engineSession);
+        if (!bound || bound.payload.source.kind !== 'dsh' || bound.payload.source.childAddress || bound.payload.source.rootSessionId !== sessionId) return null;
+      } else if (await nativeMemoryOverlay.projectOfSession(memoryContext.ownerId, commit.engineSession) !== projectId) return null;
+      const runs = await agentRuns.conversationRuns(project, sessionId);
+      if (!runs.length || runs.every(run => run.deleted === true)) return null;
+      const named = runs.find(run => typeof run.title === 'string' && run.title.trim());
+      return { ...base, sessionId, runs, conversationTitle: historyTitle(named?.title ?? runs.at(-1)?.question), projectTitle: historyTitle(project.name,'Project'),
+        conversationUrl: `/app/chat/${encodeURIComponent(sessionId)}` };
+    },
+    eligible: async (memoryContext, source) => {
+      if (isInternalProjectOf(config, memoryContext.ownerId, source.projectId)) return false;
+      const state = await memorySettings.sessionState(memoryContext.ownerId, source.projectId, source.sessionId);
+      if (state.trialCapsuleId) return false;
+      // Raw archives cannot reliably date an undated message into a mixed
+      // automated conversation, so exclude that entire conversation here.
+      for (const run of source.runs) {
+        if (run.deleted || isPlatformStartedRun(run) || (await agentRegistry)?.get?.(run.effectiveAgentId ?? run.agentId)?.visibility === 'internal') return false;
+      }
+      if (vcrPrivacyStore && await vcrPrivacyStore.hasClinicalContext(memoryContext.ownerId, source.projectId,
+        source.runs.map(run => ({ sessionId: source.sessionId, runId: run.id })))) return false;
+      return true;
+    },
+    admitMessage: async (memoryContext, source, message) => (await memoryAdmission.admit({ user: { id: memoryContext.ownerId }, project: source.project,
+      engineSessionId: `dsh-${source.sessionId}`, at: Number.isFinite(Date.parse(message.created_at ?? '')) ? Date.parse(message.created_at) : null })).learn,
+  }) : null;
+  // Keep lifecycle fences active even when new history search is switched off.
+  nativeMemory.history = memoryHistory;
+  nativeMemoryWorker.history = memoryHistory;
+  const sourceDeletionLedger = productDatabase ? new ConversationSourceDeletionLedger(productDatabase) : null;
+  const sourceDeletion = sourceDeletionLedger ? new ConversationSourceDeletionService({ ledger: sourceDeletionLedger, runtime: runtimeManager,
+    recordIdForUri:nativeFileId,
+    revisionSource:async(userId,revision)=>{
+      const sessionId=await nativeMemoryOverlay.conversationOf(userId,revision.engineSession,revision.archiveUri);
+      if(!sessionId)return revision.sourceProjectCreatedAt?{sessionId:null,projectId:revision.sourceProjectId??revision.projectId,projectCreatedAt:revision.sourceProjectCreatedAt}:null;
+      const commit=revision.archiveUri?await nativeMemoryOverlay.commit(userId,revision.archiveUri):null;
+      return {sessionId,projectId:revision.sourceProjectId??commit?.projectId??revision.projectId,projectCreatedAt:revision.sourceProjectCreatedAt??commit?.projectCreatedAt??null};
+    },
+    nativeRootsFor: async (project,frozen,identity)=>{
+      if(!Array.isArray(frozen.copies))return null;
+      const views=await nativeMemoryContexts.all(project.userId),roots=[];
+      for(const copy of frozen.copies) {
+        const view=copy.contextReference===null?views.find(item=>item.kind==='owned'):views.find(item=>item.namespaceId===copy.memoryNamespaceId);
+        if(!view || view.ownerCreatedAt!==identity.accountCreatedAt || view.kind==='geo-project'&&(view.projectId!==project.id||view.policy.projectCreatedAt!==identity.projectCreatedAt))throw new HttpError(409,'memory_scope_denied','A proven source namespace cannot be resolved.');
+        await nativeMemoryContexts.assertKnown(view);roots.push(view.userRoot);
+      }
+      return [...new Set(roots)];
+    },
+    contributionsFor: async row=>(await Promise.all((row.nativeRoots?.length?row.nativeRoots:row.memoryUserRoot?[row.memoryUserRoot]:[])
+      .map(root=>nativeMemory.sourceHistoryContributions(row.userId,row.projectId,row.sessionIds,root,row.projectCreatedAt)))).flat(),
+    prepareFence: async (project,sessionIds)=>{
+      await nativeMemoryOverlay.migrate();
+      const runs=(await agentRuns.list(project)).filter(run=>sessionIds.includes(run.sessionId));
+      return ()=>{for(const run of runs)runEvents.revoke(run.id);};
+    },
+    memoryRootFor: async project => nativeMemoryContexts ? (await nativeMemoryContexts.forProject(project)).userRoot : openVikingSessions.userRoot(project.userId),
+    resolveProject: async row => store.requireProject(await store.userById(row.userId), row.projectId),
+    removeHistory: async (project, row) => {
+      sourceDeletion?.rememberFence(project,row.sessionIds);
+      for(const run of await agentRuns.list(project))if(row.sessionIds.includes(run.sessionId))runEvents.revoke(run.id);
+      if (nativeMemoryContexts && memoryHistory) {
+        const deletionContext = await nativeMemoryContexts.forProject(project);
+        for (const sessionId of row.sessionIds) await memoryHistory.removeConversation({ ...deletionContext, projectId: project.id, projectCreatedAt: row.projectCreatedAt }, sessionId);
+        await memoryHistory.drainDeletes();
+      }
+      const history=await sourceDeletion.contributionsFor(row);
+      await sourceDeletionLedger.rememberHistory(row,history);
+      for(const contribution of history)await nativeMemoryOverlay.scrubLines(project.userId,contribution.uri,contribution.lines,{sourceDeleted:true});
+      // Revoke private export bindings immediately, before the background cleanup can wait for an active project.
+      if (capsuleTransferService) {
+        const uris = await sourceDeletionLedger.hiddenMemoryUris(project.userId);
+        const origins = await nativeMemoryOverlay.originsOf(project.userId, uris);
+        const ids = history.flatMap(contribution=>contribution.recordIds);
+        for (const uri of uris) {
+          ids.push(nativeFileId(uri));
+          for (const [print, origin] of origins.get(uri) ?? []) {
+            if (origin.projectId !== project.id) continue;
+            const source = await nativeMemoryOverlay.conversationOf(project.userId, origin.engineSession, origin.archiveUri);
+            if (row.sessionIds.includes(source)) ids.push(`${nativeFileId(uri)}_${print.slice(0, 12)}`);
+          }
+        }
+        await capsuleTransferService.revokeSourceRecords(project.userId, ids);
+      }
+    },
+    removeDerived: async (project, row) => {
+      if(!nativeMemory.configured)throw new HttpError(503,'memory_source_cleanup_unavailable','Native memory cleanup cannot be proved while the engine is unavailable.');
+      if (nativeMemory.configured) await withNativeMemoryWrite(productDatabase,project.userId,async()=>{
+        const owner=await store.userById(project.userId);
+        if(!owner)throw new HttpError(409,'memory_source_cleanup_busy','The source owner cannot be verified.');
+        for(const candidate of await store.listProjects(owner)) {
+          const owned=await store.requireProject(owner,candidate.id);
+          if(await runtimeManager.idleVerdict(owned)!=='idle' || await runtimeManager.hasRunningRuns(owned)!==false
+            || await runtimeManager.pluginRuntimeBusy(owned)!==false || await runtimeManager.pluginService?.hasPendingPrompts(owned)!==false)throw new HttpError(409,'memory_source_cleanup_busy','Other account work is still using memory.');
+        }
+        const views=await nativeMemoryContexts.all(project.userId);
+        for(const view of views)await nativeMemoryWorker.scanArchives(project.userId,{context:view});
+        if((await productDatabase.query("SELECT 1 FROM evimed_memory.native_reset_tombstones WHERE user_id=$1 AND state IN ('open','unknown') LIMIT 1",[project.userId])).rows.length)throw new HttpError(409,'memory_source_cleanup_busy','A prior native reset has no terminal write proof.');
+        if((await nativeMemoryOverlay.consolidationState(project.userId)).task)throw new HttpError(409,'memory_source_cleanup_busy','A native consolidation is still active or unknown.');
+        if(await nativeMemoryOverlay.hasUnprovenNativeWrites(project.userId))throw new HttpError(409,'memory_source_cleanup_busy','A native extraction is still active or unknown.');
+        const currentSource=await sourceDeletionLedger.get(project,row.rootSessionId);
+        if(currentSource?.lineageRoots?.length)throw new HttpError(409,'memory_source_lineage_unverified','Native consolidation source lineage is unverified.');
+        for(const nativeRoot of row.nativeRoots?.length?row.nativeRoots:row.memoryUserRoot?[row.memoryUserRoot]:[]) {
+        const sourceView=views.find(view=>view.userRoot===nativeRoot);
+        if(!sourceView)throw new HttpError(409,'memory_source_cleanup_busy','The frozen native namespace cannot be verified.');
+        const commits=[];
+        for(const sessionId of row.sessionIds)commits.push(...await nativeMemoryOverlay.commitsOfSession(project.userId,`dsh-${sessionId}`,{userRoot:nativeRoot}));
+        const visited=new Set();
+        for(let index=0;index<commits.length;index++) {
+          const commit=commits[index];if(visited.has(commit.archiveUri))continue;visited.add(commit.archiveUri);
+          if(commit.state!=='completed'&&!commit.nativeIngestedAt&&!commit.ingestedAt) {
+            const task=commit.taskId?await sourceView.sessions.task(project.userId,commit.taskId):null;
+            if(!task || !['completed','failed','cancelled','canceled'].includes(String(task.status).toLowerCase()))throw new HttpError(409,'memory_source_cleanup_busy','The source extraction has no terminal native proof.');
+            throw new HttpError(409,'memory_source_lineage_unverified','The source extraction has no completed native ingestion receipt.');
+          }
+          if(commit.replayedAs){const replay=await nativeMemoryOverlay.commit(project.userId,commit.replayedAs);if(replay)commits.push(replay);}
+        }
+        await nativeMemory.removeConversationSource(project.userId, project.id, row.sessionIds, { userRoot: nativeRoot,cleanedRevisionId:row.cleanedRevisionId,projectCreatedAt:row.projectCreatedAt });
+        }
+      },{exclusive:true});
+      const removedRuns = await agentRuns.removeConversationSource(project, row.sessionIds);
+      for (const runId of removedRuns) preStopTranscripts.take(runId);
+    },
+  }) : null;
+  runtimeManager.sourceDeletion = sourceDeletion;
+  researchSessions.sourceDeletion = sourceDeletion;
+  agentRuns.sourceDeletion = sourceDeletion;
+  nativeMemory.sourceDeletion = sourceDeletion;
+  nativeMemoryOverlay.sourceDeletion = sourceDeletion;
+  const sourceDeletionRoutes = createConversationSourceDeletionRoutes({ store, service: sourceDeletion });
+
   // A runtime's recall of a subscribed zone is the frontier's too: an account outside its audience is offered nothing, as every zone route answers it.
   const recallSubscriptions = zoneSubscriptions?.enabled && frontier
     ? subscriptionsForAudience({ subscriptions: zoneSubscriptions, userById: userId => store.userById(userId), allows: user => frontier.service.allows(user) }) : null;
   const memoryGatewayHandler = createMemoryGatewayHandler({
     config, runtimeManager, store, sessions: openVikingSessions, admission: memoryAdmission,
     memoryContexts: nativeMemoryContexts, rememberJournal: nativeRememberJournal,
+    historySearch: memoryHistory ? request => memoryHistory.search(request) : null,
+    sourceDeletion,
+    sourceReceipt:async({user,project,sessionId,uris,context:sourceContext})=>{
+      // Unbound/concurrent native reads remain an acceptance gap; never guess the latest run.
+      if(!sessionId)return;
+      const active=(await agentRuns.list(project)).filter(run=>run.sessionId===sessionId&&run.status==='running');
+      if(active.length!==1)return;
+      const files=await nativeMemory.files(user.id,{context:sourceContext,uris});
+      const records=await nativeMemory.records(user.id,{files});
+      const originalSources=records.map(record=>({id:record.id,contentDigest:record.contentHash,sourcePrivacy:record.sourcePrivacy,attribution:record.attribution}));
+      if(originalSources.length)await agentRuns.recordLearning(project,active[0].id,{originalSources});
+    },
     overlay: nativeMemoryOverlay.configured ? nativeMemoryOverlay : null,
     // The capsule's half of a search (`memoryGateway.mjs`, item 9): the notes kept for the project, the packs in force, the zones it follows.
     capsuleSearch: capsuleService ? createNativeCapsuleSearch({ service: capsuleService, subscriptions: recallSubscriptions, contextItems }) : null,
@@ -7125,6 +7309,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       }
 
       if (await memoryMapRoutes(req, res)) return;
+      if (await sourceDeletionRoutes(req, res)) return;
       if (await memoryRoutes(req, res)) return;
       if (await agentKeyRoutes(req, res)) return;
 
@@ -7831,6 +8016,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         assertNotPlatformAccount(user);
         const exportProjects = new Map();
         await withAccountExportSnapshot(productDatabase, user, config, async snapshot => {
+          if(sourceDeletion) {
+            if(snapshot)await snapshot.withDatabaseSnapshot(()=>sourceDeletion.assertAccountExportSafe(user.id));
+            else await sourceDeletion.assertAccountExportSafe(user.id);
+          }
           const projects = snapshot?.projects ?? await store.listProjects(user);
           // Written as `memory/memory.json`, from the store itself rather than
           // from the account-state snapshot: the export is the researcher's own
@@ -7906,6 +8095,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         // Nothing of the account is committed to the engine from here, and its commits in flight finish first: a commit that reached
         // the engine as its deletion began left an extraction the deletion then waited on for ever (`nativeTurnCommit.forgetAccount`).
         await nativeTurnCommit.forgetAccount(user.id);
+        await memoryHistory?.eraseAccount(user.id);
         if (await nativeMemoryHeldBy(user.id)) await nativeMemory.eraseAccount(user.id);
         // The memory tables reference the account with ON DELETE CASCADE, so `store.deleteUser` below removes them inside the
         // transaction that can still fail.
@@ -8026,8 +8216,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           const user = await store.ensureUser(req, res);
           const project = await store.requireProject(user, projectId);
           await audit({ config, user, project }, "project.export", "completed", { target: project.id });
-          const entries = await collectProjectArchiveEntries(project, config);
-          await sendProjectArchive(res, project, entries);
+          const send=async()=>{const entries=await collectProjectArchiveEntries(project,config);await sendProjectArchive(res,project,entries);};
+          if(sourceDeletion)await sourceDeletion.withProjectExport(project,send);else await send();
           return;
         }
         if (!action && req.method === "DELETE") {
@@ -8307,6 +8497,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         const runs = await agentRuns.list(ctx.project);
         const run = runs.find((candidate) => candidate.id === runId);
         if (!run) throw new HttpError(404, "agent_run_not_found", "Agent run not found.");
+        await sourceDeletion?.assertAvailable(ctx.project,run.sessionId);
         const channel = runEvents.channel(runId);
         // The current state goes out before anything else, so a tab that
         // attaches to a finished run sees its outcome rather than an empty
@@ -8478,6 +8669,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     agentRegistry,
     usageLedger,
     managedBrowser,
+    sourceDeletion,
     authorizeOpenSession: authorizeOwnedNativeSession,
     recordUploadSuccess: vcrUploadReceipts ? (project, upload) => vcrUploadReceipts.record(project, upload) : null,
     recordUploadAttempt: productDocuments ? (project) => recordNativeUploadAttempt(productDocuments, project) : null,
@@ -8853,6 +9045,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       hostedExtensions?.worker.start();
       memoryIndexWorker?.start();
       nativeMemoryWorker.start();
+      sourceDeletion?.start();
       researchGoals?.start();
       scheduleWakes?.start();
       openVikingEngine?.start();
@@ -8989,6 +9182,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     memoryIndexWorker,
     nativeMemory,
     nativeMemoryWorker,
+    memoryHistory,
+    sourceDeletion,
     nativeTurnCommit,
     sharedContextPolicies, nativeMemoryContexts, nativeRememberJournal, geoNativeAuthority, geoNativeInputs, geoNativeSelections, contextItems, contextProvenance,
     sourceService,
@@ -9096,6 +9291,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           process.stderr.write(`review migration failed: ${typeof error?.code === "string" ? error.code : error?.name ?? "review_migration_failed"}\n`);
         });
       }
+      await sourceDeletionLedger?.migrate();
       await connectorCredentials?.migrate();
       await maintenanceService?.initialize();
       await scheduleWakes?.migrate();
@@ -9150,6 +9346,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       await hostedExtensions?.preparation.close();
       await hostedExtensions?.worker.close();
       await memoryIndexWorker?.close();
+      await sourceDeletion?.stop();
       nativeMemoryWorker.close();
       nativeTurnCommit.close();
       openVikingEngine?.close();
@@ -9253,12 +9450,16 @@ async function sendProjectArchive(res, project, entries = null, config = null) {
   gzip.on("error", () => {
     if (!res.destroyed) res.destroy();
   });
+  const completion=finished(res,{cleanup:true});
+  void completion.catch(()=>{gzip.destroy();});
   gzip.pipe(res);
   try {
     await writeTarArchive(gzip, archiveEntries, project.rootDir);
     gzip.end();
+    await completion;
   } catch (err) {
     gzip.destroy(err);
+    await completion.catch(()=>{});
     throw err;
   }
 }
@@ -9275,12 +9476,16 @@ async function sendUserArchive(res, user, entries = null, config = null) {
   gzip.on("error", () => {
     if (!res.destroyed) res.destroy();
   });
+  const completion=finished(res,{cleanup:true});
+  void completion.catch(()=>{gzip.destroy();});
   gzip.pipe(res);
   try {
     await writeTarArchive(gzip, archiveEntries, user.rootDir);
     gzip.end();
+    await completion;
   } catch (err) {
     gzip.destroy(err);
+    await completion.catch(()=>{});
     throw err;
   }
 }

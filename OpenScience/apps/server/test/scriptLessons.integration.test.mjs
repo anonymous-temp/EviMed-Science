@@ -44,7 +44,8 @@ after(async () => {
 
 const day = (/** @type {number} */ daysAgo) => new Date(NOW.getTime() - daysAgo * 86_400_000);
 const run = (/** @type {string} */ runId, /** @type {string} */ sessionId, /** @type {string | null} */ projectId, /** @type {number} */ daysAgo, /** @type {any[]} */ scripts, scope = "conversation") =>
-  ({ runId, sessionId, projectId, scope, at: day(daysAgo), scripts });
+  ({ runId, sessionId, projectId, scope, at: day(daysAgo), scripts,
+    scopeProof: { schema: 'run-turn-scope/1', runId, rootSessionId: sessionId, available: true, rootTurnStarts: [0], childSessionIds: [], unverifiedChildSessionIds: [], partial: false } });
 
 test("one row per script and run; the recurrence counts runs and conversations inside the window, newest first, one account at a time", options, async () => {
   assert.equal(await uses.record(owner, run("run_1", "conv_a", "p_one", 1, [{ hash: HASH, source: "print(1)" }])), 1);
@@ -88,4 +89,45 @@ test("a project's deletion takes its occurrences, a memory reset takes the accou
   await database.query("DELETE FROM evimed_control.users WHERE id=$1", [stranger]);
   assert.equal((await uses.recurrence(stranger, HASH)).runs, 0);
   await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Script uses','development')", [stranger]);
+});
+
+test('legacy whole-session occurrences remain stored but teach nothing without a current-run proof', options, async () => {
+  const hash = 'f'.repeat(32);
+  await database.query(`INSERT INTO evimed_learning.script_uses(user_id,script_hash,run_id,session_id,project_id,scope,occurred_at,source)
+    VALUES ($1,$2,'legacy','s_old','p_one','conversation',$3,'print("old whole-session program")')`, [owner, hash, NOW.toISOString()]);
+  assert.equal((await uses.recurrence(owner, hash)).runs, 0);
+  assert.deepEqual(await uses.exemplars(owner, hash), []);
+  assert.equal(await uses.record(owner, { ...run('unproved', 's_now', 'p_one', 0, [{ hash, source: 'print("unproved")' }]), scopeProof: null }), 0);
+  assert.equal((await database.query("SELECT source FROM evimed_learning.script_uses WHERE user_id=$1 AND run_id='legacy'", [owner])).rowCount, 1);
+});
+
+test('stored malformed scope proofs never qualify as script evidence', options, async () => {
+  const hash = '9'.repeat(32);
+  const valid = { schema: 'run-turn-scope/1', available: true, runId: 'bad', rootSessionId: 's', rootTurnStarts: [0] };
+  for (const proof of [{ ...valid, available: 'true' }, { ...valid, rootTurnStarts: [] }, { ...valid, rootTurnStarts: [-1] }, { ...valid, rootTurnStarts: [1.5] }, { ...valid, rootTurnStarts: ['1'] }]) {
+    await database.query(`INSERT INTO evimed_learning.script_uses(user_id,script_hash,run_id,session_id,project_id,scope,occurred_at,source,scope_proof)
+      VALUES ($1,$2,'bad','s','p_one','conversation',$3,'print("bad proof")',$4)
+      ON CONFLICT (user_id,script_hash,run_id) DO UPDATE SET scope_proof=EXCLUDED.scope_proof`, [owner, hash, NOW.toISOString(), proof]);
+    assert.equal((await uses.recurrence(owner, hash)).runs, 0);
+    assert.deepEqual(await uses.exemplars(owner, hash), []);
+  }
+});
+
+test('counts and sources share one snapshot and valid scoped evidence has a fresh job generation', options, async () => {
+  const { ProductJobs } = await import('../src/productJobs.mjs');
+  const { scriptLessonFor } = await import('../src/scriptLessons.mjs');
+  const hash = '8'.repeat(32), jobs = new ProductJobs(database);
+  for (const [id, sessionId] of [['new1', 'a'], ['new2', 'a'], ['new3', 'b']]) {
+    await uses.record(owner, run(id, sessionId, 'p_one', 0, [{ hash, source: `print('${id}')` }]));
+  }
+  const evidence = await uses.lesson(owner, hash);
+  assert.deepEqual([evidence.runs, evidence.conversations, evidence.exemplars.length], [3, 2, 3]);
+  const old = await jobs.enqueue(owner, 'distill', { trigger: 'script', runId: 'old', scriptHash: hash }, { idempotencyKey: `distill:script:${hash}`, projectId: 'p_one' });
+  await database.query("UPDATE evimed_product.jobs SET status='failed' WHERE user_id=$1 AND id=$2", [owner, old.id]);
+  const lesson = scriptLessonFor({ hash, run: { id: 'new3' }, recurrence: await uses.recurrence(owner, hash) });
+  const fresh = await jobs.enqueue(owner, 'distill', { trigger: 'script', runId: 'new3', ...lesson.payload }, { idempotencyKey: lesson.idempotencyKey, projectId: 'p_one' });
+  assert.notEqual(fresh.id, old.id); assert.equal(fresh.status, 'queued');
+  await database.query("DELETE FROM evimed_learning.script_uses WHERE user_id=$1 AND script_hash=$2 AND session_id='b'", [owner, hash]);
+  const afterDelete = await uses.lesson(owner, hash);
+  assert.deepEqual([afterDelete.runs, afterDelete.conversations, afterDelete.exemplars.length], [2, 1, 2]);
 });

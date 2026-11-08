@@ -1,4 +1,5 @@
 import { verifyContextGeneration } from './runtimeContextGeneration.mjs';
+import { createSourceStorageController } from './runtimeSourceStorageController.mjs';
 import {createRuntimeEgressProofStore} from './runtimeEgressProof.mjs';
 import { createOpenVikingCompileObserver } from "./openVikingCompileObserver.mjs";
 import { verifyPlatformSkillGeneration } from "./platformSkillSupply.mjs";
@@ -384,6 +385,8 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
   const projectOperations = new Map();
   const socketPath = config.runtimeControllerSocket;
   let ownedSocket = null;
+  const sourceStorage = createSourceStorageController(config, { inspectImage: () => inspectRuntimeImage(config), runtimeStatus,
+    ...(hooks.sourceStorage ?? {}) });
 
   /** One line per launch that went ahead although this controller's release
    *  manifest disagrees with its configuration. The control plane records the
@@ -952,6 +955,7 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
             if (disconnected) return;
             const result = await withProjectOperation(project, async () => {
               if (disconnected || res.destroyed) return null;
+              await sourceStorage.beforeStart(project);
               const started = await startRuntime(project, payload);
               if (disconnected || res.destroyed) {
                 await cleanupRuntime(project).catch(() => {});
@@ -969,6 +973,15 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
         }
         sendJson(res, 200, { data: await withProjectOperation(project, () => cleanupRuntime(project)) });
         return;
+      }
+      if (req.method === 'POST' && ['/v1/runtime/source-storage/capture', '/v1/runtime/source-storage/purge'].includes(url.pathname)) {
+        if (!String(req.headers['content-type'] ?? '').toLowerCase().startsWith('application/json')) throw controllerFailure(415, 'runtime_controller_content_type_invalid', 'Runtime controller requires JSON requests.');
+        const payload = await readJson(req, Math.min(config.maxJsonBytes, 2 * 1024 * 1024));
+        const capture = url.pathname.endsWith('/capture');
+        assertExactKeys(payload, capture ? ['userId', 'projectId', 'activeWorkspace', 'sessionId', 'contextReference', 'incarnation'] : ['userId', 'projectId', 'activeWorkspace', 'frozen']);
+        const project = await projectFromReference(config, payload);
+        const result = await withProjectOperation(project, () => capture ? sourceStorage.capture(project, payload) : sourceStorage.purge(project, payload.frozen));
+        sendJson(res, 200, { data: result }); return;
       }
       throw controllerFailure(404, "runtime_controller_route_not_found", "Runtime controller route not found.");
     } catch (error) {

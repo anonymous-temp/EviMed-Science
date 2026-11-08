@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+import { sourcePrivacyOf } from '@evimed/domain';
 /**
  * The capsule's half of the resident profile: who the researcher is and how they like to work, from their own capsule, as
  * memos the profile block renders beside the research-memory records (`residentProfile.mjs`).
@@ -76,6 +78,8 @@ export function capsuleFactMemos(facts) {
         scope: "capsule",
         ...(fact.origin ? { origin: String(fact.origin) } : {}),
         content,
+        attribution:/** @type {any} */(fact).attribution??{schemaVersion:1,origins:[fact.origin??"unknown"],confirmed:false},
+        sourcePrivacy:sourcePrivacyOf(fact),originalSources:[{id:fact.id?`fact:${fact.id}`:"fact",contentDigest:createHash("sha256").update(String(fact.content)).digest("hex"),sourcePrivacy:sourcePrivacyOf(fact),attribution:/** @type {any} */(fact).attribution??{schemaVersion:1,origins:[fact.origin??"unknown"],confirmed:false}}],
         updatedAt: fact.updatedAt ?? null,
       });
     }

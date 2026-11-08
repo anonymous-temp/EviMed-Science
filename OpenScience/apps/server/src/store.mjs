@@ -1451,6 +1451,7 @@ export class PostgresStore extends InMemoryStore {
       id,
       name: row.name,
       ...(typeof row.account_created_at === "string" ? { accountCreatedAt: row.account_created_at } : {}),
+      ...(typeof row.project_created_at === "string" ? { projectCreatedAt: row.project_created_at } : {}),
       tenantId: user.tenantId ?? user.id,
       userId: user.id,
       userRoot: user.rootDir,
@@ -1523,7 +1524,7 @@ export class PostgresStore extends InMemoryStore {
       const result = await client.query(
         `SELECT p.id, p.name, p.active_workspace, p.quota_bytes, p.archived_at,
                 u.id AS user_id, u.name AS user_name, u.password_hash, u.auth_type,
-                u.created_at::text AS account_created_at
+                u.created_at::text AS account_created_at, p.created_at::text AS project_created_at
            FROM ${CONTROL_PLANE_SCHEMA}.projects p
            JOIN ${CONTROL_PLANE_SCHEMA}.users u ON u.id = p.user_id
           ORDER BY p.user_id, p.id
@@ -1579,7 +1580,7 @@ export class PostgresStore extends InMemoryStore {
     return this.database.transaction(async (client) => {
       const result = await client.query(
         `SELECT p.id, p.name, p.active_workspace, p.quota_bytes, p.archived_at,
-                u.created_at::text AS account_created_at
+                u.created_at::text AS account_created_at, p.created_at::text AS project_created_at
            FROM ${CONTROL_PLANE_SCHEMA}.projects p
            JOIN ${CONTROL_PLANE_SCHEMA}.users u ON u.id=p.user_id
           WHERE p.user_id = $1 AND p.id = $2 FOR SHARE OF p`,
@@ -1602,7 +1603,7 @@ export class PostgresStore extends InMemoryStore {
       );
       const result = await client.query(
         `SELECT p.id, p.name, p.active_workspace, p.quota_bytes, p.archived_at,
-                u.created_at::text AS account_created_at
+                u.created_at::text AS account_created_at, p.created_at::text AS project_created_at
            FROM ${CONTROL_PLANE_SCHEMA}.projects p
            JOIN ${CONTROL_PLANE_SCHEMA}.users u ON u.id=p.user_id
           WHERE p.user_id = $1 AND p.id = $2 FOR SHARE OF p`,

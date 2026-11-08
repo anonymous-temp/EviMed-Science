@@ -239,6 +239,7 @@ function requestErrorCode(status) {
 
 export class OpenVikingClient {
   constructor(config, { fetchImpl = globalThis.fetch } = {}) {
+    /** @type {any} */ this.writeAdmission = null;
     this.baseUrl = String(config.openVikingUrl ?? "").replace(/\/+$/, "");
     this.apiKey = config.openVikingApiKey ?? "";
     this.apiKeyError = config.openVikingApiKeyError ?? null;
@@ -470,10 +471,17 @@ export class OpenVikingClient {
    * @param {{ method?: string, path: string, query?: Record<string, unknown> | null, body?: unknown,
    *   userId?: string | null, openVikingUser?: string | null, peerId?: string | null, timeoutMs?: number | null,
    *   idempotencyKey?: string | null, responseType?: "json" | "text" | "bytes", authenticated?: boolean,
-   *   maxResponseBytes?: number | null }} request
+   *   maxResponseBytes?: number | null }} input
    * @returns {Promise<any>}
    */
-  async request({
+  async request(input) {
+    const method=String(input.method??'GET').toUpperCase(), route=String(input.path??'');
+    const reads=route.startsWith('/api/v1/search/') || route==='/api/v1/fs/attrs/stat';
+    if(this.writeAdmission && input.userId && !['GET','HEAD'].includes(method) && !reads) return this.writeAdmission(input.userId,()=>this.performRequest(input));
+    return this.performRequest(input);
+  }
+
+  async performRequest({
     method = "GET", path, query = null, body = undefined, userId = null, openVikingUser = null, peerId = null,
     timeoutMs = null, idempotencyKey = null, responseType = "json", authenticated = true, maxResponseBytes = null,
   }) {

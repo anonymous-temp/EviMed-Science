@@ -23,7 +23,7 @@ import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { METHOD_RELEVANT_MOUNT_REASONS, NEVER_SHARED_LAYERS } from "@evimed/domain";
+import { METHOD_RELEVANT_MOUNT_REASONS, NEVER_SHARED_LAYERS, sourceAllowsEgress } from "@evimed/domain";
 import { entryReaches } from "./capsuleEntryProject.mjs";
 import { sharedFrom } from "./capsuleShareLabel.mjs";
 import { MAX_MOUNTED_LEARNED_METHODS, selectLearnedMethods, selectOfficialMethods } from "./learnedMethodMount.mjs";
@@ -245,6 +245,8 @@ function isMountableEntry(entry) {
   const payload = entry?.payload;
   return payload?.status === MOUNTABLE_STATUS
     && payload.origin !== "inferred"
+    && !payload.attribution?.origins?.includes("inferred")
+    && (!payload.transfer || sourceAllowsEgress(payload,{purpose:"method"}))
     && payload.unscanned !== true
     && payload.safetyHold !== true
     && CAPSULE_WORK_STYLE_FACT_KINDS.includes(String(payload.factKind))
@@ -393,6 +395,7 @@ export async function selectCapsuleMethods(capsules, { userId, projectId, maxByt
     // A pack the author or the operator took down mounts nothing, whatever list still names it.
     if (record?.payload?.takenDown) continue;
     for (const entry of entries) {
+      if(received&&!sourceAllowsEgress(entry.payload,{purpose:"method"}))continue;
       if(contextPolicy?.kind === "geo-project" && (!await capsules.inForce(userId,selection.capsuleId) || !await contextItems.capsule(contextPolicy,selection,entry))) continue;
       snapshots.set(String(entry.id),{entry,selection});
       const origin = record ? sharedFrom(record, entry.payload) : null;

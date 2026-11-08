@@ -132,6 +132,7 @@ CREATE TABLE IF NOT EXISTS evimed_memory.native_commits (
   PRIMARY KEY (user_id, archive_uri)
 );
 -- A ledger made before the page's 「记住这一条」 existed gains the column without being rebuilt.
+ALTER TABLE evimed_memory.native_commits ADD COLUMN IF NOT EXISTS native_ingested_at timestamptz(3);
 ALTER TABLE evimed_memory.native_commits ADD COLUMN IF NOT EXISTS pending_text text CHECK (pending_text IS NULL OR char_length(pending_text) <= 2000);
 -- A ledger made before 2026-10-23 gains what the extraction said about itself (a commit that wrote nothing is told apart: the
 -- model proposed nothing, or the engine refused what it proposed).
@@ -256,6 +257,12 @@ CREATE TABLE IF NOT EXISTS evimed_memory.native_imports (
   expires_at timestamptz(3) NOT NULL
 );
 CREATE INDEX IF NOT EXISTS native_imports_user_idx ON evimed_memory.native_imports (user_id, created_at DESC);
+-- Authority stamps are captured from trusted project/context rows, separately from a memory's display scope.
+ALTER TABLE evimed_memory.native_commits ADD COLUMN IF NOT EXISTS project_created_at text;
+ALTER TABLE evimed_memory.native_sessions ADD COLUMN IF NOT EXISTS project_created_at text;
+ALTER TABLE evimed_memory.native_line_origins ADD COLUMN IF NOT EXISTS project_created_at text;
+ALTER TABLE evimed_memory.native_revisions ADD COLUMN IF NOT EXISTS source_project_id text;
+ALTER TABLE evimed_memory.native_revisions ADD COLUMN IF NOT EXISTS source_project_created_at text;
 `;
 
 /** @param {any} database */

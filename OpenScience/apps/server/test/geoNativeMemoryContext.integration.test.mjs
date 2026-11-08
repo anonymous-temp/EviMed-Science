@@ -121,3 +121,10 @@ test('account replacement cannot enumerate or reuse old project memory context',
   await assert.rejects(f.contexts.session(a, 'dsh-root'), refused);
   await assert.rejects(f.contexts.noteInternal(a, 'evimed-page-one', { kind: 'page', operationRef: 'page-one' }), refused);
 });
+
+test('an owned live context cannot survive its project incarnation even though its personal namespace is unchanged',options,async t=>{
+  const f=await setup(t),old=await f.contexts.forProject(f.normal);assert.equal(old.kind,'owned');await f.contexts.assertLive(old);
+  await f.accounts.database.query("UPDATE evimed_control.projects SET created_at=created_at+interval '1 second' WHERE user_id=$1 AND id=$2",[f.owner.id,f.normal.id]);
+  const current=await f.contexts.forProject(f.normal);assert.equal(current.namespaceId,old.namespaceId);assert.notEqual(current.projectCreatedAt,old.projectCreatedAt);
+  await assert.rejects(f.contexts.assertLive(old),refused);await f.contexts.assertLive(current);
+});

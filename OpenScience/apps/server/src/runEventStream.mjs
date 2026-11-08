@@ -51,6 +51,7 @@ export class RunEventChannel {
     /** @type {Set<{ write: (chunk: string) => void, close: () => void }>} */
     this.subscribers = new Set();
     this.closed = false;
+    this.revoked = false;
   }
 
   /**
@@ -61,6 +62,7 @@ export class RunEventChannel {
    */
   publish(type, data, now = () => new Date()) {
     const envelope = { seq: (this.seq += 1), time: now().toISOString(), type, data };
+    if(this.revoked)return envelope;
     this.buffer.push(envelope);
     // A bounded buffer is a deliberate limit, not an oversight: an unbounded one
     // turns a long run plus a closed laptop into a memory leak with a user's
@@ -84,6 +86,7 @@ export class RunEventChannel {
    * @returns {() => void}
    */
   subscribe(subscriber, since = 0) {
+    if(this.revoked){subscriber.close();return ()=>{};}
     const missed = this.buffer.filter((envelope) => envelope.seq > since);
     // A client that asks for a sequence older than the buffer is told so
     // explicitly, so it can re-read rather than believe it caught up.
@@ -115,6 +118,7 @@ export class RunEventHub {
   constructor() {
     /** @type {Map<string, RunEventChannel>} */
     this.channels = new Map();
+    this.revoked = new Set();
   }
 
   /** @param {string} runId @returns {RunEventChannel} */
@@ -122,6 +126,7 @@ export class RunEventHub {
     let channel = this.channels.get(runId);
     if (!channel) {
       channel = new RunEventChannel(runId);
+      if(this.revoked.has(runId)){channel.revoked=true;channel.closed=true;}
       this.channels.set(runId, channel);
     }
     return channel;
@@ -130,6 +135,12 @@ export class RunEventHub {
   /** @param {string} runId @param {string} type @param {Record<string, any>} data @returns {StreamEnvelope} */
   publish(runId, type, data) {
     return this.channel(runId).publish(type, data);
+  }
+
+  /** A deleted source has neither a live subscriber nor replay bytes, including after channel recreation. */
+  revoke(runId) {
+    this.revoked.add(runId);
+    const channel=this.channel(runId);channel.revoked=true;channel.buffer=[];channel.close();
   }
 
   /** @param {string} runId */
