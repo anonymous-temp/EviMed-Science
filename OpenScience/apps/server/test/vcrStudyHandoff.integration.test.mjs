@@ -11,7 +11,7 @@ import { before, after, test } from 'node:test';
 import { ControlPlaneDatabase } from '../src/controlPlaneDatabase.mjs';
 import { composeVcr } from '../src/vcrComposition.mjs';
 import { createVcrGatewayHandler } from '../src/vcrGateway.mjs';
-import { createVcrCompletionResolver } from '../src/vcrConversationCompletions.mjs';
+import { createVcrCompletionResolver, VcrConversationCompletions } from '../src/vcrConversationCompletions.mjs';
 import { validateVcrConversationReference } from '../src/vcrConversationReference.mjs';
 import { createGeoTestDatabase } from './helpers/geoTestDatabase.mjs';
 
@@ -145,4 +145,37 @@ test('a job started in the granted conversation completes there, and a revoked c
   assert.equal((await resolve({...row,root_session_id:'sess_never'})).session,null,'a conversation the study was never handed to is not');
   await vcr.store.revokeStudyConversation(earlier.id,'sess_new');
   assert.equal((await resolve(row)).session,null,'taking the study back means its jobs no longer wake that conversation');
+});
+
+// Review X2 R11: a member's job is queued under the owner, but the conversation that started it is the member's own, in the member's own
+// project. Its completion used to be recorded for the owner and the owner's project, whose session list never held the member's conversation,
+// so it read as an invalid origin and the member's conversation was never woken.
+test('a job a member started from the conversation the study was handed to wakes that conversation once, and not after the grant is revoked',options,async () => {
+  caller = {userId:'dave',projectId:'prj_dave',rootSessionId:'sess_dave'};
+  await vcr.store.query(`INSERT INTO evimed_vcr.members (study_id,user_id,role,invited_by) VALUES ($1,'dave','data_manager','alice') ON CONFLICT DO NOTHING`,[earlier.id]);
+  await vcr.store.grantStudyConversation({studyId:earlier.id,sessionId:'sess_dave',grantedBy:'dave'});
+  const started = await post('simulate',{action:'start',kind:'design_analytic',scenario:{design:{kind:'two_arm_fixed',allocation:.5},
+    endpoint:{type:'binary'},truth:{controlRate:.35,treatmentRate:.2},analysis:{alpha:.05,power:.9,sided:2}}},'token:dave:prj_dave');
+  assert.equal(started.status,200,started.body);
+  const job = await vcr.store.one(`SELECT * FROM evimed_vcr.jobs WHERE study_id=$1 AND checkpoint->'conversationOrigin'->>'userId'='dave' ORDER BY created_at DESC LIMIT 1`,[earlier.id]);
+  assert.equal(job.user_id,'alice',"the work is saved under the study's owner");
+  await vcr.store.query(`UPDATE evimed_vcr.jobs SET state='succeeded',finished_at=now() WHERE id=$1`,[job.id]);
+  const completions = new VcrConversationCompletions({store:vcr.store,resolve:async () => null,inbox:async () => ({running:false,queued:0}),dispatch:async () => ({}),notify:async () => {},report:() => {}});
+  await completions.reconcile();
+  await completions.reconcile();
+  const rows = await vcr.store.rows(`SELECT * FROM evimed_vcr.conversation_completions WHERE job_id=$1`,[job.id]);
+  assert.equal(rows.length,1,'one completion, however many ticks');
+  assert.deepEqual([rows[0].user_id,rows[0].project_id,rows[0].root_session_id,rows[0].state,rows[0].last_error,rows[0].payload.studyOwnerId],['dave','prj_dave','sess_dave','pending',null,'alice'],
+    "recorded for the member's conversation, in the member's project, as a valid origin");
+  const sessions = {get:async (/** @type {any} */ _project,/** @type {string} */ id) => ({id})};
+  const resolve = createVcrCompletionResolver({accounts:{userById:async (/** @type {string} */ id) => ({id}),requireProject:async (/** @type {any} */ _u,/** @type {string} */ id) => ({id})},
+    studies:vcr.store,sessions,allows:() => true});
+  assert.equal((await resolve(rows[0])).session?.id,'sess_dave','the member\'s conversation is woken');
+  // a completion nobody's grant backs is no origin: another person's conversation is never woken by a job it did not start
+  const stranger = {...job,id:'job_stranger',checkpoint:{...job.checkpoint,conversationOrigin:{...job.checkpoint.conversationOrigin,userId:'erin',projectId:'prj_erin',rootSessionId:'sess_erin'}}};
+  assert.equal((await completions.conversationOf(stranger,stranger.checkpoint.conversationOrigin,'prj_default',true)).invalid,true);
+
+
+  await vcr.store.revokeStudyConversation(earlier.id,'sess_dave','dave');
+  assert.equal((await resolve(rows[0])).session,null,'after the grant is revoked the conversation is not woken');
 });

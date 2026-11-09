@@ -20,11 +20,14 @@ export function createVcrCompletionResolver({ accounts,studies,sessions,allows,a
     const user=await accounts.userById(row.user_id);if(!user)return null;
     if(row.study_id && !allows(user)) throw new HttpError(503,'vcr_disabled','Research tools are disabled for this account.');
     const project=await accounts.requireProject(user,row.project_id);
-    const study=row.study_id ? await studies.getStudy(row.user_id,row.study_id) : null;
+    // A member's conversation (the job is the study owner's, the completion belongs to the member who granted it) reads the study as the owner
+    // did and needs the member's own live grant: the grant is what makes the conversation a valid place to answer.
+    const memberOf=row.payload?.studyOwnerId ? String(row.payload.studyOwnerId) : null;
+    const study=row.study_id ? await studies.getStudy(memberOf ?? row.user_id,row.study_id) : null;
     // A study handed to this conversation (R11) answers there while the grant stands, and a revoked grant has no conversation to wake;
     // without a grant, a conversation-scoped study answers only in the conversation it belongs to.
     const handoff=study && study.conversationSessionId!==row.root_session_id ? await studies.studyConversationHandoff?.(study.id,row.root_session_id,String(row.user_id)) : null;
-    if(row.study_id && (!study || study.projectId!==row.project_id || !['active','draft'].includes(study.status)
+    if(row.study_id && (!study || (memberOf ? !handoff : study.projectId!==row.project_id) || !['active','draft'].includes(study.status)
       || (handoff ? handoff.revokedAt!==null : study.scope==='conversation' && study.conversationSessionId!==row.root_session_id))) return {user,project,session:null};
     return {user,project,session:await sessions.get(project,row.root_session_id) ?? await adoptSession?.(project,row.root_session_id) ?? null};
   };
@@ -35,6 +38,26 @@ export class VcrConversationCompletions {
     this.counters={reconciled:0,attempted:0,delivered:0,observed:0,canceled:0,retried:0,exhausted:0,unavailable:0,notificationFailed:0,pruned:0};
     this.promptStops=new RuntimePromptStops({database:store.database ?? null});
     this.store = store; this.resolve = resolve; this.inbox = inbox; this.dispatch = dispatch; this.notify = notify; this.report = report;
+  }
+  /**
+   * Whose conversation a job's, campaign's or comparison's completion wakes. The work is saved under the study's owner, but a conversation a study
+   * was handed to by a member (R11) is the member's: the completion belongs to the member and the member's project, with the owner named in the
+   * payload so the study is read as before, and only while the member's grant for that very conversation stands. Anything else that does not
+   * match the row's owner and project is an invalid origin, as it was.
+   * @param {Record<string, any>} row the job, campaign or comparison row (`user_id`, `study_id`) @param {Record<string, any> | null | undefined} origin
+   * @param {string} projectId the study's project @param {boolean} strict whether the owner's own origin must also name the study's project (a job's does)
+   * @returns {Promise<{ userId: string, projectId: string, studyOwnerId: string | null, invalid: boolean }>}
+   */
+  async conversationOf(row,origin,projectId,strict) {
+    const owner={userId:String(row.user_id),projectId:String(projectId),studyOwnerId:null};
+    if(origin?.userId && origin.userId!==row.user_id) {
+      const grant=row.study_id && origin.rootSessionId && origin.projectId && this.store.one
+        ? await this.store.one(`SELECT 1 AS held FROM evimed_vcr.study_conversations WHERE study_id=$1 AND session_id=$2 AND granted_by=$3 AND revoked_at IS NULL LIMIT 1`,
+          [row.study_id,String(origin.rootSessionId),String(origin.userId)]) : null;
+      if(grant) return {userId:String(origin.userId),projectId:String(origin.projectId),studyOwnerId:String(row.user_id),invalid:!origin.runId || !origin.callId};
+      return {...owner,invalid:true};
+    }
+    return {...owner,invalid:strict ? origin?.userId !== row.user_id || origin?.projectId !== projectId || !origin?.rootSessionId || !origin?.runId || !origin?.callId : !origin?.callId};
   }
   async reconcileReplays() {
     if (!this.store.one || !(await this.store.one("SELECT to_regclass('evimed_product.documents') AS relation"))?.relation) return 0;
@@ -82,17 +105,18 @@ export class VcrConversationCompletions {
       AND COALESCE(e.state->>'completionRecorded','false')<>'true' ORDER BY e.updated_at,e.id LIMIT $1`,[this.config.vcrCompletionReconcileBatch ?? 50]);
     for(const row of rows){
       const origin=row.origin,reason=String(row.state?.stop?.reason ?? 'unknown');
-      const invalid=!origin.callId;
+      const who=await this.conversationOf(row,origin,row.project_id,false);
+      const invalid=who.invalid;
       if(invalid) this.report('vcr_completion_origin_invalid');
       const view=presentCampaign(row);
       const shown=view.candidates.find(c=>c.key===view.best) ?? view.candidates.find(c=>c.key===view.undecided?.closest?.key) ?? null;
       const state=reason==='user_cancellation'?'canceled':reason==='persistent_model_failure'?'failed':'succeeded';
-      const fingerprint=hash([row.user_id,row.project_id,origin.rootSessionId,row.id,'campaign']);
+      const fingerprint=hash([who.userId,who.projectId,origin.rootSessionId,row.id,'campaign']);
       await this.store.query(`INSERT INTO evimed_vcr.conversation_completions
         (id,study_id,job_id,user_id,project_id,root_session_id,result_key,dispatch_id,fingerprint,payload,state,last_error)
         VALUES ($1,$2,NULL,$3,$4,$5,'campaign',$6,$7,$8::jsonb,$9,$10) ON CONFLICT DO NOTHING`,
-      [`vcc_${fingerprint}`,row.study_id,row.user_id,row.project_id,origin.rootSessionId,vcrCompletionDispatchId(fingerprint),fingerprint,
-        JSON.stringify({completedAt:row.state?.stop?.at ?? row.updated_at,state,campaignId:row.id,stopReason:reason,resultId:null,resultVersion:null,partial:false,error:null,
+      [`vcc_${fingerprint}`,row.study_id,who.userId,who.projectId,origin.rootSessionId,vcrCompletionDispatchId(fingerprint),fingerprint,
+        JSON.stringify({...(who.studyOwnerId ? {studyOwnerId:who.studyOwnerId} : {}),completedAt:row.state?.stop?.at ?? row.updated_at,state,campaignId:row.id,stopReason:reason,resultId:null,resultVersion:null,partial:false,error:null,
           objective:view.objective?.pick?{phrase:view.objective.pick.phrase,sentence:view.objective.pick.sentence}:null,
           best:shown?{index:shown.index+1,set:shown.set,objective:(v=>v?{value:v.value,mcse:v.mcse ?? null,unit:v.unit ?? null}:null)(shown.objective.final ?? shown.objective.screening),source:view.best?'feasible':'undecided'}:null,
           robust:view.robust?{scenarios:view.robust.scenarios.map(x=>x.name),cheapestAcceptable:view.robust.cheapestAcceptable?{index:view.robust.cheapestAcceptable.index+1}:null,cheapestUnderBase:view.robust.cheapestUnderBase?{index:view.robust.cheapestUnderBase.index+1}:null,sameDesign:view.robust.sameDesign,statement:view.robust.statement}:null,
@@ -120,14 +144,15 @@ export class VcrConversationCompletions {
       const outcome=await experimentOutcome(this.store,row);
       if(!outcome.terminal) continue;
       const origin=row.origin;
-      const invalid=!origin.callId;
+      const who=await this.conversationOf(row,origin,row.project_id,false);
+      const invalid=who.invalid;
       if(invalid) this.report('vcr_completion_origin_invalid');
-      const fingerprint=hash([row.user_id,row.project_id,origin.rootSessionId,row.id,'experiment']);
+      const fingerprint=hash([who.userId,who.projectId,origin.rootSessionId,row.id,'experiment']);
       await this.store.query(`INSERT INTO evimed_vcr.conversation_completions
         (id,study_id,job_id,user_id,project_id,root_session_id,result_key,dispatch_id,fingerprint,payload,state,last_error)
         VALUES ($1,$2,NULL,$3,$4,$5,'experiment',$6,$7,$8::jsonb,$9,$10) ON CONFLICT DO NOTHING`,
-      [`vcc_${fingerprint}`,row.study_id,row.user_id,row.project_id,origin.rootSessionId,vcrCompletionDispatchId(fingerprint),fingerprint,
-        JSON.stringify({completedAt:outcome.finishedAt ?? row.updated_at,state:outcome.state,experimentId:row.id,outcome:outcome.outcome,arms:outcome.arms,resultId:null,resultVersion:null,
+      [`vcc_${fingerprint}`,row.study_id,who.userId,who.projectId,origin.rootSessionId,vcrCompletionDispatchId(fingerprint),fingerprint,
+        JSON.stringify({...(who.studyOwnerId ? {studyOwnerId:who.studyOwnerId} : {}),completedAt:outcome.finishedAt ?? row.updated_at,state:outcome.state,experimentId:row.id,outcome:outcome.outcome,arms:outcome.arms,resultId:null,resultVersion:null,
           partial:outcome.partial,error:null,runId:origin.runId,callId:origin.callId ?? null}),invalid?'unavailable':'pending',invalid?'vcr_completion_origin_invalid':null]);
       await this.store.query(`UPDATE evimed_vcr.experiments SET state=state || '{"completionRecorded":true}'::jsonb WHERE id=$1`,[row.id]);
       recorded++;
@@ -149,15 +174,16 @@ export class VcrConversationCompletions {
       [this.config.vcrCompletionReconcileBatch ?? 50,Boolean(this.jobs)]);
     for (const row of rows) {
       const origin = row.checkpoint.conversationOrigin;
-      const invalid=origin?.userId !== row.user_id || origin?.projectId !== row.project_id || !origin?.rootSessionId || !origin?.runId || !origin?.callId;
+      const who=await this.conversationOf(row,origin,row.project_id,true);
+      const invalid=who.invalid;
       if(invalid) this.report('vcr_completion_origin_invalid');
       const key = row.result_id ? `${row.result_id}:${row.result_version}` : 'none';
-      const fingerprint = hash([row.user_id,row.project_id,origin?.rootSessionId ?? 'invalid',row.id,key]);
+      const fingerprint = hash([who.userId,who.projectId,origin?.rootSessionId ?? 'invalid',row.id,key]);
       await this.store.query(`INSERT INTO evimed_vcr.conversation_completions
         (id,study_id,job_id,user_id,project_id,root_session_id,result_key,dispatch_id,fingerprint,payload,state,last_error)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11,$12) ON CONFLICT (job_id,result_key) DO NOTHING`,
-      [`vcc_${fingerprint}`,row.study_id,row.id,row.user_id,row.project_id,origin?.rootSessionId ?? 'invalid',key,vcrCompletionDispatchId(fingerprint),fingerprint,
-        JSON.stringify({completedAt:row.finished_at,state: row.state, resultId: row.result_id ?? null, resultVersion: row.result_version ?? null,
+      [`vcc_${fingerprint}`,row.study_id,row.id,who.userId,who.projectId,origin?.rootSessionId ?? 'invalid',key,vcrCompletionDispatchId(fingerprint),fingerprint,
+        JSON.stringify({...(who.studyOwnerId ? {studyOwnerId:who.studyOwnerId} : {}),completedAt:row.finished_at,state: row.state, resultId: row.result_id ?? null, resultVersion: row.result_version ?? null,
           partial: row.partial === 'true', error: row.error ? { code: row.error.code ?? 'vcr_job_failed' } : null,
           runId: origin?.runId, callId: origin?.callId }),invalid ? 'unavailable' : 'pending',invalid ? 'vcr_completion_origin_invalid' : null]);
       await this.store.query(`UPDATE evimed_vcr.jobs SET checkpoint=checkpoint || '{"completionOutboxRecorded":true}'::jsonb WHERE id=$1`,[row.id]);
@@ -170,12 +196,12 @@ export class VcrConversationCompletions {
     if(!this.store.one) return null;
     const source=row.payload.campaignId ?? row.payload.experimentId
       ? await this.store.one(`SELECT state->'originTerminalObservation' AS observation,CASE WHEN $2='canceled' THEN 'canceled' ELSE 'stopped' END AS state
-          FROM evimed_vcr.experiments WHERE id=$1 AND user_id=$3`,[row.payload.campaignId ?? row.payload.experimentId,row.payload.state,row.user_id])
+          FROM evimed_vcr.experiments WHERE id=$1 AND user_id=$3`,[row.payload.campaignId ?? row.payload.experimentId,row.payload.state,row.payload.studyOwnerId ?? row.user_id])
       : row.payload.replayId
       ? await this.store.one(`SELECT d.payload->'terminalObservation' AS observation,COALESCE(j.status,d.payload->>'state') AS state
           FROM evimed_product.documents d LEFT JOIN evimed_product.jobs j ON j.id=d.payload->>'jobId' AND j.user_id=d.user_id
           WHERE d.id=$1 AND d.project_id=$2 AND COALESCE(d.payload->>'requestedBy',d.user_id)=$3 AND d.kind='result-replay' AND d.deleted_at IS NULL`,[row.payload.replayId,row.project_id,row.user_id])
-      : await this.store.one(`SELECT checkpoint->'originTerminalObservation' AS observation,state FROM evimed_vcr.jobs WHERE id=$1 AND user_id=$2`,[row.job_id,row.user_id]);
+      : await this.store.one(`SELECT checkpoint->'originTerminalObservation' AS observation,state FROM evimed_vcr.jobs WHERE id=$1 AND user_id=$2`,[row.job_id,row.payload.studyOwnerId ?? row.user_id]);
     const proof=source?.observation;
     return {canceled:source?.state==='canceled',observed:Boolean(proof && proof.runId===row.payload.runId && proof.rootSessionId===row.root_session_id
       && proof.state===row.payload.state && proof.resultKey===row.result_key)};
