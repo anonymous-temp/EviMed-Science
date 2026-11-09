@@ -33,3 +33,9 @@ test('stays the model declines are rejected in the ledger and still counted in t
   assert.equal(result.denominator.submitted,40);
   assert.equal(result.missingForecasts,10);
 });
+
+test("the engine's own predictions file (quoted fields, a patientId column) is read as it is written", () => {
+  // The first real-data run (2026-11-09) read every forecast as missing: the engine quotes its strings and names the id patientId.
+  const rows = parseCsv('"patientId","score","prediction","reason","source"\n"b0001",94.5,94.5,"","predicted"\n"b0002",91,91,"a, b","predicted"\n');
+  assert.deepEqual(rows.map(r => [r.patientId, Number(r.prediction), r.reason]), [['b0001', 94.5, ''], ['b0002', 91, 'a, b']]);
+});

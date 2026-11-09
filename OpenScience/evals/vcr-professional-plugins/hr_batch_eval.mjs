@@ -8,7 +8,7 @@
  * or arm is chosen on B or C. The denominator is the whole split: stays that lacked an early or a 24-hour heart rate were dropped by
  * `hr_baseline.py` before this path and are carried in from its counts, so submitted + dropped = every stay.
  *
- *   node hr_batch_eval.mjs --clinical <dir with hr-b-paired.csv, hr-baseline.json> --split b [--predictions <csv USUBJID,prediction>] --out <file.json>
+ *   node hr_batch_eval.mjs --clinical <dir with hr-b-paired.csv, hr-baseline.json> --split b [--predictions <csv: USUBJID or patientId (the engine's own column), prediction>] --out <file.json>
  *
  * Aggregates only: no patient row is written. */
 import fs from 'node:fs/promises';
@@ -25,11 +25,25 @@ const at = hours => new Date(Date.parse('2026-01-01T00:00:00.000Z') + hours * 3_
 const endpoint = { code: 'HR', type: 'continuous', unit: 'bpm' };
 const permission = { schema: 1, status: 'approved', dataClass: 'synthetic', purpose: 'vcr', destinations: ['https://local-adapter.example.org'] };
 
+/** One CSV line into fields; a quoted field (the engine's own writer quotes every string, and `""` is a quote inside one) is read as its text.
+ * @param {string} line */
+function splitLine(line) {
+  const fields = [];
+  for (let i = 0, field = '', quoted = false; i <= line.length; i += 1) {
+    const ch = line[i];
+    if (quoted) {
+      if (ch === '"' && line[i + 1] === '"') { field += '"'; i += 1; } else if (ch === '"') quoted = false; else field += ch ?? '';
+    } else if (ch === '"' && field === '') quoted = true;
+    else if (ch === ',' || ch === undefined) { fields.push(field); field = ''; } else field += ch;
+  }
+  return fields;
+}
+
 /** @param {string} text */
 export function parseCsv(text) {
   const [head, ...rows] = text.trim().split(/\r?\n/);
-  const names = head.split(',');
-  return rows.map(row => Object.fromEntries(row.split(',').map((value, index) => [names[index], value])));
+  const names = splitLine(head);
+  return rows.map(row => Object.fromEntries(splitLine(row).map((value, index) => [names[index], value])));
 }
 
 /**
@@ -77,7 +91,10 @@ async function main() {
   const pairs = parseCsv(await fs.readFile(path.join(args.clinical, `hr-${args.split}-paired.csv`), 'utf8'));
   const baseline = JSON.parse(await fs.readFile(path.join(args.clinical, 'hr-baseline.json'), 'utf8')).splits?.[args.split];
   const dropped = baseline ? { noEarlyOrNoTarget: baseline.no_both } : null;
-  const predictions = args.predictions ? new Map(parseCsv(await fs.readFile(args.predictions, 'utf8')).map(r => [r.USUBJID, Number(r.prediction)])) : null;
+  const predictionRows = args.predictions ? parseCsv(await fs.readFile(args.predictions, 'utf8')) : null;
+  // A predictions file with neither id column would read as "every forecast missing"; say what is wrong instead.
+  if (predictionRows && !(predictionRows.length && ('USUBJID' in predictionRows[0] || 'patientId' in predictionRows[0]) && 'prediction' in predictionRows[0])) throw new Error('predictions csv needs a USUBJID or patientId column and a prediction column');
+  const predictions = predictionRows ? new Map(predictionRows.map(r => [r.USUBJID ?? r.patientId, Number(r.prediction)])) : null;
   const persistence = await runBatchEval({ pairs, dropped });
   const arms = predictions ? [persistence, await runBatchEval({ pairs, predictions, dropped })] : [persistence];
   await fs.writeFile(args.out, JSON.stringify({ split: args.split, records: baseline?.records ?? null, arms }, null, 2) + '\n');

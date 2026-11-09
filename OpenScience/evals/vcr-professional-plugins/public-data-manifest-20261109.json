@@ -1,0 +1,30 @@
+{
+  "note": "The two public sources the frozen batch evaluation reads, pinned by SHA-256 of the bytes fetched on 2026-11-09. Data is kept out of the repository; fetch_public_data.py refuses any file whose hash differs.",
+  "physionet-challenge-2012": {
+    "licence": "ODC-By 1.0",
+    "page": "https://physionet.org/content/challenge-2012/1.0.0/",
+    "base": "https://physionet.org/files/challenge-2012/1.0.0/",
+    "files": {
+      "set-a.tar.gz": { "bytes": 6632372, "sha256": "8cb250f179cd0952b4b9ebcf8954b63d70383131670fac1cfee13deaa13ca920" },
+      "set-b.tar.gz": { "bytes": 6652690, "sha256": "b1637a2a423a8e76f8f087896cfc5fdf28f88519e1f4e874fbda69b2a64dac30" },
+      "set-c.tar.gz": { "bytes": 6600293, "sha256": "a4a56b95bcee4d50a3874fe298bf2998f2ed0dd98a676579573dc10419329ee1" },
+      "Outcomes-a.txt": { "bytes": 79219, "sha256": "2613ea60ccda29f87571a7d6b09ad130858a8ccd66325bd073365925026883c2" },
+      "Outcomes-b.txt": { "bytes": 79149, "sha256": "1305f29734da374a809483229a99f33a9230aa8d4fa74b1a2d6ad788136423d5" },
+      "Outcomes-c.txt": { "bytes": 79191, "sha256": "0b32dcb7753c0f18f2f5fde498a28618b8879c5e527ce0dae8ad120dd7e205c9" }
+    }
+  },
+  "actg175-speff2trial": {
+    "licence": "GPL-2 (CRAN package speff2trial 1.0.5; the data file only)",
+    "page": "https://cran.r-project.org/package=speff2trial",
+    "base": "https://cloud.r-project.org/src/contrib/",
+    "files": {
+      "speff2trial_1.0.5.tar.gz": { "bytes": 66356, "sha256": "ecb3579670c360786da55346f783091f6b71bf6a49a920ab1224d254cd55e4a1", "md5": "52ffb49246e35e40386625a007819848" }
+    },
+    "member": {
+      "speff2trial/data/ACTG175.txt": { "sha256": "7b52e6b3701a1f24090ef0388f1c148d5286450f97276d9c8fbe611ce0c76779", "md5InPackageMD5File": "38d443f539f20e2badf99192f5855f69", "rows": 2139 }
+    },
+    "derived": {
+      "actg_survival.csv": "actg_from_cran.py: the same rows as the member, space-separated text rewritten as CSV, NA kept as NA"
+    }
+  }
+}
