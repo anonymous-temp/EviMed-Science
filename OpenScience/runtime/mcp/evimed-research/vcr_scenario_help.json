@@ -50,6 +50,8 @@
     "borrowing_prior": {"method":"comparator.borrowing"},
     "train_prognostic_model": {"method":"model.prognostic_train"},
     "generate_progression": {"method":"patients.progression"},
+    "decision_voi": {"method":"decision.value_of_information"},
+    "pk_interaction": {"method":"pk.interaction"},
     "match_extract": {"method":"matching.extract","platformBuilt":[]},
     "forecast_trajectories": {"method":"forecast.trajectories"},
     "evaluate_forecast": {"method":"forecast.evaluate"},
@@ -208,7 +210,9 @@
         "The treatment slows the clock: a treated person follows the same curve with time scaled by 1 - slowing. The result is the exact mean curve and spread by arm at every visit, and the power of the analysis (a Welch t-test of the change from baseline to `visit`, or of each person's least-squares slope over all the visits) by simulation with its Monte Carlo error, with the closed-form power of the same test beside it. With no slowing the same number is the type I error. It is a population-level curve and not a prediction for a person.",
         "family \"beta_logit\" (1.1.0) is a published model whose numbers are in the engine: parameterSet camd-adas-cog-11 / adsim-3.0 is the CAMD drug-disease-trial model of mild and moderate Alzheimer disease on ADAS-cog 11 (0 to 70, higher is worse), run with the 1,600 posterior draws its authors released; timeUnit must be \"weeks\" and the first visit 0. State no slope, spread, baseline, residual or slowing: those are the other families'. population overrides the entry (mmseRange, default 16 to 26) and the covariate model (apoe4 shares for 0/1/2 alleles, femaleShare, ageMeanByApoe4, ageSd, ageBounds), each with its basis. placebo (default true) and dropoutModel (\"parameter_set\" or \"none\") switch those parts of the model.",
         "The drug is a hypothesis the run states, never a prediction for a compound: treatment.symptomatic is a difference in points (treated less untreated, negative is better) at atWeek for a person at referenceAdas, or a logitEmax, with et50Weeks and, when doseEnd is before the last visit, washoutHalfLifeWeeks; treatment.diseaseModifying.fraction is the share of the study's mean decline removed while on drug (kept after the dose ends). uncertainty: \"new_study\" draws one study per simulated trial (default), \"typical_study\" none, \"posterior_draws\" a posterior draw and then a study. analysis.kind \"change\" (Welch) or \"ancova\" (change on arm and baseline), among the people still observed at the visit. The curves are calculated for a typical study; the power is simulated. Report the premises the result lists (the parameters reproduce the EMA 2013 qualification opinion Tables 7, 9 and 11, not Table 10 or Figures 15-16; no regulatory status transfers); never recompute a number.",
-        "From 1.2.0 treatment.symptomatic.pointsAt and treatment.diseaseModifying.fraction are either { value, basis } or { distribution: { family, parameters, source, tier } }, drawn once per simulated trial: family fixed (value), normal (mean, sd), truncated_normal (mean, sd, lower, upper), lognormal (meanlog, sdlog), beta (shape1, shape2), uniform (min, max) or empirical_draws (values); source { kind: literature | model_result | stated, with a citation, an objectRef or a note }; tier A (from a published fit of the compound's class), B (from a mechanism chain), C (a literature estimate with no model) or stated (the person's own). The result is then an assurance (named so): it counts every significant benefit, a null or irrelevant effect included, and is neither the chance that the drug works nor a programme's chance of success; more simulated trials shrink only its Monte Carlo error. A draw the model cannot represent is redrawn and the share is reported."
+        "From 1.2.0 treatment.symptomatic.pointsAt and treatment.diseaseModifying.fraction are either { value, basis } or { distribution: { family, parameters, source, tier } }, drawn once per simulated trial: family fixed (value), normal (mean, sd), truncated_normal (mean, sd, lower, upper), lognormal (meanlog, sdlog), beta (shape1, shape2), uniform (min, max) or empirical_draws (values); source { kind: literature | model_result | stated, with a citation, an objectRef or a note }; tier A (from a published fit of the compound's class), B (from a mechanism chain), C (a literature estimate with no model) or stated (the person's own). The result is then an assurance (named so): it counts every significant benefit, a null or irrelevant effect included, and is neither the chance that the drug works nor a programme's chance of success; more simulated trials shrink only its Monte Carlo error. A draw the model cannot represent is redrawn and the share is reported.",
+        "From 1.2.0 the drug effect has an origin, named by tier on the result. Tier A: treatment.reference { drug: donepezil | galantamine | rivastigmine, doseMg, washoutHalfLifeWeeks (needed only when doseEnd is before the last visit) } is the treated arm taking that marketed inhibitor, instead of treatment.symptomatic: the effect is the posterior's own (the manual's equation: the effect at the reference dose of 5, 24 and 6 mg times (dose / reference dose) to the fitted exponent), one posterior row per trial under uncertainty \"posterior_draws\"; the range of the fitted doses is not published, so the same law applies at any dose and the result says so. treatment.background { drug, doseMg, weeksBefore } is an inhibitor both arms already take (an add-on trial), started weeksBefore weeks before baseline. The donepezil 10 mg effect at 26 weeks agrees with the Cochrane review (Birks and Harvey 2018, -2.67 points): a consistency check of the implementation, not an independent validation. Tier B: treatment.mechanism { drug: aducanumab, regimen { maintenanceMgPerKg, titrationMgPerKg (the first doses), intervalWeeks (default 4), infusionHours (default 1) }, atWeek, link } replaces diseaseModifying with the published chain from dose to serum concentration to amyloid PET SUVR (Muralidharan 2022) to ADAS-Cog (Pang 2023: 0.33 points per 0.1 SUVR, 95% CI 0.12 to 0.55, drawn per simulated trial), turned into the model's disease-modifying share by calculation at the typical study; the result is an assurance that holds only if that chain holds, with its three mismatches (scale, population, link) among its premises. lecanemab is not executable: its serum model is published and its amyloid model is not, and nothing is guessed. Never state a number of the chain yourself.",
+        "From 1.2.0 intercurrent states what happens to a person besides finishing as planned, each number { value, basis }: discontinuation { shareControl, shareTreated (the share of each arm that stops the drug by the last visit), retrievedShare (of those, who stay in the study and are followed), progressionLogHazardPerSd (optional: positive means the person who declines fastest stops sooner, the missing-not-at-random case) }, withdrawal { treatedHazardRatio, progressionLogHazardPerSd } on the parameter set's own hazard of leaving, death { share } (scored as the worst value, 70, from that day) and offTreatment.reboundLogit. A person who stops keeps the symptomatic effect fading with washoutHalfLifeWeeks (required then) and the disease-modifying effect held. estimand.strategy is treatment_policy (everyone followed whatever happened) or hypothetical (nobody stops the drug): the result computes the true value of both from the model and gives the estimator's bias and 95% coverage against each. analysis.kind adds mmrm (unstructured, visit by arm and visit by baseline), cmi_jump_to_reference and cmi_copy_reference (conditional-mean imputation, jackknife standard error over jackknifeGroups); analysis.data is all_observed (default; for a reference-based imputation on_treatment) or on_treatment; analysis.delta adds points to what is imputed for the treated arm (the tipping-point delta). An estimator answers one estimand: say which the research question asked for and read the bias against it, never against the other."
       ],
       "rows": [
         {"path":"endpoint","type":"object","requiredWhen":[{"path":"instantiate","present":false}]},
@@ -1187,6 +1191,145 @@
           "when": [{"path":"model.family","in":["beta_logit"]}],
           "fieldRole": "defaultable"
         },
+        {"path":"treatment.reference","type":"object","within":"treatment","when":[{"path":"model.family","in":["beta_logit"]}]},
+        {
+          "path": "treatment.reference.drug",
+          "type": "string",
+          "values": ["donepezil","galantamine","rivastigmine"],
+          "required": true,
+          "within": "treatment.reference",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "treatment.reference.doseMg",
+          "type": "number",
+          "gt": 0,
+          "required": true,
+          "within": "treatment.reference",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "research_fact"
+        },
+        {"path":"treatment.reference.washoutHalfLifeWeeks","type":"object","within":"treatment.reference","when":[{"path":"model.family","in":["beta_logit"]}]},
+        {
+          "path": "treatment.reference.washoutHalfLifeWeeks.value",
+          "type": "number",
+          "gt": 0,
+          "required": true,
+          "within": "treatment.reference.washoutHalfLifeWeeks",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "treatment.reference.washoutHalfLifeWeeks.basis",
+          "type": "string",
+          "values": ["literature","assumed","data"],
+          "required": true,
+          "within": "treatment.reference.washoutHalfLifeWeeks",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "treatment.reference.washoutHalfLifeWeeks.citation",
+          "type": "string",
+          "maxLength": 300,
+          "within": "treatment.reference.washoutHalfLifeWeeks",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {"path":"treatment.background","type":"object","within":"treatment","when":[{"path":"model.family","in":["beta_logit"]}]},
+        {
+          "path": "treatment.background.drug",
+          "type": "string",
+          "values": ["donepezil","galantamine","rivastigmine"],
+          "required": true,
+          "within": "treatment.background",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "treatment.background.doseMg",
+          "type": "number",
+          "gt": 0,
+          "required": true,
+          "within": "treatment.background",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "treatment.background.weeksBefore",
+          "type": "number",
+          "min": 0,
+          "required": true,
+          "within": "treatment.background",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "research_fact"
+        },
+        {"path":"treatment.mechanism","type":"object","within":"treatment","when":[{"path":"model.family","in":["beta_logit"]}]},
+        {
+          "path": "treatment.mechanism.drug",
+          "type": "string",
+          "values": ["aducanumab","lecanemab"],
+          "required": true,
+          "within": "treatment.mechanism",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {"path":"treatment.mechanism.regimen","type":"object","required":true,"within":"treatment.mechanism","when":[{"path":"model.family","in":["beta_logit"]}]},
+        {
+          "path": "treatment.mechanism.regimen.maintenanceMgPerKg",
+          "type": "number",
+          "gt": 0,
+          "required": true,
+          "within": "treatment.mechanism",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "treatment.mechanism.regimen.titrationMgPerKg",
+          "type": "list",
+          "count": {"min":1,"max":12},
+          "items": {"type":"number","gt":0},
+          "within": "treatment.mechanism",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "treatment.mechanism.regimen.intervalWeeks",
+          "type": "number",
+          "gt": 0,
+          "default": 4,
+          "within": "treatment.mechanism",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "treatment.mechanism.regimen.infusionHours",
+          "type": "number",
+          "gt": 0,
+          "default": 1,
+          "within": "treatment.mechanism",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "treatment.mechanism.atWeek",
+          "type": "number",
+          "gt": 0,
+          "required": true,
+          "within": "treatment.mechanism",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "treatment.mechanism.link",
+          "type": "string",
+          "values": ["pang_2023"],
+          "default": "pang_2023",
+          "within": "treatment.mechanism",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
         {
           "path": "treatment.doseBegin",
           "type": "number",
@@ -1197,10 +1340,321 @@
           "fieldRole": "defaultable"
         },
         {"path":"treatment.doseEnd","type":"number","gt":0,"within":"treatment","when":[{"path":"model.family","in":["beta_logit"]}],"fieldRole":"defaultable"},
+        {"path":"intercurrent","type":"object","when":[{"path":"model.family","in":["beta_logit"]}]},
+        {"path":"intercurrent.discontinuation","type":"object","within":"intercurrent","when":[{"path":"model.family","in":["beta_logit"]}]},
+        {
+          "path": "intercurrent.discontinuation.shareControl",
+          "type": "object",
+          "required": true,
+          "within": "intercurrent.discontinuation",
+          "when": [{"path":"model.family","in":["beta_logit"]}]
+        },
+        {
+          "path": "intercurrent.discontinuation.shareControl.value",
+          "type": "number",
+          "min": 0,
+          "lt": 1,
+          "required": true,
+          "within": "intercurrent.discontinuation",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "intercurrent.discontinuation.shareControl.basis",
+          "type": "string",
+          "values": ["literature","assumed","data"],
+          "required": true,
+          "within": "intercurrent.discontinuation",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "intercurrent.discontinuation.shareControl.citation",
+          "type": "string",
+          "maxLength": 300,
+          "within": "intercurrent.discontinuation",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "intercurrent.discontinuation.shareTreated",
+          "type": "object",
+          "required": true,
+          "within": "intercurrent.discontinuation",
+          "when": [{"path":"model.family","in":["beta_logit"]}]
+        },
+        {
+          "path": "intercurrent.discontinuation.shareTreated.value",
+          "type": "number",
+          "min": 0,
+          "lt": 1,
+          "required": true,
+          "within": "intercurrent.discontinuation",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "intercurrent.discontinuation.shareTreated.basis",
+          "type": "string",
+          "values": ["literature","assumed","data"],
+          "required": true,
+          "within": "intercurrent.discontinuation",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "intercurrent.discontinuation.shareTreated.citation",
+          "type": "string",
+          "maxLength": 300,
+          "within": "intercurrent.discontinuation",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "intercurrent.discontinuation.progressionLogHazardPerSd",
+          "type": "object",
+          "within": "intercurrent.discontinuation",
+          "when": [{"path":"model.family","in":["beta_logit"]}]
+        },
+        {
+          "path": "intercurrent.discontinuation.progressionLogHazardPerSd.value",
+          "type": "number",
+          "required": true,
+          "within": "intercurrent.discontinuation.progressionLogHazardPerSd",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "intercurrent.discontinuation.progressionLogHazardPerSd.basis",
+          "type": "string",
+          "values": ["literature","assumed","data"],
+          "required": true,
+          "within": "intercurrent.discontinuation.progressionLogHazardPerSd",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "intercurrent.discontinuation.progressionLogHazardPerSd.citation",
+          "type": "string",
+          "maxLength": 300,
+          "within": "intercurrent.discontinuation.progressionLogHazardPerSd",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "intercurrent.discontinuation.retrievedShare",
+          "type": "object",
+          "required": true,
+          "within": "intercurrent.discontinuation",
+          "when": [{"path":"model.family","in":["beta_logit"]}]
+        },
+        {
+          "path": "intercurrent.discontinuation.retrievedShare.value",
+          "type": "number",
+          "min": 0,
+          "max": 1,
+          "required": true,
+          "within": "intercurrent.discontinuation",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "intercurrent.discontinuation.retrievedShare.basis",
+          "type": "string",
+          "values": ["literature","assumed","data"],
+          "required": true,
+          "within": "intercurrent.discontinuation",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "intercurrent.discontinuation.retrievedShare.citation",
+          "type": "string",
+          "maxLength": 300,
+          "within": "intercurrent.discontinuation",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {"path":"intercurrent.withdrawal","type":"object","within":"intercurrent","when":[{"path":"model.family","in":["beta_logit"]}]},
+        {"path":"intercurrent.withdrawal.treatedHazardRatio","type":"object","within":"intercurrent.withdrawal","when":[{"path":"model.family","in":["beta_logit"]}]},
+        {
+          "path": "intercurrent.withdrawal.treatedHazardRatio.value",
+          "type": "number",
+          "gt": 0,
+          "required": true,
+          "within": "intercurrent.withdrawal.treatedHazardRatio",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "intercurrent.withdrawal.treatedHazardRatio.basis",
+          "type": "string",
+          "values": ["literature","assumed","data"],
+          "required": true,
+          "within": "intercurrent.withdrawal.treatedHazardRatio",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "intercurrent.withdrawal.treatedHazardRatio.citation",
+          "type": "string",
+          "maxLength": 300,
+          "within": "intercurrent.withdrawal.treatedHazardRatio",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "intercurrent.withdrawal.progressionLogHazardPerSd",
+          "type": "object",
+          "within": "intercurrent.withdrawal",
+          "when": [{"path":"model.family","in":["beta_logit"]}]
+        },
+        {
+          "path": "intercurrent.withdrawal.progressionLogHazardPerSd.value",
+          "type": "number",
+          "required": true,
+          "within": "intercurrent.withdrawal.progressionLogHazardPerSd",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "intercurrent.withdrawal.progressionLogHazardPerSd.basis",
+          "type": "string",
+          "values": ["literature","assumed","data"],
+          "required": true,
+          "within": "intercurrent.withdrawal.progressionLogHazardPerSd",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "intercurrent.withdrawal.progressionLogHazardPerSd.citation",
+          "type": "string",
+          "maxLength": 300,
+          "within": "intercurrent.withdrawal.progressionLogHazardPerSd",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {"path":"intercurrent.death","type":"object","within":"intercurrent","when":[{"path":"model.family","in":["beta_logit"]}]},
+        {"path":"intercurrent.death.share","type":"object","required":true,"within":"intercurrent.death","when":[{"path":"model.family","in":["beta_logit"]}]},
+        {
+          "path": "intercurrent.death.share.value",
+          "type": "number",
+          "min": 0,
+          "lt": 1,
+          "required": true,
+          "within": "intercurrent.death",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "intercurrent.death.share.basis",
+          "type": "string",
+          "values": ["literature","assumed","data"],
+          "required": true,
+          "within": "intercurrent.death",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "intercurrent.death.share.citation",
+          "type": "string",
+          "maxLength": 300,
+          "within": "intercurrent.death",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {"path":"intercurrent.offTreatment","type":"object","within":"intercurrent","when":[{"path":"model.family","in":["beta_logit"]}]},
+        {"path":"intercurrent.offTreatment.reboundLogit","type":"object","within":"intercurrent.offTreatment","when":[{"path":"model.family","in":["beta_logit"]}]},
+        {
+          "path": "intercurrent.offTreatment.reboundLogit.value",
+          "type": "number",
+          "required": true,
+          "within": "intercurrent.offTreatment.reboundLogit",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "intercurrent.offTreatment.reboundLogit.basis",
+          "type": "string",
+          "values": ["literature","assumed","data"],
+          "required": true,
+          "within": "intercurrent.offTreatment.reboundLogit",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "intercurrent.offTreatment.reboundLogit.citation",
+          "type": "string",
+          "maxLength": 300,
+          "within": "intercurrent.offTreatment.reboundLogit",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {"path":"estimand","type":"object","when":[{"path":"model.family","in":["beta_logit"]}]},
+        {
+          "path": "estimand.strategy",
+          "type": "string",
+          "values": ["treatment_policy","hypothetical"],
+          "required": true,
+          "within": "estimand",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
         {"path":"analysis","type":"object"},
-        {"path":"analysis.kind","type":"string","values":["change","slope","ancova"],"default":"change","within":"analysis","fieldRole":"defaultable"},
+        {
+          "path": "analysis.kind",
+          "type": "string",
+          "values": ["change","slope","ancova","mmrm","cmi_jump_to_reference","cmi_copy_reference"],
+          "default": "change",
+          "within": "analysis",
+          "fieldRole": "defaultable"
+        },
         {"path":"analysis.visit","type":"number","min":0,"within":"analysis","fieldRole":"defaultable"},
-        {"path":"analysis.alpha","type":"number","gt":0,"lt":1,"default":0.05,"within":"analysis","fieldRole":"defaultable"}
+        {"path":"analysis.alpha","type":"number","gt":0,"lt":1,"default":0.05,"within":"analysis","fieldRole":"defaultable"},
+        {
+          "path": "analysis.data",
+          "type": "string",
+          "values": ["all_observed","on_treatment"],
+          "within": "analysis",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {"path":"analysis.delta","type":"object","within":"analysis","when":[{"path":"model.family","in":["beta_logit"]}]},
+        {
+          "path": "analysis.delta.value",
+          "type": "number",
+          "required": true,
+          "within": "analysis.delta",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "analysis.delta.basis",
+          "type": "string",
+          "values": ["literature","assumed","data"],
+          "required": true,
+          "within": "analysis.delta",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "analysis.delta.citation",
+          "type": "string",
+          "maxLength": 300,
+          "within": "analysis.delta",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "analysis.jackknifeGroups",
+          "type": "integer",
+          "min": 5,
+          "max": 100,
+          "default": 10,
+          "within": "analysis",
+          "when": [{"path":"model.family","in":["beta_logit"]}],
+          "fieldRole": "defaultable"
+        }
       ],
       "rules": [
         {
@@ -1335,6 +1789,30 @@
                 }
               }
             },
+            "analysis": {"kind":"change","visit":78}
+          }
+        },
+        {
+          "label": "donepezil 10 mg a day as the treated arm (the posterior's own fitted effect, with its parameter uncertainty), 26 weeks, 150 per arm",
+          "scenario": {
+            "endpoint": {"type":"continuous","unit":"points"},
+            "design": {"nTreat":150,"nControl":150},
+            "timeUnit": "weeks",
+            "visits": [0,13,26],
+            "model": {"family":"beta_logit","parameterSet":{"id":"camd-adas-cog-11","version":"adsim-3.0"},"uncertainty":"posterior_draws"},
+            "treatment": {"reference":{"drug":"donepezil","doseMg":10}},
+            "analysis": {"kind":"change","visit":26}
+          }
+        },
+        {
+          "label": "aducanumab titrated to 10 mg/kg every 4 weeks, effect on ADAS-cog 11 at week 78 through the published exposure, amyloid and clinical chain (an assurance that holds only if the chain holds)",
+          "scenario": {
+            "endpoint": {"type":"continuous","unit":"points"},
+            "design": {"nTreat":300,"nControl":300},
+            "timeUnit": "weeks",
+            "visits": [0,26,52,78],
+            "model": {"family":"beta_logit","parameterSet":{"id":"camd-adas-cog-11","version":"adsim-3.0"},"uncertainty":"new_study"},
+            "treatment": {"mechanism":{"drug":"aducanumab","regimen":{"maintenanceMgPerKg":10,"titrationMgPerKg":[1,1,3,3,6,6],"intervalWeeks":4},"atWeek":78}},
             "analysis": {"kind":"change","visit":78}
           }
         }
@@ -7840,6 +8318,631 @@
         {
           "label": "a phase 2 hazard ratio of 0.66 (the standard error of its log is 0.19), and a phase 3 that will measure the effect with a standard error of 0.12",
           "scenario": {"label":"phase 2 hazard ratio","scale":"log","values":[{"id":"phase2","estimate":-0.4155,"se":0.19,"futureSe":0.12}]}
+        }
+      ]
+    },
+    "decision.value_of_information": {
+      "endpoints": [],
+      "notes": [
+        "It asks which unknown input, if it were learned, would change the decision, and how much that is worth: the expected value of perfect information (EVPI), of perfect partial information on each input (EVPPI, a GAM regression of each option's utility on the input; Strong, Oakley and Brennan 2014) and of the sample information of a named study (EVSI by regression; Strong et al. 2015). Every number comes from the engine; the model reports the table and never ranks, estimates or recomputes a value.",
+        "source two_arm_continuous evaluates the power of a two-arm trial of each option on every draw (options give the people per arm, 0 for no trial). The utility is the probability of success, or a net benefit (successValue times that probability less costPerPatient times the people enrolled). Each of effect, sd, dropoutShare and controlProgression is fixed, drawn from a distribution (it gets an EVPPI), or a range of optimistic, base and pessimistic values (no distribution: held at base, and it gets the value at which the best option changes, never a probability). Dropout only removes analysed people. effectScale proportional_slowing reads effect as a share of controlProgression, the control arm's worsening.",
+        "source table takes the utilities of each option and the draws of each input (lists of numbers of equal length, at least 30) from any other computation, as the voi package does; the engine says it did not compute them. groups name two to four inputs whose joint EVPPI is wanted. studies: phase2_effect (people per arm, observes the effect), natural_history_control (people, observes the control worsening) or, for a table, normal_known (a named input observed with a known sd).",
+        "replicates is the number of draws (default 10,000, at least 30; under 1,000 the regression is rough and the premises say so). An EVPPI may exceed the EVPI by estimation error, and the standard error does not include the smoothing error of the regression."
+      ],
+      "rows": [
+        {"path":"label","type":"string","maxLength":120,"fieldRole":"defaultable"},
+        {"path":"source","type":"string","values":["two_arm_continuous","table"],"required":true,"fieldRole":"defaultable"},
+        {
+          "path": "options",
+          "type": "list",
+          "count": {"min":2,"max":8},
+          "items": {"type":"object"},
+          "required": true,
+          "when": [{"path":"source","in":["two_arm_continuous"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "options[].label",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60,
+          "required": true,
+          "when": [{"path":"source","in":["two_arm_continuous"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "options[].nPerArm",
+          "type": "integer",
+          "min": 0,
+          "max": 100000,
+          "required": true,
+          "when": [{"path":"source","in":["two_arm_continuous"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "utility",
+          "type": "string",
+          "values": ["success_probability","net_benefit"],
+          "required": true,
+          "when": [{"path":"source","in":["two_arm_continuous"]}],
+          "fieldRole": "defaultable"
+        },
+        {"path":"successValue","type":"number","gt":0,"when":[{"path":"source","in":["two_arm_continuous"]}],"fieldRole":"defaultable"},
+        {"path":"costPerPatient","type":"number","min":0,"when":[{"path":"source","in":["two_arm_continuous"]}],"fieldRole":"defaultable"},
+        {"path":"alpha","type":"number","gt":0,"lt":0.5,"default":0.025,"when":[{"path":"source","in":["two_arm_continuous"]}],"fieldRole":"defaultable"},
+        {
+          "path": "effectScale",
+          "type": "string",
+          "values": ["absolute","proportional_slowing"],
+          "default": "absolute",
+          "when": [{"path":"source","in":["two_arm_continuous"]}],
+          "fieldRole": "defaultable"
+        },
+        {"path":"inputs","type":"object","required":true,"when":[{"path":"source","in":["two_arm_continuous"]}]},
+        {"path":"inputs.effect","type":"object","required":true,"when":[{"path":"source","in":["two_arm_continuous"]}]},
+        {
+          "path": "inputs.effect.family",
+          "type": "string",
+          "values": ["fixed","normal","lognormal","beta","uniform","range"],
+          "required": true,
+          "when": [{"path":"source","in":["two_arm_continuous"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "inputs.effect.value",
+          "type": "number",
+          "required": true,
+          "when": [{"path":"source","in":["two_arm_continuous"]}],
+          "variant": {"on":"inputs.effect.family","is":["fixed"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "inputs.effect.mean",
+          "type": "number",
+          "required": true,
+          "when": [{"path":"source","in":["two_arm_continuous"]}],
+          "variant": {"on":"inputs.effect.family","is":["normal"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "inputs.effect.sd",
+          "type": "number",
+          "gt": 0,
+          "required": true,
+          "when": [{"path":"source","in":["two_arm_continuous"]}],
+          "variant": {"on":"inputs.effect.family","is":["normal"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "inputs.effect.meanlog",
+          "type": "number",
+          "required": true,
+          "when": [{"path":"source","in":["two_arm_continuous"]}],
+          "variant": {"on":"inputs.effect.family","is":["lognormal"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "inputs.effect.sdlog",
+          "type": "number",
+          "gt": 0,
+          "required": true,
+          "when": [{"path":"source","in":["two_arm_continuous"]}],
+          "variant": {"on":"inputs.effect.family","is":["lognormal"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "inputs.effect.alpha",
+          "type": "number",
+          "gt": 0,
+          "required": true,
+          "when": [{"path":"source","in":["two_arm_continuous"]}],
+          "variant": {"on":"inputs.effect.family","is":["beta"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "inputs.effect.beta",
+          "type": "number",
+          "gt": 0,
+          "required": true,
+          "when": [{"path":"source","in":["two_arm_continuous"]}],
+          "variant": {"on":"inputs.effect.family","is":["beta"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "inputs.effect.min",
+          "type": "number",
+          "required": true,
+          "when": [{"path":"source","in":["two_arm_continuous"]}],
+          "variant": {"on":"inputs.effect.family","is":["uniform"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "inputs.effect.max",
+          "type": "number",
+          "required": true,
+          "when": [{"path":"source","in":["two_arm_continuous"]}],
+          "variant": {"on":"inputs.effect.family","is":["uniform"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "inputs.effect.optimistic",
+          "type": "number",
+          "required": true,
+          "when": [{"path":"source","in":["two_arm_continuous"]}],
+          "variant": {"on":"inputs.effect.family","is":["range"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "inputs.effect.base",
+          "type": "number",
+          "required": true,
+          "when": [{"path":"source","in":["two_arm_continuous"]}],
+          "variant": {"on":"inputs.effect.family","is":["range"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "inputs.effect.pessimistic",
+          "type": "number",
+          "required": true,
+          "when": [{"path":"source","in":["two_arm_continuous"]}],
+          "variant": {"on":"inputs.effect.family","is":["range"]},
+          "fieldRole": "research_fact"
+        },
+        {"path":"inputs.sd","type":"object","required":true,"when":[{"path":"source","in":["two_arm_continuous"]}]},
+        {
+          "path": "inputs.sd.family",
+          "type": "string",
+          "values": ["fixed","normal","lognormal","beta","uniform","range"],
+          "required": true,
+          "when": [{"path":"source","in":["two_arm_continuous"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "inputs.sd.value",
+          "type": "number",
+          "required": true,
+          "when": [{"path":"source","in":["two_arm_continuous"]}],
+          "variant": {"on":"inputs.sd.family","is":["fixed"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "inputs.sd.mean",
+          "type": "number",
+          "required": true,
+          "when": [{"path":"source","in":["two_arm_continuous"]}],
+          "variant": {"on":"inputs.sd.family","is":["normal"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "inputs.sd.sd",
+          "type": "number",
+          "gt": 0,
+          "required": true,
+          "when": [{"path":"source","in":["two_arm_continuous"]}],
+          "variant": {"on":"inputs.sd.family","is":["normal"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "inputs.sd.meanlog",
+          "type": "number",
+          "required": true,
+          "when": [{"path":"source","in":["two_arm_continuous"]}],
+          "variant": {"on":"inputs.sd.family","is":["lognormal"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "inputs.sd.sdlog",
+          "type": "number",
+          "gt": 0,
+          "required": true,
+          "when": [{"path":"source","in":["two_arm_continuous"]}],
+          "variant": {"on":"inputs.sd.family","is":["lognormal"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "inputs.sd.alpha",
+          "type": "number",
+          "gt": 0,
+          "required": true,
+          "when": [{"path":"source","in":["two_arm_continuous"]}],
+          "variant": {"on":"inputs.sd.family","is":["beta"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "inputs.sd.beta",
+          "type": "number",
+          "gt": 0,
+          "required": true,
+          "when": [{"path":"source","in":["two_arm_continuous"]}],
+          "variant": {"on":"inputs.sd.family","is":["beta"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "inputs.sd.min",
+          "type": "number",
+          "required": true,
+          "when": [{"path":"source","in":["two_arm_continuous"]}],
+          "variant": {"on":"inputs.sd.family","is":["uniform"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "inputs.sd.max",
+          "type": "number",
+          "required": true,
+          "when": [{"path":"source","in":["two_arm_continuous"]}],
+          "variant": {"on":"inputs.sd.family","is":["uniform"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "inputs.sd.optimistic",
+          "type": "number",
+          "required": true,
+          "when": [{"path":"source","in":["two_arm_continuous"]}],
+          "variant": {"on":"inputs.sd.family","is":["range"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "inputs.sd.base",
+          "type": "number",
+          "required": true,
+          "when": [{"path":"source","in":["two_arm_continuous"]}],
+          "variant": {"on":"inputs.sd.family","is":["range"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "inputs.sd.pessimistic",
+          "type": "number",
+          "required": true,
+          "when": [{"path":"source","in":["two_arm_continuous"]}],
+          "variant": {"on":"inputs.sd.family","is":["range"]},
+          "fieldRole": "research_fact"
+        },
+        {"path":"inputs.dropoutShare","type":"object","when":[{"path":"source","in":["two_arm_continuous"]}]},
+        {
+          "path": "inputs.dropoutShare.family",
+          "type": "string",
+          "values": ["fixed","normal","lognormal","beta","uniform","range"],
+          "required": true,
+          "within": "inputs.dropoutShare",
+          "when": [{"path":"source","in":["two_arm_continuous"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "inputs.dropoutShare.value",
+          "type": "number",
+          "required": true,
+          "within": "inputs.dropoutShare",
+          "when": [{"path":"source","in":["two_arm_continuous"]}],
+          "variant": {"on":"inputs.dropoutShare.family","is":["fixed"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "inputs.dropoutShare.mean",
+          "type": "number",
+          "required": true,
+          "within": "inputs.dropoutShare",
+          "when": [{"path":"source","in":["two_arm_continuous"]}],
+          "variant": {"on":"inputs.dropoutShare.family","is":["normal"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "inputs.dropoutShare.sd",
+          "type": "number",
+          "gt": 0,
+          "required": true,
+          "within": "inputs.dropoutShare",
+          "when": [{"path":"source","in":["two_arm_continuous"]}],
+          "variant": {"on":"inputs.dropoutShare.family","is":["normal"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "inputs.dropoutShare.meanlog",
+          "type": "number",
+          "required": true,
+          "within": "inputs.dropoutShare",
+          "when": [{"path":"source","in":["two_arm_continuous"]}],
+          "variant": {"on":"inputs.dropoutShare.family","is":["lognormal"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "inputs.dropoutShare.sdlog",
+          "type": "number",
+          "gt": 0,
+          "required": true,
+          "within": "inputs.dropoutShare",
+          "when": [{"path":"source","in":["two_arm_continuous"]}],
+          "variant": {"on":"inputs.dropoutShare.family","is":["lognormal"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "inputs.dropoutShare.alpha",
+          "type": "number",
+          "gt": 0,
+          "required": true,
+          "within": "inputs.dropoutShare",
+          "when": [{"path":"source","in":["two_arm_continuous"]}],
+          "variant": {"on":"inputs.dropoutShare.family","is":["beta"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "inputs.dropoutShare.beta",
+          "type": "number",
+          "gt": 0,
+          "required": true,
+          "within": "inputs.dropoutShare",
+          "when": [{"path":"source","in":["two_arm_continuous"]}],
+          "variant": {"on":"inputs.dropoutShare.family","is":["beta"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "inputs.dropoutShare.min",
+          "type": "number",
+          "required": true,
+          "within": "inputs.dropoutShare",
+          "when": [{"path":"source","in":["two_arm_continuous"]}],
+          "variant": {"on":"inputs.dropoutShare.family","is":["uniform"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "inputs.dropoutShare.max",
+          "type": "number",
+          "required": true,
+          "within": "inputs.dropoutShare",
+          "when": [{"path":"source","in":["two_arm_continuous"]}],
+          "variant": {"on":"inputs.dropoutShare.family","is":["uniform"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "inputs.dropoutShare.optimistic",
+          "type": "number",
+          "required": true,
+          "within": "inputs.dropoutShare",
+          "when": [{"path":"source","in":["two_arm_continuous"]}],
+          "variant": {"on":"inputs.dropoutShare.family","is":["range"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "inputs.dropoutShare.base",
+          "type": "number",
+          "required": true,
+          "within": "inputs.dropoutShare",
+          "when": [{"path":"source","in":["two_arm_continuous"]}],
+          "variant": {"on":"inputs.dropoutShare.family","is":["range"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "inputs.dropoutShare.pessimistic",
+          "type": "number",
+          "required": true,
+          "within": "inputs.dropoutShare",
+          "when": [{"path":"source","in":["two_arm_continuous"]}],
+          "variant": {"on":"inputs.dropoutShare.family","is":["range"]},
+          "fieldRole": "research_fact"
+        },
+        {"path":"inputs.controlProgression","type":"object","when":[{"path":"source","in":["two_arm_continuous"]}]},
+        {
+          "path": "inputs.controlProgression.family",
+          "type": "string",
+          "values": ["fixed","normal","lognormal","beta","uniform","range"],
+          "required": true,
+          "within": "inputs.controlProgression",
+          "when": [{"path":"source","in":["two_arm_continuous"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "inputs.controlProgression.value",
+          "type": "number",
+          "required": true,
+          "within": "inputs.controlProgression",
+          "when": [{"path":"source","in":["two_arm_continuous"]}],
+          "variant": {"on":"inputs.controlProgression.family","is":["fixed"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "inputs.controlProgression.mean",
+          "type": "number",
+          "required": true,
+          "within": "inputs.controlProgression",
+          "when": [{"path":"source","in":["two_arm_continuous"]}],
+          "variant": {"on":"inputs.controlProgression.family","is":["normal"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "inputs.controlProgression.sd",
+          "type": "number",
+          "gt": 0,
+          "required": true,
+          "within": "inputs.controlProgression",
+          "when": [{"path":"source","in":["two_arm_continuous"]}],
+          "variant": {"on":"inputs.controlProgression.family","is":["normal"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "inputs.controlProgression.meanlog",
+          "type": "number",
+          "required": true,
+          "within": "inputs.controlProgression",
+          "when": [{"path":"source","in":["two_arm_continuous"]}],
+          "variant": {"on":"inputs.controlProgression.family","is":["lognormal"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "inputs.controlProgression.sdlog",
+          "type": "number",
+          "gt": 0,
+          "required": true,
+          "within": "inputs.controlProgression",
+          "when": [{"path":"source","in":["two_arm_continuous"]}],
+          "variant": {"on":"inputs.controlProgression.family","is":["lognormal"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "inputs.controlProgression.alpha",
+          "type": "number",
+          "gt": 0,
+          "required": true,
+          "within": "inputs.controlProgression",
+          "when": [{"path":"source","in":["two_arm_continuous"]}],
+          "variant": {"on":"inputs.controlProgression.family","is":["beta"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "inputs.controlProgression.beta",
+          "type": "number",
+          "gt": 0,
+          "required": true,
+          "within": "inputs.controlProgression",
+          "when": [{"path":"source","in":["two_arm_continuous"]}],
+          "variant": {"on":"inputs.controlProgression.family","is":["beta"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "inputs.controlProgression.min",
+          "type": "number",
+          "required": true,
+          "within": "inputs.controlProgression",
+          "when": [{"path":"source","in":["two_arm_continuous"]}],
+          "variant": {"on":"inputs.controlProgression.family","is":["uniform"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "inputs.controlProgression.max",
+          "type": "number",
+          "required": true,
+          "within": "inputs.controlProgression",
+          "when": [{"path":"source","in":["two_arm_continuous"]}],
+          "variant": {"on":"inputs.controlProgression.family","is":["uniform"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "inputs.controlProgression.optimistic",
+          "type": "number",
+          "required": true,
+          "within": "inputs.controlProgression",
+          "when": [{"path":"source","in":["two_arm_continuous"]}],
+          "variant": {"on":"inputs.controlProgression.family","is":["range"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "inputs.controlProgression.base",
+          "type": "number",
+          "required": true,
+          "within": "inputs.controlProgression",
+          "when": [{"path":"source","in":["two_arm_continuous"]}],
+          "variant": {"on":"inputs.controlProgression.family","is":["range"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "inputs.controlProgression.pessimistic",
+          "type": "number",
+          "required": true,
+          "within": "inputs.controlProgression",
+          "when": [{"path":"source","in":["two_arm_continuous"]}],
+          "variant": {"on":"inputs.controlProgression.family","is":["range"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "utilities",
+          "type": "map",
+          "of": {"type":"list","count":{"min":30,"max":100000},"items":{"type":"number"}},
+          "count": {"min":2,"max":8},
+          "required": true,
+          "when": [{"path":"source","in":["table"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "draws",
+          "type": "map",
+          "of": {"type":"list","count":{"min":30,"max":100000},"items":{"type":"number"}},
+          "count": {"min":1,"max":12},
+          "required": true,
+          "when": [{"path":"source","in":["table"]}],
+          "fieldRole": "research_fact"
+        },
+        {"path":"unit","type":"string","maxLength":20,"fieldRole":"defaultable"},
+        {
+          "path": "groups",
+          "type": "list",
+          "count": {"min":1,"max":6},
+          "items": {"type":"list","count":{"min":2,"max":4},"items":{"type":"string","maxLength":64,"role":"column"},"unique":true},
+          "fieldRole": "defaultable"
+        },
+        {"path":"studies","type":"list","count":{"min":1,"max":4},"items":{"type":"object"},"fieldRole":"defaultable"},
+        {"path":"studies[].label","type":"string","minLength":1,"maxLength":60,"required":true,"within":"studies","fieldRole":"research_fact"},
+        {
+          "path": "studies[].kind",
+          "type": "string",
+          "values": ["phase2_effect","natural_history_control","normal_known"],
+          "required": true,
+          "within": "studies",
+          "fieldRole": "defaultable"
+        },
+        {"path":"studies[].size","type":"integer","min":2,"max":10000000,"required":true,"within":"studies","fieldRole":"research_fact"},
+        {"path":"studies[].input","type":"string","maxLength":64,"role":"column","within":"studies","fieldRole":"defaultable"},
+        {"path":"studies[].sd","type":"number","gt":0,"within":"studies","fieldRole":"defaultable"}
+      ],
+      "examples": [
+        {
+          "label": "whether to run a 150, 300 or 450 per arm phase 3 (or none): the effect, the standard deviation and the dropout are uncertain, the net benefit is the value of success less the cost of the people, and one phase 2 of 80 per arm is asked about",
+          "scenario": {
+            "label": "phase 3 size",
+            "source": "two_arm_continuous",
+            "utility": "net_benefit",
+            "successValue": 400,
+            "costPerPatient": 0.2,
+            "unit": "百万元",
+            "options": [{"label":"no_trial","nPerArm":0},{"label":"n150","nPerArm":150},{"label":"n300","nPerArm":300},{"label":"n450","nPerArm":450}],
+            "inputs": {"effect":{"family":"normal","mean":1.2,"sd":0.8},"sd":{"family":"lognormal","meanlog":1.95,"sdlog":0.12},"dropoutShare":{"family":"beta","alpha":4,"beta":16}},
+            "studies": [{"label":"phase 2, 80 per arm","kind":"phase2_effect","size":80}]
+          }
+        },
+        {
+          "label": "an effect that is a share of the control arm's worsening, with the share given only as optimistic, base and pessimistic values (a threshold is reported, never a probability), the control worsening uncertain, and a natural-history cohort of 200",
+          "scenario": {
+            "source": "two_arm_continuous",
+            "utility": "success_probability",
+            "effectScale": "proportional_slowing",
+            "options": [{"label":"n200","nPerArm":200},{"label":"n400","nPerArm":400}],
+            "inputs": {
+              "effect": {"family":"range","optimistic":0.35,"base":0.25,"pessimistic":0.1},
+              "sd": {"family":"fixed","value":7},
+              "controlProgression": {"family":"lognormal","meanlog":0.9,"sdlog":0.3}
+            },
+            "studies": [{"label":"natural-history cohort of 200","kind":"natural_history_control","size":200}]
+          }
+        }
+      ]
+    },
+    "pk.interaction": {
+      "endpoints": [],
+      "notes": [
+        "It runs one published whole-body PBPK model (Asaumi et al. 2018, CPT Pharmacometrics Syst Pharmacol) of midazolam with CYP3A4 induction by repeated oral rifampicin, in gut wall and liver, with the enzyme turnover the paper states: the victim's curve alone and after the perpetrator, the area and peak ratios, and the enzyme activity at the victim's dose. Victim: midazolam, oral (default) or intravenous (a bolus, or an infusion over infusionH). Perpetrator: rifampicin, doses of doseMg every intervalH hours (default 24), the victim given gapH hours (default 12) after the last. Nothing else is in the model: another victim or perpetrator is refused by name, and no stand-in is run.",
+        "It is a typical healthy adult: every clearance, flow and volume is per kilogram and weightKg (default 80) is the only person. There is no between-person variability, genotype or disease, so the ratio is the model's typical value and not a prediction interval. The paper prints no interaction ratio in its text (the fits are figures); the model reproduces its authors' own simulation to the digit, and a comparison with a clinical study is a separate, labelled thing. Say that when you report it."
+      ],
+      "rows": [
+        {"path":"label","type":"string","maxLength":120,"fieldRole":"defaultable"},
+        {"path":"victim","type":"object","required":true},
+        {"path":"victim.drug","type":"string","values":["midazolam"],"required":true,"fieldRole":"defaultable"},
+        {"path":"victim.doseMg","type":"number","max":50,"gt":0,"unit":"mg","required":true,"fieldRole":"research_fact"},
+        {"path":"victim.route","type":"string","values":["oral","iv"],"default":"oral","fieldRole":"defaultable"},
+        {"path":"victim.infusionH","type":"number","max":24,"gt":0,"unit":"h","when":[{"path":"victim.route","in":["iv"]}],"fieldRole":"defaultable"},
+        {"path":"perpetrator","type":"object","required":true},
+        {"path":"perpetrator.drug","type":"string","values":["rifampicin"],"required":true,"fieldRole":"defaultable"},
+        {"path":"perpetrator.doseMg","type":"number","max":1200,"gt":0,"unit":"mg","required":true,"fieldRole":"research_fact"},
+        {"path":"perpetrator.intervalH","type":"number","max":168,"gt":0,"unit":"h","default":24,"fieldRole":"defaultable"},
+        {"path":"perpetrator.doses","type":"integer","min":1,"max":60,"required":true,"fieldRole":"research_fact"},
+        {"path":"perpetrator.gapH","type":"number","min":0,"max":336,"unit":"h","default":12,"fieldRole":"defaultable"},
+        {"path":"weightKg","type":"number","max":200,"gt":30,"unit":"kg","default":80,"fieldRole":"defaultable"},
+        {"path":"horizonH","type":"number","max":96,"gt":1,"unit":"h","default":48,"fieldRole":"defaultable"}
+      ],
+      "examples": [
+        {
+          "label": "a 3 mg oral midazolam dose 12 hours after the last of seven daily 75 mg rifampicin doses, over 48 hours, in an 80 kg adult",
+          "scenario": {"label":"midazolam after rifampicin","victim":{"drug":"midazolam","doseMg":3},"perpetrator":{"drug":"rifampicin","doseMg":75,"doses":7}}
+        },
+        {
+          "label": "the same victim as a 30-minute intravenous infusion of 2 mg after 600 mg rifampicin daily for ten days, a 70 kg adult",
+          "scenario": {"victim":{"drug":"midazolam","doseMg":2,"route":"iv","infusionH":0.5},"perpetrator":{"drug":"rifampicin","doseMg":600,"doses":10,"gapH":24},"weightKg":70}
         }
       ]
     }

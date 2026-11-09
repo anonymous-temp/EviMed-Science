@@ -267,6 +267,18 @@ export const NUMERIC_REFERENCES = {
   N76b: { methods: ['evidence.dose_response'], anchors: ['d_est <- max(abs(est - c(-0.0097, 0.1274, -0.2144)))', 'abs(ov$chi2 - 28.3632) < 6e-5'] },
   N76c: { methods: ['evidence.dose_response'], anchors: ['S <- matrix(1 / a[1] + 1 / b[1], k - 1L, k - 1L) + diag(1 / a[-1] + 1 / b[-1], k - 1L)', 'v <- 1 / as.numeric(t(x) %*% solve(S) %*% x); beta <- v * as.numeric(t(x) %*% solve(S) %*% lor)'] },
   N76f: { methods: ['evidence.dose_response'], anchors: ['m <- metafor::rma(vapply(fits, `[`, numeric(1), 1L), vapply(fits, `[`, numeric(1), 2L), method = "REML")', 'list(pass = mixed && ok21 && ok20 && ok6,'] },
+  // decision.value_of_information (R35): closed forms of a normal-normal two-decision problem, Strong, Oakley & Brennan (2014) case study 1, the voi package on the same utility matrix, the assurance integral and the crossing point of a net benefit
+  N140a: { methods: ['decision.value_of_information'], anchors: ['want <- c(evpi = .n140_nn(m, s_all), a = .n140_nn(m, sg[1])', 'abs(got$z$evppi) < 0.01 * want[["evpi"]]'] },
+  N140b: { methods: ['decision.value_of_information'], anchors: ['X <- mvtnorm::rmvnorm(S, mean_, diag(sd_) %*% R %*% diag(sd_))', 'sets <- list(list(c("x5", "x14"), 247.95, 16.24)', 'all(abs(miss[1:2]) < tol[1:2])'] },
+  N140c: { methods: ['decision.value_of_information'], anchors: ['voi::evppi(U, inputs, pars = p, method = "gam"', 'theirs <- voi::evsi(U, inputs, datagen_fn = function(inputs, n = 1) data.frame(T = Tt)', 'abs(ours - theirs) < 1e-8'] },
+  N140d: { methods: ['decision.value_of_information'], anchors: ['stats::pnorm((a * 1.0 - z) / sqrt(1 + a^2 * 0.7^2))', 'all(abs(got - want) < 4 * ses)'] },
+  N140e: { methods: ['decision.value_of_information'], anchors: ['want <- (stats::qnorm(0.975) + stats::qnorm(2 * 0.2 * 300 / 400)) / a', 'abs(f$value - want) < 2e-3'] },
+  N140f: { methods: ['decision.value_of_information'], anchors: ['all(diff(ev) > 0) && all(ev <= ceil + 4 * se)', 'abs(ev[4L] - ceil) < 4 * (se[4L] + v$inputs[[1L]]$evppi$mcse) + 1e-9'] },
+  N140g: { methods: ['decision.value_of_information'], anchors: ['direct <- vcr_voi_evppi(U, cbind(theta = th, w = w, junk = junk), "theta")$evppi', 'abs(by[["theta"]] - direct) < 1e-9'] },
+  N160a: { methods: ['pk.interaction'], anchors: ['r75 <- .n160_run(v, list(drug = "rifampicin", doseMg = 75, doses = 7L), horizonH = 10)', 'want <- list(`10` = c(13.9, 56.3, 0.05), `30` = c(9.74, 39.4, 0.005), `90` = c(6.33, 25.6, 0.005))', 'd75 <- c(abs(r75$auc_alone - 24.70), abs(r75$auc_with - 6.84)'] },
+  N160b: { methods: ['pk.interaction'], anchors: ['ref_with <- .n160_lsoda(sc$v, sc$p, sc$w, 8, rel)', 'list(pass = worst < 1e-6'] },
+  N160c: { methods: ['pk.interaction'], anchors: ['m <- .n160_fold(.n160_clinical$oral, "oral")', 'all(m["pred", ] >= lo & m["pred", ] <= hi)'] },
+  N160d: { methods: ['pk.interaction'], anchors: ['m <- .n160_fold(.n160_clinical$iv, "iv")', 'all(m["fold", ] <= 2) && gm < 1.6'] },
   N77a: { methods: ['evidence.shrinkage'], anchors: ['rows <- c(d$table2, d$table3)', 's <- .n77_stratum(as.numeric(row$p[[1]]), as.numeric(row$p[[2]]), mix)'] },
   N77b: { methods: ['evidence.shrinkage'], anchors: ['folded_med <- stats::uniroot(', 'sign_int <- stats::integrate(dens, 0, Inf, rel.tol = 1e-11)$value', 'jr <- vcr_test_run(.n77_job(list(list(id = "paper", estimate = 0.44, se = 0.2)), "n77b_job"))', 'abs(jrow$replication - repl_int)'] },
 
@@ -384,6 +396,7 @@ export const NUMERIC_REFERENCES = {
   N120h: { methods: ['patients.progression'], anchors: ['weight_ok && abs(ratio[["CL"]] - 1.1^0.561) < 1e-12 && abs(ref - 0.335) < 0.02'] },
   N120i: { methods: ['patients.progression'], anchors: ['# the inversion: the share at the median of the link, run as a fixed disease-modifying share', 'abs(by_hand - want) < 1e-9 && abs(diff - want) < 0.01'] },
   N120j: { methods: ['patients.progression'], anchors: ['identical(rep$tier, "B") && identical(rep$source$kind, "model_result")', 'pk_ok && w_ok'] },
+  N120k: { methods: ['patients.progression', 'evidence.pool'], anchors: ['# the pooled value by hand, DerSimonian-Laird', 'abs(dist$mean - mu) < 1e-9 && dist$sd >= se'] },
   // individualization (plan R32): a mixed model held to nlme, a Gaussian posterior held to its BLUPs, the Laplace posterior held to a grid, intervals held to known truth
   N130a: { methods: ['patients.longitudinal'], anchors: ['m <- nlme::lme(y ~ t + x, random = ~ t | id, data = d, method = "REML")', 'worst <- max(worst, gap)'] },
   N130b: { methods: ['patients.longitudinal'], anchors: ['brute <- solve(crossprod(Z) / f2$sigma^2 + solve(G))'] },

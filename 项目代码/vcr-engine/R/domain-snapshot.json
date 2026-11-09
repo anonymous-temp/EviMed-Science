@@ -42,7 +42,10 @@
         "EMA qualification opinion 2013 Table 11: the expected one-year change by baseline MMSE, sex and ApoE4 in a new study",
         "EMA qualification opinion 2013 Table 8 medians of dropout, under a stated covariate reading",
         "adsim 3.0 training manual: three printed numbers (Listings 2.6, 2.8 and 4.6)",
-        "closed forms of the beta observation, the Bateman placebo integral and the symptomatic and disease-modifying terms"
+        "closed forms of the beta observation, the Bateman placebo integral and the symptomatic and disease-modifying terms",
+        "the MMRM against nlme::gls and the mmrm package (effects, standard errors, covariance)",
+        "conditional-mean imputation against a hand-computed case and a per-person implementation on mmrm coefficients",
+        "the true value of each estimand against the exact moments of the model and its closed limits"
       ],
       "modelTier": "scenario",
       "compatibleVersions": [
@@ -756,6 +759,26 @@
         "a numerical integral of the mixture distribution given the data"
       ],
       "modelTier": "literature"
+    },
+    "decision.value_of_information": {
+      "version": "1.0.0",
+      "endpoints": [],
+      "crossChecks": [
+        "voi 1.0.3 (evppi and evsi on the same utility matrix and the same regression formula)",
+        "closed forms of a normal-normal two-decision problem (EVPI, EVPPI of each input, EVPPI of a group)",
+        "Strong, Oakley & Brennan (2014), case study 1: the overall EVPI of the decision tree and its partial EVPIs against the printed gold standard",
+        "closed form of the expected power under a normal design prior (the assurance integral)"
+      ],
+      "modelTier": "scenario"
+    },
+    "pk.interaction": {
+      "version": "1.0.0",
+      "endpoints": [],
+      "crossChecks": [
+        "deSolve (its stiff integrator on the same equations, the doses as events: the 41 states and the area under the curve, to 1e-6)",
+        "the authors' own simulation of the model (the Metrum Research Group's open vignette: the 3 mg midazolam area after 75 mg rifampicin daily for 7 days, 24.70 and 6.84 ng/mL*h, and its dose-response)"
+      ],
+      "modelTier": "literature"
     }
   },
   "jobMethods": {
@@ -806,7 +829,9 @@
     "design_win_ratio": "design.win_ratio",
     "borrowing_prior": "comparator.borrowing",
     "train_prognostic_model": "model.prognostic_train",
-    "generate_progression": "patients.progression"
+    "generate_progression": "patients.progression",
+    "decision_voi": "decision.value_of_information",
+    "pk_interaction": "pk.interaction"
   },
   "patientLevelJobKinds": [
     "fit_survival_model",
@@ -3094,6 +3119,145 @@
                 ]
               }
             },
+            "reference": {
+              "t": "object",
+              "fields": {
+                "drug": {
+                  "t": "string",
+                  "values": [
+                    "donepezil",
+                    "galantamine",
+                    "rivastigmine"
+                  ],
+                  "req": true
+                },
+                "doseMg": {
+                  "t": "number",
+                  "gt": 0,
+                  "req": true
+                },
+                "washoutHalfLifeWeeks": {
+                  "t": "object",
+                  "fields": {
+                    "value": {
+                      "t": "number",
+                      "gt": 0,
+                      "req": true
+                    },
+                    "basis": {
+                      "t": "string",
+                      "values": [
+                        "literature",
+                        "assumed",
+                        "data"
+                      ],
+                      "req": true
+                    },
+                    "citation": {
+                      "t": "string",
+                      "maxLength": 300
+                    }
+                  }
+                }
+              },
+              "when": {
+                "path": "model.family",
+                "in": [
+                  "beta_logit"
+                ]
+              }
+            },
+            "background": {
+              "t": "object",
+              "fields": {
+                "drug": {
+                  "t": "string",
+                  "values": [
+                    "donepezil",
+                    "galantamine",
+                    "rivastigmine"
+                  ],
+                  "req": true
+                },
+                "doseMg": {
+                  "t": "number",
+                  "gt": 0,
+                  "req": true
+                },
+                "weeksBefore": {
+                  "t": "number",
+                  "min": 0,
+                  "req": true
+                }
+              },
+              "when": {
+                "path": "model.family",
+                "in": [
+                  "beta_logit"
+                ]
+              }
+            },
+            "mechanism": {
+              "t": "object",
+              "fields": {
+                "drug": {
+                  "t": "string",
+                  "values": [
+                    "aducanumab",
+                    "lecanemab"
+                  ],
+                  "req": true
+                },
+                "regimen": {
+                  "t": "object",
+                  "fields": {
+                    "maintenanceMgPerKg": {
+                      "t": "number",
+                      "gt": 0,
+                      "req": true
+                    },
+                    "titrationMgPerKg": {
+                      "t": "array",
+                      "items": {
+                        "t": "number",
+                        "gt": 0
+                      },
+                      "min": 1,
+                      "max": 12
+                    },
+                    "intervalWeeks": {
+                      "t": "number",
+                      "gt": 0,
+                      "default": 4
+                    },
+                    "infusionHours": {
+                      "t": "number",
+                      "gt": 0,
+                      "default": 1
+                    }
+                  },
+                  "req": true
+                },
+                "atWeek": {
+                  "t": "number",
+                  "gt": 0,
+                  "req": true
+                },
+                "link": {
+                  "t": "string",
+                  "values": [
+                    "pang_2023"
+                  ],
+                  "default": "pang_2023"
+                }
+              },
+              "when": {
+                "path": "model.family",
+                "in": [
+                  "beta_logit"
+                ]
+              }
+            },
             "doseBegin": {
               "t": "number",
               "min": 0,
@@ -3123,6 +3287,245 @@
             ]
           }
         },
+        "intercurrent": {
+          "t": "object",
+          "fields": {
+            "discontinuation": {
+              "t": "object",
+              "fields": {
+                "shareControl": {
+                  "t": "object",
+                  "fields": {
+                    "value": {
+                      "t": "number",
+                      "min": 0,
+                      "lt": 1,
+                      "req": true
+                    },
+                    "basis": {
+                      "t": "string",
+                      "values": [
+                        "literature",
+                        "assumed",
+                        "data"
+                      ],
+                      "req": true
+                    },
+                    "citation": {
+                      "t": "string",
+                      "maxLength": 300
+                    }
+                  },
+                  "req": true
+                },
+                "shareTreated": {
+                  "t": "object",
+                  "fields": {
+                    "value": {
+                      "t": "number",
+                      "min": 0,
+                      "lt": 1,
+                      "req": true
+                    },
+                    "basis": {
+                      "t": "string",
+                      "values": [
+                        "literature",
+                        "assumed",
+                        "data"
+                      ],
+                      "req": true
+                    },
+                    "citation": {
+                      "t": "string",
+                      "maxLength": 300
+                    }
+                  },
+                  "req": true
+                },
+                "progressionLogHazardPerSd": {
+                  "t": "object",
+                  "fields": {
+                    "value": {
+                      "t": "number",
+                      "req": true
+                    },
+                    "basis": {
+                      "t": "string",
+                      "values": [
+                        "literature",
+                        "assumed",
+                        "data"
+                      ],
+                      "req": true
+                    },
+                    "citation": {
+                      "t": "string",
+                      "maxLength": 300
+                    }
+                  }
+                },
+                "retrievedShare": {
+                  "t": "object",
+                  "fields": {
+                    "value": {
+                      "t": "number",
+                      "min": 0,
+                      "max": 1,
+                      "req": true
+                    },
+                    "basis": {
+                      "t": "string",
+                      "values": [
+                        "literature",
+                        "assumed",
+                        "data"
+                      ],
+                      "req": true
+                    },
+                    "citation": {
+                      "t": "string",
+                      "maxLength": 300
+                    }
+                  },
+                  "req": true
+                }
+              }
+            },
+            "withdrawal": {
+              "t": "object",
+              "fields": {
+                "treatedHazardRatio": {
+                  "t": "object",
+                  "fields": {
+                    "value": {
+                      "t": "number",
+                      "gt": 0,
+                      "req": true
+                    },
+                    "basis": {
+                      "t": "string",
+                      "values": [
+                        "literature",
+                        "assumed",
+                        "data"
+                      ],
+                      "req": true
+                    },
+                    "citation": {
+                      "t": "string",
+                      "maxLength": 300
+                    }
+                  }
+                },
+                "progressionLogHazardPerSd": {
+                  "t": "object",
+                  "fields": {
+                    "value": {
+                      "t": "number",
+                      "req": true
+                    },
+                    "basis": {
+                      "t": "string",
+                      "values": [
+                        "literature",
+                        "assumed",
+                        "data"
+                      ],
+                      "req": true
+                    },
+                    "citation": {
+                      "t": "string",
+                      "maxLength": 300
+                    }
+                  }
+                }
+              }
+            },
+            "death": {
+              "t": "object",
+              "fields": {
+                "share": {
+                  "t": "object",
+                  "fields": {
+                    "value": {
+                      "t": "number",
+                      "min": 0,
+                      "lt": 1,
+                      "req": true
+                    },
+                    "basis": {
+                      "t": "string",
+                      "values": [
+                        "literature",
+                        "assumed",
+                        "data"
+                      ],
+                      "req": true
+                    },
+                    "citation": {
+                      "t": "string",
+                      "maxLength": 300
+                    }
+                  },
+                  "req": true
+                }
+              }
+            },
+            "offTreatment": {
+              "t": "object",
+              "fields": {
+                "reboundLogit": {
+                  "t": "object",
+                  "fields": {
+                    "value": {
+                      "t": "number",
+                      "req": true
+                    },
+                    "basis": {
+                      "t": "string",
+                      "values": [
+                        "literature",
+                        "assumed",
+                        "data"
+                      ],
+                      "req": true
+                    },
+                    "citation": {
+                      "t": "string",
+                      "maxLength": 300
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "when": {
+            "path": "model.family",
+            "in": [
+              "beta_logit"
+            ]
+          }
+        },
+        "estimand": {
+          "t": "object",
+          "fields": {
+            "strategy": {
+              "t": "string",
+              "values": [
+                "treatment_policy",
+                "hypothetical"
+              ],
+              "req": true
+            }
+          },
+          "when": {
+            "path": "model.family",
+            "in": [
+              "beta_logit"
+            ]
+          }
+        },
         "analysis": {
           "t": "object",
           "fields": {
@@ -3131,7 +3534,10 @@
               "values": [
                 "change",
                 "slope",
-                "ancova"
+                "ancova",
+                "mmrm",
+                "cmi_jump_to_reference",
+                "cmi_copy_reference"
               ],
               "default": "change"
             },
@@ -3144,6 +3550,59 @@
               "gt": 0,
               "lt": 1,
               "default": 0.05
+            },
+            "data": {
+              "t": "string",
+              "values": [
+                "all_observed",
+                "on_treatment"
+              ],
+              "when": {
+                "path": "model.family",
+                "in": [
+                  "beta_logit"
+                ]
+              }
+            },
+            "delta": {
+              "t": "object",
+              "fields": {
+                "value": {
+                  "t": "number",
+                  "req": true
+                },
+                "basis": {
+                  "t": "string",
+                  "values": [
+                    "literature",
+                    "assumed",
+                    "data"
+                  ],
+                  "req": true
+                },
+                "citation": {
+                  "t": "string",
+                  "maxLength": 300
+                }
+              },
+              "when": {
+                "path": "model.family",
+                "in": [
+                  "beta_logit"
+                ]
+              }
+            },
+            "jackknifeGroups": {
+              "t": "integer",
+              "min": 5,
+              "max": 100,
+              "default": 10,
+              "when": {
+                "path": "model.family",
+                "in": [
+                  "beta_logit"
+                ]
+              }
             }
           }
         }
@@ -6508,6 +6967,506 @@
           "gt": 0,
           "lt": 1,
           "default": 0.95
+        }
+      }
+    },
+    "decision.value_of_information": {
+      "t": "object",
+      "fields": {
+        "label": {
+          "t": "string",
+          "maxLength": 120
+        },
+        "source": {
+          "t": "string",
+          "values": [
+            "two_arm_continuous",
+            "table"
+          ],
+          "req": true
+        },
+        "options": {
+          "t": "array",
+          "items": {
+            "t": "object",
+            "fields": {
+              "label": {
+                "t": "string",
+                "minLength": 1,
+                "maxLength": 60,
+                "req": true
+              },
+              "nPerArm": {
+                "t": "integer",
+                "min": 0,
+                "max": 100000,
+                "req": true
+              }
+            }
+          },
+          "min": 2,
+          "max": 8,
+          "req": true,
+          "when": {
+            "path": "source",
+            "in": [
+              "two_arm_continuous"
+            ]
+          }
+        },
+        "utility": {
+          "t": "string",
+          "values": [
+            "success_probability",
+            "net_benefit"
+          ],
+          "req": true,
+          "when": {
+            "path": "source",
+            "in": [
+              "two_arm_continuous"
+            ]
+          }
+        },
+        "successValue": {
+          "t": "number",
+          "gt": 0,
+          "when": {
+            "path": "source",
+            "in": [
+              "two_arm_continuous"
+            ]
+          }
+        },
+        "costPerPatient": {
+          "t": "number",
+          "min": 0,
+          "when": {
+            "path": "source",
+            "in": [
+              "two_arm_continuous"
+            ]
+          }
+        },
+        "alpha": {
+          "t": "number",
+          "gt": 0,
+          "lt": 0.5,
+          "default": 0.025,
+          "when": {
+            "path": "source",
+            "in": [
+              "two_arm_continuous"
+            ]
+          }
+        },
+        "effectScale": {
+          "t": "string",
+          "values": [
+            "absolute",
+            "proportional_slowing"
+          ],
+          "default": "absolute",
+          "when": {
+            "path": "source",
+            "in": [
+              "two_arm_continuous"
+            ]
+          }
+        },
+        "inputs": {
+          "t": "object",
+          "fields": {
+            "effect": {
+              "t": "variant",
+              "on": "family",
+              "variants": {
+                "fixed": {
+                  "value": {
+                    "t": "number",
+                    "req": true
+                  }
+                },
+                "normal": {
+                  "mean": {
+                    "t": "number",
+                    "req": true
+                  },
+                  "sd": {
+                    "t": "number",
+                    "gt": 0,
+                    "req": true
+                  }
+                },
+                "lognormal": {
+                  "meanlog": {
+                    "t": "number",
+                    "req": true
+                  },
+                  "sdlog": {
+                    "t": "number",
+                    "gt": 0,
+                    "req": true
+                  }
+                },
+                "beta": {
+                  "alpha": {
+                    "t": "number",
+                    "gt": 0,
+                    "req": true
+                  },
+                  "beta": {
+                    "t": "number",
+                    "gt": 0,
+                    "req": true
+                  }
+                },
+                "uniform": {
+                  "min": {
+                    "t": "number",
+                    "req": true
+                  },
+                  "max": {
+                    "t": "number",
+                    "req": true
+                  }
+                },
+                "range": {
+                  "optimistic": {
+                    "t": "number",
+                    "req": true
+                  },
+                  "base": {
+                    "t": "number",
+                    "req": true
+                  },
+                  "pessimistic": {
+                    "t": "number",
+                    "req": true
+                  }
+                }
+              },
+              "req": true
+            },
+            "sd": {
+              "t": "variant",
+              "on": "family",
+              "variants": {
+                "fixed": {
+                  "value": {
+                    "t": "number",
+                    "req": true
+                  }
+                },
+                "normal": {
+                  "mean": {
+                    "t": "number",
+                    "req": true
+                  },
+                  "sd": {
+                    "t": "number",
+                    "gt": 0,
+                    "req": true
+                  }
+                },
+                "lognormal": {
+                  "meanlog": {
+                    "t": "number",
+                    "req": true
+                  },
+                  "sdlog": {
+                    "t": "number",
+                    "gt": 0,
+                    "req": true
+                  }
+                },
+                "beta": {
+                  "alpha": {
+                    "t": "number",
+                    "gt": 0,
+                    "req": true
+                  },
+                  "beta": {
+                    "t": "number",
+                    "gt": 0,
+                    "req": true
+                  }
+                },
+                "uniform": {
+                  "min": {
+                    "t": "number",
+                    "req": true
+                  },
+                  "max": {
+                    "t": "number",
+                    "req": true
+                  }
+                },
+                "range": {
+                  "optimistic": {
+                    "t": "number",
+                    "req": true
+                  },
+                  "base": {
+                    "t": "number",
+                    "req": true
+                  },
+                  "pessimistic": {
+                    "t": "number",
+                    "req": true
+                  }
+                }
+              },
+              "req": true
+            },
+            "dropoutShare": {
+              "t": "variant",
+              "on": "family",
+              "variants": {
+                "fixed": {
+                  "value": {
+                    "t": "number",
+                    "req": true
+                  }
+                },
+                "normal": {
+                  "mean": {
+                    "t": "number",
+                    "req": true
+                  },
+                  "sd": {
+                    "t": "number",
+                    "gt": 0,
+                    "req": true
+                  }
+                },
+                "lognormal": {
+                  "meanlog": {
+                    "t": "number",
+                    "req": true
+                  },
+                  "sdlog": {
+                    "t": "number",
+                    "gt": 0,
+                    "req": true
+                  }
+                },
+                "beta": {
+                  "alpha": {
+                    "t": "number",
+                    "gt": 0,
+                    "req": true
+                  },
+                  "beta": {
+                    "t": "number",
+                    "gt": 0,
+                    "req": true
+                  }
+                },
+                "uniform": {
+                  "min": {
+                    "t": "number",
+                    "req": true
+                  },
+                  "max": {
+                    "t": "number",
+                    "req": true
+                  }
+                },
+                "range": {
+                  "optimistic": {
+                    "t": "number",
+                    "req": true
+                  },
+                  "base": {
+                    "t": "number",
+                    "req": true
+                  },
+                  "pessimistic": {
+                    "t": "number",
+                    "req": true
+                  }
+                }
+              }
+            },
+            "controlProgression": {
+              "t": "variant",
+              "on": "family",
+              "variants": {
+                "fixed": {
+                  "value": {
+                    "t": "number",
+                    "req": true
+                  }
+                },
+                "normal": {
+                  "mean": {
+                    "t": "number",
+                    "req": true
+                  },
+                  "sd": {
+                    "t": "number",
+                    "gt": 0,
+                    "req": true
+                  }
+                },
+                "lognormal": {
+                  "meanlog": {
+                    "t": "number",
+                    "req": true
+                  },
+                  "sdlog": {
+                    "t": "number",
+                    "gt": 0,
+                    "req": true
+                  }
+                },
+                "beta": {
+                  "alpha": {
+                    "t": "number",
+                    "gt": 0,
+                    "req": true
+                  },
+                  "beta": {
+                    "t": "number",
+                    "gt": 0,
+                    "req": true
+                  }
+                },
+                "uniform": {
+                  "min": {
+                    "t": "number",
+                    "req": true
+                  },
+                  "max": {
+                    "t": "number",
+                    "req": true
+                  }
+                },
+                "range": {
+                  "optimistic": {
+                    "t": "number",
+                    "req": true
+                  },
+                  "base": {
+                    "t": "number",
+                    "req": true
+                  },
+                  "pessimistic": {
+                    "t": "number",
+                    "req": true
+                  }
+                }
+              }
+            }
+          },
+          "req": true,
+          "when": {
+            "path": "source",
+            "in": [
+              "two_arm_continuous"
+            ]
+          }
+        },
+        "utilities": {
+          "t": "map",
+          "values": {
+            "t": "array",
+            "items": {
+              "t": "number"
+            },
+            "min": 30,
+            "max": 100000
+          },
+          "min": 2,
+          "max": 8,
+          "req": true,
+          "when": {
+            "path": "source",
+            "in": [
+              "table"
+            ]
+          }
+        },
+        "draws": {
+          "t": "map",
+          "values": {
+            "t": "array",
+            "items": {
+              "t": "number"
+            },
+            "min": 30,
+            "max": 100000
+          },
+          "min": 1,
+          "max": 12,
+          "req": true,
+          "when": {
+            "path": "source",
+            "in": [
+              "table"
+            ]
+          }
+        },
+        "unit": {
+          "t": "string",
+          "maxLength": 20
+        },
+        "groups": {
+          "t": "array",
+          "items": {
+            "t": "array",
+            "items": {
+              "t": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+              "maxLength": 64
+            },
+            "min": 2,
+            "max": 4,
+            "unique": true
+          },
+          "min": 1,
+          "max": 6
+        },
+        "studies": {
+          "t": "array",
+          "items": {
+            "t": "object",
+            "fields": {
+              "label": {
+                "t": "string",
+                "minLength": 1,
+                "maxLength": 60,
+                "req": true
+              },
+              "kind": {
+                "t": "string",
+                "values": [
+                  "phase2_effect",
+                  "natural_history_control",
+                  "normal_known"
+                ],
+                "req": true
+              },
+              "size": {
+                "t": "integer",
+                "min": 2,
+                "max": 10000000,
+                "req": true
+              },
+              "input": {
+                "t": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                "maxLength": 64
+              },
+              "sd": {
+                "t": "number",
+                "gt": 0
+              }
+            }
+          },
+          "min": 1,
+          "max": 4
         }
       }
     },
@@ -13930,6 +14889,109 @@
         }
       }
     },
+    "pk.interaction": {
+      "t": "object",
+      "fields": {
+        "label": {
+          "t": "string",
+          "maxLength": 120
+        },
+        "victim": {
+          "t": "object",
+          "fields": {
+            "drug": {
+              "t": "string",
+              "values": [
+                "midazolam"
+              ],
+              "req": true
+            },
+            "doseMg": {
+              "t": "number",
+              "gt": 0,
+              "max": 50,
+              "unit": "mg",
+              "req": true
+            },
+            "route": {
+              "t": "string",
+              "values": [
+                "oral",
+                "iv"
+              ],
+              "default": "oral"
+            },
+            "infusionH": {
+              "t": "number",
+              "gt": 0,
+              "max": 24,
+              "unit": "h",
+              "when": {
+                "path": "victim.route",
+                "in": [
+                  "iv"
+                ]
+              }
+            }
+          },
+          "req": true
+        },
+        "perpetrator": {
+          "t": "object",
+          "fields": {
+            "drug": {
+              "t": "string",
+              "values": [
+                "rifampicin"
+              ],
+              "req": true
+            },
+            "doseMg": {
+              "t": "number",
+              "gt": 0,
+              "max": 1200,
+              "unit": "mg",
+              "req": true
+            },
+            "intervalH": {
+              "t": "number",
+              "gt": 0,
+              "max": 168,
+              "default": 24,
+              "unit": "h"
+            },
+            "doses": {
+              "t": "integer",
+              "min": 1,
+              "max": 60,
+              "req": true
+            },
+            "gapH": {
+              "t": "number",
+              "min": 0,
+              "max": 336,
+              "default": 12,
+              "unit": "h"
+            }
+          },
+          "req": true
+        },
+        "weightKg": {
+          "t": "number",
+          "gt": 30,
+          "max": 200,
+          "default": 80,
+          "unit": "kg"
+        },
+        "horizonH": {
+          "t": "number",
+          "gt": 1,
+          "max": 96,
+          "default": 48,
+          "unit": "h"
+        }
+      }
+    },
     "accrual.poisson_gamma": {
       "t": "object",
       "fields": {
@@ -14895,7 +15957,9 @@
     "design_win_ratio",
     "borrowing_prior",
     "train_prognostic_model",
-    "generate_progression"
+    "generate_progression",
+    "decision_voi",
+    "pk_interaction"
   ],
   "endpointTypes": [
     "continuous",

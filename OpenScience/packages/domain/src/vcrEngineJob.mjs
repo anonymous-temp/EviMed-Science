@@ -113,7 +113,9 @@ export const VCR_ENGINE_METHODS = Object.freeze({
   'patients.progression': { version: '1.2.0', compatibleVersions: frozen(['1.0.0', '1.1.0']), endpoints: frozen(['continuous']), crossChecks: frozen(['the moments of the outcome at every visit in closed form', 'the closed-form power of the same test (noncentral t with Welch degrees of freedom)',
     'EMA qualification opinion 2013 Table 7: the covariate model (ApoE4 alleles, sex, age by genotype)', 'EMA qualification opinion 2013 Table 9: the expected ADAS-cog 11 intercept by baseline MMSE in a new study',
     'EMA qualification opinion 2013 Table 11: the expected one-year change by baseline MMSE, sex and ApoE4 in a new study', 'EMA qualification opinion 2013 Table 8 medians of dropout, under a stated covariate reading',
-    'adsim 3.0 training manual: three printed numbers (Listings 2.6, 2.8 and 4.6)', 'closed forms of the beta observation, the Bateman placebo integral and the symptomatic and disease-modifying terms']), modelTier: 'scenario' },
+    'adsim 3.0 training manual: three printed numbers (Listings 2.6, 2.8 and 4.6)', 'closed forms of the beta observation, the Bateman placebo integral and the symptomatic and disease-modifying terms',
+    'the MMRM against nlme::gls and the mmrm package (effects, standard errors, covariance)', 'conditional-mean imputation against a hand-computed case and a per-person implementation on mmrm coefficients',
+    'the true value of each estimand against the exact moments of the model and its closed limits']), modelTier: 'scenario' },
   'model.prognostic_apply': { version: '1.2.0', compatibleVersions: frozen(['1.0.0', '1.1.0']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['closed-form published equation evaluation']), modelTier: null },
   'profile.snapshot': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen([]), crossChecks: frozen(['every printed figure recomputed from its definition (means, spreads, type-7 quantiles, counts)']), modelTier: null },
   'cohort.build': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen([]), crossChecks: frozen([]), modelTier: null },
@@ -199,6 +201,12 @@ export const VCR_ENGINE_METHODS = Object.freeze({
   'evidence.network': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['netmeta (Senn2013 in contrast form with a three-arm study, and smokingcessation in arm form with multi-arm studies: effects, standard errors, tau-squared, Q and its split between designs, P-scores)', 'closed-form pairwise DerSimonian-Laird pooling of a network of two treatments']), modelTier: 'literature' },
   'evidence.dose_response': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['the package\'s own article (Crippa & Orsini 2016): the linear and the four-knot spline fit of the colorectal-cancer data, the test of non-linearity and the table of ratios', 'a hand Greenland-Longnecker generalized-least-squares slope on counts whose variances are exact']), modelTier: 'literature' },
   'evidence.shrinkage': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['van Zwet et al. (2023), Tables 2 and 3: the quantities of the Cochrane reference population by P value, integrated over the strata', 'a numerical integral of the mixture distribution given the data']), modelTier: 'literature' },
+  // The value of information of a decision (in-silico round 2, R35, 2026-11-09): EVPI, EVPPI by GAM regression, EVSI by regression and the thresholds of
+  // inputs with no distribution, over probabilistic draws of named uncertain inputs. Written in R on mgcv (a recommended package); `voi` is the check
+  // in CI and is never called from the engine.
+  'decision.value_of_information': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['voi 1.0.3 (evppi and evsi on the same utility matrix and the same regression formula)', 'closed forms of a normal-normal two-decision problem (EVPI, EVPPI of each input, EVPPI of a group)', 'Strong, Oakley & Brennan (2014), case study 1: the overall EVPI of the decision tree and its partial EVPIs against the printed gold standard', 'closed form of the expected power under a normal design prior (the assurance integral)']), modelTier: 'scenario' },
+  // A published whole-body PBPK model (Asaumi et al. 2018): midazolam, oral or intravenous, after repeated rifampicin (induction of CYP3A4 in gut wall and liver).
+  'pk.interaction': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['deSolve (its stiff integrator on the same equations, the doses as events: the 41 states and the area under the curve, to 1e-6)', 'the authors\' own simulation of the model (the Metrum Research Group\'s open vignette: the 3 mg midazolam area after 75 mg rifampicin daily for 7 days, 24.70 and 6.84 ng/mL*h, and its dose-response)']), modelTier: 'literature' },
 })
 
 export const VCR_ENGINE_METHOD_IDS = frozen(Object.keys(VCR_ENGINE_METHODS))
@@ -267,6 +275,10 @@ export const VCR_JOB_METHODS = Object.freeze({
   // a prognostic model trained on the person's own table, and a population-level disease-progression simulator (2026-11-03)
   train_prognostic_model: 'model.prognostic_train',
   generate_progression: 'patients.progression',
+  // the value of information of a decision (2026-11-09)
+  decision_voi: 'decision.value_of_information',
+  // a published whole-body PBPK model: midazolam with rifampicin's CYP3A4 induction (2026-11-09)
+  pk_interaction: 'pk.interaction',
   // The batch reading of patient records (D4): run by the control plane on its slow local lane, never by the R engine.
   ...VCR_MATCH_BATCH_JOBS,
   // The longitudinal forecast kinds, last, in VCR_JOB_KINDS' order (the scenario help lists kinds in this object's order).
@@ -848,7 +860,12 @@ function usesLongitudinalBeyond1_1_0(scenario) {
  */
 function usesProgressionBeyond1_1_0(scenario) {
   if (scenario?.people !== undefined || scenario?.instantiate !== undefined) return true
+  // plan R26: intercurrent events, the estimand a result claims and the estimators that are not the change or the covariance analysis
+  if (scenario?.intercurrent !== undefined || scenario?.estimand !== undefined) return true
+  const analysis = scenario?.analysis
+  if (['mmrm', 'cmi_jump_to_reference', 'cmi_copy_reference'].includes(analysis?.kind) || analysis?.data !== undefined || analysis?.delta !== undefined || analysis?.jackknifeGroups !== undefined) return true
   const treatment = scenario?.treatment
+  if (treatment?.reference !== undefined || treatment?.background !== undefined || treatment?.mechanism !== undefined) return true
   return treatment?.symptomatic?.pointsAt?.distribution !== undefined || treatment?.diseaseModifying?.fraction?.distribution !== undefined
 }
 

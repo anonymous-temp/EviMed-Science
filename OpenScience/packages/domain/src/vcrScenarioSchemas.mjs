@@ -815,6 +815,10 @@ const PROGRESSION_LIST = (/** @type {Record<string, any>} */ range, /** @type {n
 export const VCR_EFFECT_DISTRIBUTION_FAMILIES = Object.freeze(['fixed', 'normal', 'truncated_normal', 'lognormal', 'beta', 'uniform', 'empirical_draws'])
 export const VCR_EFFECT_DISTRIBUTION_TIERS = Object.freeze(['A', 'B', 'C', 'stated'])
 export const VCR_EFFECT_SOURCE_KINDS = Object.freeze(['literature', 'model_result', 'stated'])
+/** The marketed AChE inhibitors the Alzheimer posterior carries (plan R29), and the antibodies and links of the mechanism chain (R30). */
+export const VCR_REFERENCE_DRUGS = Object.freeze(['donepezil', 'galantamine', 'rivastigmine'])
+export const VCR_MECHANISM_DRUGS = Object.freeze(['aducanumab', 'lecanemab'])
+export const VCR_MECHANISM_LINKS = Object.freeze(['pang_2023'])
 /** The two ways a run uses a record of virtual patients (plan R23): every person under every arm, or a trial's worth drawn from it. */
 export const VCR_PEOPLE_MODES = Object.freeze(['paired_counterfactual', 'resampled_trials'])
 /** The parameter sets of the beta_logit family the engine carries, by id (the version of each): a record of people made for another one is made for an earlier model. */
@@ -849,6 +853,25 @@ const PROGNOSTIC_MODEL = { t: 'variant', on: 'family', variants: {
   logistic: { intercept: req(number()), terms: PROGNOSTIC_TERMS },
   cox: { terms: PROGNOSTIC_TERMS, baseline: object({ reference: req(string({ values: ['zero', 'centered'] })), survival: req(number({ min: 0, max: 1 })), horizon: req(number({ gt: 0 })), timeUnit: req(string({ values: [...VCR_TIME_UNITS] })) }) },
 } };
+
+/**
+ * An input of a decision whose value of information is asked (R35): a fixed value, a proper distribution (it gets an EVPPI) or a range of
+ * three values with no distribution (it gets a threshold, never a probability). Which values a role may take (a positive sd, a dropout
+ * share in [0, 1)) is the engine's check on the draws.
+ */
+const VOI_INPUT = {
+  t: 'variant', on: 'family',
+  variants: {
+    fixed: { value: req(number()) },
+    normal: { mean: req(number()), sd: req(number({ gt: 0 })) },
+    lognormal: { meanlog: req(number()), sdlog: req(number({ gt: 0 })) },
+    beta: { alpha: req(number({ gt: 0 })), beta: req(number({ gt: 0 })) },
+    uniform: { min: req(number()), max: req(number()) },
+    range: { optimistic: req(number()), base: req(number()), pessimistic: req(number()) },
+  },
+}
+const VOI_TWO_ARM = is('source', 'two_arm_continuous')
+const VOI_TABLE = is('source', 'table')
 
 export const VCR_SCENARIO_SCHEMAS = deepFreeze({
   'model.survival_fit': object({
@@ -968,11 +991,43 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
         }, { exactlyOne: [['pointsAt', 'logitEmax']], requires: { pointsAt: ['atWeek', 'referenceAdas'] } }), BETA_LOGIT),
         // the share of the study's covariate-adjusted mean slope taken away while on drug, held after the dose ends
         diseaseModifying: gated(object({ fraction: req(EFFECT_PARAM({ min: 0, lt: 1 }, 'treatment.diseaseModifying.fraction')) }), BETA_LOGIT),
+        // 1.2.0 (plan R29, tier A): the treated arm takes a marketed AChE inhibitor whose effect is the posterior's own (eStar, ET50 and the dose exponent of that
+        // drug, one row per trial under posterior_draws); instead of `symptomatic`. `background` (both arms already on one, started `weeksBefore` weeks before baseline)
+        reference: gated(object({ drug: req(string({ values: [...VCR_REFERENCE_DRUGS] })), doseMg: req(number({ gt: 0 })), washoutHalfLifeWeeks: PROGRESSION_PARAM({ gt: 0 }) }), BETA_LOGIT),
+        background: gated(object({ drug: req(string({ values: [...VCR_REFERENCE_DRUGS] })), doseMg: req(number({ gt: 0 })), weeksBefore: req(number({ min: 0 })) }), BETA_LOGIT),
+        // 1.2.0 (plan R30, tier B): an antibody's effect from a published exposure -> biomarker -> clinical chain, instead of `diseaseModifying`: the dosing, the week the
+        // clinical effect is stated at, and which published link carries the biomarker to the score
+        mechanism: gated(object({
+          drug: req(string({ values: [...VCR_MECHANISM_DRUGS] })),
+          regimen: req(object({ maintenanceMgPerKg: req(number({ gt: 0 })), titrationMgPerKg: array(number({ gt: 0 }), { min: 1, max: 12 }), intervalWeeks: number({ gt: 0, default: 4 }), infusionHours: number({ gt: 0, default: 1 }) })),
+          atWeek: req(number({ gt: 0 })), link: string({ values: [...VCR_MECHANISM_LINKS], default: 'pang_2023' }),
+        }), BETA_LOGIT),
         doseBegin: gated(number({ min: 0, default: 0 }), BETA_LOGIT), doseEnd: gated(number({ gt: 0 }), BETA_LOGIT),
       }),
       reqWhen: PROGRESSION_SHAPES,
     },
-    analysis: object({ kind: string({ values: ['change', 'slope', 'ancova'], default: 'change' }), visit: number({ min: 0 }), alpha: number({ gt: 0, lt: 1, default: 0.05 }) }),
+    // 1.2.0 (plan R26): what happens to a person other than finishing the study as planned. Stopping the drug (a share of each arm by the last visit, an
+    // optional dependence of the hazard on the person's own slope: the person who declines fastest stops sooner, the missing-not-at-random case, and the
+    // share who stay in the study), leaving the study (arm and slope terms on the parameter set's own hazard), death (scored as the worst value) and a
+    // rebound after stopping. Each number carries its basis.
+    intercurrent: gated(object({
+      discontinuation: object({
+        shareControl: req(PROGRESSION_PARAM({ min: 0, lt: 1 })), shareTreated: req(PROGRESSION_PARAM({ min: 0, lt: 1 })),
+        progressionLogHazardPerSd: PROGRESSION_PARAM(), retrievedShare: req(PROGRESSION_PARAM({ min: 0, max: 1 })),
+      }),
+      withdrawal: object({ treatedHazardRatio: PROGRESSION_PARAM({ gt: 0 }), progressionLogHazardPerSd: PROGRESSION_PARAM() }),
+      death: object({ share: req(PROGRESSION_PARAM({ min: 0, lt: 1 })) }),
+      offTreatment: object({ reboundLogit: PROGRESSION_PARAM() }),
+    }), BETA_LOGIT),
+    // which effect the question asks for; the result gives the estimator's bias and coverage against it
+    estimand: gated(object({ strategy: req(string({ values: ['treatment_policy', 'hypothetical'] })) }), BETA_LOGIT),
+    analysis: object({
+      kind: string({ values: ['change', 'slope', 'ancova', 'mmrm', 'cmi_jump_to_reference', 'cmi_copy_reference'], default: 'change' }), visit: number({ min: 0 }), alpha: number({ gt: 0, lt: 1, default: 0.05 }),
+      // the values the analysis may use: everything collected, or only what was collected while on the drug (default: the first, and for a reference-based imputation the second)
+      data: gated(string({ values: ['all_observed', 'on_treatment'] }), BETA_LOGIT),
+      // points added to what a reference-based imputation fills in for the treated arm (positive is worse): the tipping-point delta
+      delta: gated(PROGRESSION_PARAM(), BETA_LOGIT), jackknifeGroups: gated(integer({ min: 5, max: 100, default: 10 }), BETA_LOGIT),
+    }),
   }),
 
   'profile.snapshot': object({}),
@@ -1171,6 +1226,34 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
     predictAt: array(number(), { min: 1, max: 50 }),
     perDose: number({ gt: 0 }),
     level: number({ gt: 0, lt: 1, default: 0.95 }),
+  }),
+
+  // The value of information of a decision (in-silico round 2, R35; Strong, Oakley & Brennan 2014, Strong et al. 2015). `two_arm_continuous` evaluates the
+  // power of a two-arm trial of each option on every draw of the uncertain inputs; `table` takes the utilities and the input draws as the `voi` package does.
+  'decision.value_of_information': object({
+    label: string({ maxLength: 120 }),
+    source: req(string({ values: ['two_arm_continuous', 'table'] })),
+    options: gated(req(array(object({ label: req(string({ minLength: 1, maxLength: 60 })), nPerArm: req(integer({ min: 0, max: 100000 })) }), { min: 2, max: 8 })), VOI_TWO_ARM),
+    utility: gated(req(string({ values: ['success_probability', 'net_benefit'] })), VOI_TWO_ARM),
+    successValue: gated(number({ gt: 0 }), VOI_TWO_ARM),
+    costPerPatient: gated(number({ min: 0 }), VOI_TWO_ARM),
+    alpha: gated(number({ gt: 0, lt: 0.5, default: 0.025 }), VOI_TWO_ARM),
+    effectScale: gated(string({ values: ['absolute', 'proportional_slowing'], default: 'absolute' }), VOI_TWO_ARM),
+    inputs: gated(req(object({
+      effect: req(VOI_INPUT), sd: req(VOI_INPUT), dropoutShare: VOI_INPUT, controlProgression: VOI_INPUT,
+    })), VOI_TWO_ARM),
+    utilities: gated(req({ t: 'map', values: array(number(), { min: 30, max: 100000 }), min: 2, max: 8 }), VOI_TABLE),
+    draws: gated(req({ t: 'map', values: array(number(), { min: 30, max: 100000 }), min: 1, max: 12 }), VOI_TABLE),
+    unit: string({ maxLength: 20 }),
+    groups: array(array(COLUMN, { min: 2, max: 4, unique: true }), { min: 1, max: 6 }),
+    studies: array(object({
+      label: req(string({ minLength: 1, maxLength: 60 })),
+      kind: req(string({ values: ['phase2_effect', 'natural_history_control', 'normal_known'] })),
+      size: req(integer({ min: 2, max: 10000000 })),
+      // of a table decision's normal_known study (a `when` here would read the scenario's root, not this item; the engine checks the pairing)
+      input: COLUMN,
+      sd: number({ gt: 0 }),
+    }), { min: 1, max: 4 }),
   }),
 
   // The empirical shrinkage of a published effect against the trials of the Cochrane Database (algorithm round E8; van Zwet et al. 2023). The
@@ -1615,6 +1698,28 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
       lambda: number({ gt: 0, max: 1, default: 1 }),
       gamma: number({ min: 1, default: 1 }),
     })),
+  }),
+
+  // A published whole-body PBPK model of an oral or intravenous victim after a repeated oral perpetrator (plan R38; Asaumi et al. 2018). The
+  // drug lists are closed on purpose: a perpetrator or a victim whose published model could not be written from open text is refused by name
+  // at the schema (a value not in the list), never run with a stand-in.
+  'pk.interaction': object({
+    label: string({ maxLength: 120 }),
+    victim: req(object({
+      drug: req(string({ values: ['midazolam'] })),
+      doseMg: req(number({ gt: 0, max: 50, unit: 'mg' })),
+      route: string({ values: ['oral', 'iv'], default: 'oral' }),
+      infusionH: gated(number({ gt: 0, max: 24, unit: 'h' }), is('victim.route', 'iv')),
+    })),
+    perpetrator: req(object({
+      drug: req(string({ values: ['rifampicin'] })),
+      doseMg: req(number({ gt: 0, max: 1200, unit: 'mg' })),
+      intervalH: number({ gt: 0, max: 168, default: 24, unit: 'h' }),
+      doses: req(integer({ min: 1, max: 60 })),
+      gapH: number({ min: 0, max: 336, default: 12, unit: 'h' }),
+    })),
+    weightKg: number({ gt: 30, max: 200, default: 80, unit: 'kg' }),
+    horizonH: number({ gt: 1, max: 96, default: 48, unit: 'h' }),
   }),
 
   'accrual.poisson_gamma': object({

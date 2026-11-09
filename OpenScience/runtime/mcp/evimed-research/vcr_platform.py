@@ -122,6 +122,10 @@ JOB_KINDS = ("fit_survival_model", "apply_prognostic_model",
     "borrowing_prior",
     # a prognostic model trained on the person's own historical table, cross-fitted, and a population-level disease-progression simulator (2026-11-03)
     "train_prognostic_model", "generate_progression",
+    # the value of information of a decision: which unknown is worth learning before a design is chosen (2026-11-09)
+    "decision_voi",
+    # a published whole-body PBPK model: an oral drug after a CYP3A4 perpetrator (midazolam after rifampicin) (2026-11-09)
+    "pk_interaction",
     # the batch reading of patient records for the criteria's facts (2026-11-01)
     "match_extract",
     "forecast_trajectories", "evaluate_forecast", "compare_forecasts", "benchmark_trial_effect",
@@ -166,6 +170,7 @@ DESIGN_POINTER = ("This kind designs one trial of the usual kinds. If the questi
                   "design_dose (3+3, BOIN, CRM, Keyboard: which dose is chosen), design_bayesian (a single-arm trial looked at every few patients: BOP2, "
                   "predictive monitoring, against Simon), design_confirmatory (futility stops, sample-size re-estimation, multi-arm selection, enrichment), "
                   "design_win_ratio (death, then admissions, then a score, compared in order), network_meta (which of several treatments is best), "
+                  "decision_voi (which unknown input is worth learning before a design is chosen, and what a study of it is worth), "
                   "generate_progression (trial arms on a disease-progression model: the Alzheimer ADAS-cog model with a symptomatic or disease-modifying "
                   "drug hypothesis), forecast_trajectories (a forecast for each of the person's patients). Designs already computed are compared with "
                   "action compare, and the smallest design that meets stated requirements is found with action search; action shape with no kind gives "

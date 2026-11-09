@@ -395,6 +395,11 @@ vcr_test_handler_jobs <- function() {
                                                           list(dose = 25, effect = 0.20, se = 0.20, cases = 104, n = 70000), list(dose = 40, effect = 0.30, se = 0.22, cases = 63, n = 40000)))),
          model = list(kind = "linear")), NULL),
     list("evidence.shrinkage", list(scale = "log", values = list(list(id = "phase2", estimate = log(0.66), se = 0.19, futureSe = 0.12))), NULL),
+    # the value of information of a decision (R35): the analytic power model on a few draws (the regression needs only a few dozen; the cases run thousands)
+    list("decision.value_of_information", list(source = "two_arm_continuous", utility = "success_probability", options = list(list(label = "none", nPerArm = 0), list(label = "n100", nPerArm = 100)),
+           inputs = list(effect = list(family = "normal", mean = 0.5, sd = 0.3), sd = list(family = "fixed", value = 1))), NULL, 60L),
+    # the published PBPK model: one rifampicin dose and an intravenous bolus, the cheap path of the family (the 7-day regimen is the case's)
+    list("pk.interaction", list(victim = list(drug = "midazolam", doseMg = 1, route = "iv"), perpetrator = list(drug = "rifampicin", doseMg = 600, doses = 1), horizonH = 6), NULL),
     list("evidence.reconstruct_km", list(curve = curve_arm(12)$curve, riskTable = curve_arm(12)$riskTable, provenance = list(kind = "digitizer", tool = "e05-digitizer")), list(list(kind = "evidence", id = "ev_e05@1"))),
     list("comparator.entropy_balance", list(covariates = list("age", "male"), treatmentColumn = "arm", outcomeColumn = "y", endpoint = list(type = "continuous")), list(in_subj)),
     list("comparator.propensity_weight", list(covariates = list("age", "male"), treatmentColumn = "arm", outcomeColumn = "y", endpoint = list(type = "continuous")), list(in_subj)),

@@ -7623,6 +7623,173 @@
           }
         }
       }
+    },
+    {
+      "name": "a decision on the size of a phase 3 with an uncertain effect and a phase 2 study",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "decision_voi",
+        "method": "decision.value_of_information",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "source": "two_arm_continuous",
+          "utility": "net_benefit",
+          "successValue": 400,
+          "costPerPatient": 0.2,
+          "options": [
+            {
+              "label": "none",
+              "nPerArm": 0
+            },
+            {
+              "label": "n300",
+              "nPerArm": 300
+            }
+          ],
+          "inputs": {
+            "effect": {
+              "family": "normal",
+              "mean": 1.2,
+              "sd": 0.8
+            },
+            "sd": {
+              "family": "fixed",
+              "value": 7
+            }
+          },
+          "studies": [
+            {
+              "label": "phase 2",
+              "kind": "phase2_effect",
+              "size": 80
+            }
+          ]
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "an effect with no distribution gets a threshold",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "decision_voi",
+        "method": "decision.value_of_information",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "source": "two_arm_continuous",
+          "utility": "net_benefit",
+          "successValue": 400,
+          "costPerPatient": 0.2,
+          "options": [
+            {
+              "label": "none",
+              "nPerArm": 0
+            },
+            {
+              "label": "n300",
+              "nPerArm": 300
+            }
+          ],
+          "inputs": {
+            "effect": {
+              "family": "range",
+              "optimistic": 2,
+              "base": 1.2,
+              "pessimistic": 0.4
+            },
+            "sd": {
+              "family": "lognormal",
+              "meanlog": 1.9,
+              "sdlog": 0.1
+            }
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "midazolam after seven daily doses of rifampicin (the published PBPK model)",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ],
+        "kind": "pk_interaction",
+        "method": "pk.interaction",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "label": "midazolam after rifampicin",
+          "victim": {
+            "drug": "midazolam",
+            "doseMg": 3
+          },
+          "perpetrator": {
+            "drug": "rifampicin",
+            "doseMg": 75,
+            "doses": 7
+          }
+        }
+      }
+    },
+    {
+      "name": "an intravenous midazolam infusion after rifampicin, with the person's weight",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ],
+        "kind": "pk_interaction",
+        "method": "pk.interaction",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "victim": {
+            "drug": "midazolam",
+            "doseMg": 2,
+            "route": "iv",
+            "infusionH": 0.5
+          },
+          "perpetrator": {
+            "drug": "rifampicin",
+            "doseMg": 600,
+            "doses": 10,
+            "gapH": 24
+          },
+          "weightKg": 70,
+          "horizonH": 24
+        }
+      }
     }
   ],
   "invalid": [
@@ -31376,6 +31543,391 @@
       },
       "expected": [
         "scenario_field_missing@scenario.accrual.duration"
+      ]
+    },
+    {
+      "name": "a decision names its source",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "decision_voi",
+        "method": "decision.value_of_information",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "source": "markov",
+          "utility": "net_benefit",
+          "successValue": 400,
+          "costPerPatient": 0.2,
+          "options": [
+            {
+              "label": "none",
+              "nPerArm": 0
+            },
+            {
+              "label": "n300",
+              "nPerArm": 300
+            }
+          ],
+          "inputs": {
+            "effect": {
+              "family": "normal",
+              "mean": 1.2,
+              "sd": 0.8
+            },
+            "sd": {
+              "family": "fixed",
+              "value": 7
+            }
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_unknown@scenario.utility",
+        "scenario_field_unknown@scenario.successValue",
+        "scenario_field_unknown@scenario.costPerPatient",
+        "scenario_field_unknown@scenario.options",
+        "scenario_field_unknown@scenario.inputs",
+        "scenario_value_invalid@scenario.source"
+      ]
+    },
+    {
+      "name": "the two-arm form states its options",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "decision_voi",
+        "method": "decision.value_of_information",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "source": "two_arm_continuous",
+          "utility": "net_benefit",
+          "successValue": 400,
+          "costPerPatient": 0.2,
+          "inputs": {
+            "effect": {
+              "family": "normal",
+              "mean": 1.2,
+              "sd": 0.8
+            },
+            "sd": {
+              "family": "fixed",
+              "value": 7
+            }
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_missing@scenario.options"
+      ]
+    },
+    {
+      "name": "a decision has at least two options",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "decision_voi",
+        "method": "decision.value_of_information",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "source": "two_arm_continuous",
+          "utility": "net_benefit",
+          "successValue": 400,
+          "costPerPatient": 0.2,
+          "options": [
+            {
+              "label": "n300",
+              "nPerArm": 300
+            }
+          ],
+          "inputs": {
+            "effect": {
+              "family": "normal",
+              "mean": 1.2,
+              "sd": 0.8
+            },
+            "sd": {
+              "family": "fixed",
+              "value": 7
+            }
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.options"
+      ]
+    },
+    {
+      "name": "an input family is closed",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "decision_voi",
+        "method": "decision.value_of_information",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "source": "two_arm_continuous",
+          "utility": "net_benefit",
+          "successValue": 400,
+          "costPerPatient": 0.2,
+          "options": [
+            {
+              "label": "none",
+              "nPerArm": 0
+            },
+            {
+              "label": "n300",
+              "nPerArm": 300
+            }
+          ],
+          "inputs": {
+            "effect": {
+              "family": "cauchy",
+              "mean": 1
+            },
+            "sd": {
+              "family": "fixed",
+              "value": 7
+            }
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.inputs.effect.family"
+      ]
+    },
+    {
+      "name": "a table has at least 30 draws",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "decision_voi",
+        "method": "decision.value_of_information",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "source": "table",
+          "utilities": {
+            "a": [
+              0.8414709848078965,
+              0.9092974268256817,
+              0.1411200080598672,
+              -0.7568024953079282,
+              -0.9589242746631385,
+              -0.27941549819892586,
+              0.6569865987187891,
+              0.9893582466233818,
+              0.4121184852417566,
+              -0.5440211108893698
+            ],
+            "b": [
+              0.8414709848078965,
+              0.9092974268256817,
+              0.1411200080598672,
+              -0.7568024953079282,
+              -0.9589242746631385,
+              -0.27941549819892586,
+              0.6569865987187891,
+              0.9893582466233818,
+              0.4121184852417566,
+              -0.5440211108893698
+            ]
+          },
+          "draws": {
+            "x": [
+              0.8414709848078965,
+              0.9092974268256817,
+              0.1411200080598672,
+              -0.7568024953079282,
+              -0.9589242746631385,
+              -0.27941549819892586,
+              0.6569865987187891,
+              0.9893582466233818,
+              0.4121184852417566,
+              -0.5440211108893698
+            ]
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.utilities.a",
+        "scenario_value_invalid@scenario.utilities.b",
+        "scenario_value_invalid@scenario.draws.x"
+      ]
+    },
+    {
+      "name": "a perpetrator the published model does not carry (ketoconazole)",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ],
+        "kind": "pk_interaction",
+        "method": "pk.interaction",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "victim": {
+            "drug": "midazolam",
+            "doseMg": 3
+          },
+          "perpetrator": {
+            "drug": "ketoconazole",
+            "doseMg": 200,
+            "doses": 7
+          }
+        }
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.perpetrator.drug"
+      ]
+    },
+    {
+      "name": "a victim the published model does not carry",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ],
+        "kind": "pk_interaction",
+        "method": "pk.interaction",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "victim": {
+            "drug": "tacrolimus",
+            "doseMg": 3
+          },
+          "perpetrator": {
+            "drug": "rifampicin",
+            "doseMg": 75,
+            "doses": 7
+          }
+        }
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.victim.drug"
+      ]
+    },
+    {
+      "name": "an infusion time on an oral dose",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ],
+        "kind": "pk_interaction",
+        "method": "pk.interaction",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "victim": {
+            "drug": "midazolam",
+            "doseMg": 3,
+            "infusionH": 0.5
+          },
+          "perpetrator": {
+            "drug": "rifampicin",
+            "doseMg": 75,
+            "doses": 7
+          }
+        }
+      },
+      "expected": [
+        "scenario_field_unknown@scenario.victim.infusionH"
+      ]
+    },
+    {
+      "name": "a perpetrator with no number of doses",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ],
+        "kind": "pk_interaction",
+        "method": "pk.interaction",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "victim": {
+            "drug": "midazolam",
+            "doseMg": 3
+          },
+          "perpetrator": {
+            "drug": "rifampicin",
+            "doseMg": 75
+          }
+        }
+      },
+      "expected": [
+        "scenario_field_missing@scenario.perpetrator.doses"
       ]
     }
   ],
