@@ -454,7 +454,7 @@ export class VcrExperiments {
    */
   async bindPeopleStart(study, scenario, people) {
     const bound = vcrPeopleStartBinding(scenario, people);
-    if (!bound.ok) throw invalid("vcr_people_invalid", "虚拟患者记录的设置不完整：", bound.issues);
+    if (bound.ok === false) throw invalid("vcr_people_invalid", "虚拟患者记录的设置不完整：", bound.issues);
     await this.#peopleRecord(study, bound.recordId);
     return bound;
   }

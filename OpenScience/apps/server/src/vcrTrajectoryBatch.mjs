@@ -260,7 +260,7 @@ export function reasonCounts(lines) {
  * The one premises block of a trajectory result: what the domain's use check found, and what the action context and the missing
  * or mixed uncertainty mean for how far the result goes. Sentences, never numbers; the page folds all but the decisive rows.
  * The claim row (which of the three claims the forecast supports) leads when the provider said whether it used the person's own history.
- * @param {{findings?:any[],actionContext:{mode:string,actionSource:string},uncertainty:ReturnType<typeof uncertaintyProvenance>,usesOwnHistory?:boolean|null,individualizationHelped?:boolean|null}} input
+ * @param {{findings?:any[],actionContext:{mode:string,actionSource:string},uncertainty:ReturnType<typeof uncertaintyProvenance>,usesOwnHistory?:boolean|null,individualizationHelped?:boolean|null,individualizationFamily?:string|null}} input
  */
 export function trajectoryPremises({ findings = [], actionContext: context, uncertainty, usesOwnHistory = null, individualizationHelped = null, individualizationFamily = null }) {
   /** @type {any[]} */ const rows = [];

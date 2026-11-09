@@ -3095,7 +3095,7 @@ const sourcesNotForKind = () => ({ field: "", state: "assumption", because: "kin
  * @param {any} vcr @param {any} study
  * @param {{ kind: string, scenario: Record<string, any>, inputs: unknown[], seed: number | null, replicates: number | null,
  *   cpuSecondsLimit: number | null, subjectId: string | null, reconstructionResultId?: string | null, selection?: any, modelId?:string|null, modelVersion?:string|null,
- *   sources?: unknown }} request
+ *   sources?: unknown, people?: unknown }} request
  * @param {{ personMessages?: (() => Promise<readonly import("./vcrPersonStated.mjs").HumanParameterMessage[] | null>) | null }} [context]
  */
 async function startJob(vcr, study, request, { personMessages = null } = {}) {

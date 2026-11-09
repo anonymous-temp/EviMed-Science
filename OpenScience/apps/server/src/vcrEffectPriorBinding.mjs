@@ -84,7 +84,7 @@ export async function bindVcrEffectPrior({ store, studyId, scenario, inputs }) {
     throw new HttpError(400, "vcr_effect_prior_not_a_pooling", "药效先验只能取自本研究一次已核验的证据汇总结果。");
   }
   const prior = vcrEffectPriorFromPool(result, { target, estimand: from.estimand });
-  if (!prior.ok) {
+  if (prior.ok === false) {
     const error = new HttpError(400, "vcr_effect_prior_refused", `这项汇总结果不能作为药效先验：${prior.detail}`);
     /** @type {any} */ (error).issues = [{ code: prior.reason, field: "scenario.treatment.effectFrom.input", detail: prior.detail }];
     throw error;
