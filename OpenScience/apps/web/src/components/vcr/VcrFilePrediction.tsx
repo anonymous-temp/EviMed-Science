@@ -1,3 +1,4 @@
+import { VCR_RESULT_QUANTITY_LABELS_ZH } from "@evimed/domain";
 import { useId, useRef, useState } from "react";
 import { fileVcrPrediction, type VcrDesign } from "@/lib/vcrClient";
 import { webErrorMessage } from "@/lib/apiClient";
@@ -8,7 +9,7 @@ import { Input, Select } from "@/components/ui/Input";
 /** The measures of a design that are a probability of success, and the path the server reads them at. */
 const PROBABILITY_MEASURES: ReadonlyArray<{ key: string; label: string; path: string }> = Object.freeze([
   { key: "power", label: "功效", path: "measure(power)" },
-  { key: "assurance", label: "成功把握", path: "measure(assurance)" },
+  { key: "assurance", label: VCR_RESULT_QUANTITY_LABELS_ZH.assurance, path: "measure(assurance)" },
 ]);
 
 /** The designs a prediction can be filed from: not dominated, and with a power or an assurance the engine computed. */

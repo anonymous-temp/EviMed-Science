@@ -270,7 +270,7 @@ export const VCR_STEP_GIVES: Readonly<Record<VcrStepKey, string>> = Object.freez
   population: "一批情景人群；接入数据（T1 及以上）后也可以筛出真实队列",
   patients: "分组曲线和每个虚拟患者的个体记录",
   comparator: "五条对照路线的诊断、效应或缺口清单",
-  trial: "方案对比、运行特征和成功把握",
+  trial: "方案对比和运行特征",
   matching: "逐条入排判定和补证建议",
 });
 
@@ -295,7 +295,7 @@ export const VCR_STEP_EMPTY: Readonly<Record<VcrStepKey, string>> = Object.freez
   population: "还没有人群：AI 会按研究定义生成一批情景人群；接入你的数据（T1 及以上）后，也可以筛出真实队列。",
   patients: "还没有虚拟患者：在给定模型和情景下推演个体轨迹与不确定性。",
   comparator: "还没有对照设计：五条对照路线的诊断、效应或缺口清单。",
-  trial: "还没有试验情景：方案对比、运行特征和成功把握。",
+  trial: "还没有试验情景：方案对比和运行特征。",
   matching: "还没有匹配评估：逐条判定每个人是否符合入排条件，并给出补证建议。",
 });
 

@@ -878,7 +878,7 @@ test("C2-4 while a change is recomputed the page says its numbers are old; an ed
   assert.equal(during.assurance, undefined, "there is no prior to integrate over any more: the old assurance is not left beside the new numbers");
   const trialDuring = await service.tab(owner, study.id, "trial");
   assert.ok(trialDuring.stale, "the design's page is stale until every stage of it has landed");
-  assert.ok(trialDuring.footnotes.some((/** @type {string} */ note) => /方案 A：成功把握不再显示/.test(note)), JSON.stringify(trialDuring.footnotes));
+  assert.ok(trialDuring.footnotes.some((/** @type {string} */ note) => /方案 A：按药效的不确定性平均后，得到显著结果的概率（assurance）不再显示/.test(note)), JSON.stringify(trialDuring.footnotes));
 
   await settle(module, study.id);
   const settled = await measuresOf();

@@ -117,10 +117,12 @@ test("each step has at most one short finding with its one number, from what the
     population: { note: "3,412 名", stale: false },
     patients: { note: "2,000 名", stale: false },
     comparator: { note: "1 条可估计", stale: false },
-    trial: { note: "成功把握 58–71%", stale: true },
+    trial: { note: "3 个方案", stale: true }, // an assurance's name does not fit the strip, and a bare number must not stand for it
     matching: { note: "4 条入排标准", stale: false },
   });
   for (const entry of Object.values(summaries)) assert.ok([...String(entry.note ?? "")].length <= VCR_STEP_NOTE_MAX, entry.note);
+  // a design's own power is the chance at its stated effect, and fits: it keeps its name
+  assert.equal(vcrStepSummaries(bundle, [{ dominated: false, measures: { power: { value: 81 } } }, { dominated: false, measures: { power: { value: 86 } } }]).trial.note, "功效 81–86%");
   // A step with nothing to say is absent — and so is one whose note would not fit a step bar.
   assert.deepEqual(vcrStepSummaries({ study: { steps: {} }, assumptions: [] }, []), {});
   assert.equal(vcrStepSummaries({ study: { steps: {} }, populations: [{ resultId: "r", counts: { generatedRecords: 123456789012 } }], allResults: [] }, []).population, undefined);

@@ -86,7 +86,7 @@ test("a single-arm binary design is held to a response rate it must beat; there 
 
 test("a success probability that is not there says why, in one line, and a design that cannot have one says nothing", () => {
   const absent = byKey(vcrPremises("trial", trialInput({ hasAssurance: false, assuranceReason: "没有算：效应只有一个值，没有可以积分的预测分布" })));
-  assert.equal(absent.assurance.label, "成功把握");
+  assert.equal(absent.assurance.label, "按药效的不确定性平均后，得到显著结果的概率（assurance）");
   assert.equal(absent.assurance.value, "没有算：效应只有一个值，没有可以积分的预测分布");
   assert.equal(absent.assurance.decisive, false, "a reason is folded with the rest");
   assert.equal(byKey(vcrPremises("trial", trialInput({ hasAssurance: true }))).assurance, undefined);

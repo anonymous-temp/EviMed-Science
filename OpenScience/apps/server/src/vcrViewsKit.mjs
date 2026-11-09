@@ -41,8 +41,7 @@ import { vcrAnalyticComputationBasis } from "./vcrScientificBasis.mjs";
 
 import {
   VCR_COUNT_KEYS, VCR_INTERVAL_KINDS, VCR_NOT_ESTIMABLE_RULE_LABELS_ZH, VCR_PERFORMANCE_MEASURE_LABELS_ZH,
-  VCR_STALE_REASON_LABELS_ZH, VCR_VALUE_SOURCES, knownErrorCodeMessage,
-} from "@evimed/domain";
+  VCR_STALE_REASON_LABELS_ZH, VCR_VALUE_SOURCES, knownErrorCodeMessage, VCR_RESULT_QUANTITY_LABELS_ZH } from "@evimed/domain";
 
 /** @param {unknown} value */
 export const object = (value) => (value && typeof value === "object" && !Array.isArray(value) ? /** @type {Record<string, any>} */ (value) : {});
@@ -345,10 +344,10 @@ export const MEASURE_META = Object.freeze({
   power: { label: VCR_PERFORMANCE_MEASURE_LABELS_ZH.power, unit: "%", percent: true },
   type_one_error: { label: VCR_PERFORMANCE_MEASURE_LABELS_ZH.type_one_error, unit: "%", percent: true },
   coverage: { label: VCR_PERFORMANCE_MEASURE_LABELS_ZH.coverage, unit: "%", percent: true },
-  assurance: { label: "成功把握", unit: "%", percent: true },
+  assurance: { label: VCR_RESULT_QUANTITY_LABELS_ZH.assurance, unit: "%", percent: true },
   duration_months: { label: "平均研究时长", unit: "个月" },
   power_at_prior_mean: { label: "先验均值处的功效", unit: "%", percent: true },
-  assurance_simulated: { label: "成功把握（仿真复核）", unit: "%", percent: true },
+  assurance_simulated: { label: `${VCR_RESULT_QUANTITY_LABELS_ZH.assurance}（仿真复核）`, unit: "%", percent: true },
   bias: { label: VCR_PERFORMANCE_MEASURE_LABELS_ZH.bias },
   empirical_se: { label: "经验标准误" },
   mse: { label: "均方误差" },
@@ -963,7 +962,7 @@ export const METHOD_LABELS = Object.freeze(/** @type {Record<string, string>} */
   "comparator.rmst": "RMST 比较", "comparator.maic": "匹配调整间接比较", "comparator.evalue": "E 值", "comparator.bias_analysis": "未测混杂的偏倚分析", "comparator.borrowing": "外部对照的动态借用", "comparator.stc": "模拟治疗比较（G 计算）", "comparator.target_trial": "目标试验模拟", "comparator.map_prior": "MAP 先验",
   "comparator.weighted_cox": "加权 Cox 风险比", "comparator.maic_time_to_event": "事件时间终点的匹配调整间接比较",
   "comparator.aipw": "双重稳健估计（AIPW）", "comparator.covariate_sets": "协变量集敏感性分析",
-  "design.analytic": "方案的解析计算", "design.simulate": "方案的模拟运行", "design.grid": "设计网格", "design.assurance": "成功把握",
+  "design.analytic": "方案的解析计算", "design.simulate": "方案的模拟运行", "design.grid": "设计网格", "design.assurance": VCR_RESULT_QUANTITY_LABELS_ZH.assurance,
   "design.procova": "预后协变量调整", "accrual.poisson_gamma": "Poisson–Gamma 入组预测", "matching.evaluate": "逐条匹配",
   "comparator.negative_control": "阴性对照结局", "comparator.tipping_point": "缺失数据的临界点分析", "comparator.prognostic_adjustment": "预后评分校正（二分类/事件时间）",
 }));

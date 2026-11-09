@@ -1,3 +1,4 @@
+import { VCR_RESULT_QUANTITY_LABELS_ZH } from "@evimed/domain";
 import { VcrAccrualForecasts } from "../VcrAccrualForecasts";
 import { VcrBayesianDesigns } from "../VcrBayesianDesigns";
 import { VcrConfirmatoryDesigns } from "../VcrConfirmatoryDesigns";
@@ -361,14 +362,14 @@ function DesignsView({ studyId, study, data, headline, noneRan, failed, onOpen, 
     cells.push({
       key: "tradeoff",
       node: (
-        <ChartCard title="周期、成本与成功把握的取舍">
+        <ChartCard title="周期、成本与 assurance 的取舍">
           <VcrTradeoffScatter
             designs={data.designs}
             xKey="duration_months"
             yKey="assurance"
             sizeKey="cost"
             xLabel="平均研究时长（月）"
-            yLabel="成功把握"
+            yLabel={VCR_RESULT_QUANTITY_LABELS_ZH.assurance}
             sizeLabel="气泡面积 = 成本"
           />
         </ChartCard>
@@ -781,7 +782,7 @@ function DecisionForm({ studyId, decision, designs, onRecorded }: {
         value={goal}
         onChange={(event) => setGoal(event.target.value)}
         rows={3}
-        placeholder="先写比较目标，再选一个方案。例如：成功把握不低于 70% 的前提下，平均研究时长不超过 18 个月，成本最低……"
+        placeholder="先写比较目标，再选一个方案。例如：assurance 不低于 70% 的前提下，平均研究时长不超过 18 个月，成本最低……"
       />
       <fieldset>
         <legend className="text-caption text-text-3">选定方案</legend>

@@ -2,7 +2,7 @@ import { presentResearchProgress } from "./vcrResearchProgress.mjs";
 import { vcrAnalyticComputationBasis } from "./vcrScientificBasis.mjs";
 import { presentVcrReview } from "./vcrViewsKit.mjs";
 import { createHash } from "node:crypto";
-import { documentExportDigest } from "@evimed/domain";
+import { documentExportDigest, VCR_RESULT_QUANTITY_LABELS_ZH } from "@evimed/domain";
 /**
  * What 「虚拟临床研究」's pages are shown: the presenter (contract 2026-09-29 §5).
  *
@@ -101,7 +101,7 @@ export const JOB_KIND_LABELS = Object.freeze(/** @type {Record<string, string>} 
   weighted_cox_comparator: "加权 Cox 风险比", maic_time_to_event_comparator: "事件时间终点的匹配调整间接比较",
   aipw_comparator: "双重稳健估计（AIPW）", covariate_set_comparator: "协变量集敏感性分析",
   evalue: "E 值", rmst: "RMST 比较", design_analytic: "方案的解析计算", design_simulation: "方案的模拟运行",
-  design_grid: "设计网格", assurance: "成功把握", procova: "预后协变量调整", accrual_forecast: "入组预测",
+  design_grid: "设计网格", assurance: VCR_RESULT_QUANTITY_LABELS_ZH.assurance, procova: "预后协变量调整", accrual_forecast: "入组预测",
   map_prior: "MAP 先验", match_criteria: "逐条匹配", match_extract: "读病历",
   negative_control_comparator: "阴性对照结局", tipping_point: "缺失数据的临界点分析", prognostic_adjustment_comparator: "预后评分校正（二分类/事件时间）",
 }));
@@ -807,7 +807,7 @@ export function designsSentence(designs) {
   const assurance = pick("assurance");
   const power = pick("power");
   const shown = assurance.length ? assurance : power;
-  const label = assurance.length ? "成功把握" : "功效";
+  const label = assurance.length ? VCR_RESULT_QUANTITY_LABELS_ZH.assurance : "功效";
   if (!shown.length) return `已模拟 ${live.length} 个方案`;
   const low = Math.min(...shown);
   const high = Math.max(...shown);
@@ -858,7 +858,7 @@ function overviewMetrics(bundle, allDesigns) {
     const measure = design.measures.assurance ?? design.measures.power;
     if (!measure) continue;
     metrics.push({
-      key: `design:${design.code}`, label: `方案 ${design.code} ${design.measures.assurance ? "成功把握" : "功效"}`,
+      key: `design:${design.code}`, label: `方案 ${design.code} ${design.measures.assurance ? VCR_RESULT_QUANTITY_LABELS_ZH.assurance : "功效"}`,
       lead: metrics.every((/** @type {any} */ entry) => !entry.lead), note: design.name, value: measure,
     });
   }

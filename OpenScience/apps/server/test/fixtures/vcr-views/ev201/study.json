@@ -110,7 +110,7 @@
       "stale": false
     },
     "trial": {
-      "note": "成功把握 58–74%",
+      "note": "4 个方案",
       "stale": false
     },
     "matching": {
@@ -340,7 +340,7 @@
       },
       "profileStatistics": []
     },
-    "headline": "已模拟 3 个方案，成功把握 58%～74%；真实外部对照不可估计，缺 3 项数据。",
+    "headline": "已模拟 3 个方案，按药效的不确定性平均后，得到显著结果的概率（assurance） 58%～74%；真实外部对照不可估计，缺 3 项数据。",
     "metrics": [
       {
         "key": "assumption:control_median_pfs",
@@ -422,7 +422,7 @@
       },
       {
         "key": "design:A",
-        "label": "方案 A 成功把握",
+        "label": "方案 A 按药效的不确定性平均后，得到显著结果的概率（assurance）",
         "lead": true,
         "note": "单臂 + 文献对照",
         "value": {
@@ -443,7 +443,7 @@
           "stale": false,
           "detail": {
             "kind": "run",
-            "title": "成功把握",
+            "title": "按药效的不确定性平均后，得到显著结果的概率（assurance）",
             "fields": [
               {
                 "label": "方法",
@@ -478,7 +478,7 @@
       },
       {
         "key": "design:B",
-        "label": "方案 B 成功把握",
+        "label": "方案 B 按药效的不确定性平均后，得到显著结果的概率（assurance）",
         "lead": false,
         "note": "2:1 随机",
         "value": {
@@ -499,7 +499,7 @@
           "stale": false,
           "detail": {
             "kind": "run",
-            "title": "成功把握",
+            "title": "按药效的不确定性平均后，得到显著结果的概率（assurance）",
             "fields": [
               {
                 "label": "方法",
@@ -534,7 +534,7 @@
       },
       {
         "key": "design:C",
-        "label": "方案 C 成功把握",
+        "label": "方案 C 按药效的不确定性平均后，得到显著结果的概率（assurance）",
         "lead": false,
         "note": "1:1 随机 + 一次期中分析",
         "value": {
@@ -555,7 +555,7 @@
           "stale": false,
           "detail": {
             "kind": "run",
-            "title": "成功把握",
+            "title": "按药效的不确定性平均后，得到显著结果的概率（assurance）",
             "fields": [
               {
                 "label": "方法",
@@ -806,7 +806,7 @@
             "stale": false,
             "detail": {
               "kind": "run",
-              "title": "成功把握",
+              "title": "按药效的不确定性平均后，得到显著结果的概率（assurance）",
               "fields": [
                 {
                   "label": "方法",
@@ -1141,7 +1141,7 @@
             "stale": false,
             "detail": {
               "kind": "run",
-              "title": "成功把握",
+              "title": "按药效的不确定性平均后，得到显著结果的概率（assurance）",
               "fields": [
                 {
                   "label": "方法",
@@ -1476,7 +1476,7 @@
             "stale": false,
             "detail": {
               "kind": "run",
-              "title": "成功把握",
+              "title": "按药效的不确定性平均后，得到显著结果的概率（assurance）",
               "fields": [
                 {
                   "label": "方法",

@@ -206,18 +206,20 @@ export function buildVcrActivity({ now, steps, flight = null, last = null, ledge
 // --- one finding per step ---------------------------------------------------------------------------------------------
 
 /**
- * The power or success assurance of the designs still in the running, as a range: the number a person compares designs on.
+ * The power of the designs still in the running, as a range: the number a person compares designs on (nothing when an assurance was computed:
+ * its name does not fit the strip).
  * @param {readonly Record<string, any>[]} designs
  * @returns {string | null}
  */
 function designRange(designs) {
   const live = designs.filter((design) => !design.dominated);
   const pick = (/** @type {string} */ key) => live.map((design) => finite(object(design.measures?.[key]).value)).filter((value) => value !== null);
-  const assurance = pick("assurance");
-  const power = pick("power");
-  const shown = assurance.length ? assurance : power;
+  // An assurance has a closed name (`VCR_RESULT_QUANTITY_LABELS_ZH`) far longer than the strip's note holds, and a bare number must never
+  // stand for it: the strip then says how many designs there are (the caller's count) and the page beside it names the quantity.
+  if (pick("assurance").length) return null;
+  const shown = pick("power");
   if (!shown.length) return null;
-  const label = assurance.length ? "成功把握" : "功效";
+  const label = "功效";
   const low = Math.round(Math.min(...shown));
   const high = Math.round(Math.max(...shown));
   return `${label} ${low === high ? `${low}%` : `${low}–${high}%`}`;

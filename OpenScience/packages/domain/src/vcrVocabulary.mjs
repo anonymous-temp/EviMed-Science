@@ -1138,6 +1138,73 @@ export const VCR_EFFECT_DISCOUNT = Object.freeze({ time_to_event: Object.freeze(
  * a prediction and an observed value. Below them the result reports the intercept only and says why.
  */
 export const VCR_LOCAL_CALIBRATION_MIN = Object.freeze({ slopeEvents: 10, slopeNonEvents: 10, slopePairs: 10 })
+// ---------------------------------------------------------------------------
+// What a simulated "chance of a good result" is the chance of (round 2, R24)
+// ---------------------------------------------------------------------------
+
+/**
+ * The closed set of names of the chances a result may state. They are the names of different quantities, not a ladder: a result carries
+ * the name of what it computed and no other, in the domain, the page, the reply and the report (Kunzmann et al., Am Stat 2021, Eq 11-22;
+ * O'Hagan, Stevens & Campbell 2005). Every stream emits only these ids.
+ *
+ * - `conditional_power_typical_study`: the chance of a significant result for the typical study, every parameter at its middle value.
+ * - `expected_power_over_studies`: the same averaged over the variation between studies (a new study is drawn each time).
+ * - `expected_power_over_parameters`: also averaged over the model's parameter uncertainty (a posterior draw each time).
+ * - `assurance`: the chance of a significant result averaged over a sourced prior on the drug's effect. It counts a significant result
+ *   whatever the true effect is, a null or an irrelevant one included.
+ * - `expected_power_given_mid`: that average restricted to effects at or above the minimal important difference; shown beside
+ *   `probability_effect_at_least_mid` (the prior's own chance of such an effect), and only when the person states a minimal important difference.
+ * - `trial_success_probability`: significant and the effect at or above the minimal important difference (assurance's product rule:
+ *   expected power given the MID times the chance of such an effect). Computed only when `VCR_QUANTITY_REQUIRES` is all there.
+ *
+ * A programme's or an indication's 「研发成功率」 is no quantity here and is never computed: it needs a declared denominator, evidence of
+ * the transitions between phases and attribution, none of which a simulation holds.
+ */
+export const VCR_RESULT_QUANTITIES = frozen([
+  'conditional_power_typical_study', 'expected_power_over_studies', 'expected_power_over_parameters',
+  'assurance', 'expected_power_given_mid', 'probability_effect_at_least_mid', 'trial_success_probability',
+])
+export const VCR_RESULT_QUANTITY_LABELS_ZH = Object.freeze({
+  conditional_power_typical_study: '在典型研究条件下的把握度',
+  expected_power_over_studies: '考虑研究之间差异后的预期把握度',
+  expected_power_over_parameters: '再考虑模型参数不确定性后的预期把握度',
+  assurance: '按药效的不确定性平均后，得到显著结果的概率（assurance）',
+  expected_power_given_mid: '药效至少达到最小重要差异时的预期把握度',
+  probability_effect_at_least_mid: '药效至少达到最小重要差异的概率',
+  trial_success_probability: '得到显著结果且药效达到最小重要差异的概率',
+})
+/** The power a progression simulation reports, by how its trials vary (`model.uncertainty`; no key at all is the typical study). */
+export const VCR_UNCERTAINTY_MODE_QUANTITY = Object.freeze({
+  typical_study: 'conditional_power_typical_study', new_study: 'expected_power_over_studies', posterior_draws: 'expected_power_over_parameters',
+})
+/** The facts a quantity rests on, in the person's words (the premise says which are missing). */
+export const VCR_QUANTITY_FACT_LABELS_ZH = Object.freeze({
+  effectPrior: '一个说明了来源的药效先验', mid: '你给出的最小重要差异', betweenStudy: '研究之间的差异', estimand: '与研究问题一致的分析方法',
+})
+/** What each quantity that needs more than a simulation needs; the others need nothing beyond the run. */
+export const VCR_QUANTITY_REQUIRES = Object.freeze({
+  assurance: frozen(['effectPrior']),
+  expected_power_given_mid: frozen(['effectPrior', 'mid']),
+  probability_effect_at_least_mid: frozen(['effectPrior', 'mid']),
+  trial_success_probability: frozen(['effectPrior', 'mid', 'betweenStudy', 'estimand']),
+})
+/**
+ * Whether a quantity may be computed from the facts at hand, and what is missing when it may not. A fact not stated true is missing:
+ * nothing is assumed present. Pure; the caller says which facts hold.
+ * @param {string} quantity one of `VCR_RESULT_QUANTITIES`
+ * @param {Partial<Record<'effectPrior' | 'mid' | 'betweenStudy' | 'estimand', boolean>>} facts
+ * @returns {{ computable: boolean, missing: string[], sentence: string | null }} `missing`: keys of `VCR_QUANTITY_FACT_LABELS_ZH`
+ */
+export function vcrQuantityAvailability(quantity, facts) {
+  const needs = /** @type {Record<string, readonly string[]>} */ (VCR_QUANTITY_REQUIRES)[quantity] ?? []
+  const missing = needs.filter((key) => /** @type {Record<string, boolean | undefined>} */ (facts ?? {})[key] !== true)
+  const label = /** @type {Record<string, string>} */ (VCR_RESULT_QUANTITY_LABELS_ZH)[quantity] ?? quantity
+  return { computable: missing.length === 0, missing,
+    sentence: missing.length ? `“${label}”没有计算：还缺${missing.map((key) => /** @type {Record<string, string>} */ (VCR_QUANTITY_FACT_LABELS_ZH)[key]).join('、')}` : null }
+}
+/** Said of every simulated result: what more replicates change and what they never do. */
+export const VCR_SIMULATION_ERROR_SENTENCE_ZH = '多模拟几次只会让模拟本身的误差变小，模型形式带来的误差和错误的药效假设不会因此减少。'
+
 /** What the page says of that figure where it is listed (the premise's folded detail): the source and its limits, no more. */
 export const VCR_EFFECT_DISCOUNT_LABEL_ZH = '效应按已发表的计划—实测差距折减后的把握度'
 export const VCR_EFFECT_DISCOUNT_LIMITS_ZH = '来自一份对肿瘤三期试验生存终点的综述简报（预期风险比 0.66、实测 0.72，原文未核对）：说明计划的效应常被高估，不预测这项试验；二分类和连续终点没有这样的数。'

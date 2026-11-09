@@ -27,7 +27,7 @@
  * @module vcrPremises
  */
 
-import { VCR_EFFECT_DISCOUNT_LABEL_ZH, VCR_EFFECT_DISCOUNT_LIMITS_ZH, VCR_ESTIMAND_LABELS_ZH, VCR_MIN_CELL_SIZE, VCR_PREMISES_DECISIVE_MAX, VCR_PREMISE_SOURCES, vcrTimeUnitOf } from "@evimed/domain";
+import { VCR_EFFECT_DISCOUNT_LABEL_ZH, VCR_EFFECT_DISCOUNT_LIMITS_ZH, VCR_ESTIMAND_LABELS_ZH, VCR_MIN_CELL_SIZE, VCR_PREMISES_DECISIVE_MAX, VCR_PREMISE_SOURCES, VCR_QUANTITY_FACT_LABELS_ZH, VCR_RESULT_QUANTITY_LABELS_ZH, VCR_SIMULATION_ERROR_SENTENCE_ZH, vcrQuantityAvailability, vcrTimeUnitOf } from "@evimed/domain";
 import { VCR_USE_TEXT_ZH } from "./vcrModelApplicability.mjs";
 import { personWord, personMappingPremises } from "./vcrPersonStated.mjs";
 import { imputationPremise } from "./vcrImputationView.mjs";
@@ -196,7 +196,7 @@ function timeWord(configuration, diagnostics) {
  *
  * @param {{ endpointType?: string | null, configuration?: Record<string, any>, diagnostics?: Record<string, any>, effectDiscount?: Record<string, any> | null,
  *   bound?: ReadonlyArray<{ key?: string, path?: string }>, cards?: ReadonlyArray<Record<string, any>>,
- *   appliedDefaults?: ReadonlyArray<{ path: string, value?: unknown }>, hasAssurance?: boolean, assuranceReason?: string | null,
+ *   appliedDefaults?: ReadonlyArray<{ path: string, value?: unknown }>, hasAssurance?: boolean, assuranceReason?: string | null, assuranceRan?: boolean, simulated?: boolean, successFacts?: Record<string, boolean>,
  *   designKind?: string | null, personStated?: Record<string, any> | null }} input
  * `bound`: the cards that were laid over the scenario (the job's own record), by the path each filled; `cards`: the study's cards.
  * @returns {Array<Partial<VcrPremise>>}
@@ -353,9 +353,21 @@ function trialPremises(input) {
       source: "assumed", decisive: false, reason: VCR_EFFECT_DISCOUNT_LIMITS_ZH });
   }
 
+  // Every simulated result says what more replicates do and do not change (R24): a folded sentence, no number behind it.
+  if (input.simulated === true) rows.push({ key: "lab:replicates", label: "模拟的误差", value: VCR_SIMULATION_ERROR_SENTENCE_ZH, source: "default", decisive: false });
+
   // A success probability that is not there, and why (A14): the effect was a single value, and a single value has nothing to integrate.
   if (input.hasAssurance === false && text(input.assuranceReason)) {
-    rows.push({ key: "assurance", label: "成功把握", value: String(input.assuranceReason), source: "default", decisive: false });
+    rows.push({ key: "assurance", label: VCR_RESULT_QUANTITY_LABELS_ZH.assurance, value: String(input.assuranceReason), source: "default", decisive: false });
+  }
+  // The joint chance (significant AND the effect at or above the minimal important difference) is computed only when all four things it
+  // rests on hold; beside an assurance the page says which are missing, in the person's words, instead of leaving the reader to read the
+  // assurance as it (`facts` is what the caller knows: an absent fact is a missing one).
+  if (input.assuranceRan === true) {
+    const availability = vcrQuantityAvailability("trial_success_probability", { effectPrior: true, ...object(input.successFacts) });
+    if (!availability.computable) {
+      rows.push({ key: "trialSuccess", label: VCR_RESULT_QUANTITY_LABELS_ZH.trial_success_probability, value: `没有计算：还缺${availability.missing.map((key) => /** @type {Record<string, string>} */ (VCR_QUANTITY_FACT_LABELS_ZH)[key]).join("、")}`, source: "default", decisive: false });
+    }
   }
   return rows;
 }

@@ -54,6 +54,7 @@ import { VCR_DEFAULT_STUDY_NAME, vcrObjectNode, vcrStudyNameFrom } from "./vcrSt
 import { vcrSealState } from "./vcrSeal.mjs";
 import { VCR_SCHEMA } from "./vcrPersistence.mjs";
 import { vcrTypeOneLevel, vcrWithTypeOneVerdicts } from "./vcrTypeOneVerdict.mjs";
+import { vcrWithSimulationNote } from "./vcrSimulationNote.mjs";
 import { vcrProgressionWithDifferences } from "./vcrProgression.mjs";
 import {
   presentConversationStudy, presentExport, presentModels, presentPrecedents, presentReviewNotes, presentStudy, presentSummary, resultNode, useCeilingOf, intakeNeedsOf,
@@ -1795,7 +1796,7 @@ export class VcrService {
    * @param {any} study @param {any} shown
    */
   async #resultsAnswer(study, shown) {
-    const results = (Array.isArray(shown?.results) ? shown.results : []).map((/** @type {any} */ result) => vcrProgressionWithDifferences(result));
+    const results = (Array.isArray(shown?.results) ? shown.results : []).map((/** @type {any} */ result) => vcrWithSimulationNote(vcrProgressionWithDifferences(result)));
     if (!Array.isArray(shown?.results)) return shown;
     const holds = (/** @type {any} */ result) => [result?.measures, ...(Array.isArray(result?.diagnostics?.cells) ? result.diagnostics.cells.map((/** @type {any} */ cell) => cell?.measures) : [])]
       .some((measures) => Array.isArray(measures) && measures.some((/** @type {any} */ measure) => measure?.name === "type_one_error"));

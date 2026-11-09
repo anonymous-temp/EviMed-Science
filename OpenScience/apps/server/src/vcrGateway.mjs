@@ -90,6 +90,7 @@ import { vcrWinRatioSubjectId } from "./vcrWinRatio.mjs";
 import { vcrPrognosticSubjectId } from "./vcrPrognosticTraining.mjs";
 import { vcrProgressionSubjectId, vcrProgressionWithDifferences } from "./vcrProgression.mjs";
 import { vcrTypeOneLevel, vcrTypeOneVerdict, vcrWithTypeOneVerdicts } from "./vcrTypeOneVerdict.mjs";
+import { vcrWithSimulationNote } from "./vcrSimulationNote.mjs";
 import { vcrSynthesisSubjectId } from "./vcrEvidenceSynthesis.mjs";
 import { vcrBiasScenarioFromComparison } from "./vcrBiasAnalysis.mjs";
 import { renderVcrNumbers } from "./vcrRender.mjs";
@@ -2992,7 +2993,7 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
           const typeOneVerdict = typeOne ? vcrTypeOneVerdict({ value: typeOne.value, mcse: typeOne.mcse, bound: typeOneLevel }) : null;
           if (typeOneVerdict && safe && typeof safe === "object") safe.typeOneError = { verdict: typeOneVerdict.status, text: `I 类错误${typeOneVerdict.text}` };
           // and so is each cell of a design grid that measured one (phase 3: a grid's null check carried no verdict at all)
-          if (safe && typeof safe === "object" && safe.result && typeof safe.result === "object") safe.result = vcrProgressionWithDifferences(vcrWithTypeOneVerdicts(safe.result, typeOneLevel));
+          if (safe && typeof safe === "object" && safe.result && typeof safe.result === "object") safe.result = vcrWithSimulationNote(vcrProgressionWithDifferences(vcrWithTypeOneVerdicts(safe.result, typeOneLevel)));
           if (origin && ["succeeded","failed","canceled"].includes(job.state)) await vcr.store.query(`UPDATE evimed_vcr.jobs
             SET checkpoint=checkpoint || jsonb_build_object('originTerminalObservation',$4::jsonb) WHERE id=$1
             AND checkpoint->'conversationOrigin'->>'runId'=$2 AND checkpoint->'conversationOrigin'->>'rootSessionId'=$3`,[job.id,origin.runId,origin.rootSessionId,JSON.stringify({runId:origin.runId,rootSessionId:origin.rootSessionId,callId:origin.callId,state:job.state,resultKey:result ? `${result.id}:${result.version}` : 'none'})]);

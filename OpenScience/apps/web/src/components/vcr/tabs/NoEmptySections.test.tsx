@@ -13,7 +13,7 @@ import { MatchingTab } from "./MatchingTab";
 import { DataTab } from "./DataTab";
 
 /**
- * A card or a section that holds nothing but its title is not drawn (2026-10-07 live walk: 「周期、成本与成功把握的取舍」 over an empty
+ * A card or a section that holds nothing but its title is not drawn (2026-10-07 live walk: 「周期、成本与 assurance 的取舍」 over an empty
  * chart on the trial tab, 「定义库」 over nothing on the population tab). The seven study tabs are rendered from the server's own pages
  * and, for each part that can come back empty, from a copy of the page with that part emptied; none may leave a heading with no
  * content under it.
@@ -106,7 +106,7 @@ describe("no title over an empty box", () => {
     installVcrServer(network.productRequest, { [tab("trial")]: raw });
     const view = await drawTab(<TrialTab studyId={STUDY_ID} study={study()} />);
     await screen.findByRole("table", { name: "方案的对比" });
-    expect(view.queryByText("周期、成本与成功把握的取舍")).toBeNull();
+    expect(view.queryByText("周期、成本与 assurance 的取舍")).toBeNull();
     expect(view.queryByText("里程碑")).toBeNull();
     expect(view.queryByText("本次运行")).toBeNull();
     expect(emptyTitles(view.container)).toEqual([]);

@@ -359,7 +359,7 @@ test("a notice title puts a space between the design's name and the label of its
     vcrJobNoticeText({ resultKind: "trial_scenario", stage, label, state: "succeeded", result: { conclusion: "estimable", measures: [measure] } })?.title;
   assert.equal(title("试验方案 4", { name: "type_one_error", value: 0.025 }), "方案模拟完成：试验方案 4 I 类错误 2.5%");
   assert.equal(title("试验方案 2", { name: "power", value: 0.764 }), "方案模拟完成：试验方案 2 功效 76.4%");
-  assert.equal(title("试验方案 3", { name: "assurance", value: 0.71 }, "assurance"), "成功把握计算完成：试验方案 3 成功把握 71%");
+  assert.equal(title("试验方案 3", { name: "assurance", value: 0.71 }, "assurance"), "assurance 计算完成：试验方案 3 按药效的不确定性平均后，得到显著结果的概率（assurance） 71%");
   assert.equal(title("", { name: "power", value: 0.9 }), "方案模拟完成：功效 90%", "no name, no leading space");
 });
 

@@ -1,4 +1,4 @@
-import { vcrPredictionLimit, VCR_EFFECT_DISCOUNT_LABEL_ZH } from "@evimed/domain";
+import { vcrPredictionLimit, VCR_EFFECT_DISCOUNT_LABEL_ZH, VCR_RESULT_QUANTITY_LABELS_ZH } from "@evimed/domain";
 import { vcrPopulationGenerationInput } from "./vcrSubjects.mjs";
 import { presentVcrReview } from "./vcrViewsKit.mjs";
 /**
@@ -1265,7 +1265,7 @@ export function presentTrialTab(bundle) {
   const headlineRow = newestRow;
   const decision = decisions[0] ?? null;
   const columnSpec = [
-    ["required_events", "所需事件数", "例"], ["sample_size", "样本量", "例"], ["expected_events", "期望事件数", null], ["power", "功效", "%"], ["assurance", "成功把握", "%"],
+    ["required_events", "所需事件数", "例"], ["sample_size", "样本量", "例"], ["expected_events", "期望事件数", null], ["power", "功效", "%"], ["assurance", VCR_RESULT_QUANTITY_LABELS_ZH.assurance, "%"],
     ["type_one_error", "I 类错误", "%"], ["bias", "偏倚", null], ["coverage", "覆盖率", "%"], ["expected_sample_size", "期望样本量", "例"], ["expected_sample_size_null", "无效应时的期望样本量", "例"], ["first_stage_stop_probability_null", "无效应时在第一阶段就停止的概率", "%"], ["duration_months", "平均研究时长", "月"], ["last_patient_in_months", "末例入组（入组假设模拟）", "月"], ["cost", "成本", "万元"],
   ];
   // The type I error is a column as soon as a design waits for one (the check follows the result): a cell that says 排队中 needs its column.
@@ -1426,6 +1426,8 @@ function trialPremiseInput(bundle, row) {
     appliedDefaults: appliedDefaultsOf(scenario, stages),
     // which numbers are in the person's own messages (a conversation's design job froze it): the newest stage that has the record
     personStated: stages.simulation?.diagnostics?.personStated ?? stages.analytic?.diagnostics?.personStated ?? row._result?.diagnostics?.personStated ?? null,
+    simulated: Boolean(stages.simulation),
+    assuranceRan: Boolean(stages.assurance),
     hasAssurance: !(supportsAssurance && ran) || Boolean(stages.assurance),
     assuranceReason: "没有算：效应只有一个值，没有可以积分的预测分布",
     // The power the design keeps at the effect reduced by the published gap, from the analytic stage (C6); absent where there is none.
@@ -1528,7 +1530,7 @@ function operatingCharacteristicsView(diagnostics) {
 }
 
 /** What a stage of a design's result is called when it is said not to have been redone. */
-const STAGE_WORDS = Object.freeze(/** @type {Record<string, string>} */ ({ assurance: "成功把握", analytic: "解析计算", simulation: "仿真", reconstruct: "曲线重建", rmst: "RMST 比较" }));
+const STAGE_WORDS = Object.freeze(/** @type {Record<string, string>} */ ({ assurance: VCR_RESULT_QUANTITY_LABELS_ZH.assurance, analytic: "解析计算", simulation: "仿真", reconstruct: "曲线重建", rmst: "RMST 比较" }));
 
 /**
  * The notes under the design table: a stage the design had and its latest
@@ -1545,7 +1547,7 @@ function notRerunNotes(designRows) {
     for (const entry of list(object(row._result?.diagnostics).notRerun).map(object)) {
       const word = STAGE_WORDS[String(entry.stage)] ?? String(entry.stage);
       notes.push(entry.stage === "assurance"
-        ? `方案 ${row.code}：成功把握不再显示——效应假设卡现在没有预测分布，没有可以积分的先验，这一项没有重算。`
+        ? `方案 ${row.code}：${VCR_RESULT_QUANTITY_LABELS_ZH.assurance}不再显示——效应假设卡现在没有预测分布，没有可以积分的先验，这一项没有重算。`
         : `方案 ${row.code}：上一次的${word}没有重算，已不再显示。`);
     }
   }

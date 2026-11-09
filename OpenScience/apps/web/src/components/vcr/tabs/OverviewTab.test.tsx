@@ -63,7 +63,7 @@ beforeEach(() => {
 describe("总览", () => {
   it("leads with the study's own sentence, and the question when the study has not found anything yet", () => {
     draw(study());
-    expect(screen.getByText("已模拟 3 个方案，成功把握 58%～74%；真实外部对照不可估计，缺 3 项数据。")).toBeInTheDocument();
+    expect(screen.getByText("已模拟 3 个方案，按药效的不确定性平均后，得到显著结果的概率（assurance） 58%～74%；真实外部对照不可估计，缺 3 项数据。")).toBeInTheDocument();
   });
 
   it("is the sentence, the numbers it has, what needs the reader, the seven steps and the deliverables — in that order, and nothing stacked under them", () => {
@@ -142,7 +142,7 @@ describe("总览", () => {
       // A step that did not finish says so and keeps the number of what it kept.
       expect(patients.querySelector("[data-vcr-step-state='failed']")).not.toBeNull();
       expect(patients).toHaveTextContent("2,000 名");
-      expect(trial).toHaveTextContent("成功把握 58–74%");
+      expect(trial).toHaveTextContent("4 个方案");
     });
 
     it("says nothing of time for a step nobody has started, and when the others moved for the rest", () => {

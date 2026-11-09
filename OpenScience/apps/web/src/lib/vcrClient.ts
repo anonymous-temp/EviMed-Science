@@ -394,7 +394,7 @@ export interface VcrPremise {
   /** 文献 / 假设 / 默认 / 你给的数据 / 由你给的数据算出. */
   source: "literature" | "assumed" | "default" | "given" | "derived";
   decisive: boolean;
-  /** One short line of why, where the premise is a reason and not a number (「成功把握」 not computed). */
+  /** One short line of why, where the premise is a reason and not a number (an assurance not computed). */
   reason?: string | null;
   /** The key of the premise this one is derived from (source `derived`). */
   from?: string;

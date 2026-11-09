@@ -29,6 +29,7 @@
  */
 
 import { createHash } from "node:crypto";
+import { VCR_RESULT_QUANTITY_LABELS_ZH, VCR_SIMULATION_ERROR_SENTENCE_ZH, VCR_UNCERTAINTY_MODE_QUANTITY } from "@evimed/domain";
 import { finishPremises } from "./vcrPremises.mjs";
 import { list, markFor, measureValue, numeric, object, text, zhUnit } from "./vcrViewsKit.mjs";
 import { researchQuestionPremises, resultQuestionInput } from "./vcrResearchQuestionView.mjs";
@@ -153,9 +154,9 @@ function alzheimerPremisesOf(progression) {
   ];
   const uncertainty = String(progression.uncertainty ?? "");
   const uncertaintyWords = /** @type {Record<string, string>} */ ({
-    new_study: "每次模拟的试验都按一项新研究抽取研究层面的参数（研究之间的差异算在功效里）",
+    new_study: `每次模拟的试验都按一项新研究抽取研究层面的参数（研究之间的差异算在“${VCR_RESULT_QUANTITY_LABELS_ZH.expected_power_over_studies}”里）`,
     typical_study: "不考虑研究之间的差异，每次模拟都是同一个典型研究",
-    posterior_draws: "每次模拟先抽一组后验参数，再按它抽一项新研究（参数的不确定性和研究之间的差异都算在功效里）",
+    posterior_draws: `每次模拟先抽一组后验参数，再按它抽一项新研究（参数的不确定性和研究之间的差异都算在“${VCR_RESULT_QUANTITY_LABELS_ZH.expected_power_over_parameters}”里）`,
   });
   if (uncertaintyWords[uncertainty]) rows.push({ key: "progression:ad:uncertainty", label: "试验之间的差异", value: uncertaintyWords[uncertainty], source: assumedHas(progression, "model.uncertainty") ? "default" : "given" });
   const apoe = list(population.apoe4).map(Number); const means = list(population.ageMeanByApoe4).map(Number);
@@ -172,14 +173,15 @@ function alzheimerPremisesOf(progression) {
   if (effect) rows.push({ key: "progression:ad:dosing", label: "用药时间", source: assumedHas(progression, "treatment.doseEnd") ? "default" : "given",
     value: `第 ${plain(Number(treatment.doseBegin ?? 0))}–${plain(Number(treatment.doseEnd))} 周` });
   rows.push({ key: "progression:ad:curves", label: "曲线怎么算的", source: "default",
-    value: "平均病程按典型研究、用参数的中位数精确计算；功效和估计差值是模拟的" });
+    value: "平均病程按典型研究、用参数的中位数精确计算；检验的把握度和估计差值是模拟的" });
+  rows.push({ key: "lab:replicates", label: "模拟的误差", source: "default", decisive: false, value: VCR_SIMULATION_ERROR_SENTENCE_ZH });
   return finishPremises(rows);
 }
 
 /**
  * What one run compared, said in its title so that no two runs of a study read alike (live 2026-11-07: twelve Alzheimer runs -- no drug,
  * a symptomatic and a disease-modifying hypothesis at 200 per arm, then sample sizes from 800 to 1,800 with and without study-to-study
- * variation -- each read 「阿尔茨海默病 ADAS-cog 11 进展：人群的平均病程与检验的功效」). The hypothesis is the scenario's own values, the arm
+ * variation -- each read 「阿尔茨海默病 ADAS-cog 11 进展：人群的平均病程与检验的把握度」). The hypothesis is the scenario's own values, the arm
  * sizes are the engine's count of people at the first visit (everyone is observed then), else the people of one simulated trial.
  * @param {Record<string, any>} result @param {Record<string, any>} progression @param {boolean} alzheimer
  * @returns {string}
@@ -259,7 +261,8 @@ function cardOf(result, staleMark) {
     label: "人群层面，不是对个人的预测",
     reason: "这条曲线只描述一组人的平均病程和人与人之间的散布，用来估计检验的把握；它不能告诉你某一个人会怎样。",
     power: power ? shown(power) : null,
-    powerName: isNull ? "没有真实效应时误判有效的概率" : "判出有效的把握（模拟）",
+    powerName: isNull ? "没有真实效应时误判有效的概率" : VCR_RESULT_QUANTITY_LABELS_ZH[VCR_UNCERTAINTY_MODE_QUANTITY[String(progression.uncertainty ?? "typical_study")] ?? "conditional_power_typical_study"],
+    powerQuantity: isNull ? null : VCR_UNCERTAINTY_MODE_QUANTITY[String(progression.uncertainty ?? "typical_study")] ?? "conditional_power_typical_study",
     approximation: approx === null ? null : shown({ name: isNull ? "type_one_error" : "power", value: approx, source: "calculated" }),
     expected: difference ? { value: shown(difference), words: slope ? "治疗组减对照组的平均斜率之差" : alzheimer ? "治疗组减对照组的平均变化之差（典型研究，按那时仍在随访的人）" : "治疗组减对照组的平均变化之差" } : null,
     timeUnit: unit ? unitWords(unit) : unit, visits: curves.map((curve) => Number(curve.visit)),
