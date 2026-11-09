@@ -106,7 +106,7 @@ export function vcrEffectPriorFromPool(result, options = {}) {
 /**
  * The effect prior of the researcher's own phase-2 estimate (or of any single published estimate): a normal with the estimate as its mean and the SD its
  * standard error, or the interval it states, implies.
- * @param {{ estimate: number, se?: number, lower?: number, upper?: number, level?: number, citation?: string, note?: string, estimand?: unknown, own?: boolean }} input
+ * @param {{ estimate: number, se?: number, lower?: number, upper?: number, level?: number, citation?: string, note?: string, estimand?: unknown, own?: boolean, scale?: 'points' | 'share' }} input `scale` says what the estimate is in: points of the score (the symptomatic target) or a share of the decline (the disease-modifying one)
  * @param {{ target?: string }} [options]
  * @returns {{ ok: true, target: string, distribution: Record<string, any>, estimand: { text: string, stated: boolean }, premises: string[], basis: string } | { ok: false, reason: string, detail: string }}
  */

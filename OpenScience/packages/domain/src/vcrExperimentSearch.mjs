@@ -554,7 +554,7 @@ export function vcrSearchFromForm(input) {
   const directions = ['minimize', 'maximize'].filter((key) => goalIn[key] !== undefined)
   if (directions.length !== 1 || typeof goalIn[directions[0]] !== 'string') bad('search_form_goal', 'goal', 'A goal minimizes or maximizes exactly one measure: {minimize: "expected_sample_size"}.')
   const errorControlled = method === 'design.simulate' || method === 'patients.progression'
-  /** @type {Array<{ name: string, truth: Record<string, any> }>} */
+  /** @type {Array<{ name: string, truth: Record<string, any>, world?: Record<string, any> }>} */
   let truths = []
   /** @type {string} */
   let effectName = 'alternative'

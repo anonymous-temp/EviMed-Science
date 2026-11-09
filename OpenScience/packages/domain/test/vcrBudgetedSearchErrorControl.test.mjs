@@ -32,7 +32,7 @@ function certified(/** @type {Record<string, any>} */ manifest, /** @type {numbe
     const p = binom(replicates, alt ? power : typeOne, mulberry32((worldSeed * 1000003 + unit.seed) >>> 0)) / replicates
     const measures = [{ name: 'expected_sample_size', value: 200, mcse: 0, simulated: true, ...(screening ? { precision: 'screening' } : {}) },
       { name: alt ? 'power' : 'type_one_error', value: p, mcse: Math.sqrt(p * (1 - p) / replicates), simulated: true, ...(screening ? { precision: 'screening' } : {}) }]
-    state = vcrCampaignRecord(manifest, { ...state, inFlight: { unitKey: unit.key, unit } }, unit, { jobId: `j${unit.key}`, state: 'succeeded', seed: unit.seed, replicates, precision: screening ? 'screening' : 'final', measures, cpuSeconds: 0 })
+    state = vcrCampaignRecord(manifest, { ...state, inFlight: { unitKey: unit.key, unit } }, /** @type {any} */ (unit), { jobId: `j${unit.key}`, state: 'succeeded', seed: unit.seed, replicates, precision: screening ? 'screening' : 'final', measures, cpuSeconds: 0 })
   }
   void vcrCampaignCandidates
   return Boolean(vcrCampaignVerdict(manifest, state).best)
