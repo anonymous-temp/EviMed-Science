@@ -769,7 +769,7 @@ export function createVcrRoutes(dependencies) {
       if (!longitudinal && method === 'GET') return reply({available:false,records:[],providers:[],templates:LONGITUDINAL_TEMPLATES});
       if (!longitudinal) throw UNAVAILABLE();
       if (method === 'GET' && parts.length === 3) return reply(presentLongitudinal(await longitudinal.view(study,
-        Object.fromEntries(['id','parentId','kind','offset','limit'].map(key => [key,url.searchParams.get(key)]))),{minCell:service.minCell,page:true}));
+        Object.fromEntries(['id','parentId','kind','offset','limit'].map(key => [key,url.searchParams.get(key)])),undefined,String(user.id)),{minCell:service.minCell,page:true}));
       // The owner's protected per-person read: its keys are the study's pseudonyms, so it is not the suppressed aggregate view above.
       if (method === 'GET' && parts.length === 5 && parts[4] === 'subjects') {
         // a per-person read, judged as one at the route too (review eng P2-3): the artifact's own lineage check stays the second guard

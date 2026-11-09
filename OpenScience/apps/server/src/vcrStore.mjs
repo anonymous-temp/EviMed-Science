@@ -454,12 +454,15 @@ export class VcrStore extends VcrStoreBase {
 
   /** @param {string} studyId @param {any} [filter] */
   longitudinalIndex(studyId,filter = {}) { return longitudinalIndex(this,studyId,filter); }
+  /** Set by the longitudinal package: judges which artifact rows an actor may still be served (a snapshot of this store carries it). @type {null | ((studyId:string,rows:any[],actor?:string|null) => Promise<Set<string>>)} */
+  longitudinalGuard = null;
   /** Read every report input at one PostgreSQL snapshot. @param {(store:VcrStore) => Promise<any>} operation */
   async reportSnapshot(operation) {
     await this.ready();
     return this.database.transaction(async (client) => {
       await client.query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
       const snapshot = new VcrStore({ database: this.database });
+      snapshot.longitudinalGuard = this.longitudinalGuard;
       snapshot.transaction = async (read) => read(client);
       return operation(snapshot);
     });

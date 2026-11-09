@@ -98,3 +98,24 @@ test('F02 the comparison keeps the outcome source in its lineage: withdrawing th
   await vcr.store.query("UPDATE evimed_vcr.sources SET status='withdrawn' WHERE id=$1",[outcomeSource.id]);
   await assert.rejects(() => vcr.longitudinal.artifacts.read(study,comparison.id,'owner'),error => /withdrawn/.test(String(error.code)) && error.status === 403);
 });
+
+test('R02 follow-up: after the outcome source is withdrawn no read path serves a summary whose lineage includes it (list, view, run read, report model, export inputs)',options,async () => {
+  const {comparison,outcomeSource} = await runMixedComparison();
+  const lineage = await vcr.longitudinal.artifacts.record(study.id,comparison.id);
+  const idsOf = (/** @type {any} */ shown) => JSON.stringify([...(shown?.records ?? []),...(shown?.related ?? [])].map((/** @type {any} */ r) => r.id)).concat(JSON.stringify(Object.keys(shown?.byId ?? {})));
+  const everyPath = async () => ({
+    view: await vcr.longitudinal.view(study,{all:true}),
+    page: await vcr.longitudinal.view(study,{},undefined,'owner'),
+    store: await vcr.store.longitudinalIndex(study.id,{all:true}),
+    run: await vcr.service.runtimeRead(study,'longitudinal'),
+    report: (await vcr.service.reportModel(study)).longitudinal,
+    exportInputs: (await (await import('../src/vcrModelDocuments.mjs')).readModelAnalysisInputs(vcr.store,study)).longitudinal,
+  });
+  for (const [path,shown] of Object.entries(await everyPath())) assert.ok(idsOf(shown).includes(comparison.id),`${path} serves it while the grant stands`);
+  await vcr.store.query("UPDATE evimed_vcr.sources SET status='withdrawn' WHERE id=$1",[outcomeSource.id]);
+  assert.ok(lineage.source_ids.includes(outcomeSource.id));
+  for (const [path,shown] of Object.entries(await everyPath())) {
+    assert.ok(!idsOf(shown).includes(comparison.id),`${path} no longer lists the comparison`);
+    assert.ok(!JSON.stringify(shown).includes(comparison.id),`${path} no longer carries any summary of it`);
+  }
+});

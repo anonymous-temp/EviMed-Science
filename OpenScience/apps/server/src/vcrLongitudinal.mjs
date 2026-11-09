@@ -70,6 +70,11 @@ function lineageOf(rows,parentId) {
 export function createVcrLongitudinal({store,dataStore,dataPlane,matchStore,access,jobs,config = {},fetchImpl,now = () => new Date()}) {
   if (!dataPlane) return null;
   const artifacts = new VcrLongitudinalStore({store,plane:dataPlane,access});
+  // every list, report model and run read of an artifact goes through the store's index; this is the lineage judgement it applies
+  store.longitudinalGuard = async (/** @type {string} */ studyId,/** @type {any[]} */ rows,/** @type {string | null | undefined} */ actor) => {
+    const study = await store.studyById(studyId);
+    return study ? artifacts.permitted(study,rows,actor) : new Set();
+  };
   const providers = createForecastProviders({file:config.vcrForecastProvidersFile,fetchImpl,now});
   /** @param {any} study @param {string} actor @param {string} ability */
   const authorize = (study,actor,ability) => access.require({studyId:study.id,actor,ability,purpose:'vcr',note:'longitudinal research'});
@@ -475,8 +480,8 @@ export function createVcrLongitudinal({store,dataStore,dataPlane,matchStore,acce
         actionContext:held.content.actionContext ?? held.row.summary?.actionContext ?? null};
     },
     /** @param {any} study @param {any} [filter] @param {any} [readStore] */
-    async view(study,filter = {},readStore = store) {
-      return {...await artifacts.list(study.id,filter,readStore),providers:await providers.list().catch(() => []),
+    async view(study,filter = {},readStore = store,actor = null) {
+      return {...await artifacts.list(study.id,filter,readStore,actor),providers:await providers.list().catch(() => []),
         candidates:forecastCandidates.candidates,jobSchemas:VCR_LONGITUDINAL_SCHEMAS,
         available:true,templates:LONGITUDINAL_TEMPLATES,interfaces:['event_history_to_trajectories','external_prediction_file'],
         alternatives:['literature_scenario','sensitivity_analysis','trial_design']};
