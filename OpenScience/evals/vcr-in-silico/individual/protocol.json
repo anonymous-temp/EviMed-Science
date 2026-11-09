@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "plan": "R33",
+  "folds": 5,
+  "levels": [0.5, 0.8, 0.95],
+  "bootstrap": { "replicates": 2000, "seed": 20261109 },
+  "data": {
+    "pbcseq": { "source": "survival::pbcseq", "survivalVersion": "3.5-8", "rows": 1945, "csvSha256": "6646b6069a46c6762e673f8f067c2dec856ed3e49bc871382c83f3f28c2b8fc5", "csvRecipe": "write.csv(pbcseq, row.names = FALSE), lines joined by newline, SHA-256 of the text" },
+    "jmAids": { "source": "JM 1.5-2 (CRAN, 2022-08-08), data/aids.rda", "tarballSha256": "d2afe10ce15c14dc80c68a6e726908d2938b4eeaf143ae966d0d85fb8a297a8c", "tarballMd5": "19c57d95fd721c8520eee6cde08059a6", "sha256": "6175d3d0ecc45676f60d8ddfc09ccc0d5d05822a1aae6bf85176879a9719a2af", "md5InPackageMD5File": "4107b3274b78cf0f85272e43987c68ac", "rows": 1405 },
+    "actg175": { "source": "speff2trial 1.0.5 (CRAN, 2022-05-31), data/ACTG175.txt, fetched by E1", "tarballSha256": "ecb3579670c360786da55346f783091f6b71bf6a49a920ab1224d254cd55e4a1", "memberSha256": "7b52e6b3701a1f24090ef0388f1c148d5286450f97276d9c8fbe611ce0c76779", "rows": 2139 }
+  },
+  "datasets": {
+    "pbcseq": { "role": "primary", "historyDaysMax": 243, "targetDay": 365, "targetWindowDays": 60, "minHistory": 2, "laterDaysMax": 1095, "horizonBinsMonths": [0, 6, 12, 24] },
+    "aids": { "role": "secondary", "historyMonthsMax": 6, "targetMonth": 12, "laterMonthsMax": 18, "minHistory": 2, "horizonBinsMonths": [0, 6, 12] },
+    "actg175": { "role": "secondary", "week420": 20, "week496": 96, "minHistory": 2, "horizonBinsWeeks": [0, 76] }
+  },
+  "code": { "individualizeR": "3ed5d6a6bfc5e730e907a5158d05ac7be834fb5eff0e176d9989d48b99199879" }
+}
