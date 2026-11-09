@@ -76,6 +76,11 @@ const store = {
   async modelPlanVersions() { return []; },
   // The protocol's visit schedule and the regulatory log: neither holds a head count, and both are read like the rest.
   async schedule() { return [{ visit: "筛选期", day: -14, windowDays: 3, note: "", procedures: [{ name: "知情同意", note: "" }] }]; },
+  // The study's research question: a versioned row of free fields and the basis of each, read through `presentResearchQuestion` like the page does.
+  async researchQuestions() {
+    return [{ id: "main", version: 2, studyId: "std_1", fields: { question: "多奈哌齐能否延缓恶化", estimand: "treatment policy" },
+      bases: { question: "person_stated", estimand: "model_inferred" }, written: ["question", "estimand"], by: "u1", createdAt: AT }];
+  },
   async regulatoryContacts() {
     return [{ id: "ctc_1", date: "2026-09-30", agency: "药审中心", type: "沟通交流会议", summary: "", outcome: "", attachments: [], source: "researcher", recordedAt: AT }];
   },

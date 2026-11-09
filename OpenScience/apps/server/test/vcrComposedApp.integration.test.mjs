@@ -186,6 +186,8 @@ function requests(target, ids) {
     "GET /studies/:id/longitudinal": async () => ["GET", `${S}/longitudinal`, undefined],
     "GET /studies/:id/longitudinal/:prediction/subjects": async () => ["GET", `${S}/longitudinal/vlf_missing/subjects`, undefined],
     "GET /studies/:id/followup-history": async () => ["GET", `${S}/followup-history`, undefined],
+    "GET /studies/:id/research-question": async () => ["GET", `${S}/research-question`, undefined],
+    "POST /studies/:id/research-question": async () => ["POST", `${S}/research-question`, { question: "同一个问题" }],
     "POST /studies/:id/longitudinal/histories": async () => ["POST", `${S}/longitudinal/histories`, {}],
     "POST /studies/:id/longitudinal/predictions": async () => ["POST", `${S}/longitudinal/predictions`, {}],
     "POST /studies/:id/longitudinal/benchmarks": async () => ["POST", `${S}/longitudinal/benchmarks`, {}],
