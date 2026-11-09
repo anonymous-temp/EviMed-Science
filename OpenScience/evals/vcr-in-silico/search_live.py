@@ -47,7 +47,8 @@ def calls_of(rows):
             calls[d.get("callId")] = {"name": short(d.get("name")), "args": args if isinstance(args, dict) else {}, "result": ""}
             order.append(d.get("callId"))
         elif t == "tool/result":
-            c = calls.get(d.get("callId"))
+            m = d.get("message") or {}
+            c = calls.get(d.get("callId") or m.get("toolCallId") or (m.get("source") or {}).get("callId"))
             if c is not None:
                 c["result"] = text_of((d.get("message") or {}).get("content", []))
     return [calls[i] for i in order]
