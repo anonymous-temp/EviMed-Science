@@ -81,21 +81,34 @@ test('the child answers the clinical fields only, and code completes a decision 
   assert.equal(completeDecision({ ...answer, trialId: 'trial-z' }, prepared), null, 'a pair outside the execution is not completed')
 })
 
-test('code counts the parts of a composite criterion and the days of a time window', () => {
+test('code decides the parts of a composite criterion and the days of a time window the assessment left open', () => {
   const { prepared } = twoTrials()
   const base = { subjectKey: 'patient-a', trialId: 'trial-b', clinicalEligibility: 'eligible', recommendation: { priority: 0.5, rationale: 'r' }, unresolvedFacts: [], assumptions: [] }
   const decision = completeDecision({ ...base, criteria: [
-    { criterionId: 'b1', kind: 'inclusion', verdict: 'satisfied', basis: 'inferred', evidenceIds: [], reason: 'r', assumptions: [], missingFact: '', rule: { kind: 'atLeast', count: 2 }, timing: null,
-      parts: [{ text: 'prior MI', verdict: 'satisfied', basis: 'stated', evidenceIds: ['e:2.2'], timing: null }, { text: 'prior CABG', verdict: 'unknown', basis: 'silent', evidenceIds: [], timing: null }, { text: 'angina', verdict: 'not-satisfied', basis: 'silent', evidenceIds: [], timing: null }] },
-    { criterionId: 'b2', kind: 'exclusion', verdict: 'not-satisfied', basis: 'stated', evidenceIds: ['e:2.2'], reason: 'r', assumptions: [], missingFact: '', parts: [], rule: null,
-      timing: { eventDate: '2069-03-15', referenceDate: '2069-04-07', windowDays: 183, relation: 'within' } },
+    { criterionId: 'b1', kind: 'inclusion', verdict: 'unknown', basis: 'inferred', evidenceIds: [], reason: 'r', assumptions: [], missingFact: 'prior CABG', rule: { kind: 'atLeast', count: 2 }, timing: null,
+      parts: [{ text: 'prior MI', verdict: 'satisfied', basis: 'stated', evidenceIds: ['e:2.2'], timing: null }, { text: 'prior CABG', verdict: 'satisfied', basis: 'stated', evidenceIds: ['e:1.4'], timing: null }, { text: 'angina', verdict: 'not-satisfied', basis: 'silent', evidenceIds: [], timing: null }] },
+    { criterionId: 'b2', kind: 'exclusion', verdict: 'unknown', basis: 'stated', evidenceIds: ['e:2.2'], reason: 'r', assumptions: [], missingFact: 'date of MI', parts: [], rule: null,
+      timing: { eventDate: '2069-03-15', referenceDate: null, windowDays: 183, relation: 'within' } },
   ] }, prepared)
   assert.equal(applyCriterionLogic(decision), 2)
-  assert.equal(decision.criteria[0].verdict, 'unknown', 'one of the two required parts is open')
+  assert.equal(decision.criteria[0].verdict, 'satisfied', 'two of the listed parts are met')
+  assert.equal(decision.criteria[0].missingFact, undefined)
   assert.equal(decision.criteria[1].verdict, 'satisfied', 'an MI 23 days before the newest record is within six months, so the exclusion holds')
   assert.equal(decision.clinicalEligibility, 'ineligible', 'an eligible label cannot stand once a met exclusion is computed')
   assert.match(decision.criteria[1].assumptions.at(-1), /computed from the recorded dates and window/)
   validatePairDecision(decision, { task: prepared.task, trialProfile: prepared.trialProfiles[1], evidenceBundle: prepared.evidenceBundles[1] })
+})
+
+test('code never reverses a verdict the assessment decided; the disagreement stays visible', () => {
+  const { prepared } = twoTrials()
+  // "MI in the past 6 months" recorded with relation "beyond" (where the patient's MI fell): code would read satisfied.
+  const decision = completeDecision({ subjectKey: 'patient-a', trialId: 'trial-b', clinicalEligibility: 'uncertain', recommendation: { priority: null, rationale: 'r' }, unresolvedFacts: [], assumptions: [], criteria: [
+    { criterionId: 'b2', kind: 'exclusion', verdict: 'not-satisfied', basis: 'stated', evidenceIds: ['e:1.4'], reason: 'r', assumptions: [], parts: [], rule: null,
+      timing: { eventDate: '2061-06-01', referenceDate: null, windowDays: 183, relation: 'beyond' } },
+  ] }, prepared)
+  assert.equal(applyCriterionLogic(decision), 0)
+  assert.equal(decision.criteria[0].verdict, 'not-satisfied')
+  assert.match(decision.criteria[0].assumptions.at(-1), /would read satisfied; the assessment's not-satisfied stands/)
 })
 
 test('a decision id is stable for the same execution and pair', () => {
@@ -119,7 +132,7 @@ test('malformed logic is dropped instead of costing the pair', () => {
 test('"now" for a time window is the newest record date, whatever reference date the model wrote', () => {
   const { prepared } = twoTrials()
   const decision = completeDecision({ subjectKey: 'patient-a', trialId: 'trial-b', clinicalEligibility: 'uncertain', recommendation: { priority: null, rationale: 'r' }, unresolvedFacts: [], assumptions: [], criteria: [
-    { criterionId: 'b2', kind: 'exclusion', verdict: 'satisfied', basis: 'stated', evidenceIds: ['e:1.4'], reason: 'r', assumptions: [], parts: [], rule: null,
+    { criterionId: 'b2', kind: 'exclusion', verdict: 'unknown', basis: 'stated', evidenceIds: ['e:1.4'], reason: 'r', assumptions: [], parts: [], rule: null,
       timing: { eventDate: '2061-06-01', referenceDate: '2061-09-01', windowDays: 183, relation: 'within' } },
   ] }, prepared)
   assert.equal(decision.criteria[0].timing.referenceDate, '2069-04-07')

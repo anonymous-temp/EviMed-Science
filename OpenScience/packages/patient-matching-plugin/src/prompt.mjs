@@ -256,11 +256,17 @@ export function applyCriterionLogic(decision) {
   decision.criteria = decision.criteria.map((criterion) => {
     const { verdict, derived, parts } = deriveCriterionVerdict(criterion)
     const next = parts ? { ...criterion, parts } : { ...criterion }
-    if (derived && verdict !== criterion.verdict) {
+    const basis = criterion.rule ? 'parts and rule' : 'dates and window'
+    // Code completes a criterion the assessment left open; it never reverses one the assessment decided. Measured on 202 n2c2
+    // training patients (0.1.8): of 8 time-window reversals, 7 were wrong — "MI in the past 6 months" recorded with relation
+    // "beyond" (where this patient's MI fell) turned a correct not-satisfied into satisfied. A disagreement stays visible.
+    if (derived && verdict !== criterion.verdict && criterion.verdict === 'unknown' && verdict !== 'unknown') {
       changed += 1
       next.verdict = verdict
-      next.assumptions = [...next.assumptions, `Verdict computed from the recorded ${criterion.rule ? 'parts and rule' : 'dates and window'} (the assessment wrote ${criterion.verdict}).`]
-      if (verdict !== 'unknown') delete next.missingFact
+      next.assumptions = [...next.assumptions, `Verdict computed from the recorded ${basis} (the assessment left it unknown).`]
+      delete next.missingFact
+    } else if (derived && verdict !== criterion.verdict && criterion.verdict !== 'unknown' && verdict !== 'unknown') {
+      next.assumptions = [...next.assumptions, `The recorded ${basis} would read ${verdict}; the assessment's ${criterion.verdict} stands.`]
     }
     return next
   })
