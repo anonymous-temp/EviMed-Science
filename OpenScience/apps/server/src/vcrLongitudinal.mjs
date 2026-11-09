@@ -472,8 +472,8 @@ export function createVcrLongitudinal({store,dataStore,dataPlane,matchStore,acce
             WHERE study_id=$1 AND diagnostics->'longitudinal'->>'id'=$2`,[row.study_id,row.id,JSON.stringify(summary),JSON.stringify(lineage.snapshotIds)]);
         });
         counts.repaired += 1;
-        report('vcr_comparison_lineage_repaired');
-      } catch (error) { report(String(/** @type {any} */ (error)?.code ?? 'vcr_comparison_repair_failed')); }
+        report('repaired');
+      } catch (error) { report(String(/** @type {any} */ (error)?.code ?? 'failed')); }
     }
     return counts;
   }

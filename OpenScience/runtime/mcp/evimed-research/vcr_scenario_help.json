@@ -998,7 +998,6 @@
         {
           "path": "treatment.diseaseModifying.fraction.value",
           "type": "number",
-          "min": 0,
           "lt": 1,
           "within": "treatment.diseaseModifying",
           "when": [{"path":"model.family","in":["beta_logit"]}],

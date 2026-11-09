@@ -37,10 +37,10 @@ test('the claim sentence says what the protocol allows for the endpoint at hand,
   const bilirubin = premise('lmm_empirical_bayes', 'bilirubin')
   assert.ok(bilirubin.includes('血清胆红素') && bilirubin.includes('没有显示比') && !bilirubin.includes('小于'), bilirubin)
   const cd4 = premise('lmm_empirical_bayes', 'cd4')
-  assert.ok(cd4.includes('CD4 计数') && cd4.includes('95%区间不含0') && cd4.includes('小于沿用最近一次观测值'), cd4)
+  assert.ok(cd4.includes('CD4 计数') && cd4.includes('95% 区间不含 0') && cd4.includes('小于沿用最近一次观测值'), cd4)
   for (const none of [premise('lmm_empirical_bayes', 'hba1c'), premise('another_model', 'cd4')]) {
     assert.ok(none.includes('没有做过') && none.includes('不说它比简单做法更准'), none)
-    assert.ok(!none.includes('95%区间不含0') && !none.includes('血清胆红素') && !none.includes('CD4'), 'never a finding about another endpoint')
+    assert.ok(!none.includes('95% 区间不含 0') && !none.includes('血清胆红素') && !none.includes('CD4'), 'never a finding about another endpoint')
   }
   for (const text of [bilirubin, cd4]) assert.ok(!/[「」]/.test(text) && !/LOCF|EB\b|MAP|nlme|job|tool|hash/i.test(text), text)
 })

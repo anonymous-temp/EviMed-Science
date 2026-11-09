@@ -5,7 +5,7 @@ const domainCatalogue = [
     "id": "virtual-trial",
     "title": "Virtual laboratory: design simulation",
     "displayName": "虚拟实验室 · 设计模拟",
-    "task": "Virtual laboratory: sample size, power and dose finding; on the hosted platform also compare saved or new designs, or drug hypotheses on a disease-progression model (Alzheimer ADAS-cog), search for a design, and the value of more information before a decision",
+    "task": "Virtual laboratory: sample size, power, dose finding; on the hosted platform also compare saved or new designs or drug hypotheses on a disease-progression model (Alzheimer ADAS-cog), search for a design, information value",
     "dataRequirement": "Design assumptions",
     "draft": true,
     "methods": [
@@ -53,7 +53,7 @@ const domainCatalogue = [
     "id": "virtual-patient",
     "title": "Patient trajectory prediction",
     "displayName": "患者轨迹预测",
-    "task": "Patient trajectories: disease progression (Alzheimer ADAS-cog), scenarios, applying or training models, one forecast per person from their own history, and drug interactions (concentration over time)",
+    "task": "Patient trajectories: disease progression (Alzheimer ADAS-cog), per-person forecast, drug interaction, model",
     "dataRequirement": "Model and compatible inputs",
     "draft": true,
     "methods": [

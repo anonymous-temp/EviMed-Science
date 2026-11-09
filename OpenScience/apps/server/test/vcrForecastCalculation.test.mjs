@@ -5,7 +5,7 @@ import { runForecastCalculation } from '../src/vcrForecastCalculation.mjs';
 test('statistical work is cancellable without occupying the API event loop',async()=>{
   const origin = '2026-01-01T00:00:00.000Z';
   const rows = Array.from({length:15_000},(_,i)=>({subjectKey:String(i),horizonDays:30,point:i%100}));
-  const prediction = {origin,endpoint:{code:'x',unit:'u',type:'continuous'},horizonsDays:[30],rows};
+  const prediction = {dataClass:"synthetic",origin,endpoint:{code:'x',unit:'u',type:'continuous'},horizonsDays:[30],rows};
   const history = {asOf:origin,events:[],dataClass:'synthetic'};
   const outcomes = {dataClass:'synthetic',events:rows.map(r=>({...r,code:'x',unit:'u',value:r.point+1,valueSource:'synthetic',occurredAt:'2026-01-31T00:00:00.000Z'}))};
   let checks = 0, heartbeats = 0;

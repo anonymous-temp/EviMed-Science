@@ -119,6 +119,6 @@ test('three effect scenarios and the null run for every design on one stream, an
   const section = renderLabSection(model);
   assert.deepEqual(section.issues, []);
   assert.match(section.markdown, /#### 稳健性比较/);
-  assert.match(section.markdown, /“pessimistic”下的功效/);
+  assert.match(section.markdown, /“pessimistic”下的“考虑研究之间差异后的预期把握度”/);
   assert.doesNotMatch(section.markdown, /未计算/);
 });

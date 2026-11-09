@@ -462,6 +462,11 @@ export function createVcrRoutes(dependencies) {
       return found;
     };
 
+    /** The study's progression results, which only name the model a question was written for; a store that cannot read them leaves the question unnamed. */
+    const progressionResultsOf = async (/** @type {string} */ studyId) => {
+      try { return await data().results(studyId, "progression_simulation"); } catch { return []; }
+    };
+
     /** @type {Map<string, string[]>} */
     const rolesByStudy = new Map();
     /**
@@ -1534,7 +1539,7 @@ export function createVcrRoutes(dependencies) {
     if (parts.length === 3 && section === "research-question" && ["GET", "POST"].includes(method)) {
       if (method === "GET") {
         const { study } = await authorize(id, "read");
-        const progressions = await data().results(study.id, "progression_simulation").catch(() => []);
+        const progressions = await progressionResultsOf(study.id);
         return reply({ questions: (await data().researchQuestions(study.id)).map((question) => presentResearchQuestion(question, { modelId: questionModelId(question, progressions) })) });
       }
       const body = await bodyOf(req, maxJsonBytes, ["id", ...VCR_QUESTION_FIELDS]);
@@ -1544,7 +1549,7 @@ export function createVcrRoutes(dependencies) {
       const saved = await audited("vcr.research_question.edit", (result) => ({ code: String(result.question?.version ?? 0), detail: id }), { code: id },
         () => data().saveResearchQuestion({ studyId: study.id, userId: study.userId, actor: String(user.id), basis: "person_edited",
           ...(typeof body.id === "string" && body.id ? { key: body.id } : {}), patch }));
-      const progressions = await data().results(study.id, "progression_simulation").catch(() => []);
+      const progressions = await progressionResultsOf(study.id);
       return reply({ question: presentResearchQuestion(saved.question, { modelId: questionModelId(saved.question, progressions) }), created: saved.created }, saved.created ? 201 : 200);
     }
 
