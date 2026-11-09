@@ -2,7 +2,7 @@
 
 ## Status: run in full on the public sources; nothing here is private input
 
-[RUN-20261107-batch.md](./RUN-20261107-batch.md) built the batch path on a synthetic fixture because the inputs were believed to be private. They are public, so this run fetches them, pins their bytes, and runs the frozen protocol of [RUN-20261105.md](./RUN-20261105.md) through the product's batch path. Every number below was produced by the code at the revision named here; patient rows stay in `/tmp/isl2-tmp/E1/` and are not committed.
+[RUN-20261107-batch.md](./RUN-20261107-batch.md) built the batch path on a synthetic fixture because the inputs were believed to be private. They are public, so this run fetches them, pins their bytes, and runs the frozen protocol of [RUN-20261105.md](./RUN-20261105.md) through the product's batch path. Every number below was produced by the code at the revision named here; patient rows stay in a local scratch directory outside the repository and are not committed.
 
 ## Code and data
 
