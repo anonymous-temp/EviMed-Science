@@ -198,6 +198,7 @@
   c(reject = reject, estimate = est, analysed = as.numeric(ok), row = pp$row, observed,
     if (!is.null(eff)) stats::setNames(eff, c("pts", "frac", "triesPts", "triesFrac")),
     se = se, coverTP = cover(p$truth$treatment_policy$value), coverHyp = cover(p$truth$hypothetical$value),
+    ctlMean = { o <- use[, at] & treated == 0; if (any(o)) mean((y[, at] - y[, 1L])[o]) else NA_real_ }, ctlLs = fit$lsControl %||% NA_real_,
     stopControl = share_stop[1], stopTreated = share_stop[2],
     withdrewControl = mean(exit[treated == 0] <= max(visits)), withdrewTreated = mean(exit[treated == 1] <= max(visits)),
     diedControl = mean(ev$death[treated == 0] <= max(visits)), diedTreated = mean(ev$death[treated == 1] <= max(visits)))
@@ -281,7 +282,7 @@
   if (identical(kind, "mmrm")) {
     f <- vcr_mmrm_fit(chg, mask, treated, base, method = "auto")
     if (is.null(f)) return(none)
-    return(list(estimate = f$effect[ncol(chg)], se = f$se[ncol(chg)], df = f$df))
+    return(list(estimate = f$effect[ncol(chg)], se = f$se[ncol(chg)], df = f$df, lsControl = vcr_mmrm_ls_control(f, base)))
   }
   ref <- if (identical(kind, "cmi_copy_reference")) "copy" else "jump"
   # the last visit on treatment (0: never took a visit on treatment), a person who never stopped has the last visit
@@ -308,6 +309,16 @@ vcr_mmrm_fit <- function(chg, mask, arm, base, method = c("auto", "factored", "g
   path <- if (identical(method, "gls") || (identical(method, "auto") && !monotone)) "gls" else "factored"
   if (identical(path, "factored") && !monotone) vcr_abort("scenario_value_invalid", "scenario.analysis.kind", "The factored MMRM fit needs monotone missing data; use the gls path.")
   if (identical(path, "gls")) .vcr_mmrm_gls(chg, mask, arm, base) else .vcr_mmrm_factored(chg, m, arm, base)
+}
+
+#' The control arm's least-squares mean change at the last visit of a fitted MMRM, at the mean baseline of every person in the analysis (the SAS / emmeans
+#' reading of a baseline covariate): the visit's intercept plus its baseline coefficient times that mean. The arm term is 0 for control.
+vcr_mmrm_ls_control <- function(fit, base) {
+  if (is.null(fit)) return(NA_real_)
+  J <- length(fit$effect)
+  if (!is.null(fit$coef)) return(unname(fit$coef[J, 1L] + fit$coef[J, 3L] * mean(base)))
+  if (!is.null(fit$lsCoef)) return(unname(fit$lsCoef[["intercept"]] + fit$lsCoef[["base"]] * mean(base)))
+  NA_real_
 }
 
 .vcr_mmrm_factored <- function(chg, m, arm, base) {
@@ -353,7 +364,7 @@ vcr_mmrm_fit <- function(chg, mask, arm, base, method = c("auto", "factored", "g
   co <- stats::coef(fit); V <- stats::vcov(fit)
   nm <- paste0("visit", seq_len(J), ":arm")
   if (!all(nm %in% names(co))) return(NULL)
-  list(effect = unname(co[nm]), se = sqrt(diag(V)[nm]), coef = NULL, sigma = NULL, path = "gls", df = sum(d$vi == J) - 3L - (J - 1L), n = as.integer(table(d$vi)), covariance = V)
+  list(effect = unname(co[nm]), se = sqrt(diag(V)[nm]), coef = NULL, sigma = NULL, lsCoef = list(intercept = unname(co[paste0("visit", J)]), base = unname(co[paste0("visit", J, ":base")])), path = "gls", df = sum(d$vi == J) - 3L - (J - 1L), n = as.integer(table(d$vi)), covariance = V)
 }
 
 # --- conditional-mean imputation ------------------------------------------------------------------------------------------------------------

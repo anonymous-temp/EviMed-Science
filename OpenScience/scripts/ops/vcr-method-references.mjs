@@ -49,8 +49,9 @@ export const REQUIRED_CURRENT_REFERENCES = {
   // 1.1.0's beta_logit family: the parameter file and the training manual's printed numbers, EMA Tables 9 and 11
   // 1.2.0 (plan R23, R25) adds the people table's paired contrast against its closed form (N103c) and the assurance against an independent quadrature of its integral (N104b)
   // 1.2.0 (plan R26) adds the MMRM against gls and mmrm (N111a), the imputation against a hand case (N111c) and the true values against the exact moments (N111f)
+  // 1.2.0 (plan R27, R28) adds the control arm's least-squares mean against mmrm and an ordinary regression (N190c) and the second published structure against its authors' printed trajectory (N200a)
   // 1.2.0 (plan R29, R30) adds the marketed inhibitor against the posterior's own equation (N120a), the antibody's SUVR integration against lsoda (N120g) and the link's inversion against a fixed-share run (N120i)
-  'patients.progression': ['N101a', 'N101c', 'N101d', 'N103c', 'N104b', 'N111a', 'N111c', 'N111f', 'N120a', 'N120g', 'N120i'],
+  'patients.progression': ['N101a', 'N101c', 'N101d', 'N103c', 'N104b', 'N111a', 'N111c', 'N111f', 'N120a', 'N120g', 'N120i', 'N190c', 'N200a'],
 };
 export const NUMERIC_REFERENCES = {
   N53e: { methods: ['design.analytic'], anchors: ['Independently integrate arm event probabilities', 'abs(at$y-checked)<1e-10'] },
@@ -279,6 +280,11 @@ export const NUMERIC_REFERENCES = {
   N160b: { methods: ['pk.interaction'], anchors: ['ref_with <- .n160_lsoda(sc$v, sc$p, sc$w, 8, rel)', 'list(pass = worst < 1e-6'] },
   N160c: { methods: ['pk.interaction'], anchors: ['m <- .n160_fold(.n160_clinical$oral, "oral")', 'all(m["pred", ] >= lo & m["pred", ] <= hi)'] },
   N160d: { methods: ['pk.interaction'], anchors: ['m <- .n160_fold(.n160_clinical$iv, "iv")', 'all(m["fold", ] <= 2) && gm < 1.6'] },
+  N180a: { methods: ['pk.interaction'], anchors: ['r <- vapply(c("competitive", "noncompetitive", "mixed"), function(m) .n180_ratio("iv", 1, 200, 6, m), numeric(1))', 'ok <- abs(r[["mixed"]] - 2.5) <= 0.05 && abs(r[["noncompetitive"]] - 2.0) <= 0.05'] },
+  N180b: { methods: ['pk.interaction'], anchors: ['hand <- .n180_static(P, kic, ik[["Kg"]], ik[["Ke"]], 0.01, route)', 'list(pass = worst < 2e-3 && hit / base > 10'] },
+  N180c: { methods: ['pk.interaction'], anchors: ['ref <- .n180_lsoda(sc$m, sc$r, sc$d, sc$k, sc$n, sc$g, 12, rel)', 'list(pass = worst < 1e-6'] },
+  N180d: { methods: ['pk.interaction'], anchors: ['pred <- .n180_ratio(r[[2]], r[[3]], r[[4]], r[[5]], "mixed")', 'list(pass = all(fold <= 2) && gm < 1.6'] },
+  N180e: { methods: ['pk.interaction'], anchors: ['perpetrator = list(drug = "clarithromycin", doseMg = 500, doses = 3L)', 'abs(lin[2] / lin[1] - 1) < 0.02'] },
   N77a: { methods: ['evidence.shrinkage'], anchors: ['rows <- c(d$table2, d$table3)', 's <- .n77_stratum(as.numeric(row$p[[1]]), as.numeric(row$p[[2]]), mix)'] },
   N77b: { methods: ['evidence.shrinkage'], anchors: ['folded_med <- stats::uniroot(', 'sign_int <- stats::integrate(dens, 0, Inf, rel.tol = 1e-11)$value', 'jr <- vcr_test_run(.n77_job(list(list(id = "paper", estimate = 0.44, se = 0.2)), "n77b_job"))', 'abs(jrow$replication - repl_int)'] },
 
@@ -386,6 +392,15 @@ export const NUMERIC_REFERENCES = {
   N104e: { methods: ['patients.progression'], anchors: ['identical(rep$tier, "B") && identical(rep$source$kind, "model_result")'] },
   N104f: { methods: ['patients.progression'], anchors: ['identical(old, "method_version_mismatch@methodVersion")'] },
   // where the drug effect comes from (plan R29 tier A, R30 tier B): the posterior's own equation, the published chain against lsoda, the link's interval and its inversion
+  N190a: { methods: ['patients.progression'], anchors: ['r <- .vcr_control_reading(v, "points", 78, "mmrm")', 'se_true <- vapply(qs, function(p) sqrt(p * (1 - p) / length(x)) / (stats::dnorm(stats::qnorm(p)) / 0.8), numeric(1))'] },
+  N190b: { methods: ['patients.progression'], anchors: ['calc <- vcr_measure_value(res, "expected_control_change")'] },
+  N190c: { methods: ['patients.progression'], anchors: ['ls_mm <- unname(co[nm] + co[paste0(nm, ":base")] * mean(d$base))', 'ols <- stats::lm(y ~ arm + base, data = data.frame(y = d$chg[, J], arm = d$arm, base = d$base))'] },
+  N190d: { methods: ['patients.progression'], anchors: ['one <- .n190_run(sc, 19004L, cores = 1L, replicates = 400L); two <- .n190_run(sc, 19004L, cores = 2L, replicates = 400L)'] },
+  N190e: { methods: ['patients.progression'], anchors: ['mm <- .n190_run(.n190_sc(kind = "mmrm"'] },
+  N200a: { methods: ['patients.progression'], anchors: ['ref <- c("91" = 23.0622, "364" = 25.8542, "1092" = 35.0353, "1820" = 47.1252)'] },
+  N200b: { methods: ['patients.progression'], anchors: ['truth <- vcr_conrado_mean(23, slope, weeks / 52.1775) - 23', 'sd_truth <- 70 * sqrt((var_beta(m0) + var_beta(mt)) / n)'] },
+  N200c: { methods: ['patients.progression'], anchors: ['kept <- identical(s0, .Random.seed)'] },
+  N200d: { methods: ['patients.progression'], anchors: ['hand <- vcr_conrado_mean(22, 0.153 * 0.698, 52 / 52.1775) - 22'] },
   N120a: { methods: ['patients.progression'], anchors: ['at12 <- max(at12, abs(xr[["emax"]] * 12 / (xr[["et50"]] + 12) + xr[["eStar"]]))', 'isTRUE(all.equal(.n120_curve_diff(ref), .n120_curve_diff(hand), tolerance = 1e-12))'] },
   N120b: { methods: ['patients.progression'], anchors: ['ok <- ok && identical(par$drugs, want$drugs)'] },
   N120c: { methods: ['patients.progression'], anchors: ['want <- x[["emax"]] * ((t + s) / (x[["et50"]] + t + s) - s / (x[["et50"]] + s))'] },

@@ -162,7 +162,7 @@ VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "decision_voi")
 # --- end decision voi ---
 
 # --- a published whole-body PBPK model: midazolam with rifampicin's CYP3A4 induction (in-silico round 2, R38, 2026-11-09) ---
-VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "pbpk_interaction")
+VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "pbpk_interaction", "pbpk_inhibition")
 # --- end pbpk ---
 
 # --- single-arm trials of a mean and of a survival time against a benchmark (2026-10-07) ---
@@ -202,6 +202,9 @@ VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "individualize")
 VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "patients_progression_intercurrent")
 # --- end intercurrent ---
 # --- end individualization ---
+# --- a second published ADAS-cog structure (plan R28, 2026-11-09) ---
+VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "patients_progression_alternative")
+# --- end alternative ---
 
 #' Startup self-check: the local registry and the domain must agree, exactly.
 vcr_engine_self_check <- function() {
