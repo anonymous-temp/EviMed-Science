@@ -51,6 +51,27 @@ describe("疾病进展模拟 · the card", () => {
     expect(container.querySelector("[data-vcr-progression-question]")).toHaveTextContent("斜率");
   });
 
+  it("R26: a run with intercurrent events shows the true value of each way of handling a stop with the analysis's bias and coverage", () => {
+    const value = (v: number, name: string) => ({ name, value: v, mcse: 0.01, simulated: true, source: "synthetic", unit: "分" });
+    const raw = {
+      ...payloads.progression.linear,
+      estimands: { rows: [
+        { key: "treatment_policy", label: "不论是否停药（治疗策略）", claimed: true, truth: value(-2.26, "estimand_truth"), bias: value(-0.87, "estimator_bias"), coverage: value(0.862, "ci_coverage"), sentence: "这个分析只用了停药之前的数据，回答的是“假如没有人停药”的问题，不是“不论是否停药”的问题。" },
+        { key: "hypothetical", label: "假如没有人停药（假想情境）", claimed: false, truth: value(-3.1, "estimand_truth"), bias: null, coverage: null, sentence: null },
+        { key: "", label: "no key is dropped", truth: value(1, "estimand_truth") },
+      ] },
+    };
+    const card = readVcrPatients({ progressions: [raw] }).progressions?.[0];
+    expect(card?.estimands?.rows.map((row) => row.key)).toEqual(["treatment_policy", "hypothetical"]);
+    const { container } = render(<VcrProgressions cards={[card as VcrProgressionCard]} />);
+    expect(container).toHaveTextContent("这个分析回答的是哪个效应");
+    expect(container).toHaveTextContent("不论是否停药（治疗策略）（研究问题要的）");
+    expect(container).toHaveTextContent("回答的是“假如没有人停药”的问题");
+    // a card without the table draws no such block
+    const plain = render(<VcrProgressions cards={[sample("linear")]} />);
+    expect(plain.container).not.toHaveTextContent("这个分析回答的是哪个效应");
+  });
+
   it("a payload of another shape reads as nothing", () => {
     expect(readVcrPatients({ progressions: [{ id: "x" }, null, { id: "y", title: "t", table: { rows: [] } }] }).progressions).toEqual([]);
     const { container } = render(<VcrProgressions cards={[]} />);

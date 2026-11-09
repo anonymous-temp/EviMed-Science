@@ -137,7 +137,7 @@ test("a job records the version of the question it answers; the same request aft
   assert.equal(JSON.stringify(row.checkpoint).includes("questionRef") && v1.job.scenarioHash === row.scenario_hash, true, "the reference is the job's record; the scenario hash is untouched");
 
   await store.saveResearchQuestion({ studyId: study.id, userId: study.userId, actor: "runtime", basis: "person_stated",
-    patch: { intercurrentEvents: [{ event: "因不良反应停药", strategy: "treatment_policy", mechanism: "" }] } });
+    patch: { intercurrentEvents: [{ event: "因不良反应停药", strategy: "principal_stratum", mechanism: "" }] } });
   const [question] = await store.researchQuestions(study.id);
   assert.equal(question?.version, 2);
   const job = await store.one("SELECT * FROM evimed_vcr.jobs WHERE id = $1", [v1.job.id]);

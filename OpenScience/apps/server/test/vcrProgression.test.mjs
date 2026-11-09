@@ -189,3 +189,35 @@ test("live D6: the answer a conversation reads says the difference between the a
   const other = { kind: "trial_scenario", measures: [], diagnostics: {} };
   assert.equal(vcrProgressionWithDifferences(other), other);
 });
+
+test("R26: a run with intercurrent events carries its estimand table and says which question the analysis answers", () => {
+  const row = structuredClone(fixture("alzheimer-beta-logit"));
+  const measure = (name, value, mcse) => ({ name, value, mcse, simulated: true, source: "synthetic", unit: "points" });
+  row.diagnostics.progression.analysis = { kind: "ancova", data: "on_treatment", visit: 52, alpha: 0.05 };
+  row.diagnostics.progression.intercurrent = {
+    estimator: "ancova", data: "on_treatment", delta: 0, claimed: "treatment_policy",
+    estimands: [
+      { strategy: "treatment_policy", truth: measure("estimand_truth", -2.26, 0.012), bias: measure("estimator_bias", -0.87, 0.017), coverage: { name: "ci_coverage", value: 0.862, mcse: 0.005, simulated: true, source: "synthetic" } },
+      { strategy: "hypothetical", truth: measure("estimand_truth", -3.1, 0.012), bias: measure("estimator_bias", -0.025, 0.017), coverage: { name: "ci_coverage", value: 0.951, mcse: 0.003, simulated: true, source: "synthetic" } },
+    ],
+    configuration: { discontinuation: { shareControl: 0.1, shareTreated: 0.3, progressionLogHazardPerSd: 0, retrievedShare: 0.5 }, withdrawal: { treatedHazardRatio: 1, progressionLogHazardPerSd: 0 } },
+  };
+  const card = progressionCard(row);
+  assert.deepEqual(card.estimands.rows.map((entry) => [entry.key, entry.claimed]), [["treatment_policy", true], ["hypothetical", false]]);
+  assert.match(card.estimands.rows[0].sentence, /停药之前的数据/, "the on-treatment analysis does not answer the treatment-policy question, and the table says so");
+  assert.equal(card.estimands.rows[1].truth.value, -3.1);
+  const events = card.premises.find((premise) => premise.key === "progression:ad:events");
+  assert.match(events.value, /治疗组约 30%、对照组约 10% 的人停药；停药的人里约 50% 继续留在研究里随访；停不停药与病情无关/);
+  const estimand = card.premises.find((premise) => premise.key === "progression:ad:estimand");
+  assert.match(estimand.value, /不论是否停药（治疗策略）：真实差值 -2\.26 分，这个分析的偏差 -0\.87/);
+  assert.equal(estimand.decisive, true, "the analysis does not answer the question that was claimed");
+  const analysis = card.premises.find((premise) => premise.key === "progression:ad:analysis");
+  assert.match(analysis.value, /只用停药之前（用药期间）的数据/);
+  // the study's question names the strategy: a row says whether this analysis answers it
+  const [presented] = presentProgressions({ allResults: [row], stale: [], researchQuestion: { id: "main", version: 1, fields: { intercurrentEvents: [{ event: "因不良反应停药", strategy: "treatment_policy", mechanism: "" }] } } }, { nodeOf: (result) => `result:${result.id}` });
+  const asked = presented.premises.find((premise) => premise.key === "question:estimator:treatment_policy");
+  assert.match(asked.value, /研究问题要的是“不论是否停药”的效应。这个分析只用了停药之前的数据/);
+  // a run without them has none of it
+  assert.equal(progressionCard(fixture("alzheimer-beta-logit")).estimands, null);
+  assert.equal(progressionCard(fixture("alzheimer-beta-logit")).premises.some((premise) => premise.key === "progression:ad:estimand"), false);
+});

@@ -91,7 +91,11 @@ vcr_beta_logit_par <- function(row, population = list()) {
        ageSd = population[["ageSd"]] %||% sqrt(g("Vage")), female = population[["femaleShare"]] %||% g("pGen"),
        mmse = population[["mmseRange"]] %||% c(16, 26), ageBounds = population[["ageBounds"]],
        beta0 = g("beta0"), betaAge = g("betaAge"), betaMmse = g("betaBmmse"), weibullShape = g("v"), sdStudy = g("sdStudy"),
-       reference = ref)
+       reference = ref,
+       # the three fitted AChE inhibitors of this row (plan R29): eStar, ET50 and the dose exponent, in the set's order (donepezil, galantamine, rivastigmine)
+       drugs = list(eStar = c(g("eStar[1]"), g("eStar[2]"), g("eStar[3]")), et50 = c(g("et50[1]"), g("et50[2]"), g("et50[3]")), gamma = c(g("gamma[1]"), g("gamma[2]"), g("gamma[3]"))),
+       # the inhibitor every arm already takes (`treatment.background`): carried here, like the covariate overrides, so that every row of the posterior reads its own draws
+       background = population[["background"]])
 }
 
 #' A typical study: the population-level means and precisions (adsim's `sim.interstudy = FALSE`), no study effect on dropout.
@@ -115,7 +119,36 @@ vcr_beta_logit_new_study <- function(par) {
 
 #' The placebo response on the logit scale at study week `t` (Bateman form): beta (exp(-kel t) - exp(-keq t)), its integral over all time minus
 #' `aucPlacebo`.
-vcr_beta_logit_placebo <- function(par, t) par[["placeboBeta"]] * (exp(-par[["kel"]] * t) - exp(-par[["keq"]] * t))
+vcr_beta_logit_placebo <- function(par, t) {
+  out <- par[["placeboBeta"]] * (exp(-par[["kel"]] * t) - exp(-par[["keq"]] * t))
+  # the response every arm shares also holds the background inhibitor (R29): its effect from `weeksBefore` weeks before baseline, less what it had
+  # already done at baseline, because the score is a change from baseline
+  bg <- par[["background"]]
+  if (is.null(bg)) return(out)
+  e <- .vcr_bl_reference_effect(par, bg)
+  out + e$emax * ((t + bg$weeksBefore) / (e$et50 + t + bg$weeksBefore) - bg$weeksBefore / (e$et50 + bg$weeksBefore))
+}
+
+# --- a marketed AChE inhibitor from the posterior itself (plan R29) -------------------------------------------------------------------------
+
+#' The drugs the posterior carries: the index of its columns and the reference dose its effect is stated at (training manual §3.2).
+.VCR_BETA_LOGIT_REFERENCE_DRUGS <- list(donepezil = list(index = 1L, referenceDoseMg = 5), galantamine = list(index = 2L, referenceDoseMg = 24),
+                                        rivastigmine = list(index = 3L, referenceDoseMg = 6))
+
+#' The logit Emax and ET50 of `ref` (`{drug, doseMg}`) from the parameters of `par` (the medians, or one posterior draw): E_DRG = (D / Dref)^gamma
+#' x EDelta x t / (ET50 + t) with EDelta = -(1 + b) eStar / b and b = 12 / ET50 (the manual's Listing 3.9 to 3.11, adsim's own re-parameterisation:
+#' `eStar` is minus the effect at 12 weeks on the reference dose). Fitted as the equation says on doses of trials to 2008; the range of those doses is not
+#' published in what the engine carries, so the same power law is applied at any dose.
+.vcr_bl_reference_effect <- function(par, ref) {
+  d <- .VCR_BETA_LOGIT_REFERENCE_DRUGS[[as.character(ref[["drug"]] %||% "")]]
+  if (is.null(d)) vcr_abort("scenario_value_invalid", "scenario.treatment.reference.drug", "The posterior carries donepezil, galantamine and rivastigmine.")
+  dose <- vcr_scalar(ref[["doseMg"]])
+  if (is.null(dose) || !is.finite(dose) || !(dose > 0)) vcr_abort("scenario_value_invalid", "scenario.treatment.reference.doseMg", "The dose is a positive number of milligrams a day.")
+  k <- d$index; dr <- par$drugs
+  et50 <- dr$et50[k]; b <- 12 / et50
+  list(emax = (dose / d$referenceDoseMg)^dr$gamma[k] * (-(1 + b) * dr$eStar[k] / b), et50 = et50, doseRatio = dose / d$referenceDoseMg, eStar = dr$eStar[k], gamma = dr$gamma[k],
+       referenceDoseMg = d$referenceDoseMg)
+}
 
 #' A symptomatic effect stated as `points` (treated less untreated, negative is better) after `on_weeks` weeks on drug for a person at
 #' `reference_adas`, turned into the logit Emax of an Emax curve with `et50` (adsim's `gLogitDelta` with xi = 1). The curve runs on the time on
@@ -137,6 +170,23 @@ vcr_beta_logit_drug <- function(tr, t) {
     if (any(after)) sx[after] <- tr[["emax"]] * span / (tr[["et50"]] + span) * exp(-log(2) * (t[after] - tr[["end"]]) / tr[["halfLife"]])
   }
   list(symptomatic = sx, onDrug = on, fraction = tr[["fraction"]] %||% 0)
+}
+
+#' What a run says of a reference inhibitor: the drug, the dose and its ratio to the reference dose, and the parameters it was read from (the posterior's
+#' medians, which stand for the draws of a `posterior_draws` run: each trial reads its own row). NULL when none was stated.
+.vcr_bl_reference_report <- function(par, ref, uncertainty, weeks = FALSE) {
+  if (is.null(ref)) return(NULL)
+  e <- .vcr_bl_reference_effect(par, ref)
+  c(list(drug = as.character(ref[["drug"]]), doseMg = vcr_scalar(ref[["doseMg"]]), referenceDoseMg = e$referenceDoseMg, doseRatio = e$doseRatio, eStar = e$eStar, et50Weeks = e$et50,
+         doseExponent = e$gamma, logitEmax = e$emax, readFrom = if (identical(uncertainty, "posterior_draws")) "each trial's own posterior draw (the medians are shown)" else "the posterior's medians"),
+    if (weeks) list(weeksBefore = vcr_scalar(ref[["weeksBefore"]])))
+}
+
+#' The sentences a reference inhibitor adds to the result's limits.
+.vcr_bl_reference_limits <- function(tr) {
+  if (is.null(tr[["reference"]]) && is.null(tr[["background"]])) return(NULL)
+  list("The marketed inhibitor's effect is the one fitted in the posterior itself (the manual's equation: effect at the reference dose times (dose / reference dose) to the fitted exponent), on the trials the model was built from; the range of the doses in those trials is not published in what this engine carries, so the same law is applied at any dose.",
+       "Against the Cochrane review of donepezil 10 mg at 24 to 26 weeks (Birks and Harvey 2018: -2.67 points, 95% CI -3.31 to -2.02) the fitted effect lands inside the interval. That is a check that the equation is implemented as published, not an independent validation: the review pools the kind of trials this model was fitted on.")
 }
 
 # --- calculated moments ----------------------------------------------------------------------------------------------------------------
@@ -267,6 +317,15 @@ vcr_beta_logit_moments <- function(par, study, times, drug = NULL, placebo = TRU
   list(mmse = mmse, apoe = apoe, age = age, female = female, eta = eta, alpha = alpha, meanSlope = mu_alpha)
 }
 
+#' The parameters a reference inhibitor is read from in this trial: the posterior row the trial is about to draw (`posterior_draws`), else the medians.
+#' The row is the first draw of the trial's stream, so it is looked at on a copy of the stream and left to `.vcr_bl_people` to draw for real.
+.vcr_bl_trial_par <- function(set, p) {
+  if (is.null(p$reference) || !identical(p$uncertainty, "posterior_draws") || !is.null(p$record)) return(p$par)
+  seed0 <- get(".Random.seed", envir = .GlobalEnv)
+  on.exit(assign(".Random.seed", seed0, envir = .GlobalEnv), add = TRUE)
+  vcr_beta_logit_par(set$draws[sample.int(nrow(set$draws), 1L), ], p$population)
+}
+
 #' The people of one simulated trial (control first, then treated) and their scores at baseline and at the analysis visit, with the time each
 #' leaves. Draw order, fixed: the posterior row (posterior_draws only), the study (new_study and posterior_draws), then for all N people MMSE,
 #' genotype, age, sex, intercept, slope, dropout time, the baseline score and the analysis visit's score. With a population table (`p$record`) the
@@ -301,8 +360,10 @@ vcr_beta_logit_moments <- function(par, study, times, drug = NULL, placebo = TRU
 #' One simulated trial: whether the analysis rejects, its estimate (treated less control), and the people still observed per arm at each visit.
 .vcr_bl_trial <- function(set, p) {
   eff <- if (is.null(p$effects)) NULL else .vcr_bl_trial_effects(p$effects)
-  if (!is.null(eff)) p$treatment <- .vcr_bl_treatment_at(p, eff)
+  if (!is.null(eff) || !is.null(p$reference)) p$treatment <- .vcr_bl_treatment_at(p, eff, par = .vcr_bl_trial_par(set, p))
   pp <- .vcr_bl_people(set, p)
+  # intercurrent events or an estimator of the 1.2.0 set (plan R26): the trial of patients_progression_intercurrent.R, never this one
+  if (!is.null(p$ia)) return(.vcr_bl_trial_ice(set, p, pp, eff))
   visits <- p$visits; k <- length(visits)
   stay <- if (identical(p$dropout, "none")) matrix(TRUE, length(pp$y0), k) else outer(pp$leaves, visits, ">")
   observed <- c(colSums(stay[pp$treated == 0, , drop = FALSE]), colSums(stay[pp$treated == 1, , drop = FALSE]))
@@ -379,11 +440,12 @@ vcr_beta_logit_moments <- function(par, study, times, drug = NULL, placebo = TRU
        fraction = if (!is.null(tr[["diseaseModifying"]][["fraction"]])) .vcr_bl_effect_spec(tr[["diseaseModifying"]][["fraction"]], "scenario.treatment.diseaseModifying.fraction", 0, 1, closed_lo = TRUE) else NULL)
 }
 
-#' The treatment of one simulated trial: the stated one with this trial's draws of the distributed effects in place of their central values.
-.vcr_bl_treatment_at <- function(p, draw) .vcr_bl_treatment(p$treatmentScenario, max(p$visits), effects = p$effects, draw = draw)
+#' The treatment of one simulated trial: the stated one with this trial's draws of the distributed effects in place of their central values, and a
+#' reference inhibitor read from `par` (this trial's posterior row, or the medians).
+.vcr_bl_treatment_at <- function(p, draw, par = p$par) .vcr_bl_treatment(p$treatmentScenario, max(p$visits), effects = p$effects %||% .vcr_bl_effects(p$treatmentScenario), draw = draw, par = par)
 
 #' The treatment block as the drug's numbers (`vcr_beta_logit_drug`'s `tr`), refused when it cannot be computed.
-.vcr_bl_treatment <- function(tr, last_visit, effects = .vcr_bl_effects(tr), draw = NULL) {
+.vcr_bl_treatment <- function(tr, last_visit, effects = .vcr_bl_effects(tr), draw = NULL, par = NULL) {
   tr <- tr %||% list()
   begin <- vcr_scalar(tr[["doseBegin"]], 0); end <- vcr_scalar(tr[["doseEnd"]], last_visit)
   if (!(begin >= 0) || !(end > begin)) vcr_abort("scenario_value_invalid", "scenario.treatment.doseEnd", "The dose ends after it begins, and begins at week 0 or later.")
@@ -411,8 +473,17 @@ vcr_beta_logit_moments <- function(par, study, times, drug = NULL, placebo = TRU
       vcr_abort("scenario_field_missing", "scenario.treatment.symptomatic.washoutHalfLifeWeeks", "The dose ends before the last visit: how fast the symptomatic effect fades after it (its half-life in weeks) is needed.")
     }
   }
+  ref <- tr[["reference"]]
+  if (!is.null(ref)) {
+    if (!is.null(sym)) vcr_abort("scenario_value_invalid", "scenario.treatment.reference", "The treated arm's symptomatic effect is either a marketed inhibitor (reference) or the researcher's own statement (symptomatic), not both.")
+    e <- .vcr_bl_reference_effect(par, ref)
+    out$emax <- e$emax; out$et50 <- e$et50; out$halfLife <- .vcr_bl_value(ref[["washoutHalfLifeWeeks"]])
+    if (out$emax != 0 && end < last_visit && (length(out$halfLife) != 1L || !(out$halfLife > 0))) {
+      vcr_abort("scenario_field_missing", "scenario.treatment.reference.washoutHalfLifeWeeks", "The dose ends before the last visit: how fast the inhibitor's effect fades after it (its half-life in weeks) is needed; the posterior carries none.")
+    }
+  }
   dm <- tr[["diseaseModifying"]]
-  if (!is.null(dm)) out$fraction <- if (!is.null(draw) && !is.na(draw[2L])) draw[2L] else if (is.null(effects$fraction)) 0 else .vcr_bl_effect_median(effects$fraction)
+  if (!is.null(dm) || !is.null(tr[["mechanism"]])) out$fraction <- if (!is.null(draw) && !is.na(draw[2L])) draw[2L] else if (is.null(effects$fraction)) 0 else .vcr_bl_effect_median(effects$fraction)
   if (length(out$fraction) != 1L || !(out$fraction >= 0 && out$fraction < 1)) vcr_abort("scenario_value_invalid", "scenario.treatment.diseaseModifying.fraction", "The disease-modifying share is at least 0 and below 1.")
   out
 }
@@ -434,7 +505,7 @@ vcr_job_patients_progression_beta_logit <- function(job, output_dir = NULL, canc
   uncertainty <- as.character(model[["uncertainty"]] %||% "new_study")
   if (!(uncertainty %in% .VCR_BETA_LOGIT_UNCERTAINTY)) vcr_abort("scenario_value_invalid", "scenario.model.uncertainty", "The uncertainty is new_study, typical_study or posterior_draws.")
   an <- sc[["analysis"]] %||% list(); kind <- as.character(an[["kind"]] %||% "change"); alpha <- vcr_scalar(an[["alpha"]], 0.05)
-  if (!(kind %in% c("change", "ancova"))) vcr_abort("scenario_value_invalid", "scenario.analysis.kind", "The beta_logit family is analysed by the change from baseline or by an analysis of covariance; a per-person slope is the other families'.")
+  if (!(kind %in% c("change", "ancova", .VCR_ICE_KINDS))) vcr_abort("scenario_value_invalid", "scenario.analysis.kind", "The beta_logit family is analysed by the change from baseline, an analysis of covariance, an MMRM or a conditional-mean imputation; a per-person slope is the other families'.")
   at_time <- vcr_scalar(an[["visit"]], max(visits))
   at <- match(TRUE, abs(visits - at_time) < 1e-9)
   if (is.na(at) || at < 2L) vcr_abort("scenario_value_invalid", "scenario.analysis.visit", "The analysis visit is one of the scheduled visits after the first.")
@@ -447,17 +518,37 @@ vcr_job_patients_progression_beta_logit <- function(job, output_dir = NULL, canc
   }
   paired <- identical(people[["mode"]], "paired_counterfactual")
   population <- .vcr_bl_population(sc[["population"]])
-  effects <- .vcr_bl_effects(sc[["treatment"]])
-  treatment <- .vcr_bl_treatment(sc[["treatment"]], max(visits), effects)
-  distributed <- any(vapply(effects, function(e) isTRUE(e$distributed), logical(1)))
   placebo <- !identical(sc[["placebo"]], FALSE)
   dropout <- as.character(sc[["dropoutModel"]] %||% "parameter_set")
+  # the inhibitor both arms are already on (R29): started `weeksBefore` weeks before baseline, so its effect is in every arm's course from the shared response
+  bg <- sc[["treatment"]][["background"]]
+  if (!is.null(bg)) {
+    if (!placebo) vcr_abort("scenario_value_invalid", "scenario.treatment.background", "The background inhibitor acts through the response both arms share; with the placebo response switched off it would be dropped. Leave placebo on, or leave the background out.")
+    population$background <- list(drug = as.character(bg[["drug"]]), doseMg = vcr_scalar(bg[["doseMg"]]), weeksBefore = vcr_scalar(bg[["weeksBefore"]]))
+  }
   par <- vcr_beta_logit_par(set$medians, population)
+  if (!is.null(bg)) .vcr_bl_reference_effect(par, population$background)
+  effects <- .vcr_bl_effects(sc[["treatment"]])
+  # the mechanism chain (R30) stands where a disease-modifying share would: its effect distribution is what the assurance averages over
+  chain <- NULL
+  if (!is.null(sc[["treatment"]][["mechanism"]])) {
+    if (!is.null(sc[["treatment"]][["diseaseModifying"]])) vcr_abort("scenario_value_invalid", "scenario.treatment.mechanism", "The disease-modifying share is either stated (diseaseModifying) or the chain's (mechanism), not both.")
+    chain <- vcr_mechanism_chain(sc[["treatment"]][["mechanism"]], par, vcr_scalar(sc[["treatment"]][["doseBegin"]], 0), vcr_scalar(sc[["treatment"]][["doseEnd"]], max(visits)), visits, placebo, dropout,
+                                 seed = as.integer(as.numeric(vcr_scalar(job[["seed"]], 1)) %% 2147483647))
+    effects$fraction <- chain$spec
+  }
+  treatment <- .vcr_bl_treatment(sc[["treatment"]], max(visits), effects, par = par)
+  distributed <- any(vapply(effects, function(e) isTRUE(e$distributed), logical(1)))
   is_null <- !distributed && !(isTRUE(abs(treatment$emax %||% 0) > 0) || isTRUE(treatment$fraction > 0))
   n1 <- if (paired) record$n else as.integer(sc[["design"]][["nTreat"]]); n0 <- if (paired) record$n else as.integer(sc[["design"]][["nControl"]])
   p <- list(par = par, population = population, uncertainty = uncertainty, visits = visits, at = at, n1 = n1, n0 = n0, alpha = alpha, is_null = is_null,
             analysis = kind, treatment = treatment, placebo = placebo, dropout = dropout, record = record, coupling = "common", mode = people[["mode"]],
-            effects = if (distributed) effects else NULL, treatmentScenario = sc[["treatment"]])
+            effects = if (distributed) effects else NULL, treatmentScenario = sc[["treatment"]], reference = sc[["treatment"]][["reference"]])
+  # intercurrent events and the estimators of patients_progression_intercurrent.R (plan R26): read here, run in that file
+  ice_on <- !is.null(sc[["intercurrent"]]) || kind %in% .VCR_ICE_KINDS
+  if (ice_on) {
+    p <- .vcr_ice_prepare(p, sc, an, kind, max(visits), distributed, record, as.integer(as.numeric(vcr_scalar(job[["seed"]], 1)) %% 2147483647))
+  }
   floor_ <- as.integer(if (paired) 100L else vcr_replicate_floor(is_null))
   want <- as.integer(min(max(floor_, vcr_scalar(job[["replicates"]], 0L)), vcr_max_replicates()))
   cores <- vcr_cores(job[["cores"]]); seed <- vcr_scalar(job[["seed"]], 1)
@@ -501,10 +592,12 @@ vcr_job_patients_progression_beta_logit <- function(job, output_dir = NULL, canc
     list(visit = visits[j], control = vcr_measure("observed_people", mean(oc), simulated = TRUE, mcse = stats::sd(oc) / sqrt(done), source = "synthetic"),
          treated = vcr_measure("observed_people", mean(ot), simulated = TRUE, mcse = stats::sd(ot) / sqrt(done), source = "synthetic"))
   })
+  ice_report <- if (ice_on) .vcr_ice_report(p, v, unit) else NULL
   measures <- c(list(power,
                      calc("expected_difference", trt$observedChange[at] - ctl$observedChange[at], note = "treated less control change from baseline at the analysis visit, among the people still observed, in a typical study at the posterior medians"),
                      calc("expected_control_change", ctl$observedChange[at]), calc("expected_treated_change", trt$observedChange[at])),
-                if (!is.null(sim_diff)) list(sim_diff))
+                if (!is.null(sim_diff)) list(sim_diff),
+                if (ice_on) .vcr_ice_claimed_measures(ice_report))
   issues <- list(); stopped <- run$stopped
   if (identical(stopped, "cpu_budget")) issues <- list(vcr_issue("cpu_budget_exhausted", "cpuSecondsLimit", "The CPU budget ran out before every trial ran; the power uses the trials that finished."))
   status <- if (identical(stopped, "canceled")) "canceled" else if (identical(stopped, "cpu_budget")) "failed" else "succeeded"
@@ -553,9 +646,14 @@ vcr_job_patients_progression_beta_logit <- function(job, output_dir = NULL, canc
                           "More simulated trials shrink only the Monte Carlo error of this number; they do not change a wrong distribution or a wrong model.",
                           if (any(vapply(reports, function(r) isTRUE(r$redrawnShare > 0), logical(1)))) "Draws the model cannot represent were redrawn (the distribution is truncated to what it can); the share is in the result."),
     if (!is.null(record)) .vcr_bl_record_limits(record, p),
+    .vcr_bl_reference_limits(sc[["treatment"]]),
+    if (!is.null(chain)) chain$limits,
+    if (ice_on) .vcr_ice_limits(p),
     if (beyond) list(sprintf("The last visit is week %s, beyond the two years the model's data support: that part is an extrapolation.", format(max(visits)))))
   limits <- Filter(Negate(is.null), as.list(limits))
-  list(status = status, measures = measures, issues = issues, counts = vcr_counts(generatedRecords = done * (p$n1 + p$n0)),
+  if (ice_on) given <- c(given, .vcr_ice_given(sc, an))
+  if (ice_on) assumed <- c(assumed, .vcr_ice_assumed(p, sc, an))
+  res <- list(status = status, measures = measures, issues = issues, counts = vcr_counts(generatedRecords = done * (p$n1 + p$n0)),
        conclusion = "limited",
        diagnostics = list(replicatesCompleted = done, progression = list(
          family = "beta_logit", curves = curves, calculatedFor = "typical_study", isNull = is_null, trials = done, trialsRequested = want, outcomeUnit = unit,
@@ -566,12 +664,16 @@ vcr_job_patients_progression_beta_logit <- function(job, output_dir = NULL, canc
          uncertainty = uncertainty, placebo = placebo, dropoutModel = dropout,
          analysis = list(kind = kind, visit = at_time, alpha = alpha, firstVisit = visits[1L]),
          treatment = list(symptomaticLogitEmax = treatment$emax %||% 0, et50Weeks = treatment$et50, washoutHalfLifeWeeks = treatment$halfLife,
-                          diseaseModifyingFraction = treatment$fraction, doseBegin = treatment$begin, doseEnd = treatment$end),
+                          diseaseModifyingFraction = treatment$fraction, doseBegin = treatment$begin, doseEnd = treatment$end,
+                          reference = .vcr_bl_reference_report(par, sc[["treatment"]][["reference"]], uncertainty),
+                          background = .vcr_bl_reference_report(par, population[["background"]], uncertainty, weeks = TRUE)),
          population = list(mmseRange = par$mmse, ageBounds = par$ageBounds, apoe4 = par$apoe, femaleShare = par$female, ageMeanByApoe4 = par$ageMean, ageSd = par$ageSd),
-         effectDistributions = reports, people = if (is.null(record)) NULL else .vcr_bl_record_report(record, "resampled_trials", p),
+         effectDistributions = reports, mechanism = if (is.null(chain)) NULL else chain$report, people = if (is.null(record)) NULL else .vcr_bl_record_report(record, "resampled_trials", p),
          observed = observed, trialsAnalysed = length(est), posteriorRowsUsed = length(unique(v[v[, "row"] > 0, "row"])),
          extrapolation = list(dataWeeks = .VCR_BETA_LOGIT_DATA_WEEKS, lastVisit = max(visits), beyond = beyond),
          reproduction = list(reproduced = c("EMA qualification opinion 2013 Table 7", "EMA qualification opinion 2013 Table 9", "EMA qualification opinion 2013 Table 11"),
                              notReproduced = c("EMA qualification opinion 2013 Table 10 intervals", "EMA qualification opinion 2013 Figures 15 and 16")),
          given = given, assumed = assumed, populationLevel = TRUE, limits = limits)))
+  if (!is.null(ice_report)) res$diagnostics$progression$intercurrent <- ice_report
+  res
 }

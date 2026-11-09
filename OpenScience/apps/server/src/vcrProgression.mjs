@@ -29,8 +29,9 @@
  */
 
 import { createHash } from "node:crypto";
-import { VCR_RESULT_QUANTITY_LABELS_ZH, VCR_SIMULATION_ERROR_SENTENCE_ZH, VCR_UNCERTAINTY_MODE_QUANTITY } from "@evimed/domain";
+import { VCR_RESULT_QUANTITY_LABELS_ZH, VCR_SIMULATION_ERROR_SENTENCE_ZH, VCR_UNCERTAINTY_MODE_QUANTITY, vcrEstimandAlignment } from "@evimed/domain";
 import { finishPremises } from "./vcrPremises.mjs";
+import { drugOriginPremises } from "./vcrDrugOriginPremises.mjs";
 import { researchQuestionPremises, resultQuestionInput } from "./vcrResearchQuestionView.mjs";
 import { list, markFor, measureValue, numeric, object, text, zhUnit } from "./vcrViewsKit.mjs";
 
@@ -105,6 +106,9 @@ function alzheimerEffectWords(progression) {
   } else if (numeric(givenOf(progression, "treatment.symptomatic.logitEmax").value) !== null) {
     parts.push(`改善症状，最大效应强度是 ${plain(Number(givenOf(progression, "treatment.symptomatic.logitEmax").value))}${half}`);
   }
+  const reference = object(treatment.reference);
+  if (text(reference.drug)) parts.push(`已上市药物（${/** @type {Record<string, string>} */ ({ donepezil: "多奈哌齐", galantamine: "加兰他敏", rivastigmine: "卡巴拉汀" })[String(reference.drug)] ?? String(reference.drug)}，每天 ${plain(Number(reference.doseMg))} mg）按模型自己拟合的效果`);
+  if (text(object(progression.mechanism).drug)) parts.push("按已发表的机制链（剂量、血药浓度、淀粉样蛋白 PET、认知量表）算出的效果");
   const fraction = numeric(treatment.diseaseModifyingFraction);
   if (fraction !== null && fraction > 0) parts.push(`病情恶化的速度减慢 ${plain(fraction * 100)}%（停药后保持）`);
   return parts.length ? parts.join("；") : null;
@@ -126,6 +130,73 @@ export const alzheimerScopeText = (beyond, lastVisit, mmse = null) => `描述一
 export const ALZHEIMER_CONTEXT_MMSE = Object.freeze([10, 26]);
 /** @param {readonly number[] | null | undefined} mmse */
 export const alzheimerOutsideContext = (mmse) => Array.isArray(mmse) && mmse.length === 2 && (Number(mmse[0]) < ALZHEIMER_CONTEXT_MMSE[0] || Number(mmse[1]) > ALZHEIMER_CONTEXT_MMSE[1]);
+
+/** The estimators of the Alzheimer model in the words the page uses; the data each reads is said with it. @param {Record<string, any>} analysis */
+function analysisWords(analysis) {
+  const kind = String(analysis.kind ?? "change");
+  const data = analysis.data === "on_treatment" ? "只用停药之前（用药期间）的数据" : analysis.data === "all_observed" ? "用了所有收集到的数据，停药之后的也算" : "";
+  const delta = numeric(analysis.delta);
+  const words = /** @type {Record<string, string>} */ ({
+    ancova: "按基线分数校正的协方差分析", mmrm: "混合效应模型（MMRM）：每次随访各有各的均值，随访之间的相关不设限制，按基线和分组校正",
+    cmi_jump_to_reference: "参照组插补（跳到对照组）：缺失的值按停药后随对照组的病程补上，再做协方差分析，标准误用分组刀切法",
+    cmi_copy_reference: "参照组插补（复制对照组）：停药的人整个病程都按对照组补上，再做协方差分析，标准误用分组刀切法",
+  });
+  const base = words[kind] ?? "Welch t 检验";
+  const who = kind === "change" || kind === "ancova" ? "只算那时仍在随访的人" : "";
+  return [base, data, who, delta ? `补上的值在治疗组一律加 ${plain(delta)} 分（临界值分析）` : ""].filter(Boolean).join("，");
+}
+
+/**
+ * What happens to a person besides finishing as planned, and which effect the analysis answers (plan R26): the events as stated, the realized shares, the true
+ * value of each way of handling a stop with the analysis's bias and coverage against it. Rows only when the run had intercurrent events or an MMRM-class analysis.
+ * @param {Record<string, any>} progression @returns {Array<Record<string, any>>}
+ */
+function intercurrentPremises(progression) {
+  const ic = object(progression.intercurrent);
+  if (!Object.keys(ic).length) return [];
+  const config = object(ic.configuration);
+  const stop = object(config.discontinuation); const leave = object(config.withdrawal); const death = object(config.death);
+  const pct = (/** @type {unknown} */ x) => `${plain(Number(x) * 100, 3)}%`;
+  /** @type {string[]} */
+  const parts = [];
+  if (numeric(stop.shareTreated) !== null) {
+    parts.push(`到最后一次随访，治疗组约 ${pct(stop.shareTreated)}、对照组约 ${pct(stop.shareControl)} 的人停药；停药的人里约 ${pct(stop.retrievedShare)} 继续留在研究里随访${Number(stop.progressionLogHazardPerSd) ? `；病情进展越快的人越早停药（每个标准差对数风险 ${plain(Number(stop.progressionLogHazardPerSd))}）` : "；停不停药与病情无关"}`);
+  }
+  if (numeric(leave.treatedHazardRatio) !== null && (Number(leave.treatedHazardRatio) !== 1 || Number(leave.progressionLogHazardPerSd) !== 0)) parts.push("退出研究的风险与分组或病情有关");
+  if (numeric(death.share) !== null) parts.push(`约 ${pct(death.share)} 的人死亡，死亡后的分数按最差值 70 分计`);
+  /** @type {Array<Record<string, any>>} */
+  const rows = [];
+  if (parts.length) rows.push({ key: "progression:ad:events", label: "停药、退出和死亡", source: "given", decisive: false, value: `${parts.join("；")}。停药后对症的效果按设定的半衰期消退，疾病修饰的效果保留` });
+  const strategyWords = /** @type {Record<string, string>} */ ({ treatment_policy: "不论是否停药（治疗策略）", hypothetical: "假如没有人停药（假想情境）" });
+  const estimator = String(ic.estimator ?? "");
+  const claimed = typeof ic.claimed === "string" ? ic.claimed : null;
+  const table = list(ic.estimands).map(object).map((row) => {
+    const truth = numeric(object(row.truth).value); const bias = numeric(object(row.bias).value); const mcse = numeric(object(row.bias).mcse); const cover = numeric(object(row.coverage).value);
+    return truth === null ? null : `${strategyWords[String(row.strategy)] ?? String(row.strategy)}：真实差值 ${plain(truth)} 分，这个分析的偏差 ${bias === null ? "未知" : `${plain(bias)}${mcse === null ? "" : `（模拟误差 ${plain(mcse)}）`}`} 分，95% 区间覆盖 ${cover === null ? "未知" : pct(cover)}`;
+  }).filter(Boolean);
+  const alignment = claimed ? vcrEstimandAlignment({ strategy: claimed, estimator, data: String(ic.data ?? "") }) : null;
+  if (table.length) rows.push({ key: "progression:ad:estimand", label: "这个分析回答的是哪个效应", source: "derived", decisive: claimed !== null,
+    value: `${table.join("；")}。${alignment ? alignment.sentence : "两个真实值都由模型算出，偏差小、覆盖率接近 95% 的那个才是这个分析回答的问题"}` });
+  return rows;
+}
+
+/**
+ * The estimand table of a run with intercurrent events: for each way of handling a stop the model's true value, this analysis's bias against it and the
+ * coverage of its 95% interval, each with its Monte Carlo error, and a sentence saying whether the analysis answers that question. Null for a run without them.
+ * @param {Record<string, any>} progression @param {(measure: Record<string, any>) => unknown} shown
+ */
+function estimandsOf(progression, shown) {
+  const ic = object(progression.intercurrent);
+  const rows = list(ic.estimands).map(object);
+  if (!rows.length) return null;
+  const labels = /** @type {Record<string, string>} */ ({ treatment_policy: "不论是否停药（治疗策略）", hypothetical: "假如没有人停药（假想情境）" });
+  return { rows: rows.map((row) => {
+    const alignment = vcrEstimandAlignment({ strategy: String(row.strategy), estimator: String(ic.estimator ?? ""), data: String(ic.data ?? "") });
+    return { key: String(row.strategy), label: labels[String(row.strategy)] ?? String(row.strategy), claimed: ic.claimed === row.strategy, truth: shown(object(row.truth)),
+      bias: Object.keys(object(row.bias)).length ? shown(object(row.bias)) : null, coverage: Object.keys(object(row.coverage)).length ? shown(object(row.coverage)) : null,
+      sentence: alignment.sentence };
+  }) };
+}
 
 /** The premises of the Alzheimer model (beta_logit): five decisive sentences, the rest folded. @param {Record<string, any>} progression */
 function alzheimerPremisesOf(progression) {
@@ -169,11 +240,13 @@ function alzheimerPremisesOf(progression) {
   rows.push({ key: "progression:ad:placebo", label: "安慰剂反应", source: assumedHas(progression, "placebo") ? "default" : "given",
     value: progression.placebo === false ? "不加安慰剂反应" : "两组从第 0 周起都有安慰剂反应" });
   rows.push({ key: "progression:ad:analysis", label: "比较方法", source: assumedHas(progression, "analysis.kind") || assumedHas(progression, "analysis.visit") ? "default" : "given",
-    value: `第 ${visit} 周相对基线的变化，${analysis.kind === "ancova" ? "按基线分数校正的协方差分析" : "Welch t 检验"}，只算那时仍在随访的人；检验水平双侧 ${plain(Number(analysis.alpha ?? 0.05) * 100)}%` });
+    value: `第 ${visit} 周相对基线的变化，${analysisWords(analysis)}；检验水平双侧 ${plain(Number(analysis.alpha ?? 0.05) * 100)}%` });
+  rows.push(...intercurrentPremises(progression));
   if (effect) rows.push({ key: "progression:ad:dosing", label: "用药时间", source: assumedHas(progression, "treatment.doseEnd") ? "default" : "given",
     value: `第 ${plain(Number(treatment.doseBegin ?? 0))}–${plain(Number(treatment.doseEnd))} 周` });
   rows.push({ key: "progression:ad:curves", label: "曲线怎么算的", source: "default",
     value: "平均病程按典型研究、用参数的中位数精确计算；检验的把握度和估计差值是模拟的" });
+  rows.push(...drugOriginPremises(progression));
   rows.push({ key: "lab:replicates", label: "模拟的误差", source: "default", decisive: false, value: VCR_SIMULATION_ERROR_SENTENCE_ZH });
   return finishPremises(rows);
 }
@@ -278,11 +351,28 @@ function cardOf(result, staleMark) {
           gap: shown(inUnit({ name: "curve_gap", value: Number(object(t.mean).value) - Number(object(c.mean).value), source: "calculated" })) };
       }),
     },
+    estimands: alzheimer ? estimandsOf(progression, shown) : null,
     trials: numeric(progression.trials),
     premises: alzheimer ? alzheimerPremisesOf(progression) : premisesOf(progression, unit),
     limited: list(object(result.diagnostics).issues).some((issue) => object(issue).code === "cpu_budget_exhausted")
       ? `只模拟完了一部分试验（${numeric(progression.trials) ?? "?"} 次，原定 ${numeric(progression.trialsRequested) ?? "?"} 次），数字按已完成的给出。` : null,
   };
+}
+
+/**
+ * Whether the analysis a result used answers what the study's question asked of each intercurrent event (plan R26): one row for the strategies the
+ * engine computes a truth for, said in the question's own words. A result of a run with no such events says nothing.
+ * @param {Record<string, any>} bundle @param {Record<string, any>} result @returns {Array<Record<string, any>>}
+ */
+function estimatorForQuestionRows(bundle, result) {
+  const ic = object(object(object(result.diagnostics).progression).intercurrent);
+  if (!Object.keys(ic).length) return [];
+  const strategies = [...new Set(list(object(object(bundle.researchQuestion).fields).intercurrentEvents).map((entry) => object(entry).strategy).filter((value) => value === "treatment_policy" || value === "hypothetical"))];
+  const words = /** @type {Record<string, string>} */ ({ treatment_policy: "不论是否停药", hypothetical: "假如没有人停药" });
+  return strategies.map((strategy) => {
+    const alignment = vcrEstimandAlignment({ strategy: String(strategy), estimator: String(ic.estimator ?? ""), data: String(ic.data ?? "") });
+    return { key: `question:estimator:${strategy}`, label: "分析是否回答了研究问题", source: "derived", decisive: alignment.state === "not_aligned", value: `研究问题要的是“${words[String(strategy)]}”的效应。${alignment.sentence}` };
+  });
 }
 
 /**
@@ -299,7 +389,7 @@ export function presentProgressions(bundle, { nodeOf }) {
     const card = cardOf(result, markFor(bundle.stale ?? [], nodeOf(result)));
     // The Alzheimer model's calibration estimand is the parameter set's: only a result computed with it is judged against it.
     const modelId = object(object(object(result.diagnostics).progression)).family === "beta_logit" ? "camd-adas-cog-11" : null;
-    const rows = card ? researchQuestionPremises(resultQuestionInput(bundle, result, modelId)) : [];
+    const rows = card ? [...researchQuestionPremises(resultQuestionInput(bundle, result, modelId)), ...estimatorForQuestionRows(bundle, result)] : [];
     return card && rows.length ? { ...card, premises: finishPremises([...list(card.premises), ...rows]) } : card;
   }).filter(Boolean);
 }

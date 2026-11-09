@@ -71,13 +71,14 @@ export const VCR_QUESTION_OBJECT_FIELDS = Object.freeze({
 
 /**
  * What each model can represent of E9(R1)'s strategies today, and what its source data estimate. `default` covers a model not named
- * here. The AD model's dropout is a Weibull on age and baseline MMSE that depends on neither arm nor outcome, analysed on what is
- * observed: the only strategy it represents is the hypothetical one (what would have been seen had the person stayed). Round-2 R26
- * (discontinuation by arm, off-treatment follow-up, a retrieved share, estimators for each) adds entries here.
+ * here. The AD model's source data are mixed trial data analysed under missing at random, which estimate the hypothetical effect
+ * (what would have been seen had the person stayed); since round-2 R26 the engine also generates stopping the drug by arm, an off-treatment path and
+ * a retrieved share, so it represents the treatment-policy strategy as well, with an estimator for each (`vcrEstimandAlignment`).
  */
 export const VCR_QUESTION_MODEL_CAPABILITIES = Object.freeze({
   'camd-adas-cog-11': Object.freeze({
-    strategies: frozen(['hypothetical']),
+    // R26 (2026-11-09): the beta_logit family generates stopping the drug with an off-treatment path, a retrieved share and the truth of both
+    strategies: frozen(['hypothetical', 'treatment_policy']),
     calibration: Object.freeze({
       data: '混合的试验数据', treatment: '大多数人在用药期间', missing: '随机缺失（MAR）', strategies: frozen(['hypothetical']),
       sentence: '这个模型的校准数据是混合的试验数据，大多数人在用药期间，缺失的数据按随机缺失处理',
@@ -259,4 +260,31 @@ export function questionCalibration(question, modelId) {
 export function questionAnswersEarlier(ref, current) {
   if (!ref || !current || ref.id !== current.id || !Number.isInteger(ref.version) || !Number.isInteger(current.version)) return null
   return /** @type {number} */ (ref.version) < /** @type {number} */ (current.version) ? { answeredVersion: /** @type {number} */ (ref.version), currentVersion: /** @type {number} */ (current.version) } : null
+}
+
+/**
+ * Whether an analysis answers the effect a strategy asks for, from what each estimator uses and assumes (round-2 R26; held to the engine's
+ * known-truth bias and coverage cases N110g*). Never a refusal: `conditional` names what has to hold, `not_aligned` says the analysis answers
+ * another question (the engine's result carries the bias against each truth), `not_computed` is a strategy the engine has no truth for.
+ * @param {{ strategy: string | null | undefined, estimator: string | null | undefined, data?: string | null }} input
+ * @returns {{ state: 'conditional' | 'not_aligned' | 'not_computed', sentence: string }}
+ */
+export function vcrEstimandAlignment(input) {
+  const strategy = String(input?.strategy ?? '')
+  const estimator = String(input?.estimator ?? '')
+  const reference = estimator === 'cmi_jump_to_reference' || estimator === 'cmi_copy_reference'
+  const onTreatment = input?.data === 'on_treatment' || reference
+  if (strategy !== 'treatment_policy' && strategy !== 'hypothetical') {
+    return { state: 'not_computed', sentence: '这种处理方式这个模拟算不出真实值，所以没有按它给出偏差和覆盖率。' }
+  }
+  if (strategy === 'treatment_policy') {
+    if (reference) return { state: 'conditional', sentence: '参照组插补假定停药后效果就消失：对只靠对症起效、停药后很快消失的药接近治疗策略的答案，对停药后仍保留的效果会低估。' }
+    if (onTreatment) return { state: 'not_aligned', sentence: '这个分析只用了停药之前的数据，回答的是“假如没有人停药”的问题，不是“不论是否停药”的问题。' }
+    return { state: 'conditional', sentence: '这个分析用了停药后随访到的数据；只有没随访到的人和随访到的人差不多时，它回答的才是“不论是否停药”的问题。' }
+  }
+  if (reference) return { state: 'not_aligned', sentence: '参照组插补让停药的人从停药起按对照组的病程走，回答的不是“假如没有人停药”的问题。' }
+  if (!onTreatment) return { state: 'not_aligned', sentence: '这个分析把停药之后的数据也用了进去，回答的是“不论是否停药”的问题，不是“假如没有人停药”的问题。' }
+  return { state: 'conditional', sentence: estimator === 'mmrm'
+    ? '这个分析只用了停药之前的数据；停药的人与继续用药的人在前面几次随访里表现相近时，它回答的是“假如没有人停药”的问题。'
+    : '这个分析只用了停药之前的数据；只有停药与病情无关时，它回答的才是“假如没有人停药”的问题。' }
 }

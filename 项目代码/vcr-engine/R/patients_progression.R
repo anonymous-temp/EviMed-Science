@@ -150,7 +150,7 @@ vcr_job_patients_progression <- function(job, output_dir = NULL, cancel_file = N
   at_time <- vcr_scalar(an[["visit"]], max(visits))
   at <- match(TRUE, abs(visits - at_time) < 1e-9)
   if (is.na(at) || at < 2L) vcr_abort("scenario_value_invalid", "scenario.analysis.visit", "The analysis visit is one of the scheduled visits after the first.")
-  if (identical(kind, "ancova")) vcr_abort("scenario_value_invalid", "scenario.analysis.kind", "The analysis of covariance is the beta_logit family's; these four families are analysed by the change or by the per-person slope.")
+  if (kind %in% c("ancova", .VCR_ICE_KINDS)) vcr_abort("scenario_value_invalid", "scenario.analysis.kind", "The analysis of covariance, the MMRM and the reference-based imputations are the beta_logit family's; these four families are analysed by the change or by the per-person slope.")
   if (identical(kind, "slope") && length(visits) < 3L) vcr_abort("scenario_value_invalid", "scenario.visits", "A slope needs at least three visits.")
   p <- list(baseline_mean = val(sc[["baseline"]][["mean"]]), baseline_sd = val(sc[["baseline"]][["sd"]]), residual_sd = val(sc[["residualSd"]]), rho = rho, visits = visits,
             n1 = as.integer(sc[["design"]][["nTreat"]]), n0 = as.integer(sc[["design"]][["nControl"]]), alpha = alpha, at = at, is_null = !(slowing > 0),

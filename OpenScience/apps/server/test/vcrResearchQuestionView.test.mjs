@@ -9,7 +9,7 @@ import { presentProgressions } from "../src/vcrProgression.mjs";
 const question = (fields, version = 1, bases = {}) => ({ id: "main", version, studyId: "s", fields, bases, written: [], by: "u", createdAt: null });
 
 test("the card lists what is written with its basis and what is open as gaps, not errors", () => {
-  const card = presentResearchQuestion(question({ question: "q", intercurrentEvents: [{ event: "停药", strategy: "treatment_policy", mechanism: "仍随访" }, { event: "死亡", strategy: null, mechanism: "" }] }, 2,
+  const card = presentResearchQuestion(question({ question: "q", intercurrentEvents: [{ event: "停药", strategy: "principal_stratum", mechanism: "仍随访" }, { event: "死亡", strategy: null, mechanism: "" }] }, 2,
     { question: "person_edited", intercurrentEvents: "model_assembled" }), { modelId: "camd-adas-cog-11" });
   assert.equal(card.bases.question.label, "你在页面上改的");
   assert.deepEqual(card.gaps.map((gap) => gap.field), ["population", "treatment", "variable", "summary", "decisionContext", "assumptions"]);
@@ -32,12 +32,12 @@ test("a question with no events says what the default handling is, and nothing i
 
 test("a result of an earlier version is marked, an event the simulation cannot represent is said in the event's words, and neither is a refusal", () => {
   const rows = researchQuestionPremises({
-    question: question({ intercurrentEvents: [{ event: "因不良反应停药", strategy: "treatment_policy", mechanism: "" }, { event: "退出研究", strategy: "hypothetical", mechanism: "" }] }, 4),
+    question: question({ intercurrentEvents: [{ event: "因不良反应停药", strategy: "principal_stratum", mechanism: "" }, { event: "退出研究", strategy: "hypothetical", mechanism: "" }] }, 4),
     ref: { id: "main", version: 2 }, modelId: "camd-adas-cog-11",
   });
   assert.deepEqual(rows.map((row) => [row.key, row.decisive]), [["question:earlier", true], ["question:not_representable", true], ["question:calibration", false]]);
   assert.equal(rows[0].value, "这个结果回答的是研究问题的第 2 版；问题已经改到第 4 版，需要时重新计算。");
-  assert.match(rows[1].value, /“因不良反应停药”按“不论是否发生都按原来的分组分析（治疗策略）”处理，这个模拟表示不了/);
+  assert.match(rows[1].value, /“因不良反应停药”按“只看一类人：事件会发生（或不会发生）的人（主层）”处理，这个模拟表示不了/);
   assert.doesNotMatch(rows[1].value, /退出研究/, "an event the model can represent is not listed as one it cannot");
   assert.match(rows[2].value, /混合的试验数据，大多数人在用药期间/);
 });

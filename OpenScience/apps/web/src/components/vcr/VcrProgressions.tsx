@@ -19,6 +19,16 @@ function visitColumns(timeUnit: string): Array<DataColumn<VisitRow>> {
   ];
 }
 
+type EstimandRow = NonNullable<VcrProgressionCard["estimands"]>["rows"][number];
+
+const estimandColumns: Array<DataColumn<EstimandRow>> = [
+  { key: "label", header: "按哪种方式处理停药", rowHeader: true, cell: (row) => <span>{row.label}{row.claimed ? "（研究问题要的）" : ""}</span> },
+  { key: "truth", header: "模型算出的真实差值", align: "right", cell: (row) => <CardNumber value={row.truth} label="真实差值" /> },
+  { key: "bias", header: "这个分析的偏差", align: "right", cell: (row) => (row.bias ? <CardNumber value={row.bias} label="偏差" /> : "—") },
+  { key: "coverage", header: "95% 区间覆盖率", align: "right", cell: (row) => (row.coverage ? <CardNumber value={row.coverage} label="覆盖率" /> : "—") },
+  { key: "sentence", header: "这个分析回答的是不是它", cell: (row) => row.sentence ?? "—" },
+];
+
 function ProgressionCard({ card }: { card: VcrProgressionCard }) {
   return (
     <div data-vcr-progression="" data-vcr-progression-result={card.id} className="min-w-0">
@@ -47,6 +57,12 @@ function ProgressionCard({ card }: { card: VcrProgressionCard }) {
           <CardBlock title="每次随访的平均数与散布">
             <DataTable label={`${card.title}：每次随访`} columns={visitColumns(card.timeUnit)} rows={card.table.rows} rowKey={(row) => row.key} ground="surface" />
           </CardBlock>
+
+          {card.estimands && card.estimands.rows.length > 0 && (
+            <CardBlock title="这个分析回答的是哪个效应">
+              <DataTable label={`${card.title}：两种停药处理方式的真实值与偏差`} columns={estimandColumns} rows={card.estimands.rows} rowKey={(row) => row.key} ground="surface" />
+            </CardBlock>
+          )}
 
           <VcrPremises premises={card.premises} onChange={null} />
         </div>

@@ -70,7 +70,7 @@ test("intercurrent events: the five strategies, a strategy may wait, an event ne
 
 test("representability is computed from the model's capabilities, never refused", () => {
   const question = { fields: { intercurrentEvents: [
-    { event: "停药", strategy: "treatment_policy" }, { event: "退出研究", strategy: "hypothetical" }, { event: "死亡", strategy: null },
+    { event: "停药", strategy: "principal_stratum" }, { event: "退出研究", strategy: "hypothetical" }, { event: "死亡", strategy: null },
   ] } };
   const states = questionRepresentability(question, "camd-adas-cog-11").map((entry) => entry.state);
   assert.deepEqual(states, ["not_representable", "representable", "strategy_not_stated"]);

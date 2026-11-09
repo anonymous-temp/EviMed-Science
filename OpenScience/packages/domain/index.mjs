@@ -2383,6 +2383,7 @@ export {
 
 // vcrAccrualRate — 1 export: the accrual duration a stated rate gives (people / rate), derived by code before the scenario is frozen
 export { vcrDeriveAccrualDuration } from './src/vcrAccrualRate.mjs'
+export { VCR_EFFECT_PRIOR_TARGETS, vcrEffectPriorFromEstimate, vcrEffectPriorFromPool } from './src/vcrEffectPrior.mjs'
 
 // vcrWriteWords — 5 exports: the closed words of a write's fields with what each means, and the near-miss spellings that mean exactly one
 // of them (read as that one, and said), so a spelling costs no round

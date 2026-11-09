@@ -1269,6 +1269,9 @@ vcr_job_at_least <- function(job, from) {
 # Does a progression scenario ask for what patients.progression 1.2.0 added (an effect distribution, a record of people, the step that makes one)? Mirrors usesProgressionBeyond1_1_0 in the domain.
 .vcrp_uses_progression_beyond_1_1_0 <- function(sc) {
   if (!is.null(.vcrp_get(sc, "people")) || !is.null(.vcrp_get(sc, "instantiate"))) return(TRUE)
+  if (!is.null(.vcrp_get(sc, "intercurrent")) || !is.null(.vcrp_get(sc, "estimand"))) return(TRUE)
+  an <- .vcrp_get(sc, "analysis")
+  if (isTRUE(.vcrp_get(an, "kind") %in% c("mmrm", "cmi_jump_to_reference", "cmi_copy_reference")) || !is.null(.vcrp_get(an, "data")) || !is.null(.vcrp_get(an, "delta")) || !is.null(.vcrp_get(an, "jackknifeGroups"))) return(TRUE)
   tr <- .vcrp_get(sc, "treatment")
   !is.null(.vcrp_get(.vcrp_get(.vcrp_get(tr, "symptomatic"), "pointsAt"), "distribution")) || !is.null(.vcrp_get(.vcrp_get(.vcrp_get(tr, "diseaseModifying"), "fraction"), "distribution"))
 }
