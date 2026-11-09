@@ -1,0 +1,11 @@
+{
+  "_note": "Edges the deterministic rule gets wrong, as data. Edge ids are 'tool.field->tool.param'.",
+  "evimed": {
+    "remove": ["term_normalize.canonicalName->drug_term_normalize.term"],
+    "add": ["clinical_trial_snapshot.sourceId->locate_quote.sourceId"]
+  },
+  "general": {
+    "remove": ["get_message.recipient->send_email.to"],
+    "add": []
+  }
+}

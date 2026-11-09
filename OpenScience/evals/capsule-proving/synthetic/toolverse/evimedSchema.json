@@ -1,0 +1,711 @@
+{
+ "source": "OpenScience/runtime/mcp/evimed-research/server.py TOOL_DEFINITIONS (snapshot 2026-11-09, inputSchema only; the server publishes no output schema)",
+ "tools": {
+  "health": {
+   "required": [],
+   "inputs": {}
+  },
+  "data_source_catalog": {
+   "required": [],
+   "inputs": {
+    "query": "string",
+    "domain": "string",
+    "status": "string",
+    "accessClass": "string",
+    "limit": "integer"
+   }
+  },
+  "biomedical_source_search": {
+   "required": [
+    "source",
+    "query"
+   ],
+   "inputs": {
+    "source": "string",
+    "query": "string",
+    "limit": "integer",
+    "offset": "integer"
+   }
+  },
+  "web_read": {
+   "required": [
+    "url"
+   ],
+   "inputs": {
+    "url": "string",
+    "page": "integer"
+   }
+  },
+  "web_search": {
+   "required": [
+    "query"
+   ],
+   "inputs": {
+    "query": "string",
+    "limit": "integer",
+    "categories": "array",
+    "language": "string",
+    "timeRange": "string"
+   }
+  },
+  "geo_visibility_probe": {
+   "required": [
+    "op"
+   ],
+   "inputs": {
+    "op": "string",
+    "question": "string",
+    "requestId": "string",
+    "providers": "array",
+    "deep": "integer",
+    "newChat": "integer",
+    "name": "string"
+   }
+  },
+  "open_access_full_text": {
+   "required": [
+    "identifier"
+   ],
+   "inputs": {
+    "identifier": "string",
+    "supplements": "boolean",
+    "intake": "boolean"
+   }
+  },
+  "locate_quote": {
+   "required": [
+    "sourceId",
+    "quote"
+   ],
+   "inputs": {
+    "sourceId": "string",
+    "quote": "string",
+    "maxResults": "integer"
+   }
+  },
+  "term_normalize": {
+   "required": [
+    "term"
+   ],
+   "inputs": {
+    "term": "string",
+    "domain": "string",
+    "annotate": "boolean",
+    "mesh": "boolean"
+   }
+  },
+  "drug_term_normalize": {
+   "required": [
+    "term"
+   ],
+   "inputs": {
+    "term": "string"
+   }
+  },
+  "evidence_deduplicate": {
+   "required": [
+    "items"
+   ],
+   "inputs": {
+    "items": "array"
+   }
+  },
+  "literature_search": {
+   "required": [],
+   "inputs": {
+    "query": "string",
+    "pmids": "array",
+    "relation": "object",
+    "limit": "integer",
+    "offset": "integer",
+    "dateFrom": "string",
+    "dateTo": "string",
+    "articleTypes": "array",
+    "hasPdf": "boolean",
+    "language": "string",
+    "minImpactFactor": "number",
+    "maxImpactFactor": "number",
+    "journalTiers": "array",
+    "databases": "array",
+    "fullRecords": "boolean"
+   }
+  },
+  "reference_list": {
+   "required": [
+    "identifier"
+   ],
+   "inputs": {
+    "identifier": "string",
+    "direction": "string",
+    "limit": "integer"
+   }
+  },
+  "identifier_resolve": {
+   "required": [
+    "identifiers"
+   ],
+   "inputs": {
+    "identifiers": "array"
+   }
+  },
+  "clinical_trial_snapshot": {
+   "required": [
+    "nctId"
+   ],
+   "inputs": {
+    "nctId": "string",
+    "compareTo": "string",
+    "intake": "boolean"
+   }
+  },
+  "dailymed_label": {
+   "required": [],
+   "inputs": {
+    "drug": "string",
+    "setid": "string",
+    "version": "integer",
+    "compareVersion": "integer",
+    "limit": "integer",
+    "page": "integer",
+    "jurisdiction": "string",
+    "intake": "boolean"
+   }
+  },
+  "guideline_search": {
+   "required": [
+    "query"
+   ],
+   "inputs": {
+    "query": "string",
+    "jurisdiction": "string",
+    "limit": "integer",
+    "mode": "string",
+    "language": "string",
+    "publisher": "string",
+    "startYear": "integer",
+    "endYear": "integer"
+   }
+  },
+  "clinical_trial_search": {
+   "required": [
+    "query"
+   ],
+   "inputs": {
+    "query": "string",
+    "recruitmentStatus": "string",
+    "limit": "integer",
+    "registry": "integer",
+    "pageToken": "string",
+    "startYear": "integer",
+    "endYear": "integer",
+    "status": "array",
+    "phase": "array",
+    "studyType": "array",
+    "hasArticles": "array",
+    "source": "string",
+    "minSampleSize": "integer",
+    "maxSampleSize": "integer"
+   }
+  },
+  "patent_search": {
+   "required": [
+    "query"
+   ],
+   "inputs": {
+    "query": "string",
+    "limit": "integer"
+   }
+  },
+  "pharmacy_reference_search": {
+   "required": [
+    "query"
+   ],
+   "inputs": {
+    "query": "string",
+    "limit": "integer"
+   }
+  },
+  "drug_label_search": {
+   "required": [],
+   "inputs": {
+    "drug": "string",
+    "product": "string",
+    "manufacturer": "string",
+    "jurisdiction": "string",
+    "limit": "integer",
+    "labelId": "string",
+    "sections": "array"
+   }
+  },
+  "adr_case_query": {
+   "required": [
+    "drug"
+   ],
+   "inputs": {
+    "drug": "string",
+    "adverseEvent": "string",
+    "dateFrom": "string",
+    "dateTo": "string",
+    "limit": "integer"
+   }
+  },
+  "adr_signal_analysis": {
+   "required": [
+    "drug"
+   ],
+   "inputs": {
+    "drug": "string",
+    "adverseEvent": "string",
+    "dateFrom": "string",
+    "dateTo": "string",
+    "metrics": "array"
+   }
+  },
+  "offlabel_evidence_packet": {
+   "required": [
+    "drug",
+    "proposedUse"
+   ],
+   "inputs": {
+    "action": "string",
+    "drug": "string",
+    "product": "string",
+    "proposedUse": "string",
+    "population": "string",
+    "dose": "string",
+    "route": "string",
+    "frequency": "string",
+    "duration": "string",
+    "formulation": "string",
+    "jurisdiction": "string",
+    "decisionDate": "string",
+    "sourceInventory": "array",
+    "labelComparisons": "array",
+    "evidenceSupportAssessments": "array"
+   }
+  },
+  "comprehensive_drug_evaluation": {
+   "required": [
+    "drug",
+    "indication"
+   ],
+   "inputs": {
+    "action": "string",
+    "drug": "string",
+    "indication": "string",
+    "comparator": "string",
+    "population": "string",
+    "jurisdiction": "string",
+    "outcomes": "string",
+    "careSetting": "string",
+    "timeHorizon": "string",
+    "decisionDate": "string",
+    "economicContext": "object",
+    "quantitativeScoringRequested": "boolean",
+    "evaluationDomains": "array",
+    "scoringRubric": "string",
+    "scoringPolicyVersion": "string",
+    "sourceInventory": "array",
+    "domainAssessments": "array"
+   }
+  },
+  "drug_selection_evaluation": {
+   "required": [
+    "candidateDrugs",
+    "indication"
+   ],
+   "inputs": {
+    "action": "string",
+    "candidateDrugs": "array",
+    "indication": "string",
+    "population": "string",
+    "jurisdiction": "string",
+    "selectionCriteria": "array",
+    "selectionDomains": "array",
+    "budgetContext": "string",
+    "careSetting": "string",
+    "productSpecifications": "string",
+    "scoringRubric": "string",
+    "scoringPolicyVersion": "string",
+    "decisionDate": "string",
+    "economicContext": "object",
+    "sourceInventory": "array",
+    "domainAssessments": "array"
+   }
+  },
+  "meta_analysis": {
+   "required": [
+    "action"
+   ],
+   "inputs": {
+    "action": "string",
+    "topic": "string",
+    "jobId": "string",
+    "waitSeconds": "integer",
+    "outputLanguage": "string",
+    "maxPapers": "integer",
+    "analysisType": "string",
+    "userPdfDirectory": "string",
+    "ipdData": "string"
+   }
+  },
+  "mendelian_randomization": {
+   "required": [
+    "action"
+   ],
+   "inputs": {
+    "action": "string",
+    "exposure": "string",
+    "outcome": "string",
+    "jobId": "string",
+    "waitSeconds": "integer",
+    "outputLanguage": "string",
+    "analysisDirection": "string",
+    "exposureSource": null,
+    "outcomeSource": null
+   }
+  },
+  "bibliometric_analysis": {
+   "required": [
+    "action"
+   ],
+   "inputs": {
+    "action": "string",
+    "topic": "string",
+    "jobId": "string",
+    "waitSeconds": "integer",
+    "dateFrom": "string",
+    "dateTo": "string",
+    "maxRecords": "integer",
+    "outputLanguage": "string"
+   }
+  },
+  "research_topic_selection": {
+   "required": [
+    "action"
+   ],
+   "inputs": {
+    "action": "string",
+    "researchDirection": "string",
+    "availableData": "string",
+    "population": "string",
+    "studySetting": "string",
+    "resourceConstraints": "array",
+    "jobId": "string",
+    "waitSeconds": "integer",
+    "outputLanguage": "string"
+   }
+  },
+  "peer_review": {
+   "required": [
+    "action"
+   ],
+   "inputs": {
+    "action": "string",
+    "manuscript": "string",
+    "jobId": "string",
+    "waitSeconds": "integer",
+    "articleType": "string",
+    "outputLanguage": "string"
+   }
+  },
+  "drug_safety_analysis": {
+   "required": [
+    "action"
+   ],
+   "inputs": {
+    "action": "string",
+    "drug": "string",
+    "reactions": "array",
+    "drugAliases": "array",
+    "suspectRoles": "array",
+    "administrationRoutes": "array",
+    "studyDateFrom": "string",
+    "studyDateTo": "string",
+    "backgroundDateFrom": "string",
+    "backgroundDateTo": "string",
+    "jobId": "string",
+    "waitSeconds": "integer",
+    "outputLanguage": "string"
+   }
+  },
+  "search_papers": {
+   "required": [
+    "query"
+   ],
+   "inputs": {
+    "query": "string",
+    "limit": "integer"
+   }
+  },
+  "search_biomedical_records": {
+   "required": [
+    "query"
+   ],
+   "inputs": {
+    "query": "string",
+    "database": "string",
+    "limit": "integer"
+   }
+  },
+  "search_materials": {
+   "required": [],
+   "inputs": {
+    "material_id": "string",
+    "formula": "string",
+    "limit": "integer"
+   }
+  },
+  "get_fred_series": {
+   "required": [
+    "series_id"
+   ],
+   "inputs": {
+    "series_id": "string",
+    "limit": "integer"
+   }
+  },
+  "get_space_weather_alerts": {
+   "required": [],
+   "inputs": {
+    "limit": "integer"
+   }
+  },
+  "get_weather": {
+   "required": [
+    "latitude",
+    "longitude"
+   ],
+   "inputs": {
+    "latitude": "number",
+    "longitude": "number",
+    "forecast_days": "integer"
+   }
+  },
+  "get_usgs_water_data": {
+   "required": [
+    "site"
+   ],
+   "inputs": {
+    "site": "string",
+    "period": "string"
+   }
+  },
+  "kb_search": {
+   "required": [
+    "query"
+   ],
+   "inputs": {
+    "query": "string",
+    "limit": "integer",
+    "sourceIds": "array"
+   }
+  },
+  "kb_browse": {
+   "required": [
+    "op"
+   ],
+   "inputs": {
+    "op": "string",
+    "root": "string",
+    "path": "string",
+    "pattern": "string",
+    "offset": "integer",
+    "limit": "integer"
+   }
+  },
+  "frontier_search": {
+   "required": [],
+   "inputs": {
+    "q": "string",
+    "lane": "string",
+    "specialty": "string",
+    "window": "string",
+    "mode": "string",
+    "limit": "integer",
+    "zone": "string",
+    "id": "string"
+   }
+  },
+  "geo_read": {
+   "required": [
+    "what"
+   ],
+   "inputs": {
+    "what": "string",
+    "filter": "object"
+   }
+  },
+  "geo_write": {
+   "required": [
+    "what"
+   ],
+   "inputs": {
+    "what": "string",
+    "items": "array",
+    "data": "object"
+   }
+  },
+  "social_posts_search": {
+   "required": [],
+   "inputs": {
+    "query": "string",
+    "platform": "string",
+    "platforms": "array",
+    "sort": "string",
+    "limit": "integer",
+    "jobId": "string"
+   }
+  },
+  "vcr_read": {
+   "required": [
+    "what"
+   ],
+   "inputs": {
+    "what": "string",
+    "filter": "object"
+   }
+  },
+  "vcr_write": {
+   "required": [
+    "what"
+   ],
+   "inputs": {
+    "what": "string",
+    "items": "array",
+    "data": "object"
+   }
+  },
+  "vcr_simulate": {
+   "required": [
+    "action"
+   ],
+   "inputs": {
+    "action": "string",
+    "kind": "string",
+    "scenario": "object",
+    "inputs": "array",
+    "seed": "integer",
+    "replicates": "integer",
+    "cpuSecondsLimit": "integer",
+    "subjectId": "string",
+    "modelId": "string",
+    "modelVersion": "string",
+    "selection": "object",
+    "reconstructionResultId": "string",
+    "jobId": "string",
+    "manifest": "object",
+    "campaignId": "string",
+    "experiment": "object",
+    "experimentId": "string",
+    "sources": "array"
+   }
+  },
+  "trial_registry_record": {
+   "required": [
+    "registryId"
+   ],
+   "inputs": {
+    "registryId": "string",
+    "registry": "string"
+   }
+  },
+  "curve_digitize": {
+   "required": [
+    "imageArtifactId",
+    "calibration",
+    "arms"
+   ],
+   "inputs": {
+    "imageArtifactId": "string",
+    "imageSha256": "string",
+    "calibration": "object",
+    "plotArea": "object",
+    "arms": "array",
+    "reportedLogHazardRatio": "number"
+   }
+  },
+  "evidence_pool": {
+   "required": [
+    "action"
+   ],
+   "inputs": {
+    "action": "string",
+    "parameter": "string",
+    "endpointKey": "string",
+    "calibres": "array",
+    "method": "string",
+    "tauPrior": "object",
+    "jobId": "string"
+   }
+  },
+  "research_calculate": {
+   "required": [
+    "action"
+   ],
+   "inputs": {
+    "action": "string",
+    "method": "string",
+    "inputPath": "string",
+    "parameters": "object",
+    "requestId": "string",
+    "jobId": "string",
+    "templatePath": "string",
+    "outputPath": "string",
+    "calculations": "object"
+   }
+  },
+  "dataset_semantics": {
+   "required": [
+    "action"
+   ],
+   "inputs": {
+    "action": "string",
+    "datasetId": "string",
+    "table": "string",
+    "title": "string",
+    "basis": "string",
+    "statement": "string",
+    "statedIn": "string",
+    "inferredFrom": "array",
+    "population": "string",
+    "timeWindow": "object",
+    "tables": "array",
+    "variables": "array",
+    "joins": "array",
+    "files": "array",
+    "complete": "boolean",
+    "observationKeys": "object",
+    "subjectKeys": "object",
+    "leakage": "object",
+    "steps": "array",
+    "analysis": "string",
+    "transformation": "object"
+   }
+  },
+  "gene_expression_series": {
+   "required": [
+    "accession"
+   ],
+   "inputs": {
+    "accession": "string",
+    "platform": "string"
+   }
+  },
+  "gene_expression_differential": {
+   "required": [
+    "captureDir",
+    "outputDir",
+    "groups"
+   ],
+   "inputs": {
+    "captureDir": "string",
+    "outputDir": "string",
+    "groups": "array",
+    "reference": "string",
+    "transform": "string",
+    "topN": "integer"
+   }
+  }
+ }
+}

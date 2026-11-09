@@ -1,0 +1,798 @@
+{
+ "schema": "capsule-proving-medmemorybench-versions/1",
+ "github": {
+  "revision": "d9c0d5a006ab3e1380c1924c63dd2ae5980ee1f4"
+ },
+ "languages": {
+  "zh": {
+   "githubRows": 1986,
+   "githubDistinctKeys": 1986,
+   "githubRepeatedKeys": 0,
+   "huggingFaceRows": 1939,
+   "huggingFaceDistinctKeys": 1939,
+   "huggingFaceRepeatedKeys": 0,
+   "keyDefinition": "(persona_id, query_id): query_id alone repeats across personas",
+   "hfIdsAbsentFromGithub": 0,
+   "hfIdsAbsentFromGithubSample": [],
+   "githubIdsAbsentFromHf": 47,
+   "githubOnlyWithEmptyQuestion": 8,
+   "githubOnlyWithQuestionText": 39,
+   "githubOnlyByType": {
+    "inference_generation": 16,
+    "state_update": 5,
+    "temporal_localization": 26
+   },
+   "githubOnlyByPersona": {
+    "persona_4": 10,
+    "persona_5": 6,
+    "persona_6": 7,
+    "persona_10": 2,
+    "persona_11": 4,
+    "persona_12": 2,
+    "persona_15": 1,
+    "persona_16": 1,
+    "persona_18": 3,
+    "persona_19": 11
+   },
+   "githubOnly": [
+    {
+     "persona": "persona_4",
+     "query_id": "session_100_tla_1",
+     "query_type": "temporal_localization",
+     "session_id": 100,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_4",
+     "query_id": "session_10_tla_2",
+     "query_type": "temporal_localization",
+     "session_id": 10,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_4",
+     "query_id": "session_20_tla_2",
+     "query_type": "temporal_localization",
+     "session_id": 20,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_4",
+     "query_id": "session_30_tla_2",
+     "query_type": "temporal_localization",
+     "session_id": 30,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_4",
+     "query_id": "session_40_tla_2",
+     "query_type": "temporal_localization",
+     "session_id": 40,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_4",
+     "query_id": "session_50_ig_1",
+     "query_type": "inference_generation",
+     "session_id": 50,
+     "questionEmpty": true
+    },
+    {
+     "persona": "persona_4",
+     "query_id": "session_50_tla_1",
+     "query_type": "temporal_localization",
+     "session_id": 50,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_4",
+     "query_id": "session_60_tla_1",
+     "query_type": "temporal_localization",
+     "session_id": 60,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_4",
+     "query_id": "session_60_tla_2",
+     "query_type": "temporal_localization",
+     "session_id": 60,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_4",
+     "query_id": "session_80_tla_1",
+     "query_type": "temporal_localization",
+     "session_id": 80,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_5",
+     "query_id": "session_100_tla_1",
+     "query_type": "temporal_localization",
+     "session_id": 100,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_5",
+     "query_id": "session_10_tla_1",
+     "query_type": "temporal_localization",
+     "session_id": 10,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_5",
+     "query_id": "session_40_tla_1",
+     "query_type": "temporal_localization",
+     "session_id": 40,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_5",
+     "query_id": "session_60_tla_2",
+     "query_type": "temporal_localization",
+     "session_id": 60,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_5",
+     "query_id": "session_70_tla_1",
+     "query_type": "temporal_localization",
+     "session_id": 70,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_5",
+     "query_id": "session_90_tla_2",
+     "query_type": "temporal_localization",
+     "session_id": 90,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_6",
+     "query_id": "session_100_tla_1",
+     "query_type": "temporal_localization",
+     "session_id": 100,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_6",
+     "query_id": "session_100_tla_2",
+     "query_type": "temporal_localization",
+     "session_id": 100,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_6",
+     "query_id": "session_10_tla_2",
+     "query_type": "temporal_localization",
+     "session_id": 10,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_6",
+     "query_id": "session_30_tla_1",
+     "query_type": "temporal_localization",
+     "session_id": 30,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_6",
+     "query_id": "session_60_tla_1",
+     "query_type": "temporal_localization",
+     "session_id": 60,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_6",
+     "query_id": "session_80_tla_1",
+     "query_type": "temporal_localization",
+     "session_id": 80,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_6",
+     "query_id": "session_80_tla_2",
+     "query_type": "temporal_localization",
+     "session_id": 80,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_10",
+     "query_id": "session_10_tla_1",
+     "query_type": "temporal_localization",
+     "session_id": 10,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_10",
+     "query_id": "session_30_ig_1",
+     "query_type": "inference_generation",
+     "session_id": 30,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_11",
+     "query_id": "session_20_ig_1",
+     "query_type": "inference_generation",
+     "session_id": 20,
+     "questionEmpty": true
+    },
+    {
+     "persona": "persona_11",
+     "query_id": "session_20_ig_2",
+     "query_type": "inference_generation",
+     "session_id": 20,
+     "questionEmpty": true
+    },
+    {
+     "persona": "persona_11",
+     "query_id": "session_60_sua_1",
+     "query_type": "state_update",
+     "session_id": 60,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_11",
+     "query_id": "session_80_sua_1",
+     "query_type": "state_update",
+     "session_id": 80,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_12",
+     "query_id": "session_50_sua_1",
+     "query_type": "state_update",
+     "session_id": 50,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_12",
+     "query_id": "session_80_sua_1",
+     "query_type": "state_update",
+     "session_id": 80,
+     "questionEmpty": true
+    },
+    {
+     "persona": "persona_15",
+     "query_id": "session_40_ig_2",
+     "query_type": "inference_generation",
+     "session_id": 40,
+     "questionEmpty": true
+    },
+    {
+     "persona": "persona_16",
+     "query_id": "session_100_tla_2",
+     "query_type": "temporal_localization",
+     "session_id": 100,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_18",
+     "query_id": "session_50_sua_1",
+     "query_type": "state_update",
+     "session_id": 50,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_18",
+     "query_id": "session_70_tla_1",
+     "query_type": "temporal_localization",
+     "session_id": 70,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_18",
+     "query_id": "session_80_tla_1",
+     "query_type": "temporal_localization",
+     "session_id": 80,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_19",
+     "query_id": "session_100_ig_1",
+     "query_type": "inference_generation",
+     "session_id": 100,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_19",
+     "query_id": "session_100_ig_2",
+     "query_type": "inference_generation",
+     "session_id": 100,
+     "questionEmpty": true
+    },
+    {
+     "persona": "persona_19",
+     "query_id": "session_40_ig_1",
+     "query_type": "inference_generation",
+     "session_id": 40,
+     "questionEmpty": true
+    },
+    {
+     "persona": "persona_19",
+     "query_id": "session_50_ig_1",
+     "query_type": "inference_generation",
+     "session_id": 50,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_19",
+     "query_id": "session_50_ig_2",
+     "query_type": "inference_generation",
+     "session_id": 50,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_19",
+     "query_id": "session_60_ig_2",
+     "query_type": "inference_generation",
+     "session_id": 60,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_19",
+     "query_id": "session_70_ig_1",
+     "query_type": "inference_generation",
+     "session_id": 70,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_19",
+     "query_id": "session_70_ig_2",
+     "query_type": "inference_generation",
+     "session_id": 70,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_19",
+     "query_id": "session_80_ig_1",
+     "query_type": "inference_generation",
+     "session_id": 80,
+     "questionEmpty": true
+    },
+    {
+     "persona": "persona_19",
+     "query_id": "session_80_ig_2",
+     "query_type": "inference_generation",
+     "session_id": 80,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_19",
+     "query_id": "session_90_ig_2",
+     "query_type": "inference_generation",
+     "session_id": 90,
+     "questionEmpty": false
+    }
+   ],
+   "sharedIds": 1939,
+   "sharedDifferences": {
+    "question": 0,
+    "answers": 0,
+    "sessionId": 0,
+    "queryType": 0,
+    "sourceKeyPoints": 0
+   },
+   "sharedDifferenceSamples": {
+    "question": [],
+    "answers": [],
+    "sessionId": [],
+    "queryType": [],
+    "sourceKeyPoints": []
+   },
+   "githubTypeCounts": {
+    "entity_exact_match": 400,
+    "inference_generation": 397,
+    "multi_hop_clinical_deduction": 191,
+    "multiple_choice": 398,
+    "state_update": 200,
+    "temporal_localization": 400
+   },
+   "huggingFaceTypeCounts": {
+    "entity_exact_match": 400,
+    "inference_generation": 381,
+    "multi_hop_clinical_deduction": 191,
+    "multiple_choice": 398,
+    "state_update": 195,
+    "temporal_localization": 374
+   }
+  },
+  "en": {
+   "githubRows": 1986,
+   "githubDistinctKeys": 1986,
+   "githubRepeatedKeys": 0,
+   "huggingFaceRows": 1939,
+   "huggingFaceDistinctKeys": 1939,
+   "huggingFaceRepeatedKeys": 0,
+   "keyDefinition": "(persona_id, query_id): query_id alone repeats across personas",
+   "hfIdsAbsentFromGithub": 0,
+   "hfIdsAbsentFromGithubSample": [],
+   "githubIdsAbsentFromHf": 47,
+   "githubOnlyWithEmptyQuestion": 8,
+   "githubOnlyWithQuestionText": 39,
+   "githubOnlyByType": {
+    "inference_generation": 16,
+    "state_update": 5,
+    "temporal_localization": 26
+   },
+   "githubOnlyByPersona": {
+    "persona_4": 10,
+    "persona_5": 6,
+    "persona_6": 7,
+    "persona_10": 2,
+    "persona_11": 4,
+    "persona_12": 2,
+    "persona_15": 1,
+    "persona_16": 1,
+    "persona_18": 3,
+    "persona_19": 11
+   },
+   "githubOnly": [
+    {
+     "persona": "persona_4",
+     "query_id": "session_100_tla_1",
+     "query_type": "temporal_localization",
+     "session_id": 100,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_4",
+     "query_id": "session_10_tla_2",
+     "query_type": "temporal_localization",
+     "session_id": 10,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_4",
+     "query_id": "session_20_tla_2",
+     "query_type": "temporal_localization",
+     "session_id": 20,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_4",
+     "query_id": "session_30_tla_2",
+     "query_type": "temporal_localization",
+     "session_id": 30,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_4",
+     "query_id": "session_40_tla_2",
+     "query_type": "temporal_localization",
+     "session_id": 40,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_4",
+     "query_id": "session_50_ig_1",
+     "query_type": "inference_generation",
+     "session_id": 50,
+     "questionEmpty": true
+    },
+    {
+     "persona": "persona_4",
+     "query_id": "session_50_tla_1",
+     "query_type": "temporal_localization",
+     "session_id": 50,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_4",
+     "query_id": "session_60_tla_1",
+     "query_type": "temporal_localization",
+     "session_id": 60,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_4",
+     "query_id": "session_60_tla_2",
+     "query_type": "temporal_localization",
+     "session_id": 60,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_4",
+     "query_id": "session_80_tla_1",
+     "query_type": "temporal_localization",
+     "session_id": 80,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_5",
+     "query_id": "session_100_tla_1",
+     "query_type": "temporal_localization",
+     "session_id": 100,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_5",
+     "query_id": "session_10_tla_1",
+     "query_type": "temporal_localization",
+     "session_id": 10,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_5",
+     "query_id": "session_40_tla_1",
+     "query_type": "temporal_localization",
+     "session_id": 40,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_5",
+     "query_id": "session_60_tla_2",
+     "query_type": "temporal_localization",
+     "session_id": 60,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_5",
+     "query_id": "session_70_tla_1",
+     "query_type": "temporal_localization",
+     "session_id": 70,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_5",
+     "query_id": "session_90_tla_2",
+     "query_type": "temporal_localization",
+     "session_id": 90,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_6",
+     "query_id": "session_100_tla_1",
+     "query_type": "temporal_localization",
+     "session_id": 100,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_6",
+     "query_id": "session_100_tla_2",
+     "query_type": "temporal_localization",
+     "session_id": 100,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_6",
+     "query_id": "session_10_tla_2",
+     "query_type": "temporal_localization",
+     "session_id": 10,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_6",
+     "query_id": "session_30_tla_1",
+     "query_type": "temporal_localization",
+     "session_id": 30,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_6",
+     "query_id": "session_60_tla_1",
+     "query_type": "temporal_localization",
+     "session_id": 60,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_6",
+     "query_id": "session_80_tla_1",
+     "query_type": "temporal_localization",
+     "session_id": 80,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_6",
+     "query_id": "session_80_tla_2",
+     "query_type": "temporal_localization",
+     "session_id": 80,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_10",
+     "query_id": "session_10_tla_1",
+     "query_type": "temporal_localization",
+     "session_id": 10,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_10",
+     "query_id": "session_30_ig_1",
+     "query_type": "inference_generation",
+     "session_id": 30,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_11",
+     "query_id": "session_20_ig_1",
+     "query_type": "inference_generation",
+     "session_id": 20,
+     "questionEmpty": true
+    },
+    {
+     "persona": "persona_11",
+     "query_id": "session_20_ig_2",
+     "query_type": "inference_generation",
+     "session_id": 20,
+     "questionEmpty": true
+    },
+    {
+     "persona": "persona_11",
+     "query_id": "session_60_sua_1",
+     "query_type": "state_update",
+     "session_id": 60,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_11",
+     "query_id": "session_80_sua_1",
+     "query_type": "state_update",
+     "session_id": 80,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_12",
+     "query_id": "session_50_sua_1",
+     "query_type": "state_update",
+     "session_id": 50,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_12",
+     "query_id": "session_80_sua_1",
+     "query_type": "state_update",
+     "session_id": 80,
+     "questionEmpty": true
+    },
+    {
+     "persona": "persona_15",
+     "query_id": "session_40_ig_2",
+     "query_type": "inference_generation",
+     "session_id": 40,
+     "questionEmpty": true
+    },
+    {
+     "persona": "persona_16",
+     "query_id": "session_100_tla_2",
+     "query_type": "temporal_localization",
+     "session_id": 100,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_18",
+     "query_id": "session_50_sua_1",
+     "query_type": "state_update",
+     "session_id": 50,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_18",
+     "query_id": "session_70_tla_1",
+     "query_type": "temporal_localization",
+     "session_id": 70,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_18",
+     "query_id": "session_80_tla_1",
+     "query_type": "temporal_localization",
+     "session_id": 80,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_19",
+     "query_id": "session_100_ig_1",
+     "query_type": "inference_generation",
+     "session_id": 100,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_19",
+     "query_id": "session_100_ig_2",
+     "query_type": "inference_generation",
+     "session_id": 100,
+     "questionEmpty": true
+    },
+    {
+     "persona": "persona_19",
+     "query_id": "session_40_ig_1",
+     "query_type": "inference_generation",
+     "session_id": 40,
+     "questionEmpty": true
+    },
+    {
+     "persona": "persona_19",
+     "query_id": "session_50_ig_1",
+     "query_type": "inference_generation",
+     "session_id": 50,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_19",
+     "query_id": "session_50_ig_2",
+     "query_type": "inference_generation",
+     "session_id": 50,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_19",
+     "query_id": "session_60_ig_2",
+     "query_type": "inference_generation",
+     "session_id": 60,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_19",
+     "query_id": "session_70_ig_1",
+     "query_type": "inference_generation",
+     "session_id": 70,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_19",
+     "query_id": "session_70_ig_2",
+     "query_type": "inference_generation",
+     "session_id": 70,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_19",
+     "query_id": "session_80_ig_1",
+     "query_type": "inference_generation",
+     "session_id": 80,
+     "questionEmpty": true
+    },
+    {
+     "persona": "persona_19",
+     "query_id": "session_80_ig_2",
+     "query_type": "inference_generation",
+     "session_id": 80,
+     "questionEmpty": false
+    },
+    {
+     "persona": "persona_19",
+     "query_id": "session_90_ig_2",
+     "query_type": "inference_generation",
+     "session_id": 90,
+     "questionEmpty": false
+    }
+   ],
+   "sharedIds": 1939,
+   "sharedDifferences": {
+    "question": 0,
+    "answers": 0,
+    "sessionId": 0,
+    "queryType": 0,
+    "sourceKeyPoints": 0
+   },
+   "sharedDifferenceSamples": {
+    "question": [],
+    "answers": [],
+    "sessionId": [],
+    "queryType": [],
+    "sourceKeyPoints": []
+   },
+   "githubTypeCounts": {
+    "entity_exact_match": 400,
+    "inference_generation": 397,
+    "multi_hop_clinical_deduction": 191,
+    "multiple_choice": 398,
+    "state_update": 200,
+    "temporal_localization": 400
+   },
+   "huggingFaceTypeCounts": {
+    "entity_exact_match": 400,
+    "inference_generation": 381,
+    "multi_hop_clinical_deduction": 191,
+    "multiple_choice": 398,
+    "state_update": 195,
+    "temporal_localization": 374
+   }
+  }
+ },
+ "huggingface": {
+  "id": "AQ-MedAI/MedMemoryBench",
+  "revision": "df0e4892846b83123a401af5094337b3a9c5d9a0"
+ }
+}

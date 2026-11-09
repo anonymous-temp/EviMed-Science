@@ -1,0 +1,165 @@
+{
+  "adapterRevision": "fdbfb6552",
+  "adapterUncommitted": true,
+  "schema": "capsule-proving-intake/1",
+  "kind": "structure-only",
+  "modelCalls": 0,
+  "productAccuracyMeasured": false,
+  "extends": "results/intake-20261105.json",
+  "seed": "capsule-proving-20261109-v1",
+  "sourceManifestSha256": "9ef39b72a73b1d38b043dca666c898be5695607ab400ba79d1e6c79721fe32af",
+  "locomo": {
+    "benchmark": "locomo",
+    "validated": 1986,
+    "failed": 0,
+    "failureReasons": {},
+    "failures": [],
+    "denominator": 1986,
+    "denominatorMayBeReduced": false,
+    "messagesAcrossInputs": 1194140,
+    "emptyTextMessagesAcrossInputs": 0,
+    "development": 120,
+    "confirmation": 1866,
+    "sourceOverlap": {
+      "sharedSessionIds": 272,
+      "sourceContextDisjoint": false
+    },
+    "poolFile": "pools/locomo-20261109.json",
+    "poolDigest": "2337bad5bae81f799e8729f37f0e2a9ea01082737ed0a72b6cf4ea43870b84bd",
+    "conversations": 10,
+    "categories": {
+      "1": 282,
+      "2": 321,
+      "3": 96,
+      "4": 841,
+      "5": 446
+    },
+    "questionsWithoutAnswer": 444
+  },
+  "locomo-refined": {
+    "benchmark": "locomo-refined",
+    "validated": 1382,
+    "failed": 0,
+    "failureReasons": {},
+    "failures": [],
+    "denominator": 1382,
+    "denominatorMayBeReduced": false,
+    "messagesAcrossInputs": 831524,
+    "emptyTextMessagesAcrossInputs": 0,
+    "development": 120,
+    "confirmation": 1262,
+    "sourceOverlap": {
+      "sharedSessionIds": 272,
+      "sourceContextDisjoint": false
+    },
+    "poolFile": "pools/locomo-refined-20261109.json",
+    "poolDigest": "51a9f192eba062bd5a692b343de7df448a54eb4e0ecb7bd3281769ad1eac395c",
+    "conversations": 10,
+    "categories": {
+      "1": 213,
+      "2": 299,
+      "3": 68,
+      "4": 802
+    },
+    "questionsWithoutAnswer": 0,
+    "questionsJsonlRows": 1382,
+    "questionsJsonlAgreeWithRaw": 1382
+  },
+  "halumem": {
+    "benchmark": "halumem-medium",
+    "validated": 3467,
+    "failed": 0,
+    "failureReasons": {},
+    "failures": [],
+    "denominator": 3467,
+    "denominatorMayBeReduced": false,
+    "messagesAcrossInputs": 5283926,
+    "emptyTextMessagesAcrossInputs": 0,
+    "development": 120,
+    "confirmation": 3347,
+    "sourceOverlap": {
+      "sharedSessionIds": 1127,
+      "sourceContextDisjoint": false
+    },
+    "poolFile": "pools/halumem-20261109.json",
+    "poolDigest": "22a5623535cb271cdc72036f548a797cd3b45c295017be013492671372fe2a21",
+    "users": 20,
+    "sessions": 1387
+  },
+  "realmem": {
+    "benchmark": "realmem",
+    "validated": 1415,
+    "failed": 0,
+    "failureReasons": {},
+    "failures": [],
+    "denominator": 1415,
+    "denominatorMayBeReduced": false,
+    "messagesAcrossInputs": 1030458,
+    "emptyTextMessagesAcrossInputs": 80,
+    "development": 120,
+    "confirmation": 1295,
+    "sourceOverlap": {
+      "sharedSessionIds": 1886,
+      "sourceContextDisjoint": false
+    },
+    "poolFile": "pools/realmem-20261109.json",
+    "poolDigest": "5b7c0e951627aabc1b7bba38c7b093781f1677ecc45701705610e6c8da1c8c5b",
+    "personas": 10,
+    "sessions": 2055,
+    "isQueryValueCounts": {
+      "boolean:false": 12612,
+      "boolean:true": 1415,
+      "undefined:undefined": 1
+    }
+  },
+  "personamem-v2": {
+    "benchmark": "personamem-v2-32k",
+    "validated": 5000,
+    "failed": 0,
+    "failureReasons": {},
+    "failures": [],
+    "denominator": 5000,
+    "denominatorMayBeReduced": false,
+    "messagesAcrossInputs": 1173861,
+    "emptyTextMessagesAcrossInputs": 34,
+    "development": 120,
+    "confirmation": 4880,
+    "sourceOverlap": {
+      "sharedSessionIds": 90,
+      "sourceContextDisjoint": false
+    },
+    "poolFile": "pools/personamem-v2-20261109.json",
+    "poolDigest": "63e15e00e032c73fb15dc9a487d30390af102fcdb5ca3df67ae8f39dcea3a319",
+    "personas": 200,
+    "personasWithStaleLink": 200,
+    "historyFilesRead": 200,
+    "malformedHistoryMessages": 5,
+    "note": "benchmark.csv links name chat_history_250913_163134_* files; the pinned repository holds chat_history_250911_213118_* for the same personas, so the history is resolved by persona id and checked against its metadata"
+  },
+  "memsyco": {
+    "benchmark": "memsyco-bench",
+    "validated": 1550,
+    "failed": 0,
+    "failureReasons": {},
+    "failures": [],
+    "denominator": 1550,
+    "denominatorMayBeReduced": false,
+    "messagesAcrossInputs": 14330,
+    "emptyTextMessagesAcrossInputs": 0,
+    "development": 120,
+    "confirmation": 1430,
+    "sourceOverlap": {
+      "sharedSessionIds": 0,
+      "sourceContextDisjoint": true
+    },
+    "poolFile": "pools/memsyco-20261109.json",
+    "poolDigest": "1f52c0795962994d5685df247293eea014c7ab008c474620af1e98e5af9fd078",
+    "tasks": {
+      "personalized_memory_use": 300,
+      "valid_memory_selection": 350,
+      "memory_evidence_conflict": 300,
+      "contextual_scope_control": 300,
+      "objective_fact_judgment": 300
+    }
+  }
+}

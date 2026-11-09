@@ -1,0 +1,80 @@
+{
+ "schema": "capsule-proving-l3-split/1",
+ "seed": "capsule-proving-20261109-v1:l3",
+ "source": "evals/general-tasks/cases.json",
+ "sourceSha256": "f870a8060e53c340897320d071d772a4b548d89093ef621cda4e5fe4ef138063",
+ "exam": [
+  "G02",
+  "G04",
+  "G05",
+  "G07",
+  "G08",
+  "G10",
+  "G12",
+  "G14",
+  "G15",
+  "G18",
+  "G19",
+  "G20",
+  "G21",
+  "G22",
+  "M01",
+  "M02",
+  "M03",
+  "M04",
+  "M05",
+  "M06"
+ ],
+ "learning": [
+  "G01",
+  "G03",
+  "G06",
+  "G09",
+  "G11",
+  "G13",
+  "G16",
+  "G17",
+  "G23"
+ ],
+ "learningFamilies": [
+  "tasks-dev/families.json",
+  "tasks-sealed/families.json"
+ ],
+ "arms": [
+  {
+   "id": "A",
+   "label": "no methods"
+  },
+  {
+   "id": "B",
+   "label": "official, flat"
+  },
+  {
+   "id": "C",
+   "label": "official, pyramid"
+  },
+  {
+   "id": "D",
+   "label": "pyramid + account learning"
+  },
+  {
+   "id": "E",
+   "label": "flat + account learning (current)"
+  },
+  {
+   "id": "F",
+   "label": "append only, no consolidation"
+  },
+  {
+   "id": "G",
+   "label": "OpenViking Agent Evolution"
+  },
+  {
+   "id": "C+frame",
+   "label": "official pyramid + framework instruction (small extra group)"
+  }
+ ],
+ "repeats": 2,
+ "runs": 280,
+ "note": "Learning material never includes an exam case. An arm that cannot be wired within one day is dropped and named (plan §5.5 L3)."
+}

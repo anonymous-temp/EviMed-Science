@@ -1,0 +1,495 @@
+{
+  "alfworld": {
+    "asset": "release 0.4.2 json_2.1.3_tw-pddl.zip",
+    "zipTopFolder": "json_2.1.1",
+    "gamesBySplit": {
+      "valid_unseen": 134,
+      "train": 3553,
+      "valid_seen": 140,
+      "valid_train": 200
+    },
+    "games": 4027,
+    "taskTypes": {
+      "pick_clean_then_place_in_recep": 745,
+      "look_at_obj_in_light": 358,
+      "pick_cool_then_place_in_recep": 607,
+      "pick_two_obj_and_place": 899,
+      "pick_heat_then_place_in_recep": 523,
+      "pick_and_place_simple": 895
+    },
+    "note": "game counts are game.tw-pddl files; the README quotes 3,553 train / 140 valid_seen / 134 valid_unseen for the original data"
+  },
+  "scienceworld": {
+    "taskTypesWithGoldPaths": 29,
+    "goldSequences": 6907,
+    "taskIds": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29
+    ],
+    "note": "the engine defines 30 task types; the gold-path file covers the ids listed and the jar (not executed here) generates the variations"
+  },
+  "infiagent-dabench": {
+    "questions": 257,
+    "labels": 257,
+    "distinctIds": 257,
+    "tables": 68,
+    "level": {
+      "easy": 82,
+      "medium": 87,
+      "hard": 88
+    }
+  },
+  "da-code": {
+    "configFiles": {
+      "eval/eval_all.jsonl": 500,
+      "eval/eval_di.jsonl": 79,
+      "eval/eval_dm.jsonl": 73,
+      "eval/eval_dw.jsonl": 100,
+      "eval/eval_ml.jsonl": 100,
+      "eval/eval_sa.jsonl": 70,
+      "eval/eval_visual.jsonl": 78,
+      "task/all.jsonl": 500,
+      "task/all.jsonl distinctIds": 500,
+      "task/all.jsonl byType": {
+        "Data Insight": 79,
+        "Data Manipulation": 73,
+        "Data Wrangling": 100,
+        "ML Classification": 46,
+        "ML Clustering": 21,
+        "ML Regression": 33,
+        "Statistical Analysis": 70,
+        "Data Visualization": 78
+      },
+      "task/di.jsonl": 79,
+      "task/dm.jsonl": 73,
+      "task/dw.jsonl": 100,
+      "task/ml.jsonl": 100,
+      "task/sa.jsonl": 70,
+      "task/visual.jsonl": 78,
+      "note": "eval/eval_di.jsonl has 78 lines but 79 objects: one line holds two JSON objects back to back"
+    },
+    "goldFiles": 78,
+    "sourceFilesPinnedLargeOnly": 284
+  },
+  "scienceagentbench": {
+    "tasks": 102,
+    "distinctIds": 102,
+    "domains": {
+      "Computational Chemistry": 20,
+      "Geographical Information Science": 27,
+      "Bioinformatics": 27,
+      "Psychology and Cognitive science": 28
+    },
+    "verifiedParquetRows": 102
+  },
+  "tau2-bench": {
+    "tasksByDomain": {
+      "airline": 50,
+      "banking_knowledge": 97,
+      "intake": 200,
+      "mock": 10,
+      "retail": 114,
+      "telecom": 2285
+    },
+    "splits": {
+      "airline": {
+        "train": 30,
+        "test": 20,
+        "base": 50
+      },
+      "intake": {
+        "base": 200
+      },
+      "mock": {
+        "base": 10
+      },
+      "retail": {
+        "train": 74,
+        "test": 40,
+        "base": 114
+      },
+      "telecom": {
+        "small": 20,
+        "train": 74,
+        "test": 40,
+        "full": 2285,
+        "base": 114
+      }
+    },
+    "publicDomainsOfTheOriginalBenchmark": {
+      "airline": 50,
+      "retail": 114,
+      "telecom": 2285
+    }
+  },
+  "bfcl": {
+    "version": [
+      "# Changelog"
+    ],
+    "categories": {
+      "BFCL_v4_format_sensitivity": 10,
+      "BFCL_v4_irrelevance": 240,
+      "BFCL_v4_live_irrelevance": 884,
+      "BFCL_v4_live_multiple": 1053,
+      "BFCL_v4_live_parallel": 16,
+      "BFCL_v4_live_parallel_multiple": 24,
+      "BFCL_v4_live_relevance": 16,
+      "BFCL_v4_live_simple": 258,
+      "BFCL_v4_memory": 155,
+      "BFCL_v4_multi_turn_base": 200,
+      "BFCL_v4_multi_turn_long_context": 200,
+      "BFCL_v4_multi_turn_miss_func": 200,
+      "BFCL_v4_multi_turn_miss_param": 200,
+      "BFCL_v4_multiple": 200,
+      "BFCL_v4_parallel": 200,
+      "BFCL_v4_parallel_multiple": 200,
+      "BFCL_v4_simple_java": 100,
+      "BFCL_v4_simple_javascript": 50,
+      "BFCL_v4_simple_python": 400,
+      "BFCL_v4_web_search": 100
+    },
+    "items": 4706,
+    "withPossibleAnswers": {
+      "BFCL_v4_live_multiple": 1053,
+      "BFCL_v4_live_parallel": 16,
+      "BFCL_v4_live_parallel_multiple": 24,
+      "BFCL_v4_live_simple": 258,
+      "BFCL_v4_memory": 155,
+      "BFCL_v4_multi_turn_base": 200,
+      "BFCL_v4_multi_turn_long_context": 200,
+      "BFCL_v4_multi_turn_miss_func": 200,
+      "BFCL_v4_multi_turn_miss_param": 200,
+      "BFCL_v4_multiple": 200,
+      "BFCL_v4_parallel": 200,
+      "BFCL_v4_parallel_multiple": 200,
+      "BFCL_v4_simple_java": 100,
+      "BFCL_v4_simple_javascript": 50,
+      "BFCL_v4_simple_python": 400,
+      "BFCL_v4_web_search": 100
+    },
+    "itemsWithPossibleAnswers": 3556
+  },
+  "multisessioncollab": {
+    "userProfiles": 100,
+    "cachedProblemFiles": {
+      "mmlu/testset_size20_seed42.json": 20,
+      "mmlu/trainset_size20_seed42.json": 20,
+      "math_hard/testset_size20_seed42.json": 20,
+      "math_hard/trainset_size20_seed42.json": 20,
+      "logiqa/testset_size20_seed42.json": 20,
+      "logiqa/trainset_size20_seed42.json": 20,
+      "math-500/testset_size20_seed42.json": 20,
+      "math-500/trainset_size20_seed42.json": 20,
+      "medqa/testset_size20_seed42.json": 20,
+      "medqa/trainset_size20_seed42.json": 20
+    }
+  },
+  "skillsbench": {
+    "tasks": 87,
+    "tasksWithTaskMd": 87,
+    "skillFilesInTasks": 232
+  },
+  "skilllearnbench": {
+    "taskFamilies": 20,
+    "variants": 100,
+    "variantsPerFamily": {
+      "anthropic-poster-design": 5,
+      "chinese-poem-generator": 5,
+      "court-form-filling": 6,
+      "dbscan-parameter-tuning": 5,
+      "dependency-vulnerability-check": 5,
+      "earthquake-plate-calculation": 6,
+      "enterprise-information-search": 6,
+      "financial-analysis": 6,
+      "fix-security-bug": 3,
+      "github-repo-analytics": 5,
+      "nlp-paper-reproduction": 3,
+      "offer-letter-generator": 6,
+      "organize-messy-files": 6,
+      "python-scala-translation": 2,
+      "schedule-planning": 5,
+      "stock-data-visualization": 5,
+      "temperature-simulation": 5,
+      "travel-planning": 5,
+      "video-object-counting": 5,
+      "weighted-gdp-calculation": 6
+    },
+    "handWrittenSkillDirs": 25
+  },
+  "cl-bench": {
+    "taskFamilies": [
+      "blind_spectrum_monitoring",
+      "codebase_adaptation",
+      "cohort_studies",
+      "database_exploration",
+      "exploitable_poker",
+      "sales_prediction"
+    ],
+    "count": 6,
+    "dataDirs": [
+      "blind_spectrum_monitoring",
+      "codebase_adaptation",
+      "cohort_studies",
+      "database_exploration",
+      "sales_prediction"
+    ],
+    "configDirs": [
+      "blind_spectrum_monitoring",
+      "codebase_adaptation",
+      "cohort_studies",
+      "exploitable_poker",
+      "poker",
+      "sales_prediction"
+    ]
+  },
+  "memorybench": {
+    "datasets": 28,
+    "rowsBySplit": {
+      "DialSim-bigbang": {
+        "train": 66,
+        "test": 17
+      },
+      "DialSim-friends": {
+        "train": 66,
+        "test": 17
+      },
+      "DialSim-theoffice": {
+        "train": 67,
+        "test": 17
+      },
+      "HelloBench-Academic&Knowledge-QA": {
+        "train": 170,
+        "test": 43
+      },
+      "HelloBench-Academic&Knowledge-Writing": {
+        "train": 65,
+        "test": 17
+      },
+      "HelloBench-Creative&Design": {
+        "train": 181,
+        "test": 47
+      },
+      "IdeaBench": {
+        "train": 200,
+        "test": 50
+      },
+      "JRE-L": {
+        "train": 200,
+        "test": 50
+      },
+      "JuDGE": {
+        "train": 200,
+        "test": 50
+      },
+      "LexEval-Judge": {
+        "train": 200,
+        "test": 50
+      },
+      "LexEval-QA": {
+        "train": 200,
+        "test": 50
+      },
+      "LexEval-Summarization": {
+        "train": 200,
+        "test": 50
+      },
+      "LimitGen-Syn": {
+        "train": 200,
+        "test": 50
+      },
+      "Locomo-0": {
+        "train": 20,
+        "test": 5
+      },
+      "Locomo-1": {
+        "train": 20,
+        "test": 5
+      },
+      "Locomo-2": {
+        "train": 20,
+        "test": 5
+      },
+      "Locomo-3": {
+        "train": 20,
+        "test": 5
+      },
+      "Locomo-4": {
+        "train": 20,
+        "test": 5
+      },
+      "Locomo-5": {
+        "train": 20,
+        "test": 5
+      },
+      "Locomo-6": {
+        "train": 20,
+        "test": 5
+      },
+      "Locomo-7": {
+        "train": 20,
+        "test": 5
+      },
+      "Locomo-8": {
+        "train": 20,
+        "test": 5
+      },
+      "Locomo-9": {
+        "train": 20,
+        "test": 5
+      },
+      "NFCats": {
+        "train": 200,
+        "test": 50
+      },
+      "WritingBench-Academic&Engineering": {
+        "train": 133,
+        "test": 34
+      },
+      "WritingBench-Creative&Design": {
+        "train": 336,
+        "test": 86
+      },
+      "WritingBench-Politics&Law": {
+        "train": 160,
+        "test": 41
+      },
+      "WritingPrompts": {
+        "train": 200,
+        "test": 50
+      }
+    },
+    "trainRows": 3244,
+    "testRows": 819
+  },
+  "medlocomo": {
+    "patients": 101,
+    "questions": 17892,
+    "adversarial": 5964,
+    "byType": {
+      "adversarial": 5964,
+      "frequency_pattern": 1467,
+      "medical_reasoning": 2982,
+      "longitudinal_progression": 2963,
+      "cross_admission_comparison": 1534,
+      "care_plan_rationale": 2982
+    },
+    "admissions": 2982,
+    "turns": 167896,
+    "planSays": {
+      "patients": 100,
+      "questions": 17892,
+      "adversarial": 5964
+    }
+  },
+  "rabbits": {
+    "genericToBrandRows": 581,
+    "annotated_medqa_new.csv": 441,
+    "annotated_medmcqa_new.csv": 539
+  },
+  "acebench": {
+    "itemsByLang": {
+      "en": 1023,
+      "zh": 1017
+    },
+    "categories": {
+      "en": {
+        "agent_multi_step": 20,
+        "agent_multi_turn": 30,
+        "normal_atom_bool": 50,
+        "normal_atom_enum": 50,
+        "normal_atom_list": 50,
+        "normal_atom_number": 50,
+        "normal_atom_object_deep": 50,
+        "normal_atom_object_short": 50,
+        "normal_multi_turn_user_adjust": 123,
+        "normal_multi_turn_user_switch": 100,
+        "normal_preference": 50,
+        "normal_similar_api": 50,
+        "normal_single_turn_parallel_function": 100,
+        "normal_single_turn_single_function": 100,
+        "special_error_param": 50,
+        "special_incomplete": 50,
+        "special_irrelevant": 50
+      },
+      "zh": {
+        "agent_multi_step": 20,
+        "agent_multi_turn": 30,
+        "normal_atom_bool": 50,
+        "normal_atom_enum": 50,
+        "normal_atom_list": 50,
+        "normal_atom_number": 50,
+        "normal_atom_object_deep": 50,
+        "normal_atom_object_short": 50,
+        "normal_multi_turn_user_adjust": 116,
+        "normal_multi_turn_user_switch": 101,
+        "normal_preference": 50,
+        "normal_similar_api": 50,
+        "normal_single_turn_parallel_function": 100,
+        "normal_single_turn_single_function": 100,
+        "special_error_param": 50,
+        "special_incomplete": 50,
+        "special_irrelevant": 50
+      }
+    },
+    "possibleAnswerFiles": {
+      "en": 17,
+      "zh": 17
+    }
+  },
+  "researchclawbench": {
+    "tasks": 57,
+    "domains": {
+      "Astronomy": 5,
+      "Chemistry": 5,
+      "Earth": 6,
+      "Energy": 5,
+      "Information": 8,
+      "Life": 8,
+      "Material": 5,
+      "Math": 5,
+      "Neuroscience": 5,
+      "Physics": 5
+    }
+  },
+  "toucan-servers": {
+    "serverFiles": 2120,
+    "serversWithListedTools": 870,
+    "serversConnected": 871,
+    "featuredServers": 25,
+    "toolsListed": 6044,
+    "distinctServerToolPairs": 6041,
+    "primaryLabels": 28,
+    "planSays": {
+      "servers": 495,
+      "tools": "2000+"
+    },
+    "note": "mcp_servers holds every crawled server with labels and, where the crawl connected, the tool schemas in metadata.remote_server_response.tools; the 495 of the paper are the subset the trajectories use"
+  }
+}

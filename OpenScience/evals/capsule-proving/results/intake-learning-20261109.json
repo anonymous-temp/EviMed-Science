@@ -1,0 +1,977 @@
+{
+  "schema": "capsule-proving-intake-learning/1",
+  "date": "20261109",
+  "modelCallsInCode": 0,
+  "note": "Kimi wrote the brand/generic sentence templates (one call); nothing else used a model.",
+  "seed": "capsule-proving-20261109-v1",
+  "sourceManifestSha256": "b5623897172f4a294ea74c2f12ae280df5c65ce0c0da1ea5e50573a1f7372597",
+  "sets": {
+    "alfworld": {
+      "pin": "aaba6870f86c5be6a08a491f32a50b906227bc3e",
+      "repository": "https://github.com/alfworld/alfworld",
+      "license": "MIT",
+      "access": "public",
+      "filesPinned": 511,
+      "filesFetched": 511,
+      "filesLargeOnly": 0,
+      "totalBytesPinned": 38899922,
+      "bytesFetched": 38899922,
+      "fetched": true,
+      "pinnedFilesSha256Digest": "9166d7ad90f29cbd97c529b255628722bde5d5720c27c9c7f0337fab35f92353",
+      "note": "Game data is a release asset, not in the tree: json_2.1.3_tw-pddl.zip of release 0.4.2 (what alfworld-download fetches) is pinned below as extraAssets.",
+      "counts": {
+        "asset": "release 0.4.2 json_2.1.3_tw-pddl.zip",
+        "zipTopFolder": "json_2.1.1",
+        "gamesBySplit": {
+          "valid_unseen": 134,
+          "train": 3553,
+          "valid_seen": 140,
+          "valid_train": 200
+        },
+        "games": 4027,
+        "taskTypes": {
+          "pick_clean_then_place_in_recep": 745,
+          "look_at_obj_in_light": 358,
+          "pick_cool_then_place_in_recep": 607,
+          "pick_two_obj_and_place": 899,
+          "pick_heat_then_place_in_recep": 523,
+          "pick_and_place_simple": 895
+        },
+        "note": "game counts are game.tw-pddl files; the README quotes 3,553 train / 140 valid_seen / 134 valid_unseen for the original data"
+      }
+    },
+    "scienceworld": {
+      "pin": "e8216d6044e8e39be9fcb185e3b2dfb602584b52",
+      "repository": "https://github.com/allenai/ScienceWorld",
+      "license": "Apache-2.0",
+      "access": "public",
+      "filesPinned": 212,
+      "filesFetched": 212,
+      "filesLargeOnly": 0,
+      "totalBytesPinned": 18050234,
+      "bytesFetched": 18050234,
+      "fetched": true,
+      "pinnedFilesSha256Digest": "8ef3e4eb07300d4a4d9fd154b2462eba61189ff7dbc24f595770aca195f79fee",
+      "note": "C1 text-game family; the jar is data here and is never executed by the fetcher",
+      "counts": {
+        "taskTypesWithGoldPaths": 29,
+        "goldSequences": 6907,
+        "taskIds": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29
+        ],
+        "note": "the engine defines 30 task types; the gold-path file covers the ids listed and the jar (not executed here) generates the variations"
+      }
+    },
+    "infiagent-dabench": {
+      "pin": "3d6c4a70198e0a41fadf539f5b43c88b8c1a2d9c",
+      "repository": "https://github.com/InfiAgent/InfiAgent",
+      "license": "Apache-2.0",
+      "access": "public",
+      "filesPinned": 80,
+      "filesFetched": 80,
+      "filesLargeOnly": 0,
+      "totalBytesPinned": 63426804,
+      "bytesFetched": 63426804,
+      "fetched": true,
+      "pinnedFilesSha256Digest": "403f97c6a0207ce05f8d385c2e6fd6eccc39f57703239603c8662d1a3daece7b",
+      "note": "C2 data analysis",
+      "counts": {
+        "questions": 257,
+        "labels": 257,
+        "distinctIds": 257,
+        "tables": 68,
+        "level": {
+          "easy": 82,
+          "medium": 87,
+          "hard": 88
+        }
+      }
+    },
+    "da-code": {
+      "pin": "b211daf51fdc9b52d5087c9df28ac50191bcabed",
+      "repository": "https://github.com/yiyihum/da-code",
+      "license": "MIT",
+      "access": "public",
+      "filesPinned": 401,
+      "filesFetched": 117,
+      "filesLargeOnly": 284,
+      "totalBytesPinned": 1255788108,
+      "bytesFetched": 7464390,
+      "fetched": true,
+      "pinnedFilesSha256Digest": "76a39c17b60f82e212c81d60a86c2d4078d0aa5122487554ea51aef08ec7fc76",
+      "note": "da_code/source (1.2 GB of task data) is pinned and large-only; tasks and gold are fetched. The HF dataset LIAMA/DA-Code is not reachable.",
+      "counts": {
+        "configFiles": {
+          "eval/eval_all.jsonl": 500,
+          "eval/eval_di.jsonl": 79,
+          "eval/eval_dm.jsonl": 73,
+          "eval/eval_dw.jsonl": 100,
+          "eval/eval_ml.jsonl": 100,
+          "eval/eval_sa.jsonl": 70,
+          "eval/eval_visual.jsonl": 78,
+          "task/all.jsonl": 500,
+          "task/all.jsonl distinctIds": 500,
+          "task/all.jsonl byType": {
+            "Data Insight": 79,
+            "Data Manipulation": 73,
+            "Data Wrangling": 100,
+            "ML Classification": 46,
+            "ML Clustering": 21,
+            "ML Regression": 33,
+            "Statistical Analysis": 70,
+            "Data Visualization": 78
+          },
+          "task/di.jsonl": 79,
+          "task/dm.jsonl": 73,
+          "task/dw.jsonl": 100,
+          "task/ml.jsonl": 100,
+          "task/sa.jsonl": 70,
+          "task/visual.jsonl": 78,
+          "note": "eval/eval_di.jsonl has 78 lines but 79 objects: one line holds two JSON objects back to back"
+        },
+        "goldFiles": 78,
+        "sourceFilesPinnedLargeOnly": 284
+      }
+    },
+    "scienceagentbench": {
+      "pin": "9c6e96c9e74572e979b0930ee735041cef528cb7",
+      "repository": "osunlp/ScienceAgentBench",
+      "license": "cc-by-4.0",
+      "access": "public",
+      "filesPinned": 4,
+      "filesFetched": 4,
+      "filesLargeOnly": 0,
+      "totalBytesPinned": 415836,
+      "bytesFetched": 415836,
+      "fetched": true,
+      "pinnedFilesSha256Digest": "752177a6d4dd1e911c9eb34d7afe472449494d4b5c7718a49df171bea0de6743",
+      "note": "HF holds the task table only; datasets and gold programs are distributed separately by the authors and are not pinned.",
+      "counts": {
+        "tasks": 102,
+        "distinctIds": 102,
+        "domains": {
+          "Computational Chemistry": 20,
+          "Geographical Information Science": 27,
+          "Bioinformatics": 27,
+          "Psychology and Cognitive science": 28
+        },
+        "verifiedParquetRows": 102
+      }
+    },
+    "scienceagentbench-code": {
+      "pin": "c26e151ed601ba109dc4d35e057ff8e73fec469d",
+      "repository": "https://github.com/OSU-NLP-Group/ScienceAgentBench",
+      "license": "MIT",
+      "access": "public",
+      "filesPinned": 31,
+      "filesFetched": 31,
+      "filesLargeOnly": 0,
+      "totalBytesPinned": 210191,
+      "bytesFetched": 210191,
+      "fetched": true,
+      "pinnedFilesSha256Digest": "485d010dccd3d942f3936ae56ddd7254d15b463b2fb361e65011a2929a0c88ec",
+      "note": "harness code, read only"
+    },
+    "tau2-bench": {
+      "pin": "033bf082f48e4a3c6a1256208e93cf2ce9c3bb6f",
+      "repository": "https://github.com/sierra-research/tau2-bench",
+      "license": "MIT",
+      "access": "public",
+      "filesPinned": 880,
+      "filesFetched": 880,
+      "filesLargeOnly": 0,
+      "totalBytesPinned": 71073225,
+      "bytesFetched": 71073225,
+      "fetched": true,
+      "pinnedFilesSha256Digest": "b2f0bbb8650a91571019a6af4f2eba48e76a80acb7db8b90d6b48b2ab573b330",
+      "note": "Branch main at pin time; release v2.0.0 is commit 989d3285ae669e49503324bdb9981bf14fccedeb. Voice task files are not pinned.",
+      "counts": {
+        "tasksByDomain": {
+          "airline": 50,
+          "banking_knowledge": 97,
+          "intake": 200,
+          "mock": 10,
+          "retail": 114,
+          "telecom": 2285
+        },
+        "splits": {
+          "airline": {
+            "train": 30,
+            "test": 20,
+            "base": 50
+          },
+          "intake": {
+            "base": 200
+          },
+          "mock": {
+            "base": 10
+          },
+          "retail": {
+            "train": 74,
+            "test": 40,
+            "base": 114
+          },
+          "telecom": {
+            "small": 20,
+            "train": 74,
+            "test": 40,
+            "full": 2285,
+            "base": 114
+          }
+        },
+        "publicDomainsOfTheOriginalBenchmark": {
+          "airline": 50,
+          "retail": 114,
+          "telecom": 2285
+        }
+      }
+    },
+    "bfcl": {
+      "pin": "6ea57973c7a6097fd7c5915698c54c17c5b1b6c8",
+      "repository": "https://github.com/ShishirPatil/gorilla",
+      "license": "Apache-2.0",
+      "access": "public",
+      "filesPinned": 76,
+      "filesFetched": 76,
+      "filesLargeOnly": 0,
+      "totalBytesPinned": 12375594,
+      "bytesFetched": 12375594,
+      "fetched": true,
+      "pinnedFilesSha256Digest": "b67f7fe389446680f461435d3d6bb7cc36d3eb92bb134f71242420ba7460f705",
+      "note": "BFCL v4 data inside the gorilla repository (the HF mirror gorilla-llm/Berkeley-Function-Calling-Leaderboard is v3 and is not used).",
+      "counts": {
+        "version": [
+          "# Changelog"
+        ],
+        "categories": {
+          "BFCL_v4_format_sensitivity": 10,
+          "BFCL_v4_irrelevance": 240,
+          "BFCL_v4_live_irrelevance": 884,
+          "BFCL_v4_live_multiple": 1053,
+          "BFCL_v4_live_parallel": 16,
+          "BFCL_v4_live_parallel_multiple": 24,
+          "BFCL_v4_live_relevance": 16,
+          "BFCL_v4_live_simple": 258,
+          "BFCL_v4_memory": 155,
+          "BFCL_v4_multi_turn_base": 200,
+          "BFCL_v4_multi_turn_long_context": 200,
+          "BFCL_v4_multi_turn_miss_func": 200,
+          "BFCL_v4_multi_turn_miss_param": 200,
+          "BFCL_v4_multiple": 200,
+          "BFCL_v4_parallel": 200,
+          "BFCL_v4_parallel_multiple": 200,
+          "BFCL_v4_simple_java": 100,
+          "BFCL_v4_simple_javascript": 50,
+          "BFCL_v4_simple_python": 400,
+          "BFCL_v4_web_search": 100
+        },
+        "items": 4706,
+        "withPossibleAnswers": {
+          "BFCL_v4_live_multiple": 1053,
+          "BFCL_v4_live_parallel": 16,
+          "BFCL_v4_live_parallel_multiple": 24,
+          "BFCL_v4_live_simple": 258,
+          "BFCL_v4_memory": 155,
+          "BFCL_v4_multi_turn_base": 200,
+          "BFCL_v4_multi_turn_long_context": 200,
+          "BFCL_v4_multi_turn_miss_func": 200,
+          "BFCL_v4_multi_turn_miss_param": 200,
+          "BFCL_v4_multiple": 200,
+          "BFCL_v4_parallel": 200,
+          "BFCL_v4_parallel_multiple": 200,
+          "BFCL_v4_simple_java": 100,
+          "BFCL_v4_simple_javascript": 50,
+          "BFCL_v4_simple_python": 400,
+          "BFCL_v4_web_search": 100
+        },
+        "itemsWithPossibleAnswers": 3556
+      }
+    },
+    "multisessioncollab": {
+      "pin": "88e1a4b3f4107230970de7bc1a4f9d3a527e8ef1",
+      "repository": "https://github.com/Shuhaibm/multisessioncollab",
+      "license": "MIT",
+      "access": "public",
+      "filesPinned": 34,
+      "filesFetched": 34,
+      "filesLargeOnly": 0,
+      "totalBytesPinned": 391931,
+      "bytesFetched": 391931,
+      "fetched": true,
+      "pinnedFilesSha256Digest": "f1f3b063ddec867ffcba9c2cf439469d7a4d33b39fb7d70aa6016f2fbfcb83e4",
+      "note": "simulated-user design and code; problems are loaded from public datasets at run time",
+      "counts": {
+        "userProfiles": 100,
+        "cachedProblemFiles": {
+          "mmlu/testset_size20_seed42.json": 20,
+          "mmlu/trainset_size20_seed42.json": 20,
+          "math_hard/testset_size20_seed42.json": 20,
+          "math_hard/trainset_size20_seed42.json": 20,
+          "logiqa/testset_size20_seed42.json": 20,
+          "logiqa/trainset_size20_seed42.json": 20,
+          "math-500/testset_size20_seed42.json": 20,
+          "math-500/trainset_size20_seed42.json": 20,
+          "medqa/testset_size20_seed42.json": 20,
+          "medqa/trainset_size20_seed42.json": 20
+        }
+      }
+    },
+    "skillsbench": {
+      "pin": "f860ecf02ef53412a030f8661c83d644b739ff01",
+      "repository": "https://github.com/benchflow-ai/skillsbench",
+      "license": "Apache-2.0",
+      "access": "public",
+      "filesPinned": 2162,
+      "filesFetched": 2133,
+      "filesLargeOnly": 29,
+      "totalBytesPinned": 541936103,
+      "bytesFetched": 96343055,
+      "fetched": true,
+      "pinnedFilesSha256Digest": "c76e446c892452cc8d321181fbaf85b707d9bcffaa888230f4f8dd2e255ff0f5",
+      "note": "Branch main at pin time. Release v1.1 is commit b63b7b2850226b6aa4fb5929a8c1ac7bc4d9a6af; tasks-extra (14 credential-dependent packages) is not pinned. Files over 1 MB are large-only.",
+      "counts": {
+        "tasks": 87,
+        "tasksWithTaskMd": 87,
+        "skillFilesInTasks": 232
+      }
+    },
+    "skilllearnbench": {
+      "pin": "726e1f79b96b0cb3d729d0e55a1c847e0b5353ae",
+      "repository": "https://github.com/cxcscmu/SkillLearnBench",
+      "license": "MIT",
+      "access": "public",
+      "filesPinned": 3496,
+      "filesFetched": 3407,
+      "filesLargeOnly": 89,
+      "totalBytesPinned": 1969824537,
+      "bytesFetched": 212873882,
+      "fetched": true,
+      "pinnedFilesSha256Digest": "4b03f4129e1442733bdda2c45b779b428c6b09b0ebe3d2bde8b14abe2b7f42f7",
+      "note": "Task folders are task families with numbered variants. Files over 1 MB are large-only.",
+      "counts": {
+        "taskFamilies": 20,
+        "variants": 100,
+        "variantsPerFamily": {
+          "anthropic-poster-design": 5,
+          "chinese-poem-generator": 5,
+          "court-form-filling": 6,
+          "dbscan-parameter-tuning": 5,
+          "dependency-vulnerability-check": 5,
+          "earthquake-plate-calculation": 6,
+          "enterprise-information-search": 6,
+          "financial-analysis": 6,
+          "fix-security-bug": 3,
+          "github-repo-analytics": 5,
+          "nlp-paper-reproduction": 3,
+          "offer-letter-generator": 6,
+          "organize-messy-files": 6,
+          "python-scala-translation": 2,
+          "schedule-planning": 5,
+          "stock-data-visualization": 5,
+          "temperature-simulation": 5,
+          "travel-planning": 5,
+          "video-object-counting": 5,
+          "weighted-gdp-calculation": 6
+        },
+        "handWrittenSkillDirs": 25
+      }
+    },
+    "cl-bench": {
+      "pin": "5f8c50eb1e84b2eda2ef4faff757dfc812a0ea26",
+      "repository": "https://github.com/pgasawa/continual-learning-bench",
+      "license": "Apache-2.0",
+      "access": "public",
+      "filesPinned": 407,
+      "filesFetched": 302,
+      "filesLargeOnly": 105,
+      "totalBytesPinned": 274000584,
+      "bytesFetched": 4693709,
+      "fetched": true,
+      "pinnedFilesSha256Digest": "5e3b385ae83dc90249ff89f78d08c8d583f3cd8c6d48d2e2cfed997d68c18654",
+      "note": "Not the Tencent-Hunyuan CL-bench. final_results/runs (265 MB of published runs) is pinned and large-only.",
+      "counts": {
+        "taskFamilies": [
+          "blind_spectrum_monitoring",
+          "codebase_adaptation",
+          "cohort_studies",
+          "database_exploration",
+          "exploitable_poker",
+          "sales_prediction"
+        ],
+        "count": 6,
+        "dataDirs": [
+          "blind_spectrum_monitoring",
+          "codebase_adaptation",
+          "cohort_studies",
+          "database_exploration",
+          "sales_prediction"
+        ],
+        "configDirs": [
+          "blind_spectrum_monitoring",
+          "codebase_adaptation",
+          "cohort_studies",
+          "exploitable_poker",
+          "poker",
+          "sales_prediction"
+        ]
+      }
+    },
+    "memorybench": {
+      "pin": "3acd60a4bd35b43b408f0e6db4c5f1e88df5e96d",
+      "repository": "THUIR/MemoryBench",
+      "license": "mit",
+      "access": "public",
+      "filesPinned": 211,
+      "filesFetched": 211,
+      "filesLargeOnly": 0,
+      "totalBytesPinned": 189783649,
+      "bytesFetched": 189783649,
+      "fetched": true,
+      "pinnedFilesSha256Digest": "9442a1e6482f1c9553caa142aeb9b1d4fead839f48e58bc42a8830de58c6b881",
+      "note": "user-feedback learning; feedback is simulated by a model",
+      "counts": {
+        "datasets": 28,
+        "rowsBySplit": {
+          "DialSim-bigbang": {
+            "train": 66,
+            "test": 17
+          },
+          "DialSim-friends": {
+            "train": 66,
+            "test": 17
+          },
+          "DialSim-theoffice": {
+            "train": 67,
+            "test": 17
+          },
+          "HelloBench-Academic&Knowledge-QA": {
+            "train": 170,
+            "test": 43
+          },
+          "HelloBench-Academic&Knowledge-Writing": {
+            "train": 65,
+            "test": 17
+          },
+          "HelloBench-Creative&Design": {
+            "train": 181,
+            "test": 47
+          },
+          "IdeaBench": {
+            "train": 200,
+            "test": 50
+          },
+          "JRE-L": {
+            "train": 200,
+            "test": 50
+          },
+          "JuDGE": {
+            "train": 200,
+            "test": 50
+          },
+          "LexEval-Judge": {
+            "train": 200,
+            "test": 50
+          },
+          "LexEval-QA": {
+            "train": 200,
+            "test": 50
+          },
+          "LexEval-Summarization": {
+            "train": 200,
+            "test": 50
+          },
+          "LimitGen-Syn": {
+            "train": 200,
+            "test": 50
+          },
+          "Locomo-0": {
+            "train": 20,
+            "test": 5
+          },
+          "Locomo-1": {
+            "train": 20,
+            "test": 5
+          },
+          "Locomo-2": {
+            "train": 20,
+            "test": 5
+          },
+          "Locomo-3": {
+            "train": 20,
+            "test": 5
+          },
+          "Locomo-4": {
+            "train": 20,
+            "test": 5
+          },
+          "Locomo-5": {
+            "train": 20,
+            "test": 5
+          },
+          "Locomo-6": {
+            "train": 20,
+            "test": 5
+          },
+          "Locomo-7": {
+            "train": 20,
+            "test": 5
+          },
+          "Locomo-8": {
+            "train": 20,
+            "test": 5
+          },
+          "Locomo-9": {
+            "train": 20,
+            "test": 5
+          },
+          "NFCats": {
+            "train": 200,
+            "test": 50
+          },
+          "WritingBench-Academic&Engineering": {
+            "train": 133,
+            "test": 34
+          },
+          "WritingBench-Creative&Design": {
+            "train": 336,
+            "test": 86
+          },
+          "WritingBench-Politics&Law": {
+            "train": 160,
+            "test": 41
+          },
+          "WritingPrompts": {
+            "train": 200,
+            "test": 50
+          }
+        },
+        "trainRows": 3244,
+        "testRows": 819
+      }
+    },
+    "memorybench-code": {
+      "pin": "247ba8c1e327fa297c0d57aaad0e3cbd66bac656",
+      "repository": "https://github.com/THUIR/MemoryBench",
+      "license": "MIT",
+      "access": "public",
+      "filesPinned": 109,
+      "filesFetched": 109,
+      "filesLargeOnly": 0,
+      "totalBytesPinned": 653651,
+      "bytesFetched": 653651,
+      "fetched": true,
+      "pinnedFilesSha256Digest": "74b2a824a15e10a61306f241e7a6372dac0fcb477244486e434cdac55e72ded3",
+      "note": null
+    },
+    "medlocomo": {
+      "pin": "0f25894e8651879a956ec07252df6ffe1fd3c2cc",
+      "repository": "https://github.com/leozzy13/MedLoCoMo",
+      "license": "none declared",
+      "access": "public",
+      "filesPinned": 407,
+      "filesFetched": 407,
+      "filesLargeOnly": 0,
+      "totalBytesPinned": 51990025,
+      "bytesFetched": 51990025,
+      "fetched": true,
+      "pinnedFilesSha256Digest": "f3f581cbeb345214a0d509332c64f6afa32ee6402611780e5c0da4d36557bace",
+      "note": "The repository declares no license. Per-admission conversation, packet and prompt files (2,982 patients-admissions) are not pinned. Derived from credentialed MIMIC-IV/MIMIC-IV-Note data: keep the copy local, never redistribute.",
+      "counts": {
+        "patients": 101,
+        "questions": 17892,
+        "adversarial": 5964,
+        "byType": {
+          "adversarial": 5964,
+          "frequency_pattern": 1467,
+          "medical_reasoning": 2982,
+          "longitudinal_progression": 2963,
+          "cross_admission_comparison": 1534,
+          "care_plan_rationale": 2982
+        },
+        "admissions": 2982,
+        "turns": 167896,
+        "planSays": {
+          "patients": 100,
+          "questions": 17892,
+          "adversarial": 5964
+        }
+      }
+    },
+    "rabbits": {
+      "pin": "6d1bdb6a8e0791be7b4fb47426753e86006c55bb",
+      "repository": "https://github.com/BittermanLab/RABBITS",
+      "license": "README badge says Apache-2.0 (LICENSE.txt linked but absent from the repository)",
+      "access": "public",
+      "filesPinned": 17,
+      "filesFetched": 17,
+      "filesLargeOnly": 0,
+      "totalBytesPinned": 2750183,
+      "bytesFetched": 2750183,
+      "fetched": true,
+      "pinnedFilesSha256Digest": "dab52dff3b5a5df9beffe1967926bf319fb9373b81dbf7a89d9f69bde8b12e2f",
+      "note": "No license file in the repository; the README badge names Apache-2.0.",
+      "counts": {
+        "genericToBrandRows": 581,
+        "annotated_medqa_new.csv": 441,
+        "annotated_medmcqa_new.csv": 539
+      }
+    },
+    "acebench": {
+      "pin": "56dd66cf6439b0d9655ee1b353e4cd745c6f664e",
+      "repository": "https://github.com/chenchen0103/ACEBench",
+      "license": "MIT (LICENSE.md, Microsoft Corporation)",
+      "access": "public",
+      "filesPinned": 125,
+      "filesFetched": 125,
+      "filesLargeOnly": 0,
+      "totalBytesPinned": 9533358,
+      "bytesFetched": 9533358,
+      "fetched": true,
+      "pinnedFilesSha256Digest": "d1817f4b7747f227eb51edf37c960d6ecd149bdb3126a2b4fe27e0e9a4128d2e",
+      "note": "tool-use benchmark; en and zh data side by side",
+      "counts": {
+        "itemsByLang": {
+          "en": 1023,
+          "zh": 1017
+        },
+        "categories": {
+          "en": {
+            "agent_multi_step": 20,
+            "agent_multi_turn": 30,
+            "normal_atom_bool": 50,
+            "normal_atom_enum": 50,
+            "normal_atom_list": 50,
+            "normal_atom_number": 50,
+            "normal_atom_object_deep": 50,
+            "normal_atom_object_short": 50,
+            "normal_multi_turn_user_adjust": 123,
+            "normal_multi_turn_user_switch": 100,
+            "normal_preference": 50,
+            "normal_similar_api": 50,
+            "normal_single_turn_parallel_function": 100,
+            "normal_single_turn_single_function": 100,
+            "special_error_param": 50,
+            "special_incomplete": 50,
+            "special_irrelevant": 50
+          },
+          "zh": {
+            "agent_multi_step": 20,
+            "agent_multi_turn": 30,
+            "normal_atom_bool": 50,
+            "normal_atom_enum": 50,
+            "normal_atom_list": 50,
+            "normal_atom_number": 50,
+            "normal_atom_object_deep": 50,
+            "normal_atom_object_short": 50,
+            "normal_multi_turn_user_adjust": 116,
+            "normal_multi_turn_user_switch": 101,
+            "normal_preference": 50,
+            "normal_similar_api": 50,
+            "normal_single_turn_parallel_function": 100,
+            "normal_single_turn_single_function": 100,
+            "special_error_param": 50,
+            "special_incomplete": 50,
+            "special_irrelevant": 50
+          }
+        },
+        "possibleAnswerFiles": {
+          "en": 17,
+          "zh": 17
+        }
+      }
+    },
+    "toucan-servers": {
+      "pin": "a1976dea7688c0f36533aa6e3a3fa4c27e017b4b",
+      "repository": "https://github.com/TheAgentArk/Toucan",
+      "license": "MIT (GitHub LICENSE, Agent Ark); the Hugging Face card says apache-2.0",
+      "access": "public",
+      "filesPinned": 2132,
+      "filesFetched": 2132,
+      "filesLargeOnly": 0,
+      "totalBytesPinned": 28884944,
+      "bytesFetched": 28884944,
+      "fetched": true,
+      "pinnedFilesSha256Digest": "a3c63134de01f01f5717b2a11fbada989f8fb71a4b78359d175d7065c071310e",
+      "note": "The Hugging Face card says apache-2.0; the GitHub repository LICENSE is recorded as it reads (see licenseText).",
+      "counts": {
+        "serverFiles": 2120,
+        "serversWithListedTools": 870,
+        "serversConnected": 871,
+        "featuredServers": 25,
+        "toolsListed": 6044,
+        "distinctServerToolPairs": 6041,
+        "primaryLabels": 28,
+        "planSays": {
+          "servers": 495,
+          "tools": "2000+"
+        },
+        "note": "mcp_servers holds every crawled server with labels and, where the crawl connected, the tool schemas in metadata.remote_server_response.tools; the 495 of the paper are the subset the trajectories use"
+      }
+    },
+    "toucan-hf": {
+      "pin": "0df3cf37f2abefb380370cfb02eabea2a35ae782",
+      "repository": "Agent-Ark/Toucan-1.5M",
+      "license": "apache-2.0",
+      "access": "public",
+      "filesPinned": 2,
+      "filesFetched": 2,
+      "filesLargeOnly": 0,
+      "totalBytesPinned": 10841,
+      "bytesFetched": 10841,
+      "fetched": true,
+      "pinnedFilesSha256Digest": "8f1f1c5b306fa6efa51c57ef5e1d627ee158a4af15b80d2f16b1a1b6b4496b3f",
+      "note": "Identity of the trajectory dataset (21.8 GB, 1.5M rows; tool lists ride inside every row). Only the card is pinned; trajectories are deliberately not pinned or fetched."
+    },
+    "researchclawbench": {
+      "pin": "fa82414b2ead64ea3a4df2c0688512198c42ba59",
+      "repository": "InternScience/ResearchClawBench",
+      "license": "mit",
+      "access": "public",
+      "filesPinned": 119,
+      "filesFetched": 119,
+      "filesLargeOnly": 0,
+      "totalBytesPinned": 408326,
+      "bytesFetched": 408326,
+      "fetched": true,
+      "pinnedFilesSha256Digest": "7b59e6d0cef31e6ede3f4f5467f1880dd7991cd0a8c6776d71bbb1b2228c4510",
+      "note": "Only task descriptions and rubric checklists are pinned and fetched; task data, related-work PDFs and target papers (2.6 GB in all, 8,800+ files) are not pinned.",
+      "counts": {
+        "tasks": 57,
+        "domains": {
+          "Astronomy": 5,
+          "Chemistry": 5,
+          "Earth": 6,
+          "Energy": 5,
+          "Information": 8,
+          "Life": 8,
+          "Material": 5,
+          "Math": 5,
+          "Neuroscience": 5,
+          "Physics": 5
+        }
+      }
+    },
+    "gaia": {
+      "pin": "682dd723ee1e1697e00360edccf2366dc8418dd9",
+      "repository": "gaia-benchmark/GAIA",
+      "license": "none stated in the card metadata",
+      "access": "gated",
+      "filesPinned": 1,
+      "filesFetched": 1,
+      "filesLargeOnly": 0,
+      "totalBytesPinned": 3288,
+      "bytesFetched": 3288,
+      "fetched": true,
+      "pinnedFilesSha256Digest": "fec17c8393b8b11bdf6665b2842773e68f001bec4066a9438b3777bb47859d8b",
+      "note": "Gated (auto approval: a Hugging Face login that has accepted the dataset terms is required for the data files and the metadata). Only the public card is pinned. The 2023 validation and test folders and metadata files are not fetched; no credentials were requested or used."
+    },
+    "persist": {
+      "pin": null,
+      "repository": null,
+      "license": "paper: CC BY (PMC12534679)",
+      "access": "public",
+      "filesPinned": 0,
+      "filesFetched": 0,
+      "filesLargeOnly": 0,
+      "totalBytesPinned": 0,
+      "bytesFetched": 0,
+      "fetched": false,
+      "pinnedFilesSha256Digest": null,
+      "note": "Searched the paper (PMC12534679 and its supplementary zip: figures and one PDF only), GitHub repository and Hugging Face dataset search (PERSIST, sycophancy + brand/generic): no dataset or code release exists. The probe is built from RABBITS pairs instead."
+    }
+  },
+  "pools": {
+    "schema": "capsule-proving-intake-learning-pools/1",
+    "modelCalls": 0,
+    "seed": "capsule-proving-20261109-v1",
+    "medmemorybench-hf": {
+      "benchmark": "medmemorybench-hf",
+      "denominator": 1939,
+      "languages": {
+        "zh": 1939,
+        "en": 1939
+      },
+      "keyParity": {
+        "onlyZh": 0,
+        "onlyEn": 0
+      },
+      "zhRuntimeInputsBuilt": 1939,
+      "zhRuntimeInputFailures": 0,
+      "failures": [],
+      "queryTypes": {
+        "entity_exact_match": 400,
+        "temporal_localization": 374,
+        "state_update": 195,
+        "inference_generation": 381,
+        "multiple_choice": 398,
+        "multi_hop_clinical_deduction": 191
+      },
+      "emptyQuestions": 0,
+      "poolFile": "pools/medmemorybench-hf-20261109.json",
+      "poolDigest": "18546b75fb8a2d76eca03acb6d8e3709a4e8730ef9dfd75e614e80affb9c719f",
+      "development": 120,
+      "confirmation": 1819,
+      "sourceOverlap": {
+        "sharedSessionIds": 1700,
+        "sourceContextDisjoint": false
+      },
+      "note": "ids are language-neutral (persona_N:query_id); the runtime id is \"<lang>:<id>\". Pool context ids are persona_N/session_1..anchor (sessions 1-101 per persona, read from the zh dialogues). The en dialogues (386 MB) are large-only; the en inputs are built the same way from them."
+    },
+    "wildchat-pseudo-users": {
+      "benchmark": "wildchat-pseudo-users",
+      "users": 272,
+      "conversations": 2004,
+      "messages": 14168,
+      "emptyTextMessages": 30,
+      "sampleSha256": "2f518edd3f97e65c54dbbfd51d00e013916ba42015b860f93d0cdd4cf652761e",
+      "counts": {
+        "chineseConversations": 119302,
+        "pseudoUsers": 42502,
+        "usersWith10OrMore": 1459,
+        "eligibleUsers": 5895,
+        "sampleUsers": 272,
+        "sampleConversations": 2004
+      },
+      "sample": {
+        "conversationsPerUser": {
+          "min": 3,
+          "median": 5,
+          "max": 44
+        },
+        "spanDays": {
+          "min": 1,
+          "p25": 2,
+          "median": 4,
+          "p75": 12,
+          "max": 147,
+          "over30": 22
+        }
+      },
+      "note": "pseudo-users (hashed IP + header), not people; no gold; real user text, local only"
+    },
+    "medlocomo": {
+      "benchmark": "medlocomo",
+      "patients": 101,
+      "admissions": 2982,
+      "universe": 17892,
+      "byScope": {
+        "single_admission": 8946,
+        "cross_admission": 8946
+      },
+      "byType": {
+        "medical_reasoning": 2982,
+        "adversarial": 5964,
+        "care_plan_rationale": 2982,
+        "longitudinal_progression": 2963,
+        "cross_admission_comparison": 1534,
+        "frequency_pattern": 1467
+      },
+      "adversarial": 5964,
+      "validated": 17892,
+      "failed": 0,
+      "failures": [],
+      "messagesAcrossInputs": 31373016,
+      "sampleSize": 600,
+      "adversarialInSample": 198,
+      "poolFile": "pools/medlocomo-20261109.json",
+      "poolDigest": "036400c3e33c5d3f0dac8557c13d5de0ee962af3cf7a0c86aecab1f6eecc966d",
+      "development": 120,
+      "confirmation": 480,
+      "sourceOverlap": {
+        "sharedSessionIds": 2034,
+        "sourceContextDisjoint": false
+      },
+      "note": "benchmark_qa.json holds every question; cross_admission_qa.json is its cross-admission half (checked). No license is declared in the repository; derived from MIMIC-IV, local use only."
+    },
+    "brand-generic-probe": {
+      "benchmark": "brand-generic-probe",
+      "denominator": 556,
+      "pairsEligible": 556,
+      "directions": {
+        "brand-to-generic": 261,
+        "generic-to-brand": 295
+      },
+      "statements": 20,
+      "questions": 20,
+      "poolFile": "pools/brand-generic-probe-20261109.json",
+      "poolDigest": "ef6d07bb763c8135945e6f8fa3a8932f8a98f1e415bd2b2f931c2ba1d80ef82e",
+      "development": 111,
+      "confirmation": 445,
+      "sourceOverlap": {
+        "sharedSessionIds": 0,
+        "sourceContextDisjoint": true
+      },
+      "note": "pass = reply names the stated name or its pair (the plan check); bridged = reply names the stated form although the question used the other one (the memory signal). Kimi wrote the templates and never saw a drug name or the gold."
+    },
+    "l9-long-tasks": {
+      "benchmark": "researchclawbench",
+      "denominator": 57,
+      "selected": [
+        "Life_000",
+        "Information_004",
+        "Astronomy_004",
+        "Chemistry_004",
+        "Earth_004",
+        "Energy_004",
+        "Information_007",
+        "Life_006",
+        "Energy_001",
+        "Material_004"
+      ],
+      "checklistItemDistribution": {
+        "3": 22,
+        "4": 8,
+        "5": 23,
+        "6": 3,
+        "8": 1
+      },
+      "poolFile": "pools/l9-long-tasks-20261109.json",
+      "poolDigest": "0d43ea24fb99a985f7255e63b490146c1d91e9128217bae8e309672d779414d2",
+      "note": "the README says 40 tasks (plus 10 ResearchClawBench-Self ones); the pinned revision holds more task folders than that, counted from the data"
+    }
+  },
+  "discrepancies": [
+    "MedLoCoMo: 101 patient folders, not 100 (the questions match: 17892 with 5964 adversarial); the repository declares no license",
+    "ScienceWorld: gold paths cover 29 task types (ids [0, 1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29]); id 5 is absent from the gold-path file although the engine has 30",
+    "Toucan: mcp_servers holds 2120 labeled server files, 870 with listed tools (6044 tools); the paper's 495 servers / 2,000+ tools are the subset the trajectories use and are not identifiable from these files alone",
+    "ResearchClawBench: 57 task folders on the pinned Hugging Face revision; the README says 40 (plus 10 from ResearchClawBench-Self)",
+    "DA-Code: eval/eval_di.jsonl has 78 lines but 79 objects (two objects on one line); 500 tasks in total as the paper says; da_code/source (1.2 GB) is large-only",
+    "DA-Code: the Hugging Face dataset LIAMA/DA-Code is not reachable; the data comes from the GitHub repository",
+    "ALFWorld: the pinned tw-pddl archive (release 0.4.2, json_2.1.3 by name) unpacks under a json_2.1.1 folder; split counts 3,553 / 140 / 134 match the README, plus 200 valid_train games",
+    "BFCL: version v4 data counted from the repository (4,706 items over 20 categories); the Hugging Face mirror is v3 and is not pinned",
+    "tau2-bench: telecom has 2,285 tasks in tasks.json (the 114 'base' set is a split); airline 50, retail 114 match the paper; banking_knowledge and intake are newer domains",
+    "SkillsBench: 87 tasks at the pinned main commit (tag v1.1 is an earlier commit); 14 credential-dependent packages in tasks-extra are not pinned. The plan's 'v4' label is not a tag or branch of the repository",
+    "SkillLearnBench: 20 task families (the paper's '20 tasks') with 100 numbered variants in total",
+    "GAIA: gated (auto approval behind a Hugging Face login); only the public card is pinned, no data",
+    "PERSIST: no public dataset or code found; the probe uses RABBITS pairs",
+    "WildChat: 119,302 Chinese conversations and 1,459 pseudo-users with 10+ conversations, as the plan says"
+  ]
+}

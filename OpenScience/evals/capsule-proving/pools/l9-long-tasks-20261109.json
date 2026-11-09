@@ -1,0 +1,170 @@
+{
+ "schema": "capsule-proving-l9-selection/1",
+ "benchmark": "researchclawbench",
+ "seed": "capsule-proving-20261109-v1",
+ "universe": 57,
+ "selected": [
+  "Life_000",
+  "Information_004",
+  "Astronomy_004",
+  "Chemistry_004",
+  "Earth_004",
+  "Energy_004",
+  "Information_007",
+  "Life_006",
+  "Energy_001",
+  "Material_004"
+ ],
+ "signal": "checklistItems desc, then dataFiles desc, then sha256(seed|l9|id); only information in the pinned task_info.json and checklist.json is used",
+ "sourceSha256": "fd6e0443bad2906b198199bfe3d35f304ff0ca8a5ddc0acc79241816947af094",
+ "rows": [
+  {
+   "id": "Life_000",
+   "domain": "Life",
+   "checklistItems": 8,
+   "checklistWeightSum": 1,
+   "dataFiles": 6,
+   "taskChars": 275
+  },
+  {
+   "id": "Information_004",
+   "domain": "Information",
+   "checklistItems": 6,
+   "checklistWeightSum": 1,
+   "dataFiles": 2,
+   "taskChars": 1534
+  },
+  {
+   "id": "Astronomy_004",
+   "domain": "Astronomy",
+   "checklistItems": 6,
+   "checklistWeightSum": 1,
+   "dataFiles": 1,
+   "taskChars": 716
+  },
+  {
+   "id": "Chemistry_004",
+   "domain": "Chemistry",
+   "checklistItems": 6,
+   "checklistWeightSum": 1,
+   "dataFiles": 0,
+   "taskChars": 945
+  },
+  {
+   "id": "Earth_004",
+   "domain": "Earth",
+   "checklistItems": 5,
+   "checklistWeightSum": 1,
+   "dataFiles": 64,
+   "taskChars": 569
+  },
+  {
+   "id": "Energy_004",
+   "domain": "Energy",
+   "checklistItems": 5,
+   "checklistWeightSum": 1,
+   "dataFiles": 14,
+   "taskChars": 384
+  },
+  {
+   "id": "Information_007",
+   "domain": "Information",
+   "checklistItems": 5,
+   "checklistWeightSum": 1,
+   "dataFiles": 8,
+   "taskChars": 567
+  },
+  {
+   "id": "Life_006",
+   "domain": "Life",
+   "checklistItems": 5,
+   "checklistWeightSum": 1,
+   "dataFiles": 7,
+   "taskChars": 414
+  },
+  {
+   "id": "Energy_001",
+   "domain": "Energy",
+   "checklistItems": 5,
+   "checklistWeightSum": 1,
+   "dataFiles": 6,
+   "taskChars": 669
+  },
+  {
+   "id": "Material_004",
+   "domain": "Material",
+   "checklistItems": 5,
+   "checklistWeightSum": 1,
+   "dataFiles": 4,
+   "taskChars": 713
+  }
+ ],
+ "digest": "0d43ea24fb99a985f7255e63b490146c1d91e9128217bae8e309672d779414d2",
+ "internal": {
+  "note": "Ten long review-type tasks from our own capability harnesses (meta-analysis, clinical review, hospital drug evaluation): three from each, the tenth drawn from the rest, seeded (Python random.Random(\"capsule-proving-20261109-v1:l9-internal\")).",
+  "universe": 13,
+  "tasks": [
+   {
+    "harness": "evals/clinical-review-quality",
+    "id": "review-002-aripiprazole-sparse-safety",
+    "title": "",
+    "briefsSha256": "ebf5600d89f01571119677585e6231352301298692bd6504ef392dda824afe1f"
+   },
+   {
+    "harness": "evals/clinical-review-quality",
+    "id": "review-003-mimic-overlap-unknown",
+    "title": "",
+    "briefsSha256": "ebf5600d89f01571119677585e6231352301298692bd6504ef392dda824afe1f"
+   },
+   {
+    "harness": "evals/clinical-review-quality",
+    "id": "review-004-english-grade-outline",
+    "title": "",
+    "briefsSha256": "ebf5600d89f01571119677585e6231352301298692bd6504ef392dda824afe1f"
+   },
+   {
+    "harness": "evals/comprehensive-drug-evaluation",
+    "id": "cde-001-dapagliflozin-ckd",
+    "title": "达格列净用于慢性肾脏病：一次常规的院内综合评价",
+    "briefsSha256": "1fc23c4b7278912c0f2692545e958e5de0b4b727350eb7d78f5c9a9b92a86d9a"
+   },
+   {
+    "harness": "evals/comprehensive-drug-evaluation",
+    "id": "cde-002-semaglutide-product-scope",
+    "title": "司美格鲁肽用于 2 型糖尿病合并肥胖：评的是哪一个产品、哪一个剂量",
+    "briefsSha256": "1fc23c4b7278912c0f2692545e958e5de0b4b727350eb7d78f5c9a9b92a86d9a"
+   },
+   {
+    "harness": "evals/comprehensive-drug-evaluation",
+    "id": "cde-003-upadacitinib-ad-scored-without-prices",
+    "title": "乌帕替尼用于中重度特应性皮炎：药事会要一个分数，但没给价格",
+    "briefsSha256": "1fc23c4b7278912c0f2692545e958e5de0b4b727350eb7d78f5c9a9b92a86d9a"
+   },
+   {
+    "harness": "evals/meta-analysis",
+    "id": "ma-001-tranexamic-acid-tka",
+    "title": "氨甲环酸减少全膝关节置换围手术期失血：一次常规的两两 Meta 分析",
+    "briefsSha256": "99e43777583d1c17b7374974ffeee7abee384aedc565178c4990a0a8f7c80ec6"
+   },
+   {
+    "harness": "evals/meta-analysis",
+    "id": "ma-002-anti-nmdar-encephalitis-too-few-to-pool",
+    "title": "利妥昔单抗治疗成人抗 NMDA 受体脑炎：能纳入的研究太少，合不了",
+    "briefsSha256": "99e43777583d1c17b7374974ffeee7abee384aedc565178c4990a0a8f7c80ec6"
+   },
+   {
+    "harness": "evals/meta-analysis",
+    "id": "ma-003-disconnected-network-fail-closed",
+    "title": "生物制剂治疗中重度斑块状银屑病的疗效排序：申请方只认头对头试验",
+    "briefsSha256": "99e43777583d1c17b7374974ffeee7abee384aedc565178c4990a0a8f7c80ec6"
+   },
+   {
+    "harness": "evals/meta-analysis",
+    "id": "ma-005-uncapped-landmark-trials",
+    "title": "HFrEF 随机试验检索：不应擅自设置筛选上限",
+    "briefsSha256": "99e43777583d1c17b7374974ffeee7abee384aedc565178c4990a0a8f7c80ec6"
+   }
+  ]
+ },
+ "total": 20
+}

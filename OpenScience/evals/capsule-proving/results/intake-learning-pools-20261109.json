@@ -1,0 +1,150 @@
+{
+  "schema": "capsule-proving-intake-learning-pools/1",
+  "modelCalls": 0,
+  "seed": "capsule-proving-20261109-v1",
+  "medmemorybench-hf": {
+    "benchmark": "medmemorybench-hf",
+    "denominator": 1939,
+    "languages": {
+      "zh": 1939,
+      "en": 1939
+    },
+    "keyParity": {
+      "onlyZh": 0,
+      "onlyEn": 0
+    },
+    "zhRuntimeInputsBuilt": 1939,
+    "zhRuntimeInputFailures": 0,
+    "failures": [],
+    "queryTypes": {
+      "entity_exact_match": 400,
+      "temporal_localization": 374,
+      "state_update": 195,
+      "inference_generation": 381,
+      "multiple_choice": 398,
+      "multi_hop_clinical_deduction": 191
+    },
+    "emptyQuestions": 0,
+    "poolFile": "pools/medmemorybench-hf-20261109.json",
+    "poolDigest": "18546b75fb8a2d76eca03acb6d8e3709a4e8730ef9dfd75e614e80affb9c719f",
+    "development": 120,
+    "confirmation": 1819,
+    "sourceOverlap": {
+      "sharedSessionIds": 1700,
+      "sourceContextDisjoint": false
+    },
+    "note": "ids are language-neutral (persona_N:query_id); the runtime id is \"<lang>:<id>\". Pool context ids are persona_N/session_1..anchor (sessions 1-101 per persona, read from the zh dialogues). The en dialogues (386 MB) are large-only; the en inputs are built the same way from them."
+  },
+  "wildchat-pseudo-users": {
+    "benchmark": "wildchat-pseudo-users",
+    "users": 272,
+    "conversations": 2004,
+    "messages": 14168,
+    "emptyTextMessages": 30,
+    "sampleSha256": "2f518edd3f97e65c54dbbfd51d00e013916ba42015b860f93d0cdd4cf652761e",
+    "counts": {
+      "chineseConversations": 119302,
+      "pseudoUsers": 42502,
+      "usersWith10OrMore": 1459,
+      "eligibleUsers": 5895,
+      "sampleUsers": 272,
+      "sampleConversations": 2004
+    },
+    "sample": {
+      "conversationsPerUser": {
+        "min": 3,
+        "median": 5,
+        "max": 44
+      },
+      "spanDays": {
+        "min": 1,
+        "p25": 2,
+        "median": 4,
+        "p75": 12,
+        "max": 147,
+        "over30": 22
+      }
+    },
+    "note": "pseudo-users (hashed IP + header), not people; no gold; real user text, local only"
+  },
+  "medlocomo": {
+    "benchmark": "medlocomo",
+    "patients": 101,
+    "admissions": 2982,
+    "universe": 17892,
+    "byScope": {
+      "single_admission": 8946,
+      "cross_admission": 8946
+    },
+    "byType": {
+      "medical_reasoning": 2982,
+      "adversarial": 5964,
+      "care_plan_rationale": 2982,
+      "longitudinal_progression": 2963,
+      "cross_admission_comparison": 1534,
+      "frequency_pattern": 1467
+    },
+    "adversarial": 5964,
+    "validated": 17892,
+    "failed": 0,
+    "failures": [],
+    "messagesAcrossInputs": 31373016,
+    "sampleSize": 600,
+    "adversarialInSample": 198,
+    "poolFile": "pools/medlocomo-20261109.json",
+    "poolDigest": "036400c3e33c5d3f0dac8557c13d5de0ee962af3cf7a0c86aecab1f6eecc966d",
+    "development": 120,
+    "confirmation": 480,
+    "sourceOverlap": {
+      "sharedSessionIds": 2034,
+      "sourceContextDisjoint": false
+    },
+    "note": "benchmark_qa.json holds every question; cross_admission_qa.json is its cross-admission half (checked). No license is declared in the repository; derived from MIMIC-IV, local use only."
+  },
+  "brand-generic-probe": {
+    "benchmark": "brand-generic-probe",
+    "denominator": 556,
+    "pairsEligible": 556,
+    "directions": {
+      "brand-to-generic": 261,
+      "generic-to-brand": 295
+    },
+    "statements": 20,
+    "questions": 20,
+    "poolFile": "pools/brand-generic-probe-20261109.json",
+    "poolDigest": "ef6d07bb763c8135945e6f8fa3a8932f8a98f1e415bd2b2f931c2ba1d80ef82e",
+    "development": 111,
+    "confirmation": 445,
+    "sourceOverlap": {
+      "sharedSessionIds": 0,
+      "sourceContextDisjoint": true
+    },
+    "note": "pass = reply names the stated name or its pair (the plan check); bridged = reply names the stated form although the question used the other one (the memory signal). Kimi wrote the templates and never saw a drug name or the gold."
+  },
+  "l9-long-tasks": {
+    "benchmark": "researchclawbench",
+    "denominator": 57,
+    "selected": [
+      "Life_000",
+      "Information_004",
+      "Astronomy_004",
+      "Chemistry_004",
+      "Earth_004",
+      "Energy_004",
+      "Information_007",
+      "Life_006",
+      "Energy_001",
+      "Material_004"
+    ],
+    "checklistItemDistribution": {
+      "3": 22,
+      "4": 8,
+      "5": 23,
+      "6": 3,
+      "8": 1
+    },
+    "poolFile": "pools/l9-long-tasks-20261109.json",
+    "poolDigest": "0d43ea24fb99a985f7255e63b490146c1d91e9128217bae8e309672d779414d2",
+    "note": "the README says 40 tasks (plus 10 ResearchClawBench-Self ones); the pinned revision holds more task folders than that, counted from the data"
+  }
+}
