@@ -994,6 +994,8 @@ export interface VcrPatientsTab {
   premises?: VcrPremise[];
   /** Population-level progression simulations (P4): a card each. */
   progressions?: VcrProgressionCard[];
+  /** The records of virtual people the study holds (made once from the model, never real persons): how many, from what, for which model, and what ran on them. */
+  peopleRecords?: VcrPeopleRecord[];
   pbpkInteractions?: VcrPbpkInteractionCard[];
   /** The survival fits with a spline the study holds now (C13), newest first: the curve beyond the data with how far beyond, and the premises. */
   splineFits?: VcrSplineFitBlock[];
@@ -1361,11 +1363,12 @@ export interface VcrQuestionEvent {
   strategy: string | null;
   strategyLabel: string | null;
   mechanism: string;
-  state: "representable" | "not_representable" | "strategy_not_stated";
+  /** `not_judged`: the study has no model to judge the event against, so no tag is shown. */
+  state: "representable" | "not_representable" | "strategy_not_stated" | "not_judged";
   stateLabel: string;
 }
 
-/** The study's 「研究问题与假设」: what is written, by whom, what is open and what the simulation can represent of it. */
+/** The study's 「研究问题与假设」: what is written, what is open and what the simulation can represent of it (who wrote a field is never read here). */
 export interface VcrResearchQuestion {
   id: string;
   version: number;
@@ -1377,8 +1380,6 @@ export interface VcrResearchQuestion {
   decisionContext: { decision: string; thresholds: string };
   assumptions: Array<{ text: string; source: string }>;
   events: VcrQuestionEvent[];
-  /** The label of who wrote each field that has been written, by field. */
-  basisLabels: Record<string, string>;
   /** The fields nobody has written yet, by their Chinese name. */
   gaps: string[];
   calibration: { sentence: string; differs: boolean } | null;
@@ -1643,6 +1644,17 @@ export interface VcrPrognosticModelCard {
 export interface VcrPrognosticSaving { rho: number | null; saving: VcrValue; ratio: VcrValue }
 
 /** What the virtual-patients tab says of a population-level progression simulation (algorithm round P4): the curves, the power, where each number came from. */
+export interface VcrPeopleRecord {
+  id: string;
+  createdAt: string | null;
+  people: number;
+  source: string;
+  current: boolean;
+  madeFor: string;
+  outside: { people: number; range: number[] | null } | null;
+  usedBy: string[];
+}
+
 export interface VcrProgressionCard {
   id: string;
   version: number;
@@ -1655,13 +1667,15 @@ export interface VcrProgressionCard {
   powerName: string;
   /** The closed-form power of the same test, beside the simulated one. */
   approximation: VcrValue | null;
+  /** A run on a record of virtual people in the paired mode: the answer is the contrast of the same people under both arms (model-implied), not a power. */
+  paired?: { measures: Array<{ key: string; label: string; value: VcrValue }>; sentence: string } | null;
   expected: { value: VcrValue; words: string } | null;
   timeUnit: string;
   visits: number[];
   series: VcrSeries[];
   table: { rows: Array<{ key: string; visit: number; control: { mean: VcrValue; sd: VcrValue }; treated: { mean: VcrValue; sd: VcrValue }; gap: VcrValue }> };
   /** A run with intercurrent events: the true value of each way of handling a stop, and this analysis's bias and interval coverage against it (plan R26). */
-  estimands?: { rows: Array<{ key: string; label: string; claimed: boolean; truth: VcrValue; bias: VcrValue | null; coverage: VcrValue | null; sentence: string | null }> } | null;
+  estimands?: { rows: Array<{ key: string; label: string; claimed: boolean; claimedBy?: "question" | "run"; truth: VcrValue; bias: VcrValue | null; coverage: VcrValue | null; sentence: string | null }> } | null;
   trials: number | null;
   premises: VcrPremise[];
   limited: string | null;
@@ -2762,6 +2776,7 @@ function readProgressions(raw: unknown): VcrProgressionCard[] {
     return [{
       id, version: finite(card.version) ?? 1, title, question: text(card.question) ?? "", label: text(card.label) ?? "", reason: text(card.reason),
       power: card.power ? readVcrValue(card.power) : null, powerName: text(card.powerName) ?? "", approximation: card.approximation ? readVcrValue(card.approximation) : null,
+      paired: readPaired(card.paired),
       expected: expected.value ? { value: readVcrValue(expected.value), words: text(expected.words) ?? "" } : null,
       timeUnit: text(card.timeUnit) ?? "", visits: Array.isArray(card.visits) ? card.visits.map(Number).filter(Number.isFinite) : [],
       series: readSeries(card.series), table: { rows }, estimands: readEstimands(card.estimands), trials: finite(card.trials), premises: readPremises(card.premises), limited: text(card.limited),
@@ -2769,11 +2784,21 @@ function readProgressions(raw: unknown): VcrProgressionCard[] {
   });
 }
 
+/** The paired mode's measures of a run on a record of virtual people; none is no block. */
+function readPaired(raw: unknown): VcrProgressionCard["paired"] {
+  const paired = obj(raw);
+  const measures = arr(paired.measures).flatMap((entry) => {
+    const key = text(entry.key), label = text(entry.label);
+    return key && label && entry.value ? [{ key, label, value: readVcrValue(entry.value) }] : [];
+  });
+  return measures.length ? { measures, sentence: text(paired.sentence) ?? "" } : null;
+}
+
 /** The estimand table of a progression card with intercurrent events (plan R26); a row without its label and true value is left out, and no rows is no table. */
 function readEstimands(raw: unknown): VcrProgressionCard["estimands"] {
   const rows = arr(obj(raw).rows).flatMap((row) => {
     const key = text(row.key), label = text(row.label);
-    return key && label && row.truth ? [{ key, label, claimed: row.claimed === true, truth: readVcrValue(row.truth), bias: row.bias ? readVcrValue(row.bias) : null, coverage: row.coverage ? readVcrValue(row.coverage) : null, sentence: text(row.sentence) }] : [];
+    return key && label && row.truth ? [{ key, label, claimed: row.claimed === true, claimedBy: row.claimedBy === "question" ? "question" as const : "run" as const, truth: readVcrValue(row.truth), bias: row.bias ? readVcrValue(row.bias) : null, coverage: row.coverage ? readVcrValue(row.coverage) : null, sentence: text(row.sentence) }] : [];
   });
   return rows.length ? { rows } : null;
 }
@@ -3536,6 +3561,12 @@ export function readVcrPatients(raw: unknown): VcrPatientsTab {
     partial: readPartial(value.partial),
     sets: arr(value.sets) as unknown as VcrPatientsTab["sets"],
     progressions: readProgressions(value.progressions),
+    peopleRecords: arr(value.peopleRecords).flatMap((entry) => {
+      const id = text(entry.id), outside = obj(entry.outside);
+      return id ? [{ id, createdAt: text(entry.createdAt), people: finite(entry.people) ?? 0, source: text(entry.source) ?? "", current: entry.current !== false, madeFor: text(entry.madeFor) ?? "",
+        outside: finite(outside.people) ? { people: finite(outside.people) ?? 0, range: Array.isArray(outside.range) ? outside.range.map(Number).filter(Number.isFinite) : null } : null,
+        usedBy: Array.isArray(entry.usedBy) ? entry.usedBy.map(String) : [] }] : [];
+    }),
     pbpkInteractions: readPbpkInteractionCards(value.pbpkInteractions),
     splineFits: arr(value.splineFits).flatMap((block) => { const read = readSplineFit(block); return read ? [read] : []; }),
   };
@@ -3662,7 +3693,6 @@ export function readVcrSchedule(raw: unknown): VcrSchedule | null {
 export function readVcrResearchQuestion(raw: Loose): VcrResearchQuestion {
   const fields = (raw.fields && typeof raw.fields === "object" && !Array.isArray(raw.fields) ? raw.fields : {}) as Loose;
   const part = (value: unknown, key: string) => text(((value && typeof value === "object" ? value : {}) as Loose)[key]) ?? "";
-  const bases = (raw.bases && typeof raw.bases === "object" ? raw.bases : {}) as Record<string, unknown>;
   const calibration = (raw.calibration && typeof raw.calibration === "object" ? raw.calibration : null) as Loose | null;
   return {
     id: text(raw.id) ?? "main",
@@ -3676,9 +3706,8 @@ export function readVcrResearchQuestion(raw: Loose): VcrResearchQuestion {
     assumptions: arr(fields.assumptions).map((entry) => ({ text: text(entry.text) ?? "", source: text(entry.source) ?? "" })).filter((entry) => entry.text),
     events: arr(raw.events).map((entry) => ({
       event: text(entry.event) ?? "", strategy: text(entry.strategy), strategyLabel: text(entry.strategyLabel), mechanism: text(entry.mechanism) ?? "",
-      state: entry.state === "representable" || entry.state === "not_representable" ? entry.state : "strategy_not_stated", stateLabel: text(entry.stateLabel) ?? "",
+      state: entry.state === "representable" || entry.state === "not_representable" || entry.state === "not_judged" ? entry.state : "strategy_not_stated", stateLabel: text(entry.stateLabel) ?? "",
     })),
-    basisLabels: Object.fromEntries(Object.entries(bases).map(([field, entry]) => [field, text((entry as Loose | null)?.label) ?? ""])),
     gaps: arr(raw.gaps).map((entry) => text(entry.label) ?? "").filter(Boolean),
     calibration: calibration && text(calibration.sentence) ? { sentence: text(calibration.sentence) ?? "", differs: calibration.differs === true } : null,
   };
@@ -4208,6 +4237,23 @@ export function readVcrMembers(raw: unknown): VcrMember[] {
 
 export async function getVcrMembers(studyId: string): Promise<VcrMember[]> {
   return readVcrMembers(await productRequest<unknown>(`${study(studyId)}/members`));
+}
+
+/** A conversation the study was handed to (「在新对话中继续」): when, and whether it was taken back. The session id is for the call, never printed. */
+export interface VcrContinuation { sessionId: string; grantedAt: string; revoked: boolean; revokedAt: string | null; mine: boolean }
+
+/** The conversations this study was handed to: the person's own handoffs, and every one for the study's lead. */
+export async function getVcrContinuations(studyId: string): Promise<VcrContinuation[]> {
+  const raw = await productRequest<unknown>(`${study(studyId)}/continuations`);
+  return arr(obj(raw).continuations).flatMap((entry) => {
+    const sessionId = text(entry.sessionId), grantedAt = text(entry.grantedAt);
+    return sessionId && grantedAt ? [{ sessionId, grantedAt, revoked: entry.revoked === true, revokedAt: text(entry.revokedAt) || null, mine: entry.mine === true }] : [];
+  });
+}
+
+/** Take one handoff back: that conversation stops reaching the study at its next call. One click, no confirmation. */
+export function revokeVcrContinuation(studyId: string, sessionId: string) {
+  return productRequest<unknown>(`${study(studyId)}/continuations/${id(sessionId)}`, "DELETE");
 }
 
 /** Give an account a role. Idempotent: a role it already holds changes nothing. */
@@ -4847,10 +4893,13 @@ export interface VcrRobustView {
   cheapestAcceptable: { key: string; index: number; n: VcrValue | null; worstCase: VcrValue | null } | null;
   cheapestUnderBase: { key: string; index: number; n: VcrValue | null; worstCase: VcrValue | null } | null; sameDesign: boolean | null;
   statement: string; choiceRule: string; tagText: Record<string, string>;
+  /** What the search calls the chance it compares: 「功效」, or the closed name of a mode-averaged one. */
+  powerLabel?: string;
 }
 export interface VcrCampaignView {
   id: string; kind: "campaign"; question: string; status: "running" | "stopped"; method: string; methodVersion: string; identity: string;
-  objective: { measure: string; direction: string; truth: string; label: string };
+  /** `pick` says what the objective picks by (「样本量最少」, 「功效最高」), so the page never calls a pick “the cheapest” unless the objective is cost. */
+  objective: { measure: string; direction: string; truth: string; label: string; pick?: { phrase: string; tag: string; sentence: string } };
   constraints: Array<{ measure: string; op: string; bound: number; kind: string; truth: string; confidence: number; label: string; kindText: string }>;
   truths: string[]; stages: Record<string, unknown>;
   budget: { declared: { maxCandidates: number; cpuSeconds: number; modelCalls: number }; used: Record<string, number> };

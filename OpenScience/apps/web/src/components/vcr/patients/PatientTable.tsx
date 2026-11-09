@@ -7,7 +7,7 @@ import { DataTable, type DataColumn } from "@/components/ui/DataTable";
 import { IconButton } from "@/components/ui/IconButton";
 import { Note } from "@/components/ui/Note";
 import { Section } from "@/components/ui/Section";
-import { useVcrLoad } from "../vcrTabKit";
+import { useVcrLoad, VcrRefreshingNote } from "../vcrTabKit";
 import { numberText } from "../vcrText";
 
 /**
@@ -68,12 +68,12 @@ export function PatientTable({ studyId, source, result, title, labels, arm = nul
   const offset = paging.view === view ? paging.offset : 0;
 
   const sortText = sort ? `${sort.descending ? "-" : ""}${sort.column}` : null;
-  const { state, reload, last, carried } = useVcrLoad(`${studyId}:rows:${source}:${view}:${offset}`, () => getVcrRows(studyId, source, {
+  const { state, reload, last, refreshing } = useVcrLoad(`${studyId}:rows:${source}:${view}:${offset}`, () => getVcrRows(studyId, source, {
     result, offset, limit: pageSize, sort: sortText, arm, filters: Object.fromEntries(Object.entries(filters).filter(([, text]) => text)),
   }));
-  // Another page's rows stay (dimmed, aria-busy) only while this one is being read, so paging does not blank the table; once this
-  // page's read has failed nothing else is drawn in its place.
-  const page: VcrRowsPage | null = state.kind === "error" ? null : last ?? carried;
+  // Only the rows of THIS request are drawn (review F07, P2-10): another page, filter, sort or set is another key, and its rows are never shown under
+  // this one's title while it loads (the old table read as the new one's). The same key read again keeps its rows and says 「正在刷新」.
+  const page: VcrRowsPage | null = state.kind === "error" ? null : last;
 
   // A page that was asked for and came back empty (the table shrank under it) goes back to the first.
   const emptied = useRef(false);
@@ -161,7 +161,8 @@ export function PatientTable({ studyId, source, result, title, labels, arm = nul
       {state.kind === "error" && sort ? (
         <Note tone="warn" action={<Button size="sm" variant="secondary" onClick={() => setSort(null)}>取消排序</Button>}>{state.message}</Note>
       ) : (
-        <div aria-busy={state.kind === "loading" || undefined} className={cn(state.kind === "loading" && page && "opacity-disabled transition-opacity")}>
+        <div aria-busy={state.kind === "loading" || refreshing || undefined}>
+          {refreshing && <VcrRefreshingNote />}
           <DataTable
             label={title}
             columns={columns}

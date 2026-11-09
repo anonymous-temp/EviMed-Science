@@ -19,7 +19,7 @@ import { useStudyFrame, useVcrToolbar } from "./studyFrameContext";
 import { VcrPremises } from "./VcrPremises";
 import { VcrValueText } from "./VcrNumber";
 import { VcrToolbarActions, type VcrToolbarAction } from "./VcrToolbarActions";
-import { VcrTabError, useVcrLoad } from "./vcrTabKit";
+import { VcrRefreshingNote, VcrTabError, useVcrLoad } from "./vcrTabKit";
 import { VcrTabSkeleton } from "./VcrStates";
 import { methodFieldText } from "./vcrMethodFieldText";
 import { fieldLabel, hasFieldLabel } from "./vcrScenarioFieldLabels";
@@ -143,8 +143,7 @@ function CampaignView({ studyId, view, reload }: { studyId: string; view: VcrCam
     { key: "candidate", header: "方案", rowHeader: true, cell: (candidate) => (
       <span>
         <span className="tabular-nums">#{candidate.index + 1}</span>
-        {candidate.key === view.best && !view.robust && <> <Tag tone="accent">在这些假设下最省</Tag></>}
-        {view.robust?.rows.find((row) => row.key === candidate.key)?.tags.map((tag) => <Fragment key={tag}> <Tag tone={tag === "cheapest_acceptable" ? "accent" : "neutral"}>{view.robust!.tagText[tag] ?? tag}</Tag></Fragment>)}
+        {candidate.key === view.best && !view.robust && <> <Tag tone="accent">{view.objective.pick?.tag ?? "满足全部约束"}</Tag></>}
         {candidate.key === view.reference && <> <Tag>参照</Tag></>}
         <span className="block text-caption text-text-3">{setText(view.method, candidate.set)}</span>
       </span>
@@ -171,10 +170,10 @@ function CampaignView({ studyId, view, reload }: { studyId: string; view: VcrCam
         <h2 className="text-heading font-semibold text-text">{view.question || "设计搜索"}</h2>
         <Note result={["已评估 ", { n: evaluated }, ` / ${planned} 个方案，`, { n: view.finalists.length, onOpen: view.finalists.length ? () => { setOnly("finalists"); setOffset(0); } : undefined, label: `${view.finalists.length} 个入围复核，只看这些` }, " 个入围复核。",
           ...(view.robust ? [view.robust.statement]
-            : best ? [`在这些假设下，满足约束且最省的是 #${best.index + 1}${best.objective.final ? `，${view.objective.label} ${valueText(best.objective.final)}` : ""}。`]
+            : best ? [`在这些假设下，${view.objective.pick?.sentence ?? "满足全部约束的方案"}是 #${best.index + 1}${best.objective.final ? `，${view.objective.label} ${valueText(best.objective.final)}` : ""}。`]
             : view.undecided?.closest ? [`没有方案确认满足全部约束；最接近的是 #${view.undecided.closest.index + 1}${view.undecided.closest.objective ? `，${view.objective.label} ${valueText(view.undecided.closest.objective)}` : ""}，还有 ${view.undecided.closest.constraints.length} 个约束无法确定。`] : [])]} />
         {view.againstReference?.difference
-          ? <Note result={["与参照方案比，差值 ", { n: `${valueText(view.againstReference.difference)}${mcseSuffix(view.againstReference.difference)}` }, view.againstReference.couplingText ? `；${view.againstReference.couplingText}。` : "。"]} />
+          ? <Note result={[`与参照方案比，${best ? `#${best.index + 1} 的` : ""}差值 `, { n: `${valueText(view.againstReference.difference)}${mcseSuffix(view.againstReference.difference)}` }, view.againstReference.couplingText ? `；${view.againstReference.couplingText}。` : "。"]} />
           : view.improvement != null && view.reference && <Note result={[improvementWord(view.objective.direction, view.improvement), { n: `${numberText(Math.abs(view.improvement))}${(best?.objective.final ?? best?.objective.screening)?.unit ?? ""}` }, `（${view.objective.label}）。`]} />}
       </div>
 
@@ -216,6 +215,8 @@ const pct = (value: { value?: number | null; text?: string | null; unit?: string
  */
 function RobustSection({ robust }: { robust: VcrRobustView }) {
   const names = robust.scenarios.map((scenario) => scenario.name);
+  // a mode-averaged chance is named as itself, never called 功效 (review S9)
+  const power = robust.powerLabel && robust.powerLabel !== "功效" ? `“${robust.powerLabel}”` : "功效";
   const columns: Array<DataColumn<VcrRobustRow>> = [
     { key: "design", header: "方案", rowHeader: true, cell: (row) => (
       <span>
@@ -224,13 +225,13 @@ function RobustSection({ robust }: { robust: VcrRobustView }) {
         {!row.eligible && row.complete && <span className="block text-caption text-text-3">{row.referenceOnly ? "仅作对照" : row.guardText}</span>}
       </span>
     ) },
-    ...names.map((name) => ({ key: `power:${name}`, header: `“${name}”下的功效`, align: "right" as const, cell: (row: VcrRobustRow) => {
+    ...names.map((name) => ({ key: `power:${name}`, header: `“${name}”下的${power}`, align: "right" as const, cell: (row: VcrRobustRow) => {
       const power = row.scenarios.find((scenario) => scenario.name === name)?.power;
       return power ? <span>{pct(power)}<span className="block text-caption text-text-3">{power.statusText}</span></span> : "—";
     }, isEmpty: (row: VcrRobustRow) => !row.scenarios.find((scenario) => scenario.name === name)?.power })),
-    { key: "worst", header: "最差情形功效", align: "right", cell: (row) => (row.worstCase ? <span>{pct(row.worstCase)}<span className="block text-caption text-text-3">在“{row.worstCase.scenario}”下</span></span> : "—"), isEmpty: (row) => !row.worstCase },
+    { key: "worst", header: `最差情形${power}`, align: "right", cell: (row) => (row.worstCase ? <span>{pct(row.worstCase)}<span className="block text-caption text-text-3">在“{row.worstCase.scenario}”下</span></span> : "—"), isEmpty: (row) => !row.worstCase },
     { key: "regret", header: "最大遗憾", align: "right", cell: (row) => (row.maxRegret ? <span>{pct(row.maxRegret)}<span className="block text-caption text-text-3">在“{row.maxRegret.scenario}”下</span></span> : "—"), isEmpty: (row) => !row.maxRegret },
-    ...(robust.weighted ? [{ key: "expected", header: "按权重平均的功效", align: "right" as const, cell: (row: VcrRobustRow) => pct(row.expectedPower), isEmpty: (row: VcrRobustRow) => !row.expectedPower }] : []),
+    ...(robust.weighted ? [{ key: "expected", header: `按权重平均的${power}`, align: "right" as const, cell: (row: VcrRobustRow) => pct(row.expectedPower), isEmpty: (row: VcrRobustRow) => !row.expectedPower }] : []),
     { key: "n", header: "样本量", align: "right", cell: (row) => pct(row.n), isEmpty: (row) => !row.n },
     ...(robust.criteria.some((criterion) => criterion.name === "duration") ? [{ key: "duration", header: "研究时长", align: "right" as const, cell: (row: VcrRobustRow) => pct(row.duration), isEmpty: (row: VcrRobustRow) => !row.duration }] : []),
     { key: "ok", header: `各假设下是否达到 ${numberText(robust.floor * 100)}%`, cell: (row) => row.acceptableText, isEmpty: (row) => !row.acceptableText },
@@ -249,7 +250,7 @@ function RobustSection({ robust }: { robust: VcrRobustView }) {
           <DataTable label="各方案在各假设下的运行特征" rows={ocRows} rowKey={(row) => row.id} columns={[
             { key: "design", header: "方案", rowHeader: true, cell: (row) => `#${row.index + 1}` },
             { key: "scenario", header: "假设", cell: (row) => `“${row.scenario.name}”${row.compared ? "" : "（只用于判断错误率）"}` },
-            { key: "power", header: "功效", align: "right", cell: (row) => pct(row.scenario.power), isEmpty: (row) => !row.scenario.power },
+            { key: "power", header: power, align: "right", cell: (row) => pct(row.scenario.power), isEmpty: (row) => !row.scenario.power },
             { key: "rest", header: "其他", cell: (row) => <ul className="flex flex-col gap-1">{row.scenario.oc.map((oc) => <li key={oc.measure} className="text-ui text-text">{oc.label} <VcrValueText value={oc as never} /></li>)}</ul>, isEmpty: (row) => !row.scenario.oc.length },
           ]} />
         </Disclosure>
@@ -345,6 +346,11 @@ export function VirtualLabWorkspace({ studyId, canRun = true, switcher = null }:
   const running = view?.status === "running";
   const { reload } = detail;
   const reloadList = list.reload;
+  // 「正在刷新」 is said for a refresh the person asked for, never for the 5-second poll of a running search: the poll would flash it for as long as the search runs
+  const [manual, setManual] = useState(false);
+  const refreshNow = () => { setManual(true); detail.reload(); list.reload(); };
+  const reading = detail.refreshing || list.refreshing;
+  useEffect(() => { if (!reading) setManual(false); }, [reading]);
   useEffect(() => {
     if (!running) return undefined;
     const timer = setInterval(() => { reload(); reloadList(); }, POLL_MS);
@@ -362,13 +368,14 @@ export function VirtualLabWorkspace({ studyId, canRun = true, switcher = null }:
   else if (!selected) body = <LabEmpty studyId={studyId} canRun={canRun} />;
   else if (detail.state.kind === "loading") body = <><SwitcherOnly /><VcrTabSkeleton /></>;
   else if (detail.state.kind === "error") body = <><SwitcherOnly /><VcrTabError message={detail.state.message} onRetry={detail.reload} /></>;
-  else if (view?.kind === "campaign") body = <CampaignView studyId={studyId} view={view} reload={() => { detail.reload(); list.reload(); }} />;
-  else if (view) body = <ExperimentView studyId={studyId} view={view} reload={() => { detail.reload(); list.reload(); }} />;
+  else if (view?.kind === "campaign") body = <CampaignView studyId={studyId} view={view} reload={refreshNow} />;
+  else if (view) body = <ExperimentView studyId={studyId} view={view} reload={refreshNow} />;
   else body = <><SwitcherOnly /><VcrTabSkeleton /></>;
 
   return (
     <LabContext.Provider value={{ switcher, objectSelect, canRun }}>
       <div className="flex flex-col gap-6">
+        {manual && reading && <VcrRefreshingNote />}
         {body}
       </div>
     </LabContext.Provider>

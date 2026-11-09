@@ -709,6 +709,21 @@ describe("在新对话中继续 (R11)", () => {
     await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent(/^\/app\/chat\?project=prj_ev201$/));
     expect(store.select).toHaveBeenCalledWith("prj_ev201", expect.any(Function));
   });
+
+  it("lists what the study was handed to and takes one back with one click, from the same menu (review P1-11)", async () => {
+    let revoked = false;
+    server = installVcrServer(network.productRequest, {
+      [`GET /vcr/studies/${STUDY_ID}/continuations`]: () => ({ continuations: [{ sessionId: "sess_1", grantedAt: "2026-11-09T06:30:00Z", revoked, revokedAt: null, mine: true }] }),
+      [`DELETE /vcr/studies/${STUDY_ID}/continuations/sess_1`]: () => { revoked = true; return { revoked: true }; },
+    });
+    draw();
+    await openMenu("交出去的对话");
+    const drawer = await screen.findByRole("dialog", { name: "交出去的对话" });
+    await userEvent.click(await within(drawer).findByRole("button", { name: "收回第 1 个对话" }));
+    await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/continuations/sess_1`, "DELETE"));
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(await within(drawer).findByText("已收回")).toBeInTheDocument();
+  });
 });
 
 describe("重命名", () => {
@@ -878,19 +893,20 @@ describe("the 「⋯」 menu follows the reader's abilities", () => {
 
   it("offers the lead everything: rename, export, the data intake, members, budget, pause, the record, the AI's runs, and — apart — delete", async () => {
     draw();
-    expect(await items()).toEqual(["在新对话中继续", "重命名", "导出…", "数据接入", "成员与角色", "计算预算", "暂停研究", "变更记录", "AI 运行", "删除"]);
+    expect(await items()).toEqual(["在新对话中继续", "交出去的对话", "重命名", "导出…", "数据接入", "成员与角色", "计算预算", "暂停研究", "变更记录", "AI 运行", "删除"]);
   });
 
   it("offers a reader who only exports the export, and the two records — nothing that changes the study", async () => {
     withAbilities(["read", "review_clinical", "export"]);
     draw();
-    expect(await items()).toEqual(["在新对话中继续", "导出…", "数据接入", "变更记录", "AI 运行"]);
+    // a reader who may not write and run cannot hand the study to a conversation (that lets the conversation write and run in it), but still sees the handoffs and may take one back
+    expect(await items()).toEqual(["交出去的对话", "导出…", "数据接入", "变更记录", "AI 运行"]);
   });
 
   it("keeps the budget, the status, the members and the deletion from a data manager, who is not the lead — and lets them rename", async () => {
     withAbilities(["read", "write", "run", "manage_data", "read_patient_level"]);
     draw();
-    expect(await items()).toEqual(["在新对话中继续", "重命名", "数据接入", "变更记录", "AI 运行"]);
+    expect(await items()).toEqual(["在新对话中继续", "交出去的对话", "重命名", "数据接入", "变更记录", "AI 运行"]);
   });
 
   it("says nothing of the budget to a reader who cannot confirm it: the line is the lead's, and a button that would be refused is not offered", async () => {

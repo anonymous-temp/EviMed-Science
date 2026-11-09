@@ -16,11 +16,12 @@ import { Tag } from "@/components/ui/Tag";
  * and edited here. Every field is optional: one nobody wrote is a default the results' premises name, so this card is a place to say
  * more, never a form to finish. What a person changes here is their own edit and stands over what the assistant writes later (the
  * assistant is told which field it could not change). Each event shows whether this simulation can represent it, in the words the
- * premises use. The card is silent while the question cannot be read: the rest of the page does not depend on it.
+ * premises use; with no model to judge them against an event is shown with its strategy and no tag. Who wrote a field is never shown (it decides which
+ * write wins, and is the assistant's to read, not the person's). The rest of the page does not depend on the question being readable.
  * Component: VcrResearchQuestion; owner: VCR; rules: optional fields, page edit is the strongest basis.
  * Anatomy: Section with a fact list, the events with their state, and one editor opened from 编辑.
  * Variants: Written, empty (a recipe and 编辑), editing.
- * States: Loading draws nothing; a failed save keeps the form and says why.
+ * States: Loading draws nothing; an unreadable question says so with a retry; a failed save keeps the form and says why; a half-written row is named before anything is sent.
  * Hit area: Shared Button, Input and Select sizing.
  * Keyboard: Native form controls; Enter saves from a single-line field.
  * Long content: Values wrap.
@@ -31,19 +32,29 @@ import { Tag } from "@/components/ui/Tag";
 export function VcrResearchQuestionCard({ studyId, canWrite }: { studyId: string; canWrite: boolean }) {
   const [question, setQuestion] = useState<VcrResearchQuestion | null>(null);
   const [loaded, setLoaded] = useState(false);
-  const [unreadable, setUnreadable] = useState(false);
+  const [unreadable, setUnreadable] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let live = true;
     setLoaded(false);
-    setUnreadable(false);
-    void getVcrResearchQuestion(studyId).then((read) => { if (live) { setQuestion(read); setLoaded(true); } }).catch(() => { if (live) { setUnreadable(true); setLoaded(true); } });
+    setUnreadable(null);
+    void getVcrResearchQuestion(studyId).then((read) => { if (live) { setQuestion(read); setLoaded(true); } })
+      .catch((error: unknown) => { if (live) { setUnreadable(webErrorMessage(error, { fallback: "研究问题暂时读不出来。" })); setLoaded(true); } });
     return () => { live = false; };
-  }, [studyId]);
+  }, [studyId, attempt]);
 
-  // What cannot be read is not offered for writing: an editor over an unknown question could overwrite it.
-  if (!loaded || unreadable) return null;
+  // What cannot be read is not offered for writing (an editor over an unknown question could overwrite it), and it says so: the card is a place to
+  // say more, so a silent gap would read as "nothing to say here".
+  if (!loaded) return null;
+  if (unreadable !== null) {
+    return (
+      <Section title="研究问题与假设">
+        <Note tone="warn" action={<Button size="sm" variant="secondary" onClick={() => setAttempt((current) => current + 1)}>重试</Button>}>{unreadable}</Note>
+      </Section>
+    );
+  }
   if (!question && !canWrite) return null;
   if (editing) {
     return (
@@ -66,13 +77,13 @@ export function VcrResearchQuestionCard({ studyId, canWrite }: { studyId: string
     );
   }
   const facts: Fact[] = [
-    { label: "研究问题", value: <Written text={question.question} by={question.basisLabels.question} /> },
-    { label: "人群", value: <Written text={question.population} by={question.basisLabels.population} /> },
-    { label: "治疗条件", value: <Written text={question.treatment} by={question.basisLabels.treatment} /> },
-    { label: "观察的变量", value: <Written text={[question.variable.endpoint, question.variable.scale, question.variable.timePoint].filter(Boolean).join("，")} by={question.basisLabels.variable} /> },
-    { label: "汇总方式", value: <Written text={question.summary} by={question.basisLabels.summary} /> },
-    { label: "要做的决定", value: <Written text={[question.decisionContext.decision, question.decisionContext.thresholds].filter(Boolean).join("；")} by={question.basisLabels.decisionContext} /> },
-    { label: "假设", value: <Written text={question.assumptions.map((entry) => (entry.source ? `${entry.text}（${entry.source}）` : entry.text)).join("；")} by={question.basisLabels.assumptions} /> },
+    { label: "研究问题", value: <Written text={question.question} /> },
+    { label: "人群", value: <Written text={question.population} /> },
+    { label: "治疗条件", value: <Written text={question.treatment} /> },
+    { label: "观察的变量", value: <Written text={[question.variable.endpoint, question.variable.scale, question.variable.timePoint].filter(Boolean).join("，")} /> },
+    { label: "汇总方式", value: <Written text={question.summary} /> },
+    { label: "要做的决定", value: <Written text={[question.decisionContext.decision, question.decisionContext.thresholds].filter(Boolean).join("；")} /> },
+    { label: "假设", value: <Written text={question.assumptions.map((entry) => (entry.source ? `${entry.text}（${entry.source}）` : entry.text)).join("；")} /> },
   ].filter((row) => row.value.props.text);
   return (
     <Section
@@ -89,7 +100,7 @@ export function VcrResearchQuestionCard({ studyId, canWrite }: { studyId: string
                 <span>{event.event}</span>
                 <span className="text-text-2">{event.strategyLabel ?? "处理方式还没有写"}</span>
                 {event.mechanism && <span className="text-text-2">{event.mechanism}</span>}
-                <Tag tone={event.state === "not_representable" ? "warn" : "neutral"}>{event.stateLabel}</Tag>
+                {event.stateLabel && <Tag tone={event.state === "not_representable" ? "warn" : "neutral"}>{event.stateLabel}</Tag>}
               </li>
             ))}
           </ul>
@@ -104,17 +115,12 @@ export function VcrResearchQuestionCard({ studyId, canWrite }: { studyId: string
   );
 }
 
-/** A written value and, beside it, who wrote it. */
-function Written({ text, by }: { text: string; by?: string }) {
-  return (
-    <span className="flex flex-wrap items-baseline gap-2">
-      <span className="whitespace-pre-wrap break-words">{text}</span>
-      {by && <span className="text-caption text-text-3">{by}</span>}
-    </span>
-  );
+/** A written value. */
+function Written({ text }: { text: string }) {
+  return <span className="whitespace-pre-wrap break-words">{text}</span>;
 }
 
-interface Draft {
+export interface Draft {
   question: string;
   population: string;
   treatment: string;
@@ -139,6 +145,18 @@ function draftOf(question: VcrResearchQuestion | null): Draft {
 }
 
 /** The fields that differ from what was loaded, and only those: an untouched field is not re-stated as the person's edit. */
+/**
+ * The first row the person half-wrote, named in words (an event with a handling but no event text; an assumption with a source but no text), or null.
+ * A row left wholly blank is no problem: it is dropped from what is sent.
+ */
+export function halfWrittenRow(draft: Draft): string | null {
+  const event = draft.events.findIndex((entry) => !entry.event.trim() && (entry.strategy || entry.mechanism.trim()));
+  if (event >= 0) return `第 ${event + 1} 个中途事件还没有写事件本身：写上，或删除这一行，再保存。`;
+  const assumption = draft.assumptions.findIndex((entry) => !entry.text.trim() && entry.source.trim());
+  if (assumption >= 0) return `第 ${assumption + 1} 条假设只写了来源：写上假设本身，或删除这一行，再保存。`;
+  return null;
+}
+
 export function changedFields(was: Draft, now: Draft): VcrResearchQuestionBody {
   const body: VcrResearchQuestionBody = {};
   const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
@@ -157,9 +175,10 @@ export function changedFields(was: Draft, now: Draft): VcrResearchQuestionBody {
   if (clean(was.thresholds) !== clean(now.thresholds)) decision.thresholds = now.thresholds;
   if (Object.keys(decision).length) body.decisionContext = decision;
   const trimmedEvents = (draft: Draft) => draft.events.map((entry) => ({ event: entry.event.trim(), strategy: entry.strategy, mechanism: entry.mechanism.trim() })).filter((entry) => entry.event);
-  if (!same(trimmedEvents(was), trimmedEvents(now))) body.intercurrentEvents = now.events.map((entry) => ({ event: entry.event, strategy: entry.strategy || null, mechanism: entry.mechanism }));
+  // a row nothing was written in is not part of the question: it is dropped here, never sent
+  if (!same(trimmedEvents(was), trimmedEvents(now))) body.intercurrentEvents = now.events.filter((entry) => entry.event.trim() || entry.strategy || entry.mechanism.trim()).map((entry) => ({ event: entry.event, strategy: entry.strategy || null, mechanism: entry.mechanism }));
   const trimmedAssumptions = (draft: Draft) => draft.assumptions.map((entry) => ({ text: entry.text.trim(), source: entry.source.trim() })).filter((entry) => entry.text);
-  if (!same(trimmedAssumptions(was), trimmedAssumptions(now))) body.assumptions = now.assumptions;
+  if (!same(trimmedAssumptions(was), trimmedAssumptions(now))) body.assumptions = now.assumptions.filter((entry) => entry.text.trim() || entry.source.trim());
   return body;
 }
 
@@ -173,6 +192,8 @@ function QuestionEditor({ studyId, question, onDone }: { studyId: string; questi
 
   const save = () => {
     if (holding.current) return;
+    const half = halfWrittenRow(draft);
+    if (half) { toast.error(half); return; }
     const body = changedFields(initial.current, draft);
     if (Object.keys(body).length === 0) { onDone(null); return; }
     holding.current = true;

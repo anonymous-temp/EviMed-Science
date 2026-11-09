@@ -78,6 +78,9 @@ export function installVcrServer(productRequest: ReturnType<typeof vi.fn>, overr
         }
         // The programme's background conversations and the page's editable cards answer in their own shapes (no presented page).
         if (section === "runs") return { runs: [] };
+        // a study with no research question, and one handed to no conversation (the overview card and the study menu read them)
+        if (section === "research-question") return { questions: [] };
+        if (section === "continuations") return { continuations: [] };
         if (section === "cards") return { kind: query.get("kind"), objectId: query.get("object") ?? "pop_1", title: "", settings: [] };
         if (section === "matching" && set === "ev201") {
           const view = query.get("view");

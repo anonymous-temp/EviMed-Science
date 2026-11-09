@@ -22,7 +22,7 @@ function visitColumns(timeUnit: string): Array<DataColumn<VisitRow>> {
 type EstimandRow = NonNullable<VcrProgressionCard["estimands"]>["rows"][number];
 
 const estimandColumns: Array<DataColumn<EstimandRow>> = [
-  { key: "label", header: "按哪种方式处理停药", rowHeader: true, cell: (row) => <span>{row.label}{row.claimed ? "（研究问题要的）" : ""}</span> },
+  { key: "label", header: "按哪种方式处理停药", rowHeader: true, cell: (row) => <span>{row.label}{row.claimed ? (row.claimedBy === "question" ? "（研究问题要的）" : "（这次设定的分析目标）") : ""}</span> },
   { key: "truth", header: "模型算出的真实差值", align: "right", cell: (row) => <CardNumber value={row.truth} label="真实差值" /> },
   { key: "bias", header: "这个分析的偏差", align: "right", cell: (row) => (row.bias ? <CardNumber value={row.bias} label="偏差" /> : "—") },
   { key: "coverage", header: "95% 区间覆盖率", align: "right", cell: (row) => (row.coverage ? <CardNumber value={row.coverage} label="覆盖率" /> : "—") },
@@ -41,12 +41,27 @@ function ProgressionCard({ card }: { card: VcrProgressionCard }) {
           </p>
           {card.limited && <p data-vcr-progression-limited="" className="text-ui text-text">{card.limited}</p>}
 
-          <div data-vcr-progression-power="" className="flex flex-col gap-1">
-            <p className="text-caption text-text-3">{card.powerName}</p>
-            <p className="text-ui text-text"><span className="font-semibold"><CardNumber value={card.power} label={card.powerName} /></span>
-              {card.approximation && <span className="text-text">{"；同一个检验用公式算出的是 "}<VcrNumber value={card.approximation} label="用公式算出的功效" />{"，模拟应当和它一致。"}</span>}</p>
-            {card.expected && <p className="text-caption text-text-3">{`${card.expected.words}：`}<CardNumber value={card.expected.value} label={card.expected.words} /></p>}
-          </div>
+          {card.paired ? (
+            <div data-vcr-progression-paired="" className="flex flex-col gap-2">
+              <p className="text-caption text-text-3">{card.powerName}</p>
+              <ul className="flex flex-col gap-1">
+                {card.paired.measures.map((measure) => (
+                  <li key={measure.key} className="flex flex-wrap items-baseline gap-2 text-ui text-text">
+                    <span className="text-text-2">{measure.label}</span>
+                    <span className="font-semibold"><CardNumber value={measure.value} label={measure.label} /></span>
+                  </li>
+                ))}
+              </ul>
+              {card.paired.sentence && <p className="text-caption text-text-3">{card.paired.sentence}</p>}
+            </div>
+          ) : (
+            <div data-vcr-progression-power="" className="flex flex-col gap-1">
+              <p className="text-caption text-text-3">{card.powerName}</p>
+              <p className="text-ui text-text"><span className="font-semibold"><CardNumber value={card.power} label={card.powerName} /></span>
+                {card.approximation && <span className="text-text">{"；同一个检验用公式算出的是 "}<VcrNumber value={card.approximation} label="用公式算出的功效" />{"，模拟应当和它一致。"}</span>}</p>
+              {card.expected && <p className="text-caption text-text-3">{`${card.expected.words}：`}<CardNumber value={card.expected.value} label={card.expected.words} /></p>}
+            </div>
+          )}
 
           <CardBlock title="平均病程">
             <VcrSeriesLegend series={card.series} />

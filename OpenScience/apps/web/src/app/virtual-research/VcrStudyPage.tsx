@@ -24,6 +24,7 @@ import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
 import { PageShell } from "@/components/layout/PageShell";
 import { useContinueStudy } from "@/components/vcr/useContinueStudy";
+import { VcrHandoffsDrawer } from "@/components/vcr/VcrHandoffsDrawer";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Note } from "@/components/ui/Note";
@@ -156,7 +157,7 @@ function CalculationRedirect({ to }: { to: string }) {
 }
 
 /** Which of the page's panels is open over it. */
-type Panel = "rename" | "export" | "members" | "budget" | "changes" | "runs" | "intake" | "delete" | null;
+type Panel = "rename" | "export" | "members" | "budget" | "changes" | "runs" | "intake" | "handoffs" | "delete" | null;
 
 function StudyView({ studyId, study, view, tab, reload, refreshError }: { studyId: string; study: VcrStudy; view: StudyView; tab: VcrTabKey; reload: () => void; refreshError: string | null }) {
   const navigate = useNavigate();
@@ -241,7 +242,9 @@ function StudyView({ studyId, study, view, tab, reload, refreshError }: { studyI
       .finally(() => setChangingStatus(false));
   };
   const menu: MenuEntry[] = [
-    ...(can("read") ? [{ label: "在新对话中继续", onSelect: () => continueStudy({ id: studyId, projectId: study.projectId, name: study.name }) }] : []),
+    // handing a study to a conversation is an act that lets that conversation write and run in it (the study owner's, or a member whose role holds both)
+    ...(can("write") && can("run") ? [{ label: "在新对话中继续", onSelect: () => continueStudy({ id: studyId, projectId: study.projectId, name: study.name }) }] : []),
+    ...(can("read") ? [{ label: "交出去的对话", onSelect: () => setPanel("handoffs") }] : []),
     ...(can("write") ? [{ label: "重命名", onSelect: () => setPanel("rename") }] : []),
     ...(can("export") ? [{ label: "导出…", disabled: running, onSelect: () => setPanel("export") }] : []),
     // 数据接入 is one entry on every tier: a study with no data plane to take it says so in the drawer, and a tier that takes real
@@ -427,6 +430,7 @@ function StudyView({ studyId, study, view, tab, reload, refreshError }: { studyI
       {panel === "rename" && <VcrRenameDialog studyId={studyId} name={study.name} onClose={() => setPanel(null)} onRenamed={renamed} />}
       {panel === "export" && <VcrExportDialog busy={running} onClose={() => setPanel(null)} onExport={exportAs} />}
       {panel === "members" && <VcrMembersDialog studyId={studyId} onClose={() => setPanel(null)} />}
+      {panel === "handoffs" && <VcrHandoffsDrawer studyId={studyId} onClose={() => setPanel(null)} />}
       {panel === "changes" && <VcrChangeLogDrawer study={study} onClose={() => setPanel(null)} />}
       {panel === "runs" && <VcrBackgroundRunsDrawer studyId={studyId} study={study} onClose={() => setPanel(null)} />}
       {panel === "intake" && <VcrIntakeDrawer studyId={studyId} onClose={() => { setPanel(null); if (params.has("intake")) setParams(current => { const next = new URLSearchParams(current); next.delete("intake"); return next; }, { replace: true }); }} onChanged={reload} />}

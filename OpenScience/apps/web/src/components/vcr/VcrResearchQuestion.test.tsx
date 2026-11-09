@@ -5,7 +5,7 @@ import { WebApiError } from "@/lib/apiClient";
 import { VcrResearchQuestionCard } from "./VcrResearchQuestion";
 
 /**
- * 研究问题与假设 on the overview: what was written and by whom, each intercurrent event with whether the simulation can represent it,
+ * 研究问题与假设 on the overview: what was written (never by whom: owner ruling 2026-10-10), each intercurrent event with whether the simulation can represent it,
  * and the editor that sends only the fields the person changed. Rendered over the server's own shape (`presentResearchQuestion`).
  */
 
@@ -21,8 +21,7 @@ const WRITTEN = {
     variable: { endpoint: "ADAS-Cog 11", timePoint: "第 78 周" },
     intercurrentEvents: [{ event: "因不良反应停药", strategy: "treatment_policy", mechanism: "停药后继续随访" }, { event: "退出研究", strategy: "hypothetical", mechanism: "" }],
   },
-  bases: { question: { basis: "person_edited", label: "你在页面上改的" }, population: { basis: "person_stated", label: "你在对话里说的" },
-    variable: { basis: "model_assembled", label: "助手根据对话整理" }, intercurrentEvents: { basis: "model_assembled", label: "助手根据对话整理" } },
+  bases: { question: "person_edited", population: "person_stated", variable: "model_assembled", intercurrentEvents: "model_assembled" },
   gaps: [{ field: "treatment", label: "治疗条件" }, { field: "summary", label: "群体层面的汇总方式" }],
   events: [
     { event: "因不良反应停药", strategy: "treatment_policy", strategyLabel: "不论是否发生都按原来的分组分析（治疗策略）", mechanism: "停药后继续随访", state: "not_representable", stateLabel: "这个模拟表示不了" },
@@ -52,7 +51,9 @@ describe("the written question", () => {
     expect(await screen.findByText("研究问题与假设")).toBeTruthy();
     expect(screen.getByText("第 2 版")).toBeTruthy();
     expect(screen.getByText("多奈哌齐在 78 周能否延缓 ADAS-Cog 恶化？")).toBeTruthy();
-    expect(screen.getByText("你在页面上改的")).toBeTruthy();
+    // who wrote a field is the model's to read, never the person's (review P1-6): no label, in any wording, sits beside a field
+    for (const who of ["你在页面上改的", "你在对话里说的", "助手根据对话整理"]) expect(screen.queryByText(who)).toBeNull();
+    expect(container.textContent).not.toMatch(/由 .* 写|写于|助手|整理/);
     expect(screen.getByText("ADAS-Cog 11，第 78 周")).toBeTruthy();
     const events = within(screen.getByRole("list", { name: "中途事件" })).getAllByRole("listitem");
     expect(events.map((row) => row.getAttribute("data-vcr-question-event"))).toEqual(["not_representable", "representable"]);
@@ -62,17 +63,30 @@ describe("the written question", () => {
     expect(container.querySelector("[data-vcr-research-question]")).toBeTruthy();
   });
 
-  it("says nothing while the question cannot be read, and a member who may not write sees no editor on an empty study", async () => {
+  it("says so with a retry while the question cannot be read (review P2-11), and a member who may not write sees no editor on an empty study", async () => {
     network.productRequest.mockRejectedValue(new WebApiError("boom", { status: 500 }));
     const { container } = render(<VcrResearchQuestionCard studyId="std_1" canWrite />);
-    await waitFor(() => expect(network.productRequest).toHaveBeenCalled());
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(container.textContent).toBe("");
+    expect(await screen.findByRole("button", { name: "重试" })).toBeTruthy();
+    expect(container.textContent).toMatch(/研究问题与假设/);
+    expect(screen.queryByRole("button", { name: "编辑" }), "an editor over an unknown question could overwrite it").toBeNull();
+    serve(WRITTEN);
+    await userEvent.click(screen.getByRole("button", { name: "重试" }));
+    expect(await screen.findByText("第 2 版")).toBeTruthy();
     serve(null);
     const viewer = render(<VcrResearchQuestionCard studyId="std_1" canWrite={false} />);
-    await waitFor(() => expect(network.productRequest).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(network.productRequest).toHaveBeenCalledTimes(3));
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(viewer.container.textContent).toBe("");
+  });
+
+  it("an event nothing judges is shown with its strategy and no tag", async () => {
+    const unjudged = { ...WRITTEN, events: WRITTEN.events.map((event) => ({ ...event, state: "not_judged", stateLabel: null })) };
+    serve(unjudged);
+    render(<VcrResearchQuestionCard studyId="std_1" canWrite />);
+    const events = within(await screen.findByRole("list", { name: "中途事件" })).getAllByRole("listitem");
+    expect(events.map((row) => row.getAttribute("data-vcr-question-event"))).toEqual(["not_judged", "not_judged"]);
+    expect(events[0].textContent).toContain("因不良反应停药");
+    expect(events[0].textContent).not.toMatch(/表示不了|可以表示/);
   });
 
   it("offers a reader without a question the way to write one, as a recipe and not a form", async () => {
@@ -135,5 +149,25 @@ describe("editing", () => {
     await waitFor(() => expect(toasts.error).toHaveBeenCalled());
     expect(screen.getByRole("textbox", { name: "汇总方式" })).toHaveProperty("value", "x");
     expect(toasts.success).not.toHaveBeenCalled();
+  });
+});
+
+describe("a half-written row (review P2-11)", () => {
+  it("names the row and sends nothing; a wholly blank row is dropped, never sent", async () => {
+    serve(WRITTEN);
+    render(<VcrResearchQuestionCard studyId="std_1" canWrite />);
+    await userEvent.click(await screen.findByRole("button", { name: "编辑" }));
+    await userEvent.click(screen.getByRole("button", { name: "添加事件" }));
+    const last = document.querySelectorAll("[data-vcr-event-row]")[2] as HTMLElement;
+    await userEvent.selectOptions(within(last).getByRole("combobox", { name: "处理方式" }), "composite");
+    await userEvent.click(screen.getByRole("button", { name: "保存" }));
+    expect(posted()).toHaveLength(0);
+    expect(toasts.error).toHaveBeenCalledWith("第 3 个中途事件还没有写事件本身：写上，或删除这一行，再保存。");
+    // the same row left wholly blank is dropped and the rest saves
+    await userEvent.selectOptions(within(last).getByRole("combobox", { name: "处理方式" }), "");
+    await userEvent.type(screen.getByRole("textbox", { name: "汇总方式" }), "x");
+    await userEvent.click(screen.getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(posted()).toHaveLength(1));
+    expect(posted()[0][2].intercurrentEvents).toBeUndefined();
   });
 });

@@ -104,6 +104,33 @@ it('a running search is read again and can be stopped; the stop keeps what ran',
   } finally { vi.useRealTimers(); }
 });
 
+it('the 5-second poll of a running search never says 正在刷新, and a refresh the person asked for (the stop) does (review P2-10)', async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  try {
+    const running = campaign({ status: 'running', stop: null, inFlight: { unit: 'u', stage: 'final' } });
+    let release: (() => void) | null = null;
+    let hold = false;
+    network.productRequest.mockImplementation(async (url: string, method?: string) => {
+      if (url.endsWith('/experiments')) return { experiments: [entry('cmp1', 'campaign', 'running')] };
+      if (method === 'POST') return running;
+      if (hold) await new Promise<void>((resolve) => { release = resolve; });
+      return running;
+    });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    draw();
+    expect(await screen.findByText(/正在计算复核这一步/)).toBeInTheDocument();
+    hold = true;
+    await vi.advanceTimersByTimeAsync(6000);
+    await waitFor(() => expect(release).not.toBeNull());
+    expect(document.querySelector('[data-vcr-refreshing]'), 'the poll is read again in the background, quietly').toBeNull();
+    (release as unknown as () => void)();
+    release = null;
+    await user.click(await screen.findByRole('button', { name: '停止搜索' }));
+    await waitFor(() => expect(document.querySelector('[data-vcr-refreshing]')).not.toBeNull());
+    (release as unknown as (() => void) | null)?.();
+  } finally { vi.useRealTimers(); }
+});
+
 it('a cancelled search says it was asked to stop and offers no second stop', async () => {
   serve([entry('cmp1', 'campaign', 'running')], { cmp1: campaign({ status: 'running', stop: null, cancelRequested: true }) });
   draw();
@@ -312,10 +339,33 @@ it('a search over several effect scenarios shows each design in every scenario a
   expect(document.body.textContent?.match(BACK_OFFICE)?.[0]).toBeUndefined();
 });
 
-it('a search with one effect scenario says the cheapest design under these assumptions, never the optimum', async () => {
-  serve([entry('cmp1', 'campaign')], { cmp1: campaign() });
+const pick = (phrase: string) => ({ phrase, tag: `满足约束，${phrase}`, sentence: `按目标（${phrase}），满足全部约束的方案` });
+
+it('a search with one effect scenario words its pick by its objective and never calls it the optimum', async () => {
+  serve([entry('cmp1', 'campaign')], { cmp1: campaign({ objective: { measure: 'expected_sample_size', direction: 'minimize', truth: 'alt', label: '期望样本量', pick: pick('期望样本量最少') } }) });
   draw();
-  expect(await screen.findByText(/在这些假设下，满足约束且最省的是 #2/)).toBeInTheDocument();
-  expect(screen.getAllByText('在这些假设下最省').length).toBe(1);
+  expect(await screen.findByText(/在这些假设下，按目标（期望样本量最少），满足全部约束的方案是 #2/)).toBeInTheDocument();
+  expect(screen.getAllByText('满足约束，期望样本量最少').length).toBe(1);
   expect(screen.queryByText('最优')).toBeNull();
+  expect(screen.queryByText(/最省/)).toBeNull();
 });
+
+it('a search that maximizes says its pick is the one with the highest chance, never the cheapest (review P0-2)', async () => {
+  serve([entry('cmp1', 'campaign')], { cmp1: campaign({ objective: { measure: 'power', direction: 'maximize', truth: 'alt', label: '功效', pick: pick('功效最高') } }) });
+  draw();
+  expect(await screen.findByText(/在这些假设下，按目标（功效最高），满足全部约束的方案是 #2/)).toBeInTheDocument();
+  expect(screen.getAllByText('满足约束，功效最高').length).toBe(1);
+  expect(screen.queryByText(/最省/)).toBeNull();
+});
+
+it('a search over a mode-averaged chance names it in the robust headers, never 功效', async () => {
+  const robust = robustCampaign();
+  serve([entry('cmp1', 'campaign')], { cmp1: { ...robust, robust: { ...robust.robust, powerLabel: '考虑研究之间差异后的预期把握度' } } });
+  draw();
+  const section = await screen.findByRole('region', { name: /稳健性比较/ });
+  const table = within(section).getByRole('table', { name: '每个方案在各假设下的结果' });
+  expect(within(table).getByRole('columnheader', { name: '“base”下的“考虑研究之间差异后的预期把握度”' })).toBeInTheDocument();
+  expect(within(table).getByRole('columnheader', { name: '最差情形“考虑研究之间差异后的预期把握度”' })).toBeInTheDocument();
+  expect(within(table).queryByRole('columnheader', { name: /功效/ })).toBeNull();
+});
+

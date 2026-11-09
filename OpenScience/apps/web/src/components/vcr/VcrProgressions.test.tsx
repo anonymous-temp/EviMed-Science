@@ -56,7 +56,7 @@ describe("疾病进展模拟 · the card", () => {
     const raw = {
       ...payloads.progression.linear,
       estimands: { rows: [
-        { key: "treatment_policy", label: "不论是否停药（治疗策略）", claimed: true, truth: value(-2.26, "estimand_truth"), bias: value(-0.87, "estimator_bias"), coverage: value(0.862, "ci_coverage"), sentence: "这个分析只用了停药之前的数据，回答的是“假如没有人停药”的问题，不是“不论是否停药”的问题。" },
+        { key: "treatment_policy", label: "不论是否停药（治疗策略）", claimed: true, claimedBy: "question", truth: value(-2.26, "estimand_truth"), bias: value(-0.87, "estimator_bias"), coverage: value(0.862, "ci_coverage"), sentence: "这个分析只用了停药之前的数据，回答的是“假如没有人停药”的问题，不是“不论是否停药”的问题。" },
         { key: "hypothetical", label: "假如没有人停药（假想情境）", claimed: false, truth: value(-3.1, "estimand_truth"), bias: null, coverage: null, sentence: null },
         { key: "", label: "no key is dropped", truth: value(1, "estimand_truth") },
       ] },
@@ -67,6 +67,11 @@ describe("疾病进展模拟 · the card", () => {
     expect(container).toHaveTextContent("这个分析回答的是哪个效应");
     expect(container).toHaveTextContent("不论是否停药（治疗策略）（研究问题要的）");
     expect(container).toHaveTextContent("回答的是“假如没有人停药”的问题");
+    // a row the run itself aims at is not called the research question's (review P1-12)
+    const aimed = readVcrPatients({ progressions: [{ ...raw, estimands: { rows: raw.estimands.rows.map((row) => ({ ...row, claimedBy: "run" })) } }] }).progressions?.[0];
+    const own = render(<VcrProgressions cards={[aimed as VcrProgressionCard]} />);
+    expect(own.container).toHaveTextContent("不论是否停药（治疗策略）（这次设定的分析目标）");
+    expect(own.container).not.toHaveTextContent("（研究问题要的）");
     // a card without the table draws no such block
     const plain = render(<VcrProgressions cards={[sample("linear")]} />);
     expect(plain.container).not.toHaveTextContent("这个分析回答的是哪个效应");
@@ -76,5 +81,18 @@ describe("疾病进展模拟 · the card", () => {
     expect(readVcrPatients({ progressions: [{ id: "x" }, null, { id: "y", title: "t", table: { rows: [] } }] }).progressions).toEqual([]);
     const { container } = render(<VcrProgressions cards={[]} />);
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it("review P0-1: a paired run on a record shows the per-person contrasts as the result and no power", () => {
+    const m = (name: string, v: number, unit = "分") => ({ name, value: v, mcse: 0.02, simulated: true, source: "synthetic", unit });
+    const raw = { ...payloads.progression.linear, power: null, powerName: "同一批虚拟患者里，用药与不用药的差别（模型推算）", paired: { sentence: "每一组都用同一批虚拟患者。结果是模型推算的“同一批人换一种治疗会怎样”，不是任何试验观察到的个体疗效。",
+      measures: [{ key: "paired_mean_contrast", label: "同一批虚拟患者里，治疗后减对照后评分的平均差（模型推算，含测量误差）", value: m("paired_mean_contrast", -1.9) }, { key: "paired_share_improved", label: "期望评分更好的人所占比例（模型推算）", value: { ...m("paired_share_improved", 0.97), unit: "%" } }] } };
+    const card = readVcrPatients({ progressions: [raw] }).progressions?.[0] as VcrProgressionCard;
+    expect(card.paired?.measures.map((entry) => entry.key)).toEqual(["paired_mean_contrast", "paired_share_improved"]);
+    const { container } = render(<VcrProgressions cards={[card]} />);
+    expect(container.querySelector("[data-vcr-progression-paired]")).not.toBeNull();
+    expect(container.querySelector("[data-vcr-progression-power]")).toBeNull();
+    expect(container).toHaveTextContent("期望评分更好的人所占比例（模型推算）");
+    expect(container).toHaveTextContent("不是任何试验观察到的个体疗效");
   });
 });

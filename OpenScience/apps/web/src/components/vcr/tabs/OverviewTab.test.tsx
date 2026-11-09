@@ -63,7 +63,7 @@ beforeEach(() => {
 describe("总览", () => {
   it("leads with the study's own sentence, and the question when the study has not found anything yet", () => {
     draw(study());
-    expect(screen.getByText("已模拟 3 个方案，按药效的不确定性平均后，得到显著结果的概率（assurance） 58%～74%；真实外部对照不可估计，缺 3 项数据。")).toBeInTheDocument();
+    expect(screen.getByText("已模拟 3 个方案，按药效的不确定性平均后，得到显著结果的概率 58%～74%；真实外部对照不可估计，缺 3 项数据。")).toBeInTheDocument();
   });
 
   it("is the sentence, the numbers it has, what needs the reader, the seven steps and the deliverables — in that order, and nothing stacked under them", () => {

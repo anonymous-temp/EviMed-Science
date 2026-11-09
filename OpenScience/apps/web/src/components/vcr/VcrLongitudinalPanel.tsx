@@ -167,7 +167,7 @@ export function VcrLongitudinalPanel({ studyId, canRun, canManage = false, data,
     {message && <p role={error ? 'alert' : 'status'} className={error ? 'text-ui text-error' : 'text-ui text-text-2'}>{message}</p>}
     {selected && <div className="flex flex-col gap-4">
       <Select label="预测版本" value={selected.id} onChange={event => setSelectedId(event.target.value)}>
-        {historyPredictions.map(r => <option key={r.id} value={r.id}>{r.summary.endpoint?.code} · {date(r.summary.origin)} · {r.summary.model?.name ?? '外部模型'} · {r.summary.model?.version ?? '版本未提供'}</option>)}
+        {historyPredictions.map(r => <option key={r.id} value={r.id}>{r.summary.endpoint?.code} · {date(r.summary.origin)} · {r.summary.model?.name ?? '外部模型'}{r.summary.originKind === 'cloud_api' ? '' : ` · ${r.summary.model?.version ?? '版本未提供'}`}</option>)}
       </Select>
       <FactList rows={[
         { label: '来源', value: <Tag>{selected.summary.originKind === 'cloud_api' ? '云端模型预测' : '外部导入预测'}</Tag> },
@@ -201,7 +201,7 @@ export function VcrLongitudinalPanel({ studyId, canRun, canManage = false, data,
     {nextOffset != null && <div><Button variant="text" size="sm" loading={busy} onClick={() => { void more(); }}>加载较早版本</Button></div>}
     {(log.length > 0 || providers.length > 0) && <Disclosure summary={`版本记录 · ${log.length + providers.length}`}>
       <ul className="flex flex-col gap-2 text-caption text-text-2">
-        {providers.map(provider => <li key={provider.id}>{provider.name} · {provider.version}</li>)}
+        {providers.map(provider => <li key={provider.id}>{provider.name}</li>)}
         {log.map(record => <li key={record.id}>{date(record.createdAt)} · {record.kind === 'history' ? '历史快照' : '预测结果'} · {record.summary.model?.version ?? date(record.summary.origin)}</li>)}
       </ul>
     </Disclosure>}

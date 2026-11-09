@@ -866,7 +866,7 @@ describe("试验 · what the sample size rests on, the baseline and the objectiv
   it("keeps the duration against success probability trade-off where the server sent those", async () => {
     const { container } = draw();
     await trialDrawn();
-    expect(await screen.findByText("周期、成本与 assurance 的取舍")).toBeInTheDocument();
+    expect(await screen.findByText("周期、成本与药效平均后的显著概率的取舍")).toBeInTheDocument();
     expect(container.querySelector("[data-vcr-scatter-reference]")).toBeNull();
   });
 });
