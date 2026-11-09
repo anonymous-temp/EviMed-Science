@@ -1189,6 +1189,7 @@ def _search_shape() -> dict:
                 "vary: {path: [values] | {from, to, step}}; paths joined by + move together as rows",
                 "goal.minimize | goal.maximize: the measure the method produces (expected_sample_size, power, total_sample_size, ...); exactly one",
                 "goal.power: the power a design must reach (design.simulate, patients.progression; default 0.8); goal.atLeast / goal.atMost: {measure: bound}",
+                "scenarios (optional): two or more effect assumptions [{name, effect, world?, weight?}], one named base; every design runs in each, and the answer is a table of power per scenario (worst case, regret), never one best design",
                 "nullTruth (optional): the truth with no effect, when it cannot be derived from the scenario",
                 "budget (optional): {maxCandidates, cpuSeconds}; sized from the ranges when left out",
             ],

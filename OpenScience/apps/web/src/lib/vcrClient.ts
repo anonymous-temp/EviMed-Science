@@ -1559,6 +1559,38 @@ export interface VcrWinRatioCard {
 }
 
 /**
+ * The value of information of a decision (in-silico round 2, R35): what each unknown input is worth learning before the decision is taken
+ * (EVPPI, ranked by the engine), the value of the data of a named study (EVSI), and for an input with no distribution the value at which the
+ * best option changes. A share is a percent of the EVPI as computed; it can pass 100 by estimation error. Nothing here is a recommendation.
+ */
+export interface VcrValueOfInformationCard {
+  id: string;
+  version: number;
+  form: "value_of_information";
+  title: string;
+  question: string;
+  /** The option with the best expected utility now. */
+  chosen: string;
+  draws: number | null;
+  unit: string | null;
+  headline: Array<{ key: string; label: string; value: VcrValue }>;
+  /** The sentence that names the table's top input and study and leaves the decision to the person; null when nothing changes the choice. */
+  lead: string | null;
+  options: Array<{ key: string; label: string; chosen: boolean; expected: VcrValue }>;
+  /** One row per input (or stated group), the largest EVPPI first. */
+  inputs: Array<{ key: string; label: string; rank: number; group: boolean; evppi: VcrValue; share: number | null }>;
+  thresholds: Array<{
+    key: string; label: string;
+    stated: { optimistic: number | null; base: number | null; pessimistic: number | null };
+    decisions: { optimistic: string; base: string; pessimistic: string };
+    flips: Array<{ value: VcrValue; from: string; to: string }>;
+  }>;
+  studies: Array<{ key: string; label: string; observes: string; size: number | null; evsi: VcrValue; share: number | null; ceiling: VcrValue | null }>;
+  premises: VcrPremise[];
+  limited: string | null;
+}
+
+/**
  * What the comparison tab says of a prognostic model trained on the person's own table (algorithm round P3): the out-of-fold figures, the table of
  * sample-size savings under the discounts, and the equation's effects. `form: "refused"` carries the sentence that says why no model was trained.
  */
@@ -1601,6 +1633,8 @@ export interface VcrProgressionCard {
   visits: number[];
   series: VcrSeries[];
   table: { rows: Array<{ key: string; visit: number; control: { mean: VcrValue; sd: VcrValue }; treated: { mean: VcrValue; sd: VcrValue }; gap: VcrValue }> };
+  /** A run with intercurrent events: the true value of each way of handling a stop, and this analysis's bias and interval coverage against it (plan R26). */
+  estimands?: { rows: Array<{ key: string; label: string; claimed: boolean; truth: VcrValue; bias: VcrValue | null; coverage: VcrValue | null; sentence: string | null }> } | null;
   trials: number | null;
   premises: VcrPremise[];
   limited: string | null;
@@ -1727,6 +1761,8 @@ export interface VcrTrialTab {
   bayesianDesigns?: VcrBayesianCard[];
   /** The win-ratio (hierarchical composite endpoint) designs the conversation computed, each a card of its own. */
   winRatioDesigns?: VcrWinRatioCard[];
+  /** The value-of-information results (which unknown is worth learning before the decision) the conversation computed, each a card of its own. */
+  valueOfInformation?: VcrValueOfInformationCard[];
   headline?: string | null;
   /** ADEMP, one line each. */
   ademp: Array<{ key: string; label: string; text: string }>;
@@ -2606,6 +2642,42 @@ function readWinRatioDesigns(raw: unknown): VcrWinRatioCard[] {
   });
 }
 
+/** The value-of-information cards; a card without a name or the known form, or with no options, and anything of an unknown shape, is left out. */
+function readValueOfInformation(raw: unknown): VcrValueOfInformationCard[] {
+  return arr(raw).flatMap((card) => {
+    const id = text(card.id), title = text(card.title);
+    const options = arr(card.options).flatMap((row) => {
+      const label = text(row.label);
+      return label && row.expected ? [{ key: text(row.key) ?? label, label, chosen: row.chosen === true, expected: readVcrValue(row.expected) }] : [];
+    });
+    if (!id || !title || card.form !== "value_of_information" || options.length === 0) return [];
+    return [{
+      id, version: finite(card.version) ?? 1, form: "value_of_information" as const, title, question: text(card.question) ?? "",
+      chosen: text(card.chosen) ?? "", draws: finite(card.draws), unit: text(card.unit), headline: readHeadlineLines(card.headline), lead: text(card.lead), options,
+      inputs: arr(card.inputs).flatMap((row) => {
+        const label = text(row.label);
+        return label && row.evppi ? [{ key: text(row.key) ?? label, label, rank: finite(row.rank) ?? 0, group: row.group === true, evppi: readVcrValue(row.evppi), share: finite(row.share) }] : [];
+      }),
+      thresholds: arr(card.thresholds).flatMap((row) => {
+        const label = text(row.label), stated = obj(row.stated), decisions = obj(row.decisions);
+        if (!label) return [];
+        return [{
+          key: text(row.key) ?? label, label,
+          stated: { optimistic: finite(stated.optimistic), base: finite(stated.base), pessimistic: finite(stated.pessimistic) },
+          decisions: { optimistic: text(decisions.optimistic) ?? "", base: text(decisions.base) ?? "", pessimistic: text(decisions.pessimistic) ?? "" },
+          flips: arr(row.flips).flatMap((flip) => (flip.value ? [{ value: readVcrValue(flip.value), from: text(flip.from) ?? "", to: text(flip.to) ?? "" }] : [])),
+        }];
+      }),
+      studies: arr(card.studies).flatMap((row) => {
+        const label = text(row.label);
+        return label && row.evsi ? [{ key: text(row.key) ?? label, label, observes: text(row.observes) ?? "", size: finite(row.size), evsi: readVcrValue(row.evsi), share: finite(row.share), ceiling: row.ceiling ? readVcrValue(row.ceiling) : null }] : [];
+      }),
+      premises: readPremises(card.premises),
+      limited: text(card.limited),
+    }];
+  });
+}
+
 /** The cards of the trained prognostic models; a card with no id or title, or of another shape, is left out. */
 function readPrognosticModels(raw: unknown): VcrPrognosticModelCard[] {
   const saving = (cell: Loose): VcrPrognosticSaving | null => (cell.saving ? { rho: finite(cell.rho), saving: readVcrValue(cell.saving), ratio: readVcrValue(cell.ratio) } : null);
@@ -2646,9 +2718,18 @@ function readProgressions(raw: unknown): VcrProgressionCard[] {
       power: card.power ? readVcrValue(card.power) : null, powerName: text(card.powerName) ?? "", approximation: card.approximation ? readVcrValue(card.approximation) : null,
       expected: expected.value ? { value: readVcrValue(expected.value), words: text(expected.words) ?? "" } : null,
       timeUnit: text(card.timeUnit) ?? "", visits: Array.isArray(card.visits) ? card.visits.map(Number).filter(Number.isFinite) : [],
-      series: readSeries(card.series), table: { rows }, trials: finite(card.trials), premises: readPremises(card.premises), limited: text(card.limited),
+      series: readSeries(card.series), table: { rows }, estimands: readEstimands(card.estimands), trials: finite(card.trials), premises: readPremises(card.premises), limited: text(card.limited),
     }];
   });
+}
+
+/** The estimand table of a progression card with intercurrent events (plan R26); a row without its label and true value is left out, and no rows is no table. */
+function readEstimands(raw: unknown): VcrProgressionCard["estimands"] {
+  const rows = arr(obj(raw).rows).flatMap((row) => {
+    const key = text(row.key), label = text(row.label);
+    return key && label && row.truth ? [{ key, label, claimed: row.claimed === true, truth: readVcrValue(row.truth), bias: row.bias ? readVcrValue(row.bias) : null, coverage: row.coverage ? readVcrValue(row.coverage) : null, sentence: text(row.sentence) }] : [];
+  });
+  return rows.length ? { rows } : null;
 }
 
 /** The network meta-analysis cards; a card without an id, a title and a ranking, and anything of an unknown shape, is left out. */
@@ -3482,6 +3563,7 @@ export function readVcrTrial(raw: unknown): VcrTrialTab {
     doseDesigns: readDoseDesigns(value.doseDesigns),
     bayesianDesigns: readBayesianDesigns(value.bayesianDesigns),
     winRatioDesigns: readWinRatioDesigns(value.winRatioDesigns),
+    valueOfInformation: readValueOfInformation(value.valueOfInformation),
     successRates: readSuccessRates(value.successRates),
     designs: arr(value.designs).map(readDesign),
     columns: arr(value.columns) as unknown as VcrTrialTab["columns"],
@@ -4699,6 +4781,26 @@ export interface VcrCampaignCandidate {
   constraints: Array<{ index: number; measure: string; label: string; kind: string; op: string; bound: number; screening: VcrConstraintVerdict | null; final: VcrConstraintVerdict | null }>;
   resultIds: string[]; usage: { cpuSeconds: number; queueSeconds: number; wallSeconds: number; replicates: number };
 }
+/** One row of a robust design search: a finalist judged in every scenario it was compared in (R34). Every number is the server's. */
+export interface VcrRobustRow {
+  key: string; index: number; complete: boolean; eligible: boolean; referenceOnly: boolean;
+  guard: string; guardText: string | null; acceptable: string; acceptableText: string | null;
+  worstCase: (VcrValue & { scenario: string }) | null; maxRegret: (VcrValue & { scenario: string }) | null; expectedPower: VcrValue | null;
+  n: VcrValue | null; duration: VcrValue | null;
+  scenarios: Array<{ name: string; weight: number | null; compared: boolean;
+    power: (VcrValue & { status: string; statusText: string | null; regret: VcrValue | null }) | null;
+    oc: Array<VcrValue & { measure: string; label: string }> }>;
+  tags: string[];
+}
+/** The robust reading of a campaign that compares two or more effect scenarios: no design is the optimum, the sets and the rule are named. */
+export interface VcrRobustView {
+  scenarios: Array<{ name: string; weight: number | null }>; weighted: boolean; floor: number; confidence: number; tolerance: { power: number; relative: number };
+  criteria: Array<{ name: string; sense: "min" | "max" }>; rows: VcrRobustRow[];
+  sets: { pareto: string[]; nearOptimal: string[]; acceptable: string[]; inconclusive: string[] }; leaders: { maximin: string | null; minimaxRegret: string | null };
+  cheapestAcceptable: { key: string; index: number; n: VcrValue | null; worstCase: VcrValue | null } | null;
+  cheapestUnderBase: { key: string; index: number; n: VcrValue | null; worstCase: VcrValue | null } | null; sameDesign: boolean | null;
+  statement: string; choiceRule: string; tagText: Record<string, string>;
+}
 export interface VcrCampaignView {
   id: string; kind: "campaign"; question: string; status: "running" | "stopped"; method: string; methodVersion: string; identity: string;
   objective: { measure: string; direction: string; truth: string; label: string };
@@ -4710,6 +4812,8 @@ export interface VcrCampaignView {
   againstReference?: { coupling: string; couplingText: string | null; difference: VcrValue | null } | null; inFlight: { unit: string; stage: string | null } | null; cancelRequested: boolean;
   /** When nothing passed every constraint but none failed: the closest design, each undecided constraint with its simulated value and error, and what would decide it (sentences are the server's). */
   undecided?: { closest: { key: string; index: number; objective: VcrValue | null; constraints: Array<{ label: string; estimate: VcrValue | null; advice: string }> } | null; advice: string[] } | null;
+  /** Present when the search compared two or more effect scenarios. */
+  robust?: VcrRobustView | null;
   stop: { reason: string; text: string | null; at: string | null } | null; premises: VcrLabPremise[]; createdAt: string | null; updatedAt: string | null;
 }
 export interface VcrDesignExperimentView {

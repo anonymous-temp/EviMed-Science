@@ -271,3 +271,51 @@ it('a list that is read again and denied replaces the old experiments with the e
     expect(screen.queryByText(/正在计算复核这一步/)).toBeNull();
   } finally { vi.useRealTimers(); }
 });
+
+// --- the robust reading (plan R34): scenarios side by side, no single optimum ---
+const robustRow = (index: number, tags: string[], power: [number, number, number], extra: Record<string, unknown> = {}) => {
+  const names = ['optimistic', 'base', 'pessimistic'];
+  return { key: `c${index}`, index, complete: true, eligible: true, referenceOnly: false, guard: 'pass', guardText: null, acceptable: power.every((p) => p >= 80) ? 'pass' : 'fail',
+    acceptableText: power.every((p) => p >= 80) ? '每个假设下都达到' : '有假设下没达到',
+    worstCase: { ...value(Math.min(...power)), scenario: 'pessimistic' }, maxRegret: { ...value(95 - Math.min(...power)), scenario: 'pessimistic' }, expectedPower: null,
+    n: { ...value(200 + index * 40, { unit: '例', mcse: undefined }) }, duration: null,
+    scenarios: names.map((name, i) => ({ name, weight: null, compared: true, power: { ...value(power[i]), status: power[i] >= 80 ? 'pass' : 'fail', statusText: power[i] >= 80 ? '满足' : '不满足', regret: null },
+      oc: [{ ...value(200 + index * 40, { unit: '例', mcse: undefined }), measure: 'expected_sample_size', label: '期望样本量' }] })),
+    tags, ...extra };
+};
+const robustCampaign = (): VcrCampaignView => campaign({
+  candidates: [candidate(0), candidate(1), candidate(2)], finalists: ['c0', 'c1', 'c2'], best: 'c0', feasible: ['c0', 'c1', 'c2'], inconclusive: [], reference: null, improvement: null,
+  robust: { scenarios: [{ name: 'optimistic', weight: null }, { name: 'base', weight: null }, { name: 'pessimistic', weight: null }], weighted: false, floor: 0.8, confidence: 0.975, tolerance: { power: 0.02, relative: 0.1 },
+    criteria: [{ name: 'n', sense: 'min' }, { name: 'worst_case_power', sense: 'max' }],
+    rows: [robustRow(0, ['pareto', 'near_optimal', 'cheapest_base'], [90, 82, 55]), robustRow(1, ['pareto', 'near_optimal'], [95, 88, 70]), robustRow(2, ['pareto', 'near_optimal', 'maximin', 'cheapest_acceptable'], [99, 96, 84])],
+    sets: { pareto: ['c0', 'c1', 'c2'], nearOptimal: ['c0', 'c1', 'c2'], acceptable: ['c2'], inconclusive: [] }, leaders: { maximin: 'c2', minimaxRegret: 'c2' },
+    cheapestAcceptable: { key: 'c2', index: 2, n: value(280, { unit: '例', mcse: undefined }), worstCase: value(84) }, cheapestUnderBase: { key: 'c0', index: 0, n: value(200, { unit: '例', mcse: undefined }), worstCase: value(55) }, sameDesign: false,
+    statement: '在这些假设下（“optimistic”、“base”、“pessimistic”）：每个假设下功效都确认不低于 80% 的最省方案是第 3 个；只看基准情形“base”，最省的是第 1 个，它在别的假设下未必够用。',
+    choiceRule: '3 个假设下每个方案都用同一批随机数模拟，差别只来自假设本身。',
+    tagText: { pareto: '帕累托集合', near_optimal: '接近最优集合', maximin: '最差情形功效最高', minimax_regret: '最大遗憾最小', cheapest_acceptable: '各假设下都达标的最省方案', cheapest_base: '仅看基准情形的最省方案' } },
+});
+
+it('a search over several effect scenarios shows each design in every scenario and calls none of them the best', async () => {
+  serve([entry('cmp1', 'campaign')], { cmp1: robustCampaign() });
+  draw();
+  const section = await screen.findByRole('region', { name: /稳健性比较/ });
+  expect(screen.getByText(/在这些假设下（“optimistic”、“base”、“pessimistic”）/)).toBeInTheDocument();
+  const table = within(section).getByRole('table', { name: '每个方案在各假设下的结果' });
+  for (const header of ['“optimistic”下的功效', '“base”下的功效', '“pessimistic”下的功效', '最差情形功效', '最大遗憾', '样本量']) expect(within(table).getByRole('columnheader', { name: header })).toBeInTheDocument();
+  expect(within(table).getAllByText('各假设下都达标的最省方案').length).toBeGreaterThan(0);
+  expect(within(table).getAllByText('仅看基准情形的最省方案').length).toBeGreaterThan(0);
+  // the two cheapest designs are told apart, and nothing on the page is a single 最优 badge
+  expect(screen.getAllByText(/#3，样本量/).length).toBeGreaterThan(0);
+  expect(screen.queryByText('最优')).toBeNull();
+  expect(screen.queryByText(/最优的是|最优方案/)).toBeNull();
+  expect(screen.queryByText('在这些假设下最省')).toBeNull();
+  expect(document.body.textContent?.match(BACK_OFFICE)?.[0]).toBeUndefined();
+});
+
+it('a search with one effect scenario says the cheapest design under these assumptions, never the optimum', async () => {
+  serve([entry('cmp1', 'campaign')], { cmp1: campaign() });
+  draw();
+  expect(await screen.findByText(/在这些假设下，满足约束且最省的是 #2/)).toBeInTheDocument();
+  expect(screen.getAllByText('在这些假设下最省').length).toBe(1);
+  expect(screen.queryByText('最优')).toBeNull();
+});

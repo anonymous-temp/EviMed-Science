@@ -157,7 +157,10 @@ What happened, including what is not clean:
   inconclusive in the exhaustive run (2.34% ± 0.11): the upper bound of 20,000 replicates sits about 0.2 points above the estimate, so the
   margin must exceed that. 2.2% passed in every run that evaluated it (200 per arm in both runs; 225 and 250 per arm in the exhaustive run), and 2.0% passed on type I
   error for all three sizes in the exhaustive run (its power at 200 per arm, 80.5%, is inconclusive). The platform's advice therefore proposes the constraint less the bound's gap above the estimate, rounded down to a tenth of a percent
-  (2.2% for a 2.5% constraint at 20,000 replicates), not a fixed fraction.
+  (2.2% for a 2.5% constraint at 20,000 replicates), not a fixed fraction. **Scope of these findings (round 2, R34):** they are results of the
+  tested configurations only: the log-rank design at 24 months of accrual, 200 to 250 patients per arm, 20,000 replicates, a 2.5% constraint and
+  these three runs. They are not a property of an analysis level in general: the level the advice proposes is an estimate from one run's own
+  margin, and whether it passes is decided by the simulation of the new campaign that tries it.
 - **Streams differ between campaigns on purpose** (seeds derive from the campaign's identity, the guard against selection bias), so the same
   design (200 per arm at 2.5%) read 2.48%, 2.44% and 2.71% in the three campaigns: that is the Monte-Carlo error of about ±0.11 at work, and the
   reason a verdict that rests on a point estimate near its bound would be luck.

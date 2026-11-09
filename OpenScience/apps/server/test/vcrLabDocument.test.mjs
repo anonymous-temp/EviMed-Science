@@ -52,7 +52,7 @@ test("the section prints each comparison and design search with every number ren
   assert.match(text, /差值 15\.5%（模拟误差 ±0\.1%）/);
   assert.match(text, /### 设计搜索：达到 80% 功效的最小样本量/);
   assert.match(text, /功效不低于80\.0%；I 类错误不高于2\.5%/, "a bound is the frozen constraint, shown in the measure's unit");
-  assert.match(text, /最优设计：试验组人数 140，检验水准 0\.025；期望样本量 280/);
+  assert.match(text, /在这些假设下满足约束且最省的设计：试验组人数 140，检验水准 0\.025；期望样本量 280/);
   assert.match(text, /\| 14 \| 试验组人数 180，检验水准 0\.020 \| 360 \|/);
   assert.match(text, /这些结论的前提：\n\n- 比较的前提：各组用同一个终点和同一套分析设置。/);
   for (const word of ["design.nTreat", "analysis.alpha", "labDoc", "TEXT_", "LAB_PREMISES"]) assert.ok(!text.includes(word), `back-office word ${word}`);
@@ -66,7 +66,7 @@ test("no number of the section is typed: its template holds none, and changing t
   changed.lab[1].best.design["design.nTreat"] = 150;
   const text = renderLabSection(changed).markdown;
   assert.match(text, /55\.5%（模拟误差 ±0\.3%）/);
-  assert.match(text, /最优设计：试验组人数 150/);
+  assert.match(text, /在这些假设下满足约束且最省的设计：试验组人数 150/);
   assert.equal(renderLabSection({ ...model, lab: [] }), null, "a study with no lab work has no section, and no other export changes");
 });
 

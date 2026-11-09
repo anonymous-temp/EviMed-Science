@@ -64,7 +64,7 @@ test('the design search says which efficacy hypotheses it simulated and a fixed 
   const view = presentCampaign(finished());
   const byKey = Object.fromEntries(view.premises.map((row) => [row.key, row]));
   assert.equal(byKey.alpha.value, '固定为 2.5%，搜索中不能放宽。');
-  assert.equal(byKey['campaign:conditional'].value, '结果是在“alternative”“null”这 2 个疗效假设下模拟的；疗效假设变了，最优方案可能不同。');
+  assert.equal(byKey['campaign:conditional'].value, '结果是在“alternative”“null”这 2 个疗效假设下模拟的；疗效假设变了，结论可能不同。');
   assert.doesNotMatch(Object.values(byKey).map((row) => row.value).join(''), /不估计药物的真实疗效|保守上界|新的随机数|真值情景/);
   assert.equal(view.objective.label.includes('_'), false);
   assert.equal(VCR_CAMPAIGN_STOP_TEXT_ZH.budget_exhausted, '计算预算已用完；已完成的方案保留。');

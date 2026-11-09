@@ -612,6 +612,7 @@ export class VcrExperiments {
           stop: view.stop, objective: view.objective, constraints: view.constraints,
           best: best ? { index: best.index + 1, design: best.set, objective: best.objective.final } : null,
           undecided: view.undecided ? { closest: view.undecided.closest, advice: view.undecided.advice } : null,
+          robust: view.robust ? { ...view.robust, rows: view.robust.rows.map((/** @type {any} */ row) => ({ ...row, index: row.index + 1, design: at(row.key)?.set ?? {} })) } : null,
           finalists, budget: view.budget, premises: view.premises, createdAt: view.createdAt });
       } else {
         const view = await reader.#presentExperiment(study, row, { design: true });
@@ -900,6 +901,8 @@ export function presentCampaign(row) {
     improvementBound: verdict?.improvementBound ? { lower: verdict.improvementBound.lower, upper: verdict.improvementBound.upper, confidence: verdict.improvementBound.confidence,
       basis: verdict.improvementBound.basis } : null,
     selection: verdict?.selection ?? null,
+    // the robust reading of a campaign that compares two or more effect scenarios; null for one that does not
+    robust: verdict?.robust ? presentRobust(manifest, verdict.robust, candidates) : null,
     // the closest design no constraint failed and what would decide each undecided constraint (only when nothing passed everything)
     undecided: verdict && !verdict.best ? undecidedView(manifest, verdict, candidates) : null,
     againstReference: versus ? { coupling: versus.coupling, couplingText: COUPLING_TEXT_ZH[/** @type {keyof typeof COUPLING_TEXT_ZH} */ (versus.coupling)] ?? null,
@@ -919,11 +922,86 @@ export function presentCampaign(row) {
         : (() => {
           // the one sentence that decides this result: which efficacy hypotheses were simulated
           const names = list(manifest.space?.truths).map((truth) => String(truth.name)).filter(Boolean);
-          return names.length ? [{ key: "campaign:conditional", label: "疗效假设", value: `结果是在“${names.join("”“")}”这 ${names.length} 个疗效假设下模拟的；疗效假设变了，最优方案可能不同。`, source: /** @type {const} */ ("assumed"), decisive: true }] : [];
+          return names.length ? [{ key: "campaign:conditional", label: "疗效假设", value: `结果是在“${names.join("”“")}”这 ${names.length} 个疗效假设下模拟的；疗效假设变了，结论可能不同。`, source: /** @type {const} */ ("assumed"), decisive: true }] : [];
         })()),
       { key: "campaign:frozen", label: "开始前已固定的评价方式", value: "目标、约束、疗效假设和每个阶段的模拟次数在开始前已固定；改动任何一项就是一个新的实验方案。", source: "given", decisive: false },
     ]),
     createdAt: iso(row.created_at), updatedAt: iso(row.updated_at),
+  };
+}
+
+const ROBUST_GUARD_TEXT_ZH = Object.freeze({ pass: "错误率与安全性约束满足", inconclusive: "错误率或安全性约束无法确定", fail: "不满足错误率或安全性约束", none: "没有错误率或安全性约束" });
+const ROBUST_ACCEPTABLE_TEXT_ZH = Object.freeze({ pass: "每个假设下都达到", fail: "有假设下没达到", inconclusive: "有假设下无法确定", unknown: "有假设没有结果" });
+const ROBUST_TAG_TEXT_ZH = Object.freeze({ pareto: "帕累托集合", near_optimal: "接近最优集合", maximin: "最差情形功效最高", minimax_regret: "最大遗憾最小",
+  cheapest_acceptable: "各假设下都达标的最省方案", cheapest_base: "仅看基准情形的最省方案" });
+const ROBUST_OC_LABELS_ZH = Object.freeze({ exposure: "累计暴露（人数 × 时长）" });
+
+/**
+ * The robust reading as the page and the conversation read it (R34): the scenarios, one row per finalist with its power in every scenario,
+ * its worst case, its largest regret and the sets it belongs to, the two cheapest designs side by side and the rule the sets were drawn by.
+ * No row is marked best: the leaders of a criterion are named as leaders of that criterion. Pure over the domain's `vcrCampaignRobust`.
+ * @param {Record<string, any>} manifest @param {Record<string, any>} robust @param {Array<Record<string, any>>} candidates the view's candidates
+ */
+function presentRobust(manifest, robust, candidates) {
+  const percentOf = (/** @type {number} */ x) => percentWord(x);
+  const num = (/** @type {string} */ name, /** @type {{ value: number, mcse?: number | null } | null | undefined} */ one) => (one
+    ? measureValue({ name, value: one.value, mcse: one.mcse ?? undefined, simulated: one.mcse != null }, { kind: "experiment_candidate" }) : null);
+  const scenarios = list(robust.scenarios).map((entry) => String(entry.name));
+  const indexOf = (/** @type {string | null} */ key) => (key ? (candidates.find((candidate) => candidate.key === key)?.index ?? null) : null);
+  const tags = (/** @type {Record<string, any>} */ row) => [
+    ...(row.pareto ? ["pareto"] : []), ...(row.nearOptimal ? ["near_optimal"] : []),
+    ...(robust.maximin === row.key ? ["maximin"] : []), ...(robust.minimaxRegret === row.key ? ["minimax_regret"] : []),
+    ...(robust.cheapestAcceptable === row.key ? ["cheapest_acceptable"] : []), ...(robust.cheapestUnderBase === row.key ? ["cheapest_base"] : []),
+  ];
+  const rows = list(robust.rows).map((row) => ({
+    key: row.key, index: indexOf(row.key) ?? row.index, complete: row.complete, eligible: row.eligible, referenceOnly: row.referenceOnly,
+    guard: row.guard, guardText: ROBUST_GUARD_TEXT_ZH[/** @type {keyof typeof ROBUST_GUARD_TEXT_ZH} */ (row.guard)] ?? null,
+    acceptable: row.acceptable, acceptableText: ROBUST_ACCEPTABLE_TEXT_ZH[/** @type {keyof typeof ROBUST_ACCEPTABLE_TEXT_ZH} */ (row.acceptable)] ?? null,
+    worstCase: row.worstCase ? { ...num("power", row.worstCase), scenario: row.worstCase.scenario } : null,
+    maxRegret: row.regret ? { ...num("power", row.regret.max), scenario: row.regret.max.scenario } : null,
+    expectedPower: num("power", row.expectedPower),
+    n: num(robust.measures.n ?? "expected_sample_size", row.n), duration: num(robust.measures.duration ?? "duration_months", row.duration),
+    scenarios: Object.entries(object(row.oc)).map(([name, oc]) => ({
+      name, weight: list(robust.scenarios).find((entry) => entry.name === name)?.weight ?? null,
+      compared: scenarios.includes(name),
+      power: object(row.scenarios)[name]?.power ? { ...num("power", object(row.scenarios)[name].power), status: object(row.scenarios)[name].power.status,
+        statusText: VCR_CONSTRAINT_STATUS_TEXT_ZH[/** @type {keyof typeof VCR_CONSTRAINT_STATUS_TEXT_ZH} */ (object(row.scenarios)[name].power.status)] ?? null,
+        regret: row.regret?.byScenario?.[name] ? num("power", row.regret.byScenario[name]) : null } : null,
+      oc: Object.entries(object(oc)).filter(([measure]) => measure !== "power").map(([measure, value]) => ({ measure, label: ROBUST_OC_LABELS_ZH[/** @type {keyof typeof ROBUST_OC_LABELS_ZH} */ (measure)] ?? measureLabel(measure),
+        ...num(measure === "exposure" ? "exposure_patient_time" : measure, /** @type {any} */ (value)) })),
+    })),
+    tags: tags(row),
+  }));
+  const pick = (/** @type {string | null} */ key) => { const row = rows.find((entry) => entry.key === key); return row ? { key: row.key, index: row.index, n: row.n, worstCase: row.worstCase } : null; };
+  const cheapestAcceptable = pick(robust.cheapestAcceptable);
+  const cheapestUnderBase = pick(robust.cheapestUnderBase);
+  const names = scenarios.map((name) => `“${name}”`).join("、");
+  const floor = percentOf(Number(robust.rule.floor));
+  const baseName = String(manifest.objective?.truth ?? "");
+  /** @type {string[]} */
+  const sentences = [`在这些假设下（${names}）：`];
+  if (cheapestAcceptable) {
+    sentences.push(`每个假设下功效都确认不低于 ${floor} 的最省方案是第 ${cheapestAcceptable.index + 1} 个`);
+    sentences.push(cheapestUnderBase ? (robust.sameDesign ? `；只看基准情形“${baseName}”，最省的也是它。` : `；只看基准情形“${baseName}”，最省的是第 ${cheapestUnderBase.index + 1} 个，它在别的假设下未必够用。`) : "。");
+  } else if (list(robust.inconclusive).length) {
+    sentences.push(`没有方案在每个假设下都确认功效不低于 ${floor}；有 ${list(robust.inconclusive).length} 个方案在某个假设下无法确定。`);
+  } else sentences.push(`没有方案在每个假设下都达到功效 ${floor}。`);
+  const weighted = robust.weighted === true;
+  const choiceRule = [
+    `${scenarios.length} 个假设下每个方案都用同一批随机数模拟，差别只来自假设本身。`,
+    `最差情形功效取各假设中最低的一个；遗憾是它与该假设下功效最高的方案之差，取各假设中最大的一个。`,
+    `帕累托集合按样本量、研究时长和最差情形功效三项比较，没有别的方案在三项上都不差、又至少一项更好；接近最优集合还包括每一项至多比某个帕累托方案差“功效 ${percentOf(Number(robust.rule.tolerance.power))}、样本量和时长各 ${percentOf(Number(robust.rule.tolerance.relative))}”加模拟误差的方案。`,
+    weighted ? "你给了各假设的权重，所以另给按权重平均的功效。" : "你没有给各假设的权重，所以不给平均功效。",
+  ];
+  return {
+    scenarios: list(robust.scenarios).map((entry) => ({ name: String(entry.name), weight: entry.weight ?? null })), weighted,
+    floor: Number(robust.rule.floor), confidence: Number(robust.rule.confidence), tolerance: robust.rule.tolerance,
+    criteria: robust.criteria, rows,
+    sets: { pareto: robust.pareto, nearOptimal: robust.nearOptimal, acceptable: robust.acceptable, inconclusive: robust.inconclusive },
+    leaders: { maximin: robust.maximin, minimaxRegret: robust.minimaxRegret },
+    cheapestAcceptable, cheapestUnderBase, sameDesign: robust.sameDesign,
+    statement: sentences.join(""), choiceRule: choiceRule.join(""),
+    tagText: ROBUST_TAG_TEXT_ZH,
   };
 }
 
@@ -964,7 +1042,7 @@ function undecidedView(manifest, verdict, candidates) {
           const stepped = margin == null ? NaN : Math.floor((Number(c.bound) - margin) * 1000 + 1e-9) / 1000;
           const lower = stepped > 0 ? stepped : Number((Number(c.bound) * 0.9).toPrecision(2));
           advice = kind === "error_control" && levelCan && !searchesLevel
-            ? `${at}，正好在界上：再多模拟几次也判断不出来。这个设计可以把检验水准定得更低（例如 ${percentWord(lower)}，约束仍是 ${plain(c.measure, Number(c.bound))}）来留出余量；这要作为一个新的实验方案重新开始，约束本身不改。`
+            ? `${at}，正好在界上：再多模拟几次也判断不出来。这个设计可以把检验水准定得更低（例如 ${percentWord(lower)}，约束仍是 ${plain(c.measure, Number(c.bound))}）来留出余量；这个值只是按这次模拟的余量估出来的，不是对所有设计都成立的结论，要作为一个新的实验方案重新开始、由它的模拟来判断，约束本身不改。`
             : kind === "error_control" && levelCan
               ? `${at}，正好在界上：再多模拟几次也判断不出来。这次搜索里的检验水准没有给它留出余量；可以再试更低的检验水准，作为新的实验方案重新开始，约束本身不改。`
               : `${at}，正好在界上：再多模拟几次也判断不出来。需要调整设计，让它离界值远一些，作为新的实验方案重新开始。`;

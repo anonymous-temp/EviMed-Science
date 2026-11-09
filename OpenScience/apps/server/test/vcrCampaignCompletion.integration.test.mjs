@@ -93,7 +93,7 @@ test('a campaign that stopped after the turn wakes the conversation once, with i
   assert.equal(sent.sessionId, origin.rootSessionId);
   assert.equal(sent.originRunId, 'run1');
   assert.match(sent.text, new RegExp(VCR_CAMPAIGN_STOP_TEXT_ZH.acceptable_precision.slice(0, 12)));
-  assert.match(sent.text, /最优的方案是第 \d+ 个/);
+  assert.match(sent.text, /在这些假设下，满足约束且最省的方案是第 \d+ 个/);
   assert.match(sent.supplement, /Campaign=cmp_after; tool=vcr_simulate action=search_status; stop=acceptable_precision; best=/);
   const best = JSON.parse(/best=(\{.*\})\. This is/.exec(sent.supplement)?.[1] ?? 'null');
   assert.deepEqual([best.source, typeof best.index, best.objective.value, Object.keys(best.set)], ['feasible', 'number', 280, ['design.nTreat']], 'the engine\'s own number, not a retyped one');

@@ -69,10 +69,37 @@ export function labDocumentRoot(lab) {
       return { ...row, finalists: list(row.finalists).map((finalist) => ({ ...object(finalist), settings: settings(object(finalist).design),
         constraints: list(object(finalist).constraints).map((constraint) => ({ ...object(constraint), opText: /** @type {Record<string, string>} */ (OPS_ZH)[String(object(constraint).op)] ?? "", boundValue: bound(object(constraint)) })) })),
         bestSettings: row.best ? settings(object(row.best).design) : [],
+        robust: row.robust ? { ...object(row.robust), rows: list(object(row.robust).rows).map((robustRow) => ({ ...object(robustRow), settings: settings(object(robustRow).design) })) } : null,
         constraints: list(row.constraints).map((constraint) => ({ ...object(constraint), opText: /** @type {Record<string, string>} */ (OPS_ZH)[String(object(constraint).op)] ?? "", boundValue: bound(object(constraint)) })) };
     }
     return row;
   });
+}
+
+/**
+ * The robust reading of a campaign (R34) as markdown: the scenarios, one table row per finalist with its power in every compared scenario, its
+ * worst case, its largest regret, its sample size and the sets it belongs to, and the two cheapest designs side by side. No design is called
+ * the best; numbers are references into the block, words are slots.
+ * @param {Record<string, any>} robust @param {string} at the reference path of the block @param {(value: unknown) => string} cell
+ * @returns {string[]}
+ */
+function robustSection(robust, at, cell) {
+  const names = list(robust.scenarios).map((scenario) => String(object(scenario).name));
+  const tags = object(robust.tagText);
+  const lines = ["#### 稳健性比较", "", cell(robust.statement), "", cell(robust.choiceRule), ""];
+  lines.push(`| 候选 | 设置 | ${names.map((name) => `${cell(`“${name}”下的功效`)}`).join(" | ")} | 最差情形功效 | 最大遗憾 | 样本量 | 所属集合 |`, `|---|---|${names.map(() => "---").join("|")}|---|---|---|---|`);
+  list(robust.rows).forEach((row, r) => {
+    const base = `${at}.rows[${r}]`;
+    const set = list(row.settings).map((setting, s) => `${cell(setting.label)} {{n:${base}.settings[${s}].value.value|${Number.isInteger(setting.value.value) ? "int" : "f3"}}}`).join("，");
+    const powers = names.map((name) => {
+      const found = list(row.scenarios).findIndex((scenario) => object(scenario).name === name);
+      return found >= 0 && object(row.scenarios[found]).power ? numberText(`${base}.scenarios[${found}].power`, row.scenarios[found].power) : "未计算";
+    });
+    const marks = list(row.tags).map((tag) => cell(tags[String(tag)] ?? "")).join("、");
+    lines.push(`| {{n:${base}.index|int}} | ${set} | ${powers.join(" | ")} | ${row.worstCase ? numberText(`${base}.worstCase`, row.worstCase) : "未计算"} | ${row.maxRegret ? numberText(`${base}.maxRegret`, row.maxRegret) : "未计算"} | ${row.n ? numberText(`${base}.n`, row.n) : "未计算"} | ${marks || cell("—")} |`);
+  });
+  lines.push("");
+  return lines;
 }
 
 /**
@@ -99,7 +126,7 @@ export function labSectionTemplate(root) {
       out.push(`目标：${goal.direction === "minimize" ? "尽量减少" : "尽量提高"}${cell(goal.label)}。约束：${list(entry.constraints).map((constraint, c) =>
         `${cell(constraint.label)}${constraint.opText}{{n:${at}.constraints[${c}].boundValue.value|${constraint.boundValue.unit === "%" ? "pct1" : "f2"}}}`).join("；") || "没有"}。`, "");
       if (entry.best) {
-        out.push(`最优设计：${list(entry.bestSettings).map((setting, s) => `${cell(setting.label)} {{n:${at}.bestSettings[${s}].value.value|${Number.isInteger(setting.value.value) ? "int" : "f3"}}}`).join("，")}；${cell(goal.label)} ${numberText(`${at}.best.objective`, entry.best.objective)}。`, "");
+        out.push(`${entry.robust ? "只看基准情形、满足约束且最省的设计" : "在这些假设下满足约束且最省的设计"}：${list(entry.bestSettings).map((setting, s) => `${cell(setting.label)} {{n:${at}.bestSettings[${s}].value.value|${Number.isInteger(setting.value.value) ? "int" : "f3"}}}`).join("，")}；${cell(goal.label)} ${numberText(`${at}.best.objective`, entry.best.objective)}。`, "");
       } else if (entry.undecided) out.push(`没有设计同时满足全部约束；${cell(entry.undecided.advice)}`, "");
       if (list(entry.finalists).length) {
         out.push(`| 候选 | 设置 | ${cell(goal.label)} | 约束 |`, "|---|---|---|---|");
@@ -111,6 +138,7 @@ export function labSectionTemplate(root) {
         });
         out.push("");
       }
+      if (entry.robust) out.push(...robustSection(entry.robust, `${at}.robust`, cell));
     } else {
       out.push(`### 方案比较：${cell(entry.question) || "未写明问题"}`, "");
       const arms = list(entry.arms);
