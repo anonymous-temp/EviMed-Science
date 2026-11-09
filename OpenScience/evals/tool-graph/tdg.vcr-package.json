@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-package",
-  "version": "sha256:6d745aa6e3b9ccdbb73c15abd6fe3806827278397eae0d5b667ebcd38a000003",
+  "version": "sha256:1a4ca39308e79809e692d9fc2cd6bacb80150eafb4f519c9685daa7f0be0ff6c",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 27,
@@ -888,10 +888,6 @@
           },
           "filter": {
             "type": "object"
-          },
-          "studyId": {
-            "type": "string",
-            "maxLength": 160
           }
         },
         "required": [
@@ -963,10 +959,6 @@
           },
           "data": {
             "type": "object"
-          },
-          "studyId": {
-            "type": "string",
-            "maxLength": 160
           }
         },
         "required": [

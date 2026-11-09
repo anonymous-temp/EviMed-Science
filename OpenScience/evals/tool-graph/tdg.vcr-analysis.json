@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-analysis",
-  "version": "sha256:070dbe5c1f29d6901a19787eec0887110447c377556ec74a99e8ee26abffd58a",
+  "version": "sha256:ecf949f9d43bbf48c237c92d0c6c96389e4c735484aef0b3860f671465b0231c",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 34,
@@ -1420,10 +1420,6 @@
           },
           "filter": {
             "type": "object"
-          },
-          "studyId": {
-            "type": "string",
-            "maxLength": 160
           }
         },
         "required": [
@@ -1461,7 +1457,8 @@
               "search_status",
               "search_cancel",
               "compare",
-              "compare_status"
+              "compare_status",
+              "instantiate"
             ],
             "default": "start"
           },
@@ -1521,7 +1518,8 @@
               "evaluate_forecast",
               "compare_forecasts",
               "benchmark_trial_effect",
-              "search"
+              "search",
+              "people"
             ]
           },
           "scenario": {
@@ -1599,6 +1597,9 @@
             "maxLength": 160,
             "pattern": "^[A-Za-z0-9_.:@-]+$"
           },
+          "people": {
+            "type": "object"
+          },
           "sources": {
             "type": "array",
             "maxItems": 8,
@@ -1666,10 +1667,6 @@
                 }
               ]
             }
-          },
-          "studyId": {
-            "type": "string",
-            "maxLength": 160
           }
         },
         "required": [
@@ -1743,10 +1740,6 @@
           },
           "data": {
             "type": "object"
-          },
-          "studyId": {
-            "type": "string",
-            "maxLength": 160
           }
         },
         "required": [
