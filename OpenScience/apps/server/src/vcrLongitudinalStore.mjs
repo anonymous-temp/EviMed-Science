@@ -19,7 +19,7 @@ export function longitudinalArtifactView(row) {
  * the latest cumulative prediction of each cloud job. Reads use the caller's
  * store so exports participate in the same repeatable-read snapshot.
  * @param {any} store @param {string} studyId @param {any} [filter] */
-export async function longitudinalIndex(store,studyId,filter = {}) {
+export async function longitudinalIndex(store,studyId,filter = {},{actor = null} = {}) {
   const limit = Math.min(50,Math.max(1,Number(filter.limit) || 30));
   const offset = Math.max(0,Math.floor(Number(filter.offset) || 0));
   const where = `a.study_id=$1 AND a.kind IN ('history','prediction','prediction_set','evaluation','comparison','trial_benchmark','trial_evaluation','prediction_interruption')
@@ -30,7 +30,7 @@ export async function longitudinalIndex(store,studyId,filter = {}) {
   const rows = (await store.query(`SELECT a.* FROM evimed_vcr.longitudinal_artifacts a WHERE ${where}
     ORDER BY a.created_at DESC,a.id DESC LIMIT $4 OFFSET $5`,[studyId,filter.kind || null,filter.id || null,filter.all ? null : limit+1,offset,filter.parentId || null])).rows;
   const more = !filter.all && rows.length>limit;
-  const page = more ? rows.slice(0,limit) : rows;
+  let page = more ? rows.slice(0,limit) : rows;
   const known = new Map(page.map((/** @type {any} */ row) => [row.id,row]));
   const parents = page.flatMap((/** @type {any} */ row) => ['prediction','trial_benchmark'].includes(row.kind) ? [row.id]
     : row.kind === 'prediction_set' ? (row.summary.components ?? []).map((/** @type {any} */ c) => c.id) : []);
@@ -57,6 +57,14 @@ export async function longitudinalIndex(store,studyId,filter = {}) {
   for (const row of known.values()) if (['evaluation','comparison','trial_evaluation','prediction_interruption'].includes(row.kind)) {
     const parent = known.get(row.parent_id);
     if (parent) (parent.related_ids ??= {})[row.kind] ??= row.id;
+  }
+  // Every row that leaves here is judged by the same lineage check a single read makes (the store's guard, set by the composition): a
+  // row whose source grant, snapshot or field binding is gone is left out whole, never served as a stored summary.
+  if (store.longitudinalGuard) {
+    const allowed = await store.longitudinalGuard(studyId,[...known.values()],actor);
+    for (const id of [...known.keys()]) if (!allowed.has(id)) known.delete(id);
+    for (const row of known.values()) for (const [kind,id] of Object.entries(row.related_ids ?? {})) if (!known.has(/** @type {string} */ (id))) delete row.related_ids[kind];
+    page = page.filter((/** @type {any} */ row) => known.has(row.id));
   }
   const ids = new Set(page.map((/** @type {any} */ row) => row.id));
   return {records:page.map(longitudinalArtifactView),related:[...known.values()].filter((/** @type {any} */ row) => !ids.has(row.id)).map(longitudinalArtifactView),
@@ -87,10 +95,9 @@ export class VcrLongitudinalStore {
     if (!row) throw new HttpError(404,'vcr_longitudinal_not_found','This research record is not in this study.');
     return row;
   }
-  /** Rejudge all source grants whenever patient-level artifacts are opened.
-   * @param {any} study @param {string} id @param {string} actor */
-  async read(study,id,actor) {
-    const row = await this.record(study.id,id);
+  /** The one authorization of an artifact's whole lineage: every snapshot, source and field binding it was made from is judged again.
+   * Throws the access error of the first one that is no longer allowed. @param {any} study @param {any} row @param {string} actor */
+  async requireLineage(study,row,actor) {
     for (const snapshotId of row.snapshot_ids) await this.access.require({studyId:study.id,actor,
       ability:'read_patient_level',snapshotId,purpose:'vcr',note:'longitudinal research'});
     for (const sourceId of row.source_ids) await this.access.require({studyId:study.id,actor,
@@ -100,12 +107,32 @@ export class VcrLongitudinalStore {
         snapshotId:binding.snapshotId,fields:binding.fields,purpose:'vcr',note:'frozen forecast fields'});
       if (decision.fields?.denied?.length) throw new HttpError(403,'vcr_forecast_fields_unavailable','Fields used by this forecast are no longer available for this operation.');
     }
+  }
+  /** The ids of the rows whose lineage is still allowed: the list, the report model and a run's read keep only these. A refusal leaves a
+   * row out; any other failure is not a refusal and is thrown. Rows with one lineage are judged once.
+   * @param {any} study @param {any[]} rows @param {string | null} [actor] @returns {Promise<Set<string>>} */
+  async permitted(study,rows,actor = null) {
+    const who = actor ?? study.userId;
+    /** @type {Map<string,Promise<boolean>>} */ const judged = new Map();
+    const allowed = new Set();
+    for (const row of rows) {
+      const key = JSON.stringify([row.snapshot_ids,row.source_ids,row.bindings ?? []]);
+      if (!judged.has(key)) judged.set(key,this.requireLineage(study,row,who).then(() => true,error => {if (error instanceof HttpError) return false;throw error;}));
+      if (await judged.get(key)) allowed.add(row.id);
+    }
+    return allowed;
+  }
+  /** Rejudge all source grants whenever patient-level artifacts are opened.
+   * @param {any} study @param {string} id @param {string} actor */
+  async read(study,id,actor) {
+    const row = await this.record(study.id,id);
+    await this.requireLineage(study,row,actor);
     const bytes = await fs.readFile(this.plane.resolve(row.location));
     if (createHash('sha256').update(bytes).digest('hex') !== row.sha256) throw new HttpError(409,'vcr_longitudinal_changed','The preserved input bytes have changed.');
     return {row,content:JSON.parse(bytes.toString('utf8'))};
   }
-  /** @param {string} studyId @param {any} [filter] @param {any} [store] */
-  async list(studyId,filter = {},store = this.store) {
-    return longitudinalIndex(store,studyId,filter);
+  /** @param {string} studyId @param {any} [filter] @param {any} [store] @param {string | null} [actor] */
+  async list(studyId,filter = {},store = this.store,actor = null) {
+    return longitudinalIndex(store,studyId,filter,{actor});
   }
 }
