@@ -14,6 +14,8 @@ source(file.path(VCR_ROOT, "tests", "helpers", "robustness.R"))   # the robustne
 source(file.path(VCR_ROOT, "tests", "helpers", "extensions.R"))   # the 2026-10-07 extensions' handler jobs
 invisible(vcr_test_data_root())
 invisible(vcr_test_apply_schema_additions(VCR_ROOT))
+invisible(vcr_test_load_shard(VCR_ROOT))
+invisible(vcr_test_load_coverage())
 # Every job a case runs goes through this wrapper, so the coverage case can say
 # which of the methods were actually exercised.
 local({
@@ -28,12 +30,18 @@ for (f in files) source(f, local = FALSE)
 ok <- vcr_case_summary()
 evidence <- Sys.getenv("VCR_NUMERICAL_EVIDENCE_FILE", "")
 if (nzchar(evidence)) {
-  writeLines(jsonlite::toJSON(list(schemaVersion = 1L, sourceRevision = Sys.getenv("GITHUB_SHA", ""),
+  report <- list(schemaVersion = 1L, sourceRevision = Sys.getenv("GITHUB_SHA", ""),
     rVersion = as.character(getRversion()), packageLockHash = vcr_package_lock_hash(),
     methods = vcr_domain()$methods, cases = .vcr_test_env$results,
     methodsByCase = vcr_test_methods_by_case(), testOnly = .vcr_test_env$only,
     skippedCaseIds = vapply(Filter(function(case) grepl("skipped:", case$detail, fixed = TRUE), .vcr_test_env$results), function(case) case$id, character(1)),
-    complete = isTRUE(ok) && !nzchar(.vcr_test_env$only)),
-    auto_unbox = TRUE, null = "null", digits = NA, pretty = TRUE), evidence)
+    complete = isTRUE(ok) && !nzchar(.vcr_test_env$only) && !nzchar(.vcr_test_env$shard))
+  # A shard's report is an intermediate (scripts/vcr/merge-numeric-shards.mjs): it says which shard it is and which methods
+  # it ran, and is never `complete`. The merged report the importer reads carries neither field.
+  if (nzchar(.vcr_test_env$shard)) {
+    report$shard <- .vcr_test_env$shard
+    report$methodsRun <- as.list(vcr_test_methods_run())
+  }
+  writeLines(jsonlite::toJSON(report, auto_unbox = TRUE, null = "null", digits = NA, pretty = TRUE), evidence)
 }
 quit(status = if (isTRUE(ok)) 0L else 1L)

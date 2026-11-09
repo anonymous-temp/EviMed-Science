@@ -488,16 +488,26 @@ jobs:
           if-no-files-found: ignore
 
   # 「虚拟临床研究」's statistics engine (项目代码/vcr-engine), on the operating
-  # system and R it ships with. Three jobs, because the R library is the slow
-  # part and the two things that need it are independent:
+  # system and R it ships with. Four jobs, because the R library is the slow
+  # part and the things that need it are independent:
   #
   #   vcr-r-library  builds the engine's R library from its two package locks
   #                  (Posit Package Manager's dated snapshot, as binaries where
   #                  it has them), proves the library is exactly the locks, and
   #                  caches it under a key made of what it is built from.
-  #   vcr-engine     the engine's own suites on that library: every numeric
-  #                  acceptance case (the ones the `web` job cannot run — they
-  #                  need R, and 40-60 minutes), and the service's tests.
+  #   vcr-engine-numeric  the numeric acceptance cases (the ones the `web` job
+  #                  cannot run: they need R, and 112 minutes of them at 4
+  #                  cores) as three matrix shards, each a list of case ids in
+  #                  `tests/numeric-partition.json`. One job took 1 h 57 m of its
+  #                  120 and main's run of 11-05 timed out; a shard is about 40
+  #                  minutes. They share the cached R library, there is no image
+  #                  here to share.
+  #   vcr-engine     the final run and the evidence: the case that needs the
+  #                  whole run's record (Z99: every method was walked), the shards
+  #                  merged into ONE report and log (`merge-numeric-shards.mjs`
+  #                  refuses a shard that is missing, ran twice or ran the wrong
+  #                  cases), and the service's tests. It is the job the method
+  #                  validation importer reads, under its old name and steps.
   #   vcr-seam       the two integration tests where the control plane meets
   #                  the real engine: they need R, the service's Python
   #                  requirements and a PostgreSQL, and are left out of the
@@ -543,10 +553,87 @@ jobs:
           path: ${{ env.VCR_R_LIBS }}
           key: ${{ steps.key.outputs.key }}
 
-  vcr-engine:
+  vcr-engine-numeric:
     needs: vcr-r-library
     runs-on: ubuntu-24.04
-    timeout-minutes: 120
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    env:
+      VCR_R_LIBS: ${{ github.workspace }}/.vcr-rlib
+      VCR_ENGINE_TESTS: required
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install R and the libraries the locked packages link against
+        run: bash scripts/vcr/ci-system-deps.sh
+
+      - name: Restore the R library the previous job built
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.VCR_R_LIBS }}
+          key: ${{ needs.vcr-r-library.outputs.key }}
+          fail-on-cache-miss: true
+
+      - name: Prove the library is exactly the locks
+        run: bash scripts/vcr/r-library.sh verify
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+
+      # Seconds, before the long run: a case that is in no shard, or in two, or a shard naming a case the source no longer has.
+      - name: Check every case is in exactly one shard
+        run: node scripts/vcr/numeric-partition.mjs
+
+      - name: Check every dispatched method has a reference case
+        run: node scripts/vcr/check-method-references.mjs
+
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: 项目代码/vcr-engine/requirements.txt
+
+      - name: Install the engine service's Python requirements
+        run: python3 -m pip install -r ../项目代码/vcr-engine/requirements.txt pytest==8.4.2 httpx==0.28.1
+
+      # The Parquet bridge: see the vcr-engine job.
+      - name: Install pyarrow for the system interpreter the Parquet bridge runs under
+        run: |
+          /usr/bin/python3 -m pip install --user --break-system-packages "$(grep -E '^pyarrow==' ../项目代码/vcr-engine/requirements.txt)"
+          /usr/bin/python3 -c "import pyarrow.parquet; print('system python has pyarrow', pyarrow.__version__)"
+
+      - name: Run this shard's numeric acceptance cases
+        working-directory: 项目代码/vcr-engine
+        shell: bash
+        run: |
+          export VCR_TEST_CORES="$(nproc)"
+          export VCR_PYTHON=/usr/bin/python3
+          export VCR_TEST_SHARD="${{ matrix.shard }}"
+          export VCR_NUMERICAL_EVIDENCE_FILE="$RUNNER_TEMP/vcr-numerical-evidence.json"
+          bash tests/run_all.sh 2>&1 | tee "$RUNNER_TEMP/vcr-numeric.log"
+
+      - name: Check the shard was whole
+        run: bash scripts/vcr/check-numeric-log.sh "$RUNNER_TEMP/vcr-numeric.log" "${{ matrix.shard }}"
+
+      - name: Preserve the shard's evidence for the final job
+        uses: actions/upload-artifact@v4
+        with:
+          name: vcr-numeric-shard-${{ matrix.shard }}-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/vcr-numerical-evidence.json
+            ${{ runner.temp }}/vcr-numeric.log
+          if-no-files-found: error
+
+  vcr-engine:
+    needs: [vcr-r-library, vcr-engine-numeric]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
     env:
       VCR_R_LIBS: ${{ github.workspace }}/.vcr-rlib
       VCR_ENGINE_TESTS: required
@@ -605,6 +692,15 @@ jobs:
           /usr/bin/python3 -m pip install --user --break-system-packages "$(grep -E '^pyarrow==' ../项目代码/vcr-engine/requirements.txt)"
           /usr/bin/python3 -c "import pyarrow.parquet; print('system python has pyarrow', pyarrow.__version__)"
 
+      - name: Fetch the shards' evidence
+        uses: actions/download-artifact@v4
+        with:
+          pattern: vcr-numeric-shard-*-${{ github.sha }}
+          path: ${{ runner.temp }}/shards
+
+      # The step keeps the name the evidence importer requires. It runs the cases no shard can (the coverage walk reads which
+      # methods every shard ran, loaded from the merged record), then assembles every shard and this run into the one report
+      # and log the importer reads: the merge refuses unless the union is every declared case exactly once, each passed.
       # `shell: bash` is what makes the pipe to `tee` fail with the suite: the
       # default `bash -e` has no pipefail.
       - name: Run every numeric acceptance case
@@ -613,8 +709,14 @@ jobs:
         run: |
           export VCR_TEST_CORES="$(nproc)"
           export VCR_PYTHON=/usr/bin/python3
+          node ../OpenScience/scripts/vcr/merge-numeric-shards.mjs coverage --shards "$RUNNER_TEMP/shards" --out "$RUNNER_TEMP/vcr-shard-coverage.json"
+          VCR_TEST_SHARD=final VCR_TEST_COVERAGE_FROM="$RUNNER_TEMP/vcr-shard-coverage.json" \
+            VCR_NUMERICAL_EVIDENCE_FILE="$RUNNER_TEMP/vcr-final-evidence.json" \
+            bash tests/run_all.sh 2>&1 | tee "$RUNNER_TEMP/vcr-final.log"
+          node ../OpenScience/scripts/vcr/merge-numeric-shards.mjs assemble --shards "$RUNNER_TEMP/shards" \
+            --final-report "$RUNNER_TEMP/vcr-final-evidence.json" --final-log "$RUNNER_TEMP/vcr-final.log" \
+            --out-report "$RUNNER_TEMP/vcr-numerical-evidence.json" --out-log "$RUNNER_TEMP/vcr-numeric.log"
           export VCR_NUMERICAL_EVIDENCE_FILE="$RUNNER_TEMP/vcr-numerical-evidence.json"
-          bash tests/run_all.sh 2>&1 | tee "$RUNNER_TEMP/vcr-numeric.log"
           python3 - <<'PY'
           import importlib.util, json, os, pathlib
           root = pathlib.Path.cwd()

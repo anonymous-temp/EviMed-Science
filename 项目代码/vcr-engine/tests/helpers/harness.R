@@ -20,6 +20,12 @@
 .vcr_test_env <- new.env(parent = emptyenv())
 .vcr_test_env$results <- list()
 .vcr_test_env$only <- Sys.getenv("VCR_TEST_ONLY", "")
+# CI runs the suite in shards (tests/numeric-partition.json). VCR_TEST_SHARD names one ("1", "2", ... or "final": the cases
+# that need the whole run's record, today the coverage walk). Unset, every case runs. A case missing from the partition fails
+# its shard by name, so a new case cannot be left out of CI by being forgotten.
+.vcr_test_env$shard <- Sys.getenv("VCR_TEST_SHARD", "")
+.vcr_test_env$shard_ids <- NULL
+.vcr_test_env$partition_ids <- NULL
 .vcr_test_env$methods_run <- character(0)
 .vcr_test_env$methods_by_case <- list()
 .vcr_test_env$current <- ""
@@ -32,6 +38,15 @@
 #' @param fn a function returning list(pass = <logical>, detail = "<numbers>").
 vcr_case <- function(id, ac, fn) {
   if (nzchar(.vcr_test_env$only) && !grepl(.vcr_test_env$only, id)) return(invisible(NULL))
+  if (nzchar(.vcr_test_env$shard)) {
+    if (!(id %in% .vcr_test_env$partition_ids)) {
+      .vcr_test_env$results[[length(.vcr_test_env$results) + 1L]] <- list(id = id, ac = ac, pass = FALSE, seconds = 0,
+        detail = "this case is in no shard of tests/numeric-partition.json: add it there (scripts/vcr/numeric-partition.mjs --assign says where)")
+      cat(sprintf("%-6s FAIL %s | %s  [0.0s]\n", id, paste(ac, collapse = ","), .vcr_test_env$results[[length(.vcr_test_env$results)]]$detail))
+      return(invisible(FALSE))
+    }
+    if (!(id %in% .vcr_test_env$shard_ids)) return(invisible(NULL))
+  }
   started <- Sys.time()
   .vcr_test_env$current <- id
   out <- tryCatch(fn(), error = function(e) list(pass = FALSE, detail = paste("error:", conditionMessage(e))))
@@ -51,6 +66,36 @@ vcr_case <- function(id, ac, fn) {
   invisible(pass)
 }
 
+#' Read the partition for VCR_TEST_SHARD; a shard that names nothing is an error, not an empty green run.
+vcr_test_load_shard <- function(root) {
+  shard <- .vcr_test_env$shard
+  if (!nzchar(shard)) return(invisible(NULL))
+  file <- Sys.getenv("VCR_TEST_PARTITION", file.path(root, "tests", "numeric-partition.json"))
+  part <- jsonlite::fromJSON(file, simplifyVector = FALSE)
+  ids <- if (identical(shard, "final")) unlist(part$final) else unlist(part$shards[[as.integer(shard)]])
+  if (!length(ids)) stop(sprintf("VCR_TEST_SHARD=%s names no cases in %s", shard, file))
+  .vcr_test_env$shard_ids <- ids
+  .vcr_test_env$partition_ids <- c(unlist(part$shards), unlist(part$final))
+  invisible(ids)
+}
+
+#' The final shard's cases read what every other shard ran (their methods): the merged record, as JSON.
+vcr_test_load_coverage <- function() {
+  file <- Sys.getenv("VCR_TEST_COVERAGE_FROM", "")
+  if (!nzchar(file)) return(invisible(NULL))
+  cov <- jsonlite::fromJSON(file, simplifyVector = FALSE)
+  .vcr_test_env$methods_run <- as.character(unlist(cov$methodsRun))
+  by <- cov$methodsByCase
+  .vcr_test_env$methods_by_case <- lapply(by, function(v) as.character(unlist(v)))
+  invisible(NULL)
+}
+
+#' Cases the shard owns that did not report: a shard is whole only when each of its ids ran.
+vcr_test_shard_missing <- function() {
+  if (!nzchar(.vcr_test_env$shard)) return(character(0))
+  setdiff(.vcr_test_env$shard_ids, vapply(.vcr_test_env$results, function(x) x$id, character(1)))
+}
+
 vcr_case_summary <- function() {
   r <- .vcr_test_env$results
   n <- length(r)
@@ -60,6 +105,13 @@ vcr_case_summary <- function() {
   if (n == 0L) {
     cat("\nNO CASE MATCHED", if (nzchar(.vcr_test_env$only)) sprintf(" the filter '%s'", .vcr_test_env$only), "\n", sep = "")
     cat("\nPASSED 0/0\n")
+    return(invisible(FALSE))
+  }
+  absent <- vcr_test_shard_missing()
+  if (length(absent)) {
+    cat("\nSHARD CASES THAT NEVER REPORTED (named in the partition, absent from tests/numeric)\n")
+    for (id in absent) cat(sprintf("  %s\n", id))
+    cat(sprintf("\nPASSED %d/%d\n", k, n + length(absent)))
     return(invisible(FALSE))
   }
   if (length(failed)) {
