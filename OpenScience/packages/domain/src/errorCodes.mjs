@@ -1582,7 +1582,7 @@ export const VCR_WRITE_ISSUE_CODES = Object.freeze([
  * this list (`vcrErrorCodesRegistered.test.mjs`).
  */
 export const VCR_MODULE_ERROR_CODES = Object.freeze([
-  'vcr_campaign_invalid', 'vcr_completion_covered', 'vcr_experiment_cancel_failed', 'vcr_experiment_enqueue_failed', 'vcr_experiment_invalid', 'vcr_experiment_not_found', 'vcr_experiment_repair_failed', 'vcr_plan_replicates',
+  'vcr_campaign_invalid', 'vcr_people_invalid', 'vcr_population_not_found', 'vcr_completion_covered', 'vcr_experiment_cancel_failed', 'vcr_experiment_enqueue_failed', 'vcr_experiment_invalid', 'vcr_experiment_not_found', 'vcr_experiment_repair_failed', 'vcr_plan_replicates',
   'vcr_task_context_deleted', 'vcr_completion_canceled', 'vcr_completion_disclosed', 'vcr_completion_notice_failed', 'vcr_completion_observed', 'vcr_completion_exhausted', 'vcr_finish_hooks_exhausted', 'vcr_completion_origin_invalid', 'vcr_completion_origin_unavailable', 'vcr_completion_unavailable', 'vcr_invocation_unavailable', 'vcr_job_advance_failed', 'vcr_model_version_changed', 'vcr_patient_context_invalid', 'vcr_object_reference_invalid',
   'vcr_backup_status_unavailable', 'vcr_backup_unhealthy', 'vcr_backup_references_missing', 'vcr_subject_table_unreadable',
   'registry_reported_not_site_confirmed',
@@ -2434,6 +2434,8 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_completion_canceled: '已按你的停止请求结束自动续接，计算结果仍可查看。',
   vcr_completion_disclosed: '计算结果已保存，可在原对话中查看。',
   vcr_campaign_invalid: '这次设计搜索的设置不完整或前后不一致，没有开始。',
+  vcr_people_invalid: '这份虚拟患者记录的设置不完整或前后不一致，没有生成。',
+  vcr_population_not_found: '这个研究里没有这份人群。',
   vcr_experiment_invalid: '这项实验的设置不完整或前后不一致，没有开始。',
   vcr_experiment_not_found: '没有找到这项实验。',
   vcr_completion_notice_failed: '结果通知暂未送达，请稍后查看原对话。',

@@ -236,7 +236,9 @@ function cardOf(result, staleMark) {
   const isNull = progression.isNull === true;
   const analysis = object(progression.analysis);
   const slope = analysis.kind === "slope";
-  const power = list(result.measures).map(object).find((measure) => measure.name === (isNull ? "type_one_error" : "power")) ?? null;
+  // an effect stated as a distribution (1.2.0) reports an assurance, named so, not a power
+  const distributed = list(progression.effectDistributions).length > 0;
+  const power = list(result.measures).map(object).find((measure) => measure.name === (isNull ? "type_one_error" : distributed ? "assurance" : "power")) ?? null;
   const approx = numeric(object(progression.approximation).power);
   const difference = list(result.measures).map(object).find((measure) => measure.name === "expected_difference") ?? null;
   const band = (/** @type {Record<string, any>} */ arm, /** @type {number} */ z) => {
@@ -261,8 +263,8 @@ function cardOf(result, staleMark) {
     label: "人群层面，不是对个人的预测",
     reason: "这条曲线只描述一组人的平均病程和人与人之间的散布，用来估计检验的把握；它不能告诉你某一个人会怎样。",
     power: power ? shown(power) : null,
-    powerName: isNull ? "没有真实效应时误判有效的概率" : VCR_RESULT_QUANTITY_LABELS_ZH[VCR_UNCERTAINTY_MODE_QUANTITY[String(progression.uncertainty ?? "typical_study")] ?? "conditional_power_typical_study"],
-    powerQuantity: isNull ? null : VCR_UNCERTAINTY_MODE_QUANTITY[String(progression.uncertainty ?? "typical_study")] ?? "conditional_power_typical_study",
+    powerName: isNull ? "没有真实效应时误判有效的概率" : distributed ? VCR_RESULT_QUANTITY_LABELS_ZH.assurance : VCR_RESULT_QUANTITY_LABELS_ZH[VCR_UNCERTAINTY_MODE_QUANTITY[String(progression.uncertainty ?? "typical_study")] ?? "conditional_power_typical_study"],
+    powerQuantity: isNull ? null : distributed ? "assurance" : VCR_UNCERTAINTY_MODE_QUANTITY[String(progression.uncertainty ?? "typical_study")] ?? "conditional_power_typical_study",
     approximation: approx === null ? null : shown({ name: isNull ? "type_one_error" : "power", value: approx, source: "calculated" }),
     expected: difference ? { value: shown(difference), words: slope ? "治疗组减对照组的平均斜率之差" : alzheimer ? "治疗组减对照组的平均变化之差（典型研究，按那时仍在随访的人）" : "治疗组减对照组的平均变化之差" } : null,
     timeUnit: unit ? unitWords(unit) : unit, visits: curves.map((curve) => Number(curve.visit)),

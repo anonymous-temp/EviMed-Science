@@ -511,6 +511,16 @@ export const MEASURE_META = Object.freeze({
   expected_control_change: { label: "对照组到所选随访的平均变化" },
   expected_treated_change: { label: "治疗组到所选随访的平均变化" },
   simulated_difference: { label: "模拟试验里治疗组减对照组的平均估计" },
+  // the paired mode over one record of virtual people (patients.progression 1.2.0): model-implied contrasts of the same people under both arms
+  paired_mean_contrast: { label: "同一批虚拟患者里，治疗后减对照后评分的平均差（模型推算，含测量误差）" },
+  paired_latent_mean_contrast: { label: "同一批虚拟患者里，期望评分的平均差（模型推算）" },
+  paired_latent_sd: { label: "期望评分差在这批人之间的标准差（模型推算）" },
+  paired_latent_q10: { label: "期望评分差的第 10 百分位（模型推算）" },
+  paired_latent_q50: { label: "期望评分差的中位数（模型推算）" },
+  paired_latent_q90: { label: "期望评分差的第 90 百分位（模型推算）" },
+  paired_share_improved: { label: "期望评分更好的人所占比例（模型推算）", unit: "%", percent: true },
+  paired_observed_share: { label: "分析随访时仍在观察的人所占比例", unit: "%", percent: true },
+  baseline_mean_score: { label: "这批虚拟患者的期望基线评分" },
   // what a lab search says about an Alzheimer trial's own size and length (calculated from its scenario)
   total_sample_size: { label: "入组总人数", unit: "例" },
   last_visit_weeks: { label: "最后一次随访", unit: "周" },

@@ -28,6 +28,12 @@
  *   (`VCR_EXPERIMENT_ATTACHABLE_KINDS`) and was computed at its method's normal precision: a population, a matching or a data profile
  *   holds head counts the comparison would hand on as numbers, and a campaign's screening run is not a result (stats P2-5). Every
  *   compared value keeps its measure's name, so the model boundary's by-name rule can judge it.
+ * - **A comparison may run every arm on one record of virtual people** (plan R23). The record is made once by the engine's `instantiate` step
+ *   (`instantiatePeople`, `vcrPeople.mjs`) and filed in the data plane with its hash; a disease experiment that names it (`people: { recordId,
+ *   mode }`) hands the same table to every arm's job as an input and gives every arm the same seed, so the same people, the same dropout times
+ *   and the same residual draws stand in each arm by construction. `paired_counterfactual` runs every person under the arm (a per-person contrast,
+ *   model-implied); `resampled_trials` draws each simulated trial's people from the record. The record is checked when the comparison starts, so
+ *   an unknown or foreign id is refused by name and nothing is frozen; a record made for an earlier parameter file still runs and says so.
  * - **A cancelled unit stops its campaign** (review eng P1-2). Whoever cancelled it — the campaign's own cancel, the study's 「停止」,
  *   a job cancel from a run or the page — the campaign stops with `user_cancellation` once the unit is recorded; it never moves on
  *   to the next candidate, and the cancelled unit is not a model failure. A decided unit that has no job yet when a cancel arrives is
@@ -47,6 +53,8 @@ import { HttpError } from "./security.mjs";
 import { finishPremises } from "./vcrPremises.mjs";
 import { ALZHEIMER_PARAMETERS_TEXT, ALZHEIMER_REGULATORY_TEXT, ALZHEIMER_REPRODUCTION_TEXT, alzheimerScopeText } from "./vcrProgression.mjs";
 import { measureLabel, measureValue } from "./vcrViewsKit.mjs";
+import { VCR_PEOPLE_TABLE, vcrPeopleInstantiateRequest, vcrPeopleRecordView } from "./vcrPeople.mjs";
+import { vcrPopulationGenerationInput } from "./vcrSubjects.mjs";
 
 const SCHEMA = "evimed_vcr";
 /**
@@ -144,6 +152,10 @@ export class VcrExperiments {
   async startCampaign(study, input, { userId, origin = null }) {
     const { manifest, issues } = vcrCampaignFromInput(input);
     if (!manifest) throw invalid("vcr_campaign_invalid", "实验方案不完整或不允许：", issues);
+    // a search ranks candidates by power and type I error; an effect stated as a distribution reports an assurance, and a record of people is an
+    // input a unit's job would not carry: both are comparisons' (startExperiment), and refused here by name instead of searched on nothing
+    const unsupported = campaignScenarioIssues(manifest);
+    if (unsupported.length) throw invalid("vcr_campaign_invalid", "实验方案不完整或不允许：", unsupported);
     const identity = sha256(vcrCampaignCanonical(manifest));
     const id = `cmp_${sha256(`${study.id}:${identity}`).slice(0, 24)}`;
     const inserted = await this.store.one(`INSERT INTO ${SCHEMA}.experiments (id, study_id, user_id, kind, identity, manifest, state, origin)
@@ -391,6 +403,50 @@ export class VcrExperiments {
     return rows.length;
   }
 
+  // --- virtual people -----------------------------------------------------------------------------------------------------------
+
+  /**
+   * Ask the engine to make a record of virtual people: n people from the model's covariate model, or the covariates a generated population
+   * version names by column. Returns the job; the record is its result, and asking again with the same request is the same job.
+   * @param {{ id: string, userId: string }} study @param {unknown} input @param {{ userId: string }} who
+   */
+  async instantiatePeople(study, input, { userId }) {
+    const asked = object(input);
+    let generation = null;
+    if (asked.populationId !== undefined) {
+      const population = (await this.store.populations(study.id, 1000)).find((/** @type {any} */ row) => row.id === asked.populationId);
+      if (!population) throw new HttpError(404, "vcr_population_not_found", "这个研究里没有这份人群。");
+      const result = population.resultId ? await this.store.result(study.id, population.resultId) : null;
+      const execution = result?.executionId ? await this.store.one(`SELECT method FROM ${SCHEMA}.executions WHERE id = $1 AND study_id = $2`, [result.executionId, study.id]) : null;
+      generation = vcrPopulationGenerationInput(population, result, execution);
+    }
+    const { request, issues } = vcrPeopleInstantiateRequest(input, generation);
+    if (!request) throw invalid("vcr_people_invalid", "虚拟患者记录的设置不完整：", issues);
+    const { job, created } = await this.jobs.enqueue({ studyId: study.id, userId: String(userId), kind: "generate_progression", scenario: request.scenario, inputs: [],
+      derived: request.derived, seed: request.seed, internal: true, detail: request.detail });
+    return { jobId: String(job.id), state: String(job.state), created: Boolean(created), identity: request.identity };
+  }
+
+  /** The records of virtual people the study holds, newest first, as `vcrPeopleRecordView` reads them. @param {{ id: string }} study */
+  async peopleRecords(study) {
+    const rows = await this.store.rows(`SELECT id FROM ${SCHEMA}.results WHERE study_id = $1 AND kind = 'experiment_candidate' AND subject_id LIKE 'people:%'
+      AND diagnostics->'progression'->>'instantiate' = 'true' ORDER BY created_at DESC LIMIT 50`, [study.id]);
+    const views = [];
+    for (const row of rows) { const view = vcrPeopleRecordView(await this.store.result(study.id, String(row.id))); if (view) views.push(view); }
+    return views;
+  }
+
+  /**
+   * A record of people of this study, or a refusal by name: an id that is not a result of the study, or a result that is not a record.
+   * @param {{ id: string }} study @param {string} recordId
+   */
+  async #peopleRecord(study, recordId) {
+    const result = await this.store.result(study.id, recordId);
+    const view = vcrPeopleRecordView(result);
+    if (!result || !view) throw invalid("vcr_experiment_invalid", "实验设置不完整：", [{ code: "experiment_people_unknown", field: "people.recordId", detail: "This study has no such record of virtual people." }]);
+    return view;
+  }
+
   // --- design experiments ------------------------------------------------------------------------------------------------------
 
   /**
@@ -413,6 +469,7 @@ export class VcrExperiments {
         throw invalid("vcr_experiment_invalid", "实验设置不完整：", [{ code: "experiment_result_screening", field, detail: "A screening run is not a result: attach a design computed at its method's normal precision." }]);
       }
     }
+    if (record.people) await this.#peopleRecord(study, record.people.recordId);
     const identity = sha256(vcrDesignExperimentCanonical(record));
     const id = `exp_${sha256(`${study.id}:${identity}`).slice(0, 24)}`;
     const inserted = await this.store.one(`INSERT INTO ${SCHEMA}.experiments (id, study_id, user_id, kind, identity, manifest, state, origin)
@@ -452,11 +509,17 @@ export class VcrExperiments {
       const runsWithBlock = Boolean(campaignInfo) && campaignInfo.exact !== true && campaignInfo.precisionBlock !== false;
       const scenario = runsWithBlock && vcrEvaluationAllowed(arm.method, arm.scenario) ? { ...arm.scenario, evaluation: { version: 1 } } : arm.scenario;
       // arms that draw identically share a seed, so their comparison can be paired; the engine's draw signature confirms it
-      const drawKey = arm.method === "design.simulate" ? vcrCampaignDrawKey({ space: { method: arm.method, scenario: arm.scenario } }, { key: arm.name, set: {} }) : `own:${arm.name}`;
+      // on a record of people every arm has the same seed too: the same people, dropout and residual draws, whatever the drug
+      const people = record.people ? { ...record.people, inputId: `${record.people.recordId}:${VCR_PEOPLE_TABLE}` } : null;
+      const drawKey = people ? `people:${people.recordId}:${people.mode}` : arm.method === "design.simulate" ? vcrCampaignDrawKey({ space: { method: arm.method, scenario: arm.scenario } }, { key: arm.name, set: {} }) : `own:${arm.name}`;
+      // a paired run is on everyone in the record, so an arm's own group sizes are not used and not carried
+      const { design: _groupSizes, ...withoutSizes } = /** @type {Record<string, any>} */ (scenario);
+      const armScenario = people ? { ...(people.mode === "paired_counterfactual" ? withoutSizes : scenario), people: { inputId: people.inputId, mode: people.mode } } : scenario;
       let job;
       try {
         // the arms carry no conversation origin: the comparison's own origin wakes the conversation once, when every arm is terminal (R04)
-        job = (await this.jobs.enqueue({ studyId: study.id, userId: String(userId), kind, scenario, inputs: [], internal: true,
+        job = (await this.jobs.enqueue({ studyId: study.id, userId: String(userId), kind, scenario: armScenario, inputs: [], internal: true,
+          ...(people ? { derived: [{ resultId: people.recordId, table: VCR_PEOPLE_TABLE, shape: "subject" }] } : {}),
           seed: vcrCampaignSeed(identity, "experiment", "arm", drawKey), idempotencyKey: `vcr-experiment:${identity.slice(0, 24)}:${sha256(arm.name).slice(0, 12)}`,
           detail: { resultKind: "experiment_candidate", subjectId: `${id}:${sha256(arm.name).slice(0, 12)}`, experiment: { id, arm: arm.name } } })).job;
       } catch (error) {
@@ -626,6 +689,7 @@ export class VcrExperiments {
     });
     return {
       id: String(row.id), kind: "experiment", experimentKind: disease ? "disease" : "design", question: String(record.question ?? ""), purpose: String(record.purpose ?? ""),
+      people: record.people ? { recordId: String(record.people.recordId), mode: String(record.people.mode), modeText: PEOPLE_MODE_TEXT_ZH[/** @type {keyof typeof PEOPLE_MODE_TEXT_ZH} */ (record.people.mode)] ?? null } : null,
       status: incomplete.some((name) => arms.find((arm) => arm.name === name)?.status === "running") ? "running" : "complete",
       arms: arms.map(({ evaluation: _e, scenario, beyond: _b, ...arm }) => (design ? { ...arm, design: scenario } : arm)), comparison, measureIssues, alignment: alignment.map(({ values: _v, ...rest }) => rest), incomplete,
       premises: finishPremises([
@@ -633,6 +697,7 @@ export class VcrExperiments {
           : `各组的${alignment.filter((entry) => !entry.aligned).map((entry) => ALIGNED_FIELD_TEXT_ZH[/** @type {keyof typeof ALIGNED_FIELD_TEXT_ZH} */ (entry.field)]).join("、")}不一致或未知，差值只能对照着看。`,
           source: "given", decisive: true },
         // no general disclaimer: the comparison's alignment and each arm's own scenario already say what it rests on
+        ...(record.people ? [{ key: "lab:people", label: "比较用的虚拟患者", value: PEOPLE_MODE_TEXT_ZH[/** @type {keyof typeof PEOPLE_MODE_TEXT_ZH} */ (record.people.mode)] ?? "", source: /** @type {const} */ ("given"), decisive: true }] : []),
         ...(disease ? diseasePremises(arms.some((arm) => arm.beyond), arms.map((arm) => object(arm.scenario))) : []),
         ...(measureIssues.length ? [{ key: "lab:measure_missing", label: "没有比较的指标", value: measureIssues.map((issue) => issue.text).join(""), source: /** @type {const} */ ("given"), decisive: true }] : []),
         ...(incomplete.length ? [{ key: "lab:incomplete", label: "未完成的组", value: `${incomplete.join("、")}还没有可比较的结果，比较中缺少它们。`, source: /** @type {const} */ ("given"), decisive: true }] : []),
@@ -642,9 +707,28 @@ export class VcrExperiments {
   }
 }
 
+/**
+ * What a search cannot run: a record of people or an effect stated as a distribution in the base scenario or in any value a variable takes.
+ * @param {Record<string, any>} manifest
+ * @returns {Array<{ code: string, field: string, detail: string }>}
+ */
+export function campaignScenarioIssues(manifest) {
+  const space = object(manifest.space);
+  if (space.method !== "patients.progression") return [];
+  const text = JSON.stringify(space);
+  const found = [];
+  if (/"people"|"instantiate"/.test(text)) found.push({ code: "campaign_people_unsupported", field: "space.scenario.people", detail: "A search runs on the model's own people; a record of virtual people is a comparison's (startExperiment)." });
+  if (/"distribution"/.test(text)) found.push({ code: "campaign_effect_distribution_unsupported", field: "space.scenario.treatment", detail: "A search ranks designs by power; an effect stated as a distribution reports an assurance, which a comparison reads." });
+  return found;
+}
+
 const ALIGNED_FIELD_TEXT_ZH = Object.freeze({ endpoint: "终点", "analysis.alpha": "检验水准", "analysis.sided": "单双侧", hypothesis: "假设类型", timeUnit: "时间单位",
   visits: "随访时间点", design: "每组人数", model: "模型设置", population: "入组人群", placebo: "安慰剂反应设置", dropoutModel: "脱落设置",
   "analysis.kind": "分析方法", "analysis.visit": "分析所在的随访点" });
+const PEOPLE_MODE_TEXT_ZH = Object.freeze({
+  paired_counterfactual: "每一组都用同一批虚拟患者：每个人在各组里个体特征、脱落时间和测量误差的随机数都相同，只有药物不同。结果是模型推算的“同一批人换一种治疗会怎样”，不是任何试验观察到的个体疗效。",
+  resampled_trials: "每一组的每次模拟试验都从同一份虚拟患者记录里抽人并随机分组，各组抽到的人相同；记录里的研究层面差异是固定的，没有再抽。",
+});
 const HYPOTHESIS_TEXT_ZH = Object.freeze({ none: "没有药物效果（只看检验会不会误判有效）", symptomatic: "改善症状的假设", disease_modifying: "减慢病情恶化的假设", both: "改善症状并减慢恶化的假设" });
 
 /** The drug hypothesis of a disease arm, in a word and in the closed sentence. @param {Record<string, any>} scenario */

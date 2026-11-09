@@ -230,6 +230,8 @@ export function vcrBindReconstruction(kind, scenario, entries, resolved) {
 export const VCR_DERIVED_SOURCES = Object.freeze({
   "population.scenario": "synthetic", "population.literature": "synthetic", "population.synthpop": "synthetic",
   "patients.continuous": "synthetic", "patients.binary": "synthetic", "patients.time_to_event": "synthetic", "patients.longitudinal": "synthetic",
+  // the record of virtual people `patients.progression` 1.2.0 makes (`instantiate`, table `progression-people`): the only table that method writes
+  "patients.progression": "synthetic",
   "evidence.reconstruct_km": "reconstructed",
 });
 
@@ -1370,8 +1372,11 @@ export class VcrJobs {
     if (!bytes || sha256Bytes(bytes) !== hash) {
       throw new HttpError(409, "vcr_derived_table_missing", "上一步的输出表丢失或已被改动：这一步暂时算不了。");
     }
-    // The engine reads it as a raw table of the value source the method that
-    // wrote it earns; it is not an analysis table of a snapshot.
+    // A record of people is read as the subject table it is (one row per person); every other derived table is read as a raw table of the
+    // value source the method that wrote it earns, not as an analysis table of a snapshot.
+    if (entry.shape === "subject" && table === "progression-people" && execution?.method === "patients.progression") {
+      return { kind: "analysis_table", shape: "subject", id: `${resultId}:${table}`, location, hash, valueSource: source };
+    }
     return { kind: "snapshot_file", id: `${resultId}:${table}`, location, hash, valueSource: source, ...(derivedTimeUnit ? { timeUnit: derivedTimeUnit } : {}) };
   }
 
