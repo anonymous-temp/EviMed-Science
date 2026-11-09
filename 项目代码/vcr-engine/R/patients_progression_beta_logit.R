@@ -438,7 +438,7 @@ vcr_beta_logit_moments <- function(par, study, times, drug = NULL, placebo = TRU
   tr <- tr %||% list()
   sym <- tr[["symptomatic"]]; ref <- vcr_scalar(sym[["referenceAdas"]])
   list(pointsAt = if (!is.null(sym[["pointsAt"]])) .vcr_bl_effect_spec(sym[["pointsAt"]], "scenario.treatment.symptomatic.pointsAt", -(ref %||% 0), 70 - (ref %||% 0)) else NULL,
-       fraction = if (!is.null(tr[["diseaseModifying"]][["fraction"]])) .vcr_bl_effect_spec(tr[["diseaseModifying"]][["fraction"]], "scenario.treatment.diseaseModifying.fraction", 0, 1, closed_lo = TRUE) else NULL)
+       fraction = if (!is.null(tr[["diseaseModifying"]][["fraction"]])) .vcr_bl_effect_spec(tr[["diseaseModifying"]][["fraction"]], "scenario.treatment.diseaseModifying.fraction", -Inf, 1) else NULL)
 }
 
 #' The treatment of one simulated trial: the stated one with this trial's draws of the distributed effects in place of their central values, and a
@@ -485,7 +485,7 @@ vcr_beta_logit_moments <- function(par, study, times, drug = NULL, placebo = TRU
   }
   dm <- tr[["diseaseModifying"]]
   if (!is.null(dm) || !is.null(tr[["mechanism"]])) out$fraction <- if (!is.null(draw) && !is.na(draw[2L])) draw[2L] else if (is.null(effects$fraction)) 0 else .vcr_bl_effect_median(effects$fraction)
-  if (length(out$fraction) != 1L || !(out$fraction >= 0 && out$fraction < 1)) vcr_abort("scenario_value_invalid", "scenario.treatment.diseaseModifying.fraction", "The disease-modifying share is at least 0 and below 1.")
+  if (length(out$fraction) != 1L || !(is.finite(out$fraction) && out$fraction < 1)) vcr_abort("scenario_value_invalid", "scenario.treatment.diseaseModifying.fraction", "The disease-modifying share is below 1 (a negative share is a drug that speeds the decline up).")
   out
 }
 
@@ -561,7 +561,7 @@ vcr_job_patients_progression_beta_logit <- function(job, output_dir = NULL, canc
   }
   treatment <- .vcr_bl_treatment(sc[["treatment"]], max(visits), effects, par = par)
   distributed <- any(vapply(effects, function(e) isTRUE(e$distributed), logical(1)))
-  is_null <- !distributed && !(isTRUE(abs(treatment$emax %||% 0) > 0) || isTRUE(treatment$fraction > 0))
+  is_null <- !distributed && !(isTRUE(abs(treatment$emax %||% 0) > 0) || isTRUE(treatment$fraction != 0))
   n1 <- if (paired) record$n else as.integer(sc[["design"]][["nTreat"]]); n0 <- if (paired) record$n else as.integer(sc[["design"]][["nControl"]])
   p <- list(par = par, population = population, uncertainty = uncertainty, visits = visits, at = at, n1 = n1, n0 = n0, alpha = alpha, is_null = is_null,
             analysis = kind, treatment = treatment, placebo = placebo, dropout = dropout, record = record, coupling = "common", mode = people[["mode"]],
@@ -666,7 +666,7 @@ vcr_job_patients_progression_beta_logit <- function(job, output_dir = NULL, canc
     "Context of the model: mild and moderate Alzheimer disease, ADAS-cog 11 (0 to 70, higher is worse), trials of up to two years."),
     if (distributed) list("The assurance counts every significant benefit over the effects the stated distribution allows, a null or an irrelevant effect included: it is not the chance that the drug works, and it is not the chance that a development programme succeeds.",
                           "More simulated trials shrink only the Monte Carlo error of this number; they do not change a wrong distribution or a wrong model.",
-                          if (any(vapply(reports, function(r) isTRUE(r$redrawnShare > 0), logical(1)))) "Draws the model cannot represent were redrawn (the distribution is truncated to what it can); the share is in the result."),
+                          .vcr_bl_redraw_limits(reports)),
     if (!is.null(record)) .vcr_bl_record_limits(record, p),
     .vcr_bl_reference_limits(sc[["treatment"]]),
     if (!is.null(chain)) chain$limits,

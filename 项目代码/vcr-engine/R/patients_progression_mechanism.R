@@ -211,7 +211,7 @@ vcr_mechanism_chain <- function(mech, par, begin, end, visits, placebo, dropout,
   share <- inv$share(-points)
   centre <- -link$slope / link$perSuvr * delta_at
   tr <- list(family = "empirical_draws", parameters = list(values = share), source = list(kind = "model_result", citation = paste0(spec$source, "; ", link$citation), objectRef = NULL, note = NULL),
-             tier = "B", distributed = TRUE, lo = 0, hi = 1, closed_lo = TRUE)
+             tier = "B", distributed = TRUE, lo = -Inf, hi = 1, closed_lo = FALSE)
   if (!(.vcr_bl_effect_mass(tr) >= .VCR_BL_EFFECT_MIN_MASS)) {
     vcr_abort("scenario_value_invalid", "scenario.treatment.mechanism", "The chain's effect is larger than any disease-modifying share the model can represent (a share of 1 or more): state a smaller dose or an earlier week.")
   }

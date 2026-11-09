@@ -2902,7 +2902,6 @@
                   "fields": {
                     "value": {
                       "t": "number",
-                      "min": 0,
                       "lt": 1
                     },
                     "basis": {

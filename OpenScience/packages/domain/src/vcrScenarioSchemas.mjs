@@ -990,7 +990,7 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
           et50Weeks: req(PROGRESSION_PARAM({ gt: 0 })), washoutHalfLifeWeeks: PROGRESSION_PARAM({ gt: 0 }),
         }, { exactlyOne: [['pointsAt', 'logitEmax']], requires: { pointsAt: ['atWeek', 'referenceAdas'] } }), BETA_LOGIT),
         // the share of the study's covariate-adjusted mean slope taken away while on drug, held after the dose ends
-        diseaseModifying: gated(object({ fraction: req(EFFECT_PARAM({ min: 0, lt: 1 }, 'treatment.diseaseModifying.fraction')) }), BETA_LOGIT),
+        diseaseModifying: gated(object({ fraction: req(EFFECT_PARAM({ lt: 1 }, 'treatment.diseaseModifying.fraction')) }), BETA_LOGIT),
         // 1.2.0 (plan R29, tier A): the treated arm takes a marketed AChE inhibitor whose effect is the posterior's own (eStar, ET50 and the dose exponent of that
         // drug, one row per trial under posterior_draws); instead of `symptomatic`. `background` (both arms already on one, started `weeksBefore` weeks before baseline)
         reference: gated(object({ drug: req(string({ values: [...VCR_REFERENCE_DRUGS] })), doseMg: req(number({ gt: 0 })), washoutHalfLifeWeeks: PROGRESSION_PARAM({ gt: 0 }) }), BETA_LOGIT),

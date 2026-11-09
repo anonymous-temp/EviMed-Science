@@ -12,6 +12,7 @@
 #      used are the truncated normal's closed forms, and a prior with no mass inside is refused
 #   d  every family draws what it says: the mean of the used disease-modifying shares and symptomatic effects against the family's own mean
 #   e  the result names the source and the tier of the distribution, and says what an assurance is (and is not)
+#   g  a share prior keeps its harmful half: the assurance is the integral over the whole prior (quadrature), and what the model cannot represent is stated with its size
 #   f  what is refused by name: no source, an unknown tier, a missing parameter, an effect that is both a number and a distribution
 
 .n104_P <- function(v, basis = "assumed") list(value = v, basis = basis)
@@ -133,4 +134,32 @@ vcr_case("N104f", c("AC-04", "AC-27"), function() {
   old <- .n104_issue(vcr_test_run(vcr_test_job("patients.progression", .n104_sc(.n104_dist("normal", list(mean = -2, sd = 1))), seed = 1L, replicates = 100L, extra = list(methodVersion = "1.1.0"))))
   ok <- all(!is.na(got)) && identical(old, "method_version_mismatch@methodVersion") && all(grepl("^(scenario_field_missing|scenario_value_invalid|scenario_field_unknown|scenario_value_conflict|scenario_choice_invalid)@", got))
   list(pass = ok, detail = sprintf("refused before anything runs: %s; labelled 1.1.0: %s", paste(sprintf("%s -> %s", names(got), got), collapse = "; "), old))
+})
+
+vcr_case("N104g", c("AC-04", "AC-28"), function() {
+  # review S2: a share prior keeps its harmful half. A negative share (the drug speeds the decline up) is representable, so the assurance is the
+  # integral over the whole stated prior, held to an independent quadrature of the fixed-share power over that prior, and the mean of the used draws is the
+  # prior's own mean (the old truncation to [0, 1) would give the truncated normal's, about 0.12 for this prior)
+  mu <- 0.05; sdv <- 0.15
+  gh <- .vcr_gauss_hermite(9)
+  nodes <- mu + sqrt(2) * sdv * gh$nodes; w <- gh$weights / sqrt(pi)
+  mk <- function(dm, seed, reps) .n104_run(.n104_sc(dm = dm, n = 150L, visits = c(0, 26, 52, 78)), seed, reps, cores = 2L)
+  runs <- lapply(seq_along(nodes), function(k) mk(.n104_P(nodes[k]), 10470L + k, 1500L))
+  pw <- vapply(runs, function(r) .n104_first(r)$value, numeric(1)); se <- vapply(runs, function(r) .n104_first(r)$mcse, numeric(1))
+  quad <- sum(w * pw); quad_se <- sqrt(sum(w^2 * se^2))
+  a <- mk(.n104_dist("normal", list(mean = mu, sd = sdv)), 10480L, 3000L)
+  rep <- a$diagnostics$progression$effectDistributions[[1]]
+  tol <- 4 * sqrt(.n104_first(a)$mcse^2 + quad_se^2)
+  mean_ok <- abs(rep$drawMean - mu) <= 4 * sdv / sqrt(rep$draws) && rep$redrawnShare < 0.001
+  # a prior of harmful effects only runs (it was refused) and rejects at no more than the one-sided rate, alpha / 2
+  h <- mk(.n104_dist("normal", list(mean = -0.4, sd = 0.02)), 10481L, 3000L)
+  hm <- .n104_first(h)
+  harm_ok <- identical(h$status, "succeeded") && hm$value <= 0.025 + 4 * hm$mcse
+  # what is left out is said with its size: Normal(0.6, 0.5) has P(share >= 1) = 0.21
+  c2 <- mk(.n104_dist("normal", list(mean = 0.6, sd = 0.5)), 10482L, 500L)
+  lim <- unlist(c2$diagnostics$progression$limits)
+  said <- any(grepl("redrawn (left out)", lim, fixed = TRUE)) && any(grepl("21.2%", lim, fixed = TRUE))
+  list(pass = identical(a$status, "succeeded") && abs(.n104_first(a)$value - quad) <= tol && mean_ok && harm_ok && said,
+       detail = sprintf("share ~ Normal(%.2f, %.2f), 150 per arm, week 78: assurance %.4f (MCSE %.4f) against the 9-node quadrature of nine fixed-share powers %.4f (error %.4f), tolerance %.4f; the used draws have mean %.4f (prior %.2f, redrawn %.5f); a prior of only harmful shares (Normal(-0.4, 0.02)) runs with assurance %.4f (<= 0.025 + 4 MCSE); a prior with 21.2%% of its mass at 1 or more says so in the limits (%s)",
+                        mu, sdv, .n104_first(a)$value, .n104_first(a)$mcse, quad, quad_se, tol, rep$drawMean, mu, rep$redrawnShare, hm$value, said))
 })

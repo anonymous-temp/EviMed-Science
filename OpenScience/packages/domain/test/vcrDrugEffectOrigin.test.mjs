@@ -89,3 +89,15 @@ test('the module is exported from the package index', () => {
     assert.ok(name in domain, name)
   }
 })
+
+test('a pooled difference in points is never a disease-modifying share, and an estimate must say which unit it is in (review S1)', () => {
+  // the reviewer's case: a pooled -0.3 +/- 0.5 points was written as share ~ Normal(-0.3, 0.5)
+  const near = vcrEffectPriorFromPool(pool({ distribution: { kind: 'normal', mean: -0.3, sd: 0.5, basis: 'confidence' } }), { target: 'disease_modifying_fraction' })
+  assert.equal(/** @type {any} */ (near).ok, false)
+  assert.equal(/** @type {any} */ (near).reason, 'effect_prior_target_scale')
+  for (const mean of [-1.8, 1.8]) assert.equal(/** @type {any} */ (vcrEffectPriorFromPool(pool({ distribution: { kind: 'normal', mean, sd: 0.6, basis: 'prediction' } }), { target: 'disease_modifying_fraction' })).reason, 'effect_prior_target_scale')
+  assert.equal(vcrEffectPriorFromPool(pool({ distribution: { kind: 'normal', mean: -0.3, sd: 0.5, basis: 'confidence' } }), { target: 'symptomatic_points' }).ok, true, 'the same pooling is the symptomatic change')
+  assert.equal(/** @type {any} */ (vcrEffectPriorFromEstimate({ estimate: -2, se: 0.5 }, { target: 'disease_modifying_fraction' })).reason, 'effect_prior_target_scale', 'points are not a share')
+  assert.equal(/** @type {any} */ (vcrEffectPriorFromEstimate({ estimate: 0.2, se: 0.1, scale: 'share' }, { target: 'symptomatic_points' })).reason, 'effect_prior_target_scale')
+  assert.equal(vcrEffectPriorFromEstimate({ estimate: 0.2, se: 0.1, scale: 'share' }, { target: 'disease_modifying_fraction' }).ok, true, 'a share the researcher states as a share is a share')
+})

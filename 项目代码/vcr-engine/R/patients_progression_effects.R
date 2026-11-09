@@ -11,7 +11,9 @@
 #   `fixed` family, or a normal with SD 1e-300) gives the fixed-effect run's numbers to the last bit, and two distributions of the same seed differ
 #   only in the effect they drew.
 # - **A draw outside what the model can represent is redrawn, and the result says how much was.** A symptomatic effect must leave the reference
-#   score strictly inside 0 to 70 (adsim's logit scale) and a disease-modifying share lies in [0, 1): a normal prior can reach beyond either. The
+#   score strictly inside 0 to 70 (adsim's logit scale) and a disease-modifying share lies below 1 (a share of 1 stops the decline; a NEGATIVE share
+#   is a drug that speeds it up, which the model's own term represents, so a harmful draw is kept and simulated as harmful: dropping it would turn the
+#   assurance into a probability conditional on a non-harmful effect, inflated by up to 1 over the mass kept, review S2): a normal prior can reach beyond either. The
 #   draw is repeated (truncating the prior to the valid range, the only change that keeps every other draw as stated), the share of the prior's mass
 #   that lies inside is calculated from its distribution function, and the share of draws that were redrawn is counted; a prior with under 1% of its
 #   mass inside is refused.
@@ -52,7 +54,7 @@
   mass <- .vcr_bl_effect_mass(spec)
   if (!(mass >= .VCR_BL_EFFECT_MIN_MASS)) {
     vcr_abort("scenario_value_invalid", paste0(field, ".distribution"), sprintf("Only %.2g of this distribution lies where the model can represent the effect (%s); state one that mostly does.", mass,
-      if (identical(field, "scenario.treatment.diseaseModifying.fraction")) "a share from 0 up to, not including, 1" else "a change that keeps the reference score between 0 and 70"))
+      if (identical(field, "scenario.treatment.diseaseModifying.fraction")) "a share below 1; a negative share is a harmful effect" else "a change that keeps the reference score between 0 and 70"))
   }
   spec
 }
@@ -146,4 +148,14 @@
   list(key = key, family = spec$family, parameters = parameters, source = list(kind = src$kind, citation = src$citation, objectRef = src$objectRef, note = src$note), tier = spec$tier,
        priorMassRepresentable = .vcr_bl_effect_mass(spec), redrawnShare = if (length(tries)) 1 - length(tries) / sum(tries) else NA_real_,
        drawMean = if (length(used)) mean(used) else NA_real_, drawSd = if (length(used) > 1L) stats::sd(used) else NA_real_, draws = length(used))
+}
+
+#' The sentence a result's limits carry about draws that were redrawn: how much of the prior was set aside, which way, and what the figure then is. The
+#' assurance is conditional on an effect the model can represent; the share set aside is stated so a reader can bound the unconditional figure.
+.vcr_bl_redraw_limits <- function(reports) {
+  rows <- Filter(function(r) !is.null(r) && is.finite(r$priorMassRepresentable) && r$priorMassRepresentable < 1, reports)
+  if (!length(rows)) return(NULL)
+  lost <- vapply(rows, function(r) 1 - r$priorMassRepresentable, numeric(1))
+  sprintf("%.1f%% of the stated effect distribution lies where the model cannot represent the effect (%s) and was redrawn (left out): the assurance is the probability given an effect the model can represent, and the part left out is not counted in either direction.",
+          100 * max(lost), if (any(vapply(rows, function(r) grepl("fraction", r$key, fixed = TRUE), logical(1)))) "a share of 1 or more, or a symptomatic change that takes the reference score outside 0 to 70" else "a change that takes the reference score outside 0 to 70")
 }

@@ -25,7 +25,7 @@
  * @module vcrEffectPriorBinding
  */
 
-import { VCR_EFFECT_PRIOR_TARGETS, lineageNode, parseLineageNode, vcrEffectPriorFromPool } from "@evimed/domain";
+import { VCR_EFFECT_PRIOR_TARGETS, lineageNode, parseLineageNode, vcrEffectPriorFromPool, vcrEffectPriorPoolTargetRefusal } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
 import { VCR_SCHEMA } from "./vcrPersistence.mjs";
 import { vcrExecutionReceiptVerified } from "./vcrEngineClient.mjs";
@@ -58,6 +58,9 @@ export async function bindVcrEffectPrior({ store, studyId, scenario, inputs }) {
   for (const key of Object.keys(from)) if (!allowed.has(key)) throw refuse("effectFrom is { input, target, estimand } and nothing else.", `scenario.treatment.effectFrom.${key}`, "scenario_field_unknown");
   const target = from.target ?? "symptomatic_points";
   if (!VCR_EFFECT_PRIOR_TARGETS.includes(target)) throw refuse(`target is one of: ${VCR_EFFECT_PRIOR_TARGETS.join(", ")}.`, "scenario.treatment.effectFrom.target", "effect_prior_target_unknown");
+  // a pooling is a difference in points: it can never become the disease-modifying share (review S1), whatever else is true of it
+  const scale = vcrEffectPriorPoolTargetRefusal(target);
+  if (scale) throw refuse(scale.detail, "scenario.treatment.effectFrom.target", scale.reason);
   if (from.estimand !== undefined && typeof from.estimand !== "string" && (typeof from.estimand !== "object" || from.estimand === null || Array.isArray(from.estimand))) {
     throw refuse("estimand is the researcher's words: a sentence, or { treatment, population, endpoint, strategy, summary } of sentences.", "scenario.treatment.effectFrom.estimand", "scenario_value_invalid");
   }

@@ -32,6 +32,17 @@ const finite = (value) => typeof value === 'number' && Number.isFinite(value)
 export const VCR_EFFECT_PRIOR_TARGETS = Object.freeze(['symptomatic_points', 'disease_modifying_fraction'])
 
 /**
+ * Whether a pooling may be put on this target at all (known before the pooling is read): a pooling is a difference in points, so it can only be the
+ * symptomatic change.
+ * @param {string} target
+ * @returns {{ reason: string, detail: string } | null}
+ */
+export function vcrEffectPriorPoolTargetRefusal(target) {
+  if (target !== 'disease_modifying_fraction') return null
+  return { reason: 'effect_prior_target_scale', detail: 'A pooling is a difference in points of the score the model runs in, and the disease-modifying target is a share of the decline taken away: no conversion between them is carried. Use the pooling as the symptomatic change (the points at a week), or state a share of your own.' }
+}
+
+/**
  * @param {unknown} estimand what the source's effect answers, in the researcher's words (any of the fields)
  * @returns {{ text: string, stated: boolean }}
  */
@@ -52,7 +63,7 @@ function premiseSentences(target, stated, basisWords) {
       ? 'The estimand of the source (the treatment strategy, population and endpoint its effect answers) is the source\'s own and may not be the one this study asks (ICH E9(R1) A.4).'
       : 'The source did not state the estimand its effect answers, so whether it is the one this study asks is not known (ICH E9(R1) A.4).',
     basisWords,
-    target === 'disease_modifying_fraction' ? 'A share of the mean decline taken away is read as stated, from 0 up to but not including 1.' : 'The effect is a difference in points on the scale the model runs in, treated less untreated, negative better.',
+    target === 'disease_modifying_fraction' ? 'A share of the mean decline taken away is read as stated: below 1, and a negative share is a drug that speeds the decline up.' : 'The effect is a difference in points on the scale the model runs in, treated less untreated, negative better.',
   ]
 }
 
@@ -65,6 +76,11 @@ function premiseSentences(target, stated, basisWords) {
 export function vcrEffectPriorFromPool(result, options = {}) {
   const target = options.target ?? 'symptomatic_points'
   if (!VCR_EFFECT_PRIOR_TARGETS.includes(target)) return { ok: false, reason: 'effect_prior_target_unknown', detail: `target is one of: ${VCR_EFFECT_PRIOR_TARGETS.join(', ')}.` }
+  // A pooling of differences in ADAS-cog POINTS is a difference in points; the disease-modifying target is a SHARE of the decline taken away. No
+  // conversion between them is carried here (tier B's inversion needs the model, the time point and the people), so a points pooling is never read as
+  // a share: it was, once, and a pooled -0.3 +/- 0.5 points became a share of -0.3 +/- 0.5 (review S1).
+  const scaleRefusal = vcrEffectPriorPoolTargetRefusal(target)
+  if (scaleRefusal) return { ok: false, ...scaleRefusal }
   const diagnostics = isObject(result?.diagnostics) ? result.diagnostics : {}
   const dist = isObject(diagnostics.distribution) ? diagnostics.distribution : null
   if (!result?.id || !dist) return { ok: false, reason: 'effect_prior_not_a_pooling', detail: 'The result is not a pooling of studies that carries the distribution a simulation samples from.' }
@@ -98,6 +114,9 @@ export function vcrEffectPriorFromEstimate(input, options = {}) {
   const target = options.target ?? 'symptomatic_points'
   if (!VCR_EFFECT_PRIOR_TARGETS.includes(target)) return { ok: false, reason: 'effect_prior_target_unknown', detail: `target is one of: ${VCR_EFFECT_PRIOR_TARGETS.join(', ')}.` }
   if (!isObject(input) || !finite(input.estimate)) return { ok: false, reason: 'effect_prior_estimate_missing', detail: 'The estimate is a finite number.' }
+  // the unit of an estimate decides the target: points for the symptomatic change, a share for the disease-modifying one; never one read as the other
+  if (target === 'disease_modifying_fraction' && input.scale !== 'share') return { ok: false, reason: 'effect_prior_target_scale', detail: 'The disease-modifying target is a share of the decline taken away: the estimate must say it is a share (scale "share"); an estimate in points is never read as one.' }
+  if (target === 'symptomatic_points' && input.scale === 'share') return { ok: false, reason: 'effect_prior_target_scale', detail: 'An estimate that is a share is the disease-modifying target, not a change in points.' }
   /** @type {number} */
   let sd
   /** @type {string} */
